@@ -36,10 +36,13 @@
             </q-item>
           </template>-->
         </q-select>
+      <mxgraph/>
   </q-page>
 </template>
 
 <script>
+import mxgraph from 'components/mxgraph.vue'
+
 const stringOptions = [
   'Component'
 ].reduce((acc, opt) => {
@@ -51,6 +54,9 @@ const stringOptions = [
 
 export default {
   name: 'PageBasicSearch',
+  components: {
+    mxgraph
+  },
   data () {
     return {
       model: null,
