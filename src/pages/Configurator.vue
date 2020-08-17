@@ -2,7 +2,6 @@
   <q-page
     class="fit column justify-start items-center"
     >
-      <h1 class="col-1"> COXACON </h1>
       <q-select
           class="col-4"
           rounded standout
