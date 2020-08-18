@@ -89,16 +89,18 @@ module.exports = function (/* ctx */) {
       config: {
         //https://coolors.co/003459-c46e72-820263-061623-618b25-e43a64-b0bbbf-e6af2e
         brand: {
-          primary: '#003459',
-          secondary: '#C46E72',
-          accent: '#820263',
+          secondary: '#F78F3B',
+          primary: '#2A3548',
+          darkaccent: '#7fa042',
+          lightaccent: '#8BA7B9',
 
-          dark: '#061623',
+          dark: '#0d1117',
+          light: '#FBFAFB',
 
-          positive: '#618B25',
-          negative: '#E43A64',
+          positive: '#7fa042',
+          negative: '#a04242',
           info: '#B0BBBF',
-          warning: '#E6AF2E'
+          warning: '#ff118c'
         }
       },
 
