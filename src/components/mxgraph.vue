@@ -4,12 +4,18 @@
 </template>
 
 <script>
+import { colors } from 'quasar'
+
 var mxgraph = require('mxgraph')({
   mxImageBasePath: './src/images',
   mxBasePath: './src'
 })
 
 console.log('imported mxgraph')
+
+/* var elements = [
+  { name: 'A' }
+] */
 
 export default {
   name: 'mxgraph',
@@ -50,10 +56,15 @@ export default {
         graph.setEnabled(false)
 
         // Changes the default vertex style in-place
+        var nodecolor = colors.getBrand('secondary')
         var style = graph.getStylesheet().getDefaultVertexStyle()
-        style[mxgraph.mxConstants.STYLE_SHAPE] = mxgraph.mxConstants.SHAPE_ELLIPSE
+        style[mxgraph.mxConstants.STYLE_SHAPE] = 'box' // mxgraph.mxConstants.SHAPE_ELLIPSE
+        style[mxgraph.mxConstants.STYLE_ROUNDED] = true
+        style[mxgraph.mxConstants.STYLE_FILLCOLOR] = nodecolor
+        style[mxgraph.mxConstants.STYLE_STROKECOLOR] = nodecolor
+        style[mxgraph.mxConstants.STYLE_FONTCOLOR] = colors.getBrand('dark')
+        // style[mxgraph.mxConstants.STYLE_GRADIENTCOLOR] = colors.getBrand('secondary')
         style[mxgraph.mxConstants.STYLE_PERIMETER] = mxgraph.mxPerimeter.EllipsePerimeter
-        style[mxgraph.mxConstants.STYLE_GRADIENTCOLOR] = 'white'
         style[mxgraph.mxConstants.STYLE_FONTSIZE] = '12'
 
         // Not sure if this works if "left-mouse-panning" is enabled, as it also uses
@@ -87,7 +98,7 @@ export default {
           var v8 = graph.insertVertex(parent, null, 'H', 0, 0, w, h)
           // the following edged could also be declared as variables if necessary:
           // var e1 = graph.insertEdge(parent, null, 'ab', v1, v2)
-          graph.insertEdge(parent, null, 'ac', v1, v3)
+          graph.insertEdge(parent, null, 'ac', v1, v3, 'startArrow=dash;startSize=12;endArrow=none;labelBackgroundColor=#FFFFFF;strokeColor=#FF0000')
           graph.insertEdge(parent, null, 'cd', v3, v4)
           graph.insertEdge(parent, null, 'be', v2, v5)
           graph.insertEdge(parent, null, 'cf', v3, v6)
@@ -111,11 +122,10 @@ export default {
 
 <style scoped>
   .container {
-    width: 600px;
-    height: 400px;
-    margin: 50px auto;
-    overflow:hidden;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
     text-align: center;
-    background-image: url("/static/grid.png");
+    background-image: url("/grid.png");
   }
 </style>

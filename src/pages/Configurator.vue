@@ -1,42 +1,73 @@
 <template>
-  <q-page
-    class="fit column justify-start items-center"
-    >
-      <q-select
-          class="col-4"
-          rounded standout
-          :value="model"
-          bg-color="white"
-          hide-selected
-          v-model="model"
-          fill-input
-          use-input
-          hide-dropdown-icon
-          autofocus
-          input-debounce="200"
-          :options="options"
-          @filter="filterFn"
-          @input-value="setModel"
-          style="width: 500px"
-          hint="Search for a component!"
-        >
-          <template v-slot:no-option>
-            <q-item>
-              <q-item-section class="text-grey">
-                No results
-              </q-item-section>
-            </q-item>
-          </template>
-          <!--
-          <template v-slot:option>
-            <q-item>
-              <q-item-section class="text-grey">
-                No results
-              </q-item-section>
-            </q-item>
-          </template>-->
-        </q-select>
-      <mxgraph/>
+  <q-page class="bg-secondary">
+      <div class="column q-pa-xs items-center">
+        <!--<div class="fit column justify-start items-center">-->
+        <div>
+          <div class="q-col-gutter-xs">
+            <div class='col'>
+              <q-select
+                  class='col'
+                  filled dense
+                  input-class="text-light"
+                  :value="model"
+                  bg-color="white"
+                  hide-selected
+                  v-model="model"
+                  hide-hint
+                  fill-input
+                  use-input
+                  hide-dropdown-icon
+                  autofocus
+                  input-debounce="500"
+                  :options="options"
+                  @filter="filterFn"
+                  @input-value="setModel"
+                  style="width: 100%"
+                  stack-label
+                  label="test"
+                  hide-bottom-space
+                >
+                  <template v-slot:append>
+                    <q-icon name="search" @click.stop />
+                  </template>
+                  <template v-slot:no-option>
+                    <q-item>
+                      <q-item-section class="text-grey">
+                        No results
+                      </q-item-section>
+                    </q-item>
+                  </template>
+                  <!--
+                  <template v-slot:option>
+                    <q-item>
+                      <q-item-section class="text-grey">
+                        No results
+                      </q-item-section>
+                    </q-item>
+                  </template>-->
+                </q-select>
+              </div>
+            <div class="row q-gutter-xs">
+              <q-card class="my-card">
+                <mxgraph/>
+              </q-card>
+              <q-card class="my-card">
+                <div class="column justify-between">
+                  <b>Component Description</b>
+                  <div>
+                    add/remove
+                  </div>
+                </div>
+              </q-card>
+            </div>
+            <div col>
+              <q-card class="my-card">
+                BoM
+              </q-card>
+            </div>
+          </div>
+        </div>
+      </div>
   </q-page>
 </template>
 

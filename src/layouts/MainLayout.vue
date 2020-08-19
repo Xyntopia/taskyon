@@ -75,7 +75,7 @@
       </q-list>
     </q-drawer>
 
-    <q-page-container class="bg-secondary">
+    <q-page-container>
       <router-view />
     </q-page-container>
   </q-layout>
