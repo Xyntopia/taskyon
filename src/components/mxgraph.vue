@@ -58,14 +58,30 @@ export default {
         // Changes the default vertex style in-place
         var nodecolor = colors.getBrand('secondary')
         var style = graph.getStylesheet().getDefaultVertexStyle()
-        style[mxgraph.mxConstants.STYLE_SHAPE] = 'box' // mxgraph.mxConstants.SHAPE_ELLIPSE
-        style[mxgraph.mxConstants.STYLE_ROUNDED] = true
-        style[mxgraph.mxConstants.STYLE_FILLCOLOR] = nodecolor
-        style[mxgraph.mxConstants.STYLE_STROKECOLOR] = nodecolor
-        style[mxgraph.mxConstants.STYLE_FONTCOLOR] = colors.getBrand('dark')
-        // style[mxgraph.mxConstants.STYLE_GRADIENTCOLOR] = colors.getBrand('secondary')
-        style[mxgraph.mxConstants.STYLE_PERIMETER] = mxgraph.mxPerimeter.EllipsePerimeter
-        style[mxgraph.mxConstants.STYLE_FONTSIZE] = '12'
+        style.shape = 'box' // mxgraph.mxConstants.SHAPE_ELLIPSE
+        style.rounded = true
+        style.fillColor = nodecolor
+        style.strokeColor = nodecolor
+        style.fontColor = colors.getBrand('dark')
+        // style.gradientColor = colors.getBrand('secondary')
+        style.perimeter = mxgraph.mxPerimeter.EllipsePerimeter
+        style.fontSize = '20'
+
+        var estyle = graph.getStylesheet().getDefaultEdgeStyle()
+        estyle.rounded = true
+        // estyle.edgeStyle = mxgraph.mxEdgeStyle.SegmentConnector
+        // estyle.edgeStyle = mxgraph.mxEdgeStyle.ElbowConnector
+        estyle.edgeStyle = mxgraph.mxEdgeStyle.OrthConnector
+        // estyle.startSize = 20
+        // estyle.endSize = 5
+        // estyle.endArrow = 'none'
+        // estyle.strokeColor = colors.getBrand('primary')
+        // estyle.labelBackgroundColor = '#FFFFFF'
+        // estyle.strokeWidth = 5
+        // 'startArrow=dash;startSize=12;endArrow=none;=#FFFFFF;strokeColor=#FF0000'
+        //
+        // Specifies the alternate edge style to be used if the main control point on an edge is being doubleclicked.
+        // graph.alternateEdgeStyle = 'elbow=vertical'
 
         // Not sure if this works if "left-mouse-panning" is enabled, as it also uses
         // the left mouse button
@@ -78,10 +94,26 @@ export default {
 
         // Creates a layout algorithm to be used
         // with the graph
+        // mxPartitionLayout
+        // mxRadialTreeLayout
         // eslint-disable-next-line
-        var layout = new mxgraph.mxFastOrganicLayout(graph)
+        var slayout = new mxgraph.mxRadialTreeLayout(graph)
+        // mxEdgeLabelLayout
+        // mxStackLayout
+        // mxCompositeLayout
+        // mxCompactTreeLayout
+        // mxCircleLayout
+        // eslint-disable-next-line
+        var hlayout = new mxgraph.mxHierarchicalLayout(graph)
+        // eslint-disable-next-line
+        var olayout = new mxgraph.mxFastOrganicLayout(graph)
+        // eslint-disable-next-line
+        var playout = new mxgraph.mxParallelEdgeLayout(graph)
         // Moves stuff wider apart than usual
-        layout.forceConstant = 80
+        olayout.forceConstant = 80
+
+        var layout = olayout
+        layout.disableEdgeStyle = false
 
         // Adds cells to the model in a single step
         graph.getModel().beginUpdate()
@@ -98,7 +130,7 @@ export default {
           var v8 = graph.insertVertex(parent, null, 'H', 0, 0, w, h)
           // the following edged could also be declared as variables if necessary:
           // var e1 = graph.insertEdge(parent, null, 'ab', v1, v2)
-          graph.insertEdge(parent, null, 'ac', v1, v3, 'startArrow=dash;startSize=12;endArrow=none;labelBackgroundColor=#FFFFFF;strokeColor=#FF0000')
+          graph.insertEdge(parent, null, 'ac', v1, v3)
           graph.insertEdge(parent, null, 'cd', v3, v4)
           graph.insertEdge(parent, null, 'be', v2, v5)
           graph.insertEdge(parent, null, 'cf', v3, v6)
@@ -110,9 +142,24 @@ export default {
 
           // Executes the layout
           layout.execute(parent)
+          // playout.execute(parent)
         } finally {
           // Updates the display
+          console.log('layouting worked!')
           graph.getModel().endUpdate()
+
+          /*
+          estyle = graph.getStylesheet().getDefaultEdgeStyle()
+          estyle.rounded = true
+          // estyle.styleEdge = mxgraph.mxEdgeStyle.ElbowConnector
+          // estyle.style = 'orthogonalEdgeStyle'
+          estyle.startSize = 20
+          estyle.endSize = 5
+          estyle.endArrow = 'none'
+          estyle.strokeColor = colors.getBrand('primary')
+          estyle.labelBackgroundColor = '#FFFFFF'
+          estyle.strokeWidth = 5
+          */
         }
       }
     }
@@ -126,6 +173,6 @@ export default {
     height: 100%;
     overflow: hidden;
     text-align: center;
-    background-image: url("/grid.png");
+    /* background-image: url("/grid.png"); */
   }
 </style>
