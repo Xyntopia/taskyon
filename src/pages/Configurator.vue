@@ -49,7 +49,8 @@
               </div>
             <div class="row q-gutter-xs">
               <q-card class="my-card">
-                <mxgraph/>
+                <!--<mxgraph/>-->
+                <cytograph/>
               </q-card>
               <q-card class="my-card">
                 <div class="column justify-between">
@@ -72,7 +73,8 @@
 </template>
 
 <script>
-import mxgraph from 'components/mxgraph.vue'
+// import mxgraph from 'components/mxgraph.vue'
+import cytograph from 'components/cytograph.vue'
 
 const stringOptions = [
   'Component'
@@ -86,7 +88,8 @@ const stringOptions = [
 export default {
   name: 'PageBasicSearch',
   components: {
-    mxgraph
+    // mxgraph,
+    cytograph
   },
   data () {
     return {

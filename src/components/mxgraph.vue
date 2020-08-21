@@ -21,7 +21,8 @@ export default {
   name: 'mxgraph',
   data () {
     return {
-      message: 'testing graph'
+      message: 'testing graph',
+      graph: null
     }
   },
   mounted () {
@@ -46,6 +47,7 @@ export default {
         // Creates the graph inside the given container
         // eslint-disable-next-line
         var graph = new mxgraph.mxGraph(container)
+        this.graph = graph
         graph.setPanning(true)
         graph.panningHandler.useLeftButtonForPanning = true
         graph.setAllowDanglingEdges(false)
@@ -70,8 +72,9 @@ export default {
         var estyle = graph.getStylesheet().getDefaultEdgeStyle()
         estyle.rounded = true
         // estyle.edgeStyle = mxgraph.mxEdgeStyle.SegmentConnector
+        estyle.edgeStyle = mxgraph.mxEdgeStyle.EntityRelation
         // estyle.edgeStyle = mxgraph.mxEdgeStyle.ElbowConnector
-        estyle.edgeStyle = mxgraph.mxEdgeStyle.OrthConnector
+        // estyle.edgeStyle = mxgraph.mxEdgeStyle.OrthConnector
         // estyle.startSize = 20
         // estyle.endSize = 5
         // estyle.endArrow = 'none'
@@ -110,7 +113,7 @@ export default {
         // eslint-disable-next-line
         var playout = new mxgraph.mxParallelEdgeLayout(graph)
         // Moves stuff wider apart than usual
-        olayout.forceConstant = 80
+        olayout.forceConstant = 50
 
         var layout = olayout
         layout.disableEdgeStyle = false
