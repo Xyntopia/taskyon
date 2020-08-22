@@ -1,7 +1,5 @@
 <template>
-  <div id=cysheet>
-    <div ref="cyref" id="cy">
-    </div>
+  <div class="fit" ref="cyref" id="cy">
   </div>
 </template>
 
@@ -79,15 +77,11 @@ export default {
 </script>
 
 <style>
-#cysheet {
-  min-width: 200px;
-  min-height: 200px;
-  background-image: url("/grid.png");
-}
-
 #cy {
+  background-image: url("/grid.png");
   min-width: inherit;
   min-height: inherit;
+
   position: absolute;
   left: 0;
   top: 0;

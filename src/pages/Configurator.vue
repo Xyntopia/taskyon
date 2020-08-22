@@ -49,7 +49,7 @@
             <div class="col-1">
               <div class="row q-col-gutter-xs">
                <div class="col-8">
-                <q-card>
+                <q-card style="min-height: 200px; min_width: 200px;">
                   <!--<mxgraph/>-->
                   <cytograph/>
                 </q-card>
