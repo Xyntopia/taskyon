@@ -63,6 +63,7 @@ export default {
           padding: 30
         }
       })
+      cy.resize()
       cy.fit()
       /* cy.layout({
         name: 'cose',
@@ -79,14 +80,14 @@ export default {
 
 <style>
 #cysheet {
-  width: 600px;
-  height: 200px;
+  min-width: 200px;
+  min-height: 200px;
   background-image: url("/grid.png");
 }
 
 #cy {
-  width: 600px;
-  height: 200px;
+  min-width: inherit;
+  min-height: inherit;
   position: absolute;
   left: 0;
   top: 0;

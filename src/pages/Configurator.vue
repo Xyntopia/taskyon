@@ -1,10 +1,9 @@
 <template>
   <q-page class="bg-secondary">
-      <div class="column q-pa-xs items-center">
+      <div class="column q-pa-xs">
         <!--<div class="fit column justify-start items-center">-->
-        <div>
           <div class="q-col-gutter-xs">
-            <div class='col'>
+            <div class='col-1'>
               <q-select
                   class='col'
                   filled dense
@@ -47,27 +46,32 @@
                   </template>-->
                 </q-select>
               </div>
-            <div class="row q-gutter-xs">
-              <q-card class="my-card">
-                <!--<mxgraph/>-->
-                <cytograph/>
-              </q-card>
-              <q-card class="my-card">
-                <div class="column justify-between">
-                  <b>Component Description</b>
-                  <div>
-                    add/remove
+            <div class="col-1">
+              <div class="row q-col-gutter-xs">
+               <div class="col-8">
+                <q-card>
+                  <!--<mxgraph/>-->
+                  <cytograph/>
+                </q-card>
+               </div>
+               <div class="col-4">
+                <q-card class="fit">
+                  <div class="column justify-start">
+                    <div class="col"><b>Component Description</b></div>
+                    <div class="col">
+                      add/remove
+                    </div>
                   </div>
-                </div>
-              </q-card>
+                </q-card>
+               </div>
+              </div>
             </div>
-            <div col>
-              <q-card class="my-card">
+            <div class="col-1">
+              <q-card>
                 BoM
               </q-card>
             </div>
           </div>
-        </div>
       </div>
   </q-page>
 </template>
