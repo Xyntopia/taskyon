@@ -6,7 +6,8 @@ const routes = [
     children: [
       { path: '', component: () => import('pages/BasicSearch.vue') },
       { path: 'configurator', component: () => import('pages/Configurator.vue') },
-      { path: 'sandbox', component: () => import('pages/Sandbox.vue') }
+      { path: 'sandbox', component: () => import('pages/Sandbox.vue') },
+      { path: 'systemviewer', component: () => import('pages/Systemviewer.vue') }
     ]
   },
 
