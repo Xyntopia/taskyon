@@ -1,6 +1,7 @@
 import Vue from 'vue'
 import Vuex from 'vuex'
 
+// TODO: currently vue modules are not in use... we might need this later though
 // import example from './module-example'
 
 Vue.use(Vuex)
@@ -18,6 +19,15 @@ export default function (/* { ssrContext } */) {
   const Store = new Vuex.Store({
     modules: {
       // example
+    },
+
+    state: {
+      count: 0
+    },
+    mutations: {
+      increment (state) {
+        state.count++
+      }
     },
 
     // enable strict mode (adds overhead!)

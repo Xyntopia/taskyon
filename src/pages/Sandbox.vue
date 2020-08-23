@@ -1,18 +1,26 @@
 <template>
   <q-page class="bg-secondary">
-    <cytograph/>
+    <q-btn color="white" text-color="black" label="vuex-test" @click="increment"/>
+    <q-card>{{ count }}</q-card>
   </q-page>
 </template>
 
 <script>
 // import mxgraph from 'components/mxgraph.vue'
-import cytograph from 'components/cytograph.vue'
+
+import { mapState } from 'vuex'
 
 export default {
   name: 'PageBasicSearch',
-  components: {
-    // mxgraph,
-    cytograph
+  computed: mapState([
+    'count'
+  ]),
+  methods: {
+    increment () {
+      console.log('pressed button....')
+      this.$store.commit('increment')
+      console.log(this.$store.state.count)
+    }
   }
 }
 </script>
