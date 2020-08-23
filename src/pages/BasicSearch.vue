@@ -5,7 +5,7 @@
       <div class="col-1">
         <h1> COXACON </h1>
       </div>
-      <div class="col-1">
+      <div class="col-1" style="width: 70%">
         <ComponentSearch/>
       </div>
   </q-page>

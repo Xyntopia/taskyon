@@ -22,7 +22,9 @@ export default function (/* { ssrContext } */) {
     },
 
     state: {
-      count: 0
+      count: 0,
+      result: ['r12', 'r23', 'r34'],
+      searchstring: ''
     },
     mutations: {
       increment (state) {

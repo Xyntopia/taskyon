@@ -1,4 +1,5 @@
 <template>
+  <div>
       <q-select
           rounded filled
           input-class="text-light"
@@ -14,7 +15,7 @@
           :options="options"
           @filter="filterFn"
           @input-value="setModel"
-          hint="Search for a component!"
+          label="Search for a component!"
         >
           <template v-slot:no-option>
             <q-item>
@@ -32,9 +33,22 @@
             </q-item>
           </template>-->
         </q-select>
+        <div
+          class="fit row justify-start items-left q-gutter-xs q-py-xs"
+          style="height:50px;">
+            <div  class="col-1"
+                  v-for="item in result"
+                  :key="item.id">
+              <q-card> {{ item }} </q-card>
+            </div>
+        </div>
+  </div>
 </template>
 
 <script>
+// import { mapGetters, mapActions } from 'vuex'
+import { mapState } from 'vuex'
+
 const stringOptions = [
   'Component'
 ].reduce((acc, opt) => {
@@ -45,12 +59,18 @@ const stringOptions = [
 }, [])
 
 export default {
-  name: 'PageBasicSearch',
+  name: 'ComponentSearch',
   data () {
     return {
       model: null,
-      options: null
+      options: null,
+      searchresult: ['r1', 'r2', 'r3']
     }
+  },
+  computed: {
+    ...mapState([
+      'result'
+    ])
   },
   methods: {
     filterFn (val, update, abort) {
