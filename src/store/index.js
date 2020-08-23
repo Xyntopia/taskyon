@@ -29,6 +29,9 @@ export default function (/* { ssrContext } */) {
     mutations: {
       increment (state) {
         state.count++
+      },
+      updateSearchString (state, searchstring) {
+        state.searchstring = searchstring
       }
     },
 

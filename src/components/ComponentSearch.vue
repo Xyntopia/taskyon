@@ -4,12 +4,11 @@
           rounded filled
           input-class="text-light"
           bg-color="white"
-          v-model="search"
+          v-model="searchstring"
           type="search"
           autofocus
           debounce="500"
           label="Search for a component!"
-          @input="updateSearchString"
         >
           <template v-slot:no-option>
             <q-item>
@@ -33,6 +32,7 @@
         <div
           class="fit row justify-start items-left q-gutter-xs q-py-xs"
           style="height:50px;">
+            {{ searchstring }}
             <div  class="col-1"
                   v-for="item in result"
                   :key="item.id">
@@ -50,20 +50,23 @@ export default {
   name: 'ComponentSearch',
   data () {
     return {
-      search: null,
-      options: null,
-      searchresult: ['r1', 'r2', 'r3']
+      options: null
     }
   },
   computed: {
+    searchstring: {
+      get () {
+        return this.$store.state.searchstring
+      },
+      set (val) {
+        console.log('updated searchstring: ')
+        console.log(val)
+        this.$store.commit('updateSearchString', val)
+      }
+    },
     ...mapState([
       'result'
     ])
-  },
-  methods: {
-    updateSearchString (val) {
-      console.log('updated searchstring: ' + val)
-    }
   }
 }
 </script>
