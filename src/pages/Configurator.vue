@@ -3,6 +3,26 @@
       <div class="column q-pa-xs">
         <!--<div class="fit column justify-start items-center">-->
           <div class="q-col-gutter-xs">
+            <div class="col-1">
+              <div class="row q-col-gutter-xs">
+               <div class="col-8">
+                <q-card style="min-height: 200px; min_width: 200px;">
+                  <!--<mxgraph/>-->
+                  <cytograph/>
+                </q-card>
+               </div>
+               <div class="col-4">
+                <q-card class="fit">
+                  <div class="column justify-start">
+                    <div class="col"><b>Component Description</b></div>
+                    <div class="col">
+                      add/remove
+                    </div>
+                  </div>
+                </q-card>
+               </div>
+              </div>
+            </div>
             <div class='col-1'>
               <q-select
                   class='col'
@@ -23,7 +43,7 @@
                   @input-value="setModel"
                   style="width: 100%"
                   stack-label
-                  label="test"
+                  label="Seach for new Components!"
                   hide-bottom-space
                 >
                   <template v-slot:append>
@@ -44,27 +64,7 @@
                       </q-item-section>
                     </q-item>
                   </template>-->
-                </q-select>
-              </div>
-            <div class="col-1">
-              <div class="row q-col-gutter-xs">
-               <div class="col-8">
-                <q-card style="min-height: 200px; min_width: 200px;">
-                  <!--<mxgraph/>-->
-                  <cytograph/>
-                </q-card>
-               </div>
-               <div class="col-4">
-                <q-card class="fit">
-                  <div class="column justify-start">
-                    <div class="col"><b>Component Description</b></div>
-                    <div class="col">
-                      add/remove
-                    </div>
-                  </div>
-                </q-card>
-               </div>
-              </div>
+              </q-select>
             </div>
             <div class="col-1">
               <q-card>
