@@ -4,6 +4,7 @@
           rounded filled
           input-class="text-light"
           bg-color="white"
+          :loading="searchingState"
           v-model="searchstring"
           type="search"
           autofocus
@@ -32,7 +33,6 @@
         <div
           class="fit row justify-start items-left q-gutter-xs q-py-xs"
           style="height:50px;">
-            {{ searchstring }}
             <div  class="col-1"
                   v-for="item in result"
                   :key="item.id">
@@ -59,13 +59,12 @@ export default {
         return this.$store.state.searchstring
       },
       set (val) {
-        console.log('updated searchstring: ')
-        console.log(val)
-        this.$store.commit('updateSearchString', val)
+        this.$store.dispatch('search', val)
       }
     },
     ...mapState([
-      'result'
+      'result',
+      'searchingState'
     ])
   }
 }

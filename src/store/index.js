@@ -24,7 +24,8 @@ export default function (/* { ssrContext } */) {
     state: {
       count: 0,
       result: ['r12', 'r23', 'r34'],
-      searchstring: ''
+      searchstring: '',
+      searchingState: false
     },
     mutations: {
       increment (state) {
@@ -32,9 +33,21 @@ export default function (/* { ssrContext } */) {
       },
       updateSearchString (state, searchstring) {
         state.searchstring = searchstring
+        state.result = searchstring.split('')
+      },
+      setSearchState (state, val) {
+        state.searchingState = val
       }
     },
-
+    actions: {
+      async search (context, val) {
+        context.commit('updateSearchString', val)
+        context.commit('setSearchState', true)
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        console.log('finished searching')
+        context.commit('setSearchState', false)
+      }
+    },
     // enable strict mode (adds overhead!)
     // for dev mode only
     strict: process.env.DEV
