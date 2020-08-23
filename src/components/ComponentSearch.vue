@@ -1,21 +1,15 @@
 <template>
   <div>
-      <q-select
+      <q-input
           rounded filled
           input-class="text-light"
-          :value="model"
           bg-color="white"
-          hide-selected
-          v-model="model"
-          fill-input
-          use-input
-          hide-dropdown-icon
+          v-model="search"
+          type="search"
           autofocus
-          input-debounce="200"
-          :options="options"
-          @filter="filterFn"
-          @input-value="setModel"
+          debounce="500"
           label="Search for a component!"
+          @input="updateSearchString"
         >
           <template v-slot:no-option>
             <q-item>
@@ -23,6 +17,9 @@
                 No results
               </q-item-section>
             </q-item>
+          </template>
+          <template v-slot:append>
+            <q-icon name="search" />
           </template>
           <!--
           <template v-slot:option>
@@ -32,7 +29,7 @@
               </q-item-section>
             </q-item>
           </template>-->
-        </q-select>
+        </q-input>
         <div
           class="fit row justify-start items-left q-gutter-xs q-py-xs"
           style="height:50px;">
@@ -49,20 +46,11 @@
 // import { mapGetters, mapActions } from 'vuex'
 import { mapState } from 'vuex'
 
-const stringOptions = [
-  'Component'
-].reduce((acc, opt) => {
-  for (let i = 1; i <= 5; i++) {
-    acc.push(opt + ' ' + i)
-  }
-  return acc
-}, [])
-
 export default {
   name: 'ComponentSearch',
   data () {
     return {
-      model: null,
+      search: null,
       options: null,
       searchresult: ['r1', 'r2', 'r3']
     }
@@ -73,25 +61,8 @@ export default {
     ])
   },
   methods: {
-    filterFn (val, update, abort) {
-      update(() => {
-        const needle = val.toLocaleLowerCase()
-        this.options = stringOptions.filter(v => v.toLocaleLowerCase().indexOf(needle) > -1)
-      })
-
-      setTimeout(() => {
-        update(() => {
-          this.options = stringOptions
-        })
-      }, 2000)
-    },
-
-    abortFilterFn () {
-      // console.log('delayed filter aborted')
-    },
-
-    setModel (val) {
-      this.model = val
+    updateSearchString (val) {
+      console.log('updated searchstring: ' + val)
     }
   }
 }
