@@ -24,47 +24,7 @@
               </div>
             </div>
             <div class='col-1'>
-              <q-select
-                  class='col'
-                  filled dense
-                  input-class="text-light"
-                  :value="model"
-                  bg-color="white"
-                  hide-selected
-                  v-model="model"
-                  hide-hint
-                  fill-input
-                  use-input
-                  hide-dropdown-icon
-                  autofocus
-                  input-debounce="500"
-                  :options="options"
-                  @filter="filterFn"
-                  @input-value="setModel"
-                  style="width: 100%"
-                  stack-label
-                  label="Seach for new Components!"
-                  hide-bottom-space
-                >
-                  <template v-slot:append>
-                    <q-icon name="search" @click.stop />
-                  </template>
-                  <template v-slot:no-option>
-                    <q-item>
-                      <q-item-section class="text-grey">
-                        No results
-                      </q-item-section>
-                    </q-item>
-                  </template>
-                  <!--
-                  <template v-slot:option>
-                    <q-item>
-                      <q-item-section class="text-grey">
-                        No results
-                      </q-item-section>
-                    </q-item>
-                  </template>-->
-              </q-select>
+              <ComponentSearch/>
             </div>
             <div class="col-1">
               <q-card>
@@ -79,6 +39,7 @@
 <script>
 // import mxgraph from 'components/mxgraph.vue'
 import cytograph from 'components/cytograph.vue'
+import ComponentSearch from 'components/ComponentSearch.vue'
 
 const stringOptions = [
   'Component'
@@ -92,8 +53,8 @@ const stringOptions = [
 export default {
   name: 'PageBasicSearch',
   components: {
-    // mxgraph,
-    cytograph
+    cytograph,
+    ComponentSearch
   },
   data () {
     return {
@@ -103,9 +64,15 @@ export default {
   },
   methods: {
     filterFn (val, update, abort) {
+      if (val.length < 2) {
+        abort()
+        return
+      }
+
       update(() => {
         const needle = val.toLocaleLowerCase()
         this.options = stringOptions.filter(v => v.toLocaleLowerCase().indexOf(needle) > -1)
+        // this.options = []
       })
 
       setTimeout(() => {
@@ -119,7 +86,12 @@ export default {
       // console.log('delayed filter aborted')
     },
 
+    newSearch (val) {
+      console.log('the new search value is: ' + val)
+    },
+
     setModel (val) {
+      console.log('new input text: ' + val)
       this.model = val
     }
   }
