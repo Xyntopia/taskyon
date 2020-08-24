@@ -7,7 +7,6 @@
 import cytoscape from 'cytoscape'
 import cola from 'cytoscape-cola'
 import { colors } from 'quasar'
-import config from './example-config'
 
 cytoscape.use(cola)
 
@@ -37,6 +36,7 @@ var layoutoptions = {
 
 export default {
   name: 'cytograph',
+  props: ['elementlist'],
   data () {
     return {
       message: 'testmessage'
@@ -54,7 +54,7 @@ export default {
 
       var cy = cytoscape({
         container: container, // container to render in
-        elements: config.elements,
+        elements: this.elementlist,
         style: `
           node {
             background-color: ${colors.getBrand('secondary')};

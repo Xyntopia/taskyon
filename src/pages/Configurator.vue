@@ -8,7 +8,7 @@
                <div class="col-8">
                 <q-card style="min-height: 200px; min_width: 200px;">
                   <!--<mxgraph/>-->
-                  <cytograph/>
+                  <cytograph v-bind:elementlist="elementlist"/>
                 </q-card>
                </div>
                <div class="col-4">
@@ -40,6 +40,7 @@
 // import mxgraph from 'components/mxgraph.vue'
 import cytograph from 'components/cytograph.vue'
 import ComponentSearch from 'components/ComponentSearch.vue'
+import config from '../components/example-config.js'
 
 const stringOptions = [
   'Component'
@@ -51,7 +52,7 @@ const stringOptions = [
 }, [])
 
 export default {
-  name: 'PageBasicSearch',
+  name: 'PageConfigurator',
   components: {
     cytograph,
     ComponentSearch
@@ -59,7 +60,8 @@ export default {
   data () {
     return {
       model: null,
-      options: null
+      options: null,
+      elementlist: config.elements
     }
   },
   methods: {
