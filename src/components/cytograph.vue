@@ -19,8 +19,10 @@ console.log('imported cytoscape')
 // for cola options check this webpage: https://github.com/cytoscape/cytoscape.js-cola
 var layoutoptions = {
   cola: {
+    name: 'cola',
     animate: true, // whether to show the layout as it's running
-    maxSimulationTime: 500, // max length in ms to run the layout
+    animationDuration: 500, // duration of animation in ms, if enabled
+    maxSimulationTime: 5000, // max length in ms to run the layout
     fit: true, // on every layout reposition of nodes, fit the viewport
     padding: 30 // padding around the simulation
   },
@@ -43,18 +45,48 @@ export default {
     }
   },
   mounted () {
-    this.initgraph(
-      this.$refs.cyref // .getElementById('container') // container to render in
-    )
+    console.log('lifecycle: mounted')
+    this.drawgraph()
+  },
+  computed: {
+    graphelements: function () {
+      // transform component data into graph format
+      // required by cytoscape
+      console.log('recompute graph elements')
+
+      var nodes = this.elementlist.map(x => {
+        return { data: { id: x }, group: 'nodes' }
+      })
+      /* var edges = [{
+          data: { id: 'abc', source: 'rc', target: 'b' },
+          group: 'edges'
+        }] */
+
+      return [...nodes]
+    }
+  },
+  watch: {
+    graphelements: function () {
+      console.log('elements changed!!')
+      this.updategraph()
+    }
   },
   methods: {
-    initgraph (container) {
+    updategraph () {
+      this._cy.elements().remove()
+      this._cy.add(this.graphelements)
+      this._cy.resize()
+      this._cy.fit()
+      this._cy.layout(layoutoptions.cola).run()
+    },
+    drawgraph () {
       console.log('initializing cytoscape')
-      console.log(container)
+      // console.log(container)
+      var container = this.$refs.cyref // .getElementById('container') // container to render in
 
       var cy = cytoscape({
         container: container, // container to render in
-        elements: this.elementlist,
+        elements: this.graphelements,
         style: `
           node {
             background-color: ${colors.getBrand('secondary')};
@@ -84,7 +116,7 @@ export default {
         padding: 30
       }).run() */
 
-      // this.cy = {refrence: cy}
+      this._cy = cy
     }
   }
 }

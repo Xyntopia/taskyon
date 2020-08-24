@@ -39,6 +39,11 @@ export default function (/* { ssrContext } */) {
         state.searchingState = val
       }
     },
+    getters: {
+      componentlist: state => {
+        return state.result
+      }
+    },
     actions: {
       async search (context, val) {
         context.commit('updateSearchString', val)

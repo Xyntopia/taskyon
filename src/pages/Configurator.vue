@@ -8,7 +8,7 @@
                <div class="col-8">
                 <q-card style="min-height: 200px; min_width: 200px;">
                   <!--<mxgraph/>-->
-                  <cytograph v-bind:elementlist="elementlist"/>
+                  <cytograph v-bind:elementlist="componentlist"/>
                 </q-card>
                </div>
                <div class="col-4">
@@ -40,7 +40,7 @@
 // import mxgraph from 'components/mxgraph.vue'
 import cytograph from 'components/cytograph.vue'
 import ComponentSearch from 'components/ComponentSearch.vue'
-import config from '../components/example-config.js'
+import { mapGetters } from 'vuex'
 
 const stringOptions = [
   'Component'
@@ -60,9 +60,13 @@ export default {
   data () {
     return {
       model: null,
-      options: null,
-      elementlist: config.elements
+      options: null
     }
+  },
+  computed: {
+    ...mapGetters([
+      'componentlist'
+    ])
   },
   methods: {
     filterFn (val, update, abort) {
