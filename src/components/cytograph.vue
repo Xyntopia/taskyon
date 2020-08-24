@@ -5,14 +5,35 @@
 
 <script>
 import cytoscape from 'cytoscape'
+import cola from 'cytoscape-cola'
 import { colors } from 'quasar'
 import config from './example-config'
+
+cytoscape.use(cola)
 
 console.log('imported cytoscape')
 
 /* var elements = [
   { name: 'A' }
 ] */
+
+// for cola options check this webpage: https://github.com/cytoscape/cytoscape.js-cola
+var layoutoptions = {
+  cola: {
+    animate: true, // whether to show the layout as it's running
+    maxSimulationTime: 500, // max length in ms to run the layout
+    fit: true, // on every layout reposition of nodes, fit the viewport
+    padding: 30 // padding around the simulation
+  },
+  cose: {
+    animate: true, // whether to animate changes to the layout
+    animationDuration: 500, // duration of animation in ms, if enabled
+    animationEasing: undefined, // easing of animation, if enabled
+    name: 'cose',
+    fit: true,
+    padding: 30
+  }
+}
 
 export default {
   name: 'cytograph',
@@ -52,14 +73,7 @@ export default {
           }
         }
         `,
-        layout: {
-          animate: true, // whether to animate changes to the layout
-          animationDuration: 500, // duration of animation in ms, if enabled
-          animationEasing: undefined, // easing of animation, if enabled
-          name: 'cose',
-          fit: true,
-          padding: 30
-        }
+        layout: layoutoptions.cola
       })
       cy.resize()
       cy.fit()
