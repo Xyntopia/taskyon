@@ -30,10 +30,19 @@
             </q-item>
           </template>-->
         </q-input>
-        <div
+        <q-table
+            v-if="true"
+            title="Components"
+            :data="result.data"
+            row-key="id"
+        />
+        <div v-if="true">
+          {{ result.data }}
+        </div>
+        <div v-if="false">
           class="fit row justify-start items-left q-gutter-xs q-py-xs"
           style="height:50px;">
-            <div  class="col-1"
+            <div  class="col"
                   v-for="item in result"
                   :key="item.id">
               <q-card> {{ item }} </q-card>
