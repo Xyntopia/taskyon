@@ -19,6 +19,15 @@ export default {
   components: {
     ComponentSearch
   },
+  mounted () {
+    console.log('mounted search string')
+    this.updateSearchString(this.$route.query.q)
+  },
+  watch: {
+    $route (to, from) {
+      this.updateSearchString(to.query.q)
+    }
+  },
   computed: {
     initiallayout () {
       return !this.$route.query.q
@@ -33,7 +42,12 @@ export default {
     }
   },
   methods: {
-
+    updateSearchString (val) {
+      if (val) {
+        console.log('updated search string')
+        this.$store.dispatch('search', val)
+      }
+    }
   }
 }
 </script>
