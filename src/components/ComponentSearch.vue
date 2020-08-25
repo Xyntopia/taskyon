@@ -32,21 +32,15 @@
         </q-input>
         <q-table
             v-if="true"
+            :dense="false"
             title="Components"
             :data="result.data"
             row-key="id"
+            :columns="columns"
+            :visible-columns="['name','keywords']"
         />
-        <div v-if="true">
-          {{ result.data }}
-        </div>
         <div v-if="false">
-          class="fit row justify-start items-left q-gutter-xs q-py-xs"
-          style="height:50px;">
-            <div  class="col"
-                  v-for="item in result"
-                  :key="item.id">
-              <q-card> {{ item }} </q-card>
-            </div>
+          {{ result.data }}
         </div>
   </div>
 </template>
@@ -59,7 +53,13 @@ export default {
   name: 'ComponentSearch',
   data () {
     return {
-      options: null
+      options: null,
+      columns: [
+        { name: 'id', field: 'id', label: 'id' },
+        { name: 'name', field: 'name', label: 'name' },
+        { name: 'score', field: 'score', label: 'score' },
+        { name: 'keywords', field: 'keywords', label: 'keywords' }
+      ]
     }
   },
   computed: {
