@@ -87,7 +87,7 @@ export default function (/* { ssrContext } */) {
           })
           .then(function () {
             // always executed
-            console.log('error occured!')
+            // console.log('error occured!')
           })
         // await new Promise(resolve => setTimeout(resolve, 1000))
         console.log('finished searching')

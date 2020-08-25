@@ -8,6 +8,7 @@
           v-model="searchstring"
           type="search"
           autofocus
+          clearable
           debounce="500"
           label="Search for a component!"
         >
