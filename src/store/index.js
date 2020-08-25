@@ -47,7 +47,6 @@ export default function (/* { ssrContext } */) {
       },
       updateSearchString (state, searchstring) {
         state.searchstring = searchstring
-        state.result = searchstring.split('')
       },
       setSearchState (state, val) {
         state.searchingState = val
