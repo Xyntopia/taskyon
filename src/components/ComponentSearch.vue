@@ -32,12 +32,14 @@
         </q-input>
         <q-table
             v-if="true"
-            :dense="false"
+            :dense="true"
             title="Components"
             :data="result.data"
             row-key="id"
             :columns="columns"
             :visible-columns="['name','keywords']"
+            :grid="true"
+            :pagination="pagination"
         />
         <div v-if="false">
           {{ result.data }}
@@ -54,6 +56,14 @@ export default {
   data () {
     return {
       options: null,
+      loading: false,
+      pagination: {
+        sortBy: 'score',
+        descending: true,
+        page: 1,
+        rowsPerPage: 10
+        // rowsNumber: 10
+      },
       columns: [
         { name: 'id', field: 'id', label: 'id' },
         { name: 'name', field: 'name', label: 'name' },
