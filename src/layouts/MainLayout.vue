@@ -44,13 +44,13 @@
           icon="settings"
           label="Administration"
         >
-          <q-list class="q-pl-lg">
-            <q-item to="/Configuration" active-class="q-item-no-link-highlighting">
+          <q-list class="q-pl-md">
+            <q-item to="/ConfiguratorAdmin" active-class="q-item-no-link-highlighting">
               <q-item-section avatar>
                 <q-icon name="design_services"/>
               </q-item-section>
               <q-item-section>
-                <q-item-label>Configurator Templates</q-item-label>
+                <q-item-label>Configurator Admin</q-item-label>
               </q-item-section>
             </q-item>
             <q-item to="/ComcharaxControlPanel" active-class="q-item-no-link-highlighting">
@@ -62,7 +62,7 @@
                 <q-item-label>Scraper Control Panel</q-item-label>
               </q-item-section>
             </q-item>
-            <q-item to="/Profile" active-class="q-item-no-link-highlighting">
+            <q-item to="/User" active-class="q-item-no-link-highlighting">
               <q-item-section avatar>
                 <q-icon name="person"/>
               </q-item-section>

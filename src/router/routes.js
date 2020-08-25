@@ -7,7 +7,10 @@ const routes = [
       { path: '', component: () => import('pages/BasicSearch.vue') },
       { path: 'configurator', component: () => import('pages/Configurator.vue') },
       { path: 'sandbox', component: () => import('pages/Sandbox.vue') },
-      { path: 'systemviewer', component: () => import('pages/Systemviewer.vue') }
+      { path: 'systemviewer', component: () => import('pages/Systemviewer.vue') },
+      { path: 'configuratoradmin', component: () => import('pages/ConfiguratorAdmin.vue') },
+      { path: 'ComcharaxControlPanel', component: () => import('pages/ComcharaxControlPanel.vue') },
+      { path: 'user', component: () => import('pages/UserProfile.vue') }
     ]
   },
 
