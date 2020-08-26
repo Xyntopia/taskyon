@@ -13,6 +13,11 @@
 
 <script>
 import ComponentSearch from 'components/ComponentSearch.vue'
+import { mapState } from 'vuex'
+
+function isEmptyOrSpaces (str) {
+  return str === null || str.match(/^ *$/) !== null
+}
 
 export default {
   name: 'PageBasicSearch',
@@ -26,6 +31,15 @@ export default {
   watch: {
     $route (to, from) {
       this.updateSearchString(to.query.q)
+    },
+    searchstring (newq, oldq) {
+      // watches the mapState "searchstring"
+      if (oldq !== newq) {
+        if (!isEmptyOrSpaces(newq)) {
+          // thisgives us an infinite loop!
+          this.$router.push({ path: '/', query: { q: newq } })
+        }
+      }
     }
   },
   computed: {
@@ -39,7 +53,10 @@ export default {
       } else {
         return 'width: 100%;'
       }
-    }
+    },
+    ...mapState([
+      'searchstring'
+    ])
   },
   methods: {
     updateSearchString (val) {

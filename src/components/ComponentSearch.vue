@@ -12,24 +12,9 @@
           debounce="500"
           label="Search for a component!"
         >
-          <template v-slot:no-option>
-            <q-item>
-              <q-item-section class="text-grey">
-                No results
-              </q-item-section>
-            </q-item>
-          </template>
           <template v-slot:append>
             <q-icon name="search" />
           </template>
-          <!--
-          <template v-slot:option>
-            <q-item>
-              <q-item-section class="text-grey">
-                No results
-              </q-item-section>
-            </q-item>
-          </template>-->
         </q-input>
         <q-table
             v-if="true"
