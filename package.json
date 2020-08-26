@@ -29,7 +29,8 @@
     "eslint-plugin-node": "^11.0.0",
     "eslint-plugin-promise": "^4.0.1",
     "eslint-plugin-standard": "^4.0.0",
-    "eslint-plugin-vue": "^6.1.2"
+    "eslint-plugin-vue": "^6.1.2",
+    "quasar-app-extension-ssg": "https://github.com/freddy38510/quasar-app-extension-ssg"
   },
   "browserslist": [
     "last 10 Chrome versions",
