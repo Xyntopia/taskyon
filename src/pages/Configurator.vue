@@ -15,6 +15,7 @@
                 <q-card class="fit">
                   <div class="column justify-start">
                     <div class="col"><b>Component Description</b></div>
+                    <div>description</div>
                     <div class="col">
                       add/remove
                     </div>

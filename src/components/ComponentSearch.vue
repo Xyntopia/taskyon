@@ -18,18 +18,38 @@
         </q-input>
         <q-table
             v-if="true"
-            :dense="true"
+            :dense="false"
             title="Components"
             :data="result.data"
             row-key="id"
             :columns="columns"
             :visible-columns="['name','keywords']"
             :grid="true"
-            :pagination="pagination"
-        />
-        <div v-if="false">
-          {{ result.data }}
-        </div>
+            :grid-header="true"
+            :card-container-class="'q-gutter-xs'"
+            :pagination="pagination">
+          <template v-slot:body-cell-name="props">
+            <q-td :props="props.name">
+              <div>
+                test
+                {{ props.row.name }}
+              </div>
+            </q-td>
+          </template>
+          <template v-slot:item="props">
+            <q-card :props="props.name" bordered>
+              <div>
+                <q-card-section>
+                {{ props.row.name }}
+                </q-card-section>
+                <q-card-actions>
+                  <q-btn size='sm' padding="xs" flat @click="onaddbuttonclick(props.row.id)">Add</q-btn>
+                  <q-btn size='sm' padding="xs" flat>Info</q-btn>
+                </q-card-actions>
+              </div>
+            </q-card>
+          </template>
+        </q-table>
   </div>
 </template>
 
@@ -56,6 +76,11 @@ export default {
         { name: 'score', field: 'score', label: 'score' },
         { name: 'keywords', field: 'keywords', label: 'keywords' }
       ]
+    }
+  },
+  methods: {
+    onaddbuttonclick (clickedId) {
+      console.log(clickedId)
     }
   },
   computed: {
