@@ -55,8 +55,9 @@ export default {
       console.log('recompute graph elements')
 
       var nodes = this.elementlist.map(x => {
-        return { data: { id: x }, group: 'nodes' }
+        return { data: { id: x.name }, group: 'nodes' }
       })
+      console.log(nodes)
       /* var edges = [{
           data: { id: 'abc', source: 'rc', target: 'b' },
           group: 'edges'

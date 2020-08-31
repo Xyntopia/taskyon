@@ -38,6 +38,7 @@ export default function (/* { ssrContext } */) {
     state: {
       count: 0,
       result: [],
+      opensystem: {},
       searchstring: '',
       searchingState: false
     },
@@ -57,7 +58,13 @@ export default function (/* { ssrContext } */) {
     },
     getters: {
       componentlist: state => {
-        return state.result
+        if (state.result.data) {
+          if (state.result.data.data) {
+            return state.result.data.data
+          }
+        } else {
+          return []
+        }
       }
     },
     actions: {
@@ -67,8 +74,7 @@ export default function (/* { ssrContext } */) {
         await axios
           .get(
             // '/components?_end=10&_order=ASC&_sort=id&_start=0&q=test',
-            '/components',
-            {
+            '/components', {
               params: {
                 q: val,
                 _end: '10',

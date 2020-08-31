@@ -20,7 +20,7 @@
             v-if="true"
             :dense="false"
             title="Components"
-            :data="result.data"
+            :data="componentlist"
             row-key="id"
             :columns="columns"
             :visible-columns="['name','keywords']"
@@ -55,7 +55,7 @@
 
 <script>
 // import { mapGetters, mapActions } from 'vuex'
-import { mapState } from 'vuex'
+import { mapState, mapGetters } from 'vuex'
 
 export default {
   name: 'ComponentSearch',
@@ -93,8 +93,10 @@ export default {
       }
     },
     ...mapState([
-      'result',
       'searchingState'
+    ]),
+    ...mapGetters([
+      'componentlist'
     ])
   }
 }
