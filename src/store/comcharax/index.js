@@ -24,7 +24,7 @@ export default {
   state: {
     count: 0,
     result: [],
-    activeComponentSystem: [],
+    activeComponentSystem: [{ id: 'atest' }, { id: 'b' }, { id: 'c' }],
     opensystem: {},
     searchstring: '',
     searchingState: false
@@ -44,6 +44,9 @@ export default {
     }
   },
   getters: {
+    componentSystem: state => {
+      return state.activeComponentSystem
+    },
     componentlist: state => {
       if (state.result.data) {
         if (state.result.data.data) {
@@ -85,10 +88,7 @@ export default {
       console.log('finished searching')
       context.commit('setSearchState', false)
     }
-  },
-  // enable strict mode (adds overhead!)
-  // for dev mode only
-  strict: process.env.DEV
+  }
 }
 
 /* export default {

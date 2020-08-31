@@ -38,6 +38,8 @@ export default {
         if (!isEmptyOrSpaces(newq)) {
           // thisgives us an infinite loop!
           this.$router.push({ path: '/', query: { q: newq } })
+        } else {
+          this.$router.push({ path: '/' })
         }
       }
     }
@@ -54,9 +56,9 @@ export default {
         return 'width: 100%;'
       }
     },
-    ...mapState([
-      'searchstring'
-    ])
+    ...mapState({
+      searchstring: s => s.comcharax.searchstring
+    })
   },
   methods: {
     updateSearchString (val) {

@@ -16,10 +16,12 @@
             <q-icon name="search" />
           </template>
         </q-input>
+        <div v-if="false">
+          debug: {{ searchingState }}
+        </div>
         <q-table
             v-if="true"
             :dense="false"
-            title="Components"
             :data="componentlist"
             row-key="id"
             :columns="columns"
@@ -86,15 +88,17 @@ export default {
   computed: {
     searchstring: {
       get () {
-        return this.$store.state.searchstring
+        return this.$store.state.comcharax.searchstring
       },
       set (val) {
         this.$store.dispatch('search', val)
       }
     },
-    ...mapState([
-      'searchingState'
-    ]),
+    ...mapState({
+      // TODO: we are doing it like this because of this: https://github.com/vuejs/vuex/issues/1592
+      // once that is resolved, make sure to revert this to a list of strings
+      searchingState: state => state.comcharax.searchingState
+    }),
     ...mapGetters([
       'componentlist'
     ])

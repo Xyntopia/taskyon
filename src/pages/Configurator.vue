@@ -8,7 +8,7 @@
                <div class="col-8">
                 <q-card style="min-height: 200px; min_width: 200px;">
                   <!--<mxgraph/>-->
-                  <cytograph v-bind:elementlist="componentlist"/>
+                  <cytograph v-bind:elementlist="componentSystem"/>
                 </q-card>
                </div>
                <div class="col-4">
@@ -66,6 +66,7 @@ export default {
   },
   computed: {
     ...mapGetters([
+      'componentSystem',
       'componentlist'
     ])
   },
