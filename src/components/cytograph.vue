@@ -7,6 +7,7 @@
 import cytoscape from 'cytoscape'
 import cola from 'cytoscape-cola'
 import { colors } from 'quasar'
+var cloneDeep = require('lodash.clonedeep')
 
 cytoscape.use(cola)
 
@@ -54,8 +55,8 @@ export default {
       // required by cytoscape
       console.log('recompute graph elements')
 
-      var nodes = this.elementlist.map(x => {
-        return { data: { id: x.id }, group: 'nodes' }
+      var nodes = this.elementlist.components.map(x => {
+        return { data: cloneDeep(x), group: 'nodes' }
       })
       console.log(nodes)
       /* var edges = [{
@@ -88,10 +89,16 @@ export default {
       var cy = cytoscape({
         container: container, // container to render in
         elements: this.graphelements,
+        // style configuration options: https://js.cytoscape.org/#style
         style: `
           node {
             background-color: ${colors.getBrand('secondary')};
-            label: data(id);
+            label: data(name);
+            text-valign: center;
+            width: label;
+            text-wrap: ellipsis;
+            font-size: 10;
+            text-max-width: 50px;
             shape: round-rectangle;
           }
 

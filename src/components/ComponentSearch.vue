@@ -27,7 +27,7 @@
             :columns="columns"
             :visible-columns="['name','keywords']"
             :grid="true"
-            :grid-header="true"
+            :grid-header="false"
             :card-container-class="'q-gutter-xs'"
             :pagination="pagination">
           <template v-slot:body-cell-name="props">
@@ -40,7 +40,6 @@
           </template>
           <template v-slot:item="props">
             <q-card :props="props.name" bordered>
-              <div>
                 <q-card-section>
                 {{ props.row.name }}
                 </q-card-section>
@@ -48,7 +47,6 @@
                   <q-btn size='sm' padding="xs" flat @click="onaddbuttonclick(props.row.id)">Add</q-btn>
                   <q-btn size='sm' padding="xs" flat>Info</q-btn>
                 </q-card-actions>
-              </div>
             </q-card>
           </template>
         </q-table>
@@ -83,6 +81,7 @@ export default {
   methods: {
     onaddbuttonclick (clickedId) {
       console.log(clickedId)
+      this.$store.commit('addComponent2System', clickedId)
     }
   },
   computed: {

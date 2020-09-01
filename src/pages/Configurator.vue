@@ -6,9 +6,16 @@
             <div class="col-1">
               <div class="row q-col-gutter-xs">
                <div class="col-8">
-                <q-card style="min-height: 200px; min_width: 200px;">
+                <q-card>
                   <!--<mxgraph/>-->
-                  <cytograph v-bind:elementlist="componentSystem"/>
+                  <q-card-actions align="between">
+                    <q-btn size='sm' padding="xs" outline>Clear</q-btn>
+                    <q-btn size='sm' padding="xs" outline>New</q-btn>
+                    <q-input hide-bottom-space filled dense v-model="test"/>
+                  </q-card-actions>
+                  <q-card-section style="min-height: 200px; min_width: 200px;">
+                    <cytograph v-bind:elementlist="componentSystem"/>
+                  </q-card-section>
                 </q-card>
                </div>
                <div class="col-4">

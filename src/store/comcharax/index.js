@@ -22,17 +22,19 @@ axios.defaults.baseURL = 'http://localhost:5000'
 
 export default {
   state: {
-    count: 0,
     result: [],
-    activeComponentSystem: [{ id: 'atest' }, { id: 'b' }, { id: 'c' }],
+    activeComponentSystem: {
+      counter: 0,
+      name: 'new system',
+      id: '00000000',
+      components: [],
+      links: []
+    },
     opensystem: {},
     searchstring: '',
     searchingState: false
   },
   mutations: {
-    increment (state) {
-      state.count++
-    },
     updateSearchString (state, searchstring) {
       state.searchstring = searchstring
     },
@@ -41,6 +43,25 @@ export default {
     },
     updateSearchResult (state, val) {
       state.result = val
+    },
+    resetComponentSystem (state) {
+      state.activeComponentSystem = {
+        counter: 0,
+        name: 'new system',
+        id: '00000000',
+        components: [],
+        links: []
+      }
+    },
+    // adds a component with new id to the active system
+    addComponent2System (state, id) {
+      // var component =
+      state.activeComponentSystem.counter += 1
+      state.activeComponentSystem.components.push({
+        id: state.activeComponentSystem.counter,
+        name: 'asdasdaTODO',
+        source: id
+      })
     }
   },
   getters: {
