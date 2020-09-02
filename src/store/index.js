@@ -1,6 +1,6 @@
 import Vue from 'vue'
 import Vuex from 'vuex'
-
+import VuexORM from '@vuex-orm/core'
 import comcharax from './comcharax'
 
 // TODO: think abot employing the followin vuex plugins:
@@ -9,6 +9,12 @@ import comcharax from './comcharax'
 // - https://github.com/imcvampire/vue-axios
 
 Vue.use(Vuex)
+
+// Create new instance of Database.
+const database = new VuexORM.Database()
+
+// Register Models.
+database.register(comcharax.Component)
 
 /*
  * If not building with SSR mode, you can
@@ -22,8 +28,9 @@ Vue.use(Vuex)
 export default function (/* { ssrContext } */) {
   const Store = new Vuex.Store({
     modules: {
-      comcharax
+      comcharax: comcharax.vuexModule
     },
+    plugins: [VuexORM.install(database)],
     // enable strict mode (adds overhead!)
     // for dev mode only
     strict: process.env.DEV

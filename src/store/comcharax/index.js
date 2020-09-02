@@ -20,7 +20,20 @@ axios.defaults.baseURL = 'http://localhost:5000'
   headers: {'X-Custom-Header': 'foobar'} */
 // var graphengineApi = axios.create()
 
-export default {
+import { Model } from '@vuex-orm/core'
+
+class Component extends Model {
+  static entity = 'components'
+
+  static fields () {
+    return {
+      id: this.attr(null),
+      name: this.attr('')
+    }
+  }
+}
+
+var vuexModule = {
   state: {
     result: [],
     activeComponentSystem: {
@@ -110,6 +123,11 @@ export default {
       context.commit('setSearchState', false)
     }
   }
+}
+
+export default {
+  vuexModule,
+  Component
 }
 
 /* export default {
