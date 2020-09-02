@@ -22,13 +22,20 @@ axios.defaults.baseURL = 'http://localhost:5000'
 
 import { Model } from '@vuex-orm/core'
 
+// TODO:
+// Component class gets added to the store in the index.js of
+// the root vuex namespace. this can probably done in a better way.
+// because of this we can still use "Component" here, but we
+// don't have the registration in the VuexORM database here.
+// For this look in the index.js file in the parent directory.
 class Component extends Model {
   static entity = 'components'
 
   static fields () {
     return {
       id: this.attr(null),
-      name: this.attr('')
+      name: this.attr(''),
+      keywords: this.attr([])
     }
   }
 }
@@ -55,6 +62,10 @@ var vuexModule = {
       state.searchingState = val
     },
     updateSearchResult (state, val) {
+      // TODO: what if data us none?
+      Component.insert({
+        data: val.data.data
+      })
       state.result = val
     },
     resetComponentSystem (state) {
@@ -68,12 +79,12 @@ var vuexModule = {
     },
     // adds a component with new id to the active system
     addComponent2System (state, id) {
-      // var component =
+      var component = Component.find(id)
       state.activeComponentSystem.counter += 1
       state.activeComponentSystem.components.push({
         id: state.activeComponentSystem.counter,
-        name: 'asdasdaTODO',
-        source: id
+        name: component.name,
+        source: component.id
       })
     }
   },

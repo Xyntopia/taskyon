@@ -1415,6 +1415,13 @@
   dependencies:
     normalizr "^3.6.0"
 
+"@vuex-orm/plugin-axios@^0.9.3":
+  version "0.9.3"
+  resolved "https://registry.yarnpkg.com/@vuex-orm/plugin-axios/-/plugin-axios-0.9.3.tgz#c50a00f110484c21bae3626f3823b5a310b1487b"
+  integrity sha512-czZpRq7g15Bb7jpvP2V6m6fisovTa/qdpAQ0gq7TflaJXq3dhsgG9ca+nHAYmV5Ogga43fE/k4ELd29R5sMuJg==
+  dependencies:
+    axios "^0.19.2"
+
 "@webassemblyjs/ast@1.9.0":
   version "1.9.0"
   resolved "https://registry.yarnpkg.com/@webassemblyjs/ast/-/ast-1.9.0.tgz#bd850604b4042459a5a41cd7d338cbed695ed964"
@@ -1949,6 +1956,13 @@ axios@^0.18.1:
   dependencies:
     follow-redirects "1.5.10"
     is-buffer "^2.0.2"
+
+axios@^0.19.2:
+  version "0.19.2"
+  resolved "https://registry.yarnpkg.com/axios/-/axios-0.19.2.tgz#3ea36c5d8818d0d5f8a8a97a6d36b86cdc00cb27"
+  integrity sha512-fjgm5MvRHLhx+osE2xoekY70AhARk3a6hkN+3Io1jc00jtquGvxYlKlsFUhmUET0V5te6CcZI7lcv2Ym61mjHA==
+  dependencies:
+    follow-redirects "1.5.10"
 
 babel-eslint@^10.0.1:
   version "10.1.0"

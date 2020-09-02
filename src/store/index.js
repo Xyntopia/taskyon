@@ -1,6 +1,8 @@
 import Vue from 'vue'
 import Vuex from 'vuex'
 import VuexORM from '@vuex-orm/core'
+import axios from 'axios'
+import VuexORMAxios from '@vuex-orm/plugin-axios'
 import comcharax from './comcharax'
 
 // TODO: think abot employing the followin vuex plugins:
@@ -9,6 +11,9 @@ import comcharax from './comcharax'
 // - https://github.com/imcvampire/vue-axios
 
 Vue.use(Vuex)
+
+// register axios-sync plugin for vuexORM
+VuexORM.use(VuexORMAxios, { axios })
 
 // Create new instance of Database.
 const database = new VuexORM.Database()

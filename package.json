@@ -12,6 +12,7 @@
   "dependencies": {
     "@quasar/extras": "^1.0.0",
     "@vuex-orm/core": "^0.36.3",
+    "@vuex-orm/plugin-axios": "^0.9.3",
     "axios": "^0.18.1",
     "core-js": "^3.6.5",
     "cytoscape": "^3.15.2",
