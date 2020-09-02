@@ -9,9 +9,13 @@
                 <q-card>
                   <!--<mxgraph/>-->
                   <q-card-actions align="between">
-                    <q-btn size='sm' padding="xs" outline>Clear</q-btn>
-                    <q-btn size='sm' padding="xs" outline>New</q-btn>
-                    <q-input hide-bottom-space filled dense v-model="test"/>
+                    <div>
+                      <q-btn size='sm' padding="sm" outline>Clear</q-btn>
+                      <q-btn size='sm' padding="sm" outline>Layout</q-btn>
+                      <q-btn size='sm' padding="sm" outline>Fit</q-btn>
+                      <q-btn size='sm' padding="sm" outline>New</q-btn>
+                    </div>
+                    <q-input hide-bottom-space filled dense v-model="test" label="System Name"/>
                   </q-card-actions>
                   <q-card-section style="min-height: 200px; min_width: 200px;">
                     <cytograph v-bind:elementlist="componentSystem"/>

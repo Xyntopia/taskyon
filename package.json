@@ -17,6 +17,7 @@
     "core-js": "^3.6.5",
     "cytoscape": "^3.15.2",
     "cytoscape-cola": "^2.4.0",
+    "cytoscape-edgehandles": "^3.6.0",
     "lodash.clonedeep": "^4.5.0",
     "mxgraph": "^4.2.0",
     "quasar": "^1.0.0",
