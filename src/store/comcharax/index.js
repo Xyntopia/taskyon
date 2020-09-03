@@ -43,14 +43,6 @@ class Component extends Model {
 var vuexModule = {
   state: {
     result: [],
-    activeComponentSystem: {
-      counter: 0,
-      name: 'new system',
-      id: '00000000',
-      components: [],
-      links: []
-    },
-    opensystem: {},
     searchstring: '',
     searchingState: false
   },
@@ -67,31 +59,9 @@ var vuexModule = {
         data: val.data.data
       })
       state.result = val
-    },
-    resetComponentSystem (state) {
-      state.activeComponentSystem = {
-        counter: 0,
-        name: 'new system',
-        id: '00000000',
-        components: [],
-        links: []
-      }
-    },
-    // adds a component with new id to the active system
-    addComponent2System (state, id) {
-      var component = Component.find(id)
-      state.activeComponentSystem.counter += 1
-      state.activeComponentSystem.components.push({
-        id: state.activeComponentSystem.counter,
-        name: component.name,
-        source: component.id
-      })
     }
   },
   getters: {
-    componentSystem: state => {
-      return state.activeComponentSystem
-    },
     componentlist: state => {
       if (state.result.data) {
         if (state.result.data.data) {

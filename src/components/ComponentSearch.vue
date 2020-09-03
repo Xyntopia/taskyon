@@ -44,8 +44,8 @@
                 {{ props.row.name }}
                 </q-card-section>
                 <q-card-actions>
-                  <q-btn size='sm' padding="xs" flat @click="onaddbuttonclick(props.row.id)">Add</q-btn>
-                  <q-btn size='sm' padding="xs" flat>Info</q-btn>
+                  <q-btn size='sm' padding="xs" flat @click="$emit('component-add', props.row)">Add</q-btn>
+                  <q-btn size='sm' padding="xs" flat @click="$emit('component-info', props.row)">Info</q-btn>
                 </q-card-actions>
             </q-card>
           </template>
@@ -76,12 +76,6 @@ export default {
         { name: 'score', field: 'score', label: 'score' },
         { name: 'keywords', field: 'keywords', label: 'keywords' }
       ]
-    }
-  },
-  methods: {
-    onaddbuttonclick (clickedId) {
-      console.log(clickedId)
-      this.$store.commit('addComponent2System', clickedId)
     }
   },
   computed: {

@@ -15,10 +15,12 @@
                       <q-btn size='sm' padding="sm" outline>Fit</q-btn>
                       <q-btn size='sm' padding="sm" outline>New</q-btn>
                     </div>
-                    <q-input hide-bottom-space filled dense v-model="test" label="System Name"/>
+                    <q-input hide-bottom-space filled dense v-model="componentSystem.name" label="System Name"/>
                   </q-card-actions>
                   <q-card-section style="min-height: 200px; min_width: 200px;">
-                    <cytograph v-bind:elementlist="componentSystem"/>
+                    <cytograph
+                      v-bind:elementlist="componentSystem"
+                      />
                   </q-card-section>
                 </q-card>
                </div>
@@ -36,7 +38,8 @@
               </div>
             </div>
             <div class='col-1'>
-              <ComponentSearch/>
+              <ComponentSearch
+                v-on:component-add="addcomponent2system"/>
             </div>
             <div class="col-1">
               <q-card>
@@ -54,15 +57,6 @@ import cytograph from 'components/cytograph.vue'
 import ComponentSearch from 'components/ComponentSearch.vue'
 import { mapGetters } from 'vuex'
 
-const stringOptions = [
-  'Component'
-].reduce((acc, opt) => {
-  for (let i = 1; i <= 5; i++) {
-    acc.push(opt + ' ' + i)
-  }
-  return acc
-}, [])
-
 export default {
   name: 'PageConfigurator',
   components: {
@@ -72,46 +66,44 @@ export default {
   data () {
     return {
       model: null,
-      options: null
+      options: null,
+      componentSystem: {
+        counter: 0,
+        name: 'new system',
+        id: '00000000',
+        components: [],
+        links: []
+      }
     }
   },
   computed: {
     ...mapGetters([
-      'componentSystem',
       'componentlist'
-    ])
+    ]),
+    components: function () {
+      return this.$store.$db().model('components')
+    }
   },
   methods: {
-    filterFn (val, update, abort) {
-      if (val.length < 2) {
-        abort()
-        return
-      }
-
-      update(() => {
-        const needle = val.toLocaleLowerCase()
-        this.options = stringOptions.filter(v => v.toLocaleLowerCase().indexOf(needle) > -1)
-        // this.options = []
-      })
-
-      setTimeout(() => {
-        update(() => {
-          this.options = stringOptions
-        })
-      }, 2000)
-    },
-
-    abortFilterFn () {
-      // console.log('delayed filter aborted')
-    },
-
     newSearch (val) {
       console.log('the new search value is: ' + val)
     },
-
     setModel (val) {
       console.log('new input text: ' + val)
       this.model = val
+    },
+    // adds a component with new id to the active system
+    addcomponent2system (row) {
+      console.log('add component to system: ' + row.id)
+      var component = this.components.find(row.id)
+      // var component = this.Component().find(row.id)
+      console.log(component)
+      this.componentSystem.counter += 1
+      this.componentSystem.components.push({
+        id: this.componentSystem.counter,
+        name: component.name,
+        source: component.id
+      })
     }
   }
 }
