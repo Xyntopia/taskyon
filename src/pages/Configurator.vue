@@ -20,6 +20,7 @@
                   <q-card-section style="min-height: 200px; min_width: 200px;">
                     <cytograph
                       v-bind:elementlist="componentSystem"
+                      v-on:link-add="addlink2system"
                       />
                   </q-card-section>
                 </q-card>
@@ -39,7 +40,8 @@
             </div>
             <div class='col-1'>
               <ComponentSearch
-                v-on:component-add="addcomponent2system"/>
+                v-on:component-add="addcomponent2system"
+                />
             </div>
             <div class="col-1">
               <q-card>
@@ -100,9 +102,19 @@ export default {
       console.log(component)
       this.componentSystem.counter += 1
       this.componentSystem.components.push({
-        id: this.componentSystem.counter,
+        id: this.componentSystem.counter.toString(),
         name: component.name,
         source: component.id
+      })
+    },
+    addlink2system (source, target) {
+      console.log('adding link')
+      console.log([source, target])
+      this.componentSystem.counter += 1
+      this.componentSystem.links.push({
+        id: this.componentSystem.counter.toString(),
+        source: source.id,
+        target: target.id
       })
     }
   }
