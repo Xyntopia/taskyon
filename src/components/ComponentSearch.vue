@@ -45,10 +45,10 @@
                 </q-card-section>
                 <q-card-action>
                 <q-btn-group flat>
-                  <q-btn size='sm' @click="$emit('component-add', props.row)">Add</q-btn>
-                  <q-btn size='sm' @click="$emit('component-add', props.row)" icon="search">Compatible</q-btn>
-                  <q-btn size='sm' @click="$emit('component-info', props.row)" icon="search">Similar</q-btn>
-                  <q-btn size='sm' @click="$emit('component-info', props.row)">Info</q-btn>
+                  <q-btn size='sm' @click="$emit('component-add', props.row)" icon="add"></q-btn>
+                  <q-btn size='sm' @click="$emit('search-compatible', props.row)" icon="search">Compatible</q-btn>
+                  <q-btn size='sm' @click="$emit('search-similar', props.row)" icon="search">Similar</q-btn>
+                  <q-btn size='sm' @click="$emit('component-info', props.row)" icon="info"></q-btn>
                 </q-btn-group>
                 </q-card-action>
             </q-card>
