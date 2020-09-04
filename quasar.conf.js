@@ -89,7 +89,7 @@ module.exports = function (/* ctx */) {
       config: {
         dark: 'false', // 'auto' or Boolean true/false
         // https://coolors.co/003459-c46e72-820263-061623-618b25-e43a64-b0bbbf-e6af2e
-        brand: {
+        /*brand: {
           secondary: '#F78F3B',
           primary: '#2A3548',
           // darkaccent: '#7fa042',
@@ -103,7 +103,7 @@ module.exports = function (/* ctx */) {
           negative: '#a04242',
           info: '#8BA7B9',
           warning: '#ff118c'
-        }
+        }*/
       },
 
       // Possible values for "importStrategy":

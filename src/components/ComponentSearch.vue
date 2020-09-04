@@ -43,15 +43,25 @@
                 <q-card-section>
                 {{ props.row.name }}
                 </q-card-section>
-                <q-card-actions>
-                  <q-btn size='sm' padding="xs" flat @click="$emit('component-add', props.row)">Add</q-btn>
-                  <q-btn size='sm' padding="xs" flat @click="$emit('component-info', props.row)">Info</q-btn>
-                </q-card-actions>
+                <q-card-action>
+                <q-btn-group flat>
+                  <q-btn size='sm' @click="$emit('component-add', props.row)">Add</q-btn>
+                  <q-btn size='sm' @click="$emit('component-add', props.row)" icon="search">Compatible</q-btn>
+                  <q-btn size='sm' @click="$emit('component-info', props.row)" icon="search">Similar</q-btn>
+                  <q-btn size='sm' @click="$emit('component-info', props.row)">Info</q-btn>
+                </q-btn-group>
+                </q-card-action>
             </q-card>
           </template>
         </q-table>
   </div>
 </template>
+
+<style lang="sass">
+.q-btn
+  //background-color: scale-color($secondary, $lightness: 80%)
+  background-color: $grey-2
+</style>
 
 <script>
 // import { mapGetters, mapActions } from 'vuex'

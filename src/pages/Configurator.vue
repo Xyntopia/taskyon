@@ -10,10 +10,12 @@
                   <!--<mxgraph/>-->
                   <q-card-actions align="between">
                     <div>
-                      <q-btn size='sm' padding="sm" outline>Clear</q-btn>
-                      <q-btn size='sm' padding="sm" outline>Layout</q-btn>
-                      <q-btn size='sm' padding="sm" outline>Fit</q-btn>
-                      <q-btn size='sm' padding="sm" outline>New</q-btn>
+                      <q-btn-group push>
+                        <q-btn size='sm' padding="sm">Clear</q-btn>
+                        <q-btn size='sm' padding="sm">Layout</q-btn>
+                        <q-btn size='sm' padding="sm">Fit</q-btn>
+                        <q-btn size='sm' padding="sm">New</q-btn>
+                      </q-btn-group>
                     </div>
                     <q-input hide-bottom-space filled dense v-model="componentSystem.name" label="System Name"/>
                   </q-card-actions>
