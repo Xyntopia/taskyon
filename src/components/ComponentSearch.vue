@@ -28,7 +28,7 @@
             :visible-columns="['name','keywords']"
             :grid="true"
             :grid-header="false"
-            :card-container-class="'q-gutter-xs'"
+            :card-container-class="'q-col-gutter-xs'"
             :pagination="pagination">
           <template v-slot:body-cell-name="props">
             <q-td :props="props.name">
@@ -39,28 +39,28 @@
             </q-td>
           </template>
           <template v-slot:item="props">
-            <q-card :props="props.name" bordered>
+            <div class="col-4">
+            <q-card :props="props.name">
                 <q-card-section>
                 {{ props.row.name }}
                 </q-card-section>
-                <q-card-action>
-                <q-btn-group flat>
-                  <q-btn size='sm' @click="$emit('component-add', props.row)" icon="add"></q-btn>
-                  <q-btn size='sm' @click="$emit('search-compatible', props.row)" icon="search">Compatible</q-btn>
-                  <q-btn size='sm' @click="$emit('search-similar', props.row)" icon="search">Similar</q-btn>
-                  <q-btn size='sm' @click="$emit('component-info', props.row)" icon="info"></q-btn>
-                </q-btn-group>
-                </q-card-action>
+                <!--<q-separator />-->
+                <q-card-actions align="between" class="comp_actions">
+                  <q-btn flat dense size='sm' @click="$emit('component-add', props.row)" icon="add"></q-btn>
+                  <q-btn flat dense size='sm' @click="$emit('component-info', props.row)" icon="info"></q-btn>
+                  <q-btn flat dense size='sm' @click="$emit('search-compatible', props.row)" icon="search">Compatible</q-btn>
+                  <q-btn flat dense size='sm' @click="$emit('search-similar', props.row)" icon="search">Similar</q-btn>
+                </q-card-actions>
             </q-card>
+            </div>
           </template>
         </q-table>
   </div>
 </template>
 
 <style lang="sass">
-.q-btn
-  //background-color: scale-color($secondary, $lightness: 80%)
-  background-color: $grey-2
+.comp_actions
+  background-color: scale-color($secondary, $lightness: 80%)
 </style>
 
 <script>
