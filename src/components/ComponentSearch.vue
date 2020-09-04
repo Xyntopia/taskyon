@@ -1,25 +1,32 @@
 <template>
   <div>
-      <q-input
-          rounded filled
-          input-class="text-light"
-          bg-color="white"
-          :loading="searchingState"
-          v-model="searchstring"
-          type="search"
-          autofocus
-          clearable
-          debounce="500"
-          label="Search for a component!"
-        >
-          <template v-slot:append>
-            <q-icon name="search" />
-          </template>
-        </q-input>
-        <div v-if="false">
-          debug: {{ searchingState }}
+    <div class="row">
+      <div class="column col">
+        <div class="row rounded-borders shadow-1 bg-white">
+          <q-btn-dropdown dense flat stretch icon="search" label="Textsearch">
+            <q-list bordered separator class="searchModeList">
+              <q-item clickable v-close-popup @click="onSearchModeClick('text')">Text Search</q-item>
+              <q-item clickable v-close-popup @click="onSearchModeClick('similarity')">Similarity Search</q-item>
+              <q-item clickable v-close-popup @click="onSearchModeClick('Compatibility')">Compatibility Search</q-item>
+            </q-list>
+          </q-btn-dropdown>
+          <div class="col componentSearch">
+            <q-input
+              filled
+              :loading="searchingState"
+              v-model="searchstring"
+              type="search"
+              autofocus
+              clearable
+              debounce="500"
+              label="Search for a component!"
+              >
+            </q-input>
+          </div>
+          <q-btn flat stretch icon="filter_list" @click="toggleFilter"/>
         </div>
-        <q-table
+        <div>
+          <q-table
             v-if="true"
             :dense="false"
             :data="componentlist"
@@ -29,38 +36,57 @@
             :grid="true"
             :grid-header="false"
             :card-container-class="'q-col-gutter-xs'"
-            :pagination="pagination">
-          <template v-slot:body-cell-name="props">
-            <q-td :props="props.name">
-              <div>
-                test
-                {{ props.row.name }}
+            :pagination="pagination"
+            >
+            <template v-slot:body-cell-name="props">
+              <q-td :props="props.name">
+                <div>
+                  test
+                  {{ props.row.name }}
+                </div>
+              </q-td>
+            </template>
+            <template v-slot:item="props">
+              <div class="col-xs-6 col-sm-4 col-md-3">
+              <q-card :props="props.name">
+                  <q-card-section>
+                  {{ props.row.name }}
+                  </q-card-section>
+                  <!--<q-separator />-->
+                  <q-card-actions align="between" class="componentActions">
+                    <div>
+                    <q-btn flat dense size='sm' @click="$emit('component-add', props.row)" icon="add"></q-btn>
+                    <q-btn flat dense size='sm' @click="$emit('component-info', props.row)" icon="info"></q-btn>
+                    </div>
+                    <div>
+                    <q-btn flat dense size='sm' @click="$emit('search-compatible', props.row)" icon="search">Compatible</q-btn>
+                    <q-btn flat dense size='sm' @click="$emit('search-similar', props.row)" icon="search">Similar</q-btn>
+                    </div>
+                  </q-card-actions>
+              </q-card>
               </div>
-            </q-td>
-          </template>
-          <template v-slot:item="props">
-            <div class="col-4">
-            <q-card :props="props.name">
-                <q-card-section>
-                {{ props.row.name }}
-                </q-card-section>
-                <!--<q-separator />-->
-                <q-card-actions align="between" class="comp_actions">
-                  <q-btn flat dense size='sm' @click="$emit('component-add', props.row)" icon="add"></q-btn>
-                  <q-btn flat dense size='sm' @click="$emit('component-info', props.row)" icon="info"></q-btn>
-                  <q-btn flat dense size='sm' @click="$emit('search-compatible', props.row)" icon="search">Compatible</q-btn>
-                  <q-btn flat dense size='sm' @click="$emit('search-similar', props.row)" icon="search">Similar</q-btn>
-                </q-card-actions>
-            </q-card>
-            </div>
-          </template>
-        </q-table>
+            </template>
+          </q-table>
+        </div>
+      </div>
+      <div class="col-auto" v-if="showFilter">
+        filter
+      </div>
+    </div>
   </div>
 </template>
 
 <style lang="sass">
-.comp_actions
+.componentActions
   background-color: scale-color($secondary, $lightness: 80%)
+  padding: 2px
+
+.componentSearch
+  background-color: scale-color($primary, $lightness: 90%)
+
+.searchModeList
+  background-color: $primary
+  color: white
 </style>
 
 <script>
@@ -72,6 +98,7 @@ export default {
   data () {
     return {
       options: null,
+      showFilter: false,
       loading: false,
       pagination: {
         sortBy: 'score',
@@ -86,6 +113,13 @@ export default {
         { name: 'score', field: 'score', label: 'score' },
         { name: 'keywords', field: 'keywords', label: 'keywords' }
       ]
+    }
+  },
+  methods: {
+    toggleFilter () { this.showFilter = !this.showFilter },
+    onSearchModeClick (evt) {
+      console.log('clicked mode selection')
+      console.log(evt)
     }
   },
   computed: {
