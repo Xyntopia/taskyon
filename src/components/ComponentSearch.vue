@@ -1,8 +1,7 @@
 <template>
-  <div>
-    <div class="row">
+    <div class="row q-gutter-xs">
       <div class="column col">
-        <div class="row rounded-borders shadow-1 bg-white">
+        <div class="row rounded-borders shadow-1 componentSearch">
           <q-btn-dropdown dense flat stretch icon="search" label="Textsearch">
             <q-list bordered separator class="searchModeList">
               <q-item clickable v-close-popup @click="onSearchModeClick('text')">Text Search</q-item>
@@ -10,9 +9,10 @@
               <q-item clickable v-close-popup @click="onSearchModeClick('Compatibility')">Compatibility Search</q-item>
             </q-list>
           </q-btn-dropdown>
-          <div class="col componentSearch">
+          <div class="col">
             <q-input
               filled
+              bg-color="white"
               :loading="searchingState"
               v-model="searchstring"
               type="search"
@@ -35,7 +35,7 @@
             :visible-columns="['name','keywords']"
             :grid="true"
             :grid-header="false"
-            :card-container-class="'q-col-gutter-xs'"
+            :card-container-class="'q-col-gutter-xs componentCardContainer rounded-borders'"
             :pagination="pagination"
             >
             <template v-slot:body-cell-name="props">
@@ -47,8 +47,8 @@
               </q-td>
             </template>
             <template v-slot:item="props">
-              <div class="col-xs-6 col-sm-4 col-md-3">
-              <q-card :props="props.name">
+              <div class="col-xs-6 col-sm-4 col-md-3 col-lg-2 col-xl-auto">
+                <q-card :props="props.name" bordered class="shadow-1">
                   <q-card-section>
                   {{ props.row.name }}
                   </q-card-section>
@@ -63,17 +63,18 @@
                     <q-btn flat dense size='sm' @click="$emit('search-similar', props.row)" icon="search">Similar</q-btn>
                     </div>
                   </q-card-actions>
-              </q-card>
+                </q-card>
               </div>
             </template>
           </q-table>
         </div>
       </div>
       <div class="col-auto" v-if="showFilter">
-        filter
+        <q-card style="width: 100px; height: 300px">
+          filter
+        </q-card>
       </div>
     </div>
-  </div>
 </template>
 
 <style lang="sass">
@@ -82,7 +83,10 @@
   padding: 2px
 
 .componentSearch
-  background-color: scale-color($primary, $lightness: 90%)
+  background-color: $tools
+
+.componentCardContainer
+  background-color: white
 
 .searchModeList
   background-color: $primary

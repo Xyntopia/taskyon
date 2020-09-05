@@ -1,6 +1,6 @@
 <template>
   <q-page class="bg-secondary">
-      <div class="column q-pa-xs">
+      <div class="column">
         <!--<div class="fit column justify-start items-center">-->
           <div class="q-col-gutter-xs">
             <div class="col-1">
