@@ -1,12 +1,12 @@
 <template>
-    <div class="row q-gutter-xs">
+    <div class="row componentSearch rounded-borders">
       <div class="column col">
-        <div class="row rounded-borders shadow-1 componentSearch">
-          <q-btn-dropdown dense flat stretch icon="search" label="Textsearch">
+        <div class="col row">
+          <q-btn-dropdown dense flat stretch icon="search" label="Description">
             <q-list bordered separator class="searchModeList">
               <q-item clickable v-close-popup @click="onSearchModeClick('text')">Text Search</q-item>
-              <q-item clickable v-close-popup @click="onSearchModeClick('similarity')">Similarity Search</q-item>
-              <q-item clickable v-close-popup @click="onSearchModeClick('Compatibility')">Compatibility Search</q-item>
+              <q-item clickable v-close-popup @click="onSearchModeClick('similar')">Similarity Search</q-item>
+              <q-item clickable v-close-popup @click="onSearchModeClick('compatible')">Compatibility Search</q-item>
             </q-list>
           </q-btn-dropdown>
           <div class="col">
@@ -25,6 +25,7 @@
           </div>
           <q-btn flat stretch icon="filter_list" @click="toggleFilter"/>
         </div>
+        <q-separator inset spaced/>
         <div>
           <q-table
             v-if="true"
@@ -35,7 +36,7 @@
             :visible-columns="['name','keywords']"
             :grid="true"
             :grid-header="false"
-            :card-container-class="'q-col-gutter-xs componentCardContainer rounded-borders'"
+            :card-container-class="'q-col-gutter-xs'"
             :pagination="pagination"
             >
             <template v-slot:body-cell-name="props">
@@ -69,10 +70,11 @@
           </q-table>
         </div>
       </div>
+      <q-separator vertical inset spaced v-if="showFilter"/>
       <div class="col-auto" v-if="showFilter">
-        <q-card style="width: 100px; height: 300px">
-          filter
-        </q-card>
+        <div style="width: 100px; height: 300px;">
+          test
+        </div>
       </div>
     </div>
 </template>
@@ -87,6 +89,9 @@
 
 .componentCardContainer
   background-color: white
+
+.componentFilter
+  background-color: $tools
 
 .searchModeList
   background-color: $primary
@@ -129,7 +134,7 @@ export default {
   computed: {
     searchstring: {
       get () {
-        return this.$store.state.comcharax.searchstring
+        return this.$store.state.comcharax.searchString
       },
       set (val) {
         this.$store.dispatch('search', val)

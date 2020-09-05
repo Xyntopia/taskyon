@@ -43,12 +43,14 @@ class Component extends Model {
 var vuexModule = {
   state: {
     result: [],
-    searchstring: '',
+    searchString: '',
+    searchMode: 'text',
+    filters: [],
     searchingState: false
   },
   mutations: {
     updateSearchString (state, searchstring) {
-      state.searchstring = searchstring
+      state.searchString = searchstring
     },
     setSearchState (state, val) {
       state.searchingState = val

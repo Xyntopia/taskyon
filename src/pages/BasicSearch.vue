@@ -32,8 +32,10 @@ export default {
     $route (to, from) {
       this.updateSearchString(to.query.q)
     },
-    searchstring (newq, oldq) {
+    searchString (newq, oldq) {
       // watches the mapState "searchstring"
+      console.log('from basicsearch: searchstring changed!!')
+      console.log(newq)
       if (oldq !== newq) {
         if (!isEmptyOrSpaces(newq)) {
           // thisgives us an infinite loop!
@@ -57,7 +59,7 @@ export default {
       }
     },
     ...mapState({
-      searchstring: s => s.comcharax.searchstring
+      searchString: state => state.comcharax.searchString
     })
   },
   methods: {
