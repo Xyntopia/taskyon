@@ -63,7 +63,7 @@
                   <q-card-actions align="between" class="componentActions">
                     <div>
                     <q-btn v-if="showAddButton" flat dense size='sm' @click="$emit('component-add', props.row)" icon="add"></q-btn>
-                    <q-btn flat dense size='sm' @click="componentInfo(props.row)" icon="info"></q-btn>
+                    <q-btn :to="{ name: 'component', params: { id: props.row.id }}" flat dense size='sm' icon="info"></q-btn>
                     </div>
                     <div>
                     <q-btn flat dense size='sm' @click="searchCompatible(props.row)" icon="search">Compatible</q-btn>
@@ -163,6 +163,7 @@ export default {
           return undefined
       }
     },
+    // TODO: make this component completly independent from vuex store?
     searchstring: {
       get () {
         return this.$store.state.comcharax.searchString
