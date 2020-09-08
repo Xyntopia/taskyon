@@ -1,9 +1,9 @@
 {
-  "name": "coxacon",
+  "name": "Componardo",
   "version": "0.0.1",
-  "description": "Component extractor and configurator frontend",
-  "productName": "coxacon",
-  "author": "thomas meschede / yeus <yeusblender@gmail.com>",
+  "description": "Component extraction and designer/configurator frontend",
+  "productName": "Componardo",
+  "author": "thomas meschede / yeus <thomas.meschede@web.de>",
   "private": true,
   "scripts": {
     "lint": "eslint --ext .js,.vue ./",

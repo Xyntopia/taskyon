@@ -3,7 +3,7 @@
     class="fit column justify-start items-center bg-secondary"
     >
       <div v-if="initiallayout" class="col-1">
-        <h1> COXACON </h1>
+        <h1> Componardo </h1>
       </div>
       <div class="col-1" v-bind:style="searchbarWidth">
         <ComponentSearch/>

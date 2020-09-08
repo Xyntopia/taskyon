@@ -136,8 +136,8 @@ module.exports = function (/* ctx */) {
       workboxPluginMode: 'GenerateSW', // 'GenerateSW' or 'InjectManifest'
       workboxOptions: {}, // only for GenerateSW
       manifest: {
-        name: 'coxacon',
-        short_name: 'coxacon',
+        name: 'Componardo',
+        short_name: 'Componardo',
         description: 'Component extractor and configurator frontend',
         display: 'standalone',
         orientation: 'portrait',
@@ -203,7 +203,7 @@ module.exports = function (/* ctx */) {
       builder: {
         // https://www.electron.build/configuration/configuration
 
-        appId: 'coxacon'
+        appId: 'Componardo'
       },
 
       // More info: https://quasar.dev/quasar-cli/developing-electron-apps/node-integration

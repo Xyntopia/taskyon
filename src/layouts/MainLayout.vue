@@ -12,7 +12,7 @@
         />
 
         <q-toolbar-title>
-          Coxacon
+          Componardo
         </q-toolbar-title>
 
         <div>DEMO</div>
