@@ -44,6 +44,7 @@
               <ComponentSearch
                 showAddButton
                 v-on:component-add="addcomponent2system"
+                class="bg-white"
                 />
             </div>
             <div class="col-1">

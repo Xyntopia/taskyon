@@ -1,5 +1,5 @@
 <template>
-    <div class="row componentSearch rounded-borders">
+    <div class="row rounded-borders">
       <div class="column col">
         <div class="col row componentSearchBar rounded-borders">
           <div class="col-auto q-mx-xs" >
@@ -90,16 +90,7 @@
   background-color: scale-color($secondary, $lightness: 80%)
   padding: 2px
 
-.componentSearch
-  background-color: white // scale-color($secondary, $lightness: 95%)
-
 .componentSearchBar
-  background-color: $tools
-
-.componentCardContainer
-  background-color: white
-
-.componentFilter
   background-color: $tools
 
 .searchModeList
