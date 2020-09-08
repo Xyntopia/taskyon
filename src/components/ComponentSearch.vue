@@ -1,17 +1,21 @@
 <template>
     <div class="row componentSearch rounded-borders">
       <div class="column col">
-        <div class="col row">
-          <q-btn-dropdown dense flat stretch icon="search" label="Description">
-            <q-list bordered separator class="searchModeList">
-              <q-item clickable v-close-popup @click="onSearchModeClick('text')">Text Search</q-item>
-              <q-item clickable v-close-popup @click="onSearchModeClick('similar')">Similarity Search</q-item>
-              <q-item clickable v-close-popup @click="onSearchModeClick('compatible')">Compatibility Search</q-item>
-            </q-list>
-          </q-btn-dropdown>
+        <div class="col row componentSearchBar rounded-borders">
+          <div class="col-auto q-mx-xs" >
+            <q-select
+              borderless
+              style="min-width: 120px"
+              v-model="searchMode" :options="searchModeOptions"
+              label="mode">
+              <template v-slot:append>
+                <q-icon name="search" />
+              </template>
+            </q-select>
+          </div>
           <div class="col">
             <q-input
-              filled
+              square filled
               bg-color="white"
               :loading="searchingState"
               v-model="searchstring"
@@ -19,13 +23,15 @@
               autofocus
               clearable
               debounce="500"
-              label="Search for a component!"
+              :label="searchHint"
+              :prefix="prefix"
+              @clear="onClear"
               >
             </q-input>
           </div>
           <q-btn flat stretch icon="filter_list" @click="toggleFilter"/>
         </div>
-        <q-separator inset spaced/>
+        <!--<q-separator inset spaced/>-->
         <div>
           <q-table
             v-if="true"
@@ -49,7 +55,7 @@
             </template>
             <template v-slot:item="props">
               <div class="col-xs-6 col-sm-4 col-md-3 col-lg-2 col-xl-auto">
-                <q-card :props="props.name" bordered class="shadow-1">
+                <q-card :props="props.name" bordered class="shadow-3">
                   <q-card-section>
                   {{ props.row.name }}
                   </q-card-section>
@@ -57,11 +63,11 @@
                   <q-card-actions align="between" class="componentActions">
                     <div>
                     <q-btn flat dense size='sm' @click="$emit('component-add', props.row)" icon="add"></q-btn>
-                    <q-btn flat dense size='sm' @click="$emit('component-info', props.row)" icon="info"></q-btn>
+                    <q-btn flat dense size='sm' @click="componentInfo(props.row)" icon="info"></q-btn>
                     </div>
                     <div>
-                    <q-btn flat dense size='sm' @click="$emit('search-compatible', props.row)" icon="search">Compatible</q-btn>
-                    <q-btn flat dense size='sm' @click="$emit('search-similar', props.row)" icon="search">Similar</q-btn>
+                    <q-btn flat dense size='sm' @click="searchCompatible(props.row)" icon="search">Compatible</q-btn>
+                    <q-btn flat dense size='sm' @click="searchSimilar(props.row)" icon="search">Similar</q-btn>
                     </div>
                   </q-card-actions>
                 </q-card>
@@ -73,7 +79,7 @@
       <q-separator vertical inset spaced v-if="showFilter"/>
       <div class="col-auto" v-if="showFilter">
         <div style="width: 100px; height: 300px;">
-          test
+          filter
         </div>
       </div>
     </div>
@@ -85,6 +91,9 @@
   padding: 2px
 
 .componentSearch
+  background-color: white // scale-color($secondary, $lightness: 95%)
+
+.componentSearchBar
   background-color: $tools
 
 .componentCardContainer
@@ -106,8 +115,9 @@ export default {
   name: 'ComponentSearch',
   data () {
     return {
-      options: null,
+      searchModeOptions: ['text', 'similar', 'compatible'],
       showFilter: false,
+      searchHint: 'test',
       loading: false,
       pagination: {
         sortBy: 'score',
@@ -125,19 +135,54 @@ export default {
     }
   },
   methods: {
-    toggleFilter () { this.showFilter = !this.showFilter },
-    onSearchModeClick (evt) {
-      console.log('clicked mode selection')
-      console.log(evt)
-    }
+    onClear (event) {
+      console.log(event)
+      this.searchMode = 'text'
+      this.searchstring = ''
+    },
+    searchSimilar (component) {
+      console.log('searchSimilar')
+      console.log(component)
+      this.searchMode = 'similar'
+      this.searchstring = component.id
+    },
+    searchCompatible (component) {
+      console.log('searchCompatible')
+      console.log(component)
+      this.searchMode = 'compatible'
+      this.searchstring = component.id
+    },
+    componentInfo (component) {
+      console.log('ShowInfo')
+      console.log(component)
+    },
+    toggleFilter () { this.showFilter = !this.showFilter }
   },
   computed: {
+    prefix () {
+      switch (this.searchMode) {
+        case 'similar':
+          return 'Component ID: '
+        case 'compatible':
+          return 'Component ID: '
+        default:
+          return undefined
+      }
+    },
     searchstring: {
       get () {
         return this.$store.state.comcharax.searchString
       },
       set (val) {
         this.$store.dispatch('search', val)
+      }
+    },
+    searchMode: {
+      get () {
+        return this.$store.state.comcharax.searchMode
+      },
+      set (val) {
+        this.$store.commit('setSearchMode', val)
       }
     },
     ...mapState({

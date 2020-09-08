@@ -52,6 +52,12 @@ var vuexModule = {
     updateSearchString (state, searchstring) {
       state.searchString = searchstring
     },
+    setSearchMode (state, val) {
+      state.searchMode = val
+    },
+    setSearchError (state, error) {
+      state.result = []
+    },
     setSearchState (state, val) {
       state.searchingState = val
     },
@@ -83,7 +89,8 @@ var vuexModule = {
           // '/components?_end=10&_order=ASC&_sort=id&_start=0&q=test',
           '/components', {
             params: {
-              q: val,
+              q: context.state.searchString,
+              qmode: context.state.searchMode,
               _end: '10',
               _start: '0',
               _sort: 'id'
@@ -96,6 +103,7 @@ var vuexModule = {
         .catch(function (error) {
           // handle error
           console.log(error)
+          context.commit('setSearchError', error)
         })
         .then(function () {
           // always executed
