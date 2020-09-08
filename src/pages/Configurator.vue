@@ -42,6 +42,7 @@
             </div>
             <div class='col-1'>
               <ComponentSearch
+                showAddButton
                 v-on:component-add="addcomponent2system"
                 />
             </div>

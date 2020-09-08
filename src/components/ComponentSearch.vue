@@ -62,7 +62,7 @@
                   <!--<q-separator />-->
                   <q-card-actions align="between" class="componentActions">
                     <div>
-                    <q-btn flat dense size='sm' @click="$emit('component-add', props.row)" icon="add"></q-btn>
+                    <q-btn v-if="showAddButton" flat dense size='sm' @click="$emit('component-add', props.row)" icon="add"></q-btn>
                     <q-btn flat dense size='sm' @click="componentInfo(props.row)" icon="info"></q-btn>
                     </div>
                     <div>
@@ -113,6 +113,9 @@ import { mapState, mapGetters } from 'vuex'
 
 export default {
   name: 'ComponentSearch',
+  props: {
+    showAddButton: { type: Boolean, default: false }
+  },
   data () {
     return {
       searchModeOptions: ['text', 'similar', 'compatible'],
