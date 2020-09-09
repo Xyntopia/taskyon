@@ -2,15 +2,32 @@
   <q-layout view="lHh lpr lff">
     <q-header elevated class="bg-primary text-white">
       <q-toolbar>
-        <q-btn
-          flat
-          dense
-          round
-          @click="leftDrawerOpen = !leftDrawerOpen"
-          icon="menu"
-          aria-label="Menu"
-        />
-
+        <div>
+          <q-btn
+            flat
+            dense
+            round
+            @click="leftDrawerOpen = !leftDrawerOpen"
+            icon="menu"
+            aria-label="Menu"
+          />
+          <q-btn
+            flat
+            dense
+            round
+            to="/"
+            icon="home"
+            aria-label="Home"
+          />
+          <q-btn
+            flat
+            dense
+            round
+            to="/configurator"
+            icon="device_hub"
+            aria-label="Home"
+          />
+        </div>
         <q-toolbar-title>
           Componardo
         </q-toolbar-title>
