@@ -35,8 +35,24 @@ class Component extends Model {
     return {
       id: this.attr(null),
       name: this.attr(''),
-      keywords: this.attr([])
+      summary: this.attr(String),
+      characteristics: this.attr([])
     }
+  }
+
+  static fetchById (id) {
+    return this.api().get(`/components/${id}`, {
+      dataTransformer: ({ data, headers }) => {
+        data = {
+          id: data.data.id,
+          name: data.data.name,
+          summary: data.data.summary_en,
+          characteristics: data.data
+        }
+
+        return data
+      }
+    })
   }
 }
 
