@@ -4,7 +4,13 @@ const routes = [
     path: '/',
     component: () => import('layouts/MainLayout.vue'),
     children: [
-      { path: '', component: () => import('pages/BasicSearch.vue') },
+      {
+        path: '',
+        component: () => import('pages/BasicSearch.vue'),
+        props: route => ({
+          searchProps: { ...route.query }
+        })
+      },
       { path: 'configurator', component: () => import('pages/Configurator.vue') },
       { path: 'component/:id', name: 'component', component: () => import('pages/Component.vue') },
       { path: 'sandbox', component: () => import('pages/Sandbox.vue') },

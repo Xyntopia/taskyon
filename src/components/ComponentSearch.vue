@@ -6,7 +6,7 @@
             <q-select
               borderless
               style="min-width: 120px"
-              v-model="searchMode" :options="searchModeOptions"
+              v-model="searchProps.qmode" :options="searchModeOptions"
               label="mode">
               <template v-slot:append>
                 <q-icon name="search" />
@@ -17,15 +17,15 @@
             <q-input
               square filled
               bg-color="white"
-              :loading="searchingState"
-              v-model="searchstring"
+              :loading="searchState"
+              :value="searchProps.q"
               type="search"
               autofocus
               clearable
               debounce="500"
               :label="searchHint"
               :prefix="prefix"
-              @clear="onClear"
+              @input="onInput"
               >
             </q-input>
           </div>
@@ -36,7 +36,7 @@
           <q-table
             v-if="true"
             :dense="false"
-            :data="componentlist"
+            :data="componentList"
             row-key="id"
             :columns="columns"
             :visible-columns="['name','keywords']"
@@ -100,15 +100,26 @@
 
 <script>
 // import { mapGetters, mapActions } from 'vuex'
-import { mapState, mapGetters } from 'vuex'
+// import { mapState, mapGetters } from 'vuex'
+var cloneDeep = require('lodash.clonedeep')
 
 export default {
   name: 'ComponentSearch',
   props: {
-    showAddButton: { type: Boolean, default: false }
+    showAddButton: { type: Boolean, default: false },
+    componentList: Array,
+    searchState: { type: Boolean, default: false }
   },
   data () {
     return {
+      searchProps: {
+        q: '',
+        qmode: 'text',
+        start: 0,
+        end: 10,
+        order: 'score',
+        filters: [1, 2, 3]
+      },
       searchModeOptions: ['text', 'similar', 'compatible'],
       showFilter: false,
       searchHint: 'test',
@@ -129,22 +140,17 @@ export default {
     }
   },
   methods: {
-    onClear (event) {
-      console.log(event)
-      this.searchMode = 'text'
-      this.searchstring = ''
+    onInput (value) {
+      this.searchProps.q = value
+      this.$emit('searchrequest', cloneDeep(this.searchProps))
     },
     searchSimilar (component) {
       console.log('searchSimilar')
       console.log(component)
-      this.searchMode = 'similar'
-      this.searchstring = component.id
     },
     searchCompatible (component) {
       console.log('searchCompatible')
       console.log(component)
-      this.searchMode = 'compatible'
-      this.searchstring = component.id
     },
     componentInfo (component) {
       console.log('ShowInfo')
@@ -154,7 +160,7 @@ export default {
   },
   computed: {
     prefix () {
-      switch (this.searchMode) {
+      switch (this.searchProps.qmode) {
         case 'similar':
           return 'Component ID: '
         case 'compatible':
@@ -162,32 +168,7 @@ export default {
         default:
           return undefined
       }
-    },
-    // TODO: make this component completly independent from vuex store?
-    searchstring: {
-      get () {
-        return this.$store.state.comcharax.searchString
-      },
-      set (val) {
-        this.$store.dispatch('search', val)
-      }
-    },
-    searchMode: {
-      get () {
-        return this.$store.state.comcharax.searchMode
-      },
-      set (val) {
-        this.$store.commit('setSearchMode', val)
-      }
-    },
-    ...mapState({
-      // TODO: we are doing it like this because of this: https://github.com/vuejs/vuex/issues/1592
-      // once that is resolved, make sure to revert this to a list of strings
-      searchingState: state => state.comcharax.searchingState
-    }),
-    ...mapGetters([
-      'componentlist'
-    ])
+    }
   }
 }
 </script>

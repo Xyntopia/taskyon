@@ -36,19 +36,19 @@ class Component extends Model {
       id: this.attr(null),
       name: this.attr(''),
       summary: this.attr(String),
-      characteristics: this.attr([])
+      characteristics: this.attr({})
     }
   }
 
   static fetchById (id) {
     return this.api().get(`/components/${id}`, {
       dataTransformer: ({ data, headers }) => {
-        data = {
-          id: data.data.id,
-          name: data.data.name,
-          summary: data.data.summary_en,
-          characteristics: data.data
-        }
+        /* data = {
+          id: data.id,
+          name: data.name,
+          summary: data.summary,
+          characteristics: data.characteristics
+        } */
 
         return data
       }
@@ -56,21 +56,27 @@ class Component extends Model {
   }
 }
 
+/* class Search extends Model {
+  static entity = 'searches'
+
+  static fields () {
+    return {
+      id: this.increment(),
+      q: this.string(''),
+      qmode: this.string(''),
+      filters: this.attr({})
+    }
+  }
+
+  static
+} */
+
 var vuexModule = {
   state: {
     result: [],
-    searchString: '',
-    searchMode: 'text',
-    filters: [],
     searchingState: false
   },
   mutations: {
-    updateSearchString (state, searchstring) {
-      state.searchString = searchstring
-    },
-    setSearchMode (state, val) {
-      state.searchMode = val
-    },
     setSearchError (state, error) {
       state.result = []
     },
@@ -78,15 +84,15 @@ var vuexModule = {
       state.searchingState = val
     },
     updateSearchResult (state, val) {
-      // TODO: what if data us none?
-      Component.insert({
+      // TODO: what if data is none?
+      /* Component.insert({
         data: val.data.data
-      })
+      }) */
       state.result = val
     }
   },
   getters: {
-    componentlist: state => {
+    componentList: state => {
       if (state.result.data) {
         if (state.result.data.data) {
           return state.result.data.data
@@ -97,21 +103,10 @@ var vuexModule = {
     }
   },
   actions: {
-    async search (context, val) {
-      context.commit('updateSearchString', val)
-      context.commit('setSearchState', true)
+    async search (context, searchProps) {
+      context.commit('setSearchState', false)
       await axios
-        .get(
-          // '/components?_end=10&_order=ASC&_sort=id&_start=0&q=test',
-          '/components', {
-            params: {
-              q: context.state.searchString,
-              qmode: context.state.searchMode,
-              _end: '10',
-              _start: '0',
-              _sort: 'id'
-            }
-          })
+        .get('/components', { params: searchProps })
         .then(r => {
           console.log(r)
           context.commit('updateSearchResult', r)

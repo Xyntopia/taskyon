@@ -20,6 +20,7 @@ const database = new VuexORM.Database()
 
 // Register Models.
 database.register(comcharax.Component)
+// database.register(comcharax.Search)
 
 /*
  * If not building with SSR mode, you can
