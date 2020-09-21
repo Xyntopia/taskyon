@@ -10,7 +10,13 @@
     <q-card-section>
       <q-list separator>
         <q-item v-for="(value, name) in componentData.characteristics" v-bind:key="name">
-          <b>{{ name }}</b>: {{ value }}
+          <b>{{ name }}</b>:&nbsp;
+            <ul v-if="name==='features'">
+                <li v-for="v in value" v-bind:key="v"> {{ v }} </li>
+            </ul>
+          <div v-else>
+            {{ value }}
+          </div>
         </q-item>
       </q-list>
     </q-card-section>
