@@ -36,23 +36,13 @@ class Component extends Model {
       id: this.attr(null),
       name: this.attr(''),
       summary: this.attr(String),
+      image: this.attr(String),
       characteristics: this.attr({})
     }
   }
 
   static fetchById (id) {
-    return this.api().get(`/components/${id}`, {
-      dataTransformer: ({ data, headers }) => {
-        /* data = {
-          id: data.id,
-          name: data.name,
-          summary: data.summary,
-          characteristics: data.characteristics
-        } */
-
-        return data
-      }
-    })
+    return this.api().get(`/components/${id}`)
   }
 }
 

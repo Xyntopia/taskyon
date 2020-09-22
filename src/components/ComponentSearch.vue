@@ -4,9 +4,10 @@
         <div class="col row componentSearchBar rounded-borders">
           <div class="col-auto q-mx-xs" >
             <q-select
+              v-if="false"
               borderless
               style="min-width: 120px"
-              v-model="searchProps.qmode" :options="searchModeOptions"
+              v-model="value.qmode" :options="searchModeOptions"
               label="mode">
               <template v-slot:append>
                 <q-icon name="search" />
@@ -16,17 +17,20 @@
           <div class="col">
             <q-input
               square filled
+              :value="value.q"
               bg-color="white"
               :loading="searchState"
-              :value="searchProps.q"
               type="search"
               autofocus
               clearable
-              debounce="500"
+              debounce="1000"
               :label="searchHint"
               :prefix="prefix"
-              @input="onInput"
+              @input="onQChange"
               >
+              <template v-slot:append>
+                <q-btn round dense flat @click="requestSearch" icon="search"/>
+              </template>
             </q-input>
           </div>
           <q-btn flat stretch icon="filter_list" @click="toggleFilter"/>
@@ -78,8 +82,22 @@
       </div>
       <q-separator vertical inset spaced v-if="showFilter"/>
       <div class="col-auto" v-if="showFilter">
-        <div style="width: 100px; height: 300px;">
-          filter
+        <div style="min-width: 100px;">
+          <q-btn-toggle
+            :value="value.qmode"
+            @input="onQModeChange"
+            class="my-custom-toggle"
+            no-caps
+            dense
+            unelevated
+            toggle-color="primary"
+            color="white"
+            text-color="primary"
+            :options="[
+              {label: 'Text', value: 'text'},
+              {label: 'AI', value: 'similar'}
+            ]"
+          />
         </div>
       </div>
     </div>
@@ -101,6 +119,7 @@
 <script>
 // import { mapGetters, mapActions } from 'vuex'
 // import { mapState, mapGetters } from 'vuex'
+
 var cloneDeep = require('lodash.clonedeep')
 
 export default {
@@ -108,22 +127,25 @@ export default {
   props: {
     showAddButton: { type: Boolean, default: false },
     componentList: Array,
-    searchState: { type: Boolean, default: false }
+    searchState: { type: Boolean, default: false },
+    value: {
+      type: Object,
+      default: function () {
+        return {
+          q: '',
+          qmode: 'text',
+          start: 0,
+          end: 10,
+          order: 'score',
+          filters: [1, 2, 3]
+        }
+      }
+    }
   },
   data () {
     return {
-      searchProps: {
-        q: '',
-        qmode: 'text',
-        start: 0,
-        end: 10,
-        order: 'score',
-        filters: [1, 2, 3]
-      },
-      searchModeOptions: ['text', 'similar', 'compatible'],
       showFilter: false,
-      searchHint: 'test',
-      loading: false,
+      searchHint: 'Search for a Component!',
       pagination: {
         sortBy: 'score',
         descending: true,
@@ -140,9 +162,18 @@ export default {
     }
   },
   methods: {
-    onInput (value) {
-      this.searchProps.q = value
-      this.$emit('searchrequest', cloneDeep(this.searchProps))
+    requestSearch   (newProps) {
+      var newSearchProps = {
+        ...cloneDeep(this.value),
+        ...newProps
+      }
+      this.$emit('input', newSearchProps)
+    },
+    onQChange (value) {
+      this.requestSearch({ q: value })
+    },
+    onQModeChange (value) {
+      this.requestSearch({ qmode: value })
     },
     searchSimilar (component) {
       console.log('searchSimilar')
@@ -152,19 +183,15 @@ export default {
       console.log('searchCompatible')
       console.log(component)
     },
-    componentInfo (component) {
-      console.log('ShowInfo')
-      console.log(component)
-    },
     toggleFilter () { this.showFilter = !this.showFilter }
   },
   computed: {
     prefix () {
-      switch (this.searchProps.qmode) {
+      switch (this.value.qmode) {
         case 'similar':
-          return 'Component ID: '
+          return 'Similar: '
         case 'compatible':
-          return 'Component ID: '
+          return 'Filtered: '
         default:
           return undefined
       }

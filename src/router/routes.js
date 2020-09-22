@@ -8,7 +8,7 @@ const routes = [
         path: '',
         component: () => import('pages/BasicSearch.vue'),
         props: route => ({
-          searchProps: { ...route.query }
+          searchPropsFromURL: { ...route.query }
         })
       },
       { path: 'configurator', component: () => import('pages/Configurator.vue') },

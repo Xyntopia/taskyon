@@ -8,10 +8,14 @@
       <div class="col-1" v-bind:style="searchbarWidth">
         <ComponentSearch
           ref="componentSearch"
+          :value="searchPropsFromURL"
           :componentList="componentList"
           :searchState="searchingState"
-          @searchrequest="onSearchRequest"
+          @input="onSearchRequest"
           />
+        <div v-if="true">
+          {{ searchProps }}
+        </div>
       </div>
   </q-page>
 </template>
@@ -19,6 +23,7 @@
 <script>
 import ComponentSearch from 'components/ComponentSearch.vue'
 import { mapGetters, mapState } from 'vuex'
+var cloneDeep = require('lodash.clonedeep')
 
 function isEmptyOrSpaces (str) {
   return str === null || str.match(/^ *$/) !== null
@@ -30,19 +35,32 @@ export default {
     ComponentSearch
   },
   props: {
-    searchProps: Object // this comes from vue router
+    searchPropsFromURL: Object // this comes from vue router
   },
   mounted () {
-    this.$refs.componentSearch.searchProps = this.searchProps
-    this.$store.dispatch('search', this.searchProps)
+    console.log('mounted ' + this.name)
+    var newSearchProps = cloneDeep(this.searchProps)
+    this.$store.dispatch('search', newSearchProps)
   },
   watch: {
     $route (to, from) {
-      this.$refs.componentSearch.searchProps = this.searchProps
-      this.$store.dispatch('search', this.searchProps)
+      var newSearchProps = cloneDeep(this.searchProps)
+      this.$store.dispatch('search', newSearchProps)
     }
   },
   computed: {
+    searchProps () {
+      /* var searchProps = {
+        q: '',
+        qmode: 'text',
+        start: 0,
+        end: 10,
+        order: 'score',
+        filters: [1, 2, 3],
+        ...cloneDeep(this.searchPropsFromURL)
+      } */
+      return cloneDeep(this.searchPropsFromURL)
+    },
     initiallayout () {
       return !this.searchProps.q
     },
@@ -64,13 +82,14 @@ export default {
   methods: {
     onSearchRequest (searchProps) {
       console.log('new basic search')
-      console.log(searchProps)
-      if (!isEmptyOrSpaces(searchProps.q)) {
-        this.$router.push({ path: '/', query: searchProps })
-      } else {
+      var newSearchProps = cloneDeep(searchProps)
+      console.log(newSearchProps)
+      if (isEmptyOrSpaces(newSearchProps.q)) {
         this.$router.push({ path: '/' })
+      } else {
+        this.$router.push({ path: '/', query: newSearchProps })
       }
-      this.$store.dispatch('search', searchProps)
+      this.$store.dispatch('search', newSearchProps)
     }
   }
 }
