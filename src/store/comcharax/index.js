@@ -42,7 +42,8 @@ class Component extends Model {
   }
 
   static fetchById (id) {
-    return this.api().get(`/components/${id}`)
+    var data = this.api().get(`/components/${id}`)
+    return data
   }
 }
 
@@ -60,6 +61,10 @@ class Component extends Model {
 
   static
 } */
+
+function sleep (ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
 var vuexModule = {
   state: {
@@ -94,7 +99,8 @@ var vuexModule = {
   },
   actions: {
     async search (context, searchProps) {
-      context.commit('setSearchState', false)
+      context.commit('setSearchState', true)
+      await sleep(1000) // this simulates a search
       await axios
         .get('/components', { params: searchProps })
         .then(r => {

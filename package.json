@@ -21,6 +21,7 @@
     "cytoscape-spread": "^3.0.0",
     "lodash.clonedeep": "^4.5.0",
     "mxgraph": "^4.2.0",
+    "qs": "^6.9.4",
     "quasar": "^1.0.0",
     "vue-i18n": "^8.0.0"
   },

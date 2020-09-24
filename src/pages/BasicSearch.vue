@@ -2,10 +2,14 @@
   <q-page
     class="fit column justify-start items-center bg-secondary"
     >
+      <div v-if="true">
+        {{ searchProps }}
+      </div>
       <div v-if="initiallayout" class="col-1">
         <h1> Componardo </h1>
       </div>
       <div class="col-1" v-bind:style="searchbarWidth">
+        <keep-alive>
         <ComponentSearch
           ref="componentSearch"
           :value="searchPropsFromURL"
@@ -13,9 +17,7 @@
           :searchState="searchingState"
           @input="onSearchRequest"
           />
-        <div v-if="true">
-          {{ searchProps }}
-        </div>
+        </keep-alive>
       </div>
   </q-page>
 </template>
@@ -59,7 +61,7 @@ export default {
         filters: [1, 2, 3],
         ...cloneDeep(this.searchPropsFromURL)
       } */
-      return cloneDeep(this.searchPropsFromURL)
+      return this.searchPropsFromURL
     },
     initiallayout () {
       return !this.searchProps.q
@@ -75,9 +77,9 @@ export default {
     ...mapGetters([
       'componentList'
     ]),
-    ...mapState([
-      'searchingState'
-    ])
+    ...mapState({
+      searchingState: state => state.comcharax.searchingState
+    })
   },
   methods: {
     onSearchRequest (searchProps) {
@@ -89,7 +91,6 @@ export default {
       } else {
         this.$router.push({ path: '/', query: newSearchProps })
       }
-      this.$store.dispatch('search', newSearchProps)
     }
   }
 }

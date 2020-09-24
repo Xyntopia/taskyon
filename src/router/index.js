@@ -1,6 +1,7 @@
 import Vue from 'vue'
 import VueRouter from 'vue-router'
-
+// https://github.com/ljharb/qs
+import qs from 'qs'
 import routes from './routes'
 
 Vue.use(VueRouter)
@@ -18,6 +19,16 @@ export default function (/* { store, ssrContext } */) {
   const Router = new VueRouter({
     scrollBehavior: () => ({ x: 0, y: 0 }),
     routes,
+
+    // set custom query resolver in order to process nested filter queries
+    parseQuery (query) {
+      return qs.parse(query, { depth: 4 })
+    },
+    stringifyQuery (query) {
+      var result = qs.stringify(query)
+
+      return result ? ('?' + result) : ''
+    },
 
     // Leave these as they are and change in quasar.conf.js instead!
     // quasar.conf.js -> build -> vueRouterMode
