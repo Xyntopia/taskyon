@@ -38,7 +38,9 @@
             :grid="true"
             :grid-header="false"
             :card-container-class="'q-col-gutter-xs'"
-            :pagination="pagination"
+            :pagination.sync="pagination"
+            :rows-per-page-options="[10,50,100]"
+            @request="onTableChange"
             >
             <template v-slot:body-cell-name="props">
               <q-td :props="props.name">
@@ -160,7 +162,8 @@ export default {
   name: 'ComponentSearch',
   props: {
     showAddButton: { type: Boolean, default: false },
-    componentList: Array,
+    componentList: { type: Array, default: undefined },
+    totalResultNum: { type: Number, default: 0 },
     searchState: { type: Boolean, default: false },
     value: {
       type: Object,
@@ -170,7 +173,8 @@ export default {
           qmode: 'text',
           start: 0,
           end: 10,
-          order: 'score',
+          sort: 'score',
+          desc: true,
           filters: []
         }
       }
@@ -178,16 +182,9 @@ export default {
   },
   data () {
     return {
-      showFilter: true,
+      showFilter: false,
       interfaceoptions: [],
       searchHint: 'Search for a Component!',
-      pagination: {
-        sortBy: 'score',
-        descending: true,
-        page: 1,
-        rowsPerPage: 10
-        // rowsNumber: 10
-      },
       columns: [
         { name: 'id', field: 'id', label: 'id' },
         { name: 'name', field: 'name', label: 'name' },
@@ -212,6 +209,15 @@ export default {
       newFilter.value = value
       newSearchProps.filters = [newFilter]
       this.$emit('input', newSearchProps)
+    },
+    onTableChange (requestProp) {
+      console.log(requestProp)
+      var newSearchProps = cloneDeep(this.value)
+      newSearchProps.start = (requestProp.pagination.page - 1) * requestProp.pagination.rowsPerPage
+      newSearchProps.end = newSearchProps.start + requestProp.pagination.rowsPerPage
+      this.$emit('input', newSearchProps)
+      // requestProp.pagination.descending
+      // requestProp.pagination.sortBy
     },
     onQChange (value) {
       this.requestSearch({ q: value })
@@ -246,6 +252,18 @@ export default {
     toggleFilter () { this.showFilter = !this.showFilter }
   },
   computed: {
+    pagination () {
+      var rowsnum = (this.value.end - this.value.start) || 10
+      // var pagenum = Math.floor(this.totalResultNum / rowsnum)
+      var page = (this.value.start / rowsnum) + 1
+      return {
+        sortBy: this.value.sort,
+        descending: this.value.order,
+        page: page,
+        rowsPerPage: rowsnum,
+        rowsNumber: this.totalResultNum
+      }
+    },
     filters () {
       if ('filters' in this.value) {
         return this.value.filters

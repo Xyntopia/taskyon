@@ -9,15 +9,14 @@
         <h1> Componardo </h1>
       </div>
       <div class="col-1" v-bind:style="searchbarWidth">
-        <keep-alive>
         <ComponentSearch
           ref="componentSearch"
           :value="searchPropsFromURL"
           :componentList="componentList"
+          :totalResultNum="result.data.total"
           :searchState="searchingState"
           @input="onSearchRequest"
           />
-        </keep-alive>
       </div>
   </q-page>
 </template>
@@ -78,6 +77,7 @@ export default {
       'componentList'
     ]),
     ...mapState({
+      result: state => state.comcharax.result,
       searchingState: state => state.comcharax.searchingState
     })
   },
