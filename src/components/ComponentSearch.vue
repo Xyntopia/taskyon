@@ -16,7 +16,6 @@
             clearable
             debounce="1000"
             :label="searchHint"
-            :prefix="prefix"
             @input="onQChange"
             >
             <template v-slot:append>
@@ -170,6 +169,7 @@ export default {
       default: function () {
         return {
           q: '',
+          uuid: '',
           qmode: 'text',
           start: 0,
           end: 10,
@@ -228,6 +228,10 @@ export default {
     searchSimilar (component) {
       console.log('searchSimilar')
       console.log(component)
+      var newSearchProps = cloneDeep(this.value)
+      newSearchProps.qmode = 'similar'
+      newSearchProps.q = 'ID: ' + component.id
+      this.$emit('input', newSearchProps)
     },
     async searchCompatible (component) {
       this.showFilter = true
@@ -269,16 +273,6 @@ export default {
         return this.value.filters
       } else {
         return []
-      }
-    },
-    prefix () {
-      switch (this.value.qmode) {
-        case 'similar':
-          return 'Similar: '
-        case 'compatible':
-          return 'Filtered: '
-        default:
-          return undefined
       }
     }
   }
