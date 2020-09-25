@@ -80,9 +80,9 @@ var vuexModule = {
     },
     updateSearchResult (state, val) {
       // TODO: what if data is none?
-      /* Component.insert({
+      Component.insert({
         data: val.data.data
-      }) */
+      })
       state.result = val
     }
   },

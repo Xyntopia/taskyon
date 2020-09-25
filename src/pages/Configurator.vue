@@ -42,9 +42,15 @@
             </div>
             <div class='col-1'>
               <ComponentSearch
+                ref="componentSearch"
+                :componentList="componentList"
+                :searchState="searchingState"
+                :totalResultNum="result.data.total"
                 showAddButton
                 v-on:component-add="addcomponent2system"
                 class="bg-white"
+                @input="onSearchRequest"
+                v-model="searchProps"
                 />
             </div>
             <div class="col-1">
@@ -61,7 +67,8 @@
 // import mxgraph from 'components/mxgraph.vue'
 import cytograph from 'components/cytograph.vue'
 import ComponentSearch from 'components/ComponentSearch.vue'
-import { mapGetters } from 'vuex'
+import { mapGetters, mapState } from 'vuex'
+var cloneDeep = require('lodash.clonedeep')
 
 export default {
   name: 'PageConfigurator',
@@ -71,6 +78,7 @@ export default {
   },
   data () {
     return {
+      searchProps: {},
       model: null,
       options: null,
       componentSystem: {
@@ -84,15 +92,22 @@ export default {
   },
   computed: {
     ...mapGetters([
-      'componentlist'
+      'componentList'
     ]),
+    ...mapState({
+      result: state => state.comcharax.result,
+      searchingState: state => state.comcharax.searchingState
+    }),
     components: function () {
       return this.$store.$db().model('components')
     }
   },
   methods: {
-    newSearch (val) {
-      console.log('the new search value is: ' + val)
+    onSearchRequest (searchProps) {
+      console.log('new configuration search')
+      var newSearchProps = cloneDeep(searchProps)
+      console.log(newSearchProps)
+      this.$store.dispatch('search', newSearchProps)
     },
     setModel (val) {
       console.log('new input text: ' + val)
