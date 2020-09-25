@@ -100,7 +100,7 @@ var vuexModule = {
   actions: {
     async search (context, searchProps) {
       context.commit('setSearchState', true)
-      await sleep(1000) // this simulates a search
+      await sleep(0) // this simulates a search
       await axios
         .get('/components', { params: searchProps })
         .then(r => {

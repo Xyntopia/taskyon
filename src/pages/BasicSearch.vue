@@ -2,13 +2,17 @@
   <q-page
     class="fit column justify-start items-center bg-secondary"
     >
-      <div v-if="true">
+      <div v-if="false">
         {{ searchProps }}
       </div>
-      <div v-if="initiallayout" class="col-1">
-        <h1> Componardo </h1>
+      <div v-if="initiallayout" class="row col-1 items-center">
+        <img
+            alt="Componardo Logo"
+            src="icons/favicon-128x128.png"
+        >
+        <h1>Componardo</h1>
       </div>
-      <div class="col-1" v-bind:style="searchbarWidth">
+      <div class="col-1 q-pa-xs" v-bind:style="searchbarWidth">
         <ComponentSearch
           ref="componentSearch"
           :value="searchPropsFromURL"
