@@ -255,7 +255,7 @@ export default {
     pagination () {
       var rowsnum = (this.value.end - this.value.start) || 10
       // var pagenum = Math.floor(this.totalResultNum / rowsnum)
-      var page = (this.value.start / rowsnum) + 1
+      var page = ((this.value.start / rowsnum) + 1) || 1
       return {
         sortBy: this.value.sort,
         descending: this.value.order,
