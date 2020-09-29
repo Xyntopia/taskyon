@@ -29,6 +29,10 @@
     "@quasar/app": "^2.0.0",
     "@quasar/icongenie": "^2.3.3",
     "babel-eslint": "^10.0.1",
+    "devtron": "^1.4.0",
+    "electron": "^9.0.0",
+    "electron-debug": "^3.0.1",
+    "electron-devtools-installer": "^3.0.0",
     "eslint": "^6.8.0",
     "eslint-config-standard": "^14.1.0",
     "eslint-loader": "^3.0.3",
@@ -37,7 +41,8 @@
     "eslint-plugin-promise": "^4.0.1",
     "eslint-plugin-standard": "^4.0.0",
     "eslint-plugin-vue": "^6.1.2",
-    "quasar-app-extension-ssg": "https://github.com/freddy38510/quasar-app-extension-ssg"
+    "quasar-app-extension-ssg": "https://github.com/freddy38510/quasar-app-extension-ssg",
+    "vue-devtools": "^5.1.4"
   },
   "browserslist": [
     "last 10 Chrome versions",

@@ -186,6 +186,7 @@ module.exports = function (/* ctx */) {
     // Full list of options: https://quasar.dev/quasar-cli/developing-electron-apps/configuring-electron
     electron: {
       bundler: 'packager', // 'packager' or 'builder'
+      nodeIntegration: false, // for security options (https://quasar.dev/quasar-cli/developing-electron-apps/node-integration#How-to-turn-it-off)
 
       packager: {
         // https://github.com/electron-userland/electron-packager/blob/master/docs/api.md#options

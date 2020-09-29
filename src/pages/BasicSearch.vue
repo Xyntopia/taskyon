@@ -2,7 +2,7 @@
   <q-page
     class="fit column justify-start items-center bg-secondary"
     >
-      <div v-if="false">
+      <div v-if="true">
         {{ searchProps }}
       </div>
       <div v-if="initiallayout" class="row col-1 items-center">
