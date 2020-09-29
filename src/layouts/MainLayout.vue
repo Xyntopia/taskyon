@@ -27,12 +27,17 @@
             icon="device_hub"
             aria-label="Home"
           />
+          <q-btn
+            flat
+            dense
+            round
+            to="/extractcomponentdata"
+            icon="find_in_page"
+            aria-label="Home"
+          />
         </div>
-        <q-toolbar-title>
-          Componardo
-        </q-toolbar-title>
-
-        <div>DEMO</div>
+        <q-space />
+        <div>Componardo-DEMO</div>
       </q-toolbar>
     </q-header>
 

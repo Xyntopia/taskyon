@@ -1,21 +1,32 @@
 <template>
   <q-page class="bg-secondary q-pa-md q-col-gutter-xs">
-    <q-input
-    outlined bg-color="white"
-    label="Comcharax API URL" v-model="urlGraphengine"
-    type="url" debounce="500" prefix="http://"
-    />
-    <q-input
-    outlined bg-color="white"
-    label="filter webpages" v-model="pageFilter"
-    type="url" debounce="500"
-    />
-
-    <q-file outlined bg-color="white" v-model="searchDir" label="Select Directory for Searching" hidden webkitdirectory directory/>
-    <q-btn color="primary" label="Search for Components"/>
-
+    <div>
+     <q-uploader
+        url="http://localhost:5000/componentfileupload/"
+        label="Upload pdf files of components!"
+        field-name="file"
+        multiple auto-upload
+      />
+    </div>
+    <div>
+      <q-btn label="Process Uploaded Components" color="tools" text-color="tools"/>
+      <q-card>
+      TODO:
+      -> upload pdf
+      -> process pdf
+      -> inject into neo4j db
+      -> get a list of uuids from injected components
+      -> display components
+      </q-card>
+      <q-card>
+      display: injected components, all components injected from this user, all injected components
+      </q-card>
+    </div>
   </q-page>
 </template>
+
+<!--<style lang="sass">
+</style>-->
 
 <script>
 
