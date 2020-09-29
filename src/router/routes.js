@@ -12,6 +12,7 @@ const routes = [
         })
       },
       { path: 'configurator', component: () => import('pages/Configurator.vue') },
+      { path: 'extractcomponentdata', component: () => import('pages/ExtractComponentData.vue') },
       { path: 'component/:id', name: 'component', component: () => import('pages/Component.vue') },
       { path: 'sandbox', component: () => import('pages/Sandbox.vue') },
       { path: 'systemviewer', component: () => import('pages/Systemviewer.vue') },

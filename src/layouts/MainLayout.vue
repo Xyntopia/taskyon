@@ -57,6 +57,14 @@
             <q-item-label>Configurator</q-item-label>
           </q-item-section>
         </q-item>
+        <q-item to="/extractcomponentdata" active-class="q-item-no-link-highlighting">
+          <q-item-section avatar>
+            <q-icon name="find_in_page"/>
+          </q-item-section>
+          <q-item-section>
+            <q-item-label>Extract Component Data</q-item-label>
+          </q-item-section>
+        </q-item>
         <q-expansion-item
           icon="settings"
           label="Administration"
