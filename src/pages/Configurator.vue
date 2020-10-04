@@ -45,7 +45,7 @@
                 ref="componentSearch"
                 :componentList="componentList"
                 :searchState="searchingState"
-                :totalResultNum="result.data.total"
+                :totalResultNum="resultnum"
                 showAddButton
                 v-on:component-add="addcomponent2system"
                 class="bg-white"
@@ -95,7 +95,7 @@ export default {
       'componentList'
     ]),
     ...mapState({
-      result: state => state.comcharax.result,
+      resultnum: state => state.comcharax.resultnum,
       searchingState: state => state.comcharax.searchingState
     }),
     components: function () {

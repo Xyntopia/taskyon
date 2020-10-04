@@ -69,6 +69,7 @@ function sleep (ms) {
 var vuexModule = {
   state: {
     result: [],
+    baseURL: 'http://localhost:5000',
     searchingState: false
   },
   mutations: {
@@ -80,13 +81,18 @@ var vuexModule = {
     },
     updateSearchResult (state, val) {
       // TODO: what if data is none?
-      Component.insert({
-        data: val.data.data
-      })
+      if (val.data.data) {
+        Component.insert({
+          data: val.data.data
+        })
+      }
       state.result = val
     }
   },
   getters: {
+    resultnum: state => {
+      return (state.result) ? 0 : state.result.data.total
+    },
     componentList: state => {
       if (state.result.data) {
         if (state.result.data.data) {

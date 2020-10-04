@@ -17,7 +17,7 @@
           ref="componentSearch"
           :value="searchPropsFromURL"
           :componentList="componentList"
-          :totalResultNum="result.data.total"
+          :totalResultNum="resultnum"
           :searchState="searchingState"
           @input="onSearchRequest"
           />
@@ -81,7 +81,7 @@ export default {
       'componentList'
     ]),
     ...mapState({
-      result: state => state.comcharax.result,
+      resultnum: state => state.comcharax.resultnum,
       searchingState: state => state.comcharax.searchingState
     })
   },
