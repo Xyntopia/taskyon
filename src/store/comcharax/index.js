@@ -68,13 +68,13 @@ function sleep (ms) {
 
 var vuexModule = {
   state: {
-    result: [],
+    result: null,
     baseURL: 'http://localhost:5000',
     searchingState: false
   },
   mutations: {
     setSearchError (state, error) {
-      state.result = []
+      state.result = {}
     },
     setSearchState (state, val) {
       state.searchingState = val
@@ -91,13 +91,11 @@ var vuexModule = {
   },
   getters: {
     resultnum: state => {
-      return (state.result) ? 0 : state.result.data.total
+      return (state.result?.data?.total) || 0
     },
     componentList: state => {
-      if (state.result.data) {
-        if (state.result.data.data) {
-          return state.result.data.data
-        }
+      if (state.result?.data?.data) {
+        return state.result.data.data
       } else {
         return []
       }

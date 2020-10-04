@@ -92,10 +92,10 @@ export default {
   },
   computed: {
     ...mapGetters([
-      'componentList'
+      'componentList',
+      'resultnum'
     ]),
     ...mapState({
-      resultnum: state => state.comcharax.resultnum,
       searchingState: state => state.comcharax.searchingState
     }),
     components: function () {

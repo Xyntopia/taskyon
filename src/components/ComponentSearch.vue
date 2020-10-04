@@ -256,16 +256,24 @@ export default {
     toggleFilter () { this.showFilter = !this.showFilter }
   },
   computed: {
-    pagination () {
-      var rowsnum = (this.value.end - this.value.start) || 10
-      // var pagenum = Math.floor(this.totalResultNum / rowsnum)
-      var page = ((this.value.start / rowsnum) + 1) || 1
-      return {
-        sortBy: this.value.sort,
-        descending: this.value.order,
-        page: page,
-        rowsPerPage: rowsnum,
-        rowsNumber: this.totalResultNum
+    pagination: {
+      get: function () {
+        var rowsnum = (this.value.end - this.value.start) || 10
+        // var pagenum = Math.floor(this.totalResultNum / rowsnum)
+        var page = ((this.value.start / rowsnum) + 1) || 1
+        return {
+          sortBy: this.value.sort,
+          descending: this.value.order,
+          page: page,
+          rowsPerPage: rowsnum,
+          rowsNumber: this.totalResultNum
+        }
+      },
+      set: function (newValue) {
+        // this function does not get used the only time when this function gets called
+        // is during the initialization of the page. Otherwise we set the pagination through
+        // the "@request" event.
+        console.log('set pagination: ' + newValue)
       }
     },
     filters () {
