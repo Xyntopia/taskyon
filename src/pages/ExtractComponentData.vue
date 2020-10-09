@@ -33,13 +33,20 @@
         <q-btn color="tools" text-color="primary" label="clear" @click="onClear()"/>
         <q-btn color="tools" text-color="primary" label="stop" @click="stopJobStream()"/>
       </div>
-      <div v-for="job in jobIDs" v-bind:key="job">
-        <q-card>
-          <div>
-            {{ job }}: {{ Tasks.find(job).status }}
-          </div>
-        <q-btn label="debug" unelevated :to="{ name: 'task', params: { id: job }}"/>
-        </q-card>
+      <div class="q-col-gutter-xs">
+        <div v-for="task in CurrentTasks" v-bind:key="task.id">
+          <q-card>
+            <q-card-section>
+              <div ellipsis class="text-overline">{{ task.id }}</div>
+              <div><b>status:</b> {{ task.status }}</div>
+              <div v-if="task.status!='error'"><b>component-name:</b> {{ task.result.component.name }}</div>
+            </q-card-section>
+            <q-card-actions>
+              <q-btn label="Details" unelevated
+                  :to="{ name: 'task', params: { id: task.id }}"/>
+            </q-card-actions>
+          </q-card>
+        </div>
       </div>
     </div>
   </q-page>
@@ -73,6 +80,9 @@ export default {
   computed: {
     Tasks () {
       return this.$store.$db().model('tasks')
+    },
+    CurrentTasks () {
+      return this.Tasks.findIn(this.jobIDs)
     }
   },
   methods: {
