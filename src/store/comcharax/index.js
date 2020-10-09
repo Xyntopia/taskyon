@@ -47,6 +47,19 @@ class Component extends Model {
   }
 }
 
+class Tasks extends Model {
+  static entity = 'tasks'
+
+  static fields () {
+    return {
+      id: this.string(),
+      status: this.string(),
+      exception: this.string(),
+      result: this.attr(null)
+    }
+  }
+}
+
 /* class Search extends Model {
   static entity = 'searches'
 
@@ -129,7 +142,8 @@ var vuexModule = {
 
 export default {
   vuexModule,
-  Component
+  Component,
+  Tasks
 }
 
 /* export default {

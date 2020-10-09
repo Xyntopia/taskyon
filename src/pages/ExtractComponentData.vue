@@ -2,6 +2,7 @@
   <q-page class="bg-secondary q-pa-md q-col-gutter-xs row">
     <div class="col-auto">
      <q-uploader
+        ref="pdfUploader"
         :url="baseURL + '/componentfileupload/'"
         label="Upload pdf files of components!"
         field-name="file"
@@ -29,12 +30,15 @@
       display: injected components, all components injected from this user, all injected components
       </q-card>-->
       <div>TASK LOG:
-        <q-btn
-          color="tools" text-color="primary" label="clear" @click="jobData={}"/>
+        <q-btn color="tools" text-color="primary" label="clear" @click="onClear()"/>
+        <q-btn color="tools" text-color="primary" label="stop" @click="stopJobStream()"/>
       </div>
-      <div v-for="(value, job) in jobData" v-bind:key="job">
+      <div v-for="job in jobIDs" v-bind:key="job">
         <q-card>
-        {{ job }}: {{ value }}
+          <div>
+            {{ job }}: {{ Tasks.find(job).status }}
+          </div>
+        <q-btn label="debug" unelevated :to="{ name: 'task', params: { id: job }}"/>
         </q-card>
       </div>
     </div>
@@ -55,18 +59,21 @@ export default {
       baseURL: 'http://localhost:5000',
       pageFilter: '*',
       searchDir: '',
-      jobData: {},
+      jobIDs: [],
       es: null
     }
   },
   /* created () {
     // this.setupJobStream()
     console.log('connection to job-stream is ready')
-  }, */
+  },  */
   beforeDestroy () {
-    console.log('disconnect from Server!')
-    this.es.close()
-    this.es = null
+    this.stopJobStream()
+  },
+  computed: {
+    Tasks () {
+      return this.$store.$db().model('tasks')
+    }
   },
   methods: {
     onUploadFiles (info) {
@@ -74,6 +81,18 @@ export default {
       if (this.es === null) {
         this.setupJobStream()
       }
+    },
+    onClear () {
+      this.jobIDs = []
+      // this.$refs.pdfUploader.removeUploadedFiles()
+      this.$refs.pdfUploader.reset()
+    },
+    stopJobStream () {
+      console.log('disconnect from Server!')
+      if (this.es) {
+        this.es.close()
+      }
+      this.es = null
     },
     setupJobStream () {
       // Not a real URL, just using for demo purposes
@@ -83,7 +102,8 @@ export default {
         console.log(event)
         const data = JSON.parse(event.data)
         console.log(data)
-        this.jobData = { ...this.jobData, ...data }
+        this.jobIDs.push(...data.map(x => x.id))
+        this.Tasks.insert({ data: data })
       })
 
       this.es.addEventListener('open', event => {
@@ -96,6 +116,8 @@ export default {
         if (event.readyState === EventSource.CLOSED) {
           console.log('Event was closed')
           console.log(EventSource)
+          this.es.close()
+          this.es = null
         }
       })
 

@@ -18,7 +18,8 @@ const routes = [
       { path: 'systemviewer', component: () => import('pages/Systemviewer.vue') },
       { path: 'configuratoradmin', component: () => import('pages/ConfiguratorAdmin.vue') },
       { path: 'ComcharaxControlPanel', component: () => import('pages/ComcharaxControlPanel.vue') },
-      { path: 'user', component: () => import('pages/UserProfile.vue') }
+      { path: 'user', component: () => import('pages/UserProfile.vue') },
+      { path: 'task/:id', name: 'task', component: () => import('pages/Task.vue') }
     ]
   },
 
