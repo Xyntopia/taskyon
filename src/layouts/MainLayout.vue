@@ -106,7 +106,7 @@
     </q-drawer>
 
     <q-page-container>
-      <keep-alive>
+      <keep-alive :max=5>
         <router-view />
       </keep-alive>
     </q-page-container>

@@ -1,8 +1,9 @@
 <template>
   <q-page class="bg-secondary">
-    <div class="text-subtitle1">{{ $route.params.id }} </div>
+    <div class="text-subtitle1">
+      Task-Object: {{ $route.params.id }} </div>
     <q-card>
-      {{ Tasks.find($route.params.id) }}
+      <pre>{{ TaskStr }}</pre>
     </q-card>
   </q-page>
 </template>
@@ -13,6 +14,10 @@ export default {
   computed: {
     Tasks () {
       return this.$store.$db().model('tasks')
+    },
+    TaskStr () {
+      // return JSON.stringify(this.Tasks.find(this.$route.params.id), null, 2)
+      return this.Tasks.find(this.$route.params.id)
     }
   }
 }
