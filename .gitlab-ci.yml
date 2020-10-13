@@ -15,6 +15,7 @@ before_script:
 
 pages:
   script:
+    - yarn global add @quasar/cli
     - quasar build -m spa
   artifacts:
     paths:
