@@ -24,5 +24,6 @@ before_script:
 pages:
   script:
     - quasar build -m spa
-  paths:
-    - dist/spa
+  artifacts:
+    paths:
+      - dist/spa
