@@ -12,23 +12,6 @@
       />
     </div>
     <div class="col column q-col-gutter-xs">
-      <q-btn
-        v-if="false"
-        label="Process Uploaded Components"
-        color="tools"
-        text-color="tools"
-        @click="onProcessComponentClick"/>
-      <!--<q-card>
-      TODO:
-      -> upload pdf
-      -> process pdf
-      -> inject into neo4j db
-      -> get a list of uuids from injected components
-      -> display components
-      </q-card>
-      <q-card>
-      display: injected components, all components injected from this user, all injected components
-      </q-card>-->
       <div>TASK LOG:
         <q-btn color="tools" text-color="primary" label="clear" @click="onClear()"/>
         <q-btn color="tools" text-color="primary" label="stop" @click="stopJobStream()"/>
@@ -37,14 +20,14 @@
         <div v-for="task in CurrentTasks" v-bind:key="task.id">
           <q-card>
             <q-card-section>
-              <div ellipsis class="text-overline">{{ task.id }}</div>
-              <div><b>status:</b> {{ task.status }}</div>
-              <div v-if="task.status!='error'"><b>component-name:</b> {{ task.result.component.name }}</div>
+              <div class="text-overline">
+                <router-link :to="{ name: 'task', params: { id: task.id }}" ellipsis>{{ task.id }}</router-link>
+              </div>
+              <div><b>status:</b>&nbsp;{{ task.status }}</div>
+              <div v-if="task.status!='error'"><b>component-name:</b>&nbsp;
+                <router-link :to="{ name: 'component', params: { id: task.result.component.id }}" >{{ task.result.component.name }}</router-link>
+              </div>
             </q-card-section>
-            <q-card-actions>
-              <q-btn label="Details" unelevated
-                  :to="{ name: 'task', params: { id: task.id }}"/>
-            </q-card-actions>
           </q-card>
         </div>
       </div>

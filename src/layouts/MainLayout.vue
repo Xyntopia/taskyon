@@ -106,7 +106,7 @@
     </q-drawer>
 
     <q-page-container>
-      <keep-alive :max=5>
+      <keep-alive :max=5 include="ExtractComponentData">
         <router-view />
       </keep-alive>
     </q-page-container>
