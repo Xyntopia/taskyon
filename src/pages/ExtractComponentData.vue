@@ -64,6 +64,9 @@ export default {
     Tasks () {
       return this.$store.$db().model('tasks')
     },
+    Components () {
+      return this.$store.$db().model('components')
+    },
     CurrentTasks () {
       return this.Tasks.findIn(this.jobIDs)
     }
@@ -97,6 +100,9 @@ export default {
         console.log(data)
         this.jobIDs.push(...data.map(x => x.id))
         this.Tasks.insert({ data: data })
+        const components = data.map(x => x.result?.component)
+        console.log(components)
+        this.Components.insert({ data: components })
       })
 
       this.es.addEventListener('open', event => {
