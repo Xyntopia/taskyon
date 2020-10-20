@@ -21,6 +21,7 @@ const database = new VuexORM.Database()
 // Register Models.
 database.register(comcharax.Component)
 database.register(comcharax.Tasks)
+database.register(comcharax.DataSheets)
 // database.register(comcharax.Search)
 
 /*

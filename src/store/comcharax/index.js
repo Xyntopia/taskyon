@@ -60,6 +60,19 @@ class Tasks extends Model {
   }
 }
 
+class DataSheets extends Model {
+  static entity = 'datasheets'
+
+  static fields () {
+    return {
+      origin: this.string(),
+      original_filename: this.string(),
+      location: this.string(),
+      data: this.attr(null)
+    }
+  }
+}
+
 /* class Search extends Model {
   static entity = 'searches'
 
@@ -143,7 +156,8 @@ var vuexModule = {
 export default {
   vuexModule,
   Component,
-  Tasks
+  Tasks,
+  DataSheets
 }
 
 /* export default {

@@ -27,6 +27,7 @@
               <div v-if="task.status!='error'"><b>component-name:</b>&nbsp;
                 <router-link :to="{ name: 'component', params: { id: task.result.component.id }}" >{{ task.result.component.name }}</router-link>
               </div>
+              <div><b>file:</b>&nbsp;{{ task.result.debug.datasheet.original_filename }}</div>
             </q-card-section>
           </q-card>
         </div>
@@ -67,6 +68,9 @@ export default {
     Components () {
       return this.$store.$db().model('components')
     },
+    DataSheets () {
+      return this.$store.$db().model('datasheets')
+    },
     CurrentTasks () {
       return this.Tasks.findIn(this.jobIDs)
     }
@@ -103,6 +107,12 @@ export default {
         const components = data.map(x => x.result?.component)
         console.log(components)
         this.Components.insert({ data: components })
+
+        // check if debugdata is included
+        const componentsFull = data.map(x => x.result?.debug?.component)
+        this.Components.insert({ data: componentsFull })
+        const dataSheets = data.map(x => x.result?.debug?.datasheet)
+        this.DataSheets.insert({ data: dataSheets })
       })
 
       this.es.addEventListener('open', event => {
