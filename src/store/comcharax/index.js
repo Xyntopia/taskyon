@@ -31,9 +31,11 @@ import { Model } from '@vuex-orm/core'
 class Component extends Model {
   static entity = 'components'
 
+  static primaryKey = 'uid'
+
   static fields () {
     return {
-      id: this.attr(null),
+      uid: this.string(),
       name: this.attr(''),
       summary: this.attr(String),
       image: this.attr(String),
@@ -41,8 +43,8 @@ class Component extends Model {
     }
   }
 
-  static fetchById (id) {
-    var data = this.api().get(`/components/${id}`)
+  static fetchById (uid) {
+    var data = this.api().get(`/components/${uid}`)
     return data
   }
 }
@@ -50,9 +52,11 @@ class Component extends Model {
 class Tasks extends Model {
   static entity = 'tasks'
 
+  static primaryKey = 'uid'
+
   static fields () {
     return {
-      id: this.string(),
+      uid: this.string(),
       status: this.string(),
       exception: this.string(),
       result: this.attr(null)
@@ -63,12 +67,18 @@ class Tasks extends Model {
 class DataSheets extends Model {
   static entity = 'datasheets'
 
+  static primaryKey = 'uid'
+
   static fields () {
     return {
+      uid: this.string(),
       origin: this.string(),
       original_filename: this.string(),
       location: this.string(),
       data: this.attr(null)
+
+      // references
+      // Component: this.hasOne(Component, 'user_id')
     }
   }
 }

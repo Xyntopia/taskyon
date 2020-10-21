@@ -1,7 +1,7 @@
 <template>
   <q-page class="bg-secondary">
     <div class="text-subtitle1">
-      Task-Object: {{ $route.params.id }} </div>
+      Task-Object: {{ $route.params.uid }} </div>
     <q-card>
       <pre>{{ TaskStr }}</pre>
     </q-card>
@@ -17,7 +17,7 @@ export default {
     },
     TaskStr () {
       // return JSON.stringify(this.Tasks.find(this.$route.params.id), null, 2)
-      return this.Tasks.find(this.$route.params.id)
+      return this.Tasks.find(this.$route.params.uid)
     }
   }
 }

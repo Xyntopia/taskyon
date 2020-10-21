@@ -1,5 +1,6 @@
 <template>
-  <q-page class="bg-secondary q-pa-md q-col-gutter-xs row">
+  <q-page class="bg-secondary q-pa-md q-col-gutter-xs column">
+    <div class="row">
     <div class="col-auto">
      <q-uploader
         ref="pdfUploader"
@@ -17,21 +18,24 @@
         <q-btn color="tools" text-color="primary" label="stop" @click="stopJobStream()"/>
       </div>
       <div class="q-col-gutter-xs">
-        <div v-for="task in CurrentTasks" v-bind:key="task.id">
+        <div v-for="task in CurrentTasks" v-bind:key="task.uid">
           <q-card>
             <q-card-section>
               <div class="text-overline">
-                <router-link :to="{ name: 'task', params: { id: task.id }}" ellipsis>{{ task.id }}</router-link>
+                <router-link :to="{ name: 'task', params: { uid: task.uid }}" ellipsis>{{ task.uid }}</router-link>
               </div>
               <div><b>status:</b>&nbsp;{{ task.status }}</div>
               <div v-if="task.status!='error'"><b>component-name:</b>&nbsp;
-                <router-link :to="{ name: 'component', params: { id: task.result.component.id }}" >{{ task.result.component.name }}</router-link>
+                <router-link :to="{ name: 'component', params: { uid: task.result.component.uid }}" >{{ task.result.component.name }}</router-link>
               </div>
               <div><b>file:</b>&nbsp;{{ task.result.debug.datasheet.original_filename }}</div>
             </q-card-section>
           </q-card>
         </div>
       </div>
+    </div></div>
+    <div class="col">
+     table
     </div>
   </q-page>
 </template>
@@ -102,7 +106,7 @@ export default {
         console.log(event)
         const data = JSON.parse(event.data)
         console.log(data)
-        this.jobIDs.push(...data.map(x => x.id))
+        this.jobIDs.push(...data.map(x => x.uid))
         this.Tasks.insert({ data: data })
         const components = data.map(x => x.result?.component)
         console.log(components)

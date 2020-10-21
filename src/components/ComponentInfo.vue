@@ -1,9 +1,9 @@
 <template>
-  <q-card>
+  <q-card v-if="componentData">
     <q-card-section class="row">
       <div class="col">
         <div class="text-h6">{{ componentData.name }}</div>
-        <div class="text-weight-light">ID: {{ componentData.id }}</div>
+        <div class="text-weight-light">ID: {{ componentData.uid }}</div>
       </div>
       <div class="col-auto">image</div>
     </q-card-section>
@@ -25,6 +25,9 @@
       </q-list>
     </q-card-section>
   </q-card>
+  <q-card v-else>
+    Component with ID: {{ componentID }} does not exist in our database!
+  </q-card>
 </template>
 
 <script>
@@ -45,13 +48,6 @@ export default {
   computed: {
     componentData () {
       var data = this.$store.$db().model('components').find(this.componentID)
-      if (data == null) {
-        return {
-          name: '',
-          summary: '',
-          id: this.componentID
-        }
-      }
       return data
       // return { name: 123 }
       // return this.$store.$db().model('components').fetchById(this.componentID)

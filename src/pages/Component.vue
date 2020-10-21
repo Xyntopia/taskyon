@@ -1,6 +1,6 @@
 <template>
   <q-page class="bg-secondary">
-    <ComponentInfo :componentID="$route.params.id"/>
+    <ComponentInfo :componentID="$route.params.uid"/>
   </q-page>
 </template>
 
