@@ -75,20 +75,27 @@
           label="Administration"
         >
           <q-list class="q-pl-md">
-            <q-item to="/ConfiguratorAdmin" active-class="q-item-no-link-highlighting">
+            <q-item to="/ComponardoSettings" active-class="q-item-no-link-highlighting">
+              <q-item-section avatar>
+                <q-icon name="settings"/>
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>Componardo Settings</q-item-label>
+              </q-item-section>
+            </q-item>
+            <q-item to="/ProjectsAdmin" active-class="q-item-no-link-highlighting">
               <q-item-section avatar>
                 <q-icon name="design_services"/>
               </q-item-section>
               <q-item-section>
-                <q-item-label>Configurator Admin</q-item-label>
+                <q-item-label>Projects Admin</q-item-label>
               </q-item-section>
             </q-item>
-            <q-item to="/ComcharaxControlPanel" active-class="q-item-no-link-highlighting">
+            <q-item to="/ScraperControlPanel" active-class="q-item-no-link-highlighting">
               <q-item-section avatar>
                 <q-icon name="api"/>
               </q-item-section>
               <q-item-section>
-                <q-item-label>Comcharax Control Panel</q-item-label>
                 <q-item-label>Scraper Control Panel</q-item-label>
               </q-item-section>
             </q-item>

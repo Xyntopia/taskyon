@@ -98,15 +98,18 @@ class DataSheets extends Model {
   static
 } */
 
+/*
 function sleep (ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
+*/
 
 var vuexModule = {
   state: {
     result: null,
     baseURL: 'http://localhost:5000',
-    searchingState: false
+    searchingState: false,
+    dbState: {}
   },
   mutations: {
     setSearchError (state, error) {
@@ -140,7 +143,7 @@ var vuexModule = {
   actions: {
     async search (context, searchProps) {
       context.commit('setSearchState', true)
-      await sleep(0) // this simulates a search
+      // await sleep(0) // uncomment to simulate a search
       await axios
         .get('/components', { params: searchProps })
         .then(r => {
@@ -159,6 +162,16 @@ var vuexModule = {
       // await new Promise(resolve => setTimeout(resolve, 1000))
       console.log('finished searching')
       context.commit('setSearchState', false)
+    },
+    async initDB (context) {
+      console.log('initialize database')
+      await axios
+        .post('/operations/init_db', { delete_nodes: false })
+        .then(r => {
+          console.log(r)
+          // context.commit('initialized!', r)
+        })
+      console.log('initialize database done')
     }
   }
 }

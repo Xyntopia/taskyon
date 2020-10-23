@@ -7,7 +7,7 @@
 <script>
 
 export default {
-  name: 'Comacharax Control Panel',
+  name: 'Projects Admin',
   components: {
   },
   data () {

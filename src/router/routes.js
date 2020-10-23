@@ -16,8 +16,9 @@ const routes = [
       { path: 'component/:uid', name: 'component', component: () => import('pages/Component.vue') },
       { path: 'sandbox', component: () => import('pages/Sandbox.vue') },
       { path: 'systemviewer', component: () => import('pages/Systemviewer.vue') },
-      { path: 'configuratoradmin', component: () => import('pages/ConfiguratorAdmin.vue') },
-      { path: 'ComcharaxControlPanel', component: () => import('pages/ComcharaxControlPanel.vue') },
+      { path: 'projectsadmin', component: () => import('pages/ProjectsAdmin.vue') },
+      { path: 'componardosettings', component: () => import('pages/ComponardoSettings.vue') },
+      { path: 'scrapercontrolpanel', component: () => import('pages/ScraperControlPanel.vue') },
       { path: 'user', component: () => import('pages/UserProfile.vue') },
       { path: 'task/:uid', name: 'task', component: () => import('pages/Task.vue') }
     ]
