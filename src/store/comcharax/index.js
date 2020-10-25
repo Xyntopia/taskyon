@@ -145,7 +145,7 @@ var vuexModule = {
       context.commit('setSearchState', true)
       // await sleep(0) // uncomment to simulate a search
       await axios
-        .get('/components', { params: searchProps })
+        .post('/components', searchProps)
         .then(r => {
           console.log(r)
           context.commit('updateSearchResult', r)
