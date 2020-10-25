@@ -199,7 +199,7 @@ export default {
         // fired when edgehandles is done and elements are added
         // cy.layout(layoutOptions.cola).run()
         console.log('completed')
-        // console.log([sourceNode.data().id, targetNode.data().id])
+        // console.log([sourceNode.data().uid, targetNode.data().uid])
         cytocomponent.$emit('link-add', sourceNode.data(), targetNode.data())
       }
       const eh = cy.edgehandles({

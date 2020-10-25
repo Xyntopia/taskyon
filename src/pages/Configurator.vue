@@ -83,7 +83,7 @@ export default {
       componentSystem: {
         counter: 0,
         name: 'new system',
-        id: '00000000',
+        uid: '00000000',
         components: [],
         links: []
       }
@@ -114,15 +114,15 @@ export default {
     },
     // adds a component with new id to the active system
     addcomponent2system (row) {
-      console.log('add component to system: ' + row.id)
-      var component = this.components.find(row.id)
-      // var component = this.Component().find(row.id)
+      console.log('add component to system: ' + row.uid)
+      var component = this.components.find(row.uid)
+      // var component = this.Component().find(row.uid)
       console.log(component)
       this.componentSystem.counter += 1
       this.componentSystem.components.push({
         id: this.componentSystem.counter.toString(),
         name: component.name,
-        source: component.id
+        source: component.uid
       })
     },
     addlink2system (source, target) {
