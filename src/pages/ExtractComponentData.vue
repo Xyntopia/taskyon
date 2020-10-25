@@ -35,7 +35,14 @@
       </div>
     </div></div>
     <div class="col">
-     table
+      TODO: only show the table, without search options
+      <ComponentSearch
+        :componentList="componentList"
+        :totalResultNum="resultnum"
+        :searchState="searchingState"
+        @input="onSearchRequest"
+        v-model="searchProps"
+        />
     </div>
   </q-page>
 </template>
@@ -44,24 +51,57 @@
 </style>-->
 
 <script>
+import ComponentSearch from 'components/ComponentSearch.vue'
+import { mapGetters, mapState } from 'vuex'
+var cloneDeep = require('lodash.clonedeep')
 
 export default {
   name: 'ExtractComponentData',
   components: {
+    ComponentSearch
   },
   data () {
     return {
       baseURL: 'http://localhost:5000',
-      pageFilter: '*',
-      searchDir: '',
       jobIDs: [],
-      es: null
+      es: null, // server-side event stream
+      searchProps: {
+        q: '',
+        uuid: '',
+        qmode: 'filter',
+        start: 0,
+        end: 10,
+        sort: 'id',
+        desc: true,
+        filters: [{
+          type: 'field_contains',
+          target: 'User.name',
+          method: 'OR',
+          value: ['DefaultUser', 'Scraper']
+        }]
+      }
     }
   },
-  /* created () {
-    // this.setupJobStream()
-    console.log('connection to job-stream is ready')
-  },  */
+  created () {
+    this.updateSearch()
+  },
+  activated () {
+    // if the page was cached, we need to change the data inside vuex store...
+    console.log('activating extract components..')
+    this.updateSearch()
+  },
+  /* watch: {
+    $route: function (to, from) {
+      console.log({ to: to, from: from })
+      console.log(to.path)
+      if (to.path === '/extractcomponentdata') {
+        console.log('watched route!!!')
+      }
+    }
+  }, */
+  /* mounted () {
+    this.updateSearch()
+  }, */
   beforeDestroy () {
     this.stopJobStream()
   },
@@ -77,9 +117,22 @@ export default {
     },
     CurrentTasks () {
       return this.Tasks.findIn(this.jobIDs)
-    }
+    },
+    ...mapGetters([
+      'componentList',
+      'resultnum'
+    ]),
+    ...mapState({
+      searchingState: state => state.comcharax.searchingState
+    })
   },
   methods: {
+    onSearchRequest (searchProps) {
+      console.log('new configuration search')
+      var newSearchProps = cloneDeep(searchProps)
+      console.log(newSearchProps)
+      this.$store.dispatch('search', newSearchProps)
+    },
     onUploadFiles (info) {
       // start listening to server for finished file processing
       if (this.es === null) {
@@ -97,6 +150,10 @@ export default {
         this.es.close()
       }
       this.es = null
+    },
+    updateSearch () {
+      // update search results
+      this.$store.dispatch('search', this.searchProps)
     },
     setupJobStream () {
       // Not a real URL, just using for demo purposes
@@ -117,6 +174,8 @@ export default {
         this.Components.insert({ data: componentsFull })
         const dataSheets = data.map(x => x.result?.debug?.datasheet)
         this.DataSheets.insert({ data: dataSheets })
+
+        this.updateSearch()
       })
 
       this.es.addEventListener('open', event => {

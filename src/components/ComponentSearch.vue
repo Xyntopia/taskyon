@@ -31,7 +31,7 @@
             :loading="searchState"
             :dense="false"
             :data="componentList"
-            row-key="id"
+            row-key="uid"
             :columns="columns"
             :visible-columns="['name','keywords']"
             :grid="true"
@@ -62,7 +62,7 @@
                   <q-card-actions align="between" class="componentActions">
                     <div>
                     <q-btn v-if="showAddButton" flat dense size='sm' @click="$emit('component-add', props.row)" icon="add"></q-btn>
-                    <q-btn :to="{ name: 'component', params: { id: props.row.id }}" flat dense size='sm' icon="info"></q-btn>
+                    <q-btn :to="{ name: 'component', params: { uid: props.row.uid }}" flat dense size='sm' icon="info"></q-btn>
                     </div>
                     <div>
                     <q-btn flat dense size='sm' @click="searchCompatible(props.row)" icon="search">Compatible</q-btn>
@@ -76,65 +76,11 @@
         </div>
       </div>
       <q-separator vertical inset spaced v-if="showFilter"/>
-      <div class="col-4 col-md-3 column items-left" v-if="showFilter">
-        <div class="col-auto text-h6 text-primary self-center" >
-            SELECTED FILTERS
-        </div>
-        <div class="col-auto self-center">
-          <q-btn-toggle
-            :value="value.qmode"
-            @input="onQModeChange"
-            class="my-custom-toggle"
-            no-caps
-            rounded
-            unelevated
-            toggle-color="primary"
-            color="white"
-            text-color="primary"
-            :options="[
-              {label: 'Text', value: 'text'},
-              {label: 'AI', value: 'similar'}
-            ]"
-          />
-        </div>
-        <q-separator inset spaced/>
-        <div
-          v-for="filter in filters"
-          v-bind:key="filter.field"
-          class="col-auto">
-          <q-select
-            use-input
-            multiple
-            :value="filter.value"
-            color="primary"
-            dense
-            label-color="primary"
-            outlined
-            :options="interfaceoptions"
-            hide-dropdown-icon
-            input-debounce="0"
-            use-chips
-            hide-bottom-space
-            new-value-mode="add-unique"
-            :label="filter.field + ' : ' + filter.method"
-            @input="onFilterChange(filter,$event)">
-            <template v-slot:selected-item="scope">
-              <q-chip
-                removable
-                square
-                dense
-                @remove="scope.removeAtIndex(scope.index)"
-                :tabindex="scope.tabindex"
-                color="white"
-                text-color="primary"
-                class="q-mb-none q-ml-none"
-              >
-                {{ scope.opt }}
-              </q-chip>
-            </template>
-          </q-select>
-        </div>
-      </div>
+      <NodeFilter
+        v-if="showFilter"
+        :value="search_options"
+        @input="onFilterChange"
+        />
     </div>
 </template>
 
@@ -154,11 +100,15 @@
 <script>
 // import { mapGetters, mapActions } from 'vuex'
 // import { mapState, mapGetters } from 'vuex'
+import NodeFilter from 'components/NodeFilter.vue'
 
 var cloneDeep = require('lodash.clonedeep')
 
 export default {
   name: 'ComponentSearch',
+  components: {
+    NodeFilter
+  },
   props: {
     showAddButton: { type: Boolean, default: false },
     componentList: { type: Array, default: undefined },
@@ -183,10 +133,9 @@ export default {
   data () {
     return {
       showFilter: false,
-      interfaceoptions: [],
       searchHint: 'Search for a Component!',
       columns: [
-        { name: 'id', field: 'id', label: 'id' },
+        { name: 'uid', field: 'uid', label: 'uid' },
         { name: 'name', field: 'name', label: 'name' },
         { name: 'score', field: 'score', label: 'score' },
         { name: 'keywords', field: 'keywords', label: 'keywords' }
@@ -201,13 +150,12 @@ export default {
       }
       this.$emit('input', newSearchProps)
     },
-    onFilterChange (filter, value) {
-      console.log(filter)
+    onFilterChange (value) {
+      console.log('filter change detected!')
       console.log(value)
       var newSearchProps = cloneDeep(this.value)
-      var newFilter = cloneDeep(filter)
-      newFilter.value = value
-      newSearchProps.filters = [newFilter]
+      newSearchProps.filters = value.filters
+      newSearchProps.qmode = value.qmode
       this.$emit('input', newSearchProps)
     },
     onTableChange (requestProp) {
@@ -230,14 +178,14 @@ export default {
       console.log(component)
       var newSearchProps = cloneDeep(this.value)
       newSearchProps.qmode = 'similar'
-      newSearchProps.q = 'ID: ' + component.id
+      newSearchProps.q = 'ID: ' + component.uid
       this.$emit('input', newSearchProps)
     },
     async searchCompatible (component) {
       this.showFilter = true
       console.log('searchCompatible')
       console.log(component)
-      var result = await this.$store.$db().model('components').fetchById(component.id)
+      var result = await this.$store.$db().model('components').fetchById(component.uid)
       // get interfaces of the component
       var interfaces = result.entities.components[0].characteristics.interfaces
       if (interfaces && interfaces.length) {
@@ -256,6 +204,12 @@ export default {
     toggleFilter () { this.showFilter = !this.showFilter }
   },
   computed: {
+    search_options () {
+      return {
+        qmode: this.value.qmode,
+        filters: this.value.filters
+      }
+    },
     pagination: {
       get: function () {
         var rowsnum = (this.value.end - this.value.start) || 10

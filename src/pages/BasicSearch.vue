@@ -14,7 +14,6 @@
       </div>
       <div class="col-1 q-pa-xs" v-bind:style="searchbarWidth">
         <ComponentSearch
-          ref="componentSearch"
           :value="searchPropsFromURL"
           :componentList="componentList"
           :totalResultNum="resultnum"
@@ -43,7 +42,6 @@ export default {
     searchPropsFromURL: Object // this comes from vue router
   },
   mounted () {
-    console.log('mounted ' + this.name)
     var newSearchProps = cloneDeep(this.searchProps)
     this.$store.dispatch('search', newSearchProps)
   },

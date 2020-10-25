@@ -116,6 +116,7 @@
       <keep-alive :max=5 include="ExtractComponentData">
         <router-view />
       </keep-alive>
+      <!--<router-view/>-->
     </q-page-container>
   </q-layout>
 </template>

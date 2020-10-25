@@ -1,7 +1,7 @@
 <template>
-  <q-page class="bg-secondary q-pa-xl">
-  <div class="q-col-gutter-xl row">
-    <div class="col-3">
+  <q-page class="bg-secondary q-pa-lg componardo-settings">
+  <div class="q-col-gutter-lg row">
+    <div class="col-auto">
       <q-card>
         <q-card-section>
           Initialize underlying Graph DB with all required options:<br>
@@ -10,34 +10,34 @@
           - initialize datascheme
         </q-card-section>
         <q-card-actions>
-          <q-btn color="primary" label="Initialize DB"  @click="onInitDB"/>
+          <q-btn label="Initialize DB"  @click="onInitDB"/>
         </q-card-actions>
       </q-card>
     </div>
-    <div class="col-3">
+    <div class="col-auto">
       <q-card>
         <q-card-section>
           Delete all Data from DB.<br>
         </q-card-section>
         <q-card-actions>
-          <q-btn color="primary" label="Reset DB"/>
+          <q-btn label="Reset DB"/>
         </q-card-actions>
       </q-card>
     </div>
-    <div class="col-3">
+    <div class="col-auto">
       <q-card>
         <q-card-section>
           Set Relevant URLs
         </q-card-section>
         <q-card-actions>
           <q-input
-          outlined bg-color="white"
+          outlined
           label="Comcharax API URL" v-model="urlGraphengine"
           type="url" debounce="500" prefix="http://"
           disable readonly
           />
           <q-input
-          outlined bg-color="white"
+          outlined
           label="Database URL" v-model="urlDatabase"
           type="url" debounce="500"
           disable readonly
@@ -45,9 +45,52 @@
         </q-card-actions>
       </q-card>
     </div>
+    <div class="col-auto">
+      <q-card>
+        <q-card-section>
+          Username & Password
+        </q-card-section>
+        <q-card-actions>
+          <q-input
+          outlined
+          label="Username" v-model="username"
+          type="url" debounce="500"
+          disable readonly password
+          />
+          <q-input v-model="password" outlined
+            :type="isPwd ? 'password' : 'text'"
+            label="Password"
+            disable readonly>
+            <template v-slot:append>
+              <q-icon
+                :name="isPwd ? 'visibility_off' : 'visibility'"
+                class="cursor-pointer"
+                @click="isPwd = !isPwd"
+              />
+            </template>
+          </q-input>
+        </q-card-actions>
+      </q-card>
+    </div>
+    <div class="col-auto">
+      <q-card>
+        <q-card-section>
+          Status
+        </q-card-section>
+        <q-card-actions>
+          <q-btn label="refresh"/>
+        </q-card-actions>
+      </q-card>
+    </div>
   </div>
   </q-page>
 </template>
+
+<style lang="sass">
+.componardo-settings .q-btn
+  color: black
+  background-color: $tools
+</style>
 
 <script>
 
@@ -59,7 +102,10 @@ export default {
     return {
       urlGraphengine: '127.0.0.1:5000',
       urlDatabase: 'bolt+',
-      searchDir: ''
+      searchDir: '',
+      password: null,
+      username: null,
+      isPwd: 'visibility_off'
     }
   },
   methods: {

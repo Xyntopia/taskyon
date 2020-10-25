@@ -121,7 +121,7 @@ var vuexModule = {
     updateSearchResult (state, val) {
       // TODO: what if data is none?
       if (val.data.data) {
-        Component.insert({
+        Component.insertOrUpdate({
           data: val.data.data
         })
       }

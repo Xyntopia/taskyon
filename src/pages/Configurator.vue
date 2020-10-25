@@ -42,7 +42,6 @@
             </div>
             <div class='col-1'>
               <ComponentSearch
-                ref="componentSearch"
                 :componentList="componentList"
                 :searchState="searchingState"
                 :totalResultNum="resultnum"
