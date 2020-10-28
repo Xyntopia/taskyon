@@ -109,7 +109,8 @@ var vuexModule = {
     result: null,
     baseURL: 'http://localhost:5000',
     searchingState: false,
-    dbState: {}
+    dbState: {},
+    token: null
   },
   mutations: {
     setSearchError (state, error) {
@@ -126,7 +127,8 @@ var vuexModule = {
         })
       }
       state.result = val
-    }
+    },
+    setToken (state, val) { state.token = val }
   },
   getters: {
     resultnum: state => {
@@ -163,14 +165,15 @@ var vuexModule = {
       console.log('finished searching')
       context.commit('setSearchState', false)
     },
-    async initDB (context, reset) {
+    async initDB ({ commit, state }, reset) {
       console.log('initialize database')
       await axios
-        .get('/operations/init_db', { params: { delete_nodes: reset } })
-        .then(r => {
-          console.log(r)
-          // context.commit('initialized!', r)
+        .get('/operations/init_db', {
+          params: { delete_nodes: reset },
+          headers: { Authorization: `Bearer ${state.token}` }
         })
+        .then(r => { console.log(r) })
+        .catch((error) => console.log(error))
       console.log('initialize database done')
     },
     async authenticate (context, { username, password }) {
@@ -181,7 +184,6 @@ var vuexModule = {
       formData.set('password', password)
       // console.log(FormData)
 
-      var token = ''
       await axios
         .post('/auth/jwt/login',
           formData,
@@ -191,9 +193,14 @@ var vuexModule = {
             }
           }
         )
-        .then((response) => console.log(response))
+        .then((response) => {
+          console.log(response)
+          context.commit('setToken', response.data.access_token)
+        })
         .catch((error) => console.log(error))
-      console.log('token: ' + token)
+    },
+    async getSettings (context) {
+      console.log('get settings ...')
     }
   }
 }

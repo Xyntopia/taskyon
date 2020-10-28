@@ -5,6 +5,7 @@
      <q-uploader
         ref="pdfUploader"
         :url="baseURL + '/componentfileupload/'"
+        :headers="[{name: 'Authorization', value: `Bearer ${token}`}]"
         label="Upload pdf files of components!"
         field-name="file"
         multiple auto-upload
@@ -55,6 +56,9 @@ import ComponentSearch from 'components/ComponentSearch.vue'
 import { mapGetters, mapState } from 'vuex'
 var cloneDeep = require('lodash.clonedeep')
 
+// as we want the ability to use an authorization header, wee need to usr the polyfill
+import { EventSourcePolyfill } from 'event-source-polyfill'
+
 export default {
   name: 'ExtractComponentData',
   components: {
@@ -62,7 +66,6 @@ export default {
   },
   data () {
     return {
-      baseURL: 'http://localhost:5000',
       jobIDs: [],
       es: null, // server-side event stream
       searchProps: {
@@ -125,7 +128,9 @@ export default {
       'resultnum'
     ]),
     ...mapState({
-      searchingState: state => state.comcharax.searchingState
+      searchingState: state => state.comcharax.searchingState,
+      token: state => state.comcharax.token,
+      baseURL: state => state.comcharax.baseURL
     })
   },
   methods: {
@@ -159,7 +164,11 @@ export default {
     },
     setupJobStream () {
       // Not a real URL, just using for demo purposes
-      this.es = new EventSource(this.baseURL + '/jobstream')
+      this.es = new EventSourcePolyfill(this.baseURL + '/jobstream', {
+        headers: {
+          Authorization: `Bearer ${this.token}`
+        }
+      })
 
       this.es.addEventListener('jobstatus', event => {
         console.log(event)

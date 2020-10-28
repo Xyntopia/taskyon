@@ -4,6 +4,7 @@ import VuexORM from '@vuex-orm/core'
 import axios from 'axios'
 import VuexORMAxios from '@vuex-orm/plugin-axios'
 import comcharax from './comcharax'
+import VuexPersistence from 'vuex-persist'
 
 // TODO: think abot employing the followin vuex plugins:
 // - https://github.com/christianmalek/vuex-rest-api
@@ -24,6 +25,15 @@ database.register(comcharax.Tasks)
 database.register(comcharax.DataSheets)
 // database.register(comcharax.Search)
 
+// create persistant store
+const vuexLocal = new VuexPersistence({
+  storage: window.localStorage,
+  reducer: (state) => ({
+    comcharax: state.comcharax
+  }),
+  filter: (mutation) => mutation.type === 'setToken'
+})
+
 /*
  * If not building with SSR mode, you can
  * directly export the Store instantiation;
@@ -38,7 +48,10 @@ export default function (/* { ssrContext } */) {
     modules: {
       comcharax: comcharax.vuexModule
     },
-    plugins: [VuexORM.install(database)],
+    plugins: [
+      VuexORM.install(database),
+      vuexLocal.plugin
+    ],
     // enable strict mode (adds overhead!)
     // for dev mode only
     strict: process.env.DEV
