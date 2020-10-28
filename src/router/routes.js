@@ -20,7 +20,8 @@ const routes = [
       { path: 'componardosettings', component: () => import('pages/ComponardoSettings.vue') },
       { path: 'scrapercontrolpanel', component: () => import('pages/ScraperControlPanel.vue') },
       { path: 'user', component: () => import('pages/UserProfile.vue') },
-      { path: 'task/:uid', name: 'task', component: () => import('pages/Task.vue') }
+      { path: 'task/:uid', name: 'task', component: () => import('pages/Task.vue') },
+      { path: 'login', name: 'login', component: () => import('pages/Login.vue') }
     ]
   },
 

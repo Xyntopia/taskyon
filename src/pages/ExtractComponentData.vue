@@ -82,9 +82,11 @@ export default {
       }
     }
   },
+  /*
   created () {
     this.updateSearch()
   },
+  */
   activated () {
     // if the page was cached, we need to change the data inside vuex store...
     console.log('activating extract components..')

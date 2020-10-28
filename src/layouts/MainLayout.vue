@@ -37,7 +37,16 @@
           />
         </div>
         <q-space />
-        <div>Componardo-DEMO</div>
+        <div>Componardo-DEMO
+          <q-btn
+            flat
+            dense
+            round
+            to="/login"
+            icon="person"
+            aria-label="Home"
+          />
+        </div>
       </q-toolbar>
     </q-header>
 

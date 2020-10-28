@@ -10,7 +10,7 @@
           - initialize datascheme
         </q-card-section>
         <q-card-actions>
-          <q-btn label="Initialize DB"  @click="onInitDB"/>
+          <q-btn label="Initialize DB"  @click="onInitDB(false)"/>
         </q-card-actions>
       </q-card>
     </div>
@@ -20,7 +20,7 @@
           Delete all Data from DB.<br>
         </q-card-section>
         <q-card-actions>
-          <q-btn label="Reset DB"/>
+          <q-btn label="Reset DB" @click="onInitDB(true)"/>
         </q-card-actions>
       </q-card>
     </div>
@@ -109,9 +109,9 @@ export default {
     }
   },
   methods: {
-    onInitDB () {
-      console.log('reset db !!!')
-      this.$store.dispatch('initDB')
+    onInitDB (reset) {
+      console.log('reset db !!! ' + reset)
+      this.$store.dispatch('initDB', reset)
     }
   }
 }

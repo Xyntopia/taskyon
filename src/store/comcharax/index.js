@@ -163,15 +163,37 @@ var vuexModule = {
       console.log('finished searching')
       context.commit('setSearchState', false)
     },
-    async initDB (context) {
+    async initDB (context, reset) {
       console.log('initialize database')
       await axios
-        .post('/operations/init_db', { delete_nodes: false })
+        .get('/operations/init_db', { params: { delete_nodes: reset } })
         .then(r => {
           console.log(r)
           // context.commit('initialized!', r)
         })
       console.log('initialize database done')
+    },
+    async authenticate (context, { username, password }) {
+      console.log('authenticate with server!')
+      console.log(username, password)
+      const formData = new FormData()
+      formData.set('username', username)
+      formData.set('password', password)
+      // console.log(FormData)
+
+      var token = ''
+      await axios
+        .post('/auth/jwt/login',
+          formData,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data'
+            }
+          }
+        )
+        .then((response) => console.log(response))
+        .catch((error) => console.log(error))
+      console.log('token: ' + token)
     }
   }
 }
