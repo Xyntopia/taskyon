@@ -10,15 +10,27 @@ import * as mutations from './mutations'
 import * as actions from './actions' */
 
 import axios from 'axios'
+// import { LocalStorage, SessionStorage } from 'quasar'
+// import { LocalStorage } from 'quasar'
 
 axios.defaults.headers.post['Access-Control-Allow-Origin'] = '*'
 // axios.defaults.headers.post['Content-Type'] = 'application/x-www-form-urlencoded';
-axios.defaults.baseURL = 'http://localhost:5000'
+// axios.defaults.baseURL = 'http://localhost:5000'
 // axios.defaults.headers.common['Authorization'] = AUTH_TOKEN;
 /*  baseURL: ,
   timeout: 1000,
   headers: {'X-Custom-Header': 'foobar'} */
 // var graphengineApi = axios.create()
+
+// var initialURL = LocalStorage.getItem('vuex')
+// console.log('initial URL:' + initialURL)
+var initialURL = 'https://api.componardo.com'
+
+var componardoapi = axios.create({
+  // baseURL: 'https://api.componardo.com/'
+  baseURL: initialURL,
+  headers: { 'Access-Control-Allow-Origin': '*' }
+})
 
 import { Model } from '@vuex-orm/core'
 
@@ -107,12 +119,17 @@ function sleep (ms) {
 var vuexModule = {
   state: {
     result: null,
-    baseURL: 'http://localhost:5000',
+    baseURL: initialURL,
     searchingState: false,
     dbState: {},
     token: null
   },
   mutations: {
+    setBaseURL (state, val) {
+      componardoapi.defaults.baseURL = val
+      componardoapi.defaults.headers['Access-Control-Allow-Origin'] = '*'
+      state.baseURL = val
+    },
     setSearchError (state, error) {
       state.result = {}
     },
@@ -131,6 +148,10 @@ var vuexModule = {
     setToken (state, val) { state.token = val }
   },
   getters: {
+    baseURLFull: state => {
+      // return 'http://' + state.baseURL
+      return state.baseURL
+    },
     resultnum: state => {
       return (state.result?.data?.total) || 0
     },
@@ -146,7 +167,7 @@ var vuexModule = {
     async search (context, searchProps) {
       context.commit('setSearchState', true)
       // await sleep(0) // uncomment to simulate a search
-      await axios
+      await componardoapi
         .post('/components', searchProps)
         .then(r => {
           console.log(r)
@@ -167,7 +188,7 @@ var vuexModule = {
     },
     async initDB ({ commit, state }, reset) {
       console.log('initialize database')
-      await axios
+      await componardoapi
         .get('/operations/init_db', {
           params: { delete_nodes: reset },
           headers: { Authorization: `Bearer ${state.token}` }
@@ -184,7 +205,7 @@ var vuexModule = {
       formData.set('password', password)
       // console.log(FormData)
 
-      await axios
+      await componardoapi
         .post('/auth/jwt/login',
           formData,
           {
@@ -209,7 +230,8 @@ export default {
   vuexModule,
   Component,
   Tasks,
-  DataSheets
+  DataSheets,
+  componardoapi
 }
 
 /* export default {

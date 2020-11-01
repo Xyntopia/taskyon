@@ -1,7 +1,7 @@
 import Vue from 'vue'
 import Vuex from 'vuex'
 import VuexORM from '@vuex-orm/core'
-import axios from 'axios'
+// import axios from 'axios'
 import VuexORMAxios from '@vuex-orm/plugin-axios'
 import comcharax from './comcharax'
 import VuexPersistence from 'vuex-persist'
@@ -14,7 +14,7 @@ import VuexPersistence from 'vuex-persist'
 Vue.use(Vuex)
 
 // register axios-sync plugin for vuexORM
-VuexORM.use(VuexORMAxios, { axios })
+VuexORM.use(VuexORMAxios, { axios: comcharax.componardoapi })
 
 // Create new instance of Database.
 const database = new VuexORM.Database()
@@ -27,11 +27,18 @@ database.register(comcharax.DataSheets)
 
 // create persistant store
 const vuexLocal = new VuexPersistence({
+  strictMode: true, // This **MUST** be set to true
   storage: window.localStorage,
   reducer: (state) => ({
-    comcharax: state.comcharax
+    comcharax: {
+      baseURL: state.comcharax.baseURL,
+      token: state.comcharax.token
+    }
   }),
-  filter: (mutation) => mutation.type === 'setToken'
+  filter: (mutation) => {
+    return mutation.type === 'setToken' ||
+      mutation.type === 'setBaseURL'
+  }
 })
 
 /*
@@ -47,6 +54,15 @@ export default function (/* { ssrContext } */) {
   const Store = new Vuex.Store({
     modules: {
       comcharax: comcharax.vuexModule
+    },
+    mutations: {
+      RESTORE_MUTATION: vuexLocal.RESTORE_MUTATION // this mutation **MUST** be named "RESTORE_MUTATION"
+    },
+    actions: {
+      async initialize ({ commit, state }) {
+        console.log('initialize store!')
+        comcharax.componardoapi.defaults.baseURL = state.comcharax.baseURL
+      }
     },
     plugins: [
       VuexORM.install(database),

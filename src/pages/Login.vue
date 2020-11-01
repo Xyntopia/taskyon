@@ -19,7 +19,7 @@
                 />
               </template>
             </q-input>
-            <q-input filled disable prefix="https://" v-model="server" type="url" label="Componardo Server" />
+            <q-input filled v-model="baseURL" type="url" label="Componardo Server" />
             <div>
               <q-btn size="lg" class="fit" color="primary" label="Login" type="submit"/>
             </div>
@@ -31,14 +31,26 @@
 </template>
 
 <script>
+// import { mapState } from 'vuex'
+
 export default {
   name: 'Login',
   data () {
     return {
       isPwd: true,
-      server: 'localhost',
       username: 'DefaultUser@Componardo.com',
       password: ''
+    }
+  },
+  computed: {
+    baseURL: {
+      get () {
+        return this.$store.state.comcharax.baseURL
+      },
+      set (value) {
+        // console.log('set new base URL: ' + value)
+        this.$store.commit('setBaseURL', value)
+      }
     }
   },
   methods: {

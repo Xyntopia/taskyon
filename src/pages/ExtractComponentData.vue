@@ -4,7 +4,7 @@
     <div class="col-auto">
      <q-uploader
         ref="pdfUploader"
-        :url="baseURL + '/componentfileupload/'"
+        :url="baseURLFull + '/componentfileupload/'"
         :headers="[{name: 'Authorization', value: `Bearer ${token}`}]"
         label="Upload pdf files of components!"
         field-name="file"
@@ -125,7 +125,8 @@ export default {
     },
     ...mapGetters([
       'componentList',
-      'resultnum'
+      'resultnum',
+      'baseURLFull'
     ]),
     ...mapState({
       searchingState: state => state.comcharax.searchingState,
@@ -164,7 +165,7 @@ export default {
     },
     setupJobStream () {
       // Not a real URL, just using for demo purposes
-      this.es = new EventSourcePolyfill(this.baseURL + '/jobstream', {
+      this.es = new EventSourcePolyfill(this.baseURLFull + '/jobstream', {
         headers: {
           Authorization: `Bearer ${this.token}`
         }

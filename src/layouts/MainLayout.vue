@@ -24,7 +24,20 @@
             dense
             round
             to="/configurator"
-            icon="device_hub"
+            icon="engineering"
+            aria-label="Home"
+          />
+          <!-- other sybols that work for the "offer configurator" are:
+          extension, mediation, redeem, shopping_cart, shopping_basket,
+          smart_button, square_foot, save_alt, unarchive, monetization_on,
+          assistant, local_offer, miscellaneous_services
+          -->
+          <q-btn
+            flat
+            dense
+            round
+            to="/offers"
+            icon="assistant"
             aria-label="Home"
           />
           <q-btn
@@ -65,10 +78,18 @@
         </q-item>
         <q-item to="/configurator" active-class="q-item-no-link-highlighting">
           <q-item-section avatar>
-            <q-icon name="device_hub"/>
+            <q-icon name="engineering"/>
           </q-item-section>
           <q-item-section>
             <q-item-label>Configurator</q-item-label>
+          </q-item-section>
+        </q-item>
+        <q-item to="/offers" active-class="q-item-no-link-highlighting">
+          <q-item-section avatar>
+            <q-icon name="extension"/>
+          </q-item-section>
+          <q-item-section>
+            <q-item-label>Dynamic Offers</q-item-label>
           </q-item-section>
         </q-item>
         <q-item to="/extractcomponentdata" active-class="q-item-no-link-highlighting">

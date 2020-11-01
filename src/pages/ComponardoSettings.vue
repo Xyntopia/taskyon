@@ -32,8 +32,8 @@
         <q-card-actions>
           <q-input
           outlined
-          label="Comcharax API URL" v-model="urlGraphengine"
-          type="url" debounce="500" prefix="http://"
+          label="Comcharax API URL" v-model="baseURL"
+          type="url" debounce="500"
           disable readonly
           />
           <q-input
@@ -51,13 +51,15 @@
           Username & Password
         </q-card-section>
         <q-card-actions>
-          <q-input
+          <q-btn label="Logout"/>
+          <q-input  v-if="false"
           outlined
           label="Username" v-model="username"
           type="url" debounce="500"
           disable readonly password
           />
-          <q-input v-model="password" outlined
+          <q-input  v-if="false"
+            v-model="password" outlined
             :type="isPwd ? 'password' : 'text'"
             label="Password"
             disable readonly>
@@ -94,19 +96,24 @@
 
 <script>
 
+import { mapState } from 'vuex'
+
 export default {
   name: 'ComcharaxControlPanel',
   components: {
   },
   data () {
     return {
-      urlGraphengine: '127.0.0.1:5000',
-      urlDatabase: 'bolt+',
-      searchDir: '',
       password: null,
       username: null,
       isPwd: 'visibility_off'
     }
+  },
+  computed: {
+    ...mapState({
+      token: state => state.comcharax.token,
+      baseURL: state => state.comcharax.baseURL
+    })
   },
   methods: {
     onInitDB (reset) {
