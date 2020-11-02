@@ -10,6 +10,9 @@ import * as mutations from './mutations'
 import * as actions from './actions' */
 
 import axios from 'axios'
+// eslint-disable-next-line
+import jwt_decode from "jwt-decode";
+import { Model } from '@vuex-orm/core'
 // import { LocalStorage, SessionStorage } from 'quasar'
 // import { LocalStorage } from 'quasar'
 
@@ -31,8 +34,6 @@ var componardoapi = axios.create({
   baseURL: initialURL,
   headers: { 'Access-Control-Allow-Origin': '*' }
 })
-
-import { Model } from '@vuex-orm/core'
 
 // TODO:
 // Component class gets added to the store in the index.js of
@@ -117,14 +118,21 @@ function sleep (ms) {
 */
 
 var vuexModule = {
+  namespaced: true,
   state: {
     result: null,
     baseURL: initialURL,
+    neo4jURI: 'neo4j:7687',
+    neo4jPW: 'TODO',
     searchingState: false,
     dbState: {},
-    token: null
+    token: null,
+    userName: ''
   },
   mutations: {
+    setUserName (state, val) {
+      state.userName = val
+    },
     setBaseURL (state, val) {
       componardoapi.defaults.baseURL = val
       componardoapi.defaults.headers['Access-Control-Allow-Origin'] = '*'
@@ -148,6 +156,12 @@ var vuexModule = {
     setToken (state, val) { state.token = val }
   },
   getters: {
+    isLoggedIn: state => {
+      return state.token !== null
+    },
+    getTokenInfo: state => {
+      return jwt_decode(state.token)
+    },
     baseURLFull: state => {
       // return 'http://' + state.baseURL
       return state.baseURL
@@ -197,7 +211,11 @@ var vuexModule = {
         .catch((error) => console.log(error))
       console.log('initialize database done')
     },
-    async authenticate (context, { username, password }) {
+    logOut (context) {
+      console.log('log out!')
+      context.commit('setToken', null)
+    },
+    async authenticate (context, { username, password, baseURL }) {
       console.log('authenticate with server!')
       console.log(username, password)
       const formData = new FormData()
@@ -205,8 +223,11 @@ var vuexModule = {
       formData.set('password', password)
       // console.log(FormData)
 
+      // as we are potentially using a new URL, we should make
+      // the URL explicit inside the request
+      // if the request is successful, it will get updated
       await componardoapi
-        .post('/auth/jwt/login',
+        .post(`${baseURL}/auth/jwt/login`,
           formData,
           {
             headers: {
@@ -217,6 +238,8 @@ var vuexModule = {
         .then((response) => {
           console.log(response)
           context.commit('setToken', response.data.access_token)
+          context.commit('setUserName', username)
+          context.commit('setBaseURL', baseURL)
         })
         .catch((error) => console.log(error))
     },

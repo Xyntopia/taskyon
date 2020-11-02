@@ -43,12 +43,12 @@ export default {
   },
   mounted () {
     var newSearchProps = cloneDeep(this.searchProps)
-    this.$store.dispatch('search', newSearchProps)
+    this.$store.dispatch('comcharax/search', newSearchProps)
   },
   watch: {
     $route (to, from) {
       var newSearchProps = cloneDeep(this.searchProps)
-      this.$store.dispatch('search', newSearchProps)
+      this.$store.dispatch('comcharax/search', newSearchProps)
     }
   },
   computed: {
@@ -75,13 +75,13 @@ export default {
         return 'width: 100%;'
       }
     },
-    ...mapGetters([
+    ...mapGetters('comcharax', [
       'componentList',
       'resultnum'
     ]),
-    ...mapState({
-      searchingState: state => state.comcharax.searchingState
-    })
+    ...mapState('comcharax', [
+      'searchingState'
+    ])
   },
   methods: {
     onSearchRequest (searchProps) {

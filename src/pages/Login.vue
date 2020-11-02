@@ -1,6 +1,8 @@
 <template>
   <q-page class="bg-secondary row justify-center items-center">
-    <div class="row">
+    <div
+      v-if="!isLoggedIn"
+      class="row">
       <q-card class="q-pa-lg">
         <q-card-section class="text-center q-pa-none">
           <p class="text-red-6">Demo: only "<b>{{ username }}</b>" account works right now!!!</p>
@@ -19,7 +21,7 @@
                 />
               </template>
             </q-input>
-            <q-input filled v-model="baseURL" type="url" label="Componardo Server" />
+            <q-input filled v-model="componardoURL" type="url" label="Componardo Server" />
             <div>
               <q-btn size="lg" class="fit" color="primary" label="Login" type="submit"/>
             </div>
@@ -27,11 +29,24 @@
         </q-card-section>
       </q-card>
     </div>
+    <div
+      v-else
+      class="row">
+      <q-card class="q-pa-lg">
+        <q-card-section class="q-pa-none">
+        Username: {{ userName }} <br>
+        BaseURL: {{ baseURL }}
+        </q-card-section>
+        <q-card-actions>
+          <q-btn class="fit" size="lg" label="Log Out" color="primary" @click="onLogOut"/>
+        </q-card-actions>
+      </q-card>
+    </div>
   </q-page>
 </template>
 
 <script>
-// import { mapState } from 'vuex'
+import { mapGetters, mapState } from 'vuex'
 
 export default {
   name: 'Login',
@@ -39,26 +54,33 @@ export default {
     return {
       isPwd: true,
       username: 'DefaultUser@Componardo.com',
-      password: ''
+      password: '',
+      componardoURL: ''
     }
+  },
+  mounted () {
+    this.componardoURL = this.baseURL
   },
   computed: {
-    baseURL: {
-      get () {
-        return this.$store.state.comcharax.baseURL
-      },
-      set (value) {
-        // console.log('set new base URL: ' + value)
-        this.$store.commit('setBaseURL', value)
-      }
-    }
+    ...mapGetters('comcharax', [
+      'getTokenInfo',
+      'isLoggedIn'
+    ]),
+    ...mapState('comcharax', [
+      'userName',
+      'baseURL'
+    ])
   },
   methods: {
+    onLogOut (event) {
+      this.$store.dispatch('comcharax/logOut', null)
+    },
     onSubmit (event) {
       console.log('authenticate user!')
-      this.$store.dispatch('authenticate', {
+      this.$store.dispatch('comcharax/authenticate', {
         username: this.username,
-        password: this.password
+        password: this.password,
+        baseURL: this.componardoURL
       })
     }
   }

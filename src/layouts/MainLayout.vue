@@ -50,16 +50,17 @@
           />
         </div>
         <q-space />
-        <div>Componardo-DEMO
-          <q-btn
+        <div>DEMO
+        <div v-if='isLoggedIn'>{{ userName }}</div>
+        </div>
+        <q-btn
             flat
             dense
             round
             to="/login"
             icon="person"
             aria-label="Home"
-          />
-        </div>
+        />
       </q-toolbar>
     </q-header>
 
@@ -152,6 +153,7 @@
 </template>
 
 <script>
+import { mapState, mapGetters } from 'vuex'
 
 export default {
   name: 'MainLayout',
@@ -159,6 +161,15 @@ export default {
     return {
       leftDrawerOpen: false
     }
+  },
+  computed: {
+    ...mapState('comcharax', [
+      'userName',
+      'baseURL'
+    ]),
+    ...mapGetters('comcharax', [
+      'isLoggedIn'
+    ])
   }
 }
 </script>

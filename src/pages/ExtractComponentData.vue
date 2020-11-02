@@ -28,8 +28,8 @@
               <div><b>status:</b>&nbsp;{{ task.status }}</div>
               <div v-if="task.status!='error'"><b>component-name:</b>&nbsp;
                 <router-link :to="{ name: 'component', params: { uid: task.result.component.uid }}" >{{ task.result.component.name }}</router-link>
+                <div><b>file:</b>&nbsp;{{ task.result.debug.datasheet.original_filename }}</div>
               </div>
-              <div><b>file:</b>&nbsp;{{ task.result.debug.datasheet.original_filename }}</div>
             </q-card-section>
           </q-card>
         </div>
@@ -123,23 +123,23 @@ export default {
     CurrentTasks () {
       return this.Tasks.findIn(this.jobIDs)
     },
-    ...mapGetters([
+    ...mapGetters('comcharax', [
       'componentList',
       'resultnum',
       'baseURLFull'
     ]),
-    ...mapState({
-      searchingState: state => state.comcharax.searchingState,
-      token: state => state.comcharax.token,
-      baseURL: state => state.comcharax.baseURL
-    })
+    ...mapState('comcharax', [
+      'searchingState',
+      'token',
+      'baseURL'
+    ])
   },
   methods: {
     onSearchRequest (searchProps) {
       console.log('new configuration search')
       var newSearchProps = cloneDeep(searchProps)
       console.log(newSearchProps)
-      this.$store.dispatch('search', newSearchProps)
+      this.$store.dispatch('comcharax/search', newSearchProps)
     },
     onUploadFiles (info) {
       // start listening to server for finished file processing
@@ -161,7 +161,7 @@ export default {
     },
     updateSearch () {
       // update search results
-      this.$store.dispatch('search', this.searchProps)
+      this.$store.dispatch('comcharax/search', this.searchProps)
     },
     setupJobStream () {
       // Not a real URL, just using for demo purposes

@@ -8,13 +8,10 @@
 <script>
 // import mxgraph from 'components/mxgraph.vue'
 
-import { mapState } from 'vuex'
+// import { mapState } from 'vuex'
 
 export default {
   name: 'PageBasicSearch',
-  computed: mapState([
-    'count'
-  ]),
   methods: {
     increment () {
       console.log('pressed button....')

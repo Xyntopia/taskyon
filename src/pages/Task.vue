@@ -3,7 +3,7 @@
     <div class="text-subtitle1">
       Task-Object: {{ $route.params.uid }} </div>
     <q-card>
-      <pre>{{ TaskStr }}</pre>
+      <pre style="word-wrap: break-word; width: 100%">{{ TaskStr }}</pre>
     </q-card>
   </q-page>
 </template>

@@ -110,15 +110,14 @@ export default {
     }
   },
   computed: {
-    ...mapState({
-      token: state => state.comcharax.token,
-      baseURL: state => state.comcharax.baseURL
-    })
+    ...mapState('comcharax', [
+      'token', 'baseURL'
+    ])
   },
   methods: {
     onInitDB (reset) {
       console.log('reset db !!! ' + reset)
-      this.$store.dispatch('initDB', reset)
+      this.$store.dispatch('comcharax/initDB', reset)
     }
   }
 }

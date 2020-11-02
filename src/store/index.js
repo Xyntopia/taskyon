@@ -32,12 +32,13 @@ const vuexLocal = new VuexPersistence({
   reducer: (state) => ({
     comcharax: {
       baseURL: state.comcharax.baseURL,
-      token: state.comcharax.token
+      token: state.comcharax.token,
+      userName: state.comcharax.userName
     }
   }),
   filter: (mutation) => {
-    return mutation.type === 'setToken' ||
-      mutation.type === 'setBaseURL'
+    return mutation.type === 'comcharax/setToken' ||
+      mutation.type === 'comcharax/setBaseURL'
   }
 })
 

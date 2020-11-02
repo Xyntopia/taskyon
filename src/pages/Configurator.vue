@@ -90,13 +90,13 @@ export default {
     }
   },
   computed: {
-    ...mapGetters([
+    ...mapGetters('comcharax', [
       'componentList',
       'resultnum'
     ]),
-    ...mapState({
-      searchingState: state => state.comcharax.searchingState
-    }),
+    ...mapState('comcharax', [
+      'searchingState'
+    ]),
     components: function () {
       return this.$store.$db().model('components')
     }
@@ -106,7 +106,7 @@ export default {
       console.log('new configuration search')
       var newSearchProps = cloneDeep(searchProps)
       console.log(newSearchProps)
-      this.$store.dispatch('search', newSearchProps)
+      this.$store.dispatch('comcharax/search', newSearchProps)
     },
     setModel (val) {
       console.log('new input text: ' + val)
