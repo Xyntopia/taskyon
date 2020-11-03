@@ -72,6 +72,7 @@ class Tasks extends Model {
       uid: this.string(),
       status: this.string(),
       exception: this.string(),
+      args: this.attr(null),
       result: this.attr(null)
     }
   }

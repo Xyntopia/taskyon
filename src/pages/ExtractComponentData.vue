@@ -1,40 +1,41 @@
 <template>
   <q-page class="bg-secondary q-pa-md q-col-gutter-xs column">
-    <div class="row">
-    <div class="col-auto">
-     <q-uploader
-        ref="pdfUploader"
-        :url="baseURLFull + '/componentfileupload/'"
-        :headers="[{name: 'Authorization', value: `Bearer ${token}`}]"
-        label="Upload pdf files of components!"
-        field-name="file"
-        multiple auto-upload
-        hide-upload-btn
-        @uploading="onUploadFiles"
-      />
+    <div class="col row">
+      <div class="col-auto">
+      <q-uploader
+          ref="pdfUploader"
+          :url="baseURLFull + '/componentfileupload/'"
+          :headers="[{name: 'Authorization', value: `Bearer ${token}`}]"
+          label="Upload pdf files of components!"
+          field-name="file"
+          multiple auto-upload
+          hide-upload-btn
+          @uploading="onUploadFiles"
+        />
+      </div>
+      <div class="col">
+        <q-scroll-area ref="taskScroll" class="inset-shadow bg-tools rounded-borders" style="height: 100%;">
+          <q-list dense bordered separator class="q-pa-xs">
+            <q-item clickable v-for="task in CurrentTasks" v-bind:key="task.uid">
+              <q-item-section>
+                <q-item-label><router-link :to="{ name: 'task', params: { uid: task.uid }}"
+                  ellipsis style="font-size: 10px">{{ task.status }} | {{ task.uid }}</router-link>
+                </q-item-label>
+                <q-item-label v-if="task.status!='error'">
+                    <b>component-name:</b>&nbsp;
+                    <router-link :to="{ name: 'component', params: { uid: task.result.component.uid }}" >{{ task.result.component.name }}</router-link>
+                    <div><b>file:</b>&nbsp;{{ task.result.debug.datasheet.original_filename }}</div>
+                </q-item-label>
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </q-scroll-area>
+      </div>
     </div>
-    <div class="col column q-col-gutter-xs">
-      <div>TASK LOG:
-        <q-btn color="tools" text-color="primary" label="clear" @click="onClear()"/>
-        <q-btn color="tools" text-color="primary" label="stop" @click="stopJobStream()"/>
-      </div>
-      <div class="q-col-gutter-xs">
-        <div v-for="task in CurrentTasks" v-bind:key="task.uid">
-          <q-card>
-            <q-card-section>
-              <div class="text-overline">
-                <router-link :to="{ name: 'task', params: { uid: task.uid }}" ellipsis>{{ task.uid }}</router-link>
-              </div>
-              <div><b>status:</b>&nbsp;{{ task.status }}</div>
-              <div v-if="task.status!='error'"><b>component-name:</b>&nbsp;
-                <router-link :to="{ name: 'component', params: { uid: task.result.component.uid }}" >{{ task.result.component.name }}</router-link>
-                <div><b>file:</b>&nbsp;{{ task.result.debug.datasheet.original_filename }}</div>
-              </div>
-            </q-card-section>
-          </q-card>
-        </div>
-      </div>
-    </div></div>
+    <div class="col">TASK LOG:
+      <q-btn color="tools" text-color="primary" label="clear" @click="onClear()"/>
+      <q-btn color="tools" text-color="primary" label="stop" @click="stopJobStream()"/>
+    </div>
     <div class="col">
       TODO: only show the table, without search options
       <ComponentSearch
@@ -176,18 +177,12 @@ export default {
         const data = JSON.parse(event.data)
         console.log(data)
         this.jobIDs.push(...data.map(x => x.uid))
-        this.Tasks.insert({ data: data })
+        this.Tasks.insertOrUpdate({ data: data })
         const components = data.map(x => x.result?.component)
         console.log(components)
-        this.Components.insert({ data: components })
-
-        // check if debugdata is included
-        const componentsFull = data.map(x => x.result?.debug?.component)
-        this.Components.insert({ data: componentsFull })
-        const dataSheets = data.map(x => x.result?.debug?.datasheet)
-        this.DataSheets.insert({ data: dataSheets })
-
+        this.Components.insertOrUpdate({ data: components })
         this.updateSearch()
+        this.$refs.taskScroll.setScrollPercentage(1.0)
       })
 
       this.es.addEventListener('open', event => {

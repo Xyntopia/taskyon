@@ -51,7 +51,7 @@
         </div>
         <q-space />
         <div>DEMO
-        <div v-if='isLoggedIn'>{{ userName }}</div>
+        <div v-if='isLoggedIn'>{{ userName }} | {{ baseURL }}</div>
         </div>
         <q-btn
             flat

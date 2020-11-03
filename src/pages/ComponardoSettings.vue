@@ -36,12 +36,6 @@
           type="url" debounce="500"
           disable readonly
           />
-          <q-input
-          outlined
-          label="Database URL" v-model="urlDatabase"
-          type="url" debounce="500"
-          disable readonly
-          />
         </q-card-actions>
       </q-card>
     </div>
