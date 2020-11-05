@@ -2,7 +2,7 @@
   <q-page
     class="fit column justify-start items-center bg-secondary"
     >
-      <div v-if="true">
+      <div v-if="false">
         {{ searchProps }}
       </div>
       <div v-if="initiallayout" class="row col-1 items-center">
@@ -29,8 +29,12 @@ import ComponentSearch from 'components/ComponentSearch.vue'
 import { mapGetters, mapState } from 'vuex'
 var cloneDeep = require('lodash.clonedeep')
 
-function isEmptyOrSpaces (str) {
-  return str === null || str.match(/^ *$/) !== null
+function isNotEmptyOrSpaces (str) {
+  if (str) {
+    return str.match(/^ *$/) !== null
+  } else {
+    return false
+  }
 }
 
 export default {
@@ -88,10 +92,11 @@ export default {
       console.log('new basic search')
       var newSearchProps = cloneDeep(searchProps)
       console.log(newSearchProps)
-      if (isEmptyOrSpaces(newSearchProps.q)) {
-        this.$router.push({ path: '/' })
-      } else {
+      if (isNotEmptyOrSpaces(newSearchProps.q) ||
+           newSearchProps.qmode) {
         this.$router.push({ path: '/', query: newSearchProps })
+      } else {
+        this.$router.push({ path: '/' })
       }
     }
   }

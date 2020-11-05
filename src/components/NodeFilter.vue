@@ -1,13 +1,22 @@
 <template>
   <div class="col-4 col-md-3 column items-left">
     <div class="col-auto text-h6 text-primary self-center" >
-        SELECTED FILTERS
+        FILTER
     </div>
     <div class="col-auto self-center">
+      <q-select filled :value="preset" :options="presetOptions"
+        label="Select Preset" :dense="true" :options-dense="true"
+        @input="onSelectPreset"
+        >
+        <template v-slot:append>
+          <q-icon name="close" @click.stop="preset = ''" class="cursor-pointer" />
+        </template>
+      </q-select>
+      <q-separator inset spaced/>
       <q-btn-toggle
         :value="value.qmode"
         no-caps rounded unelevated
-        toggle-color="primary" color="white" text-color="primary"
+        toggle-color="primary" color="tools" text-color="primary"
         clearable
         :options="[
           {label: 'Filter', value: 'filter'},
@@ -60,6 +69,7 @@
 <script>
 // import { mapGetters, mapActions } from 'vuex'
 // import { mapState, mapGetters } from 'vuex'
+import { mapState } from 'vuex'
 
 var cloneDeep = require('lodash.clonedeep')
 
@@ -76,7 +86,23 @@ export default {
       }
     }
   },
+  data () {
+    return {
+      preset: null,
+      presetOptions: ['userComponents']
+    }
+  },
+  computed: {
+    ...mapState('comcharax', [
+      'filterPresets'
+    ])
+  },
   methods: {
+    onSelectPreset (preset) {
+      console.log(preset)
+      var newFilter = cloneDeep(this.filterPresets[preset])
+      this.$emit('input', { qmode: 'filter', filters: [newFilter] })
+    },
     filteroptions (filter) {
       return ['TODO1', 'TODO2', 'TODO3...']
     },
