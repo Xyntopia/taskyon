@@ -137,7 +137,7 @@ var vuexModule = {
       links: []
     },
     filterPresets: {
-      userComponents: {
+      'User Components': {
         type: 'field_contains',
         target: 'User.name',
         method: 'OR',

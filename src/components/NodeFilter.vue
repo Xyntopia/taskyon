@@ -9,7 +9,7 @@
         @input="onSelectPreset"
         >
         <template v-slot:append>
-          <q-icon name="close" @click.stop="preset = ''" class="cursor-pointer" />
+          <q-icon name="close" @click.stop="onClearFilters" class="cursor-pointer" />
         </template>
       </q-select>
       <q-separator inset spaced/>
@@ -88,16 +88,22 @@ export default {
   },
   data () {
     return {
-      preset: null,
-      presetOptions: ['userComponents']
+      preset: null
     }
   },
   computed: {
+    presetOptions () {
+      return Object.keys(this.filterPresets)
+    },
     ...mapState('comcharax', [
       'filterPresets'
     ])
   },
   methods: {
+    onClearFilters () {
+      this.preset = null
+      this.$emit('input', { qmode: this.value.qmode, filters: [] })
+    },
     onSelectPreset (preset) {
       console.log(preset)
       var newFilter = cloneDeep(this.filterPresets[preset])
