@@ -4,6 +4,7 @@ import VuexORM from '@vuex-orm/core'
 // import axios from 'axios'
 import VuexORMAxios from '@vuex-orm/plugin-axios'
 import comcharax from './comcharax'
+import models from './comcharax/models'
 import VuexPersistence from 'vuex-persist'
 
 // TODO: think abot employing the followin vuex plugins:
@@ -20,9 +21,9 @@ VuexORM.use(VuexORMAxios, { axios: comcharax.componardoapi })
 const database = new VuexORM.Database()
 
 // Register Models.
-database.register(comcharax.Component)
-database.register(comcharax.Tasks)
-database.register(comcharax.DataSheets)
+database.register(models.Component)
+database.register(models.Tasks)
+database.register(models.DataSheets)
 // database.register(comcharax.Search)
 
 // create persistant store

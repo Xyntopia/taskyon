@@ -11,8 +11,8 @@ import * as actions from './actions' */
 
 import axios from 'axios'
 // eslint-disable-next-line
-import jwt_decode from "jwt-decode";
-import { Model } from '@vuex-orm/core'
+import jwt_decode from "jwt-decode"
+import models from './models'
 // import { LocalStorage, SessionStorage } from 'quasar'
 // import { LocalStorage } from 'quasar'
 
@@ -34,83 +34,6 @@ var componardoapi = axios.create({
   baseURL: initialURL,
   headers: { 'Access-Control-Allow-Origin': '*' }
 })
-
-// TODO:
-// Component class gets added to the store in the index.js of
-// the root vuex namespace. this can probably done in a better way.
-// because of this we can still use "Component" here, but we
-// don't have the registration in the VuexORM database here.
-// For this look in the index.js file in the parent directory.
-class Component extends Model {
-  static entity = 'components'
-
-  static primaryKey = 'uid'
-
-  static fields () {
-    return {
-      uid: this.string(),
-      name: this.attr(''),
-      summary: this.attr(String),
-      image: this.attr(String),
-      characteristics: this.attr({})
-    }
-  }
-
-  static fetchById (uid) {
-    var data = this.api().get(`/components/${uid}`)
-    return data
-  }
-}
-
-class Tasks extends Model {
-  static entity = 'tasks'
-
-  static primaryKey = 'uid'
-
-  static fields () {
-    return {
-      uid: this.string(),
-      status: this.string(),
-      exception: this.string(),
-      args: this.attr(null),
-      result: this.attr(null)
-    }
-  }
-}
-
-class DataSheets extends Model {
-  static entity = 'datasheets'
-
-  static primaryKey = 'uid'
-
-  static fields () {
-    return {
-      uid: this.string(),
-      origin: this.string(),
-      original_filename: this.string(),
-      location: this.string(),
-      data: this.attr(null)
-
-      // references
-      // Component: this.hasOne(Component, 'user_id')
-    }
-  }
-}
-
-/* class Search extends Model {
-  static entity = 'searches'
-
-  static fields () {
-    return {
-      id: this.increment(),
-      q: this.string(''),
-      qmode: this.string(''),
-      filters: this.attr({})
-    }
-  }
-
-  static
-} */
 
 /*
 function sleep (ms) {
@@ -173,7 +96,7 @@ var vuexModule = {
     updateSearchResult (state, val) {
       // TODO: what if data is none?
       if (val.data.data) {
-        Component.insertOrUpdate({
+        models.Component.insertOrUpdate({
           data: val.data.data
         })
       }
@@ -277,9 +200,6 @@ var vuexModule = {
 
 export default {
   vuexModule,
-  Component,
-  Tasks,
-  DataSheets,
   componardoapi
 }
 
