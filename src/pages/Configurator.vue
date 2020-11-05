@@ -11,18 +11,18 @@
                   <q-card-actions align="between">
                     <div>
                       <q-btn-group push>
-                        <q-btn size='sm' padding="sm">Clear</q-btn>
-                        <q-btn size='sm' padding="sm">Layout</q-btn>
-                        <q-btn size='sm' padding="sm">Fit</q-btn>
+                        <q-btn size='sm' padding="sm" @click="onClear">Clear</q-btn>
+                        <q-btn size='sm' padding="sm">Save</q-btn>
                         <q-btn size='sm' padding="sm">New</q-btn>
                       </q-btn-group>
                     </div>
-                    <q-input hide-bottom-space filled dense v-model="componentSystem.name" label="System Name"/>
+                    <q-input hide-bottom-space filled dense v-model="projectName" label="Project Name"/>
                   </q-card-actions>
                   <q-card-section style="min-height: 200px; min_width: 200px;">
                     <cytograph
-                      v-bind:elementlist="componentSystem"
-                      v-on:link-add="addlink2system"
+                      :elementlist="componentSystem"
+                      @link-add="addlink2system"
+                      @selected-node="onSelectNode"
                       />
                   </q-card-section>
                 </q-card>
@@ -31,9 +31,8 @@
                 <q-card class="fit">
                   <div class="column justify-start">
                     <div class="col"><b>Component Description</b></div>
-                    <div>description</div>
-                    <div class="col">
-                      add/remove
+                    <div v-if="ComponentInfoID">
+                      <router-link :to="{ name: 'component', params: { uid: ComponentInfoID }}" >{{ selectedNode.name }}</router-link>
                     </div>
                   </div>
                 </q-card>
@@ -46,7 +45,7 @@
                 :searchState="searchingState"
                 :totalResultNum="resultnum"
                 showAddButton
-                v-on:component-add="addcomponent2system"
+                @component-add="addcomponent2system"
                 class="bg-white"
                 @input="onSearchRequest"
                 v-model="searchProps"
@@ -80,28 +79,43 @@ export default {
       searchProps: {},
       model: null,
       options: null,
-      componentSystem: {
-        counter: 0,
-        name: 'new system',
-        uid: '00000000',
-        components: [],
-        links: []
-      }
+      selectedNode: null
     }
   },
   computed: {
+    projectName: {
+      set (val) {
+        this.$store.commit('comcharax/setProjectName', val)
+      },
+      get () {
+        return this.componentSystem.name
+      }
+    },
+    ComponentInfoID () {
+      return this.selectedNode?.source
+    },
     ...mapGetters('comcharax', [
       'componentList',
       'resultnum'
     ]),
     ...mapState('comcharax', [
-      'searchingState'
+      'searchingState',
+      'componentSystem'
     ]),
     components: function () {
       return this.$store.$db().model('components')
     }
   },
   methods: {
+    onCytoDelete () {
+      console.log('delete')
+    },
+    onClear () {
+      this.$store.commit('comcharax/clearNodes')
+    },
+    onSelectNode (node) {
+      this.selectedNode = node
+    },
     onSearchRequest (searchProps) {
       console.log('new configuration search')
       var newSearchProps = cloneDeep(searchProps)
@@ -118,22 +132,26 @@ export default {
       var component = this.components.find(row.uid)
       // var component = this.Component().find(row.uid)
       console.log(component)
-      this.componentSystem.counter += 1
-      this.componentSystem.components.push({
-        id: this.componentSystem.counter.toString(),
+      var newProject = cloneDeep(this.componentSystem)
+      newProject.counter += 1
+      newProject.components.push({
+        id: newProject.counter.toString(),
         name: component.name,
         source: component.uid
       })
+      this.$store.commit('comcharax/setComponentSystem', newProject)
     },
     addlink2system (source, target) {
       console.log('adding link')
       console.log([source, target])
-      this.componentSystem.counter += 1
-      this.componentSystem.links.push({
-        id: this.componentSystem.counter.toString(),
+      var newProject = cloneDeep(this.componentSystem)
+      newProject.counter += 1
+      newProject.links.push({
+        id: newProject.counter.toString(),
         source: source.id,
         target: target.id
       })
+      this.$store.commit('comcharax/setComponentSystem', newProject)
     }
   }
 }

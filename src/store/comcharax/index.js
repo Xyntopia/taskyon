@@ -128,9 +128,34 @@ var vuexModule = {
     searchingState: false,
     dbState: {},
     token: null,
-    userName: ''
+    userName: '',
+    componentSystem: {
+      counter: 0,
+      name: 'new system',
+      uid: '00000000',
+      components: [],
+      links: []
+    },
+    filterPresets: {
+      userComponents: {
+        type: 'field_contains',
+        target: 'User.name',
+        method: 'OR',
+        value: ['DefaultUser', 'Scraper']
+      }
+    }
   },
   mutations: {
+    setProjectName (state, val) {
+      state.componentSystem.name = val
+    },
+    clearNodes (state, val) {
+      state.componentSystem.components = []
+      state.componentSystem.links = []
+    },
+    setComponentSystem (state, val) {
+      state.componentSystem = val
+    },
     setUserName (state, val) {
       state.userName = val
     },

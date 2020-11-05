@@ -142,6 +142,10 @@ export default {
             shape: round-rectangle;
           }
 
+          :selected {
+            background-blacken: +0.5;
+          }
+
           edge {
             width: 3;
             curve-style: taxi;
@@ -198,7 +202,7 @@ export default {
       function completefunc (sourceNode, targetNode, addedEles) {
         // fired when edgehandles is done and elements are added
         // cy.layout(layoutOptions.cola).run()
-        console.log('completed')
+        // console.log('completed')
         // console.log([sourceNode.data().uid, targetNode.data().uid])
         cytocomponent.$emit('link-add', sourceNode.data(), targetNode.data())
       }
@@ -211,6 +215,10 @@ export default {
         }
       })
       // eh.enableDrawMode()
+      cy.on('select', 'node', function (evt) {
+        var node = evt.target
+        cytocomponent.$emit('selected-node', node.data())
+      })
 
       this._eh = eh
       this._cy = cy

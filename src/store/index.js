@@ -33,12 +33,16 @@ const vuexLocal = new VuexPersistence({
     comcharax: {
       baseURL: state.comcharax.baseURL,
       token: state.comcharax.token,
-      userName: state.comcharax.userName
+      userName: state.comcharax.userName,
+      componentSystem: state.comcharax.componentSystem
     }
   }),
   filter: (mutation) => {
     return mutation.type === 'comcharax/setToken' ||
-      mutation.type === 'comcharax/setBaseURL'
+      mutation.type === 'comcharax/setBaseURL' ||
+      mutation.type === 'comcharax/setComponentSystem' ||
+      mutation.type === 'comcharax/clearNodes' ||
+      mutation.type === 'comcharax/setProjectName'
   }
 })
 
@@ -67,7 +71,7 @@ export default function (/* { ssrContext } */) {
     },
     plugins: [
       VuexORM.install(database),
-      vuexLocal.plugin
+      vuexLocal.plugin // it is important to include this after the ORM in order to be able to persist ORM data.
     ],
     // enable strict mode (adds overhead!)
     // for dev mode only
