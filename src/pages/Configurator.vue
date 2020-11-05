@@ -11,16 +11,16 @@
                   <q-card-actions align="between">
                     <div>
                       <q-btn-group push>
-                        <q-btn size='sm' padding="sm" @click="onClear">Clear</q-btn>
-                        <q-btn size='sm' padding="sm">Save</q-btn>
-                        <q-btn size='sm' padding="sm">New</q-btn>
+                        <q-btn size='sm' padding="sm" @click="onClearProject">Clear</q-btn>
+                        <q-btn size='sm' padding="sm" @click="onSaveProject">Save</q-btn>
+                        <q-btn size='sm' padding="sm" @click="onNewProject">New</q-btn>
                       </q-btn-group>
                     </div>
                     <q-input hide-bottom-space filled dense v-model="projectName" label="Project Name"/>
                   </q-card-actions>
                   <q-card-section style="min-height: 200px; min_width: 200px;">
                     <cytograph
-                      :elementlist="componentSystem"
+                      :elementlist="activeProject"
                       @link-add="addlink2system"
                       @selected-node="onSelectNode"
                       />
@@ -31,8 +31,11 @@
                 <q-card class="fit">
                   <div class="column justify-start">
                     <div class="col"><b>Component Description</b></div>
-                    <div v-if="ComponentInfoID">
-                      <router-link :to="{ name: 'component', params: { uid: ComponentInfoID }}" >{{ selectedNode.name }}</router-link>
+                    <div v-if="ComponentInfoIDs">
+                      {{ selectedNode.name }}
+                      <div v-for="uid in ComponentInfoIDs" :key="uid">
+                        <router-link :to="{ name: 'component', params: { uid: uid }}" >{{ uid }}</router-link>
+                      </div>
                     </div>
                   </div>
                 </q-card>
@@ -88,11 +91,14 @@ export default {
         this.$store.commit('comcharax/setProjectName', val)
       },
       get () {
-        return this.componentSystem.name
+        return this.activeProject.name
       }
     },
-    ComponentInfoID () {
-      return this.selectedNode?.source
+    ComponentInfoIDs () {
+      return this.selectedNode?.componentIDs
+    },
+    Components () {
+      return this.$store.$db().model('components')
     },
     ...mapGetters('comcharax', [
       'componentList',
@@ -100,7 +106,7 @@ export default {
     ]),
     ...mapState('comcharax', [
       'searchingState',
-      'componentSystem'
+      'activeProject'
     ]),
     components: function () {
       return this.$store.$db().model('components')
@@ -110,7 +116,14 @@ export default {
     onCytoDelete () {
       console.log('delete')
     },
-    onClear () {
+    onSaveProject () {
+      console.log('save project')
+      this.$store.dispatch('comcharax/saveProject')
+    },
+    onNewProject () {
+      console.log('new project!')
+    },
+    onClearProject () {
       this.$store.commit('comcharax/clearNodes')
     },
     onSelectNode (node) {
@@ -132,26 +145,27 @@ export default {
       var component = this.components.find(row.uid)
       // var component = this.Component().find(row.uid)
       console.log(component)
-      var newProject = cloneDeep(this.componentSystem)
+      var newProject = cloneDeep(this.activeProject)
       newProject.counter += 1
-      newProject.components.push({
+      newProject.componentcontainers.push({
         id: newProject.counter.toString(),
         name: component.name,
-        source: component.uid
+        componentIDs: [component.uid],
+        type: 'component'
       })
-      this.$store.commit('comcharax/setComponentSystem', newProject)
+      this.$store.commit('comcharax/setActiveProject', newProject)
     },
     addlink2system (source, target) {
       console.log('adding link')
       console.log([source, target])
-      var newProject = cloneDeep(this.componentSystem)
+      var newProject = cloneDeep(this.activeProject)
       newProject.counter += 1
       newProject.links.push({
         id: newProject.counter.toString(),
         source: source.id,
         target: target.id
       })
-      this.$store.commit('comcharax/setComponentSystem', newProject)
+      this.$store.commit('comcharax/setActiveProject', newProject)
     }
   }
 }

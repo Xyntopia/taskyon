@@ -24,6 +24,7 @@ const database = new VuexORM.Database()
 database.register(models.Component)
 database.register(models.Tasks)
 database.register(models.DataSheets)
+database.register(models.Projects)
 // database.register(comcharax.Search)
 
 // create persistant store
@@ -35,13 +36,13 @@ const vuexLocal = new VuexPersistence({
       baseURL: state.comcharax.baseURL,
       token: state.comcharax.token,
       userName: state.comcharax.userName,
-      componentSystem: state.comcharax.componentSystem
+      activeProject: state.comcharax.activeProject
     }
   }),
   filter: (mutation) => {
     return mutation.type === 'comcharax/setToken' ||
       mutation.type === 'comcharax/setBaseURL' ||
-      mutation.type === 'comcharax/setComponentSystem' ||
+      mutation.type === 'comcharax/setActiveProject' ||
       mutation.type === 'comcharax/clearNodes' ||
       mutation.type === 'comcharax/setProjectName'
   }

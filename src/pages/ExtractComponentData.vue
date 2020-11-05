@@ -39,6 +39,7 @@
     <div class="col">
       TODO: only show the table, without search options
       <ComponentSearch
+        ref="ComponentSearch"
         :componentList="componentList"
         :totalResultNum="resultnum"
         :searchState="searchingState"

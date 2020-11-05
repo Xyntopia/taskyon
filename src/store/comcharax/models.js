@@ -66,6 +66,23 @@ class DataSheets extends Model {
   }
 }
 
+class Projects extends Model {
+  static entity = 'projects'
+
+  static primaryKey = 'uid'
+
+  static fields () {
+    return {
+      uid: this.string(),
+      name: this.string(),
+      componentcontainers: this.attr([]),
+      links: this.attr([])
+      // references
+      // Component: this.hasOne(Component, 'user_id')
+    }
+  }
+}
+
 /* class Search extends Model {
   static entity = 'searches'
 
@@ -82,6 +99,7 @@ class DataSheets extends Model {
 } */
 
 export default {
+  Projects,
   Component,
   Tasks,
   DataSheets

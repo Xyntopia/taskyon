@@ -52,11 +52,11 @@ var vuexModule = {
     dbState: {},
     token: null,
     userName: '',
-    componentSystem: {
+    activeProject: { // TODO: replace this with "ID" and a getter which gets the project from the orm module
       counter: 0,
       name: 'new system',
       uid: '00000000',
-      components: [],
+      componentcontainers: [],
       links: []
     },
     filterPresets: {
@@ -70,14 +70,14 @@ var vuexModule = {
   },
   mutations: {
     setProjectName (state, val) {
-      state.componentSystem.name = val
+      state.activeProject.name = val
     },
     clearNodes (state, val) {
-      state.componentSystem.components = []
-      state.componentSystem.links = []
+      state.activeProject.componentcontainers = []
+      state.activeProject.links = []
     },
-    setComponentSystem (state, val) {
-      state.componentSystem = val
+    setActiveProject (state, val) {
+      state.activeProject = val
     },
     setUserName (state, val) {
       state.userName = val
@@ -127,6 +127,15 @@ var vuexModule = {
     }
   },
   actions: {
+    async saveProject ({ commit, state }) {
+      var prj = await models.Projects.insert({ data: state.activeProject })
+      console.log(prj)
+      const result = await models.Projects.api().post(
+        '/projects', state.activeProject)
+      console.log(result)
+      // TODO: when pushing the project to the server return the newly
+      // created UID on the server
+    },
     async search (context, searchProps) {
       context.commit('setSearchState', true)
       // await sleep(0) // uncomment to simulate a search

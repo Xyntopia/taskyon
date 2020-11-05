@@ -95,7 +95,7 @@ export default {
       // required by cytoscape
       console.log('recompute graph elements')
 
-      const nodes = this.elementlist.components.map(x => {
+      const nodes = this.elementlist.componentcontainers.map(x => {
         return { data: cloneDeep(x), group: 'nodes' }
       })
       // console.log(nodes)
