@@ -2,15 +2,13 @@
   <div class="col-4 col-md-3 column items-left">
     <div class="col-auto text-h6 text-primary self-center" >
         FILTER
+        <q-btn outline dense @click="onClearFilters" label="clear"/>
     </div>
     <div class="col-auto self-center">
       <q-select filled :value="preset" :options="presetOptions"
         label="Select Preset" :dense="true" :options-dense="true"
         @input="onSelectPreset"
         >
-        <template v-slot:append>
-          <q-icon name="close" @click.stop="onClearFilters" class="cursor-pointer" />
-        </template>
       </q-select>
       <q-separator inset spaced/>
       <q-btn-toggle
