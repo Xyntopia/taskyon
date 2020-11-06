@@ -1,19 +1,30 @@
 <template>
   <q-page class="bg-secondary">
-    Control Panel
+    All Projects:
+    <div v-for="p in Projects.all()" :key=p.uid>
+    - {{ p.name }}
+    </div>
   </q-page>
 </template>
 
 <script>
 
 export default {
-  name: 'Projects Admin',
+  name: 'ProjectsAdmin',
   components: {
   },
   data () {
     return {
       model: null,
       options: null
+    }
+  },
+  mounted () {
+    this.$store.dispatch('comcharax/downloadProjects')
+  },
+  computed: {
+    Projects () {
+      return this.$store.$db().model('projects')
     }
   }
 }

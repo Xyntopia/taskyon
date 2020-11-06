@@ -16,7 +16,22 @@
                         <q-btn size='sm' padding="sm" @click="onNewProject">New</q-btn>
                       </q-btn-group>
                     </div>
-                    <q-input hide-bottom-space filled dense v-model="projectName" label="Project Name"/>
+                    <q-input v-if="editName"
+                      dense hide-bottom-space filled label="Edit Project Name"
+                      v-model="projectName"
+                      @keydown.enter.prevent="editName = !editName">
+                      <template v-slot:before>
+                        <q-btn icon="edit" round dense @click="editName = !editName"/>
+                      </template>
+                    </q-input>
+                    <q-select v-else
+                      hide-bottom-space filled dense
+                      v-model="selectedProject" :options="ProjectNamesAndUIDs"
+                      label="Select Project">
+                      <template v-slot:before>
+                        <q-btn icon="edit" round dense @click="editName = !editName"/>
+                      </template>
+                    </q-select>
                   </q-card-actions>
                   <q-card-section style="min-height: 200px; min_width: 200px;">
                     <cytograph
@@ -82,8 +97,12 @@ export default {
       searchProps: {},
       model: null,
       options: null,
-      selectedNode: null
+      selectedNode: null,
+      editName: false
     }
+  },
+  mounted () {
+    this.$store.dispatch('comcharax/downloadProjects')
   },
   computed: {
     projectName: {
@@ -93,6 +112,25 @@ export default {
       get () {
         return this.activeProject.name
       }
+    },
+    selectedProject: {
+      set (val) {
+        console.log('load new project ...')
+        // var name = val.name
+        var uid = val.value
+        this.$store.dispatch('comcharax/selectActiveProject', uid)
+      },
+      get () {
+        return this.activeProject.name
+      }
+    },
+    Projects () {
+      return this.$store.$db().model('projects')
+    },
+    ProjectNamesAndUIDs () {
+      return this.Projects.all().map(x => {
+        return { label: x.name, value: x.uid }
+      })
     },
     ComponentInfoIDs () {
       return this.selectedNode?.componentIDs
@@ -107,10 +145,7 @@ export default {
     ...mapState('comcharax', [
       'searchingState',
       'activeProject'
-    ]),
-    components: function () {
-      return this.$store.$db().model('components')
-    }
+    ])
   },
   methods: {
     onCytoDelete () {
@@ -143,7 +178,7 @@ export default {
     // adds a component with new id to the active system
     addcomponent2system (row) {
       console.log('add component to system: ' + row.uid)
-      var component = this.components.find(row.uid)
+      var component = this.Components.find(row.uid)
       // var component = this.Component().find(row.uid)
       console.log(component)
       var newProject = cloneDeep(this.activeProject)

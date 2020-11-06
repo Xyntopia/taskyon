@@ -81,6 +81,11 @@ class Projects extends Model {
       // Component: this.hasOne(Component, 'user_id')
     }
   }
+
+  static async fetchById (uid) {
+    var data = await this.api().get(`/projects/${uid}`)
+    return data.entities.projects[0]
+  }
 }
 
 /* class Search extends Model {

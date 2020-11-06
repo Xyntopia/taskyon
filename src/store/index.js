@@ -44,7 +44,9 @@ const vuexLocal = new VuexPersistence({
       mutation.type === 'comcharax/setBaseURL' ||
       mutation.type === 'comcharax/setActiveProject' ||
       mutation.type === 'comcharax/clearNodes' ||
-      mutation.type === 'comcharax/setProjectName'
+      mutation.type === 'comcharax/setProjectName' ||
+      mutation.type === 'comcharax/setProjectID' ||
+      mutation.type === 'comcharax/createNewProject'
   }
 })
 
@@ -69,6 +71,8 @@ export default function (/* { ssrContext } */) {
       async initialize ({ commit, state }) {
         console.log('initialize store!')
         comcharax.componardoapi.defaults.baseURL = state.comcharax.baseURL
+        if state.comcharax.token:
+          comcharax.componardoapi.defaults.headers.Authorization = `Bearer ${state.comcharax.token}`
       }
     },
     plugins: [

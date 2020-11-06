@@ -114,7 +114,10 @@ var vuexModule = {
       }
       state.result = val
     },
-    setToken (state, val) { state.token = val }
+    setToken (state, val) {
+      state.token = val
+      componardoapi.defaults.headers.Authorization = `Bearer ${state.token}`
+    }
   },
   getters: {
     isLoggedIn: state => {
@@ -139,14 +142,28 @@ var vuexModule = {
     }
   },
   actions: {
+    async selectActiveProject ({ commit, state }, uid) {
+      var proj = await models.Projects.fetchById(uid)
+      var maxnum1 = Math.max(...proj.componentcontainers.map(x => x.id))
+      var maxnum2 = Math.max(...proj.links.map(x => x.id))
+      proj.counter = Math.max(maxnum1, maxnum2)
+      commit('setActiveProject', proj)
+    },
+    async downloadProjects ({ commit, state }) {
+      await componardoapi.get(
+        '/projects'
+      ).then(r => {
+        models.Projects.insertOrUpdate({ data: r.data })
+        console.log(r)
+      })
+      // TODO: when pushing the project to the server return the newly
+      // created UID on the server
+    },
     async saveProject ({ commit, state }) {
-      await componardoapi.post(
-        '/projects',
-        state.activeProject,
-        { headers: { Authorization: `Bearer ${state.token}` } }
+      await componardoapi.post('/projects', state.activeProject
       ).then(r => {
         commit('setProjectID', r.data)
-        models.Projects.insert({ data: state.activeProject })
+        models.Projects.insertOrUpdate({ data: state.activeProject })
         console.log(r)
       })
       // TODO: when pushing the project to the server return the newly
@@ -176,12 +193,9 @@ var vuexModule = {
     },
     async initDB ({ commit, state }, reset) {
       console.log('initialize database')
-      await componardoapi
-        .get('/operations/init_db', {
-          params: { delete_nodes: reset },
-          headers: { Authorization: `Bearer ${state.token}` }
-        })
-        .then(r => { console.log(r) })
+      await componardoapi.get('/operations/init_db', {
+        params: { delete_nodes: reset }
+      }).then(r => { console.log(r) })
         .catch((error) => console.log(error))
       console.log('initialize database done')
     },
@@ -200,22 +214,14 @@ var vuexModule = {
       // as we are potentially using a new URL, we should make
       // the URL explicit inside the request
       // if the request is successful, it will get updated
-      await componardoapi
-        .post(`${baseURL}/auth/jwt/login`,
-          formData,
-          {
-            headers: {
-              'Content-Type': 'multipart/form-data'
-            }
-          }
-        )
-        .then((response) => {
-          console.log(response)
-          context.commit('setToken', response.data.access_token)
-          context.commit('setUserName', username)
-          context.commit('setBaseURL', baseURL)
-        })
-        .catch((error) => console.log(error))
+      await componardoapi.post(`${baseURL}/auth/jwt/login`,
+        formData, { headers: { 'Content-Type': 'multipart/form-data' } }
+      ).then((response) => {
+        console.log(response)
+        context.commit('setToken', response.data.access_token)
+        context.commit('setUserName', username)
+        context.commit('setBaseURL', baseURL)
+      }).catch((error) => console.log(error))
     },
     async getSettings (context) {
       console.log('get settings ...')
