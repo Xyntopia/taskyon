@@ -71,8 +71,9 @@ export default function (/* { ssrContext } */) {
       async initialize ({ commit, state }) {
         console.log('initialize store!')
         comcharax.componardoapi.defaults.baseURL = state.comcharax.baseURL
-        if state.comcharax.token:
+        if (state.comcharax.token) {
           comcharax.componardoapi.defaults.headers.Authorization = `Bearer ${state.comcharax.token}`
+        }
       }
     },
     plugins: [
