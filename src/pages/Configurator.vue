@@ -122,6 +122,7 @@ export default {
     },
     onNewProject () {
       console.log('new project!')
+      this.$store.commit('comcharax/createNewProject')
     },
     onClearProject () {
       this.$store.commit('comcharax/clearNodes')
@@ -156,6 +157,7 @@ export default {
       this.$store.commit('comcharax/setActiveProject', newProject)
     },
     addlink2system (source, target) {
+      // TODO: make interface selectable or choose default interface
       console.log('adding link')
       console.log([source, target])
       var newProject = cloneDeep(this.activeProject)
@@ -163,7 +165,8 @@ export default {
       newProject.links.push({
         id: newProject.counter.toString(),
         source: source.id,
-        target: target.id
+        target: target.id,
+        type: 'some_interface'
       })
       this.$store.commit('comcharax/setActiveProject', newProject)
     }

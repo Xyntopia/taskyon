@@ -55,7 +55,7 @@ var vuexModule = {
     activeProject: { // TODO: replace this with "ID" and a getter which gets the project from the orm module
       counter: 0,
       name: 'new system',
-      uid: '00000000',
+      uid: null,
       componentcontainers: [],
       links: []
     },
@@ -69,8 +69,20 @@ var vuexModule = {
     }
   },
   mutations: {
+    createNewProject (state, val) {
+      state.activeProject = {
+        counter: 0,
+        name: 'new system',
+        uid: null,
+        componentcontainers: [],
+        links: []
+      }
+    },
     setProjectName (state, val) {
       state.activeProject.name = val
+    },
+    setProjectID (state, val) {
+      state.activeProject.uid = val
     },
     clearNodes (state, val) {
       state.activeProject.componentcontainers = []
@@ -128,11 +140,15 @@ var vuexModule = {
   },
   actions: {
     async saveProject ({ commit, state }) {
-      var prj = await models.Projects.insert({ data: state.activeProject })
-      console.log(prj)
-      const result = await models.Projects.api().post(
-        '/projects', state.activeProject)
-      console.log(result)
+      await componardoapi.post(
+        '/projects',
+        state.activeProject,
+        { headers: { Authorization: `Bearer ${state.token}` } }
+      ).then(r => {
+        commit('setProjectID', r.data)
+        models.Projects.insert({ data: state.activeProject })
+        console.log(r)
+      })
       // TODO: when pushing the project to the server return the newly
       // created UID on the server
     },
