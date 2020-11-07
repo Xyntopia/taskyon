@@ -71,10 +71,19 @@
     <div class="col-auto">
       <q-card>
         <q-card-section>
-          Status
+          <q-list dense>
+            <q-item v-for="(val, key) in backendSettings" :key="key">
+              <q-item-section>
+                <q-item-label class="text-weight-bold">{{ key }}</q-item-label>
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>{{ val }}</q-item-label>
+              </q-item-section>
+            </q-item>
+          </q-list>
         </q-card-section>
         <q-card-actions>
-          <q-btn label="refresh"/>
+          <q-btn label="update" @click="onUpdateSettings"/>
         </q-card-actions>
       </q-card>
     </div>
@@ -105,13 +114,16 @@ export default {
   },
   computed: {
     ...mapState('comcharax', [
-      'token', 'baseURL'
+      'token', 'baseURL', 'backendSettings'
     ])
   },
   methods: {
     onInitDB (reset) {
       console.log('reset db !!! ' + reset)
       this.$store.dispatch('comcharax/initDB', reset)
+    },
+    onUpdateSettings () {
+      this.$store.dispatch('comcharax/getSettings')
     }
   }
 }

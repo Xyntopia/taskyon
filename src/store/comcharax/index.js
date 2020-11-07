@@ -52,6 +52,7 @@ var vuexModule = {
     dbState: {},
     token: null,
     userName: '',
+    backendSettings: {},
     activeProject: { // TODO: replace this with "ID" and a getter which gets the project from the orm module
       counter: 0,
       name: 'new system',
@@ -69,6 +70,9 @@ var vuexModule = {
     }
   },
   mutations: {
+    setBackendSettings (state, val) {
+      state.backendSettings = val
+    },
     createNewProject (state, val) {
       state.activeProject = {
         counter: 0,
@@ -199,6 +203,13 @@ var vuexModule = {
         .catch((error) => console.log(error))
       console.log('initialize database done')
     },
+    async getSettings ({ commit, state }) {
+      console.log('download settings')
+      await componardoapi.get('/settings').then(r => {
+        console.log(r)
+        commit('setBackendSettings', r.data)
+      }).catch((error) => console.log(error))
+    },
     logOut (context) {
       console.log('log out!')
       context.commit('setToken', null)
@@ -222,9 +233,6 @@ var vuexModule = {
         context.commit('setUserName', username)
         context.commit('setBaseURL', baseURL)
       }).catch((error) => console.log(error))
-    },
-    async getSettings (context) {
-      console.log('get settings ...')
     }
   }
 }
