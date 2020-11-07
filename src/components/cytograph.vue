@@ -53,9 +53,9 @@ var layoutOptions = {
     prelayout: {
       name: 'breadthfirst',
       fit: true,
-      grid: true,
+      grid: false,
       circle: false,
-      spacingFactor: 1.75 // default: 1.75
+      spacingFactor: 1.0 // default: 1.75
     }// Layout options for the first phase
   }
 }
@@ -82,7 +82,7 @@ export default {
   props: ['elementlist'],
   data () {
     return {
-      message: 'testmessage'
+      layoutStyle: layoutOptions.spread
     }
   },
   mounted () {
@@ -118,7 +118,7 @@ export default {
       this._cy.add(this.graphelements)
       // this._cy.resize()
       // this._cy.fit()
-      this._cy.layout(layoutOptions.breadthfirst).run()
+      this._cy.layout(this.layoutStyle).run()
     },
     drawgraph () {
       console.log('initializing cytoscape')
@@ -142,7 +142,7 @@ export default {
             shape: round-rectangle;
           }
 
-          :selected {
+          node:selected {
             background-blacken: +0.5;
           }
 
@@ -154,6 +154,10 @@ export default {
             source-arrow-color: ${colors.getBrand('secondary')};
             target-arrow-shape: square;
             source-arrow-shape: none;
+          }
+
+          edge:selected {
+            line-style: dashed;
           }
 
           .eh-handle {
@@ -190,7 +194,7 @@ export default {
           .eh-ghost-edge.eh-preview-active {
               opacity: 0;
           }`,
-        layout: layoutOptions.spread
+        layout: this.layoutStyle
       })
       // cy.resize()
       // cy.fit()
@@ -218,6 +222,10 @@ export default {
       cy.on('select', 'node', function (evt) {
         var node = evt.target
         cytocomponent.$emit('selected-node', node.data())
+      })
+      cy.on('select', 'edge', function (evt) {
+        var link = evt.target
+        cytocomponent.$emit('selected-edge', link.data())
       })
 
       this._eh = eh
