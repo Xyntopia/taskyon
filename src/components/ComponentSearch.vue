@@ -65,7 +65,7 @@
                     <q-btn :to="{ name: 'component', params: { uid: props.row.uid }}" flat dense size='sm' icon="info"></q-btn>
                     </div>
                     <div>
-                    <q-btn flat dense size='sm' @click="searchCompatible(props.row)" icon="search">Compatible</q-btn>
+                    <q-btn flat dense size='sm' @click="searchCompatible(props.row.uid)" icon="search">Compatible</q-btn>
                     <q-btn flat dense size='sm' @click="searchSimilar(props.row)" icon="search">Similar</q-btn>
                     </div>
                   </q-card-actions>
@@ -181,22 +181,23 @@ export default {
       newSearchProps.q = 'ID: ' + component.uid
       this.$emit('input', newSearchProps)
     },
-    async searchCompatible (component) {
+    async searchCompatible (componentID) {
       this.showFilter = true
       console.log('searchCompatible')
-      console.log(component)
-      var result = await this.$store.$db().model('components').fetchById(component.uid)
+      console.log(componentID)
+      var result = await this.$store.$db().model('components').fetchById(componentID)
       // get interfaces of the component
       var interfaces = result.entities.components[0].characteristics.interfaces
       if (interfaces && interfaces.length) {
         // set filter with interface list
         var newfilter = {
-          field: 'interfaces',
-          method: 'MATCH_OR',
+          type: 'field_contains',
+          target: 'Interface.name',
+          method: 'OR',
           value: interfaces
         }
         // ad replace all previously defined filters with the new configuration
-        this.requestSearch({ filters: [newfilter] })
+        this.requestSearch({ filters: [newfilter], qmode: 'filter' })
       } else {
         this.requestSearch({ filters: [] })
       }

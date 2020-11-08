@@ -45,35 +45,41 @@
                </div>
                <div class="col-4">
                 <q-card class="fit">
-                  <div class="column justify-start">
-                    <div v-if="ComponentInfoIDs" class="col"><b>Component Description</b><br>
-                      {{ selectedNode.name }}
-                      <div v-for="uid in ComponentInfoIDs" :key="uid">
-                        <router-link :to="{ name: 'component', params: { uid: uid }}" >{{ uid }}</router-link>
-                      </div>
-                      search for compatible components:<br>
+                  <q-card-section v-if="ComponentInfoIDs" class="col"><b>Component Description</b><br>
+                    {{ selectedNode.name }}
+                    <div v-for="uid in ComponentInfoIDs" :key="uid">
+                      <router-link :to="{ name: 'component', params: { uid: uid }}" >{{ uid }}</router-link>
+                    </div>
+                    <q-separator inset spaced/>
+                    <q-btn dense class="bg-tools" label="Compatible Components" icon="search"
+                      @click="$refs.ComponentSearch.searchCompatible(ComponentInfoID)"/>
+                    <div class="text-info">search for interfaces:</div>
+                    <div class="q-gutter-md">
                       <q-btn v-for="intf in possibleInterfaces" :key="intf" :label="intf"
-                        dense rounded @click="onInterfaceSearch(intf)"/>
+                        dense
+                        class="bg-tools"
+                        @click="onInterfaceSearch(intf)"/>
                     </div>
-                    <div v-else-if="selectedLink" class="col"><b>Link Description</b><br>
-                      <b>interface:</b> {{ selectedLink.type }}<br>
-                      possible interfaces:<br>
-                      <q-scroll-area>
-                        <!--<q-option-group
-                          v-model="selectedLinkType"
-                          :options="possibleInterfaces"
-                          color="primary"
-                        />-->
-                      {{ possibleInterfaces }}
-                      </q-scroll-area>
-                    </div>
-                  </div>
+                  </q-card-section>
+                  <q-card-section v-else-if="selectedLink" class="col"><b>Link Description</b><br>
+                    <b>interface:</b> {{ selectedLink.type }}<br>
+                    possible interfaces:<br>
+                    <q-scroll-area>
+                      <!--<q-option-group
+                        v-model="selectedLinkType"
+                        :options="possibleInterfaces"
+                        color="primary"
+                      />-->
+                    {{ possibleInterfaces }}
+                    </q-scroll-area>
+                  </q-card-section>
                 </q-card>
                </div>
               </div>
             </div>
             <div class='col-1'>
               <ComponentSearch
+                ref="ComponentSearch"
                 :componentList="componentList"
                 :searchState="searchingState"
                 :totalResultNum="resultnum"
@@ -123,12 +129,15 @@ export default {
   computed: {
     possibleInterfaces () {
       if (this.selectedNode) {
-        const intfs = this.Components.find(this.ComponentInfoID)?.characteristics?.interfaces
+        const intfs = this.selectedComponent?.characteristics?.interfaces
         return intfs
       } else if (this.selectedLink) {
         return []
       }
       return []
+    },
+    selectedComponent () {
+      return this.Components.find(this.ComponentInfoID)
     },
     projectName: {
       set (val) {

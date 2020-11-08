@@ -43,16 +43,14 @@
         use-chips
         hide-bottom-space
         new-value-mode="add-unique"
-        :label="filter.type + ': ' + filter.target + ' : ' + filter.method"
+        :label="filter.type + ': <' + filter.target + '> : ' + filter.method"
         @input="onFilterChange(filter,$event)">
         <template v-slot:selected-item="scope">
           <q-chip
-            removable
-            square
-            dense
+            removable square outline dense
             @remove="scope.removeAtIndex(scope.index)"
             :tabindex="scope.tabindex"
-            color="white"
+            color="primary"
             text-color="primary"
             class="q-mb-none q-ml-none"
           >
