@@ -36,8 +36,8 @@
             flat
             dense
             round
-            to="/offers"
-            icon="assistant"
+            to="/offerconfigurator"
+            icon="mediation"
             aria-label="Home"
           />
           <q-btn
@@ -50,8 +50,9 @@
           />
         </div>
         <q-space />
-        <div>DEMO
-        <div v-if='isLoggedIn'>{{ userName }} | {{ baseURL }}</div>
+        <div>
+          <div>DEMO @ {{ baseURL }}</div>
+          <div v-if='isLoggedIn' class="text-bold">{{ userName }}</div>
         </div>
         <q-btn
             flat
@@ -85,12 +86,12 @@
             <q-item-label>Configurator</q-item-label>
           </q-item-section>
         </q-item>
-        <q-item to="/offers" active-class="q-item-no-link-highlighting">
+        <q-item to="/offerconfigurator" active-class="q-item-no-link-highlighting">
           <q-item-section avatar>
-            <q-icon name="extension"/>
+            <q-icon name="mediation"/>
           </q-item-section>
           <q-item-section>
-            <q-item-label>Dynamic Offers</q-item-label>
+            <q-item-label>Configurable Offers</q-item-label>
           </q-item-section>
         </q-item>
         <q-item to="/extractcomponentdata" active-class="q-item-no-link-highlighting">

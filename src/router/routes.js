@@ -12,6 +12,7 @@ const routes = [
         })
       },
       { path: 'configurator', component: () => import('pages/Configurator.vue') },
+      { path: 'offerconfigurator', component: () => import('pages/OfferConfigurator.vue') },
       { path: 'extractcomponentdata', component: () => import('pages/ExtractComponentData.vue') },
       { path: 'component/:uid', name: 'component', component: () => import('pages/Component.vue') },
       { path: 'sandbox', component: () => import('pages/Sandbox.vue') },
