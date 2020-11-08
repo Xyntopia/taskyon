@@ -9,6 +9,7 @@
           label="Upload pdf files of components!"
           field-name="file"
           multiple auto-upload
+          :max-file-size="30000000"
           hide-upload-btn
           @uploading="onUploadFiles"
         />

@@ -29,6 +29,8 @@ class Component extends Model {
     var data = this.api().get(`/components/${uid}`)
     return data
   }
+
+  // TODO: fetch multiple by ID
 }
 
 class Tasks extends Model {

@@ -25,7 +25,7 @@
                       </template>
                     </q-input>
                     <q-select v-else
-                      hide-bottom-space filled dense
+                      hide-bottom-space outlined dense
                       v-model="selectedProject" :options="ProjectNamesAndUIDs"
                       label="Select Project">
                       <template v-slot:before>
@@ -38,6 +38,7 @@
                       :elementlist="activeProject"
                       @link-add="addlink2system"
                       @selected-node="onSelectNode"
+                      @selected-edge="onSelectLink"
                       />
                   </q-card-section>
                 </q-card>
@@ -45,12 +46,26 @@
                <div class="col-4">
                 <q-card class="fit">
                   <div class="column justify-start">
-                    <div class="col"><b>Component Description</b></div>
-                    <div v-if="ComponentInfoIDs">
+                    <div v-if="ComponentInfoIDs" class="col"><b>Component Description</b><br>
                       {{ selectedNode.name }}
                       <div v-for="uid in ComponentInfoIDs" :key="uid">
                         <router-link :to="{ name: 'component', params: { uid: uid }}" >{{ uid }}</router-link>
                       </div>
+                      search for compatible components:<br>
+                      <q-btn v-for="intf in possibleInterfaces" :key="intf" :label="intf"
+                        dense rounded @click="onInterfaceSearch(intf)"/>
+                    </div>
+                    <div v-else-if="selectedLink" class="col"><b>Link Description</b><br>
+                      <b>interface:</b> {{ selectedLink.type }}<br>
+                      possible interfaces:<br>
+                      <q-scroll-area>
+                        <!--<q-option-group
+                          v-model="selectedLinkType"
+                          :options="possibleInterfaces"
+                          color="primary"
+                        />-->
+                      {{ possibleInterfaces }}
+                      </q-scroll-area>
                     </div>
                   </div>
                 </q-card>
@@ -71,7 +86,7 @@
             </div>
             <div class="col-1">
               <q-card>
-                BoM
+                BoM TODO: as tabbed interface on one of the above windows
               </q-card>
             </div>
           </div>
@@ -98,6 +113,7 @@ export default {
       model: null,
       options: null,
       selectedNode: null,
+      selectedLink: null,
       editName: false
     }
   },
@@ -105,6 +121,15 @@ export default {
     this.$store.dispatch('comcharax/downloadProjects')
   },
   computed: {
+    possibleInterfaces () {
+      if (this.selectedNode) {
+        const intfs = this.Components.find(this.ComponentInfoID)?.characteristics?.interfaces
+        return intfs
+      } else if (this.selectedLink) {
+        return []
+      }
+      return []
+    },
     projectName: {
       set (val) {
         this.$store.commit('comcharax/setProjectName', val)
@@ -135,6 +160,9 @@ export default {
     ComponentInfoIDs () {
       return this.selectedNode?.componentIDs
     },
+    ComponentInfoID () {
+      return this.selectedNode?.componentIDs[0]
+    },
     Components () {
       return this.$store.$db().model('components')
     },
@@ -148,6 +176,9 @@ export default {
     ])
   },
   methods: {
+    onInterfaceSearch (intf) {
+      console.log(intf)
+    },
     onCytoDelete () {
       console.log('delete')
     },
@@ -163,7 +194,15 @@ export default {
       this.$store.commit('comcharax/clearNodes')
     },
     onSelectNode (node) {
+      console.log('select node')
       this.selectedNode = node
+      this.Components.fetchById(this.ComponentInfoID)
+      this.selectedLink = null
+    },
+    onSelectLink (link) {
+      console.log('select link')
+      this.selectedNode = null
+      this.selectedLink = link
     },
     onSearchRequest (searchProps) {
       console.log('new configuration search')
