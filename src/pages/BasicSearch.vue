@@ -1,18 +1,21 @@
 <template>
   <q-page
-    class="fit column justify-start items-center bg-secondary"
+    class="fit column justify-evenly items-center bg-secondary"
     >
-      <div v-if="false">
-        {{ searchProps }}
-      </div>
-      <div v-if="initiallayout" class="row col-1 items-center">
+      <div v-if="initiallayout" class="row col items-center justify-center">
         <img
+            class="gt-xs q-pa-md"
             alt="Componardo Logo"
             src="icons/favicon-128x128.png"
         >
-        <h1>Componardo</h1>
+        <img
+            class="xs"
+            alt="Componardo Logo"
+            src="icons/favicon-96x96.png"
+        >
+        <div class="text-h1 gt-xs">Componardo</div>
       </div>
-      <div class="col-1 q-pa-xs" v-bind:style="searchbarWidth">
+      <div class="col" v-bind:style="searchbarWidth">
         <ComponentSearch
           :value="searchPropsFromURL"
           :componentList="componentList"
@@ -69,7 +72,7 @@ export default {
       return this.searchPropsFromURL
     },
     initiallayout () {
-      return !this.searchProps.q
+      return !this.searchProps.q && !this.resultnum
     },
     searchbarWidth () {
       // if we just entered the webpage there shouldn't be a query-string

@@ -16,7 +16,7 @@
             dense
             round
             to="/"
-            icon="home"
+            icon="search"
             aria-label="Home"
           />
           <q-btn
@@ -50,17 +50,20 @@
           />
         </div>
         <q-space />
+        <img
+            class="xs"
+            src="icons/favicon-32x32.png"
+        >
+        <q-space />
         <div>
-          <div>DEMO @ {{ baseURL }}</div>
-          <div v-if='isLoggedIn' class="text-bold">{{ userName }}</div>
+          <div class="gt-xs">DEMO @ {{ baseURL }}</div>
+          <div v-if='isLoggedIn' class="gt-xs text-bold">{{ userName }}</div>
         </div>
+        <q-icon v-if='isLoggedIn' name="done"/>
         <q-btn
-            flat
-            dense
-            round
+            flat dense round
             to="/login"
-            icon="person"
-            aria-label="Home"
+            icon="person" aria-label="Home"
         />
       </q-toolbar>
     </q-header>
