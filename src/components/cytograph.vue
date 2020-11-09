@@ -147,8 +147,15 @@ export default {
           }
 
           edge {
+            label: data(type);
             width: 3;
             curve-style: taxi;
+            font-size: 7;
+            text-background-color: white;
+            text-background-opacity: 1.0;
+            text-background-shape: round-rectangle;
+            text-background-padding: 0;
+            text-rotation: autorotate;
             line-color: ${colors.getBrand('primary')};
             target-arrow-color: ${colors.getBrand('primary')};
             source-arrow-color: ${colors.getBrand('secondary')};
@@ -225,7 +232,9 @@ export default {
       })
       cy.on('select', 'edge', function (evt) {
         var link = evt.target
-        cytocomponent.$emit('selected-edge', link.data())
+        const c1 = link.source().data().componentIDs[0]
+        const c2 = link.target().data().componentIDs[0]
+        cytocomponent.$emit('selected-edge', link.data(), c1, c2)
       })
 
       this._eh = eh

@@ -27,11 +27,12 @@
     <q-separator inset spaced/>
     <div
       v-for="filter in value.filters"
-      v-bind:key="filter.target"
+      v-bind:key="filter.type+filter.target+filter.method"
       class="col-auto">
       <q-select
         use-input
         multiple
+        clearable
         :value="filter.value"
         color="primary"
         dense
@@ -52,7 +53,7 @@
             :tabindex="scope.tabindex"
             color="primary"
             text-color="primary"
-            class="q-mb-none q-ml-none"
+            class="bg-white q-mb-none q-ml-none"
           >
             {{ scope.opt }}
           </q-chip>

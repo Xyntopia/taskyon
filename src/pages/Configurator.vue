@@ -66,16 +66,14 @@
                     </div>
                   </q-card-section>
                   <q-card-section v-else-if="selectedLink" class="col"><b>Link Description</b><br>
-                    <b>interface:</b> {{ selectedLink.type }}<br>
-                    possible interfaces:<br>
-                    <q-scroll-area>
-                      <!--<q-option-group
-                        v-model="selectedLinkType"
-                        :options="possibleInterfaces"
-                        color="primary"
-                      />-->
-                    {{ possibleInterfaces }}
-                    </q-scroll-area>
+                    <q-select
+                      class="bg-tools"
+                      hide-bottom-space outlined dense
+                      new-value-mode="add-unique"
+                      use-input
+                      @input="setNewLinkInterface"
+                      v-model="selectedLinkInterface" :options="possibleInterfaces"
+                      label="Selected Interface"/>
                   </q-card-section>
                 </q-card>
                </div>
@@ -119,12 +117,13 @@ export default {
   },
   data () {
     return {
-      searchProps: {},
+      searchProps: { qmode: 'filters', filters: [] },
       model: null,
-      options: null,
       selectedNode: null,
       selectedLink: null,
-      editName: false
+      selectedLinkInterface: null,
+      editName: false,
+      editInterfaceName: false
     }
   },
   mounted () {
@@ -136,7 +135,12 @@ export default {
         const intfs = this.selectedComponent?.characteristics?.interfaces
         return intfs
       } else if (this.selectedLink) {
-        return []
+        const n1 = this.selectedLink.sourceUID
+        const n2 = this.selectedLink.targetUID
+        const intf1 = this.Components.find(n1)?.characteristics?.interfaces
+        const intf2 = this.Components.find(n2)?.characteristics?.interfaces
+
+        return [...intf1, ...intf2]
       }
       return []
     },
@@ -189,6 +193,13 @@ export default {
     ])
   },
   methods: {
+    setNewLinkInterface (value) {
+      console.log('set link type')
+      // eslint-disable-next-line
+      const idx = this.activeProject.links.findIndex(l => l.id == this.selectedLink.id)
+      // this.activeProject.links[idx] = value
+      this.$set(this.activeProject.links[idx], 'type', value)
+    },
     onCalculateLayout (intf) {
       this.$refs.CytoGraph.updategraph()
     },
@@ -204,7 +215,14 @@ export default {
         this.searchProps = {}
       }
       if (this.searchProps.filters) {
-        this.searchProps.filters.push(newfilter)
+        const index = this.searchProps.filters.findIndex(f =>
+          f.type === 'field_contains' && f.target === 'Interface.name' && f.method === 'OR'
+        )
+        if (index === -1) {
+          this.searchProps.filters.push(newfilter)
+        } else {
+          this.$set(this.searchProps.filters, index, newfilter)
+        }
       } else {
         this.searchProps.filters = [newfilter]
       }
@@ -227,12 +245,17 @@ export default {
     onSelectNode (node) {
       console.log('select node')
       this.selectedNode = node
-      this.Components.fetchById(this.ComponentInfoID)
+      this.Components.fetchById(node.componentIDs[0])
       this.selectedLink = null
     },
-    onSelectLink (link) {
+    onSelectLink (link, c1, c2) {
       console.log('select link')
       this.selectedNode = null
+      this.Components.fetchById(c1)
+      this.Components.fetchById(c2)
+      link.sourceUID = c1
+      link.targetUID = c2
+      this.selectedLinkInterface = link.type
       this.selectedLink = link
     },
     onSearchRequest (searchProps) {
