@@ -15,6 +15,9 @@
                         <q-btn size='sm' padding="sm" @click="onSaveProject">Save</q-btn>
                         <q-btn size='sm' padding="sm" @click="onNewProject">New</q-btn>
                       </q-btn-group>
+                      <q-btn-group push>
+                        <q-btn size='sm' padding="sm" @click="onCalculateLayout">Layout</q-btn>
+                      </q-btn-group>
                     </div>
                     <q-input v-if="editName"
                       dense hide-bottom-space filled label="Edit Project Name"
@@ -35,6 +38,7 @@
                   </q-card-actions>
                   <q-card-section style="min-height: 200px; min_width: 200px;">
                     <cytograph
+                      ref="CytoGraph"
                       :elementlist="activeProject"
                       @link-add="addlink2system"
                       @selected-node="onSelectNode"
@@ -87,7 +91,7 @@
                 @component-add="addcomponent2system"
                 class="bg-white"
                 @input="onSearchRequest"
-                v-model="searchProps"
+                :value="searchProps"
                 />
             </div>
             <div class="col-1">
@@ -185,8 +189,26 @@ export default {
     ])
   },
   methods: {
+    onCalculateLayout (intf) {
+      this.$refs.CytoGraph.updategraph()
+    },
     onInterfaceSearch (intf) {
-      console.log(intf)
+      this.searchProps.qmode = 'filter'
+      const newfilter = {
+        type: 'field_contains',
+        target: 'Interface.name',
+        method: 'OR',
+        value: [intf]
+      }
+      if (!this.searchProps) {
+        this.searchProps = {}
+      }
+      if (this.searchProps.filters) {
+        this.searchProps.filters.push(newfilter)
+      } else {
+        this.searchProps.filters = [newfilter]
+      }
+      this.$store.dispatch('comcharax/search', this.searchProps)
     },
     onCytoDelete () {
       console.log('delete')
@@ -218,6 +240,7 @@ export default {
       var newSearchProps = cloneDeep(searchProps)
       console.log(newSearchProps)
       this.$store.dispatch('comcharax/search', newSearchProps)
+      this.searchProps = newSearchProps
     },
     setModel (val) {
       console.log('new input text: ' + val)

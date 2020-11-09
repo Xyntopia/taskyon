@@ -6,9 +6,9 @@
         <div class="col-auto" v-for="p in Projects.all()" :key=p.uid>
           <q-card class="q-pa-md">
             <q-card-section class="text-h6">{{ p.name }}</q-card-section>
-            <q-card-action>
+            <q-card-actions>
               <q-btn class="fit" color="primary" label="configure"/>
-            </q-card-action>
+            </q-card-actions>
           </q-card>
         </div>
       </div>
