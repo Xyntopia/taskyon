@@ -123,7 +123,8 @@ export default {
       selectedLink: null,
       selectedLinkInterface: null,
       editName: false,
-      editInterfaceName: false
+      editInterfaceName: false,
+      lastInterfaceSearch: null
     }
   },
   mounted () {
@@ -205,6 +206,7 @@ export default {
     },
     onInterfaceSearch (intf) {
       this.searchProps.qmode = 'filter'
+      this.lastInterfaceSearch = intf
       const newfilter = {
         type: 'field_contains',
         target: 'Interface.name',
@@ -277,12 +279,22 @@ export default {
       console.log(component)
       var newProject = cloneDeep(this.activeProject)
       newProject.counter += 1
+      const newNodeID = newProject.counter.toString()
       newProject.componentcontainers.push({
-        id: newProject.counter.toString(),
+        id: newNodeID,
         name: component.name,
         componentIDs: [component.uid],
         type: 'component'
       })
+      if (this.lastInterfaceSearch) {
+        newProject.counter += 1
+        newProject.links.push({
+          id: newProject.counter.toString(),
+          source: this.selectedNode.id,
+          target: newNodeID,
+          type: this.lastInterfaceSearch
+        })
+      }
       this.$store.commit('comcharax/setActiveProject', newProject)
     },
     addlink2system (source, target) {
