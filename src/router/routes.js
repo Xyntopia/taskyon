@@ -9,12 +9,22 @@ const routes = [
         component: () => import('pages/BasicSearch.vue'),
         props: route => ({
           searchPropsFromURL: { ...route.query }
-        })
+        }),
+        meta: { access: 'public' }
       },
       { path: 'configurator', component: () => import('pages/Configurator.vue') },
-      { path: 'offerconfigurator', component: () => import('pages/OfferConfigurator.vue') },
+      {
+        path: 'offerconfigurator',
+        component: () => import('pages/OfferConfigurator.vue'),
+        meta: { access: 'public' }
+      },
       { path: 'extractcomponentdata', component: () => import('pages/ExtractComponentData.vue') },
-      { path: 'component/:uid', name: 'component', component: () => import('pages/Component.vue') },
+      {
+        path: 'component/:uid',
+        name: 'component',
+        component: () => import('pages/Component.vue'),
+        meta: { access: 'public' }
+      },
       { path: 'sandbox', component: () => import('pages/Sandbox.vue') },
       { path: 'systemviewer', component: () => import('pages/Systemviewer.vue') },
       { path: 'projectsadmin', component: () => import('pages/ProjectsAdmin.vue') },
@@ -22,7 +32,13 @@ const routes = [
       { path: 'scrapercontrolpanel', component: () => import('pages/ScraperControlPanel.vue') },
       { path: 'user', component: () => import('pages/UserProfile.vue') },
       { path: 'task/:uid', name: 'task', component: () => import('pages/Task.vue') },
-      { path: 'login', name: 'login', component: () => import('pages/Login.vue') }
+      {
+        path: 'login',
+        name: 'login',
+        component: () => import('pages/Login.vue'),
+        meta: { access: 'public' },
+        props: route => ({ nextPage: route.query.next })
+      }
     ]
   },
 

@@ -15,7 +15,7 @@ Vue.use(VueRouter)
  * with the Router instance.
  */
 
-export default function (/* { store, ssrContext } */) {
+export default function ({ store }/* , ssrContext } */) {
   const Router = new VueRouter({
     scrollBehavior: () => ({ x: 0, y: 0 }),
     routes,
@@ -35,6 +35,20 @@ export default function (/* { store, ssrContext } */) {
     // quasar.conf.js -> build -> publicPath
     mode: process.env.VUE_ROUTER_MODE,
     base: process.env.VUE_ROUTER_BASE
+  })
+
+  Router.beforeEach((to, from, next) => {
+    console.log(to)
+    if (to.matched.some(record => record.meta.access === 'public')) {
+      console.log('is public!')
+      next()
+    } else {
+      if (store.getters['comcharax/isLoggedIn']) {
+        next()
+      } else {
+        next({ name: 'login', query: { next: to.fullPath } })
+      }
+    }
   })
 
   return Router

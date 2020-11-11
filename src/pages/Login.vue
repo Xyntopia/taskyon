@@ -50,6 +50,9 @@ import { mapGetters, mapState } from 'vuex'
 
 export default {
   name: 'Login',
+  props: {
+    nextPage: String
+  },
   data () {
     return {
       isPwd: true,
@@ -75,13 +78,14 @@ export default {
     onLogOut (event) {
       this.$store.dispatch('comcharax/logOut', null)
     },
-    onSubmit (event) {
+    async onSubmit (event) {
       console.log('authenticate user!')
-      this.$store.dispatch('comcharax/authenticate', {
+      await this.$store.dispatch('comcharax/authenticate', {
         username: this.username,
         password: this.password,
         baseURL: this.componardoURL
       })
+      this.$router.push(this.nextPage)
     }
   }
 }
