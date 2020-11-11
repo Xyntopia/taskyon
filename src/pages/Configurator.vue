@@ -141,7 +141,9 @@ export default {
         const intf1 = this.Components.find(n1)?.characteristics?.interfaces
         const intf2 = this.Components.find(n2)?.characteristics?.interfaces
 
-        return intf1.filter(x => intf2.includes(x))
+        if (intf1 && intf2) {
+          return intf1.filter(x => intf2.includes(x))
+        }
       }
       return []
     },
