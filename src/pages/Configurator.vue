@@ -108,6 +108,7 @@ import cytograph from 'components/cytograph.vue'
 import ComponentSearch from 'components/ComponentSearch.vue'
 import { mapGetters, mapState } from 'vuex'
 var cloneDeep = require('lodash.clonedeep')
+var Mousetrap = require('mousetrap')
 
 export default {
   name: 'PageConfigurator',
@@ -129,6 +130,10 @@ export default {
   },
   mounted () {
     this.$store.dispatch('comcharax/downloadProjects')
+    Mousetrap.bind('del', this.onDelete)
+  },
+  beforeDestroy () {
+    Mousetrap.unbind('del')
   },
   computed: {
     possibleInterfaces () {
@@ -196,12 +201,32 @@ export default {
     ])
   },
   methods: {
+    onDelete () {
+      if (this.selectedNode) {
+        var modProject = cloneDeep(this.activeProject)
+        // const idx = modProject.nodes.findIndex(l => l.id == this.selectedNode.id)
+        modProject.componentcontainers = modProject.componentcontainers.filter(
+          (value, index, arr) => {
+            // eslint-disable-next-line
+            return value.id != this.selectedNode.id
+          }
+        )
+        modProject.links = modProject.links.filter(
+          (value, index, arr) => {
+            // eslint-disable-next-line
+            return (value.source != this.selectedNode.id) && (value.target != this.selectedNode.id)
+          }
+        )
+        this.$store.commit('comcharax/setActiveProject', modProject)
+      }
+    },
     setNewLinkInterface (value) {
-      console.log('set link type')
+      var modProject = cloneDeep(this.activeProject)
       // eslint-disable-next-line
-      const idx = this.activeProject.links.findIndex(l => l.id == this.selectedLink.id)
+      const idx = modProject.links.findIndex(l => l.id == this.selectedLink.id)
       // this.activeProject.links[idx] = value
-      this.$set(this.activeProject.links[idx], 'type', value)
+      modProject.links[idx].type = value
+      this.$store.commit('comcharax/setActiveProject', modProject)
     },
     onCalculateLayout (intf) {
       this.$refs.CytoGraph.updategraph()
@@ -231,9 +256,6 @@ export default {
         this.searchProps.filters = [newfilter]
       }
       this.$store.dispatch('comcharax/search', this.searchProps)
-    },
-    onCytoDelete () {
-      console.log('delete')
     },
     onSaveProject () {
       console.log('save project')

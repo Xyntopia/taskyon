@@ -22,6 +22,7 @@
     "event-source-polyfill": "^1.0.21",
     "jwt-decode": "^3.0.0",
     "lodash.clonedeep": "^4.5.0",
+    "mousetrap": "^1.6.5",
     "mxgraph": "^4.2.0",
     "qs": "^6.9.4",
     "quasar": "^1.0.0",

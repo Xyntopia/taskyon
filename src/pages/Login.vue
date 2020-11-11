@@ -79,7 +79,6 @@ export default {
       this.$store.dispatch('comcharax/logOut', null)
     },
     async onSubmit (event) {
-      console.log('authenticate user!')
       await this.$store.dispatch('comcharax/authenticate', {
         username: this.username,
         password: this.password,

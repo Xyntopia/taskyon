@@ -38,9 +38,7 @@ export default function ({ store }/* , ssrContext } */) {
   })
 
   Router.beforeEach((to, from, next) => {
-    console.log(to)
     if (to.matched.some(record => record.meta.access === 'public')) {
-      console.log('is public!')
       next()
     } else {
       if (store.getters['comcharax/isLoggedIn']) {
