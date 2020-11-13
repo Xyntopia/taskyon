@@ -1,6 +1,17 @@
 <template>
   <q-layout view="lHh lpr lff">
     <q-header elevated class="bg-primary text-white">
+      <div
+        class="row bg-secondary text-primary"
+        >
+        <q-space/>
+        <q-btn type="a" href="https://hq.componardo.com/"
+          target="_blank"
+          size="sm" flat dense stretch icon="business" label="About the Company"/>
+        <q-btn type="a" href="https://api.componardo.com/docs"
+          target="_blank"
+          size="sm" flat dense stretch icon="info" label="Api-Docs"/>
+      </div>
       <q-toolbar>
         <div>
           <q-btn
@@ -144,6 +155,16 @@
             </q-item>
           </q-list>
         </q-expansion-item>
+
+        <q-item active-class="q-item-no-link-highlighting" @click.native="openLink('https://www.google.com')">
+          <q-item-section avatar>
+            <q-icon name="business"/>
+          </q-item-section>
+          <q-item-section>
+            <q-item-label>Get Componardo for your business!</q-item-label>
+          </q-item-section>
+        </q-item>
+
       </q-list>
     </q-drawer>
 
@@ -158,12 +179,21 @@
 
 <script>
 import { mapState, mapGetters } from 'vuex'
+import { openURL } from 'quasar'
 
 export default {
   name: 'MainLayout',
   data () {
     return {
       leftDrawerOpen: false
+    }
+  },
+  created () {
+    this.$q.addressbarColor.set('#F78F3B')
+  },
+  methods: {
+    openLink (link) {
+      openURL(link)
     }
   },
   computed: {
