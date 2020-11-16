@@ -2,6 +2,7 @@
   <q-page
     class="fit column justify-evenly items-center bg-secondary"
     >
+      <div class="q-pa-xl text-h2 bg-red">!!! Prototype !!!</div>
       <div v-if="initiallayout" class="row col items-center justify-center">
         <img
             class="gt-xs q-pa-md"

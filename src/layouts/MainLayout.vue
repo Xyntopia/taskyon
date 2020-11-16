@@ -8,7 +8,7 @@
         <q-btn type="a" href="https://hq.componardo.com/"
           target="_blank"
           size="sm" flat dense stretch icon="business" label="About the Company"/>
-        <q-btn type="a" href="https://api.componardo.com/docs"
+        <q-btn type="a" :href="baseURL+`/docs`"
           target="_blank"
           size="sm" flat dense stretch icon="info" label="Api-Docs"/>
       </div>
