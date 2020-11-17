@@ -5,6 +5,8 @@
         class="row bg-secondary text-primary"
         >
         <q-space/>
+        <q-title class="text-bold bg-red">!!! Prototype !!!</q-title>
+        <q-space/>
         <q-btn type="a" href="https://hq.componardo.com/"
           target="_blank"
           size="sm" flat dense stretch icon="business" label="About the Company"/>
