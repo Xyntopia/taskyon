@@ -49,16 +49,15 @@ class Tasks extends Model {
   }
 }
 
-class DataSheets extends Model {
-  static entity = 'datasheets'
+class ExtractedData extends Model {
+  static entity = 'ExtractedData'
 
   static primaryKey = 'uid'
 
   static fields () {
     return {
       uid: this.string(),
-      origin: this.string(),
-      original_filename: this.string(),
+      source: this.string(),
       location: this.string(),
       data: this.attr(null)
 
@@ -109,5 +108,5 @@ export default {
   Projects,
   Component,
   Tasks,
-  DataSheets
+  ExtractedData
 }

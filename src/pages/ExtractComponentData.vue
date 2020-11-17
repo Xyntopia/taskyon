@@ -25,7 +25,7 @@
                 <q-item-label v-if="task.status!='error'">
                     <b>component-name:</b>&nbsp;
                     <router-link :to="{ name: 'component', params: { uid: task.result.component.uid }}" >{{ task.result.component.name }}</router-link>
-                    <div><b>file:</b>&nbsp;{{ task.result.debug.datasheet.original_filename }}</div>
+                    <div><b>file:</b>&nbsp;{{ task.result.debug.datasheet.source }}</div>
                 </q-item-label>
               </q-item-section>
             </q-item>

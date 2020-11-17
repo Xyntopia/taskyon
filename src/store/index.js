@@ -23,7 +23,7 @@ const database = new VuexORM.Database()
 // Register Models.
 database.register(models.Component)
 database.register(models.Tasks)
-database.register(models.DataSheets)
+database.register(models.ExtractedData)
 database.register(models.Projects)
 // database.register(comcharax.Search)
 
