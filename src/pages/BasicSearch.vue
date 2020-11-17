@@ -33,12 +33,8 @@ import ComponentSearch from 'components/ComponentSearch.vue'
 import { mapGetters, mapState } from 'vuex'
 var cloneDeep = require('lodash.clonedeep')
 
-function isNotEmptyOrSpaces (str) {
-  if (str) {
-    return str.match(/^ *$/) !== null
-  } else {
-    return false
-  }
+function isBlank (str) {
+  return (!str || /^\s*$/.test(str))
 }
 
 export default {
@@ -96,7 +92,7 @@ export default {
       console.log('new basic search')
       var newSearchProps = cloneDeep(searchProps)
       console.log(newSearchProps)
-      if (isNotEmptyOrSpaces(newSearchProps.q) ||
+      if (!isBlank(newSearchProps.q) ||
            newSearchProps.qmode) {
         this.$router.push({ path: '/', query: newSearchProps })
       } else {
