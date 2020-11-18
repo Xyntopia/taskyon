@@ -158,7 +158,7 @@
           </q-list>
         </q-expansion-item>
 
-        <q-item active-class="q-item-no-link-highlighting" @click.native="openLink('https://www.google.com')">
+        <q-item clickable @click.native="openLink('https://hq.componardo.com')">
           <q-item-section avatar>
             <q-icon name="business"/>
           </q-item-section>
