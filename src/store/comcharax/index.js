@@ -35,6 +35,18 @@ var componardoapi = axios.create({
   headers: { 'Access-Control-Allow-Origin': '*' }
 })
 
+// add interceptor to handle login failures
+/*
+componardoapi.interceptors.response.use(response => {
+   return response;
+}, error => {
+  if (error.response.status === 401) {
+   //place your reentry code
+  }
+  return error;
+})
+*/
+
 /*
 function sleep (ms) {
   return new Promise(resolve => setTimeout(resolve, ms))

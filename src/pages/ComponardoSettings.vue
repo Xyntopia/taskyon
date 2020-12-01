@@ -40,32 +40,13 @@
       </q-card>
     </div>
     <div class="col-auto">
-      <q-card>
+      <q-card style="max-width: 300px;">
         <q-card-section>
-          Username & Password
+          Tokens:
+          <q-item-section>
+            <q-item-label style="overflow-wrap: break-word;">{{ token }}</q-item-label>
+          </q-item-section>
         </q-card-section>
-        <q-card-actions>
-          <q-btn label="Logout"/>
-          <q-input  v-if="false"
-          outlined
-          label="Username" v-model="username"
-          type="url" debounce="500"
-          disable readonly password
-          />
-          <q-input  v-if="false"
-            v-model="password" outlined
-            :type="isPwd ? 'password' : 'text'"
-            label="Password"
-            disable readonly>
-            <template v-slot:append>
-              <q-icon
-                :name="isPwd ? 'visibility_off' : 'visibility'"
-                class="cursor-pointer"
-                @click="isPwd = !isPwd"
-              />
-            </template>
-          </q-input>
-        </q-card-actions>
       </q-card>
     </div>
     <div class="col-auto">
@@ -77,7 +58,7 @@
                 <q-item-label class="text-weight-bold">{{ key }}</q-item-label>
               </q-item-section>
               <q-item-section>
-                <q-item-label>{{ val }}</q-item-label>
+                <q-item-label style="overflow-wrap: break-word;">{{ val }}</q-item-label>
               </q-item-section>
             </q-item>
           </q-list>

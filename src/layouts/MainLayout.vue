@@ -121,6 +121,7 @@
         <q-expansion-item
           icon="settings"
           label="Administration"
+          default-opened
         >
           <q-list class="q-pl-md">
             <q-item to="/ComponardoSettings" active-class="q-item-no-link-highlighting">
