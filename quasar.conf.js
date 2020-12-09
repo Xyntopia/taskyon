@@ -71,6 +71,30 @@ module.exports = function (/* ctx */) {
           loader: 'eslint-loader',
           exclude: /node_modules/
         })
+      },
+
+      // TODO: the following is a stupid solution as we have to modify the code in multiple places...
+      // - also make sure that routes are configurd accordingly
+      // - also make sure that "MainLayout" is configured accordingly.
+      env: {
+        ...{
+          APPMODE: process.env.APPMODE,
+          SETTINGS: true,
+          CONFIGURATOR: true,
+          EXTRACTOR: true,
+          SCRAPER: true,
+          OPTIMIZER: true,
+          OFFERS: true,
+          SEARCH: true
+        },
+        ...(process.env.APPMODE === '2specs') && {
+          CONFIGURATOR: false,
+          EXTRACTOR: true,
+          SCRAPER: false,
+          OPTIMIZER: false,
+          OFFERS: false,
+          SEARCH: false
+        }
       }
     },
 
@@ -79,7 +103,7 @@ module.exports = function (/* ctx */) {
       https: false,
       host: '0.0.0.0',
       port: 8080,
-      open: true // opens browser window automatically
+      open: false // opens browser window automatically
     },
 
     // https://quasar.dev/quasar-cli/quasar-conf-js#Property%3A-framework
@@ -87,9 +111,9 @@ module.exports = function (/* ctx */) {
       iconSet: 'material-icons', // Quasar icon set
       lang: 'en-us', // Quasar language pack
       config: {
-        dark: 'false', // 'auto' or Boolean true/false
+        dark: 'false' // 'auto' or Boolean true/false
         // https://coolors.co/003459-c46e72-820263-061623-618b25-e43a64-b0bbbf-e6af2e
-        /*brand: {
+        /* brand: {
           secondary: '#F78F3B',
           primary: '#2A3548',
           // darkaccent: '#7fa042',
@@ -103,7 +127,7 @@ module.exports = function (/* ctx */) {
           negative: '#a04242',
           info: '#8BA7B9',
           warning: '#ff118c'
-        }*/
+        } */
       },
 
       // Possible values for "importStrategy":
@@ -120,7 +144,7 @@ module.exports = function (/* ctx */) {
 
       // Quasar plugins
       plugins: [
-         // 'LocalStorage'
+        // 'LocalStorage'
         'AddressbarColor'
       ]
     },
@@ -189,6 +213,7 @@ module.exports = function (/* ctx */) {
     // Full list of options: https://quasar.dev/quasar-cli/developing-electron-apps/configuring-electron
     electron: {
       bundler: 'packager', // 'packager' or 'builder'
+      // More info: https://quasar.dev/quasar-cli/developing-electron-apps/node-integration
       nodeIntegration: false, // for security options (https://quasar.dev/quasar-cli/developing-electron-apps/node-integration#How-to-turn-it-off)
 
       packager: {
@@ -209,9 +234,6 @@ module.exports = function (/* ctx */) {
 
         appId: 'Componardo'
       },
-
-      // More info: https://quasar.dev/quasar-cli/developing-electron-apps/node-integration
-      nodeIntegration: true,
 
       extendWebpack (/* cfg */) {
         // do something with Electron main process Webpack cfg

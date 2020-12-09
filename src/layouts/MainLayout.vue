@@ -5,7 +5,7 @@
         class="row bg-secondary text-primary"
         >
         <q-space/>
-        <q-title class="text-bold bg-red">!!! Prototype !!!</q-title>
+        <div class="text-bold bg-red">!! Prototype !!</div>
         <q-space/>
         <q-btn type="a" href="https://hq.componardo.com/"
           target="_blank"
@@ -15,7 +15,7 @@
           size="sm" flat dense stretch icon="info" label="Api-Docs"/>
       </div>
       <q-toolbar>
-        <div>
+        <div class="row">
           <q-btn
             flat
             dense
@@ -24,43 +24,16 @@
             icon="menu"
             aria-label="Menu"
           />
-          <q-btn
-            flat
-            dense
-            round
-            to="/"
-            icon="search"
-            aria-label="Home"
-          />
-          <q-btn
-            flat
-            dense
-            round
-            to="/configurator"
-            icon="engineering"
-            aria-label="Home"
-          />
-          <!-- other sybols that work for the "offer configurator" are:
-          extension, mediation, redeem, shopping_cart, shopping_basket,
-          smart_button, square_foot, save_alt, unarchive, monetization_on,
-          assistant, local_offer, miscellaneous_services
-          -->
-          <q-btn
-            flat
-            dense
-            round
-            to="/offerconfigurator"
-            icon="mediation"
-            aria-label="Home"
-          />
-          <q-btn
-            flat
-            dense
-            round
-            to="/extractcomponentdata"
-            icon="find_in_page"
-            aria-label="Home"
-          />
+          <div>
+            <q-btn v-for="def in appLinks" v-bind:key="def[0]+def[1]"
+              flat
+              dense
+              round
+              :to="def[2]"
+              :icon="def[1]"
+              :aria-label="def[0]"
+            />
+          </div>
         </div>
         <q-space />
         <img
@@ -86,36 +59,13 @@
       content-class="bg-primary text-white"
     >
       <q-list>
-        <q-item to="/" active-class="q-item-no-link-highlighting">
+        <q-item v-for="def in appLinks" v-bind:key="def[0]+def[1]"
+          :to="def[2]" active-class="q-item-no-link-highlighting">
           <q-item-section avatar>
-            <q-icon name="search"/>
+            <q-icon :name="def[1]"/>
           </q-item-section>
           <q-item-section>
-            <q-item-label>Search</q-item-label>
-          </q-item-section>
-        </q-item>
-        <q-item to="/configurator" active-class="q-item-no-link-highlighting">
-          <q-item-section avatar>
-            <q-icon name="engineering"/>
-          </q-item-section>
-          <q-item-section>
-            <q-item-label>Configurator</q-item-label>
-          </q-item-section>
-        </q-item>
-        <q-item to="/offerconfigurator" active-class="q-item-no-link-highlighting">
-          <q-item-section avatar>
-            <q-icon name="mediation"/>
-          </q-item-section>
-          <q-item-section>
-            <q-item-label>Configurable Offers</q-item-label>
-          </q-item-section>
-        </q-item>
-        <q-item to="/extractcomponentdata" active-class="q-item-no-link-highlighting">
-          <q-item-section avatar>
-            <q-icon name="find_in_page"/>
-          </q-item-section>
-          <q-item-section>
-            <q-item-label>Extract Component Data</q-item-label>
+            <q-item-label>{{ def[0] }}</q-item-label>
           </q-item-section>
         </q-item>
         <q-expansion-item
@@ -124,36 +74,13 @@
           default-opened
         >
           <q-list class="q-pl-md">
-            <q-item to="/ComponardoSettings" active-class="q-item-no-link-highlighting">
+            <q-item v-for="link in settingsLinks" v-bind:key="link[0]+link[1]"
+              :to="link[2]" active-class="q-item-no-link-highlighting">
               <q-item-section avatar>
-                <q-icon name="settings"/>
+                <q-icon :name="link[1]"/>
               </q-item-section>
               <q-item-section>
-                <q-item-label>Componardo Settings</q-item-label>
-              </q-item-section>
-            </q-item>
-            <q-item to="/ProjectsAdmin" active-class="q-item-no-link-highlighting">
-              <q-item-section avatar>
-                <q-icon name="design_services"/>
-              </q-item-section>
-              <q-item-section>
-                <q-item-label>Projects Admin</q-item-label>
-              </q-item-section>
-            </q-item>
-            <q-item to="/ScraperControlPanel" active-class="q-item-no-link-highlighting">
-              <q-item-section avatar>
-                <q-icon name="api"/>
-              </q-item-section>
-              <q-item-section>
-                <q-item-label>Scraper Control Panel</q-item-label>
-              </q-item-section>
-            </q-item>
-            <q-item to="/User" active-class="q-item-no-link-highlighting">
-              <q-item-section avatar>
-                <q-icon name="person"/>
-              </q-item-section>
-              <q-item-section>
-                <q-item-label>User Profile</q-item-label>
+                <q-item-label>{{ link[0] }}</q-item-label>
               </q-item-section>
             </q-item>
           </q-list>
@@ -164,7 +91,7 @@
             <q-icon name="business"/>
           </q-item-section>
           <q-item-section>
-            <q-item-label>Get Componardo for your business!</q-item-label>
+            <q-item-label>Get Componardo Solutions for your business!</q-item-label>
           </q-item-section>
         </q-item>
 
@@ -200,6 +127,30 @@ export default {
     }
   },
   computed: {
+    appLinks () {
+      //       <!-- other sybols that work for the "offer configurator" are:
+      //       extension, mediation, redeem, shopping_cart, shopping_basket,
+      //       smart_button, square_foot, save_alt, unarchive, monetization_on,
+      //       assistant, local_offer, miscellaneous_services
+      //       -->
+
+      const links = []
+      // format is:  [label, icon, link]
+      if (process.env.SEARCH) { links.push(['Search', 'search', '/search']) }
+      if (process.env.CONFIGURATOR) { links.push(['Configurator', 'engineering', '/configurator']) }
+      if (process.env.OFFERS) { links.push(['Configurable Offers', 'mediation', '/offerconfigurator']) }
+      if (process.env.EXTRACTOR) { links.push(['Extract Component Data', 'find_in_page', '/extractcomponentdata']) }
+      return links
+    },
+    settingsLinks () {
+      const links = []
+      // format is:  [label, icon, link]
+      if (process.env.SETTINGS) { links.push(['Componardo Settings', 'settings', '/ComponardoSettings']) }
+      if (process.env.CONFIGURATOR) { links.push(['Projects Admin', 'design_services', '/ProjectsAdmin']) }
+      if (process.env.SCRAPER) { links.push(['Scraper Control Panel', 'api', '/ScraperControlPanel']) }
+      links.push(['User Profile', 'person', '/User'])
+      return links
+    },
     ...mapState('comcharax', [
       'userName',
       'baseURL'
