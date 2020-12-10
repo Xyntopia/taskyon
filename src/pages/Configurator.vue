@@ -91,6 +91,7 @@
                 @input="onSearchRequest"
                 :value="searchProps"
                 :usegrid.sync="usegrid"
+                :initialColumns="['name','interfaces']"
                 />
             </div>
             <div class="col-1">

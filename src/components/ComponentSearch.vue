@@ -24,8 +24,10 @@
             </q-input>
             <q-btn
               flat stretch dense :icon="usegrid ? 'view_list': 'view_module'"
-              @click="$emit('update:usegrid', !usegrid)" aria-label="Table"/>
-            <q-btn flat stretch icon="filter_list" @click="toggleFilter"/>
+              @click="$emit('update:usegrid', !usegrid)" aria-label="Table">
+              <q-tooltip>{{ usegrid ? 'Table Mode' : 'Grid Mode' }}</q-tooltip></q-btn>
+            <q-btn flat stretch icon="filter_alt" @click="toggleFilter">
+              <q-tooltip>Toggle Filter Options</q-tooltip></q-btn>
           </q-toolbar>
         </div>
         <!--<q-separator inset spaced/>-->
@@ -37,7 +39,7 @@
             :data="componentList"
             row-key="uid"
             :columns="columns"
-            :visible-columns="visible_columns"
+            :visible-columns="selectedColumns"
             :grid="usegrid"
             :grid-header="false"
             :card-container-class="'q-col-gutter-xs'"
@@ -48,6 +50,8 @@
             :selection="enableSelection ? 'multiple': 'none'"
             :selected.sync="selection"
             :selected-rows-label="getSelectedString"
+            no-data-label="No results found!"
+            no-results-label="Your search did not return any results..."
             >
             <!--<template v-slot:top="props">
               <q-btn
@@ -57,8 +61,34 @@
                 class="q-ml-md"
               />
             </template>-->
+            <template v-slot:header-cell-tools="props">
+              <q-th :props="props">
+                <q-btn dense flat size='sm' icon="menu">
+                  <q-tooltip>Table Menu</q-tooltip>
+                  <q-menu fit anchor="top left" self="top left">
+                    <q-item>
+                      <q-select class="full-width"
+                        filled dense
+                        label="Selected columns" use-chips
+                        :options="possibleColumns" multiple
+                        v-model="selectedColumns"/>
+                    </q-item>
+                    <q-item>
+                      <q-item-section>
+                        <q-item-label>Make All Columns:</q-item-label>
+                      </q-item-section>
+                      <div class="row q-px-md">
+                        <q-btn size="md" outline @click="possibleColumns.map(x => columnStates[x].thin=false)" label="Thick"/>
+                        <q-btn size="md" outline @click="possibleColumns.map(x => columnStates[x].thin=true)" label="Thin"/>
+                      </div>
+                    </q-item>
+                  </q-menu>
+                </q-btn>
+              </q-th>
+            </template>
             <template v-slot:header-cell="props">
               <q-th :props="props">
+                <!--TODO: synchronize the filters for the columns with the sidebar filters-->
                 <q-input
                   v-if="props.col.filter_active"
                   outlined
@@ -66,6 +96,7 @@
                   standout="bg-tools text-primary"
                   v-model="columnFilters"
                   dense clearable
+                  @click.stop=""
                   >
                   <template v-slot:prepend>
                     <div class="row items-center all-pointer-events">
@@ -73,42 +104,70 @@
                     </div>
                   </template>
                 </q-input>
-                <q-btn v-else color="tools" text-color="primary" size="xs"
+                <q-btn v-if="false" color="tools" text-color="primary" size="xs"
                   round flat dense icon="filter_alt" @click.stop="onFilterClick(props.col.field)"/>
                 {{ props.col.label }}
+                <q-btn size="xs" round flat dense icon="menu" @click.stop>
+                  <q-menu fit auto-close anchor="top right" self="top left">
+                    <q-item>
+                      <q-toggle size="xs" v-model="columnStates[props.col.field].thin">Thin</q-toggle>
+                    </q-item>
+                    <q-item clickable @click="onColumnRemove(props.col.field)">
+                      <q-item-section>Remove</q-item-section>
+                    </q-item>
+                  </q-menu>
+                </q-btn>
               </q-th>
             </template>
             <template v-slot:body-selection="scope">
                 <q-checkbox v-model="scope.selected" dense/>
             </template>
-            <template v-slot:header-cell-tools="props">
-              <q-th :props="props">
-              </q-th>
+            <template v-slot:no-data="props">
+              <div class="full-width row flex-center text-primary q-gutter-sm">
+                <span>
+                  {{ props.message }}
+                </span>
+              </div>
             </template>
             <template v-slot:body-cell-tools="props">
               <q-td :props="props.name" :to="props.row.uid">
                 <div class="row bg-tools rounded-borders" style="min-width: 45px;">
                   <div class="col-auto">
-                    <q-btn v-if="showAddButton" flat stretch dense size='sm' @click="$emit('component-add', props.row)" icon="add"/>
+                    <q-btn v-if="showAddButton" flat stretch dense size='sm' @click="$emit('component-add', props.row)" icon="add">
+                      <q-tooltip>Add component to project</q-tooltip>
+                    </q-btn>
                   </div>
                   <div class="col-auto">
                     <q-btn size='10px'
-                      :to="{ name: 'component', params: { uid: props.row.uid }}" flat dense icon="info"></q-btn>
+                      :to="{ name: 'component', params: { uid: props.row.uid }}" flat dense icon="info"
+                      tooltip="test">
+                      <q-tooltip>Info</q-tooltip>
+                    </q-btn>
                   </div>
                     <div class="col-auto">
                   <q-btn flat dense size='10px'
-                    @click="searchCompatible(props.row.uid)" icon="device_hub"/>
+                    @click="searchCompatible(props.row.uid)" icon="device_hub">
+                    <q-tooltip>Search for compatible Components</q-tooltip>
+                  </q-btn>
                   </div>
                     <div class="col-auto">
                   <q-btn flat dense size='10px'
-                  @click="searchSimilar(props.row)" icon="search"/>
+                    @click="searchSimilar(props.row)" icon="search">
+                    <q-tooltip>Search for similar Component</q-tooltip>
+                  </q-btn>
                   </div>
                 </div>
               </q-td>
             </template>
             <template v-slot:body-cell-name="props">
               <q-td :props="props.name" :to="props.row.uid">
-                <router-link :to="{ name: 'component', params: { uid: props.row.uid }}">{{ props.row.name }}</router-link>
+                <router-link :to="{ name: 'component', params: { uid: props.row.uid }}">
+                  <div class="ellipsis" :style="props.col.thin ? 'max-width: 100px;' : ''">{{ props.value }}</div></router-link>
+              </q-td>
+            </template>
+            <template v-slot:body-cell="props">
+              <q-td :props="props" :to="props.row.uid">
+                <div class="ellipsis" :style="props.col.thin ? 'max-width: 100px;' : ''">{{ props.value }}</div>
               </q-td>
             </template>
             <template v-slot:loading>
@@ -180,6 +239,7 @@ export default {
     usegrid: { type: Boolean, default: true },
     enableSelection: { type: Boolean, default: false },
     denselayout: { type: Boolean, default: true },
+    initialColumns: { type: Array, default: () => { return ['name'] } },
     value: {
       type: Object,
       default: function () {
@@ -196,16 +256,31 @@ export default {
       }
     }
   },
+  mounted () {
+    this.selectedColumns = cloneDeep(this.initialColumns)
+  },
   data () {
     return {
+      selectedColumns: ['name', 'interfaces'],
+      columnStates: {
+        uid: { thin: false },
+        name: { thin: false },
+        score: { thin: false },
+        keywords: { thin: false },
+        interfaces: { thin: false },
+        modified: { thin: false }
+      },
       showFilter: false,
       selection: [],
       searchHint: 'Search for a Component!',
-      columnFilters: 'test',
-      visible_columns: ['name', 'keywords', 'modified', 'score']
+      columnFilters: 'test'
     }
   },
   methods: {
+    onColumnRemove (column) {
+      console.log('remove column: ' + column)
+      this.selectedColumns = this.selectedColumns.filter(e => e !== column)
+    },
     getSelectedString () {
       return this.selection.length === 0 ? '' : `${this.selection.length} record${this.selection.length > 1 ? 's' : ''} selection of ${this.componentList.length}`
       // return this.selection
@@ -285,11 +360,11 @@ export default {
     toggleFilter () { this.showFilter = !this.showFilter }
   },
   computed: {
-    columnNames () {
-      return ['uid', 'name', 'score', 'keywords', 'interfaces', 'modified']
+    possibleColumns () {
+      return Object.keys(this.columnStates).map(x => x)
     },
     columns () {
-      const tablecols = this.columnNames.map(x => {
+      const tablecols = this.possibleColumns.map(x => {
         return {
           name: x,
           required: x,
@@ -297,6 +372,7 @@ export default {
           label: x,
           sortable: true,
           filter_active: false,
+          thin: this.columnStates[x].thin,
           align: 'left'
         }
       })
@@ -306,12 +382,9 @@ export default {
         field: 'tools',
         label: 'tools',
         sortable: false,
-        align: 'left'
+        align: 'center'
       })
       return tablecols
-    },
-    possibleColumns () {
-      return ['name', 'uid', 'interfaces']
     },
     search_options () {
       return {

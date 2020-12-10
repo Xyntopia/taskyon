@@ -47,6 +47,7 @@
         v-model="searchProps"
         :usegrid.sync="usegrid"
         enableSelection
+        :initialColumns="['name','modified']"
         />
     </div>
   </q-page>
