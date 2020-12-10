@@ -22,27 +22,32 @@
                 <q-btn round flat @click="requestSearch" icon="search"/>
               </template>
             </q-input>
+            <q-btn
+              flat stretch dense :icon="usegrid ? 'view_list': 'view_module'"
+              @click="$emit('update:usegrid', !usegrid)" aria-label="Table"/>
             <q-btn flat stretch icon="filter_list" @click="toggleFilter"/>
           </q-toolbar>
         </div>
         <!--<q-separator inset spaced/>-->
         <div class="col q-py-xs full-width">
           <q-table
-            v-if="true"
             :loading="searchState"
-            :dense="false"
+            :dense="denselayout"
             :wrap-cells="false"
             :data="componentList"
             row-key="uid"
             :columns="columns"
-            :visible-columns="['name','keywords','modified','score']"
-            :grid="false"
+            :visible-columns="visible_columns"
+            :grid="usegrid"
             :grid-header="false"
             :card-container-class="'q-col-gutter-xs'"
             :pagination.sync="pagination"
             :rows-per-page-options="[10,50,100]"
             binary-state-sort
             @request="onTableChange"
+            :selection="enableSelection ? 'multiple': 'none'"
+            :selected.sync="selection"
+            :selected-rows-label="getSelectedString"
             >
             <!--<template v-slot:top="props">
               <q-btn
@@ -52,10 +57,10 @@
                 class="q-ml-md"
               />
             </template>-->
-            <!--<template v-slot:header-cell="props">
+            <template v-slot:header-cell="props">
               <q-th :props="props">
                 <q-input
-                  v-if="false"
+                  v-if="props.col.filter_active"
                   outlined
                   label-color="primary"
                   standout="bg-tools text-primary"
@@ -68,15 +73,42 @@
                     </div>
                   </template>
                 </q-input>
-                <q-btn v-else color="tools" text-color="primary" round flat dense icon="filter_alt" @click="onFilterClick(props.col.field)"/>
+                <q-btn v-else color="tools" text-color="primary" size="xs"
+                  round flat dense icon="filter_alt" @click.stop="onFilterClick(props.col.field)"/>
                 {{ props.col.label }}
               </q-th>
-            </template>-->
-            <template v-slot:body-cell-name="props">
-              <q-td :props="props.name" :to="props.row.uid" clickable>
-                <div>
-                  <router-link :to="{ name: 'component', params: { uid: props.row.uid }}">{{ props.row.name }}</router-link>
+            </template>
+            <template v-slot:body-selection="scope">
+                <q-checkbox v-model="scope.selected" dense/>
+            </template>
+            <template v-slot:header-cell-tools="props">
+              <q-th :props="props">
+              </q-th>
+            </template>
+            <template v-slot:body-cell-tools="props">
+              <q-td :props="props.name" :to="props.row.uid">
+                <div class="row bg-tools rounded-borders" style="min-width: 45px;">
+                  <div class="col-auto">
+                    <q-btn v-if="showAddButton" flat stretch dense size='sm' @click="$emit('component-add', props.row)" icon="add"/>
+                  </div>
+                  <div class="col-auto">
+                    <q-btn size='10px'
+                      :to="{ name: 'component', params: { uid: props.row.uid }}" flat dense icon="info"></q-btn>
+                  </div>
+                    <div class="col-auto">
+                  <q-btn flat dense size='10px'
+                    @click="searchCompatible(props.row.uid)" icon="device_hub"/>
+                  </div>
+                    <div class="col-auto">
+                  <q-btn flat dense size='10px'
+                  @click="searchSimilar(props.row)" icon="search"/>
+                  </div>
                 </div>
+              </q-td>
+            </template>
+            <template v-slot:body-cell-name="props">
+              <q-td :props="props.name" :to="props.row.uid">
+                <router-link :to="{ name: 'component', params: { uid: props.row.uid }}">{{ props.row.name }}</router-link>
               </q-td>
             </template>
             <template v-slot:loading>
@@ -86,7 +118,7 @@
               <div class="col-xs-6 col-sm-4 col-md-3 col-lg-2 col-xl-auto">
                 <q-card :props="props.name" bordered class="shadow-3">
                   <q-card-section>
-                  {{ props.row.name }}
+                  <router-link :to="{ name: 'component', params: { uid: props.row.uid }}">{{ props.row.name }}</router-link>
                   </q-card-section>
                   <!--<q-separator />-->
                   <q-card-actions align="between" class="componentActions">
@@ -95,7 +127,7 @@
                     <q-btn :to="{ name: 'component', params: { uid: props.row.uid }}" flat dense size='sm' icon="info"></q-btn>
                     </div>
                     <div>
-                    <q-btn flat dense size='sm' @click="searchCompatible(props.row.uid)" icon="search">Compatible</q-btn>
+                    <q-btn flat dense size='sm' @click="searchCompatible(props.row.uid)" icon="device_hub">Compatible</q-btn>
                     <q-btn flat dense size='sm' @click="searchSimilar(props.row)" icon="search">Similar</q-btn>
                     </div>
                   </q-card-actions>
@@ -117,7 +149,7 @@
 
 <style lang="sass">
 .componentActions
-  background-color: scale-color($secondary, $lightness: 80%)
+  background-color: $tools
   padding: 2px
 
 .componentSearchBar
@@ -145,6 +177,9 @@ export default {
     componentList: { type: Array, default: undefined },
     totalResultNum: { type: Number, default: 0 },
     searchState: { type: Boolean, default: false },
+    usegrid: { type: Boolean, default: true },
+    enableSelection: { type: Boolean, default: false },
+    denselayout: { type: Boolean, default: true },
     value: {
       type: Object,
       default: function () {
@@ -164,11 +199,17 @@ export default {
   data () {
     return {
       showFilter: false,
+      selection: [],
       searchHint: 'Search for a Component!',
-      columnFilters: 'test'
+      columnFilters: 'test',
+      visible_columns: ['name', 'keywords', 'modified', 'score']
     }
   },
   methods: {
+    getSelectedString () {
+      return this.selection.length === 0 ? '' : `${this.selection.length} record${this.selection.length > 1 ? 's' : ''} selection of ${this.componentList.length}`
+      // return this.selection
+    },
     onFilterClick (field) {
       console.log('clicked column filter: ' + field)
     },
@@ -244,16 +285,28 @@ export default {
     toggleFilter () { this.showFilter = !this.showFilter }
   },
   computed: {
+    columnNames () {
+      return ['uid', 'name', 'score', 'keywords', 'interfaces', 'modified']
+    },
     columns () {
-      const columns = ['uid', 'name', 'score', 'keywords', 'interfaces', 'modified']
-      const tablecols = columns.map(x => {
+      const tablecols = this.columnNames.map(x => {
         return {
           name: x,
+          required: x,
           field: x,
           label: x,
           sortable: true,
+          filter_active: false,
           align: 'left'
         }
+      })
+      tablecols.unshift({
+        name: 'tools',
+        required: true,
+        field: 'tools',
+        label: 'tools',
+        sortable: false,
+        align: 'left'
       })
       return tablecols
     },

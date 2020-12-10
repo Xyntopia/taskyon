@@ -24,6 +24,7 @@
           :totalResultNum="resultnum"
           :searchState="searchingState"
           @input="onSearchRequest"
+          :usegrid.sync="usegrid"
           />
       </div>
   </q-page>
@@ -49,6 +50,11 @@ export default {
   mounted () {
     var newSearchProps = cloneDeep(this.searchProps)
     this.$store.dispatch('comcharax/search', newSearchProps)
+  },
+  data () {
+    return {
+      usegrid: true
+    }
   },
   watch: {
     $route (to, from) {

@@ -45,6 +45,8 @@
         :searchState="searchingState"
         @input="onSearchRequest"
         v-model="searchProps"
+        :usegrid.sync="usegrid"
+        enableSelection
         />
     </div>
   </q-page>
@@ -69,6 +71,7 @@ export default {
   data () {
     return {
       jobIDs: [],
+      usegrid: false,
       es: null, // server-side event stream
       searchProps: {
         q: '',
@@ -82,7 +85,7 @@ export default {
           type: 'field_contains',
           target: 'User.name',
           method: 'OR',
-          value: ['DefaultUser', 'Scraper']
+          value: ['DefaultUser']
         }]
       }
     }

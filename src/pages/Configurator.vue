@@ -90,6 +90,7 @@
                 class="bg-white"
                 @input="onSearchRequest"
                 :value="searchProps"
+                :usegrid.sync="usegrid"
                 />
             </div>
             <div class="col-1">
@@ -120,6 +121,7 @@ export default {
     return {
       searchProps: { qmode: 'filters', filters: [] },
       model: null,
+      usegrid: false,
       selectedNode: null,
       selectedLink: null,
       selectedLinkInterface: null,
