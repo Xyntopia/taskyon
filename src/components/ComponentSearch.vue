@@ -1,51 +1,81 @@
 <template>
     <div class="row">
-      <div class="column col-xs-auto col-sm">
-        <q-toolbar
-          class="col-auto q-px-none shadow-2 rounded-borders componentSearchBar"
-          dense>
-          <q-input
-            class="col"
-            filled
-            bg-color="white"
-            :value="value.q"
-            :loading="searchState"
-            type="search"
-            autofocus
-            :dense="false"
-            clearable
-            debounce="1000"
-            :label="searchHint"
-            @input="onQChange"
-            >
-            <template v-slot:append>
-              <q-btn round flat @click="requestSearch" icon="search"/>
-            </template>
-          </q-input>
-          <q-btn flat stretch icon="filter_list" @click="toggleFilter"/>
-        </q-toolbar>
+      <div class="col-sm col-xs-auto column">
+        <div class="col-auto">
+          <q-toolbar
+            class="q-px-none shadow-2 rounded-borders componentSearchBar">
+            <q-input
+              class="col"
+              filled
+              bg-color="white"
+              :value="value.q"
+              :loading="searchState"
+              type="search"
+              autofocus
+              :dense="false"
+              clearable
+              debounce="1000"
+              :label="searchHint"
+              @input="onQChange"
+              >
+              <template v-slot:append>
+                <q-btn round flat @click="requestSearch" icon="search"/>
+              </template>
+            </q-input>
+            <q-btn flat stretch icon="filter_list" @click="toggleFilter"/>
+          </q-toolbar>
+        </div>
         <!--<q-separator inset spaced/>-->
-        <div>
+        <div class="col q-py-xs full-width">
           <q-table
             v-if="true"
             :loading="searchState"
             :dense="false"
+            :wrap-cells="false"
             :data="componentList"
             row-key="uid"
             :columns="columns"
-            :visible-columns="['name','keywords']"
-            :grid="true"
+            :visible-columns="['name','keywords','modified','score']"
+            :grid="false"
             :grid-header="false"
             :card-container-class="'q-col-gutter-xs'"
             :pagination.sync="pagination"
             :rows-per-page-options="[10,50,100]"
+            binary-state-sort
             @request="onTableChange"
             >
+            <!--<template v-slot:top="props">
+              <q-btn
+                flat round dense
+                :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
+                @click="props.toggleFullscreen"
+                class="q-ml-md"
+              />
+            </template>-->
+            <!--<template v-slot:header-cell="props">
+              <q-th :props="props">
+                <q-input
+                  v-if="false"
+                  outlined
+                  label-color="primary"
+                  standout="bg-tools text-primary"
+                  v-model="columnFilters"
+                  dense clearable
+                  >
+                  <template v-slot:prepend>
+                    <div class="row items-center all-pointer-events">
+                      <q-icon color="primary" size="16px" name="filter_alt" />
+                    </div>
+                  </template>
+                </q-input>
+                <q-btn v-else color="tools" text-color="primary" round flat dense icon="filter_alt" @click="onFilterClick(props.col.field)"/>
+                {{ props.col.label }}
+              </q-th>
+            </template>-->
             <template v-slot:body-cell-name="props">
-              <q-td :props="props.name">
+              <q-td :props="props.name" :to="props.row.uid" clickable>
                 <div>
-                  test
-                  {{ props.row.name }}
+                  <router-link :to="{ name: 'component', params: { uid: props.row.uid }}">{{ props.row.name }}</router-link>
                 </div>
               </q-td>
             </template>
@@ -75,12 +105,13 @@
           </q-table>
         </div>
       </div>
-      <q-separator vertical inset spaced v-if="showFilter"/>
-      <NodeFilter
-        v-if="showFilter"
-        :value="search_options"
-        @input="onFilterChange"
-        />
+      <q-separator v-if="showFilter" vertical inset spaced/>
+      <div class="col-4 col-md-3" v-if="showFilter">
+        <NodeFilter
+          :value="search_options"
+          @input="onFilterChange"
+          />
+      </div>
     </div>
 </template>
 
@@ -124,7 +155,7 @@ export default {
           start: 0,
           end: 10,
           sort: 'score',
-          desc: true,
+          descending: false,
           filters: []
         }
       }
@@ -134,16 +165,15 @@ export default {
     return {
       showFilter: false,
       searchHint: 'Search for a Component!',
-      columns: [
-        { name: 'uid', field: 'uid', label: 'uid' },
-        { name: 'name', field: 'name', label: 'name' },
-        { name: 'score', field: 'score', label: 'score' },
-        { name: 'keywords', field: 'keywords', label: 'keywords' }
-      ]
+      columnFilters: 'test'
     }
   },
   methods: {
-    requestSearch   (newProps) {
+    onFilterClick (field) {
+      console.log('clicked column filter: ' + field)
+    },
+    requestSearch (newProps) {
+      console.log('new search requested ')
       var newSearchProps = {
         ...cloneDeep(this.value),
         ...newProps
@@ -158,14 +188,23 @@ export default {
       newSearchProps.qmode = value.qmode
       this.$emit('input', newSearchProps)
     },
+    /*
+    onUpdatePagination (props) {
+      console.log(props)
+    },
+    */
     onTableChange (requestProp) {
+      console.log('table change!')
       console.log(requestProp)
+      const { page, rowsPerPage, sortBy, descending } = requestProp.pagination
       var newSearchProps = cloneDeep(this.value)
-      newSearchProps.start = (requestProp.pagination.page - 1) * requestProp.pagination.rowsPerPage
-      newSearchProps.end = newSearchProps.start + requestProp.pagination.rowsPerPage
+      newSearchProps.start = (page - 1) * rowsPerPage
+      newSearchProps.end = newSearchProps.start + rowsPerPage
+      if (sortBy) {
+        newSearchProps.sort = sortBy
+      }
+      newSearchProps.descending = descending
       this.$emit('input', newSearchProps)
-      // requestProp.pagination.descending
-      // requestProp.pagination.sortBy
     },
     onQChange (value) {
       this.requestSearch({ q: value })
@@ -205,6 +244,22 @@ export default {
     toggleFilter () { this.showFilter = !this.showFilter }
   },
   computed: {
+    columns () {
+      const columns = ['uid', 'name', 'score', 'keywords', 'interfaces', 'modified']
+      const tablecols = columns.map(x => {
+        return {
+          name: x,
+          field: x,
+          label: x,
+          sortable: true,
+          align: 'left'
+        }
+      })
+      return tablecols
+    },
+    possibleColumns () {
+      return ['name', 'uid', 'interfaces']
+    },
     search_options () {
       return {
         qmode: this.value.qmode,
@@ -218,7 +273,7 @@ export default {
         var page = ((this.value.start / rowsnum) + 1) || 1
         return {
           sortBy: this.value.sort,
-          descending: this.value.order,
+          descending: this.value.descending,
           page: page,
           rowsPerPage: rowsnum,
           rowsNumber: this.totalResultNum

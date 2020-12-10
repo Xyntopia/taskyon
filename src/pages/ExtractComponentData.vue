@@ -1,5 +1,5 @@
 <template>
-  <q-page class="bg-secondary q-pa-md q-col-gutter-xs column">
+  <q-page class="bg-secondary q-pa-md q-col-gutter-xs column content-stretch">
     <div class="col row">
       <div class="col-auto">
       <q-uploader
@@ -37,8 +37,7 @@
       <q-btn color="tools" text-color="primary" label="clear" @click="onClear()"/>
       <q-btn color="tools" text-color="primary" label="stop" @click="stopJobStream()"/>
     </div>
-    <div class="col">
-      TODO: only show the table, without search options
+    <div class="col full-width">
       <ComponentSearch
         ref="ComponentSearch"
         :componentList="componentList"
@@ -78,7 +77,7 @@ export default {
         start: 0,
         end: 10,
         sort: 'id',
-        desc: true,
+        descending: false,
         filters: [{
           type: 'field_contains',
           target: 'User.name',

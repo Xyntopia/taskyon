@@ -1,5 +1,5 @@
 <template>
-  <div class="col-4 col-md-3 column items-left">
+  <div class="column items-left">
     <div class="col-auto text-h6 text-primary self-center" >
         FILTER
         <q-btn outline dense @click="onClearFilters" label="clear"/>
