@@ -30,6 +30,20 @@ class Component extends Model {
     return data
   }
 
+  static deleteById (uid) {
+    const result = this.api().delete(`/components/${uid}`)
+    return result
+  }
+
+  static deleteByIds (uids) {
+    const responses = uids.map(uid => {
+      return this.api().delete(`/components/${uid}`)
+    })
+    // TODO: check if all results are successfull and
+    //       return all deleted IDs
+    return responses
+  }
+
   // TODO: fetch multiple by ID
 }
 

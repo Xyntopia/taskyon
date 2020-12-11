@@ -63,6 +63,16 @@
             </template>-->
             <template v-slot:header-cell-tools="props">
               <q-th :props="props">
+                <q-btn dense flat size='sm' icon="edit">
+                  <q-tooltip>Component Actions</q-tooltip>
+                  <q-menu fit anchor="top left" self="top left">
+                    <q-item clickable @click="deleteComponents('selection')">
+                      <q-item-section>
+                        <q-item-label class="text-warning">Delete selected components</q-item-label>
+                      </q-item-section>
+                    </q-item>
+                  </q-menu>
+                </q-btn>
                 <q-btn dense flat size='sm' icon="menu">
                   <q-tooltip>Table Menu</q-tooltip>
                   <q-menu fit anchor="top left" self="top left">
@@ -277,6 +287,14 @@ export default {
     }
   },
   methods: {
+    deleteComponents (uids) {
+      console.log('delete component with uids: ' + uids)
+      if (uids === 'selection') {
+        uids = this.selection.map(x => x.uid)
+      }
+      console.log(uids)
+      this.$store.$db().model('components').deleteByIds(uids)
+    },
     onColumnRemove (column) {
       console.log('remove column: ' + column)
       this.selectedColumns = this.selectedColumns.filter(e => e !== column)
