@@ -17,26 +17,28 @@ class Component extends Model {
 
   static fields () {
     return {
-      uid: this.string(),
-      name: this.attr(''),
-      summary: this.attr(String),
-      image: this.attr(String),
+      uid: this.string(null).nullable(),
+      name: this.string(null).nullable(),
+      created: this.string(null).nullable(),
+      modified: this.string(null).nullable(),
+      summary: this.string(null).nullable(),
+      image: this.string(null).nullable(),
       characteristics: this.attr({})
     }
   }
 
-  static fetchById (uid) {
-    var data = this.api().get(`/components/${uid}`)
+  static async fetchById (uid) {
+    var data = await this.api().get(`/components/${uid}`)
     return data
   }
 
-  static deleteById (uid) {
-    const result = this.api().delete(`/components/${uid}`)
+  static async deleteById (uid) {
+    const result = await this.api().delete(`/components/${uid}`)
     return result
   }
 
-  static deleteByIds (uids) {
-    const responses = uids.map(uid => {
+  static async deleteByIds (uids) {
+    const responses = await uids.map(uid => {
       return this.api().delete(`/components/${uid}`)
     })
     // TODO: check if all results are successfull and

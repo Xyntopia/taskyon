@@ -88,8 +88,8 @@
                         <q-item-label>Make All Columns:</q-item-label>
                       </q-item-section>
                       <div class="row q-px-md">
-                        <q-btn size="md" outline @click="possibleColumns.map(x => columnStates[x].thin=false)" label="Thick"/>
-                        <q-btn size="md" outline @click="possibleColumns.map(x => columnStates[x].thin=true)" label="Thin"/>
+                        <q-btn size="md" outline @click="possibleColumns.map(x => thinState[x]=false)" label="Thick"/>
+                        <q-btn size="md" outline @click="possibleColumns.map(x => thinState[x]=true)" label="Thin"/>
                       </div>
                     </q-item>
                   </q-menu>
@@ -120,7 +120,7 @@
                 <q-btn size="xs" round flat dense icon="menu" @click.stop>
                   <q-menu fit auto-close anchor="top right" self="top left">
                     <q-item>
-                      <q-toggle size="xs" v-model="columnStates[props.col.field].thin">Thin</q-toggle>
+                      <q-toggle size="xs" v-model="thinState[props.col.field]">Thin</q-toggle>
                     </q-item>
                     <q-item clickable @click="onColumnRemove(props.col.field)">
                       <q-item-section>Remove</q-item-section>
@@ -272,18 +272,11 @@ export default {
   data () {
     return {
       selectedColumns: ['name', 'interfaces'],
-      columnStates: {
-        uid: { thin: false },
-        name: { thin: false },
-        score: { thin: false },
-        keywords: { thin: false },
-        interfaces: { thin: false },
-        modified: { thin: false }
-      },
       showFilter: false,
       selection: [],
       searchHint: 'Search for a Component!',
-      columnFilters: 'test'
+      columnFilters: 'test',
+      thinState: {}
     }
   },
   methods: {
@@ -294,13 +287,19 @@ export default {
       }
       console.log(uids)
       this.$store.$db().model('components').deleteByIds(uids)
+      // and update search results
+      this.$emit('input', cloneDeep(this.value))
     },
     onColumnRemove (column) {
       console.log('remove column: ' + column)
       this.selectedColumns = this.selectedColumns.filter(e => e !== column)
     },
     getSelectedString () {
-      return this.selection.length === 0 ? '' : `${this.selection.length} record${this.selection.length > 1 ? 's' : ''} selection of ${this.componentList.length}`
+      // string that displays information about how many components were selected
+      return this.selection.length === 0 ? ''
+        : `${this.selection.length}
+        record${this.selection.length > 1 ? 's' : ''}
+        of ${this.componentList.length} selected`
       // return this.selection
     },
     onFilterClick (field) {
@@ -378,8 +377,14 @@ export default {
     toggleFilter () { this.showFilter = !this.showFilter }
   },
   computed: {
+    Components () {
+      return this.$store.$db().model('components')
+    },
     possibleColumns () {
-      return Object.keys(this.columnStates).map(x => x)
+      // var allKeys = Object.keys(this.columnStates).map(x => x)
+      // var allKeys = Object.keys(this.componentList).map(x => x)
+      var allKeys = Object.keys(this.Components.fields()).map(x => x)
+      return allKeys
     },
     columns () {
       const tablecols = this.possibleColumns.map(x => {
@@ -390,7 +395,7 @@ export default {
           label: x,
           sortable: true,
           filter_active: false,
-          thin: this.columnStates[x].thin,
+          thin: this.thinState[x],
           align: 'left'
         }
       })

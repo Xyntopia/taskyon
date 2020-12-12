@@ -186,6 +186,7 @@ var vuexModule = {
       // created UID on the server
     },
     async search (context, searchProps) {
+      // TODO: move this function to models.js we might have a little problem here as we want to set the "loading" state
       context.commit('setSearchState', true)
       // await sleep(0) // uncomment to simulate a search
       await componardoapi

@@ -80,8 +80,8 @@ export default {
         qmode: 'filter',
         start: 0,
         end: 10,
-        sort: 'id',
-        descending: false,
+        sort: 'modified',
+        descending: true,
         filters: [{
           type: 'field_contains',
           target: 'User.name',
