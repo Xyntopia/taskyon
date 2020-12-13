@@ -36,7 +36,7 @@
             :loading="searchState"
             :dense="denselayout"
             :wrap-cells="false"
-            :data="componentList"
+            :data="componentData"
             row-key="uid"
             :columns="columns"
             :visible-columns="selectedColumns"
@@ -63,6 +63,7 @@
             </template>-->
             <template v-slot:header-cell-tools="props">
               <q-th :props="props">
+                <div class="row justify-around">
                 <q-btn dense flat size='sm' icon="edit">
                   <q-tooltip>Component Actions</q-tooltip>
                   <q-menu fit anchor="top left" self="top left">
@@ -75,13 +76,16 @@
                 </q-btn>
                 <q-btn dense flat size='sm' icon="menu">
                   <q-tooltip>Table Menu</q-tooltip>
-                  <q-menu fit anchor="top left" self="top left">
+                  <q-menu fit anchor="top left" self="top left" max-width="400px">
                     <q-item>
                       <q-select class="full-width"
-                        filled dense
-                        label="Selected columns" use-chips
-                        :options="possibleColumns" multiple
-                        v-model="selectedColumns"/>
+                        filled dense hide-dropdown-icon clearable
+                        use-input use-chips multiple
+                        input-debounce="0" new-value-mode="add-unique"
+                        label="Select columns"
+                        :options="columnSelectOptions"
+                        v-model="selectedColumns"
+                        @filter="filterFn"/>
                     </q-item>
                     <q-item>
                       <q-item-section>
@@ -94,6 +98,7 @@
                     </q-item>
                   </q-menu>
                 </q-btn>
+                </div>
               </q-th>
             </template>
             <template v-slot:header-cell="props">
@@ -141,7 +146,7 @@
             </template>
             <template v-slot:body-cell-tools="props">
               <q-td :props="props.name" :to="props.row.uid">
-                <div class="row bg-tools rounded-borders" style="min-width: 45px;">
+                <div class="row bg-tools rounded-borders justify-around" style="min-width: 45px;">
                   <div class="col-auto">
                     <q-btn v-if="showAddButton" flat stretch dense size='sm' @click="$emit('component-add', props.row)" icon="add">
                       <q-tooltip>Add component to project</q-tooltip>
@@ -272,6 +277,7 @@ export default {
   data () {
     return {
       selectedColumns: ['name', 'interfaces'],
+      columnSelectOptions: [],
       showFilter: false,
       selection: [],
       searchHint: 'Search for a Component!',
@@ -280,6 +286,18 @@ export default {
     }
   },
   methods: {
+    filterFn (val, update) {
+      update(() => {
+        if (val === '') {
+          this.columnSelectOptions = this.possibleColumns
+        } else {
+          const needle = val.toLowerCase()
+          this.columnSelectOptions = this.possibleColumns.filter(
+            v => v.toLowerCase().indexOf(needle) > -1
+          )
+        }
+      })
+    },
     deleteComponents (uids) {
       console.log('delete component with uids: ' + uids)
       if (uids === 'selection') {
@@ -299,7 +317,7 @@ export default {
       return this.selection.length === 0 ? ''
         : `${this.selection.length}
         record${this.selection.length > 1 ? 's' : ''}
-        of ${this.componentList.length} selected`
+        of ${this.componentData.length} selected`
       // return this.selection
     },
     onFilterClick (field) {
@@ -377,14 +395,26 @@ export default {
     toggleFilter () { this.showFilter = !this.showFilter }
   },
   computed: {
+    componentData () {
+      console.log('flatten componentlist')
+      return this.componentList.map(x => {
+        return { ...x.characteristics, ...x }
+      })
+    },
     Components () {
       return this.$store.$db().model('components')
     },
     possibleColumns () {
+      // get this from the search result...
+      // field columns
+      const allKeys = Object.keys(this.Components.fields()).map(x => x)
       // var allKeys = Object.keys(this.columnStates).map(x => x)
       // var allKeys = Object.keys(this.componentList).map(x => x)
-      var allKeys = Object.keys(this.Components.fields()).map(x => x)
-      return allKeys
+      // columns generated from characteristics
+      const chars = this.componentList.map(x => Object.keys(x.characteristics))
+      const columns = chars.flat()
+      allKeys.push(...columns)
+      return [...new Set(allKeys)]
     },
     columns () {
       const tablecols = this.possibleColumns.map(x => {
