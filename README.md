@@ -3,6 +3,22 @@
 Component extractor and configurator frontend
 
 ## Install the dependencies
+
+### install latest LTS of node
+
+```bash
+sudo snap install node --channel=14/stable --classic
+```
+
+### install yarn & node
+
+- https://classic.yarnpkg.com/en/docs/install
+
+```bash
+curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
+echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
+```
+
 ```bash
 yarn
 ```
