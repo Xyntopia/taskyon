@@ -190,7 +190,7 @@ var vuexModule = {
       context.commit('setSearchState', true)
       // await sleep(0) // uncomment to simulate a search
       await componardoapi
-        .post('/components', searchProps)
+        .post('/components/search', searchProps)
         .then(r => {
           console.log(r)
           context.commit('updateSearchResult', r)

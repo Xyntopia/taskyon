@@ -77,6 +77,7 @@ export default {
       this.Components.insertOrUpdate({
         data: newdata
       })
+      this.Components.persistToServer([this.componentData.uid])
     }
   },
   computed: {

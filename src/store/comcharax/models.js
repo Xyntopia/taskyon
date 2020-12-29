@@ -46,6 +46,17 @@ class Component extends Model {
     return responses
   }
 
+  static async persistToServer (uids) {
+    console.log('persist to server:' + uids)
+    const components = this.findIn(uids)
+    /* const responses = await components.map(co => {
+      return this.api().post('/components', co)
+    }) */
+    const response = await this.api().post('/components', components)
+    // TODO: check if all results are successfull and
+    //       return all deleted IDs
+    return response
+  }
   // TODO: fetch multiple by ID
 }
 

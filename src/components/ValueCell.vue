@@ -5,6 +5,7 @@
           :value="value"
           filled dense
           type="text"
+          debounce="1000"
           @input="$emit('input', $event)"
           @keydown.enter.prevent="editMode = !editMode"
           label="edit value"
@@ -22,7 +23,7 @@
 export default {
   name: 'ValueCell',
   props: {
-    value: [String, Object, Array]
+    value: [String, Object, Array, Number]
   },
   data () {
     return {
