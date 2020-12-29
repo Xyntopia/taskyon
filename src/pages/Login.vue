@@ -21,7 +21,12 @@
                 />
               </template>
             </q-input>
-            <q-input filled v-model="componardoURL" type="url" label="Componardo Server" />
+            <q-select
+              filled
+              v-model="componardoURL"
+              :options="['https://api.componardo.com', 'http://localhost:5000']"
+              type="url"
+              label="Componardo Server" />
             <div>
               <q-btn size="lg" class="fit" color="primary" label="Login" type="submit"/>
             </div>
