@@ -23,12 +23,32 @@ class Component extends Model {
       modified: this.string(null).nullable(),
       summary: this.string(null).nullable(),
       image: this.string(null).nullable(),
-      characteristics: this.attr({})
+      characteristics: this.attr({}),
+      allowcache: this.boolean(false)
     }
   }
 
-  static async fetchById (uid) {
-    var data = await this.api().get(`/components/${uid}`)
+  static state () {
+    return {
+      loading: false // TODO: use this instead of the state variable in index.js
+    }
+  }
+
+  static async fetchById (uid, allowcache = false) {
+    /* if used, this request config makes sure we have
+    don't get the cached result... */
+    console.log('get component, allow cache=' + allowcache)
+    const requestconfig = {
+      headers: {
+        'Cache-Control': 'max-age=0'
+      }
+    }
+
+    var data = await this.api().get(
+      `/components/${uid}`,
+      allowcache ? {} : requestconfig
+    )
+
     return data
   }
 

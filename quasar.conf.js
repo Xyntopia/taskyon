@@ -161,15 +161,17 @@ module.exports = function (/* ctx */) {
     // https://quasar.dev/quasar-cli/developing-pwa/configuring-pwa
     pwa: {
       workboxPluginMode: 'GenerateSW', // 'GenerateSW' or 'InjectManifest'
-      workboxOptions: {}, // only for GenerateSW
+      workboxOptions: {
+        cacheId: 'componardo'
+      }, // only for GenerateSW
       manifest: {
         name: 'Componardo',
         short_name: 'Componardo',
         description: 'Component extractor and configurator frontend',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#ffffff',
-        theme_color: '#027be3',
+        background_color: '#F78F3B',
+        theme_color: '#2A3548',
         icons: [
           {
             src: 'icons/icon-128x128.png',

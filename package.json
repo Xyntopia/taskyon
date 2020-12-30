@@ -11,7 +11,9 @@
     "2specs": "APPMODE=2specs quasar dev",
     "dev": "quasar dev",
     "build": "quasar build",
-    "build-2specs": "APPMODE=2specs quasar build"
+    "build-2specs": "APPMODE=2specs quasar build",
+    "pwadev": "quasar dev -m pwa",
+    "pwabuild": "quasar build -m pwa"
   },
   "dependencies": {
     "@quasar/extras": "^1.0.0",
@@ -50,7 +52,8 @@
     "eslint-plugin-standard": "^4.0.0",
     "eslint-plugin-vue": "^6.1.2",
     "quasar-app-extension-ssg": "https://github.com/freddy38510/quasar-app-extension-ssg",
-    "vue-devtools": "^5.1.4"
+    "vue-devtools": "^5.1.4",
+    "workbox-webpack-plugin": "^5.0.0"
   },
   "browserslist": [
     "last 10 Chrome versions",

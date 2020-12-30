@@ -852,6 +852,13 @@
     "@babel/types" "^7.4.4"
     esutils "^2.0.2"
 
+"@babel/runtime@^7.5.5":
+  version "7.12.5"
+  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.12.5.tgz#410e7e487441e1b360c29be715d870d9b985882e"
+  integrity sha512-plcc+hbExy3McchJCEQG3knOsuh3HH+Prx1P6cLIkET/0dLuQDEnrT+s27Axgc9bqfsmNUNHfscgMUdBpC9xfg==
+  dependencies:
+    regenerator-runtime "^0.13.4"
+
 "@babel/runtime@^7.7.2", "@babel/runtime@^7.8.4", "@babel/runtime@^7.9.0":
   version "7.11.2"
   resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.11.2.tgz#f549c13c754cc40b87644b9fa9f09a6a95fe0736"
@@ -11356,7 +11363,7 @@ unzip-crx-3@^0.2.0:
     mkdirp "^0.5.1"
     yaku "^0.16.6"
 
-upath@1.2.0, upath@^1.1.1, upath@^1.2.0:
+upath@1.2.0, upath@^1.1.1, upath@^1.1.2, upath@^1.2.0:
   version "1.2.0"
   resolved "https://registry.yarnpkg.com/upath/-/upath-1.2.0.tgz#8f66dbcd55a883acdae4408af8b035a5044c1894"
   integrity sha512-aZwGpamFO61g3OlfT7OQCHqhGnW43ieH9WZeP7QxN/G/jS4jfqUkZxoryvJgVPEcrl5NL/ggHsSmLMHuH64Lhg==
@@ -11788,7 +11795,7 @@ webpack-node-externals@2.5.2:
   resolved "https://registry.yarnpkg.com/webpack-node-externals/-/webpack-node-externals-2.5.2.tgz#178e017a24fec6015bc9e672c77958a6afac861d"
   integrity sha512-aHdl/y2N7PW2Sx7K+r3AxpJO+aDMcYzMQd60Qxefq3+EwhewSbTBqNumOsCE1JsCUNoyfGj5465N0sSf6hc/5w==
 
-webpack-sources@^1.1.0, webpack-sources@^1.4.0, webpack-sources@^1.4.1, webpack-sources@^1.4.3:
+webpack-sources@^1.1.0, webpack-sources@^1.3.0, webpack-sources@^1.4.0, webpack-sources@^1.4.1, webpack-sources@^1.4.3:
   version "1.4.3"
   resolved "https://registry.yarnpkg.com/webpack-sources/-/webpack-sources-1.4.3.tgz#eedd8ec0b928fbf1cbfe994e22d2d890f330a933"
   integrity sha512-lgTS3Xhv1lCOKo7SA5TjKXMjpSM4sBjNV5+q2bqesbSPs5FjGmU6jjtBSkX9b4qW87vDIsCIlUPOEhbZrMdjeQ==
@@ -11922,7 +11929,7 @@ workbox-broadcast-update@^5.1.4:
   dependencies:
     workbox-core "^5.1.4"
 
-workbox-build@5.1.4:
+workbox-build@5.1.4, workbox-build@^5.1.4:
   version "5.1.4"
   resolved "https://registry.yarnpkg.com/workbox-build/-/workbox-build-5.1.4.tgz#23d17ed5c32060c363030c8823b39d0eabf4c8c7"
   integrity sha512-xUcZn6SYU8usjOlfLb9Y2/f86Gdo+fy1fXgH8tJHjxgpo53VVsqRX0lUDw8/JuyzNmXuo8vXX14pXX2oIm9Bow==
@@ -12041,6 +12048,18 @@ workbox-sw@^5.1.4:
   version "5.1.4"
   resolved "https://registry.yarnpkg.com/workbox-sw/-/workbox-sw-5.1.4.tgz#2bb34c9f7381f90d84cef644816d45150011d3db"
   integrity sha512-9xKnKw95aXwSNc8kk8gki4HU0g0W6KXu+xks7wFuC7h0sembFnTrKtckqZxbSod41TDaGh+gWUA5IRXrL0ECRA==
+
+workbox-webpack-plugin@^5.0.0:
+  version "5.1.4"
+  resolved "https://registry.yarnpkg.com/workbox-webpack-plugin/-/workbox-webpack-plugin-5.1.4.tgz#7bfe8c16e40fe9ed8937080ac7ae9c8bde01e79c"
+  integrity sha512-PZafF4HpugZndqISi3rZ4ZK4A4DxO8rAqt2FwRptgsDx7NF8TVKP86/huHquUsRjMGQllsNdn4FNl8CD/UvKmQ==
+  dependencies:
+    "@babel/runtime" "^7.5.5"
+    fast-json-stable-stringify "^2.0.0"
+    source-map-url "^0.4.0"
+    upath "^1.1.2"
+    webpack-sources "^1.3.0"
+    workbox-build "^5.1.4"
 
 workbox-window@^5.1.4:
   version "5.1.4"
