@@ -130,14 +130,16 @@ export default {
       return this.Tasks.findIn(this.jobIDs)
     },
     ...mapGetters('comcharax', [
-      'componentList',
-      'resultnum',
       'baseURLFull'
     ]),
     ...mapState('comcharax', [
-      'searchingState',
       'token',
       'baseURL'
+    ]),
+    ...mapState('entities/components', [
+      'searchingState',
+      'componentList',
+      'resultnum'
     ])
   },
   methods: {
@@ -145,7 +147,7 @@ export default {
       console.log('new configuration search')
       var newSearchProps = cloneDeep(searchProps)
       console.log(newSearchProps)
-      this.$store.dispatch('comcharax/search', newSearchProps)
+      this.Components.search(newSearchProps)
     },
     onUploadFiles (info) {
       // start listening to server for finished file processing
@@ -167,7 +169,7 @@ export default {
     },
     updateSearch () {
       // update search results
-      this.$store.dispatch('comcharax/search', this.searchProps)
+      this.Components.search(this.searchProps)
     },
     setupJobStream () {
       // Not a real URL, just using for demo purposes

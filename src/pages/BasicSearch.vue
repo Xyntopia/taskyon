@@ -32,7 +32,7 @@
 
 <script>
 import ComponentSearch from 'components/ComponentSearch.vue'
-import { mapGetters, mapState } from 'vuex'
+import { mapState } from 'vuex'
 var cloneDeep = require('lodash.clonedeep')
 
 function isBlank (str) {
@@ -49,7 +49,7 @@ export default {
   },
   mounted () {
     var newSearchProps = cloneDeep(this.searchProps)
-    this.$store.dispatch('comcharax/search', newSearchProps)
+    this.Components.search(newSearchProps)
   },
   data () {
     return {
@@ -59,7 +59,7 @@ export default {
   watch: {
     $route (to, from) {
       var newSearchProps = cloneDeep(this.searchProps)
-      this.$store.dispatch('comcharax/search', newSearchProps)
+      this.Components.search(newSearchProps)
     }
   },
   computed: {
@@ -86,12 +86,13 @@ export default {
         return 'width: 100%;'
       }
     },
-    ...mapGetters('comcharax', [
+    Components () {
+      return this.$store.$db().model('components')
+    },
+    ...mapState('entities/components', [
+      'searchingState',
       'componentList',
       'resultnum'
-    ]),
-    ...mapState('comcharax', [
-      'searchingState'
     ])
   },
   methods: {

@@ -56,11 +56,9 @@ function sleep (ms) {
 var vuexModule = {
   namespaced: true,
   state: {
-    result: null,
     baseURL: initialURL,
     neo4jURI: 'neo4j:7687',
     neo4jPW: 'TODO',
-    searchingState: false,
     dbState: {},
     token: null,
     userName: '',
@@ -115,21 +113,6 @@ var vuexModule = {
       componardoapi.defaults.headers['Access-Control-Allow-Origin'] = '*'
       state.baseURL = val
     },
-    setSearchError (state, error) {
-      state.result = {}
-    },
-    setSearchState (state, val) {
-      state.searchingState = val
-    },
-    updateSearchResult (state, val) {
-      // TODO: what if data is none?
-      if (val.data.data) {
-        models.Component.insertOrUpdate({
-          data: val.data.data
-        })
-      }
-      state.result = val
-    },
     setToken (state, val) {
       state.token = val
       componardoapi.defaults.headers.Authorization = `Bearer ${state.token}`
@@ -145,16 +128,6 @@ var vuexModule = {
     baseURLFull: state => {
       // return 'http://' + state.baseURL
       return state.baseURL
-    },
-    resultnum: state => {
-      return (state.result?.data?.total) || 0
-    },
-    componentList: state => {
-      if (state.result?.data?.data) {
-        return state.result.data.data
-      } else {
-        return []
-      }
     }
   },
   actions: {
@@ -184,29 +157,6 @@ var vuexModule = {
       })
       // TODO: when pushing the project to the server return the newly
       // created UID on the server
-    },
-    async search (context, searchProps) {
-      // TODO: move this function to models.js we might have a little problem here as we want to set the "loading" state
-      context.commit('setSearchState', true)
-      // await sleep(0) // uncomment to simulate a search
-      await componardoapi
-        .post('/components/search', searchProps)
-        .then(r => {
-          console.log(r)
-          context.commit('updateSearchResult', r)
-        })
-        .catch(function (error) {
-          // handle error
-          console.log(error)
-          context.commit('setSearchError', error)
-        })
-        .then(function () {
-          // always executed
-          // console.log('error occured!')
-        })
-      // await new Promise(resolve => setTimeout(resolve, 1000))
-      console.log('finished searching')
-      context.commit('setSearchState', false)
     },
     async initDB ({ commit, state }, reset) {
       console.log('initialize database')

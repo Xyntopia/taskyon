@@ -108,7 +108,7 @@
 // import mxgraph from 'components/mxgraph.vue'
 import cytograph from 'components/cytograph.vue'
 import ComponentSearch from 'components/ComponentSearch.vue'
-import { mapGetters, mapState } from 'vuex'
+import { mapState } from 'vuex'
 var cloneDeep = require('lodash.clonedeep')
 var Mousetrap = require('mousetrap')
 
@@ -194,13 +194,13 @@ export default {
     Components () {
       return this.$store.$db().model('components')
     },
-    ...mapGetters('comcharax', [
+    ...mapState('comcharax', [
+      'activeProject'
+    ]),
+    ...mapState('entities/components', [
+      'searchingState',
       'componentList',
       'resultnum'
-    ]),
-    ...mapState('comcharax', [
-      'searchingState',
-      'activeProject'
     ])
   },
   methods: {
@@ -258,7 +258,7 @@ export default {
       } else {
         this.searchProps.filters = [newfilter]
       }
-      this.$store.dispatch('comcharax/search', this.searchProps)
+      this.Components.search(this.searchProps)
     },
     onSaveProject () {
       console.log('save project')
@@ -291,7 +291,7 @@ export default {
       console.log('new configuration search')
       var newSearchProps = cloneDeep(searchProps)
       console.log(newSearchProps)
-      this.$store.dispatch('comcharax/search', newSearchProps)
+      this.Components.search(newSearchProps)
       this.searchProps = newSearchProps
     },
     setModel (val) {

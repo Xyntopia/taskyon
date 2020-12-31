@@ -77,7 +77,9 @@ export default {
       this.Components.insertOrUpdate({
         data: newdata
       })
-      this.Components.persistToServer([this.componentData.uid])
+      // TODO: move the following in its own function and introuce a "global" button
+      // to sync local data with the server
+      // this.Components.persistToServer([this.componentData.uid])
     }
   },
   computed: {

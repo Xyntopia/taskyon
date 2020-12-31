@@ -23,15 +23,50 @@ class Component extends Model {
       modified: this.string(null).nullable(),
       summary: this.string(null).nullable(),
       image: this.string(null).nullable(),
-      characteristics: this.attr({}),
-      allowcache: this.boolean(false)
+      characteristics: this.attr({})
     }
   }
 
   static state () {
     return {
-      loading: false // TODO: use this instead of the state variable in index.js
+      searchingState: false, // TODO: use this instead of the state variable in index.js
+      componentList: [],
+      resultnum: 0
     }
+  }
+
+  static async search (searchProps) {
+    // TODO: move this function to models.js we might have a little problem here as we want to set the "loading" state
+    this.commit((state) => {
+      state.searchingState = true
+    })
+    var self = this
+    // await sleep(0) // uncomment to simulate a search
+    await this.api().post('/components/search', searchProps)
+      .then(r => {
+        console.log(r)
+        self.commit((state) => {
+          if (r?.response?.data?.data) {
+            state.componentList = r.response.data.data
+            state.resultnum = r.response.data.total
+          } else {
+            state.componentList = []
+            state.resultnum = 0
+          }
+        })
+      })
+      .catch(function (error) {
+        // handle error
+        console.log(error)
+      })
+      .then(function () {
+        // always executed
+        // console.log('error occured!')
+        self.commit((state) => {
+          state.searchingState = false
+        })
+      })
+    console.log('finished searching')
   }
 
   static async fetchById (uid, allowcache = false) {

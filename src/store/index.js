@@ -3,6 +3,7 @@ import Vuex from 'vuex'
 import VuexORM from '@vuex-orm/core'
 // import axios from 'axios'
 import VuexORMAxios from '@vuex-orm/plugin-axios'
+import VuexORMisDirtyPlugin from '@vuex-orm/plugin-change-flags'
 import comcharax from './comcharax'
 import models from './comcharax/models'
 import VuexPersistence from 'vuex-persist'
@@ -16,6 +17,7 @@ Vue.use(Vuex)
 
 // register axios-sync plugin for vuexORM
 VuexORM.use(VuexORMAxios, { axios: comcharax.componardoapi })
+VuexORM.use(VuexORMisDirtyPlugin)
 
 // Create new instance of Database.
 const database = new VuexORM.Database()
