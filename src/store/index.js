@@ -7,6 +7,7 @@ import VuexORMisDirtyPlugin from '@vuex-orm/plugin-change-flags'
 import comcharax from './comcharax'
 import models from './comcharax/models'
 import VuexPersistence from 'vuex-persist'
+import localForage from 'localforage'
 
 // TODO: think abot employing the followin vuex plugins:
 // - https://github.com/christianmalek/vuex-rest-api
@@ -31,8 +32,10 @@ database.register(models.Projects)
 
 // create persistant store
 const vuexLocal = new VuexPersistence({
+  key: 'componardo-vuex',
   strictMode: true, // This **MUST** be set to true
-  storage: window.localStorage,
+  storage: localForage,
+  asyncStorage: true,
   reducer: (state) => ({
     comcharax: {
       baseURL: state.comcharax.baseURL,
