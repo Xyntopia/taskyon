@@ -3,3 +3,10 @@
  * is picked up by the build system ONLY if
  * quasar.conf > pwa > workboxPluginMode is set to "InjectManifest"
  */
+
+import { precacheAndRoute } from 'workbox-precaching'
+
+// Use with precache injection
+precacheAndRoute(self.__WB_MANIFEST)
+
+console.log('Hello from service-worker.js')
