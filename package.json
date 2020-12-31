@@ -13,12 +13,15 @@
     "build": "quasar build",
     "build-2specs": "APPMODE=2specs quasar build",
     "pwadev": "quasar dev -m pwa",
-    "pwabuild": "quasar build -m pwa"
+    "pwabuild": "quasar build -m pwa",
+    "build:ssg": "quasar ssg generate",
+    "serve:ssg": "quasar ssg serve dist/ssg"
   },
   "dependencies": {
     "@quasar/extras": "^1.0.0",
     "@vuex-orm/core": "^0.36.3",
     "@vuex-orm/plugin-axios": "^0.9.3",
+    "@vuex-orm/plugin-change-flags": "^1.2.3",
     "axios": "^0.18.1",
     "core-js": "^3.6.5",
     "cytoscape": "^3.15.2",
@@ -33,6 +36,7 @@
     "qs": "^6.9.4",
     "quasar": "^1.0.0",
     "vue-i18n": "^8.0.0",
+    "vuex-orm-localforage": "^0.3.2",
     "vuex-persist": "^3.1.3"
   },
   "devDependencies": {
@@ -51,7 +55,7 @@
     "eslint-plugin-promise": "^4.0.1",
     "eslint-plugin-standard": "^4.0.0",
     "eslint-plugin-vue": "^6.1.2",
-    "quasar-app-extension-ssg": "https://github.com/freddy38510/quasar-app-extension-ssg",
+    "quasar-app-extension-ssg": "^1.0.4",
     "vue-devtools": "^5.1.4",
     "workbox-webpack-plugin": "^5.0.0"
   },
