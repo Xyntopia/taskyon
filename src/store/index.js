@@ -40,7 +40,7 @@ becomes pretty tedious...
 const vuexLocal = new VuexPersistence({
   key: 'componardo-vuex',
   strictMode: true, // This **MUST** be set to true
-  storage: window.localStorage, // localForage,
+  storage: window.localStorage, // localForage, window.localStorage
   // asyncStorage: true,
   reducer: (state) => ({
     comcharax: {
@@ -81,7 +81,7 @@ export default function (/* { ssrContext } */) {
     actions: {
       async initialize ({ commit, state }) {
         console.log('initialize store!')
-        // TODO: if we need to do any initialization code
+        // signal service worker which base-url we want to use...
       }
     },
     plugins: [

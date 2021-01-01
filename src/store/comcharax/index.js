@@ -113,7 +113,6 @@ var vuexModule = {
     },
     setToken (state, val) {
       state.token = val
-      componardoapi.defaults.headers.Authorization = `Bearer ${state.token}`
     }
   },
   getters: {

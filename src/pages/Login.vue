@@ -68,6 +68,9 @@ export default {
   },
   mounted () {
     this.componardoURL = this.baseURL
+    if (this.isLoggedIn) {
+      this.$router.push(this.nextPage)
+    }
   },
   computed: {
     ...mapGetters('comcharax', [
