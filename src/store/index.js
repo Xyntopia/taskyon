@@ -7,7 +7,7 @@ import VuexORMisDirtyPlugin from '@vuex-orm/plugin-change-flags'
 import comcharax from './comcharax'
 import models from './comcharax/models'
 import VuexPersistence from 'vuex-persist'
-import localForage from 'localforage'
+// import localForage from 'localforage'
 
 // TODO: think abot employing the followin vuex plugins:
 // - https://github.com/christianmalek/vuex-rest-api
@@ -30,12 +30,18 @@ database.register(models.ExtractedData)
 database.register(models.Projects)
 // database.register(comcharax.Search)
 
-// create persistant store
+/*
+create persistant store for login information.
+This saved in window.localStorage as
+it is better to have a synchronous storage handling this
+information. Otherwise initialization of the App
+becomes pretty tedious...
+*/
 const vuexLocal = new VuexPersistence({
   key: 'componardo-vuex',
   strictMode: true, // This **MUST** be set to true
-  storage: localForage,
-  asyncStorage: true,
+  storage: window.localStorage, // localForage,
+  // asyncStorage: true,
   reducer: (state) => ({
     comcharax: {
       baseURL: state.comcharax.baseURL,
@@ -75,10 +81,7 @@ export default function (/* { ssrContext } */) {
     actions: {
       async initialize ({ commit, state }) {
         console.log('initialize store!')
-        comcharax.componardoapi.defaults.baseURL = state.comcharax.baseURL
-        if (state.comcharax.token) {
-          comcharax.componardoapi.defaults.headers.Authorization = `Bearer ${state.comcharax.token}`
-        }
+        // TODO: if we need to do any initialization code
       }
     },
     plugins: [
@@ -89,5 +92,19 @@ export default function (/* { ssrContext } */) {
     // for dev mode only
     strict: process.env.DEV
   })
+
+  // link the token and baseURL to the axios instance we are using
+  comcharax.componardoapi.interceptors.request.use((config) => {
+    const token = Store.getters['comcharax/token']
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    config.baseURL = Store.getters['comcharax/baseURLFull']
+    // TODO: change Access-Control to server value
+    config.headers['Access-Control-Allow-Origin'] = '*'
+
+    return config
+  })
+
   return Store
 }

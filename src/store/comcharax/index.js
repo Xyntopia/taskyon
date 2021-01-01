@@ -109,8 +109,6 @@ var vuexModule = {
       state.userName = val
     },
     setBaseURL (state, val) {
-      componardoapi.defaults.baseURL = val
-      componardoapi.defaults.headers['Access-Control-Allow-Origin'] = '*'
       state.baseURL = val
     },
     setToken (state, val) {
@@ -119,8 +117,11 @@ var vuexModule = {
     }
   },
   getters: {
-    isLoggedIn: state => {
-      return state.token !== null
+    isLoggedIn ({ token }) {
+      return token !== null
+    },
+    token ({ token }) {
+      return token
     },
     getTokenInfo: state => {
       return jwt_decode(state.token)
