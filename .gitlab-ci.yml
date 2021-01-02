@@ -9,15 +9,20 @@ cache:
   paths:
     - node_modules/
 
+variables:
+  # could be "spa" for single page application or 
+  # "pwa" for progressive web application with offline functionality
+  MODE: "pwa"
+
 pages:
   stage: deploy
   script:
     - yarn install
-    - yarn run quasar build -m spa
+    - yarn run quasar build -m $MODE
     - mkdir .public
-    - cp -r dist/spa/* .public
+    - cp -r dist/$MODE/* .public
     #- cp .htaccess .public
-    - cp dist/spa/index.html .public/404.html
+    - cp dist/$MODE/index.html .public/404.html
     - ls .public
     - rm -r public && mv .public public
     - ls public
