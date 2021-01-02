@@ -7,6 +7,7 @@
   "private": true,
   "scripts": {
     "lint": "eslint --ext .js,.vue ./",
+    "fixlint": "eslint --ext .js,.vue ./ --fix",
     "test": "echo \"No test specified\" && exit 0",
     "2specs": "APPMODE=2specs quasar dev",
     "dev": "quasar dev",
@@ -38,7 +39,8 @@
     "quasar": "^1.0.0",
     "vue-i18n": "^8.0.0",
     "vuex-orm-localforage": "^0.3.2",
-    "vuex-persist": "^3.1.3"
+    "vuex-persist": "^3.1.3",
+    "workbox-strategies": "^6.0.2"
   },
   "devDependencies": {
     "@quasar/app": "^2.0.0",

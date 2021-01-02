@@ -5,8 +5,118 @@
  */
 
 import { precacheAndRoute } from 'workbox-precaching'
+import { registerRoute } from 'workbox-routing'
+import { /* NetworkFirst, */ CacheFirst, Strategy } from 'workbox-strategies'
+import { CacheableResponsePlugin } from 'workbox-cacheable-response'
+import { ExpirationPlugin } from 'workbox-expiration'
+import localForage from 'localforage'
 
-// Use with precache injection
+var PostRequestCache = localForage.createInstance({
+  name: 'PostRequestCache'
+})
+
+// precache skeleton of componardo
 precacheAndRoute(self.__WB_MANIFEST)
 
-console.log('Hello from service-worker.js')
+// Cache images with a Cache First strategy
+registerRoute(
+  // Check to see if the request's destination is style for an image
+  ({ request }) => request.destination === 'image',
+  // Use a Cache First caching strategy
+  new CacheFirst({
+    // Put all cached files in a cache named 'images'
+    cacheName: 'images',
+    plugins: [
+      // Ensure that only requests that result in a 200 status are cached
+      new CacheableResponsePlugin({
+        statuses: [200]
+      }),
+      // Don't cache more than 50 items, and expire them after 30 days
+      new ExpirationPlugin({
+        maxEntries: 50,
+        maxAgeSeconds: 60 * 60 * 24 * 30 // 30 Days
+      })
+    ]
+  })
+)
+
+// cache all other get requests
+// TODO: pay attention here to the maxage header coming from
+// the app. It gives indications on whether we want to have cache
+// or network policy
+/* registerRoute(
+  ({ request }) => {
+    // console.log('handling request: ' + request.url)
+    if (!request.url.includes('service-worker.js')) {
+      // console.log(request)
+      return true
+    }
+  },
+  new NetworkFirst({
+    networkTimeoutSeconds: 3,
+    cacheName: 'componardo-pages',
+    plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200]
+      })
+    ]
+  })
+) *?
+
+/* class NewNetworkOnlyStrategy extends Strategy {
+  _handle (request, handler) {
+    return handler.fetch(request)
+  }
+} */
+
+async function toCache (request, response) {
+  const body = await request.text() // can also be json() or blob()  etc...
+  // eslint-disable-next-line
+  const key = request.url + body.replace(/[{}\[\]_":,]/g, '') // shorten the response body to get a key
+  const clonedresponse = await response
+  const json = await clonedresponse.clone().json()
+  console.log(key, json)
+  PostRequestCache.setItem(key, json)
+}
+
+class CacheFirstPostRequests extends Strategy {
+  async _handle (request, handler) {
+    const clonedreq = request.clone()
+    const response = handler.fetch(request)
+    toCache(clonedreq, response)
+    // console.log(`Load response from cache.`);
+    // return new Response(JSON.stringify(data.response.body), data.response);
+    return response
+  }
+}
+
+registerRoute(
+  ({ request }) => {
+    console.log('handling POST request: ' + request.url)
+    // request.url
+    return true
+  },
+  new CacheFirstPostRequests(),
+  'POST'
+)
+
+console.log('Installed new componardo service worker!')
+
+// cache all request
+/* registerRoute(
+  ({ request }) => {
+    return request.method === 'GET'
+  },
+  new NetworkFirst()
+) */
+
+// Catch routing errors, like if the user is offline
+/* setCatchHandler(async ({ event }) => {
+    // Return the precached offline page if a document is being requested
+    if (event.request.destination === 'document') {
+      return matchPrecache('/offline.html');
+    }
+
+    return Response.error();
+  });
+*/

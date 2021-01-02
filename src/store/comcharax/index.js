@@ -13,8 +13,7 @@ import axios from 'axios'
 // eslint-disable-next-line
 import jwt_decode from "jwt-decode"
 import models from './models'
-// import { LocalStorage, SessionStorage } from 'quasar'
-// import { LocalStorage } from 'quasar'
+// import localForage from 'localforage'
 
 axios.defaults.headers.post['Access-Control-Allow-Origin'] = '*'
 // axios.defaults.headers.post['Content-Type'] = 'application/x-www-form-urlencoded';
