@@ -79,28 +79,41 @@ function serializeHeaders (headers) {
   return serialized
 }
 
-async function toCache (request, response) {
+/*
+this function takes sarch requests based on POST method
+and goes for a cache-first strategy. TODO: it also pays
+attention to the header and updates cache
+according to cache-control values.
+*/
+async function CacheFirstPost (request, responsepromise) {
+  const response = await responsepromise
   const body = await request.text() // can also be json() or blob()  etc...
   // eslint-disable-next-line
   const key = request.url + body.replace(/[{}\[\]_":,]/g, '') // shorten the response body to get a key
-  const json = await response.json()
+  const json = await response.text()
+  const headers = serializeHeaders(response.headers)
   const cachedresponse = [
     json,
-    serializeHeaders(response.headers)
+    headers
   ]
   console.log(key, cachedresponse)
   PostRequestCache.setItem(key, cachedresponse)
+  return new Response(
+    json,
+    {
+      url: response.url,
+      headers: headers,
+      status: response.status,
+      statusText: response.statusText
+    }
+  )
 }
 
 class CacheFirstPostRequests extends Strategy {
   _handle (request, handler) {
     const responsepromise = handler.fetch(request.clone())
-    responsepromise.then(response => {
-      toCache(request, response.clone())
-    })
-    // console.log(`Load response from cache.`);
-    // return new Response(JSON.stringify(data.response.body), data.response);
-    return responsepromise
+    const response = CacheFirstPost(request, responsepromise)
+    return response
   }
 }
 
