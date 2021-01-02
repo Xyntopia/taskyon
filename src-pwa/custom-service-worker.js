@@ -85,44 +85,42 @@ and goes for a cache-first strategy. TODO: it also pays
 attention to the header and updates cache
 according to cache-control values.
 */
-async function CacheFirstPost (request, responsepromise) {
-  const response = await responsepromise
-  const body = await request.text() // can also be json() or blob()  etc...
-  // eslint-disable-next-line
-  const key = request.url + body.replace(/[{}\[\]_":,]/g, '') // shorten the response body to get a key
-  const json = await response.text()
-  const headers = serializeHeaders(response.headers)
-  const cachedresponse = [
-    json,
-    headers
-  ]
-  console.log(key, cachedresponse)
-  PostRequestCache.setItem(key, cachedresponse)
-  return new Response(
-    json,
-    {
-      url: response.url,
-      headers: headers,
-      status: response.status,
-      statusText: response.statusText
-    }
-  )
-}
-
 class CacheFirstPostRequests extends Strategy {
-  _handle (request, handler) {
-    const responsepromise = handler.fetch(request.clone())
-    const response = CacheFirstPost(request, responsepromise)
-    return response
+  async _handle (request, handler) {
+    const body = await request.clone().text() // can also be json() or blob()  etc...
+    // eslint-disable-next-line
+    const key = request.url + body.replace(/[{}\[\]_":,]/g, '') // shorten the response body to get a key
+    // check if key exists in db
+    var responsebody = null
+    var config = null
+    const cachedResponse = await PostRequestCache.getItem(key)
+    if (cachedResponse === null) {
+      const response = await handler.fetch(request)
+      if ([200, 204].includes(response.status)) {
+        config = {
+          headers: serializeHeaders(response.headers),
+          url: response.url,
+          status: response.status,
+          statusText: response.statusText
+        }
+        const cacheresponse = [
+          await response.clone().text(),
+          config
+        ]
+        console.log(key, cacheresponse)
+        PostRequestCache.setItem(key, cacheresponse)
+      }
+      return response
+    } else {
+      config = cachedResponse[1]
+      responsebody = cachedResponse[0]
+      return Promise.resolve(new Response(responsebody || null, config))
+    }
   }
 }
 
 registerRoute(
-  ({ request }) => {
-    console.log('handling POST request: ' + request.url)
-    // request.url
-    return true
-  },
+  new RegExp('.*search.*'),
   new CacheFirstPostRequests(),
   'POST'
 )
