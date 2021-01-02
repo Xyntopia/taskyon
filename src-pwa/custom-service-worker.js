@@ -6,7 +6,7 @@
 
 import { precacheAndRoute } from 'workbox-precaching'
 import { registerRoute } from 'workbox-routing'
-import { /* NetworkFirst, */ CacheFirst, Strategy } from 'workbox-strategies'
+import { NetworkFirst, CacheFirst, Strategy } from 'workbox-strategies'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 import { ExpirationPlugin } from 'workbox-expiration'
 import localForage from 'localforage'
@@ -40,18 +40,13 @@ registerRoute(
   })
 )
 
-// cache all other get requests
-// TODO: pay attention here to the maxage header coming from
+// cache components
+// TODO: cache all other get requests
+// TODO: pay attention here to the cachecontrol-maxage header coming from
 // the app. It gives indications on whether we want to have cache
 // or network policy
-/* registerRoute(
-  ({ request }) => {
-    // console.log('handling request: ' + request.url)
-    if (!request.url.includes('service-worker.js')) {
-      // console.log(request)
-      return true
-    }
-  },
+registerRoute(
+  new RegExp('.*/components/.*'),
   new NetworkFirst({
     networkTimeoutSeconds: 3,
     cacheName: 'componardo-pages',
@@ -61,7 +56,7 @@ registerRoute(
       })
     ]
   })
-) *?
+)
 
 /* class NewNetworkOnlyStrategy extends Strategy {
   _handle (request, handler) {
@@ -126,14 +121,6 @@ registerRoute(
 )
 
 console.log('Installed new componardo service worker!')
-
-// cache all request
-/* registerRoute(
-  ({ request }) => {
-    return request.method === 'GET'
-  },
-  new NetworkFirst()
-) */
 
 // Catch routing errors, like if the user is offline
 /* setCatchHandler(async ({ event }) => {
