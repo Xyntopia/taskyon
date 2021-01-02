@@ -69,24 +69,38 @@ registerRoute(
   }
 } */
 
+function serializeHeaders (headers) {
+  var serialized = {}
+  // `for(... of ...)` is ES6 notation but current browsers supporting SW, support this
+  // notation as well and this is the only way of retrieving all the headers.
+  for (var entry of headers.entries()) {
+    serialized[entry[0]] = entry[1]
+  }
+  return serialized
+}
+
 async function toCache (request, response) {
   const body = await request.text() // can also be json() or blob()  etc...
   // eslint-disable-next-line
   const key = request.url + body.replace(/[{}\[\]_":,]/g, '') // shorten the response body to get a key
-  const clonedresponse = await response
-  const json = await clonedresponse.clone().json()
-  console.log(key, json)
-  PostRequestCache.setItem(key, json)
+  const json = await response.json()
+  const cachedresponse = [
+    json,
+    serializeHeaders(response.headers)
+  ]
+  console.log(key, cachedresponse)
+  PostRequestCache.setItem(key, cachedresponse)
 }
 
 class CacheFirstPostRequests extends Strategy {
-  async _handle (request, handler) {
-    const clonedreq = request.clone()
-    const response = handler.fetch(request)
-    toCache(clonedreq, response)
+  _handle (request, handler) {
+    const responsepromise = handler.fetch(request.clone())
+    responsepromise.then(response => {
+      toCache(request, response.clone())
+    })
     // console.log(`Load response from cache.`);
     // return new Response(JSON.stringify(data.response.body), data.response);
-    return response
+    return responsepromise
   }
 }
 
