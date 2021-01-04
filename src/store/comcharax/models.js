@@ -194,6 +194,17 @@ class Projects extends Model {
     // TODO: when pushing the project to the server return the newly
     // created UID on the server
   }
+
+  static async selectActiveProject (uid) {
+    var proj = await this.fetchById(uid)
+    // calculate number of object in project to be able
+    // to provide new unique ids
+    // TODO: this should be done in a better way...
+    var maxnum1 = Math.max(...proj.componentcontainers.map(x => x.id))
+    var maxnum2 = Math.max(...proj.links.map(x => x.id))
+    proj.counter = Math.max(maxnum1, maxnum2)
+    this.store().commit('comcharax/setActiveProject', proj)
+  }
 }
 
 /* class Search extends Model {

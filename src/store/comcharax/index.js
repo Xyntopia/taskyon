@@ -12,7 +12,6 @@ import * as actions from './actions' */
 import axios from 'axios'
 // eslint-disable-next-line
 import jwt_decode from "jwt-decode"
-import models from './models'
 // import localForage from 'localforage'
 
 axios.defaults.headers.post['Access-Control-Allow-Origin'] = '*'
@@ -137,16 +136,6 @@ var vuexModule = {
     }
   },
   actions: {
-    async selectActiveProject ({ commit, state }, uid) {
-      var proj = await models.Projects.fetchById(uid)
-      // calculate number of object in project to be able
-      // to provide new unique ids
-      // TODO: this should be done in a better way...
-      var maxnum1 = Math.max(...proj.componentcontainers.map(x => x.id))
-      var maxnum2 = Math.max(...proj.links.map(x => x.id))
-      proj.counter = Math.max(maxnum1, maxnum2)
-      commit('setActiveProject', proj)
-    },
     async initDB ({ commit, state }, reset) {
       console.log('initialize database')
       await componardoapi.get('/operations/init_db', {

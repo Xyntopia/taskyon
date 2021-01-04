@@ -185,7 +185,7 @@ export default {
         console.log('load new project ...')
         // var name = val.name
         var uid = val.value
-        this.$store.dispatch('comcharax/selectActiveProject', uid)
+        this.Projects.selectActiveProject(uid)
       },
       get () {
         return this.activeProject.name
