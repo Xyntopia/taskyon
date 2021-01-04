@@ -42,7 +42,10 @@ class Component extends Model {
     })
     var self = this
     // await sleep(0) // uncomment to simulate a search
-    await this.api().post('/components/search', searchProps)
+    await this.api().post(
+      '/components/search',
+      searchProps,
+      { dataKey: 'data' })
       .then(r => {
         console.log(r)
         self.commit((state) => {
