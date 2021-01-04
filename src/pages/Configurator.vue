@@ -146,7 +146,7 @@ export default {
     }
   },
   mounted () {
-    this.$store.dispatch('comcharax/downloadProjects')
+    this.Projects.downloadProjects()
     Mousetrap.bind('del', this.onDelete)
   },
   beforeDestroy () {
@@ -276,7 +276,7 @@ export default {
     },
     onSaveProject () {
       console.log('save project')
-      this.$store.dispatch('comcharax/saveProject')
+      this.Projects.saveProject()
     },
     onNewProject () {
       console.log('new project!')

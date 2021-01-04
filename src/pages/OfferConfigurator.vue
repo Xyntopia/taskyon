@@ -30,7 +30,7 @@ export default {
     }
   },
   mounted () {
-    this.$store.dispatch('comcharax/downloadProjects')
+    this.Projects.downloadProjects()
   },
   computed: {
     Projects () {

@@ -172,6 +172,28 @@ class Projects extends Model {
     var data = await this.api().get(`/projects/${uid}`)
     return data.entities.projects[0]
   }
+
+  static async downloadProjects () {
+    await this.api().get('/projects')
+    // TODO: when pushing the project to the server return the newly
+    // created UID on the server
+  }
+
+  static async saveProject () {
+    console.log('store the project!!')
+    const store = this.store()
+    await this.api().post(
+      '/projects',
+      store.state.comcharax.activeProject,
+      { save: false }
+    ).then(r => {
+      store.commit('comcharax/setProjectID', r.data)
+      this.insertOrUpdate({ data: store.state.comcharax.activeProject })
+      console.log(r)
+    })
+    // TODO: when pushing the project to the server return the newly
+    // created UID on the server
+  }
 }
 
 /* class Search extends Model {

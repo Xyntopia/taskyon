@@ -139,30 +139,13 @@ var vuexModule = {
   actions: {
     async selectActiveProject ({ commit, state }, uid) {
       var proj = await models.Projects.fetchById(uid)
+      // calculate number of object in project to be able
+      // to provide new unique ids
+      // TODO: this should be done in a better way...
       var maxnum1 = Math.max(...proj.componentcontainers.map(x => x.id))
       var maxnum2 = Math.max(...proj.links.map(x => x.id))
       proj.counter = Math.max(maxnum1, maxnum2)
       commit('setActiveProject', proj)
-    },
-    async downloadProjects ({ commit, state }) {
-      await componardoapi.get(
-        '/projects'
-      ).then(r => {
-        models.Projects.insertOrUpdate({ data: r.data })
-        console.log(r)
-      })
-      // TODO: when pushing the project to the server return the newly
-      // created UID on the server
-    },
-    async saveProject ({ commit, state }) {
-      await componardoapi.post('/projects', state.activeProject
-      ).then(r => {
-        commit('setProjectID', r.data)
-        models.Projects.insertOrUpdate({ data: state.activeProject })
-        console.log(r)
-      })
-      // TODO: when pushing the project to the server return the newly
-      // created UID on the server
     },
     async initDB ({ commit, state }, reset) {
       console.log('initialize database')
