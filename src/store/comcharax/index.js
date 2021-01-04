@@ -70,12 +70,19 @@ var vuexModule = {
       links: []
     },
     filterPresets: {
-      'User Components': {
+      'Starred Components': {
+        type: 'field_contains',
+        target: 'User.name',
+        method: 'OR',
+        value: ['DefaultUser']
+      },
+      'Accessible Components': {
         type: 'field_contains',
         target: 'User.name',
         method: 'OR',
         value: ['DefaultUser', 'Scraper']
       }
+
     }
   },
   mutations: {

@@ -99,7 +99,7 @@
     </q-drawer>
 
     <q-page-container>
-      <keep-alive :max=5 include="ExtractComponentData">
+      <keep-alive :max=5 :include="keepAlivePages">
         <router-view />
       </keep-alive>
       <!--<router-view/>-->
@@ -115,7 +115,11 @@ export default {
   name: 'MainLayout',
   data () {
     return {
-      leftDrawerOpen: false
+      leftDrawerOpen: false,
+      keepAlivePages: [
+        'ExtractComponentData',
+        'PageConfigurator'
+      ]
     }
   },
   created () {

@@ -120,7 +120,21 @@ export default {
   },
   data () {
     return {
-      searchProps: { qmode: 'filters', filters: [] },
+      searchProps: {
+        q: '',
+        uuid: '',
+        qmode: 'filter',
+        start: 0,
+        end: 10,
+        sort: 'modified',
+        descending: true,
+        filters: [{
+          type: 'field_contains',
+          target: 'User.name',
+          method: 'OR',
+          value: ['DefaultUser']
+        }]
+      },
       model: null,
       usegrid: false,
       selectedNode: null,
