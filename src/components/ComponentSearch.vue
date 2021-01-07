@@ -154,8 +154,7 @@
                   </div>
                   <div class="col-auto">
                     <q-btn size='10px'
-                      :to="{ name: 'component', params: { uid: props.row.uid }}" flat dense icon="info"
-                      tooltip="test">
+                      :to="{ name: 'component', params: { uid: props.row.uid }}" flat dense icon="info">
                       <q-tooltip>Info</q-tooltip>
                     </q-btn>
                   </div>

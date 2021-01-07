@@ -7,13 +7,12 @@
           <q-card class="q-pa-md">
             <q-card-section class="text-h6">{{ p.name }}</q-card-section>
             <q-card-actions>
-              <q-btn class="fit" color="primary" label="configure"/>
+              <q-btn
+                :to="{ name: 'productconfigurator', params: { uid: p.uid }}"
+                class="fit" color="primary" label="configure"/>
             </q-card-actions>
           </q-card>
         </div>
-      </div>
-      <div class="col">
-        PUBLISHED CONFIGURATOR
       </div>
     </div>
   </q-page>
@@ -22,7 +21,7 @@
 <script>
 
 export default {
-  name: 'ProjectsAdmin',
+  name: 'Offers',
   components: {
   },
   data () {

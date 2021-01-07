@@ -57,6 +57,12 @@ if (process.env.CONFIGURATOR) {
       component: () => import('pages/OfferConfigurator.vue'),
       meta: { access: 'public' }
     },
+    {
+      path: 'productconfigurator/:uid',
+      name: 'productconfigurator',
+      component: () => import('pages/ProductConfigurator.vue'),
+      meta: { access: 'public' }
+    },
     { path: 'systemviewer', component: () => import('pages/Systemviewer.vue') },
     { path: 'projectsadmin', component: () => import('pages/ProjectsAdmin.vue') }])
 }

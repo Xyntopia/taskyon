@@ -169,8 +169,8 @@ class Projects extends Model {
   }
 
   static async fetchById (uid) {
-    var data = await this.api().get(`/projects/${uid}`)
-    return data.entities.projects[0]
+    await this.api().get(`/projects/${uid}`)
+    return this.find(uid)
   }
 
   static async downloadProjects () {
