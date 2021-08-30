@@ -23,6 +23,12 @@ echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/source
 yarn
 ```
 
+install quasar-cli
+
+```bash
+yarn global add @quasar/cli
+```
+
 ### Start the app in development mode (hot-code reloading, error reporting, etc.)
 ```bash
 quasar dev

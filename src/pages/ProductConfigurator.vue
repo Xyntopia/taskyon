@@ -79,7 +79,7 @@ export default {
       }
     },
     data () {
-      return this.Project.componentcontainers
+      return this.Project.componentcontainers.map()
     },
     columns () {
       return [
