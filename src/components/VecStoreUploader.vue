@@ -143,7 +143,11 @@ export default defineComponent({
     if (!isInIframe) {
       accessGranted.value = true
     } else {
-      parentUrl.value = document.location.ancestorOrigins[0]
+      try {
+        parentUrl.value = document.location.ancestorOrigins[0]
+      } catch {
+        parentUrl.value = document.referrer
+      }
       console.log('running in iframe ' + parentUrl.value)
       if (uploaderState.value.accessWhiteList.includes(parentUrl.value)) {
         accessGranted.value = true
