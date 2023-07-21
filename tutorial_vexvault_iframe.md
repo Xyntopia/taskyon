@@ -98,4 +98,4 @@ And that’s it! You’ve just embedded your search engine in an iframe and set 
 
 An complete example webpage can be found here: [](public/widget_examples/search_w_upload.html)
 
-And here is a js fiddle to play around with: 
+And here is a js fiddle to play around with: [](https://codepen.io/xyntopia/pen/PoxagGK)
