@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Parent Page</title>
+    <style>
+      #results {
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Search Engine</h1>
+
+    <iframe
+      id="search-engine"
+      style="border: none"
+      src="http://localhost:8080/widgets/searchplugin"
+      width="100%"
+      height="300"
+    ></iframe>
+
+    <input type="text" id="search-input" placeholder="Enter search term" />
+    <button id="search-button">Search</button>
+
+    <div id="results"></div>
+
+    <script>
+      // Get the iframe element
+      var iframe = document.getElementById('search-engine');
+
+      // Get the search input and button
+      var searchInput = document.getElementById('search-input');
+      var searchButton = document.getElementById('search-button');
+
+      var url = 'http://localhost:8080/widgets/search';
+
+      // Listen for click events on the search button
+      searchButton.addEventListener('click', function () {
+        // Send a message to the iframe with the search query
+        iframe.contentWindow.postMessage(searchInput.value, url);
+      });
+
+      // Listen for messages from the iframe
+      window.addEventListener(
+        'message',
+        function (event) {
+          // Check the origin of the data!
+          //if (event.origin !== url) return;
+
+          // Process the received data (search results)
+          var results = event.data;
+
+          console.log('results');
+          // Convert the results to a formatted JSON string
+          var resultsString = JSON.stringify(results, null, 2);
+
+          // Display the results
+          var resultsDiv = document.getElementById('results');
+          resultsDiv.textContent = resultsString;
+        },
+        false
+      );
+    </script>
+  </body>
+</html>

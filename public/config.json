@@ -1,0 +1,5 @@
+{
+  "API_DEV_URL": "http://localhost:5111",
+  "API_PROD_URL": "https://localhost:5111",
+  "PAYMENT_URL": "https://payments.xyntopia.com"
+}

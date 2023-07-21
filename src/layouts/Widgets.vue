@@ -1,0 +1,30 @@
+<template>
+  <q-layout view="hHh Lpr fFf">
+    <q-header class="row bg-transparent"> <!-- Be sure to play with the Layout demo on docs -->
+      <q-btn flat dense size="xs" icon="launch" color="grey-6" type="a" href="/admin" target="_blank"
+        label="Manage Documents stored in VexVault" />
+      <q-space />
+      <q-btn flat dense size="xs" icon="launch" color="grey-6" type="a" href="http://www.xyntopia.com" target="_blank"
+        aria-label="Visit Xyntopia" label="xyntopia.com" />
+      <!--<q-img width="30px" src="~assets/xyntopia.svg" />-->
+    </q-header>
+    <q-page-container>
+      <!-- This is where pages get injected we do row & items-stretch in order for our widgets to fill the entire iframe..-->
+      <q-page class="row items-stretch">
+        <router-view />
+      </q-page>
+    </q-page-container>
+
+  </q-layout>
+</template>
+
+<script lang="ts">
+import { defineComponent } from 'vue'
+export default defineComponent({
+  // name: 'LayoutName',
+
+  setup() {
+    return {}
+  }
+})
+</script>
