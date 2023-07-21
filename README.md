@@ -1,4 +1,9 @@
-# Vexvault: Browser Based, AI Native, 0-Cost, Document Store
+↗️Vexvault↗️: 🌐 Browser Based, 🤖 AI Native, 🆓 0-Cost, 🔒 privacy-first, 💼 Document Store
+==========================================================================================
+
+
+***
+
 
 ## Introduction:
 
