@@ -25,9 +25,9 @@ Vexvault started its life during a hackathon SDx in 2023 as a proof-of-concept b
 
 ### How to use?
 
-[Iframe Tutorial](tutorial_vexvault_iframe.md)
-[Example Page](public/widget_examples/search_w_upload.html)
-
+- [Iframe Tutorial](tutorial_vexvault_iframe.md)
+- [Example Page](public/widget_examples/search_w_upload.html)
+- [Use in your own project](DEVELOPMENT.md)
 
 ### How does it Work?
 

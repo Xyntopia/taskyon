@@ -96,6 +96,6 @@ export default defineComponent({
 
 And that’s it! You’ve just embedded your search engine in an iframe and set up communication between the parent webpage and the iframe. When a user enters a query and clicks the search button, the query is sent to the iframe, the vectorstore database is searched, and the results are sent back to the parent webpage and displayed in an alert box.
 
-An complete example webpage can be found here: TODO....
+An complete example webpage can be found here: [](public/widget_examples/search_w_upload.html)
 
 And here is a js fiddle to play around with: 

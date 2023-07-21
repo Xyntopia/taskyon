@@ -1,76 +1,23 @@
 # Vexvault
 
-Generic, configurable frontend for various purposes:
+Vexvault is built on Vue3/Quasar and follows most of its best practices.
 
-- Xyntowritre
-- HQ
-- Doxcavator
-- Componardo
+For more information follow this link:  [quasar documentation](https://quasar.dev/)
 
-for static site generation do this:
+## Install the project
 
-    > quasar ssg generate
-
-## Desktop GUI using Tauri
-
-Tauri offers a lightweight alternative to Electron.
-
-- install tauri using the following guide:
-
-    https://tauri.app/v1/guides/getting-started/setup/integrate/
-
-- 
-
-
-## Install the dependencies
-
-### install latest LTS of node
+download the project from github:
 
 ```bash
-sudo snap install node --channel=14/stable --classic
-```
+# download
+git clone https://github.com/Xyntopia/vexvault.git
 
-### install yarn & node
+# install dependencies
+yarn install
 
-- https://classic.yarnpkg.com/en/docs/install
-
-```bash
-curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
-echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-```
-
-```bash
-yarn
-```
-
-install quasar-cli
-
-```bash
-yarn global add @quasar/cli
-```
-
-### Start the app in development mode (hot-code reloading, error reporting, etc.)
-```bash
+# start development server
 quasar dev
-```
 
-### Lint the files
-```bash
-yarn run lint
-```
-
-### Build the app for production
-```bash
+# build static webpage
 quasar build
 ```
-
-### Customize the configuration
-See [Configuring quasar.conf.js](https://v2.quasar.dev/quasar-cli/quasar-conf-js).
-
-
-## initialize aws amplify for authentication
-
-    yarn global add @aws-amplify/cli
-
-## access icongenie
-    yarn icongenie generate -m pwa -i /home/tom/Dropbox/company/brand/icon.png
