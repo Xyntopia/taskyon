@@ -40,15 +40,27 @@ TODO: add some graphics for better illustration of features
 
 Vexvault is a browser-based vector & document store that uses indexeddb as a backend and webassembly + hnswlib for vector Approximate Nearest Neighbor (ANN) search. It's designed to be accessible, scalable, and secure, making it an ideal solution for storing and accessing large amounts of data.
 
+🔒↗️🤖🔒↗️🔒↗️🤖
+
 Vexvault automatically creates embeddings client-side and locally, ensuring data privacy and reducing the need for data transfer. It's designed to be accessible from anywhere for language learning models like ChatGPT and other tools, making it a versatile solution for a range of applications.
+
+📚🌐📚🌐📚🌐📚🌐
 
 The data stored in Vexvault is persisted in indexeddb for the URL it is deployed on and can be accessed through an iframe, making it possible to use the same information storage for multiple webpages. When using the Vexvault as it is deployed under the URL [](http://www.vexvault.com), this becomes particularly useful for applications that need to share data across different webpages or platforms. 
 
+🛠️🔍🛠️🔍🛠️🔍🛠️🔍 
+
 Vexvault comes with an admin interface for easy management and is open source, allowing for personal deployment. It also supports document upload in various formats, with more formats to come.
+
+🛡️💼🔒🛡️💼🔒🛡️💼 
 
 In terms of data protection, Vexvault stores data client-side in the browser, ensuring easy compliance with data protection regulations. It also has a feature in progress for synchronization with gdrive/dropbox/onedrive, further enhancing its data management capabilities.
 
+🗝️☁️🛠️🗝️💽🛠️🗝️💽
+
 Vexvault is accessible to all kinds of different apps via iframe, making it a versatile solution for a range of applications. It's also scalable, capable of storing large amounts of data, typically up to 80% of available disk space.
+
+🌐📂🌐📂🌐📂🌐📂
 
 The standard URL for Vexvault is www.vexvault.com, which can be used to store information. This makes it easy to integrate Vexvault into your applications or webpages. Furthermore, no registration is required to use Vexvault, and it works out of the box, making it a convenient and user-friendly solution for data storage and access.
 
