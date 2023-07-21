@@ -5,7 +5,7 @@
       <div class="col-6">
         <q-card>
           <q-card-section>
-            <VecStoreUploader />
+            <VecStoreUploader/>
           </q-card-section>
         </q-card>
       </div>

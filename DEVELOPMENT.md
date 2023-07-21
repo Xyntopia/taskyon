@@ -1,84 +1,76 @@
-# xyntopia-gui
+# Vexvault
 
-## build configuration
+Generic, configurable frontend for various purposes:
 
-TODO: find a concept ;).
+- Xyntowritre
+- HQ
+- Doxcavator
+- Componardo
 
-## code sync between projects
+for static site generation do this:
 
-We can synchronize and exchange  code pieces between different project using git diff
+    > quasar ssg generate
 
-for example the to get a diff between
+## Desktop GUI using Tauri
 
-or to merge manually:
+Tauri offers a lightweight alternative to Electron.
 
-  git merge --no-commit origin/something
+- install tauri using the following guide:
 
-in the case of a conflict use our branch:
+    https://tauri.app/v1/guides/getting-started/setup/integrate/
 
-  git merge -Xours --no-commit origin/quasar1merge
-
-
-## size comparisons
-
-bare-bones quasar is aout 179.37 KB in:
-
-Build mode........ spa
- Pkg quasar........ v2.5.5
- Pkg @quasar/app... v3.3.3
- Pkg webpack....... v5
- Debugging......... no
- Publishing........ no
- Transpiled JS..... yes (Babel)
-
-then:
-
-- amplify + axios + payments ~ 500-700kb vendor size
-- danfojs: 10MB!!!
-- vuex: 100kb  (maye get rid of it?)
-- i18n: have to keep it anyways...
-- qmarkdown adds an additional 250kb
-
-if we want to find out *where* large packages are coming from:
-
-- first make sure in quasar.conf.js we set "analyze: true"
-- in the resulting output get the parge packages
-- with yarn why <package-name> check which 3rd party library is responsible
-
-## static site generation
-
-https://github.com/freddy38510/quasar-app-extension-ssg
-
-quasar ext add ssg
-
-## serverless development setup
-
-    curl -o- -L https://slss.io/install | bash
+- 
 
 
-## aws amplify for authentication
+## Install the dependencies
 
-    npm install -g @aws-amplify/cli
+### install latest LTS of node
 
-## generate new icons:
+```bash
+sudo snap install node --channel=14/stable --classic
+```
 
-install icongenie from here: https://quasar.dev/icongenie/installation
+### install yarn & node
+
+- https://classic.yarnpkg.com/en/docs/install
+
+```bash
+curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
+echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
+```
+
+```bash
+yarn
+```
+
+install quasar-cli
+
+```bash
+yarn global add @quasar/cli
+```
+
+### Start the app in development mode (hot-code reloading, error reporting, etc.)
+```bash
+quasar dev
+```
+
+### Lint the files
+```bash
+yarn run lint
+```
+
+### Build the app for production
+```bash
+quasar build
+```
+
+### Customize the configuration
+See [Configuring quasar.conf.js](https://v2.quasar.dev/quasar-cli/quasar-conf-js).
 
 
-and then do this for example:
+## initialize aws amplify for authentication
 
-  icongenie g -m all -i (..)/brand/doxcavator.png
+    yarn global add @aws-amplify/cli
 
-oher icons can be placed in "assets" folder
-
-install "tauricon":
-
-  yarn add github:tauri-apps/tauricon
-
-and for tauri:
-
-  yarn run tauricon -l -t src-tauri/icons (..)/brand/doxcavator.png
-
-we need to replace the *.icns icon using this commandline program do this inside icons folder:
-
-  png2icns icon.icns 32x32.png 128x128.png
+## access icongenie
+    yarn icongenie generate -m pwa -i /home/tom/Dropbox/company/brand/icon.png
