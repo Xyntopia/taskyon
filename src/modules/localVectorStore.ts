@@ -162,8 +162,13 @@ async function storeIndex(name: string) {
 
 const vec = useVectorizer();
 
-async function uploadToIndex(file: File) {
+async function uploadToIndex(
+  file: File,
+  progressCallback: (progress: number) => Promise<void> | void
+) {
   const txt = await loadFile(file);
+  let maxsteps = 0;
+  let steps = 0;
   //console.log(txt)
   console.log(`processing ${file.name}`);
   if (txt && documentStore) {
@@ -176,9 +181,8 @@ async function uploadToIndex(file: File) {
         },
       }),
     ]);
+    maxsteps = output.length * 2 || 1;
     //const output = await splitter.createDocuments([txt], metadatas = [{ filename: file.name }]);
-    //console.log(output)
-    console.log('vectorize');
     const docvecs: idbDocument[] = [];
     for (let i = 0; i < output.length; i++) {
       const doc = output[i];
@@ -193,6 +197,8 @@ async function uploadToIndex(file: File) {
           )
         ).tolist()[0] as number[],
       });
+      steps += 1;
+      await progressCallback(steps / maxsteps);
     }
 
     //const labelIds = docvecs.map(([doc]) => doc.metadata['uuid'] as number);
@@ -203,6 +209,8 @@ async function uploadToIndex(file: File) {
       if (doc.vector && newId) {
         documentStore.index?.addPoint(doc.vector, newId, false);
       }
+      steps += 1;
+      await progressCallback(steps / maxsteps);
     }
     /*const vecs = docvecs.map((doc) => doc.vector);
           const docs = docvecs.map((doc) => {

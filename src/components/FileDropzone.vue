@@ -1,8 +1,17 @@
 <template>
-  <div class="fit dropzone inset-shadow-down" @dragover.prevent @dragenter.prevent @drop="handleDrop" @click="openFileInput">
-    <p>{{ props.label }}</p>
-    <input class="hidden" type="file" multiple @change="handleFileInput" ref="fileInput" />
-    <q-btn icon="add" flat @click="openFileInput" />
+  <div class="fit dropzone inset-shadow-down column justify-center" @dragover.prevent @dragenter.prevent
+    @drop="handleDrop" @click="openFileInput">
+    <div>
+      <p>{{ label }}</p>
+    </div>
+    <div>
+      <input class="hidden" type="file" multiple @change="handleFileInput" ref="fileInput" />
+    </div>
+    <div>
+      <q-btn v-if="progress == 0" icon="add" flat @click="openFileInput" />
+      <q-circular-progress v-else :value="progress*100" color="secondary" class="q-md-sm" size="xl" show-value>{{ progress*100
+      }}%</q-circular-progress>
+    </div>
   </div>
 </template>
 
@@ -24,6 +33,10 @@ export default defineComponent({
     label: {
       type: String,
       default: ''
+    },
+    progress: {
+      type: Number,
+      default: 0
     }
   },
   setup(props, { emit }) {
@@ -81,7 +94,6 @@ export default defineComponent({
       handleFileInput,
       handleFiles,
       openFileInput,
-      props
     };
   },
 })

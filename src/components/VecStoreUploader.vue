@@ -12,7 +12,7 @@
           <q-tab-panel name="upload">
             <FileDropZone
               :label="`Drag & drop your files here, or click to select files for '${vecStoreUploaderState.collectionName}'`"
-              v-model="fileList">
+              :modelValue="fileList" @update:model-value="storeDocs" :progress="vectorizationProgress">
             </FileDropZone>
           </q-tab-panel>
           <q-tab-panel name="settings">
@@ -60,7 +60,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, watchEffect, watch } from 'vue'
+import { defineComponent, ref, watch, nextTick } from 'vue'
 import { LocalStorage } from 'quasar';
 
 /*import { open } from '@tauri-apps/api/dialog';
@@ -83,6 +83,7 @@ export default defineComponent({
     const uploaderState = ref({
       accessWhiteList: [] as string[]
     })
+    const vectorizationProgress = ref(0)
     const stateName = 'uploaderState'
 
     // persist state in browser storage
@@ -109,13 +110,21 @@ export default defineComponent({
         storedState as string
       ) as typeof uploaderState.value;
     }
-    watchEffect(
-      () => {
-        fileList.value.forEach(f => {
-          void vecst.uploadToIndex(f)
-        });
+
+    async function storeDocs(newFiles: File[]) {
+      vectorizationProgress.value = 0.01
+      for (const f of newFiles) {
+        let progressvar = 0
+        await vecst.uploadToIndex(f, async (progress) => {
+          progressvar = progress
+          vectorizationProgress.value = Math.round(progressvar * 100) / 100
+          await new Promise(r => setTimeout(r, 1)); // apparently we need this in order to get our progress window to update
+          await nextTick();  // wait until next DOM update cycle to continue
+        })
       }
-    )
+      await new Promise(r => setTimeout(r, 5000));
+      vectorizationProgress.value = 0
+    }
 
     /*
     function set_root_dir() {
@@ -207,6 +216,8 @@ export default defineComponent({
       accessGranted,
       grantAccess,
       parentUrl,
+      vectorizationProgress,
+      storeDocs
     }
   }
 })

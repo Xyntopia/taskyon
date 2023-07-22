@@ -1,4 +1,4 @@
-interface CloudProvider {
+/*interface CloudProvider {
   login: () => Promise<void>;
   upload: (file: File) => Promise<unknown>;
   download: (fileId: string) => Promise<unknown>;
@@ -74,4 +74,4 @@ const cloudService = new CloudStorageService(gdrive);
 
 //cloudService.login();
 //cloudService.upload(new File([''], 'filename'));
-//cloudService.download('fileId');
+//cloudService.download('fileId');*/

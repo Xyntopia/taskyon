@@ -37,7 +37,7 @@ Vexvault started its life during a hackathon SDx in 2023 as a proof-of-concept b
 - [Integrate as an iframe Tutorial](tutorial_vexvault_iframe.md)
 - [Example Page with iFrame integration](public/widget_examples/search_w_upload.html)
 - [Deploy your own version of Vexvault](DEVELOPMENT.md)
-- [TODO: integrate in your project]
+- [TODO: integrate in your project as a reactiv component/npm package]
 
 ### How does it Work?
 
