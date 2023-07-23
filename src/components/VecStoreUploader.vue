@@ -236,10 +236,7 @@ export default defineComponent({
     }
 
     function onCollectionChange(inputValue: string) {
-      console.log('create new value: ' + inputValue)
-
       if (inputValue.length > 0) {
-        console.log('long enough')
         vecst.loadCollection(inputValue)
       }
     }
