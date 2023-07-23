@@ -9,6 +9,22 @@ import Dexie from 'dexie';
 //TODO: maybe use yarn add hnsw  (pure javascript library)
 //TODO: make everything functional... no side effects etc...
 
+/**
+ * Returns a hash code from a string
+ * @param  {String} str The string to hash.
+ * @return {Number}    A 32bit integer
+ * @see http://werxltd.com/wp/2010/05/13/javascript-implementation-of-javas-string-hashcode-method/
+ */
+function hashCode(str: string) {
+  let hash = 0;
+  for (let i = 0, len = str.length; i < len; i++) {
+    const chr = str.charCodeAt(i);
+    hash = (hash << 5) - hash + chr;
+    hash |= 0; // Convert to 32bit integer
+  }
+  return hash;
+}
+
 async function loadIndex(
   numDimensions: number,
   indexName: string,
@@ -47,6 +63,7 @@ const defaultConfiguration = {
 const vectorStoreState = ref({
   maxElements: 0,
   numElements: 0,
+  documentCount: 0,
 });
 
 const splitter = new RecursiveCharacterTextSplitter({
@@ -59,11 +76,12 @@ class DocumentDatabase extends Dexie {
   // (just to inform Typescript. Instanciated by Dexie in stores() method)
   documents!: Dexie.Table<idbDocument, number>; // number = type of the primkey
   //...other tables goes here...
+  // TODO: instead of locastorage, choose imdb in order to store collection names
 
   constructor(name: string) {
     super(name);
     this.version(1).stores({
-      documents: 'id++, document',
+      documents: 'id++, document, filehash',
       //...other tables goes here...
     });
   }
@@ -73,6 +91,7 @@ interface idbDocument {
   id?: number;
   document: Document;
   vector?: number[];
+  filehash?: string;
 }
 
 // TODO: get rid of "refs"
@@ -118,12 +137,17 @@ async function loadDocumentStore(name: string): Promise<documentStoreType> {
   };
 }
 
-function updateStoreState(documentStore: documentStoreType) {
+async function updateStoreState(documentStore: documentStoreType) {
+  const documentNameSet = new Set(
+    (await documentStore.idb?.documents.toArray())?.map((doc) => doc.filehash)
+  );
+  const documentCount = documentNameSet.size;
   if (documentStore) {
     vectorStoreState.value = {
       ...vectorStoreState.value,
       maxElements: documentStore.index?.getMaxElements() || 0,
       numElements: documentStore.index?.getCurrentCount() || 0,
+      documentCount: documentCount,
     };
   }
 }
@@ -131,7 +155,7 @@ function updateStoreState(documentStore: documentStoreType) {
 function loadCollection(collectionName: string) {
   void loadDocumentStore(collectionName).then((docstore) => {
     documentStore = docstore;
-    updateStoreState(docstore);
+    void updateStoreState(docstore);
   });
 }
 const statename = 'vectorStoreState';
@@ -167,6 +191,7 @@ async function uploadToIndex(
   progressCallback: (progress: number) => Promise<void> | void
 ) {
   const txt = await loadFile(file);
+  const txthash = hashCode(txt || '');
   let maxsteps = 0;
   let steps = 0;
   //console.log(txt)
@@ -205,6 +230,7 @@ async function uploadToIndex(
     for (const doc of docvecs) {
       const newId = await documentStore.idb?.documents.put({
         document: doc.document,
+        filehash: `${file.name}${txthash}`,
       });
       if (doc.vector && newId) {
         documentStore.index?.addPoint(doc.vector, newId, false);
@@ -227,7 +253,7 @@ async function uploadToIndex(
     //await vectorUpsert(pineconeVecs);
     await storeIndex(vecStoreUploaderConfigurationState.value.collectionName);
     console.log(`successfully uploaded file: ${file.name}`);
-    updateStoreState(documentStore);
+    await updateStoreState(documentStore);
   }
 }
 async function knnQuery(searchQuery: string, k = 3) {

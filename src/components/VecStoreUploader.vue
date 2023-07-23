@@ -1,12 +1,23 @@
 <template>
   <div v-if="accessGranted" class="row" style="min-width: 100%">
     <div class="col row content-stretch full-height">
-      <div class="col-auto">
-        <q-tabs dense v-model="tab" vertical class="text-primary">
-          <q-tab name="upload" icon="upload"><q-tooltip :delay="1000">open upload window</q-tooltip></q-tab>
-          <q-tab name="settings" icon="settings"><q-tooltip :delay="1000">open store settings</q-tooltip></q-tab>
-          <q-tab name="whitelist" icon="key"><q-tooltip :delay="1000">open access whitelist</q-tooltip></q-tab>
-        </q-tabs>
+      <div class="col-auto col items-center">
+        <div class="col-auto">
+          <q-tabs dense v-model="tab" vertical class="text-primary">
+            <q-tab name="upload" icon="upload"><q-tooltip :delay="1000">open upload window</q-tooltip></q-tab>
+            <q-tab name="settings" icon="settings"><q-tooltip :delay="1000">open store settings</q-tooltip></q-tab>
+            <q-tab name="whitelist" icon="key"><q-tooltip :delay="1000">open access whitelist</q-tooltip></q-tab>
+          </q-tabs>
+        </div>
+        <q-separator class="q-my-xs" />
+        <div class="col-auto row text-center items-center justify-center">
+          <q-icon name="local_library" color="secondary" />:
+          {{ vectorStoreState.documentCount }}
+        </div>
+        <q-separator class="q-my-xs" />
+        <div class="col-auto">
+          <q-btn dense size="sm" icon="help" flat href="/admin" target="_blank" class="fit"></q-btn>
+        </div>
       </div>
       <div class="col">
         <q-tab-panels v-model="tab" animated class="full-height">
@@ -24,7 +35,7 @@
             <div class="text-caption">Chunks: {{ vectorStoreState.numElements }}</div>
           </q-tab-panel>
           <q-tab-panel name="whitelist">
-            <div class="text-h6">Webpages who have been granted access to the document store:</div>
+            <div class="text-bold">Webpages who have been granted access to the document store:</div>
             <q-virtual-scroll bordered :items="uploaderState.accessWhiteList" separator v-slot="{ item, index }">
               <q-item :key="index" dense>
                 <q-item-section>

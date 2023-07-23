@@ -5,7 +5,7 @@
       <div class="col-6">
         <q-card class="fit">
           <q-card-section class="fit">
-            <VecStoreUploader class="fit"/>
+            <VecStoreUploader class="fit" />
           </q-card-section>
         </q-card>
       </div>
@@ -14,12 +14,34 @@
           <q-card-section>
             <p class="text-h6">Some links:</p>
             <q-list dense separator bordered>
-              <q-item href="https://github.com/xyntopia/vexvault#readme" target="_blank">-> Vexvault documentation</q-item>
-              <q-item href="https://codepen.io/xyntopia/pen/zYMLRWN" target="_blank">-> Vexvault iFrame integration example</q-item>
-              <q-item href="https://github.com/Xyntopia/vexvault/blob/main/tutorial_vexvault_iframe.md" target="_blank">-> Vexvault iFrame integration tutorial</q-item>
+              <q-item href="https://github.com/xyntopia/vexvault#readme" target="_blank">-> Vexvault
+                documentation</q-item>
+              <q-item href="https://codepen.io/xyntopia/pen/zYMLRWN" target="_blank">-> Vexvault iFrame integration
+                example</q-item>
+              <q-item href="https://github.com/Xyntopia/vexvault/blob/main/tutorial_vexvault_iframe.md" target="_blank">->
+                Vexvault iFrame integration tutorial</q-item>
               <q-item href="https://www.vexvault.com" target="_blank">-> Vexvault homepage</q-item>
               <q-item href="https://www.xyntopia.com" target="_blank">-> Xyntopia homepage</q-item>
-          </q-list>
+            </q-list>
+          </q-card-section>
+        </q-card>
+      </div>
+      <div class="col-5">
+        <q-card>
+          <q-card-section>
+            <p class="text-h6">DB control:</p>
+            <q-list dense separator bordered>
+              <q-item clickable @click="resetDb">
+                <q-item-section avatar>
+                  <q-icon name="delete_forever" color="red">
+                    <!--<q-img src="~assets/xyntopia_mono.svg" />-->
+                  </q-icon>
+                </q-item-section>
+                <q-item-section>
+                  Reset Database (not working, yet)
+                </q-item-section>
+              </q-item>
+            </q-list>
           </q-card-section>
         </q-card>
       </div>
@@ -87,7 +109,10 @@ export default defineComponent({
     };
     return {
       onSearchChange,
-      searchResults
+      searchResults,
+      resetDb: () => {
+        console.log('resetting document store')
+      }
     }
   }
 })
