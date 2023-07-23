@@ -1,18 +1,25 @@
 <template>
   <div class="column q-gutter-xs items-stretch content-stretch fit">
     <div class="text-h5">Vexvault Document Store Administration & Settings </div>
-    <div class="row q-gutter-xs">
+    <div class="row q-gutter-xs items-stretch">
       <div class="col-6">
-        <q-card>
-          <q-card-section>
-            <VecStoreUploader/>
+        <q-card class="fit">
+          <q-card-section class="fit">
+            <VecStoreUploader class="fit"/>
           </q-card-section>
         </q-card>
       </div>
       <div class="col-5">
         <q-card>
           <q-card-section>
-            <VecStoreUploader />
+            <p class="text-h6">Some links:</p>
+            <q-list dense separator bordered>
+              <q-item href="https://github.com/xyntopia/vexvault#readme" target="_blank">-> Vexvault documentation</q-item>
+              <q-item href="https://codepen.io/xyntopia/pen/zYMLRWN" target="_blank">-> Vexvault iFrame integration example</q-item>
+              <q-item href="https://github.com/Xyntopia/vexvault/blob/main/tutorial_vexvault_iframe.md" target="_blank">-> Vexvault iFrame integration tutorial</q-item>
+              <q-item href="https://www.vexvault.com" target="_blank">-> Vexvault homepage</q-item>
+              <q-item href="https://www.xyntopia.com" target="_blank">-> Xyntopia homepage</q-item>
+          </q-list>
           </q-card-section>
         </q-card>
       </div>
