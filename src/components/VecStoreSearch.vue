@@ -1,14 +1,20 @@
 <template>
   <div class="column q-gutter-xs items-stretch content-stretch fit">
-    <div class="text-h5">Vexvault Document Store Administration & Settings </div>
+    <div class="col">
+      <q-card>
+        <q-card-section class="row items-center q-gutter-md">
+          <div class="col-auto">
+            <q-icon size="128px">
+              <q-img src="~assets/vexvault.svg" />
+            </q-icon>
+          </div>
+          <div class="col text-h3 text-center">
+            Vexvault Document Store Administration & Settings
+          </div>
+        </q-card-section>
+      </q-card>
+    </div>
     <div class="row q-gutter-xs items-stretch">
-      <div class="col-6">
-        <q-card class="fit">
-          <q-card-section class="fit">
-            <VecStoreUploader class="fit" />
-          </q-card-section>
-        </q-card>
-      </div>
       <div class="col-5">
         <q-card>
           <q-card-section>
@@ -23,6 +29,13 @@
               <q-item href="https://www.vexvault.com" target="_blank">-> Vexvault homepage</q-item>
               <q-item href="https://www.xyntopia.com" target="_blank">-> Xyntopia homepage</q-item>
             </q-list>
+          </q-card-section>
+        </q-card>
+      </div>
+      <div class="col-6">
+        <q-card class="fit">
+          <q-card-section class="fit">
+            <VecStoreUploader class="fit" />
           </q-card-section>
         </q-card>
       </div>
