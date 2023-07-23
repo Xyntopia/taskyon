@@ -5,6 +5,7 @@
         <q-tabs dense v-model="tab" vertical class="text-primary">
           <q-tab name="upload" icon="upload"><q-tooltip :delay="1000">open upload window</q-tooltip></q-tab>
           <q-tab name="settings" icon="settings"><q-tooltip :delay="1000">open store settings</q-tooltip></q-tab>
+          <q-tab name="whitelist" icon="key"><q-tooltip :delay="1000">open access whitelist</q-tooltip></q-tab>
         </q-tabs>
       </div>
       <div class="col">
@@ -21,6 +22,22 @@
               @new-value="createCollection" use-input>
             </q-select>
             <div class="text-caption">Chunks: {{ vectorStoreState.numElements }}</div>
+          </q-tab-panel>
+          <q-tab-panel name="whitelist">
+            <div class="text-h6">Webpages who have been granted access to the document store:</div>
+            <q-virtual-scroll bordered :items="uploaderState.accessWhiteList" separator v-slot="{ item, index }">
+              <q-item :key="index" dense>
+                <q-item-section>
+                  <q-item-label>
+                    {{ item }}
+                  </q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                  <q-btn icon="block" unelevated dense text-color="red" @click="blockAccess(item)">
+                    <q-tooltip>block access</q-tooltip></q-btn>
+                </q-item-section>
+              </q-item>
+            </q-virtual-scroll>
           </q-tab-panel>
         </q-tab-panels>
       </div>
@@ -140,30 +157,35 @@ export default defineComponent({
       return res
     }
 
-    /*var parentUrl = (window.location != window.parent.location)
-            ? document.referrer
-            : document.location.href;*/
-    //document.location.ancestorOrigins[0]
     let isInIframe = true
     try {
       isInIframe = window.self !== window.top;
     } catch (e) {
       isInIframe = true;
     }
-    if (!isInIframe) {
-      accessGranted.value = true
-    } else {
-      try {
-        parentUrl.value = document.location.ancestorOrigins[0]
-      } catch {
-        parentUrl.value = document.referrer
-      }
-      console.log('running in iframe ' + parentUrl.value)
-      if (uploaderState.value.accessWhiteList.includes(parentUrl.value)) {
+
+    function checkAccess() {
+      /*var parentUrl = (window.location != window.parent.location)
+              ? document.referrer
+              : document.location.href;*/
+      //document.location.ancestorOrigins[0]
+      accessGranted.value = false
+      if (!isInIframe) {
         accessGranted.value = true
+      } else {
+        try {
+          parentUrl.value = document.location.ancestorOrigins[0]
+        } catch {
+          parentUrl.value = document.referrer
+        }
+        console.log('running in iframe ' + parentUrl.value)
+        if (uploaderState.value.accessWhiteList.includes(parentUrl.value)) {
+          accessGranted.value = true
+        }
       }
     }
 
+    checkAccess()
 
     if (isInIframe) { // window is an iframe
       // Listen for messages from the parent page
@@ -173,8 +195,7 @@ export default defineComponent({
         if (!uploaderState.value.accessWhiteList.includes(event.origin)) {
           console.log('can not grant access to: ' + event.origin)
           return
-        }
-        if (accessGranted.value) {
+        } else if (accessGranted.value == true) {
           // Process the data
           // Assuming you're receiving a search query
           var query = event.data as string;
@@ -218,7 +239,13 @@ export default defineComponent({
       grantAccess,
       parentUrl,
       vectorizationProgress,
-      storeDocs
+      storeDocs,
+      uploaderState,
+      blockAccess: (page: string) => {
+        console.log('block access to page: ' + page)
+        uploaderState.value.accessWhiteList = uploaderState.value.accessWhiteList.filter(p => p !== page)
+        checkAccess()
+      }
     }
   }
 })
