@@ -113,11 +113,12 @@ export default defineComponent({
 
     async function storeDocs(newFiles: File[]) {
       vectorizationProgress.value = 0.01
-      for (const f of newFiles) {
-        let progressvar = 0
+      const numFiles = newFiles.length
+      for (let i = 0; i < numFiles; i++) {
+        const f = newFiles[i]
         await vecst.uploadToIndex(f, async (progress) => {
-          progressvar = progress
-          vectorizationProgress.value = Math.round(progressvar * 100) / 100
+          const newProgress = (i + progress) / numFiles
+          vectorizationProgress.value = Math.round(newProgress * 100) / 100
           await new Promise(r => setTimeout(r, 1)); // apparently we need this in order to get our progress window to update
           await nextTick();  // wait until next DOM update cycle to continue
         })
