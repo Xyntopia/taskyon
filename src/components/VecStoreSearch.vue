@@ -21,7 +21,7 @@
             <p class="text-h6">Some links:</p>
             <q-list dense separator bordered>
               <q-item href="https://github.com/xyntopia/vexvault#readme" target="_blank">-> Vexvault
-                documentation</q-item>
+                documentation/github</q-item>
               <q-item href="https://codepen.io/xyntopia/pen/zYMLRWN" target="_blank">-> Vexvault iFrame integration
                 example</q-item>
               <q-item href="https://github.com/Xyntopia/vexvault/blob/main/tutorial_vexvault_iframe.md" target="_blank">->
