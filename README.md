@@ -1,5 +1,7 @@
 # ↗️ Vexvault ↗️:
 
+<img align="left" src="src/assets/vexvault.svg" width="140">
+
 - 🌐 Browser Based
 - 🤖 AI Native
 - 🆓 0-Cost
