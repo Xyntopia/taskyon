@@ -156,6 +156,17 @@ function loadCollection(collectionName: string) {
   void loadDocumentStore(collectionName).then((docstore) => {
     documentStore = docstore;
     void updateStoreState(docstore);
+    vecStoreUploaderConfigurationState.value.collectionName = collectionName;
+    if (
+      !vecStoreUploaderConfigurationState.value.collectionList.includes(
+        collectionName
+      )
+    ) {
+      console.log('push to collectionlist');
+      vecStoreUploaderConfigurationState.value.collectionList.push(
+        collectionName
+      );
+    }
   });
 }
 const statename = 'vectorStoreState';
@@ -211,7 +222,7 @@ async function uploadToIndex(
     const docvecs: idbDocument[] = [];
     for (let i = 0; i < output.length; i++) {
       const doc = output[i];
-      //const uuid = uuidv4()
+      //const uuids = uuidv4()
       //doc.metadata['uuid'] = uuid.to
       docvecs.push({
         document: doc,
@@ -309,21 +320,12 @@ if (storedState) {
 // finally, make sure we oad the correct collection
 loadCollection(vecStoreUploaderConfigurationState.value.collectionName);
 
-// make sure we reload everything as soon as we change our collection name.
-watch(
-  () => vecStoreUploaderConfigurationState.value.collectionName,
-  (newValue /*,oldValue*/) => {
-    console.log('load collection: ' + newValue);
-    loadCollection(newValue);
-    console.log('succesfull loaded collection: ' + newValue);
-  }
-);
-
 export const useVectorStore = () => {
   return {
     vecStoreUploaderState: vecStoreUploaderConfigurationState,
     vectorStoreState,
     uploadToIndex,
+    loadCollection,
     query,
   };
 };

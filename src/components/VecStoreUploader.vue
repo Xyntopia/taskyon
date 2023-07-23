@@ -4,19 +4,22 @@
       <div class="col-auto col items-center">
         <div class="col-auto">
           <q-tabs dense v-model="tab" vertical class="text-primary">
-            <q-tab name="upload" icon="upload"><q-tooltip :delay="1000">open upload window</q-tooltip></q-tab>
-            <q-tab name="settings" icon="settings"><q-tooltip :delay="1000">open store settings</q-tooltip></q-tab>
-            <q-tab name="whitelist" icon="key"><q-tooltip :delay="1000">open access whitelist</q-tooltip></q-tab>
+            <q-tab name="upload" icon="upload"><q-tooltip :delay="500">open upload window</q-tooltip></q-tab>
+            <q-tab name="settings" icon="settings"><q-tooltip :delay="500">open store settings</q-tooltip></q-tab>
+            <q-tab name="whitelist" icon="key"><q-tooltip :delay="500">open access whitelist</q-tooltip></q-tab>
           </q-tabs>
         </div>
         <q-separator class="q-my-xs" />
         <div class="col-auto row text-center items-center justify-center">
-          <q-icon name="local_library" color="secondary" />:
+          <q-icon name="local_library" />:
           {{ vectorStoreState.documentCount }}
+          <q-tooltip>Number of documents in the collection</q-tooltip>
         </div>
         <q-separator class="q-my-xs" />
         <div class="col-auto">
-          <q-btn dense size="sm" icon="help" flat href="/admin" target="_blank" class="fit"></q-btn>
+          <q-btn dense size="sm" icon="help" flat href="/admin" target="_blank" class="fit">
+            <q-tooltip :delay="500">Help & Documentation</q-tooltip>
+          </q-btn>
         </div>
       </div>
       <div class="col">
@@ -28,9 +31,23 @@
             </FileDropZone>
           </q-tab-panel>
           <q-tab-panel name="settings">
-            <q-select filled dense debounce="2000" label="Selected Collection"
-              :options="vecStoreUploaderState.collectionList" v-model="vecStoreUploaderState.collectionName"
-              @new-value="createCollection" use-input>
+            <q-input v-if="addCollection" label="Input name for new collection" outlined dense v-model="newCollectionName"
+              @keyup.enter="onNewCollection(newCollectionName)">
+              <template v-slot:after>
+                <q-btn dense flat icon="done" @click="onNewCollection(newCollectionName)">
+                  <q-tooltip :delay="500">Initializecollection.</q-tooltip>
+                </q-btn>
+              </template>
+            </q-input>
+            <q-select v-else filled dense input-debounce="0" label="Selected Collection"
+              :options="vecStoreUploaderState.collectionList" 
+              v-model="vecStoreUploaderState.collectionName"
+              @update:model-value="onCollectionChange">
+              <!--fill-input-->
+              <template v-slot:after>
+                <q-btn dense flat icon="add_box" @click="addCollection = true"><q-tooltip :delay="500">Create new
+                    collection.</q-tooltip></q-btn>
+              </template>
             </q-select>
             <div class="text-caption">Chunks: {{ vectorStoreState.numElements }}</div>
           </q-tab-panel>
@@ -218,14 +235,23 @@ export default defineComponent({
       }, false);
     }
 
-    function createCollection(inputValue: string, doneFn: (item?: unknown, mode?: 'add' | 'add-unique' | 'toggle' | undefined) => void) {
+    function onCollectionChange(inputValue: string) {
       console.log('create new value: ' + inputValue)
+
       if (inputValue.length > 0) {
-        if (!vecst.vecStoreUploaderState.value.collectionList.includes(inputValue)) {
-          vecst.vecStoreUploaderState.value.collectionList.push(inputValue)
-        }
-        doneFn(inputValue, 'toggle')
+        console.log('long enough')
+        vecst.loadCollection(inputValue)
       }
+    }
+
+    const addCollection = ref(false)
+    const newCollectionName = ref<string>('')
+
+    function onNewCollection(newCollName: string) {
+      console.log('create new collection with name: ' + newCollName)
+      addCollection.value = false
+      newCollectionName.value = ''
+      vecst.loadCollection(newCollName)
     }
 
     function grantAccess(url: string) {
@@ -239,19 +265,37 @@ export default defineComponent({
     }
 
 
+    /*function filterFn (val: string, update) {
+        update(() => {
+
+          if (val === '') {
+            filterOptions.value = stringOptions
+          }
+          else {
+            const needle = val.toLowerCase()
+            filterOptions.value = stringOptions.filter(
+              v => v.toLowerCase().indexOf(needle) > -1
+            )
+          }
+        })
+      }*/
+
     return {
       vecStoreUploaderState: vecst.vecStoreUploaderState,
       vectorStoreState: vecst.vectorStoreState,
       tab: ref<string>('upload'),
       fileList,
       searchString,
-      createCollection,
+      onCollectionChange,
       accessGranted,
       grantAccess,
       parentUrl,
       vectorizationProgress,
       storeDocs,
       uploaderState,
+      addCollection,
+      newCollectionName,
+      onNewCollection,
       blockAccess: (page: string) => {
         console.log('block access to page: ' + page)
         uploaderState.value.accessWhiteList = uploaderState.value.accessWhiteList.filter(p => p !== page)
