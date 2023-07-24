@@ -8,6 +8,8 @@
 - 🔒 privacy-first
 - 💼 Document Store
 
+**In firefox this app has some issues and doesn't function completly yet. In chrome everything should work as expected**
+
 ---
 
 ## Introduction:
