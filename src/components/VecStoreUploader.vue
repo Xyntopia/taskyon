@@ -26,7 +26,7 @@
         <q-tab-panels v-model="tab" animated class="full-height">
           <q-tab-panel name="upload">
             <FileDropZone
-              :label="`Drag & drop your files here, or click to select files for the collection: '${vecStoreUploaderState.collectionName}'`"
+              :label="`Drag & drop, or click to add files to the collection: '${vecStoreUploaderState.collectionName}'`"
               :modelValue="fileList" @update:model-value="storeDocs" :progress="vectorizationProgress">
             </FileDropZone>
           </q-tab-panel>
