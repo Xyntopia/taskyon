@@ -216,7 +216,7 @@ async function uploadToIndex(
             pageContent: txtLine,
             metadata: {
               filename: file.name,
-              source: 'doxcavator',
+              source: 'file upload',
               line: index,
             },
           })
@@ -227,7 +227,7 @@ async function uploadToIndex(
           pageContent: txt,
           metadata: {
             filename: file.name,
-            source: 'doxcavator',
+            source: 'file upload',
           },
         }),
       ]);
