@@ -71,10 +71,16 @@
             { name: 'id', required: true, label: 'id', field: row => row.document.id, },
             { name: 'score', sortable: true, required: true, label: 'score', field: row => (1 / (row.distance + 0.001)), },
             { name: 'document', sortable: true, required: true, label: 'document', field: row => row.document.document.pageContent, },
-            { name: 'meta', sortable: true, required: true, label: 'meta', field: row => row.document.document.metadata, },
+            {
+              name: 'meta', sortable: true, required: true, label: 'meta',
+              field: row => row.document.document.metadata
+            },
           ]" row-key="name">
             <template v-slot:top>
               <Search @search="onSearchChange" class="fit" />
+            </template>
+            <template v-slot:body-cell-meta="props">
+              <pre>{{ yaml.dump(props.value) }}</pre>
             </template>
           </q-table>
         </q-card-section>
@@ -88,6 +94,7 @@ import { defineComponent, ref } from 'vue'
 import { useVectorStore, SearchResult } from 'src/modules/localVectorStore'
 import Search from 'components/Search.vue';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
+import yaml from 'js-yaml';
 
 export default defineComponent({
   name: 'VecStoreSearch',
@@ -120,6 +127,7 @@ export default defineComponent({
     };
     return {
       onSearchChange,
+      yaml,
       searchResults,
       numberOfSearchResults: ref(5),
       initialPagination: {
