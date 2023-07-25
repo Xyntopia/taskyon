@@ -34,8 +34,13 @@
       </div>
       <div class="col-6">
         <q-card class="fit">
-          <q-card-section class="fit">
-            <VecStoreUploader class="fit" />
+          <q-card-section>
+            This is the uploader widget, you can add it to your app by integrating it with iframe
+            (<a href="https://github.com/Xyntopia/vexvault/blob/main/tutorial_vexvault_iframe.md"
+              target="_blank">tutorial</a>).
+          </q-card-section>
+          <q-card-section class="fit-height">
+            <VecStoreUploader class="fit-height" />
           </q-card-section>
         </q-card>
       </div>
