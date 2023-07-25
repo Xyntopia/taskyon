@@ -62,24 +62,17 @@
     <div>
       <q-card style="width:100%">
         <q-card-section>
-          <Search @search="onSearchChange" class="fit" />
+          <q-table wrap-cells title="Search Results" :rows="searchResults" :pagination="initialPagination" :columns="[
+            { name: 'id', required: true, label: 'id', field: row => row.document.id, },
+            { name: 'score', sortable: true, required: true, label: 'score', field: row => (1 / (row.distance + 0.001)), },
+            { name: 'document', sortable: true, required: true, label: 'document', field: row => row.document.document.pageContent, },
+            { name: 'meta', sortable: true, required: true, label: 'meta', field: row => row.document.document.metadata, },
+          ]" row-key="name">
+            <template v-slot:top>
+              <Search @search="onSearchChange" class="fit" />
+            </template>
+          </q-table>
         </q-card-section>
-        <q-item-section>
-          <q-list dense separator padding bordered>
-            <q-item>
-              <q-item-section side>ID</q-item-section>
-              <q-item-section>Score</q-item-section>
-              <q-item-section>Document</q-item-section>
-              <q-item-section>Metadata</q-item-section>
-            </q-item>
-            <q-item v-for="res, idx in searchResults" v-bind:key="idx">
-              <q-item-section side>{{ res.document.id }}</q-item-section>
-              <q-item-section>{{ (1 / (res.distance + 0.001)) }}</q-item-section>
-              <q-item-section>{{ res.document.document.pageContent }}</q-item-section>
-              <q-item-section>{{ res.document.document.metadata }}</q-item-section>
-            </q-item>
-          </q-list>
-        </q-item-section>
       </q-card>
     </div>
   </div>
@@ -87,7 +80,7 @@
 
 <script lang="ts">
 import { defineComponent, ref } from 'vue'
-import { useVectorStore } from 'src/modules/localVectorStore'
+import { useVectorStore, SearchResult } from 'src/modules/localVectorStore'
 import Search from 'components/Search.vue';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
 
@@ -99,16 +92,16 @@ export default defineComponent({
   },
   setup() {
     const vectorStore = useVectorStore();
-    const searchResults = ref<unknown[]>([]);
+    const searchResults = ref<SearchResult[]>([]);
 
     // Perform the search and get results
-    async function performSearch(searchTerm: string) {
-      const res = await vectorStore.query(searchTerm)
+    async function performSearch(searchTerm: string, k: number) {
+      const res = await vectorStore.query(searchTerm, k)
       return res
     }
 
 
-    async function onSearchChange(searchTerm: string | Event) {
+    async function onSearchChange(searchTerm: string | Event, k: number) {
       if (searchTerm instanceof Event) { // for some reason, in chrome, a second event with the original input-event gets fired...
         return
       } else if (!searchTerm) {
@@ -116,13 +109,21 @@ export default defineComponent({
       } else {
         // Perform your search here
         console.log(`Searching for ${searchTerm}`);
-        searchResults.value = await performSearch(searchTerm)
+        searchResults.value = await performSearch(searchTerm, k)
         console.log(searchResults.value)
       }
     };
     return {
       onSearchChange,
       searchResults,
+      numberOfSearchResults: ref(5),
+      initialPagination: {
+        sortBy: 'score',
+        descending: true,
+        //page: 2,
+        rowsPerPage: 5
+        // rowsNumber: xx if getting data from a server
+      },
       resetDb: () => {
         console.log('resetting document store')
       }

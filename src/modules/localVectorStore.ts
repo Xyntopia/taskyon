@@ -208,15 +208,35 @@ async function uploadToIndex(
   //console.log(txt)
   console.log(`processing ${file.name}`);
   if (txt && documentStore) {
-    const output = await splitter.splitDocuments([
-      new Document({
-        pageContent: txt,
-        metadata: {
-          filename: file.name,
-          source: 'doxcavator',
-        },
-      }),
-    ]);
+    let output: Document[] = [];
+    if (file.type == 'text/csv') {
+      output = txt.split('\n').map(
+        (txtLine, index) =>
+          new Document({
+            pageContent: txtLine,
+            metadata: {
+              filename: file.name,
+              source: 'doxcavator',
+              line: index,
+            },
+          })
+      );
+    } else {
+      output = await splitter.splitDocuments([
+        new Document({
+          pageContent: txt,
+          metadata: {
+            filename: file.name,
+            source: 'doxcavator',
+          },
+        }),
+      ]);
+    }
+
+    // filter out empty lines etc...
+    output = output.filter((doc) => doc.pageContent);
+
+    // prepare data (vectorize) for ingestions
     maxsteps = output.length * 2 || 1;
     //const output = await splitter.createDocuments([txt], metadatas = [{ filename: file.name }]);
     const docvecs: idbDocument[] = [];
@@ -237,6 +257,7 @@ async function uploadToIndex(
       await progressCallback(steps / maxsteps);
     }
 
+    // ingest into database
     //const labelIds = docvecs.map(([doc]) => doc.metadata['uuid'] as number);
     for (const doc of docvecs) {
       const newId = await documentStore.idb?.documents.put({
@@ -283,10 +304,15 @@ async function knnQuery(searchQuery: string, k = 3) {
   }
 }
 
-async function query(searchQuery: string): Promise<unknown[]> {
+export interface SearchResult {
+  distance: number;
+  document: idbDocument;
+}
+
+async function query(searchQuery: string, k = 3): Promise<SearchResult[]> {
   if (searchQuery && searchQuery.length > 0) {
-    const res = await knnQuery(searchQuery);
-    const docs: unknown[] = [];
+    const res = await knnQuery(searchQuery, k);
+    const docs: SearchResult[] = [];
     if (res) {
       for (let i = 0; i < (res?.neighbors.length || 0); i++) {
         const docId = res.neighbors[i];
