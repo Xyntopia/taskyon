@@ -50,6 +50,7 @@ async function read_docx(file: File) {
 }
 
 export async function loadFile(file: File) {
+  console.log('load file: ' + file.type);
   switch (file.type) {
     case 'application/pdf':
       return await read_pdf(file);

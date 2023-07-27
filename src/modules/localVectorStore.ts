@@ -152,6 +152,49 @@ async function updateStoreState(documentStore: documentStoreType) {
   }
 }
 
+function parseCSV(csvData: string): string[][] {
+  // Regular expression to match CSV lines, even those containing quoted fields with commas and newlines
+  const regex = /"(?:[^"\\]|\\.)*"|[^,]*|,|\r?\n/g;
+  const lines: string[][] = [[]];
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(csvData))) {
+    const str = match[0];
+    if (str === ',' || str === '\n' || str === '\r\n') {
+      if (str === ',' && lines[lines.length - 1].length === 0) {
+        lines[lines.length - 1].push('');
+      }
+      if (str === '\n' || str === '\r\n') {
+        lines.push([]);
+      }
+    } else {
+      lines[lines.length - 1].push(
+        str.startsWith('"') && str.endsWith('"')
+          ? str.slice(1, str.length - 1)
+          : str
+      );
+    }
+  }
+
+  return lines;
+}
+
+function splitCSVIntoLines(csvData: string): string[] {
+  // Regular expression to match CSV lines, even those containing quoted fields with commas and newlines
+  const regex = /"(?:[^"\\]|\\.)*"|[^,"\r\n]*(?:\r\n|\n|$)/g;
+  const lines: string[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(csvData))) {
+    const str = match[0];
+    if (str !== '\n' && str !== '\r\n') {
+      lines.push(str);
+    }
+  }
+
+  return lines;
+}
+
 function loadCollection(collectionName: string) {
   void loadDocumentStore(collectionName).then((docstore) => {
     documentStore = docstore;
@@ -210,7 +253,7 @@ async function uploadToIndex(
   if (txt && documentStore) {
     let output: Document[] = [];
     if (file.type == 'text/csv') {
-      output = txt.split('\n').map(
+      output = splitCSVIntoLines(txt).map(
         (txtLine, index) =>
           new Document({
             pageContent: txtLine,
