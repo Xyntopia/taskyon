@@ -152,7 +152,7 @@ async function updateStoreState(documentStore: documentStoreType) {
   }
 }
 
-function parseCSV(csvData: string): string[][] {
+/*function parseCSV(csvData: string): string[][] {
   // Regular expression to match CSV lines, even those containing quoted fields with commas and newlines
   const regex = /"(?:[^"\\]|\\.)*"|[^,]*|,|\r?\n/g;
   const lines: string[][] = [[]];
@@ -177,22 +177,18 @@ function parseCSV(csvData: string): string[][] {
   }
 
   return lines;
-}
+}*/
 
 function splitCSVIntoLines(csvData: string): string[] {
-  // Regular expression to match CSV lines, even those containing quoted fields with commas and newlines
-  const regex = /"(?:[^"\\]|\\.)*"|[^,"\r\n]*(?:\r\n|\n|$)/g;
-  const lines: string[] = [];
-  let match: RegExpExecArray | null;
+  // Regular expression to match CSV lines, ignoring newline characters inside quotes
+  const lines = csvData.match(/(?:[^"\n\r]+|"[^"]*")+?(?=\r?\n|$)/g);
 
-  while ((match = regex.exec(csvData))) {
-    const str = match[0];
-    if (str !== '\n' && str !== '\r\n') {
-      lines.push(str);
-    }
+  if (lines) {
+    const csvlines = lines.map((line) => line.trim());
+    return csvlines;
+  } else {
+    return [];
   }
-
-  return lines;
 }
 
 function loadCollection(collectionName: string) {
