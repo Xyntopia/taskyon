@@ -26,7 +26,7 @@ TODO: add screenshots of the app & integration
 
 ## History
 
-Vexvault started its life during a hackathon SDx in 2023 as a proof-of-concept by Xyntopia.
+Vexvault started its life during a hackathon SDx in July 2023 as a proof-of-concept by Xyntopia.
 
 ## Use Cases:
 
@@ -89,6 +89,9 @@ In order for a 3rd party application to access the data, the user needs to grant
 🗝️☁️🛠️🗝️💽🛠️🗝️💽
 
 Vexvault is accessible to all kinds of different apps via iframe, making it a versatile solution for a range of applications. It's also scalable, capable of storing large amounts of data, typically up to 80% of available disk space.
+
+- Because Vexvaut is built using the quasar framework, it is also possible to compile the app as a progressive web app, so it becomes available offline in the browser, without the need to run a server (also works for localhost).
+- Additionally, it is possible to build it for other targets such as a "tauri" framework based rust-based app or electron. Or for mobile applications, checkout this link:  [quasar documentation](https://quasar.dev/quasar-cli-vite/developing-mobile-apps).
 
 🌐📂🌐📂🌐📂🌐📂
 
