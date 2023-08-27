@@ -6,7 +6,7 @@
     </div>
     <div>
       <input class="hidden" type="file" multiple @change="handleFileInput" ref="fileInput"
-        accept="image/*,text/*,.pdf,application/*" capture="environment" @click.stop/>
+        accept="image/*,text/*,.pdf,application/*" capture="environment" @click.stop />
     </div>
     <div>
       <q-btn v-if="progress == 0" flat>
@@ -83,9 +83,7 @@ export default defineComponent({
       emit('update:modelValue', fileList);
     };
 
-    const openFileInput = (event: Event) => {
-      console.log('openFileInput');
-      console.log(event);
+    const openFileInput = (/*event: Event*/) => {
       if (fileInput.value) {
         fileInput.value.click();
       }
