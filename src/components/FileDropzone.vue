@@ -1,17 +1,39 @@
 <template>
   <div class="fit dropzone inset-shadow-down column justify-center" @dragover.prevent @dragenter.prevent
-    @drop="handleDrop" @click="openFileInput">
+    @drop="handleDrop" @click.stop="openFileInput">
     <div>
       <p>{{ label }}</p>
     </div>
     <div>
-      <input class="hidden" type="file" multiple @change="handleFileInput" ref="fileInput" />
+      <input class="hidden" type="file" multiple @change="handleFileInput" ref="fileInput"
+        accept="image/*,text/*,.pdf,application/*" capture="environment" @click.stop/>
     </div>
     <div>
-      <q-btn v-if="progress == 0" icon="add" flat @click="openFileInput" />
-      <q-circular-progress v-else :value="progress*100" color="secondary" class="q-md-sm" size="xl" show-value>{{ progress*100
+      <q-btn v-if="progress == 0" flat>
+        <div clas="row">
+          <q-icon name="upload_file" />
+          <q-icon name="add_a_photo" />
+        </div>
+      </q-btn>
+      <q-circular-progress v-else :value="progress * 100" color="secondary" class="q-md-sm" size="xl" show-value>{{
+        progress * 100
       }}%</q-circular-progress>
     </div>
+    <!-- if we are in electron, we want a choice to scan a directory:  "webkitdirectory", "directory" -->
+    <!-- add "capture" attribute in order to accept camera newlyAddedFiles from cellphone-->
+    <!--TODO: add the following as an option
+    <q-file append class="hidden" multiple ref="filePicker" v-model="newlyAddedFiles"
+        accept="image/*,text/*,.pdf,application/*" capture="environment" />
+      <div class="row items-stretch q-gutter-x-xs">
+        <q-btn class="col-3" color="primary" text-color="white" stack @click="filePicker?.pickFiles()">
+          <div clas="row">
+            <q-icon name="upload_file" />
+            <q-icon name="add_a_photo" />
+          </div>
+          add file(s)
+        </q-btn>
+      <div>
+        -->
   </div>
 </template>
 
@@ -61,7 +83,9 @@ export default defineComponent({
       emit('update:modelValue', fileList);
     };
 
-    const openFileInput = () => {
+    const openFileInput = (event: Event) => {
+      console.log('openFileInput');
+      console.log(event);
       if (fileInput.value) {
         fileInput.value.click();
       }
