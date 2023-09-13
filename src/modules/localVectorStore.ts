@@ -44,8 +44,7 @@ async function loadIndex(
     maxElements,
     m,
     efConstruction,
-    randomSeed,
-    false // allowReplaceDeleted
+    randomSeed
   );
 
   // Set efSearch parameters. This can be changed after the index is created.
@@ -119,7 +118,7 @@ async function loadDocumentStore(name: string): Promise<documentStoreType> {
 
   console.log('load index');
   try {
-    await newindex.readIndex(vecdbName, 10000, false);
+    await newindex.readIndex(vecdbName, 10000);
   } catch {
     console.log(`index ${vecdbName} coud not be reloaded`);
     newindex = await loadIndex(

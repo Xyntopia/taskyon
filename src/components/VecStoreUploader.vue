@@ -253,6 +253,14 @@ function grantAccess(url: string) {
   }
 }
 
+const vecStoreUploaderState= vecst.vecStoreUploaderState
+const vectorStoreState= vecst.vectorStoreState
+const tab= ref<string>('upload')
+function blockAccess(page: string) {
+  console.log('block access to page: ' + page)
+  uploaderState.value.accessWhiteList = uploaderState.value.accessWhiteList.filter(p => p !== page)
+  checkAccess()
+}
 
 /*function filterFn (val: string, update) {
     update(() => {
@@ -268,4 +276,6 @@ function grantAccess(url: string) {
       }
     })
   }*/
+
+
 </script>
