@@ -24,55 +24,47 @@
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent, ref } from 'vue'
-export default defineComponent({
-  props: {
-    searchState: {
-      type: Boolean,
-      default: false
-    },
-    searchHint: {
-      type: String,
-      default: 'Search...'
-    },
-    showFilterButton: {
-      type: Boolean,
-      default: false
-    },
-    showGridButton: {
-      type: Boolean,
-      default: false
-    },
-    usegrid: {
-      type: Boolean,
-      default: false
-    }
+<script setup lang="ts">
+import { ref } from 'vue'
+
+const props = defineProps({
+  searchState: {
+    type: Boolean,
+    default: false
   },
-  setup(props, { emit }) {
-    const searchString = ref<string>('');
-    const numberOfSearchResults = ref<number>(5);
-
-    function onQChange(value: string) {
-      searchString.value = value
-      emit('search', value, Number(numberOfSearchResults.value));
-    };
-
-    const requestSearch = () => {
-      emit('search', searchString.value, Number(numberOfSearchResults.value));
-    };
-
-    const toggleFilter = () => {
-      emit('toggleFilter');
-    };
-
-    return {
-      onQChange,
-      requestSearch,
-      toggleFilter,
-      searchString,
-      numberOfSearchResults
-    };
+  searchHint: {
+    type: String,
+    default: 'Search...'
+  },
+  showFilterButton: {
+    type: Boolean,
+    default: false
+  },
+  showGridButton: {
+    type: Boolean,
+    default: false
+  },
+  usegrid: {
+    type: Boolean,
+    default: false
   }
 })
+
+const emit = defineEmits(['search', 'toggleFilter'])
+
+const searchString = ref<string>('');
+const numberOfSearchResults = ref<number>(5);
+
+function onQChange(value: string) {
+  searchString.value = value
+  emit('search', value, Number(numberOfSearchResults.value));
+};
+
+const requestSearch = () => {
+  emit('search', searchString.value, Number(numberOfSearchResults.value));
+};
+
+const toggleFilter = () => {
+  emit('toggleFilter');
+};
 </script>

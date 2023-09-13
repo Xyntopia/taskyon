@@ -89,58 +89,44 @@
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent, ref } from 'vue'
+<script setup lang="ts">
+import { ref } from 'vue'
 import { useVectorStore, SearchResult } from 'src/modules/localVectorStore'
 import Search from 'components/Search.vue';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
 import yaml from 'js-yaml';
 
-export default defineComponent({
-  name: 'VecStoreSearch',
-  components: {
-    Search,
-    VecStoreUploader
-  },
-  setup() {
-    const vectorStore = useVectorStore();
-    const searchResults = ref<SearchResult[]>([]);
+const vectorStore = useVectorStore();
+const searchResults = ref<SearchResult[]>([]);
 
-    // Perform the search and get results
-    async function performSearch(searchTerm: string, k: number) {
-      const res = await vectorStore.query(searchTerm, k)
-      return res
-    }
+// Perform the search and get results
+async function performSearch(searchTerm: string, k: number) {
+  const res = await vectorStore.query(searchTerm, k)
+  return res
+}
 
 
-    async function onSearchChange(searchTerm: string | Event, k: number) {
-      if (searchTerm instanceof Event) { // for some reason, in chrome, a second event with the original input-event gets fired...
-        return
-      } else if (!searchTerm) {
-        searchResults.value = []
-      } else {
-        // Perform your search here
-        console.log(`Searching for ${searchTerm}`);
-        searchResults.value = await performSearch(searchTerm, k)
-        console.log(searchResults.value)
-      }
-    };
-    return {
-      onSearchChange,
-      yaml,
-      searchResults,
-      numberOfSearchResults: ref(5),
-      initialPagination: {
-        sortBy: 'score',
-        descending: true,
-        //page: 2,
-        rowsPerPage: 5
-        // rowsNumber: xx if getting data from a server
-      },
-      resetDb: () => {
-        console.log('resetting document store')
-      }
-    }
+async function onSearchChange(searchTerm: string | Event, k: number) {
+  if (searchTerm instanceof Event) { // for some reason, in chrome, a second event with the original input-event gets fired...
+    return
+  } else if (!searchTerm) {
+    searchResults.value = []
+  } else {
+    // Perform your search here
+    console.log(`Searching for ${searchTerm}`);
+    searchResults.value = await performSearch(searchTerm, k)
+    console.log(searchResults.value)
   }
-})
+};
+const numberOfSearchResults = ref(5)
+const initialPagination = {
+  sortBy: 'score',
+  descending: true,
+  //page: 2,
+  rowsPerPage: 5
+  // rowsNumber: xx if getting data from a server
+}
+function resetDb() {
+  console.log('resetting document store')
+}
 </script>
