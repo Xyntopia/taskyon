@@ -114,9 +114,7 @@ import FileDropZone from 'components/FileDropzone.vue'
 import { useVectorStore } from 'src/modules/localVectorStore'
 
 //name: 'VecStoreUploader',
-const fileList = ref<File[]>([])
 const vecst = useVectorStore()
-const searchString = ref<string>('')
 const accessGranted = ref(false)
 const parentUrl = ref<string>('')
 const uploaderState = ref({

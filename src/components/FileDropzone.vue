@@ -50,7 +50,7 @@ import { ref, Ref } from 'vue'
 
 const emit = defineEmits(['update:modelValue'])
 
-const props = defineProps({
+defineProps({
   label: {
     type: String,
     default: ''
