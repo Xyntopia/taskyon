@@ -40,8 +40,7 @@
               </template>
             </q-input>
             <q-select v-else filled dense input-debounce="0" label="Selected Collection"
-              :options="vecStoreUploaderState.collectionList" 
-              v-model="vecStoreUploaderState.collectionName"
+              :options="vecStoreUploaderState.collectionList" v-model="vecStoreUploaderState.collectionName"
               @update:model-value="onCollectionChange">
               <!--fill-input-->
               <template v-slot:after>
@@ -104,8 +103,8 @@
     -->
 </template>
 
-<script lang="ts">
-import { defineComponent, ref, watch, nextTick } from 'vue'
+<script setup lang="ts">
+import { ref, watch, nextTick } from 'vue'
 import { LocalStorage } from 'quasar';
 
 /*import { open } from '@tauri-apps/api/dialog';
@@ -114,191 +113,161 @@ import { homeDir } from '@tauri-apps/api/path';
 import FileDropZone from 'components/FileDropzone.vue'
 import { useVectorStore } from 'src/modules/localVectorStore'
 
-export default defineComponent({
-  name: 'VecStoreUploader',
-  components: {
-    FileDropZone
+//name: 'VecStoreUploader',
+const fileList = ref<File[]>([])
+const vecst = useVectorStore()
+const searchString = ref<string>('')
+const accessGranted = ref(false)
+const parentUrl = ref<string>('')
+const uploaderState = ref({
+  accessWhiteList: [] as string[]
+})
+const vectorizationProgress = ref(0)
+const stateName = 'uploaderState'
+
+// persist state in browser storage
+watch(
+  () => uploaderState,
+  (newValue /*,oldValue*/) => {
+    // This function will be called every time `state` or any of its nested properties changes.
+    // `newValue` is the new value of `state`, and `oldValue` is its old value.
+    // You can use these values to save the entire object.
+
+    // Save the entire object here.
+    // This could be an API call, local storage update, etc.
+    // For example, let's save it to local storage:
+    LocalStorage.set(stateName, JSON.stringify(newValue.value));
   },
-  setup() {
-    const fileList = ref<File[]>([])
-    const vecst = useVectorStore()
-    const searchString = ref<string>('')
-    const accessGranted = ref(false)
-    const parentUrl = ref<string>('')
-    const uploaderState = ref({
-      accessWhiteList: [] as string[]
+  {
+    deep: true,
+  } // This option makes the watcher track nested properties.
+);
+
+const storedState = LocalStorage.getItem(stateName);
+if (storedState) {
+  uploaderState.value = JSON.parse(
+    storedState as string
+  ) as typeof uploaderState.value;
+}
+
+async function storeDocs(newFiles: File[]) {
+  vectorizationProgress.value = 0.01
+  const numFiles = newFiles.length
+  for (let i = 0; i < numFiles; i++) {
+    const f = newFiles[i]
+    await vecst.uploadToIndex(f, async (progress) => {
+      const newProgress = (i + progress) / numFiles
+      vectorizationProgress.value = Math.round(newProgress * 100) / 100
+      await new Promise(r => setTimeout(r, 1)); // apparently we need this in order to get our progress window to update
+      await nextTick();  // wait until next DOM update cycle to continue
     })
-    const vectorizationProgress = ref(0)
-    const stateName = 'uploaderState'
+  }
+  await new Promise(r => setTimeout(r, 5000));
+  vectorizationProgress.value = 0
+}
 
-    // persist state in browser storage
-    watch(
-      () => uploaderState,
-      (newValue /*,oldValue*/) => {
-        // This function will be called every time `state` or any of its nested properties changes.
-        // `newValue` is the new value of `state`, and `oldValue` is its old value.
-        // You can use these values to save the entire object.
+/*
+function set_root_dir() {
+  console.log('pick directory');
+  //filePicker.value?.pickFiles()
+  void open_dir().then((dir) => (writersettings.root_dir = dir));
+}*/
 
-        // Save the entire object here.
-        // This could be an API call, local storage update, etc.
-        // For example, let's save it to local storage:
-        LocalStorage.set(stateName, JSON.stringify(newValue.value));
-      },
-      {
-        deep: true,
-      } // This option makes the watcher track nested properties.
-    );
+// Perform the search and get results
+async function performSearch(searchTerm: string) {
+  const res = await vecst.query(searchTerm)
+  return res
+}
 
-    const storedState = LocalStorage.getItem(stateName);
-    if (storedState) {
-      uploaderState.value = JSON.parse(
-        storedState as string
-      ) as typeof uploaderState.value;
-    }
+let isInIframe = true
+try {
+  isInIframe = window.self !== window.top;
+} catch (e) {
+  isInIframe = true;
+}
 
-    async function storeDocs(newFiles: File[]) {
-      vectorizationProgress.value = 0.01
-      const numFiles = newFiles.length
-      for (let i = 0; i < numFiles; i++) {
-        const f = newFiles[i]
-        await vecst.uploadToIndex(f, async (progress) => {
-          const newProgress = (i + progress) / numFiles
-          vectorizationProgress.value = Math.round(newProgress * 100) / 100
-          await new Promise(r => setTimeout(r, 1)); // apparently we need this in order to get our progress window to update
-          await nextTick();  // wait until next DOM update cycle to continue
-        })
-      }
-      await new Promise(r => setTimeout(r, 5000));
-      vectorizationProgress.value = 0
-    }
-
-    /*
-    function set_root_dir() {
-      console.log('pick directory');
-      //filePicker.value?.pickFiles()
-      void open_dir().then((dir) => (writersettings.root_dir = dir));
-    }*/
-
-    // Perform the search and get results
-    async function performSearch(searchTerm: string) {
-      const res = await vecst.query(searchTerm)
-      return res
-    }
-
-    let isInIframe = true
+function checkAccess() {
+  /*var parentUrl = (window.location != window.parent.location)
+          ? document.referrer
+          : document.location.href;*/
+  //document.location.ancestorOrigins[0]
+  accessGranted.value = false
+  if (!isInIframe) {
+    accessGranted.value = true
+  } else {
     try {
-      isInIframe = window.self !== window.top;
-    } catch (e) {
-      isInIframe = true;
+      parentUrl.value = document.location.ancestorOrigins[0]
+    } catch {
+      parentUrl.value = document.referrer
     }
-
-    function checkAccess() {
-      /*var parentUrl = (window.location != window.parent.location)
-              ? document.referrer
-              : document.location.href;*/
-      //document.location.ancestorOrigins[0]
-      accessGranted.value = false
-      if (!isInIframe) {
-        accessGranted.value = true
-      } else {
-        try {
-          parentUrl.value = document.location.ancestorOrigins[0]
-        } catch {
-          parentUrl.value = document.referrer
-        }
-        console.log('running in iframe ' + parentUrl.value)
-        if (uploaderState.value.accessWhiteList.includes(parentUrl.value)) {
-          accessGranted.value = true
-        }
-      }
-    }
-
-    checkAccess()
-
-    if (isInIframe) { // window is an iframe
-      // Listen for messages from the parent page
-      window.addEventListener('message', function (event) {
-        console.log('search!')
-        // Check the origin of the data!
-        if (!uploaderState.value.accessWhiteList.includes(event.origin)) {
-          console.log('can not grant access to: ' + event.origin)
-          return
-        } else if (accessGranted.value == true) {
-          // Process the data
-          // Assuming you're receiving a search query
-          var query = event.data as string;
-          void performSearch(query).then(res => {
-            // Send results back to the parent page
-            event.source?.postMessage(res, { targetOrigin: event.origin });
-          })
-        }
-      }, false);
-    }
-
-    function onCollectionChange(inputValue: string) {
-      if (inputValue.length > 0) {
-        vecst.loadCollection(inputValue)
-      }
-    }
-
-    const addCollection = ref(false)
-    const newCollectionName = ref<string>('')
-
-    function onNewCollection(newCollName: string) {
-      console.log('create new collection with name: ' + newCollName)
-      addCollection.value = false
-      newCollectionName.value = ''
-      vecst.loadCollection(newCollName)
-    }
-
-    function grantAccess(url: string) {
+    console.log('running in iframe ' + parentUrl.value)
+    if (uploaderState.value.accessWhiteList.includes(parentUrl.value)) {
       accessGranted.value = true
-      console.log('add to whitelist')
-      if (parentUrl.value) {
-        if (!uploaderState.value.accessWhiteList.includes(url)) {
-          uploaderState.value.accessWhiteList.push(url)
-        }
-      }
-    }
-
-
-    /*function filterFn (val: string, update) {
-        update(() => {
-
-          if (val === '') {
-            filterOptions.value = stringOptions
-          }
-          else {
-            const needle = val.toLowerCase()
-            filterOptions.value = stringOptions.filter(
-              v => v.toLowerCase().indexOf(needle) > -1
-            )
-          }
-        })
-      }*/
-
-    return {
-      vecStoreUploaderState: vecst.vecStoreUploaderState,
-      vectorStoreState: vecst.vectorStoreState,
-      tab: ref<string>('upload'),
-      fileList,
-      searchString,
-      onCollectionChange,
-      accessGranted,
-      grantAccess,
-      parentUrl,
-      vectorizationProgress,
-      storeDocs,
-      uploaderState,
-      addCollection,
-      newCollectionName,
-      onNewCollection,
-      blockAccess: (page: string) => {
-        console.log('block access to page: ' + page)
-        uploaderState.value.accessWhiteList = uploaderState.value.accessWhiteList.filter(p => p !== page)
-        checkAccess()
-      }
     }
   }
-})
+}
+
+checkAccess()
+
+if (isInIframe) { // window is an iframe
+  // Listen for messages from the parent page
+  window.addEventListener('message', function (event) {
+    console.log('search!')
+    // Check the origin of the data!
+    if (!uploaderState.value.accessWhiteList.includes(event.origin)) {
+      console.log('can not grant access to: ' + event.origin)
+      return
+    } else if (accessGranted.value == true) {
+      // Process the data
+      // Assuming you're receiving a search query
+      var query = event.data as string;
+      void performSearch(query).then(res => {
+        // Send results back to the parent page
+        event.source?.postMessage(res, { targetOrigin: event.origin });
+      })
+    }
+  }, false);
+}
+
+function onCollectionChange(inputValue: string) {
+  if (inputValue.length > 0) {
+    vecst.loadCollection(inputValue)
+  }
+}
+
+const addCollection = ref(false)
+const newCollectionName = ref<string>('')
+
+function onNewCollection(newCollName: string) {
+  console.log('create new collection with name: ' + newCollName)
+  addCollection.value = false
+  newCollectionName.value = ''
+  vecst.loadCollection(newCollName)
+}
+
+function grantAccess(url: string) {
+  accessGranted.value = true
+  console.log('add to whitelist')
+  if (parentUrl.value) {
+    if (!uploaderState.value.accessWhiteList.includes(url)) {
+      uploaderState.value.accessWhiteList.push(url)
+    }
+  }
+}
+
+
+/*function filterFn (val: string, update) {
+    update(() => {
+
+      if (val === '') {
+        filterOptions.value = stringOptions
+      }
+      else {
+        const needle = val.toLowerCase()
+        filterOptions.value = stringOptions.filter(
+          v => v.toLowerCase().indexOf(needle) > -1
+        )
+      }
+    })
+  }*/
 </script>
