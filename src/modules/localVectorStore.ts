@@ -118,7 +118,7 @@ async function loadDocumentStore(name: string): Promise<documentStoreType> {
 
   console.log('load index');
   try {
-    await newindex.readIndex(vecdbName, 10000);
+    await newindex.readIndex(vecdbName, 10000, true);
   } catch {
     console.log(`index ${vecdbName} coud not be reloaded`);
     newindex = await loadIndex(
