@@ -11,6 +11,10 @@
     <q-drawer v-model="state.drawerOpen" show-if-above :width="300" :breakpoint="500" bordered
       :class="$q.dark.isActive ? 'bg-primary' : 'bg-grey-3'">
       <div class="q-gutter-lg">
+        <!-- Upload Area -->
+        <q-expansion-item dense label="Upload" icon="upload" default-opened>
+          <iframe id="vexvault" style="border: none" src="http://www.vexvault.com" height="200"></iframe>
+        </q-expansion-item>
         <!-- Conversation Area -->
         <q-expansion-item dense label="Conversations" icon="folder" default-opened>
           <div class="column items-stretch">
