@@ -29,9 +29,9 @@
       <q-page class="fit column">
         <div class="full-height full-width q-pa-md">
           <q-card-section class="row items-center">
-            <div v-if="selectedConversation" class="shadow-2 bg-grey-3 text-white rounded-borders">
-              <div v-for="message, idx in selectedConversation.messages" :key="idx"
-                :class="message.role === 'assistant' ? 'message bot-message bg-primary' : 'message user-message bg-secondary'">
+            <div v-if="selectedConversation" class="q-gutter-sm">
+              <div v-for="message, idx in selectedConversation.messages" :key="idx" :class="[message.role === 'assistant' ? 'bg-primary' : 'bg-secondary',
+                'rounded-borders', 'q-pa-xs', 'shadow-2']">
                 {{ message.content }}
               </div>
             </div>
