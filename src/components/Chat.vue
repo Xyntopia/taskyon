@@ -8,30 +8,37 @@
     </q-header>
 
     <!-- Sidebar -->
-    <q-drawer v-model="state.drawerOpen" show-if-above :width="200" :breakpoint="500" bordered
+    <q-drawer v-model="state.drawerOpen" show-if-above :width="300" :breakpoint="500" bordered
       :class="$q.dark.isActive ? 'bg-primary' : 'bg-grey-3'">
-      <!-- Conversation Area -->
-      <q-expansion-item dense label="Conversations" icon="folder" default-opened>
-        <div class="column items-stretch">
-          <q-btn dense flat icon="add" @click="createNewConversation"></q-btn>
-          <q-list>
-            <q-item dense v-for="(conversation, idx) in state.conversations" :key="idx"
-              @click="state.selectedConversationID = idx" clickable v-ripple>
-              <q-item-section avatar>
-                <q-icon name="chat_bubble" size="xs" />
-              </q-item-section>
-              <q-item-section>
-                Conversation {{ idx }}
-              </q-item-section>
-            </q-item>
-          </q-list>
-        </div>
-      </q-expansion-item>
-      <!-- Settings Area -->
-      <q-expansion-item dense label="Settings" icon="settings">
-        <q-input v-model="state.openAIKey" label="OpenAI Key" />
-        <q-toggle :color="$q.dark.isActive ? 'secondary' : 'bg-grey-3'" v-model="isDarkTheme" label="Dark Theme" />
-      </q-expansion-item>
+      <div class="q-gutter-lg">
+        <!-- Conversation Area -->
+        <q-expansion-item dense label="Conversations" icon="folder" default-opened>
+          <div class="column items-stretch">
+            <q-btn dense flat icon="add" @click="createNewConversation"></q-btn>
+            <q-list>
+              <q-item dense v-for="(conversation, idx) in state.conversations" :key="idx"
+                @click="state.selectedConversationID = idx" clickable v-ripple>
+                <q-item-section avatar>
+                  <q-icon name="chat_bubble" size="xs" />
+                </q-item-section>
+                <q-item-section>
+                  Conversation {{ idx }}
+                </q-item-section>
+                <q-item-section side>
+                  <q-btn dense flat icon="delete" size="xs" />
+                </q-item-section>
+              </q-item>
+            </q-list>
+          </div>
+        </q-expansion-item>
+        <!-- Settings Area -->
+        <q-expansion-item dense label="Settings" icon="settings">
+          <div class="q-pa-md">
+            <q-input dense filled v-model="state.openAIKey" label="OpenAI Key" />
+            <q-toggle :color="$q.dark.isActive ? 'secondary' : 'bg-grey-3'" v-model="isDarkTheme" label="Dark Theme" />
+          </div>
+        </q-expansion-item>
+      </div>
     </q-drawer>
 
     <!-- Main Content Area -->
