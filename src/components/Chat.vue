@@ -2,16 +2,16 @@
   <q-layout view="hHh Lpr lff">
     <q-header elevated :class="$q.dark.isActive ? 'bg-secondary' : 'bg-black'">
       <q-toolbar>
-        <q-btn flat @click="drawerOpen = !drawerOpen" round dense icon="menu" />
+        <q-btn flat @click="state.drawerOpen = !state.drawerOpen" round dense icon="menu" />
         <q-toolbar-title>Chat</q-toolbar-title>
       </q-toolbar>
     </q-header>
 
     <!-- Sidebar -->
-    <q-drawer v-model="drawerOpen" show-if-above :width="200" :breakpoint="500" bordered
+    <q-drawer v-model="state.drawerOpen" show-if-above :width="200" :breakpoint="500" bordered
       :class="$q.dark.isActive ? 'bg-grey-9' : 'bg-grey-3'">
       <q-list>
-        <q-item v-for="(conversation, idx) in conversations" :key="idx" @click="selectConversation(idx)">
+        <q-item v-for="(conversation, idx) in state.conversations" :key="idx" @click="state.selectedConversationID = idx">
           <q-item-section>
             Conversation {{ idx + 1 }}
           </q-item-section>
@@ -19,7 +19,7 @@
       </q-list>
       <!-- Settings Area -->
       <q-expansion-item dense label="Settings" icon="settings">
-        <q-input v-model="openAIKey" label="OpenAI Key" />
+        <q-input v-model="state.openAIKey" label="OpenAI Key" />
         <q-toggle v-model="isDarkTheme" label="Dark Theme" />
       </q-expansion-item>
     </q-drawer>
@@ -30,7 +30,7 @@
         <div class="full-height full-width q-pa-md">
           <q-card-section class="row items-center">
             <div v-if="selectedConversation" class="q-gutter-sm">
-              <div v-for="message, idx in selectedConversation.messages" :key="idx" :class="[message.role === 'assistant' ? 'bg-primary' : 'bg-secondary',
+              <div v-for="message, idx in selectedConversation" :key="idx" :class="[message.role === 'assistant' ? 'bg-primary' : 'bg-secondary',
                 'rounded-borders', 'q-pa-xs', 'shadow-2']">
                 {{ message.content }}
               </div>
@@ -38,10 +38,10 @@
           </q-card-section>
 
           <q-card-section>
-            <q-input autogrow filled color="secondary" v-model="userInput" label="Type your message...">
+            <q-input autogrow filled color="secondary" v-model="state.userInput" label="Type your message...">
               <template v-slot:append>
-                <q-icon v-if="userInput !== ''" name="close" @click="userInput = ''" class="cursor-pointer" />
-                <q-btn flat icon="send" @click="sendMessage" />
+                <q-icon v-if="state.userInput !== ''" name="close" @click="state.userInput = ''" class="cursor-pointer" />
+                <q-btn flat dense stretch icon="send" @click="sendMessage" />
               </template>
             </q-input>
           </q-card-section>
@@ -53,8 +53,8 @@
 
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import { useQuasar } from 'quasar';
+import { ref, watch, computed, watchEffect } from 'vue';
+import { useQuasar, LocalStorage } from 'quasar';
 import axios from 'axios';
 
 const $q = useQuasar();
@@ -86,18 +86,20 @@ type OpenAIMessage = {
   content: string
 }
 
-const messages = ref<OpenAIMessage[]>([]);
-const userInput = ref<string>('');
-const drawerOpen = ref<boolean>(true);
-const conversations = ref<{ id: string, messages: OpenAIMessage[] }[]>([]);
-const selectedConversation = ref<{ id: string, messages: OpenAIMessage[] } | null>(null);
-const openAIKey = ref<string>(localStorage.getItem('openai_key') || '');
-const isDarkTheme = ref<boolean>($q.dark.isActive);
-// Initialize with a default conversation if desired
-const defaultConversation = { id: '1', messages: [] };
-conversations.value.push(defaultConversation);
-selectedConversation.value = defaultConversation;
+const state = ref({
+  conversations: {} as Record<string, OpenAIMessage[]>,
+  selectedConversationID: '',
+  openAIKey: 'add open AI key here!!',
+  userInput: '',
+  drawerOpen: true
+})
 
+const isDarkTheme = ref<boolean>($q.dark.isActive);
+
+const selectedConversation = computed(() => {
+  return state.value.conversations[state.value.selectedConversationID];
+}
+)
 
 const callOpenAI = async (userMessage: OpenAIMessage): Promise<string> => {
   const apiKey = localStorage.getItem('openai_key'); // Fetching from local storage
@@ -109,7 +111,7 @@ const callOpenAI = async (userMessage: OpenAIMessage): Promise<string> => {
   // Prepare the payload, including all the messages from the chat history
   const payload = {
     model: 'gpt-3.5-turbo',
-    messages: messages.value
+    messages: selectedConversation.value
   };
 
   const response = await axios.post<OpenAIResponse>('https://api.openai.com/v1/chat/completions', payload, {
@@ -123,26 +125,22 @@ const callOpenAI = async (userMessage: OpenAIMessage): Promise<string> => {
   const botResponseContent = response.data?.choices[0]?.message?.content ?? '';
 
   // Add the bot's response to the existing messages array
-  messages.value.push({ role: 'assistant', content: botResponseContent });
+  selectedConversation.value.push({ role: 'assistant', content: botResponseContent });
 
   return botResponseContent;
 };
 
-const selectConversation = (idx: number) => {
-  selectedConversation.value = conversations.value[idx];
-};
-
 const sendMessage = async () => {
-  if (userInput.value.trim() === '' || !selectedConversation.value) return;
+  if (state.value.userInput.trim() === '' || !selectedConversation.value) return;
 
   const userMessage = {
     role: 'user',
-    content: userInput.value
+    content: state.value.userInput
   };
 
   // Check for null before accessing messages property
   if (selectedConversation.value) {
-    selectedConversation.value.messages.push(userMessage);
+    selectedConversation.value.push(userMessage);
 
     // Getting bot's response and pushing it to messages array
     const botResponseContent = await callOpenAI(userMessage);
@@ -153,8 +151,10 @@ watch(isDarkTheme, (newValue) => {
   $q.dark.set(newValue);
 });
 
-watch(openAIKey, (newValue) => {
-  localStorage.setItem('openai_key', newValue);
+watch(() => state, (newValue) => {
+  LocalStorage.set('chat_state', JSON.stringify(newValue.value));
+}, {
+  deep: true,
 });
 
 </script>
