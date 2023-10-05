@@ -28,23 +28,30 @@
     <q-page-container>
       <q-page class="fit column">
         <div class="full-height full-width q-pa-md">
-          <q-card-section class="row items-center">
-            <div v-if="selectedConversation" class="q-gutter-sm">
-              <div v-for="message, idx in selectedConversation" :key="idx" :class="[message.role === 'assistant' ? 'bg-primary' : 'bg-secondary',
-                'rounded-borders', 'q-pa-xs', 'shadow-2']">
-                {{ message.content }}
+          <div v-if="selectedConversation">
+            <q-card-section class="row items-center">
+              <div class="q-gutter-sm">
+                <div v-for="message, idx in selectedConversation" :key="idx" :class="[message.role === 'assistant' ? 'bg-primary' : 'bg-secondary',
+                  'rounded-borders', 'q-pa-xs', 'shadow-2']">
+                  {{ message.content }}
+                </div>
               </div>
-            </div>
-          </q-card-section>
+            </q-card-section>
 
-          <q-card-section>
-            <q-input autogrow filled color="secondary" v-model="state.userInput" label="Type your message...">
-              <template v-slot:append>
-                <q-icon v-if="state.userInput !== ''" name="close" @click="state.userInput = ''" class="cursor-pointer" />
-                <q-btn flat dense stretch icon="send" @click="sendMessage" />
-              </template>
-            </q-input>
-          </q-card-section>
+            <q-card-section>
+              <q-input autogrow filled color="secondary" v-model="state.userInput" label="Type your message..."
+                @keyup="checkForShiftEnter">
+                <template v-slot:append>
+                  <q-icon v-if="state.userInput !== ''" name="close" @click="state.userInput = ''"
+                    class="cursor-pointer" />
+                  <q-btn flat dense stretch icon="send" @click="sendMessage" />
+                </template>
+              </q-input>
+            </q-card-section>
+          </div>
+          <div v-else>
+            <q-btn label="create new conversion" icon="add" @click="createNewConversation"></q-btn>
+          </div>
         </div>
       </q-page>
     </q-page-container>
@@ -53,9 +60,10 @@
 
 
 <script setup lang="ts">
-import { ref, watch, computed, watchEffect } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { useQuasar, LocalStorage } from 'quasar';
 import axios from 'axios';
+import { StampAnnotationElement } from 'pdfjs-dist/types/src/display/annotation_layer';
 
 const $q = useQuasar();
 
@@ -86,6 +94,7 @@ type OpenAIMessage = {
   content: string
 }
 
+const stateName = "chat_state";
 const state = ref({
   conversations: {} as Record<string, OpenAIMessage[]>,
   selectedConversationID: '',
@@ -94,20 +103,37 @@ const state = ref({
   drawerOpen: true
 })
 
+
+const storedState = LocalStorage.getItem(stateName);
+if (storedState) {
+  state.value = JSON.parse(
+    storedState as string
+  ) as typeof state.value;
+}
+
 const isDarkTheme = ref<boolean>($q.dark.isActive);
 
 const selectedConversation = computed(() => {
   return state.value.conversations[state.value.selectedConversationID];
+})
+
+function createNewConversation() {
+  // Get all existing conversation IDs and convert them to integers
+  const existingIds = Object.keys(state.value.conversations).map(id => parseInt(id, 10));
+
+  // Find the maximum existing ID
+  const maxId = Math.max(...existingIds, 0);  // Starst at 0 if there are no existing IDs
+
+  // Generate a new unique ID by incrementing the max ID
+  const newId = (maxId + 1).toString();
+
+  // Create a new conversation with the unique ID
+  state.value.conversations[newId] = [];
+
+  state.value.selectedConversationID = newId
 }
-)
 
 const callOpenAI = async (userMessage: OpenAIMessage): Promise<string> => {
-  const apiKey = localStorage.getItem('openai_key'); // Fetching from local storage
-
-  if (!apiKey) {
-    throw new Error('API Key not found in local storage');
-  }
-
   // Prepare the payload, including all the messages from the chat history
   const payload = {
     model: 'gpt-3.5-turbo',
@@ -116,7 +142,7 @@ const callOpenAI = async (userMessage: OpenAIMessage): Promise<string> => {
 
   const response = await axios.post<OpenAIResponse>('https://api.openai.com/v1/chat/completions', payload, {
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${state.value.openAIKey}`,
       'Content-Type': 'application/json'
     }
   });
@@ -147,12 +173,20 @@ const sendMessage = async () => {
   }
 };
 
+const checkForShiftEnter = (event: KeyboardEvent) => {
+  if (event.shiftKey && event.key === 'Enter') {
+    void sendMessage();
+    // Prevent a new line from being added to the input (optional)
+    event.preventDefault();
+  }
+};
+
 watch(isDarkTheme, (newValue) => {
   $q.dark.set(newValue);
 });
 
 watch(() => state, (newValue) => {
-  LocalStorage.set('chat_state', JSON.stringify(newValue.value));
+  LocalStorage.set(stateName, JSON.stringify(newValue.value));
 }, {
   deep: true,
 });
