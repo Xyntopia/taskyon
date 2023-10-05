@@ -1,6 +1,6 @@
 <template>
   <q-layout view="hHh Lpr lff">
-    <q-header elevated :class="$q.dark.isActive ? 'bg-secondary' : 'bg-black'">
+    <q-header elevated :class="$q.dark.isActive ? 'bg-secondary' : 'bg-primary'">
       <q-toolbar>
         <q-btn flat @click="state.drawerOpen = !state.drawerOpen" round dense icon="menu" />
         <q-toolbar-title>Chat: Conversation {{ state.selectedConversationID }}</q-toolbar-title>
@@ -9,7 +9,7 @@
 
     <!-- Sidebar -->
     <q-drawer v-model="state.drawerOpen" show-if-above :width="200" :breakpoint="500" bordered
-      :class="$q.dark.isActive ? 'bg-grey-9' : 'bg-grey-3'">
+      :class="$q.dark.isActive ? 'bg-primary' : 'bg-grey-3'">
       <!-- Conversation Area -->
       <q-expansion-item dense label="Conversations" icon="folder" default-opened>
         <div class="column items-stretch">
@@ -30,7 +30,7 @@
       <!-- Settings Area -->
       <q-expansion-item dense label="Settings" icon="settings">
         <q-input v-model="state.openAIKey" label="OpenAI Key" />
-        <q-toggle v-model="isDarkTheme" label="Dark Theme" />
+        <q-toggle :color="$q.dark.isActive ? 'secondary' : 'bg-grey-3'" v-model="isDarkTheme" label="Dark Theme" />
       </q-expansion-item>
     </q-drawer>
 
@@ -41,8 +41,9 @@
           <div v-if="selectedConversation">
             <q-card-section class="row items-center">
               <div class="q-gutter-sm">
-                <div v-for="message, idx in selectedConversation" :key="idx" :class="[message.role === 'assistant' ? ($q.dark.isActive ? 'bg-secondary' : 'bg-black') : 'bg-secondary',
-                  'rounded-borders', 'q-pa-xs', 'shadow-2']">
+                <div v-for="message, idx in selectedConversation" :key="idx" :class="[message.role === 'assistant' ? ($q.dark.isActive ? 'bg-primary' : 'bg-white') : 'bg-secondary',
+                  'rounded-borders', 'q-pa-xs', 'shadow-2',
+                message.role === 'assistant' ? 'q-mr-lg' : 'q-ml-lg']">
                   {{ message.content }}
                 </div>
               </div>
@@ -177,9 +178,9 @@ const sendMessage = async () => {
   // Check for null before accessing messages property
   if (selectedConversation.value) {
     selectedConversation.value.push(userMessage);
-
+    state.value.userInput = ''
     // Getting bot's response and pushing it to messages array
-    const botResponseContent = await callOpenAI(userMessage);
+    await callOpenAI(userMessage);
   }
 };
 
