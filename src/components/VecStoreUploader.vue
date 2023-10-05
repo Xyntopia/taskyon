@@ -3,7 +3,7 @@
     <div class="col row content-stretch full-height">
       <div class="col-auto col items-center">
         <div class="col-auto">
-          <q-tabs dense v-model="tab" vertical class="text-primary">
+          <q-tabs dense v-model="tab" vertical :class="$q.dark.isActive ? 'text-secondary' : 'text-black'">
             <q-tab name="upload" icon="upload"><q-tooltip :delay="500">open upload window</q-tooltip></q-tab>
             <q-tab name="settings" icon="settings"><q-tooltip :delay="500">open store settings</q-tooltip></q-tab>
             <q-tab name="whitelist" icon="key"><q-tooltip :delay="500">open access whitelist</q-tooltip></q-tab>
