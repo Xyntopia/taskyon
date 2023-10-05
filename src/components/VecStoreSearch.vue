@@ -64,8 +64,13 @@
         </q-card>
       </div>
     </div>
-    <div>
-      <q-card style="width:100%">
+    <div class="row">
+      <q-card class="col-auto">
+        <q-card-section>
+          <q-btn icon="chat" label="Chat with the store" to="chat"/>
+        </q-card-section>
+      </q-card>
+      <q-card class="col">
         <q-card-section>
           <q-table wrap-cells title="Search Results" :rows="searchResults" :pagination="initialPagination" :columns="[
             { name: 'id', required: true, label: 'id', field: row => row.document.id, },

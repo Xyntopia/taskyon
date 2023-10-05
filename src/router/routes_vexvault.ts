@@ -7,6 +7,10 @@ const routes: RouteRecordRaw[] = [
     children: [
       { path: '', component: () => import('components/VecStoreUploader.vue') },
       {
+        path: 'chat',
+        component: () => import('components/Chat.vue'),
+      },
+      {
         path: 'uploader',
         component: () => import('components/VecStoreUploader.vue'),
       },
