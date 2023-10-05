@@ -1,6 +1,12 @@
 <template>
   <div class="fit column">
-    <q-card class="full-height full-width q-pa-md">
+    <div :class="[theme, 'full-height', 'full-width', 'q-pa-md']">
+      <!-- Settings Area -->
+      <q-expansion-item label="Settings" icon="settings">
+        <q-input v-model="openAIKey" label="OpenAI Key" />
+        <q-toggle v-model="isDarkTheme" label="Dark Theme" />
+      </q-expansion-item>
+
       <q-card-section class="row items-center">
         <div class="shadow-2 bg-grey-3 text-white rounded-borders">
           <div v-for="message in messages" :key="message.id"
@@ -14,23 +20,52 @@
         <q-input v-model="userInput" label="Type your message..." />
         <q-btn label="Send" @click="sendMessage" />
       </q-card-section>
-    </q-card>
+    </div>
   </div>
 </template>
 
+
+<style lang="sass" scoped>
+$dark-theme-color: $primary
+$light-theme-color: white
+
+.dark-theme
+  background-color: $dark-theme-color
+  color: #fff
+
+.light-theme
+  background-color: $light-theme-color
+  color: #333
+</style>
+
+
+
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import axios from 'axios';
 
 type OpenAIResponse = {
+  id: string,
+  object: string,
+  created: number,
+  model: string,
   choices: [
     {
+      index: number,
       message: {
-        content: string;
-      }
+        role: 'assistant',
+        content: string
+      },
+      finish_reason: string
     }
-  ];
+  ],
+  usage: {
+    prompt_tokens: number,
+    completion_tokens: number,
+    total_tokens: number
+  }
 };
+
 
 
 const callOpenAI = async (userMessage: string): Promise<string> => {
@@ -42,15 +77,21 @@ const callOpenAI = async (userMessage: string): Promise<string> => {
 
   // Constructing the payload based on OpenAI chat endpoint structure
   const payload = {
-    messages: [...messages.value, { role: 'user', content: userMessage }]
+    model: 'gpt-3.5-turbo',
+    messages: [
+      ...messages.value,
+      { role: 'user', content: userMessage }
+    ]
   };
 
-  const response = await axios.post<OpenAIResponse>('https://api.openai.com/v1/engines/davinci-codex/chat/completions', payload, {
+
+  const response = await axios.post<OpenAIResponse>('https://api.openai.com/v1/chat/completions', payload, {
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     }
   });
+
 
   // Extracting the bot's message from the response
   return response.data?.choices[0]?.message?.content ?? '';
@@ -76,5 +117,17 @@ const sendMessage = async () => {
 
   userInput.value = '';
 };
+
+const openAIKey = ref<string>(localStorage.getItem('openai_key') || '');
+const isDarkTheme = ref<boolean>(false);
+const theme = ref<string>('light-theme');
+
+watch(isDarkTheme, (newValue) => {
+  theme.value = newValue ? 'dark-theme' : 'light-theme';
+});
+
+watch(openAIKey, (newValue) => {
+  localStorage.setItem('openai_key', newValue);
+});
 
 </script>
