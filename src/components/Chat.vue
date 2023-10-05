@@ -1,5 +1,5 @@
 <template>
-  <q-layout view="hHh Lpr lff">
+  <q-layout>
     <q-header elevated :class="$q.dark.isActive ? 'bg-secondary' : 'bg-primary'">
       <q-toolbar>
         <q-btn flat @click="state.drawerOpen = !state.drawerOpen" round dense icon="menu" />
@@ -10,11 +10,15 @@
     <!-- Sidebar -->
     <q-drawer v-model="state.drawerOpen" show-if-above :width="300" :breakpoint="500" bordered
       :class="$q.dark.isActive ? 'bg-primary' : 'bg-grey-3'">
-      <div class="q-gutter-lg">
+      <q-list>
         <!-- Upload Area -->
-        <q-expansion-item dense label="Upload" icon="upload" default-opened>
-          <iframe id="vexvault" style="border: none" src="http://www.vexvault.com" height="200"></iframe>
+        <q-expansion-item v-if="true" label="Upload" icon="upload" default-opened>
+          <VecStoreUploader class="fit-height" />
+          <!--
+          <iframe id="vexvault" style="border: none" :src="uploaderURL" height="200"></iframe>
+          -->
         </q-expansion-item>
+        <q-separator spaced />
         <!-- Conversation Area -->
         <q-expansion-item dense label="Conversations" icon="folder" default-opened>
           <div class="column items-stretch">
@@ -35,6 +39,7 @@
             </q-list>
           </div>
         </q-expansion-item>
+        <q-separator spaced />
         <!-- Settings Area -->
         <q-expansion-item dense label="Settings" icon="settings">
           <div class="q-pa-md">
@@ -42,7 +47,7 @@
             <q-toggle :color="$q.dark.isActive ? 'secondary' : 'bg-grey-3'" v-model="isDarkTheme" label="Dark Theme" />
           </div>
         </q-expansion-item>
-      </div>
+      </q-list>
     </q-drawer>
 
     <!-- Main Content Area -->
@@ -85,7 +90,7 @@
 import { ref, watch, computed } from 'vue';
 import { useQuasar, LocalStorage } from 'quasar';
 import axios from 'axios';
-import { StampAnnotationElement } from 'pdfjs-dist/types/src/display/annotation_layer';
+import VecStoreUploader from 'components/VecStoreUploader.vue';
 
 const $q = useQuasar();
 
@@ -125,6 +130,9 @@ const state = ref({
   drawerOpen: true
 })
 
+const uploaderURL = 'http://www.vexvault.com'
+//const uploaderURL='http://localhost:8080'
+
 
 const storedState = LocalStorage.getItem(stateName);
 if (storedState) {
@@ -155,7 +163,7 @@ function createNewConversation() {
   state.value.selectedConversationID = newId
 }
 
-const callOpenAI = async (userMessage: OpenAIMessage): Promise<string> => {
+async function callOpenAI() {
   // Prepare the payload, including all the messages from the chat history
   const payload = {
     model: 'gpt-3.5-turbo',
@@ -191,7 +199,7 @@ const sendMessage = async () => {
     selectedConversation.value.push(userMessage);
     state.value.userInput = ''
     // Getting bot's response and pushing it to messages array
-    await callOpenAI(userMessage);
+    await callOpenAI();
   }
 };
 

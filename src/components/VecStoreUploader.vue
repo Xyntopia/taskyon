@@ -23,7 +23,7 @@
         </div>
       </div>
       <div class="col">
-        <q-tab-panels v-model="tab" animated class="full-height">
+        <q-tab-panels v-model="tab" animated class="full-height" style="background-color: inherit;">
           <q-tab-panel name="upload">
             <FileDropZone
               :label="`Drag & drop, or click to add files to the collection: '${vecStoreUploaderState.collectionName}'`"
@@ -253,9 +253,9 @@ function grantAccess(url: string) {
   }
 }
 
-const vecStoreUploaderState= vecst.vecStoreUploaderState
-const vectorStoreState= vecst.vectorStoreState
-const tab= ref<string>('upload')
+const vecStoreUploaderState = vecst.vecStoreUploaderState
+const vectorStoreState = vecst.vectorStoreState
+const tab = ref<string>('upload')
 function blockAccess(page: string) {
   console.log('block access to page: ' + page)
   uploaderState.value.accessWhiteList = uploaderState.value.accessWhiteList.filter(p => p !== page)

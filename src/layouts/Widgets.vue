@@ -16,7 +16,13 @@
     </q-page-container>
 
   </q-layout>
+  {{ route.query }}
 </template>
 
 <script setup lang="ts">
+//TODO: change colors based on the route... 
+import { useRoute } from 'vue-router'
+const route = useRoute()
+route.query //has all the parameters :)
+
 </script>
