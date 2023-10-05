@@ -104,13 +104,6 @@ import yaml from 'js-yaml';
 const vectorStore = useVectorStore();
 const searchResults = ref<SearchResult[]>([]);
 
-// Perform the search and get results
-async function performSearch(searchTerm: string, k: number) {
-  const res = await vectorStore.query(searchTerm, k)
-  return res
-}
-
-
 async function onSearchChange(searchTerm: string | Event, k: number) {
   if (searchTerm instanceof Event) { // for some reason, in chrome, a second event with the original input-event gets fired...
     return
@@ -119,10 +112,11 @@ async function onSearchChange(searchTerm: string | Event, k: number) {
   } else {
     // Perform your search here
     console.log(`Searching for ${searchTerm}`);
-    searchResults.value = await performSearch(searchTerm, k)
+    searchResults.value = await vectorStore.query(searchTerm, k)
     console.log(searchResults.value)
   }
 };
+
 const numberOfSearchResults = ref(5)
 const initialPagination = {
   sortBy: 'score',

@@ -91,6 +91,7 @@ import { ref, watch, computed } from 'vue';
 import { useQuasar, LocalStorage } from 'quasar';
 import axios from 'axios';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
+import { useVectorStore, SearchResult } from 'src/modules/localVectorStore'
 
 const $q = useQuasar();
 
@@ -121,7 +122,7 @@ type OpenAIMessage = {
   content: string
 }
 
-const stateName = "chat_state";
+const stateName = 'chat_state';
 const state = ref({
   conversations: {} as Record<string, OpenAIMessage[]>,
   selectedConversationID: '',
@@ -130,8 +131,18 @@ const state = ref({
   drawerOpen: true
 })
 
-const uploaderURL = 'http://www.vexvault.com'
+//const uploaderURL = 'http://www.vexvault.com'
 //const uploaderURL='http://localhost:8080'
+
+const vectorStore = useVectorStore();
+const searchResults = ref<SearchResult[]>([]);
+
+async function searchStore(searchTerm: string) {
+  console.log(`Searching for ${searchTerm}`);
+  searchResults.value = await vectorStore.query(searchTerm, k)
+  console.log(searchResults.value)
+}
+
 
 
 const storedState = LocalStorage.getItem(stateName);
