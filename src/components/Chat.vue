@@ -1,27 +1,54 @@
 <template>
-  <div class="fit column">
-    <div :class="[theme, 'full-height', 'full-width', 'q-pa-md']">
+  <q-layout view="hHh Lpr lff">
+    <q-header elevated :class="$q.dark.isActive ? 'bg-secondary' : 'bg-black'">
+      <q-toolbar>
+        <q-btn flat @click="drawerOpen = !drawerOpen" round dense icon="menu" />
+        <q-toolbar-title>Chat</q-toolbar-title>
+      </q-toolbar>
+    </q-header>
+
+    <!-- Sidebar -->
+    <q-drawer v-model="drawerOpen" show-if-above :width="200" :breakpoint="500" bordered
+      :class="$q.dark.isActive ? 'bg-grey-9' : 'bg-grey-3'">
+      <q-list>
+        <q-item v-for="(conversation, idx) in conversations" :key="idx" @click="selectConversation(idx)">
+          <q-item-section>
+            Conversation {{ idx + 1 }}
+          </q-item-section>
+        </q-item>
+      </q-list>
       <!-- Settings Area -->
       <q-expansion-item dense label="Settings" icon="settings">
         <q-input v-model="openAIKey" label="OpenAI Key" />
         <q-toggle v-model="isDarkTheme" label="Dark Theme" />
       </q-expansion-item>
+    </q-drawer>
 
-      <q-card-section class="row items-center">
-        <div class="shadow-2 bg-grey-3 text-white rounded-borders">
-          <div v-for="message, idx in messages" :key="idx"
-            :class="message.role === 'assistant' ? 'message bot-message bg-primary' : 'message user-message bg-secondary'">
-            {{ message.content }}
-          </div>
+    <!-- Main Content Area -->
+    <q-page-container>
+      <q-page class="fit column">
+        <div class="full-height full-width q-pa-md">
+          <q-card-section class="row items-center">
+            <div v-if="selectedConversation" class="shadow-2 bg-grey-3 text-white rounded-borders">
+              <div v-for="message, idx in selectedConversation.messages" :key="idx"
+                :class="message.role === 'assistant' ? 'message bot-message bg-primary' : 'message user-message bg-secondary'">
+                {{ message.content }}
+              </div>
+            </div>
+          </q-card-section>
+
+          <q-card-section>
+            <q-input autogrow filled color="secondary" v-model="userInput" label="Type your message...">
+              <template v-slot:append>
+                <q-icon v-if="userInput !== ''" name="close" @click="userInput = ''" class="cursor-pointer" />
+                <q-btn flat icon="send" @click="sendMessage" />
+              </template>
+            </q-input>
+          </q-card-section>
         </div>
-      </q-card-section>
-
-      <q-card-section>
-        <q-input v-model="userInput" label="Type your message..." />
-        <q-btn label="Send" @click="sendMessage" />
-      </q-card-section>
-    </div>
-  </div>
+      </q-page>
+    </q-page-container>
+  </q-layout>
 </template>
 
 
@@ -61,6 +88,16 @@ type OpenAIMessage = {
 
 const messages = ref<OpenAIMessage[]>([]);
 const userInput = ref<string>('');
+const drawerOpen = ref<boolean>(true);
+const conversations = ref<{ id: string, messages: OpenAIMessage[] }[]>([]);
+const selectedConversation = ref<{ id: string, messages: OpenAIMessage[] } | null>(null);
+const openAIKey = ref<string>(localStorage.getItem('openai_key') || '');
+const isDarkTheme = ref<boolean>($q.dark.isActive);
+// Initialize with a default conversation if desired
+const defaultConversation = { id: '1', messages: [] };
+conversations.value.push(defaultConversation);
+selectedConversation.value = defaultConversation;
+
 
 const callOpenAI = async (userMessage: OpenAIMessage): Promise<string> => {
   const apiKey = localStorage.getItem('openai_key'); // Fetching from local storage
@@ -91,22 +128,26 @@ const callOpenAI = async (userMessage: OpenAIMessage): Promise<string> => {
   return botResponseContent;
 };
 
+const selectConversation = (idx: number) => {
+  selectedConversation.value = conversations.value[idx];
+};
+
 const sendMessage = async () => {
-  if (userInput.value.trim() === '') return;
+  if (userInput.value.trim() === '' || !selectedConversation.value) return;
 
   const userMessage = {
     role: 'user',
     content: userInput.value
   };
 
-  messages.value.push(userMessage);  // Here
+  // Check for null before accessing messages property
+  if (selectedConversation.value) {
+    selectedConversation.value.messages.push(userMessage);
 
-  // Getting bot's response and pushing it to messages array
-  const botResponseContent = await callOpenAI(userMessage);
+    // Getting bot's response and pushing it to messages array
+    const botResponseContent = await callOpenAI(userMessage);
+  }
 };
-
-const openAIKey = ref<string>(localStorage.getItem('openai_key') || '');
-const isDarkTheme = ref<boolean>($q.dark.isActive);
 
 watch(isDarkTheme, (newValue) => {
   $q.dark.set(newValue);
