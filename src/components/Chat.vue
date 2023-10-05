@@ -3,20 +3,30 @@
     <q-header elevated :class="$q.dark.isActive ? 'bg-secondary' : 'bg-black'">
       <q-toolbar>
         <q-btn flat @click="state.drawerOpen = !state.drawerOpen" round dense icon="menu" />
-        <q-toolbar-title>Chat</q-toolbar-title>
+        <q-toolbar-title>Chat: Conversation {{ state.selectedConversationID }}</q-toolbar-title>
       </q-toolbar>
     </q-header>
 
     <!-- Sidebar -->
     <q-drawer v-model="state.drawerOpen" show-if-above :width="200" :breakpoint="500" bordered
       :class="$q.dark.isActive ? 'bg-grey-9' : 'bg-grey-3'">
-      <q-list>
-        <q-item v-for="(conversation, idx) in state.conversations" :key="idx" @click="state.selectedConversationID = idx">
-          <q-item-section>
-            Conversation {{ idx + 1 }}
-          </q-item-section>
-        </q-item>
-      </q-list>
+      <!-- Conversation Area -->
+      <q-expansion-item dense label="Conversations" icon="folder" default-opened>
+        <div class="column items-stretch">
+          <q-btn dense flat icon="add" @click="createNewConversation"></q-btn>
+          <q-list>
+            <q-item dense v-for="(conversation, idx) in state.conversations" :key="idx"
+              @click="state.selectedConversationID = idx" clickable v-ripple>
+              <q-item-section avatar>
+                <q-icon name="chat_bubble" size="xs" />
+              </q-item-section>
+              <q-item-section>
+                Conversation {{ idx }}
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </div>
+      </q-expansion-item>
       <!-- Settings Area -->
       <q-expansion-item dense label="Settings" icon="settings">
         <q-input v-model="state.openAIKey" label="OpenAI Key" />
@@ -31,7 +41,7 @@
           <div v-if="selectedConversation">
             <q-card-section class="row items-center">
               <div class="q-gutter-sm">
-                <div v-for="message, idx in selectedConversation" :key="idx" :class="[message.role === 'assistant' ? 'bg-primary' : 'bg-secondary',
+                <div v-for="message, idx in selectedConversation" :key="idx" :class="[message.role === 'assistant' ? ($q.dark.isActive ? 'bg-secondary' : 'bg-black') : 'bg-secondary',
                   'rounded-borders', 'q-pa-xs', 'shadow-2']">
                   {{ message.content }}
                 </div>
