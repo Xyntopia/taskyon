@@ -44,7 +44,8 @@ async function loadIndex(
     maxElements,
     m,
     efConstruction,
-    randomSeed
+    randomSeed,
+    true
   );
 
   // Set efSearch parameters. This can be changed after the index is created.
