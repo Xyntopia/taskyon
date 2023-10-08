@@ -23,7 +23,7 @@
       "boot/*": [
         "src/boot/*"
       ],
-      "modues/*": [
+      "modules/*": [
         "src/modules/*"
       ],
       "vue$": [
