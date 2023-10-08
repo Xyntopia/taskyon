@@ -2,21 +2,19 @@ import VecStoreUploader from 'components/VecStoreUploader.vue';
 import { useVectorStore, SearchResult } from 'src/modules/localVectorStore';
 import axios from 'axios';
 
-// Define an interface for chatState
-interface IChatState {
-  conversations: Record<string, OpenAIMessage[]>;
-  selectedConversationID: string;
-  openAIKey: string;
-}
-
 export let chatState = {
   conversations: {} as Record<string, OpenAIMessage[]>,
   selectedConversationID: '',
   openAIKey: 'add open AI key here!!',
 };
 
-export function updateChatState(newValue: typeof chatState){
-  chatState = newValue
+/**
+ * Updates the chat state with a new value.
+ *
+ * @param {typeof chatState} newValue - The new value for the chat state.
+ */
+export function updateChatState(newValue: typeof chatState) {
+  chatState = newValue;
 }
 
 export type OpenAIResponse = {
@@ -48,6 +46,13 @@ export type OpenAIMessage = {
 
 const vectorStore = useVectorStore();
 
+/**
+ * Searches the vector store with a given term and returns k results.
+ *
+ * @param {string} searchTerm - The term to search for.
+ * @param {number} k - The number of results to return.
+ * @returns {Promise<SearchResult[]>} - A promise that resolves to an array of search results.
+ */
 async function searchStore(searchTerm: string, k: number) {
   console.log(`Searching for ${searchTerm}`);
   const searchResults = await vectorStore.query(searchTerm, k);
@@ -55,8 +60,13 @@ async function searchStore(searchTerm: string, k: number) {
   return searchResults;
 }
 
+/**
+ * Calls the OpenAI API with a given set of chat messages.
+ *
+ * @param {OpenAIMessage[]} chatMessages - The chat messages to send to the API.
+ * @returns {Promise<string>} - A promise that resolves to the bot's response content.
+ */
 export async function callOpenAI(chatMessages: OpenAIMessage[]) {
-  // Prepare the payload, including all the messages from the chat history
   const payload = {
     model: 'gpt-3.5-turbo',
     messages: chatMessages,
@@ -73,8 +83,6 @@ export async function callOpenAI(chatMessages: OpenAIMessage[]) {
     }
   );
 
-  // Extracting the bot's message from the response
   const botResponseContent = response.data?.choices[0]?.message?.content ?? '';
-
   return botResponseContent;
 }
