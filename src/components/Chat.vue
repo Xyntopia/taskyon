@@ -140,7 +140,13 @@
                     @click="state.userInput = ''"
                     class="cursor-pointer"
                   />
-                  <q-btn flat dense stretch icon="send" @click="sendMessage" />
+                  <q-btn
+                    flat
+                    dense
+                    stretch
+                    icon="send"
+                    @click="sendMessageWrapper"
+                  />
                 </template>
               </q-input>
             </q-card-section>
@@ -163,13 +169,7 @@ import { ref, watch, computed } from 'vue';
 import { useQuasar, LocalStorage } from 'quasar';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
 import { useVectorStore, SearchResult } from 'src/modules/localVectorStore';
-import {
-  OpenAIResponse,
-  OpenAIMessage,
-  callOpenAI,
-  chatState,
-  updateChatState,
-} from 'src/modules/chat';
+import { chatState, updateChatState, sendMessage } from 'src/modules/chat';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
 
 const $q = useQuasar();
@@ -223,32 +223,14 @@ function createNewConversation() {
   state.value.chatState.selectedConversationID = newId;
 }
 
-const sendMessage = async () => {
-  if (state.value.userInput.trim() === '' || !selectedConversation.value)
-    return;
-
-  const userMessage = {
-    role: 'user',
-    content: state.value.userInput,
-  };
-
-  // Check for null before accessing messages property
-  if (selectedConversation.value) {
-    selectedConversation.value.push(userMessage);
-    state.value.userInput = '';
-    // Getting bot's response and pushing it to messages array
-    const botResponseContent = await callOpenAI(selectedConversation.value);
-    // Add the bot's response to the existing messages array
-    selectedConversation.value.push({
-      role: 'assistant',
-      content: botResponseContent,
-    });
-  }
-};
+function sendMessageWrapper() {
+  void sendMessage(state.value.userInput);
+  state.value.userInput = '';
+}
 
 const checkForShiftEnter = (event: KeyboardEvent) => {
   if (event.shiftKey && event.key === 'Enter') {
-    void sendMessage();
+    void sendMessageWrapper();
     // Prevent a new line from being added to the input (optional)
     event.preventDefault();
   }

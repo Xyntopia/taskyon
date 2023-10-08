@@ -66,7 +66,7 @@ async function searchStore(searchTerm: string, k: number) {
  * @param {OpenAIMessage[]} chatMessages - The chat messages to send to the API.
  * @returns {Promise<string>} - A promise that resolves to the bot's response content.
  */
-export async function callOpenAI(chatMessages: OpenAIMessage[]) {
+async function callOpenAI(chatMessages: OpenAIMessage[]) {
   const payload = {
     model: 'gpt-3.5-turbo',
     messages: chatMessages,
@@ -86,3 +86,29 @@ export async function callOpenAI(chatMessages: OpenAIMessage[]) {
   const botResponseContent = response.data?.choices[0]?.message?.content ?? '';
   return botResponseContent;
 }
+
+function activeConversation() {
+  return chatState.conversations[chatState.selectedConversationID];
+}
+
+export const sendMessage = async (message: string) => {
+  const conversation = activeConversation();
+  if (message.trim() === '' || !conversation) return;
+
+  const userMessage = {
+    role: 'user',
+    content: message,
+  };
+
+  // Check for null before accessing messages property
+  if (conversation) {
+    activeConversation().push(userMessage);
+    // Getting bot's response and pushing it to messages array
+    const botResponseContent = await callOpenAI(conversation);
+    // Add the bot's response to the existing messages array
+    conversation.push({
+      role: 'assistant',
+      content: botResponseContent,
+    });
+  }
+};
