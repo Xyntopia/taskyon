@@ -65,7 +65,13 @@
                 </q-item-section>
                 <q-item-section> Conversation {{ idx }} </q-item-section>
                 <q-item-section side>
-                  <q-btn dense flat icon="delete" size="xs" />
+                  <q-btn
+                    dense
+                    flat
+                    icon="delete"
+                    size="xs"
+                    @click="delete state.chatState.conversations[idx]"
+                  />
                 </q-item-section>
               </q-item>
             </q-list>
@@ -164,7 +170,7 @@ import {
   chatState,
   updateChatState,
 } from 'src/modules/chat';
-import { syncStateWLocalStorage } from 'src/modules/saveState'
+import { syncStateWLocalStorage } from 'src/modules/saveState';
 
 const $q = useQuasar();
 
@@ -174,7 +180,7 @@ const initialState = {
   drawerOpen: true,
 };
 
-const state = syncStateWLocalStorage('chat_window_state', initialState)
+const state = syncStateWLocalStorage('chat_window_state', initialState);
 
 watch(
   () => state.value.chatState,
