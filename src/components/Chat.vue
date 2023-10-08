@@ -164,18 +164,17 @@ import {
   chatState,
   updateChatState,
 } from 'src/modules/chat';
-//import { syncStateWLocalStorage } from 'src/modules/saveState'
+import { syncStateWLocalStorage } from 'src/modules/saveState'
 
 const $q = useQuasar();
 
-const state = ref({
+const initialState = {
   chatState,
   userInput: '',
   drawerOpen: true,
-});
+};
 
-//const state = syncStateWLocalStorage<initialState>('chat_window_state', initialState)
-//const state = initialState;
+const state = syncStateWLocalStorage('chat_window_state', initialState)
 
 watch(
   () => state.value.chatState,
