@@ -1,11 +1,10 @@
-import VecStoreUploader from 'components/VecStoreUploader.vue';
 import { useVectorStore, SearchResult } from 'src/modules/localVectorStore';
 import axios from 'axios';
 
 export let chatState = {
   conversations: {} as Record<string, OpenAIMessage[]>,
   selectedConversationID: '',
-  openAIKey: 'add open AI key here!!',
+  openAIKey: '',
 };
 
 /**

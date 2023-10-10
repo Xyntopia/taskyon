@@ -82,6 +82,8 @@
         <q-expansion-item dense label="Settings" icon="settings">
           <div class="q-pa-md">
             <q-input
+            placeholder="Add OpenAI API key here!"
+label-color="white"
               dense
               filled
               v-model="state.chatState.openAIKey"
@@ -126,6 +128,7 @@
 
             <q-card-section>
               <q-input
+                v-if="state.chatState.openAIKey"
                 autogrow
                 filled
                 color="secondary"
@@ -149,6 +152,15 @@
                   />
                 </template>
               </q-input>
+              <div v-else>
+                Add an OpenAI API key to access the chatbot in Settings on the left side!
+                <q-btn
+                  href="https://platform.openai.com/account/api-keys"
+                  target="_blank"
+                >
+                  https://platform.openai.com/account/api-keys</q-btn
+                >
+              </div>
             </q-card-section>
           </div>
           <div v-else>
@@ -168,7 +180,6 @@
 import { ref, watch, computed } from 'vue';
 import { useQuasar, LocalStorage } from 'quasar';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
-import { useVectorStore, SearchResult } from 'src/modules/localVectorStore';
 import { chatState, updateChatState, sendMessage } from 'src/modules/chat';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
 
