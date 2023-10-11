@@ -1,6 +1,6 @@
-import { useVectorStore, SearchResult } from 'src/modules/localVectorStore';
+import { useVectorStore } from 'src/modules/localVectorStore';
 import axios from 'axios';
-import 
+import { dump } from 'js-yaml';
 
 export let chatState = {
   conversations: {} as Record<string, OpenAIMessage[]>,
@@ -45,20 +45,6 @@ export type OpenAIMessage = {
 };
 
 const vectorStore = useVectorStore();
-
-/**
- * Searches the vector store with a given term and returns k results.
- *
- * @param {string} searchTerm - The term to search for.
- * @param {number} k - The number of results to return.
- * @returns {Promise<SearchResult[]>} - A promise that resolves to an array of search results.
- */
-async function searchStore(searchTerm: string, k: number) {
-  console.log(`Searching for ${searchTerm}`);
-  const searchResults = await vectorStore.query(searchTerm, k);
-  console.log(searchResults);
-  return searchResults;
-}
 
 /**
  * Calls the OpenAI API with a given set of chat messages.
@@ -135,10 +121,12 @@ function taskChat(
   });
 
   if (method === 'chat') {
-    msgs.push({
-      role: 'user',
-      content: `# Overall objective: \n${objective}\n\n`,
-    });
+    if (objective) {
+      msgs.push({
+        role: 'user',
+        content: `# Overall objective: \n${objective}\n\n`,
+      });
+    }
 
     if (previousTasks) {
       msgs.push({
@@ -166,7 +154,11 @@ function taskChat(
       });
     }
   } else {
-    let msg = `# Considering the overall objective: \n${objective}\n\n`;
+    let msg = '';
+
+    if (objective) {
+      msg += `# Considering the overall objective: \n${objective}\n\n`;
+    }
 
     if (previousTasks) {
       msg += `# Take into account these previously completed tasks:\n\n${previousTasks} \n\n`;
@@ -224,10 +216,16 @@ function generateToolSummary() {
     .join('\n');
 }
 
-function generateContext(context: string): OpenAIMessage {
+async function generateContext(searchTerm: string): Promise<OpenAIMessage> {
+  const k = 3;
+  console.log(`Searching for ${searchTerm}`);
+  const results = await vectorStore.query(searchTerm, k);
+  const context = dump(results);
+  console.log(context);
   return {
     role: 'user',
-    content: `# Take into account this context\n\n${context} \n\n`,
+    content: `# Take into account this context which was found in 
+    our database for the previous message\n\n${context} \n\n`,
   };
 }
 
@@ -242,17 +240,8 @@ export const sendMessage = async (message: string) => {
       role: 'system',
       content: generateToolSummary(),
     };
-    
-    const searchTerm = message
-    const k=3
-    console.log(`Searching for ${searchTerm}`);
-    const context = await vectorStore.query(searchTerm, k)
-    console.log(context)
 
-    const contextMessage = {
-      role: 'system',
-      content: generateContext(context),
-    };
+    const contextMessage = await generateContext(message);
 
     const userMessage = {
       role: 'user',
@@ -263,6 +252,7 @@ export const sendMessage = async (message: string) => {
     // Getting bot's response and pushing it to messages array
     const botResponseContent = await callOpenAI([
       toolSummaryMessage,
+      // add context to each message of the user!
       contextMessage,
       ...conversation,
     ]);
