@@ -14,9 +14,7 @@
         <router-view />
       </q-page>
     </q-page-container>
-
   </q-layout>
-  {{ route.query }}
 </template>
 
 <script setup lang="ts">
