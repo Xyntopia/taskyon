@@ -135,7 +135,7 @@
                     'shadow-2',
                     'row',
                     'justify-between',
-                    message.role === 'assistant' ? 'q-mr-lg' : 'q-ml-lg',
+                    message.role === 'assistant' ? '' : 'q-ml-lg',
                   ]"
                 >
                   <div class="col">
@@ -144,7 +144,7 @@
                   <div class="col-auto row justify-center">
                     <q-btn
                       flat
-                      icon="code"
+                      icon="code" dense
                       @click="toggleMessageDebug(message.id)"
                     >
                       <q-tooltip :delay="1000">Show message context</q-tooltip>

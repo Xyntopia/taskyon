@@ -2,6 +2,7 @@ import { useVectorStore } from 'src/modules/localVectorStore';
 import axios from 'axios';
 import { dump } from 'js-yaml';
 import { v1 as uuidv1 } from 'uuid';
+import { concat } from 'lodash';
 
 export let chatState = {
   conversations: {} as Record<string, LLMTask[]>,
@@ -225,17 +226,23 @@ function generateToolSummary() {
     .join('\n');
 }
 
-async function generateContext(searchTerm: string): Promise<OpenAIMessage> {
+async function generateContext(
+  searchTerm: string
+): Promise<OpenAIMessage | null> {
   const k = 3;
   console.log(`Searching for ${searchTerm}`);
   const results = await vectorStore.query(searchTerm, k);
-  const context = dump(results);
-  console.log(context);
-  return {
-    role: 'user',
-    content: `# Take into account this context which was found in 
+  if (results.length > 0) {
+    const context = dump(results);
+    console.log(context);
+    return {
+      role: 'user',
+      content: `# Take into account this context which was found in 
     our database for the previous message\n\n${context} \n\n`,
-  };
+    };
+  } else {
+    return null;
+  }
 }
 
 export const sendMessage = async (message: string) => {
@@ -250,6 +257,7 @@ export const sendMessage = async (message: string) => {
       content: generateToolSummary(),
     };
 
+    console.log('starting to send!');
     const contextMessage = await generateContext(message);
 
     const userMessage = {
@@ -264,14 +272,20 @@ export const sendMessage = async (message: string) => {
 
     conversation.push(userMessage);
     // Getting bot's response and pushing it to messages array
-    const botResponseContent = await callOpenAI([
-      //toolSummaryMessage,
-      // add context to each message of the user!
+    const openAIConversation = [] as OpenAIMessage[];
+    //give a hint on available tools to the AI...
+    //openAIConversation.concat(//toolSummaryMessage,)
+    openAIConversation.push(
       ...conversation.map((m) => {
         return { role: m.role, content: m.content };
-      }),
-      userMessage.data.context,
-    ]);
+      })
+    );
+    // add context to each message of the user!
+    if (userMessage.data.context) {
+      openAIConversation.push(userMessage.data.context);
+    }
+    //--------  and perform the inference -------------
+    const botResponseContent = await callOpenAI(openAIConversation);
     // Add the bot's response to the existing messages array
     conversation.push({
       role: 'assistant',
