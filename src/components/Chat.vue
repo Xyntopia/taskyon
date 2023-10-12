@@ -80,7 +80,7 @@
         <q-separator spaced />
         <!-- Settings Area -->
         <q-expansion-item dense label="Settings" icon="settings">
-          <div class="q-pa-md">
+          <div class="q-pa-md q-gutter-md">
             <q-input
               placeholder="Add OpenAI API key here!"
               label-color="white"
@@ -89,11 +89,26 @@
               v-model="state.chatState.openAIKey"
               label="OpenAI Key"
             />
-            <q-toggle
-              :color="$q.dark.isActive ? 'secondary' : 'bg-grey-3'"
-              v-model="isDarkTheme"
-              label="Dark Theme"
-            />
+            <div>
+              set theme:
+              <q-btn-toggle
+                dense
+                :toggle-color="$q.dark.isActive ? 'secondary' : 'bg-grey-3'"
+                :model-value="$q.dark.mode"
+                @update:modelValue="
+                  (value) => {
+                    $q.dark.set(value);
+                    state.darkTheme = value;
+                  }
+                "
+                label="Dark Theme"
+                :options="[
+                  { label: 'Auto', value: 'auto' },
+                  { label: 'Light', value: false },
+                  { label: 'Dark', value: true },
+                ]"
+              />
+            </div>
           </div>
         </q-expansion-item>
       </q-list>
@@ -207,9 +222,13 @@ const initialState = {
   chatState,
   userInput: '',
   drawerOpen: true,
+  debugMessageExpand: {},
+  darkTheme: 'auto' as boolean | 'auto',
 };
 
 const state = syncStateWLocalStorage('chat_window_state', initialState);
+
+$q.dark.set(state.value.darkTheme);
 
 watch(
   () => state.value.chatState,
@@ -223,8 +242,6 @@ watch(
 
 //const uploaderURL = 'http://www.vexvault.com'
 //const uploaderURL='http://localhost:8080'
-
-const isDarkTheme = ref<boolean>($q.dark.isActive);
 
 const selectedConversation = computed(() => {
   return state.value.chatState.conversations[
@@ -264,8 +281,4 @@ const checkForShiftEnter = (event: KeyboardEvent) => {
     event.preventDefault();
   }
 };
-
-watch(isDarkTheme, (newValue) => {
-  $q.dark.set(newValue);
-});
 </script>

@@ -48,6 +48,8 @@ type LLMTask = {
   role: string;
   content: string;
   data: unknown;
+  result: string | undefined;
+  id: string;
 };
 
 const vectorStore = useVectorStore();
