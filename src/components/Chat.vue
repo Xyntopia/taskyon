@@ -82,8 +82,8 @@
         <q-expansion-item dense label="Settings" icon="settings">
           <div class="q-pa-md">
             <q-input
-            placeholder="Add OpenAI API key here!"
-label-color="white"
+              placeholder="Add OpenAI API key here!"
+              label-color="white"
               dense
               filled
               v-model="state.chatState.openAIKey"
@@ -103,7 +103,7 @@ label-color="white"
     <q-page-container>
       <q-page class="fit column">
         <div class="full-height full-width q-pa-md">
-          <div v-if="selectedConversation">
+          <q-card flat v-if="selectedConversation">
             <q-card-section class="row items-center">
               <div class="q-gutter-sm">
                 <div
@@ -118,10 +118,27 @@ label-color="white"
                     'rounded-borders',
                     'q-pa-xs',
                     'shadow-2',
+                    'row',
+                    'justify-between',
                     message.role === 'assistant' ? 'q-mr-lg' : 'q-ml-lg',
                   ]"
                 >
-                  {{ message.content }}
+                  <div class="col">
+                    {{ message.content }}
+                  </div>
+                  <div class="col-auto row justify-center">
+                    <q-btn flat icon="code">
+                      <q-tooltip :delay="1000">Show message context</q-tooltip>
+                    </q-btn>
+                  </div>
+                  <q-slide-transition>
+                    <div v-show="true">
+                      <q-separator />
+                      <q-card-section class="text-subtitle2">
+                        {{ message }}
+                      </q-card-section>
+                    </div>
+                  </q-slide-transition>
                 </div>
               </div>
             </q-card-section>
@@ -153,7 +170,8 @@ label-color="white"
                 </template>
               </q-input>
               <div v-else>
-                Add an OpenAI API key to access the chatbot in Settings on the left side!
+                Add an OpenAI API key to access the chatbot in Settings on the
+                left side!
                 <q-btn
                   href="https://platform.openai.com/account/api-keys"
                   target="_blank"
@@ -162,7 +180,7 @@ label-color="white"
                 >
               </div>
             </q-card-section>
-          </div>
+          </q-card>
           <div v-else>
             <q-btn
               label="create new conversion"

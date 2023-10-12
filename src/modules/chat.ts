@@ -3,7 +3,7 @@ import axios from 'axios';
 import { dump } from 'js-yaml';
 
 export let chatState = {
-  conversations: {} as Record<string, OpenAIMessage[]>,
+  conversations: {} as Record<string, LLMTask[]>,
   selectedConversationID: '',
   openAIKey: '',
 };
@@ -42,6 +42,12 @@ export type OpenAIResponse = {
 export type OpenAIMessage = {
   role: string;
   content: string;
+};
+
+type LLMTask = {
+  role: string;
+  content: string;
+  data: unknown;
 };
 
 const vectorStore = useVectorStore();
@@ -246,20 +252,26 @@ export const sendMessage = async (message: string) => {
     const userMessage = {
       role: 'user',
       content: message,
+      data: {
+        context: contextMessage,
+      },
     };
 
     conversation.push(userMessage);
     // Getting bot's response and pushing it to messages array
     const botResponseContent = await callOpenAI([
-      toolSummaryMessage,
+      //toolSummaryMessage,
       // add context to each message of the user!
-      contextMessage,
-      ...conversation,
+      ...conversation.map((m) => {
+        return { role: m.role, content: m.content };
+      }),
+      userMessage.data.context,
     ]);
     // Add the bot's response to the existing messages array
     conversation.push({
       role: 'assistant',
       content: botResponseContent,
+      data: {},
     });
   }
 };
