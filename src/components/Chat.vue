@@ -144,16 +144,15 @@
                   <div class="col-auto row justify-center">
                     <q-btn
                       flat
-                      icon="code" dense
+                      icon="code"
+                      dense
                       @click="toggleMessageDebug(message.id)"
                     >
                       <q-tooltip :delay="1000">Show message context</q-tooltip>
                     </q-btn>
                   </div>
                   <q-slide-transition>
-                    <div
-                      v-show="(state.messageVisualization[message.id])"
-                    >
+                    <div v-show="state.messageVisualization[message.id]">
                       <q-separator />
                       <q-card-section class="text-subtitle2">
                         {{ message }}
@@ -216,8 +215,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
-import { useQuasar, LocalStorage } from 'quasar';
+import { watch, computed } from 'vue';
+import { useQuasar } from 'quasar';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
 import { chatState, updateChatState, sendMessage } from 'src/modules/chat';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
@@ -234,6 +233,7 @@ const initialState = {
 };
 
 const state = syncStateWLocalStorage('chat_window_state', initialState);
+updateChatState(state.value.chatState);
 
 $q.dark.set(state.value.darkTheme);
 
@@ -295,8 +295,8 @@ function toggleMessageDebug(id: string) {
     state.value.messageVisualization[id] = true;
   } else {
     // If it does exist, toggle the boolean.
-    state.value.messageVisualization[id] = !state.value.messageVisualization[id];
+    state.value.messageVisualization[id] =
+      !state.value.messageVisualization[id];
   }
 }
-
 </script>
