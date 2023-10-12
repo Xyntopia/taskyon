@@ -1,6 +1,7 @@
 import { useVectorStore } from 'src/modules/localVectorStore';
 import axios from 'axios';
 import { dump } from 'js-yaml';
+import { v1 as uuidv1 } from 'uuid';
 
 export let chatState = {
   conversations: {} as Record<string, LLMTask[]>,
@@ -257,6 +258,8 @@ export const sendMessage = async (message: string) => {
       data: {
         context: contextMessage,
       },
+      result: undefined,
+      id: uuidv1(),
     };
 
     conversation.push(userMessage);
@@ -274,6 +277,8 @@ export const sendMessage = async (message: string) => {
       role: 'assistant',
       content: botResponseContent,
       data: {},
+      id: uuidv1(),
+      result: undefined,
     });
   }
 };

@@ -37,10 +37,15 @@ export function syncStateWLocalStorage<T>(
   key: string,
   initialState: T
 ): Ref<UnwrapRef<T>> {
+  console.log('loading state!')
   const savedState = loadState<T>(key);
   const state = ref(initialState);
   if (savedState != null) {
-    state.value = savedState as UnwrapRef<T>;
+    const newState = {
+      ...initialState,
+      ...savedState,
+    };
+    state.value = newState as UnwrapRef<T>;
   }
 
   watch(

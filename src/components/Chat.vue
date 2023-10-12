@@ -117,7 +117,7 @@
     <!-- Main Content Area -->
     <q-page-container>
       <q-page class="fit column">
-        <div class="full-height full-width q-pa-md">
+        <div class="full-height full-width q-pa-xs">
           <q-card flat v-if="selectedConversation">
             <q-card-section class="row items-center">
               <div class="q-gutter-sm">
@@ -142,12 +142,18 @@
                     {{ message.content }}
                   </div>
                   <div class="col-auto row justify-center">
-                    <q-btn flat icon="code">
+                    <q-btn
+                      flat
+                      icon="code"
+                      @click="toggleMessageDebug(message.id)"
+                    >
                       <q-tooltip :delay="1000">Show message context</q-tooltip>
                     </q-btn>
                   </div>
                   <q-slide-transition>
-                    <div v-show="true">
+                    <div
+                      v-show="(state.messageVisualization[message.id])"
+                    >
                       <q-separator />
                       <q-card-section class="text-subtitle2">
                         {{ message }}
@@ -224,6 +230,7 @@ const initialState = {
   drawerOpen: true,
   debugMessageExpand: {},
   darkTheme: 'auto' as boolean | 'auto',
+  messageVisualization: {} as Record<string, boolean>, // whether message with ID should be open or not...
 };
 
 const state = syncStateWLocalStorage('chat_window_state', initialState);
@@ -281,4 +288,15 @@ const checkForShiftEnter = (event: KeyboardEvent) => {
     event.preventDefault();
   }
 };
+
+function toggleMessageDebug(id: string) {
+  if (state.value.messageVisualization[id] === undefined) {
+    // If the message ID doesn't exist, default to true since we're opening it.
+    state.value.messageVisualization[id] = true;
+  } else {
+    // If it does exist, toggle the boolean.
+    state.value.messageVisualization[id] = !state.value.messageVisualization[id];
+  }
+}
+
 </script>
