@@ -2,12 +2,13 @@ import { useVectorStore } from 'src/modules/localVectorStore';
 import axios from 'axios';
 import { dump } from 'js-yaml';
 import { v1 as uuidv1 } from 'uuid';
-import { concat } from 'lodash';
+import { useCachedModels } from './mlModels';
 
 export let chatState = {
   conversations: {} as Record<string, LLMTask[]>,
   selectedConversationID: '',
   openAIKey: '',
+  summaryModel: 'Xenova/distilbart-cnn-6-6',
 };
 
 /**
@@ -18,6 +19,8 @@ export let chatState = {
 export function updateChatState(newValue: typeof chatState) {
   chatState = newValue;
 }
+
+const models = useCachedModels()
 
 export type OpenAIResponse = {
   id: string;

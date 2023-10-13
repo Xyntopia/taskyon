@@ -2,7 +2,8 @@
 import { ref, watch } from 'vue';
 import { Document } from 'langchain/document';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
-import { loadFile, useVectorizer } from 'src/modules/loadFiles';
+import { loadFile } from 'src/modules/loadFiles';
+import { useCachedModels } from './mlModels';
 import { HierarchicalNSW, loadHnswlib } from 'hnswlib-wasm';
 import { LocalStorage } from 'quasar';
 import Dexie from 'dexie';
@@ -40,13 +41,7 @@ async function loadIndex(
   // bigger efConstruction: higher quality index, longer construction
   const efConstruction = 200;
   const randomSeed = 111;
-  index.initIndex(
-    maxElements,
-    m,
-    efConstruction,
-    randomSeed,
-    true
-  );
+  index.initIndex(maxElements, m, efConstruction, randomSeed, true);
 
   // Set efSearch parameters. This can be changed after the index is created.
   index.setEfSearch(200); // higher ef: slower, more accurate (between k & size of dataset)
@@ -234,7 +229,7 @@ async function storeIndex(name: string) {
   }
 }
 
-const vec = useVectorizer();
+const models = useCachedModels();
 
 async function uploadToIndex(
   file: File,
@@ -286,7 +281,7 @@ async function uploadToIndex(
       docvecs.push({
         document: doc,
         vector: (
-          await vec.vectorize(
+          await models.vectorize(
             doc.pageContent,
             vecStoreUploaderConfigurationState.value.modelName
           )
@@ -329,7 +324,7 @@ async function uploadToIndex(
 }
 async function knnQuery(searchQuery: string, k = 3) {
   if (documentStore?.index) {
-    const vector = await vec.vectorize(
+    const vector = await models.vectorize(
       searchQuery,
       vecStoreUploaderConfigurationState.value.modelName
     );

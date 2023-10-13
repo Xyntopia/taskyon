@@ -4,15 +4,6 @@
 import * as pdfjsLibRaw from 'pdfjs-dist/webpack';
 import * as mammoth from 'mammoth';
 import type pdfjsLibModule from 'pdfjs-dist';
-import { ref } from 'vue';
-import {
-  AutoModel,
-  AutoTokenizer,
-  mean_pooling,
-  PreTrainedModel,
-  PreTrainedTokenizer,
-  Tensor,
-} from '@xenova/transformers';
 const pdfjsLib = pdfjsLibRaw as typeof pdfjsLibModule;
 
 async function read_pdf(file: File) {
@@ -65,48 +56,3 @@ export async function loadFile(file: File) {
       }
   }
 }
-
-const state = ref({
-  vectorizerModel: undefined as PreTrainedModel | undefined,
-  vectorizerTokenizer: undefined as PreTrainedTokenizer | undefined,
-});
-
-async function loadModel(modelName: string) {
-  if (state.value.vectorizerModel == undefined) {
-    console.log(`load model: ${modelName}`);
-    state.value.vectorizerModel = await AutoModel.from_pretrained(modelName);
-    return state.value.vectorizerModel;
-  } else {
-    return state.value.vectorizerModel;
-  }
-}
-
-async function loadTokenizer(modelName: string) {
-  if (state.value.vectorizerTokenizer == undefined) {
-    console.log(`load tokenizer: ${modelName}`);
-    state.value.vectorizerTokenizer = await AutoTokenizer.from_pretrained(
-      modelName
-    );
-    return state.value.vectorizerTokenizer;
-  } else {
-    return state.value.vectorizerTokenizer;
-  }
-}
-
-async function vectorize(txt: string, modelName: string) {
-  //let classifier = await pipeline('sentiment-analysis');
-
-  console.log('calcuate vectors');
-  const tokenizer = await loadTokenizer(modelName);
-  const model = await loadModel(modelName);
-  const inputs = (await tokenizer(txt)) as Record<string, Tensor>;
-  const res = (await model(inputs)) as Record<string, Tensor>;
-  const res2 = mean_pooling(res.last_hidden_state, inputs.attention_mask);
-  return res2;
-}
-
-export const useVectorizer = () => {
-  return {
-    vectorize,
-  };
-};
