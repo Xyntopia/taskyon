@@ -125,21 +125,18 @@
                   v-for="(message, idx) in selectedConversation"
                   :key="idx"
                   :class="[
-                    message.role === 'assistant'
-                      ? $q.dark.isActive
-                        ? 'bg-primary'
-                        : 'bg-white'
-                      : 'bg-secondary',
+                    $q.dark.isActive ? 'bg-primary' : 'bg-white',
                     'rounded-borders',
                     'q-pa-xs',
                     'shadow-2',
                     'row',
                     'justify-between',
+                    message.role === 'assistant' ? '' : 'not-assistant-message',
                     message.role === 'assistant' ? '' : 'q-ml-lg',
                   ]"
                 >
                   <div class="col">
-                    <q-markdown :src="message.content"/>
+                    <q-markdown :src="message.content" />
                   </div>
                   <div class="col-auto row justify-center">
                     <q-btn
@@ -215,6 +212,13 @@
   </q-layout>
 </template>
 
+<style lang="sass">
+/* Define the CSS class for the orange "glow" shadow */
+.not-assistant-message
+  box-shadow: inset 0 0 5px $secondary
+  border-radius: 5px
+</style>
+
 <script setup lang="ts">
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import { watch, computed } from 'vue';
@@ -222,7 +226,7 @@ import { useQuasar } from 'quasar';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
 import { chatState, updateChatState, sendMessage } from 'src/modules/chat';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
-import '@quasar/quasar-ui-qmarkdown/dist/index.css'
+import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 
 const $q = useQuasar();
 
