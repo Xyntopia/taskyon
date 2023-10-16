@@ -139,7 +139,7 @@
                   ]"
                 >
                   <div class="col">
-                    {{ message.content }}
+                    <q-markdown :src="message.content"/>
                   </div>
                   <div class="col-auto row justify-center">
                     <q-btn
@@ -216,11 +216,13 @@
 </template>
 
 <script setup lang="ts">
+import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import { watch, computed } from 'vue';
 import { useQuasar } from 'quasar';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
 import { chatState, updateChatState, sendMessage } from 'src/modules/chat';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
+import '@quasar/quasar-ui-qmarkdown/dist/index.css'
 
 const $q = useQuasar();
 
