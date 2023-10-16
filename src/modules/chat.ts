@@ -20,7 +20,7 @@ export function updateChatState(newValue: typeof chatState) {
   chatState = newValue;
 }
 
-const models = useCachedModels()
+const models = useCachedModels();
 
 export type OpenAIResponse = {
   id: string;
@@ -48,6 +48,63 @@ export type OpenAIMessage = {
   role: string;
   content: string;
 };
+
+type ChatCompletionRequest = {
+  // An array of messages in the conversation.
+  messages: Array<{
+    // The content of the message, can be null for some messages.
+    content: string | null;
+    // Function call details if applicable.
+    function_call?: {
+      // The name of the function to call.
+      name: string;
+      // Arguments to call the function with in JSON format.
+      arguments: string;
+    };
+    // The name of the message author (optional).
+    name?: string;
+    // The role of the message author (system, user, assistant, or function).
+    role: 'system' | 'user' | 'assistant' | 'function';
+  }>;
+  // The ID of the model to use.
+  model: string;
+  // Controls how the model calls functions.
+  function_call?: string | {
+    // The name of the function to call.
+    name: string;
+  };
+  // Penalty for repeating tokens.
+  frequency_penalty?: number | null;
+  // Details on how the model calls functions.
+  functions?: Array<{
+    // Description of what the function does (optional).
+    description?: string;
+    // The name of the function to be called.
+    name: string;
+    // The parameters the function accepts (JSON Schema object).
+    parameters: Record<string, any>;
+  }>;
+  // Modify the likelihood of specified tokens.
+  logit_bias?: Record<string, number> | null;
+  // Maximum number of tokens to generate.
+  max_tokens?: number | null;
+  // Number of chat completion choices to generate.
+  n?: number | null;
+  // Penalty for new tokens in the text.
+  presence_penalty?: number | null;
+  // Sequences to stop generating tokens.
+  stop?: string | Array<string> | null;
+  // Enable partial message deltas streaming.
+  stream?: boolean | null;
+  // Sampling temperature for output.
+  temperature?: number | null;
+  // Probability mass for nucleus sampling.
+  top_p?: number | null;
+  // Unique identifier for your end-user (optional).
+  user?: string;
+};
+
+
 
 type LLMTask = {
   role: string;
