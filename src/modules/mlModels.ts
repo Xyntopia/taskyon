@@ -41,12 +41,12 @@ async function vectorize(txt: string, modelName: string) {
   return res2;
 }
 
-async function summarize(txt: string, modelName:string) {
-    console.log('summarize')
-    const tokenizer = await loadTokenizer(modelName);
-    const model = await loadModel(modelName);
-    const inputs = (await tokenizer(txt)) as Record<string, Tensor>;
-  
+async function summarize(txt: string, modelName: string) {
+  console.log('summarize');
+  const tokenizer = await loadTokenizer(modelName);
+  const model = await loadModel(modelName);
+  const inputs = (await tokenizer(txt)) as Record<string, Tensor>;
+  //const res = (await model.generate(inputs))// as Record<string, Tensor>;
 }
 
 export const useCachedModels = () => {

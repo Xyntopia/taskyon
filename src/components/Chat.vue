@@ -189,6 +189,7 @@
                   />
                 </template>
               </q-input>
+
               <div v-else>
                 Add an OpenAI API key to access the chatbot in Settings on the
                 left side!
