@@ -22,21 +22,32 @@ export function updateChatState(newValue: typeof chatState) {
 
 const models = useCachedModels();
 
-export type OpenAIResponse = {
+export type OpenAIMessage = {
+  // The content of the message, can be null for some messages.
+  content: string | null;
+  // Function call details if applicable.
+  function_call?: {
+    // The name of the function to call.
+    name: string;
+    // Arguments to call the function with in JSON format.
+    arguments: string;
+  };
+  // The name of the message author (optional).
+  name?: string;
+  // The role of the message author (system, user, assistant, or function).
+  role: 'system' | 'user' | 'assistant' | 'function';
+};
+
+export type ChatCompletionResponse = {
   id: string;
-  object: string;
-  created: number;
+  object: string; // "chat.completion"
+  created: number; // Unix timestamp in seconds
   model: string;
-  choices: [
-    {
-      index: number;
-      message: {
-        role: 'assistant';
-        content: string;
-      };
-      finish_reason: string;
-    }
-  ];
+  choices: {
+    index: number;
+    message: OpenAIMessage;
+    finish_reason: string;
+  }[];
   usage: {
     prompt_tokens: number;
     completion_tokens: number;
@@ -44,35 +55,18 @@ export type OpenAIResponse = {
   };
 };
 
-export type OpenAIMessage = {
-  role: string;
-  content: string;
-};
-
 type ChatCompletionRequest = {
   // An array of messages in the conversation.
-  messages: Array<{
-    // The content of the message, can be null for some messages.
-    content: string | null;
-    // Function call details if applicable.
-    function_call?: {
-      // The name of the function to call.
-      name: string;
-      // Arguments to call the function with in JSON format.
-      arguments: string;
-    };
-    // The name of the message author (optional).
-    name?: string;
-    // The role of the message author (system, user, assistant, or function).
-    role: 'system' | 'user' | 'assistant' | 'function';
-  }>;
+  messages: Array<OpenAIMessage>;
   // The ID of the model to use.
   model: string;
   // Controls how the model calls functions.
-  function_call?: string | {
-    // The name of the function to call.
-    name: string;
-  };
+  function_call?:
+    | string
+    | {
+        // The name of the function to call.
+        name: string;
+      };
   // Penalty for repeating tokens.
   frequency_penalty?: number | null;
   // Details on how the model calls functions.
@@ -104,12 +98,12 @@ type ChatCompletionRequest = {
   user?: string;
 };
 
-
-
 type LLMTask = {
-  role: string;
+  role: 'system' | 'user' | 'assistant' | 'function';
   content: string;
-  data: unknown;
+  data: {
+    context?: OpenAIMessage;
+  };
   result: string | undefined;
   id: string;
 };
@@ -123,12 +117,12 @@ const vectorStore = useVectorStore();
  * @returns {Promise<string>} - A promise that resolves to the bot's response content.
  */
 async function callOpenAI(chatMessages: OpenAIMessage[]) {
-  const payload = {
+  const payload: ChatCompletionRequest = {
     model: 'gpt-3.5-turbo',
     messages: chatMessages,
   };
 
-  const response = await axios.post<OpenAIResponse>(
+  const response = await axios.post<ChatCompletionResponse>(
     'https://api.openai.com/v1/chat/completions',
     payload,
     {
@@ -288,7 +282,7 @@ function generateToolSummary() {
 
 async function generateContext(
   searchTerm: string
-): Promise<OpenAIMessage | null> {
+): Promise<OpenAIMessage | undefined> {
   const k = 3;
   console.log(`Searching for ${searchTerm}`);
   const results = await vectorStore.query(searchTerm, k);
@@ -301,7 +295,7 @@ async function generateContext(
     our database for the previous message\n\n${context} \n\n`,
     };
   } else {
-    return null;
+    return undefined;
   }
 }
 
@@ -320,7 +314,7 @@ export const sendMessage = async (message: string) => {
     console.log('starting to send!');
     const contextMessage = await generateContext(message);
 
-    const userMessage = {
+    const userMessage: LLMTask = {
       role: 'user',
       content: message,
       data: {
