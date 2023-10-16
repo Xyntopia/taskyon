@@ -3,6 +3,7 @@ import axios from 'axios';
 import { dump } from 'js-yaml';
 import { v1 as uuidv1 } from 'uuid';
 import { useCachedModels } from './mlModels';
+import { functions } from 'lodash';
 
 export let chatState = {
   conversations: {} as Record<string, LLMTask[]>,
@@ -112,7 +113,7 @@ type LLMTask = {
   };
   result: string | undefined;
   id: string;
-  tools?: Tool[];
+  tools?: string[];
 };
 
 const vectorStore = useVectorStore();
@@ -123,10 +124,16 @@ const vectorStore = useVectorStore();
  * @param {OpenAIMessage[]} chatMessages - The chat messages to send to the API.
  * @returns {Promise<string>} - A promise that resolves to the bot's response content.
  */
-async function callOpenAI(chatMessages: OpenAIMessage[]) {
+async function callOpenAI(
+  chatMessages: OpenAIMessage[],
+  functions: Array<Tool>
+) {
   const payload: ChatCompletionRequest = {
     model: 'gpt-3.5-turbo',
     messages: chatMessages,
+    functions,
+    function_call: functions.length > 0 ? 'auto' : 'none',
+    user: 'vexvault',
   };
 
   const response = await axios.post<ChatCompletionResponse>(
@@ -156,10 +163,17 @@ const tools: ToolCollection = {};
 
 tools.localVectorStoreSearch = {
   description:
-    'Performs a search in the local vector store and retrieves the results.',
+    'Performs an ANN search in the local vector database from the chat and retrieves the results.',
   name: 'localVectorStoreSearch',
   parameters: {
-    searchTerm: { type: 'string' },
+    type: 'object',
+    properties: {
+      searchTerm: {
+        type: 'string',
+        description: 'The search term to use in the vector store search.',
+      },
+    },
+    required: ['searchTerm'],
   },
 };
 
@@ -301,10 +315,10 @@ export const sendMessage = async (message: string) => {
   // Check for null before accessing messages property
   if (conversation) {
     // Insert tool summary message
-    const toolSummaryMessage = {
+    /*const toolSummaryMessage = {
       role: 'system',
       content: generateToolSummary(),
-    };
+    };*/
 
     console.log('starting to send!');
     const contextMessage = await generateContext(message);
@@ -317,6 +331,7 @@ export const sendMessage = async (message: string) => {
       },
       result: undefined,
       id: uuidv1(),
+      tools: Object.keys(tools),
     };
 
     conversation.push(userMessage);
@@ -326,15 +341,25 @@ export const sendMessage = async (message: string) => {
     //openAIConversation.concat(//toolSummaryMessage,)
     openAIConversation.push(
       ...conversation.map((m) => {
-        return { role: m.role, content: m.content };
+        return {
+          role: m.role,
+          content: m.content,
+        };
       })
     );
     // add context to each message of the user!
-    if (userMessage.data.context) {
+    /*if (userMessage.data.context) {
       openAIConversation.push(userMessage.data.context);
-    }
+    }*/
+
+    // add possible functions to the call:
+    const functions = userMessage.tools?.map((t) => tools[t]) || [];
+
+    // TODO: check if our response contains a function call and execute that!
+    //       then add that to the chat and call OpenAI again, but this time with the result....
+
     //--------  and perform the inference -------------
-    const botResponseContent = await callOpenAI(openAIConversation);
+    const botResponseContent = await callOpenAI(openAIConversation, functions);
     // Add the bot's response to the existing messages array
     conversation.push({
       role: 'assistant',
