@@ -1,4 +1,4 @@
-import { useVectorStore } from 'src/modules/localVectorStore';
+import { useVectorStore, SearchResult } from 'src/modules/localVectorStore';
 import axios from 'axios';
 import { dump } from 'js-yaml';
 import { v1 as uuidv1 } from 'uuid';
@@ -22,6 +22,15 @@ export function updateChatState(newValue: typeof chatState) {
 
 const models = useCachedModels();
 
+type Tool = {
+  // Description of what the function does (optional).
+  description: string;
+  // The name of the function to be called.
+  name: string;
+  // The parameters the function accepts (JSON Schema object).
+  parameters: Record<string, any>;
+};
+
 export type OpenAIMessage = {
   // The content of the message, can be null for some messages.
   content: string | null;
@@ -32,7 +41,8 @@ export type OpenAIMessage = {
     // Arguments to call the function with in JSON format.
     arguments: string;
   };
-  // The name of the message author (optional).
+  // The name of the message author (optional) it has to be the name of the function, if
+  // the role is "function".
   name?: string;
   // The role of the message author (system, user, assistant, or function).
   role: 'system' | 'user' | 'assistant' | 'function';
@@ -62,7 +72,8 @@ type ChatCompletionRequest = {
   model: string;
   // Controls how the model calls functions.
   function_call?:
-    | string
+    | 'none'
+    | 'auto'
     | {
         // The name of the function to call.
         name: string;
@@ -70,14 +81,7 @@ type ChatCompletionRequest = {
   // Penalty for repeating tokens.
   frequency_penalty?: number | null;
   // Details on how the model calls functions.
-  functions?: Array<{
-    // Description of what the function does (optional).
-    description?: string;
-    // The name of the function to be called.
-    name: string;
-    // The parameters the function accepts (JSON Schema object).
-    parameters: Record<string, any>;
-  }>;
+  functions?: Array<Tool>;
   // Modify the likelihood of specified tokens.
   logit_bias?: Record<string, number> | null;
   // Maximum number of tokens to generate.
@@ -103,9 +107,12 @@ type LLMTask = {
   content: string;
   data: {
     context?: OpenAIMessage;
+    tool?: string; // Name of the tool to use (if any)
+    toolParameters?: Record<string, any>; // Parameters for the tool (if any)
   };
   result: string | undefined;
   id: string;
+  tools?: Tool[];
 };
 
 const vectorStore = useVectorStore();
@@ -141,30 +148,18 @@ function activeConversation() {
   return chatState.conversations[chatState.selectedConversationID];
 }
 
-type Tool = {
-  description: string;
-  fullDescription: string;
-  func: (params: any) => void; // Consider being more specific with 'any' if possible
-};
-
 type ToolCollection = {
   [key: string]: Tool;
 };
 
-const tools: ToolCollection = {
-  tool1: {
-    description: 'Short description of tool1.',
-    fullDescription: 'Detailed description of tool1.',
-    func: function (params: number) {
-      console.log('tool 2');
-    },
-  },
-  tool2: {
-    description: 'Short description of tool2.',
-    fullDescription: 'Detailed description of tool2.',
-    func: function (params: string) {
-      console.log('tool 1');
-    },
+const tools: ToolCollection = {};
+
+tools.localVectorStoreSearch = {
+  description:
+    'Performs a search in the local vector store and retrieves the results.',
+  name: 'localVectorStoreSearch',
+  parameters: {
+    searchTerm: { type: 'string' },
   },
 };
 
