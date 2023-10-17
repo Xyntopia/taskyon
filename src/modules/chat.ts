@@ -118,7 +118,7 @@ type LLMTask = {
   debugging?: Record<string, any>;
   result?: TaskResult;
   id: string;
-  tools?: string[];
+  allowedTools?: string[];
   authorId?: string;
 };
 
@@ -344,7 +344,7 @@ export const sendMessage = async (message: string) => {
       },
       result: undefined,
       id: uuidv1(),
-      tools: Object.keys(tools),
+      allowedTools: Object.keys(tools),
     };
 
     conversation.push(currentTask);
@@ -366,7 +366,7 @@ export const sendMessage = async (message: string) => {
     }*/
 
     // add possible functions to the call:
-    const functions = currentTask.tools?.map((t) => tools[t]) || [];
+    const functions = currentTask.allowedTools?.map((t) => tools[t]) || [];
 
     // TODO: check if our response contains a function call and execute that!
     //       then add that to the chat and call OpenAI again, but this time with the result....
