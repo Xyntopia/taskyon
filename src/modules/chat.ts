@@ -32,16 +32,18 @@ type Tool = {
   parameters: Record<string, any>;
 };
 
+export type FunctionCall = {
+  // The name of the function to call.
+  name: string;
+  // Arguments to call the function with in JSON format.
+  arguments: string;
+};
+
 export type OpenAIMessage = {
   // The content of the message, can be null for some messages.
   content: string | null;
   // Function call details if applicable.
-  function_call?: {
-    // The name of the function to call.
-    name: string;
-    // Arguments to call the function with in JSON format.
-    arguments: string;
-  };
+  function_call?: FunctionCall;
   // The name of the message author (optional) it has to be the name of the function, if
   // the role is "function".
   name?: string;
@@ -105,16 +107,27 @@ type ChatCompletionRequest = {
 
 type LLMTask = {
   role: 'system' | 'user' | 'assistant' | 'function';
-  content: string;
-  data: {
-    context?: OpenAIMessage;
+  content: string | null;
+  status: 'Open' | 'In Progress' | 'Completed';
+  context?: {
+    message?: OpenAIMessage;
     tool?: string; // Name of the tool to use (if any)
     toolParameters?: Record<string, any>; // Parameters for the tool (if any)
   };
-  result: string | undefined;
+  parentID?: string;
+  debugging?: Record<string, any>;
+  result?: TaskResult;
   id: string;
   tools?: string[];
+  authorId?: string;
 };
+
+interface TaskResult {
+  type: 'ChatAnswer' | 'FunctionCall' | 'NewTask'; // Type of result
+  content?: string; // Description or value of the result
+  functionCallDetails?: FunctionCall; // Details if the result is a function call
+  newTaskDetails?: LLMTask[]; // Details if the result is a new task
+}
 
 const vectorStore = useVectorStore();
 
@@ -147,8 +160,7 @@ async function callOpenAI(
     }
   );
 
-  const botResponseContent = response.data?.choices[0]?.message?.content ?? '';
-  return botResponseContent;
+  return response.data;
 }
 
 function activeConversation() {
@@ -323,18 +335,19 @@ export const sendMessage = async (message: string) => {
     console.log('starting to send!');
     const contextMessage = await generateContext(message);
 
-    const userMessage: LLMTask = {
+    const currentTask: LLMTask = {
       role: 'user',
+      status: 'In Progress',
       content: message,
-      data: {
-        context: contextMessage,
+      context: {
+        message: contextMessage,
       },
       result: undefined,
       id: uuidv1(),
       tools: Object.keys(tools),
     };
 
-    conversation.push(userMessage);
+    conversation.push(currentTask);
     // Getting bot's response and pushing it to messages array
     const openAIConversation = [] as OpenAIMessage[];
     //give a hint on available tools to the AI...
@@ -353,20 +366,44 @@ export const sendMessage = async (message: string) => {
     }*/
 
     // add possible functions to the call:
-    const functions = userMessage.tools?.map((t) => tools[t]) || [];
+    const functions = currentTask.tools?.map((t) => tools[t]) || [];
 
     // TODO: check if our response contains a function call and execute that!
     //       then add that to the chat and call OpenAI again, but this time with the result....
 
     //--------  and perform the inference -------------
-    const botResponseContent = await callOpenAI(openAIConversation, functions);
+    const response = await callOpenAI(openAIConversation, functions);
+    currentTask.status = 'Completed';
     // Add the bot's response to the existing messages array
-    conversation.push({
-      role: 'assistant',
-      content: botResponseContent,
-      data: {},
-      id: uuidv1(),
-      result: undefined,
-    });
+    if (response.choices.length > 0) {
+      const choice = response.choices[0];
+      const taskChain: LLMTask = {
+        status: 'Completed',
+        parentID: currentTask.id,
+        role: choice.message.role,
+        content: choice.message.content,
+        debugging: {
+          aiResponse: response,
+        },
+        id: response.id,
+      };
+
+      // if we got anything back ;)
+      if (choice.message.content) {
+        conversation.push(taskChain);
+      } else if (
+        choice.finish_reason == 'function_call' &&
+        choice.message.content == null &&
+        choice.message.function_call
+      ) {
+        taskChain.result = {
+          type: 'FunctionCall',
+          functionCallDetails: choice.message.function_call,
+        };
+        conversation.push(taskChain);
+      } else {
+        console.log("We don't know what to do with this response:", response);
+      }
+    }
   }
 };

@@ -119,44 +119,49 @@
       <q-page class="fit column">
         <div class="full-height full-width q-pa-xs">
           <q-card flat v-if="selectedConversation">
-            <q-card-section class="row items-center">
-              <div class="q-gutter-sm">
-                <div
-                  v-for="(message, idx) in selectedConversation"
-                  :key="idx"
-                  :class="[
-                    $q.dark.isActive ? 'bg-primary' : 'bg-white',
-                    'rounded-borders',
-                    'q-pa-xs',
-                    'shadow-2',
-                    'row',
-                    'justify-between',
-                    message.role === 'assistant' ? '' : 'not-assistant-message',
-                    message.role === 'assistant' ? '' : 'q-ml-lg',
-                  ]"
-                >
-                  <div class="col">
-                    <q-markdown :src="message.content" />
+            <!-- "Task" Display -->
+            <q-card-section class="q-gutter-sm">
+              <div
+                v-for="(message, idx) in selectedConversation"
+                :key="idx"
+                :class="[
+                  $q.dark.isActive ? 'bg-primary' : 'bg-white',
+                  'rounded-borders',
+                  'q-pa-xs',
+                  'shadow-2',
+                  'row',
+                  'justify-between',
+                  message.role === 'assistant' ? '' : 'not-assistant-message',
+                  message.role === 'assistant' ? '' : 'q-ml-lg',
+                ]"
+              >
+                <div class="col">
+                  <q-markdown v-if="message.content" :src="message.content" />
+                  <div v-if="message.result?.type == 'FunctionCall'">
+                    <q-icon size="sm" name="settings" />
+                    {{ message.result.functionCallDetails?.name }}({{
+                      message.result.functionCallDetails?.arguments
+                    }})
                   </div>
-                  <div class="col-auto row justify-center">
-                    <q-btn
-                      flat
-                      icon="code"
-                      dense
-                      @click="toggleMessageDebug(message.id)"
-                    >
-                      <q-tooltip :delay="1000">Show message context</q-tooltip>
-                    </q-btn>
-                  </div>
-                  <q-slide-transition>
-                    <div v-show="state.messageVisualization[message.id]">
-                      <q-separator />
-                      <q-card-section class="text-subtitle2">
-                        {{ message }}
-                      </q-card-section>
-                    </div>
-                  </q-slide-transition>
                 </div>
+                <div class="col-auto row justify-center">
+                  <q-btn
+                    flat
+                    icon="code"
+                    dense
+                    @click="toggleMessageDebug(message.id)"
+                  >
+                    <q-tooltip :delay="1000">Show message context</q-tooltip>
+                  </q-btn>
+                </div>
+                <q-slide-transition>
+                  <div v-show="state.messageVisualization[message.id]">
+                    <q-separator />
+                    <q-card-section class="text-subtitle2">
+                      {{ message }}
+                    </q-card-section>
+                  </div>
+                </q-slide-transition>
               </div>
             </q-card-section>
 
