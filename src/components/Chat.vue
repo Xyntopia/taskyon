@@ -114,6 +114,21 @@
       </q-list>
     </q-drawer>
 
+    <!-- Sidebar Right -->
+    <q-drawer
+      side="right"
+      v-model="state.drawerRight"
+      bordered
+      :width="200"
+      :breakpoint="500"
+    >
+      <q-scroll-area class="fit">
+        <div class="q-pa-sm">
+          <div v-for="n in 50" :key="n">Drawer {{ n }} / 50</div>
+        </div>
+      </q-scroll-area>
+    </q-drawer>
+
     <!-- Main Content Area -->
     <q-page-container>
       <q-page class="fit column">
@@ -242,6 +257,7 @@ const initialState = {
   chatState,
   userInput: '',
   drawerOpen: false,
+  drawerRight: false,
   debugMessageExpand: {},
   darkTheme: 'auto' as boolean | 'auto',
   messageVisualization: {} as Record<string, boolean>, // whether message with ID should be open or not...
