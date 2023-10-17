@@ -241,7 +241,7 @@ const $q = useQuasar();
 const initialState = {
   chatState,
   userInput: '',
-  drawerOpen: true,
+  drawerOpen: false,
   debugMessageExpand: {},
   darkTheme: 'auto' as boolean | 'auto',
   messageVisualization: {} as Record<string, boolean>, // whether message with ID should be open or not...

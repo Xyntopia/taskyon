@@ -4,6 +4,7 @@ import { dump } from 'js-yaml';
 import { v1 as uuidv1 } from 'uuid';
 import { useCachedModels } from './mlModels';
 import { functions } from 'lodash';
+import { extname } from 'path';
 
 export let chatState = {
   conversations: {} as Record<string, LLMTask[]>,
@@ -23,14 +24,14 @@ export function updateChatState(newValue: typeof chatState) {
 
 const models = useCachedModels();
 
-type Tool = {
+interface Tool {
   // Description of what the function does (optional).
   description: string;
   // The name of the function to be called.
   name: string;
   // The parameters the function accepts (JSON Schema object).
   parameters: Record<string, any>;
-};
+}
 
 export type FunctionCall = {
   // The name of the function to call.
@@ -111,8 +112,7 @@ type LLMTask = {
   status: 'Open' | 'In Progress' | 'Completed';
   context?: {
     message?: OpenAIMessage;
-    tool?: string; // Name of the tool to use (if any)
-    toolParameters?: Record<string, any>; // Parameters for the tool (if any)
+    function?: FunctionCall;
   };
   parentID?: string;
   debugging?: Record<string, any>;
@@ -167,13 +167,23 @@ function activeConversation() {
   return chatState.conversations[chatState.selectedConversationID];
 }
 
+interface ExtendedTool extends Tool {
+  function: (...args: any[]) => Promise<any>;
+}
+
 type ToolCollection = {
-  [key: string]: Tool;
+  [key: string]: ExtendedTool;
 };
 
 const tools: ToolCollection = {};
 
 tools.localVectorStoreSearch = {
+  function: async ({ searchTerm }: { searchTerm: string }) => {
+    const k = 3;
+    console.log(`Searching for ${searchTerm}`);
+    const results = await vectorStore.query(searchTerm, k);
+    return results;
+  },
   description:
     'Performs an ANN search in the local vector database from the chat and retrieves the results.',
   name: 'localVectorStoreSearch',
@@ -309,7 +319,6 @@ async function generateContext(
   const results = await vectorStore.query(searchTerm, k);
   if (results.length > 0) {
     const context = dump(results);
-    console.log(context);
     return {
       role: 'user',
       content: `# Take into account this context which was found in 
@@ -354,10 +363,14 @@ export const sendMessage = async (message: string) => {
     //openAIConversation.concat(//toolSummaryMessage,)
     openAIConversation.push(
       ...conversation.map((m) => {
-        return {
+        const message: OpenAIMessage = {
           role: m.role,
           content: m.content,
         };
+        if (m.role == 'function') {
+          message.name = m.authorId;
+        }
+        return message;
       })
     );
     // add context to each message of the user!
@@ -396,11 +409,36 @@ export const sendMessage = async (message: string) => {
         choice.message.content == null &&
         choice.message.function_call
       ) {
+        const func = choice.message.function_call;
         taskChain.result = {
           type: 'FunctionCall',
-          functionCallDetails: choice.message.function_call,
+          functionCallDetails: func,
         };
-        conversation.push(taskChain);
+        //conversation.push(taskChain);
+
+        // convert functions arguments from json
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const funcArguments = JSON.parse(func.arguments);
+        // now do the function call :)
+        console.log('call ' + choice.message.function_call.name);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const funcR = dump(
+          await tools[choice.message.function_call.name].function(funcArguments)
+        );
+
+        const funcResult: LLMTask = {
+          status: 'Completed',
+          parentID: taskChain.id,
+          role: 'function',
+          content: funcR,
+          id: uuidv1(),
+          context: {
+            function: func,
+          },
+          authorId: func.name,
+        };
+
+        conversation.push(funcResult);
       } else {
         console.log("We don't know what to do with this response:", response);
       }
