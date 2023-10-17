@@ -133,6 +133,9 @@
                   'justify-between',
                   message.role === 'assistant' ? '' : 'not-assistant-message',
                   message.role === 'assistant' ? '' : 'q-ml-lg',
+                  message.result?.type == 'FunctionCall'
+                    ? 'text-secondary'
+                    : '',
                 ]"
               >
                 <div class="col">
