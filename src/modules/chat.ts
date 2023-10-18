@@ -3,11 +3,12 @@ import axios from 'axios';
 import { dump } from 'js-yaml';
 import { v1 as uuidv1 } from 'uuid';
 import { useCachedModels } from './mlModels';
-import { functions } from 'lodash';
-import { extname } from 'path';
+import { Tool } from './tools';
+import { tools } from './tools';
 
 export let chatState = {
-  conversations: {} as Record<string, LLMTask[]>,
+  conversations: {} as Record<string, string[]>,
+  Tasks: {} as Record<string, LLMTask>,
   selectedConversationID: '',
   openAIKey: '',
   summaryModel: 'Xenova/distilbart-cnn-6-6',
@@ -23,15 +24,6 @@ export function updateChatState(newValue: typeof chatState) {
 }
 
 const models = useCachedModels();
-
-interface Tool {
-  // Description of what the function does (optional).
-  description: string;
-  // The name of the function to be called.
-  name: string;
-  // The parameters the function accepts (JSON Schema object).
-  parameters: Record<string, any>;
-}
 
 export type FunctionCall = {
   // The name of the function to call.
@@ -129,7 +121,7 @@ interface TaskResult {
   newTaskDetails?: LLMTask[]; // Details if the result is a new task
 }
 
-const vectorStore = useVectorStore();
+export const vectorStore = useVectorStore();
 
 /**
  * Calls the OpenAI API with a given set of chat messages.
@@ -166,38 +158,6 @@ async function callOpenAI(
 function activeConversation() {
   return chatState.conversations[chatState.selectedConversationID];
 }
-
-interface ExtendedTool extends Tool {
-  function: (...args: any[]) => Promise<any>;
-}
-
-type ToolCollection = {
-  [key: string]: ExtendedTool;
-};
-
-const tools: ToolCollection = {};
-
-tools.localVectorStoreSearch = {
-  function: async ({ searchTerm }: { searchTerm: string }) => {
-    const k = 3;
-    console.log(`Searching for ${searchTerm}`);
-    const results = await vectorStore.query(searchTerm, k);
-    return results;
-  },
-  description:
-    'Performs an ANN search in the local vector database from the chat and retrieves the results.',
-  name: 'localVectorStoreSearch',
-  parameters: {
-    type: 'object',
-    properties: {
-      searchTerm: {
-        type: 'string',
-        description: 'The search term to use in the vector store search.',
-      },
-    },
-    required: ['searchTerm'],
-  },
-};
 
 function taskChat(
   task: string,
@@ -326,38 +286,6 @@ async function generateContext(
     };
   } else {
     return undefined;
-  }
-}
-
-class AsyncQueue {
-  private queue: (() => Promise<void>)[] = [];
-  private processing = false;
-
-  async enqueue(task: () => Promise<void>): Promise<void> {
-    this.queue.push(task);
-    if (!this.processing) {
-      this.processing = true;
-      await this.processNext();
-    }
-  }
-
-  private async processNext(): Promise<void> {
-    if (this.queue.length === 0) {
-      this.processing = false;
-      return;
-    }
-
-    const task = this.queue.shift();
-    if (task) {
-      try {
-        await task();
-      } catch (error) {
-        console.error('Error processing task:', error);
-      }
-
-      // Process the next task in the queue
-      await this.processNext();
-    }
   }
 }
 
