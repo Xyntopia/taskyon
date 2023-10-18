@@ -12,7 +12,6 @@ export let chatState = {
   // this refers to the task chain that we have selected. We select one task and then
   // put the chain together by following the parentIds.
   selectedTaskId: undefined as string | undefined,
-  selectedConversationID: '',
   openAIKey: '',
   summaryModel: 'Xenova/distilbart-cnn-6-6',
 };
@@ -111,6 +110,7 @@ export type LLMTask = {
   };
   // is undefined in the case it is an "initial" task
   parentID?: string | undefined;
+  childrenIDs: string[];
   debugging?: Record<string, any>;
   result?: TaskResult;
   id: string;
@@ -162,6 +162,59 @@ async function callOpenAI(
   );
 
   return response.data;
+}
+
+/**
+ * Finds the root task of a given task.
+ *
+ * @param {string} taskId - The ID of the task.
+ * @returns {string} - The ID of the root task, or null if not found.
+ */
+export function findRootTask(taskId: string): string | null {
+  let currentTaskID = taskId;
+
+  while (currentTaskID) {
+    const currentTask = chatState.Tasks[currentTaskID];
+    if (!currentTask) return null; // Return null if a task doesn't exist
+
+    if (currentTask.parentID) {
+      currentTaskID = currentTask.parentID; // Trace back to the parent task
+    } else {
+      return currentTaskID; // Return the current task ID if it has no parent
+    }
+  }
+
+  return currentTaskID; // Return null if the loop exits without finding a root task
+}
+
+/**
+ * Finds the leaf tasks of a given task.
+ *
+ * @param {string} taskId - The ID of the task.
+ * @returns {string[]} - An array of IDs of the leaf tasks.
+ */
+export function findLeafTasks(taskId: string): string[] {
+  const leafTasks: string[] = [];
+
+  function traverse(taskId: string) {
+    const task = chatState.Tasks[taskId];
+    if (!task) return; // Exit if a task doesn't exist
+
+    let hasChildren = false;
+    for (const [id, task] of Object.entries(chatState.Tasks)) {
+      if (task.parentID === taskId) {
+        hasChildren = true;
+        traverse(id); // Recursively traverse the children
+      }
+    }
+
+    if (!hasChildren) {
+      leafTasks.push(taskId); // Add the task ID to the array if it has no children
+    }
+  }
+
+  traverse(taskId); // Start the traversal from the given task ID
+  return leafTasks;
 }
 
 export function taskChain(lastTaskId: string) {
@@ -317,11 +370,13 @@ export function sendMessage(message: string) {
     status: 'Open',
     content: message,
     id: uuidv1(),
+    childrenIDs: [],
     allowedTools: Object.keys(tools),
   };
 
   if (chatState.selectedTaskId) {
     currentTask.parentID = chatState.selectedTaskId;
+    chatState.Tasks[chatState.selectedTaskId].childrenIDs.push(currentTask.id);
   }
 
   // Push it to the "overall Tasks List"
@@ -374,16 +429,18 @@ function createNewTasksFromChatResponse(
       parentID: parentTaskId,
       role: choice.message.role,
       content: choice.message.content,
+      childrenIDs: [],
       debugging: {
         aiResponse: response,
       },
       id: response.id,
     };
+    chatState.Tasks[response.id] = newResponseTask;
+    chatState.Tasks[parentTaskId].childrenIDs.push(newResponseTask.id);
 
     // and push newly created tasks to our task list. they were already processed, so we don't need to
     // add them to our task queue.
     if (choice.message.content) {
-      chatState.Tasks[response.id] = newResponseTask;
       chatState.selectedTaskId = newResponseTask.id;
     } else if (
       choice.finish_reason === 'function_call' &&
@@ -394,23 +451,22 @@ function createNewTasksFromChatResponse(
         type: 'FunctionCall',
         functionCallDetails: func,
       };
-      chatState.Tasks[response.id] = newResponseTask;
-
       // Create a new task for the function call
       const funcTask: LLMTask = {
         role: 'function',
         parentID: newResponseTask.id,
         content: null,
         status: 'Open',
+        childrenIDs: [],
         id: uuidv1(),
         context: {
           function: func,
         },
         authorId: func.name,
       };
-
-      // Push the new function task to processTasksQueue
       chatState.Tasks[funcTask.id] = funcTask;
+      newResponseTask.childrenIDs.push(funcTask.id);
+      // Push the new function task to processTasksQueue
       processTasksQueue.push(funcTask);
       chatState.selectedTaskId = funcTask.id;
     }

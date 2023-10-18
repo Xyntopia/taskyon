@@ -14,7 +14,7 @@
         />
         <q-toolbar-title
           >Chat: Conversation
-          {{ state.chatState.selectedConversationID }}</q-toolbar-title
+          {{ state.chatState.selectedTaskId }}</q-toolbar-title
         >
       </q-toolbar>
     </q-header>
@@ -46,7 +46,7 @@
         <q-expansion-item
           dense
           label="Conversations"
-          icon="folder"
+          icon="list"
           default-opened
         >
           <div class="column items-stretch">
@@ -293,7 +293,7 @@ const conversationIDs = computed(() => {
   // represent the start of conversations...
   const orphanTasks = Object.values(state.value.chatState.Tasks)
     .filter((t) => {
-      return t.parentID ? false : true;
+      return t.childrenIDs.length == 0;
     })
     .map((t) => t.id);
   return orphanTasks;
