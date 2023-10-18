@@ -146,21 +146,31 @@
                   'shadow-2',
                   'row',
                   'justify-between',
-                  message.role === 'assistant' ? '' : 'not-assistant-message',
-                  message.role === 'assistant' ? '' : 'q-ml-lg',
+                  message.role === 'user' ? 'not-assistant-message' : '',
+                  message.role === 'user' ? 'q-ml-lg' : '',
                   message.result?.type == 'FunctionCall'
                     ? 'text-secondary'
                     : '',
                 ]"
               >
                 <div class="col">
-                  <q-markdown v-if="message.content" :src="message.content" />
                   <div v-if="message.result?.type == 'FunctionCall'">
                     <q-icon size="sm" name="settings" />
                     {{ message.result.functionCallDetails?.name }}({{
                       message.result.functionCallDetails?.arguments
                     }})
                   </div>
+                  <div v-else-if="message.role == 'function'">
+                    <div>
+                      <q-icon size="md" name="calculate" />
+                      <q-icon size="md" name="check" color="positive"/>
+                      {{ message.context?.function?.name }}
+                    </div>
+                  </div>
+                  <q-markdown
+                    v-else-if="message.content"
+                    :src="message.content"
+                  />
                 </div>
                 <div class="col-auto row justify-center">
                   <q-btn

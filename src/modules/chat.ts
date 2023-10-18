@@ -362,16 +362,18 @@ export const sendMessage = async (message: string) => {
     //give a hint on available tools to the AI...
     //openAIConversation.concat(//toolSummaryMessage,)
     openAIConversation.push(
-      ...conversation.map((m) => {
-        const message: OpenAIMessage = {
-          role: m.role,
-          content: m.content,
-        };
-        if (m.role == 'function') {
-          message.name = m.authorId;
-        }
-        return message;
-      })
+      ...conversation
+        .map((m) => {
+          const message: OpenAIMessage = {
+            role: m.role,
+            content: m.content,
+          };
+          if (m.role == 'function') {
+            message.name = m.authorId;
+          }
+          return message;
+        })
+        .filter((m) => m.content) // OpenAI doesn't accept messages with zero content, even though they generate it themselfs
     );
     // add context to each message of the user!
     /*if (userMessage.data.context) {
@@ -414,7 +416,7 @@ export const sendMessage = async (message: string) => {
           type: 'FunctionCall',
           functionCallDetails: func,
         };
-        //conversation.push(taskChain);
+        conversation.push(taskChain);
 
         // convert functions arguments from json
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
