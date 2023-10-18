@@ -41,3 +41,13 @@ tools.localVectorStoreSearch = {
     required: ['searchTerm'],
   },
 };
+
+
+function generateToolSummary() {
+  return Object.keys(tools)
+    .map((toolName) => {
+      const { description } = tools[toolName];
+      return `${toolName}: ${description}`;
+    })
+    .join('\n');
+}

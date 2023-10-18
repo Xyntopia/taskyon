@@ -142,10 +142,13 @@ async function callOpenAI(
   const payload: ChatCompletionRequest = {
     model: 'gpt-3.5-turbo',
     messages: chatMessages,
-    functions,
-    function_call: functions.length > 0 ? 'auto' : 'none',
     user: 'vexvault',
   };
+
+  if (functions.length > 0) {
+    payload.function_call = 'auto';
+    payload.functions = functions;
+  }
 
   const response = await axios.post<ChatCompletionResponse>(
     'https://api.openai.com/v1/chat/completions',
@@ -287,15 +290,6 @@ async function executeTask(task, previousTasks = null, context = null, objective
 }
 */
 
-function generateToolSummary() {
-  return Object.keys(tools)
-    .map((toolName) => {
-      const { description } = tools[toolName];
-      return `${toolName}: ${description}`;
-    })
-    .join('\n');
-}
-
 async function generateContext(
   searchTerm: string
 ): Promise<OpenAIMessage | undefined> {
@@ -340,93 +334,105 @@ export function sendMessage(message: string) {
   processTasksQueue.push(currentTask);
 }
 
-/*TODO: function convertTaskChainToChat(lastTask: LLMTask) {
-  
-}*/
+function buildChatFromTask(task: LLMTask) {
+  const openAIConversation = [] as OpenAIMessage[];
+  const conversation = taskChain(task.id);
+
+  if (conversation) {
+    openAIConversation.push(
+      ...conversation
+        .map((mId) => {
+          const m = chatState.Tasks[mId];
+          const message: OpenAIMessage = {
+            role: m.role,
+            content: m.content,
+          };
+          if (m.role == 'function') {
+            message.name = m.authorId;
+            message.content = m.result?.content || null;
+          }
+          return message;
+        })
+        .filter((m) => m.content) // OpenAI doesn't accept messages with zero content, even though they generate it themselfs
+    );
+  }
+  return openAIConversation;
+}
+
+function createNewTasksFromChatResponse(
+  response: ChatCompletionResponse,
+  parentTaskId: string
+) {
+  // Process the response and create new tasks if necessary
+  if (response.choices.length > 0) {
+    const choice = response.choices[0];
+    // put AI response in our chain as a new, completed task...
+    // TODO: theoretically the user "viewing" the task would be its completion..
+    //       so we could create it before sending it and then wait for AI to respond...
+    const newResponseTask: LLMTask = {
+      status: 'Completed',
+      parentID: parentTaskId,
+      role: choice.message.role,
+      content: choice.message.content,
+      debugging: {
+        aiResponse: response,
+      },
+      id: response.id,
+    };
+
+    // and push newly created tasks to our task list. they were already processed, so we don't need to
+    // add them to our task queue.
+    if (choice.message.content) {
+      chatState.Tasks[response.id] = newResponseTask;
+      chatState.selectedTaskId = newResponseTask.id;
+    } else if (
+      choice.finish_reason === 'function_call' &&
+      choice.message.function_call
+    ) {
+      const func = choice.message.function_call;
+      newResponseTask.result = {
+        type: 'FunctionCall',
+        functionCallDetails: func,
+      };
+      chatState.Tasks[response.id] = newResponseTask;
+
+      // Create a new task for the function call
+      const funcTask: LLMTask = {
+        role: 'function',
+        parentID: newResponseTask.id,
+        content: null,
+        status: 'Open',
+        id: uuidv1(),
+        context: {
+          function: func,
+        },
+        authorId: func.name,
+      };
+
+      // Push the new function task to processTasksQueue
+      chatState.Tasks[funcTask.id] = funcTask;
+      processTasksQueue.push(funcTask);
+      chatState.selectedTaskId = funcTask.id;
+    }
+  }
+}
 
 async function taskWorker() {
+  console.log('entering task worker loop...');
   while (true) {
     console.log('waiting for next task!');
     const task = await processTasksQueue.pop();
+    console.log('processing task:', task);
     if (task.role == 'user') {
-      const openAIConversation = [] as OpenAIMessage[];
-      const conversation = taskChain(task.id);
-
-      if (conversation) {
-        openAIConversation.push(
-          ...conversation
-            .map((mId) => {
-              const m = chatState.Tasks[mId];
-              const message: OpenAIMessage = {
-                role: m.role,
-                content: m.content,
-              };
-              if (m.role == 'function') {
-                message.name = m.authorId;
-              }
-              return message;
-            })
-            .filter((m) => m.content) // OpenAI doesn't accept messages with zero content, even though they generate it themselfs
-        );
-
+      const openAIConversation = buildChatFromTask(task);
+      if (openAIConversation) {
         const functions = task.allowedTools?.map((t) => tools[t]) || [];
         const response = await callOpenAI(openAIConversation, functions);
-        // Process the response and create new tasks if necessary
-        if (response.choices.length > 0) {
-          const choice = response.choices[0];
-          // put AI response in our chain as a new, completed task...
-          // TODO: theoretically the user "viewing" the task would be its completion..
-          //       so we could create it before sending it and then wait for AI to respond...
-          const newResponseTask: LLMTask = {
-            status: 'Completed',
-            parentID: task.id,
-            role: choice.message.role,
-            content: choice.message.content,
-            debugging: {
-              aiResponse: response,
-            },
-            id: response.id,
-          };
-
-          // and push newly created tasks to our task list. they were already processed, so we don't need to
-          // add them to our task queue.
-          if (choice.message.content) {
-            chatState.Tasks[response.id] = newResponseTask;
-            chatState.selectedTaskId = newResponseTask.id;
-          } else if (
-            choice.finish_reason === 'function_call' &&
-            choice.message.function_call
-          ) {
-            const func = choice.message.function_call;
-            newResponseTask.result = {
-              type: 'FunctionCall',
-              functionCallDetails: func,
-            };
-            chatState.Tasks[response.id] = newResponseTask;
-
-            // Create a new task for the function call
-            const funcTask: LLMTask = {
-              role: 'function',
-              parentID: newResponseTask.id,
-              content: null,
-              status: 'Open',
-              id: uuidv1(),
-              context: {
-                function: func,
-              },
-              authorId: func.name,
-            };
-
-            // Push the new function task to processTasksQueue
-            chatState.Tasks[funcTask.id] = funcTask;
-            processTasksQueue.push(funcTask);
-            chatState.selectedTaskId = funcTask.id;
-          }
-        }
+        createNewTasksFromChatResponse(response, task.id);
       }
     } else if (task.role == 'function') {
-      if (task.result?.functionCallDetails) {
-        const func = task.result?.functionCallDetails;
+      if (task.context?.function) {
+        const func = task.context?.function;
         // convert functions arguments from json
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const funcArguments = JSON.parse(func.arguments);
@@ -443,6 +449,15 @@ async function taskWorker() {
         // Push the task ID to the current conversation
         // make the task ID active..
         chatState.selectedTaskId = task.id;
+
+        // now we're making sure to send the chat with the function result
+        // to openAI again...
+        const openAIConversation = buildChatFromTask(task);
+        if (openAIConversation) {
+          const functions = task.allowedTools?.map((t) => tools[t]) || [];
+          const response = await callOpenAI(openAIConversation, functions);
+          createNewTasksFromChatResponse(response, task.id);
+        }
       }
     } else {
       console.log("We don't know what to do with this task:", task);

@@ -146,7 +146,7 @@
               >
                 <div class="col">
                   <div v-if="message.result?.type == 'FunctionCall'">
-                    <q-icon size="sm" name="settings" />
+                    <q-icon size="sm" name="build_circle" />
                     {{ message.result.functionCallDetails?.name }}({{
                       message.result.functionCallDetails?.arguments
                     }})
