@@ -54,9 +54,9 @@
             <q-list>
               <q-item
                 dense
-                v-for="(conversation, idx) in state.chatState.conversations"
+                v-for="(conversationId, idx) in conversationIDs"
                 :key="idx"
-                @click="state.chatState.selectedConversationID = idx"
+                @click="state.chatState.selectedTaskId = conversationId"
                 clickable
                 v-ripple
               >
@@ -64,15 +64,6 @@
                   <q-icon name="chat_bubble" size="xs" />
                 </q-item-section>
                 <q-item-section> Conversation {{ idx }} </q-item-section>
-                <q-item-section side>
-                  <q-btn
-                    dense
-                    flat
-                    icon="delete"
-                    size="xs"
-                    @click="delete state.chatState.conversations[idx]"
-                  />
-                </q-item-section>
               </q-item>
             </q-list>
           </div>
@@ -163,7 +154,7 @@
                   <div v-else-if="message.role == 'function'">
                     <div>
                       <q-icon size="md" name="calculate" />
-                      <q-icon size="md" name="check" color="positive"/>
+                      <q-icon size="md" name="check" color="positive" />
                       {{ message.context?.function?.name }}
                     </div>
                   </div>
@@ -257,7 +248,13 @@ import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import { watch, computed } from 'vue';
 import { useQuasar } from 'quasar';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
-import { chatState, updateChatState, sendMessage } from 'src/modules/chat';
+import {
+  chatState,
+  updateChatState,
+  sendMessage,
+  taskChain,
+  run,
+} from 'src/modules/chat';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 
@@ -291,30 +288,32 @@ watch(
 //const uploaderURL = 'http://www.vexvault.com'
 //const uploaderURL='http://localhost:8080'
 
+const conversationIDs = computed(() => {
+  // extract all "top-level tasks" (orphan tasks) which
+  // represent the start of conversations...
+  const orphanTasks = Object.values(state.value.chatState.Tasks)
+    .filter((t) => {
+      return t.parentID ? false : true;
+    })
+    .map((t) => t.id);
+  return orphanTasks;
+});
+
 const selectedConversation = computed(() => {
-  return state.value.chatState.conversations[
-    state.value.chatState.selectedConversationID
-  ];
+  if (state.value.chatState.selectedTaskId) {
+    const conversationIDChain = taskChain(state.value.chatState.selectedTaskId);
+    const conversation = conversationIDChain.map((tId) => chatState.Tasks[tId]);
+    return conversation;
+  } else {
+    return [];
+  }
 });
 
 function createNewConversation() {
-  console.log('start');
-
-  // Get all existing conversation IDs and convert them to integers
-  const existingIds = Object.keys(state.value.chatState.conversations).map(
-    (id) => parseInt(id, 10)
-  );
-
-  // Find the maximum existing ID
-  const maxId = Math.max(...existingIds, 0); // Starst at 0 if there are no existing IDs
-
-  // Generate a new unique ID by incrementing the max ID
-  const newId = (maxId + 1).toString();
-
-  // Create a new conversation with the unique ID
-  state.value.chatState.conversations[newId] = [];
-
-  state.value.chatState.selectedConversationID = newId;
+  console.log('start a new conversation (create an "orphan task")');
+  // we simply need to tell our task manager that we don't have any task selected
+  // the next message which will be send, will be an orphan in this case.
+  state.value.chatState.selectedTaskId = undefined;
 }
 
 function sendMessageWrapper() {
@@ -340,4 +339,6 @@ function toggleMessageDebug(id: string) {
       !state.value.messageVisualization[id];
   }
 }
+
+void run();
 </script>
