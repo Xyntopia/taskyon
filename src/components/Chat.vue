@@ -152,11 +152,42 @@
                     }})
                   </div>
                   <div v-else-if="message.role == 'function'">
-                    <div>
-                      <q-icon size="md" name="calculate" />
-                      <q-icon size="md" name="check" color="positive" />
-                      {{ message.context?.function?.name }}
-                    </div>
+                    <q-expansion-item
+                      icon="calculate"
+                      :label="message.context?.function?.name"
+                      header-class="text-green"
+                    >
+                      <q-list dense bordered>
+                        <q-item
+                          v-for="(arg, idx) in JSON.parse(
+                            message.context?.function?.arguments || ''
+                          )"
+                          :key="idx"
+                        >
+                          <q-item-section class="text-bold">
+                            <q-item-label> {{ idx }}: </q-item-label>
+                          </q-item-section>
+                          <q-item-section>
+                            <q-item-label>
+                              {{ arg }}
+                            </q-item-label>
+                          </q-item-section>
+                        </q-item>
+                        <q-item>
+                          <q-item-section>
+                            <q-item-label class="text-bold">
+                              result:
+                            </q-item-label>
+                            <q-item-label>
+                              <pre>
+                              {{ dump(message.result) }}
+                              </pre
+                              >
+                            </q-item-label>
+                          </q-item-section>
+                        </q-item>
+                      </q-list>
+                    </q-expansion-item>
                   </div>
                   <q-markdown
                     v-else-if="message.content"
@@ -255,6 +286,7 @@ import {
   taskChain,
   run,
 } from 'src/modules/chat';
+import { dump } from 'js-yaml';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 

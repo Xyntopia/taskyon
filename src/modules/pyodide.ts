@@ -18,6 +18,7 @@ function loadScript(src: string): Promise<void> {
 export interface PythonResult {
   result?: string;
   error?: unknown;
+  stdout?: string;
 }
 
 export async function execute(python_script: string): Promise<PythonResult> {
@@ -31,9 +32,22 @@ export async function execute(python_script: string): Promise<PythonResult> {
       indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
     });
 
+    let stdout_content = '';
+
+    const stdoutHandler = {
+      batched: (str: string) => {
+        stdout_content += str + '\n';
+      },
+    };
+
+    pyodide.setStdout(stdoutHandler);
+
     const result = pyodide.runPython(python_script);
-    console.log(result);
-    return { result };
+
+    // Reset stdout handler to default behavior if necessary
+    pyodide.setStdout({ batched: (str: string) => console.log(str) });
+
+    return { result, stdout: stdout_content };
   } catch (error) {
     console.error('Loading Pyodide failed', error);
     return { error };

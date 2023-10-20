@@ -52,10 +52,11 @@ tools.executePythonCode = {
     return await execute(pythonScript);
   },
   description: `
-    Executes the provided Python code using a Python runtime. 
-    This tool can be used to run data processing tasks, perform calculations, or interact with Python libraries. 
-    Common use-cases include executing data transformations, statistical analyses, or machine learning algorithms on uploaded files.
-  `,
+  Executes the provided Python code using a Python runtime and returns the result of the last expression evaluated. 
+  This tool can be used to run data processing tasks, perform calculations, or interact with Python libraries.
+  Common use-cases include executing data transformations, statistical analyses, or machine learning algorithms on uploaded files.
+  It's important to structure the Python code such that the desired result is the outcome of the last expression in the script.
+`,
   name: 'executePythonCode',
   parameters: {
     type: 'object',
