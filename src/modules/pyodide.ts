@@ -15,6 +15,31 @@ function loadScript(src: string): Promise<void> {
   });
 }
 
+export interface PythonResult {
+  result?: string;
+  error?: unknown;
+}
+
+export async function execute(python_script: string): Promise<PythonResult> {
+  try {
+    await loadScript(
+      'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js'
+    );
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    const pyodide = await window.loadPyodide({
+      indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
+    });
+
+    const result = pyodide.runPython(python_script);
+    console.log(result);
+    return { result };
+  } catch (error) {
+    console.error('Loading Pyodide failed', error);
+    return { error };
+  }
+}
+
 export async function main() {
   try {
     await loadScript(

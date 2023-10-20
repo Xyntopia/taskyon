@@ -1,4 +1,5 @@
 import { useVectorStore, SearchResult } from 'src/modules/localVectorStore';
+import { execute } from './pyodide';
 
 export const vectorStore = useVectorStore();
 
@@ -20,6 +21,7 @@ type ToolCollection = {
 };
 
 export const tools: ToolCollection = {};
+
 tools.localVectorStoreSearch = {
   function: async ({ searchTerm }: { searchTerm: string }) => {
     const k = 3;
@@ -27,8 +29,11 @@ tools.localVectorStoreSearch = {
     const results = await vectorStore.query(searchTerm, k);
     return results;
   },
-  description:
-    'Performs an ANN search in the local vector database from the chat and retrieves the results.',
+  description: `
+    Conducts an Approximate Nearest Neighbors (ANN) search in the local vector database derived from uploaded files. 
+    This tool allows for natural language queries to retrieve relevant pieces of files based on semantic similarity. 
+    Ideal for finding related documents or data segments amidst a large, vectorized dataset.
+  `,
   name: 'localVectorStoreSearch',
   parameters: {
     type: 'object',
@@ -42,6 +47,27 @@ tools.localVectorStoreSearch = {
   },
 };
 
+tools.executePythonCode = {
+  function: async ({ pythonScript }: { pythonScript: string }) => {
+    return await execute(pythonScript);
+  },
+  description: `
+    Executes the provided Python code using a Python runtime. 
+    This tool can be used to run data processing tasks, perform calculations, or interact with Python libraries. 
+    Common use-cases include executing data transformations, statistical analyses, or machine learning algorithms on uploaded files.
+  `,
+  name: 'executePythonCode',
+  parameters: {
+    type: 'object',
+    properties: {
+      pythonScript: {
+        type: 'string',
+        description: 'The Python code to be executed.',
+      },
+    },
+    required: ['pythonScript'],
+  },
+};
 
 function generateToolSummary() {
   return Object.keys(tools)
