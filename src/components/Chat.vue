@@ -181,8 +181,7 @@
                             <q-item-label>
                               <pre>
                               {{ dump(message.result) }}
-                              </pre
-                              >
+                              </pre>
                             </q-item-label>
                           </q-item-section>
                         </q-item>
@@ -194,14 +193,26 @@
                     :src="message.content"
                   />
                 </div>
-                <div class="col-auto row justify-center">
+                <div class="col-auto column justify-around">
                   <q-btn
+                    class="col"
                     flat
                     icon="code"
                     dense
                     @click="toggleMessageDebug(message.id)"
                   >
                     <q-tooltip :delay="1000">Show message context</q-tooltip>
+                  </q-btn>
+                  <q-btn
+                    class="col rotate-180"
+                    flat
+                    icon="alt_route"
+                    dense
+                    @click="state.chatState.selectedTaskId = message.id"
+                  >
+                    <q-tooltip :delay="1000"
+                      >Start alternative conversation from here</q-tooltip
+                    >
                   </q-btn>
                 </div>
                 <q-slide-transition>
