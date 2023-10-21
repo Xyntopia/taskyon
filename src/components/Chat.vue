@@ -26,9 +26,15 @@
       :width="300"
       :breakpoint="500"
       bordered
-      :class="$q.dark.isActive ? 'bg-primary' : 'bg-grey-3'"
+      :class="[$q.dark.isActive ? 'bg-primary' : 'bg-grey-3']"
     >
       <q-list>
+        <q-toggle
+          v-model="state.expertMode"
+          label="Expert Mode"
+          left-label
+          class="q-px-md"
+        />
         <!-- Upload Area -->
         <q-expansion-item
           v-if="true"
@@ -135,7 +141,7 @@
                   'rounded-borders',
                   'q-pa-xs',
                   'shadow-2',
-                  'row',
+                  'column',
                   'justify-between',
                   message.role === 'user' ? 'not-assistant-message' : '',
                   message.role === 'user' ? 'q-ml-lg' : '',
@@ -144,7 +150,7 @@
                     : '',
                 ]"
               >
-                <div class="col">
+                <div class="col-auto">
                   <div v-if="message.result?.type == 'FunctionCall'">
                     <q-icon size="sm" name="build_circle" />
                     {{ message.result.functionCallDetails?.name }}({{
@@ -164,12 +170,15 @@
                           )"
                           :key="idx"
                         >
-                          <q-item-section class="text-bold">
+                          <q-item-section class="text-bold" side>
                             <q-item-label> {{ idx }}: </q-item-label>
                           </q-item-section>
                           <q-item-section>
                             <q-item-label>
+                              <pre class="bg-lightgrey">
                               {{ arg }}
+                            </pre
+                              >
                             </q-item-label>
                           </q-item-section>
                         </q-item>
@@ -193,7 +202,42 @@
                     :src="message.content"
                   />
                 </div>
-                <div class="col-auto column justify-around">
+                <div
+                  v-if="state.expertMode"
+                  class="col-auto q-gutter-xs row justify-start items-stretch"
+                >
+                  <q-btn
+                    v-if="message.debugging?.aiResponse?.usage"
+                    class="col-auto"
+                    flat
+                    stretch
+                    dense
+                    stack
+                    :ripple="false"
+                    :label="message.debugging?.aiResponse?.usage.total_tokens"
+                    icon="monetization_on"
+                    size="xs"
+                    ><q-tooltip :delay="1000"
+                      >Number of tokens used for this task</q-tooltip
+                    ></q-btn
+                  >
+                  <q-separator
+                    v-if="message.debugging?.aiResponse?.usage"
+                    vertical
+                    class="q-my-xs"
+                  />
+                  <q-btn
+                    class="col-auto rotate-180"
+                    push
+                    outline
+                    icon="alt_route"
+                    dense
+                    @click="state.chatState.selectedTaskId = message.id"
+                  >
+                    <q-tooltip :delay="1000"
+                      >Start alternative conversation from here</q-tooltip
+                    >
+                  </q-btn>
                   <q-btn
                     class="col"
                     flat
@@ -202,17 +246,6 @@
                     @click="toggleMessageDebug(message.id)"
                   >
                     <q-tooltip :delay="1000">Show message context</q-tooltip>
-                  </q-btn>
-                  <q-btn
-                    class="col rotate-180"
-                    flat
-                    icon="alt_route"
-                    dense
-                    @click="state.chatState.selectedTaskId = message.id"
-                  >
-                    <q-tooltip :delay="1000"
-                      >Start alternative conversation from here</q-tooltip
-                    >
                   </q-btn>
                 </div>
                 <q-slide-transition>
@@ -306,6 +339,7 @@ const $q = useQuasar();
 const initialState = {
   chatState,
   userInput: '',
+  expertMode: false,
   drawerOpen: false,
   drawerRight: false,
   debugMessageExpand: {},
