@@ -34,6 +34,7 @@
           label="Expert Mode"
           left-label
           class="q-px-md"
+          color="secondary"
         />
         <!-- Upload Area -->
         <q-expansion-item
