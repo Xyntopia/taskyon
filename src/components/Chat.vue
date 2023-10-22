@@ -84,7 +84,7 @@
               label-color="white"
               dense
               filled
-              v-model="state.chatState.openAIKey"
+              v-model="state.chatState.ApiKey"
               label="OpenAI Key"
             />
             <div>
@@ -287,7 +287,7 @@
               </div>
             </q-card-section>
 
-            <q-card-section v-if="state.chatState.openAIKey">
+            <q-card-section v-if="state.chatState.ApiKey">
               <q-input
                 autogrow
                 filled
@@ -318,9 +318,14 @@
                 dense
                 label="Select LLM"
                 icon="smart_toy"
-                :options="availableModels()"
-                v-model="state.selectedModel"
-              />
+                :options="allModels"
+                v-model="state.chatState.defaultModel"
+              >
+                <template v-slot:hint>
+                  For a list of supported models go here:
+                  https://openrouter.ai/docs#models
+                </template>
+              </q-select>
             </q-card-section>
             <q-card-section v-else>
               <div>
@@ -331,6 +336,10 @@
                   target="_blank"
                 >
                   https://platform.openai.com/account/api-keys</q-btn
+                >
+                or here:
+                <q-btn href="https://openrouter.ai/keys" target="_blank">
+                  https://openrouter.ai/keys</q-btn
                 >
               </div>
             </q-card-section>
@@ -357,7 +366,7 @@
 
 <script setup lang="ts">
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
-import { watch, computed } from 'vue';
+import { watch, computed, ref } from 'vue';
 import { useQuasar } from 'quasar';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
 import {
@@ -367,6 +376,7 @@ import {
   taskChain,
   run,
   availableModels,
+  ModelListResponse,
 } from 'src/modules/chat';
 import { dump } from 'js-yaml';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
@@ -377,7 +387,6 @@ const $q = useQuasar();
 const initialState = {
   chatState,
   userInput: '',
-  selectedModel: 'gpt-3.5-turbo',
   expertMode: false,
   drawerOpen: false,
   drawerRight: false,
@@ -385,6 +394,18 @@ const initialState = {
   darkTheme: 'auto' as boolean | 'auto',
   messageVisualization: {} as Record<string, boolean>, // whether message with ID should be open or not...
 };
+
+const allModels = ref<string[]>([]);
+void availableModels().then((res) => {
+  allModels.value = res
+    .map((m) => {
+      const p = parseFloat(m.pricing.prompt);
+      const c = parseFloat(m.pricing.completion);
+      return { m, p: p + c };
+    })
+    .sort(({ p: p1 }, { p: p2 }) => p1 - p2)
+    .map(({ m, p }) => `${m.id}: ${m.pricing.prompt}/${m.pricing.completion}`);
+});
 
 const state = syncStateWLocalStorage('chat_window_state', initialState);
 updateChatState(state.value.chatState);

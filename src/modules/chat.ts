@@ -7,13 +7,22 @@ import { Tool } from './tools';
 import { tools } from './tools';
 import AsyncQueue from './taskManager';
 
+// const baseURL = "https://api.openai.com/v1/"
+const baseURL = 'https://openrouter.ai/api/v1';
+
 export let chatState = {
   Tasks: {} as Record<string, LLMTask>,
   // this refers to the task chain that we have selected. We select one task and then
   // put the chain together by following the parentIds.
   selectedTaskId: undefined as string | undefined,
-  openAIKey: '',
+  defaultModel: 'mistralai/mistral-7b-instruct', //model which is generally chosen for a task if not explicitly specified
+  ApiKey: '',
+  siteUrl: 'https://taskyon.xyntopia.com',
   summaryModel: 'Xenova/distilbart-cnn-6-6',
+  URLs: {
+    chat: baseURL + '/chat/completions',
+    models: baseURL + '/models',
+  },
 };
 
 /**
@@ -138,20 +147,19 @@ interface TaskResult {
 
 export const vectorStore = useVectorStore();
 
-/**
- * Calls the OpenAI API with a given set of chat messages.
- *
- * @param {OpenAIMessage[]} chatMessages - The chat messages to send to the API.
- * @returns {Promise<string>} - A promise that resolves to the bot's response content.
- */
-async function callOpenAI(
+// calls openRouter OR OpenAI  chatmodels
+async function callOpenRouter(
   chatMessages: OpenAIMessage[],
-  functions: Array<Tool>
+  functions: Array<Tool>,
+  openRouter = true
 ) {
   const payload: ChatCompletionRequest = {
-    model: 'gpt-3.5-turbo',
+    model: chatState.defaultModel,
     messages: chatMessages,
     user: 'vexvault',
+    temperature: 0.0,
+    stream: false,
+    n: 1,
   };
 
   if (functions.length > 0) {
@@ -159,15 +167,23 @@ async function callOpenAI(
     payload.functions = functions;
   }
 
+  let headers: Record<string, string> = {
+    Authorization: `Bearer ${chatState.ApiKey}`,
+    'Content-Type': 'application/json',
+  };
+
+  if (openRouter) {
+    headers = {
+      ...headers,
+      'HTTP-Referer': `${chatState.siteUrl}`, // To identify your app. Can be set to localhost for testing
+      'X-Title': `${chatState.siteUrl}`, // Optional. Shows on openrouter.ai
+    };
+  }
+
   const response = await axios.post<ChatCompletionResponse>(
-    'https://api.openai.com/v1/chat/completions',
+    chatState.URLs.chat,
     payload,
-    {
-      headers: {
-        Authorization: `Bearer ${chatState.openAIKey}`,
-        'Content-Type': 'application/json',
-      },
-    }
+    { headers }
   );
 
   return response.data;
@@ -527,7 +543,7 @@ async function processOpenAIConversation(task: LLMTask) {
   const openAIConversation = buildChatFromTask(task);
   if (openAIConversation) {
     const functions = task.allowedTools?.map((t) => tools[t]) || [];
-    const response = await callOpenAI(openAIConversation, functions);
+    const response = await callOpenRouter(openAIConversation, functions);
     createNewTasksFromChatResponse(response, task.id);
   }
 }
@@ -601,6 +617,37 @@ export async function run() {
   await taskWorker();
 }
 
-export function availableModels() {
-  return ['gpt-3.5-turbo', 'gpt-4'];
+interface Model {
+  id: string;
+  pricing: {
+    prompt: string;
+    completion: string;
+    discount: string;
+  };
+  context_length: number;
+  top_provider: {
+    max_completion_tokens: number;
+  };
+}
+
+export interface ModelListResponse {
+  data: Model[];
+}
+
+// Update the availableModels function to return a list of models
+export async function availableModels(): Promise<Model[]> {
+  try {
+    // Setting up the Axios request
+    const response = await axios.get<ModelListResponse>(chatState.URLs.models, {
+      headers: {
+        Authorization: `Bearer ${chatState.ApiKey}`,
+      },
+    });
+
+    // Return the list of models directly
+    return response.data.data;
+  } catch (error) {
+    console.error('Error fetching models:', error);
+    throw error; // re-throwing the error to be handled by the calling code
+  }
 }
