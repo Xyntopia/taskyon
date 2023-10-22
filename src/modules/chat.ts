@@ -103,7 +103,7 @@ type ChatCompletionRequest = {
 export type LLMTask = {
   role: 'system' | 'user' | 'assistant' | 'function';
   content: string | null;
-  status: 'Open' | 'In Progress' | 'Completed';
+  status: 'Open' | 'In Progress' | 'Completed' | 'Error';
   context?: {
     message?: OpenAIMessage;
     function?: FunctionCall;
@@ -479,46 +479,51 @@ async function taskWorker() {
     console.log('waiting for next task!');
     const task = await processTasksQueue.pop();
     console.log('processing task:', task);
-    if (task.role == 'user') {
-      const openAIConversation = buildChatFromTask(task);
-      if (openAIConversation) {
-        const functions = task.allowedTools?.map((t) => tools[t]) || [];
-        const response = await callOpenAI(openAIConversation, functions);
-        createNewTasksFromChatResponse(response, task.id);
-      }
-    } else if (task.role == 'function') {
-      if (task.context?.function) {
-        const func = task.context?.function;
-        // convert functions arguments from json
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        const funcArguments = JSON.parse(func.arguments);
-        // now do the function call :)
-        console.log('call ' + func.name);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        const funcR = dump(await tools[func.name].function(funcArguments));
-
-        task.result = {
-          type: 'FunctionResult',
-          content: funcR,
-        };
-        task.status = 'Completed';
-        // Push the task ID to the current conversation
-        // make the task ID active..
-        chatState.selectedTaskId = task.id;
-
-        // now we're making sure to send the chat with the function result
-        // to openAI again...
+    try {
+      if (task.role == 'user') {
         const openAIConversation = buildChatFromTask(task);
         if (openAIConversation) {
           const functions = task.allowedTools?.map((t) => tools[t]) || [];
           const response = await callOpenAI(openAIConversation, functions);
           createNewTasksFromChatResponse(response, task.id);
         }
+      } else if (task.role == 'function') {
+        if (task.context?.function) {
+          const func = task.context?.function;
+          // convert functions arguments from json
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          const funcArguments = JSON.parse(func.arguments);
+          // now do the function call :)
+          console.log('call ' + func.name);
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          const funcR = dump(await tools[func.name].function(funcArguments));
+
+          task.result = {
+            type: 'FunctionResult',
+            content: funcR,
+          };
+          task.status = 'Completed';
+          // Push the task ID to the current conversation
+          // make the task ID active..
+          chatState.selectedTaskId = task.id;
+
+          // now we're making sure to send the chat with the function result
+          // to openAI again...
+          const openAIConversation = buildChatFromTask(task);
+          if (openAIConversation) {
+            const functions = task.allowedTools?.map((t) => tools[t]) || [];
+            const response = await callOpenAI(openAIConversation, functions);
+            createNewTasksFromChatResponse(response, task.id);
+          }
+        }
+      } else {
+        console.log("We don't know what to do with this task:", task);
       }
-    } else {
-      console.log("We don't know what to do with this task:", task);
+      task.status = 'Completed';
+    } catch (error) {
+      task.status = 'Error';
+      task.debugging = { error };
     }
-    task.status = 'Completed';
   }
 }
 

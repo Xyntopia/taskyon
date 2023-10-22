@@ -159,9 +159,13 @@
                   </div>
                   <div v-else-if="message.role == 'function'">
                     <q-expansion-item
-                      icon="calculate"
+                      :icon="
+                        message.status == 'Error' ? 'warning' : 'calculate'
+                      "
                       :label="message.context?.function?.name"
-                      header-class="text-green"
+                      :header-class="
+                        message.status == 'Error' ? 'text-red' : 'text-green'
+                      "
                     >
                       <q-list dense bordered>
                         <q-item
