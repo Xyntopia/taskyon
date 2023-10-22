@@ -1,4 +1,4 @@
-import { useVectorStore, SearchResult } from 'src/modules/localVectorStore';
+import { useVectorStore } from 'src/modules/localVectorStore';
 import axios from 'axios';
 import { dump } from 'js-yaml';
 import { v1 as uuidv1 } from 'uuid';
@@ -490,12 +490,18 @@ async function taskWorker() {
       } else if (task.role == 'function') {
         if (task.context?.function) {
           const func = task.context?.function;
-          // convert functions arguments from json
+          // Try to parse the function arguments from JSON, log and re-throw the error if parsing fails
+          let funcArguments;
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            funcArguments = JSON.parse(func.arguments);
+          } catch (parseError) {
+            // in this cse, we assume, that we can call the function with the return string!
+            funcArguments = func.arguments;
+          }
+          console.log(`Calling function ${func.name}`);
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          const funcArguments = JSON.parse(func.arguments);
-          // now do the function call :)
-          console.log('call ' + func.name);
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          // Convert the result of the function call to YAML using the dump function from js-yaml 
           const funcR = dump(await tools[func.name].function(funcArguments));
 
           task.result = {
@@ -523,6 +529,7 @@ async function taskWorker() {
     } catch (error) {
       task.status = 'Error';
       task.debugging = { error };
+      console.error('Error processing task:', error);
     }
   }
 }
