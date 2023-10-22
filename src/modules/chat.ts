@@ -537,19 +537,29 @@ async function taskWorker() {
         if (task.context?.function) {
           const func = task.context?.function;
           console.log(`Calling function ${func.name}`);
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          // Convert the result of the function call to YAML using the dump function from js-yaml
-          //const funcR = dump(await tools[func.name].function(func.arguments));
-          let funcR: unknown = await tools[func.name].function(func.arguments);
 
-          funcR = bigIntToString(funcR);
+          if (tools[func.name]) {
+            let funcR: unknown = await tools[func.name].function(
+              func.arguments
+            );
+            funcR = bigIntToString(funcR);
 
-          task.result = {
-            type: 'FunctionResult',
-            // TODO: it would be better to have this here rather in yaml than json
-            content: dump(funcR),
-          };
-          task.status = 'Completed';
+            task.result = {
+              type: 'FunctionResult',
+              // TODO: it would be better to have this here rather in yaml than json
+              content: dump(funcR),
+            };
+            task.status = 'Completed';
+          } else {
+            const toolnames = JSON.stringify(Object.keys(tools));
+            task.result = {
+              type: 'FunctionResult',
+              // TODO: it would be better to have this here rather in yaml than json
+              content: `The function ${func.name} is not available in tools. Please select a valid function from this list: 
+              ${toolnames}`,
+            };
+            task.allowedTools = Object.keys(tools);
+          }
           // Push the task ID to the current conversation
           // make the task ID active..
           chatState.selectedTaskId = task.id;

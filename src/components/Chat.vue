@@ -174,7 +174,7 @@
                         >
                           <q-item-section>
                             <q-item-label>
-                              <pre class="bg-lightgrey">
+                              <pre>
                               {{ message.context?.function?.arguments }}
                               </pre>
                             </q-item-label>
@@ -191,7 +191,7 @@
                           </q-item-section>
                           <q-item-section>
                             <q-item-label>
-                              <pre class="bg-info">
+                              <pre>
                               {{ arg }}
                             </pre
                               >
@@ -268,7 +268,18 @@
                   <div v-show="state.messageVisualization[message.id]">
                     <q-separator />
                     <q-card-section class="text-subtitle2">
-                      {{ message }}
+                      <textarea
+                        :value="JSON.stringify(message, null, 2)"
+                        readonly
+                        wrap="soft"
+                        style="
+                          width: 100%;
+                          height: 200px;
+                          background-color: inherit;
+                          color: inherit;
+                        "
+                      >
+                      </textarea>
                     </q-card-section>
                   </div>
                 </q-slide-transition>
