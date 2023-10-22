@@ -546,7 +546,6 @@ async function taskWorker() {
 
             task.result = {
               type: 'FunctionResult',
-              // TODO: it would be better to have this here rather in yaml than json
               content: dump(funcR),
             };
             task.status = 'Completed';
@@ -554,7 +553,6 @@ async function taskWorker() {
             const toolnames = JSON.stringify(Object.keys(tools));
             task.result = {
               type: 'FunctionResult',
-              // TODO: it would be better to have this here rather in yaml than json
               content: `The function ${func.name} is not available in tools. Please select a valid function from this list: 
               ${toolnames}`,
             };
