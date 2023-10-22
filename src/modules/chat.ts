@@ -27,18 +27,24 @@ export function updateChatState(newValue: typeof chatState) {
 
 const models = useCachedModels();
 
+type FunctionArguments = Record<string, any> | string | number;
+
 export type FunctionCall = {
   // The name of the function to call.
   name: string;
-  // Arguments to call the function with in JSON format.
-  arguments: string;
+  arguments: FunctionArguments;
 };
 
 export type OpenAIMessage = {
   // The content of the message, can be null for some messages.
   content: string | null;
   // Function call details if applicable.
-  function_call?: FunctionCall;
+  function_call?: {
+    // The name of the function to call.
+    name: string;
+    // Arguments to call the function with in JSON format.
+    arguments: string;
+  };
   // The name of the message author (optional) it has to be the name of the function, if
   // the role is "function".
   name?: string;
@@ -447,6 +453,17 @@ function createNewTasksFromChatResponse(
       choice.message.function_call
     ) {
       const func = choice.message.function_call;
+
+      // Try to parse the function arguments from JSON, log and re-throw the error if parsing fails
+      let funcArguments: Record<string, any> | string;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        funcArguments = JSON.parse(func.arguments);
+      } catch (parseError) {
+        // in this case, we assume, that we can call the function with the return string!
+        funcArguments = func.arguments;
+      }
+
       newResponseTask.result = {
         type: 'FunctionCall',
         functionCallDetails: func,
@@ -460,7 +477,10 @@ function createNewTasksFromChatResponse(
         childrenIDs: [],
         id: uuidv1(),
         context: {
-          function: func,
+          function: {
+            name: func.name,
+            arguments: funcArguments,
+          },
         },
         authorId: func.name,
       };
@@ -471,6 +491,32 @@ function createNewTasksFromChatResponse(
       chatState.selectedTaskId = funcTask.id;
     }
   }
+}
+
+function bigIntToString(obj: unknown): unknown {
+  if (obj === null) {
+    return obj;
+  }
+
+  if (typeof obj === 'bigint') {
+    return obj.toString();
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => bigIntToString(item));
+  }
+
+  if (typeof obj === 'object') {
+    const result: { [key: string]: unknown } = {};
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        result[key] = bigIntToString((obj as Record<string, unknown>)[key]);
+      }
+    }
+    return result;
+  }
+
+  return obj;
 }
 
 async function taskWorker() {
@@ -490,23 +536,18 @@ async function taskWorker() {
       } else if (task.role == 'function') {
         if (task.context?.function) {
           const func = task.context?.function;
-          // Try to parse the function arguments from JSON, log and re-throw the error if parsing fails
-          let funcArguments;
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-            funcArguments = JSON.parse(func.arguments);
-          } catch (parseError) {
-            // in this cse, we assume, that we can call the function with the return string!
-            funcArguments = func.arguments;
-          }
           console.log(`Calling function ${func.name}`);
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          // Convert the result of the function call to YAML using the dump function from js-yaml 
-          const funcR = dump(await tools[func.name].function(funcArguments));
+          // Convert the result of the function call to YAML using the dump function from js-yaml
+          //const funcR = dump(await tools[func.name].function(func.arguments));
+          let funcR: unknown = await tools[func.name].function(func.arguments);
+
+          funcR = bigIntToString(funcR);
 
           task.result = {
             type: 'FunctionResult',
-            content: funcR,
+            // TODO: it would be better to have this here rather in yaml than json
+            content: dump(funcR),
           };
           task.status = 'Completed';
           // Push the task ID to the current conversation

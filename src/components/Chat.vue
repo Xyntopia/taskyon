@@ -170,9 +170,20 @@
                     >
                       <q-list dense bordered>
                         <q-item
-                          v-for="(arg, idx) in JSON.parse(
-                            message.context?.function?.arguments || ''
-                          )"
+                          v-if="isString(message.context?.function?.arguments)"
+                        >
+                          <q-item-section>
+                            <q-item-label>
+                              <pre class="bg-lightgrey">
+                              {{ message.context?.function?.arguments }}
+                              </pre>
+                            </q-item-label>
+                          </q-item-section>
+                        </q-item>
+                        <q-item
+                          v-else
+                          v-for="(arg, idx) in message.context?.function
+                            ?.arguments || ''"
                           :key="idx"
                         >
                           <q-item-section class="text-bold" side>
@@ -180,7 +191,7 @@
                           </q-item-section>
                           <q-item-section>
                             <q-item-label>
-                              <pre class="bg-lightgrey">
+                              <pre class="bg-info">
                               {{ arg }}
                             </pre
                               >
@@ -380,6 +391,10 @@ const conversationIDs = computed(() => {
     .map((t) => t.id);
   return orphanTasks;
 });
+
+function isString(value: unknown) {
+  return typeof value === 'string';
+}
 
 const selectedConversation = computed(() => {
   if (state.value.chatState.selectedTaskId) {
