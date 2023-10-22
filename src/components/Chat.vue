@@ -268,6 +268,7 @@
                   <div v-show="state.messageVisualization[message.id]">
                     <q-separator />
                     <q-card-section class="text-subtitle2">
+                      <div>Task data:</div>
                       <textarea
                         :value="JSON.stringify(message, null, 2)"
                         readonly
@@ -286,9 +287,8 @@
               </div>
             </q-card-section>
 
-            <q-card-section>
+            <q-card-section v-if="state.chatState.openAIKey">
               <q-input
-                v-if="state.chatState.openAIKey"
                 autogrow
                 filled
                 color="secondary"
@@ -312,8 +312,18 @@
                   />
                 </template>
               </q-input>
-
-              <div v-else>
+              <q-select
+                class="q-pt-xs"
+                filled
+                dense
+                label="Select LLM"
+                icon="smart_toy"
+                :options="availableModels()"
+                v-model="state.selectedModel"
+              />
+            </q-card-section>
+            <q-card-section v-else>
+              <div>
                 Add an OpenAI API key to access the chatbot in Settings on the
                 left side!
                 <q-btn
@@ -356,6 +366,7 @@ import {
   sendMessage,
   taskChain,
   run,
+  availableModels,
 } from 'src/modules/chat';
 import { dump } from 'js-yaml';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
@@ -366,6 +377,7 @@ const $q = useQuasar();
 const initialState = {
   chatState,
   userInput: '',
+  selectedModel: 'gpt-3.5-turbo',
   expertMode: false,
   drawerOpen: false,
   drawerRight: false,

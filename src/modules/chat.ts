@@ -115,6 +115,7 @@ export type LLMTask = {
   context?: {
     message?: OpenAIMessage;
     function?: FunctionCall;
+    model?: string;
   };
   // is undefined in the case it is an "initial" task
   parentID?: string | undefined;
@@ -598,4 +599,8 @@ async function taskWorker() {
 export async function run() {
   console.log('start task taskWorker');
   await taskWorker();
+}
+
+export function availableModels() {
+  return ['gpt-3.5-turbo', 'gpt-4'];
 }
