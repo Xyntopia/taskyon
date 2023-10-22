@@ -106,10 +106,12 @@ type ChatCompletionRequest = {
   user?: string;
 };
 
+type TaskStatus = 'Open' | 'In Progress' | 'Completed' | 'Error';
+
 export type LLMTask = {
   role: 'system' | 'user' | 'assistant' | 'function';
   content: string | null;
-  status: 'Open' | 'In Progress' | 'Completed' | 'Error';
+  status: TaskStatus;
   context?: {
     message?: OpenAIMessage;
     function?: FunctionCall;
@@ -519,6 +521,57 @@ function bigIntToString(obj: unknown): unknown {
   return obj;
 }
 
+// Function to process OpenAI conversation
+async function processOpenAIConversation(task: LLMTask) {
+  const openAIConversation = buildChatFromTask(task);
+  if (openAIConversation) {
+    const functions = task.allowedTools?.map((t) => tools[t]) || [];
+    const response = await callOpenAI(openAIConversation, functions);
+    createNewTasksFromChatResponse(response, task.id);
+  }
+}
+
+// Function to process user tasks
+async function processUserTask(task: LLMTask) {
+  await processOpenAIConversation(task);
+  task.status = 'Completed';
+}
+
+// Function to process function tasks
+async function processFunctionTask(task: LLMTask) {
+  if (task.context?.function) {
+    const func = task.context.function;
+    console.log(`Calling function ${func.name}`);
+    const { result, status } = await handleFunctionExecution(task, func);
+    task.result = result;
+    task.status = status;
+    task.allowedTools = Object.keys(tools);
+    await processOpenAIConversation(task);
+  }
+}
+
+// Helper function to handle function execution
+async function handleFunctionExecution(
+  task: LLMTask,
+  func: FunctionCall
+): Promise<{ result: TaskResult; status: TaskStatus }> {
+  const allowedTools = Object.keys(tools);
+  if (tools[func.name]) {
+    let funcR: unknown = await tools[func.name].function(func.arguments);
+    funcR = bigIntToString(funcR);
+    const result: TaskResult = { type: 'FunctionResult', content: dump(funcR) };
+    return { result, status: 'Completed' };
+  } else {
+    const toolnames = JSON.stringify(allowedTools);
+    const result: TaskResult = {
+      type: 'FunctionResult',
+      content: `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`,
+    };
+    return { result, status: 'Error' };
+  }
+}
+
+// Updated taskWorker function
 async function taskWorker() {
   console.log('entering task worker loop...');
   while (true) {
@@ -527,54 +580,13 @@ async function taskWorker() {
     console.log('processing task:', task);
     try {
       if (task.role == 'user') {
-        const openAIConversation = buildChatFromTask(task);
-        if (openAIConversation) {
-          const functions = task.allowedTools?.map((t) => tools[t]) || [];
-          const response = await callOpenAI(openAIConversation, functions);
-          createNewTasksFromChatResponse(response, task.id);
-        }
+        await processUserTask(task);
       } else if (task.role == 'function') {
-        if (task.context?.function) {
-          const func = task.context?.function;
-          console.log(`Calling function ${func.name}`);
-
-          if (tools[func.name]) {
-            let funcR: unknown = await tools[func.name].function(
-              func.arguments
-            );
-            funcR = bigIntToString(funcR);
-
-            task.result = {
-              type: 'FunctionResult',
-              content: dump(funcR),
-            };
-            task.status = 'Completed';
-          } else {
-            const toolnames = JSON.stringify(Object.keys(tools));
-            task.result = {
-              type: 'FunctionResult',
-              content: `The function ${func.name} is not available in tools. Please select a valid function from this list: 
-              ${toolnames}`,
-            };
-            task.allowedTools = Object.keys(tools);
-          }
-          // Push the task ID to the current conversation
-          // make the task ID active..
-          chatState.selectedTaskId = task.id;
-
-          // now we're making sure to send the chat with the function result
-          // to openAI again...
-          const openAIConversation = buildChatFromTask(task);
-          if (openAIConversation) {
-            const functions = task.allowedTools?.map((t) => tools[t]) || [];
-            const response = await callOpenAI(openAIConversation, functions);
-            createNewTasksFromChatResponse(response, task.id);
-          }
-        }
+        await processFunctionTask(task);
       } else {
         console.log("We don't know what to do with this task:", task);
+        task.status = 'Error';
       }
-      task.status = 'Completed';
     } catch (error) {
       task.status = 'Error';
       task.debugging = { error };
