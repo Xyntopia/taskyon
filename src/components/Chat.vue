@@ -318,7 +318,8 @@
                 dense
                 label="Select LLM"
                 icon="smart_toy"
-                :options="allModels"
+                :options="modelOptions"
+                emit-value
                 v-model="state.chatState.defaultModel"
               >
                 <template v-slot:hint>
@@ -395,16 +396,19 @@ const initialState = {
   messageVisualization: {} as Record<string, boolean>, // whether message with ID should be open or not...
 };
 
-const allModels = ref<string[]>([]);
+const modelOptions = ref<{ label: string; value: string }[]>([]);
 void availableModels().then((res) => {
-  allModels.value = res
+  modelOptions.value = res
     .map((m) => {
       const p = parseFloat(m.pricing.prompt);
       const c = parseFloat(m.pricing.completion);
       return { m, p: p + c };
     })
     .sort(({ p: p1 }, { p: p2 }) => p1 - p2)
-    .map(({ m, p }) => `${m.id}: ${m.pricing.prompt}/${m.pricing.completion}`);
+    .map(({ m }) => ({
+      label: `${m.id}: ${m.pricing.prompt}/${m.pricing.completion}`,
+      value: m.id,
+    }));
 });
 
 const state = syncStateWLocalStorage('chat_window_state', initialState);
