@@ -28,12 +28,31 @@
       bordered
       :class="[$q.dark.isActive ? 'bg-primary' : 'bg-grey-3']"
     >
-      <q-list>
+      <q-list class="q-pa-xs">
+        <div>
+          set theme:
+          <q-btn-toggle
+            dense
+            :toggle-color="$q.dark.isActive ? 'secondary' : 'bg-grey-3'"
+            :model-value="$q.dark.mode"
+            @update:modelValue="
+              (value) => {
+                $q.dark.set(value);
+                state.darkTheme = value;
+              }
+            "
+            label="Dark Theme"
+            :options="[
+              { label: 'Auto', value: 'auto' },
+              { label: 'Light', value: false },
+              { label: 'Dark', value: true },
+            ]"
+          />
+        </div>
         <q-toggle
           v-model="state.expertMode"
           label="Expert Mode"
           left-label
-          class="q-px-md"
           color="secondary"
         />
         <!-- Upload Area -->
@@ -85,28 +104,9 @@
               dense
               filled
               v-model="state.chatState.ApiKey"
-              label="OpenAI Key"
+              label="API Key"
+              hint="Can either be OpenAI key or openrouter.ai key."
             />
-            <div>
-              set theme:
-              <q-btn-toggle
-                dense
-                :toggle-color="$q.dark.isActive ? 'secondary' : 'bg-grey-3'"
-                :model-value="$q.dark.mode"
-                @update:modelValue="
-                  (value) => {
-                    $q.dark.set(value);
-                    state.darkTheme = value;
-                  }
-                "
-                label="Dark Theme"
-                :options="[
-                  { label: 'Auto', value: 'auto' },
-                  { label: 'Light', value: false },
-                  { label: 'Dark', value: true },
-                ]"
-              />
-            </div>
           </div>
         </q-expansion-item>
       </q-list>
@@ -135,8 +135,8 @@
             <!-- "Task" Display -->
             <q-card-section class="q-gutter-sm">
               <div
-                v-for="(message, idx) in selectedConversation"
-                :key="idx"
+                v-for="message in selectedConversation"
+                :key="message.id"
                 :class="[
                   $q.dark.isActive ? 'bg-primary' : 'bg-white',
                   'rounded-borders',
@@ -151,7 +151,10 @@
                     : '',
                 ]"
               >
-                <div class="col-auto">
+                <div class="col-auto row justify-begin">
+                  <div v-if="message.status == 'Error'" class="q-pa-xs">
+                    <q-icon name="warning"></q-icon>
+                  </div>
                   <div v-if="message.result?.type == 'FunctionCall'">
                     <q-icon size="sm" name="build_circle" />
                     {{ message.result.functionCallDetails?.name }}({{
@@ -245,6 +248,7 @@
                   <q-btn
                     class="col-auto rotate-180"
                     push
+                    size="sm"
                     outline
                     icon="alt_route"
                     dense
@@ -259,6 +263,7 @@
                     flat
                     icon="code"
                     dense
+                    size="sm"
                     @click="toggleMessageDebug(message.id)"
                   >
                     <q-tooltip :delay="1000">Show message context</q-tooltip>
@@ -326,6 +331,24 @@
                   For a list of supported models go here:
                   https://openrouter.ai/docs#models
                 </template>
+                <template v-slot:after>
+                  <div style="font-size: 0.5em">
+                    <div>
+                      prompt:
+                      {{
+                        modelLookUp[state.chatState.defaultModel]?.pricing
+                          ?.prompt
+                      }}
+                    </div>
+                    <div>
+                      completion:
+                      {{
+                        modelLookUp[state.chatState.defaultModel]?.pricing
+                          ?.completion
+                      }}
+                    </div>
+                  </div>
+                </template>
               </q-select>
             </q-card-section>
             <q-card-section v-else>
@@ -345,13 +368,6 @@
               </div>
             </q-card-section>
           </q-card>
-          <div v-else>
-            <q-btn
-              label="create new conversion"
-              icon="add"
-              @click="createNewConversation"
-            ></q-btn>
-          </div>
         </div>
       </q-page>
     </q-page-container>
@@ -377,7 +393,7 @@ import {
   taskChain,
   run,
   availableModels,
-  ModelListResponse,
+  Model,
 } from 'src/modules/chat';
 import { dump } from 'js-yaml';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
@@ -397,6 +413,7 @@ const initialState = {
 };
 
 const modelOptions = ref<{ label: string; value: string }[]>([]);
+const modelLookUp = ref<Record<string, Model>>({});
 void availableModels().then((res) => {
   modelOptions.value = res
     .map((m) => {
@@ -409,6 +426,10 @@ void availableModels().then((res) => {
       label: `${m.id}: ${m.pricing.prompt}/${m.pricing.completion}`,
       value: m.id,
     }));
+  modelLookUp.value = res.reduce((acc, m) => {
+    acc[m.id] = m;
+    return acc;
+  }, {} as Record<string, Model>);
 });
 
 const state = syncStateWLocalStorage('chat_window_state', initialState);
@@ -419,6 +440,7 @@ $q.dark.set(state.value.darkTheme);
 watch(
   () => state.value.chatState,
   (newState) => {
+    console.log('changing state!!', newState);
     updateChatState(newState);
   },
   {
@@ -447,7 +469,9 @@ function isString(value: unknown) {
 const selectedConversation = computed(() => {
   if (state.value.chatState.selectedTaskId) {
     const conversationIDChain = taskChain(state.value.chatState.selectedTaskId);
-    const conversation = conversationIDChain.map((tId) => chatState.Tasks[tId]);
+    const conversation = conversationIDChain.map(
+      (tId) => state.value.chatState.Tasks[tId]
+    );
     return conversation;
   } else {
     return [];
@@ -462,7 +486,7 @@ function createNewConversation() {
 }
 
 function sendMessageWrapper() {
-  void sendMessage(state.value.userInput);
+  void sendMessage(state.value.userInput.trim());
   state.value.userInput = '';
 }
 

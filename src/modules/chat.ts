@@ -588,7 +588,6 @@ async function handleFunctionExecution(
   }
 }
 
-// Updated taskWorker function
 async function taskWorker() {
   console.log('entering task worker loop...');
   while (true) {
@@ -617,7 +616,7 @@ export async function run() {
   await taskWorker();
 }
 
-interface Model {
+export interface Model {
   id: string;
   pricing: {
     prompt: string;
@@ -630,15 +629,11 @@ interface Model {
   };
 }
 
-export interface ModelListResponse {
-  data: Model[];
-}
-
 // Update the availableModels function to return a list of models
 export async function availableModels(): Promise<Model[]> {
   try {
     // Setting up the Axios request
-    const response = await axios.get<ModelListResponse>(chatState.URLs.models, {
+    const response = await axios.get<{ data: Model[] }>(chatState.URLs.models, {
       headers: {
         Authorization: `Bearer ${chatState.ApiKey}`,
       },
