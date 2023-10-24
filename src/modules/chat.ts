@@ -10,29 +10,24 @@ import AsyncQueue from './taskManager';
 // const baseURL = "https://api.openai.com/v1/"
 const baseURL = 'https://openrouter.ai/api/v1';
 
-export let chatState = {
-  Tasks: {} as Record<string, LLMTask>,
-  // this refers to the task chain that we have selected. We select one task and then
-  // put the chain together by following the parentIds.
-  selectedTaskId: undefined as string | undefined,
-  defaultModel: 'mistralai/mistral-7b-instruct', //model which is generally chosen for a task if not explicitly specified
-  ApiKey: '',
-  siteUrl: 'https://taskyon.xyntopia.com',
-  summaryModel: 'Xenova/distilbart-cnn-6-6',
-  URLs: {
-    chat: baseURL + '/chat/completions',
-    models: baseURL + '/models',
-  },
-};
-
-/**
- * Updates the chat state with a new value.
- *
- * @param {typeof chatState} newValue - The new value for the chat state.
- */
-export function updateChatState(newValue: typeof chatState) {
-  chatState = newValue;
+export function defaultChatState() {
+  return {
+    Tasks: {} as Record<string, LLMTask>,
+    // this refers to the task chain that we have selected. We select one task and then
+    // put the chain together by following the parentIds.
+    selectedTaskId: undefined as string | undefined,
+    defaultModel: 'mistralai/mistral-7b-instruct', //model which is generally chosen for a task if not explicitly specified
+    ApiKey: '',
+    siteUrl: 'https://taskyon.xyntopia.com',
+    summaryModel: 'Xenova/distilbart-cnn-6-6',
+    URLs: {
+      chat: baseURL + '/chat/completions',
+      models: baseURL + '/models',
+    },
+  };
 }
+
+type ChatStateType = ReturnType<typeof defaultChatState>;
 
 const models = useCachedModels();
 
@@ -151,7 +146,8 @@ export const vectorStore = useVectorStore();
 async function callOpenRouter(
   chatMessages: OpenAIMessage[],
   functions: Array<Tool>,
-  openRouter = true
+  openRouter = true,
+  chatState: ChatStateType
 ) {
   const payload: ChatCompletionRequest = {
     model: chatState.defaultModel,
@@ -195,7 +191,10 @@ async function callOpenRouter(
  * @param {string} taskId - The ID of the task.
  * @returns {string} - The ID of the root task, or null if not found.
  */
-export function findRootTask(taskId: string): string | null {
+export function findRootTask(
+  taskId: string,
+  chatState: ChatStateType
+): string | null {
   let currentTaskID = taskId;
 
   while (currentTaskID) {
@@ -218,7 +217,10 @@ export function findRootTask(taskId: string): string | null {
  * @param {string} taskId - The ID of the task.
  * @returns {string[]} - An array of IDs of the leaf tasks.
  */
-export function findLeafTasks(taskId: string): string[] {
+export function findLeafTasks(
+  taskId: string,
+  chatState: ChatStateType
+): string[] {
   const leafTasks: string[] = [];
 
   function traverse(taskId: string) {
@@ -242,7 +244,7 @@ export function findLeafTasks(taskId: string): string[] {
   return leafTasks;
 }
 
-export function taskChain(lastTaskId: string) {
+export function taskChain(lastTaskId: string, tasks: Record<string, LLMTask>) {
   // Start with the selected task
   let currentTaskID = lastTaskId;
   const conversationList: string[] = [];
@@ -250,7 +252,7 @@ export function taskChain(lastTaskId: string) {
   // Trace back the parentIDs to the original task in the chain
   while (currentTaskID) {
     // Get the current task
-    const currentTask = chatState.Tasks[currentTaskID];
+    const currentTask = tasks[currentTaskID];
     if (!currentTask) break; // Break if we reach a task that doesn't exist
 
     // Prepend the current task to the conversation list so the selected task ends up being the last in the list
@@ -386,7 +388,7 @@ async function generateContext(
   }
 }
 
-export function sendMessage(message: string) {
+export function sendMessage(message: string, chatState: ChatStateType) {
   // adds a "sendMessage task to the Task stack"
   if (message.trim() === '') return;
 
@@ -414,9 +416,9 @@ export function sendMessage(message: string) {
   processTasksQueue.push(currentTask);
 }
 
-function buildChatFromTask(task: LLMTask) {
+function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
   const openAIConversation = [] as OpenAIMessage[];
-  const conversation = taskChain(task.id);
+  const conversation = taskChain(task.id, chatState.Tasks);
 
   if (conversation) {
     openAIConversation.push(
@@ -441,7 +443,8 @@ function buildChatFromTask(task: LLMTask) {
 
 function createNewTasksFromChatResponse(
   response: ChatCompletionResponse,
-  parentTaskId: string
+  parentTaskId: string,
+  chatState: ChatStateType
 ) {
   // Process the response and create new tasks if necessary
   if (response.choices.length > 0) {
@@ -539,23 +542,31 @@ function bigIntToString(obj: unknown): unknown {
 }
 
 // Function to process OpenAI conversation
-async function processOpenAIConversation(task: LLMTask) {
-  const openAIConversation = buildChatFromTask(task);
+async function processOpenAIConversation(
+  task: LLMTask,
+  chatState: ChatStateType
+) {
+  const openAIConversation = buildChatFromTask(task, chatState);
   if (openAIConversation) {
     const functions = task.allowedTools?.map((t) => tools[t]) || [];
-    const response = await callOpenRouter(openAIConversation, functions);
-    createNewTasksFromChatResponse(response, task.id);
+    const response = await callOpenRouter(
+      openAIConversation,
+      functions,
+      true,
+      chatState
+    );
+    createNewTasksFromChatResponse(response, task.id, chatState);
   }
 }
 
 // Function to process user tasks
-async function processUserTask(task: LLMTask) {
-  await processOpenAIConversation(task);
+async function processUserTask(task: LLMTask, chatState: ChatStateType) {
+  await processOpenAIConversation(task, chatState);
   task.status = 'Completed';
 }
 
 // Function to process function tasks
-async function processFunctionTask(task: LLMTask) {
+async function processFunctionTask(task: LLMTask, chatState: ChatStateType) {
   if (task.context?.function) {
     const func = task.context.function;
     console.log(`Calling function ${func.name}`);
@@ -563,7 +574,7 @@ async function processFunctionTask(task: LLMTask) {
     task.result = result;
     task.status = status;
     task.allowedTools = Object.keys(tools);
-    await processOpenAIConversation(task);
+    await processOpenAIConversation(task, chatState);
   }
 }
 
@@ -588,7 +599,7 @@ async function handleFunctionExecution(
   }
 }
 
-async function taskWorker() {
+async function taskWorker(chatState: ChatStateType) {
   console.log('entering task worker loop...');
   while (true) {
     console.log('waiting for next task!');
@@ -596,9 +607,9 @@ async function taskWorker() {
     console.log('processing task:', task);
     try {
       if (task.role == 'user') {
-        await processUserTask(task);
+        await processUserTask(task, chatState);
       } else if (task.role == 'function') {
-        await processFunctionTask(task);
+        await processFunctionTask(task, chatState);
       } else {
         console.log("We don't know what to do with this task:", task);
         task.status = 'Error';
@@ -611,9 +622,9 @@ async function taskWorker() {
   }
 }
 
-export async function run() {
+export async function run(chatState: ChatStateType) {
   console.log('start task taskWorker');
-  await taskWorker();
+  await taskWorker(chatState);
 }
 
 export interface Model {
@@ -630,7 +641,9 @@ export interface Model {
 }
 
 // Update the availableModels function to return a list of models
-export async function availableModels(): Promise<Model[]> {
+export async function availableModels(
+  chatState: ChatStateType
+): Promise<Model[]> {
   try {
     // Setting up the Axios request
     const response = await axios.get<{ data: Model[] }>(chatState.URLs.models, {

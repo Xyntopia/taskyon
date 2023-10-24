@@ -387,8 +387,7 @@ import { watch, computed, ref } from 'vue';
 import { useQuasar } from 'quasar';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
 import {
-  chatState,
-  updateChatState,
+  defaultChatState,
   sendMessage,
   taskChain,
   run,
@@ -398,11 +397,12 @@ import {
 import { dump } from 'js-yaml';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
+import { stat } from 'fs';
 
 const $q = useQuasar();
 
 const initialState = {
-  chatState,
+  chatState: defaultChatState(),
   userInput: '',
   expertMode: false,
   drawerOpen: false,
@@ -412,9 +412,11 @@ const initialState = {
   messageVisualization: {} as Record<string, boolean>, // whether message with ID should be open or not...
 };
 
+const state = syncStateWLocalStorage('chat_window_state', initialState);
+
 const modelOptions = ref<{ label: string; value: string }[]>([]);
 const modelLookUp = ref<Record<string, Model>>({});
-void availableModels().then((res) => {
+void availableModels(state.value.chatState).then((res) => {
   modelOptions.value = res
     .map((m) => {
       const p = parseFloat(m.pricing.prompt);
@@ -432,21 +434,7 @@ void availableModels().then((res) => {
   }, {} as Record<string, Model>);
 });
 
-const state = syncStateWLocalStorage('chat_window_state', initialState);
-updateChatState(state.value.chatState);
-
 $q.dark.set(state.value.darkTheme);
-
-watch(
-  () => state.value.chatState,
-  (newState) => {
-    console.log('changing state!!', newState);
-    updateChatState(newState);
-  },
-  {
-    deep: true,
-  }
-);
 
 //const uploaderURL = 'http://www.vexvault.com'
 //const uploaderURL='http://localhost:8080'
@@ -468,7 +456,10 @@ function isString(value: unknown) {
 
 const selectedConversation = computed(() => {
   if (state.value.chatState.selectedTaskId) {
-    const conversationIDChain = taskChain(state.value.chatState.selectedTaskId);
+    const conversationIDChain = taskChain(
+      state.value.chatState.selectedTaskId,
+      state.value.chatState.Tasks
+    );
     const conversation = conversationIDChain.map(
       (tId) => state.value.chatState.Tasks[tId]
     );
@@ -486,7 +477,7 @@ function createNewConversation() {
 }
 
 function sendMessageWrapper() {
-  void sendMessage(state.value.userInput.trim());
+  void sendMessage(state.value.userInput.trim(), state.value.chatState);
   state.value.userInput = '';
 }
 
@@ -509,5 +500,5 @@ function toggleMessageDebug(id: string) {
   }
 }
 
-void run();
+void run(state.value.chatState);
 </script>
