@@ -437,15 +437,15 @@
                     <div>
                       prompt:
                       {{
-                        modelLookUp[state.chatState.openAIModel]?.pricing
+                        modelLookUp.openrouter[state.chatState.openrouterAIModel]?.pricing
                           ?.prompt
                       }}
                     </div>
                     <div>
                       completion:
                       {{
-                        modelLookUp[state.chatState.openAIModel]?.pricing
-                          ?.completion
+                        modelLookUp.openrouter[state.chatState.openrouterAIModel]
+                          ?.pricing?.completion
                       }}
                     </div>
                   </div>
@@ -504,7 +504,6 @@ import { getEncoding } from 'js-tiktoken';
 import openrouterModules from 'assets/openrouter_models.json';
 const openrouterModels: Model[] = openrouterModules.data;
 import openaiModels from 'assets/openai_models.json';
-import { cat } from '@xenova/transformers';
 const openAiModels: Model[] = openaiModels.data;
 
 const $q = useQuasar();
@@ -526,10 +525,13 @@ const initialState = {
 
 const state = syncStateWLocalStorage('chat_window_state', initialState);
 
-const modelLookUp = ref<Record<string, Model>>({});
+const modelLookUp = ref({
+  openai: {} as Record<string, Model>,
+  openrouter: {} as Record<string, Model>,
+});
 async function updateModelOptions(): Promise<void> {
-  let res: Model[] = [];
   if (state.value.chatState.baseURL == getBackendUrls('openrouter')) {
+    let res: Model[] = [];
     try {
       res = await availableModels(state.value.chatState);
     } catch (error) {
@@ -550,7 +552,13 @@ async function updateModelOptions(): Promise<void> {
         }`,
         value: m.id,
       }));
+
+    modelLookUp.value.openrouter = res.reduce((acc, m) => {
+      acc[m.id] = m;
+      return acc;
+    }, {} as Record<string, Model>);
   } else {
+    let res: Model[] = [];
     try {
       res = await availableModels(state.value.chatState);
     } catch (error) {
@@ -563,12 +571,12 @@ async function updateModelOptions(): Promise<void> {
         label: `${m.id}`,
         value: m.id,
       }));
-  }
 
-  modelLookUp.value = res.reduce((acc, m) => {
-    acc[m.id] = m;
-    return acc;
-  }, {} as Record<string, Model>);
+    modelLookUp.value.openai = res.reduce((acc, m) => {
+      acc[m.id] = m;
+      return acc;
+    }, {} as Record<string, Model>);
+  }
 }
 
 void updateModelOptions();
