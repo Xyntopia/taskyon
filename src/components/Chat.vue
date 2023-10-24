@@ -119,16 +119,41 @@
         </q-expansion-item>
         <q-separator spaced />
         <!-- Settings Area -->
-        <q-expansion-item dense label="Settings" icon="settings">
-          <div class="q-pa-md q-gutter-md">
+        <q-expansion-item dense label="Settings" icon="settings" default-opened>
+          <div class="q-pa-sm q-gutter-md">
+            <q-btn-toggle
+              v-model="state.chatState.baseURL"
+              no-caps
+              rounded
+              unelevated
+              bordered
+              outline
+              toggle-color="secondary"
+              color="white"
+              text-color="black"
+              :options="[
+                { label: 'OpenAI API', value: getBackendUrls('openai') },
+                {
+                  label: 'Openrouter.ai API',
+                  value: getBackendUrls('openrouter.ai'),
+                },
+              ]"
+            />
             <q-input
-              placeholder="Add OpenAI API key here!"
+              placeholder="Add API key here!"
               label-color="white"
               dense
               filled
-              v-model="state.chatState.ApiKey"
-              label="API Key"
-              hint="Can either be OpenAI key or openrouter.ai key."
+              v-model="state.chatState.openRouterAIApiKey"
+              label="Openrouter.ai API key"
+            />
+            <q-input
+              placeholder="Add API key here!"
+              label-color="white"
+              dense
+              filled
+              v-model="state.chatState.openAIApiKey"
+              label="OpenAI API Key"
             />
           </div>
         </q-expansion-item>
@@ -332,8 +357,8 @@
               </div>
               <div
                 v-if="
-                  state.chatState.Tasks[state.chatState.selectedTaskId]
-                    .status == 'Open'
+                  state.chatState.Tasks[state.chatState.selectedTaskId || '']
+                    ?.status == 'Open'
                 "
                 class="q-pa-xs"
               >
@@ -342,7 +367,7 @@
             </q-card-section>
 
             <!--Create new task area-->
-            <q-card-section v-if="state.chatState.ApiKey">
+            <q-card-section v-if="getApikey(state.chatState)">
               <q-input
                 autogrow
                 filled
@@ -369,32 +394,57 @@
                 </template>
               </q-input>
               <q-select
+                v-if="state.chatState.baseURL == getBackendUrls('openai')"
                 class="q-pt-xs"
                 filled
+                bottom-slots
                 dense
-                label="Select LLM"
+                label="Select Openrouter.ai LLM"
                 icon="smart_toy"
-                :options="modelOptions"
+                :options="state.modelOptions.openai"
                 emit-value
-                v-model="state.chatState.defaultModel"
+                v-model="state.chatState.openAIModel"
               >
                 <template v-slot:hint>
                   For a list of supported models go here:
-                  https://openrouter.ai/docs#models
+                  <a
+                    href="https://platform.openai.com/docs/models"
+                    target="_blank"
+                    >https://platform.openai.com/docs/models</a
+                  >
+                </template>
+              </q-select>
+              <q-select
+                v-else
+                class="q-pt-xs"
+                filled
+                dense
+                bottom-slots
+                label="Select OpenAI LLM"
+                icon="smart_toy"
+                :options="state.modelOptions.openrouter"
+                emit-value
+                v-model="state.chatState.openrouterAIModel"
+              >
+                <template v-slot:hint>
+                  For a list of supported models go here:
+                  <a href="https://openrouter.ai/docs#models" target="_blank"
+                    >https://openrouter.ai/docs#models</a
+                  >
                 </template>
                 <template v-slot:after>
                   <div style="font-size: 0.5em">
                     <div>
                       prompt:
                       {{
-                        modelLookUp[state.chatState.defaultModel]?.pricing
+                        modelLookUp[state.chatState.openAIModel]?.pricing
                           ?.prompt
                       }}
                     </div>
                     <div>
                       completion:
                       {{
-                        modelLookUp[state.chatState.defaultModel]?.pricing
+                        modelLookUp[state.chatState.openAIModel]?.pricing
                           ?.completion
                       }}
                     </div>
@@ -404,8 +454,7 @@
             </q-card-section>
             <q-card-section v-else>
               <div>
-                Add an OpenAI API key to access the chatbot in Settings on the
-                left side!
+                Add an API key to access a chatbot in Settings on the left side!
                 <q-btn
                   href="https://platform.openai.com/account/api-keys"
                   target="_blank"
@@ -434,7 +483,7 @@
 
 <script setup lang="ts">
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
 import {
@@ -445,6 +494,8 @@ import {
   availableModels,
   Model,
   deleteConversation,
+  getBackendUrls,
+  getApikey,
 } from 'src/modules/chat';
 import { dump } from 'js-yaml';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
@@ -455,6 +506,10 @@ const $q = useQuasar();
 
 const initialState = {
   chatState: defaultChatState(),
+  modelOptions: {
+    openai: [] as { label: string; value: string }[],
+    openrouter: [] as { label: string; value: string }[],
+  },
   userInput: '',
   expertMode: false,
   drawerOpen: false,
@@ -466,25 +521,40 @@ const initialState = {
 
 const state = syncStateWLocalStorage('chat_window_state', initialState);
 
-const modelOptions = ref<{ label: string; value: string }[]>([]);
 const modelLookUp = ref<Record<string, Model>>({});
-void availableModels(state.value.chatState).then((res) => {
-  modelOptions.value = res
-    .map((m) => {
-      const p = parseFloat(m.pricing.prompt);
-      const c = parseFloat(m.pricing.completion);
-      return { m, p: p + c };
-    })
-    .sort(({ p: p1 }, { p: p2 }) => p1 - p2)
-    .map(({ m }) => ({
-      label: `${m.id}: ${m.pricing.prompt}/${m.pricing.completion}`,
-      value: m.id,
-    }));
+async function updateModelOptions(): Promise<void> {
+  let res: Model[] = [];
+  if (state.value.chatState.baseURL == getBackendUrls('openrouter')) {
+    res = await availableModels(state.value.chatState);
+    state.value.modelOptions.openrouter = res
+      .map((m) => {
+        const p = parseFloat(m.pricing.prompt);
+        const c = parseFloat(m.pricing.completion);
+        return { m, p: p + c };
+      })
+      .sort(({ p: p1 }, { p: p2 }) => p1 - p2)
+      .map(({ m }) => ({
+        label: `${m.id}: ${m.pricing.prompt}/${m.pricing.completion}`,
+        value: m.id,
+      }));
+  } else {
+    res = await availableModels(state.value.chatState);
+    state.value.modelOptions.openai = res
+      .sort((m1, m2) => m1.id.localeCompare(m2.id))
+      .map((m) => ({
+        label: `${m.id}`,
+        value: m.id,
+      }));
+  }
+
   modelLookUp.value = res.reduce((acc, m) => {
     acc[m.id] = m;
     return acc;
   }, {} as Record<string, Model>);
-});
+}
+
+void updateModelOptions();
+watch(() => state.value.chatState.baseURL, updateModelOptions);
 
 $q.dark.set(state.value.darkTheme);
 
