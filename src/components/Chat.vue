@@ -174,19 +174,22 @@
                     : '',
                 ]"
               >
-                <div class="col-auto row justify-begin">
-                  <div v-if="message.status == 'Error'" class="q-pa-xs">
+                <div class="col-auto row justify-begin q-gutter-xs">
+                  <div v-if="message.status == 'Error'" class="col-auto">
                     <q-icon name="warning" color="warning" size="sm"
                       ><q-tooltip class="bg-warning">Error!</q-tooltip>
                     </q-icon>
                   </div>
-                  <div v-if="message.result?.type == 'FunctionCall'">
+                  <div
+                    v-if="message.result?.type == 'FunctionCall'"
+                    class="col"
+                  >
                     <q-icon size="sm" name="build_circle" />
                     {{ message.result.functionCallDetails?.name }}({{
                       message.result.functionCallDetails?.arguments
                     }})
                   </div>
-                  <div v-else-if="message.role == 'function'">
+                  <div v-else-if="message.role == 'function'" class="col">
                     <q-expansion-item
                       :icon="
                         message.status == 'Error' ? 'warning' : 'calculate'
@@ -242,18 +245,15 @@
                     </q-expansion-item>
                   </div>
                   <q-markdown
+                    class="col"
                     v-else-if="message.content"
                     :src="message.content"
                   />
-                </div>
-                <div
-                  v-if="state.expertMode"
-                  class="col-auto q-gutter-xs row justify-start items-stretch"
-                >
                   <q-btn
-                    v-if="message.debugging?.aiResponse?.usage"
                     class="col-auto"
+                    v-if="message.debugging?.aiResponse?.usage"
                     flat
+                    color="secondary"
                     stretch
                     dense
                     stack
@@ -263,8 +263,13 @@
                     size="xs"
                     ><q-tooltip :delay="1000"
                       >Number of tokens used for this task</q-tooltip
-                    ></q-btn
-                  >
+                    >
+                  </q-btn>
+                </div>
+                <div
+                  v-if="state.expertMode"
+                  class="col-auto q-gutter-xs row justify-start items-stretch"
+                >
                   <q-separator
                     v-if="message.debugging?.aiResponse?.usage"
                     vertical
@@ -293,6 +298,16 @@
                   >
                     <q-tooltip :delay="1000">Show message context</q-tooltip>
                   </q-btn>
+                  <q-btn
+                    class="col-auto"
+                    outline
+                    icon="edit"
+                    dense
+                    size="sm"
+                    @click="editTask(message.id)"
+                  >
+                    <q-tooltip :delay="1000">Edit user Message</q-tooltip>
+                  </q-btn>
                 </div>
                 <q-slide-transition>
                   <div v-show="state.messageVisualization[message.id]">
@@ -314,6 +329,15 @@
                     </q-card-section>
                   </div>
                 </q-slide-transition>
+              </div>
+              <div
+                v-if="
+                  state.chatState.Tasks[state.chatState.selectedTaskId]
+                    .status == 'Open'
+                "
+                class="q-pa-xs"
+              >
+                <q-spinner-comment color="secondary" size="lg" />
               </div>
             </q-card-section>
 
@@ -521,6 +545,12 @@ const estimatedTokens = computed(() => {
 function sendMessageWrapper() {
   void sendMessage(state.value.userInput.trim(), state.value.chatState);
   state.value.userInput = '';
+}
+
+function editTask(taskId: string) {
+  state.value.userInput = state.value.chatState.Tasks[taskId].content || '';
+  state.value.chatState.selectedTaskId =
+    state.value.chatState.Tasks[taskId].parentID;
 }
 
 const checkForShiftEnter = (event: KeyboardEvent) => {
