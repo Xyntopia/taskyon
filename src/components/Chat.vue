@@ -58,6 +58,7 @@
         <!-- Upload Area -->
         <q-expansion-item
           v-if="true"
+          dense
           label="Upload"
           icon="upload"
           default-opened
@@ -94,7 +95,7 @@
               <q-item
                 dense
                 v-for="(conversationId, idx) in conversationIDs"
-                :key="idx"
+                :key="conversationId"
                 @click="state.chatState.selectedTaskId = conversationId"
                 clickable
                 v-ripple
@@ -103,6 +104,15 @@
                   <q-icon name="chat_bubble" size="xs" />
                 </q-item-section>
                 <q-item-section> Conversation {{ idx }} </q-item-section>
+                <q-item-section side>
+                  <q-btn
+                    dense
+                    icon="delete"
+                    size="sm"
+                    flat
+                    @click="deleteConversation(conversationId, state.chatState)"
+                  ></q-btn>
+                </q-item-section>
               </q-item>
             </q-list>
           </div>
@@ -307,12 +317,14 @@
               </div>
             </q-card-section>
 
+            <!--Create new task area-->
             <q-card-section v-if="state.chatState.ApiKey">
               <q-input
                 autogrow
                 filled
                 color="secondary"
                 v-model="state.userInput"
+                :hint="`Estimated number of tokens: ${estimatedTokens}`"
                 label="Type your message..."
                 @keyup="checkForShiftEnter"
               >
@@ -408,10 +420,12 @@ import {
   run,
   availableModels,
   Model,
+  deleteConversation,
 } from 'src/modules/chat';
 import { dump } from 'js-yaml';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
+import { getEncoding } from 'js-tiktoken';
 
 const $q = useQuasar();
 
@@ -493,6 +507,16 @@ function createNewConversation() {
   // the next message which will be send, will be an orphan in this case.
   state.value.chatState.selectedTaskId = undefined;
 }
+
+const enc = getEncoding('gpt2');
+
+const estimatedTokens = computed(() => {
+  // Tokenize the message
+  const tokens = enc.encode(state.value.userInput);
+
+  // Return the token count
+  return tokens.length;
+});
 
 function sendMessageWrapper() {
   void sendMessage(state.value.userInput.trim(), state.value.chatState);

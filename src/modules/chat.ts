@@ -582,6 +582,36 @@ async function processFunctionTask(task: LLMTask, chatState: ChatStateType) {
   }
 }
 
+export function deleteConversation(leafId: string, chatState: ChatStateType) {
+  if (chatState.selectedTaskId == leafId) {
+    chatState.selectedTaskId = undefined;
+  }
+
+  let currentTaskId = leafId;
+  while (currentTaskId) {
+    const currentTask = chatState.Tasks[currentTaskId];
+    if (!currentTask) break; // Break if a task doesn't exist
+
+    // Check if the parent task has more than one child
+    if (currentTask.parentID) {
+      const parentTask = chatState.Tasks[currentTask.parentID];
+      if (parentTask && parentTask.childrenIDs.length > 1) {
+        break; // Stop deletion if the parent task has more than one child
+      }
+    }
+
+    // Delete the current task
+    delete chatState.Tasks[currentTaskId];
+
+    if (currentTask.parentID) {
+      // Move to the parent task
+      currentTaskId = currentTask.parentID;
+    } else {
+      break;
+    }
+  }
+}
+
 // Helper function to handle function execution
 async function handleFunctionExecution(
   task: LLMTask,

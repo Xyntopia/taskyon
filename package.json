@@ -31,6 +31,7 @@
     "dexie": "^3.2.4",
     "hnsw": "^1.0.2",
     "hnswlib-wasm": "^0.7.0",
+    "js-tiktoken": "^1.0.7",
     "js-yaml": "^4.1.0",
     "langchain": "^0.0.102",
     "lodash": "^4.17.21",
