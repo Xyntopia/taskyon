@@ -153,7 +153,9 @@
               >
                 <div class="col-auto row justify-begin">
                   <div v-if="message.status == 'Error'" class="q-pa-xs">
-                    <q-icon name="warning"></q-icon>
+                    <q-icon name="warning" color="warning" size="sm"
+                      ><q-tooltip class="bg-warning">Error!</q-tooltip>
+                    </q-icon>
                   </div>
                   <div v-if="message.result?.type == 'FunctionCall'">
                     <q-icon size="sm" name="build_circle" />
@@ -383,7 +385,7 @@
 
 <script setup lang="ts">
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
-import { watch, computed, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useQuasar } from 'quasar';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
 import {
@@ -397,7 +399,6 @@ import {
 import { dump } from 'js-yaml';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
-import { stat } from 'fs';
 
 const $q = useQuasar();
 
@@ -460,9 +461,9 @@ const selectedConversation = computed(() => {
       state.value.chatState.selectedTaskId,
       state.value.chatState.Tasks
     );
-    const conversation = conversationIDChain.map(
-      (tId) => state.value.chatState.Tasks[tId]
-    );
+    const conversation = conversationIDChain.map((tId) => {
+      return state.value.chatState.Tasks[tId];
+    });
     return conversation;
   } else {
     return [];

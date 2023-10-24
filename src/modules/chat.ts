@@ -390,6 +390,7 @@ async function generateContext(
 
 export function sendMessage(message: string, chatState: ChatStateType) {
   // adds a "sendMessage task to the Task stack"
+  console.log('send message');
   if (message.trim() === '') return;
 
   const currentTask: LLMTask = {
@@ -413,7 +414,10 @@ export function sendMessage(message: string, chatState: ChatStateType) {
   chatState.selectedTaskId = currentTask.id;
 
   // Push the new task to processTasksQueue
-  processTasksQueue.push(currentTask);
+  // we are using the reference from chatState here isntead of currentTask,
+  // because we want to preserve reactivity from librares such as react
+  // or vue. And this way we can use the reactive object!
+  processTasksQueue.push(chatState.Tasks[currentTask.id]);
 }
 
 function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
@@ -509,7 +513,7 @@ function createNewTasksFromChatResponse(
       chatState.Tasks[funcTask.id] = funcTask;
       newResponseTask.childrenIDs.push(funcTask.id);
       // Push the new function task to processTasksQueue
-      processTasksQueue.push(funcTask);
+      processTasksQueue.push(chatState.Tasks[funcTask.id]);
       chatState.selectedTaskId = funcTask.id;
     }
   }
