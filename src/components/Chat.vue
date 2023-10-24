@@ -501,6 +501,11 @@ import { dump } from 'js-yaml';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { getEncoding } from 'js-tiktoken';
+import openrouterModules from 'assets/openrouter_models.json';
+const openrouterModels: Model[] = openrouterModules.data;
+import openaiModels from 'assets/openai_models.json';
+import { cat } from '@xenova/transformers';
+const openAiModels: Model[] = openaiModels.data;
 
 const $q = useQuasar();
 
@@ -525,20 +530,33 @@ const modelLookUp = ref<Record<string, Model>>({});
 async function updateModelOptions(): Promise<void> {
   let res: Model[] = [];
   if (state.value.chatState.baseURL == getBackendUrls('openrouter')) {
-    res = await availableModels(state.value.chatState);
+    try {
+      res = await availableModels(state.value.chatState);
+    } catch (error) {
+      console.error('Error fetching models:', error);
+      console.log('using default list');
+      res = openrouterModels;
+    }
     state.value.modelOptions.openrouter = res
       .map((m) => {
-        const p = parseFloat(m.pricing.prompt);
-        const c = parseFloat(m.pricing.completion);
+        const p = parseFloat(m.pricing?.prompt || '');
+        const c = parseFloat(m.pricing?.completion || '');
         return { m, p: p + c };
       })
       .sort(({ p: p1 }, { p: p2 }) => p1 - p2)
       .map(({ m }) => ({
-        label: `${m.id}: ${m.pricing.prompt}/${m.pricing.completion}`,
+        label: `${m.id}: ${m.pricing?.prompt || 'N/A'}/${
+          m.pricing?.completion || 'N/A'
+        }`,
         value: m.id,
       }));
   } else {
-    res = await availableModels(state.value.chatState);
+    try {
+      res = await availableModels(state.value.chatState);
+    } catch (error) {
+      console.error('Error fetching models:', error);
+      res = openAiModels;
+    }
     state.value.modelOptions.openai = res
       .sort((m1, m2) => m1.id.localeCompare(m2.id))
       .map((m) => ({
