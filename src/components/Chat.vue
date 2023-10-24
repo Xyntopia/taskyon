@@ -76,7 +76,20 @@
           default-opened
         >
           <div class="column items-stretch">
-            <q-btn dense flat icon="add" @click="createNewConversation"></q-btn>
+            <div class="row">
+              <q-btn
+                class="col"
+                dense
+                flat
+                icon="add"
+                @click="createNewConversation"
+              ></q-btn>
+              <q-btn dense flat icon="delete" @click="deleteAllTasks"
+                ><q-tooltip :delay="500"
+                  >Delete all conversations!</q-tooltip
+                ></q-btn
+              >
+            </div>
             <q-list>
               <q-item
                 dense
@@ -455,6 +468,11 @@ function isString(value: unknown) {
   return typeof value === 'string';
 }
 
+function deleteAllTasks() {
+  state.value.chatState.selectedTaskId = undefined;
+  state.value.chatState.Tasks = {};
+}
+
 const selectedConversation = computed(() => {
   if (state.value.chatState.selectedTaskId) {
     const conversationIDChain = taskChain(
@@ -471,7 +489,6 @@ const selectedConversation = computed(() => {
 });
 
 function createNewConversation() {
-  console.log('start a new conversation (create an "orphan task")');
   // we simply need to tell our task manager that we don't have any task selected
   // the next message which will be send, will be an orphan in this case.
   state.value.chatState.selectedTaskId = undefined;
