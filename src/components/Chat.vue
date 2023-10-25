@@ -437,15 +437,17 @@
                     <div>
                       prompt:
                       {{
-                        modelLookUp.openrouter[state.chatState.openrouterAIModel]?.pricing
-                          ?.prompt
+                        modelLookUp.openrouter[
+                          state.chatState.openrouterAIModel
+                        ]?.pricing?.prompt
                       }}
                     </div>
                     <div>
                       completion:
                       {{
-                        modelLookUp.openrouter[state.chatState.openrouterAIModel]
-                          ?.pricing?.completion
+                        modelLookUp.openrouter[
+                          state.chatState.openrouterAIModel
+                        ]?.pricing?.completion
                       }}
                     </div>
                   </div>
@@ -510,10 +512,6 @@ const $q = useQuasar();
 
 const initialState = {
   chatState: defaultChatState(),
-  modelOptions: {
-    openai: [] as { label: string; value: string }[],
-    openrouter: [] as { label: string; value: string }[],
-  },
   userInput: '',
   expertMode: false,
   drawerOpen: false,
@@ -525,62 +523,64 @@ const initialState = {
 
 const state = syncStateWLocalStorage('chat_window_state', initialState);
 
-const modelLookUp = ref({
-  openai: {} as Record<string, Model>,
-  openrouter: {} as Record<string, Model>,
-});
-async function updateModelOptions(): Promise<void> {
-  if (state.value.chatState.baseURL == getBackendUrls('openrouter')) {
-    let res: Model[] = [];
-    try {
-      res = await availableModels(state.value.chatState);
-    } catch (error) {
-      console.error('Error fetching models:', error);
-      console.log('using default list');
-      res = openrouterModels;
-    }
-    state.value.modelOptions.openrouter = res
-      .map((m) => {
-        const p = parseFloat(m.pricing?.prompt || '');
-        const c = parseFloat(m.pricing?.completion || '');
-        return { m, p: p + c };
-      })
-      .sort(({ p: p1 }, { p: p2 }) => p1 - p2)
-      .map(({ m }) => ({
-        label: `${m.id}: ${m.pricing?.prompt || 'N/A'}/${
-          m.pricing?.completion || 'N/A'
-        }`,
-        value: m.id,
-      }));
-
-    modelLookUp.value.openrouter = res.reduce((acc, m) => {
-      acc[m.id] = m;
-      return acc;
-    }, {} as Record<string, Model>);
-  } else {
-    let res: Model[] = [];
-    try {
-      res = await availableModels(state.value.chatState);
-    } catch (error) {
-      console.error('Error fetching models:', error);
-      res = openAiModels;
-    }
-    state.value.modelOptions.openai = res
-      .sort((m1, m2) => m1.id.localeCompare(m2.id))
-      .map((m) => ({
-        label: `${m.id}`,
-        value: m.id,
-      }));
-
-    modelLookUp.value.openai = res.reduce((acc, m) => {
-      acc[m.id] = m;
-      return acc;
-    }, {} as Record<string, Model>);
+const resOpenRouter = ref<Model[]>([]);
+const resOpenAI = ref<Model[]>([]);
+async function fetchModels(): Promise<void> {
+  try {
+    resOpenRouter.value = await availableModels(
+      getBackendUrls('openrouter'),
+      state.value.chatState.openRouterAIApiKey
+    );
+  } catch (error) {
+    console.error('Error fetching models:', error);
+    console.log('using default list');
+    resOpenRouter.value = openrouterModels;
+  }
+  try {
+    resOpenAI.value = await availableModels(
+      getBackendUrls('openai'),
+      state.value.chatState.openRouterAIApiKey
+    );
+  } catch (error) {
+    console.error('Error fetching models:', error);
+    resOpenAI.value = openAiModels;
   }
 }
 
-void updateModelOptions();
-watch(() => state.value.chatState.baseURL, updateModelOptions);
+const modelOptions = computed(() => ({
+  openai: resOpenRouter.value
+    .map((m) => {
+      const p = parseFloat(m.pricing?.prompt || '');
+      const c = parseFloat(m.pricing?.completion || '');
+      return { m, p: p + c };
+    })
+    .sort(({ p: p1 }, { p: p2 }) => p1 - p2)
+    .map(({ m }) => ({
+      label: `${m.id}: ${m.pricing?.prompt || 'N/A'}/${
+        m.pricing?.completion || 'N/A'
+      }`,
+      value: m.id,
+    })),
+  openrouter: [...resOpenAI.value]
+    .sort((m1, m2) => m1.id.localeCompare(m2.id))
+    .map((m) => ({
+      label: `${m.id}`,
+      value: m.id,
+    })),
+}));
+
+const modelLookUp = computed(() => ({
+  openai: resOpenAI.value.reduce((acc, m) => {
+    acc[m.id] = m;
+    return acc;
+  }, {} as Record<string, Model>),
+  openrouter: resOpenRouter.value.reduce((acc, m) => {
+    acc[m.id] = m;
+    return acc;
+  }, {} as Record<string, Model>),
+}));
+
+void fetchModels();
 
 $q.dark.set(state.value.darkTheme);
 

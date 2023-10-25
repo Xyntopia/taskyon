@@ -14,7 +14,7 @@ function getAPIURLs(baseURL: string) {
   };
 }
 
-export function getBackendUrls(backend: string) {
+export function getBackendUrls(backend: 'openai' | 'openrouter') {
   let baseURL;
   if (backend == 'openai') {
     baseURL = 'https://api.openai.com/v1/';
@@ -726,15 +726,16 @@ export interface Model {
 
 // Update the availableModels function to return a list of models
 export async function availableModels(
-  chatState: ChatStateType
+  baseURL: string,
+  apiKey: string
 ): Promise<Model[]> {
   try {
     // Setting up the Axios requsest
     const response = await axios.get<{ data: Model[] }>(
-      getAPIURLs(chatState.baseURL).models,
+      getAPIURLs(baseURL).models,
       {
         headers: {
-          Authorization: `Bearer ${getApikey(chatState)}`,
+          Authorization: `Bearer ${apiKey}`,
           'Cache-Control': 'max-stale=3600',
         },
       }
