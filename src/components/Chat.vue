@@ -401,7 +401,7 @@
                 dense
                 label="Select Openrouter.ai LLM"
                 icon="smart_toy"
-                :options="state.modelOptions.openai"
+                :options="modelOptions.openrouter"
                 emit-value
                 v-model="state.chatState.openAIModel"
               >
@@ -422,7 +422,7 @@
                 bottom-slots
                 label="Select OpenAI LLM"
                 icon="smart_toy"
-                :options="state.modelOptions.openrouter"
+                :options="modelOptions.openai"
                 emit-value
                 v-model="state.chatState.openrouterAIModel"
               >
