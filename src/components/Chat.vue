@@ -135,7 +135,7 @@
                 { label: 'OpenAI API', value: getBackendUrls('openai') },
                 {
                   label: 'Openrouter.ai API',
-                  value: getBackendUrls('openrouter.ai'),
+                  value: getBackendUrls('openrouter'),
                 },
               ]"
             />
@@ -485,7 +485,7 @@
 
 <script setup lang="ts">
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { useQuasar } from 'quasar';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
 import {
@@ -539,7 +539,7 @@ async function fetchModels(): Promise<void> {
   try {
     resOpenAI.value = await availableModels(
       getBackendUrls('openai'),
-      state.value.chatState.openRouterAIApiKey
+      state.value.chatState.openAIApiKey
     );
   } catch (error) {
     console.error('Error fetching models:', error);

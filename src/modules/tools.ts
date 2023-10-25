@@ -13,7 +13,7 @@ export interface Tool {
   // The name of the function to be called.
   name: string;
   // The parameters the function accepts (JSON Schema object).
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
 }
 
 interface ExtendedTool extends Tool {
@@ -79,11 +79,11 @@ tools.executePythonScript = {
   },
 };
 
-function generateToolSummary() {
+/*function generateToolSummary() {
   return Object.keys(tools)
     .map((toolName) => {
       const { description } = tools[toolName];
       return `${toolName}: ${description}`;
     })
     .join('\n');
-}
+}*/

@@ -2,7 +2,7 @@ import { useVectorStore } from 'src/modules/localVectorStore';
 import axios from 'axios';
 import { dump } from 'js-yaml';
 import { v1 as uuidv1 } from 'uuid';
-import { useCachedModels } from './mlModels';
+//import { useCachedModels } from './mlModels';
 import { Tool } from './tools';
 import { tools } from './tools';
 import AsyncQueue from './taskManager';
@@ -53,10 +53,7 @@ export function defaultChatState() {
 }
 
 type ChatStateType = ReturnType<typeof defaultChatState>;
-
-const models = useCachedModels();
-
-type FunctionArguments = Record<string, any> | string | number;
+type FunctionArguments = Record<string, unknown> | string | number;
 
 export type FunctionCall = {
   // The name of the function to call.
@@ -149,7 +146,7 @@ export type LLMTask = {
   // is undefined in the case it is an "initial" task
   parentID?: string | undefined;
   childrenIDs: string[];
-  debugging?: Record<string, any>;
+  debugging?: Record<string, unknown>;
   result?: TaskResult;
   id: string;
   allowedTools?: string[];
@@ -292,7 +289,7 @@ export function taskChain(lastTaskId: string, tasks: Record<string, LLMTask>) {
   return conversationList;
 }
 
-function taskChat(
+/*function taskChat(
   task: string,
   context: string | null = null,
   previousTasks: string | null = null,
@@ -361,7 +358,7 @@ function taskChat(
   }
 
   return msgs;
-}
+}*/
 
 /*
 async function executeTask(task, previousTasks = null, context = null, objective = null, formatting = "yaml", modelId = "ggml-mpt-7b-instruct", maxTokens = 1000) {
@@ -395,7 +392,7 @@ async function executeTask(task, previousTasks = null, context = null, objective
 }
 */
 
-async function generateContext(
+/*async function generateContext(
   searchTerm: string
 ): Promise<OpenAIMessage | undefined> {
   const k = 3;
@@ -411,7 +408,7 @@ async function generateContext(
   } else {
     return undefined;
   }
-}
+}*/
 
 export function sendMessage(message: string, chatState: ChatStateType) {
   // adds a "sendMessage task to the Task stack"
@@ -506,7 +503,7 @@ function createNewTasksFromChatResponse(
       const func = choice.message.function_call;
 
       // Try to parse the function arguments from JSON, log and re-throw the error if parsing fails
-      let funcArguments: Record<string, any> | string;
+      let funcArguments: Record<string, unknown> | string;
       try {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         funcArguments = JSON.parse(func.arguments);

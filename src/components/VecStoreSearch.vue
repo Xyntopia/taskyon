@@ -117,7 +117,7 @@ async function onSearchChange(searchTerm: string | Event, k: number) {
   }
 };
 
-const numberOfSearchResults = ref(5)
+//const numberOfSearchResults = ref(5)
 const initialPagination = {
   sortBy: 'score',
   descending: true,

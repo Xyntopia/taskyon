@@ -15,10 +15,10 @@
         <q-btn v-if="showFilterButton" flat stretch icon="filter_alt" @click="toggleFilter">
           <q-tooltip>Toggle Filter Options</q-tooltip>
         </q-btn>
-        <q-btn v-if="showGridButton" flat stretch dense :icon="usegrid ? 'view_list' : 'view_module'"
+        <!--<q-btn v-if="showGridButton" flat stretch dense :icon="usegrid ? 'view_list' : 'view_module'"
           @click="$emit('update:usegrid', !usegrid)" aria-label="Table">
           <q-tooltip>{{ usegrid ? 'Table Mode' : 'Grid Mode' }}</q-tooltip>
-        </q-btn>
+        </q-btn>-->
       </div>
     </div>
   </div>
@@ -27,7 +27,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-const props = defineProps({
+defineProps({
   searchState: {
     type: Boolean,
     default: false
@@ -55,8 +55,8 @@ const emit = defineEmits(['search', 'toggleFilter'])
 const searchString = ref<string>('');
 const numberOfSearchResults = ref<number>(5);
 
-function onQChange(value: string) {
-  searchString.value = value
+function onQChange(value: string | null | number) {
+  searchString.value = String(value) || ''
   emit('search', value, Number(numberOfSearchResults.value));
 };
 
