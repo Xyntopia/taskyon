@@ -91,6 +91,10 @@ export const seleniumBrowser = {
       Uses Selenium WebDriver REST API to browse to a specified webpage and fetch the document content.
       Supports various document formats including HTML, PDF, TXT, JSON, etc.
       The format and content of the document are returned from the function.
+
+      We can launch a selenium Tool in the background like this:
+
+      docker run -p 4444:4444 -p 7900:7900 --shm-size="2g" -e SE_OPTS="--allow-cors true" selenium/standalone-chrome:latest
     `,
   name: 'seleniumBrowser',
   parameters: {
