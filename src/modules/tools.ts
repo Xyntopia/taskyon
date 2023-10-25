@@ -1,9 +1,13 @@
-import { useVectorStore, SearchResult } from 'src/modules/localVectorStore';
+import { useVectorStore } from 'src/modules/localVectorStore';
 import { execute } from './pyodide';
+import { seleniumBrowser } from './seleniumTool';
 
 export const vectorStore = useVectorStore();
 
+type toolStatusType = 'available' | 'starting' | 'unavailable' | 'error';
+
 export interface Tool {
+  status: () => Promise<toolStatusType> | toolStatusType;
   // Description of what the function does (optional).
   description: string;
   // The name of the function to be called.
@@ -22,7 +26,10 @@ type ToolCollection = {
 
 export const tools: ToolCollection = {};
 
+tools.seleniumBrowser = seleniumBrowser;
+
 tools.localVectorStoreSearch = {
+  status: () => 'available',
   function: async ({ searchTerm }: { searchTerm: string }) => {
     const k = 3;
     console.log(`Searching for ${searchTerm}`);
@@ -48,6 +55,7 @@ tools.localVectorStoreSearch = {
 };
 
 tools.executePythonScript = {
+  status: () => 'available',
   function: async ({ pythonScript }: { pythonScript: string }) => {
     console.log('execute python code...');
     return await execute(pythonScript);
