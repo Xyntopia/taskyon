@@ -1,8 +1,49 @@
 import axios from 'axios';
 
-const seleniumHubUrl = 'http://localhost:4444/wd/hub';
+type SeleniumStatus = {
+  value: {
+    ready: boolean;
+    nodes: Array<{
+      slots: Array<{
+        session?: {
+          sessionId: string;
+        };
+      }>;
+    }>;
+  };
+};
+
+async function checkStatus(): Promise<string | null> {
+  const response = await axios.get<SeleniumStatus>(`${seleniumHubUrl}/status`, {
+    headers: {
+      'Content-Type': 'application/json;charset=UTF-8',
+      Accept: 'application/json',
+    },
+  });
+
+  const { nodes } = response.data.value;
+  if (nodes.length > 0) {
+    for (const node of nodes) {
+      for (const slot of node.slots) {
+        if (slot.session) {
+          return slot.session.sessionId; // return existing sessionId
+        }
+      }
+    }
+  }
+
+  return null; // no existing session found
+}
+
+//const seleniumHubUrl = 'http://localhost:4444/wd/hub';
+const seleniumHubUrl = 'http://localhost:4444';
 
 async function createSession() {
+  const existingSessionId = await checkStatus();
+  if (existingSessionId) {
+    return existingSessionId; // use existing sessionId
+  }
+
   const response = await axios.post<{
     value: {
       sessionId: string;
@@ -32,7 +73,7 @@ async function createSession() {
   return response.data.value.sessionId;
 }
 
-async function closeSession(sessionId: string) {
+export async function closeSession(sessionId: string) {
   await axios.delete(`${seleniumHubUrl}/session/${sessionId}`, {
     headers: {
       'Content-Type': 'application/json;charset=UTF-8',
@@ -41,18 +82,22 @@ async function closeSession(sessionId: string) {
   });
 }
 
-async function fetchPageContent(url: string, sessionId: string) {
+async function loadURL(url: string, sessionId: string) {
   await axios.post(
+    //`${seleniumHubUrl}/session/${sessionId}/url`,
+    //'/status',
     `${seleniumHubUrl}/session/${sessionId}/url`,
-    { url },
-    {
+    //{ url: url }
+    /*{
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
         Accept: 'application/json',
       },
-    }
+    }*/
   );
+}
 
+async function fetchPageContent(sessionId: string) {
   const pageSourceResponse = await axios.get<{ value: string }>(
     `${seleniumHubUrl}/session/${sessionId}/source`,
     {
@@ -71,22 +116,26 @@ export const seleniumBrowser = {
   status: () => {
     return 'available' as toolStatusType;
   },
-  function: async ({ url }: { url: string }) => {
+  function: (async ({ url }: { url: string }) => {
     console.log(`Browsing to ${url}...`);
 
     const sessionId = await createSession();
     console.log('got session with id:', sessionId);
 
     try {
-      const pageContent = await fetchPageContent(url, sessionId);
+      await loadURL(url, sessionId);
+      const pageContent = await fetchPageContent(sessionId);
       return {
         format: 'html',
         content: pageContent,
       };
-    } finally {
+    } catch (error) {
+      throw error;
+    } /*finally {
+      // we do not want to close sessions for increased speed :)
       await closeSession(sessionId);
-    }
-  },
+    }*/
+  }) as ((arg: Record<string, unknown>) => Promise<unknown>),
   description: `
       Uses Selenium WebDriver REST API to browse to a specified webpage and fetch the document content.
       Supports various document formats including HTML, PDF, TXT, JSON, etc.
