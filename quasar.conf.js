@@ -10,19 +10,20 @@
 // Configuration for your app
 // https://v2.quasar.dev/quasar-cli/quasar-conf-js
 
-
 /* eslint-env node */
 /* eslint-disable @typescript-eslint/no-var-requires */
 const { env } = require('process');
 const { configure } = require('quasar/wrappers');
 
 // check parent folder for configuration
-const buildConfig = require('dotenv').config({ path: '../build_configuration' }) 
+const buildConfig = require('dotenv').config({
+  path: '../build_configuration',
+});
 
-APPNAME = env.APPNAME || (buildConfig.APPNAME || 'Vexvault')
-DESCRIPTION = buildConfig.DESCRIPTION || ''
+APPNAME = env.APPNAME || buildConfig.APPNAME || 'Vexvault';
+DESCRIPTION = buildConfig.DESCRIPTION || '';
 
-console.log('compile app: ', APPNAME, DESCRIPTION)
+console.log('compile app: ', APPNAME, DESCRIPTION);
 
 module.exports = configure(function (ctx) {
   return {
@@ -33,7 +34,7 @@ module.exports = configure(function (ctx) {
           enabled: true,
           files: './src/**/*.{ts,tsx,js,jsx,vue}',
         },
-      }
+      },
     },
 
     // https://v2.quasar.dev/quasar-cli/prefetch-feature
@@ -46,7 +47,7 @@ module.exports = configure(function (ctx) {
          a "good" experience...  as things like danfojs alone are already at 9MB, it'll take a long time for users to make use of this,,
          therefore we should load those libraries lazily and only manually add some important libraries to the vendor chunk
 
-         disables vendor chunk:*/  disable: true,
+         disables vendor chunk:*/ disable: true,
 
       /*remove: ['danfojs', 'vue$', 'amplify']
       // we need to remove large libraries that we don't need in our index page!!
@@ -69,11 +70,9 @@ module.exports = configure(function (ctx) {
       //{path: 'payments', client: true, server: true }
       //'htmlDataStore'
     ],
- 
+
     // https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-css
-    css: [
-      'app.sass'
-    ],
+    css: ['app.sass'],
 
     // https://github.com/quasarframework/quasar/tree/dev/extras
     extras: [
@@ -94,49 +93,52 @@ module.exports = configure(function (ctx) {
       // eslint-disable-next-line
       title: APPNAME,
       description: {
-        prop: DESCRIPTION
-      }
+        prop: DESCRIPTION,
+      },
     },
 
     // Full list of options: https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-build
     build: {
       env: {
         APPNAME: APPNAME,
-        DESCRIPTION: DESCRIPTION
+        DESCRIPTION: DESCRIPTION,
       },
       vueRouterMode: 'history', // available values: 'hash', 'history'
       vueLoaderOptions: {
         compilerOptions: {
           // this handles the whitespace for the q-markdown component.
           // we need this in order to be able to use newlines in q-markdown...
-          isPreTag: (tag) => tag === 'pre ' || tag === 'q-markdown'
-        }
+          isPreTag: (tag) => tag === 'pre ' || tag === 'q-markdown',
+        },
 
         // there HAS to be  frontend_config file in the parent directory
         // for this to work!
         // TODO: better error message
-        
       },
-      extendWebpack (cfg, {/*isServer, isClient*/}) {
-          // use new webpack5 loaders for asset importing
-          cfg.module.rules.push ({
-            test: /\.md/,
-            type: 'asset/source',
-          })
+      extendWebpack(
+        cfg,
+        {
+          /*isServer, isClient*/
+        }
+      ) {
+        // use new webpack5 loaders for asset importing
+        cfg.module.rules.push({
+          test: /\.md/,
+          type: 'asset/source',
+        });
 
-
-          // TODO: make sure these things are only used in the browser and not in the desktop app...
-          /*cfg.node = {
+        // TODO: make sure these things are only used in the browser and not in the desktop app...
+        /*cfg.node = {
             fs: 'empty',
           }*/
 
-          cfg.module.rules.push ({
-            resolve: {
-              fallback: {fs: false, net: false, tls: false}
-            }
-          })
+        cfg.module.rules.push({
+          resolve: {
+            fallback: { fs: false, net: false, tls: false },
+          },
+        });
 
-          /*if (process.env.NODE_ENV === "production") {
+        /*if (process.env.NODE_ENV === "production") {
             // ...
             cfg.plugins.push(
               new PrerenderSPAPlugin({
@@ -159,7 +161,7 @@ module.exports = configure(function (ctx) {
               })
             );
           }*/
-        },
+      },
 
       // transpile: false,
 
@@ -183,9 +185,9 @@ module.exports = configure(function (ctx) {
 
       // https://v2.quasar.dev/quasar-cli/handling-webpack
       // "chain" is a webpack-chain object https://github.com/neutrinojs/webpack-chain
-      chainWebpack ( chain ) {
+      chainWebpack(chain) {
         // TODO: add better chunk code split behaviour
-        if(ctx.prod) {
+        if (ctx.prod) {
           chain.optimization.splitChunks({
             ...chain.optimization.get('splitChunks'),
             /*chunks: 'async',
@@ -201,7 +203,7 @@ module.exports = configure(function (ctx) {
             minSize: 20000,
             cacheGroups: {
               vendor_initial: {
-                test: /[\\/]node_modules[\\/]/,//(vue|@quasar|quasar|axios|core-js)[\\/]/,
+                test: /[\\/]node_modules[\\/]/, //(vue|@quasar|quasar|axios|core-js)[\\/]/,
                 priority: 20,
                 reuseExistingChunk: true,
                 name: 'vendor',
@@ -220,19 +222,19 @@ module.exports = configure(function (ctx) {
                 //maxAsyncSize: 1000000,
                 //minSize: 1000000
               },
-            }
-          })
+            },
+          });
         }
 
         // this is in order to support the not-updated version of danfojs (and other libraries which need
         // polyfills) in webpack 5:
         // also read https://quasar.dev/start/upgrade-guide#nodejs-polyfills
         // and https://github.com/quasarframework/quasar/issues/9780
-        // also needs: 
+        // also needs:
         //    yarn add --dev node-polyfill-webpack-plugin browserify-zlib
-        const nodePolyfillWebpackPlugin = require('node-polyfill-webpack-plugin')
-        chain.plugin('node-polyfill').use(nodePolyfillWebpackPlugin)
-        chain.resolve.alias.set('zlib', 'browserify-zlib')
+        const nodePolyfillWebpackPlugin = require('node-polyfill-webpack-plugin');
+        chain.plugin('node-polyfill').use(nodePolyfillWebpackPlugin);
+        chain.resolve.alias.set('zlib', 'browserify-zlib');
       },
     },
 
@@ -240,7 +242,7 @@ module.exports = configure(function (ctx) {
     devServer: {
       https: false,
       port: 8080,
-      open: false // opens browser window automatically
+      open: false, // opens browser window automatically
     },
 
     // https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-framework
@@ -266,7 +268,9 @@ module.exports = configure(function (ctx) {
           info: '#8BA7B9',
           warning: '#ff118c'
         } */
-        notify: { /* look at QuasarConfOptions from the API card */ },
+        notify: {
+          /* look at QuasarConfOptions from the API card */
+        },
       },
       // For special cases outside of where the auto-import strategy can have an impact
       // (like functional components as one of the examples),
@@ -281,17 +285,17 @@ module.exports = configure(function (ctx) {
         'Notify',
         //'SessionStorage'
         // TODO: 'AddressbarColor'
-      ]
+      ],
     },
 
     // animations: 'all', // --- includes all animations
     // https://v2.quasar.dev/options/animations
     animations: [],
-      // Possible values for "importStrategy":
-      // * 'auto' - (DEFAULT) Auto-import needed Quasar components & directives
-      // * 'all'  - Manually specify what to import
-      importStrategy: 'auto',
-      // For special cases outside of where "auto" importStrategy can have an impact
+    // Possible values for "importStrategy":
+    // * 'auto' - (DEFAULT) Auto-import needed Quasar components & directives
+    // * 'all'  - Manually specify what to import
+    importStrategy: 'auto',
+    // For special cases outside of where "auto" importStrategy can have an impact
     // https://v2.quasar.dev/quasar-cli/developing-ssr/configuring-ssr
     ssr: {
       pwa: false,
@@ -300,19 +304,19 @@ module.exports = configure(function (ctx) {
       // manualPostHydrationTrigger: true,
 
       prodPort: 3000, // The default port that the production server should use
-                      // (gets superseded if process.env.PORT is specified at runtime)
+      // (gets superseded if process.env.PORT is specified at runtime)
 
-      maxAge: 5,//1000 * 60 * 60 * 24 * 30, // 1 month
-        // Tell browser when a file from the server should expire from cache (in ms)
+      maxAge: 5, //1000 * 60 * 60 * 24 * 30, // 1 month
+      // Tell browser when a file from the server should expire from cache (in ms)
 
-      chainWebpackWebserver (/* chain */) {
+      chainWebpackWebserver(/* chain */) {
         //
       },
 
       middlewares: [
         ctx.prod ? 'compression' : '',
-        'render' // keep this as last one
-      ]
+        'render', // keep this as last one
+      ],
     },
 
     ssg: {
@@ -328,7 +332,7 @@ module.exports = configure(function (ctx) {
 
       // for the custom service worker ONLY (/src-pwa/custom-service-worker.[js|ts])
       // if using workbox in InjectManifest mode
-      chainWebpackCustomSW (/* chain */) {
+      chainWebpackCustomSW(/* chain */) {
         //
       },
 
@@ -344,30 +348,30 @@ module.exports = configure(function (ctx) {
           {
             src: 'icons/icon-128x128.png',
             sizes: '128x128',
-            type: 'image/png'
+            type: 'image/png',
           },
           {
             src: 'icons/icon-192x192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
           },
           {
             src: 'icons/icon-256x256.png',
             sizes: '256x256',
-            type: 'image/png'
+            type: 'image/png',
           },
           {
             src: 'icons/icon-384x384.png',
             sizes: '384x384',
-            type: 'image/png'
+            type: 'image/png',
           },
           {
             src: 'icons/icon-512x512.png',
             sizes: '512x512',
-            type: 'image/png'
-          }
-        ]
-      }
+            type: 'image/png',
+          },
+        ],
+      },
     },
 
     // Full list of options: https://v2.quasar.dev/quasar-cli/developing-cordova-apps/configuring-cordova
@@ -377,7 +381,7 @@ module.exports = configure(function (ctx) {
 
     // Full list of options: https://v2.quasar.dev/quasar-cli/developing-capacitor-apps/configuring-capacitor
     capacitor: {
-      hideSplashscreen: true
+      hideSplashscreen: true,
     },
 
     // Full list of options: https://v2.quasar.dev/quasar-cli/developing-electron-apps/configuring-electron
@@ -386,13 +390,11 @@ module.exports = configure(function (ctx) {
 
       packager: {
         // https://github.com/electron-userland/electron-packager/blob/master/docs/api.md#options
-
         // OS X / Mac App Store
         // appBundleId: '',
         // appCategoryType: '',
         // osxSign: '',
         // protocol: 'myapp://path',
-
         // Windows only
         // win32metadata: { ... }
       },
@@ -400,20 +402,20 @@ module.exports = configure(function (ctx) {
       builder: {
         // https://www.electron.build/configuration/configuration
 
-        appId: 'xyntopia'
+        appId: 'xyntopia',
       },
 
       // "chain" is a webpack-chain object https://github.com/neutrinojs/webpack-chain
-      chainWebpack (/* chain */) {
+      chainWebpack(/* chain */) {
         // do something with the Electron main process Webpack cfg
         // extendWebpackMain also available besides this chainWebpackMain
       },
 
       // "chain" is a webpack-chain object https://github.com/neutrinojs/webpack-chain
-      chainWebpackPreload (/* chain */) {
+      chainWebpackPreload(/* chain */) {
         // do something with the Electron main process Webpack cfg
         // extendWebpackPreload also available besides this chainWebpackPreload
       },
-    }
-  }
+    },
+  };
 });
