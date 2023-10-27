@@ -116,34 +116,28 @@ function extractToolExample(toolName: string) {
   }
 }
 
-// Function to extract tool information including the function and status signatures
-function getToolInfo(toolName: string) {
-  const tool = tools[toolName];
-  if (tool) {
-    const functionSignature = getFunctionSignature(tool.function);
-    const statusSignature = getFunctionSignature(tool.status);
-    const toolInfo = {
-      ...tool,
-      function: functionSignature,
-      status: statusSignature,
-    };
-    return toolInfo;
-  } else {
-    return `Tool ${toolName} not found.`;
-  }
-}
-
 tools.getToolExample = {
   status: () => 'available',
-  function: ({ toolName }: { toolName: string }) => {
+  function: ({
+    toolName,
+    viewSource,
+  }: {
+    toolName: string;
+    viewSource: boolean;
+  }) => {
     console.log(`Fetching example for tool: ${toolName}`);
-    const toolInfo = getToolInfo(toolName);
+    let toolInfo;
+    if (viewSource) {
+      toolInfo = inspectToolCode(toolName);
+    } else {
+      toolInfo = extractToolExample(toolName);
+    }
     return toolInfo;
   },
   description: `
     Retrieves an example of an existing tool by its name. This tool extracts the tool's description, name, parameters, 
-    and function signatures to provide a complete example. This can be used by an AI to understand and generate tools 
-    based on existing examples.
+    and function signatures to provide a complete example. Optionally, view the full source code of the tool functions.
+    This can be used by an AI to understand and generate tools based on existing examples.
   `,
   name: 'getToolExample',
   parameters: {
@@ -152,6 +146,12 @@ tools.getToolExample = {
       toolName: {
         type: 'string',
         description: 'The name of the tool to fetch an example for.',
+      },
+      viewSource: {
+        type: 'boolean',
+        description:
+          'Whether to view the full source code of the tool functions.',
+        default: false,
       },
     },
     required: ['toolName'],
