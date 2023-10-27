@@ -17,7 +17,7 @@ export interface Tool {
 }
 
 interface ExtendedTool extends Tool {
-  function: (...args: any[]) => Promise<any>;
+  function: (...args: any[]) => any | Promise<any>;
 }
 
 type ToolCollection = {
@@ -76,6 +76,85 @@ tools.executePythonScript = {
       },
     },
     required: ['pythonScript'],
+  },
+};
+
+function inspectToolCode(toolName: string) {
+  const tool = tools[toolName];
+  if (tool) {
+    const functionCode = tool.function.toString();
+    const statusCode = tool.status.toString();
+    return `Tool Name: ${toolName}\nFunction Code:\n${functionCode}\n\nStatus Code:\n${statusCode}`;
+  } else {
+    return `Tool ${toolName} not found.`;
+  }
+}
+
+// Helper function to extract function signature
+function getFunctionSignature(func: (...args: any[]) => any) {
+  const funcString = func.toString();
+  const signatureMatch = /(function\s.*?\(.*?\))|((\w+|\((.*?)\))\s*=>)/.exec(
+    funcString
+  );
+  return signatureMatch ? signatureMatch[0] : 'function signature not found';
+}
+
+// Function to extract the tool object as an example, including the function signatures
+function extractToolExample(toolName: string) {
+  const tool = tools[toolName];
+  if (tool) {
+    const functionSignature = getFunctionSignature(tool.function);
+    const statusSignature = getFunctionSignature(tool.status);
+    const toolExample = {
+      ...tool,
+      function: functionSignature,
+      status: statusSignature,
+    };
+    return JSON.stringify(toolExample, null, 2); // Pretty print the JSON string
+  } else {
+    return `Tool ${toolName} not found.`;
+  }
+}
+
+// Function to extract tool information including the function and status signatures
+function getToolInfo(toolName: string) {
+  const tool = tools[toolName];
+  if (tool) {
+    const functionSignature = getFunctionSignature(tool.function);
+    const statusSignature = getFunctionSignature(tool.status);
+    const toolInfo = {
+      ...tool,
+      function: functionSignature,
+      status: statusSignature,
+    };
+    return toolInfo;
+  } else {
+    return `Tool ${toolName} not found.`;
+  }
+}
+
+tools.getToolExample = {
+  status: () => 'available',
+  function: ({ toolName }: { toolName: string }) => {
+    console.log(`Fetching example for tool: ${toolName}`);
+    const toolInfo = getToolInfo(toolName);
+    return toolInfo;
+  },
+  description: `
+    Retrieves an example of an existing tool by its name. This tool extracts the tool's description, name, parameters, 
+    and function signatures to provide a complete example. This can be used by an AI to understand and generate tools 
+    based on existing examples.
+  `,
+  name: 'getToolExample',
+  parameters: {
+    type: 'object',
+    properties: {
+      toolName: {
+        type: 'string',
+        description: 'The name of the tool to fetch an example for.',
+      },
+    },
+    required: ['toolName'],
   },
 };
 
