@@ -42,7 +42,9 @@ export async function execute(python_script: string): Promise<PythonResult> {
 
     pyodide.setStdout(stdoutHandler);
 
-    const result = pyodide.runPython(python_script);
+    await pyodide.loadPackagesFromImports(python_script);
+
+    const result = await pyodide.runPython(python_script);
 
     // Reset stdout handler to default behavior if necessary
     pyodide.setStdout({ batched: (str: string) => console.log(str) });
