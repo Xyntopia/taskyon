@@ -405,6 +405,7 @@ module.exports = configure(function (ctx) {
         appId: 'xyntopia',
       },
 
+      
       // "chain" is a webpack-chain object https://github.com/neutrinojs/webpack-chain
       chainWebpack(/* chain */) {
         // do something with the Electron main process Webpack cfg
