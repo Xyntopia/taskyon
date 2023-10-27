@@ -84,10 +84,10 @@ export async function closeSession(sessionId: string) {
 
 async function loadURL(url: string, sessionId: string) {
   await axios.post(
-    //`${seleniumHubUrl}/session/${sessionId}/url`,
-    //'/status',
     `${seleniumHubUrl}/session/${sessionId}/url`,
-    //{ url: url }
+    //'/status',
+    //`${seleniumHubUrl}/session/${sessionId}/url`,
+    { url: url }
     /*{
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
