@@ -5,6 +5,15 @@ import { seleniumBrowser } from './seleniumTool';
 export const vectorStore = useVectorStore();
 
 type toolStatusType = 'available' | 'starting' | 'unavailable' | 'error';
+export type FunctionArguments = Record<string, unknown> | string | number;
+
+export type FunctionCall = {
+  // The name of the function to call.
+  name: string;
+  arguments: FunctionArguments;
+};
+
+
 
 export interface Tool {
   status: () => Promise<toolStatusType> | toolStatusType;
@@ -16,7 +25,7 @@ export interface Tool {
   parameters: Record<string, unknown>;
 }
 
-interface ExtendedTool extends Tool {
+export interface ExtendedTool extends Tool {
   function: (...args: any[]) => any | Promise<any>;
 }
 

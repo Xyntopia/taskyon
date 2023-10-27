@@ -224,49 +224,7 @@
                         message.status == 'Error' ? 'text-red' : 'text-green'
                       "
                     >
-                      <q-list dense bordered>
-                        <q-item
-                          v-if="isString(message.context?.function?.arguments)"
-                        >
-                          <q-item-section>
-                            <q-item-label>
-                              <pre>
-                              {{ message.context?.function?.arguments }}
-                              </pre>
-                            </q-item-label>
-                          </q-item-section>
-                        </q-item>
-                        <q-item
-                          v-else
-                          v-for="(arg, idx) in message.context?.function
-                            ?.arguments || ''"
-                          :key="idx"
-                        >
-                          <q-item-section class="text-bold" side>
-                            <q-item-label> {{ idx }}: </q-item-label>
-                          </q-item-section>
-                          <q-item-section>
-                            <q-item-label>
-                              <pre>
-                              {{ arg }}
-                            </pre
-                              >
-                            </q-item-label>
-                          </q-item-section>
-                        </q-item>
-                        <q-item>
-                          <q-item-section>
-                            <q-item-label class="text-bold">
-                              result:
-                            </q-item-label>
-                            <q-item-label>
-                              <pre>
-                              {{ dump(message.result) }}
-                              </pre>
-                            </q-item-label>
-                          </q-item-section>
-                        </q-item>
-                      </q-list>
+                    <ToolWidget :task="message"/>
                     </q-expansion-item>
                   </div>
                   <q-markdown
@@ -524,6 +482,7 @@ import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import { computed, ref } from 'vue';
 import { useQuasar } from 'quasar';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
+import ToolWidget from 'components/ToolWidget.vue'
 import {
   defaultChatState,
   sendMessage,

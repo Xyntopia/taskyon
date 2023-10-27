@@ -7,6 +7,7 @@ import { Tool } from './tools';
 import { tools } from './tools';
 import AsyncQueue from './taskManager';
 import { getEncoding } from 'js-tiktoken';
+import { FunctionCall } from './tools';
 
 function getAPIURLs(baseURL: string) {
   return {
@@ -54,14 +55,6 @@ export function defaultChatState() {
 }
 
 type ChatStateType = ReturnType<typeof defaultChatState>;
-type FunctionArguments = Record<string, unknown> | string | number;
-
-export type FunctionCall = {
-  // The name of the function to call.
-  name: string;
-  arguments: FunctionArguments;
-};
-
 export type OpenAIMessage = {
   // The content of the message, can be null for some messages.
   content: string | null;
