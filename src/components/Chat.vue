@@ -274,22 +274,53 @@
                     v-else-if="message.content"
                     :src="message.content"
                   />
-                  <q-btn
-                    class="col-auto"
+                  <div
+                    v-if="message.debugging?.usedTokens"
+                    style="font-size: xx-small"
+                    class="column items-center"
+                  >
+                    <q-icon
+                      name="monetization_on"
+                      size="xs"
+                      color="secondary"
+                    ></q-icon>
+                    <q-tooltip :delay="1000">Tokens used</q-tooltip>
+                    <div>{{ message.debugging?.usedTokens }}</div>
+                  </div>
+                  <div
+                    v-else-if="message.debugging?.estimatedTokens"
+                    style="font-size: xx-small"
+                    class="column items-center"
+                  >
+                    <q-icon
+                      name="monetization_on"
+                      size="xs"
+                      color="info"
+                    ></q-icon
+                    ><q-tooltip :delay="1000">Prompt token estimate</q-tooltip>
+                    <div>{{ message.debugging?.estimatedTokens }}</div>
+                  </div>
+                  <div
                     v-if="message.debugging?.aiResponse?.usage"
-                    flat
-                    color="secondary"
-                    stretch
-                    dense
-                    stack
-                    :ripple="false"
-                    :label="message.debugging?.aiResponse?.usage.total_tokens"
-                    icon="monetization_on"
-                    size="xs"
+                    class="column items-center"
+                    style="font-size: xx-small"
+                  >
+                    <q-icon
+                      name="monetization_on"
+                      size="xs"
+                      color="secondary"
+                    ></q-icon
                     ><q-tooltip :delay="1000"
-                      >Number of tokens used for this task</q-tooltip
-                    >
-                  </q-btn>
+                      >Number of tokens used:
+                      <div>
+                        {{ message.debugging?.aiResponse?.usage.prompt_tokens }}
+                        +{{
+                          message.debugging?.aiResponse?.usage.completion_tokens
+                        }}
+                        ={{ message.debugging?.aiResponse?.usage.total_tokens }}
+                      </div></q-tooltip
+                    >{{ message.debugging?.aiResponse?.usage.total_tokens }}
+                  </div>
                 </div>
                 <div
                   v-if="state.expertMode"
@@ -498,11 +529,11 @@ import {
   deleteConversation,
   getBackendUrls,
   getApikey,
+  countStringTokens,
 } from 'src/modules/chat';
 import { dump } from 'js-yaml';
 import { syncStateWLocalStorage } from 'src/modules/saveState';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
-import { getEncoding } from 'js-tiktoken';
 import openrouterModules from 'assets/openrouter_models.json';
 const openrouterModels: Model[] = openrouterModules.data;
 import openaiModels from 'assets/openai_models.json';
@@ -628,14 +659,12 @@ function createNewConversation() {
   state.value.chatState.selectedTaskId = undefined;
 }
 
-const enc = getEncoding('gpt2');
-
 const estimatedTokens = computed(() => {
   // Tokenize the message
-  const tokens = enc.encode(state.value.userInput);
+  const tokens = countStringTokens(state.value.userInput);
 
   // Return the token count
-  return tokens.length;
+  return tokens;
 });
 
 function sendMessageWrapper() {

@@ -6,6 +6,7 @@ import { v1 as uuidv1 } from 'uuid';
 import { Tool } from './tools';
 import { tools } from './tools';
 import AsyncQueue from './taskManager';
+import { getEncoding } from 'js-tiktoken';
 
 function getAPIURLs(baseURL: string) {
   return {
@@ -146,7 +147,12 @@ export type LLMTask = {
   // is undefined in the case it is an "initial" task
   parentID?: string | undefined;
   childrenIDs: string[];
-  debugging?: Record<string, unknown>;
+  debugging: {
+    estimatedTokens?: number;
+    usedTokens?: number;
+    aiResponse?: ChatCompletionResponse;
+    error?: unknown;
+  };
   result?: TaskResult;
   id: string;
   allowedTools?: string[];
@@ -160,6 +166,21 @@ interface TaskResult {
   content?: string; // Description or value of the result
   functionCallDetails?: FunctionCall; // Details if the result is a function call
   newTaskDetails?: LLMTask[]; // Details if the result is a new task
+}
+
+const enc = getEncoding('gpt2');
+
+export function countStringTokens(txt: string) {
+  // Tokenize the content
+  const content = enc.encode(txt);
+  return content.length;
+}
+
+function estimateTokens(task: LLMTask) {
+  const content = countStringTokens(task.content || '');
+  // Return the token count
+  const total = content;
+  return total;
 }
 
 export const vectorStore = useVectorStore();
@@ -419,10 +440,13 @@ export function sendMessage(message: string, chatState: ChatStateType) {
     role: 'user',
     status: 'Open',
     content: message,
+    debugging: {},
     id: uuidv1(),
     childrenIDs: [],
     allowedTools: Object.keys(tools),
   };
+
+  currentTask.debugging = { estimatedTokens: estimateTokens(currentTask) };
 
   if (chatState.selectedTaskId) {
     currentTask.parentID = chatState.selectedTaskId;
@@ -523,6 +547,7 @@ function createNewTasksFromChatResponse(
         content: null,
         status: 'Open',
         childrenIDs: [],
+        debugging: {},
         id: uuidv1(),
         context: {
           function: {
@@ -581,6 +606,7 @@ async function processOpenAIConversation(
       true,
       chatState
     );
+    task.debugging.usedTokens = response.usage.prompt_tokens;
     createNewTasksFromChatResponse(response, task.id, chatState);
   }
 }
