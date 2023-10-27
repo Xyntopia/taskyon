@@ -388,8 +388,13 @@
               </div>
               <div
                 v-if="
-                  state.chatState.Tasks[state.chatState.selectedTaskId || '']
-                    ?.status == 'Open'
+                  ['Open', 'In Progress'].some((subs) =>
+                    subs.includes(
+                      state.chatState.Tasks[
+                        state.chatState.selectedTaskId || ''
+                      ]?.status
+                    )
+                  )
                 "
                 class="q-pa-xs"
               >

@@ -622,11 +622,12 @@ async function processFunctionTask(task: LLMTask, chatState: ChatStateType) {
   if (task.context?.function) {
     const func = task.context.function;
     console.log(`Calling function ${func.name}`);
-    const { result, status } = await handleFunctionExecution(task, func);
+    task.status = 'In Progress';
+    const { result, status } = await handleFunctionExecution(func);
     task.result = result;
-    task.status = status;
     task.allowedTools = Object.keys(tools);
     await processOpenAIConversation(task, chatState);
+    task.status = status;
   }
 }
 
@@ -662,7 +663,6 @@ export function deleteConversation(leafId: string, chatState: ChatStateType) {
 
 // Helper function to handle function execution
 async function handleFunctionExecution(
-  task: LLMTask,
   func: FunctionCall
 ): Promise<{ result: TaskResult; status: TaskStatus }> {
   const allowedTools = Object.keys(tools);
@@ -686,6 +686,7 @@ async function taskWorker(chatState: ChatStateType) {
   while (true) {
     console.log('waiting for next task!');
     const task = await processTasksQueue.pop();
+    task.status = 'In Progress';
     console.log('processing task:', task);
     try {
       if (task.role == 'user') {
