@@ -3,9 +3,9 @@ import { RouteRecordRaw } from 'vue-router';
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    component: () => import('components/Chat.vue'),
+    component: () => import('layouts/Taskyon.vue'),
     children: [
-      { path: '', component: () => import('components/VecStoreUploader.vue') },
+      { path: '', component: () => import('components/Chat.vue') },
       {
         path: 'chat',
         component: () => import('components/Chat.vue'),

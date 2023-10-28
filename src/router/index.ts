@@ -9,7 +9,7 @@ import {
 //import DoxcavatorRoutes  from './routes_doxcavator'
 //import DefaultRoutes from './routes'
 //import { RouteRecordRaw } from 'vue-router';
-import XyntowriterRoutes from './routes_vexvault'
+import TaskyonRoutes from './routes_taskyon'
 
 // TODO: do the following with #ifdef preprocessor webpack plugin
 /*let routes: RouteRecordRaw[] = []
@@ -21,7 +21,7 @@ if(process.env.APPNAME==='Spacemarket'){
   routes = DefaultRoutes
 }*/
 
-const routes = XyntowriterRoutes
+const routes = TaskyonRoutes
 //const routes = await import('./routes_doxcavator')
 
 /*

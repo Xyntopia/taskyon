@@ -1,28 +1,40 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
-import { api } from 'src/boot/axios';
+import {
+  defaultChatState,
+  sendMessage,
+  taskChain,
+  run,
+  availableModels,
+  Model,
+  getBackendUrls,
+  getApikey,
+  countStringTokens,
+} from 'src/modules/chat';
 
-export const useAppSettingsStore = defineStore('appSettings', {
+//TODO: convert store into composition api
+export const useTaskyonStore = defineStore('taskyonState', {
   state: () => {
-    console.log('initialize app settings');
-    return {
-      API_DEV_URL: 'http://localhost:5111',
-      API_PROD_URL: 'http://localhost',
-      PAYMENT_URL: '',
-      APPNAME: process.env.APPNAME,
-      DESCRIPTION: process.env.DESCRIPTION,
-      consent: {
-        googleAnalytics: 'firstvisit',
-      },
-      initial: true, // flag which indicates whether this is the initial state
+    console.log('initialize taskyon');
+    const initialState = {
+      chatState: defaultChatState(),
+      userInput: '',
+      expertMode: false,
+      drawerOpen: false,
+      drawerRight: false,
+      debugMessageExpand: {},
+      darkTheme: 'auto' as boolean | 'auto',
+      messageVisualization: {} as Record<string, boolean>, // whether message with ID should be open or not...
     };
+    return initialState;
   },
   getters: {
-    apiUrl: (state) => {
+    /*apiUrl: (state) => {
       return process.env.DEV ? state.API_DEV_URL : state.API_PROD_URL;
-    },
+    },*/
   },
   actions: {
+    /*
     setApiUrl(newUrl: string) {
       if (process.env.DEV) {
         this.API_DEV_URL = newUrl;
@@ -40,20 +52,20 @@ export const useAppSettingsStore = defineStore('appSettings', {
     setConsent(gaconsent: string) {
       this.consent.googleAnalytics = gaconsent;
     },
+    */
   },
 });
 
-const store = useAppSettingsStore();
+//const store = useAppSettingsStore();
 
 // this file can be replaced in kubernetes  using a configmap!
 // that way we can configure our webapp even if its already compiled...
 void axios.get('config.json').then((jsonconfig) => {
   // we only want to load the initial configuration the first time we are loading the page...
-  if (store.initial) {
+  /*if (store.initial) {
     console.log('load App Config', jsonconfig.data);
     store.$state = jsonconfig.data as typeof store.$state;
     store.initial = false;
   }
-  store.updateApiUrl();
+  store.updateApiUrl();*/
 });
-
