@@ -7,7 +7,7 @@ import { Tool } from './tools';
 import { tools } from './tools';
 import AsyncQueue from './taskManager';
 import { getEncoding } from 'js-tiktoken';
-import { FunctionCall } from './tools';
+import { FunctionCall, ExtendedTool } from './tools';
 
 function getAPIURLs(baseURL: string) {
   return {
@@ -82,7 +82,7 @@ export type ChatCompletionResponse = {
     message: OpenAIMessage;
     finish_reason: string;
   }[];
-  usage: {
+  usage?: {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
@@ -141,7 +141,6 @@ export type LLMTask = {
   parentID?: string | undefined;
   childrenIDs: string[];
   debugging: {
-    estimatedTokens?: number;
     usedTokens?: number;
     aiResponse?: ChatCompletionResponse;
     error?: unknown;
@@ -174,6 +173,56 @@ function estimateTokens(task: LLMTask) {
   // Return the token count
   const total = content;
   return total;
+}
+
+function countChatTokens(chatMessages: OpenAIMessage[]): number {
+  let totalTokens = 0;
+  for (const message of chatMessages) {
+    if (message.content) {
+      totalTokens += countStringTokens(message.content);
+    }
+  }
+  return totalTokens;
+}
+
+export function countToolTokens(functionList: ExtendedTool[]): number {
+  let totalTokens = 0;
+
+  // Iterate through each tool in the functionList array
+  for (const tool of functionList) {
+    // Get the description and stringify the parameters of the tool
+    const description = tool.description;
+    const stringifiedParameters = JSON.stringify(tool.parameters, null, 2); // Pretty print the JSON string
+
+    // Count the tokens in the description and stringified parameters using countStringTokens
+    const descriptionTokens = countStringTokens(description);
+    const parametersTokens = countStringTokens(stringifiedParameters);
+
+    // Sum the tokens of the description and stringified parameters for this tool
+    totalTokens += descriptionTokens + parametersTokens;
+  }
+
+  return totalTokens;
+}
+
+export function estimateChatTokens(
+  newResponseTask: LLMTask,
+  chatState: ChatStateType
+) {
+  console.log('function usage ');
+  const chat: OpenAIMessage[] = buildChatFromTask(newResponseTask, chatState);
+  const functions: ExtendedTool[] = mapFunctionNames(
+    newResponseTask.allowedTools || []
+  );
+  const promptTokens = estimateTokens(newResponseTask);
+  const chatTokens = countChatTokens(chat);
+  const functionTokens = countToolTokens(functions);
+  return {
+    promptTokens,
+    chatTokens,
+    functionTokens,
+    total: chatTokens + functionTokens,
+  };
 }
 
 export const vectorStore = useVectorStore();
@@ -439,8 +488,6 @@ export function sendMessage(message: string, chatState: ChatStateType) {
     allowedTools: Object.keys(tools),
   };
 
-  currentTask.debugging = { estimatedTokens: estimateTokens(currentTask) };
-
   if (chatState.selectedTaskId) {
     currentTask.parentID = chatState.selectedTaskId;
     chatState.Tasks[chatState.selectedTaskId].childrenIDs.push(currentTask.id);
@@ -484,6 +531,7 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
   return openAIConversation;
 }
 
+// return the last task that was created in the chain.
 function createNewTasksFromChatResponse(
   response: ChatCompletionResponse,
   parentTaskId: string,
@@ -502,6 +550,7 @@ function createNewTasksFromChatResponse(
       content: choice.message.content,
       childrenIDs: [],
       debugging: {
+        usedTokens: response.usage?.total_tokens,
         aiResponse: response,
       },
       id: response.id,
@@ -512,7 +561,10 @@ function createNewTasksFromChatResponse(
     // and push newly created tasks to our task list. they were already processed, so we don't need to
     // add them to our task queue.
     if (choice.message.content) {
-      chatState.selectedTaskId = newResponseTask.id;
+      // we are using the reference to the object here in order to preserve potential proxys
+      // introduced by things like vue :).
+      chatState.selectedTaskId = chatState.Tasks[response.id].id;
+      return chatState.Tasks[response.id];
     } else if (
       choice.finish_reason === 'function_call' &&
       choice.message.function_call
@@ -555,6 +607,7 @@ function createNewTasksFromChatResponse(
       // Push the new function task to processTasksQueue
       processTasksQueue.push(chatState.Tasks[funcTask.id]);
       chatState.selectedTaskId = funcTask.id;
+      return chatState.Tasks[funcTask.id];
     }
   }
 }
@@ -585,6 +638,10 @@ function bigIntToString(obj: unknown): unknown {
   return obj;
 }
 
+function mapFunctionNames(toolNames: string[]) {
+  return toolNames?.map((t) => tools[t]);
+}
+
 // Function to process OpenAI conversation
 async function processOpenAIConversation(
   task: LLMTask,
@@ -592,14 +649,17 @@ async function processOpenAIConversation(
 ) {
   const openAIConversation = buildChatFromTask(task, chatState);
   if (openAIConversation) {
-    const functions = task.allowedTools?.map((t) => tools[t]) || [];
+    const functions = mapFunctionNames(task.allowedTools || []) || [];
     const response = await callLLM(
       openAIConversation,
       functions,
       true,
       chatState
     );
-    task.debugging.usedTokens = response.usage.prompt_tokens;
+    if (response.usage) {
+      // openai sends back the exact number of prompt tokens :)
+      task.debugging.usedTokens = response.usage?.prompt_tokens;
+    }
     createNewTasksFromChatResponse(response, task.id, chatState);
   }
 }

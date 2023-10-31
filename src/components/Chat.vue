@@ -47,48 +47,116 @@
                 v-else-if="message.content"
                 :src="message.content"
               />
-              <div
-                v-if="message.debugging?.usedTokens"
-                style="font-size: xx-small"
-                class="column items-center"
-              >
+              <div style="font-size: xx-small" class="column items-center">
                 <q-icon
                   name="monetization_on"
                   size="xs"
-                  color="secondary"
+                  :color="message.debugging?.usedTokens ? 'secondary' : 'info'"
                 ></q-icon>
-                <q-tooltip :delay="1000">Tokens used</q-tooltip>
-                <div>{{ message.debugging?.usedTokens }}</div>
-              </div>
-              <div
-                v-else-if="message.debugging?.estimatedTokens"
-                style="font-size: xx-small"
-                class="column items-center"
-              >
-                <q-icon name="monetization_on" size="xs" color="info"></q-icon
-                ><q-tooltip :delay="1000">Prompt token estimate</q-tooltip>
-                <div>{{ message.debugging?.estimatedTokens }}</div>
-              </div>
-              <div
-                v-if="message.debugging?.aiResponse?.usage"
-                class="column items-center"
-                style="font-size: xx-small"
-              >
-                <q-icon
-                  name="monetization_on"
-                  size="xs"
-                  color="secondary"
-                ></q-icon
-                ><q-tooltip :delay="1000"
-                  >Number of tokens used:
+                <q-tooltip :delay="1000">
                   <div>
-                    {{ message.debugging?.aiResponse?.usage.prompt_tokens }}
-                    +{{
-                      message.debugging?.aiResponse?.usage.completion_tokens
-                    }}
-                    ={{ message.debugging?.aiResponse?.usage.total_tokens }}
-                  </div></q-tooltip
-                >{{ message.debugging?.aiResponse?.usage.total_tokens }}
+                    <q-markup-table
+                      dense
+                      flat
+                      :bordered="false"
+                      separator="horizontal"
+                      style="background-color: inherit; color: inherit"
+                    >
+                      Token Usage
+                      <tbody v-if="message.debugging?.aiResponse?.usage">
+                        <tr>
+                          <td class="text-left">
+                            Prompt (estimated Ts for functions):
+                          </td>
+                          <td class="text-right">
+                            +
+                            {{
+                              message.debugging?.aiResponse?.usage.prompt_tokens
+                            }}
+                            (
+                            {{
+                              estimateChatTokens(message, state.chatState)
+                                .functionTokens * 0.8
+                            }})
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="text-left">Completion:</td>
+                          <td class="text-right">
+                            +
+                            {{
+                              message.debugging?.aiResponse?.usage
+                                .completion_tokens
+                            }}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="text-left">Total:</td>
+                          <td class="text-right">
+                            =
+                            {{
+                              message.debugging?.aiResponse?.usage.total_tokens
+                            }}
+                          </td>
+                        </tr>
+                      </tbody>
+                      <tbody v-else>
+                        <tr>
+                          <td class="text-left">Functions (estimated):</td>
+                          <td class="text-right">
+                            +
+                            {{
+                              estimateChatTokens(message, state.chatState)
+                                .functionTokens
+                            }}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="text-left">Prompt (estimated):</td>
+                          <td class="text-right">
+                            +
+                            {{
+                              estimateChatTokens(message, state.chatState)
+                                .promptTokens
+                            }}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="text-left">Completion (estimated):</td>
+                          <td class="text-right">
+                            +
+                            {{
+                              estimateChatTokens(message, state.chatState)
+                                .chatTokens
+                            }}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="text-left">Total:</td>
+                          <td
+                            v-if="message.debugging?.usedTokens"
+                            class="text-right"
+                          >
+                            = {{ message.debugging?.usedTokens }}
+                          </td>
+                          <td v-else class="text-right">
+                            =
+                            {{
+                              estimateChatTokens(message, state.chatState).total
+                            }}
+                            (estimated)
+                          </td>
+                        </tr>
+                      </tbody>
+                    </q-markup-table>
+                  </div>
+                </q-tooltip>
+                <div v-if="message.debugging?.usedTokens">
+                  {{ message.debugging?.usedTokens }}
+                </div>
+                <div v-else>
+                  {{ estimateChatTokens(message, state.chatState).total }}
+                </div>
               </div>
             </div>
             <div
@@ -295,6 +363,7 @@ import {
   getBackendUrls,
   getApikey,
   countStringTokens,
+  estimateChatTokens,
 } from 'src/modules/chat';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import openrouterModules from 'assets/openrouter_models.json';
@@ -368,13 +437,6 @@ const modelLookUp = computed(() => ({
 void fetchModels();
 
 $q.dark.set(state.darkTheme);
-
-//const uploaderURL = 'http://www.vexvault.com'
-//const uploaderURL='http://localhost:8080'
-
-function isString(value: unknown) {
-  return typeof value === 'string';
-}
 
 const selectedConversation = computed(() => {
   if (state.chatState.selectedTaskId) {
