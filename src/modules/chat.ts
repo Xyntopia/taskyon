@@ -215,7 +215,7 @@ export function estimateChatTokens(
   );
   const promptTokens = estimateTokens(newResponseTask);
   const chatTokens = countChatTokens(chat);
-  const functionTokens = countToolTokens(functions);
+  const functionTokens = Math.floor(countToolTokens(functions) * 0.7);
   return {
     promptTokens,
     chatTokens,

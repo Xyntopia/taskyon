@@ -19,6 +19,7 @@ export const useTaskyonStore = defineStore('taskyonState', {
     const initialState = {
       chatState: defaultChatState(),
       userInput: '',
+      selectedTools: [] as string[],
       expertMode: false,
       drawerOpen: false,
       drawerRight: false,

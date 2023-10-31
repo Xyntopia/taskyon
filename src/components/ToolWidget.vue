@@ -26,12 +26,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, defineProps, defineEmits } from 'vue';
+import { ref, defineProps, defineEmits } from 'vue';
 import {
   ExtendedTool,
-  FunctionCall,
   FunctionArguments,
-  tools,
 } from 'src/modules/tools';
 import { dump } from 'js-yaml';
 import { LLMTask } from 'src/modules/chat';
