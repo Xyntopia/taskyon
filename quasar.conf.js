@@ -20,7 +20,7 @@ const buildConfig = require('dotenv').config({
   path: '../build_configuration',
 });
 
-APPNAME = env.APPNAME || buildConfig.APPNAME || 'Vexvault';
+APPNAME = env.APPNAME || buildConfig.APPNAME || 'Taskyon';
 DESCRIPTION = buildConfig.DESCRIPTION || '';
 
 console.log('compile app: ', APPNAME, DESCRIPTION);
