@@ -170,6 +170,37 @@
               />
             </template>
           </q-input>
+          <div class="row items-center">
+            <q-btn
+              class="q-ma-md"
+              label="toggle all tools"
+              @click="toggleSelectedTools"
+            />
+            <q-option-group
+              class="q-ma-md"
+              v-model="selectedTools"
+              :options="
+                Object.keys(tools).map((name) => ({
+                  label: name,
+                  value: name,
+                  description: tools[name].description,
+                }))
+              "
+              color="secondary"
+              type="checkbox"
+              inline
+              dense
+            >
+              <template v-slot:label="opt">
+                <div>
+                  {{ opt.label }}
+                </div>
+                <q-tooltip anchor="bottom middle" style="max-width: 500px">{{
+                  opt.description
+                }}</q-tooltip>
+              </template></q-option-group
+            >
+          </div>
           <q-select
             v-if="state.chatState.baseURL == getBackendUrls('openai')"
             class="q-pt-xs"
@@ -270,6 +301,7 @@ import {
   countStringTokens,
   estimateChatTokens,
 } from 'src/modules/chat';
+import { tools } from 'src/modules/tools';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import openrouterModules from 'assets/openrouter_models.json';
 import { useTaskyonStore } from 'stores/taskyonState';
@@ -367,8 +399,19 @@ const estimatedTokens = computed(() => {
   return tokens;
 });
 
+const selectedTools = ref<string[]>([]);
+
+function toggleSelectedTools() {
+  if (selectedTools.value.length > 0) {
+    selectedTools.value = [];
+  } else {
+    selectedTools.value = Object.keys(tools);
+  }
+}
+
 function sendMessageWrapper() {
-  void sendMessage(state.userInput.trim(), state.chatState);
+  const allowedFunctions = selectedTools.value;
+  void sendMessage(state.userInput.trim(), state.chatState, allowedFunctions);
   state.userInput = '';
 }
 

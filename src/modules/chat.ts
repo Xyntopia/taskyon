@@ -472,7 +472,11 @@ async function executeTask(task, previousTasks = null, context = null, objective
   }
 }*/
 
-export function sendMessage(message: string, chatState: ChatStateType) {
+export function sendMessage(
+  message: string,
+  chatState: ChatStateType,
+  functionNames: string[]
+) {
   // adds a "sendMessage task to the Task stack"
   console.log('send message');
   if (message.trim() === '') return;
@@ -484,7 +488,7 @@ export function sendMessage(message: string, chatState: ChatStateType) {
     debugging: {},
     id: uuidv1(),
     childrenIDs: [],
-    allowedTools: Object.keys(tools),
+    allowedTools: functionNames,
   };
 
   if (chatState.selectedTaskId) {
