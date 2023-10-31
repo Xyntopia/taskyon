@@ -33,7 +33,8 @@
               </div>
               <div v-else-if="message.role == 'function'" class="col">
                 <q-expansion-item
-                  :icon="message.status == 'Error' ? 'warning' : 'calculate'"
+                  dense
+                  icon="calculate"
                   :label="message.context?.function?.name"
                   :header-class="
                     message.status == 'Error' ? 'text-red' : 'text-green'
