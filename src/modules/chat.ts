@@ -8,6 +8,7 @@ import { tools } from './tools';
 import AsyncQueue from './taskManager';
 import { getEncoding } from 'js-tiktoken';
 import { FunctionCall, ExtendedTool } from './tools';
+import { lruCache } from './utils';
 
 function getAPIURLs(baseURL: string) {
   return {
