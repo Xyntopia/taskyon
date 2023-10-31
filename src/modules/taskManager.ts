@@ -1,10 +1,10 @@
 import { TaskResult } from './types';
-import { OpenAIMessage, ChatCompletionResponse } from './types';
 import { FunctionCall, tools } from './tools';
 import { useVectorStore } from './localVectorStore';
-import { ChatStateType, processUserTask, processFunctionTask } from './chat';
+import { ChatStateType } from './chat';
 import { bigIntToString } from './chat';
 import { dump } from 'js-yaml';
+import { LLMTask } from './types';
 
 class AsyncQueue<T> {
   private queue: T[] = [];
@@ -39,28 +39,6 @@ class AsyncQueue<T> {
 export default AsyncQueue;
 export type TaskStatus = 'Open' | 'In Progress' | 'Completed' | 'Error';
 
-export type LLMTask = {
-  role: 'system' | 'user' | 'assistant' | 'function';
-  content: string | null;
-  status: TaskStatus;
-  context?: {
-    message?: OpenAIMessage;
-    function?: FunctionCall;
-    model?: string;
-  };
-  // is undefined in the case it is an "initial" task
-  parentID?: string | undefined;
-  childrenIDs: string[];
-  debugging: {
-    usedTokens?: number;
-    aiResponse?: ChatCompletionResponse;
-    error?: unknown;
-  };
-  result?: TaskResult;
-  id: string;
-  allowedTools?: string[];
-  authorId?: string;
-};
 export const processTasksQueue = new AsyncQueue<LLMTask>();
 export const vectorStore = useVectorStore();
 /**
@@ -146,34 +124,6 @@ export function taskChain(lastTaskId: string, tasks: Record<string, LLMTask>) {
   return conversationList;
 }
 
-async function taskWorker(chatState: ChatStateType) {
-  console.log('entering task worker loop...');
-  while (true) {
-    console.log('waiting for next task!');
-    const task = await processTasksQueue.pop();
-    task.status = 'In Progress';
-    console.log('processing task:', task);
-    try {
-      if (task.role == 'user') {
-        await processUserTask(task, chatState);
-      } else if (task.role == 'function') {
-        await processFunctionTask(task, chatState);
-      } else {
-        console.log("We don't know what to do with this task:", task);
-        task.status = 'Error';
-      }
-    } catch (error) {
-      task.status = 'Error';
-      task.debugging = { error };
-      console.error('Error processing task:', error);
-    }
-  }
-}
-
-export async function run(chatState: ChatStateType) {
-  console.log('start task taskWorker');
-  await taskWorker(chatState);
-}
 // Helper function to handle function execution
 export async function handleFunctionExecution(
   func: FunctionCall

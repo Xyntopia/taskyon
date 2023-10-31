@@ -1,4 +1,4 @@
-import { LLMTask } from './taskManager';
+import { TaskStatus } from './taskManager';
 import { FunctionCall } from './tools';
 
 export type OpenAIMessage = {
@@ -39,4 +39,26 @@ export type ChatCompletionResponse = {
   functionCallDetails?: FunctionCall; // Details if the result is a function call
   newTaskDetails?: LLMTask[]; // Details if the result is a new task
 }
+export type LLMTask = {
+  role: 'system' | 'user' | 'assistant' | 'function';
+  content: string | null;
+  status: TaskStatus;
+  context?: {
+    message?: OpenAIMessage;
+    function?: FunctionCall;
+    model?: string;
+  };
+  // is undefined in the case it is an "initial" task
+  parentID?: string | undefined;
+  childrenIDs: string[];
+  debugging: {
+    usedTokens?: number;
+    aiResponse?: ChatCompletionResponse;
+    error?: unknown;
+  };
+  result?: TaskResult;
+  id: string;
+  allowedTools?: string[];
+  authorId?: string;
+};
 

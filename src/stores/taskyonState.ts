@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
 import { defaultChatState } from 'src/modules/chat';
-import { run } from 'src/modules/taskManager';
+import { run } from 'src/modules/taskWorker';
 
 //TODO: convert store into composition api
 export const useTaskyonStore = defineStore('taskyonState', {

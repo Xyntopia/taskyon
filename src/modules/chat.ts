@@ -5,11 +5,10 @@ import { Tool } from './tools';
 import { tools } from './tools';
 import { getEncoding } from 'js-tiktoken';
 import { ExtendedTool } from './tools';
-import { LLMTask } from './taskManager';
+import { LLMTask } from './types';
 import { OpenAIMessage, ChatCompletionResponse } from './types';
 import { processTasksQueue } from './taskManager';
 import { taskChain } from './taskManager';
-import { handleFunctionExecution } from './taskManager';
 
 function getAPIURLs(baseURL: string) {
   return {
@@ -377,7 +376,7 @@ function mapFunctionNames(toolNames: string[]) {
 }
 
 // Function to process OpenAI conversation
-async function processOpenAIConversation(
+export async function processOpenAIConversation(
   task: LLMTask,
   chatState: ChatStateType
 ) {
@@ -395,26 +394,6 @@ async function processOpenAIConversation(
       task.debugging.usedTokens = response.usage?.prompt_tokens;
     }
     createNewTasksFromChatResponse(response, task.id, chatState);
-  }
-}
-
-// Function to process user tasks
-export async function processUserTask(task: LLMTask, chatState: ChatStateType) {
-  await processOpenAIConversation(task, chatState);
-  task.status = 'Completed';
-}
-
-// Function to process function tasks
-export async function processFunctionTask(task: LLMTask, chatState: ChatStateType) {
-  if (task.context?.function) {
-    const func = task.context.function;
-    console.log(`Calling function ${func.name}`);
-    task.status = 'In Progress';
-    const { result, status } = await handleFunctionExecution(func);
-    task.result = result;
-    task.allowedTools = Object.keys(tools);
-    await processOpenAIConversation(task, chatState);
-    task.status = status;
   }
 }
 
