@@ -110,13 +110,6 @@
   </q-card-section>
 </template>
 
-<style lang="sass">
-/* Define the CSS class for the orange "glow" shadow */
-.not-assistant-message
-  box-shadow: inset 0 0 5px $secondary
-  border-radius: 5px
-</style>
-
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import {

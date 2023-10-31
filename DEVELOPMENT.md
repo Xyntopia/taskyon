@@ -1,6 +1,6 @@
-# Vexvault
+# Taskyon
 
-Vexvault is built on Vue3/Quasar and follows most of its best practices.
+Taskyon is built on Vue3/Quasar and follows most of its best practices.
 
 For more information follow this link:  [quasar documentation](https://quasar.dev/)
 
@@ -10,7 +10,7 @@ download the project from github:
 
 ```bash
 # download
-git clone https://github.com/Xyntopia/vexvault.git
+git clone https://github.com/Xyntopia/taskyon.git
 
 # install dependencies
 yarn install

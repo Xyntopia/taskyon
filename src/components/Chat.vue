@@ -179,11 +179,10 @@ import { computed } from 'vue';
 import { useQuasar } from 'quasar';
 import ToolWidget from 'components/ToolWidget.vue';
 import {
-  taskChain,
-  run,
   getApikey,
   estimateChatTokens,
 } from 'src/modules/chat';
+import {taskChain} from 'src/modules/taskManager'
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import TokenUsage from 'components/TokenUsage.vue';
@@ -223,6 +222,4 @@ function toggleMessageDebug(id: string) {
     state.messageVisualization[id] = !state.messageVisualization[id];
   }
 }
-
-void run(state.chatState);
 </script>

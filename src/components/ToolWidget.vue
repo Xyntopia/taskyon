@@ -32,7 +32,7 @@ import {
   FunctionArguments,
 } from 'src/modules/tools';
 import { dump } from 'js-yaml';
-import { LLMTask } from 'src/modules/chat';
+import { LLMTask } from 'src/modules/taskManager';
 
 const props = defineProps<{
   task: LLMTask;

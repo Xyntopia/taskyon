@@ -1,16 +1,7 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
-import {
-  defaultChatState,
-  sendMessage,
-  taskChain,
-  run,
-  availableModels,
-  Model,
-  getBackendUrls,
-  getApikey,
-  countStringTokens,
-} from 'src/modules/chat';
+import { defaultChatState } from 'src/modules/chat';
+import { run } from 'src/modules/taskManager';
 
 //TODO: convert store into composition api
 export const useTaskyonStore = defineStore('taskyonState', {
@@ -57,7 +48,8 @@ export const useTaskyonStore = defineStore('taskyonState', {
   },
 });
 
-//const store = useAppSettingsStore();
+const store = useTaskyonStore();
+void run(store.chatState);
 
 // this file can be replaced in kubernetes  using a configmap!
 // that way we can configure our webapp even if its already compiled...
