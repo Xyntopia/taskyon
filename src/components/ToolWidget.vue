@@ -9,7 +9,7 @@
         @input="updateTool"
       />
     </div>
-    <q-btn class="q-ma-md" label="Execute"/>
+    <q-btn class="q-ma-md" label="Execute" />
     <q-item>
       <q-item-label class="text-bold"> result: </q-item-label>
       <q-item-label>
@@ -27,12 +27,9 @@
 
 <script setup lang="ts">
 import { ref, defineProps, defineEmits } from 'vue';
-import {
-  ExtendedTool,
-  FunctionArguments,
-} from 'src/modules/tools';
+import { ExtendedTool, FunctionArguments } from 'src/modules/tools';
 import { dump } from 'js-yaml';
-import { LLMTask } from 'src/modules/taskManager';
+import { LLMTask } from 'src/modules/types';
 
 const props = defineProps<{
   task: LLMTask;
