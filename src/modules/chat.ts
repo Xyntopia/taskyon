@@ -1,14 +1,15 @@
 import axios from 'axios';
 import { v1 as uuidv1 } from 'uuid';
 //import { useCachedModels } from './mlModels';
-import { Tool } from './tools';
-import { tools } from './tools';
+import { Tool, tools, ExtendedTool } from './tools';
 import { getEncoding } from 'js-tiktoken';
-import { ExtendedTool } from './tools';
-import { LLMTask } from './types';
-import { OpenAIMessage, ChatCompletionResponse } from './types';
-import { processTasksQueue } from './taskManager';
-import { taskChain } from './taskManager';
+import {
+  LLMTask,
+  OpenAIMessage,
+  ChatCompletionResponse,
+  OpenRouterGenerationInfo,
+} from './types';
+import { taskChain, processTasksQueue } from './taskManager';
 
 function getAPIURLs(baseURL: string) {
   return {
@@ -55,6 +56,9 @@ export function defaultChatState() {
   };
 }
 
+function openRouterUsed(chatState: ChatStateType) {
+  return getBackendUrls('openrouter') == chatState.baseURL;
+}
 export type ChatStateType = ReturnType<typeof defaultChatState>;
 type ChatCompletionRequest = {
   // An array of messages in the conversation.
@@ -157,11 +161,27 @@ export function estimateChatTokens(
   };
 }
 
+function generateHeaders(chatState: ChatStateType) {
+  let headers: Record<string, string> = {
+    Authorization: `Bearer ${getApikey(chatState)}`,
+    'Content-Type': 'application/json',
+  };
+
+  if (openRouterUsed(chatState)) {
+    headers = {
+      ...headers,
+      'HTTP-Referer': `${chatState.siteUrl}`, // To identify your app. Can be set to localhost for testing
+      'X-Title': `${chatState.siteUrl}`, // Optional. Shows on openrouter.ai
+    };
+  }
+
+  return headers;
+}
+
 // calls openRouter OR OpenAI  chatmodels
 async function callLLM(
   chatMessages: OpenAIMessage[],
   functions: Array<Tool>,
-  openRouter = true,
   chatState: ChatStateType
 ) {
   const payload: ChatCompletionRequest = {
@@ -178,29 +198,44 @@ async function callLLM(
     payload.functions = functions;
   }
 
-  let headers: Record<string, string> = {
-    Authorization: `Bearer ${getApikey(chatState)}`,
-    'Content-Type': 'application/json',
-  };
-
-  if (openRouter) {
-    headers = {
-      ...headers,
-      'HTTP-Referer': `${chatState.siteUrl}`, // To identify your app. Can be set to localhost for testing
-      'X-Title': `${chatState.siteUrl}`, // Optional. Shows on openrouter.ai
-    };
-  }
+  const headers = generateHeaders(chatState);
 
   const response = await axios.post<ChatCompletionResponse>(
     getAPIURLs(chatState.baseURL).chat,
     payload,
     { headers }
   );
+  console.log('AI responded:', response);
+  const chatCompletion = response.data;
 
-  return response.data;
+  if (openRouterUsed(chatState)) {
+    const GENERATION_ID = response.data.id;
+    const headers = generateHeaders(chatState);
+    const generation = await axios.get<OpenRouterGenerationInfo>(
+      `https://openrouter.ai/api/v1/generation?id=${GENERATION_ID}`,
+      { headers }
+    );
+
+    const generationInfo = generation.data.data;
+
+    if (
+      generationInfo.native_tokens_completion &&
+      generationInfo.native_tokens_prompt
+    ) {
+      chatCompletion.usage = {
+        prompt_tokens: generationInfo.native_tokens_prompt,
+        completion_tokens: generationInfo.native_tokens_completion,
+        total_tokens:
+          generationInfo.native_tokens_prompt +
+          generationInfo.native_tokens_completion,
+        origin: generationInfo.origin,
+        inference_costs: generationInfo.usage,
+      };
+    }
+  }
+
+  return chatCompletion;
 }
-
-
 
 export function sendMessage(
   message: string,
@@ -267,7 +302,7 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
 // return the last task that was created in the chain.
 function createNewTasksFromChatResponse(
   response: ChatCompletionResponse,
-  parentTaskId: string,
+  parentTask: LLMTask,
   chatState: ChatStateType
 ) {
   // Process the response and create new tasks if necessary
@@ -278,18 +313,19 @@ function createNewTasksFromChatResponse(
     //       so we could create it before sending it and then wait for AI to respond...
     const newResponseTask: LLMTask = {
       status: 'Completed',
-      parentID: parentTaskId,
+      parentID: parentTask.id,
       role: choice.message.role,
       content: choice.message.content,
       childrenIDs: [],
       debugging: {
         usedTokens: response.usage?.total_tokens,
+        inference_costs: response.usage?.inference_costs,
         aiResponse: response,
       },
       id: response.id,
     };
     chatState.Tasks[response.id] = newResponseTask;
-    chatState.Tasks[parentTaskId].childrenIDs.push(newResponseTask.id);
+    chatState.Tasks[parentTask.id].childrenIDs.push(newResponseTask.id);
 
     // and push newly created tasks to our task list. they were already processed, so we don't need to
     // add them to our task queue.
@@ -383,17 +419,12 @@ export async function processOpenAIConversation(
   const openAIConversation = buildChatFromTask(task, chatState);
   if (openAIConversation) {
     const functions = mapFunctionNames(task.allowedTools || []) || [];
-    const response = await callLLM(
-      openAIConversation,
-      functions,
-      true,
-      chatState
-    );
+    const response = await callLLM(openAIConversation, functions, chatState);
     if (response.usage) {
       // openai sends back the exact number of prompt tokens :)
-      task.debugging.usedTokens = response.usage?.prompt_tokens;
+      task.debugging.usedTokens = response.usage.prompt_tokens;
     }
-    createNewTasksFromChatResponse(response, task.id, chatState);
+    createNewTasksFromChatResponse(response, task, chatState);
   }
 }
 

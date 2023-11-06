@@ -31,7 +31,22 @@
           <td class="text-left">Total:</td>
           <td class="text-right">
             =
-            {{ message.debugging?.aiResponse?.usage.total_tokens }}
+            {{ message.debugging?.aiResponse?.usage.total_tokens }} (exact)
+          </td>
+        </tr>
+        <tr v-if="message.debugging?.inference_costs">
+          <td class="text-left">Costs:</td>
+          <td class="text-right">
+            =
+            {{
+              Math.round(
+                message.debugging?.inference_costs * 1e6
+              ).toLocaleString()
+            }}
+            μ$ (exact, ={{
+              Math.round(0.01 / message.debugging?.inference_costs)
+            }}
+            messages to reach $0.01)
           </td>
         </tr>
       </tbody>
@@ -51,7 +66,7 @@
           </td>
         </tr>
         <tr>
-          <td class="text-left">Completion (estimated):</td>
+          <td class="text-left">Conversation (estimated):</td>
           <td class="text-right">
             +
             {{ estimateChatTokens(message, state.chatState).chatTokens }}
@@ -60,7 +75,7 @@
         <tr>
           <td class="text-left">Total:</td>
           <td v-if="message.debugging?.usedTokens" class="text-right">
-            = {{ message.debugging?.usedTokens }}
+            = {{ message.debugging?.usedTokens }} (exact)
           </td>
           <td v-else class="text-right">
             =
@@ -75,7 +90,8 @@
 
 <script setup lang="ts">
 import { defineProps, PropType } from 'vue';
-import { LLMTask, estimateChatTokens } from 'src/modules/chat';
+import { estimateChatTokens } from 'src/modules/chat';
+import { LLMTask } from 'src/modules/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 

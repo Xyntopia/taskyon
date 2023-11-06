@@ -49,20 +49,28 @@
                 :src="message.content"
               />
               <div style="font-size: xx-small" class="column items-center">
+                <div v-if="message.debugging.inference_costs">
+                  {{
+                    Math.round(
+                      message.debugging.inference_costs * 1e6
+                    ).toLocaleString()
+                  }}
+                  μ$
+                </div>
                 <q-icon
                   name="monetization_on"
                   size="xs"
-                  :color="message.debugging?.usedTokens ? 'secondary' : 'info'"
+                  :color="message.debugging.usedTokens ? 'secondary' : 'info'"
                 ></q-icon>
-                <q-tooltip :delay="1000">
-                  <TokenUsage :message="message" />
-                </q-tooltip>
                 <div v-if="message.debugging?.usedTokens">
                   {{ message.debugging?.usedTokens }}
                 </div>
                 <div v-else>
                   {{ estimateChatTokens(message, state.chatState).total }}
                 </div>
+                <q-tooltip :delay="1000">
+                  <TokenUsage :message="message" />
+                </q-tooltip>
               </div>
             </div>
             <div
@@ -178,11 +186,8 @@ import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import { computed } from 'vue';
 import { useQuasar } from 'quasar';
 import ToolWidget from 'components/ToolWidget.vue';
-import {
-  getApikey,
-  estimateChatTokens,
-} from 'src/modules/chat';
-import {taskChain} from 'src/modules/taskManager'
+import { getApikey, estimateChatTokens } from 'src/modules/chat';
+import { taskChain } from 'src/modules/taskManager';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import TokenUsage from 'components/TokenUsage.vue';

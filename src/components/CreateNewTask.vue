@@ -76,7 +76,7 @@
       filled
       dense
       bottom-slots
-      label="Select OpenAI LLM"
+      label="Select LLM Model for answering/solving the task."
       icon="smart_toy"
       :options="modelOptions.openai"
       emit-value

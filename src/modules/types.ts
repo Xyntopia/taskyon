@@ -18,6 +18,10 @@ export type OpenAIMessage = {
   role: 'system' | 'user' | 'assistant' | 'function';
 };
 
+export type TokenUsage = {
+
+}
+
 export type ChatCompletionResponse = {
   id: string;
   object: string; // "chat.completion"
@@ -32,13 +36,35 @@ export type ChatCompletionResponse = {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    origin?: string;
+    inference_costs?: number;
   };
-};export interface TaskResult {
+};
+
+export interface OpenRouterGenerationInfo {
+  data: {
+    id: string;
+    model: string;
+    streamed: boolean;
+    generation_time: number;
+    created_at: string;
+    tokens_prompt: number;
+    tokens_completion: number;
+    native_tokens_prompt: null | number;
+    native_tokens_completion: null | number;
+    num_media_generations: null | number;
+    origin: string;
+    usage: number;
+  };
+}
+
+export interface TaskResult {
   type: 'ChatAnswer' | 'FunctionCall' | 'NewTask' | 'FunctionResult'; // Type of result
   content?: string; // Description or value of the result
   functionCallDetails?: FunctionCall; // Details if the result is a function call
   newTaskDetails?: LLMTask[]; // Details if the result is a new task
 }
+
 export type LLMTask = {
   role: 'system' | 'user' | 'assistant' | 'function';
   content: string | null;
@@ -53,6 +79,8 @@ export type LLMTask = {
   childrenIDs: string[];
   debugging: {
     usedTokens?: number;
+    // the costs used to solve this task...
+    inference_costs?: number;
     aiResponse?: ChatCompletionResponse;
     error?: unknown;
   };
@@ -61,4 +89,3 @@ export type LLMTask = {
   allowedTools?: string[];
   authorId?: string;
 };
-
