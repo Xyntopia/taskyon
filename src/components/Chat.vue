@@ -5,8 +5,8 @@
         <!-- "Task" Display -->
         <q-card-section class="q-gutter-sm">
           <div
-            v-for="message in selectedConversation"
-            :key="message.id"
+            v-for="task in selectedConversation"
+            :key="task.id"
             :class="[
               $q.dark.isActive ? 'bg-primary' : 'bg-white',
               'rounded-borders',
@@ -14,45 +14,45 @@
               'shadow-2',
               'column',
               'justify-between',
-              message.role === 'user' ? 'not-assistant-message' : '',
-              message.role === 'user' ? 'q-ml-lg' : '',
-              message.result?.type == 'FunctionCall' ? 'text-secondary' : '',
+              task.role === 'user' ? 'not-assistant-message' : '',
+              task.role === 'user' ? 'q-ml-lg' : '',
+              task.result?.type == 'FunctionCall' ? 'text-secondary' : '',
             ]"
           >
             <div class="col-auto row justify-begin q-gutter-xs">
-              <div v-if="message.status == 'Error'" class="col-auto">
+              <div v-if="task.status == 'Error'" class="col-auto">
                 <q-icon name="warning" color="warning" size="sm"
                   ><q-tooltip class="bg-warning">Error!</q-tooltip>
                 </q-icon>
               </div>
-              <div v-if="message.result?.type == 'FunctionCall'" class="col">
+              <div v-if="task.result?.type == 'FunctionCall'" class="col">
                 <q-icon size="sm" name="build_circle" />
-                {{ message.result.functionCallDetails?.name }}({{
-                  message.result.functionCallDetails?.arguments
+                {{ task.result.functionCallDetails?.name }}({{
+                  task.result.functionCallDetails?.arguments
                 }})
               </div>
-              <div v-else-if="message.role == 'function'" class="col">
+              <div v-else-if="task.role == 'function'" class="col">
                 <q-expansion-item
                   dense
                   icon="calculate"
-                  :label="message.context?.function?.name"
+                  :label="task.context?.function?.name"
                   :header-class="
-                    message.status == 'Error' ? 'text-red' : 'text-green'
+                    task.status == 'Error' ? 'text-red' : 'text-green'
                   "
                 >
-                  <ToolWidget :task="message" />
+                  <ToolWidget :task="task" />
                 </q-expansion-item>
               </div>
               <q-markdown
                 class="col"
-                v-else-if="message.content"
-                :src="message.content"
+                v-else-if="task.content"
+                :src="task.content"
               />
               <div style="font-size: xx-small" class="column items-center">
-                <div v-if="message.debugging.inference_costs">
+                <div v-if="task.debugging.inference_costs">
                   {{
                     Math.round(
-                      message.debugging.inference_costs * 1e6
+                      task.debugging.inference_costs * 1e6
                     ).toLocaleString()
                   }}
                   μ$
@@ -60,16 +60,16 @@
                 <q-icon
                   name="monetization_on"
                   size="xs"
-                  :color="message.debugging.usedTokens ? 'secondary' : 'info'"
+                  :color="task.debugging.usedTokens ? 'secondary' : 'info'"
                 ></q-icon>
-                <div v-if="message.debugging?.usedTokens">
-                  {{ message.debugging?.usedTokens }}
+                <div v-if="task.debugging?.usedTokens">
+                  {{ task.debugging?.usedTokens }}
                 </div>
                 <div v-else>
-                  {{ estimateChatTokens(message, state.chatState).total }}
+                  {{ estimateChatTokens(task, state.chatState).total }}
                 </div>
                 <q-tooltip :delay="1000">
-                  <TokenUsage :message="message" />
+                  <TokenUsage :task="task" />
                 </q-tooltip>
               </div>
             </div>
@@ -78,7 +78,7 @@
               class="col-auto q-gutter-xs row justify-start items-stretch"
             >
               <q-separator
-                v-if="message.debugging?.aiResponse?.usage"
+                v-if="task.debugging?.aiResponse?.usage"
                 vertical
                 class="q-my-xs"
               />
@@ -89,7 +89,7 @@
                 outline
                 icon="alt_route"
                 dense
-                @click="state.chatState.selectedTaskId = message.id"
+                @click="state.chatState.selectedTaskId = task.id"
               >
                 <q-tooltip :delay="1000"
                   >Start alternative conversation from here</q-tooltip
@@ -101,7 +101,7 @@
                 icon="code"
                 dense
                 size="sm"
-                @click="toggleMessageDebug(message.id)"
+                @click="toggleMessageDebug(task.id)"
               >
                 <q-tooltip :delay="1000">Show message context</q-tooltip>
               </q-btn>
@@ -111,18 +111,18 @@
                 icon="edit"
                 dense
                 size="sm"
-                @click="editTask(message.id)"
+                @click="editTask(task.id)"
               >
                 <q-tooltip :delay="1000">Edit user Message</q-tooltip>
               </q-btn>
             </div>
             <q-slide-transition>
-              <div v-show="state.messageVisualization[message.id]">
+              <div v-show="state.messageVisualization[task.id]">
                 <q-separator />
                 <q-card-section class="text-subtitle2">
                   <div>Task data:</div>
                   <textarea
-                    :value="JSON.stringify(message, null, 2)"
+                    :value="JSON.stringify(task, null, 2)"
                     readonly
                     wrap="soft"
                     style="
