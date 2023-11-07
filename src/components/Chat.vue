@@ -40,7 +40,7 @@
                     task.status == 'Error' ? 'text-red' : 'text-green'
                   "
                 >
-                  <ToolWidget :task="task" />
+                  <ToolResultWidget :task="task" />
                 </q-expansion-item>
               </div>
               <q-markdown
@@ -185,7 +185,7 @@
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import { computed } from 'vue';
 import { useQuasar } from 'quasar';
-import ToolWidget from 'components/ToolWidget.vue';
+import ToolResultWidget from 'components/ToolResultWidget.vue';
 import { getApikey, estimateChatTokens } from 'src/modules/chat';
 import { taskChain } from 'src/modules/taskManager';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';

@@ -1,23 +1,23 @@
 <template>
-  <q-list dense bordered v-if="selectedTool">
-    <div v-for="(param, paramName) in parameters" :key="paramName">
-      <q-input
-        v-model="parameters[paramName]"
-        :label="paramName"
-        filled
-        type="textarea"
-        @input="updateTool"
-      />
-    </div>
-    <q-btn class="q-ma-md" label="Execute" />
+  <q-list dense separator bordered v-if="selectedTool">
     <q-item>
-      <q-item-label class="text-bold"> result: </q-item-label>
-      <q-item-label>
-        <pre>
+      <q-item-section>
+        <q-item-label> arguments (yaml): </q-item-label>
+        <q-item-label caption><pre>{{
+          dump(task.context?.function?.arguments)
+        }}</pre></q-item-label>
+      </q-item-section>
+    </q-item>
+    <q-item>
+      <q-item-section>
+        <q-item-label> result (yaml): </q-item-label>
+        <q-item-label caption>
+          <pre>
       {{ dump(task.result) }}
       </pre
-        >
-      </q-item-label>
+          >
+        </q-item-label>
+      </q-item-section>
     </q-item>
   </q-list>
   <div v-else>

@@ -299,6 +299,46 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
   return openAIConversation;
 }
 
+function addTask2Tree(
+  task: {
+    role: LLMTask['role'];
+    content?: LLMTask['content'];
+    context?: LLMTask['context'];
+  },
+  parent: LLMTask,
+  chatState: ChatStateType,
+  execute = true
+) {
+  const newTask: LLMTask = {
+    role: task.role,
+    parentID: parent.id,
+    content: task.content || null,
+    status: 'Open',
+    childrenIDs: [],
+    debugging: {},
+    id: uuidv1(),
+    context: task.context,
+  };
+
+  if (task.context) {
+    if (task.role == 'function') {
+      newTask.authorId = task.context?.function?.name;
+    }
+  }
+
+  console.log('create new Task:', newTask.id);
+
+  // connect task to task tree
+  chatState.Tasks[newTask.id] = newTask;
+  parent.childrenIDs.push(newTask.id);
+  // Push the new function task to processTasksQueue
+  if (execute) {
+    processTasksQueue.push(chatState.Tasks[newTask.id]);
+  }
+  chatState.selectedTaskId = newTask.id;
+  return newTask.id;
+}
+
 // return the last task that was created in the chain.
 function createNewTasksFromChatResponse(
   response: ChatCompletionResponse,
@@ -354,29 +394,21 @@ function createNewTasksFromChatResponse(
         type: 'FunctionCall',
         functionCallDetails: func,
       };
-      // Create a new task for the function call
-      const funcTask: LLMTask = {
-        role: 'function',
-        parentID: newResponseTask.id,
-        content: null,
-        status: 'Open',
-        childrenIDs: [],
-        debugging: {},
-        id: uuidv1(),
-        context: {
-          function: {
-            name: func.name,
-            arguments: funcArguments,
+      const funcTaskid = addTask2Tree(
+        {
+          role: 'function',
+          content: null,
+          context: {
+            function: {
+              name: func.name,
+              arguments: funcArguments,
+            },
           },
         },
-        authorId: func.name,
-      };
-      chatState.Tasks[funcTask.id] = funcTask;
-      newResponseTask.childrenIDs.push(funcTask.id);
-      // Push the new function task to processTasksQueue
-      processTasksQueue.push(chatState.Tasks[funcTask.id]);
-      chatState.selectedTaskId = funcTask.id;
-      return chatState.Tasks[funcTask.id];
+        newResponseTask,
+        chatState
+      );
+      return chatState.Tasks[funcTaskid];
     }
   }
 }
