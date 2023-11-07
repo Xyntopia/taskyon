@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-type SeleniumStatus = {
+type SeleniumState = {
   value: {
     ready: boolean;
     nodes: Array<{
@@ -13,8 +13,8 @@ type SeleniumStatus = {
   };
 };
 
-async function checkStatus(): Promise<string | null> {
-  const response = await axios.get<SeleniumStatus>(`${seleniumHubUrl}/status`, {
+async function checkState(): Promise<string | null> {
+  const response = await axios.get<SeleniumState>(`${seleniumHubUrl}/status`, {
     headers: {
       'Content-Type': 'application/json;charset=UTF-8',
       Accept: 'application/json',
@@ -39,7 +39,7 @@ async function checkStatus(): Promise<string | null> {
 const seleniumHubUrl = 'http://localhost:4444';
 
 async function createSession() {
-  const existingSessionId = await checkStatus();
+  const existingSessionId = await checkState();
   if (existingSessionId) {
     return existingSessionId; // use existing sessionId
   }
@@ -110,11 +110,11 @@ async function fetchPageContent(sessionId: string) {
   return pageSourceResponse.data.value;
 }
 
-type toolStatusType = 'available' | 'starting' | 'unavailable' | 'error';
+type toolStateType = 'available' | 'starting' | 'unavailable' | 'error';
 
 export const seleniumBrowser = {
-  status: () => {
-    return 'available' as toolStatusType;
+  state: () => {
+    return 'available' as toolStateType;
   },
   function: (async ({ url }: { url: string }) => {
     console.log(`Browsing to ${url}...`);

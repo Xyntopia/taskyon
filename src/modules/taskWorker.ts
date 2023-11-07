@@ -8,7 +8,7 @@ import { LLMTask } from './types';
 
 export async function processUserTask(task: LLMTask, chatState: ChatStateType) {
   await processOpenAIConversation(task, chatState);
-  task.status = 'Completed';
+  task.state = 'Completed';
 }
 // Function to process function tasks
 
@@ -19,12 +19,12 @@ export async function processFunctionTask(
   if (task.context?.function) {
     const func = task.context.function;
     console.log(`Calling function ${func.name}`);
-    task.status = 'In Progress';
-    const { result, status } = await handleFunctionExecution(func);
+    task.state = 'In Progress';
+    const { result, state } = await handleFunctionExecution(func);
     task.result = result;
     task.allowedTools = Object.keys(tools);
     await processOpenAIConversation(task, chatState);
-    task.status = status;
+    task.state = state;
   }
 }
 async function taskWorker(chatState: ChatStateType) {
@@ -32,7 +32,7 @@ async function taskWorker(chatState: ChatStateType) {
   while (true) {
     console.log('waiting for next task!');
     const task = await processTasksQueue.pop();
-    task.status = 'In Progress';
+    task.state = 'In Progress';
     console.log('processing task:', task);
     try {
       if (task.role == 'user') {
@@ -41,10 +41,10 @@ async function taskWorker(chatState: ChatStateType) {
         await processFunctionTask(task, chatState);
       } else {
         console.log("We don't know what to do with this task:", task);
-        task.status = 'Error';
+        task.state = 'Error';
       }
     } catch (error) {
-      task.status = 'Error';
+      task.state = 'Error';
       task.debugging = { error };
       console.error('Error processing task:', error);
     }

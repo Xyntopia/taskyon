@@ -4,7 +4,7 @@ import { seleniumBrowser } from './seleniumTool';
 
 export const vectorStore = useVectorStore();
 
-type toolStatusType = 'available' | 'starting' | 'unavailable' | 'error';
+type toolStateType = 'available' | 'starting' | 'unavailable' | 'error';
 export type FunctionArguments = Record<string, unknown> | string | number;
 
 export type FunctionCall = {
@@ -13,10 +13,8 @@ export type FunctionCall = {
   arguments: FunctionArguments;
 };
 
-
-
 export interface Tool {
-  status: () => Promise<toolStatusType> | toolStatusType;
+  state: () => Promise<toolStateType> | toolStateType;
   // Description of what the function does (optional).
   description: string;
   // The name of the function to be called.
@@ -38,7 +36,7 @@ export const tools: ToolCollection = {};
 tools.seleniumBrowser = seleniumBrowser;
 
 tools.localVectorStoreSearch = {
-  status: () => 'available',
+  state: () => 'available',
   function: async ({ searchTerm }: { searchTerm: string }) => {
     const k = 3;
     console.log(`Searching for ${searchTerm}`);
@@ -64,7 +62,7 @@ tools.localVectorStoreSearch = {
 };
 
 tools.executePythonScript = {
-  status: () => 'available',
+  state: () => 'available',
   function: async ({ pythonScript }: { pythonScript: string }) => {
     console.log('execute python code...');
     return await execute(pythonScript);
@@ -92,8 +90,8 @@ function inspectToolCode(toolName: string) {
   const tool = tools[toolName];
   if (tool) {
     const functionCode = tool.function.toString();
-    const statusCode = tool.status.toString();
-    return `Tool Name: ${toolName}\nFunction Code:\n${functionCode}\n\nStatus Code:\n${statusCode}`;
+    const stateCode = tool.state.toString();
+    return `Tool Name: ${toolName}\nFunction Code:\n${functionCode}\n\nState Code:\n${stateCode}`;
   } else {
     return `Tool ${toolName} not found.`;
   }
@@ -113,11 +111,11 @@ function extractToolExample(toolName: string) {
   const tool = tools[toolName];
   if (tool) {
     const functionSignature = getFunctionSignature(tool.function);
-    const statusSignature = getFunctionSignature(tool.status);
+    const stateSignature = getFunctionSignature(tool.state);
     const toolExample = {
       ...tool,
       function: functionSignature,
-      status: statusSignature,
+      state: stateSignature,
     };
     return JSON.stringify(toolExample, null, 2); // Pretty print the JSON string
   } else {
@@ -126,7 +124,7 @@ function extractToolExample(toolName: string) {
 }
 
 tools.getToolExample = {
-  status: () => 'available',
+  state: () => 'available',
   function: ({
     toolName,
     viewSource,

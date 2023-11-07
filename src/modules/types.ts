@@ -1,4 +1,4 @@
-import { TaskStatus } from './taskManager';
+import { TaskState } from './taskManager';
 import { FunctionCall } from './tools';
 
 export type OpenAIMessage = {
@@ -68,7 +68,7 @@ export interface TaskResult {
 export type LLMTask = {
   role: 'system' | 'user' | 'assistant' | 'function';
   content: string | null;
-  status: TaskStatus;
+  state: TaskState;
   context?: {
     message?: OpenAIMessage;
     function?: FunctionCall;

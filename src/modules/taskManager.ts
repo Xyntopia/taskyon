@@ -37,7 +37,12 @@ class AsyncQueue<T> {
 }
 
 export default AsyncQueue;
-export type TaskStatus = 'Open' | 'In Progress' | 'Completed' | 'Error';
+export type TaskState =
+  | 'Open'
+  | 'Queued'
+  | 'In Progress'
+  | 'Completed'
+  | 'Error';
 
 export const processTasksQueue = new AsyncQueue<LLMTask>();
 export const vectorStore = useVectorStore();
@@ -127,20 +132,20 @@ export function taskChain(lastTaskId: string, tasks: Record<string, LLMTask>) {
 // Helper function to handle function execution
 export async function handleFunctionExecution(
   func: FunctionCall
-): Promise<{ result: TaskResult; status: TaskStatus; }> {
+): Promise<{ result: TaskResult; state: TaskState }> {
   const allowedTools = Object.keys(tools);
   if (tools[func.name]) {
     let funcR: unknown = await tools[func.name].function(func.arguments);
     funcR = bigIntToString(funcR);
     const result: TaskResult = { type: 'FunctionResult', content: dump(funcR) };
-    return { result, status: 'Completed' };
+    return { result, state: 'Completed' };
   } else {
     const toolnames = JSON.stringify(allowedTools);
     const result: TaskResult = {
       type: 'FunctionResult',
       content: `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`,
     };
-    return { result, status: 'Error' };
+    return { result, state: 'Error' };
   }
 }
 

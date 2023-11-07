@@ -20,7 +20,7 @@
             ]"
           >
             <div class="col-auto row justify-begin q-gutter-xs">
-              <div v-if="task.status == 'Error'" class="col-auto">
+              <div v-if="task.state == 'Error'" class="col-auto">
                 <q-icon name="warning" color="warning" size="sm"
                   ><q-tooltip class="bg-warning">Error!</q-tooltip>
                 </q-icon>
@@ -37,7 +37,7 @@
                   icon="calculate"
                   :label="task.context?.function?.name"
                   :header-class="
-                    task.status == 'Error' ? 'text-red' : 'text-green'
+                    task.state == 'Error' ? 'text-red' : 'text-green'
                   "
                 >
                   <ToolResultWidget :task="task" />
@@ -142,7 +142,7 @@
               ['Open', 'In Progress'].some((subs) =>
                 subs.includes(
                   state.chatState.Tasks[state.chatState.selectedTaskId || '']
-                    ?.status
+                    ?.state
                 )
               )
             "

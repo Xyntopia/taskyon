@@ -248,7 +248,7 @@ export function sendMessage(
 
   const currentTask: LLMTask = {
     role: 'user',
-    status: 'Open',
+    state: 'Open',
     content: message,
     debugging: {},
     id: uuidv1(),
@@ -304,6 +304,9 @@ function addTask2Tree(
     role: LLMTask['role'];
     content?: LLMTask['content'];
     context?: LLMTask['context'];
+    state?: LLMTask['state'];
+    id?: LLMTask['id'];
+    debugging?: LLMTask['debugging'];
   },
   parent: LLMTask,
   chatState: ChatStateType,
@@ -313,13 +316,12 @@ function addTask2Tree(
     role: task.role,
     parentID: parent.id,
     content: task.content || null,
-    status: 'Open',
+    state: task.state || 'Open',
     childrenIDs: [],
-    debugging: {},
-    id: uuidv1(),
+    debugging: task.debugging || {},
+    id: task.id || uuidv1(),
     context: task.context,
   };
-
   if (task.context) {
     if (task.role == 'function') {
       newTask.authorId = task.context?.function?.name;
@@ -334,6 +336,7 @@ function addTask2Tree(
   // Push the new function task to processTasksQueue
   if (execute) {
     processTasksQueue.push(chatState.Tasks[newTask.id]);
+    chatState.Tasks[newTask.id].state = 'Queued';
   }
   chatState.selectedTaskId = newTask.id;
   return newTask.id;
@@ -351,29 +354,30 @@ function createNewTasksFromChatResponse(
     // put AI response in our chain as a new, completed task...
     // TODO: theoretically the user "viewing" the task would be its completion..
     //       so we could create it before sending it and then wait for AI to respond...
-    const newResponseTask: LLMTask = {
-      status: 'Completed',
-      parentID: parentTask.id,
-      role: choice.message.role,
-      content: choice.message.content,
-      childrenIDs: [],
-      debugging: {
-        usedTokens: response.usage?.total_tokens,
-        inference_costs: response.usage?.inference_costs,
-        aiResponse: response,
+    const newResponseTaskId = addTask2Tree(
+      {
+        state: 'Completed',
+        role: choice.message.role,
+        content: choice.message.content,
+        debugging: {
+          usedTokens: response.usage?.total_tokens,
+          inference_costs: response.usage?.inference_costs,
+          aiResponse: response,
+        },
+        id: response.id,
       },
-      id: response.id,
-    };
-    chatState.Tasks[response.id] = newResponseTask;
-    chatState.Tasks[parentTask.id].childrenIDs.push(newResponseTask.id);
+      parentTask,
+      chatState,
+      false
+    );
 
     // and push newly created tasks to our task list. they were already processed, so we don't need to
     // add them to our task queue.
     if (choice.message.content) {
       // we are using the reference to the object here in order to preserve potential proxys
       // introduced by things like vue :).
-      chatState.selectedTaskId = chatState.Tasks[response.id].id;
-      return chatState.Tasks[response.id];
+      chatState.selectedTaskId = chatState.Tasks[newResponseTaskId].id;
+      return chatState.Tasks[newResponseTaskId];
     } else if (
       choice.finish_reason === 'function_call' &&
       choice.message.function_call
@@ -390,7 +394,7 @@ function createNewTasksFromChatResponse(
         funcArguments = func.arguments;
       }
 
-      newResponseTask.result = {
+      chatState.Tasks[newResponseTaskId].result = {
         type: 'FunctionCall',
         functionCallDetails: func,
       };
@@ -405,7 +409,7 @@ function createNewTasksFromChatResponse(
             },
           },
         },
-        newResponseTask,
+        chatState.Tasks[newResponseTaskId],
         chatState
       );
       return chatState.Tasks[funcTaskid];
