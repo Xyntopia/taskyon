@@ -1,112 +1,132 @@
 <template>
   <!--Create new task area-->
   <q-card-section>
-    <q-input
-      autogrow
-      filled
-      color="secondary"
-      v-model="state.userInput"
-      :hint="`Estimated number of tokens: ${estimatedTokens}`"
-      label="Type your message..."
-      @keyup="checkForShiftEnter"
-    >
-      <template v-slot:append>
-        <q-icon
-          v-if="state.userInput !== ''"
-          name="close"
-          @click="state.userInput = ''"
-          class="cursor-pointer"
-        />
-        <q-btn flat dense stretch icon="send" @click="sendMessageWrapper" />
-      </template>
-    </q-input>
-    <div class="row items-center">
-      <q-btn
-        class="q-ma-md"
-        label="toggle all tools"
-        @click="toggleSelectedTools"
-      />
-      <q-option-group
-        class="q-ma-md"
-        v-model="state.selectedTools"
-        :options="
-          Object.keys(tools).map((name) => ({
-            label: name,
-            value: name,
-            description: tools[name].description,
-          }))
-        "
-        color="secondary"
-        type="checkbox"
-        inline
-        dense
-      >
-        <template v-slot:label="opt">
+    <q-list dense separator>
+      <q-item>
+        <q-item-section>
+          <q-input
+            autogrow
+            filled
+            color="secondary"
+            v-model="state.userInput"
+            :hint="`Estimated number of tokens: ${estimatedTokens}`"
+            label="Type your message..."
+            @keyup="checkForShiftEnter"
+          >
+            <template v-slot:append>
+              <q-icon
+                v-if="state.userInput !== ''"
+                name="close"
+                @click="state.userInput = ''"
+                class="cursor-pointer"
+              />
+              <q-btn
+                flat
+                dense
+                stretch
+                icon="send"
+                @click="sendMessageWrapper"
+              />
+            </template>
+          </q-input>
+        </q-item-section>
+      </q-item>
+      <q-item>
+        <q-item-section>
           <div>
-            {{ opt.label }}
+            <q-btn
+              class="q-ma-md"
+              label="toggle allowed tools"
+              @click="toggleSelectedTools"
+            />
+            <q-option-group
+              class="q-ma-md"
+              v-model="state.selectedTools"
+              :options="
+                Object.keys(tools).map((name) => ({
+                  label: name,
+                  value: name,
+                  description: tools[name].description,
+                }))
+              "
+              color="secondary"
+              type="checkbox"
+              inline
+              dense
+            >
+              <template v-slot:label="opt">
+                <div>
+                  {{ opt.label }}
+                </div>
+                <q-tooltip anchor="bottom middle" style="max-width: 500px">{{
+                  opt.description
+                }}</q-tooltip>
+              </template></q-option-group
+            >
           </div>
-          <q-tooltip anchor="bottom middle" style="max-width: 500px">{{
-            opt.description
-          }}</q-tooltip>
-        </template></q-option-group
-      >
-    </div>
-    <q-select
-      v-if="state.chatState.baseURL == getBackendUrls('openai')"
-      class="q-pt-xs"
-      filled
-      bottom-slots
-      dense
-      label="Select Openrouter.ai LLM"
-      icon="smart_toy"
-      :options="modelOptions.openrouter"
-      emit-value
-      v-model="state.chatState.openAIModel"
-    >
-      <template v-slot:hint>
-        For a list of supported models go here:
-        <a href="https://platform.openai.com/docs/models" target="_blank"
-          >https://platform.openai.com/docs/models</a
-        >
-      </template>
-    </q-select>
-    <q-select
-      v-else
-      class="q-pt-xs"
-      filled
-      dense
-      bottom-slots
-      label="Select LLM Model for answering/solving the task."
-      icon="smart_toy"
-      :options="modelOptions.openai"
-      emit-value
-      v-model="state.chatState.openrouterAIModel"
-    >
-      <template v-slot:hint>
-        For a list of supported models go here:
-        <a href="https://openrouter.ai/docs#models" target="_blank"
-          >https://openrouter.ai/docs#models</a
-        >
-      </template>
-      <template v-slot:after>
-        <div style="font-size: 0.5em">
-          <div>
-            prompt:
-            {{
-              modelLookUp.openrouter[state.chatState.openrouterAIModel]?.pricing
-                ?.prompt
-            }}
-          </div>
-          <div>
-            completion:
-            {{
-              modelLookUp.openrouter[state.chatState.openrouterAIModel]?.pricing
-                ?.completion
-            }}
-          </div>
-        </div>
-      </template>
-    </q-select>
+        </q-item-section>
+      </q-item>
+      <q-item>
+        <q-item-section>
+          <q-select
+            v-if="state.chatState.baseURL == getBackendUrls('openai')"
+            class="q-pt-xs"
+            filled
+            bottom-slots
+            dense
+            label="Select Openrouter.ai LLM"
+            icon="smart_toy"
+            :options="modelOptions.openrouter"
+            emit-value
+            v-model="state.chatState.openAIModel"
+          >
+            <template v-slot:hint>
+              For a list of supported models go here:
+              <a href="https://platform.openai.com/docs/models" target="_blank"
+                >https://platform.openai.com/docs/models</a
+              >
+            </template>
+          </q-select>
+          <q-select
+            v-else
+            class="q-pt-xs"
+            filled
+            dense
+            bottom-slots
+            label="Select LLM Model for answering/solving the task."
+            icon="smart_toy"
+            :options="modelOptions.openai"
+            emit-value
+            v-model="state.chatState.openrouterAIModel"
+          >
+            <template v-slot:hint>
+              For a list of supported models go here:
+              <a href="https://openrouter.ai/docs#models" target="_blank"
+                >https://openrouter.ai/docs#models</a
+              >
+            </template>
+            <template v-slot:after>
+              <div style="font-size: 0.5em">
+                <div>
+                  prompt:
+                  {{
+                    modelLookUp.openrouter[state.chatState.openrouterAIModel]
+                      ?.pricing?.prompt
+                  }}
+                </div>
+                <div>
+                  completion:
+                  {{
+                    modelLookUp.openrouter[state.chatState.openrouterAIModel]
+                      ?.pricing?.completion
+                  }}
+                </div>
+              </div>
+            </template>
+          </q-select>
+        </q-item-section>
+      </q-item>
+    </q-list>
   </q-card-section>
 </template>
 
