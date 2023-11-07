@@ -113,7 +113,7 @@
                 size="sm"
                 @click="editTask(task.id)"
               >
-                <q-tooltip :delay="1000">Edit user Message</q-tooltip>
+                <q-tooltip :delay="1000">Edit Task/Message</q-tooltip>
               </q-btn>
             </div>
             <q-slide-transition>

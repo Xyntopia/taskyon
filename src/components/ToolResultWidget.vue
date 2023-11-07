@@ -3,9 +3,9 @@
     <q-item>
       <q-item-section>
         <q-item-label> arguments (yaml): </q-item-label>
-        <q-item-label caption><pre>{{
-          dump(task.context?.function?.arguments)
-        }}</pre></q-item-label>
+        <q-item-label caption>
+          <pre>{{ dump(task.context?.function?.arguments) }}</pre>
+        </q-item-label>
       </q-item-section>
     </q-item>
     <q-item>

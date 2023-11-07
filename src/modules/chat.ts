@@ -246,32 +246,18 @@ export function sendMessage(
   console.log('send message');
   if (message.trim() === '') return;
 
-  const currentTask: LLMTask = {
-    role: 'user',
-    state: 'Open',
-    content: message,
-    debugging: {},
-    id: uuidv1(),
-    childrenIDs: [],
-    allowedTools: functionNames,
-  };
-
-  if (chatState.selectedTaskId) {
-    currentTask.parentID = chatState.selectedTaskId;
-    chatState.Tasks[chatState.selectedTaskId].childrenIDs.push(currentTask.id);
-  }
-
-  // Push it to the "overall Tasks List"
-  chatState.Tasks[currentTask.id] = currentTask;
-
-  // make it the acive task!
-  chatState.selectedTaskId = currentTask.id;
-
-  // Push the new task to processTasksQueue
-  // we are using the reference from chatState here isntead of currentTask,
-  // because we want to preserve reactivity from librares such as react
-  // or vue. And this way we can use the reactive object!
-  processTasksQueue.push(chatState.Tasks[currentTask.id]);
+  addTask2Tree(
+    {
+      role: 'user',
+      content: message.trim(),
+      debugging: {},
+      id: uuidv1(),
+      allowedTools: functionNames,
+    },
+    chatState.Tasks[chatState.selectedTaskId || ''],
+    chatState,
+    true
+  );
 }
 
 function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
@@ -306,21 +292,23 @@ function addTask2Tree(
     context?: LLMTask['context'];
     state?: LLMTask['state'];
     id?: LLMTask['id'];
+    allowedTools?: LLMTask['allowedTools'];
     debugging?: LLMTask['debugging'];
   },
-  parent: LLMTask,
+  parent: LLMTask | undefined,
   chatState: ChatStateType,
   execute = true
 ) {
   const newTask: LLMTask = {
     role: task.role,
-    parentID: parent.id,
+    parentID: parent?.id,
     content: task.content || null,
     state: task.state || 'Open',
     childrenIDs: [],
     debugging: task.debugging || {},
     id: task.id || uuidv1(),
     context: task.context,
+    allowedTools: task.allowedTools || parent?.allowedTools,
   };
   if (task.context) {
     if (task.role == 'function') {
@@ -332,7 +320,9 @@ function addTask2Tree(
 
   // connect task to task tree
   chatState.Tasks[newTask.id] = newTask;
-  parent.childrenIDs.push(newTask.id);
+  if (parent) {
+    parent.childrenIDs.push(newTask.id);
+  }
   // Push the new function task to processTasksQueue
   if (execute) {
     processTasksQueue.push(chatState.Tasks[newTask.id]);
