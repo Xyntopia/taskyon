@@ -1,1 +1,428 @@
-{"data":[{"id":"openai/gpt-3.5-turbo","name":"OpenAI: GPT-3.5 Turbo","pricing":{"prompt":"0.0000015","completion":"0.000002","discount":0},"context_length":4095,"architecture":{"tokenizer":"GPT","instruct_type":null},"top_provider":{"max_completion_tokens":4095}},{"id":"openai/gpt-3.5-turbo-0301","name":"OpenAI: GPT-3.5 Turbo (older v0301)","pricing":{"prompt":"0.0000015","completion":"0.000002","discount":0},"context_length":4095,"architecture":{"tokenizer":"GPT","instruct_type":null},"top_provider":{"max_completion_tokens":4095}},{"id":"openai/gpt-3.5-turbo-16k","name":"OpenAI: GPT-3.5 Turbo 16k","pricing":{"prompt":"0.000003","completion":"0.000004","discount":0},"context_length":16383,"architecture":{"tokenizer":"GPT","instruct_type":null},"top_provider":{"max_completion_tokens":16383}},{"id":"openai/gpt-4","name":"OpenAI: GPT-4","pricing":{"prompt":"0.00003","completion":"0.00006","discount":0},"context_length":8191,"architecture":{"tokenizer":"GPT","instruct_type":null},"top_provider":{"max_completion_tokens":8191}},{"id":"openai/gpt-4-0314","name":"OpenAI: GPT-4 (older v0314)","pricing":{"prompt":"0.00003","completion":"0.00006","discount":0},"context_length":8191,"architecture":{"tokenizer":"GPT","instruct_type":null},"top_provider":{"max_completion_tokens":8191}},{"id":"openai/gpt-4-32k","name":"OpenAI: GPT-4 32k","pricing":{"prompt":"0.00006","completion":"0.00012","discount":0},"context_length":32767,"architecture":{"tokenizer":"GPT","instruct_type":null},"top_provider":{"max_completion_tokens":32767}},{"id":"openai/gpt-4-32k-0314","name":"OpenAI: GPT-4 32k (older v0314)","pricing":{"prompt":"0.00006","completion":"0.00012","discount":0},"context_length":32767,"architecture":{"tokenizer":"GPT","instruct_type":null},"top_provider":{"max_completion_tokens":32767}},{"id":"openai/text-davinci-002","name":"OpenAI: Davinci 2","pricing":{"prompt":"0.00002","completion":"0.00002","discount":0},"context_length":4095,"architecture":{"tokenizer":"GPT","instruct_type":"gpt"},"top_provider":{"max_completion_tokens":4095}},{"id":"openai/gpt-3.5-turbo-instruct","name":"OpenAI: GPT-3.5 Turbo Instruct","pricing":{"prompt":"0.0000015","completion":"0.000002","discount":0},"context_length":4095,"architecture":{"tokenizer":"GPT","instruct_type":"gpt"},"top_provider":{"max_completion_tokens":4095}},{"id":"google/palm-2-chat-bison","name":"Google: PaLM 2 Chat","pricing":{"prompt":"5e-7","completion":"5e-7","discount":0},"context_length":9216,"architecture":{"tokenizer":"PaLM","instruct_type":null},"top_provider":{"max_completion_tokens":1024}},{"id":"google/palm-2-codechat-bison","name":"Google: PaLM 2 Code Chat","pricing":{"prompt":"5e-7","completion":"5e-7","discount":0},"context_length":7168,"architecture":{"tokenizer":"PaLM","instruct_type":null},"top_provider":{"max_completion_tokens":1024}},{"id":"google/palm-2-chat-bison-32k","name":"Google: PaLM 2 Chat 32k","pricing":{"prompt":"5e-7","completion":"5e-7","discount":0},"context_length":32000,"architecture":{"tokenizer":"PaLM","instruct_type":null},"top_provider":{"max_completion_tokens":8192}},{"id":"google/palm-2-codechat-bison-32k","name":"Google: PaLM 2 Code Chat 32k","pricing":{"prompt":"5e-7","completion":"5e-7","discount":0},"context_length":32000,"architecture":{"tokenizer":"PaLM","instruct_type":null},"top_provider":{"max_completion_tokens":8192}},{"id":"meta-llama/llama-2-13b-chat","name":"Meta: Llama v2 13B Chat (beta)","pricing":{"prompt":"2.345e-7","completion":"2.345e-7","discount":0},"context_length":4096,"architecture":{"tokenizer":"Llama2","instruct_type":"llama2"},"top_provider":{"max_completion_tokens":4096}},{"id":"meta-llama/llama-2-70b-chat","name":"Meta: Llama v2 70B Chat (beta)","pricing":{"prompt":"7e-7","completion":"9.5e-7","discount":0},"context_length":4096,"architecture":{"tokenizer":"Llama2","instruct_type":"llama2"},"top_provider":{"max_completion_tokens":4096}},{"id":"nousresearch/nous-hermes-llama2-13b","name":"Nous: Hermes Llama2 13B (beta)","pricing":{"prompt":"2e-7","completion":"2e-7","discount":0},"context_length":4096,"architecture":{"tokenizer":"Llama2","instruct_type":"alpaca"},"top_provider":{"max_completion_tokens":4096}},{"id":"nousresearch/nous-hermes-llama2-70b","name":"Nous: Hermes Llama2 70B (beta)","pricing":{"prompt":"0.000001","completion":"0.000001","discount":0},"context_length":4096,"architecture":{"tokenizer":"Llama2","instruct_type":"alpaca"},"top_provider":{"max_completion_tokens":4096}},{"id":"meta-llama/codellama-34b-instruct","name":"Meta: CodeLlama 34B Instruct (beta)","pricing":{"prompt":"4e-7","completion":"4e-7","discount":0},"context_length":8192,"architecture":{"tokenizer":"Llama2","instruct_type":"llama2"},"top_provider":{"max_completion_tokens":8192}},{"id":"phind/phind-codellama-34b","name":"Phind: CodeLlama 34B v2 (beta)","pricing":{"prompt":"4e-7","completion":"4e-7","discount":0},"context_length":4096,"architecture":{"tokenizer":"Llama2","instruct_type":"alpaca"},"top_provider":{"max_completion_tokens":4096}},{"id":"jondurbin/airoboros-l2-70b","name":"Airoboros L2 70B (beta)","pricing":{"prompt":"7e-7","completion":"9.5e-7","discount":0},"context_length":4096,"architecture":{"tokenizer":"Llama2","instruct_type":"airoboros"},"top_provider":{"max_completion_tokens":4096}},{"id":"migtissera/synthia-70b","name":"Synthia 70B (beta)","pricing":{"prompt":"0.000009375","completion":"0.000009375","discount":0},"context_length":8192,"architecture":{"tokenizer":"Llama2","instruct_type":"airoboros"},"top_provider":{"max_completion_tokens":300}},{"id":"mistralai/mistral-7b-instruct","name":"Mistral 7B Instruct (beta)","pricing":{"prompt":"0","completion":"0","discount":0},"context_length":8192,"architecture":{"tokenizer":"Mistral","instruct_type":"llama2"},"top_provider":{"max_completion_tokens":8192}},{"id":"open-orca/mistral-7b-openorca","name":"Mistral OpenOrca 7B (beta)","pricing":{"prompt":"2e-7","completion":"2e-7","discount":0},"context_length":8192,"architecture":{"tokenizer":"Mistral","instruct_type":"gpt"},"top_provider":{"max_completion_tokens":8192}},{"id":"teknium/openhermes-2-mistral-7b","name":"Mistral OpenHermes 7B (beta)","pricing":{"prompt":"2e-7","completion":"2e-7","discount":0},"context_length":4096,"architecture":{"tokenizer":"Mistral","instruct_type":"gpt"},"top_provider":{"max_completion_tokens":4096}},{"id":"pygmalionai/mythalion-13b","name":"Pygmalion: Mythalion 13B (beta)","pricing":{"prompt":"0.000001125","completion":"0.000001125","discount":0},"context_length":8192,"architecture":{"tokenizer":"Llama2","instruct_type":"alpaca"},"top_provider":{"max_completion_tokens":250}},{"id":"undi95/remm-slerp-l2-13b","name":"ReMM SLERP L2 13B (beta)","pricing":{"prompt":"0.000001125","completion":"0.000001125","discount":0},"context_length":6144,"architecture":{"tokenizer":"Llama2","instruct_type":"alpaca"},"top_provider":{"max_completion_tokens":250}},{"id":"gryphe/mythomax-l2-13b","name":"MythoMax L2 13B","pricing":{"prompt":"8e-7","completion":"8e-7","discount":0},"context_length":4096,"architecture":{"tokenizer":"Llama2","instruct_type":"alpaca"},"top_provider":{"max_completion_tokens":4096}},{"id":"xwin-lm/xwin-lm-70b","name":"Xwin 70B (beta)","pricing":{"prompt":"0.000009375","completion":"0.000009375","discount":0},"context_length":8192,"architecture":{"tokenizer":"Llama2","instruct_type":"airoboros"},"top_provider":{"max_completion_tokens":300}},{"id":"gryphe/mythomax-l2-13b-8k","name":"MythoMax L2 13B 8k (beta)","pricing":{"prompt":"0.000001125","completion":"0.000001125","discount":0},"context_length":8192,"architecture":{"tokenizer":"Llama2","instruct_type":"alpaca"},"top_provider":{"max_completion_tokens":300}},{"id":"huggingfaceh4/zephyr-7b-beta","name":"Hugging Face: Zephyr 7B (beta)","pricing":{"prompt":"0","completion":"0","discount":0},"context_length":4096,"architecture":{"tokenizer":"Mistral","instruct_type":"zephyr"},"top_provider":{"max_completion_tokens":4096}},{"id":"anthropic/claude-2","name":"Anthropic: Claude v2","pricing":{"prompt":"0.00001102","completion":"0.00003268","discount":0},"context_length":100000,"architecture":{"tokenizer":"Claude","instruct_type":"claude"},"top_provider":{"max_completion_tokens":100000}},{"id":"anthropic/claude-instant-v1","name":"Anthropic: Claude Instant v1","pricing":{"prompt":"0.00000163","completion":"0.00000551","discount":0},"context_length":100000,"architecture":{"tokenizer":"Claude","instruct_type":"claude"},"top_provider":{"max_completion_tokens":100000}},{"id":"anthropic/claude-v1","name":"Anthropic: Claude v1","pricing":{"prompt":"0.00001102","completion":"0.00003268","discount":0},"context_length":9000,"architecture":{"tokenizer":"Claude","instruct_type":"claude"},"top_provider":{"max_completion_tokens":9000}},{"id":"anthropic/claude-1.2","name":"Anthropic: Claude (older v1)","pricing":{"prompt":"0.00001102","completion":"0.00003268","discount":0},"context_length":9000,"architecture":{"tokenizer":"Claude","instruct_type":"claude"},"top_provider":{"max_completion_tokens":9000}},{"id":"anthropic/claude-instant-v1-100k","name":"Anthropic: Claude Instant 100k v1","pricing":{"prompt":"0.00000163","completion":"0.00000551","discount":0},"context_length":100000,"architecture":{"tokenizer":"Claude","instruct_type":"claude"},"top_provider":{"max_completion_tokens":100000}},{"id":"anthropic/claude-v1-100k","name":"Anthropic: Claude 100k v1","pricing":{"prompt":"0.00001102","completion":"0.00003268","discount":0},"context_length":100000,"architecture":{"tokenizer":"Claude","instruct_type":"claude"},"top_provider":{"max_completion_tokens":100000}},{"id":"anthropic/claude-instant-1.0","name":"Anthropic: Claude Instant (older v1)","pricing":{"prompt":"0.00000163","completion":"0.00000551","discount":0},"context_length":9000,"architecture":{"tokenizer":"Claude","instruct_type":"claude"},"top_provider":{"max_completion_tokens":9000}},{"id":"mancer/weaver","name":"Mancer: Weaver 12k (alpha)","pricing":{"prompt":"0.0000045","completion":"0.0000045","discount":0},"context_length":8000,"architecture":{"tokenizer":"Llama2","instruct_type":"alpaca"},"top_provider":{"max_completion_tokens":400}}]}
+{
+  "data": [
+    {
+      "id": "openai/gpt-3.5-turbo",
+      "name": "OpenAI: GPT-3.5 Turbo",
+      "pricing": {
+        "prompt": "0.000001",
+        "completion": "0.000002",
+        "discount": 0
+      },
+      "context_length": 4095,
+      "architecture": { "tokenizer": "GPT", "instruct_type": null },
+      "top_provider": { "max_completion_tokens": 4095 }
+    },
+    {
+      "id": "openai/gpt-3.5-turbo-1106",
+      "name": "OpenAI: GPT-3.5 Turbo 16k (preview)",
+      "pricing": {
+        "prompt": "0.000001",
+        "completion": "0.000002",
+        "discount": 0
+      },
+      "context_length": 16385,
+      "architecture": { "tokenizer": "GPT", "instruct_type": null },
+      "top_provider": { "max_completion_tokens": 4096 }
+    },
+    {
+      "id": "openai/gpt-3.5-turbo-0301",
+      "name": "OpenAI: GPT-3.5 Turbo (older v0301)",
+      "pricing": {
+        "prompt": "0.000001",
+        "completion": "0.000002",
+        "discount": 0
+      },
+      "context_length": 4095,
+      "architecture": { "tokenizer": "GPT", "instruct_type": null },
+      "top_provider": { "max_completion_tokens": 4095 }
+    },
+    {
+      "id": "openai/gpt-3.5-turbo-16k",
+      "name": "OpenAI: GPT-3.5 Turbo 16k",
+      "pricing": {
+        "prompt": "0.000003",
+        "completion": "0.000004",
+        "discount": 0
+      },
+      "context_length": 16385,
+      "architecture": { "tokenizer": "GPT", "instruct_type": null },
+      "top_provider": { "max_completion_tokens": 16385 }
+    },
+    {
+      "id": "openai/gpt-4-1106-preview",
+      "name": "OpenAI: GPT-4 Turbo (preview)",
+      "pricing": {
+        "prompt": "0.00001",
+        "completion": "0.00003",
+        "discount": 0
+      },
+      "context_length": 128000,
+      "architecture": { "tokenizer": "GPT", "instruct_type": null },
+      "top_provider": { "max_completion_tokens": 4096 }
+    },
+    {
+      "id": "openai/gpt-4",
+      "name": "OpenAI: GPT-4",
+      "pricing": {
+        "prompt": "0.00003",
+        "completion": "0.00006",
+        "discount": 0
+      },
+      "context_length": 8191,
+      "architecture": { "tokenizer": "GPT", "instruct_type": null },
+      "top_provider": { "max_completion_tokens": 8191 }
+    },
+    {
+      "id": "openai/gpt-4-0314",
+      "name": "OpenAI: GPT-4 (older v0314)",
+      "pricing": {
+        "prompt": "0.00003",
+        "completion": "0.00006",
+        "discount": 0
+      },
+      "context_length": 8191,
+      "architecture": { "tokenizer": "GPT", "instruct_type": null },
+      "top_provider": { "max_completion_tokens": 8191 }
+    },
+    {
+      "id": "openai/gpt-4-32k",
+      "name": "OpenAI: GPT-4 32k",
+      "pricing": {
+        "prompt": "0.00006",
+        "completion": "0.00012",
+        "discount": 0
+      },
+      "context_length": 32767,
+      "architecture": { "tokenizer": "GPT", "instruct_type": null },
+      "top_provider": { "max_completion_tokens": 32767 }
+    },
+    {
+      "id": "openai/gpt-4-32k-0314",
+      "name": "OpenAI: GPT-4 32k (older v0314)",
+      "pricing": {
+        "prompt": "0.00006",
+        "completion": "0.00012",
+        "discount": 0
+      },
+      "context_length": 32767,
+      "architecture": { "tokenizer": "GPT", "instruct_type": null },
+      "top_provider": { "max_completion_tokens": 32767 }
+    },
+    {
+      "id": "openai/text-davinci-002",
+      "name": "OpenAI: Davinci 2",
+      "pricing": {
+        "prompt": "0.00002",
+        "completion": "0.00002",
+        "discount": 0
+      },
+      "context_length": 4095,
+      "architecture": { "tokenizer": "GPT", "instruct_type": "gpt" },
+      "top_provider": { "max_completion_tokens": 4095 }
+    },
+    {
+      "id": "openai/gpt-3.5-turbo-instruct",
+      "name": "OpenAI: GPT-3.5 Turbo Instruct",
+      "pricing": {
+        "prompt": "0.0000015",
+        "completion": "0.000002",
+        "discount": 0
+      },
+      "context_length": 4095,
+      "architecture": { "tokenizer": "GPT", "instruct_type": "gpt" },
+      "top_provider": { "max_completion_tokens": 4095 }
+    },
+    {
+      "id": "google/palm-2-chat-bison",
+      "name": "Google: PaLM 2 Chat",
+      "pricing": { "prompt": "5e-7", "completion": "5e-7", "discount": 0 },
+      "context_length": 9216,
+      "architecture": { "tokenizer": "PaLM", "instruct_type": null },
+      "top_provider": { "max_completion_tokens": 1024 }
+    },
+    {
+      "id": "google/palm-2-codechat-bison",
+      "name": "Google: PaLM 2 Code Chat",
+      "pricing": { "prompt": "5e-7", "completion": "5e-7", "discount": 0 },
+      "context_length": 7168,
+      "architecture": { "tokenizer": "PaLM", "instruct_type": null },
+      "top_provider": { "max_completion_tokens": 1024 }
+    },
+    {
+      "id": "google/palm-2-chat-bison-32k",
+      "name": "Google: PaLM 2 Chat 32k",
+      "pricing": { "prompt": "5e-7", "completion": "5e-7", "discount": 0 },
+      "context_length": 32000,
+      "architecture": { "tokenizer": "PaLM", "instruct_type": null },
+      "top_provider": { "max_completion_tokens": 8192 }
+    },
+    {
+      "id": "google/palm-2-codechat-bison-32k",
+      "name": "Google: PaLM 2 Code Chat 32k",
+      "pricing": { "prompt": "5e-7", "completion": "5e-7", "discount": 0 },
+      "context_length": 32000,
+      "architecture": { "tokenizer": "PaLM", "instruct_type": null },
+      "top_provider": { "max_completion_tokens": 8192 }
+    },
+    {
+      "id": "meta-llama/llama-2-13b-chat",
+      "name": "Meta: Llama v2 13B Chat (beta)",
+      "pricing": {
+        "prompt": "2.345e-7",
+        "completion": "2.345e-7",
+        "discount": 0
+      },
+      "context_length": 4096,
+      "architecture": { "tokenizer": "Llama2", "instruct_type": "llama2" },
+      "top_provider": { "max_completion_tokens": 4096 }
+    },
+    {
+      "id": "meta-llama/llama-2-70b-chat",
+      "name": "Meta: Llama v2 70B Chat (beta)",
+      "pricing": { "prompt": "7e-7", "completion": "9.5e-7", "discount": 0 },
+      "context_length": 4096,
+      "architecture": { "tokenizer": "Llama2", "instruct_type": "llama2" },
+      "top_provider": { "max_completion_tokens": 4096 }
+    },
+    {
+      "id": "nousresearch/nous-hermes-llama2-13b",
+      "name": "Nous: Hermes Llama2 13B (beta)",
+      "pricing": { "prompt": "2e-7", "completion": "2e-7", "discount": 0 },
+      "context_length": 4096,
+      "architecture": { "tokenizer": "Llama2", "instruct_type": "alpaca" },
+      "top_provider": { "max_completion_tokens": 4096 }
+    },
+    {
+      "id": "nousresearch/nous-hermes-llama2-70b",
+      "name": "Nous: Hermes Llama2 70B (beta)",
+      "pricing": {
+        "prompt": "0.000001",
+        "completion": "0.000001",
+        "discount": 0
+      },
+      "context_length": 4096,
+      "architecture": { "tokenizer": "Llama2", "instruct_type": "alpaca" },
+      "top_provider": { "max_completion_tokens": 4096 }
+    },
+    {
+      "id": "meta-llama/codellama-34b-instruct",
+      "name": "Meta: CodeLlama 34B Instruct (beta)",
+      "pricing": { "prompt": "4e-7", "completion": "4e-7", "discount": 0 },
+      "context_length": 8192,
+      "architecture": { "tokenizer": "Llama2", "instruct_type": "llama2" },
+      "top_provider": { "max_completion_tokens": 8192 }
+    },
+    {
+      "id": "phind/phind-codellama-34b",
+      "name": "Phind: CodeLlama 34B v2 (beta)",
+      "pricing": { "prompt": "4e-7", "completion": "4e-7", "discount": 0 },
+      "context_length": 4096,
+      "architecture": { "tokenizer": "Llama2", "instruct_type": "alpaca" },
+      "top_provider": { "max_completion_tokens": 4096 }
+    },
+    {
+      "id": "jondurbin/airoboros-l2-70b",
+      "name": "Airoboros L2 70B (beta)",
+      "pricing": { "prompt": "7e-7", "completion": "9.5e-7", "discount": 0 },
+      "context_length": 4096,
+      "architecture": { "tokenizer": "Llama2", "instruct_type": "airoboros" },
+      "top_provider": { "max_completion_tokens": 4096 }
+    },
+    {
+      "id": "migtissera/synthia-70b",
+      "name": "Synthia 70B (beta)",
+      "pricing": {
+        "prompt": "0.000009375",
+        "completion": "0.000009375",
+        "discount": 0
+      },
+      "context_length": 8192,
+      "architecture": { "tokenizer": "Llama2", "instruct_type": "airoboros" },
+      "top_provider": { "max_completion_tokens": 300 }
+    },
+    {
+      "id": "mistralai/mistral-7b-instruct",
+      "name": "Mistral 7B Instruct (beta)",
+      "pricing": { "prompt": "0", "completion": "0", "discount": 0 },
+      "context_length": 8192,
+      "architecture": { "tokenizer": "Mistral", "instruct_type": "llama2" },
+      "top_provider": { "max_completion_tokens": 8192 }
+    },
+    {
+      "id": "open-orca/mistral-7b-openorca",
+      "name": "Mistral OpenOrca 7B (beta)",
+      "pricing": { "prompt": "2e-7", "completion": "2e-7", "discount": 0 },
+      "context_length": 8192,
+      "architecture": { "tokenizer": "Mistral", "instruct_type": "gpt" },
+      "top_provider": { "max_completion_tokens": 8192 }
+    },
+    {
+      "id": "teknium/openhermes-2-mistral-7b",
+      "name": "Mistral OpenHermes 7B (beta)",
+      "pricing": { "prompt": "2e-7", "completion": "2e-7", "discount": 0 },
+      "context_length": 4096,
+      "architecture": { "tokenizer": "Mistral", "instruct_type": "gpt" },
+      "top_provider": { "max_completion_tokens": 4096 }
+    },
+    {
+      "id": "pygmalionai/mythalion-13b",
+      "name": "Pygmalion: Mythalion 13B (beta)",
+      "pricing": {
+        "prompt": "0.000001125",
+        "completion": "0.000001125",
+        "discount": 0
+      },
+      "context_length": 8192,
+      "architecture": { "tokenizer": "Llama2", "instruct_type": "alpaca" },
+      "top_provider": { "max_completion_tokens": 250 }
+    },
+    {
+      "id": "undi95/remm-slerp-l2-13b",
+      "name": "ReMM SLERP L2 13B (beta)",
+      "pricing": {
+        "prompt": "0.000001125",
+        "completion": "0.000001125",
+        "discount": 0
+      },
+      "context_length": 6144,
+      "architecture": { "tokenizer": "Llama2", "instruct_type": "alpaca" },
+      "top_provider": { "max_completion_tokens": 250 }
+    },
+    {
+      "id": "gryphe/mythomax-l2-13b",
+      "name": "MythoMax L2 13B",
+      "pricing": { "prompt": "8e-7", "completion": "8e-7", "discount": 0 },
+      "context_length": 4096,
+      "architecture": { "tokenizer": "Llama2", "instruct_type": "alpaca" },
+      "top_provider": { "max_completion_tokens": 4096 }
+    },
+    {
+      "id": "xwin-lm/xwin-lm-70b",
+      "name": "Xwin 70B (beta)",
+      "pricing": {
+        "prompt": "0.000009375",
+        "completion": "0.000009375",
+        "discount": 0
+      },
+      "context_length": 8192,
+      "architecture": { "tokenizer": "Llama2", "instruct_type": "airoboros" },
+      "top_provider": { "max_completion_tokens": 300 }
+    },
+    {
+      "id": "gryphe/mythomax-l2-13b-8k",
+      "name": "MythoMax L2 13B 8k (beta)",
+      "pricing": {
+        "prompt": "0.000001125",
+        "completion": "0.000001125",
+        "discount": 0
+      },
+      "context_length": 8192,
+      "architecture": { "tokenizer": "Llama2", "instruct_type": "alpaca" },
+      "top_provider": { "max_completion_tokens": 300 }
+    },
+    {
+      "id": "huggingfaceh4/zephyr-7b-beta",
+      "name": "Hugging Face: Zephyr 7B (beta)",
+      "pricing": { "prompt": "0", "completion": "0", "discount": 0 },
+      "context_length": 4096,
+      "architecture": { "tokenizer": "Mistral", "instruct_type": "zephyr" },
+      "top_provider": { "max_completion_tokens": 4096 }
+    },
+    {
+      "id": "anthropic/claude-2",
+      "name": "Anthropic: Claude v2",
+      "pricing": {
+        "prompt": "0.00001102",
+        "completion": "0.00003268",
+        "discount": 0
+      },
+      "context_length": 100000,
+      "architecture": { "tokenizer": "Claude", "instruct_type": "claude" },
+      "top_provider": { "max_completion_tokens": 100000 }
+    },
+    {
+      "id": "anthropic/claude-instant-v1",
+      "name": "Anthropic: Claude Instant v1",
+      "pricing": {
+        "prompt": "0.00000163",
+        "completion": "0.00000551",
+        "discount": 0
+      },
+      "context_length": 100000,
+      "architecture": { "tokenizer": "Claude", "instruct_type": "claude" },
+      "top_provider": { "max_completion_tokens": 100000 }
+    },
+    {
+      "id": "anthropic/claude-v1",
+      "name": "Anthropic: Claude v1",
+      "pricing": {
+        "prompt": "0.00001102",
+        "completion": "0.00003268",
+        "discount": 0
+      },
+      "context_length": 9000,
+      "architecture": { "tokenizer": "Claude", "instruct_type": "claude" },
+      "top_provider": { "max_completion_tokens": 9000 }
+    },
+    {
+      "id": "anthropic/claude-1.2",
+      "name": "Anthropic: Claude (older v1)",
+      "pricing": {
+        "prompt": "0.00001102",
+        "completion": "0.00003268",
+        "discount": 0
+      },
+      "context_length": 9000,
+      "architecture": { "tokenizer": "Claude", "instruct_type": "claude" },
+      "top_provider": { "max_completion_tokens": 9000 }
+    },
+    {
+      "id": "anthropic/claude-instant-v1-100k",
+      "name": "Anthropic: Claude Instant 100k v1",
+      "pricing": {
+        "prompt": "0.00000163",
+        "completion": "0.00000551",
+        "discount": 0
+      },
+      "context_length": 100000,
+      "architecture": { "tokenizer": "Claude", "instruct_type": "claude" },
+      "top_provider": { "max_completion_tokens": 100000 }
+    },
+    {
+      "id": "anthropic/claude-v1-100k",
+      "name": "Anthropic: Claude 100k v1",
+      "pricing": {
+        "prompt": "0.00001102",
+        "completion": "0.00003268",
+        "discount": 0
+      },
+      "context_length": 100000,
+      "architecture": { "tokenizer": "Claude", "instruct_type": "claude" },
+      "top_provider": { "max_completion_tokens": 100000 }
+    },
+    {
+      "id": "anthropic/claude-instant-1.0",
+      "name": "Anthropic: Claude Instant (older v1)",
+      "pricing": {
+        "prompt": "0.00000163",
+        "completion": "0.00000551",
+        "discount": 0
+      },
+      "context_length": 9000,
+      "architecture": { "tokenizer": "Claude", "instruct_type": "claude" },
+      "top_provider": { "max_completion_tokens": 9000 }
+    },
+    {
+      "id": "mancer/weaver",
+      "name": "Mancer: Weaver 12k (alpha)",
+      "pricing": {
+        "prompt": "0.0000045",
+        "completion": "0.0000045",
+        "discount": 0
+      },
+      "context_length": 8000,
+      "architecture": { "tokenizer": "Llama2", "instruct_type": "alpaca" },
+      "top_provider": { "max_completion_tokens": 400 }
+    }
+  ]
+}
