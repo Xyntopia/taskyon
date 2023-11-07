@@ -251,7 +251,6 @@ export function sendMessage(
       role: 'user',
       content: message.trim(),
       debugging: {},
-      id: uuidv1(),
       allowedTools: functionNames,
     },
     chatState.Tasks[chatState.selectedTaskId || ''],
@@ -285,19 +284,19 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
   return openAIConversation;
 }
 
-function addTask2Tree(
+export function addTask2Tree(
   task: {
     role: LLMTask['role'];
     content?: LLMTask['content'];
     context?: LLMTask['context'];
     state?: LLMTask['state'];
-    id?: LLMTask['id'];
     allowedTools?: LLMTask['allowedTools'];
     debugging?: LLMTask['debugging'];
   },
   parent: LLMTask | undefined,
   chatState: ChatStateType,
-  execute = true
+  execute = true,
+  forceId?: string
 ) {
   const newTask: LLMTask = {
     role: task.role,
@@ -306,7 +305,7 @@ function addTask2Tree(
     state: task.state || 'Open',
     childrenIDs: [],
     debugging: task.debugging || {},
-    id: task.id || uuidv1(),
+    id: forceId || uuidv1(),
     context: task.context,
     allowedTools: task.allowedTools || parent?.allowedTools,
   };
@@ -354,11 +353,11 @@ function createNewTasksFromChatResponse(
           inference_costs: response.usage?.inference_costs,
           aiResponse: response,
         },
-        id: response.id,
       },
       parentTask,
       chatState,
-      false
+      false,
+      response.id
     );
 
     // and push newly created tasks to our task list. they were already processed, so we don't need to

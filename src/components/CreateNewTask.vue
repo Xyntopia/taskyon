@@ -2,25 +2,27 @@
   <!--Create new task area-->
   <q-card-section>
     <q-list dense separator>
+      <!--Task Creation-->
       <q-item>
         <q-item-section>
           <q-input
             autogrow
             filled
             color="secondary"
-            v-model="state.userInput"
+            v-model="state.taskDraft.content"
             :hint="`Estimated number of tokens: ${estimatedTokens}`"
             label="Type your message..."
             @keyup="checkForShiftEnter"
           >
             <template v-slot:append>
               <q-icon
-                v-if="state.userInput !== ''"
+                v-if="state.taskDraft.content !== ''"
                 name="close"
-                @click="state.userInput = ''"
+                @click="state.taskDraft.content = ''"
                 class="cursor-pointer"
               />
               <q-btn
+                v-if="!taskTypeSelection"
                 flat
                 dense
                 stretch
@@ -29,8 +31,40 @@
               />
             </template>
           </q-input>
+          <div v-for="(param, paramName) in parameters" :key="paramName">
+            <q-input
+              v-model="parameters[paramName]"
+              :label="paramName"
+              filled
+              dense
+              type="textarea"
+              @input="updateTask"
+            />
+          </div>
+          <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
+          <q-select
+            v-if="state.expertMode"
+            class="q-pt-xs q-px-md"
+            dense
+            filled
+            v-model="taskTypeSelection"
+            :options="toolList"
+            label="Or select task type"
+          >
+            <template v-slot:before>
+              <q-btn
+                dense
+                flat
+                icon="chat"
+                label="Use Chat"
+                @click="taskTypeSelection = undefined"
+                ><q-tooltip>Select Simple Chat</q-tooltip></q-btn
+              >
+            </template>
+          </q-select>
         </q-item-section>
       </q-item>
+      <!--Allowed Tools Selection-->
       <q-item>
         <q-item-section>
           <div>
@@ -66,6 +100,7 @@
           </div>
         </q-item-section>
       </q-item>
+      <!--Model Selection-->
       <q-item>
         <q-item-section>
           <q-select
@@ -138,8 +173,9 @@ import {
   Model,
   getBackendUrls,
   countStringTokens,
+  addTask2Tree,
 } from 'src/modules/chat';
-import { tools } from 'src/modules/tools';
+import { tools, FunctionArguments, FunctionCall } from 'src/modules/tools';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import openrouterModules from 'assets/openrouter_models.json';
 import { useTaskyonStore } from 'stores/taskyonState';
@@ -148,6 +184,8 @@ import openaiModels from 'assets/openai_models.json';
 const openrouterModels: Model[] = openrouterModules.data;
 const openAiModels: Model[] = openaiModels.data;
 const state = useTaskyonStore();
+
+const taskTypeSelection = ref<string | undefined>('');
 
 const resOpenRouter = ref<Model[]>([]);
 const resOpenAI = ref<Model[]>([]);
@@ -210,7 +248,7 @@ void fetchModels();
 
 const estimatedTokens = computed(() => {
   // Tokenize the message
-  const tokens = countStringTokens(state.userInput);
+  const tokens = countStringTokens(state.taskDraft.content || '');
 
   // Return the token count
   return tokens;
@@ -224,13 +262,30 @@ function toggleSelectedTools() {
   }
 }
 
+const toolList = computed(() =>
+  Object.keys(tools).map((t) => ({ label: t, value: t }))
+);
+
 function sendMessageWrapper() {
-  void sendMessage(
-    state.userInput.trim(),
+  if (state.taskDraft.content)
+    void sendMessage(
+      state.taskDraft.content.trim(),
+      state.chatState,
+      state.selectedTools
+    );
+  state.taskDraft.content = '';
+}
+
+function executeTask() {
+  const funcTaskid = addTask2Tree(
+    {
+      ...state.taskDraft,
+      role: 'function',
+    },
+    state.chatState.Tasks[state.chatState.selectedTaskId || ''],
     state.chatState,
-    state.selectedTools
+    true
   );
-  state.userInput = '';
 }
 
 const checkForShiftEnter = (event: KeyboardEvent) => {
@@ -240,4 +295,38 @@ const checkForShiftEnter = (event: KeyboardEvent) => {
     event.preventDefault();
   }
 };
+
+const convertArgumentsToObject = (
+  args: FunctionArguments
+): Record<string, string> => {
+  const result: Record<string, string> = {};
+
+  if (typeof args === 'string' || typeof args === 'number') {
+    // Convert number to string if necessary
+    result.value = args.toString();
+  } else if (typeof args === 'object' && args !== null) {
+    // Iterate through the object properties
+    for (const key in args) {
+      const value = args[key];
+      // Only keep string values or convert numbers to strings
+      if (typeof value === 'string') {
+        result[key] = value;
+      } else if (typeof value === 'number') {
+        result[key] = value.toString();
+      }
+      // Non-string, non-number values are dropped
+    }
+  }
+
+  return result;
+};
+
+// Use the conversion function before defining parameters
+const parameters = ref<Record<string, string>>(
+  convertArgumentsToObject(state.taskDraft.context?.function?.arguments || {})
+);
+
+function updateTask(){
+  console.log("update task!!")
+}
 </script>

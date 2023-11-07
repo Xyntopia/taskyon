@@ -214,7 +214,8 @@ const selectedConversation = computed(() => {
 });
 
 function editTask(taskId: string) {
-  state.userInput = state.chatState.Tasks[taskId].content || '';
+  state.taskDraft = state.chatState.Tasks[taskId];
+  state.taskDraft.id = 'draft';
   state.chatState.selectedTaskId = state.chatState.Tasks[taskId].parentID;
 }
 
