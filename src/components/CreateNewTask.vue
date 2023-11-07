@@ -31,25 +31,14 @@
               />
             </template>
           </q-input>
-          <div v-for="(param, paramName) in parameters" :key="paramName">
-            <q-input
-              v-model="parameters[paramName]"
-              :label="paramName"
-              filled
-              dense
-              type="textarea"
-              @input="updateTask"
-            />
-          </div>
-          <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
           <q-select
             v-if="state.expertMode"
             class="q-pt-xs q-px-md"
             dense
             filled
             v-model="taskTypeSelection"
-            :options="toolList"
-            label="Or select task type"
+            :options="Object.keys(tools)"
+            :label="taskTypeSelection ? 'selected Task' : 'Or select task type'"
           >
             <template v-slot:before>
               <q-btn
@@ -62,6 +51,28 @@
               >
             </template>
           </q-select>
+          <div v-if="taskTypeSelection">
+            <div
+              v-for="(param, paramName) in parameters[taskTypeSelection]"
+              :key="paramName"
+            >
+              <q-input
+                v-model="parameters[taskTypeSelection][paramName]"
+                :label="paramName"
+                debounce="500"
+                filled
+                dense
+                type="textarea"
+              />
+            </div>
+            <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
+            <q-btn
+              class="q-ma-md"
+              icon="code"
+              @click="state.showTaskData = !state.showTaskData"
+            />
+            <div v-if="state.showTaskData">{{ currentFunctionTask }}</div>
+          </div>
         </q-item-section>
       </q-item>
       <!--Allowed Tools Selection-->
@@ -166,7 +177,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch, watchEffect } from 'vue';
 import {
   sendMessage,
   availableModels,
@@ -175,17 +186,46 @@ import {
   countStringTokens,
   addTask2Tree,
 } from 'src/modules/chat';
-import { tools, FunctionArguments, FunctionCall } from 'src/modules/tools';
+import {
+  tools,
+  FunctionArguments,
+  FunctionCall,
+  getDefaultParametersForTool,
+} from 'src/modules/tools';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import openrouterModules from 'assets/openrouter_models.json';
 import { useTaskyonStore } from 'stores/taskyonState';
 import openaiModels from 'assets/openai_models.json';
+import { LLMTask } from 'src/modules/types';
 
 const openrouterModels: Model[] = openrouterModules.data;
 const openAiModels: Model[] = openaiModels.data;
 const state = useTaskyonStore();
 
-const taskTypeSelection = ref<string | undefined>('');
+const taskTypeSelection = ref<string | undefined>(undefined);
+// Use the conversion function before defining parameters
+const parameters = ref<Record<string, Record<string, string>>>({});
+
+watchEffect(() => {
+  console.log('update task!!');
+  if (taskTypeSelection.value) {
+    if (!parameters.value[taskTypeSelection.value]) {
+      parameters.value[taskTypeSelection.value] =
+        getDefaultParametersForTool(taskTypeSelection.value) || {};
+    }
+    state.taskDraft.role = 'function';
+    state.taskDraft.content = null;
+    state.taskDraft.context = {
+      function: {
+        name: taskTypeSelection.value || '',
+        arguments: parameters.value[taskTypeSelection.value],
+      },
+    };
+  } else {
+    //  we are only using a chatmessage!
+    state.taskDraft.role = 'user';
+  }
+});
 
 const resOpenRouter = ref<Model[]>([]);
 const resOpenAI = ref<Model[]>([]);
@@ -262,10 +302,7 @@ function toggleSelectedTools() {
   }
 }
 
-const toolList = computed(() =>
-  Object.keys(tools).map((t) => ({ label: t, value: t }))
-);
-
+//TODO: remove this funciton, put this into executeTask
 function sendMessageWrapper() {
   if (state.taskDraft.content)
     void sendMessage(
@@ -276,12 +313,18 @@ function sendMessageWrapper() {
   state.taskDraft.content = '';
 }
 
+const currentFunctionTask = computed(() => {
+  const task = {
+    ...state.taskDraft,
+    role: 'function' as LLMTask['role'],
+  };
+  return task;
+});
+
 function executeTask() {
+  console.log('executing task!');
   const funcTaskid = addTask2Tree(
-    {
-      ...state.taskDraft,
-      role: 'function',
-    },
+    currentFunctionTask.value,
     state.chatState.Tasks[state.chatState.selectedTaskId || ''],
     state.chatState,
     true
@@ -295,38 +338,4 @@ const checkForShiftEnter = (event: KeyboardEvent) => {
     event.preventDefault();
   }
 };
-
-const convertArgumentsToObject = (
-  args: FunctionArguments
-): Record<string, string> => {
-  const result: Record<string, string> = {};
-
-  if (typeof args === 'string' || typeof args === 'number') {
-    // Convert number to string if necessary
-    result.value = args.toString();
-  } else if (typeof args === 'object' && args !== null) {
-    // Iterate through the object properties
-    for (const key in args) {
-      const value = args[key];
-      // Only keep string values or convert numbers to strings
-      if (typeof value === 'string') {
-        result[key] = value;
-      } else if (typeof value === 'number') {
-        result[key] = value.toString();
-      }
-      // Non-string, non-number values are dropped
-    }
-  }
-
-  return result;
-};
-
-// Use the conversion function before defining parameters
-const parameters = ref<Record<string, string>>(
-  convertArgumentsToObject(state.taskDraft.context?.function?.arguments || {})
-);
-
-function updateTask(){
-  console.log("update task!!")
-}
 </script>

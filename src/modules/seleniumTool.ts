@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { ExtendedTool } from './tools';
 
 type SeleniumState = {
   value: {
@@ -112,7 +113,7 @@ async function fetchPageContent(sessionId: string) {
 
 type toolStateType = 'available' | 'starting' | 'unavailable' | 'error';
 
-export const seleniumBrowser = {
+export const seleniumBrowser: ExtendedTool = {
   state: () => {
     return 'available' as toolStateType;
   },

@@ -13,6 +13,21 @@ export type FunctionCall = {
   arguments: FunctionArguments;
 };
 
+// this reflects json schema:  https://json-schema.org/specification-links
+interface JSONSchemaForFunctionParameter {
+  $schema?: string;
+  type: 'object';
+  properties: {
+    [key: string]: {
+      type: string;
+      description?: string;
+      default?: any;
+      items?: JSONSchemaForFunctionParameter | JSONSchemaForFunctionParameter[];
+    };
+  };
+  required?: string[];
+}
+
 export interface Tool {
   state: () => Promise<toolStateType> | toolStateType;
   // Description of what the function does (optional).
@@ -20,7 +35,7 @@ export interface Tool {
   // The name of the function to be called.
   name: string;
   // The parameters the function accepts (JSON Schema object).
-  parameters: Record<string, unknown>;
+  parameters: JSONSchemaForFunctionParameter;
 }
 
 export interface ExtendedTool extends Tool {
@@ -173,3 +188,46 @@ tools.getToolExample = {
     })
     .join('\n');
 }*/
+
+export function getDefaultParametersForTool(toolName: string) {
+  const tool = tools[toolName];
+  if (!tool) {
+    console.log(`Tool ${toolName} not found.`);
+    return null;
+  }
+
+  const params = tool.parameters;
+  if (!params || !params.properties) {
+    console.log(`No parameters defined for tool ${toolName}.`);
+    return {};
+  }
+
+  const defaultParams: Record<string, any> = {};
+  Object.keys(params.properties).forEach((key) => {
+    const type = params.properties[key].type;
+    // Assign a default value based on the parameter's type.
+    switch (type) {
+      case 'string':
+        defaultParams[key] = ''; // Default empty string
+        break;
+      case 'number':
+        defaultParams[key] = 0; // Default number zero
+        break;
+      case 'boolean':
+        defaultParams[key] = false; // Default boolean false
+        break;
+      case 'object':
+        defaultParams[key] = {}; // Default empty object
+        break;
+      case 'array':
+        defaultParams[key] = []; // Default empty array
+        break;
+      // Add cases for any other types you expect
+      default:
+        console.log(`No default value for parameter type: ${type}`);
+        defaultParams[key] = null;
+    }
+  });
+
+  return defaultParams;
+}

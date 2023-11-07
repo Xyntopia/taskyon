@@ -12,6 +12,7 @@ export const useTaskyonStore = defineStore('taskyonState', {
       chatState: defaultChatState(),
       selectedTools: [] as string[],
       expertMode: false,
+      showTaskData: false,
       drawerOpen: false,
       drawerRight: false,
       taskDraft: {} as Partial<LLMTask>,
