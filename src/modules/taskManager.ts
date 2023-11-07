@@ -4,7 +4,7 @@ import { useVectorStore } from './localVectorStore';
 import { ChatStateType } from './chat';
 import { bigIntToString } from './chat';
 import { dump } from 'js-yaml';
-import { LLMTask } from './types';
+import { LLMTask, TaskState } from './types';
 
 class AsyncQueue<T> {
   private queue: T[] = [];
@@ -37,12 +37,6 @@ class AsyncQueue<T> {
 }
 
 export default AsyncQueue;
-export type TaskState =
-  | 'Open'
-  | 'Queued'
-  | 'In Progress'
-  | 'Completed'
-  | 'Error';
 
 export const processTasksQueue = new AsyncQueue<LLMTask>();
 export const vectorStore = useVectorStore();

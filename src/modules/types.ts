@@ -1,5 +1,12 @@
-import { TaskState } from './taskManager';
 import { FunctionCall } from './tools';
+
+export type TaskState =
+  | 'Open'
+  | 'Queued'
+  | 'In Progress'
+  | 'Completed'
+  | 'Error';
+
 
 export type OpenAIMessage = {
   // The content of the message, can be null for some messages.
