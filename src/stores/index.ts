@@ -1,4 +1,3 @@
-import { watch } from 'vue';
 import { store } from 'quasar/wrappers';
 import { createPinia } from 'pinia';
 import { LocalStorage } from 'quasar';
@@ -17,24 +16,16 @@ export default store((/* { ssrContext } */) => {
 
   // You can add Pinia plugins here
   // pinia.use(SomePiniaPlugin)
+  pinia.use(({ store }) => {
+    console.log(`load ${store.$id} state!`);
 
-  const storedState = LocalStorage.getItem('piniaState') as string;
-  if (storedState) {
-    const oldState = JSON.parse(storedState) as typeof pinia.state;
-
-    pinia.state.value = { ...pinia.state.value, ...oldState };
-
-    console.log('restored state!')
-  }
-
-  watch(
-    pinia.state,
-    (state) => {
-      // persist the whole state to the local storage whenever it changes
-      LocalStorage.set('piniaState', JSON.stringify(state));
-    },
-    { deep: true }
-  );
+    const storedState = LocalStorage.getItem(store.$id) as string;
+    const oldState = JSON.parse(storedState) as typeof store.$state;
+    store.$state = { ...store.$state, ...oldState };
+    store.$subscribe(() => {
+      LocalStorage.set(store.$id, JSON.stringify(store.$state));
+    });
+  });
 
   return pinia;
 });
