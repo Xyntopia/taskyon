@@ -11,7 +11,6 @@ export const useTaskyonStore = defineStore('taskyonState', {
     console.log('initialize taskyon');
     const initialState = {
       chatState: defaultChatState(),
-      selectedTools: [] as string[],
       expertMode: false,
       showTaskData: false,
       drawerOpen: false,

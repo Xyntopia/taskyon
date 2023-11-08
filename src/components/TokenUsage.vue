@@ -34,18 +34,14 @@
             {{ task.debugging?.aiResponse?.usage.total_tokens }} (exact)
           </td>
         </tr>
-        <tr v-if="task.debugging?.inference_costs">
+        <tr v-if="task.debugging?.inference_costs != undefined">
           <td class="text-left">Costs:</td>
           <td class="text-right">
             =
             {{
-              Math.round(
-                task.debugging?.inference_costs * 1e6
-              ).toLocaleString()
+              Math.round(task.debugging?.inference_costs * 1e6).toLocaleString()
             }}
-            μ$ (exact, ={{
-              Math.round(0.01 / task.debugging?.inference_costs)
-            }}
+            μ$ (exact, ={{ Math.round(0.01 / task.debugging?.inference_costs) }}
             messages to reach $0.01)
           </td>
         </tr>

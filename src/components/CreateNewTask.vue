@@ -6,6 +6,7 @@
       <q-item>
         <q-item-section>
           <q-input
+            v-if="!selectedTaskType"
             autogrow
             filled
             color="secondary"
@@ -27,8 +28,12 @@
                 dense
                 stretch
                 icon="send"
-                @click="sendMessageWrapper"
-              />
+                @click="executeTask"
+                ><q-tooltip
+                  >Alternativly send with &lt;shift&gt; +
+                  &lt;enter&gt;</q-tooltip
+                ></q-btn
+              >
             </template>
           </q-input>
           <q-select
@@ -51,6 +56,16 @@
                 ><q-tooltip>Select Simple Chat</q-tooltip></q-btn
               >
             </template>
+            <template v-slot:after>
+              <q-btn
+                class="q-ma-md"
+                dense
+                flat
+                icon="code"
+                @click="state.showTaskData = !state.showTaskData"
+                ><q-tooltip>Show Draft Task Data</q-tooltip></q-btn
+              >
+            </template>
           </q-select>
           <div v-if="selectedTaskType">
             <div
@@ -71,13 +86,8 @@
               />
             </div>
             <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
-            <q-btn
-              class="q-ma-md"
-              icon="code"
-              @click="state.showTaskData = !state.showTaskData"
-            />
-            <div v-if="state.showTaskData">{{ currentFunctionTask }}</div>
           </div>
+          <div v-if="state.showTaskData">{{ currentFunctionTask }}</div>
         </q-item-section>
       </q-item>
       <!--Allowed Tools Selection-->
@@ -91,7 +101,7 @@
             />
             <q-option-group
               class="q-ma-md"
-              v-model="state.selectedTools"
+              v-model="state.taskDraft.allowedTools"
               :options="
                 Object.keys(tools).map((name) => ({
                   label: name,
@@ -127,7 +137,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { sendMessage, countStringTokens, addTask2Tree } from 'src/modules/chat';
+import { countStringTokens, addTask2Tree } from 'src/modules/chat';
 import { tools, getDefaultParametersForTool } from 'src/modules/tools';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
@@ -184,45 +194,40 @@ const estimatedTokens = computed(() => {
 });
 
 function toggleSelectedTools() {
-  if (state.selectedTools?.length > 0) {
-    state.selectedTools = [];
-  } else {
-    state.selectedTools = Object.keys(tools);
+  if (state.taskDraft.allowedTools) {
+    if (state.taskDraft.allowedTools.length > 0) {
+      state.taskDraft.allowedTools = [];
+      return;
+    }
   }
-}
-
-//TODO: remove this funciton, put this into executeTask
-function sendMessageWrapper() {
-  if (state.taskDraft.content)
-    void sendMessage(
-      state.taskDraft.content.trim(),
-      state.chatState,
-      state.selectedTools
-    );
-  state.taskDraft.content = '';
+  state.taskDraft.allowedTools = Object.keys(tools);
 }
 
 const currentFunctionTask = computed(() => {
-  const task = {
-    ...state.taskDraft,
-    role: 'function' as LLMTask['role'],
-  };
-  return task;
+  let task: Partial<LLMTask> = { ...state.taskDraft };
+  if (selectedTaskType.value) {
+    task.role = 'function';
+  } else {
+    task.role = 'user';
+    task.debugging = {};
+    task.content = state.taskDraft.content?.trim();
+  }
+  return task as LLMTask; // we can do this, because we defined the "role"
 });
 
 function executeTask() {
   console.log('executing task!');
   addTask2Tree(
     currentFunctionTask.value,
-    state.chatState.Tasks[state.chatState.selectedTaskId || ''],
-    state.chatState,
-    true
+    state.chatState.Tasks[state.chatState.selectedTaskId || ''], //parent
+    state.chatState, //task manager
+    true // execute right away...
   );
 }
 
 const checkForShiftEnter = (event: KeyboardEvent) => {
   if (event.shiftKey && event.key === 'Enter') {
-    void sendMessageWrapper();
+    void executeTask();
     // Prevent a new line from being added to the input (optional)
     event.preventDefault();
   }

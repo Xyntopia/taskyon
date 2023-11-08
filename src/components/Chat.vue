@@ -60,7 +60,13 @@
                 <q-icon
                   name="monetization_on"
                   size="xs"
-                  :color="task.debugging.usedTokens ? 'secondary' : 'info'"
+                  :color="
+                    task.debugging.inference_costs
+                      ? 'secondary'
+                      : task.debugging.usedTokens
+                      ? 'positive'
+                      : 'info'
+                  "
                 ></q-icon>
                 <div v-if="task.debugging?.usedTokens">
                   {{ task.debugging?.usedTokens }}
@@ -219,6 +225,10 @@ function editTask(taskId: string) {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const task: Partial<LLMTask> = JSON.parse(jsonTask);
   task.id = 'draft';
+  task.debugging = {};
+  task.childrenIDs = [];
+  task.state = 'Open';
+  delete task.result;
   state.taskDraft = task;
   state.chatState.selectedTaskId = state.chatState.Tasks[taskId].parentID;
 }

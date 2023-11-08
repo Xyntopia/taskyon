@@ -243,28 +243,6 @@ async function callLLM(
   return chatCompletion;
 }
 
-export function sendMessage(
-  message: string,
-  chatState: ChatStateType,
-  functionNames: string[]
-) {
-  // adds a "sendMessage task to the Task stack"
-  console.log('send message');
-  if (message.trim() === '') return;
-
-  addTask2Tree(
-    {
-      role: 'user',
-      content: message.trim(),
-      debugging: {},
-      allowedTools: functionNames,
-    },
-    chatState.Tasks[chatState.selectedTaskId || ''],
-    chatState,
-    true
-  );
-}
-
 function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
   const openAIMessageThread = [] as OpenAIMessage[];
   const conversationThread = taskChain(task.id, chatState.Tasks);
@@ -454,7 +432,11 @@ export async function processOpenAIConversationThread(
   const openAIConversationThread = buildChatFromTask(task, chatState);
   if (openAIConversationThread) {
     const functions = mapFunctionNames(task.allowedTools || []) || [];
-    const response = await callLLM(openAIConversationThread, functions, chatState);
+    const response = await callLLM(
+      openAIConversationThread,
+      functions,
+      chatState
+    );
     if (response.usage) {
       // openai sends back the exact number of prompt tokens :)
       task.debugging.usedTokens = response.usage.prompt_tokens;
@@ -463,7 +445,10 @@ export async function processOpenAIConversationThread(
   }
 }
 
-export function deleteConversationThread(leafId: string, chatState: ChatStateType) {
+export function deleteConversationThread(
+  leafId: string,
+  chatState: ChatStateType
+) {
   if (chatState.selectedTaskId == leafId) {
     chatState.selectedTaskId = undefined;
   }

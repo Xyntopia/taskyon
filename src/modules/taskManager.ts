@@ -131,7 +131,10 @@ export async function handleFunctionExecution(
   if (tools[func.name]) {
     let funcR: unknown = await tools[func.name].function(func.arguments);
     funcR = bigIntToString(funcR);
-    const result: TaskResult = { type: 'FunctionResult', content: dump(funcR) };
+    const result: TaskResult = {
+      type: 'FunctionResult',
+      content: dump(funcR),
+    };
     return { result, state: 'Completed' };
   } else {
     const toolnames = JSON.stringify(allowedTools);
