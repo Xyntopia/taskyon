@@ -7,7 +7,6 @@ export type TaskState =
   | 'Completed'
   | 'Error';
 
-
 export type OpenAIMessage = {
   // The content of the message, can be null for some messages.
   content: string | null;
@@ -24,10 +23,6 @@ export type OpenAIMessage = {
   // The role of the message author (system, user, assistant, or function).
   role: 'system' | 'user' | 'assistant' | 'function';
 };
-
-export type TokenUsage = {
-
-}
 
 export type ChatCompletionResponse = {
   id: string;

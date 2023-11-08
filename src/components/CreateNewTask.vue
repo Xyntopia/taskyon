@@ -207,6 +207,7 @@ const currentFunctionTask = computed(() => {
   let task: Partial<LLMTask> = { ...state.taskDraft };
   if (selectedTaskType.value) {
     task.role = 'function';
+    task.content = null;
   } else {
     task.role = 'user';
     task.debugging = {};

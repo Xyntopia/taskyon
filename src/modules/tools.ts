@@ -42,7 +42,7 @@ export interface ExtendedTool extends Tool {
   function: (...args: any[]) => any | Promise<any>;
 }
 
-type ToolCollection = {
+export type ToolCollection = {
   [key: string]: ExtendedTool;
 };
 

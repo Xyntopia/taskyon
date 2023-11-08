@@ -1,5 +1,5 @@
 import { TaskResult } from './types';
-import { FunctionCall, tools } from './tools';
+import type { FunctionCall, ToolCollection } from './tools';
 import { useVectorStore } from './localVectorStore';
 import { ChatStateType } from './chat';
 import { bigIntToString } from './chat';
@@ -125,10 +125,10 @@ export function taskChain(lastTaskId: string, tasks: Record<string, LLMTask>) {
 
 // Helper function to handle function execution
 export async function handleFunctionExecution(
-  func: FunctionCall
-): Promise<{ result: TaskResult; state: TaskState }> {
-  const allowedTools = Object.keys(tools);
-  if (tools[func.name]) {
+  func: FunctionCall,
+  tools: ToolCollection
+): Promise<{ result: TaskResult; state: TaskState; error?: string }> {
+  try {
     let funcR: unknown = await tools[func.name].function(func.arguments);
     funcR = bigIntToString(funcR);
     const result: TaskResult = {
@@ -136,13 +136,14 @@ export async function handleFunctionExecution(
       content: dump(funcR),
     };
     return { result, state: 'Completed' };
-  } else {
-    const toolnames = JSON.stringify(allowedTools);
-    const result: TaskResult = {
-      type: 'FunctionResult',
-      content: `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`,
+  } catch (error) {
+    return {
+      result: {
+        type: 'FunctionResult',
+        content: JSON.stringify(error),
+      },
+      state: 'Error',
     };
-    return { result, state: 'Error' };
   }
 }
 

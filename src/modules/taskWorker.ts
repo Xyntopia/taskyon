@@ -2,7 +2,7 @@ import { ChatStateType, processOpenAIConversationThread } from './chat';
 import { processTasksQueue } from './taskManager';
 import { handleFunctionExecution } from './taskManager';
 import { tools } from './tools';
-import { LLMTask } from './types';
+import { LLMTask, TaskResult } from './types';
 
 // Function to process user tasks
 
@@ -20,11 +20,21 @@ export async function processFunctionTask(
     const func = task.context.function;
     console.log(`Calling function ${func.name}`);
     task.state = 'In Progress';
-    const { result, state } = await handleFunctionExecution(func);
-    task.result = result;
-    task.allowedTools = Object.keys(tools);
+    if (tools[func.name]) {
+      const { result, state } = await handleFunctionExecution(func, tools);
+      task.result = result;
+      task.state = state;
+    } else {
+      const toolnames = JSON.stringify(task.allowedTools);
+      task.result = {
+        type: 'FunctionResult',
+        content: `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`,
+      };
+      task.state = 'Error';
+    }
+    // TODO:  IF follow-up tasks are allowed!
+    // give task back to the AI!
     await processOpenAIConversationThread(task, chatState);
-    task.state = state;
   }
 }
 async function taskWorker(chatState: ChatStateType) {
