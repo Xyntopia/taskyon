@@ -2,7 +2,8 @@ import { defineStore } from 'pinia';
 import axios from 'axios';
 import { defaultChatState } from 'src/modules/chat';
 import { run } from 'src/modules/taskWorker';
-import { LLMTask } from 'src/modules/types';
+import type { LLMTask } from 'src/modules/types';
+import type { FunctionArguments } from 'src/modules/tools';
 
 //TODO: convert store into composition api
 export const useTaskyonStore = defineStore('taskyonState', {
@@ -16,6 +17,7 @@ export const useTaskyonStore = defineStore('taskyonState', {
       drawerOpen: false,
       drawerRight: false,
       taskDraft: {} as Partial<LLMTask>,
+      draftParameters: {} as Record<string, FunctionArguments>,
       debugMessageExpand: {},
       darkTheme: 'auto' as boolean | 'auto',
       messageVisualization: {} as Record<string, boolean>, // whether message with ID should be open or not...

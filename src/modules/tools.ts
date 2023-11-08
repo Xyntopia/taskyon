@@ -5,7 +5,7 @@ import { seleniumBrowser } from './seleniumTool';
 export const vectorStore = useVectorStore();
 
 type toolStateType = 'available' | 'starting' | 'unavailable' | 'error';
-export type FunctionArguments = Record<string, unknown> | string | number;
+export type FunctionArguments = Record<string, string | number>;
 
 export type FunctionCall = {
   // The name of the function to call.

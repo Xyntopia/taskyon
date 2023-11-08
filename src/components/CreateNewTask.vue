@@ -22,7 +22,7 @@
                 class="cursor-pointer"
               />
               <q-btn
-                v-if="!taskTypeSelection"
+                v-if="!selectedTaskType"
                 flat
                 dense
                 stretch
@@ -36,9 +36,10 @@
             class="q-pt-xs q-px-md"
             dense
             filled
-            v-model="taskTypeSelection"
+            :model-value="selectedTaskType"
+            @update:modelValue="setTaskType"
             :options="Object.keys(tools)"
-            :label="taskTypeSelection ? 'selected Task' : 'Or select task type'"
+            :label="selectedTaskType ? 'selected Task' : 'Or select task type'"
           >
             <template v-slot:before>
               <q-btn
@@ -46,18 +47,22 @@
                 flat
                 icon="chat"
                 label="Use Chat"
-                @click="taskTypeSelection = undefined"
+                @click="setTaskType(undefined)"
                 ><q-tooltip>Select Simple Chat</q-tooltip></q-btn
               >
             </template>
           </q-select>
-          <div v-if="taskTypeSelection">
+          <div v-if="selectedTaskType">
             <div
-              v-for="(param, paramName) in parameters[taskTypeSelection]"
+              v-for="(param, paramName) in state.taskDraft.context?.function
+                ?.arguments"
               :key="paramName"
             >
               <q-input
-                v-model="parameters[taskTypeSelection][paramName]"
+                :model-value="param"
+                @update:model-value="
+                  (value) => setFunctionParameter(paramName, value)
+                "
                 :label="paramName"
                 debounce="500"
                 filled
@@ -121,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watchEffect } from 'vue';
+import { computed } from 'vue';
 import { sendMessage, countStringTokens, addTask2Tree } from 'src/modules/chat';
 import { tools, getDefaultParametersForTool } from 'src/modules/tools';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
@@ -131,30 +136,44 @@ import ModelSelection from 'components/ModelSelection.vue';
 
 const state = useTaskyonStore();
 
-const taskTypeSelection = ref<string | undefined>(undefined);
-// Use the conversion function before defining parameters
-const parameters = ref<Record<string, Record<string, string>>>({});
+function setFunctionParameter(
+  paramName: string,
+  value: string | number | null
+) {
+  if (state.taskDraft.context?.function?.arguments) {
+    state.taskDraft.context.function.arguments[paramName] = value || '';
+  }
+  if (state.taskDraft.context?.function?.name) {
+    state.draftParameters[state.taskDraft.context.function.name][paramName] =
+      value || '';
+  }
+}
 
-watchEffect(() => {
-  console.log('update task!!');
-  if (taskTypeSelection.value) {
-    if (!parameters.value[taskTypeSelection.value]) {
-      parameters.value[taskTypeSelection.value] =
-        getDefaultParametersForTool(taskTypeSelection.value) || {};
-    }
+const selectedTaskType = computed(() => {
+  return state.taskDraft.context?.function?.name;
+});
+
+function setTaskType(tasktype: string | undefined) {
+  console.log('change tasktype to:', tasktype);
+  if (tasktype) {
     state.taskDraft.role = 'function';
-    state.taskDraft.content = null;
+    const defaultParams = getDefaultParametersForTool(tasktype);
+    const savedParams = state.draftParameters[tasktype];
+    const funcArguments = {
+      ...(defaultParams || {}),
+      ...(savedParams || {}),
+    };
     state.taskDraft.context = {
       function: {
-        name: taskTypeSelection.value || '',
-        arguments: parameters.value[taskTypeSelection.value],
+        name: tasktype,
+        arguments: funcArguments,
       },
     };
   } else {
-    //  we are only using a chatmessage!
     state.taskDraft.role = 'user';
+    delete state.taskDraft.context;
   }
-});
+}
 
 const estimatedTokens = computed(() => {
   // Tokenize the message

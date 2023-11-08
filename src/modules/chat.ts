@@ -1,7 +1,13 @@
 import axios from 'axios';
 import { v1 as uuidv1 } from 'uuid';
 //import { useCachedModels } from './mlModels';
-import { Tool, tools, ExtendedTool } from './tools';
+import {
+  Tool,
+  tools,
+  ExtendedTool,
+  getDefaultParametersForTool,
+  FunctionArguments,
+} from './tools';
 import { getEncoding } from 'js-tiktoken';
 import {
   LLMTask,
@@ -374,28 +380,32 @@ function createNewTasksFromChatResponse(
       const func = choice.message.function_call;
 
       // Try to parse the function arguments from JSON, log and re-throw the error if parsing fails
-      let funcArguments: Record<string, unknown> | string;
+      let funcArguments: FunctionArguments;
       try {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         funcArguments = JSON.parse(func.arguments);
       } catch (parseError) {
-        // in this case, we assume, that we can call the function with the return string!
-        funcArguments = func.arguments;
+        // in this case, we assume, that the first parameter was meant...
+        funcArguments = {};
+        funcArguments[Object.keys(tools[func.name].parameters.properties)[0]] =
+          func.arguments;
       }
+
+      const functionCall = {
+        name: func.name,
+        arguments: funcArguments,
+      };
 
       chatState.Tasks[newResponseTaskId].result = {
         type: 'FunctionCall',
-        functionCallDetails: func,
+        functionCallDetails: functionCall,
       };
       const funcTaskid = addTask2Tree(
         {
           role: 'function',
           content: null,
           context: {
-            function: {
-              name: func.name,
-              arguments: funcArguments,
-            },
+            function: functionCall,
           },
         },
         chatState.Tasks[newResponseTaskId],

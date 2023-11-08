@@ -192,6 +192,7 @@ import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import TokenUsage from 'components/TokenUsage.vue';
 import CreateNewTask from 'components/CreateNewTask.vue';
+import { LLMTask } from 'src/modules/types';
 
 const $q = useQuasar();
 
@@ -214,8 +215,11 @@ const selectedConversation = computed(() => {
 });
 
 function editTask(taskId: string) {
-  state.taskDraft = state.chatState.Tasks[taskId];
-  state.taskDraft.id = 'draft';
+  const jsonTask = JSON.stringify(state.chatState.Tasks[taskId]);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const task: Partial<LLMTask> = JSON.parse(jsonTask);
+  task.id = 'draft';
+  state.taskDraft = task;
   state.chatState.selectedTaskId = state.chatState.Tasks[taskId].parentID;
 }
 
