@@ -56,7 +56,6 @@ export async function execute(python_script: string): Promise<PythonResult> {
   }
 }
 
-
 // you can download the releases from here:
 // url: https://github.com/pyodide/pyodide/releases
 // this gives us the chnce to package packages our own way :)

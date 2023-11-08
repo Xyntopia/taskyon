@@ -266,12 +266,12 @@ export function sendMessage(
 }
 
 function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
-  const openAIConversation = [] as OpenAIMessage[];
-  const conversation = taskChain(task.id, chatState.Tasks);
+  const openAIMessageThread = [] as OpenAIMessage[];
+  const conversationThread = taskChain(task.id, chatState.Tasks);
 
-  if (conversation) {
-    openAIConversation.push(
-      ...conversation
+  if (conversationThread) {
+    openAIMessageThread.push(
+      ...conversationThread
         .map((mId) => {
           const m = chatState.Tasks[mId];
           const message: OpenAIMessage = {
@@ -287,7 +287,7 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
         .filter((m) => m.content) // OpenAI doesn't accept messages with zero content, even though they generate it themselfs
     );
   }
-  return openAIConversation;
+  return openAIMessageThread;
 }
 
 export function addTask2Tree(
@@ -447,14 +447,14 @@ function mapFunctionNames(toolNames: string[]) {
 }
 
 // Function to process OpenAI conversation
-export async function processOpenAIConversation(
+export async function processOpenAIConversationThread(
   task: LLMTask,
   chatState: ChatStateType
 ) {
-  const openAIConversation = buildChatFromTask(task, chatState);
-  if (openAIConversation) {
+  const openAIConversationThread = buildChatFromTask(task, chatState);
+  if (openAIConversationThread) {
     const functions = mapFunctionNames(task.allowedTools || []) || [];
-    const response = await callLLM(openAIConversation, functions, chatState);
+    const response = await callLLM(openAIConversationThread, functions, chatState);
     if (response.usage) {
       // openai sends back the exact number of prompt tokens :)
       task.debugging.usedTokens = response.usage.prompt_tokens;
@@ -463,7 +463,7 @@ export async function processOpenAIConversation(
   }
 }
 
-export function deleteConversation(leafId: string, chatState: ChatStateType) {
+export function deleteConversationThread(leafId: string, chatState: ChatStateType) {
   if (chatState.selectedTaskId == leafId) {
     chatState.selectedTaskId = undefined;
   }

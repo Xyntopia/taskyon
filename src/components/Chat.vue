@@ -1,11 +1,11 @@
 <template>
   <q-page class="fit column">
     <div class="full-height full-width q-pa-xs">
-      <q-card flat v-if="selectedConversation">
+      <q-card flat v-if="selectedThread">
         <!-- "Task" Display -->
         <q-card-section class="q-gutter-sm">
           <div
-            v-for="task in selectedConversation"
+            v-for="task in selectedThread"
             :key="task.id"
             :class="[
               $q.dark.isActive ? 'bg-primary' : 'bg-white',
@@ -92,7 +92,7 @@
                 @click="state.chatState.selectedTaskId = task.id"
               >
                 <q-tooltip :delay="1000"
-                  >Start alternative conversation from here</q-tooltip
+                  >Start alternative conversation thread from here</q-tooltip
                 >
               </q-btn>
               <q-btn
@@ -199,16 +199,16 @@ const $q = useQuasar();
 const state = useTaskyonStore();
 $q.dark.set(state.darkTheme);
 
-const selectedConversation = computed(() => {
+const selectedThread = computed(() => {
   if (state.chatState.selectedTaskId) {
-    const conversationIDChain = taskChain(
+    const threadIDChain = taskChain(
       state.chatState.selectedTaskId,
       state.chatState.Tasks
     );
-    const conversation = conversationIDChain.map((tId) => {
+    const thread = threadIDChain.map((tId) => {
       return state.chatState.Tasks[tId];
     });
-    return conversation;
+    return thread;
   } else {
     return [];
   }

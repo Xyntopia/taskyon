@@ -85,7 +85,9 @@
                   icon="delete"
                   size="sm"
                   flat
-                  @click="deleteConversation(conversationId, state.chatState)"
+                  @click="
+                    deleteConversationThread(conversationId, state.chatState)
+                  "
                 ></q-btn>
               </q-item-section>
             </q-item>
@@ -139,7 +141,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
-import { deleteConversation, getBackendUrls } from 'src/modules/chat';
+import { deleteConversationThread, getBackendUrls } from 'src/modules/chat';
 import { useTaskyonStore } from 'stores/taskyonState';
 
 const state = useTaskyonStore();

@@ -13,7 +13,7 @@
           icon="menu"
         />
         <q-toolbar-title
-          >Chat: Conversation
+          >Current Thread ID:
           {{ state.chatState.selectedTaskId }}</q-toolbar-title
         >
       </q-toolbar>

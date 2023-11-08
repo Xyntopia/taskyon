@@ -1,4 +1,4 @@
-import { ChatStateType, processOpenAIConversation } from './chat';
+import { ChatStateType, processOpenAIConversationThread } from './chat';
 import { processTasksQueue } from './taskManager';
 import { handleFunctionExecution } from './taskManager';
 import { tools } from './tools';
@@ -7,7 +7,7 @@ import { LLMTask } from './types';
 // Function to process user tasks
 
 export async function processUserTask(task: LLMTask, chatState: ChatStateType) {
-  await processOpenAIConversation(task, chatState);
+  await processOpenAIConversationThread(task, chatState);
   task.state = 'Completed';
 }
 // Function to process function tasks
@@ -23,7 +23,7 @@ export async function processFunctionTask(
     const { result, state } = await handleFunctionExecution(func);
     task.result = result;
     task.allowedTools = Object.keys(tools);
-    await processOpenAIConversation(task, chatState);
+    await processOpenAIConversationThread(task, chatState);
     task.state = state;
   }
 }
