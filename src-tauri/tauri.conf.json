@@ -7,7 +7,7 @@
     "distDir": "../dist/spa"
   },
   "package": {
-    "productName": "doxcavator",
+    "productName": "Taskyon",
     "version": "0.6.0"
   },
   "tauri": {

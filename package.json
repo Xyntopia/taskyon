@@ -17,7 +17,9 @@
     "pwabuild": "quasar build -m pwa",
     "build:ssg": "quasar ssg generate",
     "serve:ssg": "quasar ssg serve dist/ssg",
-    "tauri": "tauri",
+    "build:tauri": "tauri build",
+    "dev:tauri": "tauri dev",
+    "tauri:cmd": "tauri",
     "tauricon": "tauricon"
   },
   "dependencies": {
