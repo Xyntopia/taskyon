@@ -29,11 +29,18 @@
                 stretch
                 icon="send"
                 @click="executeTask"
-                ><q-tooltip
-                  >Alternativly send with &lt;shift&gt; +
-                  &lt;enter&gt;</q-tooltip
-                ></q-btn
               >
+                <q-tooltip>
+                  Alternativly send with &lt;shift&gt; + &lt;enter&gt;
+                </q-tooltip>
+              </q-btn>
+            </template>
+            <template v-slot:after>
+              <FileDropzone class="row justify-center items-center">
+                <q-btn icon="upload_file">
+                  <q-tooltip>"Attach file to message"</q-tooltip>
+                </q-btn>
+              </FileDropzone>
             </template>
           </q-input>
           <q-select
@@ -87,7 +94,9 @@
             </div>
             <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
           </div>
-          <div v-if="state.showTaskData">{{ currentFunctionTask }}</div>
+          <div v-if="state.showTaskData && state.expertMode">
+            {{ currentFunctionTask }}
+          </div>
         </q-item-section>
       </q-item>
       <!--Allowed Tools Selection-->
@@ -142,6 +151,7 @@ import { tools, getDefaultParametersForTool } from 'src/modules/tools';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { LLMTask } from 'src/modules/types';
+import FileDropzone from './FileDropzone.vue';
 import ModelSelection from 'components/ModelSelection.vue';
 
 const state = useTaskyonStore();

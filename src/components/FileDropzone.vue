@@ -1,27 +1,46 @@
 <template>
-  <div class="fit dropzone inset-shadow-down column justify-center" @dragover.prevent @dragenter.prevent
-    @drop="handleDrop" @click.stop="openFileInput">
-    <div>
-      <p>{{ label }}</p>
-    </div>
-    <div>
-      <input class="hidden" type="file" multiple @change="handleFileInput" ref="fileInput"
-        accept="image/*,text/*,.pdf,application/*" capture="environment" @click.stop />
-    </div>
-    <div>
-      <q-btn v-if="progress == 0" flat>
-        <div clas="row">
-          <q-icon name="upload_file" />
-          <q-icon name="add_a_photo" />
+  <div
+    class="fit"
+    @dragover.prevent
+    @dragenter.prevent
+    @drop="handleDrop"
+    @click.stop="openFileInput"
+  >
+    <input
+      class="hidden"
+      type="file"
+      multiple
+      @change="handleFileInput"
+      ref="fileInput"
+      accept="image/*,text/*,.pdf,application/*"
+      capture="environment"
+      @click.stop
+    />
+    <slot>
+      <div class="fit dropzone inset-shadow-down column justify-center">
+        <div>
+          <p>{{ label }}</p>
         </div>
-      </q-btn>
-      <q-circular-progress v-else :value="progress * 100" color="secondary" class="q-md-sm" size="xl" show-value>{{
-        progress * 100
-      }}%</q-circular-progress>
-    </div>
-    <!-- if we are in electron, we want a choice to scan a directory:  "webkitdirectory", "directory" -->
-    <!-- add "capture" attribute in order to accept camera newlyAddedFiles from cellphone-->
-    <!--TODO: add the following as an option
+        <div>
+          <q-btn v-if="progress == 0" flat>
+            <div clas="row">
+              <q-icon name="upload_file" />
+              <q-icon name="add_a_photo" />
+            </div>
+          </q-btn>
+          <q-circular-progress
+            v-else
+            :value="progress * 100"
+            color="secondary"
+            class="q-md-sm"
+            size="xl"
+            show-value
+            >{{ progress * 100 }}%</q-circular-progress
+          >
+        </div>
+        <!-- if we are in electron, we want a choice to scan a directory:  "webkitdirectory", "directory" -->
+        <!-- add "capture" attribute in order to accept camera newlyAddedFiles from cellphone-->
+        <!--TODO: add the following as an option
     <q-file append class="hidden" multiple ref="filePicker" v-model="newlyAddedFiles"
         accept="image/*,text/*,.pdf,application/*" capture="environment" />
       <div class="row items-stretch q-gutter-x-xs">
@@ -34,6 +53,8 @@
         </q-btn>
       <div>
         -->
+      </div>
+    </slot>
   </div>
 </template>
 
@@ -46,20 +67,20 @@
 </style>
 
 <script setup lang="ts">
-import { ref, Ref } from 'vue'
+import { ref, Ref } from 'vue';
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue']);
 
 defineProps({
   label: {
     type: String,
-    default: ''
+    default: '',
   },
   progress: {
     type: Number,
-    default: 0
-  }
-})
+    default: 0,
+  },
+});
 //name: 'DropZone',
 const fileInput: Ref<null | HTMLInputElement> = ref(null);
 
