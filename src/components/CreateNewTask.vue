@@ -37,7 +37,9 @@
             </template>
             <template v-slot:after>
               <FileDropzone class="row justify-center items-center">
-                <q-btn icon="upload_file">
+                <q-btn dense stretch>
+                  <q-icon name="upload_file" />
+                  <q-icon name="attachment" />
                   <q-tooltip>"Attach file to message"</q-tooltip>
                 </q-btn>
               </FileDropzone>
