@@ -105,12 +105,13 @@
         </q-item-section>
       </q-item>
       <!--Allowed Tools Selection-->
-      <q-item>
+      <q-expansion-item dense icon="handyman" label="Allowed Tools">
         <q-item-section>
           <div>
             <q-btn
-              class="q-ma-md"
-              label="toggle allowed tools"
+              class="q-ma-md" dense
+              label="toggle all allowed tools"
+              color="primary"
               @click="toggleSelectedTools"
             />
             <q-option-group
@@ -139,12 +140,13 @@
             >
           </div>
         </q-item-section>
-      </q-item>
-      <q-item>
+      </q-expansion-item>
+      <!--Model Selection-->
+      <q-expansion-item dense icon="handyman" label="Select Chatbot Model">
         <q-item-section>
           <ModelSelection></ModelSelection>
         </q-item-section>
-      </q-item>
+      </q-expansion-item>
     </q-list>
   </q-card-section>
 </template>

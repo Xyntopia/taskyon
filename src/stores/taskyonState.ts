@@ -12,6 +12,8 @@ export const useTaskyonStore = defineStore('taskyonState', {
     const initialState = {
       chatState: defaultTaskState(),
       expertMode: false,
+      showCosts: false,
+      modelDetails: false,
       showTaskData: false,
       drawerOpen: false,
       drawerRight: false,
@@ -19,7 +21,7 @@ export const useTaskyonStore = defineStore('taskyonState', {
       draftParameters: {} as Record<string, FunctionArguments>,
       debugMessageExpand: {},
       darkTheme: 'auto' as boolean | 'auto',
-      messageVisualization: {} as Record<string, boolean>, // whether message with ID should be open or not...
+      messageDebug: {} as Record<string, boolean>, // whether message with ID should be open or not...
     };
     return initialState;
   },

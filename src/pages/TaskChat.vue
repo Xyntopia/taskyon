@@ -1,182 +1,193 @@
 <template>
-  <q-page class="fit column">
-    <div class="full-height full-width q-pa-xs">
-      <q-card flat v-if="selectedThread">
-        <!-- "Task" Display -->
-        <q-card-section class="q-gutter-sm">
-          <div
-            v-for="task in selectedThread"
-            :key="task.id"
-            :class="[
-              $q.dark.isActive ? 'bg-primary' : 'bg-white',
-              'rounded-borders',
-              'q-pa-xs',
-              'shadow-2',
-              'column',
-              'justify-between',
-              task.role === 'user' ? 'not-assistant-message' : '',
-              task.role === 'user' ? 'q-ml-lg' : '',
-              task.result?.type == 'FunctionCall' ? 'text-secondary' : '',
-            ]"
-          >
-            <div class="col-auto row justify-begin q-gutter-xs">
-              <div v-if="task.state == 'Error'" class="col-auto">
-                <q-icon name="warning" color="warning" size="sm"
-                  ><q-tooltip class="bg-warning">Error!</q-tooltip>
-                </q-icon>
-              </div>
-              <div v-if="task.result?.type == 'FunctionCall'" class="col">
-                <q-icon size="sm" name="build_circle" />
-                {{ task.result.functionCallDetails?.name }}({{
-                  task.result.functionCallDetails?.arguments
-                }})
-              </div>
-              <div v-else-if="task.role == 'function'" class="col">
-                <q-expansion-item
-                  dense
-                  icon="calculate"
-                  :label="task.context?.function?.name"
-                  :header-class="
-                    task.state == 'Error' ? 'text-red' : 'text-green'
-                  "
-                >
-                  <ToolResultWidget :task="task" />
-                </q-expansion-item>
-              </div>
-              <q-markdown
-                class="col"
-                v-else-if="task.content"
-                :src="task.content"
-              />
-              <div style="font-size: xx-small" class="column items-center">
-                <div v-if="task.debugging.inference_costs">
-                  {{
-                    Math.round(
-                      task.debugging.inference_costs * 1e6
-                    ).toLocaleString()
-                  }}
-                  μ$
-                </div>
-                <q-icon
-                  name="monetization_on"
-                  size="xs"
-                  :color="
-                    task.debugging.inference_costs
-                      ? 'secondary'
-                      : task.debugging.usedTokens
-                      ? 'positive'
-                      : 'info'
-                  "
-                ></q-icon>
-                <div v-if="task.debugging?.usedTokens">
-                  {{ task.debugging?.usedTokens }}
-                </div>
-                <div v-else>
-                  {{ estimateChatTokens(task, state.chatState).total }}
-                </div>
-                <q-tooltip :delay="1000">
-                  <TokenUsage :task="task" />
-                </q-tooltip>
-              </div>
+  <q-page>
+    <q-card class="col column" flat v-if="selectedThread">
+      <!-- "Task" Display -->
+      <q-card-section class="q-gutter-sm">
+        <div
+          v-for="task in selectedThread"
+          :key="task.id"
+          :class="[
+            $q.dark.isActive ? 'bg-primary' : 'bg-white',
+            'rounded-borders',
+            'q-pa-xs',
+            'shadow-2',
+            'column',
+            'justify-between',
+            task.role === 'user' ? 'not-assistant-message' : '',
+            task.role === 'user' ? 'q-ml-lg' : '',
+            task.result?.type == 'FunctionCall' ? 'text-secondary' : '',
+          ]"
+        >
+          <!--Message Display-->
+          <div class="col-auto row justify-begin q-gutter-xs">
+            <!--task icon-->
+            <div v-if="task.state == 'Error'" class="col-auto">
+              <q-icon name="warning" color="warning" size="sm"
+                ><q-tooltip class="bg-warning">Error!</q-tooltip>
+              </q-icon>
             </div>
+            <div v-if="task.result?.type == 'FunctionCall'" class="col">
+              <q-icon size="sm" name="build_circle" />
+              {{ task.result.functionCallDetails?.name }}({{
+                task.result.functionCallDetails?.arguments
+              }})
+            </div>
+            <div v-else-if="task.role == 'function'" class="col">
+              <q-expansion-item
+                dense
+                icon="calculate"
+                :label="task.context?.function?.name"
+                :header-class="
+                  task.state == 'Error' ? 'text-red' : 'text-green'
+                "
+              >
+                <ToolResultWidget :task="task" />
+              </q-expansion-item>
+            </div>
+            <q-markdown
+              class="col"
+              v-else-if="task.content"
+              :src="task.content"
+            />
+            <!--task costs-->
             <div
-              v-if="state.expertMode"
-              class="col-auto q-gutter-xs row justify-start items-stretch"
+              v-if="state.showCosts"
+              style="font-size: xx-small"
+              class="column items-center"
             >
-              <q-separator
-                v-if="task.debugging?.aiResponse?.usage"
-                vertical
-                class="q-my-xs"
-              />
-              <q-btn
-                class="col-auto rotate-180"
-                push
-                size="sm"
-                outline
-                icon="alt_route"
-                dense
-                @click="state.chatState.selectedTaskId = task.id"
-              >
-                <q-tooltip :delay="1000"
-                  >Start alternative conversation thread from here</q-tooltip
-                >
-              </q-btn>
-              <q-btn
-                class="col"
-                flat
-                icon="code"
-                dense
-                size="sm"
-                @click="toggleMessageDebug(task.id)"
-              >
-                <q-tooltip :delay="1000">Show message context</q-tooltip>
-              </q-btn>
-              <q-btn
-                class="col-auto"
-                outline
-                icon="edit"
-                dense
-                size="sm"
-                @click="editTask(task.id)"
-              >
-                <q-tooltip :delay="1000">Edit Task/Message</q-tooltip>
-              </q-btn>
-            </div>
-            <q-slide-transition>
-              <div v-show="state.messageVisualization[task.id]">
-                <q-separator />
-                <q-card-section class="text-subtitle2">
-                  <div>Task data:</div>
-                  <textarea
-                    :value="JSON.stringify(task, null, 2)"
-                    readonly
-                    wrap="soft"
-                    style="
-                      width: 100%;
-                      height: 200px;
-                      background-color: inherit;
-                      color: inherit;
-                    "
-                  >
-                  </textarea>
-                </q-card-section>
+              <div v-if="task.debugging.inference_costs">
+                {{
+                  Math.round(
+                    task.debugging.inference_costs * 1e6
+                  ).toLocaleString()
+                }}
+                μ$
               </div>
-            </q-slide-transition>
+              <q-icon
+                name="monetization_on"
+                size="xs"
+                :color="
+                  task.debugging.inference_costs
+                    ? 'secondary'
+                    : task.debugging.usedTokens
+                    ? 'positive'
+                    : 'info'
+                "
+              ></q-icon>
+              <div v-if="task.debugging?.usedTokens">
+                {{ task.debugging?.usedTokens }}
+              </div>
+              <div v-else>
+                {{ estimateChatTokens(task, state.chatState).total }}
+              </div>
+              <q-tooltip :delay="1000">
+                <TokenUsage :task="task" />
+              </q-tooltip>
+            </div>
           </div>
+          <!--buttons-->
           <div
-            v-if="
-              ['Open', 'In Progress'].some((subs) =>
-                subs.includes(
-                  state.chatState.Tasks[state.chatState.selectedTaskId || '']
-                    ?.state
-                )
-              )
-            "
-            class="q-pa-xs"
+            v-if="state.expertMode"
+            class="col-auto q-gutter-xs row justify-start items-stretch"
           >
-            <q-spinner-comment color="secondary" size="lg" />
-          </div>
-        </q-card-section>
-
-        <!--Create new task area-->
-        <CreateNewTask v-if="getApikey(state.chatState)" />
-        <q-card-section v-else>
-          <div>
-            Add an API key to access a chatbot in Settings on the left side!
+            <q-separator vertical class="q-my-xs" />
             <q-btn
-              href="https://platform.openai.com/account/api-keys"
-              target="_blank"
+              class="col-auto rotate-180"
+              push
+              size="sm"
+              outline
+              icon="alt_route"
+              dense
+              @click="state.chatState.selectedTaskId = task.id"
             >
-              https://platform.openai.com/account/api-keys</q-btn
+              <q-tooltip :delay="1000"
+                >Start alternative conversation thread from here</q-tooltip
+              >
+            </q-btn>
+            <q-btn
+              class="col"
+              flat
+              icon="code"
+              dense
+              size="sm"
+              @click="toggleMessageDebug(task.id)"
             >
-            or here:
-            <q-btn href="https://openrouter.ai/keys" target="_blank">
-              https://openrouter.ai/keys</q-btn
+              <q-tooltip :delay="1000">Show message context</q-tooltip>
+            </q-btn>
+            <q-btn
+              class="col-auto"
+              outline
+              icon="edit"
+              dense
+              size="sm"
+              @click="editTask(task.id)"
             >
+              <q-tooltip :delay="1000">Edit Task/Message</q-tooltip>
+            </q-btn>
           </div>
-        </q-card-section>
-      </q-card>
-    </div>
+          <!--task debugging-->
+          <q-slide-transition>
+            <div v-show="state.messageDebug[task.id]">
+              <q-separator />
+              <q-card-section class="text-subtitle2">
+                <div>Task data:</div>
+                <textarea
+                  :value="JSON.stringify(task, null, 2)"
+                  readonly
+                  wrap="soft"
+                  style="
+                    width: 100%;
+                    height: 200px;
+                    background-color: inherit;
+                    color: inherit;
+                  "
+                >
+                </textarea>
+              </q-card-section>
+            </div>
+          </q-slide-transition>
+        </div>
+        <div
+          v-if="
+            ['Open', 'In Progress'].some((subs) =>
+              subs.includes(
+                state.chatState.Tasks[state.chatState.selectedTaskId || '']
+                  ?.state
+              )
+            )
+          "
+          class="q-pa-xs"
+        >
+          <q-spinner-comment color="secondary" size="lg" />
+        </div>
+      </q-card-section>
+    </q-card>
+    <!--Create new task area-->
+    <q-card
+      :class="$q.dark.isActive ? 'bg-primary' : 'bg-grey-2'"
+      flat
+      v-if="getApikey(state.chatState)"
+    >
+      <CreateNewTask />
+    </q-card>
+    <!--API Key hint-->
+    <q-card flat v-else>
+      <q-card-section>
+        <div>
+          Add an API key to access a chatbot in Settings on the left side!
+          <q-btn
+            href="https://platform.openai.com/account/api-keys"
+            target="_blank"
+          >
+            https://platform.openai.com/account/api-keys</q-btn
+          >
+          or here:
+          <q-btn href="https://openrouter.ai/keys" target="_blank">
+            https://openrouter.ai/keys</q-btn
+          >
+        </div>
+      </q-card-section>
+    </q-card>
   </q-page>
 </template>
 
@@ -234,12 +245,12 @@ function editTask(taskId: string) {
 }
 
 function toggleMessageDebug(id: string) {
-  if (state.messageVisualization[id] === undefined) {
+  if (state.messageDebug[id] === undefined) {
     // If the message ID doesn't exist, default to true since we're opening it.
-    state.messageVisualization[id] = true;
+    state.messageDebug[id] = true;
   } else {
     // If it does exist, toggle the boolean.
-    state.messageVisualization[id] = !state.messageVisualization[id];
+    state.messageDebug[id] = !state.messageDebug[id];
   }
 }
 </script>

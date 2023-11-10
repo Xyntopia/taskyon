@@ -1,13 +1,13 @@
 <template>
   <div
     v-if="state.chatState.baseURL == getBackendUrls('openai')"
-    class="row items-center"
+    class="row items-top"
   >
-    <div>
+    <div class="q-pt-xs">
       <q-btn-toggle
         v-model="state.chatState.useOpenAIAssistants"
         unelevated
-        outline
+        glossy
         dense
         toggle-color="secondary"
         color="primary"
@@ -15,10 +15,15 @@
           { label: 'Chat', value: false },
           { label: 'Assistant', value: true },
         ]"
-        ><q-tooltip>Select OpenAI Mode</q-tooltip></q-btn-toggle
-      >
+        ><q-tooltip>Select OpenAI Mode</q-tooltip>
+      </q-btn-toggle>
     </div>
-    <div v-if="state.chatState.useOpenAIAssistants" class="col">
+    <!--OpenAI Assistant selection-->
+    <div
+      v-if="state.chatState.useOpenAIAssistants"
+      class="col"
+      style="min-width: 200px"
+    >
       <q-select
         filled
         dense
@@ -29,10 +34,29 @@
         map-options
         v-model="state.chatState.openAIAssistant"
       >
+        <template v-slot:after>
+          <q-btn
+            icon="settings_applications"
+            @click="state.modelDetails = !state.modelDetails"
+          >
+            <q-tooltip>Check & configure the Assistants' details</q-tooltip>
+          </q-btn>
+        </template>
       </q-select>
-      {{ assistants[state.chatState.openAIAssistant] }}
+      <div v-if="state.modelDetails">
+        <div>
+          <b>Assistant instructions:</b><br />
+          {{ assistants[state.chatState.openAIAssistant]?.instructions }}
+        </div>
+        <q-scroll-area style="height: 230px; max-width: 100%">
+          <pre>
+          {{ assistants[state.chatState.openAIAssistant] }}
+          </pre>
+        </q-scroll-area>
+      </div>
     </div>
-    <div v-else class="col">
+    <!--OpenAI Model selection-->
+    <div v-else class="col" style="min-width: 200px">
       <q-select
         filled
         dense
@@ -44,13 +68,14 @@
       >
       </q-select>
     </div>
-    <div class="text-caption">
+    <div class="col-auto text-caption">
       For a list of supported models go here:
       <a href="https://platform.openai.com/docs/models" target="_blank"
         >https://platform.openai.com/docs/models</a
       >
     </div>
   </div>
+  <!--openrouter.ai models-->
   <q-select
     v-else
     class="q-pt-xs"
