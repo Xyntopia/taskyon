@@ -8,6 +8,7 @@
           <q-input
             v-if="!selectedTaskType"
             autogrow
+            :hide-hint="!state.expertMode"
             filled
             color="secondary"
             v-model="state.taskDraft.content"
@@ -61,7 +62,6 @@
             <template v-slot:before>
               <q-btn
                 dense
-                flat
                 icon="chat"
                 label="Use Chat"
                 @click="setTaskType(undefined)"
@@ -104,12 +104,19 @@
           </div>
         </q-item-section>
       </q-item>
+      <!--Model Selection-->
+      <q-expansion-item dense icon="handyman" label="Select Chatbot Model">
+        <q-item-section>
+          <ModelSelection></ModelSelection>
+        </q-item-section>
+      </q-expansion-item>
       <!--Allowed Tools Selection-->
       <q-expansion-item dense icon="handyman" label="Allowed Tools">
         <q-item-section>
           <div>
             <q-btn
-              class="q-ma-md" dense
+              class="q-ma-md"
+              dense
               label="toggle all allowed tools"
               color="primary"
               @click="toggleSelectedTools"
@@ -139,12 +146,6 @@
               </template></q-option-group
             >
           </div>
-        </q-item-section>
-      </q-expansion-item>
-      <!--Model Selection-->
-      <q-expansion-item dense icon="handyman" label="Select Chatbot Model">
-        <q-item-section>
-          <ModelSelection></ModelSelection>
         </q-item-section>
       </q-expansion-item>
     </q-list>
