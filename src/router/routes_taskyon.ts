@@ -5,10 +5,10 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     component: () => import('layouts/Taskyon.vue'),
     children: [
-      { path: '', component: () => import('components/Chat.vue') },
+      { path: '', component: () => import('pages/TaskChat.vue') },
       {
-        path: 'chat',
-        component: () => import('components/Chat.vue'),
+        path: 'taskchat',
+        component: () => import('pages/TaskChat.vue'),
       },
       {
         path: 'uploader',
