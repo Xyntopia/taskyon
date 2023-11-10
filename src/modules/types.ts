@@ -75,6 +75,7 @@ export type LLMTask = {
     message?: OpenAIMessage;
     function?: FunctionCall;
     model?: string;
+    uploadedFiles?: string[];
   };
   // is undefined in the case it is an "initial" task
   parentID?: string | undefined;
