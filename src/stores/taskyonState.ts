@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
-import { defaultChatState } from 'src/modules/chat';
+import { defaultTaskState } from 'src/modules/chat';
 import { run } from 'src/modules/taskWorker';
 import type { LLMTask } from 'src/modules/types';
 import type { FunctionArguments } from 'src/modules/tools';
@@ -10,7 +10,7 @@ export const useTaskyonStore = defineStore('taskyonState', {
   state: () => {
     console.log('initialize taskyon');
     const initialState = {
-      chatState: defaultChatState(),
+      chatState: defaultTaskState(),
       expertMode: false,
       showTaskData: false,
       drawerOpen: false,

@@ -16,6 +16,16 @@ import {
   OpenRouterGenerationInfo,
 } from './types';
 import { taskChain, processTasksQueue } from './taskManager';
+import OpenAI from 'openai';
+import { lruCache } from './utils';
+
+const openai = lruCache<OpenAI>(1)((apiKey: string) => {
+  const api = new OpenAI({
+    apiKey: apiKey,
+    dangerouslyAllowBrowser: true,
+  });
+  return api;
+});
 
 function getAPIURLs(baseURL: string) {
   return {
@@ -46,7 +56,7 @@ export function getSelectedModel(chatState: ChatStateType) {
     : chatState.openrouterAIModel;
 }
 
-export function defaultChatState() {
+export function defaultTaskState() {
   return {
     Tasks: {} as Record<string, LLMTask>,
     // this refers to the task chain that we have selected. We select one task and then
@@ -54,18 +64,36 @@ export function defaultChatState() {
     selectedTaskId: undefined as string | undefined,
     openrouterAIModel: 'mistralai/mistral-7b-instruct', //model which is generally chosen for a task if not explicitly specified
     openAIModel: 'gpt-3.5-turbo',
+    openAIAssistant: '',
     openAIApiKey: '',
     openRouterAIApiKey: '',
+    useOpenAIAssistants: false,
     siteUrl: 'https://taskyon.xyntopia.com',
     summaryModel: 'Xenova/distilbart-cnn-6-6',
     baseURL: getBackendUrls('openrouter'),
   };
 }
+export type ChatStateType = ReturnType<typeof defaultTaskState>;
 
 function openRouterUsed(chatState: ChatStateType) {
   return getBackendUrls('openrouter') == chatState.baseURL;
 }
-export type ChatStateType = ReturnType<typeof defaultChatState>;
+
+export async function getAssistants(chatState: ChatStateType) {
+  const response = await openai(chatState.openAIApiKey).beta.assistants.list({
+    order: 'desc',
+    limit: 20,
+  });
+
+  const assistantsArray = response.data;
+  const assistantsDict = assistantsArray.reduce((dict, assistant) => {
+    dict[assistant.id] = assistant;
+    return dict;
+  }, {} as Record<string, OpenAI.Beta.Assistant>);
+
+  return assistantsDict;
+}
+
 type ChatCompletionRequest = {
   // An array of messages in the conversation.
   messages: Array<OpenAIMessage>;

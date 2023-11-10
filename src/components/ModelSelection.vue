@@ -1,23 +1,56 @@
 <template>
-  <q-select
+  <div
     v-if="state.chatState.baseURL == getBackendUrls('openai')"
-    class="q-pt-xs"
-    filled
-    bottom-slots
-    dense
-    label="Select Openrouter.ai LLM"
-    icon="smart_toy"
-    :options="modelOptions.openrouter"
-    emit-value
-    v-model="state.chatState.openAIModel"
+    class="row items-center"
   >
-    <template v-slot:hint>
+    <div>
+      <q-btn-toggle
+        v-model="state.chatState.useOpenAIAssistants"
+        unelevated
+        outline
+        dense
+        toggle-color="secondary"
+        color="primary"
+        :options="[
+          { label: 'Chat', value: false },
+          { label: 'Assistant', value: true },
+        ]"
+        ><q-tooltip>Select OpenAI Mode</q-tooltip></q-btn-toggle
+      >
+    </div>
+    <div v-if="state.chatState.useOpenAIAssistants" class="col">
+      <q-select
+        filled
+        dense
+        label="Select OpenAI Assistant"
+        icon="smart_toy"
+        :options="assistantOptions"
+        emit-value
+        map-options
+        v-model="state.chatState.openAIAssistant"
+      >
+      </q-select>
+      {{ assistants[state.chatState.openAIAssistant] }}
+    </div>
+    <div v-else class="col">
+      <q-select
+        filled
+        dense
+        label="Select LLM Model for answering/solving the task."
+        icon="smart_toy"
+        :options="modelOptions.openrouter"
+        emit-value
+        v-model="state.chatState.openAIModel"
+      >
+      </q-select>
+    </div>
+    <div class="text-caption">
       For a list of supported models go here:
       <a href="https://platform.openai.com/docs/models" target="_blank"
         >https://platform.openai.com/docs/models</a
       >
-    </template>
-  </q-select>
+    </div>
+  </div>
   <q-select
     v-else
     class="q-pt-xs"
@@ -59,7 +92,12 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { availableModels, Model, getBackendUrls } from 'src/modules/chat';
+import {
+  availableModels,
+  Model,
+  getBackendUrls,
+  getAssistants,
+} from 'src/modules/chat';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import openrouterModules from 'assets/openrouter_models.json';
 import { useTaskyonStore } from 'stores/taskyonState';
@@ -68,6 +106,15 @@ import openaiModels from 'assets/openai_models.json';
 const openrouterModels: Model[] = openrouterModules.data;
 const openAiModels: Model[] = openaiModels.data;
 const state = useTaskyonStore();
+
+const assistants = ref<Awaited<ReturnType<typeof getAssistants>>>({});
+const assistantOptions = computed(() =>
+  Object.values(assistants.value).map((a) => ({ value: a.id, label: a.name }))
+);
+
+void getAssistants(state.chatState).then((assitantDict) => {
+  assistants.value = assitantDict;
+});
 
 const resOpenRouter = ref<Model[]>([]);
 const resOpenAI = ref<Model[]>([]);
@@ -82,6 +129,7 @@ async function fetchModels(): Promise<void> {
     console.log('using default list');
     resOpenRouter.value = openrouterModels;
   }*/
+  resOpenRouter.value = openrouterModels;
   try {
     resOpenAI.value = await availableModels(
       getBackendUrls('openai'),
