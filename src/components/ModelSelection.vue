@@ -72,7 +72,7 @@ const state = useTaskyonStore();
 const resOpenRouter = ref<Model[]>([]);
 const resOpenAI = ref<Model[]>([]);
 async function fetchModels(): Promise<void> {
-  try {
+  /*try {
     resOpenRouter.value = await availableModels(
       getBackendUrls('openrouter'),
       state.chatState.openRouterAIApiKey
@@ -81,7 +81,7 @@ async function fetchModels(): Promise<void> {
     console.error('Error fetching models:', error);
     console.log('using default list');
     resOpenRouter.value = openrouterModels;
-  }
+  }*/
   try {
     resOpenAI.value = await availableModels(
       getBackendUrls('openai'),
