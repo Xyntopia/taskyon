@@ -1764,6 +1764,11 @@
   resolved "https://registry.yarnpkg.com/@sindresorhus/is/-/is-4.6.0.tgz#3c7c9c46e678feefe7a2e5bb609d3dbd665ffb3f"
   integrity sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw==
 
+"@sqlite.org/sqlite-wasm@^3.44.0-build1":
+  version "3.44.0-build1"
+  resolved "https://registry.yarnpkg.com/@sqlite.org/sqlite-wasm/-/sqlite-wasm-3.44.0-build1.tgz#0af54be2427d60e9b184ab5c164ef56b8bd5ac8e"
+  integrity sha512-q6+F3Vw7f9GvP3o57H9Fxxvgyk3Xwi8gLvn2Dyjuu3ZbYM/sGPBoDywZFrp7E+sZYS7clA1g7MEQ/mSyU6QQcQ==
+
 "@surma/rollup-plugin-off-main-thread@^2.2.3":
   version "2.2.3"
   resolved "https://registry.yarnpkg.com/@surma/rollup-plugin-off-main-thread/-/rollup-plugin-off-main-thread-2.2.3.tgz#ee34985952ca21558ab0d952f00298ad2190c053"
@@ -2192,6 +2197,11 @@
     "@types/node" "*"
     tapable "^2.2.0"
     webpack "^5"
+
+"@types/wicg-file-system-access@^2023.10.3":
+  version "2023.10.3"
+  resolved "https://registry.yarnpkg.com/@types/wicg-file-system-access/-/wicg-file-system-access-2023.10.3.tgz#42f753d235d9ab733c3fb7f5b6cfdad50af89c81"
+  integrity sha512-HAmuLF6Nfbkpf7DxWfOVStuj8D+n/hdv0xJoijKIaYg6DukcqIZPz6tf0YJYRqSYhW7TwK2GZOISwiKdCWSkqw==
 
 "@types/ws@^8.5.1":
   version "8.5.3"

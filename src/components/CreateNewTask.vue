@@ -36,7 +36,10 @@
               </q-btn>
             </template>
             <template v-slot:after>
-              <FileDropzone class="row justify-center items-center">
+              <FileDropzone
+                class="row justify-center items-center"
+                @update:model-value="attachFile"
+              >
                 <q-btn dense stretch>
                   <q-icon name="upload_file" />
                   <q-icon name="attachment" />
@@ -155,6 +158,7 @@ import { useTaskyonStore } from 'stores/taskyonState';
 import { LLMTask } from 'src/modules/types';
 import FileDropzone from './FileDropzone.vue';
 import ModelSelection from 'components/ModelSelection.vue';
+import { attachFile } from 'src/modules/OPFS';
 
 const state = useTaskyonStore();
 
