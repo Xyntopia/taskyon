@@ -13,7 +13,8 @@
         set theme:
         <q-btn-toggle
           dense
-          :toggle-color="$q.dark.isActive ? 'secondary' : 'bg-grey-3'"
+          toggle-color="secondary"
+          color="primary"
           :model-value="$q.dark.mode"
           @update:modelValue="
             (value) => {
@@ -50,7 +51,7 @@
       </q-expansion-item>
       <q-separator spaced />
       <!-- Conversation Area -->
-      <q-expansion-item dense label="Conversations" icon="list" default-opened>
+      <q-expansion-item dense label="Conversation Threads" icon="list" default-opened>
         <div class="column items-stretch">
           <div class="row">
             <q-btn
@@ -78,7 +79,7 @@
               <q-item-section avatar>
                 <q-icon name="chat_bubble" size="xs" />
               </q-item-section>
-              <q-item-section> Conversation {{ idx }} </q-item-section>
+              <q-item-section> Thread {{ idx }} </q-item-section>
               <q-item-section side>
                 <q-btn
                   dense
