@@ -50,6 +50,7 @@ export async function processUserTask(task: LLMTask, chatState: ChatStateType) {
       };
     }
   } else {
+    console.log('execute chat task!', task);
     const response = await getOpenAIChatResponse(task, chatState);
     if (response?.usage) {
       // openai sends back the exact number of prompt tokens :)
@@ -110,7 +111,8 @@ export function createNewChatResponseTask(
   parentTask: LLMTask
 ): partialTaskDraft {
   // Process the response and create new tasks if necessary
-  let taskFromResponse: partialTaskDraft = { role: 'assistant' };
+  console.log('create new response task');
+  const taskFromResponse: partialTaskDraft = { role: 'assistant' };
   if (parentTask.result?.chatResponse) {
     const chatResponse = parentTask.result.chatResponse;
     taskFromResponse.debugging = {
@@ -118,12 +120,10 @@ export function createNewChatResponseTask(
       inference_costs: chatResponse.usage?.inference_costs,
       aiResponse: chatResponse,
     };
-    if (chatResponse.choices.length == 0) {
+    if (chatResponse.choices.length > 0) {
       const choice = chatResponse.choices[0];
-      taskFromResponse = {
-        role: choice.message.role,
-        content: choice.message.content,
-      };
+      taskFromResponse.role = choice.message.role;
+      taskFromResponse.content = choice.message.content;
     }
   } else if (parentTask.result?.assistantResponse) {
     const messages = parentTask.result.assistantResponse;
@@ -139,6 +139,7 @@ export function generateFollowUpTasksFromResult(
   finishedTask: LLMTask,
   chatState: ChatStateType
 ) {
+  console.log('generate follow up task');
   if (finishedTask.result?.type === 'ChatAnswer') {
     const newTaskDraft = createNewChatResponseTask(finishedTask);
     // put AI response in our chain as a new, completed task...
