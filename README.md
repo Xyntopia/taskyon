@@ -9,7 +9,7 @@
 
 A Chat & Agent Interface for Users, Experts & Developers based on Tasks! 🚀
 
-You can access the deployed app here: [https://taskyon.xyntopia.com](taskyon.xyntopia.com).
+You can access the deployed app here: [https://taskyon.xyntopia.com](https://taskyon.xyntopia.com).
 
 ---
 
