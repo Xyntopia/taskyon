@@ -25,6 +25,11 @@ type AnyFunction<ReturnType> = (...args: any[]) => ReturnType;
  * console.log(cachedExpensiveOperation(2, 3));  // Outputs: Cache hit: [2,3] \n 6
  */
 
+// Async sleep function
+export function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function lruCache<ReturnType>(
   size: number,
   ignoreIndices: number[] = []

@@ -1,13 +1,7 @@
 import axios from 'axios';
 import { v1 as uuidv1 } from 'uuid';
 //import { useCachedModels } from './mlModels';
-import {
-  Tool,
-  tools,
-  ExtendedTool,
-  getDefaultParametersForTool,
-  FunctionArguments,
-} from './tools';
+import { Tool, tools, ExtendedTool } from './tools';
 import { getEncoding } from 'js-tiktoken';
 import {
   LLMTask,
@@ -17,7 +11,7 @@ import {
 } from './types';
 import { taskChain, processTasksQueue } from './taskManager';
 import OpenAI from 'openai';
-import { lruCache } from './utils';
+import { lruCache, sleep } from './utils';
 
 const getOpenai = lruCache<OpenAI>(1)((apiKey: string) => {
   const api = new OpenAI({
@@ -300,19 +294,20 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
   return openAIMessageThread;
 }
 
+export type partialTaskDraft = {
+  role: LLMTask['role'];
+  content?: LLMTask['content'];
+  context?: LLMTask['context'];
+  state?: LLMTask['state'];
+  allowedTools?: LLMTask['allowedTools'];
+  debugging?: LLMTask['debugging'];
+};
+
 export function addTask2Tree(
-  task: {
-    role: LLMTask['role'];
-    content?: LLMTask['content'];
-    context?: LLMTask['context'];
-    state?: LLMTask['state'];
-    allowedTools?: LLMTask['allowedTools'];
-    debugging?: LLMTask['debugging'];
-  },
+  task: partialTaskDraft,
   parent: LLMTask | undefined,
   chatState: ChatStateType,
-  execute = true,
-  forceId?: string
+  execute = true
 ) {
   const newTask: LLMTask = {
     role: task.role,
@@ -321,7 +316,7 @@ export function addTask2Tree(
     state: task.state || 'Open',
     childrenIDs: [],
     debugging: task.debugging || {},
-    id: forceId || uuidv1(),
+    id: uuidv1(),
     context: task.context,
     allowedTools: task.allowedTools || parent?.allowedTools,
   };
@@ -345,85 +340,6 @@ export function addTask2Tree(
   }
   chatState.selectedTaskId = newTask.id;
   return newTask.id;
-}
-
-// return the last task that was created in the chain.
-function createNewTasksFromChatResponse(
-  response: ChatCompletionResponse,
-  parentTask: LLMTask,
-  chatState: ChatStateType
-) {
-  // Process the response and create new tasks if necessary
-  if (response.choices.length > 0) {
-    const choice = response.choices[0];
-    // put AI response in our chain as a new, completed task...
-    // TODO: theoretically the user "viewing" the task would be its completion..
-    //       so we could create it before sending it and then wait for AI to respond...
-    const newResponseTaskId = addTask2Tree(
-      {
-        state: 'Completed',
-        role: choice.message.role,
-        content: choice.message.content,
-        debugging: {
-          usedTokens: response.usage?.total_tokens,
-          inference_costs: response.usage?.inference_costs,
-          aiResponse: response,
-        },
-      },
-      parentTask,
-      chatState,
-      false,
-      response.id
-    );
-
-    // and push newly created tasks to our task list. they were already processed, so we don't need to
-    // add them to our task queue.
-    if (choice.message.content) {
-      // we are using the reference to the object here in order to preserve potential proxys
-      // introduced by things like vue :).
-      chatState.selectedTaskId = chatState.Tasks[newResponseTaskId].id;
-      return chatState.Tasks[newResponseTaskId];
-    } else if (
-      choice.finish_reason === 'function_call' &&
-      choice.message.function_call
-    ) {
-      const func = choice.message.function_call;
-
-      // Try to parse the function arguments from JSON, log and re-throw the error if parsing fails
-      let funcArguments: FunctionArguments;
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        funcArguments = JSON.parse(func.arguments);
-      } catch (parseError) {
-        // in this case, we assume, that the first parameter was meant...
-        funcArguments = {};
-        funcArguments[Object.keys(tools[func.name].parameters.properties)[0]] =
-          func.arguments;
-      }
-
-      const functionCall = {
-        name: func.name,
-        arguments: funcArguments,
-      };
-
-      chatState.Tasks[newResponseTaskId].result = {
-        type: 'FunctionCall',
-        functionCallDetails: functionCall,
-      };
-      const funcTaskid = addTask2Tree(
-        {
-          role: 'function',
-          content: null,
-          context: {
-            function: functionCall,
-          },
-        },
-        chatState.Tasks[newResponseTaskId],
-        chatState
-      );
-      return chatState.Tasks[funcTaskid];
-    }
-  }
 }
 
 export function bigIntToString(obj: unknown): unknown {
@@ -457,7 +373,7 @@ function mapFunctionNames(toolNames: string[]) {
 }
 
 // Function to process OpenAI conversation
-export async function processOpenAIConversationThread(
+export async function getOpenAIChatResponse(
   task: LLMTask,
   chatState: ChatStateType
 ) {
@@ -472,20 +388,11 @@ export async function processOpenAIConversationThread(
       getSelectedModel(chatState),
       getAPIURLs(chatState.baseURL).chat
     );
-    if (response.usage) {
-      // openai sends back the exact number of prompt tokens :)
-      task.debugging.usedTokens = response.usage.prompt_tokens;
-    }
-    createNewTasksFromChatResponse(response, task, chatState);
+    return response;
   }
 }
 
-// Async sleep function
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-export async function sendOpenAIAssistantMessage(
+export async function getOpenAIAssistantResponse(
   task: LLMTask,
   chatState: ChatStateType
 ) {
@@ -559,7 +466,7 @@ export async function sendOpenAIAssistantMessage(
 
           // Add the retrieved message to the newMessages list
           newMessages.push(message);
-          
+
           // TODO: we can now process this message and push it to our own list...
         }
       }
@@ -585,13 +492,13 @@ export async function sendOpenAIAssistantMessage(
     // now we need to check which messages are "new"
     // for now we simply assume, the last one...
     //const lastMessage = messages.data[0]
+    return newMessages;
   }
 }
 
-export function deleteConversationThread(
-  leafId: string,
-  chatState: ChatStateType
-) {
+// deletes tasks up to the first branch "split", eliminating a branch
+// which is defined by the leaf and preceding, exclusive tasks
+export function deleteTaskThread(leafId: string, chatState: ChatStateType) {
   if (chatState.selectedTaskId == leafId) {
     chatState.selectedTaskId = undefined;
   }

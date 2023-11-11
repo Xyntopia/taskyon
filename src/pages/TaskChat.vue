@@ -28,8 +28,8 @@
             </div>
             <div v-if="task.result?.type == 'FunctionCall'" class="col">
               <q-icon size="sm" name="build_circle" />
-              {{ task.result.functionCallDetails?.name }}({{
-                task.result.functionCallDetails?.arguments
+              {{ task.result.functionCall?.name }}({{
+                task.result.functionCall?.arguments
               }})
             </div>
             <div v-else-if="task.role == 'function'" class="col">

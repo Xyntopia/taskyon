@@ -1,30 +1,91 @@
+import { dump } from 'js-yaml';
 import {
-  ChatStateType,
-  processOpenAIConversationThread,
+  getOpenAIChatResponse,
   openAIUsed,
-  sendOpenAIAssistantMessage,
+  getOpenAIAssistantResponse,
+  ChatStateType,
+  addTask2Tree,
+  bigIntToString,
+  partialTaskDraft,
 } from './chat';
 import { processTasksQueue } from './taskManager';
-import { handleFunctionExecution } from './taskManager';
-import { tools } from './tools';
-import { LLMTask, TaskResult } from './types';
+import {
+  FunctionArguments,
+  FunctionCall,
+  ToolCollection,
+  tools,
+} from './tools';
+import { LLMTask, TaskResult, TaskState } from './types';
 
-// Function to process user tasks
+export async function handleFunctionExecution(
+  func: FunctionCall,
+  tools: ToolCollection
+): Promise<{ result: TaskResult; state: TaskState; error?: string }> {
+  try {
+    let funcR: unknown = await tools[func.name].function(func.arguments);
+    funcR = bigIntToString(funcR);
+    const result: TaskResult = {
+      type: 'FunctionResult',
+      content: dump(funcR),
+    };
+    return { result, state: 'Completed' };
+  } catch (error) {
+    return {
+      result: {
+        type: 'FunctionResult',
+        content: JSON.stringify(error),
+      },
+      state: 'Error',
+    };
+  }
+}
 
 export async function processUserTask(task: LLMTask, chatState: ChatStateType) {
   if (chatState.useOpenAIAssistants && openAIUsed(chatState)) {
-    await sendOpenAIAssistantMessage(task, chatState);
+    const messages = await getOpenAIAssistantResponse(task, chatState);
+    if (messages) {
+      task.result = {
+        type: 'ChatAnswer',
+        assistantResponse: messages,
+      };
+    }
   } else {
-    await processOpenAIConversationThread(task, chatState);
-  }
-  task.state = 'Completed';
-}
-// Function to process function tasks
+    const response = await getOpenAIChatResponse(task, chatState);
+    if (response?.usage) {
+      // openai sends back the exact number of prompt tokens :)
+      task.debugging.usedTokens = response.usage.prompt_tokens;
+    }
+    task.result = {
+      type: 'ChatAnswer',
+      chatResponse: response,
+    };
 
-export async function processFunctionTask(
-  task: LLMTask,
-  chatState: ChatStateType
-) {
+    // Try to parse the function arguments from JSON, log and re-throw the error if parsing fails
+    /*let funcArguments: FunctionArguments;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      funcArguments = JSON.parse(func.arguments);
+    } catch (parseError) {
+      // in this case, we assume, that the first parameter was meant...
+      funcArguments = {};
+      funcArguments[Object.keys(tools[func.name].parameters.properties)[0]] =
+        func.arguments;
+    }
+
+    const functionCall = {
+      name: func.name,
+      arguments: funcArguments,
+    };
+
+    chatState.Tasks[newResponseTaskId].result = {
+      type: 'FunctionCall',
+      functionCall: functionCall,
+    };*/
+  }
+  return task;
+}
+
+export async function processFunctionTask(task: LLMTask) {
   if (task.context?.function) {
     const func = task.context.function;
     console.log(`Calling function ${func.name}`);
@@ -41,9 +102,72 @@ export async function processFunctionTask(
       };
       task.state = 'Error';
     }
-    // TODO:  IF follow-up tasks are allowed!
-    // give task back to the AI!
-    await processOpenAIConversationThread(task, chatState);
+  }
+  return task;
+}
+
+export function createNewChatResponseTask(
+  parentTask: LLMTask
+): partialTaskDraft {
+  // Process the response and create new tasks if necessary
+  let taskFromResponse: partialTaskDraft = { role: 'assistant' };
+  if (parentTask.result?.chatResponse) {
+    const chatResponse = parentTask.result.chatResponse;
+    taskFromResponse.debugging = {
+      usedTokens: chatResponse.usage?.total_tokens,
+      inference_costs: chatResponse.usage?.inference_costs,
+      aiResponse: chatResponse,
+    };
+    if (chatResponse.choices.length == 0) {
+      const choice = chatResponse.choices[0];
+      taskFromResponse = {
+        role: choice.message.role,
+        content: choice.message.content,
+      };
+    }
+  } else if (parentTask.result?.assistantResponse) {
+    const messages = parentTask.result.assistantResponse;
+    console.log('create a new assistant response task...', messages);
+    //TODO: to the ThreadMessage stuff here...
+    // TODO: we will create an entire chain of tasks here for each message we're geting back and
+    // mark each of them as completed...
+  }
+  return taskFromResponse;
+}
+
+export function generateFollowUpTasksFromResult(
+  finishedTask: LLMTask,
+  chatState: ChatStateType
+) {
+  if (finishedTask.result?.type === 'ChatAnswer') {
+    const newTaskDraft = createNewChatResponseTask(finishedTask);
+    // put AI response in our chain as a new, completed task...
+    // TODO: theoretically the user "viewing" the task would be its completion..
+    //       so we could create it before sending it and then wait for AI to respond...
+    const newResponseTaskId = addTask2Tree(
+      {
+        state: 'Completed',
+        ...newTaskDraft,
+      },
+      finishedTask,
+      chatState,
+      false
+    );
+    return newResponseTaskId;
+  } else if (finishedTask.result?.type === 'FunctionCall') {
+    const funcTaskid = addTask2Tree(
+      {
+        role: 'function',
+        content: null,
+        context: {
+          function: finishedTask.result.functionCall,
+        },
+      },
+      finishedTask,
+      chatState,
+      true
+    );
+    return funcTaskid;
   }
 }
 
@@ -51,14 +175,14 @@ async function taskWorker(chatState: ChatStateType) {
   console.log('entering task worker loop...');
   while (true) {
     console.log('waiting for next task!');
-    const task = await processTasksQueue.pop();
+    let task = await processTasksQueue.pop();
     task.state = 'In Progress';
     console.log('processing task:', task);
     try {
       if (task.role == 'user') {
-        await processUserTask(task, chatState);
+        task = await processUserTask(task, chatState);
       } else if (task.role == 'function') {
-        await processFunctionTask(task, chatState);
+        task = await processFunctionTask(task);
       } else {
         console.log("We don't know what to do with this task:", task);
         task.state = 'Error';
@@ -67,11 +191,14 @@ async function taskWorker(chatState: ChatStateType) {
       task.state = 'Error';
       task.debugging = { error };
       console.error('Error processing task:', error);
+    } finally {
+      task.state = 'Completed';
     }
+    void generateFollowUpTasksFromResult(task, chatState);
   }
 }
 
 export async function run(chatState: ChatStateType) {
   console.log('start task taskWorker');
   await taskWorker(chatState);
-}
+} // Helper function to handle function execution

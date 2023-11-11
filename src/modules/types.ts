@@ -62,10 +62,11 @@ export interface OpenRouterGenerationInfo {
 }
 
 export interface TaskResult {
-  type: 'ChatAnswer' | 'FunctionCall' | 'NewTask' | 'FunctionResult'; // Type of result
+  type: 'ChatAnswer' | 'FunctionCall' | 'FunctionResult'; // Type of result
+  assistantResponse?: OpenAI.Beta.Threads.Messages.ThreadMessage[];
+  chatResponse?: ChatCompletionResponse;
   content?: string; // Description or value of the result
-  functionCallDetails?: FunctionCall; // Details if the result is a function call
-  newTaskDetails?: LLMTask[]; // Details if the result is a new task
+  functionCall?: FunctionCall; // Details if the result is a function call
 }
 
 export type LLMTask = {
