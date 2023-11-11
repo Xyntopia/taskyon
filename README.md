@@ -1,23 +1,32 @@
-# ↗️ Taskyon ↗️:
+# Taskyon:
 
-A Chat & Agent Interface for Users, Experts & Developers based on Tasks!
+<img align="left" src="src/assets/taskyon.svg" width="140">
+
+- 👥🛠️ Personalized AI Assistant 🤖
+- 🏡🌟 Local First
+- 🌳✅ Task Trees
+- 🛡️🏖️ Tool Sandbox
+
+A Chat & Agent Interface for Users, Experts & Developers based on Tasks! 🚀
+
+---
 
 ## Overview
 
-Taskyon is a comprehensive chat interface that orchestrates asynchronous task management in a tree-like structure, enabling parallel processing and efficient handling of tasks and conversations. It leverages services such as OpenAI, OpenAI Assistants, and Openrouter.ai to execute tasks that range from user messages to complex function calls. Taskyon is build on the principles of [_local-first_](https://dl.acm.org/doi/10.1145/3359591.3359737).
+Taskyon is a comprehensive chat interface that orchestrates asynchronous task management in a tree-like structure, enabling parallel processing and efficient handling of tasks and conversations. 🌳 It leverages services such as OpenAI, OpenAI Assistants, and Openrouter.ai to execute tasks that range from user messages to complex function calls. Taskyon is build on the principles of [_local-first_](https://dl.acm.org/doi/10.1145/3359591.3359737) 🏠.
 
 ## Philosophy: Personalized AI Interaction & Local First
 
-Individualized AI Bots: Taskyon is built on the principle that every user should have a personalized AI bot. This approach ensures that the AI adapts organically to each user's specific interactions and needs, evolving through direct, human-centric communication rather than pre-defined programming or static instructions like GPTs.
+🤖 Individualized AI Bots: Taskyon is built on the principle that every user should have a personalized AI bot. This approach ensures that the AI adapts organically to each user's specific interactions and needs, evolving through direct, human-centric communication rather than pre-defined programming or static instructions like GPTs.
 
-User-Driven Evolution: Taskyon blurs the lines between user and developer. Users, through their interactions, play a pivotal role in shaping their AI's learning and capabilities, turning their expertise and feedback into the driving force behind the bot's development. Users themselves often have more task-specific insights than developers and it is important to leverage this.
+👥🛠️ User-Driven Evolution: Taskyon blurs the lines between user and developer. Users, through their interactions, play a pivotal role in shaping their AI's learning and capabilities, turning their expertise and feedback into the driving force behind the bot's development. Users themselves often have more task-specific insights than developers and it is important to leverage this.
 
 Local First Principle: Taskyon embraces the Local First approach, prioritizing user autonomy and data security. This principle ensures that most of the data processing and AI interactions occur on the user's local device, rather than relying on cloud-based services. Key benefits include:
 
-- _Enhanced Safety:_ By processing data locally, Taskyon minimizes the risks associated with data breaches, ensuring that sensitive information remains within the user's control.
-- _Data Sovereignty:_ Users have complete ownership and control over their data, with no dependency on external cloud services.
-- _Cost Efficiency:_ Local processing reduces reliance on cloud services, potentially lowering operational costs.
-- _Customizable AI Experience:_ Users can tailor their AI's learning and performance to their specific needs, with changes and adaptations being stored and managed locally.
+- 🔐 _Enhanced Safety:_ By processing data locally, Taskyon minimizes the risks associated with data breaches, ensuring that sensitive information remains within the user's control.
+- 👑 _Data Sovereignty:_ Users have complete ownership and control over their data, with no dependency on external cloud services.
+- 💰 _Cost Efficiency:_ Local processing reduces reliance on cloud services, potentially lowering operational costs.
+- 🧪 _Customizable AI Experience:_ Users can tailor their AI's learning and performance to their specific needs, with changes and adaptations being stored and managed locally.
 
 ## Features
 
@@ -32,17 +41,15 @@ Local First Principle: Taskyon embraces the Local First approach, prioritizing u
 
 ## Installation
 
-Taskyon can be accessed directly at taskyon.xyntopia.com. For local setup:
+Taskyon can be accessed directly at [https://taskyon.xyntopia.com](https://taskyon.xyntopia.com). For local setup:
 
-1. Clone the repository.
-2. Run `yarn install` to install dependencies.
-3. Use `quasar build` for a production build or `quasar dev` for a development server.
-
-**Note:** API keys are browser-restricted for security. A desktop application is available for enhanced capabilities.
+1. Clone the repository. 📥
+2. Run `yarn install` to install dependencies. 🧶
+3. Use `quasar build` for a production build or `quasar dev` for a development server. 🏗️
 
 ## Usage
 
-Interact with the application through the chat interface, utilizing the sidebar for navigation and managing conversation threads. The frontend allows for direct code execution and tool usage within the sandbox environment. User data and configurations are stored locally for persistent sessions.
+Interact with the application through the chat interface. The frontend allows for direct code execution and tool usage within the sandbox environment. User data and configurations are stored locally for persistent sessions 💬🖥️.
 
 ## Cost and Usage Management
 
@@ -52,7 +59,7 @@ Taskyon's approach to managing costs is deeply intertwined with its Local First 
 - _Local Inference:_ Partial or complete local processing of tasks & tool execution cuts down on cloud computing expenses.
 - _Resource Optimization:_ Efficient use of local hardware optimizes performance without incurring additional costs.
 
-Additionally, taskyon provides real-time monitoring of token usage and exact service costs, ensuring transparency and control over resource consumption.
+Additionally, taskyon provides real-time monitoring of token usage and exact service costs, ensuring transparency and control over resource consumption. 📊
 
 ## Security
 
@@ -70,8 +77,8 @@ Taskyon's commitment to security is evident in its Local First approach, which i
 
 ## Contributing
 
-Contributions are welcome. Please adhere to the project's code of conduct and submit pull requests for review.
+📬 Contributions are welcome. Please adhere to the project's code of conduct and submit pull requests for review.
 
 ## License
 
-Taskyon is released under the MIT License. See LICENSE.md for more details.
+📃 Taskyon is released under the MIT License. See LICENSE.md for more details.
