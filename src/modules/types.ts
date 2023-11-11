@@ -1,4 +1,5 @@
 import { FunctionCall } from './tools';
+import type OpenAI from 'openai';
 
 export type TaskState =
   | 'Open'
@@ -81,6 +82,7 @@ export type LLMTask = {
   parentID?: string | undefined;
   childrenIDs: string[];
   debugging: {
+    threadMessage?: OpenAI.Beta.Threads.Messages.ThreadMessage;
     usedTokens?: number;
     // the costs used to solve this task...
     inference_costs?: number;

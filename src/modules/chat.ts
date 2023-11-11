@@ -19,7 +19,7 @@ import { taskChain, processTasksQueue } from './taskManager';
 import OpenAI from 'openai';
 import { lruCache } from './utils';
 
-const openai = lruCache<OpenAI>(1)((apiKey: string) => {
+const getOpenai = lruCache<OpenAI>(1)((apiKey: string) => {
   const api = new OpenAI({
     apiKey: apiKey,
     dangerouslyAllowBrowser: true,
@@ -79,11 +79,17 @@ function openRouterUsed(chatState: ChatStateType) {
   return getBackendUrls('openrouter') == chatState.baseURL;
 }
 
+export function openAIUsed(chatState: ChatStateType) {
+  return getBackendUrls('openai') == chatState.baseURL;
+}
+
 export async function getAssistants(chatState: ChatStateType) {
-  const response = await openai(chatState.openAIApiKey).beta.assistants.list({
-    order: 'desc',
-    limit: 20,
-  });
+  const response = await getOpenai(chatState.openAIApiKey).beta.assistants.list(
+    {
+      order: 'desc',
+      limit: 20,
+    }
+  );
 
   const assistantsArray = response.data;
   const assistantsDict = assistantsArray.reduce((dict, assistant) => {
@@ -216,10 +222,13 @@ function generateHeaders(chatState: ChatStateType) {
 async function callLLM(
   chatMessages: OpenAIMessage[],
   functions: Array<Tool>,
-  chatState: ChatStateType
+  chatState: ChatStateType,
+  headers: Record<string, string>,
+  model: string,
+  chatURL: string
 ) {
   const payload: ChatCompletionRequest = {
-    model: getSelectedModel(chatState),
+    model,
     messages: chatMessages,
     user: 'taskyon',
     temperature: 0.0,
@@ -232,19 +241,14 @@ async function callLLM(
     payload.functions = functions;
   }
 
-  const headers = generateHeaders(chatState);
-
-  const response = await axios.post<ChatCompletionResponse>(
-    getAPIURLs(chatState.baseURL).chat,
-    payload,
-    { headers }
-  );
+  const response = await axios.post<ChatCompletionResponse>(chatURL, payload, {
+    headers,
+  });
   console.log('AI responded:', response);
   const chatCompletion = response.data;
 
   if (openRouterUsed(chatState)) {
     const GENERATION_ID = response.data.id;
-    const headers = generateHeaders(chatState);
     const generation = await axios.get<OpenRouterGenerationInfo>(
       `https://openrouter.ai/api/v1/generation?id=${GENERATION_ID}`,
       { headers }
@@ -463,7 +467,10 @@ export async function processOpenAIConversationThread(
     const response = await callLLM(
       openAIConversationThread,
       functions,
-      chatState
+      chatState,
+      generateHeaders(chatState),
+      getSelectedModel(chatState),
+      getAPIURLs(chatState.baseURL).chat
     );
     if (response.usage) {
       // openai sends back the exact number of prompt tokens :)
@@ -471,6 +478,108 @@ export async function processOpenAIConversationThread(
     }
     createNewTasksFromChatResponse(response, task, chatState);
   }
+}
+
+// Async sleep function
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function sendOpenAIAssistantMessage(
+  task: LLMTask,
+  chatState: ChatStateType
+) {
+  const openai = getOpenai(chatState.openAIApiKey);
+  console.log('send task to assistant!', task);
+  const parentTask: LLMTask | undefined = chatState.Tasks[task.parentID || ''];
+  let threadId = parentTask?.debugging?.threadMessage?.thread_id;
+  if (!threadId) {
+    const thread = await openai.beta.threads.create();
+    threadId = thread.id;
+  }
+
+  const assistantId = chatState.openAIAssistant;
+  //TODO: we could potentially check for all the messages which are already in the thread
+
+  // first, we check if the parent of the task already has a thread & message id. If it does, we
+  // will simply use that, add the same id to our current task and add the task as a message
+  // to the thread.
+  const message = await openai.beta.threads.messages.create(threadId, {
+    role: 'user',
+    content: 'I need to solve the equation `3x + 11 = 14`. Can you help me?',
+  });
+
+  // attach message to task
+  task.debugging.threadMessage = message;
+
+  //after we have done that, we tell openai to process the run with the new message
+  let run = await openai.beta.threads.runs.create(threadId, {
+    assistant_id: assistantId,
+    instructions:
+      'Please address the user as Jane Doe. The user has a premium account.',
+  });
+
+  // check if message has completed already...
+  // TODO: write an extra task for this..   we should check if message has completed.
+  // And if so, retrieve the result..
+  run = await openai.beta.threads.runs.retrieve(threadId, run.id);
+
+  const newMessages: OpenAI.Beta.Threads.Messages.ThreadMessage[] = [];
+
+  let status;
+  do {
+    // Wait for a specified time before checking the status again
+    await sleep(5000); // sleeps for 5 seconds
+
+    // Retrieve the current status of run
+    run = await openai.beta.threads.runs.retrieve(threadId, run.id);
+    status = run.status;
+
+    // Log the current status
+    console.log('Current status:', status);
+
+    // Retrieve the steps of the run
+    const runStep = await openai.beta.threads.runs.steps.list(threadId, run.id);
+    for (const step of runStep.data) {
+      if (step.type === 'message_creation' && step.status === 'completed') {
+        // Retrieve the message using the message ID from step_details
+        OpenAI.Beta.Threads.Messages.ThreadMessagesPage;
+        const messageId = (
+          step.step_details as OpenAI.Beta.Threads.Runs.Steps.MessageCreationStepDetails
+        ).message_creation.message_id;
+        const message = await openai.beta.threads.messages.retrieve(
+          threadId,
+          messageId
+        );
+
+        // Add the retrieved message to the newMessages list
+        newMessages.push(message);
+
+        // TODO: we can now process this message and push it to our own list...
+      }
+    }
+  } while (status === 'queued' || status === 'in_progress');
+
+  // Handle other statuses accordingly
+  if (status === 'completed') {
+    // Process the completed run
+    console.log('Run completed:', run);
+  } else if (
+    status === 'requires_action' ||
+    status === 'failed' ||
+    status === 'cancelled' ||
+    status === 'expired'
+  ) {
+    // Handle other terminal statuses
+    console.log('Run ended with status:', status);
+  }
+
+  // retrieve finished conversation...
+  //const messages = await openai.beta.threads.messages.list(threadId);
+
+  // now we need to check which messages are "new"
+  // for now we simply assume, the last one...
+  //const lastMessage = messages.data[0]
 }
 
 export function deleteConversationThread(

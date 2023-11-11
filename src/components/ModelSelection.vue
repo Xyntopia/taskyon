@@ -68,7 +68,10 @@
       >
       </q-select>
     </div>
-    <div class="col-auto text-caption">
+    <div
+      v-if="!state.chatState.useOpenAIAssistants"
+      class="col-auto text-caption"
+    >
       For a list of supported models go here:
       <a href="https://platform.openai.com/docs/models" target="_blank"
         >https://platform.openai.com/docs/models</a

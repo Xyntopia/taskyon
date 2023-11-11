@@ -1,4 +1,9 @@
-import { ChatStateType, processOpenAIConversationThread } from './chat';
+import {
+  ChatStateType,
+  processOpenAIConversationThread,
+  openAIUsed,
+  sendOpenAIAssistantMessage,
+} from './chat';
 import { processTasksQueue } from './taskManager';
 import { handleFunctionExecution } from './taskManager';
 import { tools } from './tools';
@@ -7,7 +12,11 @@ import { LLMTask, TaskResult } from './types';
 // Function to process user tasks
 
 export async function processUserTask(task: LLMTask, chatState: ChatStateType) {
-  await processOpenAIConversationThread(task, chatState);
+  if (chatState.useOpenAIAssistants && openAIUsed(chatState)) {
+    await sendOpenAIAssistantMessage(task, chatState);
+  } else {
+    await processOpenAIConversationThread(task, chatState);
+  }
   task.state = 'Completed';
 }
 // Function to process function tasks
@@ -37,6 +46,7 @@ export async function processFunctionTask(
     await processOpenAIConversationThread(task, chatState);
   }
 }
+
 async function taskWorker(chatState: ChatStateType) {
   console.log('entering task worker loop...');
   while (true) {
