@@ -426,8 +426,6 @@ export async function getOpenAIAssistantResponse(
 
           // Add the retrieved message to the newMessages list
           newMessages.push(message);
-
-          // TODO: we can now process this message and push it to our own list...
         }
       }
     } while (status === 'queued' || status === 'in_progress');
@@ -446,8 +444,10 @@ export async function getOpenAIAssistantResponse(
       console.log('Run ended with status:', status);
     }
 
-    // retrieve finished conversation...
-    //const messages = await openai.beta.threads.messages.list(threadId);
+    // Sort the newMessages array by the created_at timestamp
+    newMessages.sort((a, b) => {
+      return a.created_at - b.created_at;
+    });
 
     // now we need to check which messages are "new"
     // for now we simply assume, the last one...
