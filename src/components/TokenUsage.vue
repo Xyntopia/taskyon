@@ -8,75 +8,54 @@
       style="background-color: inherit; color: inherit"
     >
       Token Usage
-      <tbody v-if="task.debugging?.aiResponse?.usage">
+      <tbody>
         <tr>
-          <td class="text-left">Prompt (estimated Ts for functions):</td>
+          <td class="text-left">Functions:</td>
           <td class="text-right">
-            +
-            {{ task.debugging?.aiResponse?.usage.prompt_tokens }}
-            (
-            {{
-              estimateChatTokens(task, state.chatState).functionTokens * 0.8
-            }})
+            {{ estimateChatTokens(task, state.chatState).functionTokens * 0.7 }}
+            (estimated)
           </td>
         </tr>
         <tr>
-          <td class="text-left">Completion:</td>
+          <td>Thread:</td>
           <td class="text-right">
-            +
-            {{ task.debugging?.aiResponse?.usage.completion_tokens }}
+            {{ estimateChatTokens(task, state.chatState).chatTokens }}
+            (estimated)
           </td>
         </tr>
         <tr>
-          <td class="text-left">Total:</td>
-          <td class="text-right">
-            =
-            {{ task.debugging?.aiResponse?.usage.total_tokens }} (exact)
+          <td class="text-left">Prompt:</td>
+          <td v-if="task.debugging?.promptTokens" class="text-right">
+            {{ task.debugging?.promptTokens }}
+          </td>
+          <td v-else class="text-right">
+            {{ estimateChatTokens(task, state.chatState).promptTokens }}
+            (estimated)
           </td>
         </tr>
-        <tr v-if="task.debugging?.inference_costs != undefined">
+        <tr>
+          <td class="text-left">Completion/Result:</td>
+          <td class="text-right">
+            {{ task.debugging?.resultTokens }}
+          </td>
+        </tr>
+        <tr>
+          <td class="text-left">Total tokens used for task:</td>
+          <td v-if="task.debugging?.taskTokens" class="text-right">
+            ={{ task.debugging?.taskTokens }}
+          </td>
+          <td v-else class="text-right">
+            ={{ estimateChatTokens(task, state.chatState).total }}
+            (estimated)
+          </td>
+        </tr>
+        <tr v-if="task.debugging?.taskCosts != undefined">
           <td class="text-left">Costs:</td>
           <td class="text-right">
             =
-            {{
-              Math.round(task.debugging?.inference_costs * 1e6).toLocaleString()
-            }}
-            μ$ (exact, ={{ Math.round(0.01 / task.debugging?.inference_costs) }}
+            {{ Math.round(task.debugging?.taskCosts * 1e6).toLocaleString() }}
+            μ$ (exact, ={{ Math.round(0.01 / task.debugging?.taskCosts) }}
             messages to reach $0.01)
-          </td>
-        </tr>
-      </tbody>
-      <tbody v-else>
-        <tr>
-          <td class="text-left">Functions (estimated):</td>
-          <td class="text-right">
-            +
-            {{ estimateChatTokens(task, state.chatState).functionTokens }}
-          </td>
-        </tr>
-        <tr>
-          <td class="text-left">Prompt (estimated):</td>
-          <td class="text-right">
-            +
-            {{ estimateChatTokens(task, state.chatState).promptTokens }}
-          </td>
-        </tr>
-        <tr>
-          <td class="text-left">Conversation (estimated):</td>
-          <td class="text-right">
-            +
-            {{ estimateChatTokens(task, state.chatState).chatTokens }}
-          </td>
-        </tr>
-        <tr>
-          <td class="text-left">Total:</td>
-          <td v-if="task.debugging?.usedTokens" class="text-right">
-            = {{ task.debugging?.usedTokens }} (exact)
-          </td>
-          <td v-else class="text-right">
-            =
-            {{ estimateChatTokens(task, state.chatState).total }}
-            (estimated)
           </td>
         </tr>
       </tbody>

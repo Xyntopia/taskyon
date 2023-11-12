@@ -55,7 +55,10 @@ export async function processUserTask(task: LLMTask, chatState: ChatStateType) {
     if (response) {
       if (response.usage) {
         // openai sends back the exact number of prompt tokens :)
-        task.debugging.usedTokens = response.usage.prompt_tokens;
+        task.debugging.promptTokens = response.usage.prompt_tokens;
+        task.debugging.resultTokens = response.usage.completion_tokens;
+        task.debugging.taskCosts = response.usage.inference_costs;
+        task.debugging.taskTokens = response.usage.total_tokens;
       }
       if (response.choices.length > 0) {
         const choice = response.choices[0];
@@ -116,19 +119,12 @@ export async function processFunctionTask(task: LLMTask) {
   return task;
 }
 
-export function createNewChatResponseTask(
-  parentTask: LLMTask
-): partialTaskDraft {
+function createNewChatResponseTask(parentTask: LLMTask): partialTaskDraft {
   // Process the response and create new tasks if necessary
   console.log('create new response task');
   const taskFromResponse: partialTaskDraft = { role: 'assistant' };
   if (parentTask.result?.chatResponse) {
     const chatResponse = parentTask.result.chatResponse;
-    taskFromResponse.debugging = {
-      usedTokens: chatResponse.usage?.total_tokens,
-      inference_costs: chatResponse.usage?.inference_costs,
-      aiResponse: chatResponse,
-    };
     if (chatResponse.choices.length > 0) {
       const choice = chatResponse.choices[0];
       taskFromResponse.role = choice.message.role;
@@ -144,13 +140,31 @@ export function createNewChatResponseTask(
   return taskFromResponse;
 }
 
-export function generateFollowUpTasksFromResult(
+function addChildCosts(parentTask: LLMTask, childTask: partialTaskDraft) {
+  // check if we find any cost-related information and then distribute them among the children :)
+  if (parentTask.result?.chatResponse) {
+    const chatResponse = parentTask.result.chatResponse;
+    childTask.debugging = {
+      ...childTask.debugging,
+      promptTokens: chatResponse.usage?.total_tokens,
+      taskCosts: chatResponse.usage?.inference_costs,
+    };
+  }
+}
+
+function generateFollowUpTasksFromResult(
   finishedTask: LLMTask,
   chatState: ChatStateType
 ) {
   console.log('generate follow up task');
+  const childCosts = {
+    promptTokens: finishedTask.debugging.resultTokens,
+    taskTokens: finishedTask.debugging.taskTokens,
+    taskCosts: finishedTask.debugging.taskCosts,
+  };
   if (finishedTask.result?.type === 'ChatAnswer') {
     const newTaskDraft = createNewChatResponseTask(finishedTask);
+    newTaskDraft.debugging = { ...newTaskDraft.debugging, ...childCosts };
     // put AI response in our chain as a new, completed task...
     // TODO: theoretically the user "viewing" the task would be its completion..
     //       so we could create it before sending it and then wait for AI to respond...
@@ -169,9 +183,8 @@ export function generateFollowUpTasksFromResult(
       {
         role: 'function',
         content: null,
-        context: {
-          function: finishedTask.result.functionCall,
-        },
+        context: { function: finishedTask.result.functionCall },
+        debugging: childCosts,
       },
       finishedTask,
       chatState,

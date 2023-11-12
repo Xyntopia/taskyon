@@ -15,7 +15,6 @@
             'justify-between',
             task.role === 'user' ? 'not-assistant-message' : '',
             task.role === 'user' ? 'q-ml-lg' : '',
-            task.result?.type == 'FunctionCall' ? 'text-secondary' : '',
           ]"
         >
           <!--Message Display-->
@@ -49,10 +48,10 @@
               style="font-size: xx-small"
               class="column items-center"
             >
-              <div v-if="task.debugging.inference_costs">
+              <div v-if="task.debugging.taskCosts">
                 {{
                   Math.round(
-                    task.debugging.inference_costs * 1e6
+                    task.debugging.taskCosts * 1e6
                   ).toLocaleString()
                 }}
                 μ$
@@ -61,15 +60,15 @@
                 name="monetization_on"
                 size="xs"
                 :color="
-                  task.debugging.inference_costs
+                  task.debugging.taskCosts
                     ? 'secondary'
-                    : task.debugging.usedTokens
+                    : task.debugging.promptTokens
                     ? 'positive'
                     : 'info'
                 "
               ></q-icon>
-              <div v-if="task.debugging?.usedTokens">
-                {{ task.debugging?.usedTokens }}
+              <div v-if="task.debugging?.promptTokens">
+                {{ task.debugging?.promptTokens }}
               </div>
               <div v-else>
                 {{ estimateChatTokens(task, state.chatState).total }}

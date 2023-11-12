@@ -84,9 +84,11 @@ export type LLMTask = {
   childrenIDs: string[];
   debugging: {
     threadMessage?: OpenAI.Beta.Threads.Messages.ThreadMessage;
-    usedTokens?: number;
+    promptTokens?: number;
+    resultTokens?: number;
+    taskTokens?: number;
     // the costs used to solve this task...
-    inference_costs?: number;
+    taskCosts?: number;
     aiResponse?: ChatCompletionResponse;
     error?: unknown;
   };
