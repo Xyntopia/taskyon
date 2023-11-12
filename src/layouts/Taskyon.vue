@@ -4,7 +4,7 @@
       elevated
       :class="$q.dark.isActive ? 'bg-secondary' : 'bg-primary'"
     >
-      <q-toolbar>
+      <q-toolbar class="q-gutter-xs">
         <q-btn
           flat
           @click="state.drawerOpen = !state.drawerOpen"
@@ -43,6 +43,17 @@
         >
           <q-tooltip :delay="500">Set dark/light theme</q-tooltip>
         </q-btn-toggle>
+        <!-- GitHub Link -->
+        <q-btn
+          flat
+          dense
+          round
+          icon="mdi-github"
+          href="https://github.com/xyntopia/taskyon"
+          target="_blank"
+        >
+          <q-tooltip :delay="500">Visit our GitHub</q-tooltip>
+        </q-btn>
       </q-toolbar>
     </q-header>
 
