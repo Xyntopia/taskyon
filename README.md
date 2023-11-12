@@ -9,11 +9,13 @@
 
 A Chat & Agent Interface for Users, Experts & Developers based on Tasks! 🚀
 
+You can access the deployed app here: [https://taskyon.xyntopia.com](https://taskyon.xyntopia.com).
+
 ---
 
 ## Overview
 
-Taskyon is a comprehensive chat interface that orchestrates asynchronous task management in a tree-like structure, enabling parallel processing and efficient handling of tasks and conversations. 🌳 It leverages services such as OpenAI, OpenAI Assistants, and Openrouter.ai to execute tasks that range from user messages to complex function calls. Taskyon is build on the principles of [_local-first_](https://dl.acm.org/doi/10.1145/3359591.3359737) 🏠.
+Taskyon is a comprehensive chat interface that orchestrates asynchronous task management in a tree-like structure, enabling parallel processing and efficient handling of tasks and conversations. 🌳 It leverages services such as OpenAI, OpenAI Assistants, and Openrouter.ai to execute tasks that range from user messages to complex function calls. Taskyon is built on the principles of [_local-first_](https://dl.acm.org/doi/10.1145/3359591.3359737) 🏠.
 
 ## Philosophy: Personalized AI Interaction & Local First
 
