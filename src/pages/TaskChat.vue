@@ -26,13 +26,7 @@
                 ><q-tooltip class="bg-warning">Error!</q-tooltip>
               </q-icon>
             </div>
-            <div v-if="task.result?.type == 'FunctionCall'" class="col">
-              <q-icon size="sm" name="build_circle" />
-              {{ task.result.functionCall?.name }}({{
-                task.result.functionCall?.arguments
-              }})
-            </div>
-            <div v-else-if="task.role == 'function'" class="col">
+            <div v-if="task.role == 'function'" class="col">
               <q-expansion-item
                 dense
                 icon="calculate"

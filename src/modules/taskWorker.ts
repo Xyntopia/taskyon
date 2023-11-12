@@ -52,36 +52,45 @@ export async function processUserTask(task: LLMTask, chatState: ChatStateType) {
   } else {
     console.log('execute chat task!', task);
     const response = await getOpenAIChatResponse(task, chatState);
-    if (response?.usage) {
-      // openai sends back the exact number of prompt tokens :)
-      task.debugging.usedTokens = response.usage.prompt_tokens;
+    if (response) {
+      if (response.usage) {
+        // openai sends back the exact number of prompt tokens :)
+        task.debugging.usedTokens = response.usage.prompt_tokens;
+      }
+      if (response.choices.length > 0) {
+        const choice = response.choices[0];
+        task.result = {
+          type: 'ChatAnswer',
+          chatResponse: response,
+        };
+        // if our response contained a call to a function...
+        if (
+          choice.finish_reason === 'function_call' &&
+          !choice.message.content &&
+          choice.message.function_call
+        ) {
+          console.log('A function call was returned...');
+          const name = choice.message.function_call.name;
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          let funcArguments: FunctionArguments = {};
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            funcArguments = JSON.parse(choice.message.function_call.arguments);
+          } catch (parseError) {
+            // in this case, we assume, that the first parameter was meant...
+            funcArguments = {};
+            const toolProps = tools[name].parameters.properties;
+            funcArguments[Object.keys(toolProps)[0]] =
+              choice.message.function_call.arguments;
+          }
+          task.result = {
+            type: 'FunctionCall',
+            functionCall: { name, arguments: funcArguments },
+            chatResponse: response,
+          };
+        }
+      }
     }
-    task.result = {
-      type: 'ChatAnswer',
-      chatResponse: response,
-    };
-
-    // Try to parse the function arguments from JSON, log and re-throw the error if parsing fails
-    /*let funcArguments: FunctionArguments;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      funcArguments = JSON.parse(func.arguments);
-    } catch (parseError) {
-      // in this case, we assume, that the first parameter was meant...
-      funcArguments = {};
-      funcArguments[Object.keys(tools[func.name].parameters.properties)[0]] =
-        func.arguments;
-    }
-
-    const functionCall = {
-      name: func.name,
-      arguments: funcArguments,
-    };
-
-    chatState.Tasks[newResponseTaskId].result = {
-      type: 'FunctionCall',
-      functionCall: functionCall,
-    };*/
   }
   return task;
 }
