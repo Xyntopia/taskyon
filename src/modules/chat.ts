@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { v1 as uuidv1 } from 'uuid';
 //import { useCachedModels } from './mlModels';
 import { Tool, tools, ExtendedTool } from './tools';
 import { getEncoding } from 'js-tiktoken';
@@ -9,7 +8,7 @@ import {
   ChatCompletionResponse,
   OpenRouterGenerationInfo,
 } from './types';
-import { taskChain, processTasksQueue } from './taskManager';
+import { taskChain } from './taskManager';
 import OpenAI from 'openai';
 import { lruCache, sleep } from './utils';
 
@@ -302,45 +301,6 @@ export type partialTaskDraft = {
   allowedTools?: LLMTask['allowedTools'];
   debugging?: LLMTask['debugging'];
 };
-
-export function addTask2Tree(
-  task: partialTaskDraft,
-  parent: LLMTask | undefined,
-  chatState: ChatStateType,
-  execute = true
-) {
-  const newTask: LLMTask = {
-    role: task.role,
-    parentID: parent?.id,
-    content: task.content || null,
-    state: task.state || 'Open',
-    childrenIDs: [],
-    debugging: task.debugging || {},
-    id: uuidv1(),
-    context: task.context,
-    allowedTools: task.allowedTools || parent?.allowedTools,
-  };
-  if (task.context) {
-    if (task.role == 'function') {
-      newTask.authorId = task.context?.function?.name;
-    }
-  }
-
-  console.log('create new Task:', newTask.id);
-
-  // connect task to task tree
-  chatState.Tasks[newTask.id] = newTask;
-  if (parent) {
-    parent.childrenIDs.push(newTask.id);
-  }
-  // Push the new function task to processTasksQueue
-  if (execute) {
-    processTasksQueue.push(chatState.Tasks[newTask.id]);
-    chatState.Tasks[newTask.id].state = 'Queued';
-  }
-  chatState.selectedTaskId = newTask.id;
-  return newTask.id;
-}
 
 export function bigIntToString(obj: unknown): unknown {
   if (obj === null) {

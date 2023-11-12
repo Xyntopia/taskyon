@@ -1,6 +1,7 @@
 import type { LLMTask } from './types';
 import { useVectorStore } from './localVectorStore';
-import type { ChatStateType } from './chat';
+import type { partialTaskDraft, ChatStateType } from './chat';
+import { v1 as uuidv1 } from 'uuid';
 
 class AsyncQueue<T> {
   private queue: T[] = [];
@@ -117,4 +118,43 @@ export function taskChain(lastTaskId: string, tasks: Record<string, LLMTask>) {
   }
 
   return conversationList;
+}
+
+export function addTask2Tree(
+  task: partialTaskDraft,
+  parent: LLMTask | undefined,
+  chatState: ChatStateType,
+  execute = true
+) {
+  const newTask: LLMTask = {
+    role: task.role,
+    parentID: parent?.id,
+    content: task.content || null,
+    state: task.state || 'Open',
+    childrenIDs: [],
+    debugging: task.debugging || {},
+    id: uuidv1(),
+    context: task.context,
+    allowedTools: task.allowedTools || parent?.allowedTools,
+  };
+  if (task.context) {
+    if (task.role == 'function') {
+      newTask.authorId = task.context?.function?.name;
+    }
+  }
+
+  console.log('create new Task:', newTask.id);
+
+  // connect task to task tree
+  chatState.Tasks[newTask.id] = newTask;
+  if (parent) {
+    parent.childrenIDs.push(newTask.id);
+  }
+  // Push the new function task to processTasksQueue
+  if (execute) {
+    processTasksQueue.push(chatState.Tasks[newTask.id]);
+    chatState.Tasks[newTask.id].state = 'Queued';
+  }
+  chatState.selectedTaskId = newTask.id;
+  return newTask.id;
 }
