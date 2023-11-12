@@ -4,10 +4,10 @@ import {
   openAIUsed,
   getOpenAIAssistantResponse,
   ChatStateType,
-  addTask2Tree,
   bigIntToString,
   partialTaskDraft,
 } from './chat';
+import { addTask2Tree } from './taskManager';
 import { processTasksQueue } from './taskManager';
 import {
   FunctionArguments,
@@ -15,32 +15,29 @@ import {
   ToolCollection,
   tools,
 } from './tools';
-import { LLMTask, TaskResult, TaskState } from './types';
+import type { LLMTask, TaskResult } from './types';
 
 export async function handleFunctionExecution(
   func: FunctionCall,
   tools: ToolCollection
-): Promise<{ result: TaskResult; state: TaskState; error?: string }> {
+): Promise<TaskResult> {
   try {
     let funcR: unknown = await tools[func.name].function(func.arguments);
     funcR = bigIntToString(funcR);
     const result: TaskResult = {
       type: 'FunctionResult',
-      content: dump(funcR),
+      functionResult: dump(funcR),
     };
-    return { result, state: 'Completed' };
+    return result;
   } catch (error) {
     return {
-      result: {
-        type: 'FunctionResult',
-        content: JSON.stringify(error),
-      },
-      state: 'Error',
+      type: 'FunctionError',
+      functionResult: JSON.stringify(error),
     };
   }
 }
 
-export async function processUserTask(task: LLMTask, chatState: ChatStateType) {
+export async function processChatTask(task: LLMTask, chatState: ChatStateType) {
   if (chatState.useOpenAIAssistants && openAIUsed(chatState)) {
     const messages = await getOpenAIAssistantResponse(task, chatState);
     if (messages) {
@@ -63,9 +60,11 @@ export async function processUserTask(task: LLMTask, chatState: ChatStateType) {
       if (response.choices.length > 0) {
         const choice = response.choices[0];
         task.result = {
+          ...task.result,
           type: 'ChatAnswer',
           chatResponse: response,
         };
+
         // if our response contained a call to a function...
         if (
           choice.finish_reason === 'function_call' &&
@@ -86,11 +85,8 @@ export async function processUserTask(task: LLMTask, chatState: ChatStateType) {
             funcArguments[Object.keys(toolProps)[0]] =
               choice.message.function_call.arguments;
           }
-          task.result = {
-            type: 'FunctionCall',
-            functionCall: { name, arguments: funcArguments },
-            chatResponse: response,
-          };
+          task.result.type = 'FunctionCall';
+          task.result.functionCall = { name, arguments: funcArguments };
         }
       }
     }
@@ -102,18 +98,15 @@ export async function processFunctionTask(task: LLMTask) {
   if (task.context?.function) {
     const func = task.context.function;
     console.log(`Calling function ${func.name}`);
-    task.state = 'In Progress';
     if (tools[func.name]) {
-      const { result, state } = await handleFunctionExecution(func, tools);
+      const result = await handleFunctionExecution(func, tools);
       task.result = result;
-      task.state = state;
     } else {
       const toolnames = JSON.stringify(task.allowedTools);
       task.result = {
-        type: 'FunctionResult',
-        content: `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`,
+        type: 'FunctionError',
+        functionResult: `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`,
       };
-      task.state = 'Error';
     }
   }
   return task;
@@ -138,18 +131,6 @@ function createNewChatResponseTask(parentTask: LLMTask): partialTaskDraft {
     // mark each of them as completed...
   }
   return taskFromResponse;
-}
-
-function addChildCosts(parentTask: LLMTask, childTask: partialTaskDraft) {
-  // check if we find any cost-related information and then distribute them among the children :)
-  if (parentTask.result?.chatResponse) {
-    const chatResponse = parentTask.result.chatResponse;
-    childTask.debugging = {
-      ...childTask.debugging,
-      promptTokens: chatResponse.usage?.total_tokens,
-      taskCosts: chatResponse.usage?.inference_costs,
-    };
-  }
 }
 
 function generateFollowUpTasksFromResult(
@@ -203,9 +184,28 @@ async function taskWorker(chatState: ChatStateType) {
     console.log('processing task:', task);
     try {
       if (task.role == 'user') {
-        task = await processUserTask(task, chatState);
+        task = await processChatTask(task, chatState);
+        task.state = 'Completed';
       } else if (task.role == 'function') {
-        task = await processFunctionTask(task);
+        // in the case of 'FunctionCall' result, we run it twice:
+        // 1. calculate function result
+        // 2. send function to LLM inference
+        // the task could potentially come back as another functionCall!
+        // the way this works: -> task state is "Completed" with "FunctionCall" and follow-up
+        // functiontask will be generated
+        if (
+          task.result?.type === 'FunctionResult' ||
+          task.result?.type === 'FunctionError'
+        ) {
+          // here we send the task to our LLM inference
+          task = await processChatTask(task, chatState);
+          task.state = 'Completed';
+        } else {
+          // in the case we don't have a result yet, we need to calculate it :)
+          task = await processFunctionTask(task);
+          processTasksQueue.push(task); // send the task back into the queue
+          task.state = 'Queued';
+        }
       } else {
         console.log("We don't know what to do with this task:", task);
         task.state = 'Error';
@@ -214,8 +214,6 @@ async function taskWorker(chatState: ChatStateType) {
       task.state = 'Error';
       task.debugging = { error };
       console.error('Error processing task:', error);
-    } finally {
-      task.state = 'Completed';
     }
     void generateFollowUpTasksFromResult(task, chatState);
   }

@@ -13,7 +13,7 @@
         <q-item-label> result (yaml): </q-item-label>
         <q-item-label caption>
           <pre>
-      {{ dump(task.result) }}
+      {{ dump(task.result?.functionResult) }}
       </pre
           >
         </q-item-label>
@@ -33,5 +33,4 @@ import { LLMTask } from 'src/modules/types';
 const props = defineProps<{
   task: LLMTask;
 }>();
-
 </script>

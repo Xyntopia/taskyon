@@ -154,14 +154,15 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { countStringTokens, addTask2Tree } from 'src/modules/chat';
+import { countStringTokens } from 'src/modules/chat';
 import { tools, getDefaultParametersForTool } from 'src/modules/tools';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { LLMTask } from 'src/modules/types';
+import type { LLMTask } from 'src/modules/types';
 import FileDropzone from './FileDropzone.vue';
 import ModelSelection from 'components/ModelSelection.vue';
 import { writeFiles } from 'src/modules/OPFS';
+import { addTask2Tree } from 'src/modules/taskManager';
 
 const state = useTaskyonStore();
 

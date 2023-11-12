@@ -283,7 +283,7 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
           };
           if (m.role == 'function') {
             message.name = m.authorId;
-            message.content = m.result?.content || null;
+            message.content = m.result?.functionResult || null;
           }
           return message;
         })

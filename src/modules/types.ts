@@ -62,10 +62,10 @@ export interface OpenRouterGenerationInfo {
 }
 
 export interface TaskResult {
-  type: 'ChatAnswer' | 'FunctionCall' | 'FunctionResult'; // Type of result
+  type: 'ChatAnswer' | 'FunctionCall' | 'FunctionResult' | 'FunctionError'; // Type of result
   assistantResponse?: OpenAI.Beta.Threads.Messages.ThreadMessage[];
   chatResponse?: ChatCompletionResponse;
-  content?: string; // Description or value of the result
+  functionResult?: string; // Description or value of the result
   functionCall?: FunctionCall; // Details if the result is a function call
 }
 
