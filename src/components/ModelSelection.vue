@@ -1,8 +1,5 @@
 <template>
-  <div
-    v-if="state.chatState.baseURL == getBackendUrls('openai')"
-    class="row items-top"
-  >
+  <div v-if="openAIUsed(state.chatState)" class="row items-top">
     <div class="q-pt-xs">
       <q-btn-toggle
         v-model="state.chatState.useOpenAIAssistants"
@@ -29,7 +26,7 @@
         dense
         label="Select OpenAI Assistant"
         icon="smart_toy"
-        :options="assistantOptions"
+        :options="modelOptions.assistantOptions"
         emit-value
         map-options
         v-model="state.chatState.openAIAssistant"
@@ -119,28 +116,28 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, defineEmits, watch } from 'vue';
 import {
   availableModels,
   Model,
   getBackendUrls,
   getAssistants,
+  openAIUsed,
 } from 'src/modules/chat';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import openrouterModules from 'assets/openrouter_models.json';
 import { useTaskyonStore } from 'stores/taskyonState';
 import openaiModels from 'assets/openai_models.json';
 
+const emit = defineEmits(['updateBotName']);
+
 const openrouterModels: Model[] = openrouterModules.data;
 const openAiModels: Model[] = openaiModels.data;
 const state = useTaskyonStore();
 
 const assistants = ref<Awaited<ReturnType<typeof getAssistants>>>({});
-const assistantOptions = computed(() =>
-  Object.values(assistants.value).map((a) => ({ value: a.id, label: a.name }))
-);
 
-void getAssistants(state.chatState).then((assitantDict) => {
+void getAssistants(state.chatState.openAIApiKey).then((assitantDict) => {
   assistants.value = assitantDict;
 });
 
@@ -170,6 +167,10 @@ async function fetchModels(): Promise<void> {
 }
 
 const modelOptions = computed(() => ({
+  assistantOptions: Object.values(assistants.value).map((a) => ({
+    value: a.id,
+    label: a.name,
+  })),
   openai: resOpenRouter.value
     .map((m) => {
       const p = parseFloat(m.pricing?.prompt || '');
@@ -201,6 +202,30 @@ const modelLookUp = computed(() => ({
     return acc;
   }, {} as Record<string, Model>),
 }));
+
+// Computed property to determine the currently selected bot name
+const currentlySelectedBotName = computed(() => {
+  if (openAIUsed(state.chatState)) {
+    if (state.chatState.useOpenAIAssistants) {
+      const selectedAssistant =
+        assistants.value[state.chatState.openAIAssistant]?.name;
+      return { newName: selectedAssistant, newService: 'openai-assistants' };
+    } else {
+      const modelName =
+        modelLookUp.value.openai[state.chatState.openAIModel]?.id;
+      return { newName: modelName, newService: 'openai' };
+    }
+  } else {
+    const modelName =
+      modelLookUp.value.openrouter[state.chatState.openrouterAIModel]?.id;
+    return { newName: modelName, newService: 'openrouter.ai' };
+  }
+});
+
+// Watch the computed property and emit an event when it changes
+watch(currentlySelectedBotName, ({ newName, newService }) => {
+  emit('updateBotName', { newName, newService });
+});
 
 void fetchModels();
 </script>

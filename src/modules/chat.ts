@@ -10,7 +10,7 @@ import {
 } from './types';
 import { taskChain } from './taskManager';
 import OpenAI from 'openai';
-import { lruCache, sleep } from './utils';
+import { lruCache, sleep, asyncTimeLruCache } from './utils';
 
 const getOpenai = lruCache<OpenAI>(1)((apiKey: string) => {
   const api = new OpenAI({
@@ -76,13 +76,44 @@ export function openAIUsed(chatState: ChatStateType) {
   return getBackendUrls('openai') == chatState.baseURL;
 }
 
-export async function getAssistants(chatState: ChatStateType) {
-  const response = await getOpenai(chatState.openAIApiKey).beta.assistants.list(
-    {
-      order: 'desc',
-      limit: 20,
+export function getCurrentMode(chatState: ChatStateType): string {
+  if (openAIUsed(chatState)) {
+    if (chatState.useOpenAIAssistants) {
+      return 'openai-assistants';
+    } else {
+      return 'openai';
     }
-  );
+  } else if (openRouterUsed(chatState)) {
+    return 'openrouter.ai';
+  } else {
+    return 'unknown'; // Default case if none of the conditions match
+  }
+}
+
+export function selectedBotID(chatState: ChatStateType) {
+  if (openAIUsed(chatState)) {
+    if (chatState.useOpenAIAssistants) {
+      return chatState.openAIAssistant;
+    } else {
+      return chatState.openAIModel;
+    }
+  } else if (openRouterUsed(chatState)) {
+    return chatState.openrouterAIModel;
+  } else {
+    return '';
+  }
+}
+
+export const getAssistants = asyncTimeLruCache<
+  Record<string, OpenAI.Beta.Assistant>
+>(
+  1,
+  60000 * 10 * 60 //1h
+)(async (openAIApiKey: string) => {
+  const response = await getOpenai(openAIApiKey).beta.assistants.list({
+    order: 'desc',
+    limit: 20,
+  });
 
   const assistantsArray = response.data;
   const assistantsDict = assistantsArray.reduce((dict, assistant) => {
@@ -91,7 +122,7 @@ export async function getAssistants(chatState: ChatStateType) {
   }, {} as Record<string, OpenAI.Beta.Assistant>);
 
   return assistantsDict;
-}
+});
 
 type ChatCompletionRequest = {
   // An array of messages in the conversation.

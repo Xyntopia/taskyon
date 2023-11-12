@@ -105,13 +105,23 @@
         </q-item-section>
       </q-item>
       <!--Model Selection-->
-      <q-expansion-item dense icon="handyman" label="Select Chatbot Model">
+      <q-expansion-item
+        dense
+        icon="handyman"
+        :label="`Select Chatbot (curent: ${currentlySelectedBotName}/${currentlySelectedService})`"
+        v-model="state.selectChatBotExpand"
+      >
         <q-item-section>
-          <ModelSelection></ModelSelection>
+          <ModelSelection @updateBotName="handleBotNameUpdate"></ModelSelection>
         </q-item-section>
       </q-expansion-item>
       <!--Allowed Tools Selection-->
-      <q-expansion-item dense icon="handyman" label="Allowed Tools">
+      <q-expansion-item
+        dense
+        icon="handyman"
+        label="Allowed Tools"
+        v-model="state.allowedToolsExpand"
+      >
         <q-item-section>
           <div>
             <q-btn
@@ -153,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { countStringTokens } from 'src/modules/chat';
 import { tools, getDefaultParametersForTool } from 'src/modules/tools';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
@@ -165,6 +175,15 @@ import { writeFiles } from 'src/modules/OPFS';
 import { addTask2Tree } from 'src/modules/taskManager';
 
 const state = useTaskyonStore();
+
+const currentlySelectedBotName = ref('');
+const currentlySelectedService = ref('');
+
+// Method to handle the updateBotName event
+const handleBotNameUpdate = ({newName, newService}: {newName: string, newService: string}) => {
+  currentlySelectedBotName.value = newName;
+  currentlySelectedService.value = newService
+};
 
 function setFunctionParameter(
   paramName: string,

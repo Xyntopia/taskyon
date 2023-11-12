@@ -65,3 +65,109 @@ export function lruCache<ReturnType>(
     };
   };
 }
+
+type CacheEntry<ReturnType> = {
+  value: ReturnType;
+  timestamp: number;
+};
+
+export function timeLruCache<ReturnType>(
+  size: number,
+  maxAge: number, // Maximum age in milliseconds
+  ignoreIndices: number[] = []
+): (fn: AnyFunction<ReturnType>) => AnyFunction<ReturnType> {
+  // The cache for storing function call results.
+  const cache = new Map<string, CacheEntry<ReturnType>>();
+
+  return (fn: AnyFunction<ReturnType>): AnyFunction<ReturnType> => {
+    return function (...args: any[]): ReturnType {
+      // Generate a cache key, ignoring specified arguments.
+      const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index));
+      const key = JSON.stringify(keyArgs);
+
+      const now = Date.now();
+
+      // Check for a cache hit.
+      if (cache.has(key)) {
+        const entry = cache.get(key) as CacheEntry<ReturnType>;
+        const age = now - entry.timestamp;
+
+        if (age <= maxAge) {
+          console.log('Cache hit:', key);
+          return entry.value;
+        } else {
+          console.log('Cache expired:', key);
+          cache.delete(key); // Remove the expired entry.
+        }
+      }
+
+      // Call the original function and cache the result.
+      const result: ReturnType = fn(...args);
+      cache.set(key, { value: result, timestamp: now });
+
+      // Check the cache size and evict the least recently used item if necessary.
+      if (cache.size > size) {
+        const oldestKey = Array.from(cache.keys())[0];
+        cache.delete(oldestKey);
+        console.log('Evicted:', oldestKey);
+      }
+
+      // Return the result.
+      return result;
+    };
+  };
+}
+
+type asyncCacheEntry<ReturnType> = {
+  value: Promise<ReturnType>;
+  timestamp: number;
+};
+
+export function asyncTimeLruCache<ReturnType>(
+  size: number,
+  maxAge: number, // Maximum age in milliseconds
+  ignoreIndices: number[] = []
+): (fn: AnyFunction<Promise<ReturnType>>) => AnyFunction<Promise<ReturnType>> {
+  // The cache for storing function call results.
+  const cache = new Map<string, asyncCacheEntry<ReturnType>>();
+
+  return (
+    fn: AnyFunction<Promise<ReturnType>>
+  ): AnyFunction<Promise<ReturnType>> => {
+    return async function (...args: any[]): Promise<ReturnType> {
+      // Generate a cache key, ignoring specified arguments.
+      const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index));
+      const key = JSON.stringify(keyArgs);
+
+      const now = Date.now();
+
+      // Check for a cache hit.
+      if (cache.has(key)) {
+        const entry = cache.get(key) as asyncCacheEntry<ReturnType>;
+        const age = now - entry.timestamp;
+
+        if (age <= maxAge) {
+          console.log('Cache hit:', key);
+          return entry.value;
+        } else {
+          console.log('Cache expired:', key);
+          cache.delete(key); // Remove the expired entry.
+        }
+      }
+
+      // Call the original function and cache the result.
+      const result = fn(...args);
+      cache.set(key, { value: result, timestamp: now });
+
+      // Check the cache size and evict the least recently used item if necessary.
+      if (cache.size > size) {
+        const oldestKey = Array.from(cache.keys())[0];
+        cache.delete(oldestKey);
+        console.log('Evicted:', oldestKey);
+      }
+
+      // Return the result.
+      return result;
+    };
+  };
+}

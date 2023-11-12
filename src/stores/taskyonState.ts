@@ -14,6 +14,8 @@ export const useTaskyonStore = defineStore('taskyonState', {
       expertMode: false,
       showCosts: false,
       modelDetails: false,
+      selectChatBotExpand: true,
+      allowedToolsExpand: false,
       showTaskData: false,
       drawerOpen: false,
       drawerRight: false,
