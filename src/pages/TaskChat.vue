@@ -1,6 +1,10 @@
 <template>
   <q-page>
-    <q-card class="col column" flat v-if="selectedThread">
+    <q-card
+      class="col column chat-timeline"
+      flat
+      v-if="selectedThread.length > 0"
+    >
       <!-- "Task" Display -->
       <q-card-section class="q-gutter-sm">
         <div
@@ -50,9 +54,7 @@
             >
               <div v-if="task.debugging.taskCosts">
                 {{
-                  Math.round(
-                    task.debugging.taskCosts * 1e6
-                  ).toLocaleString()
+                  Math.round(task.debugging.taskCosts * 1e6).toLocaleString()
                 }}
                 μ$
               </div>
@@ -155,6 +157,20 @@
         </div>
       </q-card-section>
     </q-card>
+    <q-card class="col welcome-message" v-else>
+      <q-card-section class="column items-center"
+        ><q-card-section
+          ><q-img
+            width="150px"
+            alt="Quasar logo"
+            src="~assets/taskyon.svg"
+          ></q-img>
+        </q-card-section>
+        <div class="text-h6">
+          Welcome! Just type a message below to start using Taskyon!
+        </div>
+      </q-card-section>
+    </q-card>
     <!--Create new task area-->
     <q-card
       :class="$q.dark.isActive ? 'bg-primary' : 'bg-grey-2'"
@@ -193,7 +209,7 @@
 
 <script setup lang="ts">
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useQuasar } from 'quasar';
 import ToolResultWidget from 'components/ToolResultWidget.vue';
 import { getApikey, estimateChatTokens } from 'src/modules/chat';
@@ -203,6 +219,13 @@ import { useTaskyonStore } from 'stores/taskyonState';
 import TokenUsage from 'components/TokenUsage.vue';
 import CreateNewTask from 'components/CreateNewTask.vue';
 import { LLMTask } from 'src/modules/types';
+import axios from 'axios';
+
+const welcomeText = ref<string>('');
+
+void axios.get('main_content/frontpage.md').then((jsonconfig) => {
+  welcomeText.value = jsonconfig.data as string;
+});
 
 const $q = useQuasar();
 

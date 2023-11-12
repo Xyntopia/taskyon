@@ -107,8 +107,8 @@
       <!--Model Selection-->
       <q-expansion-item
         dense
-        icon="handyman"
-        :label="`Select Chatbot (curent: ${currentlySelectedBotName}/${currentlySelectedService})`"
+        icon="smart_toy"
+        :label="`Select Chatbot (right now: ${currentlySelectedService}/${currentlySelectedBotName})`"
         v-model="state.selectChatBotExpand"
       >
         <q-item-section>
@@ -180,9 +180,15 @@ const currentlySelectedBotName = ref('');
 const currentlySelectedService = ref('');
 
 // Method to handle the updateBotName event
-const handleBotNameUpdate = ({newName, newService}: {newName: string, newService: string}) => {
+const handleBotNameUpdate = ({
+  newName,
+  newService,
+}: {
+  newName: string;
+  newService: string;
+}) => {
   currentlySelectedBotName.value = newName;
-  currentlySelectedService.value = newService
+  currentlySelectedService.value = newService;
 };
 
 function setFunctionParameter(

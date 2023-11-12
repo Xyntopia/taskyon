@@ -12,10 +12,15 @@
           dense
           icon="menu"
         />
-        <q-toolbar-title
-          >Current Thread ID:
-          {{ state.chatState.selectedTaskId }}</q-toolbar-title
-        >
+        <!-- Home Icon Button -->
+        <q-toolbar-title>
+          <q-btn stretch dense flat to="/">
+            <q-avatar class="q-pr-md">
+              <q-img src="~assets/taskyon.svg" />
+            </q-avatar>
+            Taskyon
+          </q-btn>
+        </q-toolbar-title>
         <q-btn-toggle
           dense
           unelevated

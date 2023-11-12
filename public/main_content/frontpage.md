@@ -1,5 +1,12 @@
-- Local Autonomy: Emphasizes the "Local First" principle, offering independence from centralized cloud services and enhancing data security.
-- User-Driven Development: Allows users to shape the AI's learning and capabilities based on their interactions and feedback.
-- Secure Data Management: Focuses on safeguarding user data through local storage and processing, ensuring privacy and protection.
-- Task Efficiency: Efficient handling of tasks through a structured, tree-like interface for streamlined task management.
-- Service Flexibility: Integrates various services like OpenAI for diverse task execution, adaptable to different user needs.
+
+**👥🛠️ Personalized AI Assistant 🤖:**
+Allows users to shape the AI's learning and capabilities based on their interactions and feedback.
+
+**🏡🌟 Local First:**:
+Emphasizes the "Local First" principle, offering independence from centralized cloud services and enhancing data security.
+
+**🌳✅ Task Trees:**:
+Efficient handling of tasks through a structured, tree-like interface for streamlined task management.s
+
+**🛡️🏖️ Tool Sandbox:**
+Focuses on safeguarding user data & tools through local storage and processing, ensuring privacy and protection.
