@@ -100,7 +100,7 @@
             <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
           </div>
           <div v-if="state.showTaskData && state.expertMode">
-            {{ currentFunctionTask }}
+            {{ currentnewTask }}
           </div>
         </q-item-section>
       </q-item>
@@ -223,7 +223,7 @@ function toggleSelectedTools() {
   state.taskDraft.allowedTools = Object.keys(tools);
 }
 
-const currentFunctionTask = computed(() => {
+const currentnewTask = computed(() => {
   let task: Partial<LLMTask> = { ...state.taskDraft };
   if (selectedTaskType.value) {
     task.role = 'function';
@@ -239,11 +239,14 @@ const currentFunctionTask = computed(() => {
 function executeTask() {
   console.log('executing task!');
   addTask2Tree(
-    currentFunctionTask.value,
+    currentnewTask.value,
     state.chatState.Tasks[state.chatState.selectedTaskId || ''], //parent
     state.chatState, //task manager
     true // execute right away...
   );
+  if (currentnewTask.value.role === 'user') {
+    state.taskDraft.content = '';
+  }
 }
 
 const checkForShiftEnter = (event: KeyboardEvent) => {
