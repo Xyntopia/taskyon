@@ -16,6 +16,7 @@ import {
   tools,
 } from './tools';
 import type { LLMTask, TaskResult } from './types';
+import type { OpenAI } from 'openai';
 
 export async function handleFunctionExecution(
   func: FunctionCall,
@@ -66,6 +67,7 @@ export async function processChatTask(task: LLMTask, chatState: ChatStateType) {
         };
 
         // if our response contained a call to a function...
+        // TODO: update this to the new tools API from Openai
         if (
           choice.finish_reason === 'function_call' &&
           !choice.message.content &&
@@ -112,25 +114,36 @@ export async function processFunctionTask(task: LLMTask) {
   return task;
 }
 
-function createNewChatResponseTask(parentTask: LLMTask): partialTaskDraft {
+function createNewChatResponseTask(parentTask: LLMTask): partialTaskDraft[] {
   // Process the response and create new tasks if necessary
   console.log('create new response task');
-  const taskFromResponse: partialTaskDraft = { role: 'assistant' };
+  const taskListFromResponse: partialTaskDraft[] = [];
   if (parentTask.result?.chatResponse) {
     const chatResponse = parentTask.result.chatResponse;
     if (chatResponse.choices.length > 0) {
       const choice = chatResponse.choices[0];
-      taskFromResponse.role = choice.message.role;
-      taskFromResponse.content = choice.message.content;
+      taskListFromResponse.push({
+        role: choice.message.role,
+        content: choice.message.content,
+      });
     }
   } else if (parentTask.result?.assistantResponse) {
     const messages = parentTask.result.assistantResponse;
-    console.log('create a new assistant response task...', messages);
-    //TODO: to the ThreadMessage stuff here...
-    // TODO: we will create an entire chain of tasks here for each message we're geting back and
-    // mark each of them as completed...
+    console.log('create a new assistant response tasks...', messages);
+    for (const tm of messages) {
+      const allText = tm.content.filter(
+        (m): m is OpenAI.Beta.Threads.MessageContentText => m.type === 'text'
+      );
+      taskListFromResponse.push({
+        role: tm.role,
+        content: allText
+          .map((textContent) => textContent.text.value)
+          .join('\n'),
+        debugging: { threadMessage: tm },
+      });
+    }
   }
-  return taskFromResponse;
+  return taskListFromResponse;
 }
 
 function generateFollowUpTasksFromResult(
@@ -144,21 +157,25 @@ function generateFollowUpTasksFromResult(
     taskCosts: finishedTask.debugging.taskCosts,
   };
   if (finishedTask.result?.type === 'ChatAnswer') {
-    const newTaskDraft = createNewChatResponseTask(finishedTask);
-    newTaskDraft.debugging = { ...newTaskDraft.debugging, ...childCosts };
-    // put AI response in our chain as a new, completed task...
-    // TODO: theoretically the user "viewing" the task would be its completion..
-    //       so we could create it before sending it and then wait for AI to respond...
-    const newResponseTaskId = addTask2Tree(
-      {
-        state: 'Completed',
-        ...newTaskDraft,
-      },
-      finishedTask,
-      chatState,
-      false
-    );
-    return newResponseTaskId;
+    const newTaskDraftList = createNewChatResponseTask(finishedTask);
+    let parentTask = finishedTask;
+    for (const td of newTaskDraftList) {
+      td.debugging = { ...td.debugging, ...childCosts };
+      // put AI response in our chain as a new, completed task...
+      // TODO: theoretically the user "viewing" the task would be its completion..
+      //       so we could create it before sending it and then wait for AI to respond...
+      const newResponseTaskId = addTask2Tree(
+        {
+          state: 'Completed',
+          ...td,
+        },
+        parentTask,
+        chatState,
+        false
+      );
+      parentTask = chatState.Tasks[newResponseTaskId];
+    }
+    return parentTask.id;
   } else if (finishedTask.result?.type === 'FunctionCall') {
     const funcTaskid = addTask2Tree(
       {
