@@ -3,6 +3,11 @@
  */
 type AnyFunction<ReturnType> = (...args: any[]) => ReturnType;
 
+// Async sleep function
+export function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Creates a higher-order function for caching the results of another function, using a Least Recently Used (LRU) policy.
  *
@@ -24,12 +29,6 @@ type AnyFunction<ReturnType> = (...args: any[]) => ReturnType;
  * console.log(cachedExpensiveOperation(2, 3));  // Outputs: Expensive operation: 2 3 \n 6
  * console.log(cachedExpensiveOperation(2, 3));  // Outputs: Cache hit: [2,3] \n 6
  */
-
-// Async sleep function
-export function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export function lruCache<ReturnType>(
   size: number,
   ignoreIndices: number[] = []
@@ -61,6 +60,60 @@ export function lruCache<ReturnType>(
       }
 
       // Return the result.
+      return result;
+    };
+  };
+}
+
+/**
+ * Type describing a generic function.
+ */
+type AnyAsyncFunction<ReturnType> = (...args: any[]) => Promise<ReturnType>;
+
+/**
+ * Type for cache entries in the LRU cache.
+ */
+type AsyncCacheEntry<ReturnType> = {
+  value: Promise<ReturnType>;
+};
+
+/**
+ * Creates a higher-order function for caching the results of an asynchronous function,
+ * using a Least Recently Used (LRU) policy.
+ *
+ * @param size The maximum size of the cache.
+ * @param ignoreIndices An array of argument indices to ignore when generating the cache key.
+ * @returns The higher-order function.
+ */
+export function asyncLruCache<ReturnType>(
+  size: number,
+  ignoreIndices: number[] = []
+): (fn: AnyAsyncFunction<ReturnType>) => AnyAsyncFunction<ReturnType> {
+  const cache = new Map<string, AsyncCacheEntry<ReturnType>>();
+
+  return (fn: AnyAsyncFunction<ReturnType>): AnyAsyncFunction<ReturnType> => {
+    return async function (...args: any[]): Promise<ReturnType> {
+      // Generate a cache key, ignoring specified arguments.
+      const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index));
+      const key = JSON.stringify(keyArgs);
+
+      // Check for a cache hit.
+      if (cache.has(key)) {
+        console.log('Cache hit:', key);
+        return cache.get(key)!.value;
+      }
+
+      // Call the original function and cache the result.
+      const result = fn(...args);
+      cache.set(key, { value: result });
+
+      // Evict the least recently used item if necessary.
+      if (cache.size > size) {
+        const oldestKey = Array.from(cache.keys())[0];
+        cache.delete(oldestKey);
+        console.log('Evicted:', oldestKey);
+      }
+
       return result;
     };
   };

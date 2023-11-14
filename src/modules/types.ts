@@ -79,6 +79,8 @@ export type LLMTask = {
     model?: string;
     uploadedFiles?: string[];
   };
+  summary?: string;
+  labels?: string[];
   // is undefined in the case it is an "initial" task
   parentID?: string | undefined;
   childrenIDs: string[];

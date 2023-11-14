@@ -3,7 +3,7 @@ import { ref, watch } from 'vue';
 import { Document } from 'langchain/document';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { loadFile } from 'src/modules/loadFiles';
-import { useCachedModels } from './mlModels';
+import { vectorize } from './nlp';
 import { HierarchicalNSW, loadHnswlib } from 'hnswlib-wasm';
 import { LocalStorage } from 'quasar';
 import Dexie from 'dexie';
@@ -229,8 +229,6 @@ async function storeIndex(name: string) {
   }
 }
 
-const models = useCachedModels();
-
 async function uploadToIndex(
   file: File,
   progressCallback: (progress: number) => Promise<void> | void
@@ -281,7 +279,7 @@ async function uploadToIndex(
       docvecs.push({
         document: doc,
         vector: (
-          await models.vectorize(
+          await vectorize(
             doc.pageContent,
             vecStoreUploaderConfigurationState.value.modelName
           )
@@ -324,7 +322,7 @@ async function uploadToIndex(
 }
 async function knnQuery(searchQuery: string, k = 3) {
   if (documentStore?.index) {
-    const vector = await models.vectorize(
+    const vector = await vectorize(
       searchQuery,
       vecStoreUploaderConfigurationState.value.modelName
     );
