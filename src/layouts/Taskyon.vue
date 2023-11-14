@@ -15,18 +15,17 @@
         <!-- Home Icon Button -->
         <q-toolbar-title>
           <q-btn stretch dense flat to="/">
-            <q-avatar class="q-pr-md">
+            <q-avatar class="q-mr-xs" size="md">
               <q-img src="~assets/taskyon.svg" />
             </q-avatar>
-            Taskyon
+            <div>Taskyon</div>
           </q-btn>
         </q-toolbar-title>
         <q-btn-toggle
           dense
-          unelevated
-          glossy
-          color="primary"
-          toggle-text-color="secondary"
+          outline
+          :color="$q.dark.mode ? 'primary' : 'white'"
+          :toggle-color="$q.dark.mode ? 'white' : 'secondary'"
           :model-value="$q.dark.mode"
           @update:modelValue="
             (value) => {
