@@ -2,15 +2,11 @@ import type { LLMTask } from './types';
 import { useVectorStore } from './localVectorStore';
 import type { partialTaskDraft, ChatStateType } from './chat';
 import { v1 as uuidv1 } from 'uuid';
-import {
-  SorensenDiceSimilarity,
-  DefaultTextParser,
-  ConsoleLogger,
-  RelativeSummarizerConfig,
-  Summarizer,
-  NullLogger,
-  Sentence,
-} from 'ts-textrank';
+import { SQLocal } from 'sqlocal';
+
+// Create a client with a name for the SQLite file to save in
+// the origin private file system
+//const { sql } = new SQLocal('database.sqlite3');
 
 class AsyncQueue<T> {
   private queue: T[] = [];
@@ -129,12 +125,27 @@ export function taskChain(lastTaskId: string, tasks: Record<string, LLMTask>) {
   return conversationList;
 }
 
+function base64Uuid() {
+  // Generate a UUID
+  const hexUuid = uuidv1();
+
+  // Convert the UUID from hex to a Buffer
+  const bufferUuid = Buffer.from(hexUuid.replace(/-/g, ''), 'hex');
+
+  // Convert the Buffer to a base64 string
+  const base64Uuid = bufferUuid.toString('base64');
+
+  return base64Uuid;
+}
+
 export function addTask2Tree(
   task: partialTaskDraft,
   parent: LLMTask | undefined,
   chatState: ChatStateType,
   execute = true
 ) {
+  const uuid = base64Uuid();
+
   const newTask: LLMTask = {
     role: task.role,
     parentID: parent?.id,
@@ -142,7 +153,7 @@ export function addTask2Tree(
     state: task.state || 'Open',
     childrenIDs: [],
     debugging: task.debugging || {},
-    id: uuidv1(),
+    id: uuid,
     created_at: Date.now(),
     context: task.context,
     allowedTools: task.allowedTools || parent?.allowedTools,
