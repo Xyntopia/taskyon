@@ -69,6 +69,13 @@ export interface TaskResult {
   functionCall?: FunctionCall; // Details if the result is a function call
 }
 
+// a mapping which maps a file to the various platforms and storage options
+interface FileMapping {
+  uuid: string;
+  opfs: string;
+  openAIFileId: string;
+}
+
 export type LLMTask = {
   role: 'system' | 'user' | 'assistant' | 'function';
   content: string | null;

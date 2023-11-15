@@ -2,11 +2,8 @@ import type { LLMTask } from './types';
 import { useVectorStore } from './localVectorStore';
 import type { partialTaskDraft, ChatStateType } from './chat';
 import { v1 as uuidv1 } from 'uuid';
-import { SQLocal } from 'sqlocal';
 
-// Create a client with a name for the SQLite file to save in
-// the origin private file system
-//const { sql } = new SQLocal('database.sqlite3');
+
 
 class AsyncQueue<T> {
   private queue: T[] = [];
