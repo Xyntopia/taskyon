@@ -307,14 +307,14 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
     openAIMessageThread.push(
       ...conversationThread
         .map((mId) => {
-          const m = chatState.Tasks[mId];
+          const t = chatState.Tasks[mId];
           const message: OpenAIMessage = {
-            role: m.role,
-            content: m.content,
+            role: t.role,
+            content: t.content,
           };
-          if (m.role == 'function') {
-            message.name = m.authorId;
-            message.content = m.result?.functionResult || null;
+          if (t.role == 'function') {
+            message.name = task.context?.function?.name;
+            message.content = t.result?.functionResult || null;
           }
           return message;
         })
@@ -390,16 +390,41 @@ export async function getOpenAIAssistantResponse(
   if (task.content) {
     const openai = getOpenai(chatState.openAIApiKey);
     console.log('send task to assistant!', task);
+
+    // get all messages from a chat
+    const taskIdChain = taskChain(task.id, chatState.Tasks);
+    const taskList = taskIdChain.map((t) => chatState.Tasks[t]);
+    //extract data relevant for assistants
+    const threadMessages = taskList.map((t) => {
+      const message: OpenAI.Beta.ThreadCreateParams.Message = {
+        role: 'user',
+        content: t.content || '',
+        //TODO: use the correct file IDs here..  we need to create a mapping for this...
+        //file_ids: t.context?.uploadedFiles,
+        //metadata: {},
+      };
+      return message;
+    });
+    const thread = await openai.beta.threads.create({
+      messages: threadMessages,
+    });
+    const threadId = thread.id;
+
+    /*  this is for re-using old threads which we have create right now
+    there is not really a use-case for this...
+
     const parentTask: LLMTask | undefined =
       chatState.Tasks[task.parentID || ''];
     let threadId = parentTask?.debugging?.threadMessage?.thread_id;
     if (!threadId) {
       const thread = await openai.beta.threads.create();
       threadId = thread.id;
-    }
+    }*/
 
     const assistantId = chatState.openAIAssistant;
-    //TODO: we could potentially check for all the messages which are already in the thread
+
+    //TODO: we can simply always upload attached files before doing anything. We need to store the reference for
+    //      the file locally...
 
     // first, we check if the parent of the task already has a thread & message id. If it does, we
     // will simply use that, add the same id to our current task and add the task as a message
@@ -407,6 +432,7 @@ export async function getOpenAIAssistantResponse(
     const message = await openai.beta.threads.messages.create(threadId, {
       role: 'user',
       content: task.content,
+      file_ids: [],
     });
 
     // attach message to task

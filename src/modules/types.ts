@@ -75,7 +75,7 @@ export type LLMTask = {
   state: TaskState;
   context?: {
     message?: OpenAIMessage;
-    function?: FunctionCall;
+    function?: FunctionCall;  
     model?: string;
     uploadedFiles?: string[];
   };
@@ -96,4 +96,5 @@ export type LLMTask = {
   id: string;
   allowedTools?: string[];
   authorId?: string;
+  created_at?: number; //unix timestamp
 };

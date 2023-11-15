@@ -2,6 +2,15 @@ import type { LLMTask } from './types';
 import { useVectorStore } from './localVectorStore';
 import type { partialTaskDraft, ChatStateType } from './chat';
 import { v1 as uuidv1 } from 'uuid';
+import {
+  SorensenDiceSimilarity,
+  DefaultTextParser,
+  ConsoleLogger,
+  RelativeSummarizerConfig,
+  Summarizer,
+  NullLogger,
+  Sentence,
+} from 'ts-textrank';
 
 class AsyncQueue<T> {
   private queue: T[] = [];
@@ -134,14 +143,10 @@ export function addTask2Tree(
     childrenIDs: [],
     debugging: task.debugging || {},
     id: uuidv1(),
+    created_at: Date.now(),
     context: task.context,
     allowedTools: task.allowedTools || parent?.allowedTools,
   };
-  if (task.context) {
-    if (task.role == 'function') {
-      newTask.authorId = task.context?.function?.name;
-    }
-  }
 
   console.log('create new Task:', newTask.id);
 
