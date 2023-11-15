@@ -5,7 +5,14 @@ import { seleniumBrowser } from './seleniumTool';
 export const vectorStore = useVectorStore();
 
 type toolStateType = 'available' | 'starting' | 'unavailable' | 'error';
-export type FunctionArguments = Record<string, string | number>;
+type ParamType =
+  | string
+  | number
+  | boolean
+  | Record<string, unknown>
+  | Array<unknown>
+  | null;
+export type FunctionArguments = Record<string, ParamType>;
 
 export type FunctionCall = {
   // The name of the function to call.
@@ -21,7 +28,7 @@ interface JSONSchemaForFunctionParameter {
     [key: string]: {
       type: string;
       description?: string;
-      default?: any;
+      default?: unknown;
       items?: JSONSchemaForFunctionParameter | JSONSchemaForFunctionParameter[];
     };
   };
@@ -39,7 +46,8 @@ export interface Tool {
 }
 
 export interface ExtendedTool extends Tool {
-  function: (...args: any[]) => any | Promise<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function: (...args: any[]) => unknown | Promise<unknown>;
 }
 
 export type ToolCollection = {
@@ -113,7 +121,7 @@ function inspectToolCode(toolName: string) {
 }
 
 // Helper function to extract function signature
-function getFunctionSignature(func: (...args: any[]) => any) {
+function getFunctionSignature(func: (...args: unknown[]) => unknown) {
   const funcString = func.toString();
   const signatureMatch = /(function\s.*?\(.*?\))|((\w+|\((.*?)\))\s*=>)/.exec(
     funcString
@@ -202,7 +210,7 @@ export function getDefaultParametersForTool(toolName: string) {
     return {};
   }
 
-  const defaultParams: Record<string, any> = {};
+  const defaultParams: Record<string, ParamType> = {};
   Object.keys(params.properties).forEach((key) => {
     const type = params.properties[key].type;
     // Assign a default value based on the parameter's type.

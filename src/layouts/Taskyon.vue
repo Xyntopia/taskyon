@@ -94,9 +94,7 @@
 
 <script setup lang="ts">
 import ChatSidebar from 'components/ChatSidebar.vue';
-import { useAppSettingsStore } from 'src/stores/appSettings';
 import { useTaskyonStore } from 'stores/taskyonState';
 
-const appSettings = useAppSettingsStore();
 const state = useTaskyonStore();
 </script>

@@ -12,17 +12,11 @@
             filled
             color="secondary"
             v-model="state.taskDraft.content"
-            :hint="`Estimated number of tokens: ${estimatedTokens}`"
             label="Type your message..."
+            clearable
             @keyup="checkForShiftEnter"
           >
             <template v-slot:append>
-              <q-icon
-                v-if="state.taskDraft.content !== ''"
-                name="close"
-                @click="state.taskDraft.content = ''"
-                class="cursor-pointer"
-              />
               <q-btn
                 v-if="!selectedTaskType"
                 flat
@@ -32,21 +26,28 @@
                 @click="executeTask"
               >
                 <q-tooltip>
-                  Alternativly send with &lt;shift&gt; + &lt;enter&gt;
+                  Press to send or alternatively send with &lt;shift&gt; +
+                  &lt;enter&gt;
                 </q-tooltip>
               </q-btn>
             </template>
             <template v-slot:after>
               <FileDropzone
                 class="row justify-center items-center"
-                @update:model-value="writeFiles"
+                @update:model-value="attachFileToTask"
               >
-                <q-btn dense stretch>
+                <q-btn dense class="fit">
                   <q-icon name="upload_file" />
                   <q-icon name="attachment" />
-                  <q-tooltip>"Attach file to message"</q-tooltip>
+                  <q-tooltip>Attach file to message</q-tooltip>
                 </q-btn>
               </FileDropzone>
+            </template>
+            <template v-slot:counter>
+              <div>
+                123123
+                {{ `Estimated number of tokens: ${estimatedTokens}` }}
+              </div>
             </template>
           </q-input>
           <q-select
@@ -86,6 +87,7 @@
               :key="paramName"
             >
               <q-input
+                v-if="typeof param === 'string' || typeof param === 'number'"
                 :model-value="param"
                 @update:model-value="
                   (value) => setFunctionParameter(paramName, value)
@@ -165,7 +167,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { countStringTokens } from 'src/modules/chat';
-import { tools, getDefaultParametersForTool } from 'src/modules/tools';
+import {
+  tools,
+  getDefaultParametersForTool,
+  FunctionArguments,
+} from 'src/modules/tools';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import type { LLMTask } from 'src/modules/types';
@@ -214,7 +220,7 @@ function setTaskType(tasktype: string | undefined) {
     state.taskDraft.role = 'function';
     const defaultParams = getDefaultParametersForTool(tasktype);
     const savedParams = state.draftParameters[tasktype];
-    const funcArguments = {
+    const funcArguments: FunctionArguments = {
       ...(defaultParams || {}),
       ...(savedParams || {}),
     };
@@ -281,4 +287,16 @@ const checkForShiftEnter = (event: KeyboardEvent) => {
     event.preventDefault();
   }
 };
+
+async function attachFileToTask(newFiles: File[]) {
+  //first, upload file into our OPFS file system:
+  await writeFiles(newFiles);
+
+  //and finally attach the filename to the task
+  state.taskDraft.context = state.taskDraft.context || {};
+  state.taskDraft.context.uploadedFiles =
+    state.taskDraft.context.uploadedFiles || [];
+  const fileNames = newFiles.map((f) => f.name);
+  state.taskDraft.context.uploadedFiles.push(...fileNames);
+}
 </script>

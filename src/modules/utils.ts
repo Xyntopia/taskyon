@@ -1,6 +1,7 @@
 /**
  * Type describing a generic function.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyFunction<ReturnType> = (...args: any[]) => ReturnType;
 
 /**
@@ -38,7 +39,7 @@ export function lruCache<ReturnType>(
   const cache = new Map<string, ReturnType>();
 
   return (fn: AnyFunction<ReturnType>): AnyFunction<ReturnType> => {
-    return function (...args: any[]): ReturnType {
+    return function (...args: unknown[]): ReturnType {
       // Generate a cache key, ignoring specified arguments.
       const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index));
       const key = JSON.stringify(keyArgs);
@@ -80,7 +81,7 @@ export function timeLruCache<ReturnType>(
   const cache = new Map<string, CacheEntry<ReturnType>>();
 
   return (fn: AnyFunction<ReturnType>): AnyFunction<ReturnType> => {
-    return function (...args: any[]): ReturnType {
+    return function (...args: unknown[]): ReturnType {
       // Generate a cache key, ignoring specified arguments.
       const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index));
       const key = JSON.stringify(keyArgs);
@@ -134,7 +135,7 @@ export function asyncTimeLruCache<ReturnType>(
   return (
     fn: AnyFunction<Promise<ReturnType>>
   ): AnyFunction<Promise<ReturnType>> => {
-    return async function (...args: any[]): Promise<ReturnType> {
+    return async function (...args: unknown[]): Promise<ReturnType> {
       // Generate a cache key, ignoring specified arguments.
       const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index));
       const key = JSON.stringify(keyArgs);

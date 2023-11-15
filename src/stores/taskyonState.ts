@@ -1,5 +1,4 @@
 import { defineStore } from 'pinia';
-import axios from 'axios';
 import { defaultTaskState } from 'src/modules/chat';
 import { run } from 'src/modules/taskWorker';
 import type { LLMTask } from 'src/modules/types';
@@ -60,12 +59,12 @@ void run(store.chatState);
 
 // this file can be replaced in kubernetes  using a configmap!
 // that way we can configure our webapp even if its already compiled...
-void axios.get('config.json').then((jsonconfig) => {
+/*void axios.get('config.json').then((jsonconfig) => {
   // we only want to load the initial configuration the first time we are loading the page...
-  /*if (store.initial) {
+  if (store.initial) {
     console.log('load App Config', jsonconfig.data);
     store.$state = jsonconfig.data as typeof store.$state;
     store.initial = false;
   }
-  store.updateApiUrl();*/
-});
+  store.updateApiUrl();
+});*/
