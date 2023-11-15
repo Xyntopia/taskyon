@@ -15,7 +15,7 @@
         <!-- Home Icon Button -->
         <q-toolbar-title>
           <q-btn stretch dense flat to="/">
-            <q-avatar class="q-mr-xs" size="md">
+            <q-avatar text-color="red" class="q-mr-xs" size="md">
               <q-img src="~assets/taskyon.svg" />
             </q-avatar>
             <div>Taskyon</div>

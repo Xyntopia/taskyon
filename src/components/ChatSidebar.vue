@@ -15,12 +15,7 @@
     />
     <q-separator spaced />
     <!-- Upload Area -->
-    <q-expansion-item
-      v-if="true"
-      dense
-      label="Upload"
-      icon="upload"
-    >
+    <q-expansion-item v-if="true" dense label="Upload" icon="upload">
       <VecStoreUploader class="fit-height" />
       <!--
     <iframe id="vexvault" style="border: none" :src="uploaderURL" height="200"></iframe>
@@ -68,9 +63,7 @@
                 icon="delete"
                 size="sm"
                 flat
-                @click="
-                  deleteConversationThread(conversationId, state.chatState)
-                "
+                @click="deleteTaskThread(conversationId, state.chatState)"
               ></q-btn>
             </q-item-section>
           </q-item>
@@ -123,7 +116,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import VecStoreUploader from 'components/VecStoreUploader.vue';
-import { deleteConversationThread, getBackendUrls } from 'src/modules/chat';
+import { deleteTaskThread, getBackendUrls } from 'src/modules/chat';
 import { useTaskyonStore } from 'stores/taskyonState';
 
 const state = useTaskyonStore();

@@ -8,11 +8,11 @@
           <q-input
             v-if="!selectedTaskType"
             autogrow
-            :hide-hint="!state.expertMode"
             filled
             color="secondary"
             v-model="state.taskDraft.content"
             label="Type your message..."
+            :bottom-slots="state.expertMode"
             clearable
             @keyup="checkForShiftEnter"
           >
@@ -45,11 +45,25 @@
             </template>
             <template v-slot:counter>
               <div>
-                123123
-                {{ `Estimated number of tokens: ${estimatedTokens}` }}
+                {{ `approx. token count: ${estimatedTokens}` }}
               </div>
             </template>
           </q-input>
+          <div>
+            <div>Attached files:</div>
+            <q-chip
+              v-for="f in state.taskDraft.context?.uploadedFiles"
+              :key="f"
+              removable
+              @remove="removeFileFromTask(f)"
+              icon="upload_file"
+            >
+              <div class="ellipsis" style="max-width: 100px">
+                {{ f }}
+              </div>
+              <q-tooltip :delay="0.5">{{ f }}</q-tooltip>
+            </q-chip>
+          </div>
           <q-select
             v-if="state.expertMode"
             class="q-pt-xs q-px-md"
@@ -166,6 +180,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useQuasar } from 'quasar';
 import { countStringTokens } from 'src/modules/chat';
 import {
   tools,
@@ -298,5 +313,15 @@ async function attachFileToTask(newFiles: File[]) {
     state.taskDraft.context.uploadedFiles || [];
   const fileNames = newFiles.map((f) => f.name);
   state.taskDraft.context.uploadedFiles.push(...fileNames);
+}
+
+function removeFileFromTask(fileName: string) {
+  console.log('delete file from task:', fileName);
+  const fileIndex = state.taskDraft.context?.uploadedFiles?.indexOf(fileName);
+  if (fileIndex != undefined) {
+    if (fileIndex > -1) {
+      state.taskDraft.context?.uploadedFiles?.splice(fileIndex, 1);
+    }
+  }
 }
 </script>
