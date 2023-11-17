@@ -1,9 +1,8 @@
 import type { LLMTask } from './types';
 import { useVectorStore } from './localVectorStore';
-import type { partialTaskDraft, ChatStateType } from './chat';
+import type { ChatStateType } from './chat';
 import { v1 as uuidv1 } from 'uuid';
-
-
+import type { partialTaskDraft } from './types';
 
 class AsyncQueue<T> {
   private queue: T[] = [];

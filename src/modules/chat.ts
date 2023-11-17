@@ -49,6 +49,8 @@ export function getSelectedModel(chatState: ChatStateType) {
     : chatState.openrouterAIModel;
 }
 
+// this state stores all information which
+// should be stored e.g. in browser LocalStorage
 export function defaultTaskState() {
   return {
     Tasks: {} as Record<string, LLMTask>,
@@ -64,6 +66,7 @@ export function defaultTaskState() {
     siteUrl: 'https://taskyon.xyntopia.com',
     summaryModel: 'Xenova/distilbart-cnn-6-6',
     baseURL: getBackendUrls('openrouter'),
+    databasePath: 'taskyon.sqlite3'
   };
 }
 export type ChatStateType = ReturnType<typeof defaultTaskState>;
@@ -323,15 +326,6 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
   }
   return openAIMessageThread;
 }
-
-export type partialTaskDraft = {
-  role: LLMTask['role'];
-  content?: LLMTask['content'];
-  context?: LLMTask['context'];
-  state?: LLMTask['state'];
-  allowedTools?: LLMTask['allowedTools'];
-  debugging?: LLMTask['debugging'];
-};
 
 export function bigIntToString(obj: unknown): unknown {
   if (obj === null) {

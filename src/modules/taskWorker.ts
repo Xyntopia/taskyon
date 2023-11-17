@@ -5,8 +5,8 @@ import {
   getOpenAIAssistantResponse,
   ChatStateType,
   bigIntToString,
-  partialTaskDraft,
 } from './chat';
+import { partialTaskDraft } from './types';
 import { addTask2Tree } from './taskManager';
 import { processTasksQueue } from './taskManager';
 import {

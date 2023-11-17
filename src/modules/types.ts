@@ -10,7 +10,7 @@ export type TaskState =
 
 export type OpenAIMessage = {
   // The content of the message, can be null for some messages.
-  content: string | null | undefined;
+  content: string | null;
   // Function call details if applicable.
   function_call?: {
     // The name of the function to call.
@@ -69,20 +69,13 @@ export interface TaskResult {
   functionCall?: FunctionCall; // Details if the result is a function call
 }
 
-// a mapping which maps a file to the various platforms and storage options
-interface FileMapping {
-  uuid: string;
-  opfs: string;
-  openAIFileId: string;
-}
-
 export type LLMTask = {
   role: 'system' | 'user' | 'assistant' | 'function';
-  content: string | null | undefined;
+  content: string | null;
   state: TaskState;
   context?: {
     message?: OpenAIMessage;
-    function?: FunctionCall;  
+    function?: FunctionCall;
     model?: string;
     uploadedFiles?: string[];
   };
@@ -104,4 +97,13 @@ export type LLMTask = {
   allowedTools?: string[];
   authorId?: string;
   created_at?: number; //unix timestamp
+};
+
+export type partialTaskDraft = {
+  role: LLMTask['role'];
+  content?: LLMTask['content'];
+  context?: LLMTask['context'];
+  state?: LLMTask['state'];
+  allowedTools?: LLMTask['allowedTools'];
+  debugging?: LLMTask['debugging'];
 };
