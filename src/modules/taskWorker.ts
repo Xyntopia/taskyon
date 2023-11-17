@@ -193,7 +193,7 @@ function generateFollowUpTasksFromResult(
   }
 }
 
-async function taskWorker(chatState: ChatStateType, db: ) {
+async function taskWorker(chatState: ChatStateType, db: TaskyonDatabase) {
   console.log('entering task worker loop...');
   while (true) {
     console.log('waiting for next task!');
@@ -237,10 +237,12 @@ async function taskWorker(chatState: ChatStateType, db: ) {
   }
 }
 
-export async function run(chatState: ChatStateType) {
-  console.log('creating or opening task database...')
-  const db = await createTaskyonDatabase('taskyonDB');
+export async function run(
+  chatState: ChatStateType,
+  taskyonDB: TaskyonDatabase
+) {
+  console.log('creating or opening task database...');
 
   console.log('start task taskWorker');
-  await taskWorker(chatState, db);
+  await taskWorker(chatState, taskyonDB);
 } // Helper function to handle function execution

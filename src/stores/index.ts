@@ -16,6 +16,7 @@ export default store((/* { ssrContext } */) => {
 
   // You can add Pinia plugins here
   // pinia.use(SomePiniaPlugin)
+  //pinia.use(piniaPluginPersistedstate)
   pinia.use(({ store }) => {
     console.log(`load ${store.$id} state!`);
 
