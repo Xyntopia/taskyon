@@ -3,7 +3,11 @@ import { useVectorStore } from './localVectorStore';
 import type { ChatStateType } from './chat';
 import { v1 as uuidv1 } from 'uuid';
 import type { partialTaskDraft } from './types';
-import { createTaskyonDatabase, TaskyonDatabase } from './rxdb';
+import {
+  createTaskyonDatabase,
+  TaskyonDatabase,
+  FileMappingDocType,
+} from './rxdb';
 
 class AsyncQueue<T> {
   private queue: T[] = [];
@@ -144,6 +148,27 @@ export async function getTaskyonDB(): Promise<TaskyonDatabase> {
     taskyonDB = await createTaskyonDatabase('taskyondb');
     return taskyonDB;
   }
+}
+
+export async function addFile(opfsName?: string, openAIFileId?: string) {
+  const db = await getTaskyonDB();
+
+  const fileMapping: FileMappingDocType = {
+    uuid: base64Uuid(),
+  };
+
+  // Add 'opfs' only if 'opfsName' is provided
+  if (opfsName) {
+    fileMapping.opfs = opfsName;
+  }
+
+  // Add 'openAIFileId' only if 'openAIFileId' is provided
+  if (openAIFileId) {
+    fileMapping.openAIFileId = openAIFileId;
+  }
+
+  const fileMappingDoc = await db.filemappings.insert(fileMapping);
+  return fileMappingDoc.uuid;
 }
 
 export function addTask2Tree(

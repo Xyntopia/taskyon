@@ -180,7 +180,6 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useQuasar } from 'quasar';
 import { countStringTokens } from 'src/modules/chat';
 import {
   tools,
@@ -193,7 +192,7 @@ import type { LLMTask } from 'src/modules/types';
 import FileDropzone from './FileDropzone.vue';
 import ModelSelection from 'components/ModelSelection.vue';
 import { writeFiles } from 'src/modules/OPFS';
-import { addTask2Tree } from 'src/modules/taskManager';
+import { addTask2Tree, addFile } from 'src/modules/taskManager';
 
 const state = useTaskyonStore();
 
@@ -304,15 +303,25 @@ const checkForShiftEnter = (event: KeyboardEvent) => {
 };
 
 async function attachFileToTask(newFiles: File[]) {
+  console.log('attach file to ask');
   //first, upload file into our OPFS file system:
-  await writeFiles(newFiles);
+  const opfsMapping = await writeFiles(newFiles);
 
-  //and finally attach the filename to the task
+  // Collect UUIDs from added files
+  const uuids = [];
+
+  for (const [originalFilename, savedFilename] of Object.entries(opfsMapping)) {
+    const uuid = await addFile(savedFilename);
+    uuids.push(uuid);
+  }
+
+  // Ensure 'context' and 'uploadedFiles' are initialized in 'state.taskDraft'
   state.taskDraft.context = state.taskDraft.context || {};
   state.taskDraft.context.uploadedFiles =
     state.taskDraft.context.uploadedFiles || [];
-  const fileNames = newFiles.map((f) => f.name);
-  state.taskDraft.context.uploadedFiles.push(...fileNames);
+
+  // Append the UUIDs to 'uploadedFiles'
+  state.taskDraft.context.uploadedFiles.push(...uuids);
 }
 
 function removeFileFromTask(fileName: string) {

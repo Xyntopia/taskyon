@@ -19,7 +19,7 @@ async function getRoot() {
 export async function writeFiles(
   newFiles: File[]
 ): Promise<{ [key: string]: string }> {
-  console.log('save file', newFiles);
+  console.log('save file to OPFS', newFiles);
   if (!newFiles.length) return {};
 
   const storageRoot = await getRoot();
