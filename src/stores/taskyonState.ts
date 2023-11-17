@@ -34,6 +34,9 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
   return { ...stateRefs };
 });
 
+const store = useTaskyonStore();
+void run(store.chatState);
+
 // this file can be replaced in kubernetes  using a configmap!
 // that way we can configure our webapp even if its already compiled...
 /*void axios.get('config.json').then((jsonconfig) => {
