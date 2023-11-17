@@ -3,12 +3,11 @@ import {
   RxDatabase,
   RxCollection,
   RxJsonSchema,
-  RxDocument,
+  //RxDocument,
   toTypedRxJsonSchema,
   ExtractDocumentTypeFromTypedRxJsonSchema,
 } from 'rxdb';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
-import { LLMTask } from './types';
 
 const llmTaskSchemaLiteral = {
   title: 'LLMTask schema',
@@ -32,19 +31,13 @@ const llmTaskSchemaLiteral = {
       enum: ['Open', 'Queued', 'In Progress', 'Completed', 'Error'],
     },
     context: {
-      type: ['object', 'null'],
+      type: ['object'],
       properties: {
         message: {
           type: ['object', 'null'],
-          properties: {
-            // properties of OpenAIMessage
-          },
         },
         function: {
           type: ['object', 'null'],
-          properties: {
-            // properties of FunctionCall
-          },
         },
         model: {
           type: ['string', 'null'],
@@ -91,10 +84,7 @@ const llmTaskSchemaLiteral = {
       type: ['number', 'null'],
     },
   },
-  required: ['id', 'role', 'state'],
-  attachments: {
-    encrypted: false,
-  },
+  required: ['id', 'role', 'state', 'content'],
 } as const;
 
 const llmTaskSchemaTyped = toTypedRxJsonSchema(llmTaskSchemaLiteral);
@@ -102,6 +92,13 @@ export type LLMTaskDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
   typeof llmTaskSchemaTyped
 >;
 export const llmTaskSchema: RxJsonSchema<LLMTaskDocType> = llmTaskSchemaLiteral;
+
+// Assert LLMTask to be LLMTaskDocType
+//const testLLMTask: LLMTaskDocType = {} as LLMTask;
+//const testLLMTaskDocType: LLMTask = {} as LLMTaskDocType;
+
+//type Equals<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
+//type AreEqual = Equals<LLMTask, LLMTaskDocType>;
 
 const fileMappingSchemaLiteral = {
   title: 'FileMapping schema',
@@ -112,10 +109,11 @@ const fileMappingSchemaLiteral = {
     uuid: { type: 'string' },
     opfs: { type: 'string' },
     openAIFileId: { type: 'string' },
-    fileData: { type: 'arraybuffer' },
+    fileData: { type: 'string' },
   },
   required: ['uuid'],
 } as const;
+
 const fileMappingSchemaTyped = toTypedRxJsonSchema(fileMappingSchemaLiteral);
 export type FileMappingDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
   typeof fileMappingSchemaTyped

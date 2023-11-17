@@ -10,7 +10,7 @@ export type TaskState =
 
 export type OpenAIMessage = {
   // The content of the message, can be null for some messages.
-  content: string | null;
+  content: string | null | undefined;
   // Function call details if applicable.
   function_call?: {
     // The name of the function to call.
@@ -78,7 +78,7 @@ interface FileMapping {
 
 export type LLMTask = {
   role: 'system' | 'user' | 'assistant' | 'function';
-  content: string | null;
+  content: string | null | undefined;
   state: TaskState;
   context?: {
     message?: OpenAIMessage;
