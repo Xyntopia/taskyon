@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { defaultTaskState } from 'src/modules/chat';
-import { ref, reactive } from 'vue';
+import { ref, Ref } from 'vue';
 import { run } from 'src/modules/taskWorker';
 import type { LLMTask } from 'src/modules/types';
 import type { FunctionArguments } from 'src/modules/tools';
@@ -12,7 +12,7 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
 
   let taskyonDB: TaskyonDatabase | undefined = undefined;
 
-  const initialState = reactive({
+  const initialState = {
     chatState: defaultTaskState(),
     expertMode: false,
     showCosts: false,
@@ -27,7 +27,12 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
     debugMessageExpand: {},
     darkTheme: 'auto' as boolean | 'auto',
     messageDebug: {} as Record<string, boolean>, // whether message with ID should be open or not...
-  });
+  };
+
+  // Create refs for each property and adjust the type assertion
+  const stateRefs = Object.fromEntries(
+    Object.entries(initialState).map(([key, value]) => [key, ref(value)])
+  ) as { [K in keyof typeof initialState]: Ref<(typeof initialState)[K]> };
 
   void createTaskyonDatabase('taskyondb').then((newDB) => {
     taskyonDB = newDB;
@@ -42,7 +47,7 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
     return taskyonDB;
   }
 
-  return { getTaskyonDB, ...initialState };
+  return { getTaskyonDB, ...stateRefs };
 });
 
 // this file can be replaced in kubernetes  using a configmap!
