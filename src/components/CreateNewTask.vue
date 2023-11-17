@@ -52,16 +52,18 @@
           <div>
             <div>Attached files:</div>
             <q-chip
-              v-for="f in state.taskDraft.context?.uploadedFiles"
-              :key="f"
+              v-for="fileMapping in fileMappings"
+              :key="fileMapping.uuid"
               removable
-              @remove="removeFileFromTask(f)"
+              @remove="removeFileFromTask(fileMapping.uuid)"
               icon="upload_file"
             >
               <div class="ellipsis" style="max-width: 100px">
-                {{ f }}
+                {{ `${fileMapping.opfsName} (${fileMapping.uuid})` }}
               </div>
-              <q-tooltip :delay="0.5">{{ f }}</q-tooltip>
+              <q-tooltip :delay="0.5">{{
+                `${fileMapping.opfsName} (taskyon-id: ${fileMapping.uuid})`
+              }}</q-tooltip>
             </q-chip>
           </div>
           <q-select
@@ -179,7 +181,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { countStringTokens } from 'src/modules/chat';
 import {
   tools,
@@ -192,7 +194,11 @@ import type { LLMTask } from 'src/modules/types';
 import FileDropzone from './FileDropzone.vue';
 import ModelSelection from 'components/ModelSelection.vue';
 import { writeFiles } from 'src/modules/OPFS';
-import { addTask2Tree, addFile } from 'src/modules/taskManager';
+import {
+  addTask2Tree,
+  addFile,
+  getFileMappingByUuid,
+} from 'src/modules/taskManager';
 
 const state = useTaskyonStore();
 
@@ -333,4 +339,44 @@ function removeFileFromTask(fileName: string) {
     }
   }
 }
+
+// Reactive property to store file mappings
+const fileMappings = ref<
+  {
+    uuid: string;
+    opfsName: string | undefined;
+  }[]
+>([]);
+
+async function updateFileMappings(newUploadedFiles: string[] | undefined) {
+  const newMappings = [];
+  if (newUploadedFiles) {
+    for (const uuid of newUploadedFiles) {
+      try {
+        const fileMapping = await getFileMappingByUuid(uuid);
+        if (fileMapping) {
+          newMappings.push({
+            uuid,
+            opfsName: fileMapping.opfs, // Assuming 'opfs' holds the OPFS filename
+          });
+        }
+      } catch (error) {
+        console.error(`Error fetching file mapping for UUID: ${uuid}`, error);
+      }
+    }
+  }
+
+  fileMappings.value = newMappings;
+}
+
+void updateFileMappings(state.taskDraft.context?.uploadedFiles);
+
+// Watcher to update file mappings when uploaded files change
+watch(
+  () => state.taskDraft.context?.uploadedFiles, // reactive source
+  (newUploadedFiles) => updateFileMappings(newUploadedFiles),
+  {
+    deep: true, // Use this if the watched source is an object/array
+  }
+);
 </script>

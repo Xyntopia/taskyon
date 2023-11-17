@@ -171,6 +171,29 @@ export async function addFile(opfsName?: string, openAIFileId?: string) {
   return fileMappingDoc.uuid;
 }
 
+// Corrected function
+export async function getFileMappingByUuid(
+  uuid: string
+): Promise<FileMappingDocType | null> {
+  const db = await getTaskyonDB();
+
+  // Find the document with the matching UUID
+  const fileMappingDoc = await db.filemappings.findOne(uuid).exec();
+
+  // Check if the document exists
+  if (!fileMappingDoc) {
+    console.log(`No file mapping found for UUID: ${uuid}`);
+    return null;
+  }
+
+  // Return the found document
+  return {
+    uuid: fileMappingDoc.uuid,
+    opfs: fileMappingDoc.opfs,
+    openAIFileId: fileMappingDoc.openAIFileId,
+  };
+}
+
 export function addTask2Tree(
   task: partialTaskDraft,
   parent: LLMTask | undefined,
