@@ -16,14 +16,18 @@ async function getRoot() {
   return storageRoot;
 }
 
-export async function writeFiles(newFiles: File[]) {
+export async function writeFiles(
+  newFiles: File[]
+): Promise<{ [key: string]: string }> {
   console.log('save file', newFiles);
-  if (!newFiles.length) return;
+  if (!newFiles.length) return {};
 
   const storageRoot = await getRoot();
+  const filenameMapping: { [key: string]: string } = {};
 
   if (storageRoot) {
     for (const file of newFiles) {
+      const originalFileName = file.name;
       const newSubDir = await storageRoot.getDirectoryHandle('fileuploads', {
         create: true,
       });
@@ -33,7 +37,6 @@ export async function writeFiles(newFiles: File[]) {
       let counter = 1;
 
       while (fileExists) {
-        // Change the file name by adding a suffix
         newFileName = addSuffixToFile(file.name, counter);
         fileExists = await checkFileExists(newSubDir, newFileName);
         counter++;
@@ -46,11 +49,14 @@ export async function writeFiles(newFiles: File[]) {
       const wtr = await newFile.createWritable();
       try {
         await wtr.write(await file.arrayBuffer());
+        filenameMapping[originalFileName] = newFileName; // Map the original filename to the new filename
       } finally {
         await wtr.close();
       }
     }
   }
+
+  return filenameMapping; // Return the mapping object
 }
 
 async function checkFileExists(
