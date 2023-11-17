@@ -17,7 +17,8 @@ import {
 } from './tools';
 import type { LLMTask, TaskResult } from './types';
 import type { OpenAI } from 'openai';
-import { createTaskyonDatabase, TaskyonDatabase } from './rxdb';
+import type { TaskyonDatabase } from './rxdb';
+import { getTaskyonDB } from './taskManager';
 
 export async function handleFunctionExecution(
   func: FunctionCall,
@@ -237,12 +238,10 @@ async function taskWorker(chatState: ChatStateType, db: TaskyonDatabase) {
   }
 }
 
-export async function run(
-  chatState: ChatStateType,
-  taskyonDB: TaskyonDatabase
-) {
+export async function run(chatState: ChatStateType) {
   console.log('creating or opening task database...');
 
+  const taskyonDB = await getTaskyonDB();
   console.log('start task taskWorker');
   await taskWorker(chatState, taskyonDB);
 } // Helper function to handle function execution

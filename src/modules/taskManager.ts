@@ -3,7 +3,7 @@ import { useVectorStore } from './localVectorStore';
 import type { ChatStateType } from './chat';
 import { v1 as uuidv1 } from 'uuid';
 import type { partialTaskDraft } from './types';
-
+import { createTaskyonDatabase, TaskyonDatabase } from './rxdb';
 
 class AsyncQueue<T> {
   private queue: T[] = [];
@@ -133,6 +133,17 @@ function base64Uuid() {
   const base64Uuid = bufferUuid.toString('base64');
 
   return base64Uuid;
+}
+
+let taskyonDB: TaskyonDatabase | undefined = undefined;
+
+export async function getTaskyonDB(): Promise<TaskyonDatabase> {
+  if (taskyonDB) {
+    return taskyonDB;
+  } else {
+    taskyonDB = await createTaskyonDatabase('taskyondb');
+    return taskyonDB;
+  }
 }
 
 export function addTask2Tree(

@@ -4,13 +4,10 @@ import { ref, Ref } from 'vue';
 import { run } from 'src/modules/taskWorker';
 import type { LLMTask } from 'src/modules/types';
 import type { FunctionArguments } from 'src/modules/tools';
-import { createTaskyonDatabase, TaskyonDatabase } from 'src/modules/rxdb';
 
 //TODO: convert store into composition api
 export const useTaskyonStore = defineStore('taskyonState', () => {
   console.log('initialize taskyon');
-
-  let taskyonDB: TaskyonDatabase | undefined = undefined;
 
   const initialState = {
     chatState: defaultTaskState(),
@@ -34,20 +31,7 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
     Object.entries(initialState).map(([key, value]) => [key, ref(value)])
   ) as { [K in keyof typeof initialState]: Ref<(typeof initialState)[K]> };
 
-  void createTaskyonDatabase('taskyondb').then((newDB) => {
-    taskyonDB = newDB;
-    void run(initialState.chatState, newDB);
-  });
-
-  async function getTaskyonDB(): Promise<TaskyonDatabase> {
-    while (taskyonDB === undefined) {
-      // Wait for a short period before checking again to avoid blocking the thread
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    return taskyonDB;
-  }
-
-  return { getTaskyonDB, ...stateRefs };
+  return { ...stateRefs };
 });
 
 // this file can be replaced in kubernetes  using a configmap!
