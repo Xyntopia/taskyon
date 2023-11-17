@@ -20,31 +20,62 @@ export async function writeFiles(newFiles: File[]) {
   console.log('save file', newFiles);
   if (!newFiles.length) return;
 
-  // Open the "root" of the website's (origin's) private filesystem (OPFS):
   const storageRoot = await getRoot();
 
   if (storageRoot) {
-    // Save each file to the file system.
     for (const file of newFiles) {
-      // Create an empty (zero-byte) file in a new subdirectory: "art/mywaifu.png":
       const newSubDir = await storageRoot.getDirectoryHandle('fileuploads', {
         create: true,
       });
-      const newFile = await newSubDir.getFileHandle(file.name, {
+
+      let newFileName = file.name;
+      let fileExists = await checkFileExists(newSubDir, newFileName);
+      let counter = 1;
+
+      while (fileExists) {
+        // Change the file name by adding a suffix
+        newFileName = addSuffixToFile(file.name, counter);
+        fileExists = await checkFileExists(newSubDir, newFileName);
+        counter++;
+      }
+
+      const newFile = await newSubDir.getFileHandle(newFileName, {
         create: true,
       });
 
-      // Open the `mywaifu.png` file as a writable stream ( FileSystemWritableFileStream ):
       const wtr = await newFile.createWritable();
       try {
-        // Then write the Blob object directly:
         await wtr.write(await file.arrayBuffer());
       } finally {
-        // And safely close the file stream writer:
         await wtr.close();
       }
     }
   }
+}
+
+async function checkFileExists(
+  directoryHandle: FileSystemDirectoryHandle,
+  fileName: string
+): Promise<boolean> {
+  try {
+    await directoryHandle.getFileHandle(fileName);
+    return true;
+  } catch (e) {
+    if (e instanceof Error && e.name === 'NotFoundError') {
+      return false;
+    }
+    throw e;
+  }
+}
+
+function addSuffixToFile(fileName: string, suffix: number): string {
+  const dotIndex = fileName.lastIndexOf('.');
+  if (dotIndex === -1) {
+    return `${fileName}-${suffix}`;
+  }
+  return `${fileName.substring(0, dotIndex)}-${suffix}${fileName.substring(
+    dotIndex
+  )}`;
 }
 
 export async function ls(dir: string) {
