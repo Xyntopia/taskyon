@@ -11,8 +11,9 @@ import {
 import { taskChain } from './taskManager';
 import OpenAI from 'openai';
 import { lruCache, sleep, asyncTimeLruCache } from './utils';
+import type { TaskyonDatabase, FileMappingDocType } from './rxdb';
 
-const getOpenai = lruCache<OpenAI>(1)((apiKey: string) => {
+const getOpenai = lruCache<OpenAI>(5)((apiKey: string) => {
   const api = new OpenAI({
     apiKey: apiKey,
     dangerouslyAllowBrowser: true,
@@ -66,7 +67,7 @@ export function defaultTaskState() {
     siteUrl: 'https://taskyon.xyntopia.com',
     summaryModel: 'Xenova/distilbart-cnn-6-6',
     baseURL: getBackendUrls('openrouter'),
-    databasePath: 'taskyon.sqlite3'
+    databasePath: 'taskyon.sqlite3',
   };
 }
 export type ChatStateType = ReturnType<typeof defaultTaskState>;
@@ -377,9 +378,91 @@ export async function getOpenAIChatResponse(
   }
 }
 
+async function uploadFilesToOpenAI(
+  files: File[],
+  openaiKey: string
+): Promise<string[]> {
+  const fileIDs: string[] = [];
+
+  for (const file of files) {
+    try {
+      const response = await getOpenai(openaiKey).files.create({
+        file: file,
+        purpose: 'assistants',
+      });
+
+      // Push the file ID to the array
+      fileIDs.push(response.id);
+    } catch (error) {
+      console.error('Error uploading file to OpenAI:', error);
+      // Handle the error as per your application's error handling policy
+    }
+  }
+
+  return fileIDs;
+}
+
+async function uploadFiles(
+  files: string[],
+  openaiKey: string
+): Promise<string[]> {
+  const fileObjects = files.map((filePath) => new File([filePath], filePath));
+  return await uploadFilesToOpenAI(fileObjects, openaiKey);
+}
+
+function findAllFilesInTasks(taskList: LLMTask[]): string[] {
+  const fileSet = new Set<string>();
+  taskList.forEach((task) => {
+    (task.context?.uploadedFiles || []).forEach((file) => fileSet.add(file));
+  });
+  return Array.from(fileSet);
+}
+
+async function uploadFilesAndGetMapping(
+  files: string[],
+  openaiKey: string
+): Promise<Record<string, string>> {
+  // Ensure uploadFiles function is defined to return Promise<string[]>
+  const openAIFileIds = await uploadFiles(files, openaiKey);
+  const fileMapping: Record<string, string> = {};
+
+  files.forEach((file, index) => {
+    fileMapping[file] = openAIFileIds[index];
+  });
+  return fileMapping;
+}
+
+async function updateFileMappingDatabaseWithOpenAIIds(
+  fileMappings: Record<string, string>,
+  db: TaskyonDatabase
+): Promise<void> {
+  for (const [localFile, openAIFileId] of Object.entries(fileMappings)) {
+    await db.filemappings.upsert({
+      uuid: localFile, // Local file UUID
+      opfs: localFile, // Assuming local file path or URL
+      openAIFileId: openAIFileId,
+      fileData: '', // Any additional data if needed
+    });
+  }
+}
+
+function convertTasksToOpenAIThread(
+  taskList: LLMTask[],
+  fileMappings: Record<string, string>
+): OpenAI.Beta.ThreadCreateParams.Message[] {
+  return taskList.map((task) => ({
+    role: 'user',
+    content: task.content || '',
+    file_ids: (task.context?.uploadedFiles || [])
+      .map((file) => fileMappings[file])
+      .filter((id) => id !== undefined),
+  }));
+}
+
 export async function getOpenAIAssistantResponse(
   task: LLMTask,
-  chatState: ChatStateType
+  chatState: ChatStateType,
+  db: TaskyonDatabase
 ) {
   if (task.content) {
     const openai = getOpenai(chatState.openAIApiKey);
@@ -388,55 +471,34 @@ export async function getOpenAIAssistantResponse(
     // get all messages from a chat
     const taskIdChain = taskChain(task.id, chatState.Tasks);
     const taskList = taskIdChain.map((t) => chatState.Tasks[t]);
-    //extract data relevant for assistants
-    const threadMessages = taskList.map((t) => {
-      const message: OpenAI.Beta.ThreadCreateParams.Message = {
-        role: 'user',
-        content: t.content || '',
-        //TODO: use the correct file IDs here..  we need to create a mapping for this...
-        //file_ids: t.context?.uploadedFiles,
-        //metadata: {},
-      };
-      return message;
-    });
+
+    // Step 1: Find all files in the task list
+    const files = findAllFilesInTasks(taskList);
+
+    // Step 2: Upload files and get mapping
+    const openaiKey = getApikey(chatState);
+    const fileMappings = await uploadFilesAndGetMapping(files, openaiKey);
+
+    // Step 3: Update file mapping database
+    await updateFileMappingDatabaseWithOpenAIIds(fileMappings, db);
+
+    // Step 4: Convert task list to OpenAI thread messages
+    const openAIConversationThread = convertTasksToOpenAIThread(
+      taskList,
+      fileMappings
+    );
+
     const thread = await openai.beta.threads.create({
-      messages: threadMessages,
+      messages: openAIConversationThread,
     });
     const threadId = thread.id;
-
-    /*  this is for re-using old threads which we have create right now
-    there is not really a use-case for this...
-
-    const parentTask: LLMTask | undefined =
-      chatState.Tasks[task.parentID || ''];
-    let threadId = parentTask?.debugging?.threadMessage?.thread_id;
-    if (!threadId) {
-      const thread = await openai.beta.threads.create();
-      threadId = thread.id;
-    }*/
-
     const assistantId = chatState.openAIAssistant;
-
-    //TODO: we can simply always upload attached files before doing anything. We need to store the reference for
-    //      the file locally...
-
-    // first, we check if the parent of the task already has a thread & message id. If it does, we
-    // will simply use that, add the same id to our current task and add the task as a message
-    // to the thread.
-    const message = await openai.beta.threads.messages.create(threadId, {
-      role: 'user',
-      content: task.content,
-      file_ids: [],
-    });
-
-    // attach message to task
-    task.debugging.threadMessage = message;
 
     //after we have done that, we tell openai to process the run with the new message
     let run = await openai.beta.threads.runs.create(threadId, {
       assistant_id: assistantId,
       //instructions:
-      //  'Please address the user as Jane Doe. The user has a premium account.',
+      //  e.g. "'Please address the user as Jane Doe. The user has a premium account.'"",
     });
 
     // check if message has completed already...

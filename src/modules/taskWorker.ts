@@ -40,9 +40,13 @@ export async function handleFunctionExecution(
   }
 }
 
-export async function processChatTask(task: LLMTask, chatState: ChatStateType) {
+export async function processChatTask(
+  task: LLMTask,
+  chatState: ChatStateType,
+  db: TaskyonDatabase
+) {
   if (chatState.useOpenAIAssistants && openAIUsed(chatState)) {
-    const messages = await getOpenAIAssistantResponse(task, chatState);
+    const messages = await getOpenAIAssistantResponse(task, chatState, db);
     if (messages) {
       task.result = {
         type: 'ChatAnswer',
@@ -203,7 +207,7 @@ async function taskWorker(chatState: ChatStateType, db: TaskyonDatabase) {
     console.log('processing task:', task);
     try {
       if (task.role == 'user') {
-        task = await processChatTask(task, chatState);
+        task = await processChatTask(task, chatState, db);
         task.state = 'Completed';
       } else if (task.role == 'function') {
         // in the case of 'FunctionCall' result, we run it twice:
@@ -217,7 +221,7 @@ async function taskWorker(chatState: ChatStateType, db: TaskyonDatabase) {
           task.result?.type === 'FunctionError'
         ) {
           // here we send the task to our LLM inference
-          task = await processChatTask(task, chatState);
+          task = await processChatTask(task, chatState, db);
           task.state = 'Completed';
         } else {
           // in the case we don't have a result yet, we need to calculate it :)
