@@ -8,6 +8,7 @@ import {
   TaskyonDatabase,
   FileMappingDocType,
 } from './rxdb';
+import { openFile } from './OPFS';
 
 class AsyncQueue<T> {
   private queue: T[] = [];
@@ -171,7 +172,6 @@ export async function addFile(opfsName?: string, openAIFileId?: string) {
   return fileMappingDoc.uuid;
 }
 
-// Corrected function
 export async function getFileMappingByUuid(
   uuid: string
 ): Promise<FileMappingDocType | null> {
@@ -192,6 +192,22 @@ export async function getFileMappingByUuid(
     opfs: fileMappingDoc.opfs,
     openAIFileId: fileMappingDoc.openAIFileId,
   };
+}
+
+export async function getFile(uuid: string) {
+  const fileMap = await getFileMappingByUuid(uuid);
+  if (fileMap?.opfs) {
+    const file = openFile(fileMap.opfs);
+    return file;
+  }
+}
+
+export function findAllFilesInTasks(taskList: LLMTask[]): string[] {
+  const fileSet = new Set<string>();
+  taskList.forEach((task) => {
+    (task.context?.uploadedFiles || []).forEach((file) => fileSet.add(file));
+  });
+  return Array.from(fileSet);
 }
 
 export function addTask2Tree(

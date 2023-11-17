@@ -8,8 +8,14 @@ import {
   ChatCompletionResponse,
   OpenRouterGenerationInfo,
 } from './types';
-import { taskChain } from './taskManager';
+import {
+  taskChain,
+  getFileMappingByUuid,
+  findAllFilesInTasks,
+  getFile,
+} from './taskManager';
 import OpenAI from 'openai';
+import { openFile } from './OPFS';
 import { lruCache, sleep, asyncTimeLruCache } from './utils';
 import type { TaskyonDatabase, FileMappingDocType } from './rxdb';
 
@@ -378,71 +384,19 @@ export async function getOpenAIChatResponse(
   }
 }
 
-async function uploadFilesToOpenAI(
-  files: File[],
+async function uploadFileToOpenAI(
+  file: File,
   openaiKey: string
-): Promise<string[]> {
-  const fileIDs: string[] = [];
-
-  for (const file of files) {
-    try {
-      const response = await getOpenai(openaiKey).files.create({
-        file: file,
-        purpose: 'assistants',
-      });
-
-      // Push the file ID to the array
-      fileIDs.push(response.id);
-    } catch (error) {
-      console.error('Error uploading file to OpenAI:', error);
-      // Handle the error as per your application's error handling policy
-    }
-  }
-
-  return fileIDs;
-}
-
-async function uploadFiles(
-  files: string[],
-  openaiKey: string
-): Promise<string[]> {
-  const fileObjects = files.map((filePath) => new File([filePath], filePath));
-  return await uploadFilesToOpenAI(fileObjects, openaiKey);
-}
-
-function findAllFilesInTasks(taskList: LLMTask[]): string[] {
-  const fileSet = new Set<string>();
-  taskList.forEach((task) => {
-    (task.context?.uploadedFiles || []).forEach((file) => fileSet.add(file));
-  });
-  return Array.from(fileSet);
-}
-
-async function uploadFilesAndGetMapping(
-  files: string[],
-  openaiKey: string
-): Promise<Record<string, string>> {
-  // Ensure uploadFiles function is defined to return Promise<string[]>
-  const openAIFileIds = await uploadFiles(files, openaiKey);
-  const fileMapping: Record<string, string> = {};
-
-  files.forEach((file, index) => {
-    fileMapping[file] = openAIFileIds[index];
-  });
-  return fileMapping;
-}
-
-async function updateFileMappingDatabaseWithOpenAIIds(
-  fileMappings: Record<string, string>,
-  db: TaskyonDatabase
-): Promise<void> {
-  for (const [localFile, openAIFileId] of Object.entries(fileMappings)) {
-    await db.filemappings.upsert({
-      uuid: localFile, // Local file UUID
-      opfs: localFile, // Assuming local file path or URL
-      openAIFileId: openAIFileId,
-      fileData: '', // Any additional data if needed
+): Promise<string | undefined> {
+  try {
+    const response = await getOpenai(openaiKey).files.create({
+      file: file,
+      purpose: 'assistants',
     });
+    return response.id;
+  } catch (error) {
+    console.error('Error uploading file to OpenAI:', error);
+    // Handle the error as per your application's error handling policy
   }
 }
 
@@ -472,22 +426,45 @@ export async function getOpenAIAssistantResponse(
     const taskIdChain = taskChain(task.id, chatState.Tasks);
     const taskList = taskIdChain.map((t) => chatState.Tasks[t]);
 
-    // Step 1: Find all files in the task list
-    const files = findAllFilesInTasks(taskList);
+    // Find all fileIDs in the task list
+    const fileIDs = findAllFilesInTasks(taskList);
 
-    // Step 2: Upload files and get mapping
-    const openaiKey = getApikey(chatState);
-    const fileMappings = await uploadFilesAndGetMapping(files, openaiKey);
+    // Get all corresponding filemapping entries from our database
+    const currentTaskListfileMappings = (
+      await Promise.all(
+        fileIDs.map(async (fuuid) => await getFileMappingByUuid(fuuid))
+      )
+    ).filter((fm) => fm !== null) as FileMappingDocType[];
 
-    // Step 3: Update file mapping database
-    await updateFileMappingDatabaseWithOpenAIIds(fileMappings, db);
+    // upload files to openai with that information one-by-one
+    const openAIFileMappings: Record<string, string> = {};
+    for (const fm of currentTaskListfileMappings) {
+      if (fm?.opfs) {
+        const file = await openFile(fm.opfs);
+        if (file) {
+          // TODO: only upload file, if it doesn't have a openAI ID yet.
+          const fileIDopenAI = await uploadFileToOpenAI(
+            file,
+            chatState.openAIApiKey
+          );
+          if (fileIDopenAI) {
+            fm.openAIFileId = fileIDopenAI;
+            openAIFileMappings[fm.uuid] = fileIDopenAI;
+          }
+        }
+      }
+    }
 
-    // Step 4: Convert task list to OpenAI thread messages
+    // Update file mapping database
+    await db.filemappings.bulkUpsert(currentTaskListfileMappings);
+
+    // Finally, Convert task list to OpenAI thread messages
     const openAIConversationThread = convertTasksToOpenAIThread(
       taskList,
-      fileMappings
+      openAIFileMappings
     );
 
+    // then upload the taskThread and execute it.
     const thread = await openai.beta.threads.create({
       messages: openAIConversationThread,
     });
