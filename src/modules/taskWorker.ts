@@ -17,6 +17,7 @@ import {
 } from './tools';
 import type { LLMTask, TaskResult } from './types';
 import type { OpenAI } from 'openai';
+import { createTaskyonDatabase, TaskyonDatabase } from './rxdb';
 
 export async function handleFunctionExecution(
   func: FunctionCall,
@@ -192,7 +193,7 @@ function generateFollowUpTasksFromResult(
   }
 }
 
-async function taskWorker(chatState: ChatStateType) {
+async function taskWorker(chatState: ChatStateType, db: ) {
   console.log('entering task worker loop...');
   while (true) {
     console.log('waiting for next task!');
@@ -237,6 +238,9 @@ async function taskWorker(chatState: ChatStateType) {
 }
 
 export async function run(chatState: ChatStateType) {
+  console.log('creating or opening task database...')
+  const db = await createTaskyonDatabase('taskyonDB');
+
   console.log('start task taskWorker');
-  await taskWorker(chatState);
+  await taskWorker(chatState, db);
 } // Helper function to handle function execution

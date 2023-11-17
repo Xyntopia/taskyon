@@ -126,18 +126,21 @@ export type LLMTaskCollection = RxCollection<LLMTaskDocType>;
 export type FileMappingCollection = RxCollection<FileMappingDocType>;
 
 // Define the database type
-export type MyDatabaseCollections = {
+export type TaskyonDatabaseCollections = {
   llmtasks: LLMTaskCollection;
   filemappings: FileMappingCollection;
 };
-export type MyDatabase = RxDatabase<MyDatabaseCollections>;
+export type TaskyonDatabase = RxDatabase<TaskyonDatabaseCollections>;
 
 // Function to create the database
-async function createDatabase(): Promise<MyDatabase> {
-  const db: MyDatabase = await createRxDatabase<MyDatabaseCollections>({
-    name: 'mydatabase',
-    storage: getRxStorageDexie(),
-  });
+export async function createTaskyonDatabase(
+  name: string
+): Promise<TaskyonDatabase> {
+  const db: TaskyonDatabase =
+    await createRxDatabase<TaskyonDatabaseCollections>({
+      name,
+      storage: getRxStorageDexie(),
+    });
 
   await db.addCollections({
     llmtasks: { schema: llmTaskSchema },
@@ -147,8 +150,8 @@ async function createDatabase(): Promise<MyDatabase> {
   return db;
 }
 
-async function main() {
-  const db = await createDatabase();
+/*async function main() {
+  const db = await createDatabase("")
 
   // Example usage
   const llmTaskDoc = await db.llmtasks.insert({
@@ -162,3 +165,4 @@ async function main() {
 }
 
 main().catch((err) => console.error(err));
+*/
