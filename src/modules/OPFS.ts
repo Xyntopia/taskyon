@@ -99,12 +99,19 @@ export async function ls(dir: string) {
 }
 
 export async function openFile(fileName: string) {
-  const storageRoot = await getRoot();
-  if (storageRoot) {
-    // Get the file handle:
-    const fileHandle = await storageRoot.getFileHandle(fileName);
-    // Get the file object:
-    const file = await fileHandle.getFile();
-    return file;
+  console.log('opening file: ', fileName);
+  try {
+    const storageRoot = await getRoot();
+    if (storageRoot) {
+      // Get the file handle:
+      const dirHandle = await storageRoot.getDirectoryHandle('fileuploads');
+      const fileHandle = await dirHandle.getFileHandle(fileName);
+      // Get the file object:
+      const file = await fileHandle.getFile();
+      return file;
+    }
+  } catch (err) {
+    console.error(err);
+    return undefined;
   }
 }
