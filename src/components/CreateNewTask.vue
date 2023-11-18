@@ -11,7 +11,7 @@
             filled
             color="secondary"
             v-model="state.taskDraft.content"
-            label="Type your message..."
+            label="Type your message or instruction..."
             :bottom-slots="state.expertMode"
             clearable
             @keyup="checkForShiftEnter"
@@ -49,7 +49,7 @@
               </div>
             </template>
           </q-input>
-          <div>
+          <div v-if="fileMappings.length">
             <div>Attached files:</div>
             <q-chip
               v-for="fileMapping in fileMappings"
@@ -82,8 +82,16 @@
                 icon="chat"
                 label="Use Chat"
                 @click="setTaskType(undefined)"
-                ><q-tooltip>Select Simple Chat</q-tooltip></q-btn
-              >
+                ><q-tooltip>Select Simple Chat</q-tooltip>
+              </q-btn>
+              <q-toggle
+                icon="handyman"
+                left-label
+                color="secondary"
+                dense
+                size="lg"
+                v-model="state.chatState.universalToolsEnabled"
+              ><q-tooltip>Enable Universal Tool Support (Support tools for all AI Models)</q-tooltip></q-toggle>
             </template>
             <template v-slot:after>
               <q-btn

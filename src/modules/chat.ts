@@ -70,6 +70,7 @@ export function defaultTaskState() {
     openAIApiKey: '',
     openRouterAIApiKey: '',
     useOpenAIAssistants: false,
+    universalToolsEnabled: true,
     siteUrl: 'https://taskyon.xyntopia.com',
     summaryModel: 'Xenova/distilbart-cnn-6-6',
     baseURL: getBackendUrls('openrouter'),
