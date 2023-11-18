@@ -1,6 +1,9 @@
 import { useVectorStore } from 'src/modules/localVectorStore';
 import { execute } from './pyodide';
 import { seleniumBrowser } from './seleniumTool';
+import { dump } from 'js-yaml';
+import { bigIntToString } from './chat';
+import type { TaskResult } from './types';
 
 export const vectorStore = useVectorStore();
 
@@ -55,6 +58,26 @@ export type ToolCollection = {
 };
 
 export const tools: ToolCollection = {};
+
+export async function handleFunctionExecution(
+  func: FunctionCall,
+  tools: ToolCollection
+): Promise<TaskResult> {
+  try {
+    let funcR: unknown = await tools[func.name].function(func.arguments);
+    funcR = bigIntToString(funcR);
+    const result: TaskResult = {
+      type: 'FunctionResult',
+      functionResult: dump(funcR),
+    };
+    return result;
+  } catch (error) {
+    return {
+      type: 'FunctionError',
+      functionResult: JSON.stringify(error),
+    };
+  }
+}
 
 tools.seleniumBrowser = seleniumBrowser;
 
@@ -238,4 +261,87 @@ export function getDefaultParametersForTool(toolName: string) {
   });
 
   return defaultParams;
+}
+
+interface WorkerMessage {
+  success: boolean;
+  result?: any;
+  error?: string;
+}
+
+// Tool to Execute JavaScript Code
+tools.executeJavaScript = {
+  state: () => 'available',
+  function: async ({ javascriptCode, useWorker = false }) => {
+    console.log('Executing JavaScript code...');
+    if (useWorker) {
+      // Execute using a dynamically created Web Worker
+      return executeInDynamicWorker(javascriptCode);
+    } else {
+      // Execute in the main thread
+      try {
+        return Promise.resolve(eval(javascriptCode));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
+  },
+  description: `
+    Executes the provided JavaScript code, optionally in a dynamically created Web Worker, 
+    and returns the result. The user can choose to run the code in a separate thread 
+    (Web Worker) or in the main thread. If the javascript code is executed in the main thread, it can
+    manipulate the DOM where it is currently running.
+  `,
+  name: 'executeJavaScript',
+  parameters: {
+    type: 'object',
+    properties: {
+      javascriptCode: {
+        type: 'string',
+        description: 'The JavaScript code to be executed.',
+      },
+      useWorker: {
+        type: 'boolean',
+        description: 'Whether to execute the code in a Web Worker.',
+        default: false,
+      },
+    },
+    required: ['javascriptCode'],
+  },
+};
+
+// Function to execute JavaScript in a dynamically created Web Worker
+function executeInDynamicWorker(javascriptCode: string) {
+  return new Promise((resolve, reject) => {
+    const workerCode = `
+      onmessage = function(e) {
+        try {
+          const result = eval(e.data);
+          postMessage({ success: true, result });
+        } catch (error) {
+          postMessage({ success: false, error: error.toString() });
+        }
+      };
+    `;
+
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const workerUrl = URL.createObjectURL(blob);
+    const worker = new Worker(workerUrl);
+
+    worker.onmessage = function (e: MessageEvent<WorkerMessage>) {
+      URL.revokeObjectURL(workerUrl); // Clean up the object URL
+      if (e.data.success) {
+        resolve(e.data.result);
+      } else {
+        reject(new Error(e.data.error));
+      }
+    };
+
+    worker.onerror = function (error) {
+      URL.revokeObjectURL(workerUrl); // Clean up the object URL
+      reject(new Error(`Worker error: ${error.message}`));
+    };
+
+    worker.postMessage(javascriptCode);
+  });
 }

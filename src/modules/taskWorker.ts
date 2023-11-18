@@ -1,44 +1,21 @@
-import { dump } from 'js-yaml';
 import {
   getOpenAIChatResponse,
   openAIUsed,
   getOpenAIAssistantResponse,
   ChatStateType,
-  bigIntToString,
 } from './chat';
 import { partialTaskDraft } from './types';
 import { addTask2Tree } from './taskManager';
 import { processTasksQueue } from './taskManager';
 import {
   FunctionArguments,
-  FunctionCall,
-  ToolCollection,
   tools,
 } from './tools';
-import type { LLMTask, TaskResult } from './types';
+import type { LLMTask } from './types';
 import type { OpenAI } from 'openai';
 import type { TaskyonDatabase } from './rxdb';
 import { getTaskyonDB } from './taskManager';
-
-export async function handleFunctionExecution(
-  func: FunctionCall,
-  tools: ToolCollection
-): Promise<TaskResult> {
-  try {
-    let funcR: unknown = await tools[func.name].function(func.arguments);
-    funcR = bigIntToString(funcR);
-    const result: TaskResult = {
-      type: 'FunctionResult',
-      functionResult: dump(funcR),
-    };
-    return result;
-  } catch (error) {
-    return {
-      type: 'FunctionError',
-      functionResult: JSON.stringify(error),
-    };
-  }
-}
+import { handleFunctionExecution } from './tools';
 
 export async function processChatTask(
   task: LLMTask,

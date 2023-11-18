@@ -148,10 +148,10 @@ export function asyncTimeLruCache<ReturnType>(
         const age = now - entry.timestamp;
 
         if (age <= maxAge) {
-          console.log('Cache hit:', key);
+          //console.log('Cache hit:', key);
           return entry.value;
         } else {
-          console.log('Cache expired:', key);
+          //console.log('Cache expired:', key);
           cache.delete(key); // Remove the expired entry.
         }
       }
