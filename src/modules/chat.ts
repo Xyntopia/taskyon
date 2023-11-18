@@ -12,10 +12,10 @@ import {
   taskChain,
   getFileMappingByUuid,
   findAllFilesInTasks,
-  getFile,
 } from './taskManager';
 import OpenAI from 'openai';
 import { openFile } from './OPFS';
+import { dump } from 'js-yaml';
 import { lruCache, sleep, asyncTimeLruCache } from './utils';
 import type { TaskyonDatabase, FileMappingDocType } from './rxdb';
 
@@ -323,8 +323,12 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
             content: t.content,
           };
           if (t.role == 'function') {
-            message.name = task.context?.function?.name;
-            message.content = t.result?.functionResult || null;
+            message.name = t.context?.function?.name;
+            const functionContent = dump({
+              arguments: t.context?.function?.arguments,
+              ...t.result?.functionResult,
+            });
+            message.content = functionContent;
           }
           return message;
         })

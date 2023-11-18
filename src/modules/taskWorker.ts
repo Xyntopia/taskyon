@@ -7,10 +7,7 @@ import {
 import { partialTaskDraft } from './types';
 import { addTask2Tree } from './taskManager';
 import { processTasksQueue } from './taskManager';
-import {
-  FunctionArguments,
-  tools,
-} from './tools';
+import { FunctionArguments, tools } from './tools';
 import type { LLMTask } from './types';
 import type { OpenAI } from 'openai';
 import type { TaskyonDatabase } from './rxdb';
@@ -66,9 +63,11 @@ export async function processChatTask(
           } catch (parseError) {
             // in this case, we assume, that the first parameter was meant...
             funcArguments = {};
-            const toolProps = tools[name].parameters.properties;
-            funcArguments[Object.keys(toolProps)[0]] =
-              choice.message.function_call.arguments;
+            const toolProps = tools[name]?.parameters.properties;
+            if (toolProps) {
+              funcArguments[Object.keys(toolProps)[0]] =
+                choice.message.function_call.arguments;
+            }
           }
           task.result.type = 'FunctionCall';
           task.result.functionCall = { name, arguments: funcArguments };
@@ -90,7 +89,9 @@ export async function processFunctionTask(task: LLMTask) {
       const toolnames = JSON.stringify(task.allowedTools);
       task.result = {
         type: 'FunctionError',
-        functionResult: `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`,
+        functionResult: {
+          result: `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`,
+        },
       };
     }
   }

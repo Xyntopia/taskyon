@@ -61,12 +61,19 @@ export interface OpenRouterGenerationInfo {
   };
 }
 
+export interface ToolFunctionResult {
+  result: string;
+  error?: unknown;
+  stdout?: string;
+}
+
 export interface TaskResult {
   type: 'ChatAnswer' | 'FunctionCall' | 'FunctionResult' | 'FunctionError'; // Type of result
   assistantResponse?: OpenAI.Beta.Threads.Messages.ThreadMessage[];
   chatResponse?: ChatCompletionResponse;
-  functionResult?: string; // Description or value of the result
+  functionResult?: ToolFunctionResult; // Description or value of the result
   functionCall?: FunctionCall; // Details if the result is a function call
+  //TODO:  if the result is a new task ?:).
 }
 
 export type LLMTask = {

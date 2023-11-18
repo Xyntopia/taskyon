@@ -15,13 +15,7 @@ function loadScript(src: string): Promise<void> {
   });
 }
 
-export interface PythonResult {
-  result?: string;
-  error?: unknown;
-  stdout?: string;
-}
-
-export async function execute(python_script: string): Promise<PythonResult> {
+export async function execute(python_script: string) {
   try {
     await loadScript(
       'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js'

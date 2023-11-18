@@ -3,7 +3,7 @@ import { execute } from './pyodide';
 import { seleniumBrowser } from './seleniumTool';
 import { dump } from 'js-yaml';
 import { bigIntToString } from './chat';
-import type { TaskResult } from './types';
+import type { TaskResult, ToolFunctionResult } from './types';
 
 export const vectorStore = useVectorStore();
 
@@ -68,13 +68,13 @@ export async function handleFunctionExecution(
     funcR = bigIntToString(funcR);
     const result: TaskResult = {
       type: 'FunctionResult',
-      functionResult: dump(funcR),
+      functionResult: { result: dump(funcR) },
     };
     return result;
   } catch (error) {
     return {
       type: 'FunctionError',
-      functionResult: JSON.stringify(error),
+      functionResult: { result: JSON.stringify(error) },
     };
   }
 }
@@ -291,6 +291,8 @@ tools.executeJavaScript = {
     and returns the result. The user can choose to run the code in a separate thread 
     (Web Worker) or in the main thread. If the javascript code is executed in the main thread, it can
     manipulate the DOM where it is currently running.
+    It's important to structure the code such that the desired result is the completion value (outcome)
+    of the last expression in the provided script.
   `,
   name: 'executeJavaScript',
   parameters: {
