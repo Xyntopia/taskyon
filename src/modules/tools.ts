@@ -117,7 +117,8 @@ tools.executePythonScript = {
   Executes the provided Python code using a Pyodide runtime and returns the result of the last expression evaluated. 
   This tool can be used to run data processing tasks, perform calculations, or interact with Python libraries.
   Common use-cases include executing data transformations, statistical analyses, or machine learning algorithms on uploaded files.
-  It's important to structure the Python code such that the desired result is the outcome of the last expression in the script.
+  It's important to structure the Python code such that the desired result
+  is the outcome of the last expression in the script. Outcomes should be of the types String, Number, Array, Map, Set.
 `,
   name: 'executePythonScript',
   parameters: {

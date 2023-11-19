@@ -38,7 +38,31 @@ export async function execute(python_script: string) {
 
     await pyodide.loadPackagesFromImports(python_script);
 
-    const result = await pyodide.runPython(python_script);
+    let result = await pyodide.runPython(python_script);
+
+    // Check if result is a Pyodide proxy object
+    if (result && typeof result === 'object') {
+      // Check if the object is a list, array, map (dictionary), or set
+      if (
+        'length' in result ||
+        result.constructor.name === 'PyProxyMap' ||
+        result.constructor.name === 'PyProxySet'
+      ) {
+        // Try to convert the Python object to a JavaScript object
+        try {
+          result = result.toJs();
+        } catch (error) {
+          console.error('Error converting Python object to JavaScript', error);
+        }
+      } else if ('toString' in result) {
+        // Fallback to using toString() for other types of objects
+        try {
+          result = result.toString();
+        } catch (error) {
+          console.error('Error converting Python object to string', error);
+        }
+      }
+    }
 
     // Reset stdout handler to default behavior if necessary
     pyodide.setStdout({ batched: (str: string) => console.log(str) });
