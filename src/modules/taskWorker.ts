@@ -14,6 +14,50 @@ import type { TaskyonDatabase } from './rxdb';
 import { getTaskyonDB } from './taskManager';
 import { handleFunctionExecution } from './tools';
 
+/*async function executeTask(
+  task,
+  previousTasks = null,
+  context = null,
+  objective = null,
+  formatting = 'yaml',
+  modelId = 'ggml-mpt-7b-instruct',
+  maxTokens = 1000
+) {
+  // Creates a message and executes a task with an LLM based on given information
+  const msgs = taskChat(
+    task,
+    context ? `\n---\n${context.join('\n---\n')}` : null,
+    previousTasks,
+    objective,
+    formatting
+  );
+  let res;
+  try {
+    // You'll need to define the 'chatCompletion' function, as it's not included in the Python code.
+    res = await chatCompletion(msgs, maxTokens, modelId);
+  } catch (error) {
+    // handle error
+    console.error(error);
+  }
+
+  let obj;
+  if (formatting === 'yaml') {
+    try {
+      // You'll need to use a YAML parsing library here, as JavaScript doesn't have native YAML support.
+      obj = YAML.parse(res); // using 'yaml' or another library
+    } catch (error) {
+      throw new Error(`Could not convert ${res} to yaml: ${error}`);
+    }
+  } else if (['txt', 'markdown'].includes(formatting)) {
+    obj = res;
+  } else {
+    console.warn(`Formatting: ${formatting} is unknown!`);
+    // do nothing ;)
+  }
+
+  return [obj, msgs, res];
+}*/
+
 export async function processChatTask(
   task: LLMTask,
   chatState: ChatStateType,
@@ -29,7 +73,15 @@ export async function processChatTask(
     }
   } else {
     console.log('execute chat task!', task);
-    const response = await getOpenAIChatResponse(task, chatState);
+    const variables: Record<string,string>= {}
+    //TODO: also do this, if we start the task "autonomously" in which we basically
+    //      allow it to create new tasks...
+    //TODO: we can create more things here like giving it context form other tasks, lookup
+    //      main objective, previous tasks etc....
+    if((!chatState.enableOpenAiTools) && task.allowedTools?.length){
+      variables['tools']=`# Available Tools to you:`
+    }
+    const response = await getOpenAIChatResponse(task, chatState, variables);
     if (response) {
       if (response.usage) {
         // openai sends back the exact number of prompt tokens :)

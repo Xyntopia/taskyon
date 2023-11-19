@@ -70,11 +70,47 @@ export function defaultTaskState() {
     openAIApiKey: '',
     openRouterAIApiKey: '',
     useOpenAIAssistants: false,
-    universalToolsEnabled: true,
+    enableOpenAiTools: true,
     siteUrl: 'https://taskyon.xyntopia.com',
     summaryModel: 'Xenova/distilbart-cnn-6-6',
     baseURL: getBackendUrls('openrouter'),
     databasePath: 'taskyon.sqlite3',
+    taskChatTemplates: {
+      constraints: `# CONSTRAINTS:
+      
+      {constraints}
+      `,
+      instruction: `You are a helpful assistant that aims to complete the given task. Do not add any amount of explanatory text.
+        You can make use of the following resources:`,
+      objective: '# OVERALL OBJECTIVE: \n{objective}\n',
+      previousTasks: '# PREVIOUSLY COMPLETED TASKS:\n{previousTasks}\n',
+      context: '# TAKE INTO ACCOUNT THIS CONTEXT:\n{context}\n',
+      task: `
+      # COMPLETE THE FOLLOWING TASK:
+
+      {task}
+      
+      Provide only the precise information requested without context, 
+      make sure we can parse the response as {format}.
+      
+      ## RESULT:
+      
+      `,
+      yamlSchema: `
+      command:
+       name: command name
+       args:
+        arg name: value
+       thoughts:
+       text: thought
+       reasoning: reasoning
+       plan: |
+        - short bulleted
+        - list that conveys
+        - long-term plan
+       criticism: constructive self-criticism
+      `,
+    },
   };
 }
 export type ChatStateType = ReturnType<typeof defaultTaskState>;
@@ -314,6 +350,8 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
   const openAIMessageThread = [] as OpenAIMessage[];
   const conversationThread = taskChain(task.id, chatState.Tasks);
 
+  //TODO:  add instructions
+
   if (conversationThread) {
     openAIMessageThread.push(
       ...conversationThread
@@ -324,7 +362,9 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
             content: t.content,
           };
           if (t.role == 'function') {
-            message.name = t.context?.function?.name;
+            if (chatState.enableOpenAiTools) {
+              message.name = t.context?.function?.name;
+            }
             const functionContent = dump({
               arguments: t.context?.function?.arguments,
               ...t.result?.functionResult,
@@ -369,14 +409,49 @@ function mapFunctionNames(toolNames: string[]) {
   return toolNames?.map((t) => tools[t]);
 }
 
+function createTaskChatMessages(
+  templates: Record<string, string>,
+  variables: Record<string, string>
+): string {
+  // Array to accumulate message parts
+  const messageParts: string[] = [templates.introductory];
+
+  // Loop through each key in the templates object
+  for (const key of Object.keys(templates)) {
+    if (key === 'introductory') continue; // Skip introductory as it's already added
+
+    const templateValue = templates[key];
+    if (variables[key]) {
+      // Replace placeholders in the template with actual variable values
+      const filledTemplate = templateValue.replace(
+        new RegExp(`{${key}}`, 'g'),
+        variables[key]
+      );
+      messageParts.push(filledTemplate);
+    }
+  }
+
+  // Join all parts into a single string with necessary new lines
+  return messageParts.join('\n\n');
+}
+
 // Function to process OpenAI conversation
 export async function getOpenAIChatResponse(
   task: LLMTask,
-  chatState: ChatStateType
+  chatState: ChatStateType,
+  variables?: Record<string, string>
 ) {
+  console.log('Get Chat Response from LLM');
   const openAIConversationThread = buildChatFromTask(task, chatState);
   if (openAIConversationThread) {
-    const functions = mapFunctionNames(task.allowedTools || []) || [];
+    let functions: Tool[] = [];
+    if (variables) {
+      console.log('create chat task');
+      //TODO:
+      const = createTaskChatMessages();
+    } else {
+      functions = mapFunctionNames(task.allowedTools || []) || [];
+    }
     const response = await callLLM(
       openAIConversationThread,
       functions,

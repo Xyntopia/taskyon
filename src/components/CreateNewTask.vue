@@ -76,22 +76,24 @@
             :options="Object.keys(tools)"
             :label="selectedTaskType ? 'selected Task' : 'Or select task type'"
           >
-            <template v-slot:before>
-              <q-btn
-                dense
-                icon="chat"
-                label="Use Chat"
-                @click="setTaskType(undefined)"
+            <template v-slot:append>
+              <q-btn flat dense icon="chat" @click="setTaskType(undefined)"
                 ><q-tooltip>Select Simple Chat</q-tooltip>
               </q-btn>
+            </template>
+            <template v-slot:before>
               <q-toggle
                 icon="handyman"
                 left-label
                 color="secondary"
                 dense
-                size="lg"
-                v-model="state.chatState.universalToolsEnabled"
-              ><q-tooltip>Enable Universal Tool Support (Support tools for all AI Models)</q-tooltip></q-toggle>
+                size="xl"
+                v-model="state.chatState.enableOpenAiTools"
+                ><q-tooltip
+                  >Enable OpenAI Functions (use built-in function selection mode
+                  for OpenAI)</q-tooltip
+                ></q-toggle
+              >
             </template>
             <template v-slot:after>
               <q-btn

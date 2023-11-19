@@ -119,6 +119,7 @@ tools.executePythonScript = {
   Common use-cases include executing data transformations, statistical analyses, or machine learning algorithms on uploaded files.
   It's important to structure the Python code such that the desired result
   is the outcome of the last expression in the script. Outcomes should be of the types String, Number, Array, Map, Set.
+  Additionally, stdout will be returned as a string.
 `,
   name: 'executePythonScript',
   parameters: {
