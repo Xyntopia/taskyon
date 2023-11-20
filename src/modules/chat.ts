@@ -155,8 +155,12 @@ function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
     >;
     const yamlObject: YamlObjectRepresentation = {};
     for (const key in shape) {
-      const optionalSuffix = shape[key] instanceof z.ZodOptional ? '?' : '';
-      yamlObject[key + optionalSuffix] = zodToYAMLObject(shape[key]);
+      const fieldSchema = shape[key];
+      const optionalSuffix = fieldSchema instanceof z.ZodOptional ? '?' : '';
+      if (fieldSchema.description) {
+        yamlObject[`# ${key} description`] = fieldSchema.description;
+      }
+      yamlObject[key + optionalSuffix] = zodToYAMLObject(fieldSchema);
     }
     return yamlObject;
   }
@@ -171,11 +175,11 @@ function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
 
   // records
   if (schema instanceof z.ZodRecord) {
-    const values = zodToYAMLObject(schema.element)
+    const values = zodToYAMLObject(schema.element);
     return {
       key1: values,
       key2: values,
-      '...':'...'
+      '...': '...',
     };
   }
 
@@ -209,7 +213,7 @@ const yamlToolChatType = z.object({
         args: z.record(z.union([z.string(), z.number(), z.boolean()])),
       })
     )
-    .describe('Only use this if useTool = true'),
+    .describe('Only fill toolCommand if useTool = true'),
 });
 
 type yamlToolChatType = z.infer<typeof yamlToolChatType>;
@@ -578,7 +582,7 @@ export async function getOpenAIChatResponse(
     // Prepare the variables for createTaskChatMessages
 
     const objrepr = zodToYAMLObject(yamlToolChatType);
-    const openapischema = dump(objrepr);
+    const openapischema = dump(objrepr).replace(/'# .+:/g, '#');
 
     const variables = {
       taskContent: task.content || '', // Ensuring there's a default value if content is null
