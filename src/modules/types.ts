@@ -98,6 +98,7 @@ export type LLMTask = {
     taskCosts?: number;
     aiResponse?: ChatCompletionResponse;
     error?: unknown;
+    taskPrompt?: OpenAIMessage[];
   };
   result?: TaskResult;
   id: string;

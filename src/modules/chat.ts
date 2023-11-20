@@ -1,6 +1,6 @@
 import axios from 'axios';
 //import { useCachedModels } from './mlModels';
-import { Tool, tools, ExtendedTool } from './tools';
+import { Tool, tools, ExtendedTool, summarizeTools } from './tools';
 import { getEncoding } from 'js-tiktoken';
 import {
   LLMTask,
@@ -56,6 +56,22 @@ export function getSelectedModel(chatState: ChatStateType) {
     : chatState.openrouterAIModel;
 }
 
+function stripIndent(
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+): string {
+  // Combine the strings and values to form the complete string
+  const fullString = strings
+    .map((str, i) => `${str}${values[i] ? String(values[i]) : ''}`)
+    .join('');
+
+  // Split the string into lines, trim leading whitespace, and re-join them
+  return fullString
+    .split('\n')
+    .map((line) => line.trimStart())
+    .join('\n');
+}
+
 // this state stores all information which
 // should be stored e.g. in browser LocalStorage
 export function defaultTaskState() {
@@ -77,50 +93,54 @@ export function defaultTaskState() {
     databasePath: 'taskyon.sqlite3',
     taskChatTemplates: {
       constraints: `CONSTRAINTS:
-      
-      {constraints}
+
+{constraints}
       `,
       instruction: `You are a helpful assistant that aims to complete the given task. Do not add any amount of explanatory text.
-        You can make use of the following resources:`,
+You can make use of the following resources:`,
       objective: 'OVERALL OBJECTIVE: \n{objective}\n',
+      tools: `AVAILABLE TOOLS TO CALL:
+
+{tools}
+`.trim(),
       previousTasks: 'PREVIOUSLY COMPLETED TASKS:\n{previousTasks}\n',
       context: 'TAKE INTO ACCOUNT THIS CONTEXT:\n{context}\n',
       task: `
-      COMPLETE THE FOLLOWING TASK:
+COMPLETE THE FOLLOWING TASK:
 
-      {taskContent}
-      
-      Provide only the precise information requested without context, 
-      Make sure we can parse the response as {format}.
-      
-      FORMAT THE RESULT WITH THIS SCHEMA ({format}):
+{taskContent}
 
-      {schema}
+Provide only the precise information requested without context, 
+Make sure we can parse the response as {format}.
+
+FORMAT THE RESULT WITH THIS SCHEMA ({format}):
+
+{schema}
       
-      `,
+      `.trim(),
       yamlChatSchema: `
-      useTool: yes/no
-      answer
-      toolCommand?:
-       name: nameOfTool
-       args:
-        arg name: value
-       reasoning: reasoning
-      `,
+useTool: yes/no
+answer: string
+toolCommand?:
+  name: nameOfTool
+  args:
+  arg name: value
+  reasoning: reasoning
+      `.trim(),
       yamlTaskSchema: `
-      command:
-       name: command name
-       args:
-        arg name: value
-       thoughts:
-       text: thought
-       reasoning: reasoning
-       plan: |
-        - short bulleted
-        - list that conveys
-        - long-term plan
-       criticism: constructive self-criticism
-      `,
+command:
+  name: command name
+  args:
+  arg name: value
+  thoughts:
+  text: thought
+  reasoning: reasoning
+  plan: |
+  - short bulleted
+  - list that conveys
+  - long-term plan
+  criticism: constructive self-criticism
+      `.trim(),
     },
   };
 }
@@ -467,6 +487,7 @@ export async function getOpenAIChatResponse(
       taskContent: task.content || '', // Ensuring there's a default value if content is null
       schema: chatState.taskChatTemplates.yamlChatSchema,
       format: 'yaml',
+      tools: summarizeTools(task.allowedTools),
     };
 
     // Create additional messages using createTaskChatMessages
@@ -482,10 +503,13 @@ export async function getOpenAIChatResponse(
       },
       {
         role: 'user',
-        content: filledTemplates['task'],
+        content: Object.values(filledTemplates)
+          .map((x) => x.trim())
+          .join('\n'),
       },
     ];
 
+    task.debugging.taskPrompt = additionalMessages;
     // Remove the last message from openAIConversationThread
     // because it will be replaced by our additional message
     openAIConversationThread.pop();

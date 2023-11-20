@@ -349,3 +349,19 @@ function executeInDynamicWorker(javascriptCode: string) {
     worker.postMessage(javascriptCode);
   });
 }
+
+export function summarizeTools(toolIDs: string[]) {
+  const toolStr = toolIDs
+    .map((t) => {
+      const tool = tools[t];
+      const toolStr = dump({
+        name: tool.name,
+        parameters: tool.parameters,
+        description: tool.description,
+      });
+      return toolStr;
+    })
+    .join('\n---\n');
+
+  return toolStr;
+}
