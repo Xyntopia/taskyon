@@ -96,7 +96,7 @@ export function defaultTaskState() {
       constraints: `CONSTRAINTS:
 
 {constraints}
-      `,
+      `.trim(),
       instruction: `You are a helpful assistant that aims to complete the given task. Do not add any amount of explanatory text.
 You can make use of the following resources:`,
       objective: 'OVERALL OBJECTIVE: \n{objective}\n',
@@ -204,7 +204,6 @@ function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
 
 const yamlToolChatType = z.object({
   reasoning: z.string(),
-  answer: z.string(),
   useTool: z.optional(z.boolean()),
   toolCommand: z
     .optional(
@@ -214,6 +213,9 @@ const yamlToolChatType = z.object({
       })
     )
     .describe('Only fill toolCommand if useTool = true'),
+  answer: z
+    .optional(z.string())
+    .describe('We only need this if we are not using a tool.'),
 });
 
 type yamlToolChatType = z.infer<typeof yamlToolChatType>;
@@ -606,7 +608,7 @@ export async function getOpenAIChatResponse(
         role: 'user',
         content: Object.values(filledTemplates)
           .map((x) => x.trim())
-          .join('\n'),
+          .join('\n\n'),
       },
     ];
 
