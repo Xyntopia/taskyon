@@ -147,7 +147,7 @@ function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
     return 'boolean';
   }
 
-  // Recursive case for object types
+  // Modified ZodObject case to handle optionals
   if (schema instanceof z.ZodObject) {
     const shape: Record<string, z.ZodTypeAny> = schema.shape as Record<
       string,
@@ -155,7 +155,8 @@ function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
     >;
     const yamlObject: YamlObjectRepresentation = {};
     for (const key in shape) {
-      yamlObject[key] = zodToYAMLObject(shape[key]);
+      const optionalSuffix = shape[key] instanceof z.ZodOptional ? '?' : '';
+      yamlObject[key + optionalSuffix] = zodToYAMLObject(shape[key]);
     }
     return yamlObject;
   }
@@ -168,23 +169,27 @@ function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
     };
   }
 
-  // Handle records
+  // records
   if (schema instanceof z.ZodRecord) {
+    const values = zodToYAMLObject(schema.element)
     return {
-      type: 'record',
-      values: zodToYAMLObject(schema.element),
+      key1: values,
+      key2: values,
+      '...':'...'
     };
   }
 
-  // Handle optional types
+  // Handle union types
+  if (schema instanceof z.ZodUnion) {
+    const options = (schema.options as z.ZodTypeAny[]).map((option) =>
+      zodToYAMLObject(option)
+    );
+    return options.join('|');
+  }
+
+  // Modified ZodOptional case
   if (schema instanceof z.ZodOptional) {
-    const innerSchema = zodToYAMLObject(schema.unwrap());
-    // Append '?' to indicate optionality for primitive types
-    if (typeof innerSchema === 'string') {
-      return innerSchema + '?';
-    }
-    // For non-primitive types, return as is
-    return innerSchema;
+    return zodToYAMLObject(schema.unwrap());
   }
 
   // Add more cases as needed for other Zod types (unions, etc.)
@@ -197,12 +202,14 @@ const yamlToolChatType = z.object({
   reasoning: z.string(),
   answer: z.string(),
   useTool: z.optional(z.boolean()),
-  toolCommand: z.optional(
-    z.object({
-      name: z.string(),
-      args: z.record(z.union([z.string(), z.number()])),
-    })
-  ),
+  toolCommand: z
+    .optional(
+      z.object({
+        name: z.string(),
+        args: z.record(z.union([z.string(), z.number(), z.boolean()])),
+      })
+    )
+    .describe('Only use this if useTool = true'),
 });
 
 type yamlToolChatType = z.infer<typeof yamlToolChatType>;
