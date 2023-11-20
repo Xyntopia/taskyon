@@ -18,6 +18,7 @@ import { openFile } from './OPFS';
 import { dump } from 'js-yaml';
 import { lruCache, sleep, asyncTimeLruCache } from './utils';
 import type { TaskyonDatabase, FileMappingDocType } from './rxdb';
+import { unknown, z } from 'zod';
 
 const getOpenai = lruCache<OpenAI>(5)((apiKey: string) => {
   const api = new OpenAI({
@@ -118,32 +119,103 @@ FORMAT THE RESULT WITH THIS SCHEMA ({format}):
 {schema}
       
       `.trim(),
-      yamlChatSchema: `
-useTool: yes/no
-answer: string
-toolCommand?:
-  name: nameOfTool
-  args:
-  arg name: value
-  reasoning: reasoning
-      `.trim(),
-      yamlTaskSchema: `
-command:
-  name: command name
-  args:
-  arg name: value
-  thoughts:
-  text: thought
-  reasoning: reasoning
-  plan: |
-  - short bulleted
-  - list that conveys
-  - long-term plan
-  criticism: constructive self-criticism
-      `.trim(),
     },
   };
 }
+
+interface YamlObjectRepresentation {
+  [key: string]: YamlRepresentation;
+}
+
+type YamlRepresentation =
+  | string
+  | YamlObjectRepresentation
+  | YamlArrayRepresentation;
+
+interface YamlArrayRepresentation {
+  type: 'array';
+  items: YamlRepresentation;
+}
+
+function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
+  // Base case for primitive types
+  if (schema instanceof z.ZodString) {
+    return 'string';
+  } else if (schema instanceof z.ZodNumber) {
+    return 'number';
+  } else if (schema instanceof z.ZodBoolean) {
+    return 'boolean';
+  }
+
+  // Recursive case for object types
+  if (schema instanceof z.ZodObject) {
+    const shape: Record<string, z.ZodTypeAny> = schema.shape as Record<
+      string,
+      z.ZodTypeAny
+    >;
+    const yamlObject: YamlObjectRepresentation = {};
+    for (const key in shape) {
+      yamlObject[key] = zodToYAMLObject(shape[key]);
+    }
+    return yamlObject;
+  }
+
+  // Handle arrays
+  if (schema instanceof z.ZodArray) {
+    return {
+      type: 'array',
+      items: zodToYAMLObject(schema.element),
+    };
+  }
+
+  // Handle records
+  if (schema instanceof z.ZodRecord) {
+    return {
+      type: 'record',
+      values: zodToYAMLObject(schema.element),
+    };
+  }
+
+  // Handle optional types
+  if (schema instanceof z.ZodOptional) {
+    const innerSchema = zodToYAMLObject(schema.unwrap());
+    // Append '?' to indicate optionality for primitive types
+    if (typeof innerSchema === 'string') {
+      return innerSchema + '?';
+    }
+    // For non-primitive types, return as is
+    return innerSchema;
+  }
+
+  // Add more cases as needed for other Zod types (unions, etc.)
+
+  // Fallback for unsupported types
+  return 'unsupported';
+}
+
+const yamlToolChatType = z.object({
+  reasoning: z.string(),
+  answer: z.string(),
+  useTool: z.optional(z.boolean()),
+  toolCommand: z.optional(
+    z.object({
+      name: z.string(),
+      args: z.record(z.union([z.string(), z.number()])),
+    })
+  ),
+});
+
+type yamlToolChatType = z.infer<typeof yamlToolChatType>;
+
+const yamlTaskSchema = yamlToolChatType.extend({
+  thoughts: z.string(),
+  reasoning: z.string(),
+  plan: z.string().array(),
+  criticism: z.string(),
+});
+
+type yamlTaskSchema = z.infer<typeof yamlTaskSchema>;
+
 export type ChatStateType = ReturnType<typeof defaultTaskState>;
 
 function openRouterUsed(chatState: ChatStateType) {
@@ -482,7 +554,7 @@ function createTaskChatMessages(
 export async function getOpenAIChatResponse(
   task: LLMTask,
   chatState: ChatStateType,
-  method: 'toolchat' | 'chat' | 'taskchat'
+  method: 'toolchat' | 'chat' | 'taskAgent'
 ) {
   console.log('Get Chat Response from LLM');
   const openAIConversationThread = buildChatFromTask(task, chatState);
@@ -497,9 +569,13 @@ export async function getOpenAIChatResponse(
   ) {
     console.log('Creating chat task messages');
     // Prepare the variables for createTaskChatMessages
+
+    const objrepr = zodToYAMLObject(yamlToolChatType);
+    const openapischema = dump(objrepr);
+
     const variables = {
       taskContent: task.content || '', // Ensuring there's a default value if content is null
-      schema: chatState.taskChatTemplates.yamlChatSchema,
+      schema: openapischema,
       format: 'yaml',
       tools: summarizeTools(task.allowedTools),
     };

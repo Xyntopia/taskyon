@@ -79,7 +79,7 @@ export async function processChatTask(
     //      main objective, previous tasks etc....
     let response = undefined;
     if (task.allowedTools && !chatState.enableOpenAiTools) {
-      response = await getOpenAIChatResponse(task, chatState, 'taskchat');
+      response = await getOpenAIChatResponse(task, chatState, 'toolchat');
     } else {
       response = await getOpenAIChatResponse(task, chatState, 'chat');
     }
