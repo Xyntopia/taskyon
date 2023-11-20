@@ -351,26 +351,36 @@ async function callLLM(
 
   if (openRouterUsed(chatState)) {
     const GENERATION_ID = response.data.id;
-    const generation = await axios.get<OpenRouterGenerationInfo>(
-      `https://openrouter.ai/api/v1/generation?id=${GENERATION_ID}`,
-      { headers }
-    );
+    let generation = undefined;
+    try {
+      generation = await axios.get<OpenRouterGenerationInfo>(
+        `https://openrouter.ai/api/v1/generation?id=${GENERATION_ID}`,
+        { headers }
+      );
+    } catch (err) {
+      console.log(
+        'failed to get cost information for Openrouter.ai: ',
+        GENERATION_ID
+      );
+    }
 
-    const generationInfo = generation.data.data;
+    if (generation) {
+      const generationInfo = generation.data.data;
 
-    if (
-      generationInfo.native_tokens_completion &&
-      generationInfo.native_tokens_prompt
-    ) {
-      chatCompletion.usage = {
-        prompt_tokens: generationInfo.native_tokens_prompt,
-        completion_tokens: generationInfo.native_tokens_completion,
-        total_tokens:
-          generationInfo.native_tokens_prompt +
-          generationInfo.native_tokens_completion,
-        origin: generationInfo.origin,
-        inference_costs: generationInfo.usage,
-      };
+      if (
+        generationInfo.native_tokens_completion &&
+        generationInfo.native_tokens_prompt
+      ) {
+        chatCompletion.usage = {
+          prompt_tokens: generationInfo.native_tokens_prompt,
+          completion_tokens: generationInfo.native_tokens_completion,
+          total_tokens:
+            generationInfo.native_tokens_prompt +
+            generationInfo.native_tokens_completion,
+          origin: generationInfo.origin,
+          inference_costs: generationInfo.usage,
+        };
+      }
     }
   }
 
@@ -472,7 +482,7 @@ function createTaskChatMessages(
 export async function getOpenAIChatResponse(
   task: LLMTask,
   chatState: ChatStateType,
-  variables?: Record<string, string>
+  method: 'toolchat' | 'chat' | 'taskchat'
 ) {
   console.log('Get Chat Response from LLM');
   const openAIConversationThread = buildChatFromTask(task, chatState);
@@ -480,7 +490,11 @@ export async function getOpenAIChatResponse(
   let functions: Tool[] = [];
 
   // Check if task has tools and OpenAI tools are not enabled
-  if (task.allowedTools && !chatState.enableOpenAiTools && variables) {
+  if (
+    task.allowedTools &&
+    !chatState.enableOpenAiTools &&
+    method === 'toolchat'
+  ) {
     console.log('Creating chat task messages');
     // Prepare the variables for createTaskChatMessages
     const variables = {

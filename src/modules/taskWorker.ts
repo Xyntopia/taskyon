@@ -73,15 +73,16 @@ export async function processChatTask(
     }
   } else {
     console.log('execute chat task!', task);
-    const variables: Record<string,string>= {}
     //TODO: also do this, if we start the task "autonomously" in which we basically
     //      allow it to create new tasks...
     //TODO: we can create more things here like giving it context form other tasks, lookup
     //      main objective, previous tasks etc....
-    if((!chatState.enableOpenAiTools) && task.allowedTools?.length){
-      variables['tools']=`# Available Tools to you:`
+    let response = undefined;
+    if (task.allowedTools && !chatState.enableOpenAiTools) {
+      response = await getOpenAIChatResponse(task, chatState, 'taskchat');
+    } else {
+      response = await getOpenAIChatResponse(task, chatState, 'chat');
     }
-    const response = await getOpenAIChatResponse(task, chatState, variables);
     if (response) {
       if (response.usage) {
         // openai sends back the exact number of prompt tokens :)
