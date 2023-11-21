@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { FunctionCall } from './tools';
 import type OpenAI from 'openai';
 
@@ -68,12 +69,16 @@ export interface ToolFunctionResult {
 }
 
 export interface TaskResult {
-  type: 'ChatAnswer' | 'FunctionCall' | 'FunctionResult' | 'FunctionError'; // Type of result
+  type:
+    | 'ChatAnswer'
+    | 'AssistantAnswer'
+    | 'FunctionCall'
+    | 'FunctionResult'
+    | 'FunctionError'
+    | 'ToolChatResult';
   assistantResponse?: OpenAI.Beta.Threads.Messages.ThreadMessage[];
   chatResponse?: ChatCompletionResponse;
   functionResult?: ToolFunctionResult; // Description or value of the result
-  functionCall?: FunctionCall; // Details if the result is a function call
-  //TODO:  if the result is a new task ?:).
 }
 
 export type LLMTask = {
@@ -115,3 +120,104 @@ export type partialTaskDraft = {
   allowedTools?: LLMTask['allowedTools'];
   debugging?: LLMTask['debugging'];
 };
+interface YamlObjectRepresentation {
+  [key: string]: YamlRepresentation;
+}
+type YamlRepresentation =
+  | string
+  | YamlObjectRepresentation
+  | YamlArrayRepresentation;
+interface YamlArrayRepresentation {
+  type: 'array';
+  items: YamlRepresentation;
+}
+export function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
+  // Base case for primitive types
+  if (schema instanceof z.ZodString) {
+    return 'string';
+  } else if (schema instanceof z.ZodNumber) {
+    return 'number';
+  } else if (schema instanceof z.ZodBoolean) {
+    return 'boolean';
+  }
+
+  // Modified ZodObject case to handle optionals
+  if (schema instanceof z.ZodObject) {
+    const shape: Record<string, z.ZodTypeAny> = schema.shape as Record<
+      string,
+      z.ZodTypeAny
+    >;
+    const yamlObject: YamlObjectRepresentation = {};
+    for (const key in shape) {
+      const fieldSchema = shape[key];
+      const optionalSuffix = fieldSchema instanceof z.ZodOptional ? '?' : '';
+      if (fieldSchema.description) {
+        yamlObject[`# ${key} description`] = fieldSchema.description;
+      }
+      yamlObject[key + optionalSuffix] = zodToYAMLObject(fieldSchema);
+    }
+    return yamlObject;
+  }
+
+  // Handle arrays
+  if (schema instanceof z.ZodArray) {
+    return {
+      type: 'array',
+      items: zodToYAMLObject(schema.element),
+    };
+  }
+
+  // records
+  if (schema instanceof z.ZodRecord) {
+    const values = zodToYAMLObject(schema.element);
+    return {
+      key1: values,
+      key2: values,
+      '...': '...',
+    };
+  }
+
+  // Handle union types
+  if (schema instanceof z.ZodUnion) {
+    const options = (schema.options as z.ZodTypeAny[]).map((option) =>
+      zodToYAMLObject(option)
+    );
+    return options.join('|');
+  }
+
+  // Modified ZodOptional case
+  if (schema instanceof z.ZodOptional) {
+    return zodToYAMLObject(schema.unwrap());
+  }
+
+  // Add more cases as needed for other Zod types (unions, etc.)
+  // Fallback for unsupported types
+  return 'unsupported';
+}
+
+export const yamlToolChatType = z.object({
+  reasoning: z.string(),
+  useTool: z.optional(z.boolean()),
+  toolCommand: z
+    .optional(
+      z.object({
+        name: z.string(),
+        args: z.record(z.union([z.string(), z.number(), z.boolean()])),
+      })
+    )
+    .describe('Only fill toolCommand if useTool = true'),
+  answer: z
+    .optional(z.string())
+    .describe('We only need this if we are not using a tool.'),
+});
+
+export type yamlToolChatType = z.infer<typeof yamlToolChatType>;
+
+export const yamlTaskSchema = yamlToolChatType.extend({
+  thoughts: z.string(),
+  reasoning: z.string(),
+  plan: z.string().array(),
+  criticism: z.string(),
+});
+
+export type yamlTaskSchema = z.infer<typeof yamlTaskSchema>;

@@ -4,15 +4,17 @@ import {
   getOpenAIAssistantResponse,
   ChatStateType,
 } from './chat';
+import { yamlToolChatType } from './types';
 import { partialTaskDraft } from './types';
 import { addTask2Tree } from './taskManager';
 import { processTasksQueue } from './taskManager';
-import { FunctionArguments, tools } from './tools';
-import type { LLMTask } from './types';
+import { FunctionArguments, FunctionCall, tools } from './tools';
+import type { ChatCompletionResponse, LLMTask } from './types';
 import type { OpenAI } from 'openai';
 import type { TaskyonDatabase } from './rxdb';
 import { getTaskyonDB } from './taskManager';
 import { handleFunctionExecution } from './tools';
+import { load } from 'js-yaml';
 
 /*async function executeTask(
   task,
@@ -58,6 +60,46 @@ import { handleFunctionExecution } from './tools';
   return [obj, msgs, res];
 }*/
 
+function isOpenAIFunctionCall(
+  choice: ChatCompletionResponse['choices'][0]
+): choice is ChatCompletionResponse['choices'][0] & {
+  message: { function_call: FunctionCall };
+} {
+  return (
+    choice.finish_reason === 'function_call' &&
+    !choice.message.content &&
+    !!choice.message.function_call
+  );
+}
+
+function extractOpenAIFunction(choice: ChatCompletionResponse['choices'][0]) {
+  if (isOpenAIFunctionCall(choice)) {
+    // if our response contained a call to a function...
+    // TODO: update this to the new tools API from Openai
+    console.log('A function call was returned...');
+    const name = choice.message.function_call.name;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    let funcArguments: FunctionArguments = {};
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      funcArguments = JSON.parse(choice.message.function_call.arguments);
+    } catch (parseError) {
+      // in this case, we assume, that the first parameter was meant...
+      funcArguments = {};
+      const toolProps = tools[name]?.parameters.properties;
+      if (toolProps) {
+        funcArguments[Object.keys(toolProps)[0]] =
+          choice.message.function_call.arguments;
+      }
+    }
+    const functionCall: FunctionCall = {
+      name,
+      arguments: funcArguments,
+    };
+    return functionCall;
+  }
+}
+
 export async function processChatTask(
   task: LLMTask,
   chatState: ChatStateType,
@@ -67,7 +109,7 @@ export async function processChatTask(
     const messages = await getOpenAIAssistantResponse(task, chatState, db);
     if (messages) {
       task.result = {
-        type: 'ChatAnswer',
+        type: 'AssistantAnswer',
         assistantResponse: messages,
       };
     }
@@ -77,57 +119,34 @@ export async function processChatTask(
     //      allow it to create new tasks...
     //TODO: we can create more things here like giving it context form other tasks, lookup
     //      main objective, previous tasks etc....
-    let response = undefined;
-    if (task.allowedTools && !chatState.enableOpenAiTools) {
-      response = await getOpenAIChatResponse(task, chatState, 'toolchat');
-    } else {
-      response = await getOpenAIChatResponse(task, chatState, 'chat');
-    }
-    if (response) {
-      if (response.usage) {
-        // openai sends back the exact number of prompt tokens :)
-        task.debugging.promptTokens = response.usage.prompt_tokens;
-        task.debugging.resultTokens = response.usage.completion_tokens;
-        task.debugging.taskCosts = response.usage.inference_costs;
-        task.debugging.taskTokens = response.usage.total_tokens;
-      }
-      if (response.choices.length > 0) {
-        const choice = response.choices[0];
-        task.result = {
-          ...task.result,
-          type: 'ChatAnswer',
-          chatResponse: response,
-        };
+    const useToolChat = task.allowedTools && !chatState.enableOpenAiTools;
+    const response = await getOpenAIChatResponse(
+      task,
+      chatState,
+      useToolChat ? 'toolchat' : 'chat'
+    );
 
-        // if our response contained a call to a function...
-        // TODO: update this to the new tools API from Openai
-        if (
-          choice.finish_reason === 'function_call' &&
-          !choice.message.content &&
-          choice.message.function_call
-        ) {
-          console.log('A function call was returned...');
-          const name = choice.message.function_call.name;
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          let funcArguments: FunctionArguments = {};
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-            funcArguments = JSON.parse(choice.message.function_call.arguments);
-          } catch (parseError) {
-            // in this case, we assume, that the first parameter was meant...
-            funcArguments = {};
-            const toolProps = tools[name]?.parameters.properties;
-            if (toolProps) {
-              funcArguments[Object.keys(toolProps)[0]] =
-                choice.message.function_call.arguments;
-            }
-          }
-          task.result.type = 'FunctionCall';
-          task.result.functionCall = { name, arguments: funcArguments };
-        }
-      }
+    if (response?.usage) {
+      // openai sends back the exact number of prompt tokens :)
+      task.debugging.promptTokens = response.usage.prompt_tokens;
+      task.debugging.resultTokens = response.usage.completion_tokens;
+      task.debugging.taskCosts = response.usage.inference_costs;
+      task.debugging.taskTokens = response.usage.total_tokens;
+    }
+    const choice = response?.choices[0];
+    if (choice) {
+      task.result = {
+        ...task.result,
+        type: useToolChat
+          ? 'ToolChatResult'
+          : isOpenAIFunctionCall(choice)
+          ? 'FunctionCall'
+          : 'ChatAnswer',
+        chatResponse: response,
+      };
     }
   }
+
   return task;
 }
 
@@ -151,39 +170,28 @@ export async function processFunctionTask(task: LLMTask) {
   return task;
 }
 
-function createNewChatResponseTask(parentTask: LLMTask): partialTaskDraft[] {
+function createNewAssistantResponseTask(
+  parentTask: LLMTask
+): partialTaskDraft[] {
   // Process the response and create new tasks if necessary
   console.log('create new response task');
   const taskListFromResponse: partialTaskDraft[] = [];
-  if (parentTask.result?.chatResponse) {
-    const chatResponse = parentTask.result.chatResponse;
-    if (chatResponse.choices.length > 0) {
-      const choice = chatResponse.choices[0];
-      taskListFromResponse.push({
-        role: choice.message.role,
-        content: choice.message.content,
-      });
-    }
-  } else if (parentTask.result?.assistantResponse) {
-    const messages = parentTask.result.assistantResponse;
-    console.log('create a new assistant response tasks...', messages);
-    for (const tm of messages) {
-      const allText = tm.content.filter(
-        (m): m is OpenAI.Beta.Threads.MessageContentText => m.type === 'text'
-      );
-      taskListFromResponse.push({
-        role: tm.role,
-        content: allText
-          .map((textContent) => textContent.text.value)
-          .join('\n'),
-        debugging: { threadMessage: tm },
-      });
-    }
+  const messages = parentTask.result?.assistantResponse || [];
+  console.log('create a new assistant response tasks...', messages);
+  for (const tm of messages) {
+    const allText = tm.content.filter(
+      (m): m is OpenAI.Beta.Threads.MessageContentText => m.type === 'text'
+    );
+    taskListFromResponse.push({
+      role: tm.role,
+      content: allText.map((textContent) => textContent.text.value).join('\n'),
+      debugging: { threadMessage: tm },
+    });
   }
   return taskListFromResponse;
 }
 
-function generateFollowUpTasksFromResult(
+async function generateFollowUpTasksFromResult(
   finishedTask: LLMTask,
   chatState: ChatStateType
 ) {
@@ -193,39 +201,70 @@ function generateFollowUpTasksFromResult(
     taskTokens: finishedTask.debugging.taskTokens,
     taskCosts: finishedTask.debugging.taskCosts,
   };
-  if (finishedTask.result?.type === 'ChatAnswer') {
-    const newTaskDraftList = createNewChatResponseTask(finishedTask);
-    let parentTask = finishedTask;
-    for (const td of newTaskDraftList) {
-      td.debugging = { ...td.debugging, ...childCosts };
-      // put AI response in our chain as a new, completed task...
-      // TODO: theoretically the user "viewing" the task would be its completion..
-      //       so we could create it before sending it and then wait for AI to respond...
-      const newResponseTaskId = addTask2Tree(
-        {
+  if (finishedTask.result) {
+    const taskDraftList: partialTaskDraft[] = [];
+    if (finishedTask.result.type === 'ChatAnswer') {
+      const choice = finishedTask.result.chatResponse?.choices[0];
+      if (choice) {
+        taskDraftList.push({
+          state: 'Completed',
+          role: choice.message.role,
+          content: choice.message.content,
+        });
+      }
+    } else if (finishedTask.result.type === 'AssistantAnswer') {
+      const newTaskDraftList = createNewAssistantResponseTask(finishedTask);
+      for (const td of newTaskDraftList) {
+        td.debugging = { ...td.debugging, ...childCosts };
+        taskDraftList.push({
           state: 'Completed',
           ...td,
-        },
-        parentTask,
-        chatState,
-        false
-      );
-      parentTask = chatState.Tasks[newResponseTaskId];
+        });
+      }
+    } else if (finishedTask.result.type === 'ToolChatResult') {
+      const choice = finishedTask.result.chatResponse?.choices[0];
+      // parse the response and create a new task filled with the correct parameters
+      const parsedYaml = load(choice?.message.content || '');
+      const toolChatResult = await yamlToolChatType.safeParseAsync(parsedYaml);
+      if (toolChatResult.success) {
+        console.log(toolChatResult);
+        if (toolChatResult.data.toolCommand) {
+          taskDraftList.push({
+            role: 'function',
+            content: null,
+            context: {
+              function: {
+                name: toolChatResult.data.toolCommand.name,
+                arguments: toolChatResult.data.toolCommand.args,
+              },
+            },
+            debugging: childCosts,
+          });
+        } else if (choice) {
+          taskDraftList.push({
+            state: 'Completed',
+            role: choice.message.role,
+            content: choice.message.content,
+          });
+        }
+      }
+    } else if (finishedTask.result.type === 'FunctionCall') {
+      const choice = finishedTask.result.chatResponse?.choices[0];
+      if (choice) {
+        const functionCall = extractOpenAIFunction(choice);
+        if (functionCall) {
+          taskDraftList.push({
+            role: 'function',
+            content: null,
+            context: { function: functionCall },
+            debugging: childCosts,
+          });
+        }
+      }
     }
-    return parentTask.id;
-  } else if (finishedTask.result?.type === 'FunctionCall') {
-    const funcTaskid = addTask2Tree(
-      {
-        role: 'function',
-        content: null,
-        context: { function: finishedTask.result.functionCall },
-        debugging: childCosts,
-      },
-      finishedTask,
-      chatState,
-      true
-    );
-    return funcTaskid;
+    for (const taskDraft of taskDraftList) {
+      addTask2Tree(taskDraft, finishedTask, chatState, true);
+    }
   }
 }
 
