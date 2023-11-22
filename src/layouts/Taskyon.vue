@@ -21,27 +21,31 @@
             <div>Taskyon</div>
           </q-btn>
         </q-toolbar-title>
-        <q-btn-toggle
+        <q-btn
           dense
-          outline
-          :color="$q.dark.mode ? 'primary' : 'white'"
-          :toggle-color="$q.dark.mode ? 'white' : 'secondary'"
-          :model-value="$q.dark.mode"
-          @update:modelValue="
-            (value) => {
-              $q.dark.set(value);
-              state.darkTheme = value;
+          flat
+          round
+          icon="contrast"
+          @click="
+            () => {
+              const newMode =
+                $q.dark.mode === 'auto'
+                  ? true
+                  : $q.dark.mode == true
+                  ? false
+                  : 'auto';
+              state.darkTheme = newMode;
+              $q.dark.set(newMode);
             }
           "
-          label="Dark Theme"
-          :options="[
-            { label: 'Auto', value: 'auto' },
-            { value: false, icon: 'light_mode' },
-            { value: true, icon: 'dark_mode' },
-          ]"
         >
-          <q-tooltip :delay="500">Set dark/light theme</q-tooltip>
-        </q-btn-toggle>
+          <q-tooltip
+            >Theme:
+            {{
+              $q.dark.mode === 'auto' ? 'auto' : $q.dark.mode ? 'dark' : 'light'
+            }}</q-tooltip
+          >
+        </q-btn>
         <!-- GitHub Link -->
         <q-btn
           flat
@@ -51,7 +55,7 @@
           href="https://github.com/xyntopia/taskyon"
           target="_blank"
         >
-          <q-tooltip :delay="500">Visit our GitHub</q-tooltip>
+          <q-tooltip>Visit our GitHub</q-tooltip>
         </q-btn>
       </q-toolbar>
     </q-header>
