@@ -4,7 +4,9 @@
       <q-item-section>
         <q-item-label> arguments (yaml): </q-item-label>
         <q-item-label caption>
-          <pre>{{ dump(task.context?.function?.arguments) }}</pre>
+          <div class="scroll-area">
+            {{ dump(task.context?.function?.arguments) }}
+          </div>
         </q-item-label>
       </q-item-section>
     </q-item>
@@ -12,10 +14,9 @@
       <q-item-section>
         <q-item-label> result (yaml): </q-item-label>
         <q-item-label caption>
-          <pre>
-      {{ dump(task.result?.functionResult) }}
-      </pre
-          >
+          <div class="scroll-area">
+            {{ dump(task.result?.functionResult) }}
+          </div>
         </q-item-label>
       </q-item-section>
     </q-item>
@@ -24,6 +25,12 @@
     <p>No tool selected</p>
   </div>
 </template>
+
+<style lang="sass" scoped>
+.scroll-area
+  white-space: pre-wrap
+  background-color: darken($primary, 5%)
+</style>
 
 <script setup lang="ts">
 import { defineProps } from 'vue';
