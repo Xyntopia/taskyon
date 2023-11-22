@@ -25,7 +25,13 @@
           dense
           flat
           round
-          icon="contrast"
+          :icon="
+            $q.dark.mode === 'auto'
+              ? 'contrast'
+              : $q.dark.mode
+              ? 'dark_mode'
+              : 'light_mode'
+          "
           @click="
             () => {
               const newMode =
