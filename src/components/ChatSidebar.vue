@@ -1,27 +1,6 @@
 <!-- Sidebar -->
 <template>
   <q-list class="q-pa-xs">
-    <q-toggle
-      v-model="state.expertMode"
-      label="Expert mode"
-      left-label
-      color="secondary"
-    />
-    <q-toggle
-      v-model="state.showCosts"
-      label="Show task costs"
-      left-label
-      color="secondary"
-    />
-    <q-separator spaced />
-    <!-- Upload Area -->
-    <q-expansion-item v-if="true" dense label="Upload" icon="upload">
-      <VecStoreUploader class="fit-height" />
-      <!--
-    <iframe id="vexvault" style="border: none" :src="uploaderURL" height="200"></iframe>
-    -->
-    </q-expansion-item>
-    <q-separator spaced />
     <!-- Conversation Area -->
     <q-expansion-item
       dense
@@ -70,6 +49,19 @@
         </q-list>
       </div>
     </q-expansion-item>
+    <q-separator spaced />
+    <q-toggle
+      v-model="state.expertMode"
+      label="Expert mode"
+      left-label
+      color="secondary"
+    />
+    <q-toggle
+      v-model="state.showCosts"
+      label="Show task costs"
+      left-label
+      color="secondary"
+    />
     <q-separator spaced />
     <!-- Settings Area -->
     <q-expansion-item dense label="Settings" icon="settings" default-opened>
