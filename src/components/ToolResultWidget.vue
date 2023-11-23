@@ -1,26 +1,22 @@
 <template>
-  <q-list dense separator bordered v-if="props.task.context?.function">
-    <q-item>
-      <q-item-section>
-        <q-item-label> arguments (yaml): </q-item-label>
-        <q-item-label caption>
+  <div v-if="props.task.context?.function" class="q-gutter-md q-px-xs">
+      <div>
+        <div class="text-bold"> arguments (yaml): </div>
+        <div caption>
           <div class="scroll-area">
             {{ dump(task.context?.function?.arguments) }}
           </div>
-        </q-item-label>
-      </q-item-section>
-    </q-item>
-    <q-item>
-      <q-item-section>
-        <q-item-label> result (yaml): </q-item-label>
-        <q-item-label caption>
+        </div>
+      </div>
+      <div>
+        <div class="text-bold"> result (yaml): </div>
+        <div caption>
           <div class="scroll-area">
             {{ dump(task.result?.functionResult) }}
           </div>
-        </q-item-label>
-      </q-item-section>
-    </q-item>
-  </q-list>
+        </div>
+      </div>
+  </div>
   <div v-else>
     <p>No tool selected</p>
   </div>
@@ -29,7 +25,7 @@
 <style lang="sass" scoped>
 .scroll-area
   white-space: pre-wrap
-  background-color: darken($primary, 5%)
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3)
 </style>
 
 <script setup lang="ts">
