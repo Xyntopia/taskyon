@@ -1,28 +1,50 @@
 <template>
   <q-tree :nodes="nodeTree" node-key="label">
     <template v-slot:body-text="prop">
-      <q-input
-        filled
-        :label="prop.node.label"
-        type="textarea"
-        :model-value="prop.node.value"
-        @update:modelValue="(value) => updateValue(prop.node.path, value)"
-      />
+      <div class="row">
+        <div
+          class="col-auto"
+          style="min-width: 200px"
+        >
+          {{ prop.node.label }}:
+        </div>
+        <q-input
+          class="col"
+          filled
+          :label="prop.node.label"
+          type="textarea"
+          :model-value="prop.node.value"
+          @update:modelValue="(value) => updateValue(prop.node.path, value)"
+        >
+        </q-input>
+      </div>
     </template>
     <template v-slot:header-none> </template>
     <template v-slot:body-string="prop">
-      <q-input
-        :label="prop.node.label"
-        filled
-        dense
-        autogrow
-        :debounce="500"
-        :model-value="prop.node.value"
-        @update:modelValue="(value) => updateValue(prop.node.path, value)"
-      />
+      <div class="row">
+        <div
+          class="col-auto"
+          style="min-width: 200px"
+        >
+          {{ prop.node.label }}:
+        </div>
+        <q-input
+          class="col"
+          style="min-width: 200px"
+          :label="prop.node.label"
+          filled
+          dense
+          autogrow
+          :debounce="500"
+          :model-value="prop.node.value"
+          @update:modelValue="(value) => updateValue(prop.node.path, value)"
+        >
+        </q-input>
+      </div>
     </template>
     <template v-slot:header-boolean="prop">
       <q-toggle
+      style="min-width: 200px"
         :label="prop.node.label"
         left-label
         color="secondary"
