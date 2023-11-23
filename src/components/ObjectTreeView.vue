@@ -1,15 +1,18 @@
 <template>
-  <q-tree dense :nodes="nodeTree" node-key="label">
+  <q-tree :nodes="nodeTree" node-key="label">
     <template v-slot:body-text="prop">
       <q-input
         filled
+        :label="prop.node.label"
         type="textarea"
         :model-value="prop.node.value"
         @update:modelValue="(value) => updateValue(prop.node.path, value)"
       />
     </template>
+    <template v-slot:header-none> </template>
     <template v-slot:body-string="prop">
       <q-input
+        :label="prop.node.label"
         filled
         dense
         autogrow
@@ -18,8 +21,10 @@
         @update:modelValue="(value) => updateValue(prop.node.path, value)"
       />
     </template>
-    <template v-slot:body-boolean="prop">
+    <template v-slot:header-boolean="prop">
       <q-toggle
+        :label="prop.node.label"
+        left-label
         color="secondary"
         :model-value="prop.node.value"
         @update:modelValue="(value) => updateValue(prop.node.path, value)"
@@ -86,20 +91,24 @@ const transformToTreeNodes = (
           children: transformToTreeNodes(value, newPath),
         };
       } else if (typeof value === 'string') {
-        return {
+        const node: QTreeNode = {
           label: key,
           key: newPath.join('.'),
           value: value,
           path: newPath,
-          body: value.length < 100 && !value.includes('\n') ? 'string' : 'text',
+          header: 'none',
         };
+        value.length < 100 && !value.includes('\n')
+          ? (node['body'] = 'string')
+          : (node['body'] = 'text');
+        return node;
       } else if (typeof value === 'boolean') {
         return {
           label: key,
           key: newPath.join('.'),
           value: value as string | boolean,
           path: newPath,
-          body: 'boolean',
+          header: 'boolean',
         };
       } else {
         return {
