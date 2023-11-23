@@ -11,6 +11,10 @@ const routes: RouteRecordRaw[] = [
         component: () => import('pages/TaskChat.vue'),
       },
       {
+        path: 'settings',
+        component: () => import('pages/Settings.vue'),
+      },
+      {
         path: 'uploader',
         component: () => import('components/VecStoreUploader.vue'),
       },
