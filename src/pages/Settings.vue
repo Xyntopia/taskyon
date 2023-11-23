@@ -1,7 +1,7 @@
 <template>
   <q-page>
     Settings
-    <ObjectTreeView/>
+    <ObjectTreeView v-model="chatStateProperties"/>
   </q-page>
 </template>
 
@@ -9,7 +9,8 @@
 import { computed } from 'vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import ObjectTreeView from 'components/ObjectTreeView.vue';
+import { storeToRefs } from 'pinia'
 
 const state = useTaskyonStore();
-const { Tasks, ...chatStateProperties } = state.chatState;
+const { Tasks, ...chatStateProperties } = storeToRefs(state).chatState.value;
 </script>
