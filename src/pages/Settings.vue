@@ -11,5 +11,6 @@ import { useTaskyonStore } from 'stores/taskyonState';
 import ObjectTreeView from 'components/ObjectTreeView.vue';
 
 const state = useTaskyonStore();
-const { ...chatStateProperties } = toRefs(state.chatState);
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const { Tasks, ...chatStateProperties } = toRefs(state.chatState);
 </script>
