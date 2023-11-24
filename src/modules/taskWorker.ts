@@ -368,7 +368,7 @@ async function taskWorker(chatState: ChatStateType, db: TaskyonDatabase) {
       }
     } catch (error) {
       task.state = 'Error';
-      task.debugging = { error };
+      task.debugging.error = error;
       console.error('Error processing task:', error);
     }
     // if we cancelled a task we need to prevent it from creating any follow-up tasks.
@@ -380,7 +380,13 @@ async function taskWorker(chatState: ChatStateType, db: TaskyonDatabase) {
       cancelCurrenTask = false;
       task.state = 'Cancelled';
     } else {
-      void generateFollowUpTasksFromResult(task, chatState);
+      try {
+        await generateFollowUpTasksFromResult(task, chatState);
+      } catch (error) {
+        task.state = 'Error';
+        task.debugging.followUpError = error;
+        console.log('We were not able to create a follow up task:', error);
+      }
     }
   }
 

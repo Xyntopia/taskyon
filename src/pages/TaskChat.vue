@@ -123,22 +123,100 @@
           <!--task debugging-->
           <q-slide-transition>
             <div v-show="state.messageDebug[task.id]">
-              <q-separator />
-              <q-card-section class="text-subtitle2">
-                <div>Task data:</div>
-                <textarea
-                  :value="JSON.stringify(task, null, 2)"
-                  readonly
-                  wrap="soft"
-                  style="
-                    width: 100%;
-                    height: 200px;
-                    background-color: inherit;
-                    color: inherit;
-                  "
-                >
-                </textarea>
-              </q-card-section>
+              <q-separator spaced />
+              <q-tabs dense v-model="state.messageDebug[task.id]" no-caps>
+                <q-tab name="ERROR" label="Error" />
+                <q-tab name="FOLLOWUPERROR" label="Follow-up task error" />
+                <q-tab name="RAW" label="raw task data" />
+                <q-tab name="RAWTASK" label="task prompt" />
+                <q-tab name="MESSAGECONTENT" label="raw result" />
+              </q-tabs>
+              <q-tab-panels
+                v-model="state.messageDebug[task.id]"
+                animated
+                swipeable
+                vertical
+                transition-prev="jump-up"
+                transition-next="jump-up"
+              >
+                <q-tab-panel name="ERROR">
+                  <textarea
+                    :value="JSON.stringify(task.debugging.error, null, 2)"
+                    readonly
+                    wrap="soft"
+                    style="
+                      width: 100%;
+                      height: 200px;
+                      background-color: inherit;
+                      color: inherit;
+                    "
+                  >
+                  </textarea>
+                </q-tab-panel>
+                <q-tab-panel name="FOLLOWUPERROR">
+                  <textarea
+                    :value="
+                      JSON.stringify(task.debugging.followUpError, null, 2)
+                    "
+                    readonly
+                    wrap="soft"
+                    style="
+                      width: 100%;
+                      height: 200px;
+                      background-color: inherit;
+                      color: inherit;
+                    "
+                  >
+                  </textarea>
+                </q-tab-panel>
+                <q-tab-panel name="RAW">
+                  <textarea
+                    :value="JSON.stringify(task, null, 2)"
+                    readonly
+                    wrap="soft"
+                    style="
+                      width: 100%;
+                      height: 200px;
+                      background-color: inherit;
+                      color: inherit;
+                    "
+                  >
+                  </textarea>
+                </q-tab-panel>
+                <q-tab-panel name="MESSAGECONTENT">
+                  <textarea
+                    :value="
+                      task.result?.chatResponse?.choices[0].message.content ||
+                      'ERROR'
+                    "
+                    readonly
+                    wrap="soft"
+                    style="
+                      width: 100%;
+                      height: 200px;
+                      background-color: inherit;
+                      color: inherit;
+                    "
+                  >
+                  </textarea>
+                </q-tab-panel>
+                <q-tab-panel name="RAWTASK">
+                  <textarea
+                    v-for="(tp, idx) in task.debugging.taskPrompt"
+                    :key="idx"
+                    :value="tp.content || 's'"
+                    readonly
+                    wrap="soft"
+                    style="
+                      width: 100%;
+                      height: 200px;
+                      background-color: inherit;
+                      color: inherit;
+                    "
+                  >
+                  </textarea>
+                </q-tab-panel>
+              </q-tab-panels>
             </div>
           </q-slide-transition>
         </div>
@@ -286,10 +364,10 @@ function editTask(taskId: string) {
 function toggleMessageDebug(id: string) {
   if (state.messageDebug[id] === undefined) {
     // If the message ID doesn't exist, default to true since we're opening it.
-    state.messageDebug[id] = true;
+    state.messageDebug[id] = 'raw';
   } else {
     // If it does exist, toggle the boolean.
-    state.messageDebug[id] = !state.messageDebug[id];
+    state.messageDebug[id] = undefined;
   }
 }
 </script>

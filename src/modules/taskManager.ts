@@ -29,7 +29,7 @@ class AsyncQueue<T> {
   }
 
   count() {
-    return this.queue.length
+    return this.queue.length;
   }
 
   async pop(): Promise<T> {

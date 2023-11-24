@@ -105,6 +105,7 @@ export type LLMTask = {
     aiResponse?: ChatCompletionResponse;
     error?: unknown;
     taskPrompt?: OpenAIMessage[];
+    followUpError?: unknown;
   };
   result?: TaskResult;
   id: string;

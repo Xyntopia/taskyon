@@ -23,7 +23,15 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
     draftParameters: {} as Record<string, FunctionArguments>,
     debugMessageExpand: {},
     darkTheme: 'auto' as boolean | 'auto',
-    messageDebug: {} as Record<string, boolean>, // whether message with ID should be open or not...
+    messageDebug: {} as Record<
+      string,
+      | 'RAW'
+      | 'MESSAGECONTENT'
+      | 'RAWTASK'
+      | 'ERROR'
+      | 'FOLLOWUPERROR'
+      | undefined
+    >, // whether message with ID should be open or not...
   };
 
   // Create refs for each property and adjust the type assertion
