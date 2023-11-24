@@ -7,7 +7,8 @@ export type TaskState =
   | 'Queued'
   | 'In Progress'
   | 'Completed'
-  | 'Error';
+  | 'Error'
+  | 'Cancelled';
 
 export type OpenAIMessage = {
   // The content of the message, can be null for some messages.

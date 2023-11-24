@@ -21,7 +21,7 @@
                 v-if="!selectedTaskType"
                 flat
                 dense
-                stretch
+                round
                 icon="send"
                 @click="executeTask"
               >

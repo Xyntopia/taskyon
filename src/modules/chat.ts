@@ -92,6 +92,7 @@ export function defaultTaskState() {
     summaryModel: 'Xenova/distilbart-cnn-6-6',
     baseURL: getBackendUrls('openrouter'),
     databasePath: 'taskyon.sqlite3',
+    maxTasks: 3,
     taskChatTemplates: {
       constraints: `CONSTRAINTS:
 

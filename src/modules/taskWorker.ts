@@ -268,11 +268,74 @@ async function generateFollowUpTasksFromResult(
   }
 }
 
+const TASK_CANCELLATION_EVENT = 'cancelTasks';
+const CURRENT_TASK_CANCELLATION_EVENT = 'cancelCurrentTask';
+const RUNNING_TASK_WORKER_CANCELLATION_EVENT = 'cancelRunningTaskWorker';
+
+export function emitCancelAllTasks() {
+  document.dispatchEvent(new CustomEvent(TASK_CANCELLATION_EVENT));
+}
+
+export function emitCancelTaskWorker() {
+  document.dispatchEvent(
+    new CustomEvent(RUNNING_TASK_WORKER_CANCELLATION_EVENT)
+  );
+}
+
+export function emitCancelCurrentTask() {
+  document.dispatchEvent(new CustomEvent(CURRENT_TASK_CANCELLATION_EVENT));
+}
+
 async function taskWorker(chatState: ChatStateType, db: TaskyonDatabase) {
+  let cancelAllTasks = false;
+  let cancelImmediately = false;
+  let cancelCurrenTask = false;
+
+  const cancelCurrentTaskListener = () => {
+    cancelCurrenTask = true;
+    console.log('Received signal to cancel current task');
+  };
+
+  const cancelTasksListener = () => {
+    cancelAllTasks = true;
+    console.log('Received signal to cancel all queued tasks');
+  };
+
+  const cancelImmediatelyListener = () => {
+    cancelImmediately = true;
+    console.log('Received signal for immediate cancellation');
+    document.removeEventListener(
+      RUNNING_TASK_WORKER_CANCELLATION_EVENT,
+      cancelImmediatelyListener
+    );
+    throw new Error('Task Worker immediately cancelled');
+  };
+
+  document.addEventListener(
+    CURRENT_TASK_CANCELLATION_EVENT,
+    cancelCurrentTaskListener
+  );
+  document.addEventListener(TASK_CANCELLATION_EVENT, cancelTasksListener);
+  document.addEventListener(
+    RUNNING_TASK_WORKER_CANCELLATION_EVENT,
+    cancelImmediatelyListener
+  );
+
+  window.addEventListener('beforeunload', () => {
+    processTasksQueue.clear().forEach((t) => (t.state = 'Cancelled'));
+  });
+
   console.log('entering task worker loop...');
-  while (true) {
+  while (!cancelImmediately) {
     console.log('waiting for next task!');
     let task = await processTasksQueue.pop();
+    if (!processTasksQueue.count()) {
+      cancelAllTasks = false;
+      cancelCurrenTask = false;
+    } else if (cancelAllTasks) {
+      task.state = 'Cancelled';
+      continue;
+    }
     task.state = 'In Progress';
     console.log('processing task:', task);
     try {
@@ -308,8 +371,27 @@ async function taskWorker(chatState: ChatStateType, db: TaskyonDatabase) {
       task.debugging = { error };
       console.error('Error processing task:', error);
     }
-    void generateFollowUpTasksFromResult(task, chatState);
+    // if we cancelled a task we need to prevent it from creating any follow-up tasks.
+    if (
+      (cancelCurrenTask && task.id == chatState.selectedTaskId) ||
+      cancelAllTasks
+    ) {
+      // current task cancellation should only be done once, so we set the flag to "false"
+      cancelCurrenTask = false;
+      task.state = 'Cancelled';
+    } else {
+      void generateFollowUpTasksFromResult(task, chatState);
+    }
   }
+
+  document.removeEventListener(
+    TASK_CANCELLATION_EVENT,
+    cancelCurrentTaskListener
+  );
+  document.removeEventListener(
+    CURRENT_TASK_CANCELLATION_EVENT,
+    cancelCurrentTaskListener
+  );
 }
 
 export async function run(chatState: ChatStateType) {

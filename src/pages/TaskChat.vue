@@ -151,9 +151,28 @@
               )
             )
           "
-          class="q-pa-xs"
+          class="q-pa-xs row"
         >
           <q-spinner-comment color="secondary" size="lg" />
+          <q-space></q-space>
+          <q-btn
+            round
+            color="secondary"
+            icon="stop"
+            @click="emitCancelCurrentTask"
+          >
+            <q-tooltip> Stop processing current task. </q-tooltip>
+          </q-btn>
+          <q-btn
+            v-if="state.expertMode"
+            round
+            color="secondary"
+            icon="block"
+            @click="emitCancelAllTasks"
+            class="q-ml-xs"
+          >
+            <q-tooltip> Cancel all tasks. </q-tooltip>
+          </q-btn>
         </div>
       </q-card-section>
     </q-card>
@@ -219,6 +238,10 @@ import { useTaskyonStore } from 'stores/taskyonState';
 import TokenUsage from 'components/TokenUsage.vue';
 import CreateNewTask from 'components/CreateNewTask.vue';
 import { LLMTask } from 'src/modules/types';
+import {
+  emitCancelAllTasks,
+  emitCancelCurrentTask,
+} from 'src/modules/taskWorker';
 import axios from 'axios';
 
 const welcomeText = ref<string>('');

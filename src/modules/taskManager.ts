@@ -28,6 +28,10 @@ class AsyncQueue<T> {
     }
   }
 
+  count() {
+    return this.queue.length
+  }
+
   async pop(): Promise<T> {
     const shiftedItem = this.queue.shift();
     if (shiftedItem !== undefined) {
@@ -37,6 +41,12 @@ class AsyncQueue<T> {
         this.resolveWaitingPop = resolve;
       });
     }
+  }
+
+  clear() {
+    const oldQueue = this.queue;
+    this.queue = [];
+    return oldQueue;
   }
 }
 
