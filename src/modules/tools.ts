@@ -69,7 +69,7 @@ export async function handleFunctionExecution(
     funcR = bigIntToString(funcR);
     const result: TaskResult = {
       type: 'ToolResult',
-      toolResult: { result: dump(funcR) },
+      toolResult: { result: JSON.stringify(funcR) },
     };
     return result;
   } catch (error) {
@@ -90,7 +90,7 @@ tools.localVectorStoreSearch = {
     const results = await vectorStore.query(searchTerm, k);
     return results;
   },
-  description: `Conducts an Approximate Nearest Neighbors (ANN) search in the local vector database derived from uploaded files. 
+  description: `Conducts an Approximate Nearest Neighbors search in the local vector database derived from uploaded files. 
 This tool allows for natural language queries to retrieve relevant pieces of files based on semantic similarity. 
 Ideal for finding related documents or data segments amidst a large, vectorized dataset.`,
   name: 'localVectorStoreSearch',
@@ -277,7 +277,10 @@ tools.executeJavaScript = {
     } else {
       // Execute in the main thread
       try {
-        return Promise.resolve(eval(javascriptCode));
+        return {
+          result: Promise.resolve(eval(javascriptCode)),
+          comment: 'output from console.log is not visible to assistant!',
+        };
       } catch (error) {
         return Promise.reject(error);
       }

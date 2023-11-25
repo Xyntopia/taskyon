@@ -64,7 +64,7 @@ export interface OpenRouterGenerationInfo {
 }
 
 export interface ToolResult {
-  result?: string;
+  result?: string | Record<string, unknown>;
   error?: unknown;
   stdout?: string;
 }
@@ -193,6 +193,12 @@ export function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
   if (schema instanceof z.ZodOptional) {
     return zodToYAMLObject(schema.unwrap());
   }
+
+  // Modified ZodOptional case
+  if (schema instanceof z.ZodNullable) {
+    return zodToYAMLObject(schema.unwrap());
+  }
+
 
   // Add more cases as needed for other Zod types (unions, etc.)
   // Fallback for unsupported types
