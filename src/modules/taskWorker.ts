@@ -147,16 +147,69 @@ function createNewAssistantResponseTask(
   return taskListFromResponse;
 }
 
+async function parseChatResponse(
+  message: string,
+  role: partialTaskDraft['role'] | undefined
+): Promise<{ taskDraft: partialTaskDraft; execute: boolean }> {
+  // parse the response and create a new task filled with the correct parameters
+  let yamlContent = message.trim();
+  // Use exec() to find a match
+  const yamlBlockRegex = /```yaml\n?([\s\S]*?)\n?```/;
+  const codeBlockRegex = /```\n?([\s\S]*?)\n?```/;
+  const yamlMatch =
+    yamlBlockRegex.exec(yamlContent) || codeBlockRegex.exec(yamlContent);
+  if (yamlMatch) {
+    yamlContent = yamlMatch[1]; // Use the captured group
+  }
+  // Parse the extracted or original YAML content
+  const parsedYaml = load(yamlContent);
+  const toolChatResult = await yamlToolChatType.safeParseAsync(parsedYaml);
+  if (toolChatResult.success) {
+    console.log(toolChatResult);
+    if (toolChatResult.data.toolCommand) {
+      return {
+        taskDraft: {
+          role: 'function',
+          content: null,
+          context: {
+            function: {
+              name: toolChatResult.data.toolCommand.name,
+              arguments: toolChatResult.data.toolCommand.args,
+            },
+          },
+        },
+        execute: true,
+      };
+    } else {
+      return {
+        taskDraft: {
+          state: 'Completed',
+          role: role || 'assistant',
+          content:
+            toolChatResult.data.answer ||
+            toolChatResult.data.reasoning ||
+            message,
+        },
+        execute: false,
+      };
+    }
+  } else {
+    return {
+      taskDraft: {
+        state: 'Completed',
+        role: role || 'system',
+        content: toolChatResult.error.toString(),
+      },
+      execute: false,
+    };
+  }
+}
+
 async function generateFollowUpTasksFromResult(
   finishedTask: LLMTask,
   chatState: ChatStateType
 ) {
   console.log('generate follow up task');
-  const childCosts = {
-    promptTokens: finishedTask.debugging.resultTokens,
-    taskTokens: finishedTask.debugging.taskTokens,
-    taskCosts: finishedTask.debugging.taskCosts,
-  };
   if (finishedTask.result) {
     const taskDraftList: partialTaskDraft[] = [];
     let execute = false;
@@ -172,7 +225,6 @@ async function generateFollowUpTasksFromResult(
     } else if (finishedTask.result.type === 'AssistantAnswer') {
       const newTaskDraftList = createNewAssistantResponseTask(finishedTask);
       for (const td of newTaskDraftList) {
-        td.debugging = { ...td.debugging, ...childCosts };
         taskDraftList.push({
           state: 'Completed',
           ...td,
@@ -180,40 +232,13 @@ async function generateFollowUpTasksFromResult(
       }
     } else if (finishedTask.result.type === 'ToolChatResult') {
       const choice = finishedTask.result.chatResponse?.choices[0];
-      // parse the response and create a new task filled with the correct parameters
-      const parsedYaml = load(choice?.message.content?.trim() || '');
-      const toolChatResult = await yamlToolChatType.safeParseAsync(parsedYaml);
-      if (toolChatResult.success) {
-        console.log(toolChatResult);
-        if (toolChatResult.data.toolCommand) {
-          taskDraftList.push({
-            role: 'function',
-            content: null,
-            context: {
-              function: {
-                name: toolChatResult.data.toolCommand.name,
-                arguments: toolChatResult.data.toolCommand.args,
-              },
-            },
-            debugging: childCosts,
-          });
-          execute = true;
-        } else {
-          taskDraftList.push({
-            state: 'Completed',
-            role: choice?.message.role || 'assistant',
-            content:
-              toolChatResult.data.answer ||
-              toolChatResult.data.reasoning ||
-              choice?.message.content,
-          });
-        }
-      } else {
-        taskDraftList.push({
-          state: 'Completed',
-          role: choice?.message.role || 'system',
-          content: toolChatResult.error.toString(),
-        });
+      let taskDraft = undefined;
+      ({ taskDraft, execute } = await parseChatResponse(
+        choice?.message.content || '',
+        choice?.message.role
+      ));
+      if (taskDraft) {
+        taskDraftList.push(taskDraft);
       }
     } else if (finishedTask.result.type === 'ToolCall') {
       const choice = finishedTask.result.chatResponse?.choices[0];
@@ -224,14 +249,19 @@ async function generateFollowUpTasksFromResult(
             role: 'function',
             content: null,
             context: { function: functionCall },
-            debugging: childCosts,
           });
           execute = true;
         }
       }
     }
     let parentTask = finishedTask;
+    const childCosts = {
+      promptTokens: finishedTask.debugging.resultTokens,
+      taskTokens: finishedTask.debugging.taskTokens,
+      taskCosts: finishedTask.debugging.taskCosts,
+    };
     for (const taskDraft of taskDraftList) {
+      taskDraft.debugging = { ...taskDraft.debugging, ...childCosts };
       const newId = addTask2Tree(taskDraft, parentTask, chatState, execute);
       parentTask = chatState.Tasks[newId]; // create sequental task chain
     }
