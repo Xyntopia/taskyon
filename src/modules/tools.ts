@@ -69,7 +69,7 @@ export async function handleFunctionExecution(
     funcR = bigIntToString(funcR);
     const result: TaskResult = {
       type: 'ToolResult',
-      toolResult: { result: JSON.stringify(funcR) },
+      toolResult: { result: dump(funcR) },
     };
     return result;
   } catch (error) {
