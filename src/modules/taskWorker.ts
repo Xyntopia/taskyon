@@ -16,50 +16,6 @@ import { getTaskyonDB } from './taskManager';
 import { handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
 
-/*async function executeTask(
-  task,
-  previousTasks = null,
-  context = null,
-  objective = null,
-  formatting = 'yaml',
-  modelId = 'ggml-mpt-7b-instruct',
-  maxTokens = 1000
-) {
-  // Creates a message and executes a task with an LLM based on given information
-  const msgs = taskChat(
-    task,
-    context ? `\n---\n${context.join('\n---\n')}` : null,
-    previousTasks,
-    objective,
-    formatting
-  );
-  let res;
-  try {
-    // You'll need to define the 'chatCompletion' function, as it's not included in the Python code.
-    res = await chatCompletion(msgs, maxTokens, modelId);
-  } catch (error) {
-    // handle error
-    console.error(error);
-  }
-
-  let obj;
-  if (formatting === 'yaml') {
-    try {
-      // You'll need to use a YAML parsing library here, as JavaScript doesn't have native YAML support.
-      obj = YAML.parse(res); // using 'yaml' or another library
-    } catch (error) {
-      throw new Error(`Could not convert ${res} to yaml: ${error}`);
-    }
-  } else if (['txt', 'markdown'].includes(formatting)) {
-    obj = res;
-  } else {
-    console.warn(`Formatting: ${formatting} is unknown!`);
-    // do nothing ;)
-  }
-
-  return [obj, msgs, res];
-}*/
-
 function isOpenAIFunctionCall(
   choice: ChatCompletionResponse['choices'][0]
 ): choice is ChatCompletionResponse['choices'][0] & {
@@ -203,6 +159,7 @@ async function generateFollowUpTasksFromResult(
   };
   if (finishedTask.result) {
     const taskDraftList: partialTaskDraft[] = [];
+    let execute = false;
     if (finishedTask.result.type === 'ChatAnswer') {
       const choice = finishedTask.result.chatResponse?.choices[0];
       if (choice) {
@@ -224,7 +181,7 @@ async function generateFollowUpTasksFromResult(
     } else if (finishedTask.result.type === 'ToolChatResult') {
       const choice = finishedTask.result.chatResponse?.choices[0];
       // parse the response and create a new task filled with the correct parameters
-      const parsedYaml = load(choice?.message.content || '');
+      const parsedYaml = load(choice?.message.content?.trim() || '');
       const toolChatResult = await yamlToolChatType.safeParseAsync(parsedYaml);
       if (toolChatResult.success) {
         console.log(toolChatResult);
@@ -240,13 +197,23 @@ async function generateFollowUpTasksFromResult(
             },
             debugging: childCosts,
           });
-        } else if (choice) {
+          execute = true;
+        } else {
           taskDraftList.push({
             state: 'Completed',
-            role: choice.message.role,
-            content: choice.message.content,
+            role: choice?.message.role || 'assistant',
+            content:
+              toolChatResult.data.answer ||
+              toolChatResult.data.reasoning ||
+              choice?.message.content,
           });
         }
+      } else {
+        taskDraftList.push({
+          state: 'Completed',
+          role: choice?.message.role || 'system',
+          content: toolChatResult.error.toString(),
+        });
       }
     } else if (finishedTask.result.type === 'FunctionCall') {
       const choice = finishedTask.result.chatResponse?.choices[0];
@@ -259,11 +226,14 @@ async function generateFollowUpTasksFromResult(
             context: { function: functionCall },
             debugging: childCosts,
           });
+          execute = true;
         }
       }
     }
+    let parentTask = finishedTask;
     for (const taskDraft of taskDraftList) {
-      addTask2Tree(taskDraft, finishedTask, chatState, true);
+      const newId = addTask2Tree(taskDraft, parentTask, chatState, execute);
+      parentTask = chatState.Tasks[newId]; // create sequental task chain
     }
   }
 }

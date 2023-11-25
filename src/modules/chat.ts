@@ -16,9 +16,9 @@ import {
 import OpenAI from 'openai';
 import { openFile } from './OPFS';
 import { dump } from 'js-yaml';
-import { lruCache, sleep, asyncTimeLruCache } from './utils';
+import { lruCache, sleep, asyncTimeLruCache, asyncLruCache } from './utils';
 import type { TaskyonDatabase, FileMappingDocType } from './rxdb';
-import { zodToYAMLObject, yamlToolChatType } from './types';
+import { zodToYAMLObject, yamlToolChatType, functionResultChat } from './types';
 
 const getOpenai = lruCache<OpenAI>(5)((apiKey: string) => {
   const api = new OpenAI({
@@ -97,16 +97,24 @@ export function defaultTaskState() {
       constraints: `CONSTRAINTS:
 
 {constraints}
-      `.trim(),
+      `,
       instruction: `You are a helpful assistant that aims to complete the given task. Do not add any amount of explanatory text.
-You can make use of the following resources:`,
+You can make use of the following Tools: {toolList}`,
       objective: 'OVERALL OBJECTIVE: \n{objective}\n',
       tools: `AVAILABLE TOOLS TO CALL:
 
 {tools}
-`.trim(),
+`,
       previousTasks: 'PREVIOUSLY COMPLETED TASKS:\n{previousTasks}\n',
       context: 'TAKE INTO ACCOUNT THIS CONTEXT:\n{context}\n',
+      functionResult: `THE RESULT OF THE TOOL/FUNCTION WHICH WAS CALLED BY THE SYSTEM IS:
+
+{functionResult}
+
+COMMENT THE RESULT VERY STRICTLY FOLLOWING SCHEMA ({format}):
+
+{resultSchema}
+`,
       task: `
 COMPLETE THE FOLLOWING TASK:
 
@@ -115,11 +123,11 @@ COMPLETE THE FOLLOWING TASK:
 Provide only the precise information requested without context, 
 Make sure we can parse the response as {format}.
 
-FORMAT THE RESULT WITH THIS SCHEMA ({format}):
+FORMAT THE RESULT WITH THE FOLLOWING SCHEMA VERY STRICT ({format}):
 
 {schema}
       
-      `.trim(),
+      `,
     },
   };
 }
@@ -383,9 +391,7 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
             content: t.content,
           };
           if (t.role == 'function') {
-            if (chatState.enableOpenAiTools) {
-              message.name = t.context?.function?.name;
-            }
+            message.name = t.context?.function?.name;
             const functionContent = dump({
               arguments: t.context?.function?.arguments,
               ...t.result?.functionResult,
@@ -465,7 +471,7 @@ export async function getOpenAIChatResponse(
   method: 'toolchat' | 'chat' | 'taskAgent'
 ) {
   console.log('Get Chat Response from LLM');
-  const openAIConversationThread = buildChatFromTask(task, chatState);
+  let openAIConversationThread = buildChatFromTask(task, chatState);
 
   let functions: Tool[] = [];
 
@@ -478,15 +484,30 @@ export async function getOpenAIChatResponse(
     console.log('Creating chat task messages');
     // Prepare the variables for createTaskChatMessages
 
-    const objrepr = zodToYAMLObject(yamlToolChatType);
-    const openapischema = dump(objrepr).replace(/'# .+:/g, '#');
+    let variables = {};
+    if (task.role === 'user') {
+      const objrepr = zodToYAMLObject(yamlToolChatType);
+      const openapischema = dump(objrepr).replace(/'# .+:/g, '#');
 
-    const variables = {
-      taskContent: task.content || '', // Ensuring there's a default value if content is null
-      schema: openapischema,
-      format: 'yaml',
-      tools: summarizeTools(task.allowedTools),
-    };
+      variables = {
+        taskContent: task.content || '', // Ensuring there's a default value if content is null
+        schema: openapischema,
+        format: 'yaml',
+        tools: summarizeTools(task.allowedTools),
+        toolList: JSON.stringify(task.allowedTools),
+      };
+    } else {
+      const objrepr = zodToYAMLObject(functionResultChat);
+      const openapischema = dump(objrepr).replace(/'# .+:/g, '#');
+
+      variables = {
+        functionResult: dump(task.result?.functionResult),
+        resultSchema: openapischema,
+        format: 'yaml',
+        tools: summarizeTools(task.allowedTools),
+        toolList: JSON.stringify(task.allowedTools),
+      };
+    }
 
     // Create additional messages using createTaskChatMessages
     const filledTemplates = createTaskChatMessages(
@@ -494,16 +515,31 @@ export async function getOpenAIChatResponse(
       variables
     );
 
+    const content = (
+      task.role === 'user'
+        ? [filledTemplates['task']]
+        : [filledTemplates['functionResult']]
+    )
+      .map((x) => x.trim())
+      .join('\n\n');
+
+    const toolMessage: OpenAIMessage = {
+      role: 'system',
+      content: filledTemplates['tools'],
+      name: 'taskyon',
+    };
+
     const additionalMessages: OpenAIMessage[] = [
+      toolMessage,
       {
-        role: 'assistant',
-        content: chatState.taskChatTemplates.instruction,
+        role: 'system',
+        content: filledTemplates['instruction'],
       },
       {
-        role: 'user',
-        content: Object.values(filledTemplates)
-          .map((x) => x.trim())
-          .join('\n\n'),
+        role: task.role,
+        content,
+        name:
+          task.role === 'function' ? task.context?.function?.name : undefined,
       },
     ];
 
@@ -512,7 +548,10 @@ export async function getOpenAIChatResponse(
     // because it will be replaced by our additional message
     openAIConversationThread.pop();
     // Append additional messages to the conversation thread
-    openAIConversationThread.push(...additionalMessages);
+    openAIConversationThread = [
+      ...openAIConversationThread,
+      ...additionalMessages,
+    ];
   } else {
     functions = mapFunctionNames(task.allowedTools || []) || [];
   }
@@ -762,27 +801,25 @@ export interface Model {
   };
 }
 
-// Update the availableModels function to return a list of models
-export async function availableModels(
-  baseURL: string,
-  apiKey: string
-): Promise<Model[]> {
-  try {
-    // Setting up the Axios requsest
-    const response = await axios.get<{ data: Model[] }>(
-      getAPIURLs(baseURL).models,
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Cache-Control': 'max-stale=3600',
-        },
-      }
-    );
+export const availableModels = asyncLruCache<Model[]>(3)(
+  async (baseURL: string, apiKey: string): Promise<Model[]> => {
+    try {
+      // Setting up the Axios requsest
+      const response = await axios.get<{ data: Model[] }>(
+        getAPIURLs(baseURL).models,
+        {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Cache-Control': 'max-stale=3600',
+          },
+        }
+      );
 
-    // Return the list of models directly
-    return response.data.data;
-  } catch (error) {
-    console.error('Error fetching models:', error);
-    throw error; // re-throwing the error to be handled by the calling code
+      // Return the list of models directly
+      return response.data.data;
+    } catch (error) {
+      console.error('Error fetching models:', error);
+      throw error; // re-throwing the error to be handled by the calling code
+    }
   }
-}
+);

@@ -31,7 +31,7 @@
                 </q-tooltip>
               </q-btn>
             </template>
-            <template v-slot:after>
+            <template v-slot:before>
               <FileDropzone
                 class="row justify-center items-center"
                 @update:model-value="attachFileToTask"

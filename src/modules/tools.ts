@@ -3,7 +3,8 @@ import { execute } from './pyodide';
 import { seleniumBrowser } from './seleniumTool';
 import { dump } from 'js-yaml';
 import { bigIntToString } from './chat';
-import type { TaskResult, ToolFunctionResult } from './types';
+import { TaskResult, ToolFunctionResult, toolCommandChat } from './types';
+import { z } from 'zod';
 
 export const vectorStore = useVectorStore();
 
@@ -294,7 +295,8 @@ tools.executeJavaScript = {
     (Web Worker) or in the main thread. If the javascript code is executed in the main thread, it can
     manipulate the DOM where it is currently running.
     It's important to structure the code such that the desired result is the completion value (outcome)
-    of the last expression in the provided script.
+    of the last expression in the provided script. Keep in mind that results of console.log can not be
+    seen by the system.
   `,
   name: 'executeJavaScript',
   parameters: {
@@ -350,13 +352,31 @@ function executeInDynamicWorker(javascriptCode: string) {
   });
 }
 
+function convertToToolCommandString(tool: Tool): toolCommandChat | undefined {
+  // convert a tool into a schema which is compatible ti toolCommandChat
+  const args: z.infer<(typeof toolCommandChat.shape)['args']> = {};
+
+  const requiredProperties = new Set(tool.parameters.required || []);
+
+  // Loop over each property in the tool's parameters
+  for (const key in tool.parameters.properties) {
+    const param = tool.parameters.properties[key];
+    // Check if the key is in the list of required properties
+    const isRequired = requiredProperties.has(key);
+    // If the property is required, use the key as is, otherwise add a "?" to the key
+    const argKey = isRequired ? key : `${key}?`;
+    args[argKey] = param.type;
+  }
+
+  return { name: tool.name, args };
+}
+
 export function summarizeTools(toolIDs: string[]) {
   const toolStr = toolIDs
     .map((t) => {
       const tool = tools[t];
       const toolStr = dump({
-        name: tool.name,
-        parameters: tool.parameters,
+        ...convertToToolCommandString(tool),
         description: tool.description,
       });
       return toolStr;

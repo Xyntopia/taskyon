@@ -141,6 +141,8 @@ export function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
     return 'number';
   } else if (schema instanceof z.ZodBoolean) {
     return 'boolean';
+  } else if (schema instanceof z.ZodNull) {
+    return 'null';
   }
 
   // Modified ZodObject case to handle optionals
@@ -197,20 +199,46 @@ export function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
   return 'unsupported';
 }
 
+export const toolCommandChat = z.object({
+  name: z.string(),
+  args: z.record(z.union([z.string(), z.number(), z.boolean()])),
+});
+
+export type toolCommandChat = z.infer<typeof toolCommandChat>;
+
+const answer = z.string().nullable();
+
+export const functionResultChat = z.object({
+  reasoning: z.string(),
+  satisfactory: z.boolean().describe('was the result satisfactory?'),
+  answer: answer
+    .optional()
+    .describe('Only provide answer if result was satisfactory.'),
+  useTool: z
+    .optional(z.boolean())
+    .describe('Only use a tool, if the result was not satisfactory!!'),
+  useToolReason: z
+    .optional(z.string())
+    .describe('Reason, why we should use a tool/function again?'),
+  toolCommand: toolCommandChat
+    .describe(
+      'Only fill toolCommand if useTool = true otherwise provide answer!'
+    )
+    .optional(),
+});
+export type functionResultChat = z.infer<typeof functionResultChat>;
+
 export const yamlToolChatType = z.object({
   reasoning: z.string(),
   useTool: z.optional(z.boolean()),
-  toolCommand: z
-    .optional(
-      z.object({
-        name: z.string(),
-        args: z.record(z.union([z.string(), z.number(), z.boolean()])),
-      })
+  toolCommand: toolCommandChat
+    .describe(
+      'Only fill toolCommand if useTool = true otherwise provide answer!'
     )
-    .describe('Only fill toolCommand if useTool = true'),
-  answer: z
-    .optional(z.string())
-    .describe('We only need this if we are not using a tool.'),
+    .optional(),
+  answer: answer
+    .optional()
+    .describe('Only provide answer if we are not using a tool.'),
 });
 
 export type yamlToolChatType = z.infer<typeof yamlToolChatType>;

@@ -364,7 +364,7 @@ function editTask(taskId: string) {
 function toggleMessageDebug(id: string) {
   if (state.messageDebug[id] === undefined) {
     // If the message ID doesn't exist, default to true since we're opening it.
-    state.messageDebug[id] = 'raw';
+    state.messageDebug[id] = 'RAW';
   } else {
     // If it does exist, toggle the boolean.
     state.messageDebug[id] = undefined;
