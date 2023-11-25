@@ -3,7 +3,7 @@ import { execute } from './pyodide';
 import { seleniumBrowser } from './seleniumTool';
 import { dump } from 'js-yaml';
 import { bigIntToString } from './chat';
-import { TaskResult, ToolFunctionResult, toolCommandChat } from './types';
+import { TaskResult, toolCommandChat } from './types';
 import { z } from 'zod';
 
 export const vectorStore = useVectorStore();
@@ -68,14 +68,14 @@ export async function handleFunctionExecution(
     let funcR: unknown = await tools[func.name].function(func.arguments);
     funcR = bigIntToString(funcR);
     const result: TaskResult = {
-      type: 'FunctionResult',
+      type: 'ToolResult',
       toolResult: { result: dump(funcR) },
     };
     return result;
   } catch (error) {
     return {
-      type: 'FunctionError',
-      toolResult: { result: JSON.stringify(error) },
+      type: 'ToolError',
+      toolResult: { error: JSON.stringify(error) },
     };
   }
 }
@@ -90,11 +90,9 @@ tools.localVectorStoreSearch = {
     const results = await vectorStore.query(searchTerm, k);
     return results;
   },
-  description: `
-    Conducts an Approximate Nearest Neighbors (ANN) search in the local vector database derived from uploaded files. 
-    This tool allows for natural language queries to retrieve relevant pieces of files based on semantic similarity. 
-    Ideal for finding related documents or data segments amidst a large, vectorized dataset.
-  `,
+  description: `Conducts an Approximate Nearest Neighbors (ANN) search in the local vector database derived from uploaded files. 
+This tool allows for natural language queries to retrieve relevant pieces of files based on semantic similarity. 
+Ideal for finding related documents or data segments amidst a large, vectorized dataset.`,
   name: 'localVectorStoreSearch',
   parameters: {
     type: 'object',
@@ -114,14 +112,12 @@ tools.executePythonScript = {
     console.log('execute python code...');
     return await execute(pythonScript);
   },
-  description: `
-  Executes the provided Python code using a Pyodide runtime and returns the result of the last expression evaluated. 
-  This tool can be used to run data processing tasks, perform calculations, or interact with Python libraries.
-  Common use-cases include executing data transformations, statistical analyses, or machine learning algorithms on uploaded files.
-  It's important to structure the Python code such that the desired result
-  is the outcome of the last expression in the script. Outcomes should be of the types String, Number, Array, Map, Set.
-  Additionally, stdout will be returned as a string.
-`,
+  description: `Executes the provided Python code using a Pyodide runtime and returns the result of the last expression evaluated. 
+This tool can be used to run data processing tasks, perform calculations, or interact with Python libraries.
+Common use-cases include executing data transformations, statistical analyses, or machine learning algorithms on uploaded files.
+It's important to structure the Python code such that the desired result
+is the outcome of the last expression in the script. Outcomes should be of the types String, Number, Array, Map, Set.
+Additionally, stdout will be returned as a string.`,
   name: 'executePythonScript',
   parameters: {
     type: 'object',
@@ -190,11 +186,9 @@ tools.getToolExample = {
     }
     return toolInfo;
   },
-  description: `
-    Retrieves an example of an existing tool by its name. This tool extracts the tool's description, name, parameters, 
-    and function signatures to provide a complete example. Optionally, view the full source code of the tool functions.
-    This can be used by an AI to understand and generate tools based on existing examples.
-  `,
+  description: `Retrieves an example of an existing tool by its name. This tool extracts the tool's description, name, parameters, 
+and function signatures to provide a complete example. Optionally, view the full source code of the tool functions.
+This can be used by an AI to understand and generate tools based on existing examples.`,
   name: 'getToolExample',
   parameters: {
     type: 'object',
@@ -289,15 +283,10 @@ tools.executeJavaScript = {
       }
     }
   },
-  description: `
-    Executes the provided JavaScript code, optionally in a dynamically created Web Worker, 
-    and returns the result. The user can choose to run the code in a separate thread 
-    (Web Worker) or in the main thread. If the javascript code is executed in the main thread, it can
-    manipulate the DOM where it is currently running.
-    It's important to structure the code such that the desired result is the completion value (outcome)
-    of the last expression in the provided script. Keep in mind that results of console.log can not be
-    seen by the system.
-  `,
+  description: `Executes the provided JavaScript code.
+It's important to structure the code such that the desired result is the completion value (outcome)
+of the last expression in the provided script. Keep in mind that results of console.log can not be
+seen by the assistant.`,
   name: 'executeJavaScript',
   parameters: {
     type: 'object',
@@ -306,9 +295,11 @@ tools.executeJavaScript = {
         type: 'string',
         description: 'The JavaScript code to be executed.',
       },
-      useWorker: {
+      useWebWorker: {
         type: 'boolean',
-        description: 'Whether to execute the code in a Web Worker.',
+        description: `Whether to execute the code in a Web Worker or main thread.
+If the javascript code is executed in the main thread, it can manipulate
+the DOM where it is currently running.`,
         default: false,
       },
     },

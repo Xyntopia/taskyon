@@ -63,8 +63,8 @@ export interface OpenRouterGenerationInfo {
   };
 }
 
-export interface ToolFunctionResult {
-  result: string;
+export interface ToolResult {
+  result?: string;
   error?: unknown;
   stdout?: string;
 }
@@ -73,13 +73,13 @@ export interface TaskResult {
   type:
     | 'ChatAnswer'
     | 'AssistantAnswer'
-    | 'FunctionCall'
-    | 'FunctionResult'
-    | 'FunctionError'
+    | 'ToolCall'
+    | 'ToolResult'
+    | 'ToolError'
     | 'ToolChatResult';
   assistantResponse?: OpenAI.Beta.Threads.Messages.ThreadMessage[];
   chatResponse?: ChatCompletionResponse;
-  toolResult?: ToolFunctionResult; // Description or value of the result
+  toolResult?: ToolResult; // Description or value of the result
 }
 
 export type LLMTask = {
@@ -208,7 +208,7 @@ export type toolCommandChat = z.infer<typeof toolCommandChat>;
 
 const answer = z.string().nullable();
 
-export const functionResultChat = z.object({
+export const toolResultChat = z.object({
   reasoning: z.string(),
   satisfactory: z.boolean().describe('was the result satisfactory?'),
   answer: answer
@@ -226,7 +226,7 @@ export const functionResultChat = z.object({
     )
     .optional(),
 });
-export type functionResultChat = z.infer<typeof functionResultChat>;
+export type toolResultChat = z.infer<typeof toolResultChat>;
 
 export const yamlToolChatType = z.object({
   reasoning: z.string(),

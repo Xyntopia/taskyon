@@ -12,7 +12,7 @@
         <div class="text-bold"> result (yaml): </div>
         <div caption>
           <div class="scroll-area">
-            {{ dump(task.result?.functionResult) }}
+            {{ dump(task.result?.toolResult) }}
           </div>
         </div>
       </div>

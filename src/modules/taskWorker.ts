@@ -96,7 +96,7 @@ export async function processChatTask(
         type: useToolChat
           ? 'ToolChatResult'
           : isOpenAIFunctionCall(choice)
-          ? 'FunctionCall'
+          ? 'ToolCall'
           : 'ChatAnswer',
         chatResponse: response,
       };
@@ -116,9 +116,9 @@ export async function processFunctionTask(task: LLMTask) {
     } else {
       const toolnames = JSON.stringify(task.allowedTools);
       task.result = {
-        type: 'FunctionError',
+        type: 'ToolError',
         toolResult: {
-          result: `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`,
+          error: `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`,
         },
       };
     }
@@ -215,7 +215,7 @@ async function generateFollowUpTasksFromResult(
           content: toolChatResult.error.toString(),
         });
       }
-    } else if (finishedTask.result.type === 'FunctionCall') {
+    } else if (finishedTask.result.type === 'ToolCall') {
       const choice = finishedTask.result.chatResponse?.choices[0];
       if (choice) {
         const functionCall = extractOpenAIFunction(choice);
@@ -320,8 +320,8 @@ async function taskWorker(chatState: ChatStateType, db: TaskyonDatabase) {
         // the way this works: -> task state is "Completed" with "FunctionCall" and follow-up
         // functiontask will be generated
         if (
-          task.result?.type === 'FunctionResult' ||
-          task.result?.type === 'FunctionError'
+          task.result?.type === 'ToolResult' ||
+          task.result?.type === 'ToolError'
         ) {
           // here we send the task to our LLM inference
           task = await processChatTask(task, chatState, db);

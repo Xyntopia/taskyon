@@ -18,7 +18,7 @@ import { openFile } from './OPFS';
 import { dump } from 'js-yaml';
 import { lruCache, sleep, asyncTimeLruCache, asyncLruCache } from './utils';
 import type { TaskyonDatabase, FileMappingDocType } from './rxdb';
-import { zodToYAMLObject, yamlToolChatType, functionResultChat } from './types';
+import { zodToYAMLObject, yamlToolChatType, toolResultChat } from './types';
 
 const getOpenai = lruCache<OpenAI>(5)((apiKey: string) => {
   const api = new OpenAI({
@@ -100,16 +100,16 @@ export function defaultTaskState() {
       `,
       instruction: `You are a helpful assistant that aims to complete the given task. Do not add any amount of explanatory text.
 You can make use of the following Tools: {toolList}`,
-      objective: 'OVERALL OBJECTIVE: \n{objective}\n',
+      objective: 'OVERALL OBJECTIVE:\n\n{objective}\n',
       tools: `AVAILABLE TOOLS TO CALL:
 
 {tools}
 `,
-      previousTasks: 'PREVIOUSLY COMPLETED TASKS:\n{previousTasks}\n',
-      context: 'TAKE INTO ACCOUNT THIS CONTEXT:\n{context}\n',
-      functionResult: `THE RESULT OF THE TOOL/FUNCTION WHICH WAS CALLED BY THE SYSTEM IS:
+      previousTasks: 'PREVIOUSLY COMPLETED TASKS:\n\n{previousTasks}\n',
+      context: 'TAKE INTO ACCOUNT THIS CONTEXT:\n\n{context}\n',
+      toolResult: `THE RESULT OF THE TOOL/FUNCTION WHICH WAS CALLED BY THE SYSTEM IS:
 
-{functionResult}
+{toolResult}
 
 COMMENT THE RESULT VERY STRICTLY FOLLOWING SCHEMA ({format}):
 
@@ -497,11 +497,14 @@ export async function getOpenAIChatResponse(
         toolList: JSON.stringify(task.allowedTools),
       };
     } else {
-      const objrepr = zodToYAMLObject(functionResultChat);
+      const objrepr = zodToYAMLObject(toolResultChat);
       const openapischema = dump(objrepr).replace(/'# .+:/g, '#');
 
       variables = {
-        functionResult: dump(task.result?.toolResult),
+        toolResult: dump({
+          successfullExecution: task.result?.toolResult?.error ? 'no' : 'yes',
+          ...task.result?.toolResult,
+        }),
         resultSchema: openapischema,
         format: 'yaml',
         tools: summarizeTools(task.allowedTools),
@@ -518,7 +521,7 @@ export async function getOpenAIChatResponse(
     const content = (
       task.role === 'user'
         ? [filledTemplates['task']]
-        : [filledTemplates['functionResult']]
+        : [filledTemplates['toolResult']]
     )
       .map((x) => x.trim())
       .join('\n\n');
