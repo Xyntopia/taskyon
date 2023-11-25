@@ -117,7 +117,7 @@ export async function processFunctionTask(task: LLMTask) {
       const toolnames = JSON.stringify(task.allowedTools);
       task.result = {
         type: 'FunctionError',
-        functionResult: {
+        toolResult: {
           result: `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`,
         },
       };

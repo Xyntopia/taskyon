@@ -394,7 +394,7 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
             message.name = t.context?.function?.name;
             const functionContent = dump({
               arguments: t.context?.function?.arguments,
-              ...t.result?.functionResult,
+              ...t.result?.toolResult,
             });
             message.content = functionContent;
           }
@@ -501,7 +501,7 @@ export async function getOpenAIChatResponse(
       const openapischema = dump(objrepr).replace(/'# .+:/g, '#');
 
       variables = {
-        functionResult: dump(task.result?.functionResult),
+        functionResult: dump(task.result?.toolResult),
         resultSchema: openapischema,
         format: 'yaml',
         tools: summarizeTools(task.allowedTools),

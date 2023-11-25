@@ -79,7 +79,7 @@ export interface TaskResult {
     | 'ToolChatResult';
   assistantResponse?: OpenAI.Beta.Threads.Messages.ThreadMessage[];
   chatResponse?: ChatCompletionResponse;
-  functionResult?: ToolFunctionResult; // Description or value of the result
+  toolResult?: ToolFunctionResult; // Description or value of the result
 }
 
 export type LLMTask = {
