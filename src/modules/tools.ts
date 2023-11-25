@@ -3,7 +3,12 @@ import { execute } from './pyodide';
 import { seleniumBrowser } from './seleniumTool';
 import { dump } from 'js-yaml';
 import { bigIntToString } from './chat';
-import { TaskResult, toolCommandChat } from './types';
+import {
+  TaskResult,
+  convertToYamlWComments,
+  toolCommandChat,
+  YamlRepresentation,
+} from './types';
 import { z } from 'zod';
 
 export const vectorStore = useVectorStore();
@@ -43,6 +48,7 @@ export interface Tool {
   state: () => Promise<toolStateType> | toolStateType;
   // Description of what the function does (optional).
   description: string;
+  longDescription?: string;
   // The name of the function to be called.
   name: string;
   // The parameters the function accepts (JSON Schema object).
@@ -80,7 +86,7 @@ export async function handleFunctionExecution(
   }
 }
 
-tools.seleniumBrowser = seleniumBrowser;
+tools.webBrowser = seleniumBrowser;
 
 tools.localVectorStoreSearch = {
   state: () => 'available',
@@ -90,9 +96,8 @@ tools.localVectorStoreSearch = {
     const results = await vectorStore.query(searchTerm, k);
     return results;
   },
-  description: `Conducts an Approximate Nearest Neighbors search in the local vector database derived from uploaded files. 
-This tool allows for natural language queries to retrieve relevant pieces of files based on semantic similarity. 
-Ideal for finding related documents or data segments amidst a large, vectorized dataset.`,
+  description: `Performs semantic search in a local vectorized database, ideal 
+for retrieving documents or data segments with high relevance to natural language queries.`,
   name: 'localVectorStoreSearch',
   parameters: {
     type: 'object',
@@ -112,9 +117,8 @@ tools.executePythonScript = {
     console.log('execute python code...');
     return await execute(pythonScript);
   },
-  description: `Executes the provided Python code using a Pyodide runtime and returns the result of the last expression evaluated. 
-This tool can be used to run data processing tasks, perform calculations, or interact with Python libraries.
-Common use-cases include executing data transformations, statistical analyses, or machine learning algorithms on uploaded files.
+  description: `Executes Python scripts for data processing, calculations, or library interactions, 
+ideal for data analysis, machine learning tasks, or custom algorithm execution.
 It's important to structure the Python code such that the desired result
 is the outcome of the last expression in the script. Outcomes should be of the types String, Number, Array, Map, Set.`,
   name: 'executePythonScript',
@@ -185,9 +189,8 @@ tools.getToolExample = {
     }
     return toolInfo;
   },
-  description: `Retrieves an example of an existing tool by its name. This tool extracts the tool's description, name, parameters, 
-and function signatures to provide a complete example. Optionally, view the full source code of the tool functions.
-This can be used by an AI to understand and generate tools based on existing examples.`,
+  description: `Retrieves detailed examples and source code of existing tools, assisting in 
+understanding tool functionalities and aiding in tool development or adaptation.`,
   name: 'getToolExample',
   parameters: {
     type: 'object',
@@ -307,9 +310,8 @@ tools.executeJavaScript = {
       }
     }
   },
-  description: `Executes the provided JavaScript code.
-It is important to structure the code such that the desired result is the completion value (outcome)
-of the last expression in the provided script.`,
+  description: `Runs JavaScript code either in the main thread or using a Web Worker, useful
+for tasks requiring DOM manipulation, data processing, or dynamic web content generation.`,
   name: 'executeJavaScript',
   parameters: {
     type: 'object',
@@ -366,9 +368,9 @@ function executeInDynamicWorker(javascriptCode: string) {
   });
 }
 
-function convertToToolCommandString(tool: Tool): toolCommandChat | undefined {
+function convertToToolCommandString(tool: Tool): string {
   // convert a tool into a schema which is compatible ti toolCommandChat
-  const args: z.infer<(typeof toolCommandChat.shape)['args']> = {};
+  const args: YamlRepresentation = {};
 
   const requiredProperties = new Set(tool.parameters.required || []);
 
@@ -378,21 +380,28 @@ function convertToToolCommandString(tool: Tool): toolCommandChat | undefined {
     // Check if the key is in the list of required properties
     const isRequired = requiredProperties.has(key);
     // If the property is required, use the key as is, otherwise add a "?" to the key
+    if (param.description) {
+      const descriptionKey = `# ${key} description`;
+      args[descriptionKey] = param.description.replace(/\n/g, ' ');
+    }
     const argKey = isRequired ? key : `${key}?`;
     args[argKey] = param.type;
   }
 
-  return { name: tool.name, args };
+  const objrepr: YamlRepresentation = {
+    '# description': tool.description.replace(/\n/g, ' '),
+    name: tool.name,
+    args,
+  };
+  const yamlSchema = convertToYamlWComments(dump(objrepr));
+  return yamlSchema;
 }
 
 export function summarizeTools(toolIDs: string[]) {
   const toolStr = toolIDs
     .map((t) => {
       const tool = tools[t];
-      const toolStr = dump({
-        ...convertToToolCommandString(tool),
-        description: tool.description.replace(/\n/g, ' '),
-      });
+      const toolStr = convertToToolCommandString(tool);
       return toolStr;
     })
     .join('\n---\n');

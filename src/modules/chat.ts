@@ -18,7 +18,7 @@ import { openFile } from './OPFS';
 import { dump } from 'js-yaml';
 import { lruCache, sleep, asyncTimeLruCache, asyncLruCache } from './utils';
 import type { TaskyonDatabase, FileMappingDocType } from './rxdb';
-import { zodToYAMLObject, yamlToolChatType, toolResultChat } from './types';
+import { zodToYamlString, yamlToolChatType, toolResultChat } from './types';
 
 const getOpenai = lruCache<OpenAI>(5)((apiKey: string) => {
   const api = new OpenAI({
@@ -98,8 +98,15 @@ export function defaultTaskState() {
 
 {constraints}
       `,
-      instruction: `You are a helpful assistant that aims to complete the given task. Do not add any amount of explanatory text.
-You can make use of the following Tools: {toolList}`,
+      instruction: `You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented, and adheres to YAML standards. Do not include explanatory text in your YAML responses. 
+
+Your responses should be formatted as follows:
+- For code blocks: Use proper indentation and hyphens for lists.
+- For key-value pairs: Ensure correct alignment and spacing.
+
+You can make use of the following Tools: {toolList}
+
+Remember, the focus is on the precision and correctness of the YAML output.`,
       objective: 'OVERALL OBJECTIVE:\n\n{objective}\n',
       tools: `AVAILABLE TOOLS TO CALL:
 
@@ -486,26 +493,24 @@ export async function getOpenAIChatResponse(
 
     let variables = {};
     if (task.role === 'user') {
-      const objrepr = zodToYAMLObject(yamlToolChatType);
-      const openapischema = dump(objrepr).replace(/'# .+:/g, '#');
+      const yamlRepr = zodToYamlString(yamlToolChatType);
 
       variables = {
         taskContent: task.content || '', // Ensuring there's a default value if content is null
-        schema: openapischema,
+        schema: yamlRepr,
         format: 'yaml',
         tools: summarizeTools(task.allowedTools),
         toolList: JSON.stringify(task.allowedTools),
       };
     } else {
-      const objrepr = zodToYAMLObject(toolResultChat);
-      const openapischema = dump(objrepr).replace(/'# .+:/g, '#');
+      const yamlRepr = zodToYamlString(toolResultChat);
 
       variables = {
         toolResult: dump({
           successfullExecution: task.result?.toolResult?.error ? 'no' : 'yes',
           ...task.result?.toolResult,
         }),
-        resultSchema: openapischema,
+        resultSchema: yamlRepr,
         format: 'yaml',
         tools: summarizeTools(task.allowedTools),
         toolList: JSON.stringify(task.allowedTools),

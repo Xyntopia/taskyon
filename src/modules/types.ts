@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FunctionCall } from './tools';
 import type OpenAI from 'openai';
+import { dump } from 'js-yaml';
 
 export type TaskState =
   | 'Open'
@@ -125,7 +126,8 @@ export type partialTaskDraft = {
 interface YamlObjectRepresentation {
   [key: string]: YamlRepresentation;
 }
-type YamlRepresentation =
+
+export type YamlRepresentation =
   | string
   | YamlObjectRepresentation
   | YamlArrayRepresentation;
@@ -199,10 +201,15 @@ export function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
     return zodToYAMLObject(schema.unwrap());
   }
 
-
   // Add more cases as needed for other Zod types (unions, etc.)
   // Fallback for unsupported types
   return 'unsupported';
+}
+
+export function zodToYamlString(schema: z.ZodTypeAny): string {
+  const objrepr = zodToYAMLObject(schema);
+  const yamlSchema = convertToYamlWComments(dump(objrepr));
+  return yamlSchema;
 }
 
 export const toolCommandChat = z.object({
@@ -257,3 +264,34 @@ export const yamlTaskSchema = yamlToolChatType.extend({
 });
 
 export type yamlTaskSchema = z.infer<typeof yamlTaskSchema>;
+
+export function convertToYamlWComments(objrepr: string) {
+  // Regular expression to match the entire comment section, including the key and optional '>-'
+  const regex = /( *)(('# .*:)\s*(>-)?)([\s\S]*?)(?=\n\s*\S+:|$)/g;
+
+  return objrepr.replace(
+    regex,
+    (
+      match,
+      indent: string,
+      keyX,
+      key,
+      keyEnd: string,
+      commentBlock: string
+    ) => {
+      const isMultiline = !!keyEnd;
+      // Modify each line of the comment block
+      let modifiedCommentBlock = [];
+      if (isMultiline) {
+        const commentLines = commentBlock.split('\n').filter((l) => l.trim());
+        // Trim the first line and apply the indentation to all other lines
+        modifiedCommentBlock = commentLines.map((line) => {
+          return indent + '# ' + line.trim();
+        });
+      } else {
+        modifiedCommentBlock = [indent + '# ' + commentBlock];
+      }
+      return modifiedCommentBlock.join('\n');
+    }
+  );
+}

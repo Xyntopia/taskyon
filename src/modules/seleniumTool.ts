@@ -136,17 +136,17 @@ export const seleniumBrowser: ExtendedTool = {
       // we do not want to close sessions for increased speed :)
       await closeSession(sessionId);
     }*/
-  }) as ((arg: Record<string, unknown>) => Promise<unknown>),
-  description: `
-      Uses Selenium WebDriver REST API to browse to a specified webpage and fetch the document content.
-      Supports various document formats including HTML, PDF, TXT, JSON, etc.
-      The format and content of the document are returned from the function.
+  }) as (arg: Record<string, unknown>) => Promise<unknown>,
+  description: `Webbrowser Tool to access and retrieve content from specified webpages, supporting formats such as 
+HTML, PDF, TXT, and JSON. Easily deployed in the background using a provided Docker command.`,
+  longDescription: `Uses Selenium WebDriver REST API to browse to a specified webpage and fetch the document content.
+Supports various document formats including HTML, PDF, TXT, JSON, etc.
+The format and content of the document are returned from the function.
 
-      We can launch a selenium Tool in the background like this:
+We can launch a selenium Tool in the background like this:
 
-      docker run -p 4444:4444 -p 7900:7900 --shm-size="2g" -e SE_OPTS="--allow-cors true" selenium/standalone-chrome:latest
-    `,
-  name: 'seleniumBrowser',
+docker run -p 4444:4444 -p 7900:7900 --shm-size="2g" -e SE_OPTS="--allow-cors true" selenium/standalone-chrome:latest`,
+  name: 'webBrowser',
   parameters: {
     type: 'object',
     properties: {

@@ -155,9 +155,7 @@ async function parseChatResponse(
   let yamlContent = message.trim();
   // Use exec() to find a match
   const yamlBlockRegex = /```yaml\n?([\s\S]*?)\n?```/;
-  const codeBlockRegex = /```\n?([\s\S]*?)\n?```/;
-  const yamlMatch =
-    yamlBlockRegex.exec(yamlContent) || codeBlockRegex.exec(yamlContent);
+  const yamlMatch = yamlBlockRegex.exec(yamlContent);
   if (yamlMatch) {
     yamlContent = yamlMatch[1]; // Use the captured group
   }
