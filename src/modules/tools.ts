@@ -116,8 +116,7 @@ tools.executePythonScript = {
 This tool can be used to run data processing tasks, perform calculations, or interact with Python libraries.
 Common use-cases include executing data transformations, statistical analyses, or machine learning algorithms on uploaded files.
 It's important to structure the Python code such that the desired result
-is the outcome of the last expression in the script. Outcomes should be of the types String, Number, Array, Map, Set.
-Additionally, stdout will be returned as a string.`,
+is the outcome of the last expression in the script. Outcomes should be of the types String, Number, Array, Map, Set.`,
   name: 'executePythonScript',
   parameters: {
     type: 'object',
@@ -277,19 +276,40 @@ tools.executeJavaScript = {
     } else {
       // Execute in the main thread
       try {
-        return {
-          result: Promise.resolve(eval(javascriptCode)),
-          comment: 'output from console.log is not visible to assistant!',
+        // Create a scoped environment for execution
+        const scopedExecution = () => {
+          const logMessages: string[] = [];
+          // Override console.log within this function's scope
+          const console = {
+            log: (...args: unknown[]) => {
+              logMessages.push(args.join(' '));
+            },
+          };
+
+          try {
+            // Execute the JavaScript code
+            const result = eval(javascriptCode) as unknown;
+            return {
+              result: result ? result : undefined,
+              'console.log': logMessages,
+            };
+          } catch (e) {
+            throw e;
+          }
         };
+
+        // Execute the scoped function and capture the result
+        const executionResult = scopedExecution();
+
+        return executionResult;
       } catch (error) {
         return Promise.reject(error);
       }
     }
   },
   description: `Executes the provided JavaScript code.
-It's important to structure the code such that the desired result is the completion value (outcome)
-of the last expression in the provided script. Keep in mind that results of console.log can not be
-seen by the assistant.`,
+It is important to structure the code such that the desired result is the completion value (outcome)
+of the last expression in the provided script.`,
   name: 'executeJavaScript',
   parameters: {
     type: 'object',
@@ -371,7 +391,7 @@ export function summarizeTools(toolIDs: string[]) {
       const tool = tools[t];
       const toolStr = dump({
         ...convertToToolCommandString(tool),
-        description: tool.description,
+        description: tool.description.replace(/\n/g, ' '),
       });
       return toolStr;
     })
