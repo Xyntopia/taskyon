@@ -20,13 +20,25 @@ import { lruCache, sleep, asyncTimeLruCache, asyncLruCache } from './utils';
 import type { TaskyonDatabase, FileMappingDocType } from './rxdb';
 import { zodToYamlString, yamlToolChatType, toolResultChat } from './types';
 
-const getOpenai = lruCache<OpenAI>(5)((apiKey: string) => {
-  const api = new OpenAI({
-    apiKey: apiKey,
-    dangerouslyAllowBrowser: true,
-  });
-  return api;
-});
+const getOpenai = lruCache<OpenAI>(5)(
+  (apiKey: string, baseURL?: string, headers?: Record<string, string>) => {
+    if (baseURL) {
+      const openai = new OpenAI({
+        baseURL: baseURL,
+        apiKey: apiKey,
+        defaultHeaders: headers,
+        dangerouslyAllowBrowser: true,
+      });
+      return openai;
+    } else {
+      const api = new OpenAI({
+        apiKey: apiKey,
+        dangerouslyAllowBrowser: true,
+      });
+      return api;
+    }
+  }
+);
 
 function getAPIURLs(baseURL: string) {
   return {
@@ -144,22 +156,22 @@ FORMAT THE RESULT WITH THE FOLLOWING SCHEMA VERY STRICT ({format}):
 
 export type ChatStateType = ReturnType<typeof defaultTaskState>;
 
-function openRouterUsed(chatState: ChatStateType) {
-  return getBackendUrls('openrouter') == chatState.baseURL;
+function openRouterUsed(baseURL: string) {
+  return getBackendUrls('openrouter') == baseURL;
 }
 
-export function openAIUsed(chatState: ChatStateType) {
-  return getBackendUrls('openai') == chatState.baseURL;
+export function openAIUsed(baseURL: string) {
+  return getBackendUrls('openai') == baseURL;
 }
 
 export function getCurrentMode(chatState: ChatStateType): string {
-  if (openAIUsed(chatState)) {
+  if (openAIUsed(chatState.baseURL)) {
     if (chatState.useOpenAIAssistants) {
       return 'openai-assistants';
     } else {
       return 'openai';
     }
-  } else if (openRouterUsed(chatState)) {
+  } else if (openRouterUsed(chatState.baseURL)) {
     return 'openrouter.ai';
   } else {
     return 'unknown'; // Default case if none of the conditions match
@@ -167,13 +179,13 @@ export function getCurrentMode(chatState: ChatStateType): string {
 }
 
 export function selectedBotID(chatState: ChatStateType) {
-  if (openAIUsed(chatState)) {
+  if (openAIUsed(chatState.baseURL)) {
     if (chatState.useOpenAIAssistants) {
       return chatState.openAIAssistant;
     } else {
       return chatState.openAIModel;
     }
-  } else if (openRouterUsed(chatState)) {
+  } else if (openRouterUsed(chatState.baseURL)) {
     return chatState.openrouterAIModel;
   } else {
     return '';
@@ -323,7 +335,7 @@ function generateHeaders(chatState: ChatStateType) {
     'Content-Type': 'application/json',
   };
 
-  if (openRouterUsed(chatState)) {
+  if (openRouterUsed(chatState.baseURL)) {
     headers = {
       ...headers,
       'HTTP-Referer': `${chatState.siteUrl}`, // To identify your app. Can be set to localhost for testing
@@ -382,13 +394,18 @@ async function callLLM(
   chatState: ChatStateType,
   model: string,
   chatURL: string,
-  stream: false | true | null | undefined = false
+  stream: false | true | null | undefined = false,
+  contentCallBack: (chunk: string) => void
 ) {
   const headers: Record<string, string> = generateHeaders(chatState);
-  const openai = getOpenai(chatState.openAIApiKey);
-
   let chatCompletion: ChatCompletionResponse | undefined = undefined;
   if (stream) {
+    const openai = getOpenai(
+      chatState.openAIApiKey,
+      chatState.baseURL,
+      headers
+    );
+
     const payload: OpenAI.ChatCompletionCreateParams = {
       model,
       messages: chatMessages,
@@ -409,6 +426,9 @@ async function callLLM(
       const chunks = [];
       for await (const chunk of completion) {
         chunks.push(chunk);
+        if (chunk.choices[0]?.delta?.content) {
+          contentCallBack(chunk.choices[0].delta.content);
+        }
         console.log(chunk);
       }
       chatCompletion = accumulateChatCompletion(chunks);
@@ -441,7 +461,7 @@ async function callLLM(
     chatCompletion = response.data;
   }
 
-  if (chatCompletion && openRouterUsed(chatState)) {
+  if (chatCompletion && openRouterUsed(chatState.baseURL)) {
     const GENERATION_ID = chatCompletion.id;
     let generation = undefined;
     void (await sleep(5000));
@@ -507,8 +527,7 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
             message = {
               role: t.role,
               content: t.content,
-              name: '',
-            };
+            } as OpenAI.ChatCompletionMessageParam;
           }
           return message;
         })
@@ -666,19 +685,18 @@ export async function getOpenAIChatResponse(
     functions = mapFunctionNames(task.allowedTools || []) || [];
   }
 
-  if (
-    openAIConversationThread.length > 0 &&
-    functions !== null &&
-    typeof functions === 'object' &&
-    !Array.isArray(functions)
-  ) {
+  if (openAIConversationThread.length > 0) {
     const response = await callLLM(
       openAIConversationThread,
-      functions,
+      functions as unknown as OpenAI.FunctionDefinition[],
       chatState,
       getSelectedModel(chatState),
       getAPIURLs(chatState.baseURL).chat,
-      task.id == chatState.selectedTaskId ? true : false // stream
+      task.id == chatState.selectedTaskId ? true : false, // stream
+      (chunk) => {
+        task.debugging.streamContent =
+          (task.debugging.streamContent || '') + chunk;
+      }
     );
     return response;
   }

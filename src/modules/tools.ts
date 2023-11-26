@@ -43,7 +43,7 @@ interface JSONSchemaForFunctionParameter {
   };
   required?: string[];
 }
-
+ 
 export interface Tool {
   state: () => Promise<toolStateType> | toolStateType;
   // Description of what the function does (optional).

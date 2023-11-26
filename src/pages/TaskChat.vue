@@ -231,6 +231,10 @@
           "
           class="q-pa-xs row"
         >
+          {{
+            state.chatState.Tasks[state.chatState.selectedTaskId || '']
+              .debugging.streamContent
+          }}
           <q-spinner-comment color="secondary" size="lg" />
           <q-space></q-space>
           <q-btn

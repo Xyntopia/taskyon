@@ -107,6 +107,7 @@ export type LLMTask = {
     promptTokens?: number;
     resultTokens?: number;
     taskTokens?: number;
+    streamContent?: string;
     // the costs used to solve this task...
     taskCosts?: number;
     aiResponse?: ChatCompletionResponse;

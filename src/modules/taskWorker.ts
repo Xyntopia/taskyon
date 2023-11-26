@@ -61,7 +61,7 @@ export async function processChatTask(
   chatState: ChatStateType,
   db: TaskyonDatabase
 ) {
-  if (chatState.useOpenAIAssistants && openAIUsed(chatState)) {
+  if (chatState.useOpenAIAssistants && openAIUsed(chatState.baseURL)) {
     const messages = await getOpenAIAssistantResponse(task, chatState, db);
     if (messages) {
       task.result = {
