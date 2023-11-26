@@ -136,8 +136,8 @@
                 animated
                 swipeable
                 horizontal
-                transition-prev="jump-up"
-                transition-next="jump-up"
+                transition-prev="jump-right"
+                transition-next="jump-left"
               >
                 <q-tab-panel name="ERROR">
                   <textarea
