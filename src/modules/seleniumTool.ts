@@ -137,8 +137,8 @@ export const seleniumBrowser: ExtendedTool = {
       await closeSession(sessionId);
     }*/
   }) as (arg: Record<string, unknown>) => Promise<unknown>,
-  description: `Webbrowser Tool to access and retrieve content from specified webpages, supporting formats such as 
-HTML, PDF, TXT, and JSON. Easily deployed in the background using a provided Docker command.`,
+  description: `Webbrowser tool to access and retrieve content from specified webpages, supporting formats such as 
+HTML, PDF, TXT, and JSON.`,
   longDescription: `Uses Selenium WebDriver REST API to browse to a specified webpage and fetch the document content.
 Supports various document formats including HTML, PDF, TXT, JSON, etc.
 The format and content of the document are returned from the function.

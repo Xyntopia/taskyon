@@ -118,6 +118,9 @@ Remember, the focus is on the precision and correctness of the YAML output.`,
 
 {toolResult}
 
+Provide only the precise information requested without context, 
+Make sure we can parse the entire response as {format}.
+
 COMMENT THE RESULT VERY STRICTLY FOLLOWING SCHEMA ({format}):
 
 {resultSchema}
