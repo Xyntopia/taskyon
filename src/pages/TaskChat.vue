@@ -135,7 +135,7 @@
                 v-model="state.messageDebug[task.id]"
                 animated
                 swipeable
-                vertical
+                horizontal
                 transition-prev="jump-up"
                 transition-next="jump-up"
               >
