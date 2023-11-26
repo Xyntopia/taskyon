@@ -19,8 +19,6 @@ import { dump } from 'js-yaml';
 import { lruCache, sleep, asyncTimeLruCache, asyncLruCache } from './utils';
 import type { TaskyonDatabase, FileMappingDocType } from './rxdb';
 import { zodToYamlString, yamlToolChatType, toolResultChat } from './types';
-import type { Readable } from 'stream'; // Import this at the beginning of your file
-import { chunk } from 'lodash';
 
 const getOpenai = lruCache<OpenAI>(5)((apiKey: string) => {
   const api = new OpenAI({
@@ -202,9 +200,19 @@ export const getAssistants = asyncTimeLruCache<
   return assistantsDict;
 });
 
+export type OpenAIChatMessage = {
+  // The role of the message author (system, user, assistant, or function).
+  role: 'system' | 'user' | 'assistant' | 'function';
+  // The content of the message, can be null for some messages.
+  content: string | null;
+  // The name of the message author (optional) it has to be the name of the function, if
+  // the role is "function".
+  name: string;
+};
+
 type ChatCompletionRequest = {
   // An array of messages in the conversation.
-  messages: Array<OpenAIMessage>;
+  messages: Array<OpenAIChatMessage>;
   // The ID of the model to use.
   model: string;
   // Controls how the model calls functions.
@@ -213,7 +221,7 @@ type ChatCompletionRequest = {
     | 'auto'
     | {
         // The name of the function to call.
-        name: string;
+        name?: string;
       };
   // Penalty for repeating tokens.
   frequency_penalty?: number | null;
@@ -230,7 +238,7 @@ type ChatCompletionRequest = {
   // Sequences to stop generating tokens.
   stop?: string | Array<string> | null;
   // Enable partial message deltas streaming.
-  stream?: boolean | null;
+  stream?: false | null | undefined;
   // Sampling temperature for output.
   temperature?: number | null;
   // Probability mass for nucleus sampling.
@@ -254,10 +262,16 @@ function estimateTokens(task: LLMTask) {
   return total;
 }
 
-function countChatTokens(chatMessages: OpenAIMessage[]): number {
+function countChatTokens(
+  chatMessages: (
+    | OpenAIMessage
+    | OpenAI.ChatCompletionMessage
+    | OpenAI.ChatCompletionMessageParam
+  )[]
+): number {
   let totalTokens = 0;
   for (const message of chatMessages) {
-    if (message.content) {
+    if (message.content && typeof message.content == 'string') {
       totalTokens += countStringTokens(message.content);
     }
   }
@@ -288,7 +302,7 @@ export function estimateChatTokens(
   newResponseTask: LLMTask,
   chatState: ChatStateType
 ) {
-  const chat: OpenAIMessage[] = buildChatFromTask(newResponseTask, chatState);
+  const chat = buildChatFromTask(newResponseTask, chatState);
   const functions: ExtendedTool[] = mapFunctionNames(
     newResponseTask.allowedTools || []
   );
@@ -363,41 +377,34 @@ function accumulateChatCompletion(
 
 // calls openRouter OR OpenAI  chatmodels
 async function callLLM(
-  chatMessages: OpenAIMessage[],
-  functions: Array<Tool>,
+  chatMessages: OpenAI.ChatCompletionMessageParam[],
+  functions: OpenAI.FunctionDefinition[],
   chatState: ChatStateType,
   model: string,
   chatURL: string,
-  stream = false
+  stream: false | true | null | undefined = false
 ) {
   const headers: Record<string, string> = generateHeaders(chatState);
-
   const openai = getOpenai(chatState.openAIApiKey);
-  const payload: ChatCompletionRequest = {
-    model,
-    messages: chatMessages,
-    user: 'taskyon',
-    temperature: 0.0,
-    stream,
-    n: 1,
-  };
-
-  if (functions.length > 0) {
-    payload.function_call = 'auto';
-    payload.functions = functions;
-  }
 
   let chatCompletion: ChatCompletionResponse | undefined = undefined;
   if (stream) {
+    const payload: OpenAI.ChatCompletionCreateParams = {
+      model,
+      messages: chatMessages,
+      user: 'taskyon',
+      temperature: 0.0,
+      stream,
+      n: 1,
+    };
+
+    if (functions.length > 0) {
+      payload.function_call = 'auto';
+      payload.functions = functions;
+    }
+
     try {
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          { role: 'system', content: 'You are a helpful assistant.' },
-          { role: 'user', content: 'Hello!' },
-        ],
-        stream: true,
-      });
+      const completion = await openai.chat.completions.create(payload);
 
       const chunks = [];
       for await (const chunk of completion) {
@@ -409,6 +416,20 @@ async function callLLM(
       console.error('Error during streaming:', error);
     }
   } else {
+    const payload: OpenAI.ChatCompletionCreateParams = {
+      model,
+      messages: chatMessages,
+      user: 'taskyon',
+      temperature: 0.0,
+      stream,
+      n: 1,
+    };
+
+    if (functions.length > 0) {
+      payload.function_call = 'auto';
+      payload.functions = functions;
+    }
+
     const response = await axios.post<ChatCompletionResponse>(
       chatURL,
       payload,
@@ -460,7 +481,7 @@ async function callLLM(
 }
 
 function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
-  const openAIMessageThread = [] as OpenAIMessage[];
+  const openAIMessageThread = [] as OpenAI.ChatCompletionMessageParam[];
   const conversationThread = taskChain(task.id, chatState.Tasks);
 
   //TODO:  add instructions
@@ -470,17 +491,24 @@ function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
       ...conversationThread
         .map((mId) => {
           const t = chatState.Tasks[mId];
-          const message: OpenAIMessage = {
-            role: t.role,
-            content: t.content,
-          };
-          if (t.role == 'function') {
-            message.name = t.context?.function?.name;
+          let message = undefined;
+          if (t.role == 'function' && t.context?.function?.name) {
+            message = {
+              role: t.role,
+              content: t.content,
+              name: t.context?.function?.name,
+            };
             const functionContent = dump({
               arguments: t.context?.function?.arguments,
               ...t.result?.toolResult,
             });
             message.content = functionContent;
+          } else {
+            message = {
+              role: t.role,
+              content: t.content,
+              name: '',
+            };
           }
           return message;
         })
@@ -608,23 +636,20 @@ export async function getOpenAIChatResponse(
       .map((x) => x.trim())
       .join('\n\n');
 
-    const toolMessage: OpenAIMessage = {
+    const toolMessage: OpenAI.ChatCompletionMessageParam = {
       role: 'system',
       content: filledTemplates['tools'],
-      name: 'taskyon',
     };
 
-    const additionalMessages: OpenAIMessage[] = [
+    const additionalMessages: OpenAI.ChatCompletionMessageParam[] = [
       toolMessage,
       {
         role: 'system',
         content: filledTemplates['instruction'],
       },
       {
-        role: task.role,
+        role: 'system',
         content,
-        name:
-          task.role === 'function' ? task.context?.function?.name : undefined,
       },
     ];
 
@@ -641,7 +666,12 @@ export async function getOpenAIChatResponse(
     functions = mapFunctionNames(task.allowedTools || []) || [];
   }
 
-  if (openAIConversationThread.length > 0) {
+  if (
+    openAIConversationThread.length > 0 &&
+    functions !== null &&
+    typeof functions === 'object' &&
+    !Array.isArray(functions)
+  ) {
     const response = await callLLM(
       openAIConversationThread,
       functions,

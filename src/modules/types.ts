@@ -111,7 +111,7 @@ export type LLMTask = {
     taskCosts?: number;
     aiResponse?: ChatCompletionResponse;
     error?: unknown;
-    taskPrompt?: OpenAIMessage[];
+    taskPrompt?: OpenAIMessage[] | OpenAI.ChatCompletionMessageParam[];
     followUpError?: unknown;
   };
   result?: TaskResult;

@@ -204,7 +204,7 @@
                   <textarea
                     v-for="(tp, idx) in task.debugging.taskPrompt"
                     :key="idx"
-                    :value="tp.content || 's'"
+                    :value="typeof tp.content === 'string' ? tp.content : ''"
                     readonly
                     wrap="soft"
                     style="
