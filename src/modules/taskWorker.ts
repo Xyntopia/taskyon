@@ -75,7 +75,8 @@ export async function processChatTask(
     //      allow it to create new tasks...
     //TODO: we can create more things here like giving it context form other tasks, lookup
     //      main objective, previous tasks etc....
-    const useToolChat = task.allowedTools && !chatState.enableOpenAiTools;
+    const useToolChat =
+      task.allowedTools?.length && !chatState.enableOpenAiTools;
     const response = await getOpenAIChatResponse(
       task,
       chatState,

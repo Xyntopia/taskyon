@@ -19,6 +19,8 @@ import { dump } from 'js-yaml';
 import { lruCache, sleep, asyncTimeLruCache, asyncLruCache } from './utils';
 import type { TaskyonDatabase, FileMappingDocType } from './rxdb';
 import { zodToYamlString, yamlToolChatType, toolResultChat } from './types';
+import type { Readable } from 'stream'; // Import this at the beginning of your file
+import { chunk } from 'lodash';
 
 const getOpenai = lruCache<OpenAI>(5)((apiKey: string) => {
   const api = new OpenAI({
@@ -318,21 +320,65 @@ function generateHeaders(chatState: ChatStateType) {
   return headers;
 }
 
+function accumulateChatCompletion(
+  chunks: OpenAI.ChatCompletionChunk[]
+): ChatCompletionResponse {
+  if (chunks.length === 0) {
+    throw new Error('No chunks provided');
+  }
+
+  // Assuming the id, created, and model fields are consistent across chunks,
+  // we use the first chunk to initialize these values.
+  const firstChunk = chunks[0];
+
+  // Initialize the response
+  const response: ChatCompletionResponse = {
+    id: firstChunk.id,
+    object: 'chat.completion',
+    created: firstChunk.created,
+    model: firstChunk.model,
+    choices: [
+      {
+        index: 0,
+        message: {
+          content: null,
+          role: 'assistant', // or other roles as per your logic
+        },
+        finish_reason: null,
+      },
+    ],
+  };
+
+  // Accumulate the content from the first choice of each chunk
+  response.choices[0].message.content = chunks
+    .map((chunk) => chunk.choices[0]?.delta?.content || '')
+    .join('');
+
+  // Optionally, set the finish_reason from the last chunk
+  const lastChoice = chunks[chunks.length - 1].choices[0];
+  response.choices[0].finish_reason = lastChoice.finish_reason;
+
+  return response;
+}
+
 // calls openRouter OR OpenAI  chatmodels
 async function callLLM(
   chatMessages: OpenAIMessage[],
   functions: Array<Tool>,
   chatState: ChatStateType,
-  headers: Record<string, string>,
   model: string,
-  chatURL: string
+  chatURL: string,
+  stream = false
 ) {
+  const headers: Record<string, string> = generateHeaders(chatState);
+
+  const openai = getOpenai(chatState.openAIApiKey);
   const payload: ChatCompletionRequest = {
     model,
     messages: chatMessages,
     user: 'taskyon',
     temperature: 0.0,
-    stream: false,
+    stream,
     n: 1,
   };
 
@@ -341,15 +387,43 @@ async function callLLM(
     payload.functions = functions;
   }
 
-  const response = await axios.post<ChatCompletionResponse>(chatURL, payload, {
-    headers,
-  });
-  console.log('AI responded:', response);
-  const chatCompletion = response.data;
+  let chatCompletion: ChatCompletionResponse | undefined = undefined;
+  if (stream) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: 'Hello!' },
+        ],
+        stream: true,
+      });
 
-  if (openRouterUsed(chatState)) {
-    const GENERATION_ID = response.data.id;
+      const chunks = [];
+      for await (const chunk of completion) {
+        chunks.push(chunk);
+        console.log(chunk);
+      }
+      chatCompletion = accumulateChatCompletion(chunks);
+    } catch (error) {
+      console.error('Error during streaming:', error);
+    }
+  } else {
+    const response = await axios.post<ChatCompletionResponse>(
+      chatURL,
+      payload,
+      {
+        headers,
+      }
+    );
+    console.log('AI responded:', response);
+    chatCompletion = response.data;
+  }
+
+  if (chatCompletion && openRouterUsed(chatState)) {
+    const GENERATION_ID = chatCompletion.id;
     let generation = undefined;
+    void (await sleep(5000));
     try {
       generation = await axios.get<OpenRouterGenerationInfo>(
         `https://openrouter.ai/api/v1/generation?id=${GENERATION_ID}`,
@@ -487,7 +561,7 @@ export async function getOpenAIChatResponse(
 
   // Check if task has tools and OpenAI tools are not enabled
   if (
-    task.allowedTools &&
+    task.allowedTools?.length &&
     !chatState.enableOpenAiTools &&
     method === 'toolchat'
   ) {
@@ -572,9 +646,9 @@ export async function getOpenAIChatResponse(
       openAIConversationThread,
       functions,
       chatState,
-      generateHeaders(chatState),
       getSelectedModel(chatState),
-      getAPIURLs(chatState.baseURL).chat
+      getAPIURLs(chatState.baseURL).chat,
+      task.id == chatState.selectedTaskId ? true : false // stream
     );
     return response;
   }

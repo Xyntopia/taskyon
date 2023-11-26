@@ -36,7 +36,13 @@ export type ChatCompletionResponse = {
   choices: {
     index: number;
     message: OpenAIMessage;
-    finish_reason: string;
+    finish_reason:
+      | 'stop'
+      | 'length'
+      | 'tool_calls'
+      | 'content_filter'
+      | 'function_call'
+      | null;
   }[];
   usage?: {
     prompt_tokens: number;

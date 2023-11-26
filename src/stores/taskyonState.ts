@@ -4,6 +4,7 @@ import { ref, Ref } from 'vue';
 import { run } from 'src/modules/taskWorker';
 import type { LLMTask } from 'src/modules/types';
 import type { FunctionArguments } from 'src/modules/tools';
+import { OpenAI } from 'openai'
 
 //TODO: convert store into composition api
 export const useTaskyonStore = defineStore('taskyonState', () => {
@@ -20,6 +21,7 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
     drawerOpen: false,
     drawerRight: false,
     taskDraft: {} as Partial<LLMTask>,
+    streamChatMessage: OpenAI.Chat.Completions,
     draftParameters: {} as Record<string, FunctionArguments>,
     debugMessageExpand: {},
     darkTheme: 'auto' as boolean | 'auto',
