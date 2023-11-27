@@ -66,47 +66,7 @@
               }}</q-tooltip>
             </q-chip>
           </div>
-          <q-select
-            v-if="state.expertMode"
-            class="q-pt-xs q-px-md"
-            dense
-            filled
-            :model-value="selectedTaskType"
-            @update:modelValue="setTaskType"
-            :options="Object.keys(tools)"
-            :label="selectedTaskType ? 'selected Task' : 'Or select task type'"
-          >
-            <template v-slot:append>
-              <q-btn flat dense icon="chat" @click="setTaskType(undefined)"
-                ><q-tooltip>Select Simple Chat</q-tooltip>
-              </q-btn>
-            </template>
-            <template v-slot:before>
-              <q-toggle
-                icon="handyman"
-                left-label
-                color="secondary"
-                dense
-                size="xl"
-                v-model="state.chatState.enableOpenAiTools"
-                ><q-tooltip
-                  >Enable OpenAI Functions (use built-in function selection mode
-                  for OpenAI)</q-tooltip
-                ></q-toggle
-              >
-            </template>
-            <template v-slot:after>
-              <q-btn
-                class="q-ma-md"
-                dense
-                flat
-                icon="code"
-                @click="state.showTaskData = !state.showTaskData"
-                ><q-tooltip>Show Draft Task Data</q-tooltip></q-btn
-              >
-            </template>
-          </q-select>
-          <div v-if="selectedTaskType">
+          <div v-else>
             <div
               v-for="(param, paramName) in state.taskDraft.context?.function
                 ?.arguments"
@@ -126,6 +86,49 @@
               />
             </div>
             <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
+          </div>
+          <div v-if="state.expertMode" class="row items-center">
+            <q-btn
+              flat
+              dense
+              icon="chat"
+              :color="selectedTaskType ? '' : 'secondary'"
+              @click="setTaskType(undefined)"
+              ><q-tooltip>Select Simple Chat</q-tooltip>
+            </q-btn>
+            <q-select
+              style="min-width: 200px"
+              class="q-pt-xs q-px-md"
+              dense
+              clearable
+              standout="bg-secondary text-white"
+              :bg-color="selectedTaskType ? 'secondary' : ''"
+              :model-value="selectedTaskType"
+              @update:modelValue="setTaskType"
+              :options="Object.keys(tools)"
+              :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
+            >
+            </q-select>
+            <q-toggle
+              icon="handyman"
+              left-label
+              color="secondary"
+              dense
+              size="xl"
+              v-model="state.chatState.enableOpenAiTools"
+              ><q-tooltip
+                >Enable OpenAI Functions (use built-in function selection mode
+                for OpenAI)</q-tooltip
+              ></q-toggle
+            >
+            <q-btn
+              class="q-ma-md"
+              dense
+              flat
+              icon="code"
+              @click="state.showTaskData = !state.showTaskData"
+              ><q-tooltip>Show Draft Task Data</q-tooltip></q-btn
+            >
           </div>
           <div v-if="state.showTaskData && state.expertMode">
             {{ currentnewTask }}
