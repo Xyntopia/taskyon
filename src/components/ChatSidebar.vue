@@ -107,7 +107,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import VecStoreUploader from 'components/VecStoreUploader.vue';
 import { deleteTaskThread, getBackendUrls } from 'src/modules/chat';
 import { useTaskyonStore } from 'stores/taskyonState';
 

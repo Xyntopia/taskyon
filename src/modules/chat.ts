@@ -41,7 +41,7 @@ const getOpenai = lruCache<OpenAI>(5)(
   }
 );
 
-function getAPIURLs(baseURL: string) {
+export function getAPIURLs(baseURL: string) {
   return {
     chat: baseURL + '/chat/completions',
     models: baseURL + '/models',
@@ -68,22 +68,6 @@ export function getSelectedModel(chatState: ChatStateType) {
   return getBackendUrls('openai') == chatState.baseURL
     ? chatState.openAIModel
     : chatState.openrouterAIModel;
-}
-
-function stripIndent(
-  strings: TemplateStringsArray,
-  ...values: unknown[]
-): string {
-  // Combine the strings and values to form the complete string
-  const fullString = strings
-    .map((str, i) => `${str}${values[i] ? String(values[i]) : ''}`)
-    .join('');
-
-  // Split the string into lines, trim leading whitespace, and re-join them
-  return fullString
-    .split('\n')
-    .map((line) => line.trimStart())
-    .join('\n');
 }
 
 // this state stores all information which
@@ -157,7 +141,7 @@ FORMAT THE RESULT WITH THE FOLLOWING SCHEMA VERY STRICT ({format}):
 
 export type ChatStateType = ReturnType<typeof defaultTaskState>;
 
-function openRouterUsed(baseURL: string) {
+export function openRouterUsed(baseURL: string) {
   return getBackendUrls('openrouter') == baseURL;
 }
 
@@ -223,56 +207,12 @@ export type OpenAIChatMessage = {
   name: string;
 };
 
-type ChatCompletionRequest = {
-  // An array of messages in the conversation.
-  messages: Array<OpenAIChatMessage>;
-  // The ID of the model to use.
-  model: string;
-  // Controls how the model calls functions.
-  function_call?:
-    | 'none'
-    | 'auto'
-    | {
-        // The name of the function to call.
-        name?: string;
-      };
-  // Penalty for repeating tokens.
-  frequency_penalty?: number | null;
-  // Details on how the model calls functions.
-  functions?: Array<Tool>;
-  // Modify the likelihood of specified tokens.
-  logit_bias?: Record<string, number> | null;
-  // Maximum number of tokens to generate.
-  max_tokens?: number | null;
-  // Number of chat completion choices to generate.
-  n?: number | null;
-  // Penalty for new tokens in the text.
-  presence_penalty?: number | null;
-  // Sequences to stop generating tokens.
-  stop?: string | Array<string> | null;
-  // Enable partial message deltas streaming.
-  stream?: false | null | undefined;
-  // Sampling temperature for output.
-  temperature?: number | null;
-  // Probability mass for nucleus sampling.
-  top_p?: number | null;
-  // Unique identifier for your end-user (optional).
-  user?: string;
-};
-
 const enc = getEncoding('gpt2');
 
 export function countStringTokens(txt: string) {
   // Tokenize the content
   const content = enc.encode(txt);
   return content.length;
-}
-
-function estimateTokens(task: LLMTask) {
-  const content = countStringTokens(task.content || '');
-  // Return the token count
-  const total = content;
-  return total;
 }
 
 function countChatTokens(
@@ -312,21 +252,21 @@ export function countToolTokens(functionList: ExtendedTool[]): number {
 }
 
 export function estimateChatTokens(
-  newResponseTask: LLMTask,
-  chatState: ChatStateType
-) {
-  const chat = buildChatFromTask(newResponseTask, chatState);
-  const functions: ExtendedTool[] = mapFunctionNames(
-    newResponseTask.allowedTools || []
-  );
-  const promptTokens = estimateTokens(newResponseTask);
-  const chatTokens = countChatTokens(chat);
+  task: LLMTask,
+  chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+): LLMTask['debugging']['estimatedTokens'] {
+  const functions: ExtendedTool[] = mapFunctionNames(task.allowedTools || []);
+  const singlePromptTokens = countStringTokens(task.content || '');
+  const promptTokens = countChatTokens(chat);
   const functionTokens = Math.floor(countToolTokens(functions) * 0.7);
+  const resultTokens = countStringTokens(
+    task.result?.chatResponse?.choices[0].message.content || ''
+  );
   return {
+    singlePromptTokens,
     promptTokens,
-    chatTokens,
     functionTokens,
-    total: chatTokens + functionTokens,
+    resultTokens,
   };
 }
 
@@ -389,7 +329,7 @@ function accumulateChatCompletion(
 }
 
 // calls openRouter OR OpenAI  chatmodels
-async function callLLM(
+export async function callLLM(
   chatMessages: OpenAI.ChatCompletionMessageParam[],
   functions: OpenAI.FunctionDefinition[],
   chatState: ChatStateType,
@@ -574,55 +514,10 @@ function createTaskChatMessages(
   return messages;
 }
 
-export async function getOpenAIChatResponse(
+export function prepareTasksForInference(
   task: LLMTask,
   chatState: ChatStateType,
   method: 'toolchat' | 'chat' | 'taskAgent'
-) {
-  console.log('Get Chat Response from LLM');
-  const {
-    openAIConversationThread,
-    functions,
-  }: {
-    openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
-    functions: Tool[];
-  } = prepareTasksForInference(task, chatState, method);
-
-  if (openAIConversationThread.length > 0) {
-    const chatCompletion = await callLLM(
-      openAIConversationThread,
-      functions as unknown as OpenAI.FunctionDefinition[],
-      chatState,
-      getSelectedModel(chatState),
-      getAPIURLs(chatState.baseURL).chat,
-      task.id == chatState.selectedTaskId ? true : false, // stream
-      (chunk) => {
-        if (chunk?.choices[0]?.delta?.content) {
-          task.debugging.streamContent =
-            (task.debugging.streamContent || '') +
-            chunk.choices[0].delta.content;
-        }
-      }
-    );
-
-    if (chatCompletion && openRouterUsed(chatState.baseURL)) {
-      enrichWithUsageInfos(chatCompletion, chatState, task);
-    } else if (chatCompletion?.usage) {
-      // openai sends back the exact number of prompt tokens :)
-      task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
-      task.debugging.resultTokens = chatCompletion.usage.completion_tokens;
-      task.debugging.taskCosts = chatCompletion.usage.inference_costs;
-      task.debugging.taskTokens = chatCompletion.usage.total_tokens;
-    }
-
-    return chatCompletion;
-  }
-}
-
-function prepareTasksForInference(
-  task: LLMTask,
-  chatState: ChatStateType,
-  method: string
 ) {
   let openAIConversationThread = buildChatFromTask(task, chatState);
 
@@ -708,7 +603,7 @@ function prepareTasksForInference(
   return { openAIConversationThread, functions };
 }
 
-function enrichWithUsageInfos(
+export function enrichWithDelayedUsageInfos(
   chatCompletion: ChatCompletionResponse,
   chatState: ChatStateType,
   task: LLMTask

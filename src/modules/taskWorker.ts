@@ -1,14 +1,20 @@
 import {
-  getOpenAIChatResponse,
+  callLLM,
   openAIUsed,
   getOpenAIAssistantResponse,
   ChatStateType,
+  prepareTasksForInference,
+  getSelectedModel,
+  getAPIURLs,
+  openRouterUsed,
+  enrichWithDelayedUsageInfos,
+  estimateChatTokens,
 } from './chat';
 import { yamlToolChatType } from './types';
 import { partialTaskDraft } from './types';
 import { addTask2Tree } from './taskManager';
 import { processTasksQueue } from './taskManager';
-import { FunctionArguments, FunctionCall, tools } from './tools';
+import { FunctionArguments, FunctionCall, tools, Tool } from './tools';
 import type { ChatCompletionResponse, LLMTask } from './types';
 import type { OpenAI } from 'openai';
 import type { TaskyonDatabase } from './rxdb';
@@ -61,6 +67,7 @@ export async function processChatTask(
   chatState: ChatStateType,
   db: TaskyonDatabase
 ) {
+  //TODO: merge this function with the assistants function
   if (chatState.useOpenAIAssistants && openAIUsed(chatState.baseURL)) {
     const messages = await getOpenAIAssistantResponse(task, chatState, db);
     if (messages) {
@@ -77,23 +84,63 @@ export async function processChatTask(
     //      main objective, previous tasks etc....
     const useToolChat =
       task.allowedTools?.length && !chatState.enableOpenAiTools;
-    const chatCompletion = await getOpenAIChatResponse(
+
+    const {
+      openAIConversationThread,
+      functions,
+    }: {
+      openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+      functions: Tool[];
+    } = prepareTasksForInference(
       task,
       chatState,
       useToolChat ? 'toolchat' : 'chat'
     );
 
-    const choice = chatCompletion?.choices[0];
-    if (choice) {
-      task.result = {
-        ...task.result,
-        type: useToolChat
-          ? 'ToolChatResult'
-          : isOpenAIFunctionCall(choice)
-          ? 'ToolCall'
-          : 'ChatAnswer',
-        chatResponse: chatCompletion,
-      };
+    if (openAIConversationThread.length > 0) {
+      const chatCompletion = await callLLM(
+        openAIConversationThread,
+        functions as unknown as OpenAI.FunctionDefinition[],
+        chatState,
+        getSelectedModel(chatState),
+        getAPIURLs(chatState.baseURL).chat,
+        task.id == chatState.selectedTaskId ? true : false, // stream
+        (chunk) => {
+          if (chunk?.choices[0]?.delta?.content) {
+            task.debugging.streamContent =
+              (task.debugging.streamContent || '') +
+              chunk.choices[0].delta.content;
+          }
+        }
+      );
+
+      const choice = chatCompletion?.choices[0];
+      if (choice) {
+        task.result = {
+          ...task.result,
+          type: useToolChat
+            ? 'ToolChatResult'
+            : isOpenAIFunctionCall(choice)
+            ? 'ToolCall'
+            : 'ChatAnswer',
+          chatResponse: chatCompletion,
+        };
+      }
+
+      if (chatCompletion && openRouterUsed(chatState.baseURL)) {
+        enrichWithDelayedUsageInfos(chatCompletion, chatState, task);
+      } else if (chatCompletion?.usage) {
+        // openai sends back the exact number of prompt tokens :)
+        task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
+        task.debugging.resultTokens = chatCompletion.usage.completion_tokens;
+        task.debugging.taskCosts = chatCompletion.usage.inference_costs;
+        task.debugging.taskTokens = chatCompletion.usage.total_tokens;
+      } else {
+        task.debugging.estimatedTokens = estimateChatTokens(
+          task,
+          openAIConversationThread
+        );
+      }
     }
   }
 

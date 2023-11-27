@@ -107,6 +107,13 @@ export type LLMTask = {
     promptTokens?: number;
     resultTokens?: number;
     taskTokens?: number;
+    estimatedTokens?: {
+      resultTokens?: number;
+      taskCosts?: number;
+      functionTokens?: number;
+      promptTokens?: number;
+      singlePromptTokens?: number;
+    };
     streamContent?: string;
     // the costs used to solve this task...
     taskCosts?: number;

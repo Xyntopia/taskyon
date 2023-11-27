@@ -12,30 +12,36 @@
         <tr>
           <td class="text-left">Functions:</td>
           <td class="text-right">
-            {{ estimateChatTokens(task, state.chatState).functionTokens * 0.7 }}
+            {{ task.debugging.estimatedTokens?.functionTokens }}
             (estimated)
           </td>
         </tr>
         <tr>
           <td>Thread:</td>
           <td class="text-right">
-            {{ estimateChatTokens(task, state.chatState).chatTokens }}
+            {{
+              (task.debugging.estimatedTokens?.promptTokens || 0) -
+              (task.debugging.estimatedTokens?.functionTokens || 0)
+            }}
             (estimated)
           </td>
         </tr>
         <tr>
-          <td class="text-left">Prompt:</td>
+          <td class="text-left">Prompt (Entire Thread):</td>
           <td v-if="task.debugging?.promptTokens" class="text-right">
             {{ task.debugging?.promptTokens }}
           </td>
           <td v-else class="text-right">
-            {{ estimateChatTokens(task, state.chatState).promptTokens }}
+            {{ task.debugging.estimatedTokens?.promptTokens }}
             (estimated)
           </td>
         </tr>
         <tr>
           <td class="text-left">Completion/Result:</td>
-          <td class="text-right">
+          <td v-if="task.debugging?.resultTokens" class="text-right">
+            {{ task.debugging?.resultTokens }}
+          </td>
+          <td v-else class="text-right">
             {{ task.debugging?.resultTokens }}
           </td>
         </tr>
@@ -45,7 +51,10 @@
             ={{ task.debugging?.taskTokens }}
           </td>
           <td v-else class="text-right">
-            ={{ estimateChatTokens(task, state.chatState).total }}
+            ={{
+              (task.debugging.estimatedTokens?.promptTokens || 0) +
+              (task.debugging.estimatedTokens?.resultTokens || 0)
+            }}
             (estimated)
           </td>
         </tr>
@@ -65,10 +74,8 @@
 
 <script setup lang="ts">
 import { defineProps, PropType } from 'vue';
-import { estimateChatTokens } from 'src/modules/chat';
 import { LLMTask } from 'src/modules/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
-import { useTaskyonStore } from 'stores/taskyonState';
 
 defineProps({
   task: {
@@ -76,6 +83,4 @@ defineProps({
     required: true,
   },
 });
-
-const state = useTaskyonStore();
 </script>

@@ -64,11 +64,14 @@
                       : 'info'
                   "
                 ></q-icon>
-                <div v-if="task.debugging?.promptTokens">
-                  {{ task.debugging?.promptTokens }}
+                <div v-if="task.debugging.promptTokens">
+                  {{ task.debugging.promptTokens }}
                 </div>
                 <div v-else>
-                  {{ estimateChatTokens(task, state.chatState).total }}
+                  {{
+                    (task.debugging.estimatedTokens?.promptTokens || 0) +
+                    (task.debugging.estimatedTokens?.resultTokens || 0)
+                  }}
                 </div>
                 <q-tooltip :delay="1000">
                   <TokenUsage :task="task" />
@@ -329,7 +332,7 @@ import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import { computed, ref } from 'vue';
 import { useQuasar } from 'quasar';
 import ToolResultWidget from 'components/ToolResultWidget.vue';
-import { getApikey, estimateChatTokens } from 'src/modules/chat';
+import { getApikey } from 'src/modules/chat';
 import { taskChain } from 'src/modules/taskManager';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';

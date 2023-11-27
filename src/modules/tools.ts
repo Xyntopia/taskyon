@@ -6,10 +6,8 @@ import { bigIntToString } from './chat';
 import {
   TaskResult,
   convertToYamlWComments,
-  toolCommandChat,
   YamlRepresentation,
 } from './types';
-import { z } from 'zod';
 
 export const vectorStore = useVectorStore();
 
@@ -43,7 +41,7 @@ interface JSONSchemaForFunctionParameter {
   };
   required?: string[];
 }
- 
+
 export interface Tool {
   state: () => Promise<toolStateType> | toolStateType;
   // Description of what the function does (optional).
