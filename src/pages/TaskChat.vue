@@ -39,7 +39,7 @@
               <q-markdown
                 v-else-if="task.content"
                 class="col"
-                :plugins="[markdownItMermaid]"
+                :plugins="[markdownItMermaid, addCopyButtons]"
                 :src="task.content"
               />
               <!--task costs-->
@@ -350,7 +350,7 @@ import {
 } from 'src/modules/taskWorker';
 import axios from 'axios';
 import type MarkdownIt from 'markdown-it/lib';
-import markdownItMermaid from '@datatraccorporation/markdown-it-mermaid'
+import markdownItMermaid from '@datatraccorporation/markdown-it-mermaid';
 
 const welcomeText = ref<string>('');
 
@@ -401,7 +401,7 @@ function toggleMessageDebug(id: string) {
   }
 }
 
-function extendMarkdown(md: MarkdownIt) {
+function addCopyButtons(md: MarkdownIt) {
   console.log('extend markdown ...?');
   // Store the original fence renderer
   const defaultFenceRenderer =
