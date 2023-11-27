@@ -1,5 +1,5 @@
 <template>
-  <div v-if="openAIUsed(state.chatState)" class="row items-top">
+  <div v-if="openAIUsed(state.chatState.baseURL)" class="row items-top">
     <div class="q-pt-xs">
       <q-btn-toggle
         v-model="state.chatState.useOpenAIAssistants"
@@ -205,7 +205,7 @@ const modelLookUp = computed(() => ({
 
 // Computed property to determine the currently selected bot name
 const currentlySelectedBotName = computed(() => {
-  if (openAIUsed(state.chatState)) {
+  if (openAIUsed(state.chatState.baseURL)) {
     if (state.chatState.useOpenAIAssistants) {
       const selectedAssistant =
         assistants.value[state.chatState.openAIAssistant]?.name;
