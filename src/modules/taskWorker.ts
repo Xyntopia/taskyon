@@ -77,20 +77,13 @@ export async function processChatTask(
     //      main objective, previous tasks etc....
     const useToolChat =
       task.allowedTools?.length && !chatState.enableOpenAiTools;
-    const response = await getOpenAIChatResponse(
+    const chatCompletion = await getOpenAIChatResponse(
       task,
       chatState,
       useToolChat ? 'toolchat' : 'chat'
     );
 
-    if (response?.usage) {
-      // openai sends back the exact number of prompt tokens :)
-      task.debugging.promptTokens = response.usage.prompt_tokens;
-      task.debugging.resultTokens = response.usage.completion_tokens;
-      task.debugging.taskCosts = response.usage.inference_costs;
-      task.debugging.taskTokens = response.usage.total_tokens;
-    }
-    const choice = response?.choices[0];
+    const choice = chatCompletion?.choices[0];
     if (choice) {
       task.result = {
         ...task.result,
@@ -99,7 +92,7 @@ export async function processChatTask(
           : isOpenAIFunctionCall(choice)
           ? 'ToolCall'
           : 'ChatAnswer',
-        chatResponse: response,
+        chatResponse: chatCompletion,
       };
     }
   }
@@ -155,7 +148,7 @@ async function parseChatResponse(
   // parse the response and create a new task filled with the correct parameters
   let yamlContent = message.trim();
   // Use exec() to find a match
-  const yamlBlockRegex = /```yaml\n?([\s\S]*?)\n?```/;
+  const yamlBlockRegex = /```(yaml|YAML)\n?([\s\S]*?)\n?```/;
   const yamlMatch = yamlBlockRegex.exec(yamlContent);
   if (yamlMatch) {
     yamlContent = yamlMatch[1]; // Use the captured group

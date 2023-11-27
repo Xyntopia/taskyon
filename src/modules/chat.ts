@@ -441,7 +441,6 @@ async function callLLM(
         if (chunk.choices[0]?.delta?.content) {
           contentCallBack(chunk.choices[0].delta.content);
         }
-        console.log(chunk);
       }
       chatCompletion = accumulateChatCompletion(chunks);
     } catch (error) {
@@ -476,43 +475,6 @@ async function callLLM(
     console.log('AI responded:', response);
     chatCompletion = response.data;
   }
-
-  if (chatCompletion && openRouterUsed(chatState.baseURL)) {
-    const GENERATION_ID = chatCompletion.id;
-    let generation = undefined;
-    void (await sleep(5000));
-    try {
-      generation = await axios.get<OpenRouterGenerationInfo>(
-        `https://openrouter.ai/api/v1/generation?id=${GENERATION_ID}`,
-        { headers }
-      );
-    } catch (err) {
-      console.log(
-        'failed to get cost information for Openrouter.ai: ',
-        GENERATION_ID
-      );
-    }
-
-    if (generation) {
-      const generationInfo = generation.data.data;
-
-      if (
-        generationInfo.native_tokens_completion &&
-        generationInfo.native_tokens_prompt
-      ) {
-        chatCompletion.usage = {
-          prompt_tokens: generationInfo.native_tokens_prompt,
-          completion_tokens: generationInfo.native_tokens_completion,
-          total_tokens:
-            generationInfo.native_tokens_prompt +
-            generationInfo.native_tokens_completion,
-          origin: generationInfo.origin,
-          inference_costs: generationInfo.usage,
-        };
-      }
-    }
-  }
-
   return chatCompletion;
 }
 
@@ -618,6 +580,47 @@ export async function getOpenAIChatResponse(
   method: 'toolchat' | 'chat' | 'taskAgent'
 ) {
   console.log('Get Chat Response from LLM');
+  const {
+    openAIConversationThread,
+    functions,
+  }: {
+    openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+    functions: Tool[];
+  } = prepareTasksForInference(task, chatState, method);
+
+  if (openAIConversationThread.length > 0) {
+    const chatCompletion = await callLLM(
+      openAIConversationThread,
+      functions as unknown as OpenAI.FunctionDefinition[],
+      chatState,
+      getSelectedModel(chatState),
+      getAPIURLs(chatState.baseURL).chat,
+      task.id == chatState.selectedTaskId ? true : false, // stream
+      (chunk) => {
+        task.debugging.streamContent =
+          (task.debugging.streamContent || '') + chunk;
+      }
+    );
+
+    if (chatCompletion && openRouterUsed(chatState.baseURL)) {
+      enrichWithUsageInfos(chatCompletion, chatState, task);
+    } else if (chatCompletion?.usage) {
+      // openai sends back the exact number of prompt tokens :)
+      task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
+      task.debugging.resultTokens = chatCompletion.usage.completion_tokens;
+      task.debugging.taskCosts = chatCompletion.usage.inference_costs;
+      task.debugging.taskTokens = chatCompletion.usage.total_tokens;
+    }
+
+    return chatCompletion;
+  }
+}
+
+function prepareTasksForInference(
+  task: LLMTask,
+  chatState: ChatStateType,
+  method: string
+) {
   let openAIConversationThread = buildChatFromTask(task, chatState);
 
   let functions: Tool[] = [];
@@ -630,13 +633,12 @@ export async function getOpenAIChatResponse(
   ) {
     console.log('Creating chat task messages');
     // Prepare the variables for createTaskChatMessages
-
     let variables = {};
     if (task.role === 'user') {
       const yamlRepr = zodToYamlString(yamlToolChatType);
 
       variables = {
-        taskContent: task.content || '', // Ensuring there's a default value if content is null
+        taskContent: task.content || '',
         schema: yamlRepr,
         format: 'yaml',
         tools: summarizeTools(task.allowedTools),
@@ -700,22 +702,58 @@ export async function getOpenAIChatResponse(
   } else {
     functions = mapFunctionNames(task.allowedTools || []) || [];
   }
+  return { openAIConversationThread, functions };
+}
 
-  if (openAIConversationThread.length > 0) {
-    const response = await callLLM(
-      openAIConversationThread,
-      functions as unknown as OpenAI.FunctionDefinition[],
-      chatState,
-      getSelectedModel(chatState),
-      getAPIURLs(chatState.baseURL).chat,
-      task.id == chatState.selectedTaskId ? true : false, // stream
-      (chunk) => {
-        task.debugging.streamContent =
-          (task.debugging.streamContent || '') + chunk;
-      }
-    );
-    return response;
-  }
+function enrichWithUsageInfos(
+  chatCompletion: ChatCompletionResponse,
+  chatState: ChatStateType,
+  task: LLMTask
+) {
+  const GENERATION_ID = chatCompletion.id;
+  void sleep(5000).then(() => {
+    const headers: Record<string, string> = generateHeaders(chatState);
+    void axios
+      .get<OpenRouterGenerationInfo>(
+        `https://openrouter.ai/api/v1/generation?id=${GENERATION_ID}`,
+        { headers }
+      )
+      .then((generation) => {
+        console.log('received costs for task');
+        if (generation) {
+          const generationInfo = generation.data.data;
+
+          if (
+            generationInfo.native_tokens_completion &&
+            generationInfo.native_tokens_prompt
+          ) {
+            // we get the useage data very often in an asynchronous form.
+            // thats why we need to
+            // openai sends back the exact number of prompt tokens :)
+            task.debugging.promptTokens = generationInfo.native_tokens_prompt;
+            task.debugging.resultTokens =
+              generationInfo.native_tokens_completion;
+            task.debugging.taskCosts = generationInfo.usage;
+            task.debugging.taskTokens =
+              generationInfo.native_tokens_prompt +
+              generationInfo.native_tokens_completion;
+            for (const childID of task.childrenIDs) {
+              const child = chatState.Tasks[childID];
+              if (!child.debugging.promptTokens) {
+                child.debugging.promptTokens = task.debugging.resultTokens;
+              }
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        console.log(
+          'failed to get cost information for Openrouter.ai: ',
+          GENERATION_ID,
+          err
+        );
+      });
+  });
 }
 
 async function uploadFileToOpenAI(
