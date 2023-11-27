@@ -1,225 +1,220 @@
 <template>
   <q-page>
     <q-card
-      class="col column chat-timeline"
+      :class="$q.dark.isActive ? 'black' : 'primarylight'"
       flat
+      square
       v-if="selectedThread.length > 0"
     >
       <!-- "Task" Display -->
       <q-card-section class="q-gutter-sm">
-        <div
+        <q-chat-message
           v-for="task in selectedThread"
+          :sent="task.role === 'user' ? true : false"
           :key="task.id"
-          :class="[
-            $q.dark.isActive ? 'bg-primary' : 'bg-white',
-            'rounded-borders',
-            'q-pa-xs',
-            'shadow-2',
-            'column',
-            'justify-between',
-            task.role === 'user' ? 'not-assistant-message' : '',
-            task.role === 'user' ? 'q-ml-lg' : '',
-          ]"
+          :bg-color="$q.dark.isActive ? 'primary' : 'white'"
+          :class="task.role === 'user' ? 'user-message' : ''"
         >
-          <!--Message Display-->
-          <div class="col-auto row justify-begin q-gutter-xs">
-            <!--task icon-->
-            <div v-if="task.state == 'Error'" class="col-auto">
-              <q-icon name="warning" color="warning" size="sm"
-                ><q-tooltip class="bg-warning">Error!</q-tooltip>
-              </q-icon>
-            </div>
-            <div v-if="task.role == 'function'" class="col">
-              <q-expansion-item
-                dense
-                icon="calculate"
-                :label="task.context?.function?.name"
-                :header-class="
-                  task.state == 'Error' ? 'text-red' : 'text-green'
-                "
+          <div :class="$q.dark.isActive ? 'text-white' : 'text-black'">
+            <!--Message Display-->
+            <div class="col-auto row justify-begin q-gutter-xs">
+              <!--task icon-->
+              <div v-if="task.state == 'Error'" class="col-auto">
+                <q-icon name="warning" color="warning" size="sm"
+                  ><q-tooltip class="bg-warning">Error!</q-tooltip>
+                </q-icon>
+              </div>
+              <div v-if="task.role == 'function'" class="col">
+                <q-expansion-item
+                  dense
+                  icon="calculate"
+                  :label="task.context?.function?.name"
+                  :header-class="
+                    task.state == 'Error' ? 'text-red' : 'text-green'
+                  "
+                >
+                  <ToolResultWidget :task="task" />
+                </q-expansion-item>
+              </div>
+              <q-markdown
+                class="col"
+                v-else-if="task.content"
+                :src="task.content"
+              />
+              <!--task costs-->
+              <div
+                v-if="state.showCosts"
+                style="font-size: xx-small"
+                class="column items-center"
               >
-                <ToolResultWidget :task="task" />
-              </q-expansion-item>
+                <div v-if="task.debugging.taskCosts">
+                  {{
+                    Math.round(task.debugging.taskCosts * 1e6).toLocaleString()
+                  }}
+                  μ$
+                </div>
+                <q-icon
+                  name="monetization_on"
+                  size="xs"
+                  :color="
+                    task.debugging.taskCosts
+                      ? 'secondary'
+                      : task.debugging.promptTokens
+                      ? 'positive'
+                      : 'info'
+                  "
+                ></q-icon>
+                <div v-if="task.debugging?.promptTokens">
+                  {{ task.debugging?.promptTokens }}
+                </div>
+                <div v-else>
+                  {{ estimateChatTokens(task, state.chatState).total }}
+                </div>
+                <q-tooltip :delay="1000">
+                  <TokenUsage :task="task" />
+                </q-tooltip>
+              </div>
             </div>
-            <q-markdown
-              class="col"
-              v-else-if="task.content"
-              :src="task.content"
-            />
-            <!--task costs-->
+            <!--buttons-->
             <div
-              v-if="state.showCosts"
-              style="font-size: xx-small"
-              class="column items-center"
+              v-if="state.expertMode"
+              class="col-auto q-gutter-xs row justify-start items-stretch"
             >
-              <div v-if="task.debugging.taskCosts">
-                {{
-                  Math.round(task.debugging.taskCosts * 1e6).toLocaleString()
-                }}
-                μ$
-              </div>
-              <q-icon
-                name="monetization_on"
-                size="xs"
-                :color="
-                  task.debugging.taskCosts
-                    ? 'secondary'
-                    : task.debugging.promptTokens
-                    ? 'positive'
-                    : 'info'
-                "
-              ></q-icon>
-              <div v-if="task.debugging?.promptTokens">
-                {{ task.debugging?.promptTokens }}
-              </div>
-              <div v-else>
-                {{ estimateChatTokens(task, state.chatState).total }}
-              </div>
-              <q-tooltip :delay="1000">
-                <TokenUsage :task="task" />
-              </q-tooltip>
-            </div>
-          </div>
-          <!--buttons-->
-          <div
-            v-if="state.expertMode"
-            class="col-auto q-gutter-xs row justify-start items-stretch"
-          >
-            <q-separator vertical class="q-my-xs" />
-            <q-btn
-              class="col-auto rotate-180"
-              push
-              size="sm"
-              outline
-              icon="alt_route"
-              dense
-              @click="state.chatState.selectedTaskId = task.id"
-            >
-              <q-tooltip :delay="1000"
-                >Start alternative conversation thread from here</q-tooltip
+              <q-btn
+                class="col"
+                flat
+                icon="code"
+                dense
+                size="sm"
+                @click="toggleMessageDebug(task.id)"
               >
-            </q-btn>
-            <q-btn
-              class="col"
-              flat
-              icon="code"
-              dense
-              size="sm"
-              @click="toggleMessageDebug(task.id)"
-            >
-              <q-tooltip :delay="1000">Show message context</q-tooltip>
-            </q-btn>
-            <q-btn
-              class="col-auto"
-              outline
-              icon="edit"
-              dense
-              size="sm"
-              @click="editTask(task.id)"
-            >
-              <q-tooltip :delay="1000">Edit Task/Message</q-tooltip>
-            </q-btn>
-          </div>
-          <!--task debugging-->
-          <q-slide-transition>
-            <div v-show="state.messageDebug[task.id]">
-              <q-separator spaced />
-              <q-tabs dense v-model="state.messageDebug[task.id]" no-caps>
-                <q-tab name="ERROR" label="Error" />
-                <q-tab name="FOLLOWUPERROR" label="Follow-up task error" />
-                <q-tab name="RAW" label="raw task data" />
-                <q-tab name="RAWTASK" label="task prompt" />
-                <q-tab name="MESSAGECONTENT" label="raw result" />
-              </q-tabs>
-              <q-tab-panels
-                v-model="state.messageDebug[task.id]"
-                animated
-                swipeable
-                horizontal
-                transition-prev="jump-right"
-                transition-next="jump-left"
+                <q-tooltip :delay="0">Show message context</q-tooltip>
+              </q-btn>
+              <q-btn
+                class="col-auto rotate-180"
+                push
+                size="sm"
+                outline
+                icon="alt_route"
+                dense
+                @click="state.chatState.selectedTaskId = task.id"
               >
-                <q-tab-panel name="ERROR">
-                  <textarea
-                    :value="JSON.stringify(task.debugging.error, null, 2)"
-                    readonly
-                    wrap="soft"
-                    style="
-                      width: 100%;
-                      height: 200px;
-                      background-color: inherit;
-                      color: inherit;
-                    "
-                  >
-                  </textarea>
-                </q-tab-panel>
-                <q-tab-panel name="FOLLOWUPERROR">
-                  <textarea
-                    :value="
-                      JSON.stringify(task.debugging.followUpError, null, 2)
-                    "
-                    readonly
-                    wrap="soft"
-                    style="
-                      width: 100%;
-                      height: 200px;
-                      background-color: inherit;
-                      color: inherit;
-                    "
-                  >
-                  </textarea>
-                </q-tab-panel>
-                <q-tab-panel name="RAW">
-                  <textarea
-                    :value="JSON.stringify(task, null, 2)"
-                    readonly
-                    wrap="soft"
-                    style="
-                      width: 100%;
-                      height: 200px;
-                      background-color: inherit;
-                      color: inherit;
-                    "
-                  >
-                  </textarea>
-                </q-tab-panel>
-                <q-tab-panel name="MESSAGECONTENT">
-                  <textarea
-                    :value="
-                      task.result?.chatResponse?.choices[0].message.content ||
-                      'ERROR'
-                    "
-                    readonly
-                    wrap="soft"
-                    style="
-                      width: 100%;
-                      height: 200px;
-                      background-color: inherit;
-                      color: inherit;
-                    "
-                  >
-                  </textarea>
-                </q-tab-panel>
-                <q-tab-panel name="RAWTASK">
-                  <textarea
-                    v-for="(tp, idx) in task.debugging.taskPrompt"
-                    :key="idx"
-                    :value="typeof tp.content === 'string' ? tp.content : ''"
-                    readonly
-                    wrap="soft"
-                    style="
-                      width: 100%;
-                      height: 200px;
-                      background-color: inherit;
-                      color: inherit;
-                    "
-                  >
-                  </textarea>
-                </q-tab-panel>
-              </q-tab-panels>
+                <q-tooltip :delay="0"
+                  >Start alternative conversation thread from here</q-tooltip
+                >
+              </q-btn>
+              <q-btn
+                class="col-auto"
+                outline
+                icon="edit"
+                dense
+                size="sm"
+                @click="editTask(task.id)"
+              >
+                <q-tooltip :delay="0">Edit Task/Message</q-tooltip>
+              </q-btn>
             </div>
-          </q-slide-transition>
-        </div>
+            <!--task debugging-->
+            <q-slide-transition>
+              <div v-show="state.messageDebug[task.id]">
+                <q-separator spaced />
+                <q-tabs dense v-model="state.messageDebug[task.id]" no-caps>
+                  <q-tab name="ERROR" label="Error" />
+                  <q-tab name="FOLLOWUPERROR" label="Follow-up task error" />
+                  <q-tab name="RAW" label="raw task data" />
+                  <q-tab name="RAWTASK" label="task prompt" />
+                  <q-tab name="MESSAGECONTENT" label="raw result" />
+                </q-tabs>
+                <q-tab-panels
+                  v-model="state.messageDebug[task.id]"
+                  animated
+                  swipeable
+                  horizontal
+                  transition-prev="jump-right"
+                  transition-next="jump-left"
+                >
+                  <q-tab-panel name="ERROR">
+                    <textarea
+                      :value="JSON.stringify(task.debugging.error, null, 2)"
+                      readonly
+                      wrap="soft"
+                      style="
+                        width: 100%;
+                        height: 200px;
+                        background-color: inherit;
+                        color: inherit;
+                      "
+                    >
+                    </textarea>
+                  </q-tab-panel>
+                  <q-tab-panel name="FOLLOWUPERROR">
+                    <textarea
+                      :value="
+                        JSON.stringify(task.debugging.followUpError, null, 2)
+                      "
+                      readonly
+                      wrap="soft"
+                      style="
+                        width: 100%;
+                        height: 200px;
+                        background-color: inherit;
+                        color: inherit;
+                      "
+                    >
+                    </textarea>
+                  </q-tab-panel>
+                  <q-tab-panel name="RAW">
+                    <textarea
+                      :value="JSON.stringify(task, null, 2)"
+                      readonly
+                      wrap="soft"
+                      style="
+                        width: 100%;
+                        height: 200px;
+                        background-color: inherit;
+                        color: inherit;
+                      "
+                    >
+                    </textarea>
+                  </q-tab-panel>
+                  <q-tab-panel name="MESSAGECONTENT">
+                    <textarea
+                      :value="
+                        task.result?.chatResponse?.choices[0].message.content ||
+                        'ERROR'
+                      "
+                      readonly
+                      wrap="soft"
+                      style="
+                        width: 100%;
+                        height: 200px;
+                        background-color: inherit;
+                        color: inherit;
+                      "
+                    >
+                    </textarea>
+                  </q-tab-panel>
+                  <q-tab-panel name="RAWTASK">
+                    <textarea
+                      v-for="(tp, idx) in task.debugging.taskPrompt"
+                      :key="idx"
+                      :value="typeof tp.content === 'string' ? tp.content : ''"
+                      readonly
+                      wrap="soft"
+                      style="
+                        width: 100%;
+                        height: 200px;
+                        background-color: inherit;
+                        color: inherit;
+                      "
+                    >
+                    </textarea>
+                  </q-tab-panel>
+                </q-tab-panels>
+              </div>
+            </q-slide-transition>
+          </div>
+        </q-chat-message>
         <div
           v-if="
             ['Open', 'In Progress'].some((subs) =>
@@ -301,11 +296,22 @@
   </q-page>
 </template>
 
-<style lang="sass">
-/* Define the CSS class for the orange "glow" shadow */
-.not-assistant-message
-  box-shadow: inset 0 0 5px $secondary
-  border-radius: 5px
+<style lang="sass" scoped>
+.user-message
+  position: relative
+.user-message::after
+  content: ''
+  position: absolute
+  top: 0
+  right: 0
+  bottom: 0
+  width: 5px /* Width of the fading effect */
+  background: linear-gradient(to top, rgba(255, 255, 255, 0), $secondary)
+
+.primarylight
+  background-color: scale-color($primary, $lightness: 80%)
+.primarydark
+  background-color: scale-color($primary, $blackness: 30%)
 </style>
 
 <script setup lang="ts">
