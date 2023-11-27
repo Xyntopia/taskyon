@@ -19,6 +19,7 @@ import { dump } from 'js-yaml';
 import { lruCache, sleep, asyncTimeLruCache, asyncLruCache } from './utils';
 import type { TaskyonDatabase, FileMappingDocType } from './rxdb';
 import { zodToYamlString, yamlToolChatType, toolResultChat } from './types';
+import { CURRENT_TASK_CANCELLATION_EVENT } from './taskWorker';
 
 const getOpenai = lruCache<OpenAI>(5)(
   (apiKey: string, baseURL?: string, headers?: Record<string, string>) => {
@@ -420,11 +421,22 @@ async function callLLM(
       payload.functions = functions;
     }
 
+    let cancelStreaming = false;
+    function cancelStreamListener() {
+      cancelStreaming = true;
+    }
+    document.addEventListener(
+      CURRENT_TASK_CANCELLATION_EVENT,
+      cancelStreamListener
+    );
     try {
       const completion = await openai.chat.completions.create(payload);
 
       const chunks = [];
       for await (const chunk of completion) {
+        if (cancelStreaming) {
+          return;
+        }
         chunks.push(chunk);
         if (chunk.choices[0]?.delta?.content) {
           contentCallBack(chunk.choices[0].delta.content);
@@ -435,6 +447,10 @@ async function callLLM(
     } catch (error) {
       console.error('Error during streaming:', error);
     }
+    document.removeEventListener(
+      CURRENT_TASK_CANCELLATION_EVENT,
+      cancelStreamListener
+    );
   } else {
     const payload: OpenAI.ChatCompletionCreateParams = {
       model,

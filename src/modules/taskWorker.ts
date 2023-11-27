@@ -268,7 +268,7 @@ async function generateFollowUpTasksFromResult(
 }
 
 const TASK_CANCELLATION_EVENT = 'cancelTasks';
-const CURRENT_TASK_CANCELLATION_EVENT = 'cancelCurrentTask';
+export const CURRENT_TASK_CANCELLATION_EVENT = 'cancelCurrentTask';
 const RUNNING_TASK_WORKER_CANCELLATION_EVENT = 'cancelRunningTaskWorker';
 
 export function emitCancelAllTasks() {
