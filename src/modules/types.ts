@@ -229,17 +229,17 @@ export type toolCommandChat = z.infer<typeof toolCommandChat>;
 const answer = z.string().nullable();
 
 export const toolResultChat = z.object({
-  reasoning: z.string(),
+  thought: z.string().optional(),
   satisfactory: z.boolean().describe('was the result satisfactory?'),
   answer: answer
     .optional()
     .describe('Only provide answer if result was satisfactory.'),
+  useToolReason: z
+    .optional(z.string())
+    .describe('Reason, why we should (not) use a tool/function again?'),
   useTool: z
     .optional(z.boolean())
     .describe('Only use a tool, if the result was not satisfactory!!'),
-  useToolReason: z
-    .optional(z.string())
-    .describe('Reason, why we should use a tool/function again?'),
   toolCommand: toolCommandChat
     .describe(
       'Only fill toolCommand if useTool = true otherwise provide answer!'
@@ -249,7 +249,10 @@ export const toolResultChat = z.object({
 export type toolResultChat = z.infer<typeof toolResultChat>;
 
 export const yamlToolChatType = z.object({
-  reasoning: z.string(),
+  thought: z
+    .string()
+    .optional()
+    .describe('your thoughts about what to do about the task'),
   useTool: z.optional(z.boolean()),
   toolCommand: toolCommandChat
     .describe(

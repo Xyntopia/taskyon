@@ -179,7 +179,7 @@ async function parseChatResponse(
           role: role || 'assistant',
           content:
             toolChatResult.data.answer ||
-            toolChatResult.data.reasoning ||
+            toolChatResult.data.thought ||
             message,
         },
         execute: false,
