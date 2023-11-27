@@ -22,6 +22,15 @@
           </q-btn>
         </q-toolbar-title>
         <q-btn
+          flat
+          dense
+          round
+          icon="settings"
+          to="settings"
+        >
+          <q-tooltip>Open settings</q-tooltip>
+        </q-btn>
+        <q-btn
           dense
           flat
           round
@@ -52,6 +61,7 @@
             }}</q-tooltip
           >
         </q-btn>
+        <q-separator vertical></q-separator>
         <!-- GitHub Link -->
         <q-btn
           flat
