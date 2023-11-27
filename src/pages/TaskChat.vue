@@ -224,32 +224,42 @@
               )
             )
           "
-          class="q-pa-xs row"
         >
-          {{
-            state.chatState.Tasks[state.chatState.selectedTaskId || '']
-              .debugging.streamContent
-          }}
-          <q-spinner-comment color="secondary" size="lg" />
-          <q-space></q-space>
-          <q-btn
-            round
-            color="secondary"
-            icon="stop"
-            @click="emitCancelCurrentTask"
-          >
-            <q-tooltip> Stop processing current task. </q-tooltip>
-          </q-btn>
-          <q-btn
-            v-if="state.expertMode"
-            round
-            color="secondary"
-            icon="block"
-            @click="emitCancelAllTasks"
-            class="q-ml-xs"
-          >
-            <q-tooltip> Cancel all tasks. </q-tooltip>
-          </q-btn>
+          <q-chat-message bg-color="primary" text-color="white">
+            <div>
+              <div>
+                <q-markdown
+                  :src="
+                    state.chatState.Tasks[state.chatState.selectedTaskId || '']
+                      .debugging.streamContent || ''
+                  "
+                />
+                <q-spinner-dots size="2rem" />
+              </div>
+              <div class="row justify-end">
+                <q-btn
+                  round
+                  outline
+                  color="secondary"
+                  icon="stop"
+                  @click="emitCancelCurrentTask"
+                >
+                  <q-tooltip> Stop processing current task. </q-tooltip>
+                </q-btn>
+                <q-btn
+                  v-if="state.expertMode"
+                  round
+                  outline
+                  color="secondary"
+                  icon="block"
+                  @click="emitCancelAllTasks"
+                  class="q-ml-xs"
+                >
+                  <q-tooltip> Cancel all tasks. </q-tooltip>
+                </q-btn>
+              </div>
+            </div>
+          </q-chat-message>
         </div>
       </q-card-section>
     </q-card>
