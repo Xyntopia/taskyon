@@ -396,7 +396,7 @@ async function callLLM(
   model: string,
   chatURL: string,
   stream: false | true | null | undefined = false,
-  contentCallBack: (chunk: string) => void
+  contentCallBack: (chunk?: OpenAI.Chat.Completions.ChatCompletionChunk) => void
 ) {
   const headers: Record<string, string> = generateHeaders(chatState);
   let chatCompletion: ChatCompletionResponse | undefined = undefined;
@@ -438,8 +438,8 @@ async function callLLM(
           return;
         }
         chunks.push(chunk);
-        if (chunk.choices[0]?.delta?.content) {
-          contentCallBack(chunk.choices[0].delta.content);
+        if (chunk) {
+          contentCallBack(chunk);
         }
       }
       chatCompletion = accumulateChatCompletion(chunks);
@@ -597,8 +597,11 @@ export async function getOpenAIChatResponse(
       getAPIURLs(chatState.baseURL).chat,
       task.id == chatState.selectedTaskId ? true : false, // stream
       (chunk) => {
-        task.debugging.streamContent =
-          (task.debugging.streamContent || '') + chunk;
+        if (chunk?.choices[0]?.delta?.content) {
+          task.debugging.streamContent =
+            (task.debugging.streamContent || '') +
+            chunk.choices[0].delta.content;
+        }
       }
     );
 
