@@ -59,9 +59,16 @@
         dense
         label="Select LLM Model for answering/solving the task."
         icon="smart_toy"
-        :options="modelOptions.openrouter"
+        :options="filteredOptions"
         emit-value
         v-model="state.chatState.openAIModel"
+        hide-selected
+        fill-input
+        use-input
+        input-debounce="100"
+        @filter="
+          (val, update) => filterModels(val, update, modelOptions.openaiModels)
+        "
       >
       </q-select>
     </div>
@@ -84,9 +91,16 @@
     bottom-slots
     label="Select LLM Model for answering/solving the task."
     icon="smart_toy"
-    :options="modelOptions.openai"
+    :options="filteredOptions"
     emit-value
     v-model="state.chatState.openrouterAIModel"
+    fill-input
+    hide-selected
+    use-input
+    input-debounce="100"
+    @filter="
+      (val, update) => filterModels(val, update, modelOptions.openrouterModels)
+    "
   >
     <template v-slot:hint>
       For a list of supported models go here:
@@ -171,7 +185,7 @@ const modelOptions = computed(() => ({
     value: a.id,
     label: a.name,
   })),
-  openai: resOpenRouter.value
+  openrouterModels: resOpenRouter.value
     .map((m) => {
       const p = parseFloat(m.pricing?.prompt || '');
       const c = parseFloat(m.pricing?.completion || '');
@@ -184,7 +198,7 @@ const modelOptions = computed(() => ({
       }`,
       value: m.id,
     })),
-  openrouter: [...resOpenAI.value]
+  openaiModels: [...resOpenAI.value]
     .sort((m1, m2) => m1.id.localeCompare(m2.id))
     .map((m) => ({
       label: `${m.id}`,
@@ -228,4 +242,21 @@ watch(currentlySelectedBotName, ({ newName, newService }) => {
 });
 
 void fetchModels();
+
+const filteredOptions = ref<{ label: string; value: string }[]>([]);
+
+const filterModels = (
+  val: string,
+  update: (callback: () => void) => void,
+  optionsRef: { label: string; value: string }[]
+) => {
+  update(() => {
+    const keyword = val.toLowerCase();
+    filteredOptions.value = keyword
+      ? optionsRef.filter((option) =>
+          option.label.toLowerCase().includes(keyword)
+        )
+      : optionsRef;
+  });
+};
 </script>
