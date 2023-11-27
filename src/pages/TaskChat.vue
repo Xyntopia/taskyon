@@ -37,8 +37,9 @@
                 </q-expansion-item>
               </div>
               <q-markdown
-                class="col"
                 v-else-if="task.content"
+                class="col"
+                :plugins="[markdownItMermaid]"
                 :src="task.content"
               />
               <!--task costs-->
@@ -325,6 +326,10 @@
   background-color: scale-color($primary, $lightness: 80%)
 .primarydark
   background-color: scale-color($primary, $blackness: 30%)
+
+.code-block-with-copy
+  background-color: red
+  color: white
 </style>
 
 <script setup lang="ts">
@@ -344,6 +349,8 @@ import {
   emitCancelCurrentTask,
 } from 'src/modules/taskWorker';
 import axios from 'axios';
+import type MarkdownIt from 'markdown-it/lib';
+import markdownItMermaid from '@datatraccorporation/markdown-it-mermaid'
 
 const welcomeText = ref<string>('');
 
@@ -392,5 +399,36 @@ function toggleMessageDebug(id: string) {
     // If it does exist, toggle the boolean.
     state.messageDebug[id] = undefined;
   }
+}
+
+function extendMarkdown(md: MarkdownIt) {
+  console.log('extend markdown ...?');
+  // Store the original fence renderer
+  const defaultFenceRenderer =
+    md.renderer.rules.fence ||
+    ((tokens, idx, options, env, self) => {
+      return self.renderToken(tokens, idx, options);
+    });
+
+  // Override the fence renderer
+  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+    console.log('are we doing anything here?');
+    // Call the original renderer to get the default rendering of the code block
+    const originalRenderedHtml = defaultFenceRenderer(
+      tokens,
+      idx,
+      options,
+      env,
+      self
+    );
+
+    // Add a copy button to the original rendered HTML
+    const customHtml = `<div class="code-block-with-copy">
+                          ${originalRenderedHtml}
+                          <button class="copy-button">Copy</button>
+                        </div>`;
+
+    return customHtml;
+  };
 }
 </script>
