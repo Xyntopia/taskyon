@@ -235,6 +235,7 @@
             <div>
               <div>
                 <q-markdown
+                  no-line-numbers
                   :src="
                     state.chatState.Tasks[state.chatState.selectedTaskId || '']
                       .debugging.streamContent || ''
