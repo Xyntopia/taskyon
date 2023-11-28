@@ -17,14 +17,7 @@
             @keyup="checkForShiftEnter"
           >
             <template v-slot:append>
-              <q-btn
-                v-if="!selectedTaskType"
-                flat
-                dense
-                round
-                icon="send"
-                @click="executeTask"
-              >
+              <q-btn flat dense round icon="send" @click="executeTask">
                 <q-tooltip>
                   Press to send or alternatively send with &lt;shift&gt; +
                   &lt;enter&gt;
@@ -66,25 +59,11 @@
               }}</q-tooltip>
             </q-chip>
           </div>
-          <div v-else>
-            <div
-              v-for="(param, paramName) in state.taskDraft.context?.function
-                ?.arguments"
-              :key="paramName"
-            >
-              <q-input
-                v-if="typeof param === 'string' || typeof param === 'number'"
-                :model-value="param"
-                @update:model-value="
-                  (value) => setFunctionParameter(paramName, value)
-                "
-                :label="paramName"
-                debounce="500"
-                filled
-                dense
-                type="textarea"
-              />
-            </div>
+          <div v-if="selectedTaskType">
+            <ObjectTreeView
+              :model-value="currentFuncArgs"
+              input-field-behavior="textarea"
+            />
             <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
           </div>
           <div v-if="state.expertMode" class="row items-center">
@@ -194,7 +173,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, toRefs } from 'vue';
 import { countStringTokens } from 'src/modules/chat';
 import {
   tools,
@@ -212,8 +191,13 @@ import {
   addFile,
   getFileMappingByUuid,
 } from 'src/modules/taskManager';
+import ObjectTreeView from './ObjectTreeView.vue';
 
 const state = useTaskyonStore();
+
+const currentFuncArgs = toRefs(
+  state.taskDraft.context?.function?.arguments || {}
+);
 
 const currentlySelectedBotName = ref('');
 const currentlySelectedService = ref('');

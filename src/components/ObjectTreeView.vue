@@ -2,10 +2,7 @@
   <q-tree :nodes="nodeTree" node-key="label">
     <template v-slot:body-text="prop">
       <div class="row">
-        <div
-          class="col-auto"
-          style="min-width: 200px"
-        >
+        <div class="col-auto" style="min-width: 200px">
           {{ prop.node.label }}:
         </div>
         <q-input
@@ -13,6 +10,7 @@
           filled
           :label="prop.node.label"
           type="textarea"
+          :debounce="500"
           :model-value="prop.node.value"
           @update:modelValue="(value) => updateValue(prop.node.path, value)"
         >
@@ -22,10 +20,7 @@
     <template v-slot:header-none> </template>
     <template v-slot:body-string="prop">
       <div class="row">
-        <div
-          class="col-auto"
-          style="min-width: 200px"
-        >
+        <div class="col-auto" style="min-width: 200px">
           {{ prop.node.label }}:
         </div>
         <q-input
@@ -44,7 +39,7 @@
     </template>
     <template v-slot:header-boolean="prop">
       <q-toggle
-      style="min-width: 200px"
+        style="min-width: 200px"
         :label="prop.node.label"
         left-label
         color="secondary"
@@ -63,6 +58,10 @@ const props = defineProps({
   modelValue: {
     type: Object,
     required: true,
+  },
+  inputFieldBehavior: {
+    type: String,
+    default: 'auto' as 'auto' | 'textarea' | 'autogrow',
   },
 });
 
@@ -123,7 +122,9 @@ const transformToTreeNodes = (
           path: newPath,
           header: 'none',
         };
-        value.length < 100 && !value.includes('\n')
+        value.length < 100 &&
+        !value.includes('\n') &&
+        !(props.inputFieldBehavior === 'textarea')
           ? (node['body'] = 'string')
           : (node['body'] = 'text');
         return node;
