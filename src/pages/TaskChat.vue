@@ -435,7 +435,7 @@ function addCopyButtons(md: MarkdownIt) {
     // Custom HTML for the button
     const customHtml = `
         <div class="code-block-with-overlay">
-          <button class="copy-button q-btn q-btn-item non-selectable transparent q-btn--flat q-btn--rounded
+          <button class="copy-button q-btn q-btn-item non-selectable transparent q-btn--flat q-btn--rectangle
             q-btn--actionable q-focusable q-hoverable q-btn--dense col-auto copy-button">
             <span class="q-focus-helper"></span>
             <span class="q-btn__content text-center col items-center q-anchor--skip justify-center row">
@@ -462,16 +462,16 @@ function copyToClipboard(code: string) {
 }
 
 function handleMarkdownClick(event: MouseEvent) {
-  const target = event.target as HTMLElement; // Type assertion
-  const button = target.closest('.copy-button');
-
-  if (button) {
-    const codeBlock = button.nextElementSibling;
-
-    // Check if codeBlock is actually an HTMLElement and has the textContent property
-    if (codeBlock instanceof HTMLElement) {
-      const code = codeBlock.textContent || '';
-      copyToClipboard(code);
+  const target = (event.target as HTMLElement).closest('.copy-button');
+  if (target) {
+    // Find the closest .code-block-with-overlay and then find the <code> element inside it
+    const codeBlockContainer = target.closest('.code-block-with-overlay');
+    if (codeBlockContainer) {
+      const codeElement = codeBlockContainer.querySelector('code');
+      if (codeElement) {
+        const codeText = codeElement.textContent || ''; // Get the text content of the <code> element
+        copyToClipboard(codeText);
+      }
     }
   }
 }
