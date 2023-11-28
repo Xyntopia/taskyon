@@ -41,6 +41,7 @@
                 class="col"
                 :plugins="[markdownItMermaid, addCopyButtons]"
                 :src="task.content"
+                @click="handleMarkdownClick"
               />
               <!--task costs-->
               <div
@@ -334,7 +335,7 @@
 
 <script setup lang="ts">
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
-import { computed, ref } from 'vue';
+import { computed, ref, createVNode, render, h, provide } from 'vue';
 import { useQuasar } from 'quasar';
 import ToolResultWidget from 'components/ToolResultWidget.vue';
 import { getApikey } from 'src/modules/chat';
@@ -351,6 +352,9 @@ import {
 import axios from 'axios';
 import type MarkdownIt from 'markdown-it/lib';
 import markdownItMermaid from '@datatraccorporation/markdown-it-mermaid';
+import { QBtn } from 'quasar';
+
+type markdownItMermaid = MarkdownIt.PluginSimple;
 
 const welcomeText = ref<string>('');
 
@@ -401,19 +405,17 @@ function toggleMessageDebug(id: string) {
   }
 }
 
+let copyButtonCounter = ref(0);
+
 function addCopyButtons(md: MarkdownIt) {
-  console.log('extend markdown ...?');
-  // Store the original fence renderer
   const defaultFenceRenderer =
     md.renderer.rules.fence ||
     ((tokens, idx, options, env, self) => {
       return self.renderToken(tokens, idx, options);
     });
 
-  // Override the fence renderer
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
-    console.log('are we doing anything here?');
-    // Call the original renderer to get the default rendering of the code block
+    // Original rendered HTML of the code block
     const originalRenderedHtml = defaultFenceRenderer(
       tokens,
       idx,
@@ -422,13 +424,51 @@ function addCopyButtons(md: MarkdownIt) {
       self
     );
 
-    // Add a copy button to the original rendered HTML
-    const customHtml = `<div class="code-block-with-copy">
-                          ${originalRenderedHtml}
-                          <button class="copy-button">Copy</button>
-                        </div>`;
+    const buttonId = `copy-button-${copyButtonCounter.value++}`;
+
+    // Custom HTML for the button
+    const customHtml = `
+      <div class="code-block-with-overlay">
+        <div class="code-block-with-copy">
+          ${originalRenderedHtml}
+          <button class="copy-button q-btn q-btn-item non-selectable no-outline transparent q-btn--rectangle
+           q-btn--actionable q-focusable q-hoverable q-btn--dense col-auto id="${buttonId} copy-button">
+            <span class="q-focus-helper"></span>
+            <span class="q-btn__content text-center col items-center q-anchor--skip justify-center row">
+              <i class="q-icon notranslate material-icons" aria-hidden="true" role="img">content_copy</i>
+            </span>
+          </button>
+        </div>
+      </div>
+    `;
 
     return customHtml;
   };
+}
+
+function copyToClipboard(code: string) {
+  navigator.clipboard
+    .writeText(code)
+    .then(() => {
+      console.log('Copied to clipboard');
+    })
+    .catch((err) => {
+      console.error('Error in copying text: ', err);
+    });
+}
+
+function handleMarkdownClick(event: MouseEvent) {
+  const target = event.target as HTMLElement; // Type assertion
+  const button = target.closest('.copy-button');
+
+  if (button) {
+    const codeBlock = button.previousElementSibling;
+
+    // Check if codeBlock is actually an HTMLElement and has the textContent property
+    if (codeBlock instanceof HTMLElement) {
+      const code = codeBlock.textContent || '';
+      copyToClipboard(code);
+    }
+  }
 }
 </script>
