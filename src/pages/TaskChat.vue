@@ -39,6 +39,7 @@
               <q-markdown
                 v-else-if="task.content"
                 class="col"
+                no-line-numbers
                 :plugins="[markdownItMermaid, addCopyButtons]"
                 :src="task.content"
                 @click="handleMarkdownClick"
