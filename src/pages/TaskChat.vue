@@ -328,9 +328,15 @@
 .primarydark
   background-color: scale-color($primary, $blackness: 30%)
 
-.code-block-with-copy
-  background-color: red
-  color: white
+::v-deep(.code-block-with-overlay)
+  position: relative
+
+  .copy-button
+    position: absolute
+    top: 0
+    right: 0
+    z-index: 10
+    // Add other necessary styles for the button
 </style>
 
 <script setup lang="ts">
@@ -428,19 +434,17 @@ function addCopyButtons(md: MarkdownIt) {
 
     // Custom HTML for the button
     const customHtml = `
-      <div class="code-block-with-overlay">
-        <div class="code-block-with-copy">
-          ${originalRenderedHtml}
-          <button class="copy-button q-btn q-btn-item non-selectable no-outline transparent q-btn--rectangle
-           q-btn--actionable q-focusable q-hoverable q-btn--dense col-auto id="${buttonId} copy-button">
+        <div class="code-block-with-overlay">
+          <button class="copy-button q-btn q-btn-item non-selectable transparent q-btn--flat q-btn--rounded
+            q-btn--actionable q-focusable q-hoverable q-btn--dense col-auto copy-button">
             <span class="q-focus-helper"></span>
             <span class="q-btn__content text-center col items-center q-anchor--skip justify-center row">
               <i class="q-icon notranslate material-icons" aria-hidden="true" role="img">content_copy</i>
             </span>
           </button>
+          ${originalRenderedHtml}
         </div>
-      </div>
-    `;
+      `;
 
     return customHtml;
   };
@@ -462,7 +466,7 @@ function handleMarkdownClick(event: MouseEvent) {
   const button = target.closest('.copy-button');
 
   if (button) {
-    const codeBlock = button.previousElementSibling;
+    const codeBlock = button.nextElementSibling;
 
     // Check if codeBlock is actually an HTMLElement and has the textContent property
     if (codeBlock instanceof HTMLElement) {
