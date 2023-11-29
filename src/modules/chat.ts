@@ -2,12 +2,7 @@ import axios from 'axios';
 //import { useCachedModels } from './mlModels';
 import { Tool, tools, ExtendedTool, summarizeTools } from './tools';
 import { getEncoding } from 'js-tiktoken';
-import {
-  LLMTask,
-  OpenAIMessage,
-  ChatCompletionResponse,
-  OpenRouterGenerationInfo,
-} from './types';
+import { LLMTask, OpenAIMessage, OpenRouterGenerationInfo } from './types';
 import {
   taskChain,
   getFileMappingByUuid,
@@ -20,7 +15,6 @@ import { lruCache, sleep, asyncTimeLruCache, asyncLruCache } from './utils';
 import type { TaskyonDatabase, FileMappingDocType } from './rxdb';
 import { zodToYamlString, yamlToolChatType, toolResultChat } from './types';
 import { CURRENT_TASK_CANCELLATION_EVENT } from './taskWorker';
-import { ChatCompletion } from 'openai/resources';
 
 const getOpenai = lruCache<OpenAI>(5)(
   (apiKey: string, baseURL?: string, headers?: Record<string, string>) => {
@@ -94,13 +88,9 @@ export function defaultTaskState() {
     taskChatTemplates: {
       constraints: `CONSTRAINTS:
 
-{constraints}
-      `,
-      instruction: `You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented, and adheres to YAML standards. Do not include explanatory text in your YAML responses. 
-
-Your responses should be formatted as follows:
-- For code blocks: Use proper indentation and hyphens for lists.
-- For key-value pairs: Ensure correct alignment and spacing.
+{constraints}`,
+      instruction: `You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented,
+and adheres to YAML standards. Do not include explanatory text in your YAML responses. 
 
 You can make use of the following Tools: {toolList}
 
@@ -108,8 +98,7 @@ Remember, the focus is on the precision and correctness of the YAML output.`,
       objective: 'OVERALL OBJECTIVE:\n\n{objective}\n',
       tools: `AVAILABLE TOOLS TO CALL:
 
-{tools}
-`,
+{tools}`,
       previousTasks: 'PREVIOUSLY COMPLETED TASKS:\n\n{previousTasks}\n',
       context: 'TAKE INTO ACCOUNT THIS CONTEXT:\n\n{context}\n',
       toolResult: `THE RESULT OF THE TOOL/FUNCTION WHICH WAS CALLED BY THE SYSTEM IS:
@@ -121,8 +110,8 @@ Make sure we can parse the entire response as {format}.
 
 COMMENT THE RESULT VERY STRICTLY FOLLOWING SCHEMA ({format}):
 
-{resultSchema}
-`,
+# keys with '?' are optional
+{resultSchema}`,
       task: `
 COMPLETE THE FOLLOWING TASK:
 
@@ -133,9 +122,8 @@ Make sure we can parse the response as {format}.
 
 FORMAT THE RESULT WITH THE FOLLOWING SCHEMA VERY STRICT ({format}):
 
-{schema}
-      
-      `,
+# keys with '?' are optional
+{schema}`,
     },
   };
 }
@@ -325,15 +313,21 @@ function accumulateChatCompletion(
   const choice = chunks.reduce(
     (previous, chunk) => {
       const choiceIdx = 0;
-      previous.message.content +=
-        chunk.choices[choiceIdx]?.delta?.content || '';
+      if (chunk.choices[choiceIdx]?.delta?.content) {
+        if (previous.message.content) {
+          previous.message.content += chunk.choices[choiceIdx].delta.content;
+        } else {
+          previous.message.content = chunk.choices[choiceIdx].delta
+            .content as string;
+        }
+      }
       previous.message.role =
         (chunk.choices[choiceIdx]?.delta
           ?.role as OpenAI.ChatCompletionMessage['role']) ||
         previous.message.role;
       previous.finish_reason =
         chunk.choices[choiceIdx]?.finish_reason || previous.finish_reason;
-      for (const tc of chunk.choices[choiceIdx].delta.tool_calls || []) {
+      for (const tc of chunk.choices[choiceIdx].delta?.tool_calls || []) {
         // initialize toolCalls if it doesn't exist
         const tcnew = toolCalls[tc.index] || {
           id: '',
@@ -356,7 +350,7 @@ function accumulateChatCompletion(
         content: null,
         role: 'assistant', // or other roles as per your logic
       },
-      finish_reason: 'tool_calls',
+      finish_reason: 'stop',
     } as OpenAI.ChatCompletion['choices'][0]
   );
 
@@ -519,11 +513,7 @@ function createTaskChatMessages(
       );
     }
 
-    // Check if any replacement occurred
-    if (content !== templateValue) {
-      // Add the message if replacements occurred
-      messages[templateKey] = content;
-    }
+    messages[templateKey] = content;
   }
 
   return messages;
@@ -537,6 +527,7 @@ export function prepareTasksForInference(
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
   tools: OpenAI.ChatCompletionTool[];
 } {
+  console.log('Prepare task tree for inference');
   let openAIConversationThread = buildChatFromTask(task, chatState);
 
   let tools: Tool[] = [];
@@ -581,7 +572,7 @@ export function prepareTasksForInference(
       variables
     );
 
-    const content = (
+    const taskPrompt = (
       task.role === 'user'
         ? [filledTemplates['task']]
         : [filledTemplates['toolResult']]
@@ -590,19 +581,19 @@ export function prepareTasksForInference(
       .join('\n\n');
 
     const toolMessage: OpenAI.ChatCompletionMessageParam = {
-      role: 'system',
+      role: 'user',
       content: filledTemplates['tools'],
     };
 
     const additionalMessages: OpenAI.ChatCompletionMessageParam[] = [
-      toolMessage,
       {
         role: 'system',
         content: filledTemplates['instruction'],
       },
+      toolMessage,
       {
-        role: 'system',
-        content,
+        role: 'user',
+        content: taskPrompt,
       },
     ];
 
