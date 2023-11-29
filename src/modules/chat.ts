@@ -20,6 +20,7 @@ import { lruCache, sleep, asyncTimeLruCache, asyncLruCache } from './utils';
 import type { TaskyonDatabase, FileMappingDocType } from './rxdb';
 import { zodToYamlString, yamlToolChatType, toolResultChat } from './types';
 import { CURRENT_TASK_CANCELLATION_EVENT } from './taskWorker';
+import { ChatCompletion } from 'openai/resources';
 
 const getOpenai = lruCache<OpenAI>(5)(
   (apiKey: string, baseURL?: string, headers?: Record<string, string>) => {
@@ -289,7 +290,7 @@ function generateHeaders(chatState: ChatStateType) {
 
 function accumulateChatCompletion(
   chunks: OpenAI.ChatCompletionChunk[]
-): ChatCompletionResponse {
+): OpenAI.ChatCompletion {
   if (chunks.length === 0) {
     throw new Error('No chunks provided');
   }
@@ -299,7 +300,7 @@ function accumulateChatCompletion(
   const firstChunk = chunks[0];
 
   // Initialize the response
-  const response: ChatCompletionResponse = {
+  const response: OpenAI.ChatCompletion = {
     id: firstChunk.id,
     object: 'chat.completion',
     created: firstChunk.created,
@@ -311,7 +312,7 @@ function accumulateChatCompletion(
           content: null,
           role: 'assistant', // or other roles as per your logic
         },
-        finish_reason: null,
+        finish_reason: 'stop',
       },
     ],
   };
@@ -359,12 +360,8 @@ function accumulateChatCompletion(
     } as OpenAI.ChatCompletion['choices'][0]
   );
 
-  const tool_calls = Object.values(toolCalls).map((t) => ({
-    name: t.function.name,
-    arguments: t.function.arguments,
-  }));
-
-  response.choices[0].message.tool_calls = tool_calls;
+  choice.message.tool_calls = Object.values(toolCalls).map((t) => t);
+  response.choices = [choice];
 
   return response;
 }
@@ -378,9 +375,9 @@ export async function callLLM(
   chatURL: string,
   stream: false | true | null | undefined = false,
   contentCallBack: (chunk?: OpenAI.Chat.Completions.ChatCompletionChunk) => void
-): Promise<ChatCompletionResponse | undefined> {
+): Promise<OpenAI.ChatCompletion | undefined> {
   const headers: Record<string, string> = generateHeaders(chatState);
-  let chatCompletion: ChatCompletionResponse | undefined = undefined;
+  let chatCompletion: OpenAI.ChatCompletion | undefined = undefined;
   const openai = getOpenai(chatState.openAIApiKey, chatState.baseURL, headers);
 
   const payload: OpenAI.ChatCompletionCreateParams = {
@@ -428,16 +425,11 @@ export async function callLLM(
       cancelStreamListener
     );
   } else {
-    const response = await axios.post<ChatCompletionResponse>(
-      chatURL,
-      payload,
-      {
-        headers,
-      }
-    );
-    console.log('AI responded:', response);
-    chatCompletion = response.data;
+    const completion = await openai.chat.completions.create(payload);
+    console.log('AI responded:', completion);
+    chatCompletion = completion;
   }
+
   return chatCompletion;
 }
 
@@ -644,16 +636,15 @@ export function prepareTasksForInference(
 }
 
 export function enrichWithDelayedUsageInfos(
-  chatCompletion: ChatCompletionResponse,
+  generationId: string,
   chatState: ChatStateType,
   task: LLMTask
 ) {
-  const GENERATION_ID = chatCompletion.id;
   void sleep(5000).then(() => {
     const headers: Record<string, string> = generateHeaders(chatState);
     void axios
       .get<OpenRouterGenerationInfo>(
-        `https://openrouter.ai/api/v1/generation?id=${GENERATION_ID}`,
+        `https://openrouter.ai/api/v1/generation?id=${generationId}`,
         { headers }
       )
       .then((generation) => {
@@ -687,7 +678,7 @@ export function enrichWithDelayedUsageInfos(
       .catch((err) => {
         console.log(
           'failed to get cost information for Openrouter.ai: ',
-          GENERATION_ID,
+          generationId,
           err
         );
       });

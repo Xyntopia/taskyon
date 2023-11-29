@@ -23,44 +23,42 @@ import { handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
 
 function isOpenAIFunctionCall(
-  choice: ChatCompletionResponse['choices'][0]
-): choice is ChatCompletionResponse['choices'][0] & {
-  message: { function_call: FunctionCall };
-} {
+  choice: OpenAI.ChatCompletion['choices'][0]
+): boolean {
   return (
     (choice.finish_reason === 'function_call' ||
       choice.finish_reason === 'tool_calls') &&
-    !choice.message.content &&
-    !!choice.message.function_call
+    !!choice.message.tool_calls?.length
   );
 }
 
-function extractOpenAIFunction(choice: ChatCompletionResponse['choices'][0]) {
-  if (isOpenAIFunctionCall(choice)) {
+function extractOpenAIFunctions(choice: OpenAI.ChatCompletion['choices'][0]) {
+  const functionCalls: FunctionCall[] = [];
+  for (const toolCall of choice.message.tool_calls || []) {
     // if our response contained a call to a function...
     // TODO: update this to the new tools API from Openai
     console.log('A function call was returned...');
-    const name = choice.message.function_call.name;
+    const name = toolCall.function.name;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     let funcArguments: FunctionArguments = {};
     try {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      funcArguments = JSON.parse(choice.message.function_call.arguments);
+      funcArguments = JSON.parse(toolCall.function.arguments);
     } catch (parseError) {
       // in this case, we assume, that the first parameter was meant...
       funcArguments = {};
       const toolProps = tools[name]?.parameters.properties;
       if (toolProps) {
-        funcArguments[Object.keys(toolProps)[0]] =
-          choice.message.function_call.arguments;
+        funcArguments[Object.keys(toolProps)[0]] = toolCall.function.arguments;
       }
     }
     const functionCall: FunctionCall = {
       name,
       arguments: funcArguments,
     };
-    return functionCall;
+    functionCalls.push(functionCall);
   }
+  return functionCalls;
 }
 
 export async function processChatTask(
@@ -138,12 +136,11 @@ export async function processChatTask(
       }
 
       if (chatCompletion && openRouterUsed(chatState.baseURL)) {
-        enrichWithDelayedUsageInfos(chatCompletion, chatState, task);
+        enrichWithDelayedUsageInfos(chatCompletion.id, chatState, task);
       } else if (chatCompletion?.usage) {
         // openai sends back the exact number of prompt tokens :)
         task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
         task.debugging.resultTokens = chatCompletion.usage.completion_tokens;
-        task.debugging.taskCosts = chatCompletion.usage.inference_costs;
         task.debugging.taskTokens = chatCompletion.usage.total_tokens;
       } else {
         task.debugging.estimatedTokens = estimateChatTokens(
@@ -292,12 +289,12 @@ async function generateFollowUpTasksFromResult(
     } else if (finishedTask.result.type === 'ToolCall') {
       const choice = finishedTask.result.chatResponse?.choices[0];
       if (choice) {
-        const functionCall = extractOpenAIFunction(choice);
+        const functionCall = extractOpenAIFunctions(choice);
         if (functionCall) {
           taskDraftList.push({
             role: 'function',
             content: null,
-            context: { function: functionCall },
+            context: { function: functionCall[0] },
           });
           execute = true;
         }

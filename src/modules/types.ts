@@ -90,7 +90,7 @@ export interface TaskResult {
     | 'ToolError'
     | 'ToolChatResult';
   assistantResponse?: OpenAI.Beta.Threads.Messages.ThreadMessage[];
-  chatResponse?: ChatCompletionResponse;
+  chatResponse?: OpenAI.ChatCompletion;
   toolResult?: ToolResult; // Description or value of the result
 }
 

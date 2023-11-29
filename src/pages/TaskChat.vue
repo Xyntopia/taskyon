@@ -354,7 +354,7 @@
 
 <script setup lang="ts">
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
-import { computed, ref, createVNode, render, h, provide } from 'vue';
+import { computed, ref } from 'vue';
 import { useQuasar } from 'quasar';
 import ToolResultWidget from 'components/ToolResultWidget.vue';
 import { getApikey } from 'src/modules/chat';
