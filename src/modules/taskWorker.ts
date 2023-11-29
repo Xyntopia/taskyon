@@ -28,7 +28,8 @@ function isOpenAIFunctionCall(
   message: { function_call: FunctionCall };
 } {
   return (
-    choice.finish_reason === 'function_call' &&
+    (choice.finish_reason === 'function_call' ||
+      choice.finish_reason === 'tool_calls') &&
     !choice.message.content &&
     !!choice.message.function_call
   );
@@ -85,13 +86,7 @@ export async function processChatTask(
     const useToolChat =
       task.allowedTools?.length && !chatState.enableOpenAiTools;
 
-    const {
-      openAIConversationThread,
-      functions,
-    }: {
-      openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
-      functions: Tool[];
-    } = prepareTasksForInference(
+    const { openAIConversationThread, tools } = prepareTasksForInference(
       task,
       chatState,
       useToolChat ? 'toolchat' : 'chat'
@@ -100,12 +95,27 @@ export async function processChatTask(
     if (openAIConversationThread.length > 0) {
       const chatCompletion = await callLLM(
         openAIConversationThread,
-        functions as unknown as OpenAI.FunctionDefinition[],
+        tools,
         chatState,
         getSelectedModel(chatState),
         getAPIURLs(chatState.baseURL).chat,
-        task.id == chatState.selectedTaskId ? true : false, // stream
+        // if the task runs in the "foreground", stream it :)
+        task.id == chatState.selectedTaskId ? true : false,
+        // this function receives chunks if we stream and "plants" them into
+        // our original task
         (chunk) => {
+          console.log(chunk);
+          if (chunk?.choices[0]?.delta?.tool_calls) {
+            chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
+              task.debugging.toolStreamArgsContent =
+                task.debugging.toolStreamArgsContent || {};
+              if (t.function?.name) {
+                task.debugging.toolStreamArgsContent[t.function.name] =
+                  (task.debugging.toolStreamArgsContent[t.function.name] ||
+                    '') + (t.function?.arguments || '');
+              }
+            });
+          }
           if (chunk?.choices[0]?.delta?.content) {
             task.debugging.streamContent =
               (task.debugging.streamContent || '') +

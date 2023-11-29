@@ -221,6 +221,7 @@
             </q-slide-transition>
           </div>
         </q-chat-message>
+        <!--Render tasks which are in progress-->
         <div
           v-if="
             ['Open', 'In Progress'].some((subs) =>
@@ -239,6 +240,16 @@
                   :src="
                     state.chatState.Tasks[state.chatState.selectedTaskId || '']
                       .debugging.streamContent || ''
+                  "
+                />
+                <q-markdown
+                  no-line-numbers
+                  :src="
+                    JSON.stringify(
+                      state.chatState.Tasks[
+                        state.chatState.selectedTaskId || ''
+                      ].debugging.toolStreamArgsContent
+                    )
                   "
                 />
                 <q-spinner-dots size="2rem" />

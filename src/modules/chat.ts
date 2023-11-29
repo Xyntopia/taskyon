@@ -316,14 +316,55 @@ function accumulateChatCompletion(
     ],
   };
 
-  // Accumulate the content from the first choice of each chunk
-  response.choices[0].message.content = chunks
-    .map((chunk) => chunk.choices[0]?.delta?.content || '')
-    .join('');
+  // we need to accumulate tools separatly as we need an object to do this..
+  const toolCalls: Record<string, OpenAI.ChatCompletionMessageToolCall> = {};
 
-  // Optionally, set the finish_reason from the last chunk
-  const lastChoice = chunks[chunks.length - 1].choices[0];
-  response.choices[0].finish_reason = lastChoice.finish_reason;
+  // Accumulate the content from the first choice of each chunk
+  // TODO: in the future we can easily accumulate from each choice with a  loop
+  const choice = chunks.reduce(
+    (previous, chunk) => {
+      const choiceIdx = 0;
+      previous.message.content +=
+        chunk.choices[choiceIdx]?.delta?.content || '';
+      previous.message.role =
+        (chunk.choices[choiceIdx]?.delta
+          ?.role as OpenAI.ChatCompletionMessage['role']) ||
+        previous.message.role;
+      previous.finish_reason =
+        chunk.choices[choiceIdx]?.finish_reason || previous.finish_reason;
+      for (const tc of chunk.choices[choiceIdx].delta.tool_calls || []) {
+        // initialize toolCalls if it doesn't exist
+        const tcnew = toolCalls[tc.index] || {
+          id: '',
+          type: 'function',
+          function: {
+            name: '',
+            arguments: '',
+          },
+        };
+        tcnew.id += tc.id || '';
+        tcnew.function.name += tc.function?.name || '';
+        tcnew.function.arguments += tc.function?.arguments || '';
+        toolCalls[tc.index] = tcnew;
+      }
+      return previous;
+    },
+    {
+      index: 0,
+      message: {
+        content: null,
+        role: 'assistant', // or other roles as per your logic
+      },
+      finish_reason: 'tool_calls',
+    } as OpenAI.ChatCompletion['choices'][0]
+  );
+
+  const tool_calls = Object.values(toolCalls).map((t) => ({
+    name: t.function.name,
+    arguments: t.function.arguments,
+  }));
+
+  response.choices[0].message.tool_calls = tool_calls;
 
   return response;
 }
@@ -331,36 +372,32 @@ function accumulateChatCompletion(
 // calls openRouter OR OpenAI  chatmodels
 export async function callLLM(
   chatMessages: OpenAI.ChatCompletionMessageParam[],
-  functions: OpenAI.FunctionDefinition[],
+  functions: OpenAI.ChatCompletionTool[],
   chatState: ChatStateType,
   model: string,
   chatURL: string,
   stream: false | true | null | undefined = false,
   contentCallBack: (chunk?: OpenAI.Chat.Completions.ChatCompletionChunk) => void
-) {
+): Promise<ChatCompletionResponse | undefined> {
   const headers: Record<string, string> = generateHeaders(chatState);
   let chatCompletion: ChatCompletionResponse | undefined = undefined;
-  if (stream) {
-    const openai = getOpenai(
-      chatState.openAIApiKey,
-      chatState.baseURL,
-      headers
-    );
+  const openai = getOpenai(chatState.openAIApiKey, chatState.baseURL, headers);
 
-    const payload: OpenAI.ChatCompletionCreateParams = {
-      model,
-      messages: chatMessages,
-      user: 'taskyon',
-      temperature: 0.0,
-      stream,
-      n: 1,
-    };
+  const payload: OpenAI.ChatCompletionCreateParams = {
+    model,
+    messages: chatMessages,
+    user: 'taskyon',
+    temperature: 0.0,
+    stream,
+    n: 1,
+  };
 
-    if (functions.length > 0) {
-      payload.function_call = 'auto';
-      payload.functions = functions;
-    }
+  if (functions.length > 0) {
+    payload.tool_choice = 'auto';
+    payload.tools = functions;
+  }
 
+  if (payload.stream) {
     let cancelStreaming = false;
     function cancelStreamListener() {
       cancelStreaming = true;
@@ -391,20 +428,6 @@ export async function callLLM(
       cancelStreamListener
     );
   } else {
-    const payload: OpenAI.ChatCompletionCreateParams = {
-      model,
-      messages: chatMessages,
-      user: 'taskyon',
-      temperature: 0.0,
-      stream,
-      n: 1,
-    };
-
-    if (functions.length > 0) {
-      payload.function_call = 'auto';
-      payload.functions = functions;
-    }
-
     const response = await axios.post<ChatCompletionResponse>(
       chatURL,
       payload,
@@ -518,10 +541,13 @@ export function prepareTasksForInference(
   task: LLMTask,
   chatState: ChatStateType,
   method: 'toolchat' | 'chat' | 'taskAgent'
-) {
+): {
+  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+  tools: OpenAI.ChatCompletionTool[];
+} {
   let openAIConversationThread = buildChatFromTask(task, chatState);
 
-  let functions: Tool[] = [];
+  let tools: Tool[] = [];
 
   // Check if task has tools and OpenAI tools are not enabled
   if (
@@ -598,9 +624,23 @@ export function prepareTasksForInference(
       ...additionalMessages,
     ];
   } else {
-    functions = mapFunctionNames(task.allowedTools || []) || [];
+    // TODO: add possible instructions here :) like mentioning that
+    //       we can use mermaid and html/svg in our frontend markdown-it
+    tools = mapFunctionNames(task.allowedTools || []) || [];
   }
-  return { openAIConversationThread, functions };
+  const openAITools: OpenAI.ChatCompletionTool[] = tools.map((t) => {
+    const functionDef: OpenAI.FunctionDefinition = {
+      name: t.name,
+      parameters: t.parameters as unknown as Record<string, unknown>,
+      description: t.description,
+    };
+    return {
+      function: functionDef,
+      type: 'function',
+    };
+  });
+
+  return { openAIConversationThread, tools: openAITools };
 }
 
 export function enrichWithDelayedUsageInfos(

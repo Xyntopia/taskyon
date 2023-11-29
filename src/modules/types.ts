@@ -15,12 +15,17 @@ export type OpenAIMessage = {
   // The content of the message, can be null for some messages.
   content: string | null;
   // Function call details if applicable.
+  // TODO: get rid of Function call eventually..
   function_call?: {
     // The name of the function to call.
     name: string;
     // Arguments to call the function with in JSON format.
     arguments: string;
   };
+  tool_calls?: {
+    name: string;
+    arguments: string;
+  }[];
   // The name of the message author (optional) it has to be the name of the function, if
   // the role is "function".
   name?: string;
@@ -114,6 +119,7 @@ export type LLMTask = {
       promptTokens?: number;
       singlePromptTokens?: number;
     };
+    toolStreamArgsContent?: Record<string, string>;
     streamContent?: string;
     // the costs used to solve this task...
     taskCosts?: number;
