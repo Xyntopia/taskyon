@@ -21,215 +21,10 @@
             :bg-color="$q.dark.isActive ? 'primary' : 'white'"
             :class="task.role === 'user' ? 'user-message' : ''"
           >
-            <div :class="$q.dark.isActive ? 'text-white' : 'text-black'">
-              <!--Message Display-->
-              <div class="col-auto row justify-begin q-gutter-xs">
-                <!--task icon-->
-                <div v-if="task.state == 'Error'" class="col-auto">
-                  <q-icon name="warning" color="warning" size="sm"
-                    ><q-tooltip class="bg-warning">Error!</q-tooltip>
-                  </q-icon>
-                </div>
-                <div v-if="task.role == 'function'" class="col">
-                  <q-expansion-item
-                    dense
-                    icon="calculate"
-                    :label="task.context?.function?.name"
-                    :header-class="
-                      task.state == 'Error' ? 'text-red' : 'text-green'
-                    "
-                  >
-                    <ToolResultWidget :task="task" />
-                  </q-expansion-item>
-                </div>
-                <q-markdown
-                  v-else-if="task.content"
-                  class="col"
-                  no-line-numbers
-                  :plugins="[markdownItMermaid, addCopyButtons]"
-                  :src="task.content"
-                  @click="handleMarkdownClick"
-                />
-                <!--task costs-->
-                <div
-                  v-if="state.showCosts"
-                  style="font-size: xx-small"
-                  class="column items-center"
-                >
-                  <div v-if="task.debugging.taskCosts">
-                    {{
-                      Math.round(
-                        task.debugging.taskCosts * 1e6
-                      ).toLocaleString()
-                    }}
-                    μ$
-                  </div>
-                  <q-icon
-                    name="monetization_on"
-                    size="xs"
-                    :color="
-                      task.debugging.taskCosts
-                        ? 'secondary'
-                        : task.debugging.promptTokens
-                        ? 'positive'
-                        : 'info'
-                    "
-                  ></q-icon>
-                  <div v-if="task.debugging.promptTokens">
-                    {{ task.debugging.promptTokens }}
-                  </div>
-                  <div v-else>
-                    {{
-                      (task.debugging.estimatedTokens?.promptTokens || 0) +
-                      (task.debugging.estimatedTokens?.resultTokens || 0)
-                    }}
-                  </div>
-                  <q-tooltip :delay="1000">
-                    <TokenUsage :task="task" />
-                  </q-tooltip>
-                </div>
-              </div>
-              <!--buttons-->
-              <div
-                v-if="state.expertMode"
-                class="col-auto q-gutter-xs row justify-start items-stretch"
-              >
-                <q-btn
-                  class="col"
-                  flat
-                  icon="code"
-                  dense
-                  size="sm"
-                  @click="toggleMessageDebug(task.id)"
-                >
-                  <q-tooltip :delay="0">Show message context</q-tooltip>
-                </q-btn>
-                <q-btn
-                  class="col-auto rotate-180"
-                  push
-                  size="sm"
-                  outline
-                  icon="alt_route"
-                  dense
-                  @click="state.chatState.selectedTaskId = task.id"
-                >
-                  <q-tooltip :delay="0"
-                    >Start alternative conversation thread from here</q-tooltip
-                  >
-                </q-btn>
-                <q-btn
-                  class="col-auto"
-                  outline
-                  icon="edit"
-                  dense
-                  size="sm"
-                  @click="editTask(task.id)"
-                >
-                  <q-tooltip :delay="0">Edit Task/Message</q-tooltip>
-                </q-btn>
-              </div>
-              <!--task debugging-->
-              <q-slide-transition>
-                <div v-show="state.messageDebug[task.id]">
-                  <q-separator spaced />
-                  <q-tabs dense v-model="state.messageDebug[task.id]" no-caps>
-                    <q-tab name="ERROR" label="Error" />
-                    <q-tab name="FOLLOWUPERROR" label="Follow-up task error" />
-                    <q-tab name="RAW" label="raw task data" />
-                    <q-tab name="RAWTASK" label="task prompt" />
-                    <q-tab name="MESSAGECONTENT" label="raw result" />
-                  </q-tabs>
-                  <q-tab-panels
-                    v-model="state.messageDebug[task.id]"
-                    animated
-                    swipeable
-                    horizontal
-                    transition-prev="jump-right"
-                    transition-next="jump-left"
-                  >
-                    <q-tab-panel name="ERROR">
-                      <textarea
-                        :value="JSON.stringify(task.debugging.error, null, 2)"
-                        readonly
-                        wrap="soft"
-                        style="
-                          width: 100%;
-                          height: 200px;
-                          background-color: inherit;
-                          color: inherit;
-                        "
-                      >
-                      </textarea>
-                    </q-tab-panel>
-                    <q-tab-panel name="FOLLOWUPERROR">
-                      <textarea
-                        :value="
-                          JSON.stringify(task.debugging.followUpError, null, 2)
-                        "
-                        readonly
-                        wrap="soft"
-                        style="
-                          width: 100%;
-                          height: 200px;
-                          background-color: inherit;
-                          color: inherit;
-                        "
-                      >
-                      </textarea>
-                    </q-tab-panel>
-                    <q-tab-panel name="RAW">
-                      <textarea
-                        :value="JSON.stringify(task, null, 2)"
-                        readonly
-                        wrap="soft"
-                        style="
-                          width: 100%;
-                          height: 200px;
-                          background-color: inherit;
-                          color: inherit;
-                        "
-                      >
-                      </textarea>
-                    </q-tab-panel>
-                    <q-tab-panel name="MESSAGECONTENT">
-                      <textarea
-                        :value="
-                          task.result?.chatResponse?.choices[0].message
-                            .content || 'ERROR'
-                        "
-                        readonly
-                        wrap="soft"
-                        style="
-                          width: 100%;
-                          height: 200px;
-                          background-color: inherit;
-                          color: inherit;
-                        "
-                      >
-                      </textarea>
-                    </q-tab-panel>
-                    <q-tab-panel name="RAWTASK">
-                      <textarea
-                        v-for="(tp, idx) in task.debugging.taskPrompt"
-                        :key="idx"
-                        :value="
-                          typeof tp.content === 'string' ? tp.content : ''
-                        "
-                        readonly
-                        wrap="soft"
-                        style="
-                          width: 100%;
-                          height: 200px;
-                          background-color: inherit;
-                          color: inherit;
-                        "
-                      >
-                      </textarea>
-                    </q-tab-panel>
-                  </q-tab-panels>
-                </div>
-              </q-slide-transition>
-            </div>
+            <Task
+              :task="task"
+              :class="$q.dark.isActive ? 'text-white' : 'text-black'"
+            />
           </q-chat-message>
           <!--Render tasks which are in progress-->
           <div
@@ -352,40 +147,23 @@
   background-color: scale-color($primary, $lightness: 80%)
 .primarydark
   background-color: scale-color($primary, $blackness: 30%)
-
-::v-deep(.code-block-with-overlay)
-  position: relative
-
-  .copy-button
-    position: absolute
-    top: 0
-    right: 0
-    z-index: 10
-    // Add other necessary styles for the button
 </style>
 
 <script setup lang="ts">
+import Task from 'components/Task.vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import { computed, ref } from 'vue';
 import { useQuasar } from 'quasar';
-import ToolResultWidget from 'components/ToolResultWidget.vue';
 import { getApikey } from 'src/modules/chat';
 import { taskChain } from 'src/modules/taskManager';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
-import TokenUsage from 'components/TokenUsage.vue';
 import CreateNewTask from 'components/CreateNewTask.vue';
-import { LLMTask } from 'src/modules/types';
 import {
   emitCancelAllTasks,
   emitCancelCurrentTask,
 } from 'src/modules/taskWorker';
 import axios from 'axios';
-import type MarkdownIt from 'markdown-it/lib';
-import markdownItMermaid from '@datatraccorporation/markdown-it-mermaid';
-import { QBtn } from 'quasar';
-
-type markdownItMermaid = MarkdownIt.PluginSimple;
 
 const welcomeText = ref<string>('');
 
@@ -412,92 +190,4 @@ const selectedThread = computed(() => {
     return [];
   }
 });
-
-function editTask(taskId: string) {
-  const jsonTask = JSON.stringify(state.chatState.Tasks[taskId]);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-  const task: Partial<LLMTask> = JSON.parse(jsonTask);
-  task.id = 'draft';
-  task.debugging = {};
-  task.childrenIDs = [];
-  task.state = 'Open';
-  delete task.result;
-  state.taskDraft = task;
-  state.chatState.selectedTaskId = state.chatState.Tasks[taskId].parentID;
-}
-
-function toggleMessageDebug(id: string) {
-  if (state.messageDebug[id] === undefined) {
-    // If the message ID doesn't exist, default to true since we're opening it.
-    state.messageDebug[id] = 'RAW';
-  } else {
-    // If it does exist, toggle the boolean.
-    state.messageDebug[id] = undefined;
-  }
-}
-
-let copyButtonCounter = ref(0);
-
-function addCopyButtons(md: MarkdownIt) {
-  const defaultFenceRenderer =
-    md.renderer.rules.fence ||
-    ((tokens, idx, options, env, self) => {
-      return self.renderToken(tokens, idx, options);
-    });
-
-  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
-    // Original rendered HTML of the code block
-    const originalRenderedHtml = defaultFenceRenderer(
-      tokens,
-      idx,
-      options,
-      env,
-      self
-    );
-
-    const buttonId = `copy-button-${copyButtonCounter.value++}`;
-
-    // Custom HTML for the button
-    const customHtml = `
-        <div class="code-block-with-overlay">
-          <button class="copy-button q-btn q-btn-item non-selectable transparent q-btn--flat q-btn--rectangle
-            q-btn--actionable q-focusable q-hoverable q-btn--dense col-auto copy-button">
-            <span class="q-focus-helper"></span>
-            <span class="q-btn__content text-center col items-center q-anchor--skip justify-center row">
-              <i class="q-icon notranslate material-icons" aria-hidden="true" role="img">content_copy</i>
-            </span>
-          </button>
-          ${originalRenderedHtml}
-        </div>
-      `;
-
-    return customHtml;
-  };
-}
-
-function copyToClipboard(code: string) {
-  navigator.clipboard
-    .writeText(code)
-    .then(() => {
-      console.log('Copied to clipboard');
-    })
-    .catch((err) => {
-      console.error('Error in copying text: ', err);
-    });
-}
-
-function handleMarkdownClick(event: MouseEvent) {
-  const target = (event.target as HTMLElement).closest('.copy-button');
-  if (target) {
-    // Find the closest .code-block-with-overlay and then find the <code> element inside it
-    const codeBlockContainer = target.closest('.code-block-with-overlay');
-    if (codeBlockContainer) {
-      const codeElement = codeBlockContainer.querySelector('code');
-      if (codeElement) {
-        const codeText = codeElement.textContent || ''; // Get the text content of the <code> element
-        copyToClipboard(codeText);
-      }
-    }
-  }
-}
 </script>
