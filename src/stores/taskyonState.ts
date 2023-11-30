@@ -4,7 +4,7 @@ import { ref, Ref } from 'vue';
 import { run } from 'src/modules/taskWorker';
 import type { LLMTask } from 'src/modules/types';
 import type { FunctionArguments } from 'src/modules/tools';
-import { OpenAI } from 'openai'
+import { OpenAI } from 'openai';
 
 //TODO: convert store into composition api
 export const useTaskyonStore = defineStore('taskyonState', () => {
@@ -41,7 +41,13 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
     Object.entries(initialState).map(([key, value]) => [key, ref(value)])
   ) as { [K in keyof typeof initialState]: Ref<(typeof initialState)[K]> };
 
-  return { ...stateRefs };
+  function setDraftFunctionArgs(newValue: FunctionArguments) {
+    if (stateRefs.taskDraft.value.context?.function) {
+      stateRefs.taskDraft.value.context.function.arguments = newValue;
+    }
+  }
+
+  return { ...stateRefs, setDraftFunctionArgs };
 });
 
 const store = useTaskyonStore();

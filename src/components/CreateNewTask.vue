@@ -61,7 +61,10 @@
           </div>
           <div v-if="selectedTaskType">
             <ObjectTreeView
-              :model-value="currentFuncArgs"
+              :model-value="state.taskDraft.context?.function?.arguments"
+              :on-update:model-value="
+                (value) => state.setDraftFunctionArgs(value)
+              "
               input-field-behavior="textarea"
             />
             <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
@@ -173,7 +176,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, toRefs } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { countStringTokens } from 'src/modules/chat';
 import {
   tools,
@@ -195,9 +198,7 @@ import ObjectTreeView from './ObjectTreeView.vue';
 
 const state = useTaskyonStore();
 
-const currentFuncArgs = toRefs(
-  state.taskDraft.context?.function?.arguments || {}
-);
+//const funcArgs = computed(() => );
 
 const currentlySelectedBotName = ref('');
 const currentlySelectedService = ref('');
@@ -213,19 +214,6 @@ const handleBotNameUpdate = ({
   currentlySelectedBotName.value = newName;
   currentlySelectedService.value = newService;
 };
-
-function setFunctionParameter(
-  paramName: string,
-  value: string | number | null
-) {
-  if (state.taskDraft.context?.function?.arguments) {
-    state.taskDraft.context.function.arguments[paramName] = value || '';
-  }
-  if (state.taskDraft.context?.function?.name) {
-    state.draftParameters[state.taskDraft.context.function.name][paramName] =
-      value || '';
-  }
-}
 
 const selectedTaskType = computed(() => {
   return state.taskDraft.context?.function?.name;
@@ -313,7 +301,7 @@ async function attachFileToTask(newFiles: File[]) {
   // Collect UUIDs from added files
   const uuids = [];
 
-  for (const [originalFilename, savedFilename] of Object.entries(opfsMapping)) {
+  for (const [, savedFilename] of Object.entries(opfsMapping)) {
     const uuid = await addFile(savedFilename);
     uuids.push(uuid);
   }

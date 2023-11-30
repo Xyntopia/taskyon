@@ -19,7 +19,7 @@ type ParamType =
   | Record<string, unknown>
   | Array<unknown>
   | null;
-export type FunctionArguments = Record<string, ParamType>;
+export type FunctionArguments = { [x: string]: ParamType };
 
 export type FunctionCall = {
   // The name of the function to call.
@@ -301,6 +301,8 @@ tools.executeJavaScript = {
 
         // Execute the scoped function and capture the result
         const executionResult = scopedExecution();
+
+        console.log('finished js execution..')
 
         return executionResult;
       } catch (error) {

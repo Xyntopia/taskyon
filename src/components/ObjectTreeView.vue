@@ -1,5 +1,5 @@
 <template>
-  <q-tree :nodes="nodeTree" node-key="label">
+  <q-tree v-if="modelValue" :nodes="nodeTree" node-key="label">
     <template v-slot:body-text="prop">
       <div class="row">
         <div class="col-auto" style="min-width: 200px">
@@ -48,15 +48,23 @@
       />
     </template>
   </q-tree>
+  <div v-else>no input data!</div>
 </template>
 
 <script setup lang="ts">
-import { computed, defineProps, reactive, watch, nextTick } from 'vue';
+import {
+  computed,
+  defineProps,
+  ref,
+  watch,
+  nextTick,
+  PropType,
+} from 'vue';
 import { QTreeNode } from 'quasar';
 
 const props = defineProps({
   modelValue: {
-    type: Object,
+    type: Object as PropType<Record<string, unknown> | undefined>,
     required: true,
   },
   inputFieldBehavior: {
@@ -66,7 +74,18 @@ const props = defineProps({
 });
 
 // Initialize the reactive tree object with the modelValue
-const treeObject = reactive({ ...props.modelValue });
+const treeObject = ref<Record<string, unknown> | undefined>({
+  ...props.modelValue,
+});
+//const treeObject = toRef(props.modelValue, 'tmp');
+
+watch(
+  () => props.modelValue,
+  (newValue) => {
+    treeObject.value = newValue;
+  },
+  { deep: true }
+);
 
 const emit = defineEmits(['update:modelValue']);
 
@@ -82,15 +101,17 @@ watch(
 );
 
 const updateValue = (keyPath: string[], value: unknown) => {
-  let currentPart: Record<string, unknown> = treeObject;
+  if (treeObject.value) {
+    let currentPart: Record<string, unknown> = treeObject.value;
 
-  // Iterate over the keyPath to find the correct property to update
-  for (let i = 0; i < keyPath.length - 1; i++) {
-    currentPart = currentPart[keyPath[i]] as Record<string, unknown>;
+    // Iterate over the keyPath to find the correct property to update
+    for (let i = 0; i < keyPath.length - 1; i++) {
+      currentPart = currentPart[keyPath[i]] as Record<string, unknown>;
+    }
+
+    // Update the value at the final key, with a type assertion
+    currentPart[keyPath[keyPath.length - 1]] = value;
   }
-
-  // Update the value at the final key, with a type assertion
-  currentPart[keyPath[keyPath.length - 1]] = value;
 };
 
 const transformToTreeNodes = (
@@ -149,5 +170,11 @@ const transformToTreeNodes = (
     .filter((x) => x != undefined);
 };
 
-const nodeTree = computed(() => transformToTreeNodes(treeObject));
+const nodeTree = computed(() => {
+  if (treeObject.value) {
+    return transformToTreeNodes(treeObject.value);
+  } else {
+    return [];
+  }
+});
 </script>

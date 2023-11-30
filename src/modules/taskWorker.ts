@@ -102,7 +102,6 @@ export async function processChatTask(
         // this function receives chunks if we stream and "plants" them into
         // our original task
         (chunk) => {
-          console.log(chunk);
           if (chunk?.choices[0]?.delta?.tool_calls) {
             chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
               task.debugging.toolStreamArgsContent =
