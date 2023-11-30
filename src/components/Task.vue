@@ -1,104 +1,106 @@
 <template>
-  <div>
-    <!--Message Display-->
-    <div class="col-auto row justify-begin q-gutter-xs">
-      <!--task icon-->
-      <div v-if="task.state == 'Error'" class="col-auto">
-        <q-icon name="warning" color="warning" size="sm"
-          ><q-tooltip class="bg-warning">Error!</q-tooltip>
-        </q-icon>
-      </div>
-      <div v-if="task.role == 'function'" class="col">
-        <q-expansion-item
-          dense
-          icon="calculate"
-          :label="task.context?.function?.name"
-          :header-class="task.state == 'Error' ? 'text-red' : 'text-green'"
+  <div class="message-container">
+    <div class="relative-position">
+      <!--Message Display-->
+      <div class="row justify-begin q-gutter-xs message-content">
+        <!--task icon-->
+        <div v-if="task.state == 'Error'" class="col-auto">
+          <q-icon name="warning" color="warning" size="sm"
+            ><q-tooltip class="bg-warning">Error!</q-tooltip>
+          </q-icon>
+        </div>
+        <div v-if="task.role == 'function'" class="col">
+          <q-expansion-item
+            dense
+            icon="calculate"
+            :label="task.context?.function?.name"
+            :header-class="task.state == 'Error' ? 'text-red' : 'text-green'"
+          >
+            <ToolResultWidget :task="task" />
+          </q-expansion-item>
+        </div>
+        <q-markdown
+          v-else-if="task.content"
+          class="col"
+          no-line-numbers
+          :plugins="[markdownItMermaid, addCopyButtons]"
+          :src="task.content"
+          @click="handleMarkdownClick"
+        />
+        <!--task costs-->
+        <div
+          v-if="state.showCosts"
+          style="font-size: xx-small"
+          class="column items-center"
         >
-          <ToolResultWidget :task="task" />
-        </q-expansion-item>
+          <div v-if="task.debugging.taskCosts">
+            {{ Math.round(task.debugging.taskCosts * 1e6).toLocaleString() }}
+            μ$
+          </div>
+          <q-icon
+            name="monetization_on"
+            size="xs"
+            :color="
+              task.debugging.taskCosts
+                ? 'secondary'
+                : task.debugging.promptTokens
+                ? 'positive'
+                : 'info'
+            "
+          ></q-icon>
+          <div v-if="task.debugging.promptTokens">
+            {{ task.debugging.promptTokens }}
+          </div>
+          <div v-else>
+            {{
+              (task.debugging.estimatedTokens?.promptTokens || 0) +
+              (task.debugging.estimatedTokens?.resultTokens || 0)
+            }}
+          </div>
+          <q-tooltip :delay="1000">
+            <TokenUsage :task="task" />
+          </q-tooltip>
+        </div>
       </div>
-      <q-markdown
-        v-else-if="task.content"
-        class="col"
-        no-line-numbers
-        :plugins="[markdownItMermaid, addCopyButtons]"
-        :src="task.content"
-        @click="handleMarkdownClick"
-      />
-      <!--task costs-->
+      <!--buttons-->
       <div
-        v-if="state.showCosts"
-        style="font-size: xx-small"
-        class="column items-center"
+        class="q-gutter-xs row justify-start items-stretch message-buttons absolute-bottom-left z-top print-hide transparent"
       >
-        <div v-if="task.debugging.taskCosts">
-          {{ Math.round(task.debugging.taskCosts * 1e6).toLocaleString() }}
-          μ$
-        </div>
-        <q-icon
-          name="monetization_on"
-          size="xs"
-          :color="
-            task.debugging.taskCosts
-              ? 'secondary'
-              : task.debugging.promptTokens
-              ? 'positive'
-              : 'info'
-          "
-        ></q-icon>
-        <div v-if="task.debugging.promptTokens">
-          {{ task.debugging.promptTokens }}
-        </div>
-        <div v-else>
-          {{
-            (task.debugging.estimatedTokens?.promptTokens || 0) +
-            (task.debugging.estimatedTokens?.resultTokens || 0)
-          }}
-        </div>
-        <q-tooltip :delay="1000">
-          <TokenUsage :task="task" />
-        </q-tooltip>
-      </div>
-    </div>
-    <!--buttons-->
-    <div
-      v-if="state.expertMode"
-      class="col-auto q-gutter-xs row justify-start items-stretch"
-    >
-      <q-btn
-        class="col"
-        flat
-        icon="code"
-        dense
-        size="sm"
-        @click="toggleMessageDebug(task.id)"
-      >
-        <q-tooltip :delay="0">Show message context</q-tooltip>
-      </q-btn>
-      <q-btn
-        class="col-auto rotate-180"
-        push
-        size="sm"
-        outline
-        icon="alt_route"
-        dense
-        @click="state.chatState.selectedTaskId = task.id"
-      >
-        <q-tooltip :delay="0"
-          >Start alternative conversation thread from here</q-tooltip
+        <q-btn
+          v-if="state.expertMode"
+          class="col"
+          icon="code"
+          dense
+          flat
+          size="sm"
+          @click="toggleMessageDebug(task.id)"
         >
-      </q-btn>
-      <q-btn
-        class="col-auto"
-        outline
-        icon="edit"
-        dense
-        size="sm"
-        @click="editTask(task.id)"
-      >
-        <q-tooltip :delay="0">Edit Task/Message</q-tooltip>
-      </q-btn>
+          <q-tooltip :delay="0">Show message context</q-tooltip>
+        </q-btn>
+        <q-btn
+          v-if="task.childrenIDs.length > 0"
+          class="col-auto"
+          size="sm"
+          dense
+          flat
+          @click="state.chatState.selectedTaskId = task.id"
+        >
+          <q-icon class="rotate-180" name="alt_route"></q-icon>
+          <q-tooltip :delay="0"
+            >Start alternative conversation thread from here</q-tooltip
+          >
+        </q-btn>
+        <q-btn
+          class="col-auto"
+          icon="edit"
+          dense
+          flat
+          size="sm"
+          @click="editTask(task.id)"
+        >
+          <q-tooltip :delay="0">Edit Task/Message</q-tooltip>
+        </q-btn>
+      </div>
     </div>
     <!--task debugging-->
     <q-slide-transition>
@@ -207,8 +209,19 @@
     position: absolute
     top: 0
     right: 0
-    z-index: 10
     // Add other necessary styles for the button
+
+.message-container
+    .message-buttons
+        position: absolute
+        bottom: -8px  // To move up by 6px
+        left: -8px   // To move left by 6px
+        opacity: 0
+        transition: opacity 0.3s
+
+    &:hover
+        .message-buttons
+            opacity: 1
 </style>
 
 <script setup lang="ts">
@@ -273,7 +286,7 @@ function addCopyButtons(md: MarkdownIt) {
     const customHtml = `
         <div class="code-block-with-overlay">
           <button class="copy-button q-btn q-btn-item non-selectable transparent q-btn--flat q-btn--rectangle
-            q-btn--actionable q-focusable q-hoverable q-btn--dense col-auto copy-button">
+            q-btn--actionable q-focusable q-hoverable q-btn--dense copy-button z-top">
             <span class="q-focus-helper"></span>
             <span class="q-btn__content text-center col items-center q-anchor--skip justify-center row">
               <i class="q-icon notranslate material-icons" aria-hidden="true" role="img">content_copy</i>

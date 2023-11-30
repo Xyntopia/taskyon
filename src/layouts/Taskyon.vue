@@ -2,7 +2,7 @@
   <q-layout view="hHh LpR lfr">
     <q-header
       elevated
-      :class="$q.dark.isActive ? 'bg-secondary' : 'bg-primary'"
+      :class="[$q.dark.isActive ? 'bg-secondary' : 'bg-primary', 'print-hide']"
     >
       <q-toolbar class="q-gutter-xs">
         <q-btn
@@ -21,13 +21,7 @@
             <div>Taskyon</div>
           </q-btn>
         </q-toolbar-title>
-        <q-btn
-          flat
-          dense
-          round
-          icon="settings"
-          to="settings"
-        >
+        <q-btn flat dense round icon="settings" to="settings">
           <q-tooltip>Open settings</q-tooltip>
         </q-btn>
         <q-btn
@@ -83,7 +77,7 @@
       :width="300"
       :breakpoint="800"
       bordered
-      :class="[$q.dark.isActive ? 'bg-primary' : 'bg-grey-3']"
+      :class="[$q.dark.isActive ? 'bg-primary' : 'bg-grey-3', 'print-hide']"
     >
       <ChatSidebar />
     </q-drawer>
