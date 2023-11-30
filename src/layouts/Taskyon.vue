@@ -72,11 +72,10 @@
 
     <q-drawer
       v-model="state.drawerOpen"
-      show-if-above
       elevated
-      :width="300"
+      persistent
+      :width="250"
       :breakpoint="800"
-      bordered
       :class="[$q.dark.isActive ? 'bg-primary' : 'bg-grey-3', 'print-hide']"
     >
       <ChatSidebar />

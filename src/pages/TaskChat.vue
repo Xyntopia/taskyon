@@ -5,14 +5,17 @@
       'column items-center',
     ]"
   >
-    <div class="column items-center" style="max-width: 48rem">
+    <div
+      class="column items-center"
+      :style="`padding-bottom: ${bottomPadding}px;`"
+    >
+      <!-- "Task" Display -->
       <q-card
-        style="background-color: inherit; color: inherit"
+        style="background-color: inherit; color: inherit; max-width: 48rem"
         flat
         square
         v-if="selectedThread.length > 0"
       >
-        <!-- "Task" Display -->
         <q-card-section class="q-gutter-sm">
           <q-chat-message
             v-for="task in selectedThread"
@@ -87,6 +90,7 @@
           </div>
         </q-card-section>
       </q-card>
+      <!-- Welcome Message -->
       <q-card class="col welcome-message" v-else>
         <q-card-section class="column items-center"
           ><q-card-section
@@ -101,33 +105,45 @@
           </div>
         </q-card-section>
       </q-card>
-      <!--Create new task area-->
-      <q-card
-        :class="$q.dark.isActive ? 'bg-primary' : 'bg-grey-2'"
-        flat
-        v-if="getApikey(state.chatState)"
-      >
-        <CreateNewTask />
-      </q-card>
-      <!--API Key hint-->
-      <q-card flat v-else>
-        <q-card-section>
-          <div>
-            Add an API key to access a chatbot in Settings on the left side!
-            <q-btn
-              href="https://platform.openai.com/account/api-keys"
-              target="_blank"
-            >
-              https://platform.openai.com/account/api-keys</q-btn
-            >
-            or here:
-            <q-btn href="https://openrouter.ai/keys" target="_blank">
-              https://openrouter.ai/keys</q-btn
-            >
-          </div>
-        </q-card-section>
-      </q-card>
     </div>
+    <!--Create new task area-->
+    <q-page-sticky position="bottom" :offset="[0, 0]" class="z-top">
+      <q-resize-observer
+        @resize="
+          (size) => {
+            bottomPadding = size.height;
+          }
+        "
+      />
+      <div class="shadow-5">
+        <CreateNewTask
+          v-if="getApikey(state.chatState)"
+          :class="[
+            $q.dark.isActive ? 'bg-primary' : 'bg-grey-2',
+            'rounded-borders',
+          ]"
+        >
+        </CreateNewTask>
+        <!--API Key hint-->
+        <q-card flat v-else>
+          <q-card-section>
+            <div>
+              Add an API key to access a chatbot in Settings on the left side!
+              <q-btn
+                href="https://platform.openai.com/account/api-keys"
+                target="_blank"
+              >
+                https://platform.openai.com/account/api-keys</q-btn
+              >
+              or here:
+              <q-btn href="https://openrouter.ai/keys" target="_blank">
+                https://openrouter.ai/keys</q-btn
+              >
+            </div>
+          </q-card-section>
+        </q-card>
+      </div>
+    </q-page-sticky>
   </q-page>
 </template>
 
@@ -153,7 +169,7 @@
 import Task from 'components/Task.vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import { computed, ref } from 'vue';
-import { useQuasar } from 'quasar';
+import { useQuasar, scroll } from 'quasar';
 import { getApikey } from 'src/modules/chat';
 import { taskChain } from 'src/modules/taskManager';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
@@ -164,6 +180,9 @@ import {
   emitCancelCurrentTask,
 } from 'src/modules/taskWorker';
 import axios from 'axios';
+const { getScrollHeight } = scroll;
+
+const bottomPadding = ref(100);
 
 const welcomeText = ref<string>('');
 
@@ -190,4 +209,8 @@ const selectedThread = computed(() => {
     return [];
   }
 });
+
+function scrollToThreadEnd() {
+  getScrollHeight(scrollTargetDomElement); // returns a Number
+}
 </script>

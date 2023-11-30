@@ -209,7 +209,7 @@
     position: absolute
     top: 0
     right: 0
-    // Add other necessary styles for the button
+    z-index: 1
 
 .message-container
     .message-buttons
@@ -286,7 +286,7 @@ function addCopyButtons(md: MarkdownIt) {
     const customHtml = `
         <div class="code-block-with-overlay">
           <button class="copy-button q-btn q-btn-item non-selectable transparent q-btn--flat q-btn--rectangle
-            q-btn--actionable q-focusable q-hoverable q-btn--dense copy-button z-top">
+            q-btn--actionable q-focusable q-hoverable q-btn--dense copy-button">
             <span class="q-focus-helper"></span>
             <span class="q-btn__content text-center col items-center q-anchor--skip justify-center row">
               <i class="q-icon notranslate material-icons" aria-hidden="true" role="img">content_copy</i>

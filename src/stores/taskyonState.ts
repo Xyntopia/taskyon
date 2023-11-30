@@ -18,7 +18,7 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
     selectChatBotExpand: true,
     allowedToolsExpand: false,
     showTaskData: false,
-    drawerOpen: false,
+    drawerOpen: true,
     drawerRight: false,
     taskDraft: {} as Partial<LLMTask>,
     streamChatMessage: OpenAI.Chat.Completions,
