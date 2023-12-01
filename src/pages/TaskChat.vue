@@ -115,12 +115,13 @@
           }
         "
       />
-      <div class="shadow-5">
+      <div>
         <CreateNewTask
           v-if="getApikey(state.chatState)"
           :class="[
             $q.dark.isActive ? 'bg-primary' : 'bg-grey-2',
             'rounded-borders',
+            'q-pa-xs','shadow-5'
           ]"
         >
         </CreateNewTask>

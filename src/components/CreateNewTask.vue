@@ -1,178 +1,190 @@
 <template>
   <!--Create new task area-->
-  <q-card-section>
-    <q-list dense separator>
-      <!--Task Creation-->
-      <q-item>
-        <q-item-section>
-          <q-input
-            v-if="!selectedTaskType"
-            autogrow
-            filled
-            color="secondary"
-            v-model="state.taskDraft.content"
-            label="Type your message or instruction..."
-            :bottom-slots="state.expertMode"
-            clearable
-            @keyup="checkForShiftEnter"
+  <div>
+    <!--Task Creation-->
+    <div>
+      <q-input
+        v-if="!selectedTaskType"
+        autogrow
+        filled
+        color="secondary"
+        v-model="state.taskDraft.content"
+        label="Type your message or instruction..."
+        :bottom-slots="state.expertMode"
+        clearable
+        @keyup="checkForShiftEnter"
+      >
+        <template v-slot:append>
+          <q-btn flat dense round icon="send" @click="executeTask">
+            <q-tooltip>
+              Press to send or alternatively send with &lt;shift&gt; +
+              &lt;enter&gt;
+            </q-tooltip>
+          </q-btn>
+        </template>
+        <template v-slot:before>
+          <FileDropzone
+            class="row justify-center items-center"
+            @update:model-value="attachFileToTask"
           >
-            <template v-slot:append>
-              <q-btn flat dense round icon="send" @click="executeTask">
-                <q-tooltip>
-                  Press to send or alternatively send with &lt;shift&gt; +
-                  &lt;enter&gt;
-                </q-tooltip>
-              </q-btn>
-            </template>
-            <template v-slot:before>
-              <FileDropzone
-                class="row justify-center items-center"
-                @update:model-value="attachFileToTask"
-              >
-                <q-btn dense class="fit">
-                  <q-icon name="upload_file" />
-                  <q-icon name="attachment" />
-                  <q-tooltip>Attach file to message</q-tooltip>
-                </q-btn>
-              </FileDropzone>
-            </template>
-            <template v-slot:counter>
-              <div>
-                {{ `approx. token count: ${estimatedTokens}` }}
-              </div>
-            </template>
-          </q-input>
-          <div v-if="fileMappings.length">
-            <div>Attached files:</div>
-            <q-chip
-              v-for="fileMapping in fileMappings"
-              :key="fileMapping.uuid"
-              removable
-              @remove="removeFileFromTask(fileMapping.uuid)"
-              icon="upload_file"
-            >
-              <div class="ellipsis" style="max-width: 100px">
-                {{ `${fileMapping.opfsName} (${fileMapping.uuid})` }}
-              </div>
-              <q-tooltip :delay="0.5">{{
-                `${fileMapping.opfsName} (taskyon-id: ${fileMapping.uuid})`
-              }}</q-tooltip>
-            </q-chip>
-          </div>
-          <div v-if="selectedTaskType">
-            <ObjectTreeView
-              :model-value="state.taskDraft.context?.function?.arguments"
-              :on-update:model-value="
-                (value) => state.setDraftFunctionArgs(value)
-              "
-              input-field-behavior="textarea"
-            />
-            <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
-          </div>
-          <div v-if="state.expertMode" class="row items-center">
-            <q-btn
-              flat
-              dense
-              icon="chat"
-              :color="selectedTaskType ? '' : 'secondary'"
-              @click="setTaskType(undefined)"
-              ><q-tooltip>Select Simple Chat</q-tooltip>
+            <q-btn dense class="fit dropzone" flat>
+              <q-icon name="upload_file" />
+              <q-icon name="attachment" />
+              <q-tooltip>Attach file to message</q-tooltip>
             </q-btn>
-            <q-select
-              style="min-width: 200px"
-              class="q-pt-xs q-px-md"
-              dense
-              clearable
-              standout="bg-secondary text-white"
-              :bg-color="selectedTaskType ? 'secondary' : ''"
-              :model-value="selectedTaskType"
-              @update:modelValue="setTaskType"
-              :options="Object.keys(tools)"
-              :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
-            >
-            </q-select>
-            <q-toggle
-              icon="handyman"
-              left-label
-              color="secondary"
-              dense
-              size="xl"
-              v-model="state.chatState.enableOpenAiTools"
-              ><q-tooltip
-                >Enable OpenAI Functions (use built-in function selection mode
-                for OpenAI)</q-tooltip
-              ></q-toggle
-            >
-            <q-btn
-              class="q-ma-md"
-              dense
-              flat
-              icon="code"
-              @click="state.showTaskData = !state.showTaskData"
-              ><q-tooltip>Show Draft Task Data</q-tooltip></q-btn
-            >
-          </div>
-          <div v-if="state.showTaskData && state.expertMode">
-            {{ currentnewTask }}
-          </div>
-        </q-item-section>
-      </q-item>
-      <!--Model Selection-->
-      <q-expansion-item
-        dense
-        icon="smart_toy"
-        :label="`Select Chatbot (right now: ${currentlySelectedService}/${currentlySelectedBotName})`"
-        v-model="state.selectChatBotExpand"
-      >
-        <q-item-section>
-          <ModelSelection @updateBotName="handleBotNameUpdate"></ModelSelection>
-        </q-item-section>
-      </q-expansion-item>
-      <!--Allowed Tools Selection-->
-      <q-expansion-item
-        dense
-        icon="handyman"
-        label="Allowed Tools"
-        v-model="state.allowedToolsExpand"
-      >
-        <q-item-section>
+          </FileDropzone>
+        </template>
+        <template v-slot:after>
+          <q-btn
+            flat
+            icon="tune"
+            @click="
+              () => {
+                state.expandedTaskCreation = !state.expandedTaskCreation;
+              }
+            "
+            ><q-tooltip> Open Detailed Task Settings </q-tooltip>
+          </q-btn>
+        </template>
+        <template v-slot:counter>
           <div>
-            <q-btn
-              class="q-ma-md"
-              dense
-              label="toggle all allowed tools"
-              color="primary"
-              @click="toggleSelectedTools"
-            />
-            <q-option-group
-              class="q-ma-md"
-              v-model="state.taskDraft.allowedTools"
-              :options="
-                Object.keys(tools).map((name) => ({
-                  label: name,
-                  value: name,
-                  description: tools[name].description,
-                }))
-              "
-              color="secondary"
-              type="checkbox"
-              inline
-              dense
-            >
-              <template v-slot:label="opt">
-                <div>
-                  {{ opt.label }}
-                </div>
-                <q-tooltip anchor="bottom middle" style="max-width: 500px">{{
-                  opt.description
-                }}</q-tooltip>
-              </template></q-option-group
-            >
+            {{ `approx. token count: ${estimatedTokens}` }}
           </div>
-        </q-item-section>
-      </q-expansion-item>
-    </q-list>
-  </q-card-section>
+        </template>
+      </q-input>
+      <div v-if="fileMappings.length">
+        <div>Attached files:</div>
+        <q-chip
+          v-for="fileMapping in fileMappings"
+          :key="fileMapping.uuid"
+          removable
+          @remove="removeFileFromTask(fileMapping.uuid)"
+          icon="upload_file"
+        >
+          <div class="ellipsis" style="max-width: 100px">
+            {{ `${fileMapping.opfsName} (${fileMapping.uuid})` }}
+          </div>
+          <q-tooltip :delay="0.5">{{
+            `${fileMapping.opfsName} (taskyon-id: ${fileMapping.uuid})`
+          }}</q-tooltip>
+        </q-chip>
+      </div>
+      <div v-if="selectedTaskType">
+        <ObjectTreeView
+          :model-value="state.taskDraft.context?.function?.arguments"
+          :on-update:model-value="(value) => state.setDraftFunctionArgs(value)"
+          input-field-behavior="textarea"
+        />
+        <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
+      </div>
+    </div>
+    <q-slide-transition>
+      <div v-show="state.expandedTaskCreation">
+        <div v-if="state.expertMode" class="row items-center">
+          <q-btn
+            flat
+            dense
+            icon="chat"
+            :color="selectedTaskType ? '' : 'secondary'"
+            @click="setTaskType(undefined)"
+            ><q-tooltip>Select Simple Chat</q-tooltip>
+          </q-btn>
+          <q-select
+            style="min-width: 200px"
+            class="q-pt-xs q-px-md"
+            dense
+            clearable
+            standout="bg-secondary text-white"
+            :bg-color="selectedTaskType ? 'secondary' : ''"
+            :model-value="selectedTaskType"
+            @update:modelValue="setTaskType"
+            :options="Object.keys(tools)"
+            :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
+          >
+          </q-select>
+          <q-toggle
+            icon="handyman"
+            left-label
+            color="secondary"
+            dense
+            size="xl"
+            v-model="state.chatState.enableOpenAiTools"
+            ><q-tooltip
+              >Enable OpenAI Functions (use built-in function selection mode for
+              OpenAI)</q-tooltip
+            ></q-toggle
+          >
+          <q-btn
+            class="q-ma-md"
+            dense
+            flat
+            icon="code"
+            @click="state.showTaskData = !state.showTaskData"
+            ><q-tooltip>Show Draft Task Data</q-tooltip></q-btn
+          >
+        </div>
+        <div v-if="state.showTaskData && state.expertMode">
+          {{ currentnewTask }}
+        </div>
+        <!--Model Selection-->
+        <q-expansion-item
+          dense
+          icon="smart_toy"
+          :label="`Select Chatbot (right now: ${currentlySelectedService}/${currentlySelectedBotName})`"
+          v-model="state.selectChatBotExpand"
+        >
+          <q-item-section>
+            <ModelSelection
+              @updateBotName="handleBotNameUpdate"
+            ></ModelSelection>
+          </q-item-section>
+        </q-expansion-item>
+        <!--Allowed Tools Selection-->
+        <q-expansion-item
+          dense
+          icon="handyman"
+          label="Allowed Tools"
+          v-model="state.allowedToolsExpand"
+        >
+          <q-item-section>
+            <div>
+              <q-btn
+                class="q-ma-md"
+                dense
+                label="toggle all allowed tools"
+                color="primary"
+                @click="toggleSelectedTools"
+              />
+              <q-option-group
+                class="q-ma-md"
+                v-model="state.taskDraft.allowedTools"
+                :options="
+                  Object.keys(tools).map((name) => ({
+                    label: name,
+                    value: name,
+                    description: tools[name].description,
+                  }))
+                "
+                color="secondary"
+                type="checkbox"
+                inline
+                dense
+              >
+                <template v-slot:label="opt">
+                  <div>
+                    {{ opt.label }}
+                  </div>
+                  <q-tooltip anchor="bottom middle" style="max-width: 500px">{{
+                    opt.description
+                  }}</q-tooltip>
+                </template></q-option-group
+              >
+            </div>
+          </q-item-section>
+        </q-expansion-item>
+      </div>
+    </q-slide-transition>
+  </div>
 </template>
 
 <script setup lang="ts">
