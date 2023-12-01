@@ -8,7 +8,9 @@
     <div
       class="column items-center"
       :style="`padding-bottom: ${bottomPadding}px;`"
+      ref="taskThreadContainer"
     >
+      <q-scroll-observer @scroll="onScroll" axis="vertical" :debounce="500" />
       <!-- "Task" Display -->
       <q-card
         style="background-color: inherit; color: inherit; max-width: 48rem"
@@ -16,7 +18,7 @@
         square
         v-if="selectedThread.length > 0"
       >
-        <q-card-section class="q-gutter-sm">
+        <q-card-section class="q-gutter-sm scrollCard">
           <q-chat-message
             v-for="task in selectedThread"
             :sent="task.role === 'user' ? true : false"
@@ -115,13 +117,14 @@
           }
         "
       />
-      <div>
+      <div class="row">
         <CreateNewTask
           v-if="getApikey(state.chatState)"
           :class="[
             $q.dark.isActive ? 'bg-primary' : 'bg-grey-2',
             'rounded-borders',
-            'q-pa-xs','shadow-5'
+            'q-pa-xs',
+            'shadow-5',
           ]"
         >
         </CreateNewTask>
@@ -143,6 +146,15 @@
             </div>
           </q-card-section>
         </q-card>
+        <q-btn
+          flat
+          icon="keyboard_double_arrow_down"
+          :color="lockBottomScroll ? 'secondary' : ''"
+          @click="scrollToThreadEnd"
+          size="md"
+        >
+          <q-tooltip> Scroll To Bottom </q-tooltip>
+        </q-btn>
       </div>
     </q-page-sticky>
   </q-page>
@@ -169,7 +181,7 @@
 <script setup lang="ts">
 import Task from 'components/Task.vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
-import { computed, ref } from 'vue';
+import { computed, ref, Ref, UnwrapRef } from 'vue';
 import { useQuasar, scroll } from 'quasar';
 import { getApikey } from 'src/modules/chat';
 import { taskChain } from 'src/modules/taskManager';
@@ -181,9 +193,44 @@ import {
   emitCancelCurrentTask,
 } from 'src/modules/taskWorker';
 import axios from 'axios';
-const { getScrollHeight } = scroll;
+const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
 const bottomPadding = ref(100);
+
+const lockBottomScroll = ref(true); // State to track if the user is at the bottom of scroll page
+
+const taskThreadContainer = ref<HTMLElement | undefined>();
+
+function onScroll(
+  details: UnwrapRef<{ direction: string; position: { top: number } }>
+) {
+  //  const currentPosition = getVerticalScrollPosition(scrollTargetDomElement); // returns a Number (pixels);
+  if (details.direction === 'down') {
+    //const taskThreadArea = document.getElementsByClassName('taskThreadArea')[0];
+    if (taskThreadContainer.value) {
+      //const el = document.querySelector(id)
+      //const el = document.getElementsByClassName()
+      const scrollTargetElement = getScrollTarget(taskThreadContainer.value);
+      const target = getScrollHeight(scrollTargetElement);
+      const scrollEnd = target - (scrollTargetElement as Window).innerHeight;
+      //const scrollHeight = getScrollHeight(scrollTargetDomElement); // returns a Number
+      //const currentPos = getVerticalScrollPosition(scrollTargetElement);
+      const bottomTolerance = 10;
+      if (scrollEnd - details.position.top < bottomTolerance) {
+        lockBottomScroll.value = true;
+        console.log('we are at bottom!', lockBottomScroll.value);
+      }
+    }
+  } else {
+    lockBottomScroll.value = false;
+  }
+}
+
+function scrollToThreadEnd() {
+  const offset = document.body.scrollHeight - window.innerHeight;
+  const duration = 300;
+  setVerticalScrollPosition(window, offset, duration);
+}
 
 const welcomeText = ref<string>('');
 
@@ -210,8 +257,4 @@ const selectedThread = computed(() => {
     return [];
   }
 });
-
-function scrollToThreadEnd() {
-  getScrollHeight(scrollTargetDomElement); // returns a Number
-}
 </script>

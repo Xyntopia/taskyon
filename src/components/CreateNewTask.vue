@@ -11,6 +11,7 @@
         v-model="state.taskDraft.content"
         label="Type your message or instruction..."
         :bottom-slots="state.expertMode"
+        :counter="state.expertMode"
         clearable
         @keyup="checkForShiftEnter"
       >
@@ -37,13 +38,14 @@
         <template v-slot:after>
           <q-btn
             flat
+            dense
             icon="tune"
             @click="
               () => {
                 state.expandedTaskCreation = !state.expandedTaskCreation;
               }
             "
-            ><q-tooltip> Open Detailed Task Settings </q-tooltip>
+            ><q-tooltip> Toggle Task Settings </q-tooltip>
           </q-btn>
         </template>
         <template v-slot:counter>
