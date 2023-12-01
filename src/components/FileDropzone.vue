@@ -1,6 +1,6 @@
 <template>
   <div
-    class="fit"
+    :class="'fit dropzone ' + colorClass"
     @dragover.prevent
     @dragenter.prevent
     @drop="handleDrop"
@@ -16,8 +16,9 @@
       capture="environment"
       @click.stop
     />
+
     <slot>
-      <div class="fit dropzone inset-shadow-down column justify-center">
+      <div class="fit inset-shadow-down column justify-center">
         <div>
           <p>{{ label }}</p>
         </div>
@@ -59,19 +60,22 @@
 </template>
 
 <style lang="sass">
-.dropzone
-  border: 2px dashed $secondary
+.dashedborder
+  border-width: 2px
+  border-style: dashed
   border-radius: 5px
+
+.dropzone
   text-align: center
   cursor: pointer
 </style>
 
 <script setup lang="ts">
-import { ref, Ref } from 'vue';
+import { ref, Ref, computed } from 'vue';
 
 const emit = defineEmits(['update:modelValue']);
 
-defineProps({
+const props = defineProps({
   label: {
     type: String,
     default: '',
@@ -80,7 +84,24 @@ defineProps({
     type: Number,
     default: 0,
   },
+  color: {
+    type: String,
+    default: null,
+  },
+  disableDropzoneBorder: {
+    type: Boolean,
+    default: false,
+  },
 });
+
+const colorClass = computed(() => {
+  if (props.disableDropzoneBorder != true) {
+    return 'dashedborder text-' + props.color;
+  } else {
+    return '';
+  }
+});
+
 //name: 'DropZone',
 const fileInput: Ref<null | HTMLInputElement> = ref(null);
 

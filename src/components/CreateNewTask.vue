@@ -27,7 +27,7 @@
             class="row justify-center items-center"
             @update:model-value="attachFileToTask"
           >
-            <q-btn dense class="fit dropzone" flat>
+            <q-btn dense class="fit" flat>
               <q-icon name="upload_file" />
               <q-icon name="attachment" />
               <q-tooltip>Attach file to message</q-tooltip>
