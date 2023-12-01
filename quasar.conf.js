@@ -86,7 +86,7 @@ module.exports = configure(function (ctx) {
 
       'roboto-font', // optional, you are not bound to it
       'material-icons', // optional, you are not bound to it
-      'mdi-v5'
+      'mdi-v5',
     ],
 
     // specify variables for index.template.html
@@ -100,6 +100,9 @@ module.exports = configure(function (ctx) {
 
     // Full list of options: https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-build
     build: {
+      uglifyOptions: {
+        compress: { drop_console: true },
+      },
       env: {
         APPNAME: APPNAME,
         DESCRIPTION: DESCRIPTION,
@@ -234,7 +237,14 @@ module.exports = configure(function (ctx) {
         // also needs:
         //    yarn add --dev node-polyfill-webpack-plugin browserify-zlib
         const nodePolyfillWebpackPlugin = require('node-polyfill-webpack-plugin');
-        chain.plugin('node-polyfill').use(nodePolyfillWebpackPlugin);
+        // we need the bwloe so that uglify can remove the console. because we want
+        //  check this:  https://stackoverflow.com/questions/76979427/quasar-app-does-not-remove-console-log-for-production-builds
+        // and this:  https://github.com/quasarframework/quasar/issues/11186
+        chain
+          .plugin('node-polyfill')
+          .use(nodePolyfillWebpackPlugin, [{ excludeAliases: ['console'] }]);
+        // chain.plugin('node-polyfill').use(nodePolyfillWebpackPlugin);
+        // TODO: find out, why we did this?
         chain.resolve.alias.set('zlib', 'browserify-zlib');
       },
     },
@@ -406,7 +416,6 @@ module.exports = configure(function (ctx) {
         appId: 'xyntopia',
       },
 
-      
       // "chain" is a webpack-chain object https://github.com/neutrinojs/webpack-chain
       chainWebpack(/* chain */) {
         // do something with the Electron main process Webpack cfg

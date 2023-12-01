@@ -29,7 +29,6 @@
 </style>
 
 <script setup lang="ts">
-import { defineProps } from 'vue';
 import { dump } from 'js-yaml';
 import { LLMTask } from 'src/modules/types';
 
