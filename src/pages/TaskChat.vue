@@ -5,6 +5,7 @@
       'column items-center',
     ]"
   >
+    <q-resize-observer @resize="onResize" :debounce="50" />
     <div
       class="column items-center"
       :style="`padding-bottom: ${bottomPadding}px;`"
@@ -181,7 +182,7 @@
 <script setup lang="ts">
 import Task from 'components/Task.vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
-import { computed, ref, Ref, UnwrapRef } from 'vue';
+import { computed, ref, UnwrapRef } from 'vue';
 import { useQuasar, scroll } from 'quasar';
 import { getApikey } from 'src/modules/chat';
 import { taskChain } from 'src/modules/taskManager';
@@ -202,33 +203,50 @@ const lockBottomScroll = ref(true); // State to track if the user is at the bott
 const taskThreadContainer = ref<HTMLElement | undefined>();
 
 function onScroll(
-  details: UnwrapRef<{ direction: string; position: { top: number } }>
+  details: UnwrapRef<{
+    direction: string;
+    position: { top: number };
+    delta: { top: number };
+  }>
 ) {
   //  const currentPosition = getVerticalScrollPosition(scrollTargetDomElement); // returns a Number (pixels);
-  if (details.direction === 'down') {
-    //const taskThreadArea = document.getElementsByClassName('taskThreadArea')[0];
-    if (taskThreadContainer.value) {
-      //const el = document.querySelector(id)
-      //const el = document.getElementsByClassName()
-      const scrollTargetElement = getScrollTarget(taskThreadContainer.value);
-      const target = getScrollHeight(scrollTargetElement);
-      const scrollEnd = target - (scrollTargetElement as Window).innerHeight;
-      //const scrollHeight = getScrollHeight(scrollTargetDomElement); // returns a Number
-      //const currentPos = getVerticalScrollPosition(scrollTargetElement);
-      const bottomTolerance = 10;
-      if (scrollEnd - details.position.top < bottomTolerance) {
-        lockBottomScroll.value = true;
-        console.log('we are at bottom!', lockBottomScroll.value);
-      }
+  //const taskThreadArea = document.getElementsByClassName('taskThreadArea')[0];
+  if (taskThreadContainer.value) {
+    //const el = document.querySelector(id)
+    //const el = document.getElementsByClassName()
+    const scrollTargetElement = getScrollTarget(taskThreadContainer.value);
+    const target = getScrollHeight(scrollTargetElement);
+    const scrollEnd = target - (scrollTargetElement as Window).innerHeight;
+    //const scrollHeight = getScrollHeight(scrollTargetDomElement); // returns a Number
+    //const currentPos = getVerticalScrollPosition(scrollTargetElement);
+    const bottomTolerance = 10;
+    if (
+      details.direction === 'down' &&
+      scrollEnd - details.position.top < bottomTolerance
+    ) {
+      lockBottomScroll.value = true;
+      console.log('lock bottom scroll!', lockBottomScroll.value);
+    } else if (
+      details.direction === 'up' &&
+      scrollEnd - details.position.top > bottomTolerance + 20
+    ) {
+      console.log('release bottom lock!');
+      lockBottomScroll.value = false;
     }
-  } else {
-    lockBottomScroll.value = false;
+  }
+}
+
+function onResize() {
+  if (lockBottomScroll.value) {
+    console.log('scroll to bottom');
+    scrollToThreadEnd();
   }
 }
 
 function scrollToThreadEnd() {
   const offset = document.body.scrollHeight - window.innerHeight;
   const duration = 300;
+  lockBottomScroll.value = true;
   setVerticalScrollPosition(window, offset, duration);
 }
 
