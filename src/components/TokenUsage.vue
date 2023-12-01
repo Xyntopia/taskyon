@@ -73,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps, PropType } from 'vue';
+import { PropType } from 'vue';
 import { LLMTask } from 'src/modules/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 
