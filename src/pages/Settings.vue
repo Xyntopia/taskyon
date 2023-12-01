@@ -5,7 +5,11 @@
       <q-tab name="instructions" label="Instructions" />
       <q-tab name="configuration" label="Agent Configuration" />
     </q-tabs>
-    <q-tab-panels v-model="tab" animated :class="$q.dark.isActive ? 'bg-primary' : 'white'">
+    <q-tab-panels
+      v-model="tab"
+      animated
+      :class="$q.dark.isActive ? 'bg-primary' : 'white'"
+    >
       <q-tab-panel name="settings">
         <Settings></Settings>
       </q-tab-panel>
@@ -29,6 +33,6 @@ const tab = ref('settings'); // Default to the first tab
 const state = useTaskyonStore();
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const { chatState, ...allSettings } = state;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const { Tasks, ...chatStateProperties } = toRefs(state.chatState);
-const expanded = ref(false);
 </script>

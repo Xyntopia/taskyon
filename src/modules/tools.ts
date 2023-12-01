@@ -262,7 +262,7 @@ export function getDefaultParametersForTool(toolName: string) {
 
 interface WorkerMessage {
   success: boolean;
-  result?: any;
+  result?: unknown;
   error?: string;
 }
 
@@ -281,6 +281,7 @@ tools.executeJavaScript = {
         const scopedExecution = () => {
           const logMessages: string[] = [];
           // Override console.log within this function's scope
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const console = {
             log: (...args: unknown[]) => {
               logMessages.push(args.join(' '));
@@ -302,7 +303,7 @@ tools.executeJavaScript = {
         // Execute the scoped function and capture the result
         const executionResult = scopedExecution();
 
-        console.log('finished js execution..')
+        console.log('finished js execution..');
 
         return executionResult;
       } catch (error) {
