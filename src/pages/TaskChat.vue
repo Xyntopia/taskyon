@@ -110,7 +110,7 @@
       </q-card>
     </div>
     <!--Create new task area-->
-    <q-page-sticky position="bottom" :offset="[0, 0]" class="z-top">
+    <q-page-sticky position="bottom" :offset="[0, 0]" class="z-top print-hide">
       <q-resize-observer
         @resize="
           (size) => {
@@ -225,12 +225,12 @@ function onScroll(
       scrollEnd - details.position.top < bottomTolerance
     ) {
       lockBottomScroll.value = true;
-      console.log('lock bottom scroll!', lockBottomScroll.value);
+      //console.log('lock bottom scroll!', lockBottomScroll.value);
     } else if (
       details.direction === 'up' &&
       scrollEnd - details.position.top > bottomTolerance + 20
     ) {
-      console.log('release bottom lock!');
+      //console.log('release bottom lock!');
       lockBottomScroll.value = false;
     }
   }
@@ -238,7 +238,7 @@ function onScroll(
 
 function onResize() {
   if (lockBottomScroll.value) {
-    console.log('scroll to bottom');
+    //console.log('scroll to bottom');
     scrollToThreadEnd();
   }
 }

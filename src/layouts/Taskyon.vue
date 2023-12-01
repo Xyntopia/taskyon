@@ -105,6 +105,37 @@
   </q-layout>
 </template>
 
+<style>
+@media print {
+  /* Hide everything initially */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Only display the q-page and its children */
+  .q-page,
+  .q-page * {
+    visibility: visible;
+  }
+
+  /* Override the page container padding for print */
+  .q-page-container {
+    padding: 0 !important;
+  }
+
+  .q-page {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    box-shadow: none; /* Remove shadows, if any */
+    min-height: 0 !important; /* Override min-height if necessary */
+  }
+}
+</style>
+
 <script setup lang="ts">
 import ChatSidebar from 'components/ChatSidebar.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
