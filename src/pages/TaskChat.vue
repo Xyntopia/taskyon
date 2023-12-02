@@ -94,7 +94,7 @@
         </q-card-section>
       </q-card>
       <!-- Welcome Message -->
-      <q-card class="col welcome-message" v-else>
+      <q-card v-else class="col welcome-message">
         <q-card-section class="column items-center"
           ><q-card-section
             ><q-img
@@ -103,8 +103,12 @@
               src="~assets/taskyon.svg"
             ></q-img>
           </q-card-section>
-          <div class="text-h6">
+          <div class="text-h6" v-if="getApikey(state.chatState)">
             Welcome! Just type a message below to start using Taskyon!
+          </div>
+          <div class="text-h6" v-else>
+            Welcome to Taskyon! To get started you need to add your API keys to
+            an LLM in the settings!
           </div>
         </q-card-section>
       </q-card>
@@ -147,16 +151,23 @@
             </div>
           </q-card-section>
         </q-card>
-        <q-btn
-          flat
-          icon="keyboard_double_arrow_down"
-          :color="lockBottomScroll ? 'secondary' : ''"
-          @click="scrollToThreadEnd"
-          size="md"
-        >
-          <q-tooltip> Scroll To Bottom </q-tooltip>
-        </q-btn>
       </div>
+    </q-page-sticky>
+    <q-page-sticky
+      v-if="!lockBottomScroll"
+      position="bottom-right"
+      :offset="[10, bottomPadding + 5]"
+      class="print-hide"
+    >
+      <q-btn
+        outline
+        icon="keyboard_double_arrow_down"
+        color="secondary"
+        @click="scrollToThreadEnd"
+        size="md"
+      >
+        <q-tooltip> Scroll To Bottom </q-tooltip>
+      </q-btn>
     </q-page-sticky>
   </q-page>
 </template>
