@@ -6,8 +6,10 @@ import {
   //RxDocument,
   toTypedRxJsonSchema,
   ExtractDocumentTypeFromTypedRxJsonSchema,
+  RxStorage,
 } from 'rxdb';
-import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
+import { getRxStorageDexie, RxStorageDexie } from 'rxdb/plugins/storage-dexie';
+import type { RxStorageMemory } from 'rxdb/plugins/storage-memory';
 
 const llmTaskSchemaLiteral = {
   title: 'LLMTask schema',
@@ -28,7 +30,14 @@ const llmTaskSchemaLiteral = {
     },
     state: {
       type: 'string',
-      enum: ['Open', 'Queued', 'In Progress', 'Completed', 'Error', 'Cancelled'],
+      enum: [
+        'Open',
+        'Queued',
+        'In Progress',
+        'Completed',
+        'Error',
+        'Cancelled',
+      ],
     },
     context: {
       type: 'string', // Storing context as a JSON string
@@ -111,12 +120,14 @@ export type TaskyonDatabase = RxDatabase<TaskyonDatabaseCollections>;
 
 // Function to create the database
 export async function createTaskyonDatabase(
-  name: string
+  name: string,
+  storage: RxStorageDexie | RxStorageMemory | undefined = undefined
 ): Promise<TaskyonDatabase> {
+  const newStorage = storage || getRxStorageDexie();
   const db: TaskyonDatabase =
     await createRxDatabase<TaskyonDatabaseCollections>({
       name,
-      storage: getRxStorageDexie(),
+      storage: newStorage,
     });
 
   await db.addCollections({
