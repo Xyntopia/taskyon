@@ -450,5 +450,6 @@ export async function run(chatState: ChatStateType) {
 
   const taskyonDB = await getTaskyonDB();
   console.log('start task taskWorker');
-  await taskWorker(chatState, taskyonDB);
+  //launch taskworker as an asnyc worker
+  void taskWorker(chatState, taskyonDB);
 } // Helper function to handle function execution

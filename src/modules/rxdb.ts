@@ -28,27 +28,10 @@ const llmTaskSchemaLiteral = {
     },
     state: {
       type: 'string',
-      enum: ['Open', 'Queued', 'In Progress', 'Completed', 'Error'],
+      enum: ['Open', 'Queued', 'In Progress', 'Completed', 'Error', 'Cancelled'],
     },
     context: {
-      type: ['object'],
-      properties: {
-        message: {
-          type: ['object', 'null'],
-        },
-        function: {
-          type: ['object', 'null'],
-        },
-        model: {
-          type: ['string', 'null'],
-        },
-        uploadedFiles: {
-          type: 'array',
-          items: {
-            type: 'string',
-          },
-        },
-      },
+      type: 'string', // Storing context as a JSON string
     },
     parentID: {
       type: ['string', 'null'],
@@ -60,19 +43,13 @@ const llmTaskSchemaLiteral = {
       },
     },
     debugging: {
-      type: 'object',
-      properties: {
-        // properties of the debugging object
-      },
+      type: 'string', // Storing debugging as a JSON string
     },
     result: {
-      type: ['object', 'null'],
-      properties: {
-        // properties of TaskResult
-      },
+      type: 'string', // Storing result as a JSON string
     },
     allowedTools: {
-      type: ['array', 'null'],
+      type: 'array',
       items: {
         type: 'string',
       },
