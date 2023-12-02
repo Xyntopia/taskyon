@@ -82,25 +82,12 @@ const ToolResult = z.object({
 });
 export type ToolResult = z.infer<typeof ToolResult>;
 
-export interface TaskResult {
-  type:
-    | 'ChatAnswer'
-    | 'AssistantAnswer'
-    | 'ToolCall'
-    | 'ToolResult'
-    | 'ToolError'
-    | 'ToolChatResult';
-  assistantResponse?: OpenAI.Beta.Threads.Messages.ThreadMessage[];
-  chatResponse?: OpenAI.ChatCompletion;
-  toolResult?: ToolResult; // Description or value of the result
-}
-
 const assistantThreadMessage: z.ZodType<OpenAI.Beta.Threads.Messages.ThreadMessage> =
   z.any();
 
 const chatResponse: z.ZodType<OpenAI.ChatCompletion> = z.any();
 
-export const TaskResultSchema = z.object({
+export const TaskResult = z.object({
   type: z.enum([
     'ChatAnswer',
     'AssistantAnswer',
@@ -113,9 +100,14 @@ export const TaskResultSchema = z.object({
   chatResponse: chatResponse.optional(),
   toolResult: ToolResult.optional(), // Replace 'z.any()' with the specific type if available
 });
-export type TaskResultSchema = z.infer<typeof TaskResultSchema>;
+export type TaskResult = z.infer<typeof TaskResult>;
 
-export const toolStateType = z.enum(['available', 'starting', 'unavailable', 'error']);
+export const toolStateType = z.enum([
+  'available',
+  'starting',
+  'unavailable',
+  'error',
+]);
 export type toolStateType = z.infer<typeof toolStateType>;
 export const ParamType = z.union([
   z.string(),
@@ -135,7 +127,7 @@ export const FunctionCall = z.object({
 });
 export type FunctionCall = z.infer<typeof FunctionCall>;
 
-export type LLMTask = {
+/*export type LLMTask = {
   role: 'system' | 'user' | 'assistant' | 'function';
   content: string | null;
   state: TaskState;
@@ -174,9 +166,9 @@ export type LLMTask = {
   allowedTools?: string[];
   authorId?: string;
   created_at?: number; //unix timestamp
-};
+};*/
 
-const LLMTaskSchema = z.object({
+const LLMTask = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   content: z.string().nullable(),
   state: TaskState,
@@ -212,13 +204,13 @@ const LLMTaskSchema = z.object({
     taskPrompt: z.union([z.array(OpenAIMessage), z.any()]).optional(), // Replace 'z.any()' with the correct Zod type
     followUpError: z.unknown().optional(),
   }),
-  result: ToolResult.optional(),
+  result: TaskResult.optional(),
   id: z.string(),
   allowedTools: z.array(z.string()).optional(),
   authorId: z.string().optional(),
   created_at: z.number().optional(),
 });
-export type LLMTaskSchema = z.infer<typeof LLMTaskSchema>;
+export type LLMTask = z.infer<typeof LLMTask>;
 
 export type partialTaskDraft = {
   role: LLMTask['role'];
