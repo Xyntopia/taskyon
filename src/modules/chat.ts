@@ -317,8 +317,7 @@ function accumulateChatCompletion(
         if (previous.message.content) {
           previous.message.content += chunk.choices[choiceIdx].delta.content;
         } else {
-          previous.message.content = chunk.choices[choiceIdx].delta
-            .content as string;
+          previous.message.content = chunk.choices[choiceIdx].delta.content;
         }
       }
       previous.message.role =
