@@ -8,24 +8,10 @@ import {
   convertToYamlWComments,
   YamlRepresentation,
 } from './types';
+import { z } from 'zod';
+import { toolStateType, FunctionCall, ParamType } from './types';
 
 export const vectorStore = useVectorStore();
-
-type toolStateType = 'available' | 'starting' | 'unavailable' | 'error';
-type ParamType =
-  | string
-  | number
-  | boolean
-  | Record<string, unknown>
-  | Array<unknown>
-  | null;
-export type FunctionArguments = { [x: string]: ParamType };
-
-export type FunctionCall = {
-  // The name of the function to call.
-  name: string;
-  arguments: FunctionArguments;
-};
 
 // this reflects json schema:  https://json-schema.org/specification-links
 interface JSONSchemaForFunctionParameter {
@@ -42,25 +28,58 @@ interface JSONSchemaForFunctionParameter {
   required?: string[];
 }
 
-export interface Tool {
-  state: () => Promise<toolStateType> | toolStateType;
-  // Description of what the function does (optional).
-  description: string;
-  longDescription?: string;
-  // The name of the function to be called.
-  name: string;
-  // The parameters the function accepts (JSON Schema object).
-  parameters: JSONSchemaForFunctionParameter;
-}
+const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionParameter> =
+  z.object({
+    $schema: z.string().optional(),
+    type: z.literal('object'),
+    properties: z.record(
+      z.object({
+        type: z.string(),
+        description: z.string().optional(),
+        default: z.unknown().optional(),
+        items: z
+          .lazy(() =>
+            z.union([
+              JSONSchemaForFunctionParameter,
+              z.array(JSONSchemaForFunctionParameter),
+            ])
+          )
+          .optional(),
+      })
+    ),
+    required: z.array(z.string()).optional(),
+  });
 
-export interface ExtendedTool extends Tool {
+const Tool = z.object({
+  state: z.union([
+    z.function().returns(z.promise(toolStateType)),
+    z.function().returns(toolStateType),
+    toolStateType,
+  ]),
+  description: z.string(),
+  longDescription: z.string().optional(),
+  name: z.string(),
+  parameters: JSONSchemaForFunctionParameter,
+});
+export type Tool = z.infer<typeof Tool>;
+
+const arbitraryFunctionSchema = z.custom<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function: (...args: any[]) => unknown | Promise<unknown>;
-}
+  (...args: any[]) => unknown | Promise<unknown>
+>((val) => typeof val === 'function', {
+  message:
+    'Expected a function that accepts any arguments and returns unknown or Promise<unknown>',
+});
+export type arbitraryFunction = z.infer<typeof arbitraryFunctionSchema>;
 
-export type ToolCollection = {
-  [key: string]: ExtendedTool;
-};
+const ExtendedTool = Tool.extend({
+  function: arbitraryFunctionSchema,
+});
+export type ExtendedTool = z.infer<typeof ExtendedTool>;
+
+// ToolCollection schema and type
+const ToolCollection = z.record(ExtendedTool);
+type ToolCollection = z.infer<typeof ToolCollection>;
 
 export const tools: ToolCollection = {};
 
@@ -144,7 +163,7 @@ function inspectToolCode(toolName: string) {
 }
 
 // Helper function to extract function signature
-function getFunctionSignature(func: (...args: unknown[]) => unknown) {
+function getFunctionSignature(func: arbitraryFunction | string) {
   const funcString = func.toString();
   const signatureMatch = /(function\s.*?\(.*?\))|((\w+|\((.*?)\))\s*=>)/.exec(
     funcString

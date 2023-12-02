@@ -3,7 +3,7 @@ import { defaultTaskState } from 'src/modules/chat';
 import { ref, Ref } from 'vue';
 import { run } from 'src/modules/taskWorker';
 import type { LLMTask } from 'src/modules/types';
-import type { FunctionArguments } from 'src/modules/tools';
+import type { FunctionArguments } from 'src/modules/types';
 import { OpenAI } from 'openai';
 
 //TODO: convert store into composition api

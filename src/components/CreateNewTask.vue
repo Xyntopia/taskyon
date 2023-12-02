@@ -192,11 +192,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { countStringTokens } from 'src/modules/chat';
-import {
-  tools,
-  getDefaultParametersForTool,
-  FunctionArguments,
-} from 'src/modules/tools';
+import { tools, getDefaultParametersForTool } from 'src/modules/tools';
+import { FunctionArguments } from 'src/modules/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import type { LLMTask } from 'src/modules/types';

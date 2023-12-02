@@ -1,37 +1,37 @@
-import { z } from 'zod';
-import { FunctionCall } from './tools';
 import type OpenAI from 'openai';
 import { dump } from 'js-yaml';
+import { z } from 'zod';
 
-export type TaskState =
-  | 'Open'
-  | 'Queued'
-  | 'In Progress'
-  | 'Completed'
-  | 'Error'
-  | 'Cancelled';
+const TaskState = z.enum([
+  'Open',
+  'Queued',
+  'In Progress',
+  'Completed',
+  'Error',
+  'Cancelled',
+]);
+export type TaskState = z.infer<typeof TaskState>;
 
-export type OpenAIMessage = {
-  // The content of the message, can be null for some messages.
-  content: string | null;
-  // Function call details if applicable.
-  // TODO: get rid of Function call eventually..
-  function_call?: {
-    // The name of the function to call.
-    name: string;
-    // Arguments to call the function with in JSON format.
-    arguments: string;
-  };
-  tool_calls?: {
-    name: string;
-    arguments: string;
-  }[];
-  // The name of the message author (optional) it has to be the name of the function, if
-  // the role is "function".
-  name?: string;
-  // The role of the message author (system, user, assistant, or function).
-  role: 'system' | 'user' | 'assistant' | 'function';
-};
+const OpenAIMessage = z.object({
+  content: z.string().nullable(),
+  function_call: z
+    .object({
+      name: z.string(),
+      arguments: z.string(),
+    })
+    .optional(),
+  tool_calls: z
+    .array(
+      z.object({
+        name: z.string(),
+        arguments: z.string(),
+      })
+    )
+    .optional(),
+  name: z.string().optional(),
+  role: z.enum(['system', 'user', 'assistant', 'function']),
+});
+export type OpenAIMessage = z.infer<typeof OpenAIMessage>;
 
 export type ChatCompletionResponse = {
   id: string;
@@ -75,11 +75,12 @@ export interface OpenRouterGenerationInfo {
   };
 }
 
-export interface ToolResult {
-  result?: string | Record<string, unknown>;
-  error?: unknown;
-  stdout?: string;
-}
+const ToolResult = z.object({
+  result: z.union([z.string(), z.record(z.unknown())]).optional(),
+  error: z.unknown().optional(), // 'unknown' type in Zod is handled with 'z.unknown()'
+  stdout: z.string().optional(),
+});
+export type ToolResult = z.infer<typeof ToolResult>;
 
 export interface TaskResult {
   type:
@@ -93,6 +94,46 @@ export interface TaskResult {
   chatResponse?: OpenAI.ChatCompletion;
   toolResult?: ToolResult; // Description or value of the result
 }
+
+const assistantThreadMessage: z.ZodType<OpenAI.Beta.Threads.Messages.ThreadMessage> =
+  z.any();
+
+const chatResponse: z.ZodType<OpenAI.ChatCompletion> = z.any();
+
+export const TaskResultSchema = z.object({
+  type: z.enum([
+    'ChatAnswer',
+    'AssistantAnswer',
+    'ToolCall',
+    'ToolResult',
+    'ToolError',
+    'ToolChatResult',
+  ]),
+  assistantResponse: z.array(assistantThreadMessage).optional(),
+  chatResponse: chatResponse.optional(),
+  toolResult: ToolResult.optional(), // Replace 'z.any()' with the specific type if available
+});
+export type TaskResultSchema = z.infer<typeof TaskResultSchema>;
+
+export const toolStateType = z.enum(['available', 'starting', 'unavailable', 'error']);
+export type toolStateType = z.infer<typeof toolStateType>;
+export const ParamType = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.record(z.unknown()),
+  z.array(z.unknown()),
+  z.null(),
+]);
+export type ParamType = z.infer<typeof ParamType>;
+const FunctionArguments = z.record(ParamType);
+export type FunctionArguments = z.infer<typeof FunctionArguments>;
+
+export const FunctionCall = z.object({
+  name: z.string(),
+  arguments: FunctionArguments,
+});
+export type FunctionCall = z.infer<typeof FunctionCall>;
 
 export type LLMTask = {
   role: 'system' | 'user' | 'assistant' | 'function';
@@ -134,6 +175,50 @@ export type LLMTask = {
   authorId?: string;
   created_at?: number; //unix timestamp
 };
+
+const LLMTaskSchema = z.object({
+  role: z.enum(['system', 'user', 'assistant', 'function']),
+  content: z.string().nullable(),
+  state: TaskState,
+  context: z
+    .object({
+      message: OpenAIMessage.optional(),
+      function: FunctionCall,
+      model: z.string().optional(),
+      uploadedFiles: z.array(z.string()).optional(),
+    })
+    .optional(),
+  parentID: z.string().nullable().optional(),
+  childrenIDs: z.array(z.string()),
+  debugging: z.object({
+    threadMessage: z.any().optional(), // Replace with the correct Zod schema if available
+    promptTokens: z.number().optional(),
+    resultTokens: z.number().optional(),
+    taskTokens: z.number().optional(),
+    estimatedTokens: z
+      .object({
+        resultTokens: z.number().optional(),
+        taskCosts: z.number().optional(),
+        functionTokens: z.number().optional(),
+        promptTokens: z.number().optional(),
+        singlePromptTokens: z.number().optional(),
+      })
+      .optional(),
+    toolStreamArgsContent: z.record(z.string()).optional(),
+    streamContent: z.string().optional(),
+    taskCosts: z.number().optional(),
+    aiResponse: z.any().optional(), // Replace with the correct Zod schema if available
+    error: z.unknown().optional(),
+    taskPrompt: z.union([z.array(OpenAIMessage), z.any()]).optional(), // Replace 'z.any()' with the correct Zod type
+    followUpError: z.unknown().optional(),
+  }),
+  result: ToolResult.optional(),
+  id: z.string(),
+  allowedTools: z.array(z.string()).optional(),
+  authorId: z.string().optional(),
+  created_at: z.number().optional(),
+});
+export type LLMTaskSchema = z.infer<typeof LLMTaskSchema>;
 
 export type partialTaskDraft = {
   role: LLMTask['role'];
