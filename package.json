@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@datatraccorporation/markdown-it-mermaid": "^0.5.0",
-    "@quasar/extras": "^1.15.1",
+    "@quasar/extras": "^1.16.9",
     "@quasar/quasar-ui-qmarkdown": "^2.0.0-beta.10",
     "@sqlite.org/sqlite-wasm": "^3.44.0-build1",
     "@supabase/supabase-js": "^2.39.0",
@@ -49,7 +49,7 @@
     "pdfjs-dist": "^3.7.107",
     "pinia": "^2.0.12",
     "pyodide": "^0.24.1",
-    "quasar": "^2.7.7",
+    "quasar": "^2.14.1",
     "rxdb": "^14.17.1",
     "sqlocal": "^0.6.2",
     "uuid": "^9.0.0",
@@ -62,7 +62,7 @@
   },
   "devDependencies": {
     "@babel/eslint-parser": "^7.13.14",
-    "@quasar/app-webpack": "^3.5.9",
+    "@quasar/app-webpack": "^3.12.0",
     "@tauri-apps/cli": "^1.1.0",
     "@tauri-apps/tauricon": "github:tauri-apps/tauricon",
     "@types/js-yaml": "^4.0.5",
