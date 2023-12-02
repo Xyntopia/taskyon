@@ -8,7 +8,7 @@
   "scripts": {
     "lint": "eslint --ext .js,.ts,.vue ./",
     "fixlint": "eslint --ext .js,.vue ./ --fix",
-    "test": "echo \"No test specified\" && exit 0",
+    "test": "echo \"See package.json => scripts for available tests.\" && exit 0",
     "2specs": "APPMODE=2specs quasar dev",
     "dev": "quasar dev",
     "build": "quasar build",
@@ -20,7 +20,13 @@
     "build:tauri": "tauri build",
     "dev:tauri": "tauri dev",
     "tauri:cmd": "tauri",
-    "tauricon": "tauricon"
+    "tauricon": "tauricon",
+    "test:unit:ui": "majestic",
+    "test:unit": "jest",
+    "test:unit:ci": "jest --ci",
+    "test:unit:coverage": "jest --coverage",
+    "test:unit:watch": "jest --watch",
+    "test:unit:watchAll": "jest --watchAll"
   },
   "dependencies": {
     "@datatraccorporation/markdown-it-mermaid": "^0.5.0",
@@ -65,6 +71,7 @@
   "devDependencies": {
     "@babel/eslint-parser": "^7.13.14",
     "@quasar/app-webpack": "^3.12.0",
+    "@quasar/quasar-app-extension-testing-unit-jest": "^3.0.0-beta.7",
     "@tauri-apps/cli": "^1.1.0",
     "@tauri-apps/tauricon": "github:tauri-apps/tauricon",
     "@types/js-yaml": "^4.0.5",
@@ -81,7 +88,10 @@
     "eslint-plugin-vue": "^7.0.0",
     "ifdef-loader": "^2.3.2",
     "quasar-app-extension-ssg": "^3.0.5",
-    "workbox-webpack-plugin": "^6.0.0"
+    "workbox-webpack-plugin": "^6.0.0",
+    "@vue/test-utils": "^2.3.0",
+    "jest": "^29.2.2",
+    "eslint-plugin-jest": "^27.1.3"
   },
   "browserslist": [
     "last 10 Chrome versions",

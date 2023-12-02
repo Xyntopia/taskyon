@@ -2,5 +2,10 @@
   "ssg": {
     "scripts": true,
     "inlineCriticalCss": true
+  },
+  "@quasar/testing-unit-jest": {
+    "options": [
+      "majestic"
+    ]
   }
 }
