@@ -276,3 +276,72 @@ export async function addTask2Tree(
   chatState.selectedTaskId = newTask.id;
   return newTask.id;
 }
+
+export class TaskManager {
+  // Usage example:
+  // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
+  private taskyonDB: TaskyonDatabase;
+  private tasks: Record<string, LLMTask>;
+
+  constructor(tasks: Record<string, LLMTask>, taskyonDB: TaskyonDatabase) {
+    this.tasks = tasks;
+    this.taskyonDB = taskyonDB;
+  }
+
+  async getTask(taskId: string): Promise<LLMTask | undefined> {
+    // Check if the task exists in the local record
+    let task = this.tasks[taskId];
+    if (!task) {
+      // If not, load from the database
+      const taskFromDb = await this.taskyonDB.llmtasks.findOne(taskId).exec();
+      if (taskFromDb) {
+        task = transformDocToLLMTask(taskFromDb);
+        this.tasks[taskId] = task; // Update local record
+      }
+    }
+    return task;
+  }
+
+  setTask(taskId: string, task: LLMTask, save: false): void {
+    this.tasks[taskId] = task;
+    if (save) {
+      void this.saveTask(taskId); // Save to database if required
+    }
+  }
+
+  async updateTask(
+    taskId: string,
+    updateData: Partial<LLMTask>
+  ): Promise<void> {
+    const task = await this.getTask(taskId);
+    if (task) {
+      // Update the task with new data
+      Object.assign(task, updateData);
+      // Save the updated task to the database
+      await this.saveTask(taskId);
+    }
+  }
+
+  async saveTask(taskId: string): Promise<void> {
+    const task = this.tasks[taskId];
+    if (task) {
+      const newDBTask = transformLLMTaskToDocType(task);
+      await this.taskyonDB.llmtasks.upsert(newDBTask);
+    }
+  }
+
+  subscribeToTaskChanges(
+    taskId: string,
+    callback: (task: LLMTask) => void
+  ): void {
+    // This is a simple subscription mechanism.
+    // For a more robust solution, consider using Observables or a state management library.
+    this.taskyonDB.llmtasks.findOne(taskId).$.subscribe((doc) => {
+      if (doc) {
+        const updatedTask = transformDocToLLMTask(doc);
+        this.tasks[taskId] = updatedTask;
+        callback(updatedTask);
+      }
+    });
+  }
+}

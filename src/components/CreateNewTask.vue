@@ -285,7 +285,7 @@ const currentnewTask = computed(() => {
 
 function executeTask() {
   console.log('executing task!');
-  addTask2Tree(
+  void addTask2Tree(
     currentnewTask.value,
     state.chatState.Tasks[state.chatState.selectedTaskId || ''], //parent
     state.chatState, //task manager

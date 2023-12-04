@@ -175,12 +175,12 @@ export const LLMTask = z.object({
   context: z
     .object({
       message: OpenAIMessage.optional(),
-      function: FunctionCall,
+      function: FunctionCall.optional(),
       model: z.string().optional(),
       uploadedFiles: z.array(z.string()).optional(),
     })
     .optional(),
-  parentID: z.string().nullable().optional(),
+  parentID: z.string().optional(),
   childrenIDs: z.array(z.string()),
   debugging: z.object({
     threadMessage: z.any().optional(), // Replace with the correct Zod schema if available
