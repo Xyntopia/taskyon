@@ -3,13 +3,13 @@ import {
   RxDatabase,
   RxCollection,
   RxJsonSchema,
-  //RxDocument,
+  RxDocument,
   toTypedRxJsonSchema,
   ExtractDocumentTypeFromTypedRxJsonSchema,
-  RxStorage,
 } from 'rxdb';
 import { getRxStorageDexie, RxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import type { RxStorageMemory } from 'rxdb/plugins/storage-memory';
+import { LLMTask } from './types';
 
 const llmTaskSchemaLiteral = {
   title: 'LLMTask schema',
@@ -136,6 +136,52 @@ export async function createTaskyonDatabase(
   });
 
   return db;
+}
+
+export function transformLLMTaskToDocType(llmTask: LLMTask): LLMTaskDocType {
+  // Mapping and transforming fields from LLMTask to LLMTaskDocType of taskyonDB/RxDB
+  return {
+    ...llmTask,
+    context: llmTask.context ? JSON.stringify(llmTask.context) : undefined,
+    debugging: llmTask.debugging
+      ? JSON.stringify(llmTask.debugging)
+      : undefined,
+    result: llmTask.result ? JSON.stringify(llmTask.result) : undefined,
+  };
+}
+
+export function transformDocToLLMTask(
+  doc: RxDocument<LLMTaskDocType>
+): LLMTask {
+  // Convert the database document to a JSON string
+  const jsonString = JSON.stringify(doc.toJSON());
+
+  const parsedDoc = JSON.parse(jsonString) as Record<string, unknown>;
+
+  // Safely parse the debugging, context, and result fields
+  const parsedDebugging =
+    typeof parsedDoc.debugging === 'string'
+      ? (JSON.parse(parsedDoc.debugging) as Record<string, unknown>)
+      : {};
+  const parsedContext =
+    typeof parsedDoc.context === 'string'
+      ? (JSON.parse(parsedDoc.context) as Record<string, unknown>)
+      : undefined;
+  const parsedResult =
+    typeof parsedDoc.result === 'string'
+      ? (JSON.parse(parsedDoc.result) as Record<string, unknown>)
+      : undefined;
+
+  // Parse the JSON string and transform it into an LLMTask object
+  const tmpObj = {
+    ...parsedDoc,
+    debugging: parsedDebugging,
+    context: parsedContext,
+    result: parsedResult,
+  };
+  const llmTask = LLMTask.parse(tmpObj);
+
+  return llmTask;
 }
 
 /*async function main() {

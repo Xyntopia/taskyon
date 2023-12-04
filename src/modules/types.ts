@@ -168,7 +168,7 @@ export type FunctionCall = z.infer<typeof FunctionCall>;
   created_at?: number; //unix timestamp
 };*/
 
-const LLMTask = z.object({
+export const LLMTask = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   content: z.string().nullable(),
   state: TaskState,

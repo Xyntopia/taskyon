@@ -7,6 +7,8 @@ import {
   createTaskyonDatabase,
   TaskyonDatabase,
   FileMappingDocType,
+  transformLLMTaskToDocType,
+  transformDocToLLMTask,
 } from './rxdb';
 import { openFile } from './OPFS';
 
@@ -220,13 +222,14 @@ export function findAllFilesInTasks(taskList: LLMTask[]): string[] {
   return Array.from(fileSet);
 }
 
-export function addTask2Tree(
+export async function addTask2Tree(
   task: partialTaskDraft,
   parent: LLMTask | undefined,
   chatState: ChatStateType,
   execute = true
 ) {
   const uuid = base64Uuid();
+  const db = await getTaskyonDB();
 
   const newTask: LLMTask = {
     role: task.role,
@@ -242,6 +245,23 @@ export function addTask2Tree(
   };
 
   console.log('create new Task:', newTask.id);
+
+  const newDBTask = transformLLMTaskToDocType(newTask);
+
+  await db.llmtasks.insert(newDBTask);
+
+  const taskFromDb = await db.llmtasks.findOne(newTask.id).exec();
+
+  if (taskFromDb) {
+    const savedTask = transformDocToLLMTask(taskFromDb);
+
+    // Rest of your code
+    // ...
+  } else {
+    // Handle the case when task is not found in the database
+    console.error('Task not found in the database');
+    // Maybe throw an error or return a default value
+  }
 
   // connect task to task tree
   chatState.Tasks[newTask.id] = newTask;

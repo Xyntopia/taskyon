@@ -62,13 +62,10 @@ function extractOpenAIFunctions(choice: OpenAI.ChatCompletion['choices'][0]) {
   return functionCalls;
 }
 
-export async function processChatTask(
-  task: LLMTask,
-  chatState: ChatStateType,
-  db: TaskyonDatabase
-) {
+export async function processChatTask(task: LLMTask, chatState: ChatStateType) {
   //TODO: merge this function with the assistants function
   if (chatState.useOpenAIAssistants && openAIUsed(chatState.baseURL)) {
+    const db = await getTaskyonDB();
     const messages = await getOpenAIAssistantResponse(task, chatState, db);
     if (messages) {
       task.result = {
@@ -308,7 +305,12 @@ async function generateFollowUpTasksFromResult(
     };
     for (const taskDraft of taskDraftList) {
       taskDraft.debugging = { ...taskDraft.debugging, ...childCosts };
-      const newId = addTask2Tree(taskDraft, parentTask, chatState, execute);
+      const newId = await addTask2Tree(
+        taskDraft,
+        parentTask,
+        chatState,
+        execute
+      );
       parentTask = chatState.Tasks[newId]; // create sequental task chain
     }
   }
@@ -332,7 +334,7 @@ export function emitCancelCurrentTask() {
   document.dispatchEvent(new CustomEvent(CURRENT_TASK_CANCELLATION_EVENT));
 }
 
-async function taskWorker(chatState: ChatStateType, db: TaskyonDatabase) {
+async function taskWorker(chatState: ChatStateType) {
   let cancelAllTasks = false;
   let cancelImmediately = false;
   let cancelCurrenTask = false;
@@ -386,7 +388,7 @@ async function taskWorker(chatState: ChatStateType, db: TaskyonDatabase) {
     console.log('processing task:', task);
     try {
       if (task.role == 'user') {
-        task = await processChatTask(task, chatState, db);
+        task = await processChatTask(task, chatState);
         task.state = 'Completed';
       } else if (task.role == 'function') {
         // in the case of 'FunctionCall' result, we run it twice:
@@ -400,7 +402,7 @@ async function taskWorker(chatState: ChatStateType, db: TaskyonDatabase) {
           task.result?.type === 'ToolError'
         ) {
           // here we send the task to our LLM inference
-          task = await processChatTask(task, chatState, db);
+          task = await processChatTask(task, chatState);
           task.state = 'Completed';
         } else {
           // in the case we don't have a result yet, we need to calculate it :)
@@ -446,11 +448,8 @@ async function taskWorker(chatState: ChatStateType, db: TaskyonDatabase) {
   );
 }
 
-export async function run(chatState: ChatStateType) {
-  console.log('creating or opening task database...');
-
-  const taskyonDB = await getTaskyonDB();
+export function run(chatState: ChatStateType) {
   console.log('start task taskWorker');
   //launch taskworker as an asnyc worker
-  void taskWorker(chatState, taskyonDB);
+  void taskWorker(chatState);
 } // Helper function to handle function execution
