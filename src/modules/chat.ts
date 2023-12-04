@@ -7,6 +7,7 @@ import {
   taskChain,
   getFileMappingByUuid,
   findAllFilesInTasks,
+  TaskManager,
 } from './taskManager';
 import OpenAI from 'openai';
 import { openFile } from './OPFS';
@@ -67,9 +68,8 @@ export function getSelectedModel(chatState: ChatStateType) {
 
 // this state stores all information which
 // should be stored e.g. in browser LocalStorage
-export function defaultTaskState() {
+export function defaultLLMSettings() {
   return {
-    Tasks: {} as Record<string, LLMTask>,
     // this refers to the task chain that we have selected. We select one task and then
     // put the chain together by following the parentIds.
     selectedTaskId: undefined as string | undefined,
@@ -128,7 +128,7 @@ FORMAT THE RESULT WITH THE FOLLOWING SCHEMA VERY STRICT ({format}):
   };
 }
 
-export type ChatStateType = ReturnType<typeof defaultTaskState>;
+export type ChatStateType = ReturnType<typeof defaultLLMSettings>;
 
 export function openRouterUsed(baseURL: string) {
   return getBackendUrls('openrouter') == baseURL;
@@ -426,39 +426,40 @@ export async function callLLM(
   return chatCompletion;
 }
 
-function buildChatFromTask(task: LLMTask, chatState: ChatStateType) {
+async function buildChatFromTask(
+  taskId: string,
+  getTask: InstanceType<typeof TaskManager>['getTask']
+) {
   const openAIMessageThread = [] as OpenAI.ChatCompletionMessageParam[];
-  const conversationThread = taskChain(task.id, chatState.Tasks);
+  const conversationThread = await taskChain(taskId, getTask);
 
   //TODO:  add instructions
 
   if (conversationThread) {
-    openAIMessageThread.push(
-      ...conversationThread
-        .map((mId) => {
-          const t = chatState.Tasks[mId];
-          let message = undefined;
-          if (t.role == 'function' && t.context?.function?.name) {
-            message = {
-              role: t.role,
-              content: t.content,
-              name: t.context?.function?.name,
-            };
-            const functionContent = dump({
-              arguments: t.context?.function?.arguments,
-              ...t.result?.toolResult,
-            });
-            message.content = functionContent;
-          } else {
-            message = {
-              role: t.role,
-              content: t.content,
-            } as OpenAI.ChatCompletionMessageParam;
-          }
-          return message;
-        })
-        .filter((m) => m.content) // OpenAI doesn't accept messages with zero content, even though they generate it themselfs
-    );
+    for (const mId of conversationThread) {
+      const t = await getTask(mId);
+      let message: OpenAI.ChatCompletionMessageParam | undefined = undefined;
+      if (t) {
+        if (t.role === 'function' && t?.context?.function?.name) {
+          message = {
+            role: t.role,
+            content: t.content,
+            name: t.context?.function?.name,
+          };
+          const functionContent = dump({
+            arguments: t.context?.function?.arguments,
+            ...t.result?.toolResult,
+          });
+          message.content = functionContent;
+        } else if (t.role != 'function') {
+          message = {
+            role: t.role,
+            content: t.content,
+          };
+        }
+        if (message?.content) openAIMessageThread.push(message);
+      }
+    }
   }
   return openAIMessageThread;
 }
@@ -518,16 +519,17 @@ function createTaskChatMessages(
   return messages;
 }
 
-export function prepareTasksForInference(
+export async function prepareTasksForInference(
   task: LLMTask,
   chatState: ChatStateType,
+  getTask: InstanceType<typeof TaskManager>['getTask'],
   method: 'toolchat' | 'chat' | 'taskAgent'
-): {
+): Promise<{
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
   tools: OpenAI.ChatCompletionTool[];
-} {
+}> {
   console.log('Prepare task tree for inference');
-  let openAIConversationThread = buildChatFromTask(task, chatState);
+  let openAIConversationThread = await buildChatFromTask(task.id, getTask);
 
   let tools: Tool[] = [];
 
@@ -628,7 +630,8 @@ export function prepareTasksForInference(
 export function enrichWithDelayedUsageInfos(
   generationId: string,
   chatState: ChatStateType,
-  task: LLMTask
+  task: LLMTask,
+  taskManager: TaskManager
 ) {
   void sleep(5000).then(() => {
     const headers: Record<string, string> = generateHeaders(chatState);
@@ -657,10 +660,11 @@ export function enrichWithDelayedUsageInfos(
               generationInfo.native_tokens_prompt +
               generationInfo.native_tokens_completion;
             for (const childID of task.childrenIDs) {
-              const child = chatState.Tasks[childID];
-              if (!child.debugging.promptTokens) {
-                child.debugging.promptTokens = task.debugging.resultTokens;
-              }
+              void taskManager.getTask(childID).then((child) => {
+                if (child && !child?.debugging.promptTokens) {
+                  child.debugging.promptTokens = task.debugging.resultTokens;
+                }
+              });
             }
           }
         }
@@ -707,15 +711,21 @@ function convertTasksToOpenAIThread(
 export async function getOpenAIAssistantResponse(
   task: LLMTask,
   chatState: ChatStateType,
-  db: TaskyonDatabase
+  taskManager: TaskManager
 ) {
   if (task.content) {
     const openai = getOpenai(chatState.openAIApiKey);
     console.log('send task to assistant!', task);
 
     // get all messages from a chat
-    const taskIdChain = taskChain(task.id, chatState.Tasks);
-    const taskList = taskIdChain.map((t) => chatState.Tasks[t]);
+    const taskList: LLMTask[] = [];
+    const taskIdChain = await taskChain(task.id, (taskId) =>
+      taskManager.getTask(taskId)
+    );
+    for (const t of taskIdChain) {
+      const T = await taskManager.getTask(t);
+      if (T) taskList.push();
+    }
 
     // Find all fileIDs in the task list
     const fileIDs = findAllFilesInTasks(taskList);
@@ -723,7 +733,9 @@ export async function getOpenAIAssistantResponse(
     // Get all corresponding filemapping entries from our database
     const currentTaskListfileMappings = (
       await Promise.all(
-        fileIDs.map(async (fuuid) => await getFileMappingByUuid(fuuid))
+        fileIDs.map(
+          async (fuuid) => await getFileMappingByUuid(fuuid, taskManager)
+        )
       )
     ).filter((fm) => fm !== null) as FileMappingDocType[];
 
@@ -747,7 +759,7 @@ export async function getOpenAIAssistantResponse(
     }
 
     // Update file mapping database
-    await db.filemappings.bulkUpsert(currentTaskListfileMappings);
+    await taskManager.getFileDB().bulkUpsert(currentTaskListfileMappings);
 
     // Finally, Convert task list to OpenAI thread messages
     const openAIConversationThread = convertTasksToOpenAIThread(
@@ -839,26 +851,30 @@ export async function getOpenAIAssistantResponse(
 
 // deletes tasks up to the first branch "split", eliminating a branch
 // which is defined by the leaf and preceding, exclusive tasks
-export function deleteTaskThread(leafId: string, chatState: ChatStateType) {
+export async function deleteTaskThread(
+  leafId: string,
+  chatState: ChatStateType,
+  taskManager: TaskManager
+) {
   if (chatState.selectedTaskId == leafId) {
     chatState.selectedTaskId = undefined;
   }
 
   let currentTaskId = leafId;
   while (currentTaskId) {
-    const currentTask = chatState.Tasks[currentTaskId];
+    const currentTask = await taskManager.getTask(currentTaskId);
     if (!currentTask) break; // Break if a task doesn't exist
 
     // Check if the parent task has more than one child
     if (currentTask.parentID) {
-      const parentTask = chatState.Tasks[currentTask.parentID];
+      const parentTask = await taskManager.getTask(currentTask.parentID);
       if (parentTask && parentTask.childrenIDs.length > 1) {
         break; // Stop deletion if the parent task has more than one child
       }
     }
 
     // Delete the current task
-    delete chatState.Tasks[currentTaskId];
+    void taskManager.deleteTask(currentTaskId);
 
     if (currentTask.parentID) {
       // Move to the parent task

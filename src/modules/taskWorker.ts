@@ -18,8 +18,7 @@ import { tools } from './tools';
 import { FunctionArguments, FunctionCall } from './types';
 import type { LLMTask } from './types';
 import type { OpenAI } from 'openai';
-import type { TaskyonDatabase } from './rxdb';
-import { getTaskyonDB } from './taskManager';
+import { TaskManager } from './taskManager';
 import { handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
 
@@ -62,11 +61,18 @@ function extractOpenAIFunctions(choice: OpenAI.ChatCompletion['choices'][0]) {
   return functionCalls;
 }
 
-export async function processChatTask(task: LLMTask, chatState: ChatStateType) {
+export async function processChatTask(
+  task: LLMTask,
+  chatState: ChatStateType,
+  taskManager: TaskManager
+) {
   //TODO: merge this function with the assistants function
   if (chatState.useOpenAIAssistants && openAIUsed(chatState.baseURL)) {
-    const db = await getTaskyonDB();
-    const messages = await getOpenAIAssistantResponse(task, chatState, db);
+    const messages = await getOpenAIAssistantResponse(
+      task,
+      chatState,
+      taskManager
+    );
     if (messages) {
       task.result = {
         type: 'AssistantAnswer',
@@ -82,9 +88,10 @@ export async function processChatTask(task: LLMTask, chatState: ChatStateType) {
     const useToolChat =
       task.allowedTools?.length && !chatState.enableOpenAiTools;
 
-    const { openAIConversationThread, tools } = prepareTasksForInference(
+    const { openAIConversationThread, tools } = await prepareTasksForInference(
       task,
       chatState,
+      (taskID) => taskManager.getTask(taskID),
       useToolChat ? 'toolchat' : 'chat'
     );
 
@@ -133,7 +140,12 @@ export async function processChatTask(task: LLMTask, chatState: ChatStateType) {
       }
 
       if (chatCompletion && openRouterUsed(chatState.baseURL)) {
-        enrichWithDelayedUsageInfos(chatCompletion.id, chatState, task);
+        enrichWithDelayedUsageInfos(
+          chatCompletion.id,
+          chatState,
+          task,
+          taskManager
+        );
       } else if (chatCompletion?.usage) {
         // openai sends back the exact number of prompt tokens :)
         task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
@@ -250,7 +262,8 @@ async function parseChatResponse(
 
 async function generateFollowUpTasksFromResult(
   finishedTask: LLMTask,
-  chatState: ChatStateType
+  chatState: ChatStateType,
+  taskManager: TaskManager
 ) {
   console.log('generate follow up task');
   if (finishedTask.result) {
@@ -297,7 +310,7 @@ async function generateFollowUpTasksFromResult(
         }
       }
     }
-    let parentTask = finishedTask;
+    let parentTaskId = finishedTask.id;
     const childCosts = {
       promptTokens: finishedTask.debugging.resultTokens,
       taskTokens: finishedTask.debugging.taskTokens,
@@ -307,11 +320,12 @@ async function generateFollowUpTasksFromResult(
       taskDraft.debugging = { ...taskDraft.debugging, ...childCosts };
       const newId = await addTask2Tree(
         taskDraft,
-        parentTask,
+        parentTaskId,
         chatState,
+        taskManager,
         execute
       );
-      parentTask = chatState.Tasks[newId]; // create sequental task chain
+      parentTaskId = newId; // create sequental task chain
     }
   }
 }
@@ -334,7 +348,7 @@ export function emitCancelCurrentTask() {
   document.dispatchEvent(new CustomEvent(CURRENT_TASK_CANCELLATION_EVENT));
 }
 
-async function taskWorker(chatState: ChatStateType) {
+async function taskWorker(chatState: ChatStateType, taskManager: TaskManager) {
   let cancelAllTasks = false;
   let cancelImmediately = false;
   let cancelCurrenTask = false;
@@ -370,70 +384,97 @@ async function taskWorker(chatState: ChatStateType) {
   );
 
   window.addEventListener('beforeunload', () => {
-    processTasksQueue.clear().forEach((t) => (t.state = 'Cancelled'));
+    processTasksQueue.clear().forEach(
+      (tId) =>
+        void taskManager.updateTask(
+          {
+            id: tId,
+            state: 'Cancelled',
+          },
+          true
+        )
+    );
   });
 
   console.log('entering task worker loop...');
   while (!cancelImmediately) {
     console.log('waiting for next task!');
-    let task = await processTasksQueue.pop();
+    const taskId = await processTasksQueue.pop();
     if (!processTasksQueue.count()) {
       cancelAllTasks = false;
       cancelCurrenTask = false;
     } else if (cancelAllTasks) {
-      task.state = 'Cancelled';
+      void taskManager.updateTask(
+        {
+          id: taskId,
+          state: 'Cancelled',
+        },
+        true
+      );
       continue;
     }
-    task.state = 'In Progress';
-    console.log('processing task:', task);
-    try {
-      if (task.role == 'user') {
-        task = await processChatTask(task, chatState);
-        task.state = 'Completed';
-      } else if (task.role == 'function') {
-        // in the case of 'FunctionCall' result, we run it twice:
-        // 1. calculate function result
-        // 2. send function to LLM inference
-        // the task could potentially come back as another functionCall!
-        // the way this works: -> task state is "Completed" with "FunctionCall" and follow-up
-        // functiontask will be generated
-        if (
-          task.result?.type === 'ToolResult' ||
-          task.result?.type === 'ToolError'
-        ) {
-          // here we send the task to our LLM inference
-          task = await processChatTask(task, chatState);
-          task.state = 'Completed';
-        } else {
-          // in the case we don't have a result yet, we need to calculate it :)
-          task = await processFunctionTask(task);
-          processTasksQueue.push(task); // send the task back into the queue
-          task.state = 'Queued';
-        }
-      } else {
-        console.log("We don't know what to do with this task:", task);
-        task.state = 'Error';
-      }
-    } catch (error) {
-      task.state = 'Error';
-      task.debugging.error = error;
-      console.error('Error processing task:', error);
-    }
-    // if we cancelled a task we need to prevent it from creating any follow-up tasks.
-    if (
-      (cancelCurrenTask && task.id == chatState.selectedTaskId) ||
-      cancelAllTasks
-    ) {
-      // current task cancellation should only be done once, so we set the flag to "false"
-      cancelCurrenTask = false;
-      task.state = 'Cancelled';
-    } else {
+    void taskManager.updateTask(
+      {
+        id: taskId,
+        state: 'In Progress',
+      },
+      false
+    );
+    console.log('processing task:', taskId);
+    let task = await taskManager.getTask(taskId);
+    if (task) {
       try {
-        await generateFollowUpTasksFromResult(task, chatState);
+        if (task.role == 'user') {
+          // TODO: get rid of "taskManager" in processChatTask
+          task = await processChatTask(task, chatState, taskManager);
+          task.state = 'Completed';
+        } else if (task?.role == 'function') {
+          // in the case of 'FunctionCall' result, we run it twice:
+          // 1. calculate function result
+          // 2. send function to LLM inference
+          // the task could potentially come back as another functionCall!
+          // the way this works: -> task state is "Completed" with "FunctionCall" and follow-up
+          // functiontask will be generated
+          if (
+            task.result?.type === 'ToolResult' ||
+            task.result?.type === 'ToolError'
+          ) {
+            // here we send the task to our LLM inference
+            task = await processChatTask(task, chatState, taskManager);
+            task.state = 'Completed';
+          } else {
+            // in the case we don't have a result yet, we need to calculate it :)
+            task = await processFunctionTask(task);
+            processTasksQueue.push(taskId); // send the task back into the queue
+            task.state = 'Queued';
+          }
+        } else {
+          console.log("We don't know what to do with this task:", taskId);
+          task.state = 'Error';
+        }
       } catch (error) {
         task.state = 'Error';
-        task.debugging.followUpError = error;
-        console.log('We were not able to create a follow up task:', error);
+        task.debugging.error = error;
+        console.error('Error processing task:', error);
+      }
+      // if we cancelled a task we need to prevent it from creating any follow-up tasks.
+      if (
+        (cancelCurrenTask && task.id == chatState.selectedTaskId) ||
+        cancelAllTasks
+      ) {
+        // current task cancellation should only be done once, so we set the flag to "false"
+        cancelCurrenTask = false;
+        task.state = 'Cancelled';
+      } else {
+        try {
+          await generateFollowUpTasksFromResult(task, chatState, taskManager);
+        } catch (error) {
+          task.state = 'Error';
+          task.debugging.followUpError = error;
+          console.log('We were not able to create a follow up task:', error);
+        }
+
+        taskManager.setTask(task, true);
       }
     }
   }
@@ -448,8 +489,8 @@ async function taskWorker(chatState: ChatStateType) {
   );
 }
 
-export function run(chatState: ChatStateType) {
+export function run(chatState: ChatStateType, taskManager: TaskManager) {
   console.log('start task taskWorker');
   //launch taskworker as an asnyc worker
-  void taskWorker(chatState);
+  void taskWorker(chatState, taskManager);
 } // Helper function to handle function execution

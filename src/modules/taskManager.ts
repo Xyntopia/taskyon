@@ -4,7 +4,6 @@ import type { ChatStateType } from './chat';
 import { v1 as uuidv1 } from 'uuid';
 import type { partialTaskDraft } from './types';
 import {
-  createTaskyonDatabase,
   TaskyonDatabase,
   FileMappingDocType,
   transformLLMTaskToDocType,
@@ -54,7 +53,7 @@ class AsyncQueue<T> {
 
 export default AsyncQueue;
 
-export const processTasksQueue = new AsyncQueue<LLMTask>();
+export const processTasksQueue = new AsyncQueue<string>();
 export const vectorStore = useVectorStore();
 /**
  * Finds the root task of a given task.
@@ -63,14 +62,14 @@ export const vectorStore = useVectorStore();
  * @returns {string} - The ID of the root task, or null if not found.
  */
 
-export function findRootTask(
+export async function findRootTask(
   taskId: string,
-  chatState: ChatStateType
-): string | null {
+  getTask: InstanceType<typeof TaskManager>['getTask']
+) {
   let currentTaskID = taskId;
 
   while (currentTaskID) {
-    const currentTask = chatState.Tasks[currentTaskID];
+    const currentTask = await getTask(currentTaskID);
     if (!currentTask) return null; // Return null if a task doesn't exist
 
     if (currentTask.parentID) {
@@ -82,41 +81,11 @@ export function findRootTask(
 
   return currentTaskID; // Return null if the loop exits without finding a root task
 }
-/**
- * Finds the leaf tasks of a given task.
- *
- * @param {string} taskId - The ID of the task.
- * @returns {string[]} - An array of IDs of the leaf tasks.
- */
 
-export function findLeafTasks(
-  taskId: string,
-  chatState: ChatStateType
-): string[] {
-  const leafTasks: string[] = [];
-
-  function traverse(taskId: string) {
-    const task = chatState.Tasks[taskId];
-    if (!task) return; // Exit if a task doesn't exist
-
-    let hasChildren = false;
-    for (const [id, task] of Object.entries(chatState.Tasks)) {
-      if (task.parentID === taskId) {
-        hasChildren = true;
-        traverse(id); // Recursively traverse the children
-      }
-    }
-
-    if (!hasChildren) {
-      leafTasks.push(taskId); // Add the task ID to the array if it has no children
-    }
-  }
-
-  traverse(taskId); // Start the traversal from the given task ID
-  return leafTasks;
-}
-
-export function taskChain(lastTaskId: string, tasks: Record<string, LLMTask>) {
+export async function taskChain(
+  lastTaskId: string,
+  getTask: InstanceType<typeof TaskManager>['getTask']
+) {
   // Start with the selected task
   let currentTaskID = lastTaskId;
   const conversationList: string[] = [];
@@ -124,7 +93,7 @@ export function taskChain(lastTaskId: string, tasks: Record<string, LLMTask>) {
   // Trace back the parentIDs to the original task in the chain
   while (currentTaskID) {
     // Get the current task
-    const currentTask = tasks[currentTaskID];
+    const currentTask = await getTask(currentTaskID);
     if (!currentTask) break; // Break if we reach a task that doesn't exist
 
     // Prepend the current task to the conversation list so the selected task ends up being the last in the list
@@ -152,20 +121,11 @@ function base64Uuid() {
   return base64Uuid;
 }
 
-let taskyonDB: TaskyonDatabase | undefined = undefined;
-
-export async function getTaskyonDB(): Promise<TaskyonDatabase> {
-  if (taskyonDB) {
-    return taskyonDB;
-  } else {
-    taskyonDB = await createTaskyonDatabase('taskyondb');
-    return taskyonDB;
-  }
-}
-
-export async function addFile(opfsName?: string, openAIFileId?: string) {
-  const db = await getTaskyonDB();
-
+export async function addFile(
+  taskManager: TaskManager,
+  opfsName?: string,
+  openAIFileId?: string
+) {
   const fileMapping: FileMappingDocType = {
     uuid: base64Uuid(),
   };
@@ -180,17 +140,16 @@ export async function addFile(opfsName?: string, openAIFileId?: string) {
     fileMapping.openAIFileId = openAIFileId;
   }
 
-  const fileMappingDoc = await db.filemappings.insert(fileMapping);
+  const fileMappingDoc = await taskManager.getFileDB().insert(fileMapping);
   return fileMappingDoc.uuid;
 }
 
 export async function getFileMappingByUuid(
-  uuid: string
+  uuid: string,
+  taskManager: TaskManager
 ): Promise<FileMappingDocType | null> {
-  const db = await getTaskyonDB();
-
   // Find the document with the matching UUID
-  const fileMappingDoc = await db.filemappings.findOne(uuid).exec();
+  const fileMappingDoc = await taskManager.getFileDB().findOne(uuid).exec();
 
   // Check if the document exists
   if (!fileMappingDoc) {
@@ -206,8 +165,8 @@ export async function getFileMappingByUuid(
   };
 }
 
-export async function getFile(uuid: string) {
-  const fileMap = await getFileMappingByUuid(uuid);
+export async function getFile(uuid: string, taskManager: TaskManager) {
+  const fileMap = await getFileMappingByUuid(uuid, taskManager);
   if (fileMap?.opfs) {
     const file = openFile(fileMap.opfs);
     return file;
@@ -224,16 +183,18 @@ export function findAllFilesInTasks(taskList: LLMTask[]): string[] {
 
 export async function addTask2Tree(
   task: partialTaskDraft,
-  parent: LLMTask | undefined,
+  parentID: string | undefined,
   chatState: ChatStateType,
+  taskManager: TaskManager,
   execute = true
 ) {
   const uuid = base64Uuid();
-  const db = await getTaskyonDB();
+
+  const parent = parentID ? await taskManager.getTask(parentID) : undefined;
 
   const newTask: LLMTask = {
     role: task.role,
-    parentID: parent?.id,
+    parentID,
     content: task.content || null,
     state: task.state || 'Open',
     childrenIDs: [],
@@ -246,38 +207,25 @@ export async function addTask2Tree(
 
   console.log('create new Task:', newTask.id);
 
-  const newDBTask = transformLLMTaskToDocType(newTask);
-
-  await db.llmtasks.insert(newDBTask);
-
-  const taskFromDb = await db.llmtasks.findOne(newTask.id).exec();
-
-  if (taskFromDb) {
-    const savedTask = transformDocToLLMTask(taskFromDb);
-
-    // Rest of your code
-    // ...
-  } else {
-    // Handle the case when task is not found in the database
-    console.error('Task not found in the database');
-    // Maybe throw an error or return a default value
-  }
-
-  // connect task to task tree
-  chatState.Tasks[newTask.id] = newTask;
   if (parent) {
     parent.childrenIDs.push(newTask.id);
   }
   // Push the new function task to processTasksQueue
+  // we are not saving yet, as it is going to be processed :)
   if (execute) {
-    processTasksQueue.push(chatState.Tasks[newTask.id]);
-    chatState.Tasks[newTask.id].state = 'Queued';
+    processTasksQueue.push(newTask.id);
+    newTask.state = 'Queued';
+    taskManager.setTask(newTask, false);
+  } else {
+    // in the case of a task which is not processed, we can save it :)
+    taskManager.setTask(newTask, true);
   }
   chatState.selectedTaskId = newTask.id;
   return newTask.id;
 }
 
 export class TaskManager {
+  // uses RxDB as a DB backend..
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
   private taskyonDB: TaskyonDatabase;
@@ -286,6 +234,10 @@ export class TaskManager {
   constructor(tasks: Record<string, LLMTask>, taskyonDB: TaskyonDatabase) {
     this.tasks = tasks;
     this.taskyonDB = taskyonDB;
+  }
+
+  getFileDB() {
+    return this.taskyonDB.filemappings;
   }
 
   async getTask(taskId: string): Promise<LLMTask | undefined> {
@@ -302,23 +254,24 @@ export class TaskManager {
     return task;
   }
 
-  setTask(taskId: string, task: LLMTask, save: false): void {
-    this.tasks[taskId] = task;
+  setTask(task: LLMTask, save: boolean): void {
+    this.tasks[task.id] = task;
     if (save) {
-      void this.saveTask(taskId); // Save to database if required
+      void this.saveTask(task.id); // Save to database if required
     }
   }
 
   async updateTask(
-    taskId: string,
-    updateData: Partial<LLMTask>
+    updateData: Partial<LLMTask> & { id: string },
+    save: boolean
   ): Promise<void> {
-    const task = await this.getTask(taskId);
+    const task = await this.getTask(updateData.id);
     if (task) {
       // Update the task with new data
       Object.assign(task, updateData);
-      // Save the updated task to the database
-      await this.saveTask(taskId);
+      if (save) {
+        void this.saveTask(task.id); // Save to database if required
+      }
     }
   }
 
@@ -327,6 +280,17 @@ export class TaskManager {
     if (task) {
       const newDBTask = transformLLMTaskToDocType(task);
       await this.taskyonDB.llmtasks.upsert(newDBTask);
+    }
+  }
+
+  async deleteTask(taskId: string): Promise<void> {
+    // Delete from local record
+    delete this.tasks[taskId];
+
+    // Delete from the database
+    const taskDoc = await this.taskyonDB.llmtasks.findOne(taskId).exec();
+    if (taskDoc) {
+      await taskDoc.remove();
     }
   }
 
