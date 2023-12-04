@@ -222,6 +222,14 @@
     &:hover
         .message-buttons
             opacity: 1
+
+// this is in order to make mermaid sequence diagrams work on dark backgrounds
+::v-deep(.mermaid svg)
+  .messageLine0
+    stroke: $secondary !important
+  .messageText
+    stroke: $secondary !important
+    fill: $secondary !important
 </style>
 
 <script setup lang="ts">
