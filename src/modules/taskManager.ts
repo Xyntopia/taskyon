@@ -230,6 +230,7 @@ export class TaskManager {
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
   private taskyonDB: TaskyonDatabase;
   private tasks: Record<string, LLMTask>;
+  private subscribers: Array<(task: LLMTask) => void> = [];
 
   constructor(tasks: Record<string, LLMTask>, taskyonDB: TaskyonDatabase) {
     this.tasks = tasks;
@@ -251,6 +252,7 @@ export class TaskManager {
         this.tasks[taskId] = task; // Update local record
       }
     }
+    this.notifySubscribers(taskId);
     return task;
   }
 
@@ -259,6 +261,7 @@ export class TaskManager {
     if (save) {
       void this.saveTask(task.id); // Save to database if required
     }
+    this.notifySubscribers(task.id);
   }
 
   async updateTask(
@@ -273,6 +276,7 @@ export class TaskManager {
         void this.saveTask(task.id); // Save to database if required
       }
     }
+    this.notifySubscribers(updateData.id);
   }
 
   async saveTask(taskId: string): Promise<void> {
@@ -294,18 +298,33 @@ export class TaskManager {
     }
   }
 
+  // Method to notify all subscribers for a specific task
+  private notifySubscribers(taskId: string): void {
+    const task = this.tasks[taskId];
+    if (task) {
+      this.subscribers.forEach((callback) => callback(task));
+    }
+  }
+
+  // Revised subscription method
   subscribeToTaskChanges(
     taskId: string,
     callback: (task: LLMTask) => void
   ): void {
-    // This is a simple subscription mechanism.
-    // For a more robust solution, consider using Observables or a state management library.
-    this.taskyonDB.llmtasks.findOne(taskId).$.subscribe((doc) => {
-      if (doc) {
-        const updatedTask = transformDocToLLMTask(doc);
-        this.tasks[taskId] = updatedTask;
-        callback(updatedTask);
-      }
-    });
+    this.subscribers.push(callback);
+  }
+
+  // You may also need a method to unsubscribe if required
+  unsubscribeFromTaskChanges(callback: (task: LLMTask) => void): void {
+    this.subscribers = this.subscribers.filter((sub) => sub !== callback);
+  }
+
+  getRootTasks() {
+    const orphanTasks = Object.values(this.tasks)
+      .filter((t) => {
+        return t.childrenIDs.length == 0;
+      })
+      .map((t) => t.id);
+    return orphanTasks;
   }
 }
