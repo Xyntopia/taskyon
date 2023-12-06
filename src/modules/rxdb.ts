@@ -9,7 +9,10 @@ import {
 } from 'rxdb';
 import { getRxStorageDexie, RxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import type { RxStorageMemory } from 'rxdb/plugins/storage-memory';
+import { addRxPlugin } from 'rxdb';
+import { RxDBJsonDumpPlugin } from 'rxdb/plugins/json-dump';
 import { LLMTask } from './types';
+addRxPlugin(RxDBJsonDumpPlugin);
 
 const llmTaskSchemaLiteral = {
   title: 'LLMTask schema',
