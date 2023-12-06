@@ -287,8 +287,9 @@ function executeTask() {
   console.log('executing task!');
   void addTask2Tree(
     currentnewTask.value,
-    state.chatState.Tasks[state.chatState.selectedTaskId || ''], //parent
-    state.chatState, //task manager
+    state.chatState.selectedTaskId, //parent
+    state.chatState,
+    state.taskManager,
     true // execute right away...
   );
   if (currentnewTask.value.role === 'user') {

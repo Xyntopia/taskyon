@@ -233,6 +233,7 @@
 </style>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import ToolResultWidget from 'components/ToolResultWidget.vue';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
@@ -241,6 +242,8 @@ import TokenUsage from 'components/TokenUsage.vue';
 import type { LLMTask } from 'src/modules/types';
 import type MarkdownIt from 'markdown-it/lib';
 import markdownItMermaid from '@datatraccorporation/markdown-it-mermaid';
+import { getTaskManager } from 'src/boot/taskyon';
+import { TaskManager } from 'src/modules/taskManager';
 
 type markdownItMermaid = MarkdownIt.PluginSimple;
 
@@ -249,9 +252,12 @@ defineProps<{
 }>();
 
 const state = useTaskyonStore();
+const taskManagerPromise = getTaskManager();
 
-function editTask(taskId: string) {
-  const jsonTask = JSON.stringify(state.chatState.Tasks[taskId]);
+async function editTask(taskId: string) {
+  const jsonTask = JSON.stringify(
+    await (await taskManagerPromise).getTask(taskId)
+  );
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const task: Partial<LLMTask> = JSON.parse(jsonTask);
   task.id = 'draft';
@@ -260,7 +266,7 @@ function editTask(taskId: string) {
   task.state = 'Open';
   delete task.result;
   state.taskDraft = task;
-  state.chatState.selectedTaskId = state.chatState.Tasks[taskId].parentID;
+  state.chatState.selectedTaskId = task.parentID;
 }
 
 function toggleMessageDebug(id: string) {

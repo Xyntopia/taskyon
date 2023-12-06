@@ -193,7 +193,7 @@
 <script setup lang="ts">
 import Task from 'components/Task.vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
-import { computed, ref, UnwrapRef } from 'vue';
+import { computed, ref, UnwrapRef, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
 import { getApikey } from 'src/modules/chat';
 import { taskChain } from 'src/modules/taskManager';
@@ -205,6 +205,8 @@ import {
   emitCancelCurrentTask,
 } from 'src/modules/taskWorker';
 import axios from 'axios';
+import { getTaskManager } from 'boot/taskyon';
+import { LLMTask } from 'src/modules/types';
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
 const bottomPadding = ref(100);
@@ -272,18 +274,24 @@ const $q = useQuasar();
 const state = useTaskyonStore();
 $q.dark.set(state.darkTheme);
 
-const selectedThread = computed(() => {
-  if (state.chatState.selectedTaskId) {
-    const threadIDChain = taskChain(
-      state.chatState.selectedTaskId,
-      state.chatState.Tasks
-    );
-    const thread = threadIDChain.map((tId) => {
-      return state.chatState.Tasks[tId];
-    });
-    return thread;
-  } else {
-    return [];
+const selectedThread = ref<LLMTask[]>([]);
+
+watch(
+  () => state.chatState.selectedTaskId,
+  async (value) => {
+    if (value) {
+      const threadIDChain = await taskChain(value, async (taskId) =>
+        (await getTaskManager()).getTask(taskId)
+      );
+      const thread = await Promise.all(
+        threadIDChain.map(async (tId) => {
+          return (await getTaskManager()).getTask(tId);
+        })
+      );
+      return thread;
+    } else {
+      return [];
+    }
   }
-});
+);
 </script>
