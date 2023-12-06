@@ -9,7 +9,7 @@
 
 A Chat & Agent Interface for Users, Experts & Developers based on Tasks! 🚀
 
-You can access the deployed app here: [https://taskyon.xyntopia.com](https://taskyon.xyntopia.com).
+You can access the deployed app here: [https://taskyon.space](https://taskyon.space).
 
 ---
 
@@ -43,7 +43,7 @@ Local First Principle: Taskyon embraces the Local First approach, prioritizing u
 
 ## Installation
 
-Taskyon can be accessed directly at [https://taskyon.xyntopia.com](https://taskyon.xyntopia.com). For local setup:
+Taskyon can be accessed directly at [https://taskyon.space](https://taskyon.space). For local setup:
 
 1. Clone the repository. 📥
 2. Run `yarn install` to install dependencies. 🧶
