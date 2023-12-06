@@ -73,6 +73,7 @@ void getTaskManager().then((tm) => {
   tm.subscribeToTaskChanges((_task, num) => {
     if (num) conversationIDs.value = tm.getLeafTasks();
   });
+  conversationIDs.value = tm.getLeafTasks();
 });
 
 async function onDeleteThread(conversationId: string) {

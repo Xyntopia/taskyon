@@ -230,11 +230,22 @@ export class TaskManager {
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
   private taskyonDB: TaskyonDatabase;
   private tasks: Map<string, LLMTask>;
-  private subscribers: Array<(task: LLMTask, taskNum?: number) => void> = [];
+  private subscribers: Array<(task?: LLMTask, taskNum?: number) => void> = [];
 
   constructor(tasks: Record<string, LLMTask>, taskyonDB: TaskyonDatabase) {
     this.tasks = new Map();
     this.taskyonDB = taskyonDB;
+    void this.initializeTasksFromDB();
+  }
+
+  async initializeTasksFromDB() {
+    const tasksFromDb = await this.taskyonDB.llmtasks.find().exec();
+    tasksFromDb.forEach((taskDoc) => {
+      const task = transformDocToLLMTask(taskDoc);
+      this.tasks.set(task.id, task);
+    });
+    console.log('all tasks loaded from DB!');
+    this.notifySubscribers(undefined, true);
   }
 
   getFileDB() {
@@ -304,7 +315,7 @@ export class TaskManager {
   // Revised subscription method
   // if number of tasks changed as well, a number will be supplied
   subscribeToTaskChanges(
-    callback: (task: LLMTask, taskNum?: number) => void
+    callback: (task?: LLMTask, taskNum?: number) => void
   ): void {
     this.subscribers.push(callback);
   }
@@ -325,11 +336,15 @@ export class TaskManager {
   }
 
   // Method to notify all subscribers for a specific task
-  private notifySubscribers(taskId: string, taskCountChanged = false): void {
-    const task = this.tasks.get(taskId);
-    if (task) {
-      const taskNum = taskCountChanged ? this.tasks.size : undefined;
-      this.subscribers.forEach((callback) => callback(task, taskNum));
+  private notifySubscribers(taskId?: string, taskCountChanged = false): void {
+    const taskNum = taskCountChanged ? this.tasks.size : undefined;
+    if (taskId) {
+      const task = this.tasks.get(taskId);
+      if (task) {
+        this.subscribers.forEach((callback) => callback(task, taskNum));
+      }
+    } else {
+      this.subscribers.forEach((callback) => callback(undefined, taskNum));
     }
   }
 
