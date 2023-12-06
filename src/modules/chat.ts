@@ -652,17 +652,25 @@ export function enrichWithDelayedUsageInfos(
             // we get the useage data very often in an asynchronous form.
             // thats why we need to
             // openai sends back the exact number of prompt tokens :)
-            task.debugging.promptTokens = generationInfo.native_tokens_prompt;
-            task.debugging.resultTokens =
-              generationInfo.native_tokens_completion;
-            task.debugging.taskCosts = generationInfo.usage;
-            task.debugging.taskTokens =
-              generationInfo.native_tokens_prompt +
-              generationInfo.native_tokens_completion;
+            const debugging = {
+              promptTokens: generationInfo.native_tokens_prompt,
+              resultTokens: generationInfo.native_tokens_completion,
+              taskCosts: generationInfo.usage,
+              taskTokens:
+                generationInfo.native_tokens_prompt +
+                generationInfo.native_tokens_completion,
+            };
+            taskManager.updateTask({ id: task.id, debugging }, true);
             for (const childID of task.childrenIDs) {
               void taskManager.getTask(childID).then((child) => {
                 if (child && !child?.debugging.promptTokens) {
-                  child.debugging.promptTokens = task.debugging.resultTokens;
+                  taskManager.updateTask(
+                    {
+                      id: child.id,
+                      debugging: { promptTokens: task.debugging.resultTokens },
+                    },
+                    true
+                  );
                 }
               });
             }

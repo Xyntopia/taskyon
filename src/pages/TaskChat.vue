@@ -116,7 +116,7 @@
           }
         "
       />
-      <div class="col" style="max-width: 48rem">
+      <div class="col q-pa-xs" style="max-width: 48rem">
         <CreateNewTask
           v-if="getApikey(state.chatState)"
           :class="[

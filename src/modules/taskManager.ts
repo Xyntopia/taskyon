@@ -225,6 +225,36 @@ export async function addTask2Tree(
   return newTask.id;
 }
 
+function isObject(item: unknown): item is Record<string, unknown> {
+  return item !== null && typeof item === 'object' && !Array.isArray(item);
+}
+
+function deepMerge(
+  obj1: Record<string, unknown>,
+  obj2: Record<string, unknown>
+): Record<string, unknown> {
+  const output = Object.assign({}, obj1); // Start with a shallow copy of obj1
+  if (isObject(obj1) && isObject(obj2)) {
+    Object.keys(obj2).forEach((key) => {
+      const obj2Key = obj2[key];
+      if (isObject(obj2Key)) {
+        const obj1Key = obj1[key];
+        if (isObject(obj1Key)) {
+          // Recursively call deepMerge only if both obj1[key] and obj2[key] are objects
+          output[key] = deepMerge(obj1Key, obj2Key);
+        } else {
+          // If obj1[key] is not an object, simply assign obj2[key]
+          Object.assign(output, { [key]: obj2Key });
+        }
+      } else {
+        // For non-object properties, overwrite with the value from obj2
+        Object.assign(output, { [key]: obj2Key });
+      }
+    });
+  }
+  return output;
+}
+
 export class TaskManager {
   // uses RxDB as a DB backend..
   // Usage example:
@@ -285,7 +315,8 @@ export class TaskManager {
       const task = await this.getTask(updateData.id);
       if (task) {
         // Update the task with new data
-        Object.assign(task, updateData);
+        //Object.assign(task, updateData);
+        Object.assign(task, deepMerge(task, updateData));
         if (save) {
           void this.saveTask(task.id); // Save to database if required
         }
