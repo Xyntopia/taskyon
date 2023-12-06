@@ -877,12 +877,17 @@ export async function deleteTaskThread(
     if (currentTask.parentID) {
       const parentTask = await taskManager.getTask(currentTask.parentID);
       if (parentTask && parentTask.childrenIDs.length > 1) {
-        break; // Stop deletion if the parent task has more than one child
+        // in this case we need to update the parent with the fewer children
+        const childrenIDs = parentTask.childrenIDs.filter(
+          (id) => id != currentTask.id
+        );
+        taskManager.updateTask({ id: parentTask.id, childrenIDs }, true);
+        break; // Stop deletion if the parent task has more than one child. We only want to delete this branch...
       }
     }
 
     // Delete the current task
-    void taskManager.deleteTask(currentTaskId);
+    await taskManager.deleteTask(currentTaskId);
 
     if (currentTask.parentID) {
       // Move to the parent task

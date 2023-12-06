@@ -474,7 +474,7 @@ async function taskWorker(chatState: ChatStateType, taskManager: TaskManager) {
           console.log('We were not able to create a follow up task:', error);
         }
 
-        taskManager.setTask(task, true);
+        await taskManager.setTask(task, true);
       }
     }
   }

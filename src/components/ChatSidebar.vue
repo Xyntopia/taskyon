@@ -71,16 +71,16 @@ const conversationIDs = ref<string[]>([]);
 
 void getTaskManager().then((tm) => {
   tm.subscribeToTaskChanges((_task, num) => {
+    console.log('update threads!!');
     if (num) conversationIDs.value = tm.getLeafTasks();
-  });
+  }, true);
   conversationIDs.value = tm.getLeafTasks();
 });
 
 async function onDeleteThread(conversationId: string) {
-  void deleteTaskThread(
-    conversationId,
-    state.chatState,
-    await getTaskManager()
-  );
+  console.log('deleting thread!!', conversationId);
+  const tm = await getTaskManager();
+  void deleteTaskThread(conversationId, state.chatState, tm);
+  conversationIDs.value = tm.getLeafTasks();
 }
 </script>

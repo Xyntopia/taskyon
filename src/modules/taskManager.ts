@@ -209,17 +209,17 @@ export async function addTask2Tree(
 
   if (parent) {
     parent.childrenIDs.push(newTask.id);
-    taskManager.updateTask(parent, true);
+    await taskManager.updateTask(parent, true);
   }
   // Push the new function task to processTasksQueue
   // we are not saving yet, as it is going to be processed :)
   if (execute) {
     processTasksQueue.push(newTask.id);
     newTask.state = 'Queued';
-    taskManager.setTask(newTask, false);
+    await taskManager.setTask(newTask, false);
   } else {
     // in the case of a task which is not processed, we can save it :)
-    taskManager.setTask(newTask, true);
+    await taskManager.setTask(newTask, true);
   }
   chatState.selectedTaskId = newTask.id;
   return newTask.id;
@@ -262,6 +262,9 @@ export class TaskManager {
   private taskyonDB: TaskyonDatabase;
   private tasks: Map<string, LLMTask>;
   private subscribers: Array<(task?: LLMTask, taskNum?: number) => void> = [];
+  private taskCountSubscribers: Array<
+    (task?: LLMTask, taskNum?: number) => void
+  > = [];
 
   constructor(tasks: TaskManager['tasks'], taskyonDB: TaskyonDatabase) {
     this.tasks = tasks;
@@ -298,20 +301,20 @@ export class TaskManager {
     return task;
   }
 
-  setTask(task: LLMTask, save: boolean): void {
-    void this.withTaskCountCheck(task.id, () => {
+  async setTask(task: LLMTask, save: boolean): Promise<void> {
+    await this.withTaskCountCheck(task.id, async () => {
       this.tasks.set(task.id, task);
       if (save) {
-        void this.saveTask(task.id); // Save to database if required
+        await this.saveTask(task.id); // Save to database if required
       }
     });
   }
 
-  updateTask(
+  async updateTask(
     updateData: Partial<LLMTask> & { id: string },
     save: boolean
-  ): void {
-    void this.withTaskCountCheck(updateData.id, async () => {
+  ): Promise<void> {
+    await this.withTaskCountCheck(updateData.id, async () => {
       const task = await this.getTask(updateData.id);
       if (task) {
         // Update the task with new data
@@ -335,6 +338,7 @@ export class TaskManager {
   }
 
   async deleteTask(taskId: string): Promise<void> {
+    console.log('deleting task:', taskId);
     // Delete from local record
     this.tasks.delete(taskId);
 
@@ -346,17 +350,25 @@ export class TaskManager {
     this.notifySubscribers(taskId, true);
   }
 
-  // Revised subscription method
-  // if number of tasks changed as well, a number will be supplied
   subscribeToTaskChanges(
-    callback: (task?: LLMTask, taskNum?: number) => void
+    callback: (task?: LLMTask, taskNum?: number) => void,
+    subscribeToTaskCountOnly = false
   ): void {
-    this.subscribers.push(callback);
+    if (subscribeToTaskCountOnly) {
+      this.taskCountSubscribers.push(callback);
+    } else {
+      this.subscribers.push(callback);
+    }
   }
 
   // You may also need a method to unsubscribe if required
-  unsubscribeFromTaskChanges(callback: (task: LLMTask) => void): void {
+  unsubscribeFromTaskChanges(
+    callback: (task?: LLMTask, taskNum?: number) => void
+  ): void {
     this.subscribers = this.subscribers.filter((sub) => sub !== callback);
+    this.taskCountSubscribers = this.taskCountSubscribers.filter(
+      (sub) => sub !== callback
+    );
   }
 
   getLeafTasks() {
@@ -369,9 +381,10 @@ export class TaskManager {
     return orphanTasks;
   }
 
-  // Method to notify all subscribers for a specific task
   private notifySubscribers(taskId?: string, taskCountChanged = false): void {
     const taskNum = taskCountChanged ? this.tasks.size : undefined;
+
+    // Notify subscribers interested in task changes
     if (taskId) {
       const task = this.tasks.get(taskId);
       if (task) {
@@ -379,6 +392,13 @@ export class TaskManager {
       }
     } else {
       this.subscribers.forEach((callback) => callback(undefined, taskNum));
+    }
+
+    // Notify subscribers interested in task count changes
+    if (taskCountChanged) {
+      this.taskCountSubscribers.forEach((callback) =>
+        callback(undefined, taskNum)
+      );
     }
   }
 
