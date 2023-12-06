@@ -103,7 +103,12 @@
       </div>
     </div>
     <!--Create new task area-->
-    <q-page-sticky position="bottom" :offset="[0, 0]" class="z-top print-hide">
+    <q-page-sticky
+      position="bottom"
+      :offset="[0, 0]"
+      expand
+      class="col z-top print-hide"
+    >
       <q-resize-observer
         @resize="
           (size) => {
@@ -111,7 +116,7 @@
           }
         "
       />
-      <div class="row">
+      <div class="col" style="max-width: 48rem">
         <CreateNewTask
           v-if="getApikey(state.chatState)"
           :class="[
@@ -142,6 +147,7 @@
         </q-card>
       </div>
     </q-page-sticky>
+    <!--Bottom scroll button-->
     <q-page-sticky
       v-if="!lockBottomScroll"
       position="bottom-right"
