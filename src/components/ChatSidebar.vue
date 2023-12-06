@@ -21,7 +21,7 @@
         <q-list>
           <q-item
             dense
-            v-for="(conversationId, idx) in conversationIDs"
+            v-for="conversationId in conversationIDs"
             :key="conversationId"
             @click="state.chatState.selectedTaskId = conversationId"
             clickable
@@ -30,7 +30,9 @@
             <q-item-section avatar>
               <q-icon name="chat_bubble" size="xs" />
             </q-item-section>
-            <q-item-section> Thread {{ idx }} </q-item-section>
+            <q-item-section>
+              Thread {{ conversationId.substring(0, 3) }}
+            </q-item-section>
             <q-item-section side>
               <q-btn
                 dense
@@ -54,7 +56,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { deleteTaskThread } from 'src/modules/chat';
+import { deleteTaskThread } from 'src/modules/taskManager';
 import Settings from 'components/Settings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { getTaskManager } from 'boot/taskyon';
@@ -70,9 +72,11 @@ function createNewConversation() {
 const conversationIDs = ref<string[]>([]);
 
 void getTaskManager().then((tm) => {
-  tm.subscribeToTaskChanges((_task, num) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  tm.subscribeToTaskChanges(() => {
     console.log('update threads!!');
-    if (num) conversationIDs.value = tm.getLeafTasks();
+    const leaftasks = tm.getLeafTasks();
+    conversationIDs.value = leaftasks;
   }, true);
   conversationIDs.value = tm.getLeafTasks();
 });
@@ -80,7 +84,8 @@ void getTaskManager().then((tm) => {
 async function onDeleteThread(conversationId: string) {
   console.log('deleting thread!!', conversationId);
   const tm = await getTaskManager();
-  void deleteTaskThread(conversationId, state.chatState, tm);
+  state.chatState.selectedTaskId = undefined;
+  await deleteTaskThread(conversationId, tm);
   conversationIDs.value = tm.getLeafTasks();
 }
 </script>

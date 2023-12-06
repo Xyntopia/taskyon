@@ -10,6 +10,7 @@ import {
   transformDocToLLMTask,
 } from './rxdb';
 import { openFile } from './OPFS';
+import { Lock } from 'src/modules/utils';
 
 class AsyncQueue<T> {
   private queue: T[] = [];
@@ -261,6 +262,8 @@ export class TaskManager {
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
   private taskyonDB: TaskyonDatabase;
   private tasks: Map<string, LLMTask>;
+  // we need these locks in order to sync our databases..
+  private taskLocks: Map<string, Lock> = new Map();
   private subscribers: Array<(task?: LLMTask, taskNum?: number) => void> = [];
   private taskCountSubscribers: Array<
     (task?: LLMTask, taskNum?: number) => void
@@ -270,6 +273,20 @@ export class TaskManager {
     this.tasks = tasks;
     this.taskyonDB = taskyonDB;
     void this.initializeTasksFromDB();
+  }
+
+  // Lock a task and returns a function closure which can be used to unlock it again...
+  async lockTask(taskId: string): Promise<() => void> {
+    const newLock = new Lock();
+    this.taskLocks.set(taskId, newLock);
+    return newLock.lock();
+  }
+
+  async waitForTaskUnlock(taskId: string): Promise<void> {
+    const lock = this.taskLocks.get(taskId);
+    if (lock) {
+      await lock.waitForUnlock();
+    }
   }
 
   async initializeTasksFromDB() {
@@ -287,6 +304,7 @@ export class TaskManager {
   }
 
   async getTask(taskId: string): Promise<LLMTask | undefined> {
+    await this.waitForTaskUnlock(taskId);
     // Check if the task exists in the local record
     let task = this.tasks.get(taskId);
     if (!task) {
@@ -297,17 +315,18 @@ export class TaskManager {
         this.tasks.set(taskId, task); // Update local record
       }
     }
-    this.notifySubscribers(taskId);
     return task;
   }
 
   async setTask(task: LLMTask, save: boolean): Promise<void> {
+    const unlock = await this.lockTask(task.id);
     await this.withTaskCountCheck(task.id, async () => {
       this.tasks.set(task.id, task);
       if (save) {
         await this.saveTask(task.id); // Save to database if required
       }
     });
+    unlock();
   }
 
   async updateTask(
@@ -315,6 +334,7 @@ export class TaskManager {
     save: boolean
   ): Promise<void> {
     await this.withTaskCountCheck(updateData.id, async () => {
+      const unlock = await this.lockTask(updateData.id);
       const task = await this.getTask(updateData.id);
       if (task) {
         // Update the task with new data
@@ -324,11 +344,12 @@ export class TaskManager {
           void this.saveTask(task.id); // Save to database if required
         }
       }
+      unlock();
       this.notifySubscribers(updateData.id);
     });
   }
 
-  async saveTask(taskId: string): Promise<void> {
+  private async saveTask(taskId: string): Promise<void> {
     const task = this.tasks.get(taskId);
     console.log('save task: ', task);
     if (task) {
@@ -338,6 +359,7 @@ export class TaskManager {
   }
 
   async deleteTask(taskId: string): Promise<void> {
+    const unlock = await this.lockTask(taskId);
     console.log('deleting task:', taskId);
     // Delete from local record
     this.tasks.delete(taskId);
@@ -347,7 +369,9 @@ export class TaskManager {
     if (taskDoc) {
       await taskDoc.remove();
     }
+    console.log('done deleting task:', taskId);
     this.notifySubscribers(taskId, true);
+    unlock();
   }
 
   subscribeToTaskChanges(
@@ -372,9 +396,10 @@ export class TaskManager {
   }
 
   getLeafTasks() {
+    console.log('get leaf tasks...');
     const orphanTasks = [];
     for (const task of this.tasks.values()) {
-      if (task.childrenIDs.length == 0) {
+      if (task.childrenIDs && task.childrenIDs.length == 0) {
         orphanTasks.push(task.id);
       }
     }
@@ -412,5 +437,41 @@ export class TaskManager {
 
     const taskCountChanged = this.tasks.size !== prevTaskCount;
     this.notifySubscribers(taskId, taskCountChanged);
+  }
+}
+
+// deletes tasks up to the first branch "split", eliminating a branch
+// which is defined by the leaf and preceding, exclusive tasks
+export async function deleteTaskThread(
+  leafId: string,
+  taskManager: TaskManager
+) {
+  let currentTaskId = leafId;
+  while (currentTaskId) {
+    const currentTask = await taskManager.getTask(currentTaskId);
+    if (!currentTask) break; // Break if a task doesn't exist
+
+    // Check if the parent task has more than one child
+    if (currentTask.parentID) {
+      const parentTask = await taskManager.getTask(currentTask.parentID);
+      if (parentTask && parentTask.childrenIDs.length > 1) {
+        // in this case we need to update the parent with the fewer children
+        const childrenIDs = parentTask.childrenIDs.filter(
+          (id) => id != currentTask.id
+        );
+        await taskManager.updateTask({ id: parentTask.id, childrenIDs }, true);
+        break; // Stop deletion if the parent task has more than one child. We only want to delete this branch...
+      }
+    }
+
+    // Delete the current task
+    await taskManager.deleteTask(currentTaskId);
+
+    if (currentTask.parentID) {
+      // Move to the parent task
+      currentTaskId = currentTask.parentID;
+    } else {
+      break;
+    }
   }
 }

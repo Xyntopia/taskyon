@@ -210,3 +210,32 @@ export function asyncLruCache<ReturnType>(
     };
   };
 }
+
+export class Lock {
+  private _promise: Promise<void> | null = null;
+
+  async lock(): Promise<() => void> {
+    let outerResolve: () => void;
+    if (!this._promise) {
+      this._promise = new Promise<void>((resolve) => {
+        outerResolve = resolve;
+      });
+
+      return () => {
+        if (outerResolve) {
+          outerResolve();
+          this._promise = null;
+        }
+      };
+    } else {
+      await this._promise; // Wait for the lock to be released
+      return this.lock(); // Re-attempt to acquire the lock
+    }
+  }
+
+  async waitForUnlock(): Promise<void> {
+    if (this._promise) {
+      await this._promise;
+    }
+  }
+}

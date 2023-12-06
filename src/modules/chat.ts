@@ -660,11 +660,11 @@ export function enrichWithDelayedUsageInfos(
                 generationInfo.native_tokens_prompt +
                 generationInfo.native_tokens_completion,
             };
-            taskManager.updateTask({ id: task.id, debugging }, true);
+            void taskManager.updateTask({ id: task.id, debugging }, true);
             for (const childID of task.childrenIDs) {
               void taskManager.getTask(childID).then((child) => {
                 if (child && !child?.debugging.promptTokens) {
-                  taskManager.updateTask(
+                  void taskManager.updateTask(
                     {
                       id: child.id,
                       debugging: { promptTokens: task.debugging.resultTokens },
@@ -854,47 +854,6 @@ export async function getOpenAIAssistantResponse(
     // for now we simply assume, the last one...
     //const lastMessage = messages.data[0]
     return newMessages;
-  }
-}
-
-// deletes tasks up to the first branch "split", eliminating a branch
-// which is defined by the leaf and preceding, exclusive tasks
-export async function deleteTaskThread(
-  leafId: string,
-  chatState: ChatStateType,
-  taskManager: TaskManager
-) {
-  if (chatState.selectedTaskId == leafId) {
-    chatState.selectedTaskId = undefined;
-  }
-
-  let currentTaskId = leafId;
-  while (currentTaskId) {
-    const currentTask = await taskManager.getTask(currentTaskId);
-    if (!currentTask) break; // Break if a task doesn't exist
-
-    // Check if the parent task has more than one child
-    if (currentTask.parentID) {
-      const parentTask = await taskManager.getTask(currentTask.parentID);
-      if (parentTask && parentTask.childrenIDs.length > 1) {
-        // in this case we need to update the parent with the fewer children
-        const childrenIDs = parentTask.childrenIDs.filter(
-          (id) => id != currentTask.id
-        );
-        taskManager.updateTask({ id: parentTask.id, childrenIDs }, true);
-        break; // Stop deletion if the parent task has more than one child. We only want to delete this branch...
-      }
-    }
-
-    // Delete the current task
-    await taskManager.deleteTask(currentTaskId);
-
-    if (currentTask.parentID) {
-      // Move to the parent task
-      currentTaskId = currentTask.parentID;
-    } else {
-      break;
-    }
   }
 }
 
