@@ -209,6 +209,7 @@ export async function addTask2Tree(
 
   if (parent) {
     parent.childrenIDs.push(newTask.id);
+    taskManager.updateTask(parent, true);
   }
   // Push the new function task to processTasksQueue
   // we are not saving yet, as it is going to be processed :)
@@ -268,7 +269,7 @@ export class TaskManager {
   }
 
   setTask(task: LLMTask, save: boolean): void {
-    this.withTaskCountCheck(task.id, () => {
+    void this.withTaskCountCheck(task.id, () => {
       this.tasks.set(task.id, task);
       if (save) {
         void this.saveTask(task.id); // Save to database if required
@@ -280,7 +281,7 @@ export class TaskManager {
     updateData: Partial<LLMTask> & { id: string },
     save: boolean
   ): void {
-    this.withTaskCountCheck(updateData.id, async () => {
+    void this.withTaskCountCheck(updateData.id, async () => {
       const task = await this.getTask(updateData.id);
       if (task) {
         // Update the task with new data
@@ -311,6 +312,7 @@ export class TaskManager {
     if (taskDoc) {
       await taskDoc.remove();
     }
+    this.notifySubscribers(taskId, true);
   }
 
   // Revised subscription method
@@ -349,13 +351,13 @@ export class TaskManager {
     }
   }
 
-  private withTaskCountCheck(
+  private async withTaskCountCheck(
     taskId: string,
     operation: () => void | Promise<void>
   ) {
     const prevTaskCount = this.tasks.size;
 
-    void operation();
+    void (await Promise.resolve(operation()));
 
     const taskCountChanged = this.tasks.size !== prevTaskCount;
     this.notifySubscribers(taskId, taskCountChanged);

@@ -208,14 +208,13 @@ const state = useTaskyonStore();
 $q.dark.set(state.darkTheme);
 const selectedThread = ref<LLMTask[]>([]);
 
-watch(
-  () => state.chatState.selectedTaskId,
-  async (value) => {
-    if (value) {
-      currentTask.value = await (await getTaskManager()).getTask(value);
-    }
+async function updateCurrentTask(taskId: string | undefined) {
+  if (taskId) {
+    currentTask.value = await (await getTaskManager()).getTask(taskId);
   }
-);
+}
+void updateCurrentTask(state.chatState.selectedTaskId);
+watch(() => state.chatState.selectedTaskId, updateCurrentTask);
 
 function onScroll(
   details: UnwrapRef<{
@@ -269,23 +268,23 @@ void axios.get('main_content/frontpage.md').then((jsonconfig) => {
   welcomeText.value = jsonconfig.data as string;
 });
 
-watch(
-  () => state.chatState.selectedTaskId,
-  async (value) => {
-    if (value) {
-      const threadIDChain = await taskChain(value, async (taskId) =>
-        (await getTaskManager()).getTask(taskId)
-      );
-      const TM = await getTaskManager();
-      const thread = (await Promise.all(
-        threadIDChain.map(async (tId) => {
-          return await TM.getTask(tId);
-        })
-      )) as LLMTask[];
-      selectedThread.value = thread;
-    } else {
-      selectedThread.value = [];
-    }
+async function updateTaskThread(taskId: string | undefined) {
+  if (taskId) {
+    const threadIDChain = await taskChain(taskId, async (taskId) =>
+      (await getTaskManager()).getTask(taskId)
+    );
+    const TM = await getTaskManager();
+    const thread = (await Promise.all(
+      threadIDChain.map(async (tId) => {
+        return await TM.getTask(tId);
+      })
+    )) as LLMTask[];
+    selectedThread.value = thread;
+  } else {
+    selectedThread.value = [];
   }
-);
+}
+
+void updateTaskThread(state.chatState.selectedTaskId);
+watch(() => state.chatState.selectedTaskId, updateTaskThread);
 </script>
