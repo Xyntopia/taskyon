@@ -64,7 +64,7 @@
       </div>
       <!--buttons-->
       <div
-        class="q-gutter-xs row justify-start items-stretch message-buttons absolute-bottom-left z-top print-hide transparent"
+        class="q-gutter-xs row justify-start items-stretch message-buttons absolute-bottom-left print-hide transparent"
       >
         <q-btn
           v-if="state.expertMode"
@@ -209,7 +209,6 @@
     position: absolute
     top: 0
     right: 0
-    z-index: 1
 
 .message-container
     .message-buttons
@@ -297,6 +296,7 @@ function addCopyButtons(md: MarkdownIt) {
     // Custom HTML for the button
     const customHtml = `
         <div class="code-block-with-overlay">
+          ${originalRenderedHtml}
           <button class="copy-button q-btn q-btn-item non-selectable transparent q-btn--flat q-btn--rectangle
             q-btn--actionable q-focusable q-hoverable q-btn--dense copy-button print-hide">
             <span class="q-focus-helper"></span>
@@ -304,7 +304,6 @@ function addCopyButtons(md: MarkdownIt) {
               <i class="q-icon notranslate material-icons" aria-hidden="true" role="img">content_copy</i>
             </span>
           </button>
-          ${originalRenderedHtml}
         </div>
       `;
 

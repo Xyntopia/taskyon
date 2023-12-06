@@ -107,7 +107,7 @@
       position="bottom"
       :offset="[0, 0]"
       expand
-      class="col z-top print-hide"
+      class="col print-hide"
     >
       <q-resize-observer
         @resize="

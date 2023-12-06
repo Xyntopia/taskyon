@@ -102,8 +102,7 @@
             @update:modelValue="setTaskType"
             :options="Object.keys(tools)"
             :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
-          >
-          </q-select>
+          />
           <q-toggle
             icon="handyman"
             left-label
