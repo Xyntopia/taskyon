@@ -228,6 +228,7 @@ export class Lock {
         }
       };
     } else {
+      console.log('waiting for unlock to relock')
       await this._promise; // Wait for the lock to be released
       return this.lock(); // Re-attempt to acquire the lock
     }
