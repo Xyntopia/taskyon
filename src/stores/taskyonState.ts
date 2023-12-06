@@ -1,14 +1,10 @@
 import { defineStore } from 'pinia';
 import { defaultLLMSettings } from 'src/modules/chat';
-import { ref, Ref, computed, reactive } from 'vue';
-import { run } from 'src/modules/taskWorker';
+import { ref, Ref } from 'vue';
 import type { LLMTask } from 'src/modules/types';
 import type { FunctionArguments } from 'src/modules/types';
 import { OpenAI } from 'openai';
-import { TaskManager } from 'src/modules/taskManager';
-import { createTaskyonDatabase } from 'src/modules/rxdb';
 
-//TODO: convert store into composition api
 export const useTaskyonStore = defineStore('taskyonState', () => {
   console.log('initialize taskyon');
 
@@ -50,20 +46,9 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
     }
   }
 
-  const taskManagerRef = ref<TaskManager | undefined>(undefined);
-  const TaskList = reactive<Record<string, LLMTask>>({});
 
-  void createTaskyonDatabase('taskyondb').then((taskyonDBInstance) => {
-    const newTaskManager = new TaskManager(TaskList, taskyonDBInstance);
-    taskManagerRef.value = newTaskManager;
-    void run(stateRefs.chatState.value, newTaskManager);
-  });
 
-  const taskManager = computed(() => {
-    return taskManagerRef;
-  });
-
-  return { ...stateRefs, setDraftFunctionArgs, taskManager };
+  return { ...stateRefs, setDraftFunctionArgs};
 });
 
 // this file can be replaced in kubernetes  using a configmap!

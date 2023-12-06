@@ -23,9 +23,9 @@ export default store((/* { ssrContext } */) => {
     const storedState = LocalStorage.getItem(store.$id) as string;
     const oldState = JSON.parse(storedState) as typeof store.$state;
     store.$state = { ...store.$state, ...oldState };
-    /*store.$subscribe(() => {
+    store.$subscribe(() => {
       LocalStorage.set(store.$id, JSON.stringify(store.$state));
-    });*/
+    });
   });
 
   return pinia;

@@ -229,11 +229,11 @@ export class TaskManager {
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
   private taskyonDB: TaskyonDatabase;
-  private tasks: Record<string, LLMTask>;
-  private subscribers: Array<(task: LLMTask) => void> = [];
+  private tasks: Map<string, LLMTask>;
+  private subscribers: Array<(task: LLMTask, taskNum?: number) => void> = [];
 
   constructor(tasks: Record<string, LLMTask>, taskyonDB: TaskyonDatabase) {
-    this.tasks = tasks;
+    this.tasks = new Map();
     this.taskyonDB = taskyonDB;
   }
 
@@ -243,13 +243,13 @@ export class TaskManager {
 
   async getTask(taskId: string): Promise<LLMTask | undefined> {
     // Check if the task exists in the local record
-    let task = this.tasks[taskId];
+    let task = this.tasks.get(taskId);
     if (!task) {
       // If not, load from the database
       const taskFromDb = await this.taskyonDB.llmtasks.findOne(taskId).exec();
       if (taskFromDb) {
         task = transformDocToLLMTask(taskFromDb);
-        this.tasks[taskId] = task; // Update local record
+        this.tasks.set(taskId, task); // Update local record
       }
     }
     this.notifySubscribers(taskId);
@@ -257,30 +257,33 @@ export class TaskManager {
   }
 
   setTask(task: LLMTask, save: boolean): void {
-    this.tasks[task.id] = task;
-    if (save) {
-      void this.saveTask(task.id); // Save to database if required
-    }
-    this.notifySubscribers(task.id);
-  }
-
-  async updateTask(
-    updateData: Partial<LLMTask> & { id: string },
-    save: boolean
-  ): Promise<void> {
-    const task = await this.getTask(updateData.id);
-    if (task) {
-      // Update the task with new data
-      Object.assign(task, updateData);
+    this.withTaskCountCheck(task.id, () => {
+      this.tasks.set(task.id, task);
       if (save) {
         void this.saveTask(task.id); // Save to database if required
       }
-    }
-    this.notifySubscribers(updateData.id);
+    });
+  }
+
+  updateTask(
+    updateData: Partial<LLMTask> & { id: string },
+    save: boolean
+  ): void {
+    this.withTaskCountCheck(updateData.id, async () => {
+      const task = await this.getTask(updateData.id);
+      if (task) {
+        // Update the task with new data
+        Object.assign(task, updateData);
+        if (save) {
+          void this.saveTask(task.id); // Save to database if required
+        }
+      }
+      this.notifySubscribers(updateData.id);
+    });
   }
 
   async saveTask(taskId: string): Promise<void> {
-    const task = this.tasks[taskId];
+    const task = this.tasks.get(taskId);
     if (task) {
       const newDBTask = transformLLMTaskToDocType(task);
       await this.taskyonDB.llmtasks.upsert(newDBTask);
@@ -289,7 +292,7 @@ export class TaskManager {
 
   async deleteTask(taskId: string): Promise<void> {
     // Delete from local record
-    delete this.tasks[taskId];
+    this.tasks.delete(taskId);
 
     // Delete from the database
     const taskDoc = await this.taskyonDB.llmtasks.findOne(taskId).exec();
@@ -298,18 +301,10 @@ export class TaskManager {
     }
   }
 
-  // Method to notify all subscribers for a specific task
-  private notifySubscribers(taskId: string): void {
-    const task = this.tasks[taskId];
-    if (task) {
-      this.subscribers.forEach((callback) => callback(task));
-    }
-  }
-
   // Revised subscription method
+  // if number of tasks changed as well, a number will be supplied
   subscribeToTaskChanges(
-    taskId: string,
-    callback: (task: LLMTask) => void
+    callback: (task: LLMTask, taskNum?: number) => void
   ): void {
     this.subscribers.push(callback);
   }
@@ -319,12 +314,34 @@ export class TaskManager {
     this.subscribers = this.subscribers.filter((sub) => sub !== callback);
   }
 
-  getRootTasks() {
-    const orphanTasks = Object.values(this.tasks)
-      .filter((t) => {
-        return t.childrenIDs.length == 0;
-      })
-      .map((t) => t.id);
+  getLeafTasks() {
+    const orphanTasks = [];
+    for (const task of this.tasks.values()) {
+      if (task.childrenIDs.length == 0) {
+        orphanTasks.push(task.id);
+      }
+    }
     return orphanTasks;
+  }
+
+  // Method to notify all subscribers for a specific task
+  private notifySubscribers(taskId: string, taskCountChanged = false): void {
+    const task = this.tasks.get(taskId);
+    if (task) {
+      const taskNum = taskCountChanged ? this.tasks.size : undefined;
+      this.subscribers.forEach((callback) => callback(task, taskNum));
+    }
+  }
+
+  private withTaskCountCheck(
+    taskId: string,
+    operation: () => void | Promise<void>
+  ) {
+    const prevTaskCount = this.tasks.size;
+
+    void operation();
+
+    const taskCountChanged = this.tasks.size !== prevTaskCount;
+    this.notifySubscribers(taskId, taskCountChanged);
   }
 }
