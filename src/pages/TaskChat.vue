@@ -40,7 +40,7 @@
               )
             "
           >
-            <q-chat-message bg-color="primary" text-color="white">
+            <q-chat-message :bg-color="$q.dark.isActive ? 'primary' : 'white'">
               <div>
                 <div>
                   <q-markdown
@@ -55,7 +55,7 @@
                       )
                     "
                   />
-                  <q-spinner-dots size="2rem" />
+                  <q-spinner-dots size="2rem" color="secondary" />
                 </div>
                 <div class="row justify-end">
                   <q-btn
