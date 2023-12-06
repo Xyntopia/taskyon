@@ -12,7 +12,7 @@ let taskManagerInstance: TaskManager;
 // Function to get or create the TaskManager instance
 export async function getTaskManager() {
   if (!taskManagerInstance) {
-    const TaskList = reactive<Record<string, LLMTask>>({});
+    const TaskList = reactive<Map<string, LLMTask>>(new Map());
     const taskyonDBInstance = await createTaskyonDatabase('taskyondb');
     taskManagerInstance = new TaskManager(TaskList, taskyonDBInstance);
   }

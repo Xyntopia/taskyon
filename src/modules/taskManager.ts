@@ -232,8 +232,8 @@ export class TaskManager {
   private tasks: Map<string, LLMTask>;
   private subscribers: Array<(task?: LLMTask, taskNum?: number) => void> = [];
 
-  constructor(tasks: Record<string, LLMTask>, taskyonDB: TaskyonDatabase) {
-    this.tasks = new Map();
+  constructor(tasks: TaskManager['tasks'], taskyonDB: TaskyonDatabase) {
+    this.tasks = tasks;
     this.taskyonDB = taskyonDB;
     void this.initializeTasksFromDB();
   }
