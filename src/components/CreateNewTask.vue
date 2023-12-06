@@ -159,7 +159,7 @@
               />
               <q-option-group
                 class="q-ma-md"
-                v-model="state.taskDraft.allowedTools"
+                v-model="allowedTools"
                 :options="
                   Object.keys(tools).map((name) => ({
                     label: name,
@@ -214,6 +214,14 @@ const state = useTaskyonStore();
 
 const currentlySelectedBotName = ref('');
 const currentlySelectedService = ref('');
+const allowedTools = computed({
+  get() {
+    return state.taskDraft.allowedTools || [];
+  },
+  set(newValue) {
+    state.taskDraft.allowedTools = newValue;
+  },
+});
 
 // Method to handle the updateBotName event
 const handleBotNameUpdate = ({

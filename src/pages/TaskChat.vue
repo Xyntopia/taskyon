@@ -85,24 +85,22 @@
         </q-card-section>
       </q-card>
       <!-- Welcome Message -->
-      <q-card v-else class="col welcome-message">
-        <q-card-section class="column items-center"
-          ><q-card-section
-            ><q-img
-              width="150px"
-              alt="Quasar logo"
-              src="~assets/taskyon.svg"
-            ></q-img>
-          </q-card-section>
-          <div class="text-h6" v-if="getApikey(state.chatState)">
-            Welcome! Just type a message below to start using Taskyon!
-          </div>
-          <div class="text-h6" v-else>
-            Welcome to Taskyon! To get started you need to add your API keys to
-            an LLM in the settings!
-          </div>
-        </q-card-section>
-      </q-card>
+      <div v-else class="col welcome-message column items-center q-pa-xl">
+        <div class="col-auto">
+          <q-img
+            width="150px"
+            alt="Quasar logo"
+            src="~assets/taskyon.svg"
+          ></q-img>
+        </div>
+        <div class="text-h6 col-auto" v-if="getApikey(state.chatState)">
+          Welcome! Just type a message below to start using Taskyon!
+        </div>
+        <div class="text-h6 col-auto" v-else>
+          Welcome to Taskyon! To get started you need to add your API keys to an
+          LLM in the settings!
+        </div>
+      </div>
     </div>
     <!--Create new task area-->
     <q-page-sticky position="bottom" :offset="[0, 0]" class="z-top print-hide">
