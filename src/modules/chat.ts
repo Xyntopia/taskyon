@@ -13,7 +13,7 @@ import OpenAI from 'openai';
 import { openFile } from './OPFS';
 import { dump } from 'js-yaml';
 import { lruCache, sleep, asyncTimeLruCache, asyncLruCache } from './utils';
-import type { TaskyonDatabase, FileMappingDocType } from './rxdb';
+import type { FileMappingDocType } from './rxdb';
 import { zodToYamlString, yamlToolChatType, toolResultChat } from './types';
 import { CURRENT_TASK_CANCELLATION_EVENT } from './taskWorker';
 

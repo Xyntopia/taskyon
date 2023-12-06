@@ -70,7 +70,7 @@ function createNewConversation() {
 const conversationIDs = ref<string[]>([]);
 
 void getTaskManager().then((tm) => {
-  tm.subscribeToTaskChanges((task, num) => {
+  tm.subscribeToTaskChanges((_task, num) => {
     if (num) conversationIDs.value = tm.getLeafTasks();
   });
 });

@@ -233,7 +233,6 @@
 </style>
 
 <script setup lang="ts">
-import { ref } from 'vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import ToolResultWidget from 'components/ToolResultWidget.vue';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
@@ -243,7 +242,6 @@ import type { LLMTask } from 'src/modules/types';
 import type MarkdownIt from 'markdown-it/lib';
 import markdownItMermaid from '@datatraccorporation/markdown-it-mermaid';
 import { getTaskManager } from 'src/boot/taskyon';
-import { TaskManager } from 'src/modules/taskManager';
 
 type markdownItMermaid = MarkdownIt.PluginSimple;
 

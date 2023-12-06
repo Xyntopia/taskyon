@@ -1,5 +1,5 @@
 import { boot } from 'quasar/wrappers';
-import { ref, reactive } from 'vue';
+import { reactive } from 'vue';
 import { TaskManager } from 'src/modules/taskManager';
 import { LLMTask } from 'src/modules/types';
 import { createTaskyonDatabase } from 'src/modules/rxdb';
