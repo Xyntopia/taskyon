@@ -2,7 +2,7 @@
   <q-tree v-if="modelValue" :nodes="nodeTree" node-key="label">
     <template v-slot:body-text="prop">
       <div class="row">
-        <div class="col-auto" style="min-width: 200px">
+        <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
           {{ prop.node.label }}:
         </div>
         <q-input
@@ -10,7 +10,7 @@
           filled
           :label="prop.node.label"
           type="textarea"
-          :debounce="500"
+          :debounce="debounce"
           :model-value="prop.node.value"
           @update:modelValue="(value) => updateValue(prop.node.path, value)"
         >
@@ -20,7 +20,7 @@
     <template v-slot:header-none> </template>
     <template v-slot:body-string="prop">
       <div class="row">
-        <div class="col-auto" style="min-width: 200px">
+        <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
           {{ prop.node.label }}:
         </div>
         <q-input
@@ -30,7 +30,7 @@
           filled
           dense
           autogrow
-          :debounce="500"
+          :debounce="debounce"
           :model-value="prop.node.value"
           @update:modelValue="(value) => updateValue(prop.node.path, value)"
         >
@@ -52,13 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import {
-  computed,
-  ref,
-  watch,
-  nextTick,
-  PropType,
-} from 'vue';
+import { computed, ref, watch, nextTick, PropType } from 'vue';
 import { QTreeNode } from 'quasar';
 
 const props = defineProps({
@@ -69,6 +63,14 @@ const props = defineProps({
   inputFieldBehavior: {
     type: String,
     default: 'auto' as 'auto' | 'textarea' | 'autogrow',
+  },
+  separateLabels: {
+    type: Boolean,
+    default: true,
+  },
+  debounce: {
+    type: Number,
+    default: 100,
   },
 });
 

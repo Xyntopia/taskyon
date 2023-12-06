@@ -76,8 +76,20 @@
           :model-value="state.taskDraft.context?.function?.arguments"
           :on-update:model-value="(value) => state.setDraftFunctionArgs(value)"
           input-field-behavior="textarea"
+          :separate-labels="false"
         />
         <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
+        <q-btn
+          flat
+          dense
+          icon="tune"
+          @click="
+            () => {
+              state.expandedTaskCreation = !state.expandedTaskCreation;
+            }
+          "
+          ><q-tooltip> Toggle Task Settings </q-tooltip>
+        </q-btn>
       </div>
     </div>
     <q-slide-transition>
@@ -302,6 +314,7 @@ async function executeTask() {
   );
   if (currentnewTask.value.role === 'user') {
     state.taskDraft.content = '';
+    setTaskType(undefined);
   }
 }
 
