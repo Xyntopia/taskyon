@@ -19,7 +19,7 @@
         square
         v-if="selectedThread.length > 0"
       >
-        <q-card-section class="q-gutter-sm scrollCard">
+        <q-card-section v-if="currentTask" class="q-gutter-sm scrollCard">
           <q-chat-message
             v-for="task in selectedThread"
             :sent="task.role === 'user' ? true : false"
@@ -36,10 +36,7 @@
           <div
             v-if="
               ['Open', 'In Progress'].some((subs) =>
-                subs.includes(
-                  state.chatState.Tasks[state.chatState.selectedTaskId || '']
-                    ?.state
-                )
+                subs.includes(currentTask?.state || '')
               )
             "
           >
@@ -48,19 +45,13 @@
                 <div>
                   <q-markdown
                     no-line-numbers
-                    :src="
-                      state.chatState.Tasks[
-                        state.chatState.selectedTaskId || ''
-                      ].debugging.streamContent || ''
-                    "
+                    :src="currentTask.debugging.streamContent"
                   />
                   <q-markdown
                     no-line-numbers
                     :src="
                       JSON.stringify(
-                        state.chatState.Tasks[
-                          state.chatState.selectedTaskId || ''
-                        ].debugging.toolStreamArgsContent
+                        currentTask.debugging.toolStreamArgsContent
                       )
                     "
                   />
@@ -193,7 +184,7 @@
 <script setup lang="ts">
 import Task from 'components/Task.vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
-import { computed, ref, UnwrapRef, watch } from 'vue';
+import { ref, UnwrapRef, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
 import { getApikey } from 'src/modules/chat';
 import { taskChain } from 'src/modules/taskManager';
@@ -209,11 +200,24 @@ import { getTaskManager } from 'boot/taskyon';
 import { LLMTask } from 'src/modules/types';
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
+const welcomeText = ref<string>('');
 const bottomPadding = ref(100);
-
 const lockBottomScroll = ref(true); // State to track if the user is at the bottom of scroll page
-
 const taskThreadContainer = ref<HTMLElement | undefined>();
+const currentTask = ref<LLMTask>();
+const $q = useQuasar();
+const state = useTaskyonStore();
+$q.dark.set(state.darkTheme);
+const selectedThread = ref<LLMTask[]>([]);
+
+watch(
+  () => state.chatState.selectedTaskId,
+  async (value) => {
+    if (value) {
+      currentTask.value = await (await getTaskManager()).getTask(value);
+    }
+  }
+);
 
 function onScroll(
   details: UnwrapRef<{
@@ -263,18 +267,9 @@ function scrollToThreadEnd() {
   setVerticalScrollPosition(window, offset, duration);
 }
 
-const welcomeText = ref<string>('');
-
 void axios.get('main_content/frontpage.md').then((jsonconfig) => {
   welcomeText.value = jsonconfig.data as string;
 });
-
-const $q = useQuasar();
-
-const state = useTaskyonStore();
-$q.dark.set(state.darkTheme);
-
-const selectedThread = ref<LLMTask[]>([]);
 
 watch(
   () => state.chatState.selectedTaskId,
@@ -283,14 +278,15 @@ watch(
       const threadIDChain = await taskChain(value, async (taskId) =>
         (await getTaskManager()).getTask(taskId)
       );
-      const thread = await Promise.all(
+      const TM = await getTaskManager();
+      const thread = (await Promise.all(
         threadIDChain.map(async (tId) => {
-          return (await getTaskManager()).getTask(tId);
+          return await TM.getTask(tId);
         })
-      );
-      return thread;
+      )) as LLMTask[];
+      selectedThread.value = thread;
     } else {
-      return [];
+      selectedThread.value = [];
     }
   }
 );

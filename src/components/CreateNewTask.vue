@@ -206,6 +206,7 @@ import {
   getFileMappingByUuid,
 } from 'src/modules/taskManager';
 import ObjectTreeView from './ObjectTreeView.vue';
+import { getTaskManager } from 'boot/taskyon';
 
 const state = useTaskyonStore();
 
@@ -283,13 +284,13 @@ const currentnewTask = computed(() => {
   return task as LLMTask; // we can do this, because we defined the "role"
 });
 
-function executeTask() {
+async function executeTask() {
   console.log('executing task!');
   void addTask2Tree(
     currentnewTask.value,
     state.chatState.selectedTaskId, //parent
     state.chatState,
-    state.taskManager,
+    await getTaskManager(),
     true // execute right away...
   );
   if (currentnewTask.value.role === 'user') {
@@ -314,7 +315,7 @@ async function attachFileToTask(newFiles: File[]) {
   const uuids = [];
 
   for (const [, savedFilename] of Object.entries(opfsMapping)) {
-    const uuid = await addFile(savedFilename);
+    const uuid = await addFile(await getTaskManager(), savedFilename);
     uuids.push(uuid);
   }
 
@@ -350,7 +351,10 @@ async function updateFileMappings(newUploadedFiles: string[] | undefined) {
   if (newUploadedFiles) {
     for (const uuid of newUploadedFiles) {
       try {
-        const fileMapping = await getFileMappingByUuid(uuid);
+        const fileMapping = await getFileMappingByUuid(
+          uuid,
+          await getTaskManager()
+        );
         if (fileMapping) {
           newMappings.push({
             uuid,
