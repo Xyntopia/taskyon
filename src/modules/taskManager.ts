@@ -285,6 +285,7 @@ export class TaskManager {
   async waitForTaskUnlock(taskId: string): Promise<void> {
     const lock = this.taskLocks.get(taskId);
     if (lock) {
+      console.log('wait for unlock!');
       await lock.waitForUnlock();
     }
   }
@@ -303,8 +304,7 @@ export class TaskManager {
     return this.taskyonDB.filemappings;
   }
 
-  async getTask(taskId: string): Promise<LLMTask | undefined> {
-    await this.waitForTaskUnlock(taskId);
+  private async unsafeGetTask(taskId: string): Promise<LLMTask | undefined> {
     // Check if the task exists in the local record
     let task = this.tasks.get(taskId);
     if (!task) {
@@ -316,6 +316,11 @@ export class TaskManager {
       }
     }
     return task;
+  }
+
+  async getTask(taskId: string): Promise<LLMTask | undefined> {
+    await this.waitForTaskUnlock(taskId);
+    return await this.unsafeGetTask(taskId);
   }
 
   async setTask(task: LLMTask, save: boolean): Promise<void> {
@@ -335,7 +340,7 @@ export class TaskManager {
   ): Promise<void> {
     await this.withTaskCountCheck(updateData.id, async () => {
       const unlock = await this.lockTask(updateData.id);
-      const task = await this.getTask(updateData.id);
+      const task = await this.unsafeGetTask(updateData.id);
       if (task) {
         // Update the task with new data
         //Object.assign(task, updateData);
