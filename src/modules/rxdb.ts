@@ -143,8 +143,9 @@ export async function createTaskyonDatabase(
 
 export function transformLLMTaskToDocType(llmTask: LLMTask): LLMTaskDocType {
   // Mapping and transforming fields from LLMTask to LLMTaskDocType of taskyonDB/RxDB
+  const nonReactiveLLMTask = JSON.parse(JSON.stringify(llmTask)) as LLMTask;
   return {
-    ...llmTask,
+    ...nonReactiveLLMTask,
     context: llmTask.context ? JSON.stringify(llmTask.context) : undefined,
     debugging: llmTask.debugging
       ? JSON.stringify(llmTask.debugging)

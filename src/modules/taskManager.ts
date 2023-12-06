@@ -295,6 +295,7 @@ export class TaskManager {
 
   async saveTask(taskId: string): Promise<void> {
     const task = this.tasks.get(taskId);
+    console.log('save task: ', task);
     if (task) {
       const newDBTask = transformLLMTaskToDocType(task);
       await this.taskyonDB.llmtasks.upsert(newDBTask);
