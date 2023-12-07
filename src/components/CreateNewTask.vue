@@ -14,6 +14,7 @@
         :counter="state.expertMode"
         clearable
         @keyup="checkForShiftEnter"
+        input-style="max-height: 300px"
       >
         <template v-slot:append>
           <q-btn flat dense round icon="send" @click="executeTask">
