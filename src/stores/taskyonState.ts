@@ -3,15 +3,20 @@ import { defaultLLMSettings } from 'src/modules/chat';
 import { ref, Ref } from 'vue';
 import type { LLMTask } from 'src/modules/types';
 import type { FunctionArguments } from 'src/modules/types';
-import { OpenAI } from 'openai';
 
 export const useTaskyonStore = defineStore('taskyonState', () => {
   console.log('initialize taskyon');
 
   const initialState = {
     chatState: defaultLLMSettings(),
-    expertMode: false,
-    showCosts: false,
+    appConfiguration: {
+      supabase_url: '',
+      supabase_anon_key: '',
+      expertMode: false,
+      showCosts: false,
+    },
+    appConfigurationUrl: '', // URL from which to load the app
+    // app State which should be part of the configuration
     modelDetails: false,
     expandedTaskCreation: false,
     selectChatBotExpand: true,
@@ -45,9 +50,7 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
     }
   }
 
-
-
-  return { ...stateRefs, setDraftFunctionArgs};
+  return { ...stateRefs, setDraftFunctionArgs };
 });
 
 // this file can be replaced in kubernetes  using a configmap!

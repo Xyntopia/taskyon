@@ -29,7 +29,7 @@
         />
         <!--task costs-->
         <div
-          v-if="state.showCosts"
+          v-if="state.appConfiguration.showCosts"
           style="font-size: xx-small"
           class="column items-center"
         >
@@ -67,7 +67,7 @@
         class="q-gutter-xs row justify-start items-stretch message-buttons absolute-bottom-left print-hide transparent"
       >
         <q-btn
-          v-if="state.expertMode"
+          v-if="state.appConfiguration.expertMode"
           class="col"
           icon="code"
           dense

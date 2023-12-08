@@ -10,8 +10,8 @@
         color="secondary"
         v-model="state.taskDraft.content"
         label="Type your message or instruction..."
-        :bottom-slots="state.expertMode"
-        :counter="state.expertMode"
+        :bottom-slots="state.appConfiguration.expertMode"
+        :counter="state.appConfiguration.expertMode"
         clearable
         @keyup="checkForShiftEnter"
         input-style="max-height: 300px"
@@ -95,7 +95,7 @@
     </div>
     <q-slide-transition>
       <div v-show="state.expandedTaskCreation">
-        <div v-if="state.expertMode" class="row items-center">
+        <div v-if="state.appConfiguration.expertMode" class="row items-center">
           <q-btn
             flat
             dense
@@ -137,7 +137,7 @@
             ><q-tooltip>Show Draft Task Data</q-tooltip></q-btn
           >
         </div>
-        <div v-if="state.showTaskData && state.expertMode">
+        <div v-if="state.showTaskData && state.appConfiguration.expertMode">
           {{ currentnewTask }}
         </div>
         <!--Model Selection-->

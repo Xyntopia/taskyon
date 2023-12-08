@@ -41,7 +41,7 @@
 
 <script setup lang="ts">
 import { exportFile, extend } from 'quasar';
-import { toRefs, ref, toRaw } from 'vue';
+import { toRefs, ref } from 'vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import Settings from 'components/Settings.vue';
 import ObjectTreeView from 'components/ObjectTreeView.vue';

@@ -2,13 +2,13 @@
 <template>
   <div>
     <q-toggle
-      v-model="state.expertMode"
+      v-model="state.appConfiguration.expertMode"
       label="Expert mode"
       left-label
       color="secondary"
     />
     <q-toggle
-      v-model="state.showCosts"
+      v-model="state.appConfiguration.showCosts"
       label="Show task costs"
       left-label
       color="secondary"

@@ -68,7 +68,7 @@
                     <q-tooltip> Stop processing current task. </q-tooltip>
                   </q-btn>
                   <q-btn
-                    v-if="state.expertMode"
+                    v-if="state.appConfiguration.expertMode"
                     round
                     outline
                     color="secondary"
