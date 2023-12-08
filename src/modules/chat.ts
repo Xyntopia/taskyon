@@ -37,33 +37,15 @@ const getOpenai = lruCache<OpenAI>(5)(
   }
 );
 
-export function getAPIURLs(baseURL: string) {
-  return {
-    chat: baseURL + '/chat/completions',
-    models: baseURL + '/models',
+export interface apiConfig {
+  name: string;
+  baseURL: string;
+  selectedModel: string;
+  streamSupport: boolean;
+  routes: {
+    chatCompletion: string;
+    models: string;
   };
-}
-
-export function getBackendUrls(backend: 'openai' | 'openrouter') {
-  let baseURL;
-  if (backend == 'openai') {
-    baseURL = 'https://api.openai.com/v1/';
-  } else {
-    baseURL = 'https://openrouter.ai/api/v1';
-  }
-  return baseURL;
-}
-
-export function getApikey(chatState: ChatStateType) {
-  return getBackendUrls('openai') == chatState.baseURL
-    ? chatState.openAIApiKey
-    : chatState.openRouterAIApiKey;
-}
-
-export function getSelectedModel(chatState: ChatStateType) {
-  return getBackendUrls('openai') == chatState.baseURL
-    ? chatState.openAIModel
-    : chatState.openrouterAIModel;
 }
 
 // this state stores all information which
@@ -73,18 +55,35 @@ export function defaultLLMSettings() {
     // this refers to the task chain that we have selected. We select one task and then
     // put the chain together by following the parentIds.
     selectedTaskId: undefined as string | undefined,
-    openrouterAIModel: 'mistralai/mistral-7b-instruct', //model which is generally chosen for a task if not explicitly specified
-    openAIModel: 'gpt-3.5-turbo',
-    openAIAssistant: '',
-    openAIApiKey: '',
-    openRouterAIApiKey: '',
+    openAIAssistantId: '',
     useOpenAIAssistants: false,
     enableOpenAiTools: false,
+    selectedApi: 'openrouter.ai' as string | 'openrouter.ai' | 'openai',
+    llmApis: [
+      {
+        name: 'openai',
+        baseURL: 'https://api.openai.com/v1/',
+        selectedModel: 'gpt-3.5-turbo',
+        streamSupport: true,
+        routes: {
+          chatCompletion: '/chat/completions',
+          models: '/models',
+        },
+      },
+      {
+        name: 'openrouter.ai',
+        baseURL: 'https://openrouter.ai/api/v1',
+        selectedModel: 'mistralai/mistral-7b-instruct',
+        streamSupport: true,
+        routes: {
+          chatCompletion: '/chat/completions',
+          models: '/models',
+        },
+      },
+    ] as apiConfig[],
     siteUrl: 'https://taskyon.xyntopia.com',
     summaryModel: 'Xenova/distilbart-cnn-6-6',
-    baseURL: getBackendUrls('openrouter'),
-    databasePath: 'taskyon.sqlite3',
-    maxTasks: 3,
+    maxAutonomousTasks: 3,
     taskChatTemplates: {
       constraints: `CONSTRAINTS:
 
@@ -128,43 +127,11 @@ FORMAT THE RESULT WITH THE FOLLOWING SCHEMA VERY STRICT ({format}):
   };
 }
 
+export function getApiConfig(chatState: ChatStateType) {
+  return chatState.llmApis.find((api) => chatState.selectedApi === api.name);
+}
+
 export type ChatStateType = ReturnType<typeof defaultLLMSettings>;
-
-export function openRouterUsed(baseURL: string) {
-  return getBackendUrls('openrouter') == baseURL;
-}
-
-export function openAIUsed(baseURL: string) {
-  return getBackendUrls('openai') == baseURL;
-}
-
-export function getCurrentMode(chatState: ChatStateType): string {
-  if (openAIUsed(chatState.baseURL)) {
-    if (chatState.useOpenAIAssistants) {
-      return 'openai-assistants';
-    } else {
-      return 'openai';
-    }
-  } else if (openRouterUsed(chatState.baseURL)) {
-    return 'openrouter.ai';
-  } else {
-    return 'unknown'; // Default case if none of the conditions match
-  }
-}
-
-export function selectedBotID(chatState: ChatStateType) {
-  if (openAIUsed(chatState.baseURL)) {
-    if (chatState.useOpenAIAssistants) {
-      return chatState.openAIAssistant;
-    } else {
-      return chatState.openAIModel;
-    }
-  } else if (openRouterUsed(chatState.baseURL)) {
-    return chatState.openrouterAIModel;
-  } else {
-    return '';
-  }
-}
 
 export const getAssistants = asyncTimeLruCache<
   Record<string, OpenAI.Beta.Assistant>
@@ -259,17 +226,21 @@ export function estimateChatTokens(
   };
 }
 
-function generateHeaders(chatState: ChatStateType) {
+export function generateHeaders(
+  apiKey: string,
+  siteUrl: string,
+  selectedApi: string
+) {
   let headers: Record<string, string> = {
-    Authorization: `Bearer ${getApikey(chatState)}`,
+    Authorization: `Bearer ${apiKey}`,
     'Content-Type': 'application/json',
   };
 
-  if (openRouterUsed(chatState.baseURL)) {
+  if (selectedApi == 'openrouter.ai') {
     headers = {
       ...headers,
-      'HTTP-Referer': `${chatState.siteUrl}`, // To identify your app. Can be set to localhost for testing
-      'X-Title': `${chatState.siteUrl}`, // Optional. Shows on openrouter.ai
+      'HTTP-Referer': `${siteUrl}`, // To identify your app. Can be set to localhost for testing
+      'X-Title': `${siteUrl}`, // Optional. Shows on openrouter.ai
     };
   }
 
@@ -363,18 +334,22 @@ function accumulateChatCompletion(
 export async function callLLM(
   chatMessages: OpenAI.ChatCompletionMessageParam[],
   functions: OpenAI.ChatCompletionTool[],
-  chatState: ChatStateType,
-  model: string,
-  chatURL: string,
+  api: apiConfig,
+  siteUrl: string,
+  apiKey: string,
   stream: false | true | null | undefined = false,
   contentCallBack: (chunk?: OpenAI.Chat.Completions.ChatCompletionChunk) => void
 ): Promise<OpenAI.ChatCompletion | undefined> {
-  const headers: Record<string, string> = generateHeaders(chatState);
+  const headers: Record<string, string> = generateHeaders(
+    apiKey,
+    siteUrl,
+    api.name
+  );
   let chatCompletion: OpenAI.ChatCompletion | undefined = undefined;
-  const openai = getOpenai(chatState.openAIApiKey, chatState.baseURL, headers);
+  const openai = getOpenai(apiKey, api.baseURL, headers);
 
   const payload: OpenAI.ChatCompletionCreateParams = {
-    model,
+    model: api.selectedModel,
     messages: chatMessages,
     user: 'taskyon',
     temperature: 0.0,
@@ -627,64 +602,71 @@ export async function prepareTasksForInference(
   return { openAIConversationThread, tools: openAITools };
 }
 
-export function enrichWithDelayedUsageInfos(
+async function getOpenRouterGenerationInfo(
   generationId: string,
-  chatState: ChatStateType,
+  headers: Record<string, string>
+) {
+  try {
+    const generation = await axios.get<OpenRouterGenerationInfo>(
+      `https://openrouter.ai/api/v1/generation?id=${generationId}`,
+      { headers }
+    );
+    const generationInfo = generation.data.data;
+    console.log('received generation info for task');
+    return generationInfo;
+  } catch (err) {
+    console.log(
+      'failed to get cost information for Openrouter.ai: ',
+      generationId,
+      err
+    );
+  }
+}
+
+export async function enrichWithDelayedUsageInfos(
+  generationId: string,
+  headers: Record<string, string>,
   task: LLMTask,
   taskManager: TaskManager
 ) {
-  void sleep(5000).then(() => {
-    const headers: Record<string, string> = generateHeaders(chatState);
-    void axios
-      .get<OpenRouterGenerationInfo>(
-        `https://openrouter.ai/api/v1/generation?id=${generationId}`,
-        { headers }
-      )
-      .then((generation) => {
-        console.log('received costs for task');
-        if (generation) {
-          const generationInfo = generation.data.data;
+  await sleep(5000);
+  const generationInfo = await getOpenRouterGenerationInfo(
+    generationId,
+    headers
+  );
 
-          if (
-            generationInfo.native_tokens_completion &&
-            generationInfo.native_tokens_prompt
-          ) {
-            // we get the useage data very often in an asynchronous form.
-            // thats why we need to
-            // openai sends back the exact number of prompt tokens :)
-            const debugging = {
-              promptTokens: generationInfo.native_tokens_prompt,
-              resultTokens: generationInfo.native_tokens_completion,
-              taskCosts: generationInfo.usage,
-              taskTokens:
-                generationInfo.native_tokens_prompt +
-                generationInfo.native_tokens_completion,
-            };
-            void taskManager.updateTask({ id: task.id, debugging }, true);
-            for (const childID of task.childrenIDs) {
-              void taskManager.getTask(childID).then((child) => {
-                if (child && !child?.debugging.promptTokens) {
-                  void taskManager.updateTask(
-                    {
-                      id: child.id,
-                      debugging: { promptTokens: task.debugging.resultTokens },
-                    },
-                    true
-                  );
-                }
-              });
-            }
+  if (generationInfo) {
+    if (
+      generationInfo.native_tokens_completion &&
+      generationInfo.native_tokens_prompt
+    ) {
+      // we get the useage data very often in an asynchronous form.
+      // thats why we need to
+      // openai sends back the exact number of prompt tokens :)
+      const debugging = {
+        promptTokens: generationInfo.native_tokens_prompt,
+        resultTokens: generationInfo.native_tokens_completion,
+        taskCosts: generationInfo.usage,
+        taskTokens:
+          generationInfo.native_tokens_prompt +
+          generationInfo.native_tokens_completion,
+      };
+      void taskManager.updateTask({ id: task.id, debugging }, true);
+      for (const childID of task.childrenIDs) {
+        void taskManager.getTask(childID).then((child) => {
+          if (child && !child?.debugging.promptTokens) {
+            void taskManager.updateTask(
+              {
+                id: child.id,
+                debugging: { promptTokens: task.debugging.resultTokens },
+              },
+              true
+            );
           }
-        }
-      })
-      .catch((err) => {
-        console.log(
-          'failed to get cost information for Openrouter.ai: ',
-          generationId,
-          err
-        );
-      });
-  });
+        });
+      }
+    }
+  }
 }
 
 async function uploadFileToOpenAI(
@@ -718,11 +700,12 @@ function convertTasksToOpenAIThread(
 
 export async function getOpenAIAssistantResponse(
   task: LLMTask,
-  chatState: ChatStateType,
+  openAIApiKey: string,
+  openAIAssistantId: string,
   taskManager: TaskManager
 ) {
   if (task.content) {
-    const openai = getOpenai(chatState.openAIApiKey);
+    const openai = getOpenai(openAIApiKey);
     console.log('send task to assistant!', task);
 
     // get all messages from a chat
@@ -754,10 +737,7 @@ export async function getOpenAIAssistantResponse(
         const file = await openFile(fm.opfs);
         if (file) {
           // TODO: only upload file, if it doesn't have a openAI ID yet.
-          const fileIDopenAI = await uploadFileToOpenAI(
-            file,
-            chatState.openAIApiKey
-          );
+          const fileIDopenAI = await uploadFileToOpenAI(file, openAIApiKey);
           if (fileIDopenAI) {
             fm.openAIFileId = fileIDopenAI;
             openAIFileMappings[fm.uuid] = fileIDopenAI;
@@ -780,11 +760,10 @@ export async function getOpenAIAssistantResponse(
       messages: openAIConversationThread,
     });
     const threadId = thread.id;
-    const assistantId = chatState.openAIAssistant;
 
     //after we have done that, we tell openai to process the run with the new message
     let run = await openai.beta.threads.runs.create(threadId, {
-      assistant_id: assistantId,
+      assistant_id: openAIAssistantId,
       //instructions:
       //  e.g. "'Please address the user as Jane Doe. The user has a premium account.'"",
     });
@@ -896,18 +875,15 @@ export interface Model {
 }
 
 export const availableModels = asyncLruCache<Model[]>(3)(
-  async (baseURL: string, apiKey: string): Promise<Model[]> => {
+  async (modelsUrl: string, apiKey: string): Promise<Model[]> => {
     try {
       // Setting up the Axios requsest
-      const response = await axios.get<{ data: Model[] }>(
-        getAPIURLs(baseURL).models,
-        {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Cache-Control': 'max-stale=3600',
-          },
-        }
-      );
+      const response = await axios.get<{ data: Model[] }>(modelsUrl, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Cache-Control': 'max-stale=3600',
+        },
+      });
 
       // Return the list of models directly
       return response.data.data;

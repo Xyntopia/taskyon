@@ -1,6 +1,6 @@
 <template>
-  <div v-if="openAIUsed(state.chatState.baseURL)" class="row items-top">
-    <div class="q-pt-xs">
+  <div class="row items-top">
+    <div v-if="state.chatState.selectedApi === 'openai'" class="q-pt-xs">
       <q-btn-toggle
         v-model="state.chatState.useOpenAIAssistants"
         unelevated
@@ -26,10 +26,10 @@
         dense
         label="Select OpenAI Assistant"
         icon="smart_toy"
-        :options="modelOptions.assistantOptions"
+        :options="modelOptions"
         emit-value
         map-options
-        v-model="state.chatState.openAIAssistant"
+        v-model="state.chatState.openAIAssistantId"
       >
         <template v-slot:after>
           <q-btn
@@ -43,33 +43,51 @@
       <div v-if="state.modelDetails">
         <div>
           <b>Assistant instructions:</b><br />
-          {{ assistants[state.chatState.openAIAssistant]?.instructions }}
+          {{ assistants[state.chatState.openAIAssistantId]?.instructions }}
         </div>
         <q-scroll-area style="height: 230px; max-width: 100%">
           <pre>
-          {{ assistants[state.chatState.openAIAssistant] }}
+          {{ assistants[state.chatState.openAIAssistantId] }}
           </pre>
         </q-scroll-area>
       </div>
     </div>
-    <!--OpenAI Model selection-->
+    <!--LLM Model selection-->
     <div v-else class="col" style="min-width: 200px">
       <q-select
         filled
         dense
+        :bottom-slots="state.chatState.selectedApi === 'openrouter.ai'"
         label="Select LLM Model for answering/solving the task."
         icon="smart_toy"
         :options="filteredOptions"
         emit-value
-        v-model="state.chatState.openAIModel"
+        :model-value="currentlySelectedBotName.newName"
+        @update:model-value="onModelSelect"
         hide-selected
         fill-input
         use-input
         input-debounce="100"
-        @filter="
-          (val, update) => filterModels(val, update, modelOptions.openaiModels)
-        "
+        @filter="(val, update) => filterModels(val, update, modelOptions)"
       >
+        <template v-slot:after>
+          <div style="font-size: 0.5em">
+            <div>
+              prompt:
+              {{
+                modelLookUp.openrouter[currentlySelectedBotName.newName]
+                  ?.pricing?.prompt
+              }}
+            </div>
+            <div>
+              completion:
+              {{
+                modelLookUp.openrouter[currentlySelectedBotName.newName]
+                  ?.pricing?.completion
+              }}
+            </div>
+          </div>
+        </template>
       </q-select>
     </div>
     <div
@@ -80,63 +98,21 @@
       <a href="https://platform.openai.com/docs/models" target="_blank"
         >https://platform.openai.com/docs/models</a
       >
-    </div>
-  </div>
-  <!--openrouter.ai models-->
-  <q-select
-    v-else
-    class="q-pt-xs"
-    filled
-    dense
-    bottom-slots
-    label="Select LLM Model for answering/solving the task."
-    icon="smart_toy"
-    :options="filteredOptions"
-    emit-value
-    v-model="state.chatState.openrouterAIModel"
-    fill-input
-    hide-selected
-    use-input
-    input-debounce="100"
-    @filter="
-      (val, update) => filterModels(val, update, modelOptions.openrouterModels)
-    "
-  >
-    <template v-slot:hint>
-      For a list of supported models go here:
+      or here:
       <a href="https://openrouter.ai/docs#models" target="_blank"
         >https://openrouter.ai/docs#models</a
       >
-    </template>
-    <template v-slot:after>
-      <div style="font-size: 0.5em">
-        <div>
-          prompt:
-          {{
-            modelLookUp.openrouter[state.chatState.openrouterAIModel]?.pricing
-              ?.prompt
-          }}
-        </div>
-        <div>
-          completion:
-          {{
-            modelLookUp.openrouter[state.chatState.openrouterAIModel]?.pricing
-              ?.completion
-          }}
-        </div>
-      </div>
-    </template>
-  </q-select>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import {
   availableModels,
   Model,
-  getBackendUrls,
   getAssistants,
-  openAIUsed,
+  getApiConfig,
 } from 'src/modules/chat';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import openrouterModules from 'assets/openrouter_models.json';
@@ -151,7 +127,7 @@ const state = useTaskyonStore();
 
 const assistants = ref<Awaited<ReturnType<typeof getAssistants>>>({});
 
-void getAssistants(state.chatState.openAIApiKey).then((assitantDict) => {
+void getAssistants(state.keys['openai']).then((assitantDict) => {
   assistants.value = assitantDict;
 });
 
@@ -161,7 +137,7 @@ async function fetchModels(): Promise<void> {
   /*try {
     resOpenRouter.value = await availableModels(
       getBackendUrls('openrouter'),
-      state.chatState.openRouterAIApiKey
+      openRouterAIApiKey
     );
   } catch (error) {
     console.error('Error fetching models:', error);
@@ -171,8 +147,8 @@ async function fetchModels(): Promise<void> {
   resOpenRouter.value = openrouterModels;
   try {
     resOpenAI.value = await availableModels(
-      getBackendUrls('openai'),
-      state.chatState.openAIApiKey
+      getApiConfig(state.chatState)?.routes.models,
+      state.keys.openAIApiKey
     );
   } catch (error) {
     console.error('Error fetching models:', error);
@@ -180,31 +156,40 @@ async function fetchModels(): Promise<void> {
   }
 }
 
-const modelOptions = computed(() => ({
-  assistantOptions: Object.values(assistants.value).map((a) => ({
-    value: a.id,
-    label: a.name,
-  })),
-  openrouterModels: resOpenRouter.value
-    .map((m) => {
-      const p = parseFloat(m.pricing?.prompt || '');
-      const c = parseFloat(m.pricing?.completion || '');
-      return { m, p: p + c };
-    })
-    .sort(({ p: p1 }, { p: p2 }) => p1 - p2)
-    .map(({ m }) => ({
-      label: `${m.id}: ${m.pricing?.prompt || 'N/A'}/${
-        m.pricing?.completion || 'N/A'
-      }`,
-      value: m.id,
-    })),
-  openaiModels: [...resOpenAI.value]
-    .sort((m1, m2) => m1.id.localeCompare(m2.id))
-    .map((m) => ({
-      label: `${m.id}`,
-      value: m.id,
-    })),
-}));
+const modelOptions = computed(() => {
+  if (state.chatState.selectedApi === 'openai') {
+    if (state.chatState.useOpenAIAssistants) {
+      const options = Object.values(assistants.value).map((a) => ({
+        value: a.id,
+        label: a.name || '',
+      }));
+      return options;
+    } else {
+      const options = [...resOpenAI.value]
+        .sort((m1, m2) => m1.id.localeCompare(m2.id))
+        .map((m) => ({
+          label: `${m.id}`,
+          value: m.id,
+        }));
+      return options;
+    }
+  } else {
+    const options = resOpenRouter.value
+      .map((m) => {
+        const p = parseFloat(m.pricing?.prompt || '');
+        const c = parseFloat(m.pricing?.completion || '');
+        return { m, p: p + c };
+      })
+      .sort(({ p: p1 }, { p: p2 }) => p1 - p2)
+      .map(({ m }) => ({
+        label: `${m.id}: ${m.pricing?.prompt || 'N/A'}/${
+          m.pricing?.completion || 'N/A'
+        }`,
+        value: m.id,
+      }));
+    return options;
+  }
+});
 
 const modelLookUp = computed(() => ({
   openai: resOpenAI.value.reduce((acc, m) => {
@@ -219,27 +204,33 @@ const modelLookUp = computed(() => ({
 
 // Computed property to determine the currently selected bot name
 const currentlySelectedBotName = computed(() => {
-  if (openAIUsed(state.chatState.baseURL)) {
+  if (state.chatState.selectedApi === 'openai') {
     if (state.chatState.useOpenAIAssistants) {
       const selectedAssistant =
-        assistants.value[state.chatState.openAIAssistant]?.name;
-      return { newName: selectedAssistant, newService: 'openai-assistants' };
-    } else {
-      const modelName =
-        modelLookUp.value.openai[state.chatState.openAIModel]?.id;
-      return { newName: modelName, newService: 'openai' };
+        assistants.value[state.chatState.openAIAssistantId]?.name;
+      return {
+        newName: selectedAssistant || '',
+        newService: 'openai-assistants',
+      };
     }
-  } else {
-    const modelName =
-      modelLookUp.value.openrouter[state.chatState.openrouterAIModel]?.id;
-    return { newName: modelName, newService: 'openrouter.ai' };
   }
+  const modelName =
+    modelLookUp.value.openrouter[
+      getApiConfig(state.chatState)?.selectedModel || ''
+    ]?.id;
+  return { newName: modelName || '', newService: 'openrouter.ai' };
 });
 
 // Watch the computed property and emit an event when it changes
-watch(currentlySelectedBotName, ({ newName, newService }) => {
+function onModelSelect({
+  newName,
+  newService,
+}: {
+  newName: string;
+  newService: string;
+}) {
   emit('updateBotName', { newName, newService });
-});
+}
 
 void fetchModels();
 

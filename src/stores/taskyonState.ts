@@ -7,14 +7,21 @@ import type { FunctionArguments } from 'src/modules/types';
 export const useTaskyonStore = defineStore('taskyonState', () => {
   console.log('initialize taskyon');
 
+  const llmSettings = defaultLLMSettings();
+
   const initialState = {
-    chatState: defaultLLMSettings(),
+    chatState: llmSettings,
     appConfiguration: {
       supabase_url: '',
       supabase_anon_key: '',
       expertMode: false,
       showCosts: false,
     },
+    // initialize keys with all available apis...
+    keys: llmSettings.llmApis.reduce((keys, api) => {
+      keys[api.name] = '';
+      return keys;
+    }, {} as Record<string, string>),
     appConfigurationUrl: '', // URL from which to load the app
     // app State which should be part of the configuration
     modelDetails: false,

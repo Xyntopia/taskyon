@@ -1,14 +1,12 @@
 import {
   callLLM,
-  openAIUsed,
   getOpenAIAssistantResponse,
   ChatStateType,
   prepareTasksForInference,
-  getSelectedModel,
-  getAPIURLs,
-  openRouterUsed,
   enrichWithDelayedUsageInfos,
   estimateChatTokens,
+  generateHeaders,
+  getApiConfig,
 } from './chat';
 import { yamlToolChatType } from './types';
 import { partialTaskDraft } from './types';
@@ -64,13 +62,20 @@ function extractOpenAIFunctions(choice: OpenAI.ChatCompletion['choices'][0]) {
 export async function processChatTask(
   task: LLMTask,
   chatState: ChatStateType,
+  apiKeys: Record<string, string>,
   taskManager: TaskManager
 ) {
+  const api = getApiConfig(chatState);
+  const apiKey = apiKeys[chatState.selectedApi];
+  if (!api) {
+    throw new Error(`api doesn\'t exist! ${chatState.selectedApi}`);
+  }
   //TODO: merge this function with the assistants function
-  if (chatState.useOpenAIAssistants && openAIUsed(chatState.baseURL)) {
+  if (chatState.useOpenAIAssistants && chatState.selectedApi == 'openai') {
     const messages = await getOpenAIAssistantResponse(
       task,
-      chatState,
+      apiKey,
+      chatState.openAIAssistantId,
       taskManager
     );
     if (messages) {
@@ -99,9 +104,9 @@ export async function processChatTask(
       const chatCompletion = await callLLM(
         openAIConversationThread,
         tools,
-        chatState,
-        getSelectedModel(chatState),
-        getAPIURLs(chatState.baseURL).chat,
+        api,
+        chatState.siteUrl,
+        apiKey,
         // if the task runs in the "foreground", stream it :)
         task.id == chatState.selectedTaskId ? true : false,
         // this function receives chunks if we stream and "plants" them into
@@ -139,10 +144,10 @@ export async function processChatTask(
         };
       }
 
-      if (chatCompletion && openRouterUsed(chatState.baseURL)) {
-        enrichWithDelayedUsageInfos(
+      if (chatCompletion && chatState.selectedApi == 'openrouter.ai') {
+        void enrichWithDelayedUsageInfos(
           chatCompletion.id,
-          chatState,
+          generateHeaders(apiKey, chatState.siteUrl, chatState.selectedApi),
           task,
           taskManager
         );
@@ -348,7 +353,11 @@ export function emitCancelCurrentTask() {
   document.dispatchEvent(new CustomEvent(CURRENT_TASK_CANCELLATION_EVENT));
 }
 
-async function taskWorker(chatState: ChatStateType, taskManager: TaskManager) {
+async function taskWorker(
+  chatState: ChatStateType,
+  taskManager: TaskManager,
+  apiKeys: Record<string, string>
+) {
   let cancelAllTasks = false;
   let cancelImmediately = false;
   let cancelCurrenTask = false;
@@ -426,7 +435,7 @@ async function taskWorker(chatState: ChatStateType, taskManager: TaskManager) {
       try {
         if (task.role == 'user') {
           // TODO: get rid of "taskManager" in processChatTask
-          task = await processChatTask(task, chatState, taskManager);
+          task = await processChatTask(task, chatState, apiKeys, taskManager);
           task.state = 'Completed';
         } else if (task?.role == 'function') {
           // in the case of 'FunctionCall' result, we run it twice:
@@ -440,7 +449,7 @@ async function taskWorker(chatState: ChatStateType, taskManager: TaskManager) {
             task.result?.type === 'ToolError'
           ) {
             // here we send the task to our LLM inference
-            task = await processChatTask(task, chatState, taskManager);
+            task = await processChatTask(task, chatState, apiKeys, taskManager);
             task.state = 'Completed';
           } else {
             // in the case we don't have a result yet, we need to calculate it :)
@@ -489,8 +498,12 @@ async function taskWorker(chatState: ChatStateType, taskManager: TaskManager) {
   );
 }
 
-export function run(chatState: ChatStateType, taskManager: TaskManager) {
+export function run(
+  chatState: ChatStateType,
+  taskManager: TaskManager,
+  apiKeys: Record<string, string>
+) {
   console.log('start task taskWorker');
   //launch taskworker as an asnyc worker
-  void taskWorker(chatState, taskManager);
+  void taskWorker(chatState, taskManager, apiKeys);
 } // Helper function to handle function execution

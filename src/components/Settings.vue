@@ -15,8 +15,9 @@
     />
     <q-separator spaced />
     <div class="q-pa-sm q-gutter-md">
+      <div>Select AI Provider</div>
       <q-btn-toggle
-        v-model="state.chatState.baseURL"
+        v-model="state.chatState.selectedApi"
         no-caps
         rounded
         unelevated
@@ -25,36 +26,26 @@
         toggle-color="secondary"
         color="white"
         text-color="black"
-        :options="[
-          { label: 'OpenAI API', value: getBackendUrls('openai') },
-          {
-            label: 'Openrouter.ai API',
-            value: getBackendUrls('openrouter'),
-          },
-        ]"
+        :options="
+          state.chatState.llmApis.map((api) => ({
+            value: api.name,
+            label: api.name,
+          }))
+        "
       />
       <q-input
         placeholder="Add API key here!"
         label-color="white"
         dense
         filled
-        v-model="state.chatState.openRouterAIApiKey"
-        label="Openrouter.ai API key"
-      />
-      <q-input
-        placeholder="Add API key here!"
-        label-color="white"
-        dense
-        filled
-        v-model="state.chatState.openAIApiKey"
-        label="OpenAI API Key"
+        v-model="state.keys[state.chatState.selectedApi]"
+        :label="`${state.chatState.selectedApi} API key`"
       />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { getBackendUrls } from 'src/modules/chat';
 import { useTaskyonStore } from 'stores/taskyonState';
 
 const state = useTaskyonStore();

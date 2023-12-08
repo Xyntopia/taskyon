@@ -25,5 +25,7 @@ export default boot(async (/* { app, router, ... } */) => {
   const state = useTaskyonStore();
   const taskManagerRef = await getTaskManager();
 
-  void run(state.chatState, taskManagerRef);
+  // keys are reactive here, so in theory, when they change, taskyon should automatically
+  // pick up on this...
+  void run(state.chatState, taskManagerRef, state.keys);
 });

@@ -93,7 +93,10 @@
             src="~assets/taskyon.svg"
           ></q-img>
         </div>
-        <div class="text-h6 col-auto" v-if="getApikey(state.chatState)">
+        <div
+          class="text-h6 col-auto"
+          v-if="state.keys[state.chatState.selectedApi]"
+        >
           Welcome! Just type a message below to start using Taskyon!
         </div>
         <div class="text-h6 col-auto" v-else>
@@ -118,7 +121,7 @@
       />
       <div class="col q-pa-xs" style="max-width: 48rem">
         <CreateNewTask
-          v-if="getApikey(state.chatState)"
+          v-if="state.keys[state.chatState.selectedApi]"
           :class="[
             $q.dark.isActive ? 'bg-primary' : 'bg-grey-2',
             'rounded-borders',
@@ -190,7 +193,6 @@ import Task from 'components/Task.vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import { ref, UnwrapRef, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
-import { getApikey } from 'src/modules/chat';
 import { taskChain } from 'src/modules/taskManager';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
