@@ -20,7 +20,6 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
     drawerOpen: true,
     drawerRight: false,
     taskDraft: {} as Partial<LLMTask>,
-    streamChatMessage: OpenAI.Chat.Completions,
     draftParameters: {} as Record<string, FunctionArguments>,
     debugMessageExpand: {},
     darkTheme: 'auto' as boolean | 'auto',
