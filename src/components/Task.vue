@@ -241,6 +241,8 @@ import type { LLMTask } from 'src/modules/types';
 import type MarkdownIt from 'markdown-it/lib';
 import markdownItMermaid from '@datatraccorporation/markdown-it-mermaid';
 import { getTaskManager } from 'src/boot/taskyon';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-rust';
 
 type markdownItMermaid = MarkdownIt.PluginSimple;
 

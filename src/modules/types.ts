@@ -172,6 +172,9 @@ export const LLMTask = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   content: z.string().nullable(),
   state: TaskState,
+  context: z.record(z.string(), z.string()).optional(),
+  // somehow configure our configuration in a way that e.g. when it has a function, model
+  // or chatApi become optional?
   configuration: z
     .object({
       message: OpenAIMessage.optional(),

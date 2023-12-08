@@ -320,7 +320,6 @@ function toggleSelectedTools() {
 }
 
 const currentnewTask = computed(() => {
-  console.log('recalculate task');
   let task: Partial<LLMTask> = { ...state.taskDraft };
   if (selectedTaskType.value) {
     task.role = 'function';
