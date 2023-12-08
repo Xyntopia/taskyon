@@ -157,6 +157,7 @@
               v-model:enable-open-a-i-assistants="
                 state.chatState.useOpenAIAssistants
               "
+              v-model:open-a-i-assistant-id="state.chatState.openAIAssistantId"
             ></ModelSelection>
           </q-item-section>
         </q-expansion-item>

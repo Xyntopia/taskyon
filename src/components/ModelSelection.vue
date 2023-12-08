@@ -19,7 +19,11 @@
       </q-btn-toggle>
     </div>
     <!--OpenAI Assistant selection-->
-    <div v-if="enableOpenAIAssistants" class="col" style="min-width: 200px">
+    <div
+      v-if="enableOpenAIAssistants && selectedApi === 'openai'"
+      class="col"
+      style="min-width: 200px"
+    >
       <q-select
         filled
         dense
@@ -33,7 +37,8 @@
       >
         <template v-slot:after>
           <q-btn
-            icon="settings_applications"
+            :icon="state.modelDetails ? 'expand_less' : 'expand_more'"
+            flat
             @click="state.modelDetails = !state.modelDetails"
           >
             <q-tooltip>Check & configure the Assistants' details</q-tooltip>
@@ -164,7 +169,7 @@ const state = useTaskyonStore();
 
 const assistants = ref<Awaited<ReturnType<typeof getAssistants>>>({});
 
-void getAssistants(state.keys['openai']).then((assitantDict) => {
+void getAssistants(state.keys.openai).then((assitantDict) => {
   assistants.value = assitantDict;
 });
 
@@ -172,10 +177,9 @@ const resOpenRouter = ref<Model[]>(openrouterModules.data);
 const resOpenAI = ref<Model[]>(openaiModels.data);
 const api = getApiConfig(state.chatState);
 if (api) {
-  void availableModels(
-    api.baseURL + api.routes.models,
-    state.keys.openAIApiKey
-  ).then((res) => (resOpenAI.value = res));
+  void availableModels(api.baseURL + api.routes.models, state.keys.openai).then(
+    (res) => (resOpenAI.value = res)
+  );
 }
 
 const modelOptions = computed(() => {

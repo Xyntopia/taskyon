@@ -156,6 +156,7 @@ export const getAssistants = asyncTimeLruCache<
   1,
   60000 * 10 * 60 //1h
 )(async (openAIApiKey: string) => {
+  console.log('get list of openai assistants')
   const response = await getOpenai(openAIApiKey).beta.assistants.list({
     order: 'desc',
     limit: 20,

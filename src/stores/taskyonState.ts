@@ -51,9 +51,12 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
     Object.entries(initialState).map(([key, value]) => [key, ref(value)])
   ) as { [K in keyof typeof initialState]: Ref<(typeof initialState)[K]> };
 
-  watch(()=>stateRefs.chatState.value.selectedApi,(newValue)=>{
-    console.log('api switch detected', newValue)
-  })
+  watch(
+    () => stateRefs.chatState.value.selectedApi,
+    (newValue) => {
+      console.log('api switch detected', newValue);
+    }
+  );
 
   function setDraftFunctionArgs(newValue: FunctionArguments) {
     if (stateRefs.taskDraft.value.context?.function) {
