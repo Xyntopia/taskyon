@@ -12,6 +12,8 @@ let taskManagerInstance: TaskManager;
 // Function to get or create the TaskManager instance
 export async function getTaskManager() {
   if (!taskManagerInstance) {
+    // we are creating a reactive map for our memory-based task databae
+    // this ensures, that we receive upates for our task in our UI.
     const TaskList = reactive<Map<string, LLMTask>>(new Map());
     const taskyonDBInstance = await createTaskyonDatabase('taskyondb');
     taskManagerInstance = new TaskManager(TaskList, taskyonDBInstance);

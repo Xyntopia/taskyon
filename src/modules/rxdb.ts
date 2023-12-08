@@ -122,6 +122,16 @@ export type TaskyonDatabaseCollections = {
 export type TaskyonDatabase = RxDatabase<TaskyonDatabaseCollections>;
 
 // Function to create the database
+/*
+  TaskyonDatabase is build with reactivity in mind. you can supply a reactive map
+  to the constructor. it will be kept in sync with the taskdb and supplies reactive changes
+  to the UI. We could have used the function of RxDB for this. But this approach would have been
+  less flexible...
+
+    const TaskList = reactive<Map<string, LLMTask>>(new Map());
+    const taskyonDBInstance = await createTaskyonDatabase('taskyondb');
+    taskManagerInstance = new TaskManager(TaskList, taskyonDBInstance);
+*/
 export async function createTaskyonDatabase(
   name: string,
   storage: RxStorageDexie | RxStorageMemory | undefined = undefined

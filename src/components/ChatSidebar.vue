@@ -47,10 +47,18 @@
       </div>
     </q-expansion-item>
     <q-separator spaced />
+    <!-- App Links -->
+    <div class="q-pa-md q-gutter-xs">
+      <q-btn flat icon="chat" label="Open Chat" to="/chat"></q-btn>
+      <q-btn flat icon="settings" label="Settings" to="/settings"></q-btn>
+      <q-btn flat icon="key" label="Set Keys" to="/settings"></q-btn>
+      <Settings reduced></Settings>
+    </div>
     <!-- Settings Area -->
-    <q-expansion-item dense label="Settings" icon="settings" default-closed>
-      <Settings />
+    <!--
+    <q-expansion-item dense label="Menu" icon="settings" default-closed>
     </q-expansion-item>
+    -->
   </q-list>
 </template>
 
