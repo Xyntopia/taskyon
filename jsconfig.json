@@ -26,6 +26,9 @@
       "modules/*": [
         "src/modules/*"
       ],
+      "plugins/*": [
+        "src/plugins/*"
+      ],
       "vue$": [
         "node_modules/vue/dist/vue.esm.js"
       ]
