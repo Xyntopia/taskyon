@@ -228,7 +228,7 @@ export class Lock {
         }
       };
     } else {
-      console.log('waiting for unlock to relock')
+      console.log('waiting for unlock to relock');
       await this._promise; // Wait for the lock to be released
       return this.lock(); // Re-attempt to acquire the lock
     }
@@ -239,4 +239,84 @@ export class Lock {
       await this._promise;
     }
   }
+}
+
+function isObject(item: unknown): item is Record<string, unknown> {
+  return item !== null && typeof item === 'object' && !Array.isArray(item);
+}
+
+export function deepMerge(
+  obj1: Record<string, unknown>,
+  obj2: Record<string, unknown>
+): Record<string, unknown> {
+  const output = Object.assign({}, obj1); // Start with a shallow copy of obj1
+  if (isObject(obj1) && isObject(obj2)) {
+    Object.keys(obj2).forEach((key) => {
+      const obj2Key = obj2[key];
+      if (isObject(obj2Key)) {
+        const obj1Key = obj1[key];
+        if (isObject(obj1Key)) {
+          // Recursively call deepMerge only if both obj1[key] and obj2[key] are objects
+          output[key] = deepMerge(obj1Key, obj2Key);
+        } else {
+          // If obj1[key] is not an object, simply assign obj2[key]
+          Object.assign(output, { [key]: obj2Key });
+        }
+      } else {
+        // For non-object properties, overwrite with the value from obj2
+        Object.assign(output, { [key]: obj2Key });
+      }
+    });
+  }
+  return output;
+}
+
+export function deepMergeReactive(
+  obj1: Record<string, unknown>,
+  obj2: Record<string, unknown>
+) {
+  if (!isObject(obj1) || !isObject(obj2)) {
+    throw new Error('Both arguments must be objects.');
+  }
+
+  Object.keys(obj2).forEach((key) => {
+    const obj2Value = obj2[key];
+    if (isObject(obj2Value)) {
+      if (!isObject(obj1[key])) {
+        // If obj1[key] is not an object, initialize it as an empty object
+        obj1[key] = {};
+      }
+      // Recursively merge objects
+      deepMergeReactive(obj1[key] as Record<string, unknown>, obj2Value);
+    } else {
+      // Assign non-object values directly
+      obj1[key] = obj2Value;
+    }
+  });
+
+  return obj1;
+}
+
+export function deepCopy<T>(item: T): T {
+  if (item === null || typeof item !== 'object') {
+    // Primitive value (including null and undefined): return as is
+    return item;
+  }
+
+  if (Array.isArray(item)) {
+    // Array: create a new array and recursively copy each element
+    return item.map((element) => deepCopy(element) as unknown) as unknown as T;
+  }
+
+  if (isObject(item)) {
+    // Object (excluding arrays): create a new object and recursively copy each property
+    const copy = {} as Record<string, unknown>;
+    Object.keys(item).forEach((key) => {
+      copy[key] = deepCopy(item[key]);
+    });
+    return copy as T;
+  }
+
+  // If item is of a type not handled above, return it as is
+  return item;
 }

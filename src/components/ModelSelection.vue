@@ -62,7 +62,7 @@
         icon="smart_toy"
         :options="filteredOptions"
         emit-value
-        :model-value="currentlySelectedBotName.newName"
+        :model-value="botName"
         @update:model-value="onModelSelect"
         hide-selected
         fill-input
@@ -71,19 +71,21 @@
         @filter="(val, update) => filterModels(val, update, modelOptions)"
       >
         <template v-slot:after>
-          <div style="font-size: 0.5em">
+          <div
+            v-if="state.appConfiguration.expertMode"
+            style="font-size: 0.5em"
+          >
             <div>
               prompt:
               {{
-                modelLookUp.openrouter[currentlySelectedBotName.newName]
-                  ?.pricing?.prompt
+                modelLookUp['openrouter.ai'][botName]?.pricing?.prompt || '?'
               }}
             </div>
             <div>
               completion:
               {{
-                modelLookUp.openrouter[currentlySelectedBotName.newName]
-                  ?.pricing?.completion
+                modelLookUp['openrouter.ai'][botName]?.pricing?.completion ||
+                '?'
               }}
             </div>
           </div>
@@ -119,6 +121,13 @@ import openrouterModules from 'assets/openrouter_models.json';
 import { useTaskyonStore } from 'stores/taskyonState';
 import openaiModels from 'assets/openai_models.json';
 
+defineProps({
+  botName: {
+    type: String,
+    required: true,
+  },
+});
+
 const emit = defineEmits(['updateBotName']);
 
 const openrouterModels: Model[] = openrouterModules.data;
@@ -146,10 +155,13 @@ async function fetchModels(): Promise<void> {
   }*/
   resOpenRouter.value = openrouterModels;
   try {
-    resOpenAI.value = await availableModels(
-      getApiConfig(state.chatState)?.routes.models,
-      state.keys.openAIApiKey
-    );
+    const api = getApiConfig(state.chatState);
+    if (api) {
+      resOpenAI.value = await availableModels(
+        api.baseURL + api.routes.models,
+        state.keys.openAIApiKey
+      );
+    }
   } catch (error) {
     console.error('Error fetching models:', error);
     resOpenAI.value = openAiModels;
@@ -196,40 +208,18 @@ const modelLookUp = computed(() => ({
     acc[m.id] = m;
     return acc;
   }, {} as Record<string, Model>),
-  openrouter: resOpenRouter.value.reduce((acc, m) => {
+  'openrouter.ai': resOpenRouter.value.reduce((acc, m) => {
     acc[m.id] = m;
     return acc;
   }, {} as Record<string, Model>),
 }));
 
-// Computed property to determine the currently selected bot name
-const currentlySelectedBotName = computed(() => {
-  if (state.chatState.selectedApi === 'openai') {
-    if (state.chatState.useOpenAIAssistants) {
-      const selectedAssistant =
-        assistants.value[state.chatState.openAIAssistantId]?.name;
-      return {
-        newName: selectedAssistant || '',
-        newService: 'openai-assistants',
-      };
-    }
-  }
-  const modelName =
-    modelLookUp.value.openrouter[
-      getApiConfig(state.chatState)?.selectedModel || ''
-    ]?.id;
-  return { newName: modelName || '', newService: 'openrouter.ai' };
-});
-
 // Watch the computed property and emit an event when it changes
-function onModelSelect({
-  newName,
-  newService,
-}: {
-  newName: string;
-  newService: string;
-}) {
-  emit('updateBotName', { newName, newService });
+function onModelSelect(value: string) {
+  emit('updateBotName', {
+    newName: value,
+    newService: state.chatState.selectedApi,
+  });
 }
 
 void fetchModels();

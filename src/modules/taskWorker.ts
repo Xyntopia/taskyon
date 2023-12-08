@@ -6,10 +6,9 @@ import {
   enrichWithDelayedUsageInfos,
   estimateChatTokens,
   generateHeaders,
-  getApiConfig,
+  getApiConfigCopy,
 } from './chat';
-import { yamlToolChatType } from './types';
-import { partialTaskDraft } from './types';
+import { yamlToolChatType, partialTaskDraft } from './types';
 import { addTask2Tree } from './taskManager';
 import { processTasksQueue } from './taskManager';
 import { tools } from './tools';
@@ -65,11 +64,7 @@ export async function processChatTask(
   apiKeys: Record<string, string>,
   taskManager: TaskManager
 ) {
-  const api = getApiConfig(chatState);
   const apiKey = apiKeys[chatState.selectedApi];
-  if (!api) {
-    throw new Error(`api doesn\'t exist! ${chatState.selectedApi}`);
-  }
   //TODO: merge this function with the assistants function
   if (chatState.useOpenAIAssistants && chatState.selectedApi == 'openai') {
     const messages = await getOpenAIAssistantResponse(
@@ -85,6 +80,11 @@ export async function processChatTask(
       };
     }
   } else {
+    const api = getApiConfigCopy(chatState, task.context?.chatApi);
+    if (!api) {
+      throw new Error(`api doesn\'t exist! ${chatState.selectedApi}`);
+    }
+    api.defaultModel = task.context?.model || api.defaultModel;
     console.log('execute chat task!', task);
     //TODO: also do this, if we start the task "autonomously" in which we basically
     //      allow it to create new tasks...
@@ -109,8 +109,10 @@ export async function processChatTask(
         apiKey,
         // if the task runs in the "foreground", stream it :)
         task.id == chatState.selectedTaskId ? true : false,
-        // this function receives chunks if we stream and "plants" them into
-        // our original task
+        // this function receives chunks if we stream and senfs them into
+        // our original task in the debugging property to be displayed
+        // "live" (this only works if our tasks structure in task manager is
+        // reactive)
         (chunk) => {
           if (chunk?.choices[0]?.delta?.tool_calls) {
             chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {

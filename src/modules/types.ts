@@ -177,6 +177,7 @@ export const LLMTask = z.object({
       message: OpenAIMessage.optional(),
       function: FunctionCall.optional(),
       model: z.string().optional(),
+      chatApi: z.string().optional(),
       uploadedFiles: z.array(z.string()).optional(),
     })
     .optional(),

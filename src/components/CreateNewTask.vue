@@ -144,12 +144,15 @@
         <q-expansion-item
           dense
           icon="smart_toy"
-          :label="`Select Chatbot (right now: ${currentlySelectedService}/${currentlySelectedBotName})`"
+          :label="`Select Chatbot (right now: ${
+            currentChatApi || state.chatState.selectedApi
+          }/${currentModel || currentDefaultBotName})`"
           v-model="state.selectChatBotExpand"
         >
           <q-item-section>
             <ModelSelection
               @updateBotName="handleBotNameUpdate"
+              :bot-name="currentModel || currentDefaultBotName || ''"
             ></ModelSelection>
           </q-item-section>
         </q-expansion-item>
@@ -202,8 +205,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { countStringTokens } from 'src/modules/chat';
+import { computed, ref, watch, toRaw } from 'vue';
+import { countStringTokens, getApiConfig } from 'src/modules/chat';
 import { tools, getDefaultParametersForTool } from 'src/modules/tools';
 import { FunctionArguments } from 'src/modules/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
@@ -224,8 +227,22 @@ const state = useTaskyonStore();
 
 //const funcArgs = computed(() => );
 
-const currentlySelectedBotName = ref('');
-const currentlySelectedService = ref('');
+// Computed property to determine the currently selected bot name
+const currentDefaultBotName = computed(() => {
+  if (state.chatState.selectedApi === 'openai') {
+    if (state.chatState.useOpenAIAssistants) {
+      return state.chatState.openAIAssistantId;
+    }
+  }
+  const modelName =
+    state.taskDraft.context?.model ||
+    getApiConfig(state.chatState)?.defaultModel;
+  return modelName;
+});
+
+const currentModel = ref(toRaw(currentDefaultBotName));
+const currentChatApi = ref(toRaw(state.chatState.selectedApi));
+
 const allowedTools = computed({
   get() {
     return state.taskDraft.allowedTools || [];
@@ -243,8 +260,14 @@ const handleBotNameUpdate = ({
   newName: string;
   newService: string;
 }) => {
-  currentlySelectedBotName.value = newName;
-  currentlySelectedService.value = newService;
+  console.log('getting an api & bot update :)');
+  currentModel.value = newName;
+  currentChatApi.value = newService;
+  state.chatState.selectedApi = newService;
+  const api = getApiConfig(state.chatState);
+  if (api) {
+    api.defaultModel = newName;
+  }
 };
 
 const selectedTaskType = computed(() => {
@@ -292,11 +315,17 @@ function toggleSelectedTools() {
 }
 
 const currentnewTask = computed(() => {
+  console.log('recalculate task');
   let task: Partial<LLMTask> = { ...state.taskDraft };
   if (selectedTaskType.value) {
     task.role = 'function';
     task.content = null;
   } else {
+    task.context = {
+      ...task.context,
+      model: currentModel.value,
+      chatApi: currentChatApi.value,
+    };
     task.role = 'user';
     task.debugging = {};
     task.content = state.taskDraft.content?.trim();

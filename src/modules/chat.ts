@@ -12,7 +12,13 @@ import {
 import OpenAI from 'openai';
 import { openFile } from './OPFS';
 import { dump } from 'js-yaml';
-import { lruCache, sleep, asyncTimeLruCache, asyncLruCache } from './utils';
+import {
+  lruCache,
+  sleep,
+  asyncTimeLruCache,
+  asyncLruCache,
+  deepCopy,
+} from './utils';
 import type { FileMappingDocType } from './rxdb';
 import { zodToYamlString, yamlToolChatType, toolResultChat } from './types';
 import { CURRENT_TASK_CANCELLATION_EVENT } from './taskWorker';
@@ -40,7 +46,7 @@ const getOpenai = lruCache<OpenAI>(5)(
 export interface apiConfig {
   name: string;
   baseURL: string;
-  selectedModel: string;
+  defaultModel: string;
   streamSupport: boolean;
   routes: {
     chatCompletion: string;
@@ -63,7 +69,7 @@ export function defaultLLMSettings() {
       {
         name: 'openai',
         baseURL: 'https://api.openai.com/v1/',
-        selectedModel: 'gpt-3.5-turbo',
+        defaultModel: 'gpt-3.5-turbo',
         streamSupport: true,
         routes: {
           chatCompletion: '/chat/completions',
@@ -73,7 +79,7 @@ export function defaultLLMSettings() {
       {
         name: 'openrouter.ai',
         baseURL: 'https://openrouter.ai/api/v1',
-        selectedModel: 'mistralai/mistral-7b-instruct',
+        defaultModel: 'mistralai/mistral-7b-instruct',
         streamSupport: true,
         routes: {
           chatCompletion: '/chat/completions',
@@ -128,7 +134,15 @@ FORMAT THE RESULT WITH THE FOLLOWING SCHEMA VERY STRICT ({format}):
 }
 
 export function getApiConfig(chatState: ChatStateType) {
-  return chatState.llmApis.find((api) => chatState.selectedApi === api.name);
+  const searchName = chatState.selectedApi;
+  const api = chatState.llmApis.find((api) => searchName === api.name);
+  return api;
+}
+
+export function getApiConfigCopy(chatState: ChatStateType, apiName?: string) {
+  const searchName = apiName || chatState.selectedApi;
+  const api = chatState.llmApis.find((api) => searchName === api.name);
+  return deepCopy(api);
 }
 
 export type ChatStateType = ReturnType<typeof defaultLLMSettings>;
@@ -349,7 +363,7 @@ export async function callLLM(
   const openai = getOpenai(apiKey, api.baseURL, headers);
 
   const payload: OpenAI.ChatCompletionCreateParams = {
-    model: api.selectedModel,
+    model: api.defaultModel,
     messages: chatMessages,
     user: 'taskyon',
     temperature: 0.0,
