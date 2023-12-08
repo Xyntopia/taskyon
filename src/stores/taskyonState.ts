@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { defaultLLMSettings } from 'src/modules/chat';
-import { ref, Ref } from 'vue';
+import { ref, Ref, watch } from 'vue';
 import type { LLMTask } from 'src/modules/types';
 import type { FunctionArguments } from 'src/modules/types';
 
@@ -50,6 +50,10 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
   const stateRefs = Object.fromEntries(
     Object.entries(initialState).map(([key, value]) => [key, ref(value)])
   ) as { [K in keyof typeof initialState]: Ref<(typeof initialState)[K]> };
+
+  watch(()=>stateRefs.chatState.value.selectedApi,(newValue)=>{
+    console.log('api switch detected', newValue)
+  })
 
   function setDraftFunctionArgs(newValue: FunctionArguments) {
     if (stateRefs.taskDraft.value.context?.function) {

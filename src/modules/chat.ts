@@ -133,15 +133,18 @@ FORMAT THE RESULT WITH THE FOLLOWING SCHEMA VERY STRICT ({format}):
   };
 }
 
-export function getApiConfig(chatState: ChatStateType) {
-  const searchName = chatState.selectedApi;
+export function getApiByName(chatState: ChatStateType, searchName: string) {
   const api = chatState.llmApis.find((api) => searchName === api.name);
   return api;
 }
 
+export function getApiConfig(chatState: ChatStateType) {
+  return getApiByName(chatState, chatState.selectedApi);
+}
+
 export function getApiConfigCopy(chatState: ChatStateType, apiName?: string) {
   const searchName = apiName || chatState.selectedApi;
-  const api = chatState.llmApis.find((api) => searchName === api.name);
+  const api = getApiByName(chatState, searchName);
   return deepCopy(api);
 }
 

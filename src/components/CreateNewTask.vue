@@ -153,6 +153,10 @@
             <ModelSelection
               @updateBotName="handleBotNameUpdate"
               :bot-name="currentModel || currentDefaultBotName || ''"
+              v-model:selected-api="state.chatState.selectedApi"
+              v-model:enable-open-a-i-assistants="
+                state.chatState.useOpenAIAssistants
+              "
             ></ModelSelection>
           </q-item-section>
         </q-expansion-item>
@@ -240,7 +244,7 @@ const currentDefaultBotName = computed(() => {
   return modelName;
 });
 
-const currentModel = ref(toRaw(currentDefaultBotName));
+const currentModel = ref(toRaw(currentDefaultBotName.value));
 const currentChatApi = ref(toRaw(state.chatState.selectedApi));
 
 const allowedTools = computed({
@@ -260,7 +264,7 @@ const handleBotNameUpdate = ({
   newName: string;
   newService: string;
 }) => {
-  console.log('getting an api & bot update :)');
+  console.log('getting an api & bot update :)', newName, newService);
   currentModel.value = newName;
   currentChatApi.value = newService;
   state.chatState.selectedApi = newService;

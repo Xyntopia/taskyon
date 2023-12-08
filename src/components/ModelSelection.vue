@@ -1,13 +1,16 @@
 <template>
-  <div class="row items-top">
-    <div v-if="state.chatState.selectedApi === 'openai'" class="q-pt-xs">
+  <div class="row items-top q-gutter-xs">
+    <div v-if="selectedApi === 'openai'" class="q-pt-xs">
       <q-btn-toggle
-        v-model="state.chatState.useOpenAIAssistants"
-        unelevated
-        glossy
+        label="mode"
+        :model-value="enableOpenAIAssistants"
+        @update:model-value="
+          (val) => emit('update:enableOpenAIAssistants', val)
+        "
         dense
+        outline
         toggle-color="secondary"
-        color="primary"
+        :color="$q.dark.isActive ? 'white' : 'primary'"
         :options="[
           { label: 'Chat', value: false },
           { label: 'Assistant', value: true },
@@ -16,11 +19,7 @@
       </q-btn-toggle>
     </div>
     <!--OpenAI Assistant selection-->
-    <div
-      v-if="state.chatState.useOpenAIAssistants"
-      class="col"
-      style="min-width: 200px"
-    >
+    <div v-if="enableOpenAIAssistants" class="col" style="min-width: 200px">
       <q-select
         filled
         dense
@@ -29,7 +28,8 @@
         :options="modelOptions"
         emit-value
         map-options
-        v-model="state.chatState.openAIAssistantId"
+        :model-value="openAIAssistantId"
+        @update:model-value="(val) => emit('update:openAIAssistantId', val)"
       >
         <template v-slot:after>
           <q-btn
@@ -43,11 +43,11 @@
       <div v-if="state.modelDetails">
         <div>
           <b>Assistant instructions:</b><br />
-          {{ assistants[state.chatState.openAIAssistantId]?.instructions }}
+          {{ assistants[openAIAssistantId || '']?.instructions }}
         </div>
         <q-scroll-area style="height: 230px; max-width: 100%">
           <pre>
-          {{ assistants[state.chatState.openAIAssistantId] }}
+          {{ assistants[openAIAssistantId || ''] }}
           </pre>
         </q-scroll-area>
       </div>
@@ -57,7 +57,6 @@
       <q-select
         filled
         dense
-        :bottom-slots="state.chatState.selectedApi === 'openrouter.ai'"
         label="Select LLM Model for answering/solving the task."
         icon="smart_toy"
         :options="filteredOptions"
@@ -75,6 +74,7 @@
             v-if="state.appConfiguration.expertMode"
             style="font-size: 0.5em"
           >
+            <q-tooltip>Prompt costs</q-tooltip>
             <div>
               prompt:
               {{
@@ -92,10 +92,23 @@
         </template>
       </q-select>
     </div>
-    <div
-      v-if="!state.chatState.useOpenAIAssistants"
-      class="col-auto text-caption"
-    >
+    <q-select
+      style="min-width: 150px"
+      :model-value="selectedApi"
+      @update:model-value="onApiSelect"
+      emit-value
+      dense
+      outlined
+      label="select Api"
+      :options="
+        state.chatState.llmApis.map((api) => ({
+          value: api.name,
+          label: api.name,
+        }))
+      "
+      ><q-tooltip>Choose LLM Api</q-tooltip>
+    </q-select>
+    <div v-if="!enableOpenAIAssistants" class="col-auto text-caption">
       For a list of supported models go here:
       <a href="https://platform.openai.com/docs/models" target="_blank"
         >https://platform.openai.com/docs/models</a
@@ -115,23 +128,38 @@ import {
   Model,
   getAssistants,
   getApiConfig,
+  getApiByName,
 } from 'src/modules/chat';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import openrouterModules from 'assets/openrouter_models.json';
 import { useTaskyonStore } from 'stores/taskyonState';
 import openaiModels from 'assets/openai_models.json';
 
-defineProps({
+const props = defineProps({
   botName: {
     type: String,
     required: true,
   },
+  selectedApi: {
+    type: String,
+    required: true,
+  },
+  enableOpenAIAssistants: {
+    type: Boolean,
+    required: true,
+  },
+  openAIAssistantId: {
+    type: String,
+    required: false,
+  },
 });
 
-const emit = defineEmits(['updateBotName']);
+const emit = defineEmits([
+  'update:openAIAssistantId',
+  'update:enableOpenAIAssistants',
+  'updateBotName',
+]);
 
-const openrouterModels: Model[] = openrouterModules.data;
-const openAiModels: Model[] = openaiModels.data;
 const state = useTaskyonStore();
 
 const assistants = ref<Awaited<ReturnType<typeof getAssistants>>>({});
@@ -140,37 +168,19 @@ void getAssistants(state.keys['openai']).then((assitantDict) => {
   assistants.value = assitantDict;
 });
 
-const resOpenRouter = ref<Model[]>([]);
-const resOpenAI = ref<Model[]>([]);
-async function fetchModels(): Promise<void> {
-  /*try {
-    resOpenRouter.value = await availableModels(
-      getBackendUrls('openrouter'),
-      openRouterAIApiKey
-    );
-  } catch (error) {
-    console.error('Error fetching models:', error);
-    console.log('using default list');
-    resOpenRouter.value = openrouterModels;
-  }*/
-  resOpenRouter.value = openrouterModels;
-  try {
-    const api = getApiConfig(state.chatState);
-    if (api) {
-      resOpenAI.value = await availableModels(
-        api.baseURL + api.routes.models,
-        state.keys.openAIApiKey
-      );
-    }
-  } catch (error) {
-    console.error('Error fetching models:', error);
-    resOpenAI.value = openAiModels;
-  }
+const resOpenRouter = ref<Model[]>(openrouterModules.data);
+const resOpenAI = ref<Model[]>(openaiModels.data);
+const api = getApiConfig(state.chatState);
+if (api) {
+  void availableModels(
+    api.baseURL + api.routes.models,
+    state.keys.openAIApiKey
+  ).then((res) => (resOpenAI.value = res));
 }
 
 const modelOptions = computed(() => {
-  if (state.chatState.selectedApi === 'openai') {
-    if (state.chatState.useOpenAIAssistants) {
+  if (props.selectedApi === 'openai') {
+    if (props.enableOpenAIAssistants) {
       const options = Object.values(assistants.value).map((a) => ({
         value: a.id,
         label: a.name || '',
@@ -214,15 +224,20 @@ const modelLookUp = computed(() => ({
   }, {} as Record<string, Model>),
 }));
 
-// Watch the computed property and emit an event when it changes
 function onModelSelect(value: string) {
   emit('updateBotName', {
     newName: value,
-    newService: state.chatState.selectedApi,
+    newService: props.selectedApi,
   });
 }
 
-void fetchModels();
+function onApiSelect(value: string) {
+  const newBotName = getApiByName(state.chatState, value)?.defaultModel;
+  emit('updateBotName', {
+    newName: newBotName,
+    newService: value,
+  });
+}
 
 const filteredOptions = ref<{ label: string; value: string }[]>([]);
 

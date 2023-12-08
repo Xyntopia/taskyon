@@ -84,86 +84,92 @@ export async function processChatTask(
     if (!api) {
       throw new Error(`api doesn\'t exist! ${chatState.selectedApi}`);
     }
-    api.defaultModel = task.context?.model || api.defaultModel;
-    console.log('execute chat task!', task);
-    //TODO: also do this, if we start the task "autonomously" in which we basically
-    //      allow it to create new tasks...
-    //TODO: we can create more things here like giving it context form other tasks, lookup
-    //      main objective, previous tasks etc....
-    const useToolChat =
-      task.allowedTools?.length && !chatState.enableOpenAiTools;
+    const selectedModel = task.context?.model;
+    if (selectedModel) {
+      api.defaultModel = selectedModel;
+      console.log('execute chat task!', task);
+      //TODO: also do this, if we start the task "autonomously" in which we basically
+      //      allow it to create new tasks...
+      //TODO: we can create more things here like giving it context form other tasks, lookup
+      //      main objective, previous tasks etc....
+      const useToolChat =
+        task.allowedTools?.length && !chatState.enableOpenAiTools;
 
-    const { openAIConversationThread, tools } = await prepareTasksForInference(
-      task,
-      chatState,
-      (taskID) => taskManager.getTask(taskID),
-      useToolChat ? 'toolchat' : 'chat'
-    );
+      const { openAIConversationThread, tools } =
+        await prepareTasksForInference(
+          task,
+          chatState,
+          (taskID) => taskManager.getTask(taskID),
+          useToolChat ? 'toolchat' : 'chat'
+        );
 
-    if (openAIConversationThread.length > 0) {
-      const chatCompletion = await callLLM(
-        openAIConversationThread,
-        tools,
-        api,
-        chatState.siteUrl,
-        apiKey,
-        // if the task runs in the "foreground", stream it :)
-        task.id == chatState.selectedTaskId ? true : false,
-        // this function receives chunks if we stream and senfs them into
-        // our original task in the debugging property to be displayed
-        // "live" (this only works if our tasks structure in task manager is
-        // reactive)
-        (chunk) => {
-          if (chunk?.choices[0]?.delta?.tool_calls) {
-            chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
-              task.debugging.toolStreamArgsContent =
-                task.debugging.toolStreamArgsContent || {};
-              if (t.function?.name) {
-                task.debugging.toolStreamArgsContent[t.function.name] =
-                  (task.debugging.toolStreamArgsContent[t.function.name] ||
-                    '') + (t.function?.arguments || '');
-              }
-            });
+      if (openAIConversationThread.length > 0) {
+        const chatCompletion = await callLLM(
+          openAIConversationThread,
+          tools,
+          api,
+          chatState.siteUrl,
+          apiKey,
+          // if the task runs in the "foreground", stream it :)
+          task.id == chatState.selectedTaskId ? true : false,
+          // this function receives chunks if we stream and senfs them into
+          // our original task in the debugging property to be displayed
+          // "live" (this only works if our tasks structure in task manager is
+          // reactive)
+          (chunk) => {
+            if (chunk?.choices[0]?.delta?.tool_calls) {
+              chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
+                task.debugging.toolStreamArgsContent =
+                  task.debugging.toolStreamArgsContent || {};
+                if (t.function?.name) {
+                  task.debugging.toolStreamArgsContent[t.function.name] =
+                    (task.debugging.toolStreamArgsContent[t.function.name] ||
+                      '') + (t.function?.arguments || '');
+                }
+              });
+            }
+            if (chunk?.choices[0]?.delta?.content) {
+              task.debugging.streamContent =
+                (task.debugging.streamContent || '') +
+                chunk.choices[0].delta.content;
+            }
           }
-          if (chunk?.choices[0]?.delta?.content) {
-            task.debugging.streamContent =
-              (task.debugging.streamContent || '') +
-              chunk.choices[0].delta.content;
-          }
+        );
+
+        const choice = chatCompletion?.choices[0];
+        if (choice) {
+          task.result = {
+            ...task.result,
+            type: useToolChat
+              ? 'ToolChatResult'
+              : isOpenAIFunctionCall(choice)
+              ? 'ToolCall'
+              : 'ChatAnswer',
+            chatResponse: chatCompletion,
+          };
         }
-      );
 
-      const choice = chatCompletion?.choices[0];
-      if (choice) {
-        task.result = {
-          ...task.result,
-          type: useToolChat
-            ? 'ToolChatResult'
-            : isOpenAIFunctionCall(choice)
-            ? 'ToolCall'
-            : 'ChatAnswer',
-          chatResponse: chatCompletion,
-        };
+        if (chatCompletion && chatState.selectedApi == 'openrouter.ai') {
+          void enrichWithDelayedUsageInfos(
+            chatCompletion.id,
+            generateHeaders(apiKey, chatState.siteUrl, chatState.selectedApi),
+            task,
+            taskManager
+          );
+        } else if (chatCompletion?.usage) {
+          // openai sends back the exact number of prompt tokens :)
+          task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
+          task.debugging.resultTokens = chatCompletion.usage.completion_tokens;
+          task.debugging.taskTokens = chatCompletion.usage.total_tokens;
+        } else {
+          task.debugging.estimatedTokens = estimateChatTokens(
+            task,
+            openAIConversationThread
+          );
+        }
       }
-
-      if (chatCompletion && chatState.selectedApi == 'openrouter.ai') {
-        void enrichWithDelayedUsageInfos(
-          chatCompletion.id,
-          generateHeaders(apiKey, chatState.siteUrl, chatState.selectedApi),
-          task,
-          taskManager
-        );
-      } else if (chatCompletion?.usage) {
-        // openai sends back the exact number of prompt tokens :)
-        task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
-        task.debugging.resultTokens = chatCompletion.usage.completion_tokens;
-        task.debugging.taskTokens = chatCompletion.usage.total_tokens;
-      } else {
-        task.debugging.estimatedTokens = estimateChatTokens(
-          task,
-          openAIConversationThread
-        );
-      }
+    } else {
+      throw new Error('Task has no inference model selected!');
     }
   }
 
