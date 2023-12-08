@@ -45,7 +45,7 @@ describe('rxdb operations', () => {
       role: 'user',
       content: 'Some content',
       state: 'Open',
-      context: '{}', // assuming default JSON string context
+      configuration: '{}', // assuming default JSON string configuration
       debugging: '{}', // assuming default JSON string for debugging
       result: '{}', // assuming default JSON string for result
       allowedTools: [],

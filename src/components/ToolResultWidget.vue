@@ -1,10 +1,10 @@
 <template>
-  <div v-if="props.task.context?.function" class="q-gutter-md q-px-xs">
+  <div v-if="props.task.configuration?.function" class="q-gutter-md q-px-xs">
       <div>
         <div class="text-bold"> arguments (yaml): </div>
         <div caption>
           <div class="scroll-area">
-            {{ dump(task.context?.function?.arguments) }}
+            {{ dump(task.configuration?.function?.arguments) }}
           </div>
         </div>
       </div>

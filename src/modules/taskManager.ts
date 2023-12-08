@@ -178,7 +178,7 @@ export async function getFile(uuid: string, taskManager: TaskManager) {
 export function findAllFilesInTasks(taskList: LLMTask[]): string[] {
   const fileSet = new Set<string>();
   taskList.forEach((task) => {
-    (task.context?.uploadedFiles || []).forEach((file) => fileSet.add(file));
+    (task.configuration?.uploadedFiles || []).forEach((file) => fileSet.add(file));
   });
   return Array.from(fileSet);
 }
@@ -203,7 +203,7 @@ export async function addTask2Tree(
     debugging: task.debugging || {},
     id: uuid,
     created_at: Date.now(),
-    context: task.context,
+    configuration: task.configuration,
     allowedTools: task.allowedTools || parent?.allowedTools,
   };
 

@@ -13,7 +13,7 @@
           <q-expansion-item
             dense
             icon="calculate"
-            :label="task.context?.function?.name"
+            :label="task.configuration?.function?.name"
             :header-class="task.state == 'Error' ? 'text-red' : 'text-green'"
           >
             <ToolResultWidget :task="task" />

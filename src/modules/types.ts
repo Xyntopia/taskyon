@@ -131,7 +131,7 @@ export type FunctionCall = z.infer<typeof FunctionCall>;
   role: 'system' | 'user' | 'assistant' | 'function';
   content: string | null;
   state: TaskState;
-  context?: {
+  configuration?: {
     message?: OpenAIMessage;
     function?: FunctionCall;
     model?: string;
@@ -172,7 +172,7 @@ export const LLMTask = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   content: z.string().nullable(),
   state: TaskState,
-  context: z
+  configuration: z
     .object({
       message: OpenAIMessage.optional(),
       function: FunctionCall.optional(),
@@ -216,7 +216,7 @@ export type LLMTask = z.infer<typeof LLMTask>;
 export type partialTaskDraft = {
   role: LLMTask['role'];
   content?: LLMTask['content'];
-  context?: LLMTask['context'];
+  configuration?: LLMTask['configuration'];
   state?: LLMTask['state'];
   allowedTools?: LLMTask['allowedTools'];
   debugging?: LLMTask['debugging'];

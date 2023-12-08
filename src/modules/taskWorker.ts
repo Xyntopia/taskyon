@@ -80,11 +80,11 @@ export async function processChatTask(
       };
     }
   } else {
-    const api = getApiConfigCopy(chatState, task.context?.chatApi);
+    const api = getApiConfigCopy(chatState, task.configuration?.chatApi);
     if (!api) {
       throw new Error(`api doesn\'t exist! ${chatState.selectedApi}`);
     }
-    const selectedModel = task.context?.model;
+    const selectedModel = task.configuration?.model;
     if (selectedModel) {
       api.defaultModel = selectedModel;
       console.log('execute chat task!', task);
@@ -177,8 +177,8 @@ export async function processChatTask(
 }
 
 export async function processFunctionTask(task: LLMTask) {
-  if (task.context?.function) {
-    const func = task.context.function;
+  if (task.configuration?.function) {
+    const func = task.configuration.function;
     console.log(`Calling function ${func.name}`);
     if (tools[func.name]) {
       const result = await handleFunctionExecution(func, tools);
@@ -239,7 +239,7 @@ async function parseChatResponse(
         taskDraft: {
           role: 'function',
           content: null,
-          context: {
+          configuration: {
             function: {
               name: toolChatResult.data.toolCommand.name,
               arguments: toolChatResult.data.toolCommand.args,
@@ -317,7 +317,7 @@ async function generateFollowUpTasksFromResult(
           taskDraftList.push({
             role: 'function',
             content: null,
-            context: { function: functionCall[0] },
+            configuration: { function: functionCall[0] },
           });
           execute = true;
         }

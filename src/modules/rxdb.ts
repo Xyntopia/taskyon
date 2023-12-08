@@ -42,8 +42,8 @@ const llmTaskSchemaLiteral = {
         'Cancelled',
       ],
     },
-    context: {
-      type: 'string', // Storing context as a JSON string
+    configuration: {
+      type: 'string', // Storing configuration as a JSON string
     },
     parentID: {
       type: ['string', 'null'],
@@ -156,7 +156,7 @@ export function transformLLMTaskToDocType(llmTask: LLMTask): LLMTaskDocType {
   const nonReactiveLLMTask = JSON.parse(JSON.stringify(llmTask)) as LLMTask;
   return {
     ...nonReactiveLLMTask,
-    context: llmTask.context ? JSON.stringify(llmTask.context) : undefined,
+    configuration: llmTask.configuration ? JSON.stringify(llmTask.configuration) : undefined,
     debugging: llmTask.debugging
       ? JSON.stringify(llmTask.debugging)
       : undefined,
@@ -172,14 +172,14 @@ export function transformDocToLLMTask(
 
   const parsedDoc = JSON.parse(jsonString) as Record<string, unknown>;
 
-  // Safely parse the debugging, context, and result fields
+  // Safely parse the debugging, configuration, and result fields
   const parsedDebugging =
     typeof parsedDoc.debugging === 'string'
       ? (JSON.parse(parsedDoc.debugging) as Record<string, unknown>)
       : {};
-  const parsedContext =
-    typeof parsedDoc.context === 'string'
-      ? (JSON.parse(parsedDoc.context) as Record<string, unknown>)
+  const parsedConfiguration =
+    typeof parsedDoc.configuration === 'string'
+      ? (JSON.parse(parsedDoc.configuration) as Record<string, unknown>)
       : undefined;
   const parsedResult =
     typeof parsedDoc.result === 'string'
@@ -190,7 +190,7 @@ export function transformDocToLLMTask(
   const tmpObj = {
     ...parsedDoc,
     debugging: parsedDebugging,
-    context: parsedContext,
+    configuration: parsedConfiguration,
     result: parsedResult,
   };
   const llmTask = LLMTask.parse(tmpObj);

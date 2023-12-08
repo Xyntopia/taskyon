@@ -433,14 +433,14 @@ async function buildChatFromTask(
       const t = await getTask(mId);
       let message: OpenAI.ChatCompletionMessageParam | undefined = undefined;
       if (t) {
-        if (t.role === 'function' && t?.context?.function?.name) {
+        if (t.role === 'function' && t?.configuration?.function?.name) {
           message = {
             role: t.role,
             content: t.content,
-            name: t.context?.function?.name,
+            name: t.configuration?.function?.name,
           };
           const functionContent = dump({
-            arguments: t.context?.function?.arguments,
+            arguments: t.configuration?.function?.arguments,
             ...t.result?.toolResult,
           });
           message.content = functionContent;
@@ -710,7 +710,7 @@ function convertTasksToOpenAIThread(
   return taskList.map((task) => ({
     role: 'user',
     content: task.content || '',
-    file_ids: (task.context?.uploadedFiles || [])
+    file_ids: (task.configuration?.uploadedFiles || [])
       .map((file) => fileMappings[file])
       .filter((id) => id !== undefined),
   }));

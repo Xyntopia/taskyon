@@ -59,8 +59,8 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
   );
 
   function setDraftFunctionArgs(newValue: FunctionArguments) {
-    if (stateRefs.taskDraft.value.context?.function) {
-      stateRefs.taskDraft.value.context.function.arguments = newValue;
+    if (stateRefs.taskDraft.value.configuration?.function) {
+      stateRefs.taskDraft.value.configuration.function.arguments = newValue;
     }
   }
 

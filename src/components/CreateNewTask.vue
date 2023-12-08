@@ -74,7 +74,7 @@
       </div>
       <div v-if="selectedTaskType">
         <ObjectTreeView
-          :model-value="state.taskDraft.context?.function?.arguments"
+          :model-value="state.taskDraft.configuration?.function?.arguments"
           :on-update:model-value="(value) => state.setDraftFunctionArgs(value)"
           input-field-behavior="textarea"
           :separate-labels="false"
@@ -240,7 +240,7 @@ const currentDefaultBotName = computed(() => {
     }
   }
   const modelName =
-    state.taskDraft.context?.model ||
+    state.taskDraft.configuration?.model ||
     getApiConfig(state.chatState)?.defaultModel;
   return modelName;
 });
@@ -276,7 +276,7 @@ const handleBotNameUpdate = ({
 };
 
 const selectedTaskType = computed(() => {
-  return state.taskDraft.context?.function?.name;
+  return state.taskDraft.configuration?.function?.name;
 });
 
 function setTaskType(tasktype: string | undefined) {
@@ -289,7 +289,7 @@ function setTaskType(tasktype: string | undefined) {
       ...(defaultParams || {}),
       ...(savedParams || {}),
     };
-    state.taskDraft.context = {
+    state.taskDraft.configuration = {
       function: {
         name: tasktype,
         arguments: funcArguments,
@@ -297,7 +297,7 @@ function setTaskType(tasktype: string | undefined) {
     };
   } else {
     state.taskDraft.role = 'user';
-    delete state.taskDraft.context;
+    delete state.taskDraft.configuration;
   }
 }
 
@@ -326,8 +326,8 @@ const currentnewTask = computed(() => {
     task.role = 'function';
     task.content = null;
   } else {
-    task.context = {
-      ...task.context,
+    task.configuration = {
+      ...task.configuration,
       model: currentModel.value,
       chatApi: currentChatApi.value,
     };
@@ -374,21 +374,21 @@ async function attachFileToTask(newFiles: File[]) {
     uuids.push(uuid);
   }
 
-  // Ensure 'context' and 'uploadedFiles' are initialized in 'state.taskDraft'
-  state.taskDraft.context = state.taskDraft.context || {};
-  state.taskDraft.context.uploadedFiles =
-    state.taskDraft.context.uploadedFiles || [];
+  // Ensure '.configuration' and 'uploadedFiles' are initialized in 'state.taskDraft'
+  state.taskDraft.configuration = state.taskDraft.configuration || {};
+  state.taskDraft.configuration.uploadedFiles =
+    state.taskDraft.configuration.uploadedFiles || [];
 
   // Append the UUIDs to 'uploadedFiles'
-  state.taskDraft.context.uploadedFiles.push(...uuids);
+  state.taskDraft.configuration.uploadedFiles.push(...uuids);
 }
 
 function removeFileFromTask(fileName: string) {
   console.log('delete file from task:', fileName);
-  const fileIndex = state.taskDraft.context?.uploadedFiles?.indexOf(fileName);
+  const fileIndex = state.taskDraft.configuration?.uploadedFiles?.indexOf(fileName);
   if (fileIndex != undefined) {
     if (fileIndex > -1) {
-      state.taskDraft.context?.uploadedFiles?.splice(fileIndex, 1);
+      state.taskDraft.configuration?.uploadedFiles?.splice(fileIndex, 1);
     }
   }
 }
@@ -425,11 +425,11 @@ async function updateFileMappings(newUploadedFiles: string[] | undefined) {
   fileMappings.value = newMappings;
 }
 
-void updateFileMappings(state.taskDraft.context?.uploadedFiles);
+void updateFileMappings(state.taskDraft.configuration?.uploadedFiles);
 
 // Watcher to update file mappings when uploaded files change
 watch(
-  () => state.taskDraft.context?.uploadedFiles, // reactive source
+  () => state.taskDraft.configuration?.uploadedFiles, // reactive source
   (newUploadedFiles) => updateFileMappings(newUploadedFiles),
   {
     deep: true, // Use this if the watched source is an object/array
