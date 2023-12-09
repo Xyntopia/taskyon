@@ -31,13 +31,13 @@
         <Settings></Settings>
       </q-tab-panel>
       <q-tab-panel name="instructions">
-        <ObjectTreeView v-model="chatState.taskChatTemplates.value" />
+        <ObjectTreeView :model-value="state.chatState.taskChatTemplates" />
       </q-tab-panel>
       <q-tab-panel name="agent config">
-        <ObjectTreeView v-model="chatState" />
+        <ObjectTreeView :model-value="state.chatState" />
       </q-tab-panel>
       <q-tab-panel name="app config">
-        <ObjectTreeView v-model="appConfiguration" />
+        <ObjectTreeView :model-value="state.appConfiguration" />
       </q-tab-panel>
     </q-tab-panels>
   </q-page>
@@ -45,7 +45,7 @@
 
 <script setup lang="ts">
 import { exportFile, extend } from 'quasar';
-import { toRefs, ref } from 'vue';
+import { ref } from 'vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import Settings from 'components/Settings.vue';
 import ObjectTreeView from 'components/ObjectTreeView.vue';
@@ -53,9 +53,6 @@ import yaml from 'js-yaml';
 
 const tab = ref('settings'); // Default to the first tab
 const state = useTaskyonStore();
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const chatState = toRefs(state.chatState);
-const appConfiguration = toRefs(state.appConfiguration);
 
 const downloadSettings = (format: string) => {
   console.log('download settings');

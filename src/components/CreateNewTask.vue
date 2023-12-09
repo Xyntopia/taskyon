@@ -75,7 +75,6 @@
       <div v-if="selectedTaskType">
         <ObjectTreeView
           :model-value="state.taskDraft.configuration?.function?.arguments"
-          :on-update:model-value="(value) => state.setDraftFunctionArgs(value)"
           input-field-behavior="textarea"
           :separate-labels="false"
         />
@@ -384,7 +383,8 @@ async function attachFileToTask(newFiles: File[]) {
 
 function removeFileFromTask(fileName: string) {
   console.log('delete file from task:', fileName);
-  const fileIndex = state.taskDraft.configuration?.uploadedFiles?.indexOf(fileName);
+  const fileIndex =
+    state.taskDraft.configuration?.uploadedFiles?.indexOf(fileName);
   if (fileIndex != undefined) {
     if (fileIndex > -1) {
       state.taskDraft.configuration?.uploadedFiles?.splice(fileIndex, 1);

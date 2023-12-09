@@ -52,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, PropType } from 'vue';
+import { computed, toRefs, PropType } from 'vue';
 import { QTreeNode } from 'quasar';
 
 const props = defineProps({
@@ -74,32 +74,8 @@ const props = defineProps({
   },
 });
 
-// Initialize the reactive tree object with the modelValue
-const treeObject = ref<Record<string, unknown> | undefined>({
-  ...props.modelValue,
-});
-//const treeObject = toRef(props.modelValue, 'tmp');
-
-watch(
-  () => props.modelValue,
-  (newValue) => {
-    treeObject.value = newValue;
-  },
-  { deep: true }
-);
-
-const emit = defineEmits(['update:modelValue']);
-
-// Watch for changes in treeObject and emit the update event
-watch(
-  () => treeObject,
-  (newValue) => {
-    void nextTick(() => {
-      emit('update:modelValue', newValue);
-    });
-  },
-  { deep: true }
-);
+const { modelValue } = toRefs(props);
+const treeObject = modelValue;
 
 const updateValue = (keyPath: string[], value: unknown) => {
   if (treeObject.value) {
