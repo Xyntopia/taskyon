@@ -11,15 +11,17 @@ import { getRxStorageDexie, RxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import type { RxStorageMemory } from 'rxdb/plugins/storage-memory';
 import { addRxPlugin } from 'rxdb';
 import { RxDBJsonDumpPlugin } from 'rxdb/plugins/json-dump';
+import { RxDBMigrationPlugin } from 'rxdb/plugins/migration';
 import { LLMTask } from './types';
 // TOOD: remove at some point in the future...
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
 addRxPlugin(RxDBDevModePlugin);
 addRxPlugin(RxDBJsonDumpPlugin);
+addRxPlugin(RxDBMigrationPlugin);
 
 const llmTaskSchemaLiteral = {
   title: 'LLMTask schema',
-  version: 0.1,
+  version: 1,
   type: 'object',
   primaryKey: 'id',
   properties: {
@@ -95,7 +97,7 @@ export const llmTaskSchema: RxJsonSchema<LLMTaskDocType> = llmTaskSchemaLiteral;
 
 const fileMappingSchemaLiteral = {
   title: 'FileMapping schema',
-  version: 0.1,
+  version: 1,
   type: 'object',
   primaryKey: 'uuid',
   properties: {
@@ -148,8 +150,26 @@ export async function createTaskyonDatabase(
     });
 
   await db.addCollections({
-    llmtasks: { schema: llmTaskSchema },
-    filemappings: { schema: fileMappingSchema },
+    llmtasks: {
+      schema: llmTaskSchema,
+      autoMigrate: true, // <- migration will not run at creation
+      migrationStrategies: {
+        // 1 means, this transforms data from version 0 to version 1
+        1: function (oldDoc) {
+          return null;
+        },
+      },
+    },
+    filemappings: {
+      schema: fileMappingSchema,
+      autoMigrate: true, // <- migration will not run at creation
+      migrationStrategies: {
+        // 1 means, this transforms data from version 0 to version 1
+        1: function (oldDoc) {
+          return null;
+        },
+      },
+    },
   });
 
   return db;

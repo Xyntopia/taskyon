@@ -33,6 +33,20 @@
           >
           </q-btn>
         </q-toolbar-title>
+        <q-btn
+          v-if="errors.length > 0"
+          flat
+          dense
+          round
+          color="warning"
+          icon="warning"
+          to="diagnostics"
+        >
+          <q-tooltip
+            >There was problem with taskyon!, click here to find out
+            more..</q-tooltip
+          >
+        </q-btn>
         <q-btn flat dense round icon="settings" to="settings">
           <q-tooltip>Open settings</q-tooltip>
         </q-btn>
@@ -151,6 +165,7 @@
 <script setup lang="ts">
 import ChatSidebar from 'components/ChatSidebar.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
+import { errors } from 'src/modules/utils';
 
 const state = useTaskyonStore();
 </script>
