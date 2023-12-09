@@ -320,3 +320,9 @@ export function deepCopy<T>(item: T): T {
   // If item is of a type not handled above, return it as is
   return item;
 }
+
+export const errors: string[] = [];
+
+export function logError(message: string) {
+  errors.push(message);
+}

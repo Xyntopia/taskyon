@@ -15,6 +15,10 @@ const routes: RouteRecordRaw[] = [
         component: () => import('pages/Settings.vue'),
       },
       {
+        path: 'diagnostics',
+        component: () => import('pages/Diagnostics.vue'),
+      },
+      {
         path: 'uploader',
         component: () => import('components/VecStoreUploader.vue'),
       },
