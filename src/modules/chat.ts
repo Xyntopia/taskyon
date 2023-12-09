@@ -765,7 +765,7 @@ export async function getOpenAIAssistantResponse(
     }
 
     // Update file mapping database
-    await taskManager.getFileDB().bulkUpsert(currentTaskListfileMappings);
+    await taskManager.bulkUpsertFiles(currentTaskListfileMappings)
 
     // Finally, Convert task list to OpenAI thread messages
     const openAIConversationThread = convertTasksToOpenAIThread(

@@ -142,8 +142,8 @@ export async function addFile(
     fileMapping.openAIFileId = openAIFileId;
   }
 
-  const fileMappingDoc = await taskManager.getFileDB().insert(fileMapping);
-  return fileMappingDoc.uuid;
+  await taskManager.addFile(fileMapping);
+  return fileMapping.uuid;
 }
 
 export async function getFileMappingByUuid(
@@ -151,7 +151,7 @@ export async function getFileMappingByUuid(
   taskManager: TaskManager
 ): Promise<FileMappingDocType | null> {
   // Find the document with the matching UUID
-  const fileMappingDoc = await taskManager.getFileDB().findOne(uuid).exec();
+  const fileMappingDoc = await taskManager.getFileMappingByUuid(uuid);
 
   // Check if the document exists
   if (!fileMappingDoc) {
@@ -178,7 +178,9 @@ export async function getFile(uuid: string, taskManager: TaskManager) {
 export function findAllFilesInTasks(taskList: LLMTask[]): string[] {
   const fileSet = new Set<string>();
   taskList.forEach((task) => {
-    (task.configuration?.uploadedFiles || []).forEach((file) => fileSet.add(file));
+    (task.configuration?.uploadedFiles || []).forEach((file) =>
+      fileSet.add(file)
+    );
   });
   return Array.from(fileSet);
 }
@@ -231,7 +233,7 @@ export class TaskManager {
   // uses RxDB as a DB backend..
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
-  private taskyonDB: TaskyonDatabase;
+  private taskyonDB: TaskyonDatabase | undefined;
   private tasks: Map<string, LLMTask>;
   // we need these locks in order to sync our databases..
   private taskLocks: Map<string, Lock> = new Map();
@@ -240,7 +242,7 @@ export class TaskManager {
     (task?: LLMTask, taskNum?: number) => void
   > = [];
 
-  constructor(tasks: TaskManager['tasks'], taskyonDB: TaskyonDatabase) {
+  constructor(tasks: TaskManager['tasks'], taskyonDB?: TaskyonDatabase) {
     this.tasks = tasks;
     this.taskyonDB = taskyonDB;
     void this.initializeTasksFromDB();
@@ -262,23 +264,21 @@ export class TaskManager {
   }
 
   async initializeTasksFromDB() {
-    const tasksFromDb = await this.taskyonDB.llmtasks.find().exec();
-    tasksFromDb.forEach((taskDoc) => {
-      const task = transformDocToLLMTask(taskDoc);
-      this.tasks.set(task.id, task);
-    });
-    console.log('all tasks loaded from DB!');
-    this.notifySubscribers(undefined, true);
-  }
-
-  getFileDB() {
-    return this.taskyonDB.filemappings;
+    if (this.taskyonDB) {
+      const tasksFromDb = await this.taskyonDB.llmtasks.find().exec();
+      tasksFromDb.forEach((taskDoc) => {
+        const task = transformDocToLLMTask(taskDoc);
+        this.tasks.set(task.id, task);
+      });
+      console.log('all tasks loaded from DB!');
+      this.notifySubscribers(undefined, true);
+    }
   }
 
   private async unblockedGetTask(taskId: string): Promise<LLMTask | undefined> {
     // Check if the task exists in the local record
     let task = this.tasks.get(taskId);
-    if (!task) {
+    if (!task && this.taskyonDB) {
       // If not, load from the database
       const taskFromDb = await this.taskyonDB.llmtasks.findOne(taskId).exec();
       if (taskFromDb) {
@@ -328,9 +328,33 @@ export class TaskManager {
   private async saveTask(taskId: string): Promise<void> {
     const task = this.tasks.get(taskId);
     console.log('save task: ', task);
-    if (task) {
+    if (task && this.taskyonDB) {
       const newDBTask = transformLLMTaskToDocType(task);
       await this.taskyonDB.llmtasks.upsert(newDBTask);
+    }
+  }
+
+  async addFile(fileMapping: FileMappingDocType) {
+    if (this.taskyonDB) {
+      const fileMappingDoc = await this.taskyonDB.filemappings.insert(
+        fileMapping
+      );
+      return fileMappingDoc?.uuid;
+    }
+  }
+
+  async bulkUpsertFiles(filemappings: FileMappingDocType[]) {
+    if (this.taskyonDB) {
+      await this.taskyonDB.filemappings.bulkUpsert(filemappings);
+    }
+  }
+
+  async getFileMappingByUuid(uuid: string) {
+    if (this.taskyonDB) {
+      const fileMappingDoc = await this.taskyonDB.filemappings
+        .findOne(uuid)
+        .exec();
+      return fileMappingDoc;
     }
   }
 
@@ -341,9 +365,11 @@ export class TaskManager {
     this.tasks.delete(taskId);
 
     // Delete from the database
-    const taskDoc = await this.taskyonDB.llmtasks.findOne(taskId).exec();
-    if (taskDoc) {
-      await taskDoc.remove();
+    if (this.taskyonDB) {
+      const taskDoc = await this.taskyonDB.llmtasks.findOne(taskId).exec();
+      if (taskDoc) {
+        await taskDoc.remove();
+      }
     }
     console.log('done deleting task:', taskId);
     this.notifySubscribers(taskId, true);

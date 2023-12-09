@@ -12,17 +12,21 @@ import type { RxStorageMemory } from 'rxdb/plugins/storage-memory';
 import { addRxPlugin } from 'rxdb';
 import { RxDBJsonDumpPlugin } from 'rxdb/plugins/json-dump';
 import { LLMTask } from './types';
+// TOOD: remove at some point in the future...
+import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
+addRxPlugin(RxDBDevModePlugin);
 addRxPlugin(RxDBJsonDumpPlugin);
 
 const llmTaskSchemaLiteral = {
   title: 'LLMTask schema',
-  version: 0,
+  version: 0.1,
   type: 'object',
   primaryKey: 'id',
   properties: {
     id: {
       type: 'string',
       primary: true,
+      maxLength: 128, // <- the primary key must have set maxLength
     },
     role: {
       type: 'string',
@@ -91,11 +95,11 @@ export const llmTaskSchema: RxJsonSchema<LLMTaskDocType> = llmTaskSchemaLiteral;
 
 const fileMappingSchemaLiteral = {
   title: 'FileMapping schema',
-  version: 0,
+  version: 0.1,
   type: 'object',
   primaryKey: 'uuid',
   properties: {
-    uuid: { type: 'string' },
+    uuid: { type: 'string', maxLength: 128 },
     opfs: { type: 'string' },
     openAIFileId: { type: 'string' },
     fileData: { type: 'string' },
@@ -156,7 +160,9 @@ export function transformLLMTaskToDocType(llmTask: LLMTask): LLMTaskDocType {
   const nonReactiveLLMTask = JSON.parse(JSON.stringify(llmTask)) as LLMTask;
   return {
     ...nonReactiveLLMTask,
-    configuration: llmTask.configuration ? JSON.stringify(llmTask.configuration) : undefined,
+    configuration: llmTask.configuration
+      ? JSON.stringify(llmTask.configuration)
+      : undefined,
     debugging: llmTask.debugging
       ? JSON.stringify(llmTask.debugging)
       : undefined,

@@ -2,7 +2,7 @@ import { boot } from 'quasar/wrappers';
 import { reactive } from 'vue';
 import { TaskManager } from 'src/modules/taskManager';
 import { LLMTask } from 'src/modules/types';
-import { createTaskyonDatabase } from 'src/modules/rxdb';
+import { createTaskyonDatabase, TaskyonDatabase } from 'src/modules/rxdb';
 import { run } from 'src/modules/taskWorker';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 
@@ -15,9 +15,17 @@ export async function getTaskManager() {
     // we are creating a reactive map for our memory-based task databae
     // this ensures, that we receive upates for our task in our UI.
     const TaskList = reactive<Map<string, LLMTask>>(new Map());
-    const taskyonDBInstance = await createTaskyonDatabase('taskyondb');
+    console.log('initializing taskyondb');
+    let taskyonDBInstance: TaskyonDatabase | undefined = undefined;
+    try {
+      taskyonDBInstance = await createTaskyonDatabase('taskyondb');
+    } catch (err) {
+      console.log('could not initialize taskyonDB', err);
+    }
+    console.log('initializing task manager');
     taskManagerInstance = new TaskManager(TaskList, taskyonDBInstance);
   }
+  console.log('finished initialization');
   return taskManagerInstance;
 }
 
@@ -29,5 +37,6 @@ export default boot(async (/* { app, router, ... } */) => {
 
   // keys are reactive here, so in theory, when they change, taskyon should automatically
   // pick up on this...
+  console.log('starting taskyon worker');
   void run(state.chatState, taskManagerRef, state.keys);
 });
