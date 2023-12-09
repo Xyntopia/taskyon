@@ -6,6 +6,7 @@
           {{ prop.node.label }}:
         </div>
         <q-input
+          :disable="disableEdit"
           class="col"
           filled
           :label="prop.node.label"
@@ -24,6 +25,7 @@
           {{ prop.node.label }}:
         </div>
         <q-input
+          :disable="disableEdit"
           class="col"
           style="min-width: 200px"
           :label="prop.node.label"
@@ -39,6 +41,7 @@
     </template>
     <template v-slot:header-boolean="prop">
       <q-toggle
+        :disable="disableEdit"
         style="min-width: 200px"
         :label="prop.node.label"
         left-label
@@ -56,6 +59,10 @@ import { computed, toRefs, PropType } from 'vue';
 import { QTreeNode } from 'quasar';
 
 const props = defineProps({
+  disableEdit: {
+    type: Boolean,
+    default: false,
+  },
   modelValue: {
     type: Object as PropType<Record<string, unknown> | undefined>,
     required: true,
