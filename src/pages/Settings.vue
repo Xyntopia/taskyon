@@ -19,7 +19,8 @@
     <q-tabs v-model="tab" align="justify">
       <q-tab name="settings" label="Settings" />
       <q-tab name="instructions" label="Instructions" />
-      <q-tab name="configuration" label="Agent Configuration" />
+      <q-tab name="agent config" label="Agent Configuration" />
+      <q-tab name="app config" label="App Configuration" />
     </q-tabs>
     <q-tab-panels
       v-model="tab"
@@ -30,10 +31,13 @@
         <Settings></Settings>
       </q-tab-panel>
       <q-tab-panel name="instructions">
-        <ObjectTreeView v-model="chatStateProperties.taskChatTemplates.value" />
+        <ObjectTreeView v-model="chatState.taskChatTemplates.value" />
       </q-tab-panel>
-      <q-tab-panel name="configuration">
-        <ObjectTreeView v-model="chatStateProperties" />
+      <q-tab-panel name="agent config">
+        <ObjectTreeView v-model="chatState" />
+      </q-tab-panel>
+      <q-tab-panel name="app config">
+        <ObjectTreeView v-model="appConfiguration" />
       </q-tab-panel>
     </q-tab-panels>
   </q-page>
@@ -50,14 +54,15 @@ import yaml from 'js-yaml';
 const tab = ref('settings'); // Default to the first tab
 const state = useTaskyonStore();
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const { chatState, ...allSettings } = state;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const chatStateProperties = toRefs(state.chatState);
+const chatState = toRefs(state.chatState);
+const appConfiguration = toRefs(state.appConfiguration);
 
 const downloadSettings = (format: string) => {
   console.log('download settings');
+  //relevant settings:
+  const { chatState, appConfiguration } = state;
   // Convert reactive chatStateProperties to a raw object
-  const deepCopiedSettings = extend(true, {}, state.chatState);
+  const deepCopiedSettings = extend(true, {}, { appConfiguration, chatState });
 
   let fileName, fileContent, mimeType;
 

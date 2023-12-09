@@ -14,6 +14,7 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
     appConfiguration: {
       supabase_url: '',
       supabase_anon_key: '',
+      appConfigurationUrl: '/taskyon_settings.json', // URL from which to load the initial app configuration
       expertMode: false,
       showCosts: false,
     },
@@ -22,7 +23,6 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
       keys[api.name] = '';
       return keys;
     }, {} as Record<string, string>),
-    appConfigurationUrl: '', // URL from which to load the app
     // app State which should be part of the configuration
     modelDetails: false,
     expandedTaskCreation: false,
