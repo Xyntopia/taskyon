@@ -17,6 +17,7 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
       appConfigurationUrl: '/taskyon_settings.json', // URL from which to load the initial app configuration
       expertMode: false,
       showCosts: false,
+      gdriveDir: 'taskyon',
     },
     // initialize keys with all available apis...
     keys: llmSettings.llmApis.reduce((keys, api) => {
