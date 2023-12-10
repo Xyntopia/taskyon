@@ -60,7 +60,7 @@ import yaml from 'js-yaml';
 import { login } from 'src/modules/gdrive';
 
 const tab = ref('settings'); // Default to the first tab
-export const state = useTaskyonStore();
+const state = useTaskyonStore();
 
 const downloadSettings = (format: string) => {
   console.log('download settings');
