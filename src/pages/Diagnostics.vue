@@ -8,5 +8,5 @@
 </template>
 
 <script setup lang="ts">
-import { errors } from 'src/modules/utils';
+import { errors } from 'boot/taskyon';
 </script>
