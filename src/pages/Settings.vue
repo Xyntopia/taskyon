@@ -16,15 +16,10 @@
         class="q-ma-md"
       ></q-btn>
     </div>
-    <div>
+    <div class="q-pa-md q-gutter-sm">
       Export app & settings to gdrive:
-      <GoogleLogin
-        clientId="14927198496-1flnp4qo0e91phctnjsfrci5ce0rp91s.apps.googleusercontent.com"
-        :callback="callback"
-        popup-type="TOKEN"
-      >
-        <q-btn>Login Using Google</q-btn>
-      </GoogleLogin>
+      <q-icon size="md" name="mdi-google-drive" />
+      <q-btn label="grant access" @click="login"></q-btn>
       <q-btn label="sync settings to gdrive" icon="sync" @click="onSyncGdrive">
       </q-btn>
     </div>
@@ -62,18 +57,29 @@ import { useTaskyonStore } from 'stores/taskyonState';
 import Settings from 'components/Settings.vue';
 import ObjectTreeView from 'components/ObjectTreeView.vue';
 import yaml from 'js-yaml';
-import { GoogleLogin } from 'vue3-google-login';
-import type { CallbackTypes } from 'vue3-google-login';
 import axios from 'axios';
+import { googleSdkLoaded } from 'vue3-google-login';
 
 const accessToken = ref(''); // Store the access token
 const tab = ref('settings'); // Default to the first tab
 const state = useTaskyonStore();
+const clientId =
+  '14927198496-1flnp4qo0e91phctnjsfrci5ce0rp91s.apps.googleusercontent.com';
+const scope = 'https://www.googleapis.com/auth/drive.file';
 
-const callback: CallbackTypes.TokenResponseCallback = (response) => {
-  //access token will be used for access to gdrive :)
-  console.log('Access token', response.access_token);
-  accessToken.value = response.access_token; // Store the token for later use
+const login = () => {
+  googleSdkLoaded((google) => {
+    google.accounts.oauth2
+      .initTokenClient({
+        client_id: clientId,
+        scope: scope,
+        callback: (response) => {
+          console.log('Access token', response.access_token);
+          accessToken.value = response.access_token; // Store the token for later use
+        },
+      })
+      .requestAccessToken();
+  });
 };
 
 async function onSyncGdrive() {
