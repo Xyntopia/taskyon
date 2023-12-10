@@ -77,21 +77,43 @@ async function uploadFileToDrive(
     return;
   }
 
+  const fileInfo = await pushFile(
+    fileName,
+    mimeType,
+    directoryId,
+    file,
+    accessToken
+  );
+  return fileInfo;
+}
+
+async function pushFile(
+  fileName: string,
+  mimeType: string,
+  directoryId: string | undefined,
+  file: Blob | undefined,
+  accessToken: string
+) {
   const url =
     'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
   // Now, modify the metadata to include the parent directory
-  const metadata = {
+  const metadata: Record<string, unknown> = {
     name: fileName,
     mimeType: mimeType,
-    parents: [directoryId], // Set the parent directory
   };
+
+  if (directoryId) {
+    metadata.parents = [directoryId]; // Set the parent directory
+  }
 
   const formData = new FormData();
   formData.append(
     'metadata',
     new Blob([JSON.stringify(metadata)], { type: 'application/json' })
   );
-  formData.append('file', new Blob([file], { type: mimeType }));
+  if (file) {
+    formData.append('file', new Blob([file], { type: mimeType }));
+  }
 
   const headers = {
     Authorization: `Bearer ${accessToken}`,
@@ -157,28 +179,18 @@ async function findDirectoryId(directoryPath: string) {
 }
 
 async function createDirectory(directoryPath: string) {
-  console.log('create directory');
-  const url = 'https://www.googleapis.com/drive/v3/files';
-  const metadata = {
-    name: directoryPath,
-    mimeType: 'application/vnd.google-apps.folder',
-  };
-  const formData = new FormData();
-  formData.append(
-    'metadata',
-    new Blob([JSON.stringify(metadata)], { type: 'application/json' })
+  console.log('create directory using pushFile method');
+  const directoryMimeType = 'application/vnd.google-apps.folder';
+
+  // Call pushFile to create the directory
+  const directoryInfo = await pushFile(
+    directoryPath,
+    directoryMimeType,
+    undefined, // No parent directory ID as we are creating a new directory
+    undefined,
+    accessToken.value
   );
 
-  const headers = {
-    Authorization: `Bearer ${accessToken.value}`,
-    'Content-Type': 'multipart/related',
-  };
-
-  try {
-    const response = await axios.post(url, formData, { headers });
-    return (response.data as gDriveFile).id; // The ID of the newly created folder
-  } catch (error) {
-    console.error('Error creating directory:', error);
-    return null;
-  }
+  // Return the ID of the newly created directory
+  return directoryInfo ? directoryInfo.id : null;
 }
