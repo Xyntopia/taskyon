@@ -18,9 +18,9 @@
     </div>
     <div class="q-pa-md q-gutter-sm">
       Export app & settings to gdrive:
-      <q-icon size="md" name="mdi-google-drive" />
-      <q-btn label="grant access" @click="login"></q-btn>
-      <q-btn label="sync settings to gdrive" icon="sync" @click="onSyncGdrive">
+      <q-btn @click="login" color="primary">
+        <q-icon size="md" name="mdi-google-drive" />
+        <q-icon size="md" name="sync" />
       </q-btn>
     </div>
     <q-tabs v-model="tab" align="justify">
@@ -67,25 +67,37 @@ const clientId =
   '14927198496-1flnp4qo0e91phctnjsfrci5ce0rp91s.apps.googleusercontent.com';
 const scope = 'https://www.googleapis.com/auth/drive.file';
 
+let tokenClient:
+  | {
+      requestAccessToken: (
+        overridableClientConfig?: Record<string, unknown> | undefined
+      ) => void;
+    }
+  | undefined = undefined;
+
 const login = () => {
   googleSdkLoaded((google) => {
-    google.accounts.oauth2
-      .initTokenClient({
-        client_id: clientId,
-        scope: scope,
-        callback: (response) => {
-          console.log('Access token', response.access_token);
-          accessToken.value = response.access_token; // Store the token for later use
-        },
-      })
-      .requestAccessToken();
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: scope,
+      callback: (response) => {
+        console.log('Access token', response);
+        accessToken.value = response.access_token; // Store the token for later use
+      },
+    });
+
+    tokenClient.requestAccessToken();
   });
 };
 
 async function onSyncGdrive() {
   const jsonString = JSON.stringify(state.chatState.taskChatTemplates);
   const fileBlob = new Blob([jsonString], { type: 'application/json' });
-  await uploadFileToDrive(fileBlob, 'templates.json', 'application/json');
+  await uploadFileToDrive(
+    fileBlob,
+    state.appConfiguration.gdriveDir + '/templates.json',
+    'application/json'
+  );
 }
 
 async function uploadFileToDrive(
