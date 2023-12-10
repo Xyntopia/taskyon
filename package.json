@@ -41,7 +41,6 @@
     "babel-loader": "^9.1.3",
     "core-js": "^3.6.5",
     "dexie": "^3.2.4",
-    "googleapis": "^129.0.0",
     "hnsw": "^1.0.2",
     "hnswlib-wasm": "^0.7.0",
     "js-tiktoken": "^1.0.7",

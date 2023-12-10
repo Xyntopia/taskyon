@@ -25,6 +25,8 @@
       >
         <q-btn>Login Using Google</q-btn>
       </GoogleLogin>
+      <q-btn label="sync settings to gdrive" icon="sync" @click="onSyncGdrive">
+      </q-btn>
     </div>
     <q-tabs v-model="tab" align="justify">
       <q-tab name="settings" label="Settings" />
@@ -62,13 +64,55 @@ import ObjectTreeView from 'components/ObjectTreeView.vue';
 import yaml from 'js-yaml';
 import { GoogleLogin } from 'vue3-google-login';
 import type { CallbackTypes } from 'vue3-google-login';
+import axios from 'axios';
 
-const callback: CallbackTypes.TokenResponseCallback = (response) => {
-  console.log('Access token', response.access_token);
-};
-
+const accessToken = ref(''); // Store the access token
 const tab = ref('settings'); // Default to the first tab
 const state = useTaskyonStore();
+
+const callback: CallbackTypes.TokenResponseCallback = (response) => {
+  //access token will be used for access to gdrive :)
+  console.log('Access token', response.access_token);
+  accessToken.value = response.access_token; // Store the token for later use
+};
+
+async function onSyncGdrive() {
+  const jsonString = JSON.stringify(state.chatState.taskChatTemplates);
+  const fileBlob = new Blob([jsonString], { type: 'application/json' });
+  await uploadFileToDrive(fileBlob, 'templates.json', 'application/json');
+}
+
+async function uploadFileToDrive(
+  file: Blob,
+  fileName: string,
+  mimeType: string
+): Promise<void> {
+  const url =
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+  const metadata = {
+    name: fileName,
+    mimeType: mimeType,
+  };
+
+  const formData = new FormData();
+  formData.append(
+    'metadata',
+    new Blob([JSON.stringify(metadata)], { type: 'application/json' })
+  );
+  formData.append('file', new Blob([file], { type: mimeType }));
+
+  const headers = {
+    Authorization: `Bearer ${accessToken.value}`,
+    'Content-Type': 'multipart/related',
+  };
+
+  try {
+    const response = await axios.post(url, formData, { headers });
+    console.log('File uploaded, response:', response);
+  } catch (error) {
+    console.error('Error uploading file:', error);
+  }
+}
 
 const downloadSettings = (format: string) => {
   console.log('download settings');
