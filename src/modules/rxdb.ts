@@ -155,7 +155,8 @@ export async function createTaskyonDatabase(
       autoMigrate: true, // <- migration will not run at creation
       migrationStrategies: {
         // 1 means, this transforms data from version 0 to version 1
-        1: function (oldDoc) {
+        1: function (/*oldDoc*/) {
+          // for this version we simply discard everything from version 0
           return null;
         },
       },
@@ -164,8 +165,8 @@ export async function createTaskyonDatabase(
       schema: fileMappingSchema,
       autoMigrate: true, // <- migration will not run at creation
       migrationStrategies: {
-        // 1 means, this transforms data from version 0 to version 1
-        1: function (oldDoc) {
+        // for this version we simply discard everything from version 0
+        1: function (/*oldDoc*/) {
           return null;
         },
       },
