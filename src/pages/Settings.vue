@@ -16,6 +16,16 @@
         class="q-ma-md"
       ></q-btn>
     </div>
+    <div>
+      Export app & settings to gdrive:
+      <GoogleLogin
+        clientId="14927198496-1flnp4qo0e91phctnjsfrci5ce0rp91s.apps.googleusercontent.com"
+        :callback="callback"
+        popup-type="TOKEN"
+      >
+        <q-btn>Login Using Google</q-btn>
+      </GoogleLogin>
+    </div>
     <q-tabs v-model="tab" align="justify">
       <q-tab name="settings" label="Settings" />
       <q-tab name="instructions" label="Instructions" />
@@ -50,6 +60,12 @@ import { useTaskyonStore } from 'stores/taskyonState';
 import Settings from 'components/Settings.vue';
 import ObjectTreeView from 'components/ObjectTreeView.vue';
 import yaml from 'js-yaml';
+import { GoogleLogin } from 'vue3-google-login';
+import type { CallbackTypes } from 'vue3-google-login';
+
+const callback: CallbackTypes.TokenResponseCallback = (response) => {
+  console.log('Access token', response.access_token);
+};
 
 const tab = ref('settings'); // Default to the first tab
 const state = useTaskyonStore();
