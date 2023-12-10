@@ -165,7 +165,7 @@
 <script setup lang="ts">
 import ChatSidebar from 'components/ChatSidebar.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { errors } from 'src/modules/utils';
+import { errors } from 'boot/taskyon';
 
 const state = useTaskyonStore();
 </script>

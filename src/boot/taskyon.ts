@@ -5,10 +5,14 @@ import { LLMTask } from 'src/modules/types';
 import { createTaskyonDatabase, TaskyonDatabase } from 'src/modules/rxdb';
 import { run } from 'src/modules/taskWorker';
 import { useTaskyonStore } from 'src/stores/taskyonState';
-import { logError } from 'src/modules/utils';
 
 // Singleton holder for TaskManager
 let taskManagerInstance: TaskManager;
+export const errors: string[] = [];
+
+export function logError(message: string) {
+  errors.push(message);
+}
 
 // Function to get or create the TaskManager instance
 export async function getTaskManager() {
@@ -22,7 +26,9 @@ export async function getTaskManager() {
       taskyonDBInstance = await createTaskyonDatabase('taskyondb');
     } catch (err) {
       console.log('could not initialize taskyonDB', err);
-      logError(`could not initialize taskyonDB:\n ${JSON.stringify(err, null, 2)}`);
+      logError(
+        `could not initialize taskyonDB:\n ${JSON.stringify(err, null, 2)}`
+      );
     }
     console.log('initializing task manager');
     taskManagerInstance = new TaskManager(TaskList, taskyonDBInstance);

@@ -321,8 +321,21 @@ export function deepCopy<T>(item: T): T {
   return item;
 }
 
-export const errors: string[] = [];
 
-export function logError(message: string) {
-  errors.push(message);
+export function base64UrlEncode(str: string): string {
+  return Buffer.from(str)
+      .toString('base64')  // Convert to base64
+      .replace(/\+/g, '-') // Convert '+' to '-'
+      .replace(/\//g, '_') // Convert '/' to '_'
+      .replace(/=/g, '');  // Remove padding '='
+}
+
+export function base64UrlDecode(str: string): string {
+  // Add removed '=' padding back
+  str = str.padEnd(str.length + (4 - str.length % 4) % 4, '=');
+
+  // Convert URL-safe characters back to original
+  str = str.replace(/-/g, '+').replace(/_/g, '/');
+
+  return Buffer.from(str, 'base64').toString();
 }
