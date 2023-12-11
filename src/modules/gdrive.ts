@@ -79,7 +79,10 @@ export async function onSyncGdrive() {
   const validAccessToken = await getValidAccessToken();
   if (validAccessToken) {
     console.log('sync settings to gdrive');
-    const jsonString = JSON.stringify(state.chatState.taskChatTemplates);
+    const jsonString = JSON.stringify({
+      chatState: state.chatState,
+      appConfiguration: state.appConfiguration,
+    });
     const fileBlob = new Blob([jsonString], { type: 'application/json' });
     await uploadFileToDrive(
       fileBlob,
@@ -100,7 +103,7 @@ async function uploadFileToDrive(
 ) {
   console.log('uploading file!');
   // Prepend the directory path to the file name
-  const fullPath = state.appConfiguration.gdriveDir + '/' + fileName;
+  // const fullPath = state.appConfiguration.gdriveDir + '/' + fileName;
 
   // First, check if the directory exists, if not create it
   const directoryId = await ensureDirectoryExists(

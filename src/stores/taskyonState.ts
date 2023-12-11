@@ -10,6 +10,8 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
   const llmSettings = defaultLLMSettings();
 
   const initialState = {
+    // chatState & appConfiguration define the state of our app!
+    // the rest of the state if eithr secret (keys) or
     chatState: llmSettings,
     appConfiguration: {
       supabase_url: '',
