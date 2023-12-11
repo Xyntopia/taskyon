@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import axios from 'axios';
 import { googleSdkLoaded } from 'vue3-google-login';
 import { useTaskyonStore } from 'stores/taskyonState';
@@ -11,8 +11,10 @@ type gDriveFile = {
   name: string; //"taskyon/templates.json",
   mimeType: string; //"application/json"
 };
+
+const maxTokenAgeMinutes = 55;
 const accessToken = ref(''); // Store the access token
-const accessTokenAge = ref<number>(0);
+const tokenReceivedTime = ref(0); // Unix timestamp of when the token was received
 const clientId =
   '14927198496-1flnp4qo0e91phctnjsfrci5ce0rp91s.apps.googleusercontent.com';
 const scope = 'https://www.googleapis.com/auth/drive.file';
@@ -23,6 +25,25 @@ let tokenClient:
       ) => void;
     }
   | undefined = undefined;
+
+const isTokenExpired = computed(() => {
+  const currentTime = Math.floor(Date.now() / 1000); // Current Unix timestamp in seconds
+  const tokenAgeSeconds = currentTime - tokenReceivedTime.value;
+  return tokenAgeSeconds > maxTokenAgeMinutes * 60; // Convert minutes to seconds
+});
+
+function setTokenReceivedTime() {
+  tokenReceivedTime.value = Math.floor(Date.now() / 1000); // Set to current Unix timestamp
+}
+
+// Function to refresh the token if needed
+function refreshTokenIfNeeded() {
+  if (isTokenExpired.value && tokenClient) {
+    console.log('Token expired. Refreshing...');
+    tokenClient.requestAccessToken();
+  }
+}
+
 export function login() {
   console.log('get access token');
   if (accessToken.value) {
@@ -34,7 +55,8 @@ export function login() {
         scope: scope,
         callback: (response) => {
           console.log('Access token', response);
-          accessToken.value = response.access_token; // Store the token for later use
+          accessToken.value = response.access_token; // Store the token
+          setTokenReceivedTime(); // Set token received time
           void onSyncGdrive(accessToken.value);
         },
       });
@@ -46,6 +68,7 @@ export function login() {
 
 async function onSyncGdrive(accessToken: string) {
   console.log('sync settings to gdrive');
+  refreshTokenIfNeeded(); // Refresh token if needed
   const jsonString = JSON.stringify(state.chatState.taskChatTemplates);
   const fileBlob = new Blob([jsonString], { type: 'application/json' });
   await uploadFileToDrive(
