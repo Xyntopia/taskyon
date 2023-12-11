@@ -2,6 +2,7 @@ import { ref, computed } from 'vue';
 import axios from 'axios';
 import { googleSdkLoaded } from 'vue3-google-login';
 import { useTaskyonStore } from 'stores/taskyonState';
+import { sleep } from 'src/modules/utils';
 
 export const state = useTaskyonStore();
 
@@ -23,6 +24,9 @@ let tokenClient:
       requestAccessToken: (
         overridableClientConfig?: Record<string, unknown> | undefined
       ) => void;
+      callback:
+        | ((response: { access_token: string; error: unknown }) => void)
+        | undefined;
     }
   | undefined = undefined;
 
@@ -36,47 +40,56 @@ function setTokenReceivedTime() {
   tokenReceivedTime.value = Math.floor(Date.now() / 1000); // Set to current Unix timestamp
 }
 
-// Function to refresh the token if needed
-function refreshTokenIfNeeded() {
-  if (isTokenExpired.value && tokenClient) {
-    console.log('Token expired. Refreshing...');
-    tokenClient.requestAccessToken();
+googleSdkLoaded((google) => {
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: scope,
+  }) as typeof tokenClient;
+});
+
+async function getValidAccessToken() {
+  if (!accessToken.value || isTokenExpired.value) {
+    if (!tokenClient) {
+      console.error('Token client is not initialized.');
+      return null; // Return null to indicate failure
+    }
+
+    // Request a new token
+    tokenClient.callback = (response) => {
+      if (response.error) {
+        console.error('Error refreshing token:', response.error);
+        return;
+      }
+      accessToken.value = response.access_token; // Update the access token
+      setTokenReceivedTime(); // Update the token received time
+    };
+
+    tokenClient.requestAccessToken({ prompt: '' });
+
+    // Wait for the token to be refreshed
+    while (isTokenExpired.value) {
+      await sleep(1000); // Wait for 1 second before checking again
+    }
   }
+
+  return accessToken.value; // Return the valid access token
 }
 
-export function login() {
-  console.log('get access token');
-  if (accessToken.value) {
-    void onSyncGdrive(accessToken.value);
+export async function onSyncGdrive() {
+  const validAccessToken = await getValidAccessToken();
+  if (validAccessToken) {
+    console.log('sync settings to gdrive');
+    const jsonString = JSON.stringify(state.chatState.taskChatTemplates);
+    const fileBlob = new Blob([jsonString], { type: 'application/json' });
+    await uploadFileToDrive(
+      fileBlob,
+      state.appConfiguration.gdriveDir + '/templates.json',
+      'application/json',
+      validAccessToken
+    );
   } else {
-    googleSdkLoaded((google) => {
-      tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: scope,
-        callback: (response) => {
-          console.log('Access token', response);
-          accessToken.value = response.access_token; // Store the token
-          setTokenReceivedTime(); // Set token received time
-          void onSyncGdrive(accessToken.value);
-        },
-      });
-
-      tokenClient.requestAccessToken();
-    });
+    console.error('Failed to obtain a valid access token.');
   }
-}
-
-async function onSyncGdrive(accessToken: string) {
-  console.log('sync settings to gdrive');
-  refreshTokenIfNeeded(); // Refresh token if needed
-  const jsonString = JSON.stringify(state.chatState.taskChatTemplates);
-  const fileBlob = new Blob([jsonString], { type: 'application/json' });
-  await uploadFileToDrive(
-    fileBlob,
-    state.appConfiguration.gdriveDir + '/templates.json',
-    'application/json',
-    accessToken
-  );
 }
 
 async function uploadFileToDrive(
@@ -91,7 +104,8 @@ async function uploadFileToDrive(
 
   // First, check if the directory exists, if not create it
   const directoryId = await ensureDirectoryExists(
-    state.appConfiguration.gdriveDir
+    state.appConfiguration.gdriveDir,
+    accessToken
   );
 
   // If the directory doesn't exist or there was an error, don't proceed
@@ -156,16 +170,17 @@ async function pushFile(
 }
 
 async function ensureDirectoryExists(
-  directoryPath: string
+  directoryPath: string,
+  accessToken: string
 ): Promise<string | null> {
   console.log('ensure dir exists');
   try {
     // Search for the directory
-    let directoryId = await findDirectoryId(directoryPath);
+    let directoryId = await findDirectoryId(directoryPath, accessToken);
 
     // If directory is not found, create it
     if (!directoryId) {
-      directoryId = await createDirectory(directoryPath);
+      directoryId = await createDirectory(directoryPath, accessToken);
     }
 
     return directoryId;
@@ -175,11 +190,11 @@ async function ensureDirectoryExists(
   }
 }
 
-async function findDirectoryId(directoryPath: string) {
+async function findDirectoryId(directoryPath: string, accessToken: string) {
   console.log('get directory ID');
   const url = `https://www.googleapis.com/drive/v3/files?q=name='${directoryPath}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
   const headers = {
-    Authorization: `Bearer ${accessToken.value}`,
+    Authorization: `Bearer ${accessToken}`,
   };
 
   try {
@@ -201,7 +216,7 @@ async function findDirectoryId(directoryPath: string) {
   }
 }
 
-async function createDirectory(directoryPath: string) {
+async function createDirectory(directoryPath: string, accessToken: string) {
   console.log('create directory using pushFile method');
   const directoryMimeType = 'application/vnd.google-apps.folder';
 
@@ -211,7 +226,7 @@ async function createDirectory(directoryPath: string) {
     directoryMimeType,
     undefined, // No parent directory ID as we are creating a new directory
     undefined,
-    accessToken.value
+    accessToken
   );
 
   // Return the ID of the newly created directory

@@ -18,7 +18,7 @@
     </div>
     <div class="q-pa-md q-gutter-sm">
       Export app & settings to gdrive:
-      <q-btn @click="login" color="primary">
+      <q-btn @click="onSyncGdrive" color="primary">
         <q-icon size="md" name="mdi-google-drive" />
         <q-icon size="md" name="sync" />
       </q-btn>
@@ -57,7 +57,7 @@ import { useTaskyonStore } from 'stores/taskyonState';
 import Settings from 'components/Settings.vue';
 import ObjectTreeView from 'components/ObjectTreeView.vue';
 import yaml from 'js-yaml';
-import { login } from 'src/modules/gdrive';
+import { onSyncGdrive } from 'src/modules/gdrive';
 
 const tab = ref('settings'); // Default to the first tab
 const state = useTaskyonStore();
