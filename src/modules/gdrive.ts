@@ -2,7 +2,8 @@ import { ref, computed } from 'vue';
 import axios from 'axios';
 import { googleSdkLoaded } from 'vue3-google-login';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { deepMerge, deepMergeReactive, sleep } from 'src/modules/utils';
+import { deepMergeReactive, sleep } from 'src/modules/utils';
+import { asyncLruCache } from 'src/modules/utils';
 
 export const state = useTaskyonStore();
 
@@ -101,13 +102,11 @@ export async function onUpdateAppConfiguration() {
   if (validAccessToken) {
     console.log('update app setting from gdrive');
 
-    // Use the updated function to find the file ID by path and filename
-    const filePath = state.appConfiguration.gdriveDir + '/templates.json';
-    const fileId = await findFileOrDirectoryId(
-      filePath,
-      validAccessToken,
-      true
-    );
+    const fileId = await findFileOrDirectoryId({
+      accessToken: validAccessToken,
+      fileName: state.appConfiguration.gdriveConfigurationFile,
+      directory: state.appConfiguration.gdriveDir,
+    });
 
     if (fileId) {
       const file = await downloadFileFromDrive(fileId, validAccessToken);
@@ -139,27 +138,60 @@ async function uploadFileToDrive(
   mimeType: string,
   accessToken: string
 ) {
-  console.log('uploading file!');
-  // Prepend the directory path to the file name
-  // const fullPath = state.appConfiguration.gdriveDir + '/' + fileName;
+  console.log('Uploading or updating file');
 
-  // First, check if the directory exists, if not create it
+  // Check if the directory exists, if not, create it
   const directoryId = await ensureDirectoryExists(directory, accessToken);
-
-  // If the directory doesn't exist or there was an error, don't proceed
   if (!directoryId) {
     console.error('Error in creating or finding directory.');
     return;
   }
 
-  const fileInfo = await pushFile(
+  // Check if the file already exists
+  const existingFileId = await findFileOrDirectoryId({
     fileName,
-    mimeType,
-    directoryId,
-    file,
-    accessToken
+    accessToken,
+  });
+
+  // Update or create the file
+  if (existingFileId) {
+    console.log('File exists, updating it');
+    return await updateFile(existingFileId, file, mimeType, accessToken);
+  } else {
+    console.log('File does not exist, creating new file');
+    return await pushFile(fileName, mimeType, directoryId, file, accessToken);
+  }
+}
+
+async function updateFile(
+  fileId: string,
+  file: Blob,
+  mimeType: string,
+  accessToken: string
+) {
+  const url = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`;
+  const metadata = { mimeType: mimeType };
+
+  const formData = new FormData();
+  formData.append(
+    'metadata',
+    new Blob([JSON.stringify(metadata)], { type: 'application/json' })
   );
-  return fileInfo;
+  formData.append('file', new Blob([file], { type: mimeType }));
+
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'multipart/related',
+  };
+
+  try {
+    const response = await axios.patch<gDriveFile>(url, formData, { headers });
+    console.log('File updated, response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error updating file:', error);
+    return undefined;
+  }
 }
 
 async function pushFile(
@@ -197,8 +229,8 @@ async function pushFile(
 
   let uploadedfileData: gDriveFile | undefined = undefined;
   try {
-    const response = await axios.post(url, formData, { headers });
-    uploadedfileData = response.data as gDriveFile;
+    const response = await axios.post<gDriveFile>(url, formData, { headers });
+    uploadedfileData = response.data;
     console.log('File uploaded, response:', response);
   } catch (error) {
     console.error('Error uploading file:', error);
@@ -214,7 +246,10 @@ async function ensureDirectoryExists(
   console.log('ensure dir exists');
   try {
     // Search for the directory
-    let directoryId = await findFileOrDirectoryId(directoryPath, accessToken);
+    let directoryId = await findFileOrDirectoryId({
+      accessToken,
+      directory: directoryPath,
+    });
 
     // If directory is not found, create it
     if (!directoryId) {
@@ -228,35 +263,62 @@ async function ensureDirectoryExists(
   }
 }
 
-// Updated function to find both files and directories
-async function findFileOrDirectoryId(
-  path: string,
-  accessToken: string,
-  isFile = false
-) {
-  console.log('get file or directory ID');
-  const mimeTypeQuery = isFile
-    ? ''
-    : " and mimeType='application/vnd.google-apps.folder'";
-  const url = `https://www.googleapis.com/drive/v3/files?q=name='${path}'${mimeTypeQuery} and trashed=false`;
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-  };
+const findFileOrDirectoryId = asyncLruCache<string | null>(10)(
+  async ({
+    accessToken,
+    fileName,
+    directory,
+  }: {
+    accessToken: string;
+    fileName?: string;
+    directory?: string;
+  }) => {
+    console.log('Get file or directory ID');
 
-  try {
-    const response: { data: { files: gDriveFile[] } } = await axios.get(url, {
-      headers,
-    });
-    if (response.data.files && response.data.files.length > 0) {
-      return response.data.files[0].id; // Assuming the first found item is the one we want
+    // Determine the query based on input
+    let url;
+    if (directory && !fileName) {
+      // Only directory is given
+      url = `https://www.googleapis.com/drive/v3/files?q=name='${directory}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+    } else if (fileName && !directory) {
+      // Only file is given
+      url = `https://www.googleapis.com/drive/v3/files?q=name='${fileName}' and mimeType!='application/vnd.google-apps.folder' and trashed=false`;
+    } else if (fileName && directory) {
+      // Both file and directory are given, find the directory ID first
+      const directoryId = await findFileOrDirectoryId({
+        directory,
+        accessToken,
+      });
+      if (!directoryId) {
+        console.error('Directory not found');
+        return null;
+      }
+      url = `https://www.googleapis.com/drive/v3/files?q=name='${fileName}' and parents in '${directoryId}' and trashed=false`;
     } else {
+      // Neither file nor directory is given
+      console.error('No file or directory specified');
       return null;
     }
-  } catch (error) {
-    console.error('Error finding file or directory:', error);
-    return null;
+
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+    };
+
+    try {
+      const response = await axios.get<{ files: gDriveFile[] }>(url, {
+        headers,
+      });
+      if (response.data.files && response.data.files.length > 0) {
+        return response.data.files[0].id; // Assuming the first found item is the one we want
+      } else {
+        return null;
+      }
+    } catch (error) {
+      console.error('Error finding file or directory:', error);
+      return null;
+    }
   }
-}
+);
 
 async function createDirectory(directoryPath: string, accessToken: string) {
   console.log('create directory using pushFile method');
