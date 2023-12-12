@@ -86,11 +86,11 @@ export async function onSyncGdrive() {
     const fileBlob = new Blob([jsonString], { type: 'application/json' });
     const fileInfo = await uploadFileToDrive(
       fileBlob,
-      state.appConfiguration.gdriveDir + '/templates.json',
+      state.appConfiguration.gdriveDir,
+      state.appConfiguration.gdriveConfigurationFile,
       'application/json',
       validAccessToken
     );
-    state.appConfiguration.gdriveConfigurationFileId = fileInfo?.id || '';
   } else {
     console.error('Failed to obtain a valid access token.');
   }
@@ -100,23 +100,33 @@ export async function onUpdateAppConfiguration() {
   const validAccessToken = await getValidAccessToken();
   if (validAccessToken) {
     console.log('update app setting from gdrive');
-    const file = await downloadFileFromDrive(
-      state.appConfiguration.gdriveConfigurationFileId,
-      validAccessToken
+
+    // Use the updated function to find the file ID by path and filename
+    const filePath = state.appConfiguration.gdriveDir + '/templates.json';
+    const fileId = await findFileOrDirectoryId(
+      filePath,
+      validAccessToken,
+      true
     );
-    const jsonstring = await file?.text();
-    const loadedConfig = JSON.parse(jsonstring || '') as Record<
-      string,
-      unknown
-    >;
-    deepMergeReactive(
-      state.appConfiguration,
-      (loadedConfig.appConfiguration || {}) as Record<string, unknown>
-    );
-    deepMergeReactive(
-      state.chatState,
-      (loadedConfig.chatState || {}) as Record<string, unknown>
-    );
+
+    if (fileId) {
+      const file = await downloadFileFromDrive(fileId, validAccessToken);
+      const jsonstring = await file?.text();
+      const loadedConfig = JSON.parse(jsonstring || '') as Record<
+        string,
+        unknown
+      >;
+      deepMergeReactive(
+        state.appConfiguration,
+        (loadedConfig.appConfiguration || {}) as Record<string, unknown>
+      );
+      deepMergeReactive(
+        state.chatState,
+        (loadedConfig.chatState || {}) as Record<string, unknown>
+      );
+    } else {
+      console.error('File not found in GDrive.');
+    }
   } else {
     console.error('Failed to obtain a valid access token.');
   }
@@ -124,6 +134,7 @@ export async function onUpdateAppConfiguration() {
 
 async function uploadFileToDrive(
   file: Blob,
+  directory: string,
   fileName: string,
   mimeType: string,
   accessToken: string
@@ -133,10 +144,7 @@ async function uploadFileToDrive(
   // const fullPath = state.appConfiguration.gdriveDir + '/' + fileName;
 
   // First, check if the directory exists, if not create it
-  const directoryId = await ensureDirectoryExists(
-    state.appConfiguration.gdriveDir,
-    accessToken
-  );
+  const directoryId = await ensureDirectoryExists(directory, accessToken);
 
   // If the directory doesn't exist or there was an error, don't proceed
   if (!directoryId) {
@@ -206,7 +214,7 @@ async function ensureDirectoryExists(
   console.log('ensure dir exists');
   try {
     // Search for the directory
-    let directoryId = await findDirectoryId(directoryPath, accessToken);
+    let directoryId = await findFileOrDirectoryId(directoryPath, accessToken);
 
     // If directory is not found, create it
     if (!directoryId) {
@@ -220,9 +228,17 @@ async function ensureDirectoryExists(
   }
 }
 
-async function findDirectoryId(directoryPath: string, accessToken: string) {
-  console.log('get directory ID');
-  const url = `https://www.googleapis.com/drive/v3/files?q=name='${directoryPath}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+// Updated function to find both files and directories
+async function findFileOrDirectoryId(
+  path: string,
+  accessToken: string,
+  isFile = false
+) {
+  console.log('get file or directory ID');
+  const mimeTypeQuery = isFile
+    ? ''
+    : " and mimeType='application/vnd.google-apps.folder'";
+  const url = `https://www.googleapis.com/drive/v3/files?q=name='${path}'${mimeTypeQuery} and trashed=false`;
   const headers = {
     Authorization: `Bearer ${accessToken}`,
   };
@@ -231,17 +247,13 @@ async function findDirectoryId(directoryPath: string, accessToken: string) {
     const response: { data: { files: gDriveFile[] } } = await axios.get(url, {
       headers,
     });
-    if (response.data.files) {
-      const files = response.data.files;
-      if (files.length > 0) {
-        // Assuming the first found directory is the one we want
-        return files[0].id;
-      } else {
-        return null;
-      }
+    if (response.data.files && response.data.files.length > 0) {
+      return response.data.files[0].id; // Assuming the first found item is the one we want
+    } else {
+      return null;
     }
   } catch (error) {
-    console.error('Error finding directory:', error);
+    console.error('Error finding file or directory:', error);
     return null;
   }
 }
