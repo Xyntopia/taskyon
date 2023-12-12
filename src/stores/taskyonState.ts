@@ -17,6 +17,7 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
       supabase_url: '',
       supabase_anon_key: '',
       appConfigurationUrl: '/taskyon_settings.json', // URL from which to load the initial app configuration
+      gdriveConfigurationFileId: '', // gDrive fileid of the configuration
       expertMode: false,
       showCosts: false,
       gdriveDir: 'taskyon',

@@ -6,21 +6,22 @@
       <q-btn
         label="JSON"
         @click="downloadSettings('json')"
-        color="primary"
         class="q-ma-md"
       ></q-btn>
       <q-btn
         label="YAML"
         @click="downloadSettings('yaml')"
-        color="primary"
         class="q-ma-md"
       ></q-btn>
     </div>
     <div class="q-pa-md q-gutter-sm">
       Export app & settings to gdrive:
-      <q-btn @click="onSyncGdrive" color="primary">
-        <q-icon size="md" name="mdi-google-drive" />
-        <q-icon size="md" name="sync" />
+      <q-icon size="md" name="mdi-google-drive" />
+      <q-btn @click="onSyncGdrive" icon="save">
+        <q-tooltip> Update App configuration from grive</q-tooltip>
+      </q-btn>
+      <q-btn @click="onUpdateAppConfiguration" icon="sync">
+        <q-tooltip> Update App configuration from grive</q-tooltip>
       </q-btn>
     </div>
     <q-tabs v-model="tab" align="justify">
@@ -57,7 +58,7 @@ import { useTaskyonStore } from 'stores/taskyonState';
 import Settings from 'components/Settings.vue';
 import ObjectTreeView from 'components/ObjectTreeView.vue';
 import yaml from 'js-yaml';
-import { onSyncGdrive } from 'src/modules/gdrive';
+import { onSyncGdrive, onUpdateAppConfiguration } from 'src/modules/gdrive';
 
 const tab = ref('settings'); // Default to the first tab
 const state = useTaskyonStore();

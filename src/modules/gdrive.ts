@@ -2,7 +2,7 @@ import { ref, computed } from 'vue';
 import axios from 'axios';
 import { googleSdkLoaded } from 'vue3-google-login';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { sleep } from 'src/modules/utils';
+import { deepMerge, deepMergeReactive, sleep } from 'src/modules/utils';
 
 export const state = useTaskyonStore();
 
@@ -84,11 +84,38 @@ export async function onSyncGdrive() {
       appConfiguration: state.appConfiguration,
     });
     const fileBlob = new Blob([jsonString], { type: 'application/json' });
-    await uploadFileToDrive(
+    const fileInfo = await uploadFileToDrive(
       fileBlob,
       state.appConfiguration.gdriveDir + '/templates.json',
       'application/json',
       validAccessToken
+    );
+    state.appConfiguration.gdriveConfigurationFileId = fileInfo?.id || '';
+  } else {
+    console.error('Failed to obtain a valid access token.');
+  }
+}
+
+export async function onUpdateAppConfiguration() {
+  const validAccessToken = await getValidAccessToken();
+  if (validAccessToken) {
+    console.log('update app setting from gdrive');
+    const file = await downloadFileFromDrive(
+      state.appConfiguration.gdriveConfigurationFileId,
+      validAccessToken
+    );
+    const jsonstring = await file?.text();
+    const loadedConfig = JSON.parse(jsonstring || '') as Record<
+      string,
+      unknown
+    >;
+    deepMergeReactive(
+      state.appConfiguration,
+      (loadedConfig.appConfiguration || {}) as Record<string, unknown>
+    );
+    deepMergeReactive(
+      state.chatState,
+      (loadedConfig.chatState || {}) as Record<string, unknown>
     );
   } else {
     console.error('Failed to obtain a valid access token.');
@@ -234,4 +261,22 @@ async function createDirectory(directoryPath: string, accessToken: string) {
 
   // Return the ID of the newly created directory
   return directoryInfo ? directoryInfo.id : null;
+}
+
+export async function downloadFileFromDrive(
+  fileId: string,
+  accessToken: string
+) {
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  try {
+    const response = await axios.get(url, { headers, responseType: 'blob' });
+    console.log('File downloaded successfully.');
+    return response.data as File; // The file data
+  } catch (error) {
+    console.error('Error downloading file:', error);
+    return null;
+  }
 }
