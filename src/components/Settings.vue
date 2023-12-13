@@ -1,18 +1,21 @@
 <!-- Sidebar -->
 <template>
   <div>
-    <q-toggle
-      v-model="state.appConfiguration.expertMode"
-      label="Expert mode"
-      left-label
-      color="secondary"
-    />
-    <q-toggle
-      v-model="state.appConfiguration.showCosts"
-      label="Show task costs"
-      left-label
-      color="secondary"
-    />
+    <div>
+      <q-toggle
+        v-model="state.appConfiguration.expertMode"
+        label="Expert mode"
+        left-label
+        color="secondary"
+      />
+      <q-toggle
+        v-model="state.appConfiguration.showCosts"
+        label="Show task costs"
+        left-label
+        color="secondary"
+      />
+    </div>
+    <OpenRouterPKCE />
     <div v-if="!reduced">
       <q-separator spaced />
       <div class="q-pa-sm q-gutter-md">
@@ -44,6 +47,7 @@
 
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
+import OpenRouterPKCE from './OpenRouterPKCE.vue';
 
 defineProps({
   reduced: {

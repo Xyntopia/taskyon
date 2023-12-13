@@ -127,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import {
   availableModels,
   Model,
@@ -169,18 +169,27 @@ const state = useTaskyonStore();
 
 const assistants = ref<Awaited<ReturnType<typeof getAssistants>>>({});
 
-void getAssistants(state.keys.openai).then((assitantDict) => {
-  assistants.value = assitantDict;
-});
-
 const resOpenRouter = ref<Model[]>(openrouterModules.data);
 const resOpenAI = ref<Model[]>(openaiModels.data);
 const api = getApiConfig(state.chatState);
 if (api) {
-  void availableModels(api.baseURL + api.routes.models, state.keys.openai).then(
-    (res) => (resOpenAI.value = res)
-  );
+  if (api.name != 'openrouter.ai')
+    void availableModels(
+      api.baseURL + api.routes.models,
+      state.keys.openai
+    ).then((res) => (resOpenAI.value = res));
 }
+
+watch(
+  () => state.chatState.useOpenAIAssistants,
+  (newValue) => {
+    if (newValue) {
+      void getAssistants(state.keys.openai).then((assitantDict) => {
+        assistants.value = assitantDict;
+      });
+    }
+  }
+);
 
 const modelOptions = computed(() => {
   if (props.selectedApi === 'openai') {

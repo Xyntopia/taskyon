@@ -3,6 +3,15 @@ import { defaultLLMSettings } from 'src/modules/chat';
 import { ref, Ref, watch } from 'vue';
 import type { LLMTask } from 'src/modules/types';
 import type { FunctionArguments } from 'src/modules/types';
+import axios from 'axios';
+import { Notify } from 'quasar';
+
+function removeCodeFromUrl() {
+  if (window.history.pushState) {
+    const baseUrl = window.location.href.split('?')[0];
+    window.history.pushState({}, document.title, baseUrl);
+  }
+}
 
 export const useTaskyonStore = defineStore('taskyonState', () => {
   console.log('initialize taskyon');
@@ -68,7 +77,36 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
     }
   }
 
-  return { ...stateRefs, setDraftFunctionArgs };
+  let loadingKey = false;
+  async function getOpenRouterPKCEKey(code: string) {
+    if (loadingKey == false) {
+      console.log('start openai PKCE');
+      loadingKey = true;
+      try {
+        const response = await axios.post<{ key: string }>(
+          'https://openrouter.ai/api/v1/auth/keys',
+          {
+            code: code,
+          }
+        );
+        const data = response.data;
+        console.log('downloaded key:', data.key);
+        if (data.key) {
+          Notify.create('API Key retrieved successfully');
+          stateRefs.keys.value['openrouter.ai'] = data.key;
+        } else {
+          Notify.create('Failed to retrieve API Key');
+        }
+      } catch (error) {
+        console.error('Error fetching API Key:', error);
+        Notify.create('Error occurred while fetching API Key');
+      }
+      removeCodeFromUrl(); // Remove the 'code' from URL
+      loadingKey = false;
+    }
+  }
+
+  return { ...stateRefs, setDraftFunctionArgs, getOpenRouterPKCEKey };
 });
 
 // this file can be replaced in kubernetes  using a configmap!

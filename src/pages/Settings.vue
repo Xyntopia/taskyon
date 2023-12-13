@@ -59,6 +59,8 @@ import Settings from 'components/Settings.vue';
 import ObjectTreeView from 'components/ObjectTreeView.vue';
 import yaml from 'js-yaml';
 import { onSyncGdrive, onUpdateAppConfiguration } from 'src/modules/gdrive';
+import OpenRouterPKCE from './OpenRouterPKCE.vue';
+
 
 const tab = ref('settings'); // Default to the first tab
 const state = useTaskyonStore();

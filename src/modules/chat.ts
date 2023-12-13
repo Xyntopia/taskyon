@@ -87,7 +87,7 @@ export function defaultLLMSettings() {
         },
       },
     ] as apiConfig[],
-    siteUrl: 'https://taskyon.xyntopia.com',
+    siteUrl: 'https://taskyon.space',
     summaryModel: 'Xenova/distilbart-cnn-6-6',
     maxAutonomousTasks: 3,
     taskChatTemplates: {
@@ -156,7 +156,7 @@ export const getAssistants = asyncTimeLruCache<
   1,
   60000 * 10 * 60 //1h
 )(async (openAIApiKey: string) => {
-  console.log('get list of openai assistants')
+  console.log('get list of openai assistants');
   const response = await getOpenai(openAIApiKey).beta.assistants.list({
     order: 'desc',
     limit: 20,
@@ -765,7 +765,7 @@ export async function getOpenAIAssistantResponse(
     }
 
     // Update file mapping database
-    await taskManager.bulkUpsertFiles(currentTaskListfileMappings)
+    await taskManager.bulkUpsertFiles(currentTaskListfileMappings);
 
     // Finally, Convert task list to OpenAI thread messages
     const openAIConversationThread = convertTasksToOpenAIThread(

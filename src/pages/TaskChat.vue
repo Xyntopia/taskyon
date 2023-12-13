@@ -131,21 +131,60 @@
         >
         </CreateNewTask>
         <!--API Key hint-->
-        <q-card flat v-else>
-          <q-card-section>
-            <div>
-              Add an API key to access a chatbot in Settings on the left side!
-              <q-btn
-                href="https://platform.openai.com/account/api-keys"
-                target="_blank"
-              >
-                https://platform.openai.com/account/api-keys</q-btn
-              >
-              or here:
-              <q-btn href="https://openrouter.ai/keys" target="_blank">
-                https://openrouter.ai/keys</q-btn
-              >
-            </div>
+        <q-card flat>
+          <q-card-section class="q-gutter-md">
+            <q-list>
+              <!-- Authentication Option -->
+              <q-item>
+                <q-item-section>
+                  <q-item-label>Authentication Option</q-item-label>
+                  <q-item-label caption>Use Openrouter.ai service</q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                  <div><OpenRouterPKCE /></div
+                ></q-item-section>
+              </q-item>
+
+              <!-- API Key Access -->
+              <q-item>
+                <q-item-section>
+                  <q-item-label>Add an API Key</q-item-label>
+                  <q-item-label caption
+                    >To access a chatbot in Settings</q-item-label
+                  >
+                </q-item-section>
+                <q-item-section side>
+                  <q-btn
+                    outline
+                    noCaps
+                    href="https://platform.openai.com/account/api-keys"
+                    target="_blank"
+                  >
+                    Go to OpenAI
+                  </q-btn>
+                </q-item-section>
+              </q-item>
+
+              <!-- Alternate API Key Access -->
+              <q-item>
+                <q-item-section>
+                  <q-item-label>Alternate API Key Access</q-item-label>
+                  <q-item-label caption
+                    >Access keys via OpenRouter</q-item-label
+                  ></q-item-section
+                >
+                <q-item-section side>
+                  <q-btn
+                    outline
+                    noCaps
+                    href="https://openrouter.ai/keys"
+                    target="_blank"
+                  >
+                    Go to Openrouter.ai
+                  </q-btn>
+                </q-item-section>
+              </q-item>
+            </q-list>
           </q-card-section>
         </q-card>
       </div>
@@ -197,6 +236,7 @@ import { taskChain } from 'src/modules/taskManager';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
+import OpenRouterPKCE from 'src/components/OpenRouterPKCE.vue';
 import {
   emitCancelAllTasks,
   emitCancelCurrentTask,
