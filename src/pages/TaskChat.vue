@@ -131,7 +131,7 @@
         >
         </CreateNewTask>
         <!--API Key hint-->
-        <q-card flat>
+        <q-card v-else>
           <q-card-section class="q-gutter-md">
             <q-list>
               <!-- Authentication Option -->
