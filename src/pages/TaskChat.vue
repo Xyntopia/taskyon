@@ -148,7 +148,7 @@
               <!-- API Key Access -->
               <q-item>
                 <q-item-section>
-                  <q-item-label>Add an API Key</q-item-label>
+                  <q-item-label>Add an OpenAI API key</q-item-label>
                   <q-item-label caption
                     >To access a chatbot in Settings</q-item-label
                   >
@@ -168,7 +168,9 @@
               <!-- Alternate API Key Access -->
               <q-item>
                 <q-item-section>
-                  <q-item-label>Alternate API Key Access</q-item-label>
+                  <q-item-label
+                    >Alternate API Key Accessto Openouter.ai</q-item-label
+                  >
                   <q-item-label caption
                     >Access keys via OpenRouter</q-item-label
                   ></q-item-section
@@ -185,6 +187,16 @@
                 </q-item-section>
               </q-item>
             </q-list>
+          </q-card-section>
+          <q-card-section>
+            If getting keys manually, add them to settings manually:
+            <q-btn
+              class="q-mx-sm"
+              dense
+              to="/settings"
+              label="settings"
+              icon="settings"
+            ></q-btn>
           </q-card-section>
         </q-card>
       </div>
