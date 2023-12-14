@@ -72,14 +72,16 @@
           }}</q-tooltip>
         </q-chip>
       </div>
-      <div v-if="selectedTaskType">
+      <!--function task type-->
+      <div v-if="selectedTaskType" class="row">
         <ObjectTreeView
+          class="col"
           :model-value="state.taskDraft.configuration?.function?.arguments"
           input-field-behavior="textarea"
           :separate-labels="false"
         />
-        <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
         <q-btn
+          class="col-auto"
           flat
           dense
           icon="tune"
@@ -91,51 +93,58 @@
           ><q-tooltip> Toggle Task Settings </q-tooltip>
         </q-btn>
       </div>
+      <div
+        class="row items-center"
+        v-if="selectedTaskType || state.expandedTaskCreation"
+      >
+        <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
+        <q-btn
+          flat
+          dense
+          icon="chat"
+          :color="selectedTaskType ? '' : 'secondary'"
+          @click="setTaskType(undefined)"
+          ><q-tooltip>Select Simple Chat</q-tooltip>
+        </q-btn>
+        <q-select
+          v-if="state.appConfiguration.expertMode"
+          style="min-width: 200px"
+          class="q-pt-xs q-px-md"
+          dense
+          clearable
+          standout="bg-secondary text-white"
+          :bg-color="selectedTaskType ? 'secondary' : ''"
+          :model-value="selectedTaskType"
+          @update:modelValue="setTaskType"
+          :options="Object.keys(tools)"
+          :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
+        />
+        <q-toggle
+          v-if="state.appConfiguration.expertMode"
+          icon="handyman"
+          left-label
+          color="secondary"
+          dense
+          size="xl"
+          v-model="state.chatState.enableOpenAiTools"
+          ><q-tooltip
+            >Enable OpenAI Functions (use built-in function selection mode for
+            OpenAI)</q-tooltip
+          ></q-toggle
+        >
+        <q-btn
+          v-if="state.appConfiguration.expertMode"
+          class="q-ma-md"
+          dense
+          flat
+          icon="code"
+          @click="state.showTaskData = !state.showTaskData"
+          ><q-tooltip>Show Draft Task Data</q-tooltip></q-btn
+        >
+      </div>
     </div>
     <q-slide-transition>
       <div v-show="state.expandedTaskCreation">
-        <div v-if="state.appConfiguration.expertMode" class="row items-center">
-          <q-btn
-            flat
-            dense
-            icon="chat"
-            :color="selectedTaskType ? '' : 'secondary'"
-            @click="setTaskType(undefined)"
-            ><q-tooltip>Select Simple Chat</q-tooltip>
-          </q-btn>
-          <q-select
-            style="min-width: 200px"
-            class="q-pt-xs q-px-md"
-            dense
-            clearable
-            standout="bg-secondary text-white"
-            :bg-color="selectedTaskType ? 'secondary' : ''"
-            :model-value="selectedTaskType"
-            @update:modelValue="setTaskType"
-            :options="Object.keys(tools)"
-            :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
-          />
-          <q-toggle
-            icon="handyman"
-            left-label
-            color="secondary"
-            dense
-            size="xl"
-            v-model="state.chatState.enableOpenAiTools"
-            ><q-tooltip
-              >Enable OpenAI Functions (use built-in function selection mode for
-              OpenAI)</q-tooltip
-            ></q-toggle
-          >
-          <q-btn
-            class="q-ma-md"
-            dense
-            flat
-            icon="code"
-            @click="state.showTaskData = !state.showTaskData"
-            ><q-tooltip>Show Draft Task Data</q-tooltip></q-btn
-          >
-        </div>
         <div v-if="state.showTaskData && state.appConfiguration.expertMode">
           {{ currentnewTask }}
         </div>
@@ -168,39 +177,36 @@
           v-model="state.allowedToolsExpand"
         >
           <q-item-section>
-            <div>
-              <q-btn
-                class="q-ma-md"
-                dense
-                label="toggle all allowed tools"
-                color="primary"
-                @click="toggleSelectedTools"
-              />
-              <q-option-group
-                class="q-ma-md"
-                v-model="allowedTools"
-                :options="
-                  Object.keys(tools).map((name) => ({
-                    label: name,
-                    value: name,
-                    description: tools[name].description,
-                  }))
-                "
-                color="secondary"
-                type="checkbox"
-                inline
-                dense
-              >
-                <template v-slot:label="opt">
-                  <div>
-                    {{ opt.label }}
-                  </div>
-                  <q-tooltip anchor="bottom middle" style="max-width: 500px">{{
-                    opt.description
-                  }}</q-tooltip>
-                </template></q-option-group
-              >
-            </div>
+            <q-option-group
+              class="q-ma-md"
+              v-model="allowedTools"
+              :options="
+                Object.keys(tools).map((name) => ({
+                  label: name,
+                  value: name,
+                  description: tools[name].description,
+                }))
+              "
+              color="secondary"
+              type="checkbox"
+              inline
+              dense
+            >
+              <template v-slot:label="opt">
+                <div>
+                  {{ opt.label }}
+                </div>
+                <q-tooltip anchor="bottom middle" style="max-width: 500px">{{
+                  opt.description
+                }}</q-tooltip>
+              </template></q-option-group
+            >
+            <q-btn
+              class="q-ma-md"
+              dense
+              label="toggle all allowed tools"
+              @click="toggleSelectedTools"
+            />
           </q-item-section>
         </q-expansion-item>
       </div>

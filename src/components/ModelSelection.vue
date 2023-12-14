@@ -113,16 +113,15 @@
       "
       ><q-tooltip>Choose LLM Api</q-tooltip>
     </q-select>
-    <div v-if="!enableOpenAIAssistants" class="col-auto text-caption">
-      For a list of supported models go here:
-      <a href="https://platform.openai.com/docs/models" target="_blank"
-        >https://platform.openai.com/docs/models</a
-      >
-      or here:
-      <a href="https://openrouter.ai/docs#models" target="_blank"
-        >https://openrouter.ai/docs#models</a
-      >
-    </div>
+    <InfoDialog v-if="!enableOpenAIAssistants" class="col-auto"
+    info-text="For a list of supported models go here:
+
+- https://platform.openai.com/docs/models
+
+or here:
+
+- https://openrouter.ai/docs#models">
+    </InfoDialog>
   </div>
 </template>
 
@@ -139,6 +138,7 @@ import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import openrouterModules from 'assets/openrouter_models.json';
 import { useTaskyonStore } from 'stores/taskyonState';
 import openaiModels from 'assets/openai_models.json';
+import InfoDialog from './InfoDialog.vue';
 
 const props = defineProps({
   botName: {
