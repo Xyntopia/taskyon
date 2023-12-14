@@ -18,10 +18,10 @@
       Export app & settings to gdrive:
       <q-icon size="md" name="mdi-google-drive" />
       <q-btn @click="onSyncGdrive" icon="save">
-        <q-tooltip> Update App configuration from grive</q-tooltip>
+        <q-tooltip> Save configuration to gdrive</q-tooltip>
       </q-btn>
       <q-btn @click="onUpdateAppConfiguration" icon="sync">
-        <q-tooltip> Update App configuration from grive</q-tooltip>
+        <q-tooltip> Restore app configuration from gdrive</q-tooltip>
       </q-btn>
     </div>
     <q-tabs v-model="tab" align="justify">
@@ -60,7 +60,6 @@ import ObjectTreeView from 'components/ObjectTreeView.vue';
 import yaml from 'js-yaml';
 import { onSyncGdrive, onUpdateAppConfiguration } from 'src/modules/gdrive';
 import OpenRouterPKCE from './OpenRouterPKCE.vue';
-
 
 const tab = ref('settings'); // Default to the first tab
 const state = useTaskyonStore();

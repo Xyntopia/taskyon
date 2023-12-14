@@ -1,11 +1,17 @@
 {
   "appConfiguration": {
-    "supabase_url": "test",
+    "supabase_url": "",
     "supabase_anon_key": "",
-    "expertMode": true,
-    "showCosts": true
+    "appConfigurationUrl": "/taskyon_settings.json",
+    "gdriveConfigurationFile": "configuration.json",
+    "expertMode": false,
+    "showCosts": false,
+    "gdriveDir": "taskyon"
   },
   "chatState": {
+    "openAIAssistantId": "",
+    "useOpenAIAssistants": false,
+    "enableOpenAiTools": false,
     "selectedApi": "openrouter.ai",
     "llmApis": [
       {
@@ -21,7 +27,7 @@
       {
         "name": "openrouter.ai",
         "baseURL": "https://openrouter.ai/api/v1",
-        "defaultModel": "mistralai/mistral-7b-instruct",
+        "defaultModel": "mistralai/mixtral-8x7b-instruct",
         "streamSupport": true,
         "routes": {
           "chatCompletion": "/chat/completions",
@@ -30,5 +36,17 @@
       }
     ],
     "siteUrl": "https://taskyon.xyntopia.com",
+    "summaryModel": "Xenova/distilbart-cnn-6-6",
+    "maxAutonomousTasks": 3,
+    "taskChatTemplates": {
+      "constraints": "CONSTRAINTS:\n\n{constraints}",
+      "instruction": "You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented,\nand adheres to YAML standards. Do not include explanatory text in your YAML responses. \n\nYou can make use of the following Tools: {toolList}\n\nRemember, the focus is on the precision and correctness of the YAML output.",
+      "objective": "OVERALL OBJECTIVE:\n\n{objective}\n",
+      "tools": "AVAILABLE TOOLS TO CALL:\n\n{tools}",
+      "previousTasks": "PREVIOUSLY COMPLETED TASKS:\n\n{previousTasks}\n",
+      "context": "TAKE INTO ACCOUNT THIS CONTEXT:\n\n{context}\n",
+      "toolResult": "THE RESULT OF THE TOOL/FUNCTION WHICH WAS CALLED BY THE SYSTEM IS:\n\n{toolResult}\n\nProvide only the precise information requested without context, \nMake sure we can parse the entire response as {format}.\n\nCOMMENT THE RESULT VERY STRICTLY FOLLOWING SCHEMA ({format}):\n\n# keys with '?' are optional\n{resultSchema}",
+      "task": "\nCOMPLETE THE FOLLOWING TASK:\n\n{taskContent}\n\nProvide only the precise information requested without context, \nMake sure we can parse the response as {format}.\n\nFORMAT THE RESULT WITH THE FOLLOWING SCHEMA VERY STRICT ({format}):\n\n# keys with '?' are optional\n{schema}"
+    }
   }
 }
