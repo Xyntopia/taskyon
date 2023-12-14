@@ -2,6 +2,11 @@ import { RouteRecordRaw } from 'vue-router';
 
 const routes: RouteRecordRaw[] = [
   {
+    path: '/widgets',
+    component: () => import('layouts/Widgets.vue'),
+    children: [{ path: 'chat', component: () => import('pages/TaskChat.vue') }],
+  },
+  {
     path: '/',
     component: () => import('layouts/Taskyon.vue'),
     children: [
