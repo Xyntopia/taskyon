@@ -18,6 +18,7 @@ import type { OpenAI } from 'openai';
 import { TaskManager } from './taskManager';
 import { handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
+import { unknown } from 'zod';
 
 function isOpenAIFunctionCall(
   choice: OpenAI.ChatCompletion['choices'][0]
@@ -471,7 +472,9 @@ async function taskWorker(
         }
       } catch (error) {
         task.state = 'Error';
-        task.debugging.error = error;
+        if (error instanceof Error) {
+          task.debugging.error = { message: error.message, stack: error.stack };
+        }
         console.error('Error processing task:', error);
       }
       // if we cancelled a task we need to prevent it from creating any follow-up tasks.
@@ -487,7 +490,12 @@ async function taskWorker(
           await generateFollowUpTasksFromResult(task, chatState, taskManager);
         } catch (error) {
           task.state = 'Error';
-          task.debugging.followUpError = error;
+          if (error instanceof Error) {
+            task.debugging.followUpError = {
+              message: error.message,
+              stack: error.stack,
+            };
+          }
           console.log('We were not able to create a follow up task:', error);
         }
 

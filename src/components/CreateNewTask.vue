@@ -321,6 +321,11 @@ function toggleSelectedTools() {
 const currentnewTask = computed(() => {
   let task: Partial<LLMTask> = { ...state.taskDraft };
   if (selectedTaskType.value) {
+    task.configuration = {
+      ...task.configuration,
+      model: currentModel.value,
+      chatApi: currentChatApi.value,
+    };
     task.role = 'function';
     task.content = null;
   } else {

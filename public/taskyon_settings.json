@@ -27,7 +27,7 @@
       {
         "name": "openrouter.ai",
         "baseURL": "https://openrouter.ai/api/v1",
-        "defaultModel": "mistralai/mixtral-8x7b-instruct",
+        "defaultModel": "nousresearch/nous-capybara-7b",
         "streamSupport": true,
         "routes": {
           "chatCompletion": "/chat/completions",
