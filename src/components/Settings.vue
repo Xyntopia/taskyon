@@ -20,6 +20,24 @@
       <q-separator spaced />
       <div class="q-pa-sm q-gutter-md">
         <div>Select Default AI Provider</div>
+        <div>
+          you can find available models here:
+          <q-btn
+            flat
+            color="accent"
+            href="https://openrouter.ai/api/v1/models"
+            target="_blank"
+            >https://openrouter.ai/api/v1/models</q-btn
+          >
+          as soon as you have logged in to your openrouter account:
+          <q-btn
+            flat
+            color="accent"
+            href="https://accounts.openrouter.ai/sign-in"
+            target="_blank"
+            >https://accounts.openrouter.ai/sign-in</q-btn
+          >
+        </div>
         <q-select
           v-model="state.chatState.selectedApi"
           emit-value

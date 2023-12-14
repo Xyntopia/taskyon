@@ -2,6 +2,7 @@
   <div class="row items-center">
     <div class="col">
       <q-btn
+        class="fit"
         label="Login to Openrouter.ai service"
         icon="key"
         noCaps
@@ -11,38 +12,28 @@
       </q-btn>
     </div>
     <div class="col-auto">
-      <q-btn flat rounded dense icon="info" @click="showInfo = true">
-        <q-dialog v-model="showInfo">
-          <q-card>
-            <q-card-section>
-              <QMarkdown
-                src="
+      <InfoDialog
+        info-text="
 www.openrouter.ai is a service which brings you a large number of AI
 models: Once registered you have access to a large number of models:
 
 - The free mistral model 
 - All OpenAI Models including ChatGPT4 
 - LLama2 
-- ... and a lot more!
-        "
-              />
-            </q-card-section>
-          </q-card>
-        </q-dialog>
-      </q-btn>
+- ... and a lot more!"
+      />
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, computed } from 'vue';
+import { onMounted, computed } from 'vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { useRoute } from 'vue-router';
-import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
+import InfoDialog from 'components/InfoDialog.vue';
 
 const state = useTaskyonStore();
 const route = useRoute();
-const showInfo = ref(false);
 
 const callbackUrl = window.location.origin; // This will get the base URL of your application
 
