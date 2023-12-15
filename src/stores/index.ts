@@ -1,7 +1,7 @@
 import { store } from 'quasar/wrappers';
 import { createPinia } from 'pinia';
 import { LocalStorage } from 'quasar';
-import { deepMerge, deepMergeReactive } from 'src/modules/utils';
+import { deepMerge } from 'src/modules/utils';
 
 /*
  * If not building with SSR mode, you can

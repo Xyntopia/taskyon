@@ -18,7 +18,6 @@ import type { OpenAI } from 'openai';
 import { TaskManager } from './taskManager';
 import { handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
-import { unknown } from 'zod';
 import { deepMerge } from './utils';
 
 function isOpenAIFunctionCall(

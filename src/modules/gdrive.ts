@@ -85,7 +85,7 @@ export async function onSyncGdrive() {
       appConfiguration: state.appConfiguration,
     });
     const fileBlob = new Blob([jsonString], { type: 'application/json' });
-    const fileInfo = await uploadFileToDrive(
+    await uploadFileToDrive(
       fileBlob,
       state.appConfiguration.gdriveDir,
       state.appConfiguration.gdriveConfigurationFile,

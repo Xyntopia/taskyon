@@ -871,6 +871,7 @@ interface Permission {
 
 export interface Model {
   id: string;
+  name?: string;
   object?: string;
   created?: number;
   owned_by?: string;
@@ -880,16 +881,20 @@ export interface Model {
   pricing?: {
     prompt: string;
     completion: string;
-    discount: number;
+    discount?: number;
   };
   context_length?: number;
   top_provider?: {
-    max_completion_tokens: number;
+    max_completion_tokens: number | null;
+  };
+  architecture?: {
+    tokenizer?: string;
+    instruct_type?: string | null;
   };
   per_request_limits?: {
     prompt_tokens: string;
     completion_tokens: string;
-  };
+  } | null;
 }
 
 export const availableModels = asyncLruCache<Model[]>(3)(
