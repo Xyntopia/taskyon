@@ -1,5 +1,4 @@
 import type { LLMTask } from './types';
-import { useVectorStore } from './localVectorStore';
 import type { ChatStateType } from './chat';
 import { v1 as uuidv1 } from 'uuid';
 import type { partialTaskDraft } from './types';
@@ -12,58 +11,16 @@ import {
 import { openFile } from './OPFS';
 import { Lock } from 'src/modules/utils';
 import { deepMerge } from './utils';
+import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
+import { AsyncQueue } from './utils';
+import { getVector } from './mlModels';
 
-class AsyncQueue<T> {
-  private queue: T[] = [];
-  private resolveWaitingPop?: (value: T) => void;
-
-  push(item: T) {
-    this.queue.push(item);
-    if (this.resolveWaitingPop) {
-      // Since TypeScript now expects queue.shift() to always return a T,
-      // we need to assure it's not called on an empty array.
-      // The logic ensures it's never empty at this point, but TypeScript doesn't know that.
-      const shiftedItem = this.queue.shift();
-      if (shiftedItem !== undefined) {
-        this.resolveWaitingPop(shiftedItem);
-      }
-      this.resolveWaitingPop = undefined;
-    }
-  }
-
-  count() {
-    return this.queue.length;
-  }
-
-  async pop(): Promise<T> {
-    const shiftedItem = this.queue.shift();
-    if (shiftedItem !== undefined) {
-      return shiftedItem;
-    } else {
-      return new Promise<T>((resolve) => {
-        this.resolveWaitingPop = resolve;
-      });
-    }
-  }
-
-  clear() {
-    const oldQueue = this.queue;
-    this.queue = [];
-    return oldQueue;
-  }
-}
-
-export default AsyncQueue;
-
-export const processTasksQueue = new AsyncQueue<string>();
-export const vectorStore = useVectorStore();
 /**
  * Finds the root task of a given task.
  *
  * @param {string} taskId - The ID of the task.
  * @returns {string} - The ID of the root task, or null if not found.
  */
-
 export async function findRootTask(
   taskId: string,
   getTask: InstanceType<typeof TaskManager>['getTask']
@@ -118,10 +75,26 @@ function base64Uuid() {
   const bufferUuid = Buffer.from(hexUuid.replace(/-/g, ''), 'hex');
 
   // Convert the Buffer to a base64 string
-  const base64Uuid = bufferUuid.toString('base64');
+  let base64Uuid = bufferUuid.toString('base64');
+
+  base64Uuid = base64Uuid.replace(/==$/, '');
 
   return base64Uuid;
 }
+
+/*function uuidToBigInt(uuid: string) {
+  // Remove dashes and decode hex to a Buffer
+  const buffer = Buffer.from(uuid.replace(/-/g, ''), 'hex');
+
+  let bigint = BigInt(0);
+
+  // Iterate over each byte in the buffer and shift it into the BigInt
+  for (const byte of buffer) {
+    bigint = (bigint << BigInt(8)) + BigInt(byte);
+  }
+
+  return bigint;
+}*/
 
 export async function addFile(
   taskManager: TaskManager,
@@ -185,6 +158,8 @@ export function findAllFilesInTasks(taskList: LLMTask[]): string[] {
   return Array.from(fileSet);
 }
 
+export const processTasksQueue = new AsyncQueue<string>();
+
 export async function addTask2Tree(
   task: partialTaskDraft,
   parentID: string | undefined,
@@ -193,7 +168,6 @@ export async function addTask2Tree(
   execute = true
 ) {
   const uuid = base64Uuid();
-
   const parent = parentID ? await taskManager.getTask(parentID) : undefined;
 
   const newTask: LLMTask = {
@@ -235,17 +209,28 @@ export class TaskManager {
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
   private taskyonDB: TaskyonDatabase | undefined;
   private tasks: Map<string, LLMTask>;
+  private vectorIndex: HierarchicalNSW | undefined;
+  private vectorIdMap: Map<string, number>;
   // we need these locks in order to sync our databases..
   private taskLocks: Map<string, Lock> = new Map();
   private subscribers: Array<(task?: LLMTask, taskNum?: number) => void> = [];
   private taskCountSubscribers: Array<
     (task?: LLMTask, taskNum?: number) => void
   > = [];
+  private vectorizerModel: string;
 
-  constructor(tasks: TaskManager['tasks'], taskyonDB?: TaskyonDatabase) {
+  constructor(
+    tasks: TaskManager['tasks'],
+    taskyonDB?: TaskyonDatabase,
+    vectorIndex?: HierarchicalNSW,
+    vectorizerModel?: string
+  ) {
     this.tasks = tasks;
     this.taskyonDB = taskyonDB;
     void this.initializeTasksFromDB();
+    this.vectorIndex = vectorIndex;
+    this.vectorIdMap = new Map();
+    this.vectorizerModel = vectorizerModel || '';
   }
 
   // Lock a task and returns a function closure which can be used to unlock it again...
@@ -331,6 +316,16 @@ export class TaskManager {
     if (task && this.taskyonDB) {
       const newDBTask = transformLLMTaskToDocType(task);
       await this.taskyonDB.llmtasks.upsert(newDBTask);
+      if (this.vectorIndex) {
+        const vec = await getVector(JSON.stringify(task), this.vectorizerModel);
+        if (vec) {
+          const newLabel = this.vectorIndex.addItems([vec], false)[0];
+          await this.taskyonDB.vectormappings.upsert({
+            uuid: task.id,
+            vecid: newLabel,
+          });
+        }
+      }
     }
   }
 

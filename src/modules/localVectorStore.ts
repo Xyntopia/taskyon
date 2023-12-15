@@ -7,6 +7,7 @@ import { useCachedModels } from './mlModels';
 import { HierarchicalNSW, loadHnswlib } from 'hnswlib-wasm';
 import { LocalStorage } from 'quasar';
 import Dexie from 'dexie';
+import { getVector } from './mlModels';
 //TODO: maybe use yarn add hnsw  (pure javascript library)
 //TODO: make everything functional... no side effects etc...
 
@@ -90,7 +91,7 @@ interface idbDocument {
 }
 
 // TODO: get rid of "refs"
-const vecStoreUploaderConfigurationState = ref(defaultConfiguration);
+export const vecStoreUploaderConfigurationState = ref(defaultConfiguration);
 
 interface documentStoreType {
   index: HierarchicalNSW | undefined;
@@ -103,26 +104,29 @@ let documentStore: documentStoreType | undefined = undefined;
 
 const numDimensions = 384;
 
-async function loadDocumentStore(name: string): Promise<documentStoreType> {
-  //TODO: reload index if name change detected
-  const vecdbName = name + '_vecs';
-  let newindex = await loadIndex(
-    numDimensions,
-    vecdbName,
-    vecStoreUploaderConfigurationState.value.MAX_ELEMENTS
-  );
+export async function loadOrCreateVectorStore(
+  vecdbName: string,
+  MAX_ELEMENTS: number
+) {
+  let newindex = await loadIndex(numDimensions, vecdbName, MAX_ELEMENTS);
 
   console.log('load index');
   try {
     await newindex.readIndex(vecdbName, 10000, true);
   } catch {
     console.log(`index ${vecdbName} coud not be reloaded`);
-    newindex = await loadIndex(
-      numDimensions,
-      vecdbName,
-      vecStoreUploaderConfigurationState.value.MAX_ELEMENTS
-    );
+    newindex = await loadIndex(numDimensions, vecdbName, MAX_ELEMENTS);
   }
+  return newindex;
+}
+
+async function loadDocumentStore(name: string): Promise<documentStoreType> {
+  //TODO: reload index if name change detected
+  const vecdbName = name + '_vecs';
+  const newindex = await loadOrCreateVectorStore(
+    vecdbName,
+    vecStoreUploaderConfigurationState.value.MAX_ELEMENTS
+  );
 
   const idb = new DocumentDatabase(name);
   console.log(`successfully loaded index: ${name}`);
@@ -229,7 +233,7 @@ async function storeIndex(name: string) {
   }
 }
 
-const models = useCachedModels();
+export const models = useCachedModels();
 
 async function uploadToIndex(
   file: File,
@@ -280,12 +284,10 @@ async function uploadToIndex(
       //doc.metadata['uuid'] = uuid.to
       docvecs.push({
         document: doc,
-        vector: (
-          await models.vectorize(
-            doc.pageContent,
-            vecStoreUploaderConfigurationState.value.modelName
-          )
-        ).tolist()[0] as number[],
+        vector: await getVector(
+          doc.pageContent,
+          vecStoreUploaderConfigurationState.value.modelName
+        ),
       });
       steps += 1;
       await progressCallback(steps / maxsteps);
@@ -322,19 +324,22 @@ async function uploadToIndex(
     await updateStoreState(documentStore);
   }
 }
+
 async function knnQuery(searchQuery: string, k = 3) {
   if (documentStore?.index) {
-    const vector = await models.vectorize(
+    const vector = await getVector(
       searchQuery,
       vecStoreUploaderConfigurationState.value.modelName
     );
-    const res = documentStore.index.searchKnn(vector.tolist()[0], k, undefined);
-    // You can also search the index with a label filter
-    /*const labelFilter = (label: number) => {
+    if (vector) {
+      const res = documentStore.index.searchKnn(vector, k, undefined);
+      // You can also search the index with a label filter
+      /*const labelFilter = (label: number) => {
               return label >= 10 && label < 20;
             };
             const result2 = index.searchKnn(testVectorData.vectors[10], 10, labelFilter);*/
-    return res;
+      return res;
+    }
   }
 }
 
@@ -377,7 +382,7 @@ if (storedState) {
   ) as typeof vecStoreUploaderConfigurationState.value;
 }
 
-// finally, make sure we oad the correct collection
+// finally, make sure we load the correct collection
 loadCollection(vecStoreUploaderConfigurationState.value.collectionName);
 
 export const useVectorStore = () => {

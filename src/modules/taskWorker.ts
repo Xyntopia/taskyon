@@ -9,8 +9,7 @@ import {
   getApiConfigCopy,
 } from './chat';
 import { yamlToolChatType, partialTaskDraft } from './types';
-import { addTask2Tree } from './taskManager';
-import { processTasksQueue } from './taskManager';
+import { addTask2Tree, processTasksQueue } from './taskManager';
 import { tools } from './tools';
 import { FunctionArguments, FunctionCall } from './types';
 import type { LLMTask } from './types';

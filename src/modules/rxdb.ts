@@ -116,14 +116,37 @@ export type FileMappingDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
 export const fileMappingSchema: RxJsonSchema<FileMappingDocType> =
   fileMappingSchemaLiteral;
 
+const vectorMappingSchemaLiteral = {
+  title: 'VectorMapping schema',
+  version: 1,
+  type: 'object',
+  primaryKey: 'uuid',
+  properties: {
+    uuid: { type: 'string', maxLength: 128 },
+    vecid: { type: 'number' },
+  },
+  required: ['uuid', 'vecid'],
+} as const;
+
+const vectorMappingSchemaTyped = toTypedRxJsonSchema(
+  vectorMappingSchemaLiteral
+);
+export type vectorMappingDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
+  typeof vectorMappingSchemaTyped
+>;
+export const vectorMappingSchema: RxJsonSchema<vectorMappingDocType> =
+  vectorMappingSchemaLiteral;
+
 // Define the collection types
 export type LLMTaskCollection = RxCollection<LLMTaskDocType>;
 export type FileMappingCollection = RxCollection<FileMappingDocType>;
+export type VectorMappingCollection = RxCollection<vectorMappingDocType>;
 
 // Define the database type
 export type TaskyonDatabaseCollections = {
   llmtasks: LLMTaskCollection;
   filemappings: FileMappingCollection;
+  vectormappings: VectorMappingCollection;
 };
 export type TaskyonDatabase = RxDatabase<TaskyonDatabaseCollections>;
 
@@ -163,6 +186,16 @@ export async function createTaskyonDatabase(
     },
     filemappings: {
       schema: fileMappingSchema,
+      autoMigrate: true, // <- migration will not run at creation
+      migrationStrategies: {
+        // for this version we simply discard everything from version 0
+        1: function (/*oldDoc*/) {
+          return null;
+        },
+      },
+    },
+    vectormappings: {
+      schema: vectorMappingSchema,
       autoMigrate: true, // <- migration will not run at creation
       migrationStrategies: {
         // for this version we simply discard everything from version 0

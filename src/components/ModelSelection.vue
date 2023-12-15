@@ -113,14 +113,17 @@
       "
       ><q-tooltip>Choose LLM Api</q-tooltip>
     </q-select>
-    <InfoDialog v-if="!enableOpenAIAssistants" class="col-auto"
-    info-text="For a list of supported models go here:
+    <InfoDialog
+      v-if="!enableOpenAIAssistants"
+      class="col-auto"
+      info-text="For a list of supported models go here:
 
 - https://platform.openai.com/docs/models
 
 or here:
 
-- https://openrouter.ai/docs#models">
+- https://openrouter.ai/docs#models"
+    >
     </InfoDialog>
   </div>
 </template>

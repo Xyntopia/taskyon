@@ -337,3 +337,43 @@ export function base64UrlDecode(str: string): string {
 
   return Buffer.from(str, 'base64').toString();
 }
+
+export class AsyncQueue<T> {
+  private queue: T[] = [];
+  private resolveWaitingPop?: (value: T) => void;
+
+  push(item: T) {
+    this.queue.push(item);
+    if (this.resolveWaitingPop) {
+      // Since TypeScript now expects queue.shift() to always return a T,
+      // we need to assure it's not called on an empty array.
+      // The logic ensures it's never empty at this point, but TypeScript doesn't know that.
+      const shiftedItem = this.queue.shift();
+      if (shiftedItem !== undefined) {
+        this.resolveWaitingPop(shiftedItem);
+      }
+      this.resolveWaitingPop = undefined;
+    }
+  }
+
+  count() {
+    return this.queue.length;
+  }
+
+  async pop(): Promise<T> {
+    const shiftedItem = this.queue.shift();
+    if (shiftedItem !== undefined) {
+      return shiftedItem;
+    } else {
+      return new Promise<T>((resolve) => {
+        this.resolveWaitingPop = resolve;
+      });
+    }
+  }
+
+  clear() {
+    const oldQueue = this.queue;
+    this.queue = [];
+    return oldQueue;
+  }
+}
