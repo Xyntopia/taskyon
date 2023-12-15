@@ -5,6 +5,8 @@ import {
   AutoTokenizer,
   Tensor,
   mean_pooling,
+  cat,
+  mean,
 } from '@xenova/transformers';
 import { ref } from 'vue';
 
@@ -55,7 +57,6 @@ async function smallVectorize(txt: string, modelName: string) {
   return res2;
 }
 
-// Function to create chunks with overlap
 function createChunks(tensor: Tensor, chunkSize: number, overlap: number) {
   const numChunks = Math.ceil((tensor.size - overlap) / (chunkSize - overlap));
   const chunks = [];
@@ -66,6 +67,43 @@ function createChunks(tensor: Tensor, chunkSize: number, overlap: number) {
     chunks.push(slice);
   }
   return chunks;
+}
+
+function mergeVectors(chunkVectors: Tensor[], overlap: number) {
+  console.log('merge vectors');
+  const mergedVectors: Tensor[] = [];
+
+  const chunkLength = chunkVectors[0].dims[1];
+  const firstChunk = chunkVectors[0].slice([0, 1], [0, chunkLength - overlap]);
+  mergedVectors.push(firstChunk);
+
+  for (let i = 1; i < chunkVectors.length; i++) {
+    const currentChunk = chunkVectors[i];
+    // For overlapping regions, calculate the mean with the previous chunk
+    const previousChunk = chunkVectors[i - 1];
+    const overlapPrevious = previousChunk.slice(
+      [0, 1],
+      [chunkLength - overlap, Infinity]
+    );
+    const overlapCurrent = currentChunk.slice([0, 1], [0, overlap]);
+    //TODO: calculate the actual mean of the overlap
+    const overlapMean = overlapPrevious; //overlapPrevious.cat([overlapCurrent], 1);
+
+    mergedVectors.push(overlapMean);
+
+    // Add the remaining part of the current chunk if it's not the last chunk
+    if (i < chunkVectors.length - 1) {
+      mergedVectors.push(
+        currentChunk.slice([0, 1], [overlap, chunkLength - overlap])
+      );
+    } else {
+      mergedVectors.push(currentChunk.slice([0, 1], [overlap, Infinity]));
+    }
+  }
+
+  // Concatenate all vectors to form the final merged vector
+  const finalMergedVecs = cat(mergedVectors, 1);
+  return finalMergedVecs;
 }
 
 async function vectorize(
@@ -103,7 +141,7 @@ async function vectorize(
   const tokenTypeChunks = createChunks(token_type_ids, maxChunkSize, overlap);
 
   // Vectorize each chunk and collect vectors
-  const allVectors = [];
+  const chunkVectors: Tensor[] = [];
   for (let i = 0; i < inputIdChunks.length; i++) {
     const chunkInputs = {
       input_ids: inputIdChunks[i],
@@ -111,28 +149,16 @@ async function vectorize(
       token_type_ids: tokenTypeChunks[i],
     };
     const res = (await model(chunkInputs)) as Record<string, Tensor>;
-    const chunkVectors = mean_pooling(
-      res.last_hidden_state,
-      chunkInputs.attention_mask
-    );
-    allVectors.push(chunkVectors);
+    chunkVectors.push(res.last_hidden_state);
   }
 
-  // Merge vectors, averaging in overlapping regions
-  const mergedVectors = allVectors[0];
-  /*for (let i = 1; i < allVectors.length; i++) {
-    // Handle overlap averaging here
-    // For simplicity, this example just appends vectors
-    mergedVectors = mergedVectors.cat(
-      [mergedVectors, allVectors[i]],
-      0
-    ) as Tensor;
-  }*/
+  // Merge the chunk vectors
+  const finalVector: Tensor = mergeVectors(chunkVectors, overlap);
 
   // Optionally, return mean-pooled vector of the merged result
   return {
-    //individualVectors: mergedVectors,
-    meanPooledVector: mergedVectors, //mergedVectors.mean(0),
+    individualVectors: finalVector,
+    meanPooledVector: mean(finalVector, 1),
   };
 }
 
