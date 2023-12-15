@@ -245,11 +245,8 @@ function isObject(item: unknown): item is Record<string, unknown> {
   return item !== null && typeof item === 'object' && !Array.isArray(item);
 }
 
-export function deepMerge(
-  obj1: Record<string, unknown>,
-  obj2: Record<string, unknown>
-): Record<string, unknown> {
-  const output = Object.assign({}, obj1); // Start with a shallow copy of obj1
+export function deepMerge<A, B>(obj1: A, obj2: B): A & B {
+  const output: Record<string, unknown> = Object.assign({}, obj1); // Start with a shallow copy of obj1
   if (isObject(obj1) && isObject(obj2)) {
     Object.keys(obj2).forEach((key) => {
       const obj2Value = obj2[key];
@@ -260,41 +257,43 @@ export function deepMerge(
           output[key] = deepMerge(obj1Value, obj2Value);
         } else {
           // If obj1[key] is not an object, simply assign obj2[key]
-          Object.assign(output, { [key]: obj2Value });
+          output[key] = obj2Value;
         }
       } else {
         // For non-object properties, overwrite with the value from obj2
-        Object.assign(output, { [key]: obj2Value });
+        output[key] = obj2Value;
       }
     });
   }
-  return output;
+  return output as A & B;
 }
 
-export function deepMergeReactive(
-  obj1: Record<string, unknown>,
-  obj2: Record<string, unknown>
-) {
+export function deepMergeReactive<A, B>(obj1: A, obj2: B): A & B {
   if (!isObject(obj1) || !isObject(obj2)) {
     throw new Error('Both arguments must be objects.');
   }
 
+  const obj1AsRecord = obj1 as unknown as Record<string, unknown>;
+
   Object.keys(obj2).forEach((key) => {
     const obj2Value = obj2[key];
     if (isObject(obj2Value)) {
-      if (!isObject(obj1[key])) {
+      if (!isObject(obj1AsRecord[key])) {
         // If obj1[key] is not an object, initialize it as an empty object
-        obj1[key] = {};
+        obj1AsRecord[key] = {};
       }
       // Recursively merge objects
-      deepMergeReactive(obj1[key] as Record<string, unknown>, obj2Value);
+      deepMergeReactive(
+        obj1AsRecord[key] as Record<string, unknown>,
+        obj2Value
+      );
     } else {
       // Assign non-object values directly
-      obj1[key] = obj2Value;
+      obj1AsRecord[key] = obj2Value;
     }
   });
 
-  return obj1;
+  return obj1AsRecord as A & B;
 }
 
 export function deepCopy<T>(item: T): T {
@@ -321,18 +320,17 @@ export function deepCopy<T>(item: T): T {
   return item;
 }
 
-
 export function base64UrlEncode(str: string): string {
   return Buffer.from(str)
-      .toString('base64')  // Convert to base64
-      .replace(/\+/g, '-') // Convert '+' to '-'
-      .replace(/\//g, '_') // Convert '/' to '_'
-      .replace(/=/g, '');  // Remove padding '='
+    .toString('base64') // Convert to base64
+    .replace(/\+/g, '-') // Convert '+' to '-'
+    .replace(/\//g, '_') // Convert '/' to '_'
+    .replace(/=/g, ''); // Remove padding '='
 }
 
 export function base64UrlDecode(str: string): string {
   // Add removed '=' padding back
-  str = str.padEnd(str.length + (4 - str.length % 4) % 4, '=');
+  str = str.padEnd(str.length + ((4 - (str.length % 4)) % 4), '=');
 
   // Convert URL-safe characters back to original
   str = str.replace(/-/g, '+').replace(/_/g, '/');

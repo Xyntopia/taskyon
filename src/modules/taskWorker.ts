@@ -19,6 +19,7 @@ import { TaskManager } from './taskManager';
 import { handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
 import { unknown } from 'zod';
+import { deepMerge } from './utils';
 
 function isOpenAIFunctionCall(
   choice: OpenAI.ChatCompletion['choices'][0]
@@ -282,6 +283,12 @@ async function generateFollowUpTasksFromResult(
   console.log('generate follow up task');
   if (finishedTask.result) {
     const taskDraftList: partialTaskDraft[] = [];
+    const taskTemplate: Partial<LLMTask> = {
+      configuration: {
+        chatApi: finishedTask.configuration?.chatApi,
+        model: finishedTask.configuration?.model,
+      },
+    };
     let execute = false;
     if (finishedTask.result.type === 'ChatAnswer') {
       const choice = finishedTask.result.chatResponse?.choices[0];
@@ -302,11 +309,14 @@ async function generateFollowUpTasksFromResult(
       }
     } else if (finishedTask.result.type === 'ToolChatResult') {
       const choice = finishedTask.result.chatResponse?.choices[0];
-      let taskDraft = undefined;
+      let taskDraft: partialTaskDraft | undefined = undefined;
       ({ taskDraft, execute } = await parseChatResponse(
         choice?.message.content || '',
         choice?.message.role
       ));
+      if (taskDraft && execute) {
+        taskDraft = deepMerge(taskTemplate, taskDraft);
+      }
       if (taskDraft) {
         taskDraftList.push(taskDraft);
       }
@@ -315,11 +325,13 @@ async function generateFollowUpTasksFromResult(
       if (choice) {
         const functionCall = extractOpenAIFunctions(choice);
         if (functionCall) {
-          taskDraftList.push({
-            role: 'function',
-            content: null,
-            configuration: { function: functionCall[0] },
-          });
+          taskDraftList.push(
+            deepMerge(taskTemplate, {
+              role: 'function',
+              content: null,
+              configuration: { function: functionCall[0] },
+            })
+          );
           execute = true;
         }
       }
