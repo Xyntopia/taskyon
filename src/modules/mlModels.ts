@@ -8,7 +8,6 @@ import {
   cat,
   mean,
 } from '@xenova/transformers';
-import { ref } from 'vue';
 
 // Include pako library
 // this piece of code loads a compressed vocabulary for vectorization tasks...
@@ -24,27 +23,27 @@ fetch('compressed_array.b64')
     });
 */
 
-const state = ref({
+const modelStore = {
   models: {} as Record<string, PreTrainedModel>,
   tokenizers: {} as Record<string, PreTrainedTokenizer>,
-});
+};
 
 async function loadModel(modelName: string) {
-  if (!state.value.models[modelName]) {
+  if (!modelStore.models[modelName]) {
     console.log(`load model: ${modelName}`);
-    state.value.models[modelName] = await AutoModel.from_pretrained(modelName);
+    modelStore.models[modelName] = await AutoModel.from_pretrained(modelName);
   }
-  return state.value.models[modelName];
+  return modelStore.models[modelName];
 }
 
 async function loadTokenizer(modelName: string) {
-  if (!state.value.tokenizers[modelName]) {
+  if (!modelStore.tokenizers[modelName]) {
     console.log(`load tokenizer: ${modelName}`);
-    state.value.tokenizers[modelName] = await AutoTokenizer.from_pretrained(
+    modelStore.tokenizers[modelName] = await AutoTokenizer.from_pretrained(
       modelName
     );
   }
-  return state.value.tokenizers[modelName];
+  return modelStore.tokenizers[modelName];
 }
 
 async function smallVectorize(txt: string, modelName: string) {
