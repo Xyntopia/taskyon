@@ -13,26 +13,15 @@
           icon="menu"
         />
         <q-separator vertical></q-separator>
-        <q-btn
-          flat
-          @click="state.drawerOpen = !state.drawerOpen"
-          round
-          dense
-          icon="chat"
-          to="/chat"
-        />
+        <q-btn flat round dense icon="chat" to="/chat"
+          ><q-tooltip>Open chat</q-tooltip>
+        </q-btn>
+        <q-btn flat round dense             icon="svguse:taskyon_mono_opt.svg#taskyon"
+ to="/taskmanager"
+          ><q-tooltip>Manage taskyon tasks</q-tooltip>
+        </q-btn>
         <q-space />
         <!-- Home Icon Button -->
-        <q-toolbar-title>
-          <q-btn
-            dense
-            rounded
-            flat
-            to="/"
-            icon="svguse:taskyon_mono_opt.svg#taskyon"
-          >
-          </q-btn>
-        </q-toolbar-title>
         <q-btn
           v-if="errors.length > 0"
           flat

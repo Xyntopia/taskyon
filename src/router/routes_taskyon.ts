@@ -11,6 +11,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('layouts/Taskyon.vue'),
     children: [
       { path: '', component: () => import('pages/TaskChat.vue') },
+      { path: 'taskmanager', component: () => import('pages/TaskManager.vue') },
       {
         path: 'chat',
         component: () => import('pages/TaskChat.vue'),
