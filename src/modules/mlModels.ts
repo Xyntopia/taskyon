@@ -75,7 +75,8 @@ function mergeVectors(chunkVectors: Tensor[], overlap: number) {
     );
     const overlapCurrent = currentChunk.slice([0, 1], [0, overlap]);
     //TODO: calculate the actual mean of the overlap
-    const overlapMean = overlapPrevious; //overlapPrevious.cat([overlapCurrent], 1);
+    const overlapTensor = cat([overlapPrevious, overlapCurrent], 0);
+    const overlapMean = mean(overlapTensor, 0).unsqueeze(0); //overlapPrevious.cat([overlapCurrent], 1);
 
     mergedVectors.push(overlapMean);
 
@@ -142,11 +143,12 @@ async function vectorize(
 
   // Merge the chunk vectors
   const finalVector: Tensor = mergeVectors(chunkVectors, overlap);
+  const meanPooledVector = mean(finalVector, 1);
 
   // Optionally, return mean-pooled vector of the merged result
   return {
     individualVectors: finalVector,
-    meanPooledVector: mean(finalVector, 1),
+    meanPooledVector,
   };
 }
 
