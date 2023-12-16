@@ -13,25 +13,36 @@
     >
       <q-scroll-observer @scroll="onScroll" axis="vertical" :debounce="500" />
       <!-- "Task" Display -->
-      <q-card
-        style="background-color: inherit; color: inherit; max-width: 48rem"
+      <div
+        style="background-color: inherit; color: inherit"
         flat
         square
         v-if="selectedThread.length > 0"
       >
-        <q-card-section v-if="currentTask" class="q-gutter-sm scrollCard">
-          <q-chat-message
+        <div
+          v-if="currentTask"
+          class="column q-gutter-xs q-px-xs"
+        >
+          <div
             v-for="task in selectedThread"
-            :sent="task.role === 'user' ? true : false"
+            style="max-width: 768px"
             :key="task.id"
-            :bg-color="$q.dark.isActive ? 'primary' : 'white'"
-            :class="task.role === 'user' ? 'user-message' : ''"
+            :class="[
+              'col-auto',
+              task.role === 'user' ? 'self-end' : 'self-start',
+            ]"
           >
             <Task
               :task="task"
-              :class="$q.dark.isActive ? 'text-white' : 'text-black'"
+              :class="[
+                $q.dark.isActive
+                  ? 'bg-primary text-white'
+                  : 'bg-white text-black',
+                'rounded-borders',
+                task.role === 'user' ? 'user-message' : '',
+              ]"
             />
-          </q-chat-message>
+          </div>
           <!--Render tasks which are in progress-->
           <div
             v-if="
@@ -40,7 +51,7 @@
               )
             "
           >
-            <q-chat-message :bg-color="$q.dark.isActive ? 'primary' : 'white'">
+            <div :bg-color="$q.dark.isActive ? 'primary' : 'white'">
               <div>
                 <div>
                   <q-markdown
@@ -80,10 +91,10 @@
                   </q-btn>
                 </div>
               </div>
-            </q-chat-message>
+            </div>
           </div>
-        </q-card-section>
-      </q-card>
+        </div>
+      </div>
       <!-- Welcome Message -->
       <div v-else class="col welcome-message column items-center q-pa-xl">
         <div class="col-auto">
