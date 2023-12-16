@@ -13,7 +13,32 @@ import { Lock } from 'src/modules/utils';
 import { deepMerge } from './utils';
 import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { AsyncQueue } from './utils';
-import { getVector } from './mlModels';
+
+const mlWorker = new Worker(new URL('./mlModel.worker.ts', import.meta.url));
+
+// Function to send data to the worker and receive the result
+function vectorizeText(text: string, modelName: string): Promise<number[]> {
+  return new Promise((resolve, reject) => {
+    mlWorker.onmessage = ({
+      data,
+    }: {
+      data: { error?: unknown; vector?: number[] };
+    }) => {
+      if (data.vector) {
+        resolve(data.vector);
+      } else if (data.error) {
+        reject(data.error);
+      }
+    };
+
+    mlWorker.onerror = (error) => {
+      reject(error);
+    };
+
+    console.log('calling worker with model:', modelName);
+    mlWorker.postMessage({ txt: text, modelName: modelName });
+  });
+}
 
 /**
  * Finds the root task of a given task.
@@ -317,14 +342,23 @@ export class TaskManager {
       const newDBTask = transformLLMTaskToDocType(task);
       await this.taskyonDB.llmtasks.upsert(newDBTask);
       if (this.vectorIndex) {
-        const vec = await getVector(JSON.stringify(task), this.vectorizerModel);
-        if (vec) {
-          const newLabel = this.vectorIndex.addItems([vec], false)[0];
-          await this.taskyonDB.vectormappings.upsert({
-            uuid: task.id,
-            vecid: newLabel,
-          });
-        }
+        const vecdb = this.vectorIndex;
+        const vecmapping = this.taskyonDB.vectormappings;
+        // async update of the vector database in orde to not cause any interruptions...
+        void vectorizeText(JSON.stringify(task), this.vectorizerModel).then(
+          (vec) => {
+            console.log('got a vector result.');
+            //const vec = await getVector(JSON.stringify(task), this.vectorizerModel);
+            if (vec) {
+              const newLabel = vecdb.addItems([vec], false)[0];
+              void vecmapping.upsert({
+                uuid: task.id,
+                vecid: newLabel,
+              });
+            }
+            console.log('finished adding vector!')
+          }
+        );
       }
     }
   }

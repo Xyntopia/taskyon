@@ -4,7 +4,6 @@ import {
   AutoModel,
   AutoTokenizer,
   Tensor,
-  mean_pooling,
   cat,
   mean,
 } from '@xenova/transformers';
@@ -44,16 +43,6 @@ async function loadTokenizer(modelName: string) {
     );
   }
   return modelStore.tokenizers[modelName];
-}
-
-async function smallVectorize(txt: string, modelName: string) {
-  console.log('calculate vectors');
-  const tokenizer = await loadTokenizer(modelName);
-  const model = await loadModel(modelName);
-  const inputs = (await tokenizer(txt)) as Record<string, Tensor>;
-  const res = (await model(inputs)) as Record<string, Tensor>;
-  const res2 = mean_pooling(res.last_hidden_state, inputs.attention_mask);
-  return res2;
 }
 
 function createChunks(tensor: Tensor, chunkSize: number, overlap: number) {
