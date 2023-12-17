@@ -1,8 +1,9 @@
 <template>
-  <div class="message-container">
+  <!--Task-->
+  <div class="message-container q-pa-xs">
     <div class="relative-position">
       <!--Message Display-->
-      <div class="row justify-begin q-gutter-xs message-content">
+      <div class="row items-end q-gutter-xs">
         <!--task icon-->
         <div v-if="task.state == 'Error'" class="col-auto">
           <q-icon name="warning" color="warning" size="sm"
@@ -19,19 +20,19 @@
             <ToolResultWidget :task="task" />
           </q-expansion-item>
         </div>
-        <q-markdown
-          v-else-if="task.content"
-          class="col"
-          no-line-numbers
-          :plugins="[markdownItMermaid, addCopyButtons]"
-          :src="task.content"
-          @click="handleMarkdownClick"
-        />
+        <div v-else-if="task.content" class="col">
+          <q-markdown
+            no-line-numbers
+            :plugins="[markdownItMermaid, addCopyButtons]"
+            :src="task.content"
+            @click="handleMarkdownClick"
+          />
+        </div>
         <!--task costs-->
         <div
           v-if="state.appConfiguration.showCosts"
           style="font-size: xx-small"
-          class="column items-center"
+          class="col-auto column items-center"
         >
           <div v-if="task.debugging.taskCosts">
             {{ Math.round(task.debugging.taskCosts * 1e6).toLocaleString() }}
@@ -68,7 +69,7 @@
       >
         <q-btn
           v-if="state.appConfiguration.expertMode"
-          class="col"
+          class="col-auto"
           icon="code"
           dense
           flat
@@ -213,8 +214,8 @@
 .message-container
     .message-buttons
         position: absolute
-        bottom: -8px  // To move up by 6px
-        left: -8px   // To move left by 6px
+        bottom: -2px  // To move up by 6px
+        left: -2px   // To move left by 6px
         opacity: 0
         transition: opacity 0.3s
 

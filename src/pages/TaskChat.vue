@@ -1,13 +1,10 @@
 <template>
-  <q-page
-    :class="[
-      $q.dark.isActive ? 'black' : 'primarylight',
-      'column items-center',
-    ]"
-  >
+  <!--Task Page-->
+  <q-page :class="[$q.dark.isActive ? 'black' : 'primarylight']">
     <q-resize-observer @resize="onResize" :debounce="50" />
+    <!--Chat Area-->
     <div
-      class="column items-center"
+      class="items-center"
       :style="`padding-bottom: ${bottomPadding}px;`"
       ref="taskThreadContainer"
     >
@@ -19,19 +16,8 @@
         square
         v-if="selectedThread.length > 0"
       >
-        <div
-          v-if="currentTask"
-          class="column q-gutter-xs q-px-xs"
-        >
-          <div
-            v-for="task in selectedThread"
-            style="max-width: 768px"
-            :key="task.id"
-            :class="[
-              'col-auto',
-              task.role === 'user' ? 'self-end' : 'self-start',
-            ]"
-          >
+        <div v-if="currentTask" class="q-gutter-xs q-px-xs task-container">
+          <div v-for="task in selectedThread" :key="task.id" :class="task.role">
             <Task
               :task="task"
               :class="[
@@ -51,7 +37,14 @@
               )
             "
           >
-            <div :bg-color="$q.dark.isActive ? 'primary' : 'white'">
+            <div
+              :class="[
+                $q.dark.isActive
+                  ? 'bg-primary text-white'
+                  : 'bg-white text-black',
+                'rounded-borders',
+              ]"
+            >
               <div>
                 <div>
                   <q-markdown
@@ -117,12 +110,7 @@
       </div>
     </div>
     <!--Create new task area-->
-    <q-page-sticky
-      position="bottom"
-      :offset="[0, 0]"
-      expand
-      class="col print-hide"
-    >
+    <q-page-sticky position="bottom" :offset="[0, 0]" expand class="print-hide">
       <q-resize-observer
         @resize="
           (size) => {
@@ -223,6 +211,26 @@
 </template>
 
 <style lang="sass" scoped>
+.task-container
+  display: flex
+  flex-direction: column
+  max-width: 800px
+  margin: 0 auto // Centers the container
+
+  // Default style for all tasks
+  > div
+    width: fit-content // Makes the width of the task as small as its content
+    max-width: 99% // Prevents the task from growing beyond the container width
+    box-sizing: border-box // Ensures padding and borders are included in width calculation
+    align-self: flex-start // Aligns to the left by default
+
+  // Specific style for tasks with the 'user' role
+  .user
+    align-self: flex-end // Aligns to the right
+
+
+
+
 .user-message
   position: relative
 .user-message::after
