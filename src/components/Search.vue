@@ -14,7 +14,7 @@
           clearable
           debounce="1000"
           :label="searchHint"
-          :model-value="searchString"
+          :model-value="searchString || ''"
           @update:model-value="onQChange"
         >
           <template v-slot:append>
@@ -22,6 +22,7 @@
           </template>
         </q-input>
         <q-select
+          class="col-auto"
           flat
           dense
           debounce="300"
@@ -34,6 +35,7 @@
           <q-tooltip>Number of search results.</q-tooltip>
         </q-select>
         <q-btn
+          class="col-auto"
           v-if="showFilterButton"
           flat
           stretch
@@ -83,7 +85,7 @@ const searchString = ref<string>('');
 const numberOfSearchResults = ref<number>(5);
 
 function onQChange(value: string | null | number) {
-  searchString.value = String(value) || '';
+  searchString.value = (value as string) || '';
   emit('search', value, Number(numberOfSearchResults.value));
 }
 

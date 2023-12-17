@@ -10,9 +10,9 @@
           name: 'id',
           required: true,
           label: 'id',
-          field: (row) => row.document.id,
+          field: (task) => task.id,
         },
-        {
+        /*{
           name: 'score',
           sortable: true,
           required: true,
@@ -32,7 +32,7 @@
           required: true,
           label: 'meta',
           field: (row) => row.document.document.metadata,
-        },
+        },*/
       ]"
       row-key="name"
     >
@@ -50,6 +50,10 @@
 import { ref } from 'vue';
 import Search from 'components/Search.vue';
 import { LLMTask } from 'src/modules/types';
+import { getTaskManager } from 'boot/taskyon';
+
+let taskManager: Awaited<ReturnType<typeof getTaskManager>>;
+void getTaskManager().then((tm) => (taskManager = tm));
 
 const searchResults = ref<LLMTask[]>([]);
 
@@ -62,7 +66,10 @@ function onSearchChange(searchTerm: string | Event, k: number) {
   } else {
     // Perform your search here
     console.log(`Searching for ${searchTerm}`);
-    // searchResults.value = await vectorStore.query(searchTerm, k)
+    //searchResults.value = await vectorStore.query(searchTerm, k)
+    if (taskManager) {
+      searchResults.value = taskManager.vectorSearchTask(searchTerm);
+    }
     console.log(searchResults.value);
   }
 }

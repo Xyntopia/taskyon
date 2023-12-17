@@ -363,6 +363,10 @@ export class TaskManager {
     }
   }
 
+  vectorSearchTask(searchTerm: string) {
+    return [...this.tasks.values()];
+  }
+
   async addFile(fileMapping: FileMappingDocType) {
     if (this.taskyonDB) {
       const fileMappingDoc = await this.taskyonDB.filemappings.insert(
