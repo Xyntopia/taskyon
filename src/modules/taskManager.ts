@@ -356,7 +356,7 @@ export class TaskManager {
                 vecid: newLabel,
               });
             }
-            console.log('finished adding vector!')
+            console.log('finished adding vector!');
           }
         );
       }
@@ -431,10 +431,12 @@ export class TaskManager {
     const orphanTasks = [];
     for (const task of this.tasks.values()) {
       if (task.childrenIDs && task.childrenIDs.length == 0) {
-        orphanTasks.push(task.id);
+        orphanTasks.push(task);
       }
     }
-    return orphanTasks;
+    return orphanTasks
+      .sort((a, b) => (a.created_at || 0) - (b.created_at || 0))
+      .map((t) => t.id);
   }
 
   private notifySubscribers(taskId?: string, taskCountChanged = false): void {

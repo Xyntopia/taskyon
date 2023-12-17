@@ -17,6 +17,9 @@
             icon="add"
             @click="createNewConversation"
           ></q-btn>
+          <q-btn class="col" dense flat icon="search" to="/TaskManager"
+            ><q-tooltip>Search for more conversations</q-tooltip></q-btn
+          >
         </div>
         <q-list>
           <q-item
@@ -83,10 +86,10 @@ void getTaskManager().then((tm) => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   tm.subscribeToTaskChanges(() => {
     console.log('update threads!!');
-    const leaftasks = tm.getLeafTasks();
+    const leaftasks = tm.getLeafTasks().reverse().slice(0, 10);
     conversationIDs.value = leaftasks;
   }, true);
-  conversationIDs.value = tm.getLeafTasks();
+  conversationIDs.value = tm.getLeafTasks().reverse().slice(0, 10);
 });
 
 async function onDeleteThread(conversationId: string) {
@@ -94,6 +97,6 @@ async function onDeleteThread(conversationId: string) {
   const tm = await getTaskManager();
   state.chatState.selectedTaskId = undefined;
   await deleteTaskThread(conversationId, tm);
-  conversationIDs.value = tm.getLeafTasks();
+  conversationIDs.value = tm.getLeafTasks().reverse().slice(0, 10);
 }
 </script>
