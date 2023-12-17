@@ -120,12 +120,13 @@ const vectorMappingSchemaLiteral = {
   title: 'VectorMapping schema',
   version: 1,
   type: 'object',
-  primaryKey: 'uuid',
+  primaryKey: 'vecid', // we do this, so that we can find documents very fast after commiting a vector search
   properties: {
     uuid: { type: 'string', maxLength: 128 },
-    vecid: { type: 'number' },
+    vecid: { type: 'string', maxLength: 128 },
   },
   required: ['uuid', 'vecid'],
+  indexes: ['uuid'],
 } as const;
 
 const vectorMappingSchemaTyped = toTypedRxJsonSchema(
