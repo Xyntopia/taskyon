@@ -4,10 +4,11 @@ import { Document } from 'langchain/document';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { loadFile } from 'src/modules/loadFiles';
 import { useCachedModels } from './mlModels';
-import { HierarchicalNSW, loadHnswlib } from 'hnswlib-wasm';
+import type { HierarchicalNSW } from 'hnswlib-wasm';
 import { LocalStorage } from 'quasar';
 import Dexie from 'dexie';
 import { getVector } from './mlModels';
+import { loadOrCreateVectorStore } from './vectorSearch';
 //TODO: maybe use yarn add hnsw  (pure javascript library)
 //TODO: make everything functional... no side effects etc...
 
@@ -25,28 +26,6 @@ function hashCode(str: string) {
     hash |= 0; // Convert to 32bit integer
   }
   return hash;
-}
-
-async function loadIndex(
-  numDimensions: number,
-  indexName: string,
-  maxElements: number
-) {
-  //check this for explanations:  https://github.com/nmslib/hnswlib/blob/master/ALGO_PARAMS.md
-  const lib = await loadHnswlib();
-  const index = new lib.HierarchicalNSW('cosine', numDimensions, indexName);
-  // Initialize the index with the dimensions (1536), m, efConstruction. See the section below on parameters for more details. These cannot be changed after the index is created.
-  // m: max number of outgoing connections in graph, memory consumption, roughly: (M * 8-10)*numDataPoints,
-  // also low m is better if we have low intrinsic dimension of dataset and  low recall is OK.
-  const m = 30;
-  // bigger efConstruction: higher quality index, longer construction
-  const efConstruction = 200;
-  const randomSeed = 111;
-  index.initIndex(maxElements, m, efConstruction, randomSeed, true);
-
-  // Set efSearch parameters. This can be changed after the index is created.
-  index.setEfSearch(200); // higher ef: slower, more accurate (between k & size of dataset)
-  return index;
 }
 
 const defaultConfiguration = {
@@ -101,24 +80,6 @@ interface documentStoreType {
 }
 
 let documentStore: documentStoreType | undefined = undefined;
-
-const numDimensions = 384;
-
-export async function loadOrCreateVectorStore(
-  vecdbName: string,
-  MAX_ELEMENTS: number
-) {
-  let newindex = await loadIndex(numDimensions, vecdbName, MAX_ELEMENTS);
-
-  console.log('load index');
-  try {
-    await newindex.readIndex(vecdbName, 10000, true);
-  } catch {
-    console.log(`index ${vecdbName} coud not be reloaded`);
-    newindex = await loadIndex(numDimensions, vecdbName, MAX_ELEMENTS);
-  }
-  return newindex;
-}
 
 async function loadDocumentStore(name: string): Promise<documentStoreType> {
   //TODO: reload index if name change detected

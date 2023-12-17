@@ -5,7 +5,7 @@ import { LLMTask } from 'src/modules/types';
 import { createTaskyonDatabase, TaskyonDatabase } from 'src/modules/rxdb';
 import { run } from 'src/modules/taskWorker';
 import { useTaskyonStore } from 'src/stores/taskyonState';
-import { loadOrCreateVectorStore } from 'src/modules/localVectorStore';
+import { loadOrCreateVectorStore } from 'src/modules/vectorSearch';
 
 // Singleton holder for TaskManager
 let taskManagerInstance: TaskManager;
