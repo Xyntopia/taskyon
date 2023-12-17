@@ -235,7 +235,6 @@ export class TaskManager {
   private taskyonDB: TaskyonDatabase | undefined;
   private tasks: Map<string, LLMTask>;
   private vectorIndex: HierarchicalNSW | undefined;
-  private vectorIdMap: Map<string, number>;
   // we need these locks in order to sync our databases..
   private taskLocks: Map<string, Lock> = new Map();
   private subscribers: Array<(task?: LLMTask, taskNum?: number) => void> = [];
@@ -254,7 +253,6 @@ export class TaskManager {
     this.taskyonDB = taskyonDB;
     void this.initializeTasksFromDB();
     this.vectorIndex = vectorIndex;
-    this.vectorIdMap = new Map();
     this.vectorizerModel = vectorizerModel || '';
   }
 
@@ -353,7 +351,7 @@ export class TaskManager {
               const newLabel = vecdb.addItems([vec], false)[0];
               void vecmapping.upsert({
                 uuid: task.id,
-                vecid: newLabel,
+                vecid: String(newLabel),
               });
             }
             console.log('finished adding vector!');
@@ -363,8 +361,43 @@ export class TaskManager {
     }
   }
 
-  vectorSearchTask(searchTerm: string) {
-    return [...this.tasks.values()];
+  async vectorSearchTasks(searchTerm: string, k = 5) {
+    const result = { tasks: [] as LLMTask[], distances: [] as number[] };
+    if (this.vectorIndex) {
+      const queryVec = await vectorizeText(searchTerm, this.vectorizerModel);
+      if (queryVec && this.taskyonDB) {
+        const res = this.vectorIndex.searchKnn(queryVec, k, undefined);
+        const neighborIndices = res.neighbors.map((r) => String(r));
+        // You can also search the index with a label filter
+        //const labelFilter = (label: number) => {
+        //          return label >= 10 && label < 20;
+        //        };
+        //        const result2 = index.searchKnn(testVectorData.vectors[10], 10, labelFilter);
+        //now get the relevant document using our map
+        // Query the vectormappings to find the uuid for the vecid
+        // Fetch the vector mappings in bulk for all neighbor indices
+        const vectorMappingDocs = await this.taskyonDB.vectormappings
+          .findByIds(neighborIndices)
+          .exec();
+        const uuidToIndexMap = new Map<string, number>();
+
+        // Map each uuid to its corresponding index for easy retrieval
+        vectorMappingDocs.forEach((doc, index) => {
+          if (doc) {
+            uuidToIndexMap.set(doc.uuid, Number(index));
+          }
+        });
+        // Iterate through the uuids and fetch the corresponding tasks
+        for (const [uuid, index] of uuidToIndexMap) {
+          const foundTask = this.tasks.get(uuid);
+          if (foundTask) {
+            result.tasks.push(foundTask);
+            result.distances.push(res.distances[index]);
+          }
+        }
+      }
+    }
+    return result;
   }
 
   async addFile(fileMapping: FileMappingDocType) {

@@ -1,5 +1,10 @@
 <template>
   <q-page>
+    <q-btn
+      label="udpate search index"
+      icon="sync"
+      @click="onUpdateSearchIndex"
+    />
     <q-table
       wrap-cells
       title="Search Results"
@@ -57,7 +62,7 @@ void getTaskManager().then((tm) => (taskManager = tm));
 
 const searchResults = ref<LLMTask[]>([]);
 
-function onSearchChange(searchTerm: string | Event, k: number) {
+async function onSearchChange(searchTerm: string | Event, k: number) {
   if (searchTerm instanceof Event) {
     // for some reason, in chrome, a second event with the original input-event gets fired...
     return;
@@ -68,8 +73,12 @@ function onSearchChange(searchTerm: string | Event, k: number) {
     console.log(`Searching for ${searchTerm}`);
     //searchResults.value = await vectorStore.query(searchTerm, k)
     if (taskManager) {
-      searchResults.value = taskManager.vectorSearchTask(searchTerm);
+      const { tasks, distances } = await taskManager.vectorSearchTasks(
+        searchTerm
+      );
+      searchResults.value = tasks;
     }
+    console.log('finished search!');
     console.log(searchResults.value);
   }
 }
