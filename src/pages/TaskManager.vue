@@ -1,10 +1,8 @@
 <template>
-  <q-page>
-    <q-btn
-      label="udpate search index"
-      icon="sync"
-      @click="onUpdateSearchIndex"
-    />
+  <q-page class="q-gutter-xs q-pa-xs">
+    <q-btn :percentage="syncProgress" icon="sync" @click="onUpdateSearchIndex">
+      update search index {{ syncProgressString }}</q-btn
+    >
     <q-table
       wrap-cells
       title="Search Results"
@@ -43,6 +41,7 @@
     >
       <template v-slot:top>
         <Search @search="onSearchChange" class="fit" />
+        <div class="text-caption"># of tasks: {{ taskCount }}</div>
       </template>
       <template v-slot:body-cell-meta="props">
         <pre>{{ props }}</pre>
@@ -57,10 +56,24 @@ import Search from 'components/Search.vue';
 import { LLMTask } from 'src/modules/types';
 import { getTaskManager } from 'boot/taskyon';
 
-let taskManager: Awaited<ReturnType<typeof getTaskManager>>;
-void getTaskManager().then((tm) => (taskManager = tm));
-
 const searchResults = ref<LLMTask[]>([]);
+const syncProgressString = ref('0/0');
+const syncProgress = ref(0.0);
+const taskCount = ref(0);
+
+let taskManager: Awaited<ReturnType<typeof getTaskManager>>;
+void getTaskManager().then(
+  (tm) => ((taskManager = tm), (taskCount.value = taskManager.count()))
+);
+
+async function onUpdateSearchIndex() {
+  if (taskManager) {
+    await taskManager.syncVectorIndexWithTasks(false, (done, total) => {
+      syncProgress.value = done / total;
+      syncProgressString.value = `${done}/${total}`;
+    });
+  }
+}
 
 async function onSearchChange(searchTerm: string | Event, k: number) {
   if (searchTerm instanceof Event) {

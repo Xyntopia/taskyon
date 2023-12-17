@@ -13,6 +13,7 @@ import { Lock } from 'src/modules/utils';
 import { deepMerge } from './utils';
 import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { AsyncQueue } from './utils';
+import { loadOrCreateVectorStore } from './vectorSearch';
 
 const mlWorker = new Worker(new URL('./mlModel.worker.ts', import.meta.url));
 
@@ -242,18 +243,28 @@ export class TaskManager {
     (task?: LLMTask, taskNum?: number) => void
   > = [];
   private vectorizerModel: string;
+  private vectorIndexName: string;
 
   constructor(
     tasks: TaskManager['tasks'],
     taskyonDB?: TaskyonDatabase,
-    vectorIndex?: HierarchicalNSW,
     vectorizerModel?: string
   ) {
     this.tasks = tasks;
     this.taskyonDB = taskyonDB;
     void this.initializeTasksFromDB();
-    this.vectorIndex = vectorIndex;
     this.vectorizerModel = vectorizerModel || '';
+    this.vectorIndexName = 'taskyondb_vec';
+    void this.initVectorStore();
+  }
+
+  async initVectorStore(loadIfExists = true) {
+    const maxElements = 10000;
+    this.vectorIndex = await loadOrCreateVectorStore(
+      this.vectorIndexName,
+      maxElements,
+      loadIfExists
+    );
   }
 
   // Lock a task and returns a function closure which can be used to unlock it again...
@@ -269,6 +280,10 @@ export class TaskManager {
       console.log('wait for unlock!');
       await lock.waitForUnlock();
     }
+  }
+
+  count() {
+    return this.tasks.size;
   }
 
   async initializeTasksFromDB() {
@@ -333,10 +348,45 @@ export class TaskManager {
     });
   }
 
+  async syncVectorIndexWithTasks(
+    resetVectorIndex = false,
+    progressCallback: (done: number, total: number) => void
+  ) {
+    console.log('sync vector index');
+    if (!this.vectorIndex || !this.taskyonDB) {
+      console.warn('Vector index or database is not initialized.');
+      return;
+    }
+
+    if (resetVectorIndex) {
+      await this.initVectorStore(false);
+      await this.taskyonDB.vectormappings.remove();
+    }
+
+    let counter = 0;
+    //this.taskyonDB.vectormappings.exportJSON()
+    for (const task of this.tasks.values()) {
+      progressCallback(counter, this.tasks.size);
+      // Check if the task is already in the vector index
+      const vectorMappingDoc = await this.taskyonDB.vectormappings
+        .findOne(task.id)
+        .exec();
+      /*if (vectorMappingDoc) {
+        continue; // Skip if already in the vector index
+      }*/
+
+      await this.addtoVectorDB(task);
+      counter += 1;
+    }
+
+    await this.vectorIndex.writeIndex(this.vectorIndexName);
+    progressCallback(this.tasks.size, this.tasks.size);
+
+    console.log('Sync complete.');
+  }
+
   private async addtoVectorDB(task: LLMTask) {
     if (this.vectorIndex && this.taskyonDB) {
-      const vecdb = this.vectorIndex;
-      const vecmapping = this.taskyonDB.vectormappings;
       const vec = await vectorizeText(
         JSON.stringify(task),
         this.vectorizerModel
@@ -344,8 +394,8 @@ export class TaskManager {
       console.log('got a vector result.');
       //const vec = await getVector(JSON.stringify(task), this.vectorizerModel);
       if (vec) {
-        const newLabel = vecdb.addItems([vec], false)[0];
-        void vecmapping.upsert({
+        const newLabel = this.vectorIndex.addItems([vec], false)[0];
+        void this.taskyonDB.vectormappings.upsert({
           uuid: task.id,
           vecid: String(newLabel),
         });

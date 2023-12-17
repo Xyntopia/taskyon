@@ -1,4 +1,4 @@
-import { loadHnswlib } from 'hnswlib-wasm';
+import { HierarchicalNSW, loadHnswlib } from 'hnswlib-wasm';
 
 export async function loadIndex(
   numDimensions: number,
@@ -20,21 +20,24 @@ export async function loadIndex(
   // Set efSearch parameters. This can be changed after the index is created.
   index.setEfSearch(200); // higher ef: slower, more accurate (between k & size of dataset)
   return index;
-}const numDimensions = 384;
+}
+const numDimensions = 384;
 
 export async function loadOrCreateVectorStore(
   vecdbName: string,
-  MAX_ELEMENTS: number
+  MAX_ELEMENTS: number,
+  loadIfExists = true
 ) {
-  let newindex = await loadIndex(numDimensions, vecdbName, MAX_ELEMENTS);
-
-  console.log('load index');
-  try {
-    await newindex.readIndex(vecdbName, MAX_ELEMENTS, true);
-  } catch {
-    console.log(`index ${vecdbName} coud not be reloaded`);
-    newindex = await loadIndex(numDimensions, vecdbName, MAX_ELEMENTS);
+  console.log('initialize index', vecdbName);
+  if (loadIfExists) {
+    try {
+      const newindex = await loadIndex(numDimensions, vecdbName, MAX_ELEMENTS);
+      await newindex.readIndex(vecdbName, MAX_ELEMENTS, true);
+      return newindex;
+    } catch {
+      console.log(`index ${vecdbName} could not be reloaded`);
+    }
   }
+  const newindex = await loadIndex(numDimensions, vecdbName, MAX_ELEMENTS);
   return newindex;
 }
-

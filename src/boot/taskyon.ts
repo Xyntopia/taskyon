@@ -5,7 +5,6 @@ import { LLMTask } from 'src/modules/types';
 import { createTaskyonDatabase, TaskyonDatabase } from 'src/modules/rxdb';
 import { run } from 'src/modules/taskWorker';
 import { useTaskyonStore } from 'src/stores/taskyonState';
-import { loadOrCreateVectorStore } from 'src/modules/vectorSearch';
 
 // Singleton holder for TaskManager
 let taskManagerInstance: TaskManager;
@@ -32,16 +31,10 @@ export async function getTaskManager() {
       );
     }
     console.log('initializing task manager');
-    const maxElements = 10000;
-    const vectorDb = await loadOrCreateVectorStore(
-      'taskyondb_vec',
-      maxElements
-    );
     const vectorizationModel = 'Xenova/all-MiniLM-L6-v2';
     taskManagerInstance = new TaskManager(
       TaskList,
       taskyonDBInstance,
-      vectorDb,
       vectorizationModel
     );
     console.log('finished initialization');
