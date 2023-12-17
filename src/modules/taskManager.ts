@@ -333,31 +333,35 @@ export class TaskManager {
     });
   }
 
+  private async addtoVectorDB(task: LLMTask) {
+    if (this.vectorIndex && this.taskyonDB) {
+      const vecdb = this.vectorIndex;
+      const vecmapping = this.taskyonDB.vectormappings;
+      const vec = await vectorizeText(
+        JSON.stringify(task),
+        this.vectorizerModel
+      );
+      console.log('got a vector result.');
+      //const vec = await getVector(JSON.stringify(task), this.vectorizerModel);
+      if (vec) {
+        const newLabel = vecdb.addItems([vec], false)[0];
+        void vecmapping.upsert({
+          uuid: task.id,
+          vecid: String(newLabel),
+        });
+      }
+      console.log('finished adding vector!');
+    }
+  }
+
   private async saveTask(taskId: string): Promise<void> {
     const task = this.tasks.get(taskId);
     console.log('save task: ', task);
     if (task && this.taskyonDB) {
       const newDBTask = transformLLMTaskToDocType(task);
       await this.taskyonDB.llmtasks.upsert(newDBTask);
-      if (this.vectorIndex) {
-        const vecdb = this.vectorIndex;
-        const vecmapping = this.taskyonDB.vectormappings;
-        // async update of the vector database in orde to not cause any interruptions...
-        void vectorizeText(JSON.stringify(task), this.vectorizerModel).then(
-          (vec) => {
-            console.log('got a vector result.');
-            //const vec = await getVector(JSON.stringify(task), this.vectorizerModel);
-            if (vec) {
-              const newLabel = vecdb.addItems([vec], false)[0];
-              void vecmapping.upsert({
-                uuid: task.id,
-                vecid: String(newLabel),
-              });
-            }
-            console.log('finished adding vector!');
-          }
-        );
-      }
+      // async update of the vector database in order to not cause any interruptions...
+      void this.addtoVectorDB(task);
     }
   }
 
