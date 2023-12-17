@@ -27,6 +27,7 @@
             v-for="conversationId in conversationIDs"
             :key="conversationId"
             @click="state.chatState.selectedTaskId = conversationId"
+            to="/chat"
             clickable
             v-ripple
           >
