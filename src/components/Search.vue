@@ -1,18 +1,45 @@
 <template>
   <div class="column">
     <div class="col-auto">
-      <div class="row items-center q-px-none q-gutter-md rounded-borders componentSearchBar">
-        <q-input class="col" outlined :loading="searchState" type="search" autofocus :dense="false" clearable
-          debounce="1000" :label="searchHint" :model-value="searchString" @update:model-value="onQChange">
+      <div
+        class="row items-center q-px-none q-gutter-md rounded-borders componentSearchBar"
+      >
+        <q-input
+          class="col"
+          outlined
+          :loading="searchState"
+          type="search"
+          autofocus
+          :dense="false"
+          clearable
+          debounce="1000"
+          :label="searchHint"
+          :model-value="searchString"
+          @update:model-value="onQChange"
+        >
           <template v-slot:append>
             <q-btn round flat @click="requestSearch" icon="search" />
           </template>
         </q-input>
-        <q-input filled dense debounce="300" color="primary" type="number" style="max-width: 100px"
-          v-model="numberOfSearchResults">
+        <q-select
+          flat
+          dense
+          debounce="300"
+          color="primary"
+          type="number"
+          style="max-width: 100px"
+          v-model="numberOfSearchResults"
+          :options="[5, 10, 25, 50, 100]"
+        >
           <q-tooltip>Number of search results.</q-tooltip>
-        </q-input>
-        <q-btn v-if="showFilterButton" flat stretch icon="filter_alt" @click="toggleFilter">
+        </q-select>
+        <q-btn
+          v-if="showFilterButton"
+          flat
+          stretch
+          icon="filter_alt"
+          @click="toggleFilter"
+        >
           <q-tooltip>Toggle Filter Options</q-tooltip>
         </q-btn>
         <!--<q-btn v-if="showGridButton" flat stretch dense :icon="usegrid ? 'view_list' : 'view_module'"
@@ -25,40 +52,40 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref } from 'vue';
 
 defineProps({
   searchState: {
     type: Boolean,
-    default: false
+    default: false,
   },
   searchHint: {
     type: String,
-    default: 'Search...'
+    default: 'Search...',
   },
   showFilterButton: {
     type: Boolean,
-    default: false
+    default: false,
   },
   showGridButton: {
     type: Boolean,
-    default: false
+    default: false,
   },
   usegrid: {
     type: Boolean,
-    default: false
-  }
-})
+    default: false,
+  },
+});
 
-const emit = defineEmits(['search', 'toggleFilter'])
+const emit = defineEmits(['search', 'toggleFilter']);
 
 const searchString = ref<string>('');
 const numberOfSearchResults = ref<number>(5);
 
 function onQChange(value: string | null | number) {
-  searchString.value = String(value) || ''
+  searchString.value = String(value) || '';
   emit('search', value, Number(numberOfSearchResults.value));
-};
+}
 
 const requestSearch = () => {
   emit('search', searchString.value, Number(numberOfSearchResults.value));
