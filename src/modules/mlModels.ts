@@ -74,7 +74,6 @@ function mergeVectors(chunkVectors: Tensor[], overlap: number) {
       [chunkLength - overlap, Infinity]
     );
     const overlapCurrent = currentChunk.slice([0, 1], [0, overlap]);
-    //TODO: calculate the actual mean of the overlap
     const overlapTensor = cat([overlapPrevious, overlapCurrent], 0);
     const overlapMean = mean(overlapTensor, 0).unsqueeze(0); //overlapPrevious.cat([overlapCurrent], 1);
 
@@ -121,13 +120,18 @@ async function vectorize(
   const { input_ids, attention_mask, token_type_ids } = fullInputs;
 
   // Create chunks for each tensor
-  const inputIdChunks = createChunks(input_ids, maxChunkSize, overlap);
-  const attentionMaskChunks = createChunks(
-    attention_mask,
-    maxChunkSize,
-    overlap
-  );
-  const tokenTypeChunks = createChunks(token_type_ids, maxChunkSize, overlap);
+  let inputIdChunks: Tensor[];
+  let attentionMaskChunks: Tensor[];
+  let tokenTypeChunks: Tensor[];
+  if (input_ids.size >= maxChunkSize) {
+    inputIdChunks = createChunks(input_ids, maxChunkSize, overlap);
+    attentionMaskChunks = createChunks(attention_mask, maxChunkSize, overlap);
+    tokenTypeChunks = createChunks(token_type_ids, maxChunkSize, overlap);
+  } else {
+    inputIdChunks = [input_ids];
+    attentionMaskChunks = [attention_mask];
+    tokenTypeChunks = [token_type_ids];
+  }
 
   // Vectorize each chunk and collect vectors
   const chunkVectors: Tensor[] = [];
@@ -142,7 +146,13 @@ async function vectorize(
   }
 
   // Merge the chunk vectors
-  const finalVector: Tensor = mergeVectors(chunkVectors, overlap);
+  let finalVector: Tensor;
+  if (chunkVectors.length > 1) {
+    finalVector = mergeVectors(chunkVectors, overlap);
+  } else {
+    finalVector = chunkVectors[0];
+  }
+
   const meanPooledVector = mean(finalVector, 1);
 
   // Optionally, return mean-pooled vector of the merged result
