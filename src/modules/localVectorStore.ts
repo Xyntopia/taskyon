@@ -88,9 +88,12 @@ async function loadDocumentStore(name: string): Promise<documentStoreType> {
     vecdbName,
     vecStoreUploaderConfigurationState.value.MAX_ELEMENTS
   );
+  // the next is only for debugging purposes if we want to avoid initialization
+  // of vectorindex
+  //const newindex = await Promise.resolve(undefined);
 
   const idb = new DocumentDatabase(name);
-  console.log(`successfully loaded index: ${name}`);
+  console.log(`successfully loaded vectorstore collection: ${name}`);
   return {
     index: newindex,
     idb,
