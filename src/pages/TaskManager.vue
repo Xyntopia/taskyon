@@ -4,6 +4,7 @@
       update search index {{ syncProgressString }}</q-btn
     >
     <q-table
+      style="font-size: 0.8em;"
       wrap-cells
       title="Search Results"
       :rows="searchResults"
@@ -37,7 +38,11 @@
         <div class="text-caption"># of tasks: {{ taskCount }}</div>
       </template>
       <template v-slot:body-cell-task="props">
-        <Task style="font-size: 0.8em" :task="props.row" />
+        <Task
+          style=" border: 1px solid"
+          :task="props.row"
+          class="q-pa-xs"
+        />
       </template>
     </q-table>
   </q-page>
