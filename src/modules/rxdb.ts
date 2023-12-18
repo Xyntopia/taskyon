@@ -162,6 +162,41 @@ export type TaskyonDatabase = RxDatabase<TaskyonDatabaseCollections>;
     const taskyonDBInstance = await createTaskyonDatabase('taskyondb');
     taskManagerInstance = new TaskManager(TaskList, taskyonDBInstance);
 */
+
+export const collections = {
+  llmtasks: {
+    schema: llmTaskSchema,
+    autoMigrate: true, // <- migration will not run at creation
+    migrationStrategies: {
+      // 1 means, this transforms data from version 0 to version 1
+      1: function (/*oldDoc*/) {
+        // for this version we simply discard everything from version 0
+        return null;
+      },
+    },
+  },
+  filemappings: {
+    schema: fileMappingSchema,
+    autoMigrate: true, // <- migration will not run at creation
+    migrationStrategies: {
+      // for this version we simply discard everything from version 0
+      1: function (/*oldDoc*/) {
+        return null;
+      },
+    },
+  },
+  vectormappings: {
+    schema: vectorMappingSchema,
+    autoMigrate: true, // <- migration will not run at creation
+    migrationStrategies: {
+      // for this version we simply discard everything from version 0
+      1: function (/*oldDoc*/) {
+        return null;
+      },
+    },
+  },
+};
+
 export async function createTaskyonDatabase(
   name: string,
   storage: RxStorageDexie | RxStorageMemory | undefined = undefined
@@ -173,39 +208,7 @@ export async function createTaskyonDatabase(
       storage: newStorage,
     });
 
-  await db.addCollections({
-    llmtasks: {
-      schema: llmTaskSchema,
-      autoMigrate: true, // <- migration will not run at creation
-      migrationStrategies: {
-        // 1 means, this transforms data from version 0 to version 1
-        1: function (/*oldDoc*/) {
-          // for this version we simply discard everything from version 0
-          return null;
-        },
-      },
-    },
-    filemappings: {
-      schema: fileMappingSchema,
-      autoMigrate: true, // <- migration will not run at creation
-      migrationStrategies: {
-        // for this version we simply discard everything from version 0
-        1: function (/*oldDoc*/) {
-          return null;
-        },
-      },
-    },
-    vectormappings: {
-      schema: vectorMappingSchema,
-      autoMigrate: true, // <- migration will not run at creation
-      migrationStrategies: {
-        // for this version we simply discard everything from version 0
-        1: function (/*oldDoc*/) {
-          return null;
-        },
-      },
-    },
-  });
+  await db.addCollections(collections);
 
   return db;
 }
