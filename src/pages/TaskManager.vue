@@ -22,20 +22,13 @@
           label: 'score',
           field: (row) => 1 / (row.distance + 0.001),
         },
-        /*{
-          name: 'document',
-          sortable: true,
-          required: true,
-          label: 'document',
-          field: (row) => row.document.document.pageContent,
-        },
         {
-          name: 'meta',
+          name: 'task',
           sortable: true,
           required: true,
-          label: 'meta',
-          field: (row) => row.document.document.metadata,
-        },*/
+          label: 'task',
+          field: (task: LLMTask) => task.id,
+        }
       ]"
       row-key="name"
     >
@@ -43,8 +36,8 @@
         <Search @search="onSearchChange" class="fit" />
         <div class="text-caption"># of tasks: {{ taskCount }}</div>
       </template>
-      <template v-slot:body-cell-meta="props">
-        <pre>{{ props }}</pre>
+      <template v-slot:body-cell-task="props">
+        <Task style="font-size: 0.8em" :task="props.row" />
       </template>
     </q-table>
   </q-page>
@@ -55,6 +48,7 @@ import { ref } from 'vue';
 import Search from 'components/Search.vue';
 import { LLMTask } from 'src/modules/types';
 import { getTaskManager } from 'boot/taskyon';
+import Task from 'src/components/Task.vue';
 
 const searchResults = ref<LLMTask[]>([]);
 const syncProgressString = ref('0/0');
