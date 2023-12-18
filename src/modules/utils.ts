@@ -212,6 +212,10 @@ export function asyncLruCache<ReturnType>(
 }
 
 export class Lock {
+  //TODO: the function which is returned to resolve the promise
+  //      should be a callable object and automatically resolve
+  //      when it is destroyed for example when running out of scope
+  //      in a function...
   private _promise: Promise<void> | null = null;
 
   async lock(): Promise<() => void> {

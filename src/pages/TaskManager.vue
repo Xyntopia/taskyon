@@ -15,14 +15,14 @@
           label: 'id',
           field: (task) => task.id,
         },
-        /*{
+        {
           name: 'score',
           sortable: true,
           required: true,
           label: 'score',
           field: (row) => 1 / (row.distance + 0.001),
         },
-        {
+        /*{
           name: 'document',
           sortable: true,
           required: true,
@@ -68,11 +68,12 @@ void getTaskManager().then(
 
 async function onUpdateSearchIndex() {
   if (taskManager) {
-    await taskManager.syncVectorIndexWithTasks(false, (done, total) => {
+    await taskManager.syncVectorIndexWithTasks(true, (done, total) => {
       syncProgress.value = done / total;
       syncProgressString.value = `${done}/${total}`;
     });
   }
+  taskCount.value = taskManager.count();
 }
 
 async function onSearchChange(searchTerm: string | Event, k: number) {
@@ -87,12 +88,18 @@ async function onSearchChange(searchTerm: string | Event, k: number) {
     //searchResults.value = await vectorStore.query(searchTerm, k)
     if (taskManager) {
       const { tasks, distances } = await taskManager.vectorSearchTasks(
-        searchTerm
+        searchTerm,
+        k
       );
-      searchResults.value = tasks;
+      // Add score to each task
+      searchResults.value = tasks.map((task, index) => ({
+        ...task,
+        distance: distances[index], // Calculate score based on distance
+      }));
     }
     console.log('finished search!');
     console.log(searchResults.value);
+    taskCount.value = taskManager.count();
   }
 }
 
@@ -104,7 +111,4 @@ const initialPagination = {
   rowsPerPage: 5,
   // rowsNumber: xx if getting data from a server
 };
-function resetDb() {
-  console.log('resetting document store');
-}
 </script>

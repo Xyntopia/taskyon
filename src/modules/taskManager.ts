@@ -7,9 +7,10 @@ import {
   FileMappingDocType,
   transformLLMTaskToDocType,
   transformDocToLLMTask,
+  collections,
 } from './rxdb';
 import { openFile } from './OPFS';
-import { Lock } from 'src/modules/utils';
+import { Lock, sleep } from 'src/modules/utils';
 import { deepMerge } from './utils';
 import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { AsyncQueue } from './utils';
@@ -254,7 +255,7 @@ export class TaskManager {
     this.taskyonDB = taskyonDB;
     void this.initializeTasksFromDB();
     this.vectorizerModel = vectorizerModel || '';
-    this.vectorIndexName = 'taskyondb_vec';
+    this.vectorIndexName = 'taskyondbv';
     void this.initVectorStore();
   }
 
@@ -359,8 +360,13 @@ export class TaskManager {
     }
 
     if (resetVectorIndex) {
+      console.log('delete vector store');
       await this.initVectorStore(false);
+      console.log('delete vector mappings');
       await this.taskyonDB.vectormappings.remove();
+      await this.taskyonDB.addCollections({
+        vectormappings: collections.vectormappings,
+      });
     }
 
     let counter = 0;
@@ -368,10 +374,10 @@ export class TaskManager {
     for (const task of this.tasks.values()) {
       progressCallback(counter, this.tasks.size);
       // Check if the task is already in the vector index
-      const vectorMappingDoc = await this.taskyonDB.vectormappings
+      /*const vectorMappingDoc = await this.taskyonDB.vectormappings
         .findOne(task.id)
         .exec();
-      /*if (vectorMappingDoc) {
+      if (vectorMappingDoc) {
         continue; // Skip if already in the vector index
       }*/
 
@@ -379,7 +385,8 @@ export class TaskManager {
       counter += 1;
     }
 
-    await this.vectorIndex.writeIndex(this.vectorIndexName);
+    await sleep(1000);
+    //await this.vectorIndex.writeIndex(this.vectorIndexName);
     progressCallback(this.tasks.size, this.tasks.size);
 
     console.log('Sync complete.');
@@ -416,39 +423,31 @@ export class TaskManager {
   }
 
   async vectorSearchTasks(searchTerm: string, k = 5) {
+    console.log('search for', searchTerm);
     const result = { tasks: [] as LLMTask[], distances: [] as number[] };
     if (this.vectorIndex) {
       const queryVec = await vectorizeText(searchTerm, this.vectorizerModel);
       if (queryVec && this.taskyonDB) {
         const res = this.vectorIndex.searchKnn(queryVec, k, undefined);
         const neighborIndices = res.neighbors.map((r) => String(r));
-        // You can also search the index with a label filter
-        //const labelFilter = (label: number) => {
-        //          return label >= 10 && label < 20;
-        //        };
-        //        const result2 = index.searchKnn(testVectorData.vectors[10], 10, labelFilter);
-        //now get the relevant document using our map
-        // Query the vectormappings to find the uuid for the vecid
+
         // Fetch the vector mappings in bulk for all neighbor indices
         const vectorMappingDocs = await this.taskyonDB.vectormappings
           .findByIds(neighborIndices)
           .exec();
-        const uuidToIndexMap = new Map<string, number>();
 
-        // Map each uuid to its corresponding index for easy retrieval
-        vectorMappingDocs.forEach((doc, index) => {
-          if (doc) {
-            uuidToIndexMap.set(doc.uuid, Number(index));
+        // Use the neighbor indices to get the correct vector mapping documents
+        // and then use the uuid from those documents to fetch the tasks
+        res.neighbors.forEach((neighborIndex, searchResultIndex) => {
+          const uuid = vectorMappingDocs.get(String(neighborIndex))?.uuid;
+          if (uuid) {
+            const foundTask = this.tasks.get(uuid);
+            if (foundTask) {
+              result.tasks.push(foundTask);
+              result.distances.push(res.distances[searchResultIndex]);
+            }
           }
         });
-        // Iterate through the uuids and fetch the corresponding tasks
-        for (const [uuid, index] of uuidToIndexMap) {
-          const foundTask = this.tasks.get(uuid);
-          if (foundTask) {
-            result.tasks.push(foundTask);
-            result.distances.push(res.distances[index]);
-          }
-        }
       }
     }
     return result;
