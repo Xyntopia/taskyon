@@ -509,7 +509,7 @@ async function taskWorker(
           console.log('We were not able to create a follow up task:', error);
         }
 
-        await taskManager.setTask(task, true);
+        void taskManager.setTask(task, true);
       }
     }
   }
