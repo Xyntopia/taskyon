@@ -3,11 +3,11 @@ import { ref, watch } from 'vue';
 import { Document } from 'langchain/document';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { loadFile } from 'src/modules/loadFiles';
-import { useCachedModels } from './mlModels';
+import { useCachedModels } from './nlp';
 import type { HierarchicalNSW } from 'hnswlib-wasm';
 import { LocalStorage } from 'quasar';
 import Dexie from 'dexie';
-import { getVector } from './mlModels';
+import { getVector } from './nlp';
 import { loadOrCreateVectorStore } from './vectorSearch';
 //TODO: maybe use yarn add hnsw  (pure javascript library)
 //TODO: make everything functional... no side effects etc...

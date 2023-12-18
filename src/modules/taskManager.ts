@@ -341,7 +341,7 @@ export class TaskManager {
         //Object.assign(task, updateData);
         Object.assign(task, deepMerge(task, updateData));
         if (save) {
-          void this.saveTask(task.id); // Save to database if required
+          await this.saveTask(task.id); // Save to database if required
         }
       }
       unlock();

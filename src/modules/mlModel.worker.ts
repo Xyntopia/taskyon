@@ -1,4 +1,4 @@
-import { getVector } from './mlModels';
+import { getVector } from './nlp';
 
 self.onmessage = async ({
   data,
