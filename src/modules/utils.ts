@@ -222,7 +222,10 @@ export class Lock {
     let outerResolve: () => void;
     if (!this._promise) {
       this._promise = new Promise<void>((resolve) => {
-        outerResolve = resolve;
+        outerResolve = () => {
+          console.log('unlock!');
+          resolve();
+        };
       });
 
       return () => {

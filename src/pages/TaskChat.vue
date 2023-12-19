@@ -25,7 +25,8 @@
                   ? 'bg-primary text-white'
                   : 'bg-white text-black',
                 'rounded-borders',
-                task.role === 'user' ? 'user-message' : '',
+                'q-pa-xs',
+                task.role === 'user' ? 'user-message q-pr-sm q-pl-md' : '',
               ]"
             />
           </div>

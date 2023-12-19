@@ -1,6 +1,6 @@
 <template>
   <!--Task-->
-  <div class="message-container q-pa-xs">
+  <div class="message-container">
     <div class="relative-position">
       <!--Message Display-->
       <div class="row items-end q-gutter-xs">
