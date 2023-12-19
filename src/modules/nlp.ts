@@ -133,8 +133,9 @@ export async function vectorize(
   //const res = (await model.generate(inputs))// as Record<string, Tensor>;
 }*/
 
-export function mergeTokenVectors(tokens: string[], vectors: Tensor[]) {
-  const wordVectors = [];
+export function tokenVecsToWordVecs(tokens: string[], vectors: Tensor[]) {
+  const wordVectors: Tensor[] = [];
+  const words: string[] = [];
   let currentWordVector: Tensor[] = [];
   let currentWordTokens: string[] = [];
 
@@ -165,7 +166,10 @@ export function mergeTokenVectors(tokens: string[], vectors: Tensor[]) {
     wordVectors.push(meanVector);
   }
 
-  return wordVectors;
+  return {
+    words,
+    wordVectors,
+  };
 }
 
 export const useCachedModels = () => {
