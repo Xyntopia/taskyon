@@ -170,6 +170,7 @@ export type FunctionCall = z.infer<typeof FunctionCall>;
 
 export const LLMTask = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
+  name: z.string().optional(),
   content: z.string().nullable(),
   state: TaskState,
   context: z.record(z.string(), z.string()).optional(),

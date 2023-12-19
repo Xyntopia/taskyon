@@ -21,7 +21,7 @@ addRxPlugin(RxDBMigrationPlugin);
 
 const llmTaskSchemaLiteral = {
   title: 'LLMTask schema',
-  version: 1,
+  version: 2,
   type: 'object',
   primaryKey: 'id',
   properties: {
@@ -29,6 +29,9 @@ const llmTaskSchemaLiteral = {
       type: 'string',
       primary: true,
       maxLength: 128, // <- the primary key must have set maxLength
+    },
+    name: {
+      type: 'string',
     },
     role: {
       type: 'string',
@@ -172,6 +175,10 @@ export const collections = {
       1: function (/*oldDoc*/) {
         // for this version we simply discard everything from version 0
         return null;
+      },
+      2: function (oldDoc: LLMTaskDocType) {
+        // for this version we simply discard everything from version 0
+        return oldDoc;
       },
     },
   },
