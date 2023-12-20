@@ -1,7 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 //import { loadPyodide, PyodideInterface } from 'pyodide';
+import type { PyodideInterface } from 'pyodide';
 
 function loadScript(src: string): Promise<void> {
   // Specify 'void' if the promise doesn't return a value
@@ -16,16 +14,19 @@ function loadScript(src: string): Promise<void> {
 }
 
 export async function execute(python_script: string) {
-  try {
-    await loadScript(
-      'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js'
-    );
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    const pyodide = await window.loadPyodide({
-      indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
-    });
+  await loadScript('https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js');
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+  const pyodide: PyodideInterface = await window.loadPyodide({
+    indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
+  });
 
+  await executeScript(pyodide, python_script);
+}
+
+async function executeScript(pyodide: PyodideInterface, python_script: string) {
+  try {
     let stdout_content = '';
 
     const stdoutHandler = {
@@ -38,7 +39,11 @@ export async function execute(python_script: string) {
 
     await pyodide.loadPackagesFromImports(python_script);
 
-    let result = await pyodide.runPython(python_script);
+    // result is the direct result of the execution of the python script
+    // if it is a python object, it would be a Pyodide object
+    // otherwise is corresponds to one of these types here:
+    //  https://pyodide.org/en/stable/usage/type-conversions.htmls
+    let result: unknown = await pyodide.runPython(python_script);
 
     // Check if result is a Pyodide proxy object
     if (result && typeof result === 'object') {
@@ -50,7 +55,7 @@ export async function execute(python_script: string) {
       ) {
         // Try to convert the Python object to a JavaScript object
         try {
-          result = result.toJs();
+          result = (result as { toJs: () => unknown }).toJs();
         } catch (error) {
           console.error('Error converting Python object to JavaScript', error);
         }
