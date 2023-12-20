@@ -89,6 +89,7 @@ export function defaultLLMSettings() {
     ] as apiConfig[],
     siteUrl: 'https://taskyon.space',
     summaryModel: 'Xenova/distilbart-cnn-6-6',
+    vectorizationModel: 'Xenova/all-MiniLM-L6-v2',
     maxAutonomousTasks: 3,
     taskChatTemplates: {
       constraints: `CONSTRAINTS:

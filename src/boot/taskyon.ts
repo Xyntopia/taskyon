@@ -16,6 +16,8 @@ export function logError(message: string) {
 
 // Function to get or create the TaskManager instance
 export async function getTaskManager() {
+  const state = useTaskyonStore();
+
   if (!taskManagerInstance) {
     // we are creating a reactive map for our memory-based task databae
     // this ensures, that we receive upates for our task in our UI.
@@ -31,11 +33,10 @@ export async function getTaskManager() {
       );
     }
     console.log('initializing task manager');
-    const vectorizationModel = 'Xenova/all-MiniLM-L6-v2';
     taskManagerInstance = new TaskManager(
       TaskList,
       taskyonDBInstance,
-      vectorizationModel
+      state.chatState.vectorizationModel
     );
     console.log('finished initialization');
   }

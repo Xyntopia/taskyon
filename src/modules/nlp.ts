@@ -1,5 +1,6 @@
 import { loadTokenizer, loadModel } from './mlModels';
-import { Tensor, cat, mean } from '@xenova/transformers';
+import { Tensor, cat, mean, cos_sim, dot } from '@xenova/transformers';
+import * as sw from 'stopword'; // Assuming this is the stopword library you are referring to
 
 export async function getVector(
   txt: string,
@@ -121,50 +122,59 @@ export async function vectorize(
 
   // Optionally, return mean-pooled vector of the merged result
   return {
+    token_ids: input_ids,
     individualVectors: finalVector,
     meanPooledVector,
   };
 }
 /*async function summarize(txt: string, modelName: string) {
-  console.log('summarize');
-  const tokenizer = await loadTokenizer(modelName);
-  const model = await loadModel(modelName);
-  const inputs = (await tokenizer(txt)) as Record<string, Tensor>;
-  //const res = (await model.generate(inputs))// as Record<string, Tensor>;
-}*/
+    console.log('summarize');
+    const tokenizer = await loadTokenizer(modelName);
+    const model = await loadModel(modelName);
+    const inputs = (await tokenizer(txt)) as Record<string, Tensor>;
+    //const res = (await model.generate(inputs))// as Record<string, Tensor>;
+  }*/
 
-export function tokenVecsToWordVecs(tokens: string[], vectors: Tensor[]) {
+export function tokenVecsToWordVecs(tokens: string[], vectors: Tensor) {
   const wordVectors: Tensor[] = [];
   const words: string[] = [];
-  let currentWordVector: Tensor[] = [];
-  let currentWordTokens: string[] = [];
+  let currentWordStartIndex = 0;
 
-  for (let i = 0; i < tokens.length; i++) {
+  for (let i = 1; i < tokens.length; i++) {
     const token = tokens[i];
-    const vector = vectors[i];
 
     // Check if the token is a continuation of the previous one
     if (token.startsWith('##')) {
-      currentWordTokens.push(token.slice(2));
-      currentWordVector.push(vector);
+      continue;
     } else {
       // Process the previous word
-      if (currentWordVector) {
-        const meanVector = mean(cat(currentWordVector, 0), 0).unsqueeze(0);
+      const tokenNum = i - currentWordStartIndex;
+      if (tokenNum > 1) {
+        let meanVector = vectors.slice([currentWordStartIndex, i]);
+        meanVector = mean(meanVector, 0);
         wordVectors.push(meanVector);
+      } else {
+        wordVectors.push(vectors.slice(currentWordStartIndex));
       }
 
+      const nextWord = tokens
+        .slice(currentWordStartIndex, i)
+        .map((t) => t.replace('##', ''))
+        .join('');
+      words.push(nextWord);
       // Start a new word
-      currentWordTokens = [token];
-      currentWordVector = [vector];
+      currentWordStartIndex = i;
     }
   }
 
-  // Process the last word
-  if (currentWordVector) {
-    const meanVector = mean(cat(currentWordVector, 0), 0).unsqueeze(0);
-    wordVectors.push(meanVector);
-  }
+  let meanVector = vectors.slice([currentWordStartIndex, tokens.length]);
+  meanVector = mean(meanVector, 0);
+  wordVectors.push(meanVector);
+  const nextWord = tokens
+    .slice(currentWordStartIndex, tokens.length)
+    .map((t) => t.replace('##', ''))
+    .join('');
+  words.push(nextWord);
 
   return {
     words,
@@ -177,3 +187,55 @@ export const useCachedModels = () => {
     vectorize: vectorize,
   };
 };
+
+export async function extractKeywords(
+  txt: string,
+  modelName: string,
+  numKeywords = 5 // Default number of keywords to extract
+) {
+  console.log('extract keywords!');
+
+  //const detectedLanguage = await browser.i18n.detectLanguage(txt);
+  //const languageCode = detectedLanguage.languages[0].language; // Assuming the most probable language is the first one
+
+  // First, we vectorize the text to get word vectors and the mean vector for the entire string
+  const { individualVectors, meanPooledVector, token_ids } = await vectorize(
+    txt,
+    modelName
+  );
+
+  // Tokenize the text to get individual words
+  const tokenizer = await loadTokenizer(modelName);
+  const tokens = tokenizer.model.convert_ids_to_tokens(
+    token_ids.flatten().tolist()
+  );
+  const { words, wordVectors } = tokenVecsToWordVecs(
+    tokens,
+    individualVectors.squeeze(0)
+  );
+
+  // remove all stop words from text
+
+  // Calculate cosine similarity for each word
+  const meanVecList = mean(cat(wordVectors, 0), 0).tolist();
+  const cosineSimilarities = wordVectors.map((vector) =>
+    cos_sim(meanVecList[0], vector.tolist())
+  );
+
+  // Pair words with their cosine similarities
+  const wordSimilarities = words.map((word, index) => ({
+    word,
+    similarity: cosineSimilarities[index],
+  }));
+
+  // Sort words by their similarity to the mean vector
+  wordSimilarities.sort((a, b) => b.similarity - a.similarity);
+
+  // Filter out stopwords and select top N keywords
+  const keywords = wordSimilarities
+    //TODO: renable: .filter(({ word }) => !sw.eng[word])
+    .slice(0, numKeywords)
+    .map(({ word }) => word);
+
+  return keywords;
+}

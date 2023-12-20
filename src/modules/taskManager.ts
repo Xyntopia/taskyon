@@ -16,12 +16,12 @@ import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { AsyncQueue } from './utils';
 import { loadOrCreateVectorStore } from './vectorSearch';
 
-const mlWorker = new Worker(new URL('./mlModel.worker.ts', import.meta.url));
+const nlpWorker = new Worker(new URL('./nlp.worker.ts', import.meta.url));
 
 // Function to send data to the worker and receive the result
 function vectorizeText(text: string, modelName: string): Promise<number[]> {
   return new Promise((resolve, reject) => {
-    mlWorker.onmessage = ({
+    nlpWorker.onmessage = ({
       data,
     }: {
       data: { error?: unknown; vector?: number[] };
@@ -33,12 +33,44 @@ function vectorizeText(text: string, modelName: string): Promise<number[]> {
       }
     };
 
-    mlWorker.onerror = (error) => {
+    nlpWorker.onerror = (error) => {
       reject(error);
     };
 
     console.log('calling worker with model:', modelName);
-    mlWorker.postMessage({ txt: text, modelName: modelName });
+    nlpWorker.postMessage({ txt: text, modelName: modelName });
+  });
+}
+
+function extractKeywordsFromText(
+  text: string,
+  modelName: string,
+  numKeywords = 5
+): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    nlpWorker.onmessage = ({
+      data,
+    }: {
+      data: { error?: unknown; keywords?: string[] };
+    }) => {
+      if (data.keywords) {
+        resolve(data.keywords);
+      } else if (data.error) {
+        reject(data.error);
+      }
+    };
+
+    nlpWorker.onerror = (error) => {
+      reject(error);
+    };
+
+    console.log('calling worker for keywords with model:', modelName);
+    nlpWorker.postMessage({
+      action: 'extractKeywords',
+      txt: text,
+      modelName: modelName,
+      numKeywords: numKeywords,
+    });
   });
 }
 
@@ -211,6 +243,16 @@ export async function addTask2Tree(
   };
 
   console.log('create new Task:', newTask.id);
+
+  if (task.content) {
+    void extractKeywordsFromText(
+      task.content,
+      chatState.vectorizationModel,
+      5
+    ).then((kw) => {
+      console.log('found keywords!', kw);
+    });
+  }
 
   if (parent) {
     parent.childrenIDs.push(newTask.id);
