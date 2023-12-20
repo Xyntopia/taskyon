@@ -1,5 +1,12 @@
 import { loadTokenizer, loadModel } from './mlModels';
-import { Tensor, cat, mean, cos_sim, dot } from '@xenova/transformers';
+import {
+  Tensor,
+  cat,
+  mean,
+  cos_sim,
+  dot,
+  magnitude,
+} from '@xenova/transformers';
 import * as sw from 'stopword'; // Assuming this is the stopword library you are referring to
 
 export async function getVector(
@@ -194,15 +201,13 @@ export async function extractKeywords(
   numKeywords = 5 // Default number of keywords to extract
 ) {
   console.log('extract keywords!');
+  //console.log('language detected:', lang);
 
   //const detectedLanguage = await browser.i18n.detectLanguage(txt);
   //const languageCode = detectedLanguage.languages[0].language; // Assuming the most probable language is the first one
 
   // First, we vectorize the text to get word vectors and the mean vector for the entire string
-  const { individualVectors, meanPooledVector, token_ids } = await vectorize(
-    txt,
-    modelName
-  );
+  const { individualVectors, token_ids } = await vectorize(txt, modelName);
 
   // Tokenize the text to get individual words
   const tokenizer = await loadTokenizer(modelName);
@@ -217,6 +222,13 @@ export async function extractKeywords(
   // remove all stop words from text
 
   // Calculate cosine similarity for each word
+  // filter out words with "longest" vectors which
+  // are more significant
+  const stopwords = sw['eng'];
+  const filteredWordVecs = wordVectors.map((v, i) => {
+    return [words[i], magnitude(v.tolist())];
+  });
+  filteredWordVecs.sort((a, b) => (b[1] as number) - (a[1] as number));
   const meanVecList = mean(cat(wordVectors, 0), 0).tolist();
   const cosineSimilarities = wordVectors.map((vector) =>
     cos_sim(meanVecList[0], vector.tolist())
