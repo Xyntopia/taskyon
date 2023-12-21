@@ -22,10 +22,13 @@ export async function execute(python_script: string) {
     indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
   });
 
-  await executeScript(pyodide, python_script);
+  return await executeScript(pyodide, python_script);
 }
 
-async function executeScript(pyodide: PyodideInterface, python_script: string) {
+export async function executeScript(
+  pyodide: PyodideInterface,
+  python_script: string
+) {
   try {
     let stdout_content = '';
 
@@ -43,7 +46,7 @@ async function executeScript(pyodide: PyodideInterface, python_script: string) {
     // if it is a python object, it would be a Pyodide object
     // otherwise is corresponds to one of these types here:
     //  https://pyodide.org/en/stable/usage/type-conversions.htmls
-    let result: unknown = await pyodide.runPython(python_script);
+    let result: unknown = await pyodide.runPythonAsync(python_script);
 
     // Check if result is a Pyodide proxy object
     if (result && typeof result === 'object') {
