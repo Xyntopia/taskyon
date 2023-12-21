@@ -25,7 +25,11 @@ export function vectorizeText(
     };
 
     console.log('calling worker with model:', modelName);
-    nlpWorker.postMessage({ txt: text, modelName: modelName });
+    nlpWorker.postMessage({
+      action: 'getVector',
+      txt: text,
+      modelName: modelName,
+    });
   });
 }
 
@@ -85,6 +89,7 @@ export const asyncRun = (() => {
     id = (id + 1) % Number.MAX_SAFE_INTEGER;
     return new Promise<PythonScriptResult>((onSuccess) => {
       callbacks[id] = onSuccess;
+      console.log('calling python webworker');
       pyodideWorker.postMessage({
         python: script,
         id,
