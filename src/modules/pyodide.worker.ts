@@ -1,4 +1,4 @@
-import { loadPyodide, type PyodideInterface } from 'pyodide';
+import { loadPyodide, PyProxy, type PyodideInterface } from 'pyodide';
 import { executeScript } from './pyodide';
 
 //declare const self: ServiceWorkerGlobalScope
@@ -18,6 +18,11 @@ async function getPyodide() {
     indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
   });
   //void pyodideEnv.loadPackage(['numpy', 'pytz']);
+  await pyodideEnv.loadPackage('micropip');
+  const micropip = pyodideEnv.pyimport('micropip') as PyProxy & {
+    install: (txt: string) => Promise<void>;
+  };
+  await micropip.install('yake');
   return pyodideEnv;
 }
 

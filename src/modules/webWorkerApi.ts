@@ -97,3 +97,19 @@ export const asyncRun = (() => {
     });
   };
 })();
+
+export async function extractKeywords(text: string, num: number) {
+  const pythonScript = `
+import micropip
+await micropip.install('yake')
+import yake
+
+text = "${text}"
+
+kw_extractor = yake.KeywordExtractor()
+keywords = kw_extractor.extract_keywords(text)
+keywords
+`;
+  const res = await asyncRun(pythonScript);
+  console.log('keyword Result: ', res);
+}

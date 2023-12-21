@@ -4,7 +4,7 @@ import type { PyodideInterface } from 'pyodide';
 function loadScript(src: string): Promise<void> {
   // Specify 'void' if the promise doesn't return a value
   return new Promise<void>((resolve, reject) => {
-    // Again, specify 'void' here 
+    // Again, specify 'void' here
     const script = document.createElement('script');
     script.src = src;
     script.onload = () => resolve(); // No arguments are needed for 'resolve' since no value is returned
@@ -48,29 +48,7 @@ export async function executeScript(
     //  https://pyodide.org/en/stable/usage/type-conversions.htmls
     let result: unknown = await pyodide.runPythonAsync(python_script);
 
-    // Check if result is a Pyodide proxy object
-    if (result && typeof result === 'object') {
-      // Check if the object is a list, array, map (dictionary), or set
-      if (
-        'length' in result ||
-        result.constructor.name === 'PyProxyMap' ||
-        result.constructor.name === 'PyProxySet'
-      ) {
-        // Try to convert the Python object to a JavaScript object
-        try {
-          result = (result as { toJs: () => unknown }).toJs();
-        } catch (error) {
-          console.error('Error converting Python object to JavaScript', error);
-        }
-      } else if ('toString' in result) {
-        // Fallback to using toString() for other types of objects
-        try {
-          result = result.toString();
-        } catch (error) {
-          console.error('Error converting Python object to string', error);
-        }
-      }
-    }
+    result = convertRes2Js(result);
 
     // Reset stdout handler to default behavior if necessary
     pyodide.setStdout({ batched: (str: string) => console.log(str) });
@@ -80,6 +58,34 @@ export async function executeScript(
     console.error('Loading Pyodide failed', error);
     return { error };
   }
+}
+
+function convertRes2Js(result: unknown) {
+  let convres;
+  // Check if result is a Pyodide proxy object
+  if (result && typeof result === 'object') {
+    // Check if the object is a list, array, map (dictionary), or set
+    if (
+      'length' in result ||
+      result.constructor.name === 'PyProxyMap' ||
+      result.constructor.name === 'PyProxySet'
+    ) {
+      // Try to convert the Python object to a JavaScript object
+      try {
+        convres = (result as { toJs: () => unknown }).toJs();
+      } catch (error) {
+        console.error('Error converting Python object to JavaScript', error);
+      }
+    } else if ('toString' in result) {
+      // Fallback to using toString() for other types of objects
+      try {
+        convres = result.toString();
+      } catch (error) {
+        console.error('Error converting Python object to string', error);
+      }
+    }
+  }
+  return convres;
 }
 
 // you can download the releases from here:

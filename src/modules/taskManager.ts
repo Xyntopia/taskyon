@@ -15,7 +15,11 @@ import { deepMerge } from './utils';
 import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { AsyncQueue } from './utils';
 import { loadOrCreateVectorStore } from './vectorSearch';
-import { extractKeywordsFromText, vectorizeText } from './webWorkerApi';
+import {
+  extractKeywords,
+  extractKeywordsFromText,
+  vectorizeText,
+} from './webWorkerApi';
 
 /**
  * Finds the root task of a given task.
@@ -188,6 +192,7 @@ export async function addTask2Tree(
   console.log('create new Task:', newTask.id);
 
   if (task.content) {
+    void extractKeywords(task.content, 5);
     void extractKeywordsFromText(
       task.content,
       chatState.vectorizationModel,
