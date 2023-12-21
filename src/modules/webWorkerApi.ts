@@ -1,4 +1,4 @@
-import { executeScript } from './pyodide';
+import type { PythonScriptResult } from './pyodide';
 
 const nlpWorker = new Worker(new URL('./nlp.worker.ts', import.meta.url));
 
@@ -69,7 +69,6 @@ const pyodideWorker = new Worker(
   new URL('./pyodide.worker.ts', import.meta.url)
 );
 
-export type PythonScriptResult = Awaited<ReturnType<typeof executeScript>>;
 const callbacks: Record<number, (value: PythonScriptResult) => void> = {};
 
 pyodideWorker.onmessage = ({
@@ -84,7 +83,7 @@ pyodideWorker.onmessage = ({
 
 export const asyncRun = (() => {
   let id = 0; // identify a Promise
-  return (script: string) => {
+  return (script: string, params?: unknown[]) => {
     // the id could be generated more carefully
     id = (id + 1) % Number.MAX_SAFE_INTEGER;
     return new Promise<PythonScriptResult>((onSuccess) => {
@@ -93,6 +92,7 @@ export const asyncRun = (() => {
       pyodideWorker.postMessage({
         python: script,
         id,
+        params,
       });
     });
   };
@@ -104,12 +104,20 @@ import micropip
 await micropip.install('yake')
 import yake
 
-text = "${text}"
-
-kw_extractor = yake.KeywordExtractor()
-keywords = kw_extractor.extract_keywords(text)
-keywords
+def keywordsFunc(text: str):
+  kw_extractor = yake.KeywordExtractor()
+  keywords = kw_extractor.extract_keywords(text)
+  return keywords
+keywordsFunc
 `;
-  const res = await asyncRun(pythonScript);
+  const res = await asyncRun(pythonScript, [text]);
   console.log('keyword Result: ', res);
+  try {
+    const allKws = res.result as [string, number][];
+    const kws = allKws.map((x) => x[0]).slice(0, num);
+    return kws;
+  } catch (error) {
+    console.error('no keywords found!', error);
+    return ['no keywords found'];
+  }
 }

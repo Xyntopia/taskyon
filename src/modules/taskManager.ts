@@ -192,13 +192,9 @@ export async function addTask2Tree(
   console.log('create new Task:', newTask.id);
 
   if (task.content) {
-    void extractKeywords(task.content, 5);
-    void extractKeywordsFromText(
-      task.content,
-      chatState.vectorizationModel,
-      5
-    ).then((kw) => {
-      console.log('found keywords!', kw);
+    void extractKeywords(task.content, 5).then((kws) => {
+      console.log('update task with kw: ', kws);
+      void taskManager.updateTask({ id: uuid, name: kws[0] }, true);
     });
   }
 

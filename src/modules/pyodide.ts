@@ -27,7 +27,8 @@ export async function execute(python_script: string) {
 
 export async function executeScript(
   pyodide: PyodideInterface,
-  python_script: string
+  python_script: string,
+  convert2Js = true
 ) {
   try {
     let stdout_content = '';
@@ -48,7 +49,9 @@ export async function executeScript(
     //  https://pyodide.org/en/stable/usage/type-conversions.htmls
     let result: unknown = await pyodide.runPythonAsync(python_script);
 
-    result = convertRes2Js(result);
+    if (convert2Js) {
+      result = convertRes2Js(result);
+    }
 
     // Reset stdout handler to default behavior if necessary
     pyodide.setStdout({ batched: (str: string) => console.log(str) });
@@ -60,6 +63,8 @@ export async function executeScript(
   }
 }
 
+export type PythonScriptResult = Awaited<ReturnType<typeof executeScript>>;
+
 function convertRes2Js(result: unknown) {
   let convres;
   // Check if result is a Pyodide proxy object
@@ -68,7 +73,8 @@ function convertRes2Js(result: unknown) {
     if (
       'length' in result ||
       result.constructor.name === 'PyProxyMap' ||
-      result.constructor.name === 'PyProxySet'
+      result.constructor.name === 'PyProxySet' ||
+      result.constructor.name === 'PyProxyArray'
     ) {
       // Try to convert the Python object to a JavaScript object
       try {

@@ -1,5 +1,6 @@
 import { loadPyodide, PyProxy, type PyodideInterface } from 'pyodide';
-import { executeScript } from './pyodide';
+import { PythonScriptResult, executeScript } from './pyodide';
+import { unknown } from 'zod';
 
 //declare const self: ServiceWorkerGlobalScope
 
@@ -32,12 +33,26 @@ self.onmessage = async ({
   data: {
     python: string;
     id: string;
+    params?: unknown[];
   };
 }) => {
   // make sure loading is done
+  console.log('execute python script');
   const pyodide = await getPyodide();
 
-  const result = await executeScript(pyodide, data.python);
+  let result: PythonScriptResult;
+  if (data.params) {
+    //execute as a function with params!
+    const tmp = await executeScript(pyodide, data.python, false);
+    const func = tmp.result as (...args: unknown[]) => { toJs: () => unknown };
+    const funcres = func(...data.params).toJs();
+    result = {
+      stdout: tmp.stdout || '',
+      result: funcres,
+    };
+  } else {
+    result = await executeScript(pyodide, data.python);
+  }
 
   /*
   // Don't bother yet with this line, suppose our API is built in such a way:

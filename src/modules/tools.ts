@@ -1,5 +1,5 @@
 import { useVectorStore } from 'src/modules/localVectorStore';
-import { execute } from './pyodide';
+import type { PythonScriptResult } from './pyodide';
 import { seleniumBrowser } from './seleniumTool';
 import { dump } from 'js-yaml';
 import { bigIntToString } from './chat';
@@ -10,7 +10,7 @@ import {
 } from './types';
 import { z } from 'zod';
 import { toolStateType, FunctionCall, ParamType } from './types';
-import { PythonScriptResult, asyncRun } from './webWorkerApi';
+import { asyncRun } from './webWorkerApi';
 
 export const vectorStore = useVectorStore();
 
