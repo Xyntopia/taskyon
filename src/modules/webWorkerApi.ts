@@ -1,3 +1,5 @@
+import { executeScript } from './pyodide';
+
 const nlpWorker = new Worker(new URL('./nlp.worker.ts', import.meta.url));
 
 // Function to send data to the worker and receive the result
@@ -58,3 +60,35 @@ export function extractKeywordsFromText(
     });
   });
 }
+
+const pyodideWorker = new Worker(
+  new URL('./pyodide.worker.ts', import.meta.url)
+);
+
+export type PythonScriptResult = Awaited<ReturnType<typeof executeScript>>;
+const callbacks: Record<number, (value: PythonScriptResult) => void> = {};
+
+pyodideWorker.onmessage = ({
+  data,
+}: {
+  data: { result: PythonScriptResult; id: number };
+}) => {
+  const onSuccess = callbacks[data.id];
+  delete callbacks[data.id];
+  onSuccess(data.result);
+};
+
+export const asyncRun = (() => {
+  let id = 0; // identify a Promise
+  return (script: string) => {
+    // the id could be generated more carefully
+    id = (id + 1) % Number.MAX_SAFE_INTEGER;
+    return new Promise<PythonScriptResult>((onSuccess) => {
+      callbacks[id] = onSuccess;
+      pyodideWorker.postMessage({
+        python: script,
+        id,
+      });
+    });
+  };
+})();

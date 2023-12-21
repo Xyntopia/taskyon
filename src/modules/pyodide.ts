@@ -4,7 +4,7 @@ import type { PyodideInterface } from 'pyodide';
 function loadScript(src: string): Promise<void> {
   // Specify 'void' if the promise doesn't return a value
   return new Promise<void>((resolve, reject) => {
-    // Again, specify 'void' here
+    // Again, specify 'void' here 
     const script = document.createElement('script');
     script.src = src;
     script.onload = () => resolve(); // No arguments are needed for 'resolve' since no value is returned
