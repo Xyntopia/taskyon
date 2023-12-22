@@ -1,12 +1,6 @@
 import { loadTokenizer, loadModel } from './mlModels';
-import {
-  Tensor,
-  cat,
-  mean,
-  cos_sim,
-  magnitude,
-} from '@xenova/transformers';
-import * as sw from 'stopword'; // Assuming this is the stopword library you are referring to
+import { Tensor, cat, mean, cos_sim, magnitude } from '@xenova/transformers';
+//import * as sw from 'stopword'; // Assuming this is the stopword library you are referring to
 
 export async function getVector(
   txt: string,
@@ -223,7 +217,6 @@ export async function extractKeywords(
   // Calculate cosine similarity for each word
   // filter out words with "longest" vectors which
   // are more significant
-  const stopwords = sw['eng'];
   const filteredWordVecs = wordVectors.map((v, i) => {
     return [words[i], magnitude(v.tolist())];
   });
