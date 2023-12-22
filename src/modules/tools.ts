@@ -10,7 +10,7 @@ import {
 } from './types';
 import { z } from 'zod';
 import { toolStateType, FunctionCall, ParamType } from './types';
-import { asyncRun } from './webWorkerApi';
+import { asyncRunPython } from './webWorkerApi';
 
 export const vectorStore = useVectorStore();
 
@@ -137,7 +137,7 @@ tools.executePythonScript = {
     pythonScript: string;
   }): Promise<PythonScriptResult> => {
     console.log('execute python code...');
-    return await asyncRun(pythonScript);
+    return await asyncRunPython(pythonScript);
   },
   description: `Executes Python scripts for data processing, calculations, or library interactions, 
 ideal for data analysis, machine learning tasks, or custom algorithm execution.

@@ -15,11 +15,7 @@ import { deepMerge } from './utils';
 import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { AsyncQueue } from './utils';
 import { loadOrCreateVectorStore } from './vectorSearch';
-import {
-  extractKeywords,
-  extractKeywordsFromText,
-  vectorizeText,
-} from './webWorkerApi';
+import { extractKeywords, vectorizeText } from './webWorkerApi';
 
 /**
  * Finds the root task of a given task.

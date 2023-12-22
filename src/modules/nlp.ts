@@ -4,7 +4,6 @@ import {
   cat,
   mean,
   cos_sim,
-  dot,
   magnitude,
 } from '@xenova/transformers';
 import * as sw from 'stopword'; // Assuming this is the stopword library you are referring to

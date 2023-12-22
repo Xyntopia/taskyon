@@ -1,69 +1,37 @@
 import type { PythonScriptResult } from './pyodide';
+import type { nlpWorkerResult } from './nlp.worker';
 
 const nlpWorker = new Worker(new URL('./nlp.worker.ts', import.meta.url));
 
-// Function to send data to the worker and receive the result
-export function vectorizeText(
-  text: string,
-  modelName: string
-): Promise<number[]> {
-  return new Promise((resolve, reject) => {
-    nlpWorker.onmessage = ({
-      data,
-    }: {
-      data: { error?: unknown; vector?: number[] };
-    }) => {
-      if (data.vector) {
-        resolve(data.vector);
-      } else if (data.error) {
-        reject(data.error);
-      }
-    };
+const nlpCallbacks: Record<number, (vector: number[] | undefined) => void> = {};
 
-    nlpWorker.onerror = (error) => {
-      reject(error);
-    };
+nlpWorker.onmessage = ({
+  data,
+}: {
+  data: nlpWorkerResult & { id: number };
+}) => {
+  const { id, ...res } = data;
+  const onSuccess = nlpCallbacks[id];
+  delete nlpCallbacks[id];
+  onSuccess(res.vector);
+};
 
-    console.log('calling worker with model:', modelName);
-    nlpWorker.postMessage({
-      action: 'getVector',
-      txt: text,
-      modelName: modelName,
+export const vectorizeText = (() => {
+  let id = 0; // identify a Promise
+  return (text: string, modelName: string) => {
+    // the id could be generated more carefully
+    id = (id + 1) % Number.MAX_SAFE_INTEGER;
+    return new Promise<number[] | undefined>((onSuccess) => {
+      nlpCallbacks[id] = onSuccess;
+      console.log('calling nlp webworker');
+      nlpWorker.postMessage({
+        text,
+        modelName,
+        id,
+      });
     });
-  });
-}
-
-export function extractKeywordsFromText(
-  text: string,
-  modelName: string,
-  numKeywords = 5
-): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    nlpWorker.onmessage = ({
-      data,
-    }: {
-      data: { error?: unknown; keywords?: string[] };
-    }) => {
-      if (data.keywords) {
-        resolve(data.keywords);
-      } else if (data.error) {
-        reject(data.error);
-      }
-    };
-
-    nlpWorker.onerror = (error) => {
-      reject(error);
-    };
-
-    console.log('calling worker for keywords with model:', modelName);
-    nlpWorker.postMessage({
-      action: 'extractKeywords',
-      txt: text,
-      modelName: modelName,
-      numKeywords: numKeywords,
-    });
-  });
-}
+  };
+})();
 
 const pyodideWorker = new Worker(
   new URL('./pyodide.worker.ts', import.meta.url)
@@ -81,7 +49,7 @@ pyodideWorker.onmessage = ({
   onSuccess(data.result);
 };
 
-export const asyncRun = (() => {
+export const asyncRunPython = (() => {
   let id = 0; // identify a Promise
   return (script: string, params?: unknown[]) => {
     // the id could be generated more carefully
@@ -110,7 +78,7 @@ def keywordsFunc(text: str):
   return keywords
 keywordsFunc
 `;
-  const res = await asyncRun(pythonScript, [text]);
+  const res = await asyncRunPython(pythonScript, [text]);
   console.log('keyword Result: ', res);
   try {
     const allKws = res.result as [string, number][];
