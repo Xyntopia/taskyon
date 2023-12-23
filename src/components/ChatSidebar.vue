@@ -27,9 +27,10 @@
             v-for="conversationId in conversationIDs"
             :key="conversationId.id"
             @click="state.chatState.selectedTaskId = conversationId.id"
-            to="/chat"
+            to="/"
             clickable
             v-ripple
+            active-class=""
           >
             <q-item-section avatar>
               <q-icon name="chat_bubble" size="xs" />
