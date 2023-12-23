@@ -16,8 +16,12 @@
         <q-btn flat round dense icon="chat" to="/"
           ><q-tooltip>Open chat</q-tooltip>
         </q-btn>
-        <q-btn flat round dense             icon="svguse:taskyon_mono_opt.svg#taskyon"
- to="/taskmanager"
+        <q-btn
+          flat
+          round
+          dense
+          icon="svguse:taskyon_mono_opt.svg#taskyon"
+          to="/taskmanager"
           ><q-tooltip>Manage taskyon tasks</q-tooltip>
         </q-btn>
         <q-space />
