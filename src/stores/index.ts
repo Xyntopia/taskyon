@@ -1,7 +1,6 @@
 import { store } from 'quasar/wrappers';
 import { createPinia } from 'pinia';
 import { LocalStorage } from 'quasar';
-import { deepMerge } from 'src/modules/utils';
 
 /*
  * If not building with SSR mode, you can
@@ -19,11 +18,11 @@ export default store((/* { ssrContext } */) => {
   // pinia.use(SomePiniaPlugin)
   //pinia.use(piniaPluginPersistedstate)
   pinia.use(({ store }) => {
-    console.log(`load ${store.$id} state!`);
+    //console.log(`load ${store.$id} state!`);
 
-    const storedState = LocalStorage.getItem(store.$id) as string;
-    const oldState = JSON.parse(storedState) as typeof store.$state;
-    store.$state = deepMerge(store.$state, oldState);
+    //const storedState = LocalStorage.getItem(store.$id) as string;
+    //const oldState = JSON.parse(storedState) as typeof store.$state;
+    //store.$state = deepMerge(store.$state, oldState);
     store.$subscribe(() => {
       LocalStorage.set(store.$id, JSON.stringify(store.$state));
     });

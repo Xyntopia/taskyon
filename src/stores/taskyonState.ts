@@ -4,7 +4,8 @@ import { ref, Ref, watch } from 'vue';
 import type { LLMTask } from 'src/modules/types';
 import type { FunctionArguments } from 'src/modules/types';
 import axios from 'axios';
-import { Notify } from 'quasar';
+import { Notify, LocalStorage } from 'quasar';
+import { deepMerge, deepMergeReactive } from 'src/modules/utils';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -13,30 +14,33 @@ function removeCodeFromUrl() {
   }
 }
 
-export const useTaskyonStore = defineStore('taskyonState', () => {
+const storeName = 'taskyonState';
+
+export const useTaskyonStore = defineStore(storeName, () => {
   console.log('initialize taskyon');
 
   const llmSettings = defaultLLMSettings();
 
   const initialState = {
-    // chatState & appConfiguration define the state of our app!
-    // the rest of the state if eithr secret (keys) or
     chatState: llmSettings,
     appConfiguration: {
       supabase_url: '',
       supabase_anon_key: '',
-      appConfigurationUrl: '/configuration.json', // URL from which to load the initial app configuration
-      gdriveConfigurationFile: 'configuration.json', // gDrive fileid of the configuration
+      appConfigurationUrl: '/taskyon_settings.json', // URL from which to load the initial app configuration
+      gdriveConfigurationFile: 'taskyon_settings.json', // gDrive fileid of the configuration
       expertMode: false,
       showCosts: false,
       gdriveDir: 'taskyon',
     },
+    // chatState & appConfiguration define the state of our app!
+    // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
     // initialize keys with all available apis...
     keys: llmSettings.llmApis.reduce((keys, api) => {
       keys[api.name] = '';
       return keys;
     }, {} as Record<string, string>),
     // app State which should be part of the configuration
+    initialLoad: true, // if the app was loaded for the first time and needs to be initialized
     modelDetails: false,
     expandedTaskCreation: false,
     selectChatBotExpand: true,
@@ -59,10 +63,41 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
     >, // whether message with ID should be open or not...
   };
 
+  // overwrite with saved configuration:
+  console.log(`load ${storeName} state!`);
+  const storedStateString = LocalStorage.getItem(storeName) as string;
+  const storedStateObj = JSON.parse(storedStateString) as Partial<
+    typeof initialState
+  >;
+  const storedInitialState = deepMerge(initialState, storedStateObj);
+
   // Create refs for each property and adjust the type assertion
   const stateRefs = Object.fromEntries(
-    Object.entries(initialState).map(([key, value]) => [key, ref(value)])
+    Object.entries(storedInitialState).map(([key, value]) => [key, ref(value)])
   ) as { [K in keyof typeof initialState]: Ref<(typeof initialState)[K]> };
+
+  if (stateRefs.initialLoad.value) {
+    // this file can be replaced in kubernetes  using a configmap!
+    // that way we can configure our webapp even if its already compiled...
+    void axios
+      .get(stateRefs.appConfiguration.value.appConfigurationUrl)
+      .then((jsonconfig) => {
+        // we only want to load the initial configuration the first time we are loading the page...
+        console.log('load App Config', jsonconfig.data);
+        const config = jsonconfig.data as {
+          chatState: typeof initialState.chatState;
+          appConfiguration: typeof initialState.appConfiguration;
+        };
+        deepMergeReactive(
+          stateRefs.appConfiguration.value,
+          config.appConfiguration
+        );
+        deepMergeReactive(stateRefs.chatState.value, config.chatState);
+        stateRefs.initialLoad.value = false;
+      });
+  } else {
+    console.log('loading previous configuration');
+  }
 
   watch(
     () => stateRefs.chatState.value.selectedApi,
@@ -108,15 +143,3 @@ export const useTaskyonStore = defineStore('taskyonState', () => {
 
   return { ...stateRefs, setDraftFunctionArgs, getOpenRouterPKCEKey };
 });
-
-// this file can be replaced in kubernetes  using a configmap!
-// that way we can configure our webapp even if its already compiled...
-/*void axios.get('config.json').then((jsonconfig) => {
-  // we only want to load the initial configuration the first time we are loading the page...
-  if (store.initial) {
-    console.log('load App Config', jsonconfig.data);
-    store.$state = jsonconfig.data as typeof store.$state;
-    store.initial = false;
-  }
-  store.updateApiUrl();
-});*/
