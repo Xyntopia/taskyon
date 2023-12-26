@@ -46,7 +46,7 @@ export async function loadOrCreateVectorStore(
   const done = await indexLoadLock.lock();
   // we need to wait before loading the next store :P 500ms seems to be a pretty safe bet. 100ms didn't work
   // there is some obscure background magic with probably resource sharing etc..  going on here.
-  await sleep(500);
+  await sleep(1000);
   const newindex = await loadIndex(numDimensions, vecdbName, MAX_ELEMENTS);
   if (loadIfExists) {
     try {
