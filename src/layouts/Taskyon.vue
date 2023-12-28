@@ -43,37 +43,9 @@
         <q-btn flat dense round icon="settings" to="settings">
           <q-tooltip>Open settings</q-tooltip>
         </q-btn>
-        <q-btn
-          dense
-          flat
-          round
-          :icon="
-            $q.dark.mode === 'auto'
-              ? 'contrast'
-              : $q.dark.mode
-              ? 'dark_mode'
-              : 'light_mode'
-          "
-          @click="
-            () => {
-              const newMode =
-                $q.dark.mode === 'auto'
-                  ? true
-                  : $q.dark.mode == true
-                  ? false
-                  : 'auto';
-              state.darkTheme = newMode;
-              $q.dark.set(newMode);
-            }
-          "
-        >
-          <q-tooltip
-            >Theme:
-            {{
-              $q.dark.mode === 'auto' ? 'auto' : $q.dark.mode ? 'dark' : 'light'
-            }}</q-tooltip
-          >
-        </q-btn>
+        <dark-mode-button
+          @theme-changed="(newMode) => (state.darkTheme = newMode)"
+        />
         <q-separator vertical></q-separator>
         <!-- GitHub Link -->
         <q-btn
@@ -157,6 +129,7 @@
 
 <script setup lang="ts">
 import ChatSidebar from 'components/ChatSidebar.vue';
+import DarkModeButton from 'components/DarkModeButton.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { errors } from 'boot/taskyon';
 
