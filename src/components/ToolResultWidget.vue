@@ -30,7 +30,7 @@
 
 <script setup lang="ts">
 import { dump } from 'js-yaml';
-import { LLMTask } from 'src/modules/types';
+import { LLMTask } from 'src/modules/taskyon/types';
 
 const props = defineProps<{
   task: LLMTask;

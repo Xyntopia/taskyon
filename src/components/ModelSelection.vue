@@ -136,7 +136,7 @@ import {
   getAssistants,
   getApiConfig,
   getApiByName,
-} from 'src/modules/chat';
+} from 'src/modules/taskyon/chat';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import openrouterModules from 'assets/openrouter_models.json';
 import { useTaskyonStore } from 'stores/taskyonState';

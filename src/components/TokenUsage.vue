@@ -74,7 +74,7 @@
 
 <script setup lang="ts">
 import { PropType } from 'vue';
-import { LLMTask } from 'src/modules/types';
+import { LLMTask } from 'src/modules/taskyon/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 
 defineProps({

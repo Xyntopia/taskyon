@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from '@jest/globals';
 import { installQuasarPlugin } from '@quasar/quasar-app-extension-testing-unit-jest';
-import { getVector } from 'src/modules/nlp';
+import { getVector } from 'src/modules/taskyon/nlp';
 
 //import { mount, shallowMount } from '@vue/test-utils';
 //import { QBtn } from 'quasar';

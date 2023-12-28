@@ -72,11 +72,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { deleteTaskThread } from 'src/modules/taskManager';
+import { deleteTaskThread } from 'src/modules/taskyon/taskManager';
 import Settings from 'components/Settings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { getTaskManager } from 'boot/taskyon';
-import type { TaskManager } from 'src/modules/taskManager';
+import type { TaskManager } from 'src/modules/taskyon/taskManager';
 
 const state = useTaskyonStore();
 

@@ -2,7 +2,7 @@ import {
   createTaskyonDatabase,
   LLMTaskDocType,
   TaskyonDatabase,
-} from 'src/modules/rxdb';
+} from 'src/modules/taskyon/rxdb';
 import { describe, expect, it, beforeAll, afterAll } from '@jest/globals';
 import { installQuasarPlugin } from '@quasar/quasar-app-extension-testing-unit-jest';
 import { getRxStorageMemory } from 'rxdb/plugins/storage-memory';

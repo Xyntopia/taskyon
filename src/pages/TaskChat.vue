@@ -254,7 +254,7 @@ import Task from 'components/Task.vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import { ref, UnwrapRef, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
-import { taskChain } from 'src/modules/taskManager';
+import { taskChain } from 'src/modules/taskyon/taskManager';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
@@ -263,10 +263,10 @@ import InfoDialog from 'src/components/InfoDialog.vue';
 import {
   emitCancelAllTasks,
   emitCancelCurrentTask,
-} from 'src/modules/taskWorker';
+} from 'src/modules/taskyon/taskWorker';
 import axios from 'axios';
 import { getTaskManager } from 'boot/taskyon';
-import { LLMTask } from 'src/modules/types';
+import { LLMTask } from 'src/modules/taskyon/types';
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
 const welcomeText = ref<string>('');

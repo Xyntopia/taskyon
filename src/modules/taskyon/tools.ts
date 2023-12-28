@@ -1,6 +1,6 @@
 import { useVectorStore } from 'src/modules/localVectorStore';
 import type { PythonScriptResult } from './pyodide';
-import { seleniumBrowser } from './seleniumTool';
+import { seleniumBrowser } from '../tools/seleniumTool';
 import { dump } from 'js-yaml';
 import { bigIntToString } from './chat';
 import {

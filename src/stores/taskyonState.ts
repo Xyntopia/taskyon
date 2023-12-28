@@ -1,11 +1,11 @@
 import { defineStore } from 'pinia';
-import { defaultLLMSettings } from 'src/modules/chat';
+import { defaultLLMSettings } from 'src/modules/taskyon/chat';
 import { ref, Ref, watch } from 'vue';
-import type { LLMTask } from 'src/modules/types';
-import type { FunctionArguments } from 'src/modules/types';
+import type { LLMTask } from 'src/modules/taskyon/types';
+import type { FunctionArguments } from 'src/modules/taskyon/types';
 import axios from 'axios';
 import { Notify, LocalStorage } from 'quasar';
-import { deepMerge, deepMergeReactive } from 'src/modules/utils';
+import { deepMerge, deepMergeReactive } from 'src/modules/taskyon/utils';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {

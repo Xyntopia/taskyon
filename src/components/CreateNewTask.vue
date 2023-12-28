@@ -216,20 +216,20 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, toRaw } from 'vue';
-import { countStringTokens, getApiConfig } from 'src/modules/chat';
-import { tools, getDefaultParametersForTool } from 'src/modules/tools';
-import { FunctionArguments } from 'src/modules/types';
+import { countStringTokens, getApiConfig } from 'src/modules/taskyon/chat';
+import { tools, getDefaultParametersForTool } from 'src/modules/taskyon/tools';
+import { FunctionArguments } from 'src/modules/taskyon/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
-import type { LLMTask } from 'src/modules/types';
+import type { LLMTask } from 'src/modules/taskyon/types';
 import FileDropzone from './FileDropzone.vue';
 import ModelSelection from 'components/ModelSelection.vue';
-import { writeFiles } from 'src/modules/OPFS';
+import { writeFiles } from 'src/modules/taskyon/OPFS';
 import {
   addTask2Tree,
   addFile,
   getFileMappingByUuid,
-} from 'src/modules/taskManager';
+} from 'src/modules/taskyon/taskManager';
 import ObjectTreeView from './ObjectTreeView.vue';
 import { getTaskManager } from 'boot/taskyon';
 

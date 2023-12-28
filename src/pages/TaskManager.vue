@@ -51,7 +51,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import Search from 'components/Search.vue';
-import { LLMTask } from 'src/modules/types';
+import { LLMTask } from 'src/modules/taskyon/types';
 import { getTaskManager } from 'boot/taskyon';
 import Task from 'src/components/Task.vue';
 

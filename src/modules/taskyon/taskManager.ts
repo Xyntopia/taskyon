@@ -10,7 +10,7 @@ import {
   collections,
 } from './rxdb';
 import { openFile } from './OPFS';
-import { Lock, sleep } from 'src/modules/utils';
+import { Lock, sleep } from 'src/modules/taskyon/utils';
 import { deepMerge } from './utils';
 import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { AsyncQueue } from './utils';

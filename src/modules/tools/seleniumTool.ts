@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ExtendedTool } from './tools';
+import type { ExtendedTool } from '../taskyon/tools';
 
 type SeleniumState = {
   value: {

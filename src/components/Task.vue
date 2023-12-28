@@ -238,7 +238,7 @@ import ToolResultWidget from 'components/ToolResultWidget.vue';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import TokenUsage from 'components/TokenUsage.vue';
-import type { LLMTask } from 'src/modules/types';
+import type { LLMTask } from 'src/modules/taskyon/types';
 import type MarkdownIt from 'markdown-it/lib';
 import markdownItMermaid from '@datatraccorporation/markdown-it-mermaid';
 import { getTaskManager } from 'src/boot/taskyon';
