@@ -16,7 +16,6 @@
       capture="environment"
       @click.stop
     />
-
     <slot>
       <div class="fit inset-shadow-down column justify-center">
         <div>
@@ -95,8 +94,10 @@ const props = defineProps({
 });
 
 const colorClass = computed(() => {
+  const color = props.color || '';
+  const textColor = color ? 'text-' + color : '';
   if (props.disableDropzoneBorder != true) {
-    return 'dashedborder text-' + props.color;
+    return 'dashedborder' + textColor;
   } else {
     return '';
   }
