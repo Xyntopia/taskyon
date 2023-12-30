@@ -1,7 +1,6 @@
 import axios from 'axios';
 //import { useCachedModels } from './mlModels';
 import { Tool, tools, ExtendedTool, summarizeTools } from './tools';
-import { getEncoding } from 'js-tiktoken';
 import { LLMTask, OpenAIMessage, OpenRouterGenerationInfo } from './types';
 import {
   taskChain,
@@ -182,6 +181,14 @@ export type OpenAIChatMessage = {
   name: string;
 };
 
+//import { getEncoding } from 'js-tiktoken';
+const { getEncoding } = await import(
+  /* webpackChunkName: "tiktoken" */
+  /* webpackMode: "lazy" */
+  /* webpackExports: ["getEncoding"] */
+  /* webpackFetchPriority: "high" */
+  'js-tiktoken'
+  )
 const enc = getEncoding('gpt2');
 
 export function countStringTokens(txt: string) {
@@ -291,6 +298,7 @@ function accumulateChatCompletion(
           role: 'assistant', // or other roles as per your logic
         },
         finish_reason: 'stop',
+        logprobs: null,
       },
     ],
   };
@@ -449,7 +457,10 @@ async function buildChatFromTask(
           message = {
             role: t.role,
             content: t.content,
-          };
+          } as Exclude<
+            OpenAI.ChatCompletionMessageParam,
+            OpenAI.ChatCompletionFunctionMessageParam
+          >;
         }
         if (message?.content) openAIMessageThread.push(message);
       }

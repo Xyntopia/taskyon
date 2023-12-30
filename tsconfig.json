@@ -2,7 +2,9 @@
   "extends": "@quasar/app-webpack/tsconfig-preset",
   "compilerOptions": {
     "baseUrl": ".",
-    "jsx": "preserve"
+    "jsx": "preserve",
+    "module": "es2022",
+    "target": "es2022",
   },
   "exclude": ["src-tauri"]
 }
