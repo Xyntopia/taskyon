@@ -54,6 +54,11 @@
             {{ `approx. token count: ${estimatedTokens}` }}
           </div>
         </template>
+        <template v-slot:hint>
+          <div>
+            {{ `selected AI: ${currentModel}` }}
+          </div>
+        </template>
       </q-input>
       <div v-if="fileMappings.length">
         <div>Attached files:</div>
