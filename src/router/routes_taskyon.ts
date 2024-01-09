@@ -1,47 +1,50 @@
 import { RouteRecordRaw } from 'vue-router';
 
+export const taskyonRoutes = {
+  path: '/',
+  component: () => import('layouts/Taskyon.vue'),
+  children: [
+    { path: '', component: () => import('pages/TaskChat.vue') },
+    { path: 'taskmanager', component: () => import('pages/TaskManager.vue') },
+    {
+      path: 'chat',
+      component: () => import('pages/TaskChat.vue'),
+    },
+    {
+      path: 'settings',
+      component: () => import('pages/Settings.vue'),
+    },
+    {
+      path: 'diagnostics',
+      component: () => import('pages/Diagnostics.vue'),
+    },
+    {
+      path: 'uploader',
+      component: () => import('components/VecStoreUploader.vue'),
+    },
+    {
+      path: 'searchplugin',
+      component: () => import('components/VecStoreUploader.vue'),
+    },
+    {
+      path: 'search',
+      component: () => import('components/VecStoreSearch.vue'),
+    },
+    {
+      path: 'admin',
+      component: () => import('components/VecStoreSearch.vue'),
+    },
+  ],
+}
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/widgets',
     component: () => import('layouts/Widgets.vue'),
     children: [{ path: 'chat', component: () => import('pages/TaskChat.vue') }],
   },
-  {
-    path: '/',
-    component: () => import('layouts/Taskyon.vue'),
-    children: [
-      { path: '', component: () => import('pages/TaskChat.vue') },
-      { path: 'taskmanager', component: () => import('pages/TaskManager.vue') },
-      {
-        path: 'chat',
-        component: () => import('pages/TaskChat.vue'),
-      },
-      {
-        path: 'settings',
-        component: () => import('pages/Settings.vue'),
-      },
-      {
-        path: 'diagnostics',
-        component: () => import('pages/Diagnostics.vue'),
-      },
-      {
-        path: 'uploader',
-        component: () => import('components/VecStoreUploader.vue'),
-      },
-      {
-        path: 'searchplugin',
-        component: () => import('components/VecStoreUploader.vue'),
-      },
-      {
-        path: 'search',
-        component: () => import('components/VecStoreSearch.vue'),
-      },
-      {
-        path: 'admin',
-        component: () => import('components/VecStoreSearch.vue'),
-      },
-    ],
-  },
+  
+  taskyonRoutes,
 
   // Always leave this as last one,
   // but you can also remove it
