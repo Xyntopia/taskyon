@@ -23,7 +23,7 @@
         <div v-else-if="task.content" class="col">
           <q-markdown
             no-line-numbers
-            :plugins="[markdownItMermaid, addCopyButtons]"
+            :plugins="[switchThemeMermaid, addCopyButtons]"
             :src="task.content"
             @click="handleMarkdownClick"
           />
@@ -222,14 +222,6 @@
     &:hover
         .message-buttons
             opacity: 1
-
-// this is in order to make mermaid sequence diagrams work on dark backgrounds
-::v-deep(.mermaid svg)
-  .messageLine0
-    stroke: $secondary !important
-  .messageText
-    stroke: $secondary !important
-    fill: $secondary !important
 </style>
 
 <script setup lang="ts">
@@ -244,8 +236,23 @@ import markdownItMermaid from '@datatraccorporation/markdown-it-mermaid';
 import { getTaskManager } from 'src/boot/taskyon';
 import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-rust';
+import { useQuasar } from 'quasar';
 
-type markdownItMermaid = MarkdownIt.PluginSimple;
+const $q = useQuasar();
+
+const switchThemeMermaid: MarkdownIt.PluginSimple = (md: MarkdownIt) => {
+  (
+    markdownItMermaid as (md: MarkdownIt, opts: Record<string, unknown>) => void
+  )(md, {
+    startOnLoad: false,
+    securityLevel: 'true',
+    theme: $q.dark.isActive ? 'dark' : 'default',
+    flowchart: {
+      htmlLabels: false,
+      useMaxWidth: true,
+    },
+  });
+};
 
 defineProps<{
   task: LLMTask;
