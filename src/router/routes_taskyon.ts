@@ -1,4 +1,5 @@
 import { RouteRecordRaw } from 'vue-router';
+import authRoutes from './routes_default';
 
 export const taskyonRoutes = {
   path: '/',
@@ -34,6 +35,7 @@ export const taskyonRoutes = {
       path: 'admin',
       component: () => import('components/VecStoreSearch.vue'),
     },
+    ...authRoutes
   ],
 }
 
