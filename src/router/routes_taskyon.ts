@@ -24,15 +24,7 @@ export const taskyonRoutes = {
       component: () => import('components/VecStoreUploader.vue'),
     },
     {
-      path: 'searchplugin',
-      component: () => import('components/VecStoreUploader.vue'),
-    },
-    {
       path: 'search',
-      component: () => import('components/VecStoreSearch.vue'),
-    },
-    {
-      path: 'admin',
       component: () => import('components/VecStoreSearch.vue'),
     },
     ...authRoutes
