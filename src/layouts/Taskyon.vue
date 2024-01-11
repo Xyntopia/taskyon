@@ -25,7 +25,6 @@
           ><q-tooltip>Manage taskyon tasks</q-tooltip>
         </q-btn>
         <q-space />
-        <!-- Home Icon Button -->
         <q-btn
           v-if="errors.length > 0"
           flat
