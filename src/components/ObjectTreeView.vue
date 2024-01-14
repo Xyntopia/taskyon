@@ -19,6 +19,18 @@
       </div>
     </template>
     <template v-slot:header-none> </template>
+    <template v-slot:body-list="prop">
+    <div class="row">
+      <div class="col-auto" style="min-width: 200px">
+        {{ prop.node.label }}:
+      </div>
+      <json-input
+        class="col"
+        :model-value="prop.node.value"
+        @update:modelValue="(value) => updateValue(prop.node.path, value)"
+      />
+    </div>
+  </template>
     <template v-slot:body-string="prop">
       <div class="row">
         <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
@@ -57,6 +69,7 @@
 <script setup lang="ts">
 import { computed, toRefs, PropType } from 'vue';
 import { QTreeNode } from 'quasar';
+import JsonInput from 'components/JsonInput.vue'; // Adjust the path as necessary
 
 const props = defineProps({
   disableEdit: {
@@ -118,6 +131,15 @@ const transformToTreeNodes = (
             value as Record<string, unknown>,
             newPath
           ),
+        };
+      } else if (Array.isArray(value)) {
+        return {
+          label: key,
+          key: newPath.join('.'),
+          value: value, // Keep the original array
+          path: newPath,
+          body: 'list', // Indicate this is a list
+          header: 'none',
         };
       } else if (typeof value === 'string') {
         const node: QTreeNode = {
