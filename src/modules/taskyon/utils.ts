@@ -1,3 +1,5 @@
+import equal from 'fast-deep-equal/es6';
+
 /**
  * Type describing a generic function.
  */
@@ -252,16 +254,43 @@ function isObject(item: unknown): item is Record<string, unknown> {
   return item !== null && typeof item === 'object' && !Array.isArray(item);
 }
 
-export function deepMerge<A, B>(obj1: A, obj2: B): A & B {
+function unionArrays(arr1: unknown[], arr2: unknown[]) {
+  const combined = arr1.concat(arr2);
+  return combined.filter(
+    (item, index) => combined.findIndex((obj) => equal(obj, item)) === index
+  );
+}
+
+/**
+ * Deeply merges two objects, obj1 and obj2.
+ * For objects, it recursively merges their properties.
+ * For arrays, it either overwrites (obj1's array is replaced by obj2's) or
+ * performs a union (combines arrays without duplicates) based on the strategy specified.
+ *
+ * @param {Object} obj1 - The first object to merge.
+ * @param {Object} obj2 - The second object to merge.
+ * @param {String} arrayMergeStrategy - The strategy for array merging: 'overwrite' or 'union'.
+ * @returns {Object} - The deeply merged object.
+ */
+export function deepMerge<A, B>(
+  obj1: A,
+  obj2: B,
+  arrayMergeStrategy: 'overwrite' | 'union' = 'overwrite'
+): A & B {
   const output: Record<string, unknown> = Object.assign({}, obj1); // Start with a shallow copy of obj1
   if (isObject(obj1) && isObject(obj2)) {
     Object.keys(obj2).forEach((key) => {
       const obj2Value = obj2[key];
-      if (isObject(obj2Value)) {
-        const obj1Value = obj1[key];
+      const obj1Value = obj1[key];
+      if (Array.isArray(obj1Value) && Array.isArray(obj2Value)) {
+        output[key] =
+          arrayMergeStrategy === 'union'
+            ? unionArrays(obj1Value, obj2Value)
+            : obj2Value;
+      } else if (isObject(obj2Value)) {
         if (isObject(obj1Value)) {
           // Recursively call deepMerge only if both obj1[key] and obj2[key] are objects
-          output[key] = deepMerge(obj1Value, obj2Value);
+          output[key] = deepMerge(obj1Value, obj2Value, arrayMergeStrategy);
         } else {
           // If obj1[key] is not an object, simply assign obj2[key]
           output[key] = obj2Value;
