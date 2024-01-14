@@ -66,6 +66,16 @@ export function defaultLLMSettings() {
     selectedApi: 'openrouter.ai' as string | 'openrouter.ai' | 'openai',
     llmApis: [
       {
+        name: 'taskyon',
+        baseURL: 'https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/api',
+        defaultModel: 'mistralai/mistral-7b-instruct',
+        streamSupport: false,
+        routes: {
+          chatCompletion: '/chat/completions',
+          models: '/models',
+        },
+      },
+      {
         name: 'openai',
         baseURL: 'https://api.openai.com/v1/',
         defaultModel: 'gpt-3.5-turbo',
