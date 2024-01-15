@@ -21,7 +21,11 @@
           </q-expansion-item>
         </div>
         <div v-else-if="task.content" class="col">
-          <tyMarkdown :src="task.content" />
+          <tyMarkdown
+            v-if="state.taskState[task.id]?.markdownEnabled != false"
+            :src="task.content"
+          />
+          <div v-else class="raw-markdown q-mb-md" v-html="task.content"/>
         </div>
         <!--task costs-->
         <div
@@ -62,6 +66,20 @@
       <div
         class="q-gutter-xs row justify-start items-stretch message-buttons absolute-bottom-left print-hide transparent"
       >
+        <q-btn
+          class="col-auto"
+          :icon="
+            state.taskState[task.id]?.markdownEnabled != false
+              ? 'mdi-language-markdown'
+              : 'raw_on'
+          "
+          dense
+          flat
+          size="sm"
+          @click="toggleMarkdown(task.id)"
+        >
+          <q-tooltip :delay="0">Toggle Markdown</q-tooltip>
+        </q-btn>
         <q-btn
           v-if="state.appConfiguration.expertMode"
           class="col-auto"
@@ -209,6 +227,10 @@
     &:hover
         .message-buttons
             opacity: 1
+
+.raw-markdown
+  white-space: pre-wrap // This will display newlines and wrap text
+
 </style>
 
 <script setup lang="ts">
@@ -249,5 +271,17 @@ function toggleMessageDebug(id: string) {
     // If it does exist, toggle the boolean.
     state.messageDebug[id] = undefined;
   }
+}
+
+function toggleMarkdown(id: string) {
+  if (state.taskState[id] === undefined) {
+    // If the message ID doesn't exist, default to true since we're opening it.
+    state.taskState[id] = {
+      markdownEnabled: true,
+    };
+  }
+  // If it does exist, toggle the boolean.
+  state.taskState[id].markdownEnabled = !state.taskState[id].markdownEnabled;
+  console.log(`markdown for ${id}`, state.taskState[id].markdownEnabled);
 }
 </script>

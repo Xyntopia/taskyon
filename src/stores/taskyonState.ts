@@ -16,6 +16,10 @@ function removeCodeFromUrl() {
 
 const storeName = 'taskyonState';
 
+interface TaskStateType {
+  markdownEnabled: boolean;
+}
+
 export const useTaskyonStore = defineStore(storeName, () => {
   console.log('initialize taskyon');
 
@@ -50,7 +54,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     drawerRight: false,
     taskDraft: {} as Partial<LLMTask>,
     draftParameters: {} as Record<string, FunctionArguments>,
-    debugMessageExpand: {},
+    taskState: {} as Record<string, TaskStateType>,
     darkTheme: 'auto' as boolean | 'auto',
     messageDebug: {} as Record<
       string,
@@ -69,7 +73,11 @@ export const useTaskyonStore = defineStore(storeName, () => {
   const storedStateObj = JSON.parse(storedStateString) as Partial<
     typeof initialState
   >;
-  const storedInitialState = deepMerge(initialState, storedStateObj, 'overwrite');
+  const storedInitialState = deepMerge(
+    initialState,
+    storedStateObj,
+    'overwrite'
+  );
 
   // Create refs for each property and adjust the type assertion
   const stateRefs = Object.fromEntries(
