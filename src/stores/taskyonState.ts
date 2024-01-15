@@ -69,7 +69,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
   const storedStateObj = JSON.parse(storedStateString) as Partial<
     typeof initialState
   >;
-  const storedInitialState = deepMerge(initialState, storedStateObj, 'union');
+  const storedInitialState = deepMerge(initialState, storedStateObj, 'overwrite');
 
   // Create refs for each property and adjust the type assertion
   const stateRefs = Object.fromEntries(

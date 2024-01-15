@@ -181,6 +181,15 @@ if (api) {
       api.baseURL + api.routes.models,
       state.keys.openai
     ).then((res) => (resOpenAI.value = res));
+  else {
+    const taskyonProxy = getApiByName(state.chatState, 'taskyon');
+    if (taskyonProxy) {
+      void availableModels(
+        taskyonProxy.baseURL + taskyonProxy.routes.models,
+        'test' //state.keys.taskyon
+      ).then((res) => (resOpenRouter.value = res));
+    }
+  }
 }
 
 watch(
@@ -235,6 +244,10 @@ const modelLookUp = computed(() => ({
     return acc;
   }, {} as Record<string, Model>),
   'openrouter.ai': resOpenRouter.value.reduce((acc, m) => {
+    acc[m.id] = m;
+    return acc;
+  }, {} as Record<string, Model>),
+  'taskyon': resOpenRouter.value.reduce((acc, m) => {
     acc[m.id] = m;
     return acc;
   }, {} as Record<string, Model>),

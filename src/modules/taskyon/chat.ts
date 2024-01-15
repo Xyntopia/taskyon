@@ -198,7 +198,7 @@ const { getEncoding } = await import(
   /* webpackExports: ["getEncoding"] */
   /* webpackFetchPriority: "high" */
   'js-tiktoken'
-  )
+);
 const enc = getEncoding('gpt2');
 
 export function countStringTokens(txt: string) {
@@ -390,7 +390,7 @@ export async function callLLM(
     messages: chatMessages,
     user: 'taskyon',
     temperature: 0.0,
-    stream,
+    stream: stream && api.streamSupport,
     n: 1,
   };
 
@@ -431,10 +431,10 @@ export async function callLLM(
     );
   } else {
     const completion = await openai.chat.completions.create(payload);
-    console.log('AI responded:', completion);
     chatCompletion = completion;
   }
 
+  console.log('AI responded:', chatCompletion);
   return chatCompletion;
 }
 
