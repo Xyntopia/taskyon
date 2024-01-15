@@ -367,6 +367,8 @@ function accumulateChatCompletion(
   return response;
 }
 
+type MessageError = { error: { code: number; message: string } };
+
 // calls openRouter OR OpenAI  chatmodels
 export async function callLLM(
   chatMessages: OpenAI.ChatCompletionMessageParam[],
@@ -376,13 +378,14 @@ export async function callLLM(
   apiKey: string,
   stream: false | true | null | undefined = false,
   contentCallBack: (chunk?: OpenAI.Chat.Completions.ChatCompletionChunk) => void
-): Promise<OpenAI.ChatCompletion | undefined> {
+): Promise<OpenAI.ChatCompletion | undefined | MessageError> {
   const headers: Record<string, string> = generateHeaders(
     apiKey,
     siteUrl,
     api.name
   );
-  let chatCompletion: OpenAI.ChatCompletion | undefined = undefined;
+  let chatCompletion: OpenAI.ChatCompletion | undefined | MessageError =
+    undefined;
   const openai = getOpenai(apiKey, api.baseURL, headers);
 
   const payload: OpenAI.ChatCompletionCreateParams = {

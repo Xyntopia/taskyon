@@ -136,17 +136,23 @@ export async function processChatTask(
           }
         );
 
-        const choice = chatCompletion?.choices[0];
-        if (choice) {
-          task.result = {
-            ...task.result,
-            type: useToolChat
-              ? 'ToolChatResult'
-              : isOpenAIFunctionCall(choice)
-              ? 'ToolCall'
-              : 'ChatAnswer',
-            chatResponse: chatCompletion,
-          };
+        if (chatCompletion) {
+          if ('choices' in chatCompletion) {
+            const choice = chatCompletion?.choices[0];
+            if (choice) {
+              task.result = {
+                ...task.result,
+                type: useToolChat
+                  ? 'ToolChatResult'
+                  : isOpenAIFunctionCall(choice)
+                  ? 'ToolCall'
+                  : 'ChatAnswer',
+                chatResponse: chatCompletion,
+              };
+            }
+          } else {
+            throw new Error(JSON.stringify(chatCompletion));
+          }
         }
 
         if (chatCompletion && chatState.selectedApi == 'openrouter.ai') {
