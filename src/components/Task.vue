@@ -25,7 +25,7 @@
             v-if="state.taskState[task.id]?.markdownEnabled != false"
             :src="task.content"
           />
-          <div v-else class="raw-markdown q-mb-md" v-html="task.content"/>
+          <div v-else class="raw-markdown q-mb-md" v-html="task.content" />
         </div>
         <!--task costs-->
         <div
@@ -81,17 +81,6 @@
           <q-tooltip :delay="0">Toggle Markdown</q-tooltip>
         </q-btn>
         <q-btn
-          v-if="state.appConfiguration.expertMode"
-          class="col-auto"
-          icon="code"
-          dense
-          flat
-          size="sm"
-          @click="toggleMessageDebug(task.id)"
-        >
-          <q-tooltip :delay="0">Show message context</q-tooltip>
-        </q-btn>
-        <q-btn
           v-if="task.childrenIDs.length > 0"
           class="col-auto"
           size="sm"
@@ -113,6 +102,18 @@
           @click="editTask(task.id)"
         >
           <q-tooltip :delay="0">Edit Task/Message</q-tooltip>
+        </q-btn>
+        <q-separator v-if="state.appConfiguration.expertMode" vertical />
+        <q-btn
+          v-if="state.appConfiguration.expertMode"
+          class="col-auto"
+          icon="code"
+          dense
+          flat
+          size="sm"
+          @click="toggleMessageDebug(task.id)"
+        >
+          <q-tooltip :delay="0">Show message context</q-tooltip>
         </q-btn>
       </div>
     </div>
@@ -230,7 +231,6 @@
 
 .raw-markdown
   white-space: pre-wrap // This will display newlines and wrap text
-
 </style>
 
 <script setup lang="ts">
