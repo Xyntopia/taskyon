@@ -82,16 +82,11 @@
             <q-tooltip>Prompt costs</q-tooltip>
             <div>
               prompt:
-              {{
-                modelLookUp['openrouter.ai'][botName]?.pricing?.prompt || '?'
-              }}
+              {{ modelLookUp[botName]?.pricing?.prompt || '?' }}
             </div>
             <div>
               completion:
-              {{
-                modelLookUp['openrouter.ai'][botName]?.pricing?.completion ||
-                '?'
-              }}
+              {{ modelLookUp[botName]?.pricing?.completion || '?' }}
             </div>
           </div>
         </template>
@@ -169,28 +164,29 @@ const emit = defineEmits([
 ]);
 
 const state = useTaskyonStore();
-
 const assistants = ref<Awaited<ReturnType<typeof getAssistants>>>({});
 
-const resOpenRouter = ref<Model[]>(openrouterModules.data);
-const resOpenAI = ref<Model[]>(openaiModels.data);
-const api = getApiConfig(state.chatState);
-if (api) {
-  if (api.name == 'openai')
-    void availableModels(
-      api.baseURL + api.routes.models,
-      state.keys.openai
-    ).then((res) => (resOpenAI.value = res));
-  else {
-    const taskyonProxy = getApiByName(state.chatState, 'taskyon');
-    if (taskyonProxy) {
-      void availableModels(
-        taskyonProxy.baseURL + taskyonProxy.routes.models,
-        'test' //state.keys.taskyon
-      ).then((res) => (resOpenRouter.value = res));
+const llmModels = ref<Model[]>([]);
+watch(
+  () => state.chatState.selectedApi,
+  () => {
+    console.log('downloading models...');
+    const api = getApiConfig(state.chatState);
+    const taskyonApi = getApiByName(state.chatState, 'taskyon');
+    if (api && taskyonApi) {
+      llmModels.value =
+        api.name === 'openai' ? openaiModels.data : openrouterModules.data;
+      const baseurl =
+        api.name === 'openrouter.ai'
+          ? taskyonApi.baseURL + '/models_openrouter'
+          : api.baseURL + api.routes.models;
+      void availableModels(baseurl, state.keys.taskyon).then(
+        (res) => (llmModels.value = res)
+      );
     }
-  }
-}
+  },
+  { immediate: true }
+);
 
 watch(
   () => state.chatState.useOpenAIAssistants,
@@ -204,6 +200,7 @@ watch(
 );
 
 const modelOptions = computed(() => {
+  // openai has no pricing information attached, so we sort it in different ways...
   if (props.selectedApi === 'openai') {
     if (props.enableOpenAIAssistants) {
       const options = Object.values(assistants.value).map((a) => ({
@@ -212,7 +209,7 @@ const modelOptions = computed(() => {
       }));
       return options;
     } else {
-      const options = [...resOpenAI.value]
+      const options = [...llmModels.value]
         .sort((m1, m2) => m1.id.localeCompare(m2.id))
         .map((m) => ({
           label: `${m.id}`,
@@ -221,7 +218,7 @@ const modelOptions = computed(() => {
       return options;
     }
   } else {
-    const options = resOpenRouter.value
+    const options = llmModels.value
       .map((m) => {
         const p = parseFloat(m.pricing?.prompt || '');
         const c = parseFloat(m.pricing?.completion || '');
@@ -238,20 +235,12 @@ const modelOptions = computed(() => {
   }
 });
 
-const modelLookUp = computed(() => ({
-  openai: resOpenAI.value.reduce((acc, m) => {
+const modelLookUp = computed(() =>
+  llmModels.value.reduce((acc, m) => {
     acc[m.id] = m;
     return acc;
-  }, {} as Record<string, Model>),
-  'openrouter.ai': resOpenRouter.value.reduce((acc, m) => {
-    acc[m.id] = m;
-    return acc;
-  }, {} as Record<string, Model>),
-  taskyon: resOpenRouter.value.reduce((acc, m) => {
-    acc[m.id] = m;
-    return acc;
-  }, {} as Record<string, Model>),
-}));
+  }, {} as Record<string, Model>)
+);
 
 function onModelSelect(value: string) {
   emit('updateBotName', {
