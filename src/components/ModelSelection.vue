@@ -176,7 +176,7 @@ const resOpenRouter = ref<Model[]>(openrouterModules.data);
 const resOpenAI = ref<Model[]>(openaiModels.data);
 const api = getApiConfig(state.chatState);
 if (api) {
-  if (api.name != 'openrouter.ai')
+  if (api.name == 'openai')
     void availableModels(
       api.baseURL + api.routes.models,
       state.keys.openai
@@ -247,7 +247,7 @@ const modelLookUp = computed(() => ({
     acc[m.id] = m;
     return acc;
   }, {} as Record<string, Model>),
-  'taskyon': resOpenRouter.value.reduce((acc, m) => {
+  taskyon: resOpenRouter.value.reduce((acc, m) => {
     acc[m.id] = m;
     return acc;
   }, {} as Record<string, Model>),
