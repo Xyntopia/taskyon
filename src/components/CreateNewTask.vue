@@ -149,10 +149,11 @@
       </div>
     </div>
     <q-slide-transition>
-      <div v-show="state.expandedTaskCreation">
+      <q-list dense v-show="state.expandedTaskCreation">
         <div v-if="state.showTaskData && state.appConfiguration.expertMode">
           {{ currentnewTask }}
         </div>
+        <q-separator class="q-my-sm" />
         <!--Model Selection-->
         <q-expansion-item
           dense
@@ -175,6 +176,7 @@
           </q-item-section>
         </q-expansion-item>
         <!--Allowed Tools Selection-->
+        <q-separator class="q-my-sm" />
         <q-expansion-item
           dense
           icon="handyman"
@@ -214,7 +216,7 @@
             />
           </q-item-section>
         </q-expansion-item>
-      </div>
+      </q-list>
     </q-slide-transition>
   </div>
 </template>
