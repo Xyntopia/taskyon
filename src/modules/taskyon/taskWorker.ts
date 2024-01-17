@@ -64,7 +64,10 @@ export async function processChatTask(
   apiKeys: Record<string, string>,
   taskManager: TaskManager
 ) {
-  const apiKey = apiKeys[chatState.selectedApi];
+  let apiKey = apiKeys[chatState.selectedApi];
+  if (!apiKey || apiKey.trim() === '') {
+    apiKey = apiKeys['taskyon'] || '';
+  }
   //TODO: merge this function with the assistants function
   if (chatState.useOpenAIAssistants && chatState.selectedApi == 'openai') {
     const messages = await getOpenAIAssistantResponse(
