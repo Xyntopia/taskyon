@@ -51,7 +51,7 @@
           "
         />
         <q-input
-          v-for="(key, keyname) of state.keys"
+          v-for="keyname of filteredKeys"
           :key="keyname"
           placeholder="Add API key here!"
           filled
@@ -66,6 +66,7 @@
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
 import OpenRouterPKCE from './OpenRouterPKCE.vue';
+import { computed } from 'vue';
 
 defineProps({
   reduced: {
@@ -75,4 +76,9 @@ defineProps({
 });
 
 const state = useTaskyonStore();
+const filteredKeys = computed(() => {
+  return Object.keys(state.keys).filter(
+    (name) => !['taskyon', 'jwt'].includes(name)
+  );
+});
 </script>
