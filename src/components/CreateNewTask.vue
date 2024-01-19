@@ -25,10 +25,7 @@
           </q-btn>
         </template>
         <template v-slot:before>
-          <FileDropzone
-            class="row justify-center items-center"
-            @update:model-value="attachFileToTask"
-          >
+          <FileDropzone class="fit" @update:model-value="attachFileToTask">
             <q-btn dense class="fit" flat>
               <q-icon name="upload_file" />
               <q-icon name="attachment" />

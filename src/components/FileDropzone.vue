@@ -1,6 +1,6 @@
 <template>
   <div
-    :class="'fit dropzone ' + colorClass"
+    :class="'dropzone ' + (disableDropzoneBorder ? '' : 'dashedborder')"
     @dragover.prevent
     @dragenter.prevent
     @drop="handleDrop"
@@ -12,7 +12,7 @@
       multiple
       @change="handleFileInput"
       ref="fileInput"
-      accept="image/*,text/*,.pdf,application/*"
+      :accept="accept"
       capture="environment"
       @click.stop
     />
@@ -70,11 +70,15 @@
 </style>
 
 <script setup lang="ts">
-import { ref, Ref, computed } from 'vue';
+import { ref, Ref } from 'vue';
 
 const emit = defineEmits(['update:modelValue']);
 
-const props = defineProps({
+defineProps({
+  accept: {
+    type: String,
+    default: 'image/*,text/*,.pdf,application/*',
+  },
   label: {
     type: String,
     default: '',
@@ -83,24 +87,10 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
-  color: {
-    type: String,
-    default: null,
-  },
   disableDropzoneBorder: {
     type: Boolean,
     default: false,
   },
-});
-
-const colorClass = computed(() => {
-  const color = props.color || '';
-  const textColor = color ? 'text-' + color : '';
-  if (props.disableDropzoneBorder != true) {
-    return 'dashedborder' + textColor;
-  } else {
-    return '';
-  }
 });
 
 //name: 'DropZone',
