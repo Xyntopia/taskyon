@@ -180,9 +180,13 @@ watch(
         api.name === 'openrouter.ai'
           ? taskyonApi.baseURL + '/models_openrouter'
           : api.baseURL + api.routes.models;
-      void availableModels(baseurl, state.keys.taskyon).then(
-        (res) => (llmModels.value = res)
-      );
+      try {
+        void availableModels(baseurl, state.keys.taskyon).then(
+          (res) => (llmModels.value = res)
+        );
+      } catch {
+        console.log("couldn't download models from", baseurl);
+      }
     }
   },
   { immediate: true }
