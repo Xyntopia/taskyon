@@ -199,9 +199,9 @@
       class="print-hide"
     >
       <q-btn
-        outline
+        fab-mini
+        class="scroll-to-bottom-button"
         icon="keyboard_double_arrow_down"
-        color="secondary"
         @click="scrollToThreadEnd"
         size="md"
       >
@@ -212,6 +212,10 @@
 </template>
 
 <style lang="sass" scoped>
+.scroll-to-bottom-button
+  background-color: rgba($primary, .7) // Adjust the alpha value as needed
+  color: white
+
 .task-container
   display: flex
   flex-direction: column
