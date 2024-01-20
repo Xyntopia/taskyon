@@ -66,6 +66,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
       | undefined
     >, // whether message with ID should be open or not...
   };
+  initialState.keys['taskyon'] = 'anonymous';
 
   // overwrite with saved configuration:
   console.log(`load ${storeName} state!`);
