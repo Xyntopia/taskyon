@@ -22,6 +22,7 @@
         </div>
         <div v-else-if="task.content" class="col">
           <tyMarkdown
+            style="min-width: 50px"
             v-if="state.taskState[task.id]?.markdownEnabled != false"
             :src="task.content"
           />
@@ -64,7 +65,7 @@
       </div>
       <!--buttons-->
       <div
-        class="q-gutter-xs row justify-start items-stretch message-buttons absolute-bottom-left print-hide transparent"
+        class="row justify-start items-stretch message-buttons absolute-bottom-left print-hide rounded-borders"
       >
         <q-btn
           class="col-auto"
@@ -224,6 +225,7 @@
         left: -2px   // To move left by 6px
         opacity: 0
         transition: opacity 0.3s
+        background-color: rgba($secondary, .2)
 
     &:hover
         .message-buttons
