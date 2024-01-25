@@ -15,6 +15,16 @@
     "selectedApi": "openrouter.ai",
     "llmApis": [
       {
+        "name": "taskyon",
+        "baseURL": "https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/api",
+        "defaultModel": "mistralai/mistral-7b-instruct",
+        "streamSupport": true,
+        "routes": {
+          "chatCompletion": "/chat/completions",
+          "models": "/models"
+        }
+      },
+      {
         "name": "openai",
         "baseURL": "https://api.openai.com/v1/",
         "defaultModel": "gpt-3.5-turbo",
