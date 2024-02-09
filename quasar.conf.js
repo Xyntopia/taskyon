@@ -66,7 +66,6 @@ module.exports = configure(function (ctx) {
     boot: [
       //TODO: 'addressbar-color',
       'i18n',
-      'axios',
       'taskyon',
       //{path: 'payments', client: true, server: true }
       //'htmlDataStore'
