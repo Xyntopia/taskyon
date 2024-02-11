@@ -259,7 +259,7 @@ export function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
     for (const key in shape) {
       const fieldSchema = shape[key];
       const optionalSuffix = fieldSchema instanceof z.ZodOptional ? '?' : '';
-      if (fieldSchema.description) {
+      if (fieldSchema?.description) {
         yamlObject[`# ${key} description`] = fieldSchema.description;
       }
       yamlObject[key + optionalSuffix] = zodToYAMLObject(fieldSchema);
