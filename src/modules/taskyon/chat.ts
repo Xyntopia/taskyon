@@ -252,7 +252,7 @@ export function estimateChatTokens(
   const promptTokens = countChatTokens(chat);
   const functionTokens = Math.floor(countToolTokens(functions) * 0.7);
   const resultTokens = countStringTokens(
-    task.result?.chatResponse?.choices[0].message.content || ''
+    task.result?.chatResponse?.choices[0]?.message.content || ''
   );
   return {
     singlePromptTokens,

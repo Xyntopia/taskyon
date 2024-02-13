@@ -308,7 +308,7 @@ const findFileOrDirectoryId = asyncLruCache<string | null>(10)(
       const response = await axios.get<{ files: gDriveFile[] }>(url, {
         headers,
       });
-      if (response.data.files && response.data.files.length > 0) {
+      if (response.data.files[0] && response.data.files.length > 0) {
         return response.data.files[0].id; // Assuming the first found item is the one we want
       } else {
         return null;

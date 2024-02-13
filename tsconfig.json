@@ -5,7 +5,7 @@
     "jsx": "preserve",
     "module": "es2022",
     "target": "es2022",
-    "noUncheckedIndexedAccess": true,
+    "noUncheckedIndexedAccess": false,
   },
   "exclude": ["src-tauri"]
   

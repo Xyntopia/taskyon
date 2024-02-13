@@ -246,13 +246,15 @@ async function uploadToIndex(
       const doc = output[i];
       //const uuids = uuidv4()
       //doc.metadata['uuid'] = uuid.to
-      docvecs.push({
-        document: doc,
-        vector: await getVector(
-          doc.pageContent,
-          vecStoreUploaderConfigurationState.value.modelName
-        ),
-      });
+      if (doc) {
+        docvecs.push({
+          document: doc,
+          vector: await getVector(
+            doc.pageContent,
+            vecStoreUploaderConfigurationState.value.modelName
+          ),
+        });
+      }
       steps += 1;
       await progressCallback(steps / maxsteps);
     }
@@ -320,7 +322,7 @@ async function query(searchQuery: string, k = 3): Promise<SearchResult[]> {
       for (let i = 0; i < (res?.neighbors.length || 0); i++) {
         const docId = res.neighbors[i];
         const distance = res.distances[i];
-        if (documentStore?.idb) {
+        if (documentStore?.idb && distance && docId) {
           const doc = await documentStore.idb.documents.get(docId);
           if (doc) {
             docs.push({
