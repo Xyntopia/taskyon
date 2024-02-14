@@ -1,6 +1,6 @@
 import axios from 'axios';
 //import { useCachedModels } from './mlModels';
-import { Tool, tools, ExtendedTool, summarizeTools } from './tools';
+import { ToolDescription, tools, Tool, summarizeTools } from './tools';
 import { LLMTask, OpenAIMessage, OpenRouterGenerationInfo } from './types';
 import {
   taskChain,
@@ -223,7 +223,7 @@ function countChatTokens(
   return totalTokens;
 }
 
-export function countToolTokens(functionList: ExtendedTool[]): number {
+export function countToolTokens(functionList: Tool[]): number {
   let totalTokens = 0;
 
   // Iterate through each tool in the functionList array
@@ -247,7 +247,7 @@ export function estimateChatTokens(
   task: LLMTask,
   chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
 ): LLMTask['debugging']['estimatedTokens'] {
-  const functions: ExtendedTool[] = mapFunctionNames(task.allowedTools || []);
+  const functions: Tool[] = mapFunctionNames(task.allowedTools || []);
   const singlePromptTokens = countStringTokens(task.content || '');
   const promptTokens = countChatTokens(chat);
   const functionTokens = Math.floor(countToolTokens(functions) * 0.7);

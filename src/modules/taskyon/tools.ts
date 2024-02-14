@@ -11,6 +11,7 @@ import {
 import { z } from 'zod';
 import { toolStateType, FunctionCall, ParamType } from './types';
 import { asyncRunPython } from './webWorkerApi';
+import { executeJavaScript } from '../tools/executeJavaScript';
 
 export const vectorStore = useVectorStore();
 
@@ -51,7 +52,7 @@ const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionParameter> 
     required: z.array(z.string()).optional(),
   });
 
-const Tool = z.object({
+const ToolDescription = z.object({
   state: z.union([
     z.function().returns(z.promise(toolStateType)),
     z.function().returns(toolStateType),
@@ -62,7 +63,7 @@ const Tool = z.object({
   name: z.string(),
   parameters: JSONSchemaForFunctionParameter,
 });
-export type Tool = z.infer<typeof Tool>;
+export type ToolDescription = z.infer<typeof ToolDescription>;
 
 const arbitraryFunctionSchema = z.custom<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -73,13 +74,13 @@ const arbitraryFunctionSchema = z.custom<
 });
 export type arbitraryFunction = z.infer<typeof arbitraryFunctionSchema>;
 
-const ExtendedTool = Tool.extend({
+const Tool = ToolDescription.extend({
   function: arbitraryFunctionSchema,
 });
-export type ExtendedTool = z.infer<typeof ExtendedTool>;
+export type Tool = z.infer<typeof Tool>;
 
 // ToolCollection schema and type
-const ToolCollection = z.record(ExtendedTool);
+const ToolCollection = z.record(Tool);
 type ToolCollection = z.infer<typeof ToolCollection>;
 
 export const tools: ToolCollection = {};
@@ -284,116 +285,15 @@ export function getDefaultParametersForTool(toolName: string) {
   return defaultParams;
 }
 
-interface WorkerMessage {
+export interface WorkerMessage {
   success: boolean;
   result?: unknown;
   error?: string;
 }
 
-// Tool to Execute JavaScript Code
-tools.executeJavaScript = {
-  state: () => 'available',
-  function: async ({ javascriptCode, useWorker = false }) => {
-    console.log('Executing JavaScript code...');
-    if (useWorker) {
-      // Execute using a dynamically created Web Worker
-      return executeInDynamicWorker(javascriptCode);
-    } else {
-      // Execute in the main thread
-      try {
-        // Create a scoped environment for execution
-        const scopedExecution = () => {
-          const logMessages: string[] = [];
-          // Override console.log within this function's scope
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const console = {
-            log: (...args: unknown[]) => {
-              logMessages.push(args.join(' '));
-            },
-          };
+tools.executeJavaScript = executeJavaScript;
 
-          try {
-            // Execute the JavaScript code
-            const result = eval(javascriptCode) as unknown;
-            return {
-              result: result ? result : undefined,
-              'console.log': logMessages,
-            };
-          } catch (e) {
-            throw e;
-          }
-        };
-
-        // Execute the scoped function and capture the result
-        const executionResult = scopedExecution();
-
-        console.log('finished js execution..');
-
-        return executionResult;
-      } catch (error) {
-        return Promise.reject(error);
-      }
-    }
-  },
-  description: `Runs JavaScript code either in the main thread or using a Web Worker, useful
-for tasks requiring DOM manipulation, data processing, or dynamic web content generation.`,
-  name: 'executeJavaScript',
-  parameters: {
-    type: 'object',
-    properties: {
-      javascriptCode: {
-        type: 'string',
-        description: 'The JavaScript code to be executed.',
-      },
-      useWebWorker: {
-        type: 'boolean',
-        description: `Whether to execute the code in a Web Worker or main thread.
-If the javascript code is executed in the main thread, it can manipulate
-the DOM where it is currently running.`,
-        default: false,
-      },
-    },
-    required: ['javascriptCode'],
-  },
-};
-
-// Function to execute JavaScript in a dynamically created Web Worker
-function executeInDynamicWorker(javascriptCode: string) {
-  return new Promise((resolve, reject) => {
-    const workerCode = `
-      onmessage = function(e) {
-        try {
-          const result = eval(e.data);
-          postMessage({ success: true, result });
-        } catch (error) {
-          postMessage({ success: false, error: error.toString() });
-        }
-      };
-    `;
-
-    const blob = new Blob([workerCode], { type: 'application/javascript' });
-    const workerUrl = URL.createObjectURL(blob);
-    const worker = new Worker(workerUrl);
-
-    worker.onmessage = function (e: MessageEvent<WorkerMessage>) {
-      URL.revokeObjectURL(workerUrl); // Clean up the object URL
-      if (e.data.success) {
-        resolve(e.data.result);
-      } else {
-        reject(new Error(e.data.error));
-      }
-    };
-
-    worker.onerror = function (error) {
-      URL.revokeObjectURL(workerUrl); // Clean up the object URL
-      reject(new Error(`Worker error: ${error.message}`));
-    };
-
-    worker.postMessage(javascriptCode);
-  });
-}
-
-function convertToToolCommandString(tool: Tool): string {
+function convertToToolCommandString(tool: ToolDescription): string {
   // convert a tool into a schema which is compatible ti toolCommandChat
   const args: YamlRepresentation = {};
 

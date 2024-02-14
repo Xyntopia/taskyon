@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ExtendedTool } from '../taskyon/tools';
+import type { Tool } from '../taskyon/tools';
 
 type SeleniumState = {
   value: {
@@ -113,7 +113,7 @@ async function fetchPageContent(sessionId: string) {
 
 type toolStateType = 'available' | 'starting' | 'unavailable' | 'error';
 
-export const seleniumBrowser: ExtendedTool = {
+export const seleniumBrowser: Tool = {
   state: () => {
     return 'available' as toolStateType;
   },
