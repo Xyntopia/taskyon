@@ -146,7 +146,7 @@ The format and content of the document are returned from the function.
 We can launch a selenium Tool in the background like this:
 
 docker run -p 4444:4444 -p 7900:7900 --shm-size="2g" -e SE_OPTS="--allow-cors true" selenium/standalone-chrome:latest`,
-  name: 'webBrowser',
+  name: 'seleniumBrowser',
   parameters: {
     type: 'object',
     properties: {

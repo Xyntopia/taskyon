@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { toolStateType, FunctionCall, ParamType } from './types';
 import { asyncRunPython } from './webWorkerApi';
 import { executeJavaScript } from '../tools/executeJavaScript';
+import { webBrowser } from '../tools/webBrowserTool';
 
 export const vectorStore = useVectorStore();
 
@@ -105,7 +106,7 @@ export async function handleFunctionExecution(
   }
 }
 
-tools.webBrowser = seleniumBrowser;
+tools.seleniumBrowser = seleniumBrowser;
 
 tools.localVectorStoreSearch = {
   state: () => 'available',
@@ -292,6 +293,7 @@ export interface WorkerMessage {
 }
 
 tools.executeJavaScript = executeJavaScript;
+tools.webBrowser = webBrowser;
 
 function convertToToolCommandString(tool: ToolDescription): string {
   // convert a tool into a schema which is compatible ti toolCommandChat
