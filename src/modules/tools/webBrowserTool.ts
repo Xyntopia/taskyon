@@ -15,12 +15,12 @@ function extract_text(html: string) {
   return article;
 }
 
-function cleanWebpage(htmlString: string): string {
+function cleanWebpageEnhanced(htmlString: string): string {
   // Parse the HTML string into a DOM object
   const parser: DOMParser = new DOMParser();
   const doc: Document = parser.parseFromString(htmlString, 'text/html');
 
-  // Define the tags to keep
+  // Define the tags to keep based on content-rich criteria
   const tagsToKeep: string[] = [
     'h1',
     'h2',
@@ -37,8 +37,24 @@ function cleanWebpage(htmlString: string): string {
     'section',
   ];
 
-  // Function to recursively remove elements not matching the tags to keep
+  // Function to determine if an element is considered empty
+  function isEmptyElement(element: Element): boolean {
+    return !element.textContent?.trim() && element.children.length === 0;
+  }
+
+  // Function to recursively clean an element
   function cleanElement(element: Element): void {
+    // Remove script-related elements and comments
+    Array.from(element.childNodes).forEach((node) => {
+      if (
+        node.nodeType === Node.COMMENT_NODE ||
+        (node as HTMLElement).tagName === 'SCRIPT' ||
+        (node as HTMLElement).tagName === 'STYLE'
+      ) {
+        node.parentNode?.removeChild(node);
+      }
+    });
+
     // Get all child elements
     const children: HTMLCollection = element.children;
 
@@ -46,17 +62,64 @@ function cleanWebpage(htmlString: string): string {
     const childrenArray: Element[] = Array.from(children);
 
     childrenArray.forEach((child: Element) => {
-      // If the child's tag is not in the list, remove it
-      if (!tagsToKeep.includes(child.tagName.toLowerCase())) {
+      // Remove non-essential elements and empty divs/sections
+      if (
+        !tagsToKeep.includes(child.tagName.toLowerCase()) ||
+        isEmptyElement(child)
+      ) {
         child.remove();
       } else {
-        // Otherwise, recursively clean this child element
+        // Recursively clean this child element
         cleanElement(child);
       }
     });
   }
 
   // Start cleaning from the body element
+  cleanElement(doc.body);
+
+  // Return the cleaned HTML as a string
+  return doc.body.innerHTML;
+}
+
+function deepCleanWebpage(htmlString: string): string {
+  // Parse the HTML string into a DOM object
+  const parser: DOMParser = new DOMParser();
+  const doc: Document = parser.parseFromString(htmlString, 'text/html');
+
+  // Function to check if an element (or its children) contains meaningful content
+  function hasMeaningfulContent(element: Node): boolean {
+    return element.nodeType === Node.TEXT_NODE
+      ? /\S/.test(element.nodeValue || '')
+      : Array.from(element.childNodes).some(hasMeaningfulContent);
+  }
+
+  // Function to strip all attributes from an element
+  function stripAttributes(element: Element): void {
+    while (element.attributes.length > 0) {
+      element.removeAttribute(element.attributes[0].name);
+    }
+  }
+
+  // Function to recursively clean an element
+  function cleanElement(element: Node): void {
+    if (element.nodeType === Node.ELEMENT_NODE) {
+      stripAttributes(element as Element);
+
+      // Convert NodeList to array for convenience
+      const childNodesArray: Node[] = Array.from(element.childNodes);
+
+      childNodesArray.forEach((child: Node) => {
+        if (!hasMeaningfulContent(child)) {
+          element.removeChild(child);
+        } else {
+          cleanElement(child);
+        }
+      });
+    }
+  }
+
+  // Start the deep cleaning process from the body element
   cleanElement(doc.body);
 
   // Return the cleaned HTML as a string
@@ -78,8 +141,8 @@ async function fetchContentFromURL(url: string): Promise<string> {
       apiEndpoint,
       {
         url: url,
-        browser: false,
-        return_page_source: true, // don't use javascript if set to "true"
+        browser: true,
+        return_page_source: false, // don't use javascript if set to "true"
       },
       {
         headers: {
@@ -95,12 +158,15 @@ async function fetchContentFromURL(url: string): Promise<string> {
   }
 }
 
+
+
 export const webBrowser: Tool = {
   state: () => 'available',
   function: async ({ url }: { url: string }) => {
     console.log(`Fetching content for ${url}...`);
     const content = await fetchContentFromURL(url);
-    const processedContent = cleanWebpage(content);
+    let processedContent = cleanWebpageEnhanced(content);
+    processedContent = deepCleanWebpage(processedContent);
     //const processedContent = content;
     return processedContent;
   },
