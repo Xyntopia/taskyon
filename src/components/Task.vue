@@ -26,7 +26,7 @@
             v-if="state.taskState[task.id]?.markdownEnabled != false"
             :src="task.content"
           />
-          <div v-else class="raw-markdown q-mb-md" v-html="task.content" />
+          <div v-else class="raw-markdown q-mb-md">{{ task.content }}</div>
         </div>
         <!--task costs-->
         <div
@@ -81,6 +81,20 @@
         >
           <q-tooltip :delay="0">Toggle Markdown</q-tooltip>
         </q-btn>
+        <q-separator vertical class="q-mx-sm" />
+        <q-btn
+          v-if="task.childrenIDs.length > 0"
+          class="col-auto"
+          size="sm"
+          dense
+          flat
+          @click="createNewConversation(task.id)"
+        >
+          <q-icon name="mdi-star-four-points" size="xs"></q-icon>
+          <q-tooltip :delay="0">
+            Start a new thread with this message!
+          </q-tooltip>
+        </q-btn>
         <q-btn
           v-if="task.childrenIDs.length > 0"
           class="col-auto"
@@ -91,7 +105,7 @@
         >
           <q-icon class="rotate-180" name="alt_route"></q-icon>
           <q-tooltip :delay="0"
-            >Start alternative conversation thread from here</q-tooltip
+            >Start alternative conversation branch from here</q-tooltip
           >
         </q-btn>
         <q-btn
@@ -104,7 +118,11 @@
         >
           <q-tooltip :delay="0">Edit Task/Message</q-tooltip>
         </q-btn>
-        <q-separator v-if="state.appConfiguration.expertMode" vertical />
+        <q-separator
+          v-if="state.appConfiguration.expertMode"
+          vertical
+          class="q-mx-sm"
+        />
         <q-btn
           v-if="state.appConfiguration.expertMode"
           class="col-auto"
@@ -250,7 +268,8 @@ defineProps<{
 const state = useTaskyonStore();
 const taskManagerPromise = getTaskManager();
 
-async function editTask(taskId: string) {
+async function taskDraftFromTask(taskId: string) {
+  // we are copying the current task with json stringify
   const jsonTask = JSON.stringify(
     await (await taskManagerPromise).getTask(taskId)
   );
@@ -262,7 +281,20 @@ async function editTask(taskId: string) {
   task.state = 'Open';
   delete task.result;
   state.taskDraft = task;
+  return task;
+}
+
+async function editTask(taskId: string) {
+  const task = await taskDraftFromTask(taskId);
   state.chatState.selectedTaskId = task.parentID;
+}
+
+async function createNewConversation(taskId: string) {
+  await taskDraftFromTask(taskId);
+
+  // we simply need to tell our task manager that we don't have any task selected
+  // the next message which will be send, will be an orphan in this case.
+  state.chatState.selectedTaskId = undefined;
 }
 
 function toggleMessageDebug(id: string) {
