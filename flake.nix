@@ -50,7 +50,7 @@
               set +a
             fi
 
-            export PATH="$(pwd)/frontend/node_modules/.bin:$PATH"
+            export PATH="$(pwd)/node_modules/.bin:$PATH"
           '';
           # fixes xcb issues :
           #QT_PLUGIN_PATH=${qt5.qtbase}/${qt5.qtbase.qtPluginPrefix}
