@@ -21,37 +21,38 @@
         libraries = with pkgs; [
 
           # tauri deps
-          webkitgtk
-          gtk3
-          cairo
-          gdk-pixbuf
-          glib
-          dbus
-          openssl_3
-          librsvg
-          libsoup
+          #webkitgtk
+          #gtk3
+          #cairo
+          #gdk-pixbuf
+          #glib
+          #dbus
+          #openssl_3
+          #librsvg
+          #libsoup
 
           # this is needed for appimage by build_appimage.sh ...
-          libgpg-error 
-          xorg.libX11
-          xorg.libSM
-          xorg.libICE
-          xorg.libxcb
-          fribidi
-          fontconfig
-          libthai
-          harfbuzz
-          freetype
-          libglvnd
-          mesa
-          libdrm
+          #libgpg-error 
+          #xorg.libX11
+          #xorg.libSM
+          #xorg.libICE
+          #xorg.libxcb
+          #fribidi
+          #fontconfig
+          #libthai
+          #harfbuzz
+          #freetype
+          #libglvnd
+          #mesa
+          #libdrm
+          cargo-tauri
         ];
         packages = with pkgs; [
           # rust
-          rustfmt
+          #rustfmt
           #clippy
-          rustc
-          cargo
+          #rustc
+          #cargo
           #cargo-deny
           #cargo-edit
           #cargo-watch
