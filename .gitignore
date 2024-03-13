@@ -56,4 +56,7 @@ amplifytools.xcconfig
 **.sample
 #amplify-do-not-edit-end
 
-.quasar.env.json
+#.quasar.env.json
+
+.direnv/
+.envrc
