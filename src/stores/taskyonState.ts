@@ -35,6 +35,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
       expertMode: false,
       showCosts: false,
       gdriveDir: 'taskyon',
+      useEnterToSend: true,
     },
     // chatState & appConfiguration define the state of our app!
     // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved

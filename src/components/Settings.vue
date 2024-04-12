@@ -14,6 +14,12 @@
         left-label
         color="secondary"
       />
+      <q-toggle
+        v-model="state.appConfiguration.useEnterToSend"
+        label="<enter> key sends message/executes task"
+        left-label
+        color="secondary"
+      />
     </div>
     <OpenRouterPKCE />
     <div v-if="!reduced">

@@ -42,7 +42,7 @@
       <q-tab name="settings" label="Settings" />
       <q-tab name="instructions" label="Instructions" />
       <q-tab name="agent config" label="Agent Configuration" />
-      <q-tab name="app config" label="App Configuration" />
+      <q-tab v-if="state.appConfiguration.expertMode" name="app config" label="Expert App Configuration" />
     </q-tabs>
     <q-tab-panels
       v-model="tab"
