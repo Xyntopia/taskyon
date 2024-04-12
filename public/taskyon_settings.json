@@ -1,23 +1,24 @@
 {
   "appConfiguration": {
-    "supabase_url": "",
-    "supabase_anon_key": "",
+    "supabase_url": "https://sicynrpldixtrddgqnpm.supabase.co",
+    "supabase_anon_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpY3lucnBsZGl4dHJkZGdxbnBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwNzgxMTYsImV4cCI6MjAxNTY1NDExNn0.EwuXaxbRPvSZNlce3E_FjylLFrxSMV3tbz8JHR8GuJI",
     "appConfigurationUrl": "/taskyon_settings.json",
-    "gdriveConfigurationFile": "configuration.json",
+    "gdriveConfigurationFile": "taskyon_settings.json",
     "expertMode": false,
     "showCosts": false,
-    "gdriveDir": "taskyon"
+    "gdriveDir": "taskyon",
+    "useEnterToSend": true
   },
   "chatState": {
     "openAIAssistantId": "",
     "useOpenAIAssistants": false,
     "enableOpenAiTools": false,
-    "selectedApi": "openrouter.ai",
+    "selectedApi": "taskyon",
     "llmApis": [
       {
         "name": "taskyon",
         "baseURL": "https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/api",
-        "defaultModel": "mistralai/mistral-7b-instruct",
+        "defaultModel": "mistralai/mistral-7b-instruct:free",
         "streamSupport": true,
         "routes": {
           "chatCompletion": "/chat/completions",
@@ -37,7 +38,7 @@
       {
         "name": "openrouter.ai",
         "baseURL": "https://openrouter.ai/api/v1",
-        "defaultModel": "nousresearch/nous-capybara-7b",
+        "defaultModel": "mistralai/mistral-7b-instruct:free",
         "streamSupport": true,
         "routes": {
           "chatCompletion": "/chat/completions",
@@ -45,8 +46,9 @@
         }
       }
     ],
-    "siteUrl": "https://taskyon.xyntopia.com",
+    "siteUrl": "https://taskyon.space",
     "summaryModel": "Xenova/distilbart-cnn-6-6",
+    "vectorizationModel": "Xenova/all-MiniLM-L6-v2",
     "maxAutonomousTasks": 3,
     "taskChatTemplates": {
       "constraints": "CONSTRAINTS:\n\n{constraints}",
