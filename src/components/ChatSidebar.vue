@@ -14,9 +14,11 @@
             class="col"
             dense
             flat
-            icon="add"
-            @click="createNewConversation"
-          ></q-btn>
+            icon="reviews"
+            @click="state.chatState.selectedTaskId = undefined"
+          >
+            <q-tooltip> Create a new conversation </q-tooltip>
+          </q-btn>
           <q-btn class="col" dense flat icon="search" to="/TaskManager"
             ><q-tooltip>Search for more conversations</q-tooltip></q-btn
           >
@@ -79,12 +81,6 @@ import { getTaskManager } from 'boot/taskyon';
 import type { TaskManager } from 'src/modules/taskyon/taskManager';
 
 const state = useTaskyonStore();
-
-function createNewConversation() {
-  // we simply need to tell our task manager that we don't have any task selected
-  // the next message which will be send, will be an orphan in this case.
-  state.chatState.selectedTaskId = undefined;
-}
 
 type taskEntry = { id: string; name: string | undefined };
 
