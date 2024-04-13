@@ -100,12 +100,12 @@
           ></q-img>-->
         </div>
         <div
-          class="text-h6 col-auto"
+          class="text-h6 col-auto text-center"
           v-if="state.keys[state.chatState.selectedApi]"
         >
           Welcome! Just type a message below to start using Taskyon!
         </div>
-        <div class="text-h6 col-auto" v-else>
+        <div v-else class="text-h6 col-auto text-center">
           Welcome to Taskyon! To get started you need to add your API keys to an
           LLM in the settings!
         </div>
