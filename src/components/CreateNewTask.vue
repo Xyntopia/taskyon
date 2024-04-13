@@ -118,7 +118,7 @@
           :bg-color="selectedTaskType ? 'secondary' : ''"
           :model-value="selectedTaskType"
           @update:modelValue="setTaskType"
-          :options="Object.keys(tools)"
+          :options="Object.keys(state.chatState.tools)"
           :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
         />
         <q-toggle
@@ -185,10 +185,10 @@
               class="q-ma-md"
               v-model="allowedTools"
               :options="
-                Object.keys(tools).map((name) => ({
+                Object.keys(state.chatState.tools).map((name) => ({
                   label: name,
                   value: name,
-                  description: tools[name].description,
+                  description: state.chatState.tools[name].description,
                 }))
               "
               color="secondary"
@@ -221,7 +221,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, toRaw } from 'vue';
 import { countStringTokens, getApiConfig } from 'src/modules/taskyon/chat';
-import { tools, getDefaultParametersForTool } from 'src/modules/taskyon/tools';
+import { getDefaultParametersForTool } from 'src/modules/taskyon/tools';
 import { FunctionArguments } from 'src/modules/taskyon/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
@@ -292,7 +292,13 @@ function setTaskType(tasktype: string | undefined) {
   console.log('change tasktype to:', tasktype);
   if (tasktype) {
     state.taskDraft.role = 'function';
-    const defaultParams = getDefaultParametersForTool(tasktype);
+    const toolName = tasktype;
+    const tool = state.chatState.tools[tasktype];
+    if (!tool) {
+      console.log(`Tool ${toolName} not found.`);
+      return null;
+    }
+    const defaultParams = getDefaultParametersForTool(tool);
     const savedParams = state.draftParameters[tasktype];
     const funcArguments: FunctionArguments = {
       ...(defaultParams || {}),
@@ -325,7 +331,7 @@ function toggleSelectedTools() {
       return;
     }
   }
-  state.taskDraft.allowedTools = Object.keys(tools);
+  state.taskDraft.allowedTools = Object.keys(state.chatState.tools);
 }
 
 const currentnewTask = computed(() => {
@@ -367,7 +373,11 @@ async function executeTask() {
 }
 
 const checkForSendMessage = (event: KeyboardEvent) => {
-  if (!state.appConfiguration.useEnterToSend && event.shiftKey && event.key === 'Enter') {
+  if (
+    !state.appConfiguration.useEnterToSend &&
+    event.shiftKey &&
+    event.key === 'Enter'
+  ) {
     void executeTask();
     // Prevent a new line from being added to the input (optional)
     event.preventDefault();

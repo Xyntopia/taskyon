@@ -1,6 +1,6 @@
 import axios from 'axios';
 //import { useCachedModels } from './mlModels';
-import { ToolDescription, tools, Tool, summarizeTools } from './tools';
+import { Tool, summarizeTools, ToolCollection } from './tools';
 import { LLMTask, OpenAIMessage, OpenRouterGenerationInfo } from './types';
 import {
   taskChain,
@@ -63,6 +63,7 @@ export function defaultLLMSettings() {
     openAIAssistantId: '',
     useOpenAIAssistants: false,
     enableOpenAiTools: false,
+    tools: {} as ToolCollection,
     selectedApi: 'openrouter.ai' as string | 'openrouter.ai' | 'openai',
     llmApis: [
       {
@@ -245,9 +246,10 @@ export function countToolTokens(functionList: Tool[]): number {
 
 export function estimateChatTokens(
   task: LLMTask,
-  chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+  chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  tools: ToolCollection,
 ): LLMTask['debugging']['estimatedTokens'] {
-  const functions: Tool[] = mapFunctionNames(task.allowedTools || []);
+  const functions: Tool[] = mapFunctionNames(task.allowedTools || [], tools);
   const singlePromptTokens = countStringTokens(task.content || '');
   const promptTokens = countChatTokens(chat);
   const functionTokens = Math.floor(countToolTokens(functions) * 0.7);
@@ -508,7 +510,7 @@ export function bigIntToString(obj: unknown): unknown {
   return obj;
 }
 
-function mapFunctionNames(toolNames: string[]) {
+function mapFunctionNames(toolNames: string[], tools: ToolCollection) {
   return toolNames?.map((t) => tools[t]);
 }
 
@@ -567,7 +569,7 @@ export async function prepareTasksForInference(
         taskContent: task.content || '',
         schema: yamlRepr,
         format: 'yaml',
-        tools: summarizeTools(task.allowedTools),
+        tools: summarizeTools(task.allowedTools, chatState.tools),
         toolList: JSON.stringify(task.allowedTools),
       };
     } else {
@@ -580,7 +582,7 @@ export async function prepareTasksForInference(
         }),
         resultSchema: yamlRepr,
         format: 'yaml',
-        tools: summarizeTools(task.allowedTools),
+        tools: summarizeTools(task.allowedTools, chatState.tools),
         toolList: JSON.stringify(task.allowedTools),
       };
     }
@@ -628,7 +630,7 @@ export async function prepareTasksForInference(
   } else {
     // TODO: add possible instructions here :) like mentioning that
     //       we can use mermaid and html/svg in our frontend markdown-it
-    tools = mapFunctionNames(task.allowedTools || []) || [];
+    tools = mapFunctionNames(task.allowedTools || [], chatState.tools) || [];
   }
   const openAITools: OpenAI.ChatCompletionTool[] = tools.map((t) => {
     const functionDef: OpenAI.FunctionDefinition = {

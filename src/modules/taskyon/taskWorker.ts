@@ -10,12 +10,11 @@ import {
 } from './chat';
 import { yamlToolChatType, partialTaskDraft } from './types';
 import { addTask2Tree, processTasksQueue } from './taskManager';
-import { tools } from './tools';
 import { FunctionArguments, FunctionCall } from './types';
 import type { LLMTask } from './types';
 import type { OpenAI } from 'openai';
 import { TaskManager } from './taskManager';
-import { handleFunctionExecution } from './tools';
+import { ToolCollection, handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
 import { deepMerge } from './utils';
 
@@ -29,7 +28,10 @@ function isOpenAIFunctionCall(
   );
 }
 
-function extractOpenAIFunctions(choice: OpenAI.ChatCompletion['choices'][0]) {
+function extractOpenAIFunctions(
+  choice: OpenAI.ChatCompletion['choices'][0],
+  tools: ToolCollection
+) {
   const functionCalls: FunctionCall[] = [];
   for (const toolCall of choice.message.tool_calls || []) {
     // if our response contained a call to a function...
@@ -173,7 +175,8 @@ export async function processChatTask(
         } else {
           task.debugging.estimatedTokens = estimateChatTokens(
             task,
-            openAIConversationThread
+            openAIConversationThread,
+            chatState.tools
           );
         }
       }
@@ -185,7 +188,7 @@ export async function processChatTask(
   return task;
 }
 
-export async function processFunctionTask(task: LLMTask) {
+async function processFunctionTask(task: LLMTask, tools: ToolCollection) {
   if (task.configuration?.function) {
     const func = task.configuration.function;
     console.log(`Calling function ${func.name}`);
@@ -330,7 +333,7 @@ async function generateFollowUpTasksFromResult(
     } else if (finishedTask.result.type === 'ToolCall') {
       const choice = finishedTask.result.chatResponse?.choices[0];
       if (choice) {
-        const functionCall = extractOpenAIFunctions(choice);
+        const functionCall = extractOpenAIFunctions(choice, chatState.tools);
         if (functionCall) {
           taskDraftList.push(
             deepMerge(taskTemplate, {
@@ -481,7 +484,7 @@ async function taskWorker(
             task.state = 'Completed';
           } else {
             // in the case we don't have a result yet, we need to calculate it :)
-            task = await processFunctionTask(task);
+            task = await processFunctionTask(task, chatState.tools);
             processTasksQueue.push(taskId); // send the task back into the queue
             task.state = 'Queued';
           }

@@ -2,6 +2,7 @@ import { useVectorStore } from 'src/modules/localVectorStore';
 import type { PythonScriptResult } from './pyodide';
 import { dump } from 'js-yaml';
 import { bigIntToString } from './chat';
+import { asyncRunPython } from 'src/modules/taskyon/webWorkerApi';
 import {
   TaskResult,
   convertToYamlWComments,
@@ -9,9 +10,6 @@ import {
 } from './types';
 import { z } from 'zod';
 import { toolStateType, FunctionCall, ParamType } from './types';
-import { asyncRunPython } from './webWorkerApi';
-import { executeJavaScript } from '../tools/executeJavaScript';
-import { webBrowser } from '../tools/webBrowserTool';
 
 export const vectorStore = useVectorStore();
 
@@ -81,9 +79,7 @@ export type Tool = z.infer<typeof Tool>;
 
 // ToolCollection schema and type
 const ToolCollection = z.record(Tool);
-type ToolCollection = z.infer<typeof ToolCollection>;
-
-export const tools: ToolCollection = {};
+export type ToolCollection = z.infer<typeof ToolCollection>;
 
 export async function handleFunctionExecution(
   func: FunctionCall,
@@ -105,7 +101,7 @@ export async function handleFunctionExecution(
   }
 }
 
-tools.localVectorStoreSearch = {
+export const localVectorStoreSearch: Tool = {
   state: () => 'available',
   function: async ({ searchTerm }: { searchTerm: string }) => {
     const k = 3;
@@ -128,7 +124,7 @@ for retrieving documents or data segments with high relevance to natural languag
   },
 };
 
-tools.executePythonScript = {
+export const executePythonScript: Tool = {
   state: () => 'available',
   function: async ({
     pythonScript,
@@ -155,81 +151,89 @@ is the outcome of the last expression in the script. Outcomes should be of the t
   },
 };
 
-function inspectToolCode(toolName: string) {
-  const tool = tools[toolName];
-  if (tool) {
-    const functionCode = tool.function.toString();
-    const stateCode = tool.state.toString();
-    return `Tool Name: ${toolName}\nFunction Code:\n${functionCode}\n\nState Code:\n${stateCode}`;
-  } else {
-    return `Tool ${toolName} not found.`;
-  }
-}
-
-// Helper function to extract function signature
-function getFunctionSignature(func: arbitraryFunction | string) {
-  const funcString = func.toString();
-  const signatureMatch = /(function\s.*?\(.*?\))|((\w+|\((.*?)\))\s*=>)/.exec(
-    funcString
-  );
-  return signatureMatch ? signatureMatch[0] : 'function signature not found';
-}
-
-// Function to extract the tool object as an example, including the function signatures
-function extractToolExample(toolName: string) {
-  const tool = tools[toolName];
-  if (tool) {
-    const functionSignature = getFunctionSignature(tool.function);
-    const stateSignature = getFunctionSignature(tool.state);
-    const toolExample = {
-      ...tool,
-      function: functionSignature,
-      state: stateSignature,
-    };
-    return JSON.stringify(toolExample, null, 2); // Pretty print the JSON string
-  } else {
-    return `Tool ${toolName} not found.`;
-  }
-}
-
-tools.getToolExample = {
-  state: () => 'available',
-  function: ({
-    toolName,
-    viewSource,
-  }: {
-    toolName: string;
-    viewSource: boolean;
-  }) => {
-    console.log(`Fetching example for tool: ${toolName}`);
-    let toolInfo;
-    if (viewSource) {
-      toolInfo = inspectToolCode(toolName);
+// the following tool is "self-referential" and because of this we can not initialize it yet
+// we instead write a factory function which creates this tool using a reference to our tools
+// variable
+export function createToolExampleTool(tools: ToolCollection): Tool {
+  // used to get the code from our tools :)
+  function inspectToolCode(toolName: string) {
+    const tool = tools[toolName];
+    if (tool) {
+      const functionCode = tool.function.toString();
+      const stateCode = tool.state.toString();
+      return `Tool Name: ${toolName}\nFunction Code:\n${functionCode}\n\nState Code:\n${stateCode}`;
     } else {
-      toolInfo = extractToolExample(toolName);
+      return `Tool ${toolName} not found.`;
     }
-    return toolInfo;
-  },
-  description: `Retrieves detailed examples and source code of existing tools, assisting in 
-understanding tool functionalities and aiding in tool development or adaptation.`,
-  name: 'getToolExample',
-  parameters: {
-    type: 'object',
-    properties: {
-      toolName: {
-        type: 'string',
-        description: 'The name of the tool to fetch an example for.',
-      },
-      viewSource: {
-        type: 'boolean',
-        description:
-          'Whether to view the full source code of the tool functions.',
-        default: false,
-      },
+  }
+
+  // Helper function to extract function signature
+  function getFunctionSignature(func: arbitraryFunction | string) {
+    const funcString = func.toString();
+    const signatureMatch = /(function\s.*?\(.*?\))|((\w+|\((.*?)\))\s*=>)/.exec(
+      funcString
+    );
+    return signatureMatch ? signatureMatch[0] : 'function signature not found';
+  }
+
+  // Function to extract the tool object as an example, including the function signatures
+  function extractToolExample(toolName: string) {
+    const tool = tools[toolName];
+    if (tool) {
+      const functionSignature = getFunctionSignature(tool.function);
+      const stateSignature = getFunctionSignature(tool.state);
+      const toolExample = {
+        ...tool,
+        function: functionSignature,
+        state: stateSignature,
+      };
+      return JSON.stringify(toolExample, null, 2); // Pretty print the JSON string
+    } else {
+      return `Tool ${toolName} not found.`;
+    }
+  }
+
+  const getToolExample: Tool = {
+    state: () => 'available',
+    function: ({
+      toolName,
+      viewSource,
+    }: {
+      toolName: string;
+      viewSource: boolean;
+    }) => {
+      console.log(`Fetching example for tool: ${toolName}`);
+      let toolInfo;
+      if (viewSource) {
+        toolInfo = inspectToolCode(toolName);
+      } else {
+        toolInfo = extractToolExample(toolName);
+      }
+      return toolInfo;
     },
-    required: ['toolName'],
-  },
-};
+    description: `Retrieves detailed examples and source code of existing tools, assisting in 
+understanding tool functionalities and aiding in tool development or adaptation.`,
+    name: 'getToolExample',
+    parameters: {
+      type: 'object',
+      properties: {
+        toolName: {
+          type: 'string',
+          description: 'The name of the tool to fetch an example for.',
+        },
+        viewSource: {
+          type: 'boolean',
+          description:
+            'Whether to view the full source code of the tool functions.',
+          default: false,
+        },
+      },
+      required: ['toolName'],
+    },
+  };
+
+  return getToolExample;
+}
 
 /*function generateToolSummary() {
   return Object.keys(tools)
@@ -240,16 +244,10 @@ understanding tool functionalities and aiding in tool development or adaptation.
     .join('\n');
 }*/
 
-export function getDefaultParametersForTool(toolName: string) {
-  const tool = tools[toolName];
-  if (!tool) {
-    console.log(`Tool ${toolName} not found.`);
-    return null;
-  }
-
+export function getDefaultParametersForTool(tool: Tool) {
   const params = tool.parameters;
   if (!params || !params.properties) {
-    console.log(`No parameters defined for tool ${toolName}.`);
+    console.log(`No parameters defined for tool ${tool.name}.`);
     return {};
   }
 
@@ -289,9 +287,6 @@ export interface WorkerMessage {
   error?: string;
 }
 
-tools.executeJavaScript = executeJavaScript;
-tools.webBrowser = webBrowser;
-
 function convertToToolCommandString(tool: ToolDescription): string {
   // convert a tool into a schema which is compatible ti toolCommandChat
   const args: YamlRepresentation = {};
@@ -321,7 +316,7 @@ function convertToToolCommandString(tool: ToolDescription): string {
   return yamlSchema;
 }
 
-export function summarizeTools(toolIDs: string[]) {
+export function summarizeTools(toolIDs: string[], tools: ToolCollection) {
   const toolStr = toolIDs
     .map((t) => {
       const tool = tools[t];

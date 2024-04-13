@@ -6,6 +6,13 @@ import type { FunctionArguments } from 'src/modules/taskyon/types';
 import axios from 'axios';
 import { Notify, LocalStorage } from 'quasar';
 import { deepMerge, deepMergeReactive } from 'src/modules/taskyon/utils';
+import {
+  executePythonScript,
+  localVectorStoreSearch,
+  createToolExampleTool,
+} from 'src/modules/taskyon/tools';
+import { executeJavaScript } from 'src/modules/tools/executeJavaScript';
+
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -24,6 +31,15 @@ export const useTaskyonStore = defineStore(storeName, () => {
   console.log('initialize taskyon');
 
   const llmSettings = defaultLLMSettings();
+
+  // initialize some of our default tools:
+  llmSettings.tools = {
+    executePythonScript,
+    getToolExample: createToolExampleTool(llmSettings.tools),
+    // TODO: add local context(task) search
+    localVectorStoreSearch,
+    executeJavaScript
+  };
 
   const initialState = {
     chatState: llmSettings,
