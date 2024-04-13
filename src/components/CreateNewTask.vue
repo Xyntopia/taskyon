@@ -7,6 +7,7 @@
         v-if="!selectedTaskType"
         autogrow
         filled
+        dense
         color="secondary"
         v-model="state.taskDraft.content"
         label="Type your message or instruction..."
@@ -52,8 +53,8 @@
           </div>
         </template>
         <template v-slot:hint>
-          <div>
-            {{ `selected AI: ${currentModel}` }}
+          <div class="ellipsis">
+            {{ `${currentModel} (selected AI)` }}
           </div>
         </template>
       </q-input>

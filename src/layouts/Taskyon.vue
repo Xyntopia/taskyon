@@ -13,22 +13,24 @@
           icon="menu"
         />
         <q-separator vertical :dark="!$q.dark.isActive"></q-separator>
-        <q-btn
-          flat
-          round
-          dense
-          to="/taskmanager">
+        <q-btn flat round dense to="/taskmanager">
           <q-icon name="search"></q-icon>
           <q-tooltip>Search Conversations</q-tooltip>
         </q-btn>
         <q-btn flat round dense icon="chat" to="/"
           ><q-tooltip>Go to Chat</q-tooltip>
         </q-btn>
-        <q-btn flat round dense icon="reviews" to="/" @click="state.chatState.selectedTaskId = undefined;"
+        <q-btn
+          flat
+          round
+          dense
+          icon="reviews"
+          to="/"
+          @click="state.chatState.selectedTaskId = undefined"
           ><q-tooltip>Create New Chat</q-tooltip>
         </q-btn>
         <q-space />
-        <q-icon size="sm" name="svguse:taskyon_mono_opt.svg#taskyon"></q-icon>
+        <q-icon class="desktop-only" size="sm" name="svguse:taskyon_mono_opt.svg#taskyon"></q-icon>
         <q-space />
         <q-btn
           v-if="errors.length > 0"
@@ -53,6 +55,7 @@
         <q-separator vertical></q-separator>
         <!-- GitHub Link -->
         <q-btn
+          class="desktop-only"
           flat
           dense
           round
