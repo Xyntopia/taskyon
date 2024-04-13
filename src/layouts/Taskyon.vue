@@ -18,11 +18,11 @@
         </q-btn>
         <q-btn
           flat
-          round
           dense
-          icon="svguse:taskyon_mono_opt.svg#taskyon"
-          to="/taskmanager"
-          ><q-tooltip>Manage taskyon tasks</q-tooltip>
+          to="/taskmanager">
+          <q-icon name="svguse:taskyon_mono_opt.svg#taskyon"></q-icon>
+          <q-icon name="search"></q-icon>
+          <q-tooltip>Manage taskyon tasks</q-tooltip>
         </q-btn>
         <q-space />
         <q-btn
