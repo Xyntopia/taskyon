@@ -13,7 +13,7 @@
         :bottom-slots="state.appConfiguration.expertMode"
         :counter="state.appConfiguration.expertMode"
         clearable
-        @keyup="checkForSendMessage"
+        @keyup="checkKeyboardEvents"
         input-style="max-height: 300px"
       >
         <template v-slot:append>
@@ -372,19 +372,21 @@ async function executeTask() {
   }
 }
 
-const checkForSendMessage = (event: KeyboardEvent) => {
-  if (
-    !state.appConfiguration.useEnterToSend &&
-    event.shiftKey &&
-    event.key === 'Enter'
-  ) {
-    void executeTask();
-    // Prevent a new line from being added to the input (optional)
-    event.preventDefault();
-  } else if (state.appConfiguration.useEnterToSend && event.key === 'Enter') {
-    void executeTask();
-    // Prevent a new line from being added to the input (optional)
-    event.preventDefault();
+const checkKeyboardEvents = (event: KeyboardEvent) => {
+  if (state.appConfiguration.useEnterToSend) {
+    if (!event.shiftKey && event.key === 'Enter') {
+      void executeTask();
+      // Prevent a new line from being added to the input (optional)
+      event.preventDefault();
+    }
+    // otherwise it'll simply be the default action and inserting a newline :)
+  } else {
+    if (event.shiftKey && event.key === 'Enter') {
+      void executeTask();
+      // Prevent a new line from being added to the input (optional)
+      event.preventDefault();
+    }
+    // otherwise it'll simply be the default action and inserting a newline :)
   }
 };
 
