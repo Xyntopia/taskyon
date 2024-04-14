@@ -35,8 +35,7 @@
           class="col-auto column items-center"
         >
           <div v-if="task.debugging.taskCosts">
-            {{ Math.round(task.debugging.taskCosts * 1e6).toLocaleString() }}
-            μ$
+            {{ humanReadableTaskCosts }}
           </div>
           <q-icon
             name="monetization_on"
@@ -260,8 +259,9 @@ import TokenUsage from 'components/TokenUsage.vue';
 import type { LLMTask } from 'src/modules/taskyon/types';
 import { getTaskManager } from 'src/boot/taskyon';
 import tyMarkdown from './tyMarkdown.vue';
+import { computed } from 'vue';
 
-defineProps<{
+const props = defineProps<{
   task: LLMTask;
 }>();
 
@@ -283,6 +283,18 @@ async function taskDraftFromTask(taskId: string) {
   state.taskDraft = task;
   return task;
 }
+
+const humanReadableTaskCosts = computed(() => {
+  if (props.task.debugging.taskCosts) {
+    if (props.task.debugging.taskCosts > 1.0) {
+      return `${(props.task.debugging.taskCosts).toFixed(1)} $`;
+    } else if (props.task.debugging.taskCosts > 0.001) {
+      return `${(props.task.debugging.taskCosts * 1e2).toFixed(1)} ¢`;
+    }
+    return `${Math.round(props.task.debugging.taskCosts * 1e6).toLocaleString()} μ$`;
+  }
+  return '';
+});
 
 async function editTask(taskId: string) {
   const task = await taskDraftFromTask(taskId);

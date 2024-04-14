@@ -52,7 +52,7 @@
         <dark-mode-button
           @theme-changed="(newMode) => (state.darkTheme = newMode)"
         />
-        <q-separator vertical></q-separator>
+        <q-separator class="desktop-only" vertical :dark="!$q.dark.isActive"></q-separator>
         <!-- GitHub Link -->
         <q-btn
           class="desktop-only"
