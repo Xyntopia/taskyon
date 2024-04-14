@@ -82,7 +82,6 @@
         </q-btn>
         <q-separator vertical class="q-mx-sm" />
         <q-btn
-          v-if="task.childrenIDs.length > 0"
           class="col-auto"
           size="sm"
           dense
