@@ -100,8 +100,9 @@
         class="row items-center"
         v-if="selectedTaskType || state.expandedTaskCreation"
       >
-        <q-btn class="q-ma-md" label="Execute Task" @click="executeTask" />
+        <q-btn v-if="selectedTaskType" class="q-ma-md" label="Execute Task" @click="executeTask" />
         <q-btn
+          v-if="selectedTaskType"
           flat
           dense
           icon="chat"
