@@ -11,6 +11,7 @@
         : 'light_mode'
     "
     @click="toggleTheme"
+    v-bind="$attrs"
   >
     <q-tooltip
       >Theme:

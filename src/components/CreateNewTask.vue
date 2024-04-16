@@ -36,6 +36,7 @@
         </template>
         <template v-slot:after>
           <q-btn
+            v-if="state.appConfiguration.enableTaskSettingsButton"
             flat
             dense
             icon="tune"
@@ -100,7 +101,12 @@
         class="row items-center"
         v-if="selectedTaskType || state.expandedTaskCreation"
       >
-        <q-btn v-if="selectedTaskType" class="q-ma-md" label="Execute Task" @click="executeTask" />
+        <q-btn
+          v-if="selectedTaskType"
+          class="q-ma-md"
+          label="Execute Task"
+          @click="executeTask"
+        />
         <q-btn
           v-if="selectedTaskType"
           flat
@@ -207,12 +213,25 @@
                 }}</q-tooltip>
               </template></q-option-group
             >
-            <q-btn
-              class="q-ma-md"
-              dense
-              label="toggle all allowed tools"
-              @click="toggleSelectedTools"
-            />
+            <div class="row q-pl-md">
+              <q-btn
+                dense
+                label="toggle all allowed tools"
+                @click="toggleSelectedTools"
+              />
+              <q-space/>
+              <q-btn
+                flat
+                dense
+                icon="tune"
+                @click="
+                  () => {
+                    state.expandedTaskCreation = !state.expandedTaskCreation;
+                  }
+                "
+                ><q-tooltip> Toggle Task Settings </q-tooltip>
+              </q-btn>
+            </div>
           </q-item-section>
         </q-expansion-item>
       </q-list>

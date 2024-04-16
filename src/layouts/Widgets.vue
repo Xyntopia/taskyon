@@ -1,19 +1,53 @@
 <template>
   <q-layout view="hHh Lpr fFf">
-    <q-header class="row bg-transparent">
+    <q-header class="row items-center">
       <!-- Be sure to play with the Layout demo on docs -->
+      <q-btn
+        flat
+        @click="state.drawerOpen = !state.drawerOpen"
+        dense
+        icon="menu"
+        :size="btnsize"
+      />
+      <q-separator vertical :dark="!$q.dark.isActive"></q-separator>
+      <q-btn
+        flat
+        dense
+        :size="btnsize"
+        icon="reviews"
+        to="/"
+        @click="state.chatState.selectedTaskId = undefined"
+        ><q-tooltip>Create New Chat</q-tooltip>
+      </q-btn>
+      <q-space />
+      <q-btn
+        v-if="errors.length > 0"
+        flat
+        dense
+        round
+        color="warning"
+        icon="warning"
+        to="diagnostics"
+      >
+        <q-tooltip
+          >There was problem with taskyon!, click here to find out
+          more..</q-tooltip
+        >
+      </q-btn>
+      <dark-mode-button
+        :size="btnsize"
+        @theme-changed="(newMode) => (state.darkTheme = newMode)"
+      />
+
       <q-btn
         flat
         dense
         size="xs"
-        icon="launch"
-        color="grey-6"
+        icon="svguse:taskyon_mono_opt.svg#taskyon"
         type="a"
         href="/chat"
         target="_blank"
-        label="Manage Chat Window"
       />
-      <q-space />
       <q-btn
         flat
         dense
@@ -24,7 +58,6 @@
         href="http://www.xyntopia.com"
         target="_blank"
         aria-label="Visit Xyntopia"
-        label="xyntopia.com"
       />
       <!--<q-img width="30px" src="~assets/xyntopia.svg" />-->
     </q-header>
@@ -42,4 +75,11 @@
 import { useRoute } from 'vue-router';
 const route = useRoute();
 route.query; //has all the parameters :)
+
+import DarkModeButton from 'components/DarkModeButton.vue';
+import { useTaskyonStore } from 'stores/taskyonState';
+import { errors } from 'boot/taskyon';
+
+const state = useTaskyonStore();
+const btnsize = 'xs';
 </script>

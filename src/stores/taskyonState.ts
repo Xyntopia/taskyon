@@ -52,6 +52,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
       showCosts: false,
       gdriveDir: 'taskyon',
       useEnterToSend: true,
+      enableTaskSettingsButton: true,
     },
     // chatState & appConfiguration define the state of our app!
     // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
@@ -61,6 +62,8 @@ export const useTaskyonStore = defineStore(storeName, () => {
       return keys;
     }, {} as Record<string, string>),
     // app State which should be part of the configuration
+    // the things below should only represent transitional states
+    // which have no relevance in the actual configuration of the app.
     initialLoad: true, // if the app was loaded for the first time and needs to be initialized
     modelDetails: false,
     expandedTaskCreation: false,
