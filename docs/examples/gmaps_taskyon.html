@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Taskyon Chat Integration with OpenStreetMap</title>
+    <style>
+      body,
+      html {
+        height: 100%;
+        margin: 0;
+        font-family: Arial, sans-serif;
+      }
+      #map {
+        height: 100%;
+        width: 50%;
+        float: left;
+      }
+      #chat {
+        height: 100%;
+        width: 49%;
+        float: right;
+      }
+    </style>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <iframe id="chat" frameborder="0" src="https://taskyon.space/chat"></iframe>
+    <!--
+    <iframe id="chat" src="http://localhost:8080"></iframe>
+    -->
+
+    <script>
+      var map = L.map('map').setView([51.505, -0.09], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors',
+      }).addTo(map);
+
+      // Function to add a marker
+      function addMarker(lat, lon) {
+        L.marker([lat, lon]).addTo(map);
+      }
+
+      // Example: Add a marker at a specific location
+      addMarker(51.505, -0.09); // Coordinates for London
+
+      // Later, this function can be called via messages from the chat iframe
+    </script>
+  </body>
+</html>
