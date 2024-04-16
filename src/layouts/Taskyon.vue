@@ -4,20 +4,40 @@
       elevated
       :class="[$q.dark.isActive ? 'bg-secondary' : 'bg-primary', 'print-hide']"
     >
-      <q-toolbar class="q-gutter-xs">
+      <component
+        :is="!$q.platform.within.iframe ? 'q-toolbar' : 'div'"
+        :class="
+          $q.platform.within.iframe ? 'q-gutter-xs row q-px-sm' : 'q-gutter-xs'
+        "
+      >
         <q-btn
           flat
           @click="state.drawerOpen = !state.drawerOpen"
           round
           dense
+          :size="btnSize"
           icon="menu"
         />
         <q-separator vertical :dark="!$q.dark.isActive"></q-separator>
-        <q-btn flat round dense to="/taskmanager">
-          <q-icon name="search"></q-icon>
+        <q-btn
+          v-if="!$q.platform.within.iframe"
+          flat
+          round
+          dense
+          :size="btnSize"
+          icon="search"
+          to="/taskmanager"
+        >
           <q-tooltip>Search Conversations</q-tooltip>
         </q-btn>
-        <q-btn flat round dense icon="chat" to="/"
+        <q-btn
+          v-if="!$q.platform.within.iframe"
+          flat
+          round
+          dense
+          icon="chat"
+          to="/"
+          :size="btnSize"
           ><q-tooltip>Go to Chat</q-tooltip>
         </q-btn>
         <q-btn
@@ -25,18 +45,27 @@
           round
           dense
           icon="reviews"
+          :size="btnSize"
           to="/"
           @click="state.chatState.selectedTaskId = undefined"
           ><q-tooltip>Create New Chat</q-tooltip>
         </q-btn>
-        <q-space />
-        <q-icon class="desktop-only" size="sm" name="svguse:taskyon_mono_opt.svg#taskyon"></q-icon>
+        <q-space v-if="!$q.platform.within.iframe" />
+        <q-btn
+          v-if="!$q.platform.within.iframe"
+          flat
+          dense
+          class="desktop-only"
+          :size="btnSize"
+          icon="svguse:taskyon_mono_opt.svg#taskyon"
+        ></q-btn>
         <q-space />
         <q-btn
           v-if="errors.length > 0"
           flat
           dense
           round
+          :size="btnSize"
           color="warning"
           icon="warning"
           to="diagnostics"
@@ -46,17 +75,33 @@
             more..</q-tooltip
           >
         </q-btn>
-        <q-btn flat dense round icon="settings" to="settings">
+        <q-btn
+          v-if="!$q.platform.within.iframe"
+          flat
+          :size="btnSize"
+          dense
+          round
+          icon="settings"
+          to="settings"
+        >
           <q-tooltip>Open settings</q-tooltip>
         </q-btn>
         <dark-mode-button
+          :size="btnSize"
           @theme-changed="(newMode) => (state.darkTheme = newMode)"
         />
-        <q-separator class="desktop-only" vertical :dark="!$q.dark.isActive"></q-separator>
+        <q-separator
+          v-if="!$q.platform.within.iframe"
+          class="desktop-only"
+          vertical
+          :dark="!$q.dark.isActive"
+        ></q-separator>
         <!-- GitHub Link -->
         <q-btn
+          v-if="!$q.platform.within.iframe"
           class="desktop-only"
           flat
+          :size="btnSize"
           dense
           round
           icon="mdi-github"
@@ -65,7 +110,7 @@
         >
           <q-tooltip>Visit our GitHub</q-tooltip>
         </q-btn>
-      </q-toolbar>
+      </component>
     </q-header>
 
     <q-drawer
@@ -139,6 +184,9 @@ import ChatSidebar from 'components/ChatSidebar.vue';
 import DarkModeButton from 'components/DarkModeButton.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { errors } from 'boot/taskyon';
+import { useQuasar } from 'quasar';
+const $q = useQuasar();
 
 const state = useTaskyonStore();
+const btnSize = $q.platform.within.iframe ? 'xs' : 'md';
 </script>
