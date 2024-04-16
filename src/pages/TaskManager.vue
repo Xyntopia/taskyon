@@ -4,7 +4,7 @@
       update search index {{ syncProgressString }}</q-btn
     >
     <q-table
-      style="font-size: 0.8em;"
+      style="font-size: 0.8em"
       wrap-cells
       title="Search Results"
       :rows="searchResults"
@@ -38,11 +38,25 @@
         <div class="text-caption"># of tasks: {{ taskCount }}</div>
       </template>
       <template v-slot:body-cell-task="props">
-        <Task
-          style=" border: 1px solid"
-          :task="props.row"
-          class="q-pa-xs"
-        />
+        <td>
+          <div class="row items-stretch">
+            <div class="col-auto">
+              <q-btn
+                flat
+                stretch
+                icon="play_arrow"
+                dense
+                @click="state.chatState.selectedTaskId = props.row.id"
+                to="chat"
+              />
+            </div>
+            <Task
+              style="border: 1px solid"
+              :task="props.row"
+              class="col q-pa-xs"
+            />
+          </div>
+        </td>
       </template>
     </q-table>
   </q-page>
@@ -54,7 +68,9 @@ import Search from 'components/Search.vue';
 import { LLMTask } from 'src/modules/taskyon/types';
 import { getTaskManager } from 'boot/taskyon';
 import Task from 'src/components/Task.vue';
+import { useTaskyonStore } from 'src/stores/taskyonState';
 
+const state = useTaskyonStore();
 const searchResults = ref<LLMTask[]>([]);
 const syncProgressString = ref('0/0');
 const syncProgress = ref(0.0);
