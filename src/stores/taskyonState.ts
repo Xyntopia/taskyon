@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { defaultLLMSettings } from 'src/modules/taskyon/chat';
-import { ref, Ref, watch } from 'vue';
+import { ref, Ref, watch, reactive } from 'vue';
 import type { LLMTask } from 'src/modules/taskyon/types';
 import type { FunctionArguments } from 'src/modules/taskyon/types';
 import axios from 'axios';
@@ -12,7 +12,6 @@ import {
   createToolExampleTool,
 } from 'src/modules/taskyon/tools';
 import { executeJavaScript } from 'src/modules/tools/executeJavaScript';
-
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -27,8 +26,21 @@ interface TaskStateType {
   markdownEnabled: boolean;
 }
 
+function setupIframeApi() {
+  // Listen for messages from the parent page
+  window.addEventListener(
+    'message',
+    function (event) {
+      console.log('request from parent:', event);
+    },
+    false
+  );
+}
+
 export const useTaskyonStore = defineStore(storeName, () => {
   console.log('initialize taskyon');
+
+  setupIframeApi();
 
   const llmSettings = defaultLLMSettings();
 
@@ -38,7 +50,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     getToolExample: createToolExampleTool(llmSettings.tools),
     // TODO: add local context(task) search
     localVectorStoreSearch,
-    executeJavaScript
+    executeJavaScript,
   };
 
   const initialState = {
@@ -76,6 +88,12 @@ export const useTaskyonStore = defineStore(storeName, () => {
     draftParameters: {} as Record<string, FunctionArguments>,
     taskState: {} as Record<string, TaskStateType>,
     darkTheme: 'auto' as boolean | 'auto',
+    // this store everything relevant to iframes
+    iframe: {
+      accessGranted: false,
+      accessWhiteList: [] as string[],
+      parentUrl: '',
+    },
     messageDebug: {} as Record<
       string,
       | 'RAW'

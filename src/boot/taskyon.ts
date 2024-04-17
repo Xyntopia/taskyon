@@ -2,7 +2,10 @@ import { boot } from 'quasar/wrappers';
 import { reactive } from 'vue';
 import { TaskManager } from 'src/modules/taskyon/taskManager';
 import { LLMTask } from 'src/modules/taskyon/types';
-import { createTaskyonDatabase, TaskyonDatabase } from 'src/modules/taskyon/rxdb';
+import {
+  createTaskyonDatabase,
+  TaskyonDatabase,
+} from 'src/modules/taskyon/rxdb';
 import { run } from 'src/modules/taskyon/taskWorker';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 

@@ -184,6 +184,10 @@ try {
   isInIframe = true;
 }
 
+//TODO: this doesn't work anymore. due to storage partitioning.
+//      we need an API like requestStorageAccess or somthing like that
+//      which also works for localStorage here. As of April 2024 this doesn't
+//      exist yet.
 function checkAccess() {
   /*var parentUrl = (window.location != window.parent.location)
           ? document.referrer

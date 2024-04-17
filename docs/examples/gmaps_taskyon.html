@@ -28,10 +28,8 @@
   <body>
     <div id="map"></div>
 
-    <iframe id="chat" frameborder="0" src="https://taskyon.space/chat"></iframe>
-    <!--
-    <iframe id="chat" src="http://localhost:8080"></iframe>
-    -->
+    <!--<iframe id="chat" frameborder="0" src="https://taskyon.space/chat"></iframe>-->
+    <iframe id="chat" frameborder="0" src="http://localhost:8080"></iframe>
 
     <script>
       var map = L.map('map').setView([51.505, -0.09], 13);
@@ -48,7 +46,37 @@
       // Example: Add a marker at a specific location
       addMarker(51.505, -0.09); // Coordinates for London
 
-      // Later, this function can be called via messages from the chat iframe
+      // Send configuration data to the iframe
+      var chatFrame = document.getElementById('chat');
+      // wait until window was loaded...
+      chatFrame.addEventListener('load', function () {
+        var configData = {
+          user: 'exampleUser',
+          theme: 'light',
+          allowedActions: ['postMessage', 'receiveMessage'],
+        };
+        chatFrame.contentWindow.postMessage(
+          configData,
+          'http://localhost:8080'
+        );
+      });
+
+      window.addEventListener('message', function (event) {
+        // Check the origin to ensure security
+        if (event.origin !== 'http://localhost:8080') {
+          console.log('Received message from unauthorized origin');
+          return;
+        }
+
+        // Handle different types of messages
+        if (
+          event.data.type === 'addMarker' &&
+          event.data.lat &&
+          event.data.lon
+        ) {
+          addMarker(event.data.lat, event.data.lon);
+        }
+      });
     </script>
   </body>
 </html>
