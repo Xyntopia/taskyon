@@ -40,9 +40,13 @@
     </div>
     <q-tabs v-model="tab" align="justify">
       <q-tab name="settings" label="Settings" />
-      <q-tab name="instructions" label="Instructions" />
+      <q-tab name="instructions" label="AI/LLM Instructions" />
       <q-tab name="agent config" label="Agent Configuration" />
-      <q-tab v-if="state.appConfiguration.expertMode" name="app config" label="Expert App Configuration" />
+      <q-tab
+        v-if="state.appConfiguration.expertMode"
+        name="app config"
+        label="Expert App Configuration"
+      />
     </q-tabs>
     <q-tab-panels
       v-model="tab"
@@ -53,12 +57,15 @@
         <Settings></Settings>
       </q-tab-panel>
       <q-tab-panel name="instructions">
+        <div>Set custom instructions for the AI Model</div>
         <ObjectTreeView :model-value="state.chatState.taskChatTemplates" />
       </q-tab-panel>
       <q-tab-panel name="agent config">
+        <div>ALl of the Agent configuration</div>
         <ObjectTreeView :model-value="state.chatState" />
       </q-tab-panel>
       <q-tab-panel name="app config">
+        <div>All of the app configurations</div>
         <ObjectTreeView :model-value="state.appConfiguration" />
       </q-tab-panel>
     </q-tab-panels>
@@ -102,7 +109,7 @@ async function loadSettingsFromFile(
   } catch (error) {
     console.error('Error processing file', error);
   }
-  console.log('new configuration loaded:', state)
+  console.log('new configuration loaded:', state);
 }
 
 // Function to load JSON settings

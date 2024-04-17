@@ -15,13 +15,14 @@
         color="secondary"
       />
       <q-toggle
+        v-if="!reduced"
         v-model="state.appConfiguration.useEnterToSend"
-        label="<enter> key sends message/executes task"
+        label="Enter to send message"
         left-label
         color="secondary"
       />
     </div>
-    <OpenRouterPKCE />
+    <OpenRouterPKCE v-if="!reduced"/>
     <div v-if="!reduced">
       <q-separator spaced />
       <div class="q-pa-sm q-gutter-md">

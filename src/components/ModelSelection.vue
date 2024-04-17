@@ -1,5 +1,5 @@
 <template>
-  <div class="row items-top q-gutter-xs">
+  <div class="row items-start q-gutter-xs">
     <div v-if="selectedApi === 'openai'" class="q-pt-xs">
       <q-btn-toggle
         label="mode"
@@ -109,7 +109,7 @@
       ><q-tooltip>Choose LLM Api</q-tooltip>
     </q-select>
     <InfoDialog
-      v-if="!enableOpenAIAssistants"
+      v-if="!enableOpenAIAssistants && state.chatState.selectedApi!='taskyon'"
       class="col-auto"
       info-text="For a list of supported models go here:
 

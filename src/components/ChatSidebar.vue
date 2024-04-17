@@ -59,10 +59,8 @@
     <q-separator spaced />
     <!-- App Links -->
     <div class="q-pa-md q-gutter-xs">
-      <q-btn flat icon="chat" label="Open Chat" to="/chat"></q-btn>
-      <q-btn flat icon="settings" label="Settings" to="/settings"></q-btn>
-      <q-btn flat icon="key" label="Set Keys" to="/settings"></q-btn>
       <Settings reduced></Settings>
+      <q-btn flat icon="manage_accounts" label="accounts" to="/settings"></q-btn>
     </div>
     <!-- Settings Area -->
     <!--

@@ -28,7 +28,7 @@
         <template v-slot:before>
           <FileDropzone class="fit" @update:model-value="attachFileToTask">
             <q-btn dense class="fit" flat>
-              <q-icon name="upload_file" />
+              <q-icon class="gt-sm" name="upload_file" />
               <q-icon name="attachment" />
               <q-tooltip>Attach file to message</q-tooltip>
             </q-btn>
@@ -160,26 +160,18 @@
         </div>
         <q-separator class="q-my-sm" />
         <!--Model Selection-->
-        <q-expansion-item
-          dense
-          icon="smart_toy"
-          :label="`Select Chatbot (right now: ${
-            currentChatApi || state.chatState.selectedApi
-          }/${currentModel || currentDefaultBotName})`"
-          v-model="state.selectChatBotExpand"
-        >
-          <q-item-section>
-            <ModelSelection
-              @updateBotName="handleBotNameUpdate"
-              :bot-name="currentModel || currentDefaultBotName || ''"
-              v-model:selected-api="state.chatState.selectedApi"
-              v-model:enable-open-a-i-assistants="
-                state.chatState.useOpenAIAssistants
-              "
-              v-model:open-a-i-assistant-id="state.chatState.openAIAssistantId"
-            ></ModelSelection>
-          </q-item-section>
-        </q-expansion-item>
+        <q-item class="row items-center">
+          <q-icon name="smart_toy" size="sm" class="q-pr-sm"></q-icon>
+          <ModelSelection
+            @updateBotName="handleBotNameUpdate"
+            :bot-name="currentModel || currentDefaultBotName || ''"
+            v-model:selected-api="state.chatState.selectedApi"
+            v-model:enable-open-a-i-assistants="
+              state.chatState.useOpenAIAssistants
+            "
+            v-model:open-a-i-assistant-id="state.chatState.openAIAssistantId"
+          ></ModelSelection>
+        </q-item>
         <!--Allowed Tools Selection-->
         <q-separator class="q-my-sm" />
         <q-expansion-item

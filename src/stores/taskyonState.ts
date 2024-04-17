@@ -4,7 +4,7 @@ import { ref, Ref, watch, reactive } from 'vue';
 import type { LLMTask } from 'src/modules/taskyon/types';
 import type { FunctionArguments } from 'src/modules/taskyon/types';
 import axios from 'axios';
-import { Notify, LocalStorage } from 'quasar';
+import { LocalStorage, Notify } from 'quasar';
 import { deepMerge, deepMergeReactive } from 'src/modules/taskyon/utils';
 import {
   executePythonScript,

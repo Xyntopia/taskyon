@@ -68,7 +68,7 @@ export async function processChatTask(
 ) {
   let apiKey = apiKeys[chatState.selectedApi];
   if (!apiKey || apiKey.trim() === '') {
-    apiKey = apiKeys['taskyon'] || '';
+    apiKey = apiKeys['taskyon'] || 'free';
   }
   //TODO: merge this function with the assistants function
   if (chatState.useOpenAIAssistants && chatState.selectedApi == 'openai') {
