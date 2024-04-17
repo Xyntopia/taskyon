@@ -348,9 +348,9 @@ module.exports = configure(function (ctx) {
       },
 
       manifest: {
-        name: 'doxcavator',
-        short_name: 'doxcavator',
-        description: 'Document extraction tasks made easy',
+        name: 'taskyon',
+        short_name: 'taskyon',
+        description: 'AI chat application for projects.',
         display: 'standalone',
         orientation: 'portrait',
         background_color: '#F78F3B',
