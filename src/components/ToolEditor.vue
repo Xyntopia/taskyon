@@ -1,5 +1,18 @@
 <template>
   <div>
+    <q-select
+        filled
+        dense
+        label="Select LLM Model for answering/solving the task."
+        icon="mdi:tools"
+        :options="toolNames"
+        :model-value="selectedToolName"
+        hide-selected
+        fill-input
+        use-input
+        input-debounce="100"
+        @filter="(val, update) => filterModels(val, update, modelOptions)"
+      />
     <ObjectTreeView :model-value="tool" />
     {{ tool }}
   </div>
@@ -26,9 +39,8 @@
 import { dump } from 'js-yaml';
 import { Tool } from 'src/modules/taskyon/tools';
 import { computed, ref, defineProps } from 'vue';
-import { ObjectTreeView } from 'src/components/ObjectTreeView';
+import ObjectTreeView from 'src/components/ObjectTreeView.vue';
 
-const props = defineProps<{
-  tool: Tool;
-}>();
+
+
 </script>

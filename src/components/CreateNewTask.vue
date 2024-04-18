@@ -121,8 +121,8 @@
           style="min-width: 200px"
           class="q-pt-xs q-px-md"
           dense
+          outlined
           clearable
-          standout="bg-secondary text-white"
           :bg-color="selectedTaskType ? 'secondary' : ''"
           :model-value="selectedTaskType"
           @update:modelValue="setTaskType"
@@ -190,7 +190,7 @@
                 <q-btn
                   dense
                   icon="checklist"
-                  label="toggle all allowed tools"
+                  label="toggle tools"
                   @click="toggleSelectedTools"
                 />
               </div>

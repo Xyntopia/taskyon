@@ -60,7 +60,6 @@
     <!--LLM Model selection-->
     <div v-else class="col" style="min-width: 200px">
       <q-select
-        filled
         dense
         label="Select LLM Model for answering/solving the task."
         icon="smart_toy"
