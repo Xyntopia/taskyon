@@ -28,7 +28,7 @@ export const taskyonRoutes = {
       component: () => import('components/VecStoreSearch.vue'),
     },
     {
-      path: 'tool',
+      path: 'tools',
       component: () => import('components/ToolEditor.vue'),
     },
     ...authRoutes

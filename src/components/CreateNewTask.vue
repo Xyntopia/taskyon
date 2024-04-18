@@ -126,7 +126,7 @@
           :bg-color="selectedTaskType ? 'secondary' : ''"
           :model-value="selectedTaskType"
           @update:modelValue="setTaskType"
-          :options="Object.keys(state.chatState.tools)"
+          :options="Object.keys(toolCollection)"
           :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
         />
         <q-toggle
@@ -174,58 +174,68 @@
         </q-item>
         <!--Allowed Tools Selection-->
         <q-separator class="q-my-sm" />
-        <q-expansion-item
-          dense
-          icon="handyman"
-          label="Allowed Tools"
-          v-model="state.allowedToolsExpand"
-        >
-          <q-item-section>
-            <q-option-group
-              class="q-ma-md"
-              v-model="allowedTools"
-              :options="
-                Object.keys(state.chatState.tools).map((name) => ({
-                  label: name,
-                  value: name,
-                  description: state.chatState.tools[name].description,
-                }))
-              "
-              color="secondary"
-              type="checkbox"
-              inline
-              dense
-            >
-              <template v-slot:label="opt">
-                <div>
-                  {{ opt.label }}
-                </div>
-                <q-tooltip anchor="bottom middle" style="max-width: 500px">{{
-                  opt.description
-                }}</q-tooltip>
-              </template></q-option-group
-            >
-            <div class="row q-pl-md">
-              <q-btn
-                dense
-                label="toggle all allowed tools"
-                @click="toggleSelectedTools"
-              />
-              <q-space/>
-              <q-btn
-                flat
-                dense
-                icon="tune"
-                @click="
-                  () => {
-                    state.expandedTaskCreation = !state.expandedTaskCreation;
-                  }
+        <q-item class="row items-center">
+          <q-icon name="mdi-tools" size="sm" />
+          <q-expansion-item
+            class="col"
+            dense
+            icon="handyman"
+            expand-icon-toggle
+            label="Tools"
+            v-model="state.allowedToolsExpand"
+          >
+            <template v-slot:header>
+              <div class="row items-center q-gutter-sm">
+                <q-btn dense icon="edit" label="edit/create tools" to="tools" />
+                <q-btn
+                  dense
+                  icon="checklist"
+                  label="toggle all allowed tools"
+                  @click="toggleSelectedTools"
+                />
+              </div>
+            </template>
+            <q-item-section>
+              <q-option-group
+                class="q-ma-md"
+                v-model="allowedTools"
+                :options="
+                  Object.keys(toolCollection).map((name) => ({
+                    label: name,
+                    value: name,
+                    description: toolCollection[name].description,
+                  }))
                 "
-                ><q-tooltip> Toggle Task Settings </q-tooltip>
-              </q-btn>
-            </div>
-          </q-item-section>
-        </q-expansion-item>
+                color="secondary"
+                type="checkbox"
+                inline
+                dense
+              >
+                <template v-slot:label="opt">
+                  <div>
+                    {{ opt.label }}
+                  </div>
+                  <q-tooltip anchor="bottom middle" style="max-width: 500px">{{
+                    opt.description
+                  }}</q-tooltip>
+                </template></q-option-group
+              >
+            </q-item-section>
+          </q-expansion-item>
+          <q-space />
+          <q-btn
+            class="col-auto self-end"
+            flat
+            dense
+            icon="tune"
+            @click="
+              () => {
+                state.expandedTaskCreation = !state.expandedTaskCreation;
+              }
+            "
+            ><q-tooltip> Toggle Task Settings </q-tooltip>
+          </q-btn>
+        </q-item>
       </q-list>
     </q-slide-transition>
   </div>
@@ -249,10 +259,18 @@ import {
 } from 'src/modules/taskyon/taskManager';
 import ObjectTreeView from './ObjectTreeView.vue';
 import { getTaskManager } from 'boot/taskyon';
+import type { ToolCollection } from 'src/modules/taskyon/tools';
 
 const state = useTaskyonStore();
 
 //const funcArgs = computed(() => );
+
+async function getAllTools() {
+  return (await getTaskManager()).getTools();
+}
+
+const toolCollection = ref<ToolCollection>({});
+void getAllTools().then((tools) => (toolCollection.value = tools));
 
 // Computed property to determine the currently selected bot name
 const currentDefaultBotName = computed(() => {
@@ -301,12 +319,12 @@ const selectedTaskType = computed(() => {
   return state.taskDraft.configuration?.function?.name;
 });
 
-function setTaskType(tasktype: string | undefined) {
+async function setTaskType(tasktype: string | undefined) {
   console.log('change tasktype to:', tasktype);
   if (tasktype) {
     state.taskDraft.role = 'function';
     const toolName = tasktype;
-    const tool = state.chatState.tools[tasktype];
+    const tool = (await getAllTools())[tasktype];
     if (!tool) {
       console.log(`Tool ${toolName} not found.`);
       return null;
@@ -337,14 +355,14 @@ const estimatedTokens = computed(() => {
   return tokens;
 });
 
-function toggleSelectedTools() {
+async function toggleSelectedTools() {
   if (state.taskDraft.allowedTools) {
     if (state.taskDraft.allowedTools.length > 0) {
       state.taskDraft.allowedTools = [];
       return;
     }
   }
-  state.taskDraft.allowedTools = Object.keys(state.chatState.tools);
+  state.taskDraft.allowedTools = Object.keys(await getAllTools());
 }
 
 const currentnewTask = computed(() => {
@@ -381,7 +399,7 @@ async function executeTask() {
   );
   if (currentnewTask.value.role === 'user') {
     state.taskDraft.content = '';
-    setTaskType(undefined);
+    await setTaskType(undefined);
   }
 }
 
