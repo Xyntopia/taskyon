@@ -63,7 +63,6 @@ export function defaultLLMSettings() {
     openAIAssistantId: '',
     useOpenAIAssistants: false,
     enableOpenAiTools: false,
-    tools: {} as ToolCollection,
     selectedApi: 'openrouter.ai' as string | 'openrouter.ai' | 'openai',
     llmApis: [
       {
@@ -247,7 +246,7 @@ export function countToolTokens(functionList: Tool[]): number {
 export function estimateChatTokens(
   task: LLMTask,
   chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  tools: ToolCollection,
+  tools: ToolCollection
 ): LLMTask['debugging']['estimatedTokens'] {
   const functions: Tool[] = mapFunctionNames(task.allowedTools || [], tools);
   const singlePromptTokens = countStringTokens(task.content || '');
@@ -541,6 +540,7 @@ function createTaskChatMessages(
 
 export async function prepareTasksForInference(
   task: LLMTask,
+  toolCollection: ToolCollection,
   chatState: ChatStateType,
   getTask: InstanceType<typeof TaskManager>['getTask'],
   method: 'toolchat' | 'chat' | 'taskAgent'
@@ -569,7 +569,7 @@ export async function prepareTasksForInference(
         taskContent: task.content || '',
         schema: yamlRepr,
         format: 'yaml',
-        tools: summarizeTools(task.allowedTools, chatState.tools),
+        tools: summarizeTools(task.allowedTools, toolCollection),
         toolList: JSON.stringify(task.allowedTools),
       };
     } else {
@@ -582,7 +582,7 @@ export async function prepareTasksForInference(
         }),
         resultSchema: yamlRepr,
         format: 'yaml',
-        tools: summarizeTools(task.allowedTools, chatState.tools),
+        tools: summarizeTools(task.allowedTools, toolCollection),
         toolList: JSON.stringify(task.allowedTools),
       };
     }
@@ -630,7 +630,7 @@ export async function prepareTasksForInference(
   } else {
     // TODO: add possible instructions here :) like mentioning that
     //       we can use mermaid and html/svg in our frontend markdown-it
-    tools = mapFunctionNames(task.allowedTools || [], chatState.tools) || [];
+    tools = mapFunctionNames(task.allowedTools || [], toolCollection) || [];
   }
   const openAITools: OpenAI.ChatCompletionTool[] = tools.map((t) => {
     const functionDef: OpenAI.FunctionDefinition = {

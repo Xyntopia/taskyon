@@ -103,6 +103,7 @@ export async function processChatTask(
       const { openAIConversationThread, tools } =
         await prepareTasksForInference(
           task,
+          taskManager.getTools(),
           chatState,
           (taskID) => taskManager.getTask(taskID),
           useToolChat ? 'toolchat' : 'chat'
@@ -176,7 +177,7 @@ export async function processChatTask(
           task.debugging.estimatedTokens = estimateChatTokens(
             task,
             openAIConversationThread,
-            chatState.tools
+            taskManager.getTools()
           );
         }
       }
@@ -333,7 +334,7 @@ async function generateFollowUpTasksFromResult(
     } else if (finishedTask.result.type === 'ToolCall') {
       const choice = finishedTask.result.chatResponse?.choices[0];
       if (choice) {
-        const functionCall = extractOpenAIFunctions(choice, chatState.tools);
+        const functionCall = extractOpenAIFunctions(choice, taskManager.getTools());
         if (functionCall) {
           taskDraftList.push(
             deepMerge(taskTemplate, {
@@ -484,7 +485,7 @@ async function taskWorker(
             task.state = 'Completed';
           } else {
             // in the case we don't have a result yet, we need to calculate it :)
-            task = await processFunctionTask(task, chatState.tools);
+            task = await processFunctionTask(task, taskManager.getTools());
             processTasksQueue.push(taskId); // send the task back into the queue
             task.state = 'Queued';
           }

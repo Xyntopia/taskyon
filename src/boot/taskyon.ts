@@ -8,6 +8,13 @@ import {
 } from 'src/modules/taskyon/rxdb';
 import { run } from 'src/modules/taskyon/taskWorker';
 import { useTaskyonStore } from 'src/stores/taskyonState';
+import { ToolCollection } from 'src/modules/taskyon/tools';
+import {
+  executePythonScript,
+  localVectorStoreSearch,
+  createToolExampleTool,
+} from 'src/modules/taskyon/tools';
+import { executeJavaScript } from 'src/modules/tools/executeJavaScript';
 
 // Singleton holder for TaskManager
 let taskManagerInstance: TaskManager;
@@ -22,6 +29,16 @@ export async function getTaskManager() {
   const state = useTaskyonStore();
 
   if (!taskManagerInstance) {
+    const ToolList = reactive<ToolCollection>({});
+    // initialize some of our default tools:
+    Object.assign(ToolList, {
+      executePythonScript,
+      getToolExample: createToolExampleTool(ToolList),
+      // TODO: add local context(task) search
+      localVectorStoreSearch,
+      executeJavaScript,
+    });
+
     // we are creating a reactive map for our memory-based task databae
     // this ensures, that we receive upates for our task in our UI.
     const TaskList = reactive<Map<string, LLMTask>>(new Map());
@@ -38,6 +55,7 @@ export async function getTaskManager() {
     console.log('initializing task manager');
     taskManagerInstance = new TaskManager(
       TaskList,
+      ToolList,
       taskyonDBInstance,
       state.chatState.vectorizationModel
     );

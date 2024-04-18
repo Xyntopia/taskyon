@@ -1,17 +1,11 @@
 import { defineStore } from 'pinia';
 import { defaultLLMSettings } from 'src/modules/taskyon/chat';
-import { ref, Ref, watch, reactive } from 'vue';
+import { ref, Ref, watch } from 'vue';
 import type { LLMTask } from 'src/modules/taskyon/types';
 import type { FunctionArguments } from 'src/modules/taskyon/types';
 import axios from 'axios';
 import { LocalStorage, Notify } from 'quasar';
 import { deepMerge, deepMergeReactive } from 'src/modules/taskyon/utils';
-import {
-  executePythonScript,
-  localVectorStoreSearch,
-  createToolExampleTool,
-} from 'src/modules/taskyon/tools';
-import { executeJavaScript } from 'src/modules/tools/executeJavaScript';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -43,15 +37,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
   setupIframeApi();
 
   const llmSettings = defaultLLMSettings();
-
-  // initialize some of our default tools:
-  llmSettings.tools = {
-    executePythonScript,
-    getToolExample: createToolExampleTool(llmSettings.tools),
-    // TODO: add local context(task) search
-    localVectorStoreSearch,
-    executeJavaScript,
-  };
 
   const initialState = {
     chatState: llmSettings,

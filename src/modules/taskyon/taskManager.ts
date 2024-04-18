@@ -243,6 +243,7 @@ export class TaskManager {
 
   constructor(
     tasks: TaskManager['tasks'],
+    tools: TaskManager['tools'],
     taskyonDB?: TaskyonDatabase,
     vectorizerModel?: string
   ) {
@@ -252,7 +253,7 @@ export class TaskManager {
     this.vectorizerModel = vectorizerModel || '';
     this.vectorIndexName = 'taskyondbv';
     void this.initVectorStore();
-    this.tools = {};
+    this.tools = tools;
   }
 
   async initVectorStore(loadIfExists = true) {
@@ -556,6 +557,10 @@ export class TaskManager {
 
     const taskCountChanged = this.tasks.size !== prevTaskCount;
     this.notifySubscribers(taskId, taskCountChanged);
+  }
+
+  getTools() {
+    return this.tools;
   }
 }
 
