@@ -16,6 +16,7 @@ import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { AsyncQueue } from './utils';
 import { loadOrCreateVectorStore } from './vectorSearch';
 import { extractKeywords, vectorizeText } from './webWorkerApi';
+import { ToolCollection } from './tools';
 
 /**
  * Finds the root task of a given task.
@@ -212,12 +213,24 @@ export async function addTask2Tree(
   return newTask.id;
 }
 
+// Function to create the database
+/*
+  TaskyonManager is build with reactivity in mind. you can supply a reactive map
+  to the constructor. it will be kept in sync with the taskdb and supplies reactive changes
+  to the UI. We could have used the function of RxDB for this. But this approach would have been
+  less flexible...
+
+    const TaskList = reactive<Map<string, LLMTask>>(new Map());
+    const taskyonDBInstance = await createTaskyonDatabase('taskyondb');
+    taskManagerInstance = new TaskManager(TaskList, taskyonDBInstance);
+*/
 export class TaskManager {
   // uses RxDB as a DB backend..
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
   private taskyonDB: TaskyonDatabase | undefined;
   private tasks: Map<string, LLMTask>;
+  private tools: ToolCollection;
   private vectorIndex: HierarchicalNSW | undefined;
   // we need these locks in order to sync our databases..
   private taskLocks: Map<string, Lock> = new Map();
@@ -239,6 +252,7 @@ export class TaskManager {
     this.vectorizerModel = vectorizerModel || '';
     this.vectorIndexName = 'taskyondbv';
     void this.initVectorStore();
+    this.tools = {};
   }
 
   async initVectorStore(loadIfExists = true) {

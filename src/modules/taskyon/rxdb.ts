@@ -100,13 +100,24 @@ export const llmTaskSchema: RxJsonSchema<LLMTaskDocType> = llmTaskSchemaLiteral;
 
 const fileMappingSchemaLiteral = {
   title: 'FileMapping schema',
-  version: 1,
+  version: 2,
   type: 'object',
   primaryKey: 'uuid',
   properties: {
     uuid: { type: 'string', maxLength: 128 },
+    // filename in opfs
     opfs: { type: 'string' },
     openAIFileId: { type: 'string' },
+    // we can give each file several labels which helps has to put them into different categories
+    // such as tools, different projects, etc...
+    labels: {
+      type: 'array',
+      items: {
+        type: 'string',
+      },
+    },
+    // TODO: we're not sure if we need a file path?
+    fileType: { type: 'string' },
     fileData: { type: 'string' },
   },
   required: ['uuid'],
@@ -154,18 +165,6 @@ export type TaskyonDatabaseCollections = {
 };
 export type TaskyonDatabase = RxDatabase<TaskyonDatabaseCollections>;
 
-// Function to create the database
-/*
-  TaskyonDatabase is build with reactivity in mind. you can supply a reactive map
-  to the constructor. it will be kept in sync with the taskdb and supplies reactive changes
-  to the UI. We could have used the function of RxDB for this. But this approach would have been
-  less flexible...
-
-    const TaskList = reactive<Map<string, LLMTask>>(new Map());
-    const taskyonDBInstance = await createTaskyonDatabase('taskyondb');
-    taskManagerInstance = new TaskManager(TaskList, taskyonDBInstance);
-*/
-
 export const collections = {
   llmtasks: {
     schema: llmTaskSchema,
@@ -186,8 +185,12 @@ export const collections = {
     schema: fileMappingSchema,
     autoMigrate: true, // <- migration will not run at creation
     migrationStrategies: {
-      // for this version we simply discard everything from version 0
       1: function (/*oldDoc*/) {
+        // for this version we simply discard everything from version 0
+        return null;
+      },
+      2: function (/*oldDoc*/) {
+        // for this version we simply discard everything from version 0
         return null;
       },
     },

@@ -75,7 +75,11 @@ export type arbitraryFunction = z.infer<typeof arbitraryFunctionSchema>;
 const Tool = ToolDescription.extend({
   function: arbitraryFunctionSchema,
 });
+const ToolCode = ToolDescription.extend({
+  Code: z.string(), // this type is used in order to dynamically store tools
+});
 export type Tool = z.infer<typeof Tool>;
+export type ToolCode = z.infer<typeof ToolCode>;
 
 // ToolCollection schema and type
 const ToolCollection = z.record(Tool);
