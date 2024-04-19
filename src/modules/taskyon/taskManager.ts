@@ -16,7 +16,7 @@ import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { AsyncQueue } from './utils';
 import { loadOrCreateVectorStore } from './vectorSearch';
 import { extractKeywords, vectorizeText } from './webWorkerApi';
-import { ToolCollection } from './tools';
+import { Tool } from './tools';
 
 /**
  * Finds the root task of a given task.
@@ -230,7 +230,7 @@ export class TaskManager {
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
   private taskyonDB: TaskyonDatabase | undefined;
   private tasks: Map<string, LLMTask>;
-  private tools: ToolCollection;
+  private tools: Record<string, Tool>;
   private vectorIndex: HierarchicalNSW | undefined;
   // we need these locks in order to sync our databases..
   private taskLocks: Map<string, Lock> = new Map();
@@ -560,6 +560,7 @@ export class TaskManager {
   }
 
   getTools() {
+    // TODO: make sure, its clear that we return non-partial tool types here...
     return this.tools;
   }
 }

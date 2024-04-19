@@ -8,11 +8,11 @@ import {
 } from 'src/modules/taskyon/rxdb';
 import { run } from 'src/modules/taskyon/taskWorker';
 import { useTaskyonStore } from 'src/stores/taskyonState';
-import { ToolCollection } from 'src/modules/taskyon/tools';
 import {
   executePythonScript,
   localVectorStoreSearch,
   createToolExampleTool,
+  Tool,
 } from 'src/modules/taskyon/tools';
 import { executeJavaScript } from 'src/modules/tools/executeJavaScript';
 
@@ -29,7 +29,7 @@ export async function getTaskManager() {
   const state = useTaskyonStore();
 
   if (!taskManagerInstance) {
-    const ToolList = reactive<ToolCollection>({});
+    const ToolList = reactive<Record<string, Tool>>({});
     // initialize some of our default tools:
     Object.assign(ToolList, {
       executePythonScript,

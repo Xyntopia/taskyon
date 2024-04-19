@@ -50,18 +50,14 @@ const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionParameter> 
     required: z.array(z.string()).optional(),
   });
 
-const ToolDescription = z.object({
-  state: z.union([
-    z.function().returns(z.promise(toolStateType)),
-    z.function().returns(toolStateType),
-    toolStateType,
-  ]),
+const ToolBase = z.object({
   description: z.string(),
   longDescription: z.string().optional(),
   name: z.string(),
   parameters: JSONSchemaForFunctionParameter,
+  code: z.string().optional(),
 });
-export type ToolDescription = z.infer<typeof ToolDescription>;
+export type ToolBase = z.infer<typeof ToolBase>;
 
 const arbitraryFunctionSchema = z.custom<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,22 +68,20 @@ const arbitraryFunctionSchema = z.custom<
 });
 export type arbitraryFunction = z.infer<typeof arbitraryFunctionSchema>;
 
-const Tool = ToolDescription.extend({
+const Tool = ToolBase.extend({
+  state: z.union([
+    z.function().returns(z.promise(toolStateType)),
+    z.function().returns(toolStateType),
+    toolStateType,
+  ]),
   function: arbitraryFunctionSchema,
-});
-const ToolCode = ToolDescription.extend({
-  Code: z.string(), // this type is used in order to dynamically store tools
+  code: z.string().optional(),
 });
 export type Tool = z.infer<typeof Tool>;
-export type ToolCode = z.infer<typeof ToolCode>;
-
-// ToolCollection schema and type
-const ToolCollection = z.record(Tool);
-export type ToolCollection = z.infer<typeof ToolCollection>;
 
 export async function handleFunctionExecution(
   func: FunctionCall,
-  tools: ToolCollection
+  tools: Record<string, Tool>
 ): Promise<TaskResult> {
   try {
     let funcR: unknown = await tools[func.name].function(func.arguments);
@@ -158,7 +152,7 @@ is the outcome of the last expression in the script. Outcomes should be of the t
 // the following tool is "self-referential" and because of this we can not initialize it yet
 // we instead write a factory function which creates this tool using a reference to our tools
 // variable
-export function createToolExampleTool(tools: ToolCollection): Tool {
+export function createToolExampleTool(tools: Record<string, Tool>): Tool {
   // used to get the code from our tools :)
   function inspectToolCode(toolName: string) {
     const tool = tools[toolName];
@@ -291,7 +285,7 @@ export interface WorkerMessage {
   error?: string;
 }
 
-function convertToToolCommandString(tool: ToolDescription): string {
+function convertToToolCommandString(tool: Tool): string {
   // convert a tool into a schema which is compatible ti toolCommandChat
   const args: YamlRepresentation = {};
 
@@ -320,7 +314,7 @@ function convertToToolCommandString(tool: ToolDescription): string {
   return yamlSchema;
 }
 
-export function summarizeTools(toolIDs: string[], tools: ToolCollection) {
+export function summarizeTools(toolIDs: string[], tools: Record<string, Tool>) {
   const toolStr = toolIDs
     .map((t) => {
       const tool = tools[t];

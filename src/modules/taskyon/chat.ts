@@ -1,6 +1,6 @@
 import axios from 'axios';
 //import { useCachedModels } from './mlModels';
-import { Tool, summarizeTools, ToolCollection } from './tools';
+import { Tool, summarizeTools } from './tools';
 import { LLMTask, OpenAIMessage, OpenRouterGenerationInfo } from './types';
 import {
   taskChain,
@@ -246,7 +246,7 @@ export function countToolTokens(functionList: Tool[]): number {
 export function estimateChatTokens(
   task: LLMTask,
   chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  tools: ToolCollection
+  tools: Record<string, Tool>
 ): LLMTask['debugging']['estimatedTokens'] {
   const functions: Tool[] = mapFunctionNames(task.allowedTools || [], tools);
   const singlePromptTokens = countStringTokens(task.content || '');
@@ -509,7 +509,7 @@ export function bigIntToString(obj: unknown): unknown {
   return obj;
 }
 
-function mapFunctionNames(toolNames: string[], tools: ToolCollection) {
+function mapFunctionNames(toolNames: string[], tools: Record<string,Tool>) {
   return toolNames?.map((t) => tools[t]);
 }
 
@@ -540,7 +540,7 @@ function createTaskChatMessages(
 
 export async function prepareTasksForInference(
   task: LLMTask,
-  toolCollection: ToolCollection,
+  toolCollection: Record<string, Tool>,
   chatState: ChatStateType,
   getTask: InstanceType<typeof TaskManager>['getTask'],
   method: 'toolchat' | 'chat' | 'taskAgent'

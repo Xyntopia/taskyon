@@ -259,7 +259,7 @@ import {
 } from 'src/modules/taskyon/taskManager';
 import ObjectTreeView from './ObjectTreeView.vue';
 import { getTaskManager } from 'boot/taskyon';
-import type { ToolCollection } from 'src/modules/taskyon/tools';
+import type { Tool } from 'src/modules/taskyon/tools';
 
 const state = useTaskyonStore();
 
@@ -269,7 +269,7 @@ async function getAllTools() {
   return (await getTaskManager()).getTools();
 }
 
-const toolCollection = ref<ToolCollection>({});
+const toolCollection = ref<Record<string, Tool>>({});
 void getAllTools().then((tools) => (toolCollection.value = tools));
 
 // Computed property to determine the currently selected bot name

@@ -14,7 +14,7 @@ import { FunctionArguments, FunctionCall } from './types';
 import type { LLMTask } from './types';
 import type { OpenAI } from 'openai';
 import { TaskManager } from './taskManager';
-import { ToolCollection, handleFunctionExecution } from './tools';
+import { Tool, handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
 import { deepMerge } from './utils';
 
@@ -30,7 +30,7 @@ function isOpenAIFunctionCall(
 
 function extractOpenAIFunctions(
   choice: OpenAI.ChatCompletion['choices'][0],
-  tools: ToolCollection
+  tools: Record<string, Tool>
 ) {
   const functionCalls: FunctionCall[] = [];
   for (const toolCall of choice.message.tool_calls || []) {
@@ -189,7 +189,7 @@ export async function processChatTask(
   return task;
 }
 
-async function processFunctionTask(task: LLMTask, tools: ToolCollection) {
+async function processFunctionTask(task: LLMTask, tools: Record<string, Tool>) {
   if (task.configuration?.function) {
     const func = task.configuration.function;
     console.log(`Calling function ${func.name}`);
@@ -334,7 +334,10 @@ async function generateFollowUpTasksFromResult(
     } else if (finishedTask.result.type === 'ToolCall') {
       const choice = finishedTask.result.chatResponse?.choices[0];
       if (choice) {
-        const functionCall = extractOpenAIFunctions(choice, taskManager.getTools());
+        const functionCall = extractOpenAIFunctions(
+          choice,
+          taskManager.getTools()
+        );
         if (functionCall) {
           taskDraftList.push(
             deepMerge(taskTemplate, {
