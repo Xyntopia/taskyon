@@ -46,9 +46,10 @@
                 stretch
                 icon="play_arrow"
                 dense
-                @click="state.chatState.selectedTaskId = props.row.id"
+                @click="setConversation(props.row.id)"
                 to="chat"
-              />
+                ><q-tooltip>View entire conversation</q-tooltip></q-btn
+              >
             </div>
             <Task
               style="border: 1px solid"
@@ -69,6 +70,7 @@ import { LLMTask } from 'src/modules/taskyon/types';
 import { getTaskManager } from 'boot/taskyon';
 import Task from 'src/components/Task.vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
+import { findLeafTasks } from 'src/modules/taskyon/taskManager';
 
 const state = useTaskyonStore();
 const searchResults = ref<LLMTask[]>([]);
@@ -126,4 +128,12 @@ const initialPagination = {
   rowsPerPage: 5,
   // rowsNumber: xx if getting data from a server
 };
+
+async function setConversation(taskId: string) {
+  taskManager = await getTaskManager();
+  const leafTasks = await findLeafTasks(taskId, (taskID) =>
+    taskManager.getTask(taskID)
+  );
+  state.chatState.selectedTaskId = leafTasks[0];
+}
 </script>

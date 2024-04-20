@@ -44,27 +44,86 @@ export async function findRootTask(
   return currentTaskID; // Return null if the loop exits without finding a root task
 }
 
-export async function taskChain(
-  lastTaskId: string,
+/**
+ * Finds the leaf tasks of a given task tree node using a depth-first search (DFS) iterative approach.
+ *
+ * @param {string} taskId - The ID of the task.
+ * @param {Function} getTask - Function to retrieve a task by its ID.
+ * @returns {Promise<string[]>} - An array of IDs of the leaf tasks.
+ */
+export async function findLeafTasks(
+  taskId: string,
   getTask: InstanceType<typeof TaskManager>['getTask']
+): Promise<string[]> {
+  const stack: string[] = [taskId];
+  const leafTasks: string[] = [];
+
+  while (stack.length > 0) {
+    const currentTaskId = stack.pop() || ''; // Pop the last task from the stack
+    const currentTask = await getTask(currentTaskId);
+
+    if (!currentTask) continue; // Skip if the task doesn't exist
+
+    // Check if the current task is a leaf task
+    if (!currentTask.childrenIDs || currentTask.childrenIDs.length === 0) {
+      leafTasks.push(currentTaskId);
+    } else {
+      // Push all children of the current task onto the stack
+      // To maintain the order of processing, you might want to reverse the children array
+      stack.push(...currentTask.childrenIDs.reverse());
+    }
+  }
+
+  return leafTasks;
+}
+
+// get a taskchain from a task ID: following parent and/or child links
+export async function taskChain(
+  taskId: string,
+  getTask: InstanceType<typeof TaskManager>['getTask'],
+  parents = true,
+  children = false
 ) {
-  // Start with the selected task
-  let currentTaskID = lastTaskId;
-  const conversationList: string[] = [];
+  const conversationList: string[] = [taskId];
 
-  // Trace back the parentIDs to the original task in the chain
-  while (currentTaskID) {
-    // Get the current task
-    const currentTask = await getTask(currentTaskID);
-    if (!currentTask) break; // Break if we reach a task that doesn't exist
+  if (parents) {
+    // Start with the selected task
+    let currentTaskID = taskId;
 
-    // Prepend the current task to the conversation list so the selected task ends up being the last in the list
-    conversationList.unshift(currentTaskID);
+    // Trace back the parentIDs to the original task in the chain
+    while (currentTaskID) {
+      // Get the current task
+      const currentTask = await getTask(currentTaskID);
+      if (!currentTask) break; // Break if we reach a task that doesn't exist
 
-    // Move to the parent task
-    if (currentTask.parentID) {
-      currentTaskID = currentTask.parentID; // This can now be string | undefined
-    } else break; // Break if we reach an "initial" task
+      // Move to the parent task
+      if (currentTask.parentID) {
+        currentTaskID = currentTask.parentID; // This can now be string | undefined
+      } else break; // Break if we reach an "initial" task
+
+      // Prepend the current task to the conversation list so the selected task ends up being the last in the list
+      conversationList.unshift(currentTaskID);
+    }
+  }
+
+  if (children) {
+    // Start with the first child of the selected task
+    let currentTaskID = taskId;
+
+    // Follow the first child in the task list
+    while (currentTaskID) {
+      // Get the current task
+      const currentTask = await getTask(currentTaskID);
+      if (!currentTask) break; // Break if we reach a task that doesn't exist
+
+      // Move to the first child task, if it exists
+      if (currentTask.childrenIDs.length) {
+        currentTaskID = currentTask.childrenIDs[0];
+      } else break;
+
+      // Append the current task to the conversation list
+      conversationList.push(currentTaskID);
+    }
   }
 
   return conversationList;
@@ -562,6 +621,10 @@ export class TaskManager {
   getTools() {
     // TODO: make sure, its clear that we return non-partial tool types here...
     return this.tools;
+  }
+
+  addToolCode(toolCode: string) {
+    console.log('add tool code:', toolCode);
   }
 }
 

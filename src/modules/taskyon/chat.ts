@@ -509,7 +509,7 @@ export function bigIntToString(obj: unknown): unknown {
   return obj;
 }
 
-function mapFunctionNames(toolNames: string[], tools: Record<string,Tool>) {
+function mapFunctionNames(toolNames: string[], tools: Record<string, Tool>) {
   return toolNames?.map((t) => tools[t]);
 }
 
