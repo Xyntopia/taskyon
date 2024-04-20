@@ -60,6 +60,7 @@
     <!-- App Links -->
     <div class="q-pa-md q-gutter-xs">
       <Settings reduced></Settings>
+      <q-btn flat icon="mdi-tools" label="Tool Editor" to="/tools"></q-btn>
       <q-btn flat icon="manage_accounts" label="accounts" to="/settings"></q-btn>
     </div>
     <!-- Settings Area -->

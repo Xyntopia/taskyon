@@ -1,46 +1,83 @@
 <template>
-  <div>
+  <div class="column q-pa-md q-gutter-sm">
     <q-select
-        filled
-        dense
-        label="Select LLM Model for answering/solving the task."
-        icon="mdi:tools"
-        :options="toolNames"
-        :model-value="selectedToolName"
-        hide-selected
-        fill-input
-        use-input
-        input-debounce="100"
-        @filter="(val, update) => filterModels(val, update, modelOptions)"
-      />
-    <ObjectTreeView :model-value="tool" />
-    {{ tool }}
+      filled
+      dense
+      label="Select Tool"
+      :options="Object.keys(toolCollection)"
+      v-model="selectedToolName"
+      input-debounce="100"
+    />
+    <q-input
+      v-model="state.toolDraft.name"
+      label="Specify the Name of the new Tool"
+    />
+    <codemirror
+      v-model="state.toolDraft.code"
+      placeholder="Code goes here..."
+      :style="{ height: '400px' }"
+      :autofocus="true"
+      :indent-with-tab="true"
+      :tab-size="2"
+      :extensions="extensions"
+      @ready="handleReady"
+      @change="console.log('change', $event)"
+      @focus="console.log('focus', $event)"
+      @blur="console.log('blur', $event)"
+    />
+    <q-btn
+      label="new tool"
+      @click="state.toolDraft.code = newToolStructure()"
+    ></q-btn>
   </div>
 </template>
 
-<style lang="sass" scoped>
-
-.scroll-area-btn
-  position: absolute
-  top: 0px // Adjust as needed for proper alignment
-  right: 0px // Adjust as needed for proper alignment
-  z-index: 10 // Ensure the button is above other content
-
-.scroll-area
-  white-space: pre-wrap
-  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3)
-  max-height: 300px // Adjust this value based on your needs
-  overflow-y: auto
-  width: auto // Ensures it takes the necessary width up to its parent's maximum
-  min-width: 100% // Ensures it stretches to at least the width of its parent
-</style>
-
 <script setup lang="ts">
-import { dump } from 'js-yaml';
-import { Tool } from 'src/modules/taskyon/tools';
-import { computed, ref, defineProps } from 'vue';
-import ObjectTreeView from 'src/components/ObjectTreeView.vue';
+import { ref } from 'vue';
+import { getTaskManager } from 'src/boot/taskyon';
+import type { Tool, ToolBase } from 'src/modules/taskyon/tools';
+import { useTaskyonStore } from 'src/stores/taskyonState';
+import { Codemirror } from 'vue-codemirror';
+import { javascript } from '@codemirror/lang-javascript';
+import { oneDark } from '@codemirror/theme-one-dark';
 
+const state = useTaskyonStore();
 
+const extensions = [javascript(), oneDark]
 
+async function getAllTools() {
+  return (await getTaskManager()).getTools();
+}
+
+const toolCollection = ref<Record<string, Tool>>({});
+//void getAllTools().then((tools) => (toolCollection.value = tools));
+
+const selectedToolName = ref<string>('');
+
+function newToolStructure(): string {
+  const tool = `{
+    name: 'myExampleStringAdder',
+    description: 'provide a short description which an AI can understand',
+    longDescription: 'provide a long description if the AI/Human needs more details',
+    // this is the actual function code which gets executed by the AI.
+    function: (parameter1, parameter2 = 'default parameter :)')=>{
+      return parameter1 + ' ' + parameter2;
+    },
+    parameters: {
+      type: 'object',
+      properties: {
+        parameter1: {
+          type: 'string',
+          description: 'This is an example parameter!',
+        },
+        parameter2: {
+          type: 'string',
+          description: 'This is another example parameter, but not required!',
+        },
+      },
+      required: ['parameter1'],
+    },
+  };`;
+  return tool;
+}
 </script>
