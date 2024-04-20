@@ -68,6 +68,16 @@
       >
         <q-btn
           class="col-auto"
+          icon="content_copy"
+          dense
+          flat
+          size="sm"
+          @click="copyToClipboard(task.content || '')"
+        >
+          <q-tooltip :delay="0">Copy raw text.</q-tooltip>
+        </q-btn>
+        <q-btn
+          class="col-auto"
           :icon="
             state.taskState[task.id]?.markdownEnabled != false
               ? 'mdi-language-markdown'
@@ -267,6 +277,17 @@ const props = defineProps<{
 const state = useTaskyonStore();
 const taskManagerPromise = getTaskManager();
 
+function copyToClipboard(text: string) {
+  navigator.clipboard
+    .writeText(text)
+    .then(() => {
+      console.log('Copied to clipboard');
+    })
+    .catch((err) => {
+      console.error('Error in copying text: ', err);
+    });
+}
+
 async function taskDraftFromTask(taskId: string) {
   // we are copying the current task with json stringify
   const jsonTask = JSON.stringify(
@@ -286,11 +307,13 @@ async function taskDraftFromTask(taskId: string) {
 const humanReadableTaskCosts = computed(() => {
   if (props.task.debugging.taskCosts) {
     if (props.task.debugging.taskCosts > 1.0) {
-      return `${(props.task.debugging.taskCosts).toFixed(1)} $`;
+      return `${props.task.debugging.taskCosts.toFixed(1)} $`;
     } else if (props.task.debugging.taskCosts > 0.001) {
       return `${(props.task.debugging.taskCosts * 1e2).toFixed(1)} ¢`;
     }
-    return `${Math.round(props.task.debugging.taskCosts * 1e6).toLocaleString()} μ$`;
+    return `${Math.round(
+      props.task.debugging.taskCosts * 1e6
+    ).toLocaleString()} μ$`;
   }
   return '';
 });
