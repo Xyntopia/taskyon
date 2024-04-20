@@ -20,7 +20,6 @@
       :indent-with-tab="true"
       :tab-size="2"
       :extensions="extensions"
-      @ready="handleReady"
       @change="console.log('change', $event)"
       @focus="console.log('focus', $event)"
       @blur="console.log('blur', $event)"
@@ -33,8 +32,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, shallowRef, computed } from 'vue';
 import { getTaskManager } from 'src/boot/taskyon';
+import { useQuasar } from 'quasar';
 import type { Tool, ToolBase } from 'src/modules/taskyon/tools';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { Codemirror } from 'vue-codemirror';
@@ -43,7 +43,17 @@ import { oneDark } from '@codemirror/theme-one-dark';
 
 const state = useTaskyonStore();
 
-const extensions = [javascript(), oneDark]
+const $q = useQuasar();
+const extensions = computed(() =>
+  $q.dark.isActive ? [javascript(), oneDark] : [javascript()]
+);
+/*//this is only needed if we need direct access to the codemirror element
+//  add this to the <codemirror ...       @ready="handleReady" />
+const view = shallowRef()
+const handleReady = (payload) => {
+  view.value = payload.view;
+};
+*/
 
 async function getAllTools() {
   return (await getTaskManager()).getTools();
