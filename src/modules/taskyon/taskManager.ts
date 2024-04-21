@@ -266,7 +266,7 @@ export class TaskManager {
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
   private taskyonDB: TaskyonDatabase | undefined;
   private tasks: Map<string, LLMTask>;
-  private tools: Record<string, Tool>;
+  private defaultTools: Record<string, Tool>;
   private vectorIndex: HierarchicalNSW | undefined;
   // we need these locks in order to sync our databases..
   private taskLocks: Map<string, Lock> = new Map();
@@ -279,7 +279,7 @@ export class TaskManager {
 
   constructor(
     tasks: TaskManager['tasks'],
-    tools: TaskManager['tools'],
+    defaultTools: TaskManager['defaultTools'],
     taskyonDB?: TaskyonDatabase,
     vectorizerModel?: string
   ) {
@@ -289,7 +289,7 @@ export class TaskManager {
     this.vectorizerModel = vectorizerModel || '';
     this.vectorIndexName = 'taskyondbv';
     void this.initVectorStore();
-    this.tools = tools;
+    this.defaultTools = defaultTools;
   }
 
   async initVectorStore(loadIfExists = true) {
@@ -602,7 +602,7 @@ export class TaskManager {
 
   getTools() {
     // TODO: make sure, its clear that we return non-partial tool types here...
-    return this.tools;
+    return this.defaultTools;
   }
 
   addToolCode(toolCode: string) {
