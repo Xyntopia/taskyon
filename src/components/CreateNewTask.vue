@@ -254,7 +254,6 @@ import ModelSelection from 'components/ModelSelection.vue';
 import { writeFiles } from 'src/modules/taskyon/OPFS';
 import {
   addTask2Tree,
-  addFile,
   getFileMappingByUuid,
 } from 'src/modules/taskyon/taskManager';
 import ObjectTreeView from './ObjectTreeView.vue';
@@ -429,8 +428,9 @@ async function attachFileToTask(newFiles: File[]) {
   // Collect UUIDs from added files
   const uuids = [];
 
+  const tm = await getTaskManager();
   for (const [, savedFilename] of Object.entries(opfsMapping)) {
-    const uuid = await addFile(await getTaskManager(), savedFilename);
+    const uuid = tm.addFile({ opfs: savedFilename });
     uuids.push(uuid);
   }
 

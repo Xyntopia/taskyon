@@ -158,29 +158,6 @@ function base64Uuid() {
   return bigint;
 }*/
 
-export async function addFile(
-  taskManager: TaskManager,
-  opfsName?: string,
-  openAIFileId?: string
-) {
-  const fileMapping: FileMappingDocType = {
-    uuid: base64Uuid(),
-  };
-
-  // Add 'opfs' only if 'opfsName' is provided
-  if (opfsName) {
-    fileMapping.opfs = opfsName;
-  }
-
-  // Add 'openAIFileId' only if 'openAIFileId' is provided
-  if (openAIFileId) {
-    fileMapping.openAIFileId = openAIFileId;
-  }
-
-  await taskManager.addFile(fileMapping);
-  return fileMapping.uuid;
-}
-
 export async function getFileMappingByUuid(
   uuid: string,
   taskManager: TaskManager
@@ -509,10 +486,15 @@ export class TaskManager {
     return result;
   }
 
-  async addFile(fileMapping: FileMappingDocType) {
+  async addFile(fileMapping: Partial<FileMappingDocType>) {
+    const uuidFileMapping: FileMappingDocType = {
+      uuid: base64Uuid(),
+      ...fileMapping,
+    };
+
     if (this.taskyonDB) {
       const fileMappingDoc = await this.taskyonDB.filemappings.insert(
-        fileMapping
+        uuidFileMapping
       );
       return fileMappingDoc?.uuid;
     }
@@ -625,6 +607,15 @@ export class TaskManager {
 
   addToolCode(toolCode: string) {
     console.log('add tool code:', toolCode);
+
+    const myString =
+      "function myFunction(a) { console.log('Hello, World!', a); }";
+
+    // TODO: consider getting a security audit for these types of things...  But we can already execute html code etc..  sow I don't
+    //       think there is anything wrong here anyways. We are also in the browser sandbox
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const myFunction = new Function(myString);
+    myFunction('Hello, World!');
   }
 }
 
