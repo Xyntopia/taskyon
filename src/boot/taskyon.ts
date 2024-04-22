@@ -13,6 +13,7 @@ import {
   localVectorStoreSearch,
   createToolExampleTool,
   Tool,
+  addTool2DB,
 } from 'src/modules/taskyon/tools';
 import { executeJavaScript } from 'src/modules/tools/executeJavaScript';
 
@@ -37,6 +38,7 @@ export async function getTaskManager() {
       // TODO: add local context(task) search
       localVectorStoreSearch,
       executeJavaScript,
+      addTool2DB,
     });
 
     // we are creating a reactive map for our memory-based task databae
