@@ -208,7 +208,7 @@
           <q-tab-panel name="MESSAGECONTENT">
             <textarea
               :value="
-                task.result?.chatResponse?.choices[0].message.content || 'ERROR'
+                task.result?.chatResponse?.choices[0].message.content || 'N/A'
               "
               readonly
               wrap="soft"
