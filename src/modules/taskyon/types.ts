@@ -92,9 +92,10 @@ export const TaskResult = z.object({
     'ChatAnswer',
     'AssistantAnswer',
     'ToolCall',
-    'ToolResult',
+    'ToolResult', // the result is the result of a tool function execution
     'ToolError',
-    'ToolChatResult',
+    'ToolChatResult', // a chat with taskyon tools enabled
+    'ToolResultInterpretation' // a formalized interpretation of the result with an LLM
   ]),
   assistantResponse: z.array(assistantThreadMessage).optional(),
   chatResponse: chatResponse.optional(),
@@ -327,41 +328,47 @@ export type toolCommandChat = z.infer<typeof toolCommandChat>;
 
 const answer = z.string().nullable();
 
-export const toolResultChat = z.object({
-  thought: z.string().optional(),
-  satisfactory: z.boolean().describe('was the result satisfactory?'),
-  answer: answer
-    .optional()
-    .describe('Only provide answer if result was satisfactory.'),
-  useToolReason: z
-    .optional(z.string())
-    .describe('Reason, why we should (not) use a tool/function again?'),
-  useTool: z
-    .optional(z.boolean())
-    .describe('Only use a tool, if the result was not satisfactory!!'),
-  toolCommand: toolCommandChat
-    .describe(
-      'Only fill toolCommand if useTool = true otherwise provide answer!'
-    )
-    .optional(),
-});
+export const toolResultChat = z
+  .object({
+    thought: z.string().optional(),
+    satisfactory: z.boolean().describe('was the result satisfactory?'),
+    answer: answer
+      .optional()
+      .describe('Only provide answer if result was satisfactory.'),
+    useToolReason: z
+      .optional(z.string())
+      .describe('Reason, why we should (not) use a tool/function again?'),
+    useTool: z
+      .optional(z.boolean())
+      .describe('Only use a tool, if the result was not satisfactory!!'),
+    toolCommand: toolCommandChat
+      .describe(
+        'Only fill toolCommand if useTool = true otherwise provide answer!'
+      )
+      .optional(),
+  })
+  .describe('format required to comment on a toolResult');
 export type toolResultChat = z.infer<typeof toolResultChat>;
 
-export const yamlToolChatType = z.object({
-  thought: z
-    .string()
-    .optional()
-    .describe('your thoughts about what to do about the task'),
-  useTool: z.optional(z.boolean()),
-  toolCommand: toolCommandChat
-    .describe(
-      'Only fill toolCommand if useTool = true otherwise provide answer!'
-    )
-    .optional(),
-  answer: answer
-    .optional()
-    .describe('Only provide answer if we are not using a tool.'),
-});
+export const yamlToolChatType = z
+  .object({
+    thought: z
+      .string()
+      .optional()
+      .describe('your thoughts about what to do about the task'),
+    useTool: z.optional(z.boolean()),
+    toolCommand: toolCommandChat
+      .describe(
+        'Only fill toolCommand if useTool = true otherwise provide answer!'
+      )
+      .optional(),
+    answer: answer
+      .optional()
+      .describe('Only provide answer if we are not using a tool.'),
+  })
+  .describe(
+    'Format required whether we should use a tool or not and and how to use it...'
+  );
 
 export type yamlToolChatType = z.infer<typeof yamlToolChatType>;
 

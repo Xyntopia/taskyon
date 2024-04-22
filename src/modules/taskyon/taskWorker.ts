@@ -8,10 +8,16 @@ import {
   generateHeaders,
   getApiConfigCopy,
 } from './chat';
-import { yamlToolChatType, partialTaskDraft } from './types';
+import {
+  FunctionArguments,
+  FunctionCall,
+  yamlToolChatType,
+  partialTaskDraft,
+  toolResultChat,
+  LLMTask,
+  TaskResult,
+} from './types';
 import { addTask2Tree, processTasksQueue } from './taskManager';
-import { FunctionArguments, FunctionCall } from './types';
-import type { LLMTask } from './types';
 import type { OpenAI } from 'openai';
 import { TaskManager } from './taskManager';
 import { Tool, handleFunctionExecution } from './tools';
@@ -66,6 +72,7 @@ export async function processChatTask(
   apiKeys: Record<string, string>,
   taskManager: TaskManager
 ) {
+  // TODO: refactor this function!
   let apiKey = apiKeys[chatState.selectedApi];
   if (!apiKey || apiKey.trim() === '') {
     apiKey = apiKeys['taskyon'] || 'free';
@@ -142,17 +149,22 @@ export async function processChatTask(
           }
         );
 
+        // choose the tye of the result.
         if (chatCompletion) {
           if ('choices' in chatCompletion) {
             const choice = chatCompletion?.choices[0];
             if (choice) {
+              let resultType: TaskResult['type'] = 'ChatAnswer';
+              if (task.result?.type === 'ToolResult') {
+                resultType = 'ToolResultInterpretation';
+              } else if (useToolChat) {
+                resultType = 'ToolChatResult';
+              } else if (isOpenAIFunctionCall(choice)) {
+                resultType = 'ToolCall';
+              }
               task.result = {
                 ...task.result,
-                type: useToolChat
-                  ? 'ToolChatResult'
-                  : isOpenAIFunctionCall(choice)
-                  ? 'ToolCall'
-                  : 'ChatAnswer',
+                type: resultType,
                 chatResponse: chatCompletion,
               };
             }
@@ -232,7 +244,8 @@ function createNewAssistantResponseTask(
 
 async function parseChatResponse(
   message: string,
-  role: partialTaskDraft['role'] | undefined
+  role: partialTaskDraft['role'] | undefined,
+  zodSchema: typeof yamlToolChatType | typeof toolResultChat
 ): Promise<{ taskDraft: partialTaskDraft; execute: boolean }> {
   // parse the response and create a new task filled with the correct parameters
   let yamlContent = message.trim();
@@ -240,11 +253,11 @@ async function parseChatResponse(
   const yamlBlockRegex = /```(yaml|YAML)\n?([\s\S]*?)\n?```/;
   const yamlMatch = yamlBlockRegex.exec(yamlContent);
   if (yamlMatch) {
-    yamlContent = yamlMatch[1]; // Use the captured group
+    yamlContent = yamlMatch[2]; // Use the captured group
   }
   // Parse the extracted or original YAML content
   const parsedYaml = load(yamlContent);
-  const toolChatResult = await yamlToolChatType.strict().safeParseAsync(parsedYaml);
+  const toolChatResult = await zodSchema.strict().safeParseAsync(parsedYaml);
   if (toolChatResult.success) {
     console.log(toolChatResult);
     if (toolChatResult.data.toolCommand) {
@@ -275,11 +288,14 @@ async function parseChatResponse(
       };
     }
   } else {
+    const delimiters = '```';
     return {
       taskDraft: {
         state: 'Completed',
         role: role || 'system',
-        content: toolChatResult.error.toString(),
+        content: `Error parsing response:\n${
+          delimiters + yamlContent + '\n' + delimiters
+        }\nError: ${toolChatResult.error.toString()}`,
       },
       execute: false,
     };
@@ -318,12 +334,18 @@ async function generateFollowUpTasksFromResult(
           ...td,
         });
       }
-    } else if (finishedTask.result.type === 'ToolChatResult') {
+    } else if (
+      finishedTask.result.type === 'ToolChatResult' ||
+      finishedTask.result.type === 'ToolResultInterpretation'
+    ) {
       const choice = finishedTask.result.chatResponse?.choices[0];
       let taskDraft: partialTaskDraft | undefined = undefined;
       ({ taskDraft, execute } = await parseChatResponse(
         choice?.message.content || '',
-        choice?.message.role
+        choice?.message.role,
+        finishedTask.result.type == 'ToolResultInterpretation'
+          ? toolResultChat
+          : yamlToolChatType
       ));
       if (taskDraft && execute) {
         taskDraft = deepMerge(taskTemplate, taskDraft);
@@ -391,11 +413,7 @@ export function emitCancelCurrentTask() {
   document.dispatchEvent(new CustomEvent(CURRENT_TASK_CANCELLATION_EVENT));
 }
 
-async function taskWorker(
-  chatState: ChatStateType,
-  taskManager: TaskManager,
-  apiKeys: Record<string, string>
-) {
+function initCancelCallbacks(taskManager: TaskManager) {
   let cancelAllTasks = false;
   let cancelImmediately = false;
   let cancelCurrenTask = false;
@@ -442,6 +460,28 @@ async function taskWorker(
         )
     );
   });
+  return {
+    cancelImmediately,
+    cancelAllTasks,
+    cancelCurrenTask,
+    cancelCurrentTaskListener,
+  };
+}
+
+async function taskWorker(
+  chatState: ChatStateType,
+  taskManager: TaskManager,
+  apiKeys: Record<string, string>
+) {
+  // TODO: refactor taskWorker to make it even nicer...
+  let {
+    // eslint-disable-next-line prefer-const
+    cancelImmediately,
+    cancelAllTasks,
+    cancelCurrenTask,
+    // eslint-disable-next-line prefer-const
+    cancelCurrentTaskListener,
+  } = initCancelCallbacks(taskManager);
 
   console.log('entering task worker loop...');
   while (!cancelImmediately) {
@@ -478,6 +518,8 @@ async function taskWorker(
         } else if (task?.role == 'function') {
           // in the case of 'FunctionCall' result, we run it twice:
           // 1. calculate function result
+          //   then, we set it to "queued" status in order to prevent it form being deleted from the queue.
+          //   this time, it has a "ToolResult" which means, we are sending it to an LLM for interpretation:
           // 2. send function to LLM inference
           // the task could potentially come back as another functionCall!
           // the way this works: -> task state is "Completed" with "FunctionCall" and follow-up
@@ -493,7 +535,7 @@ async function taskWorker(
             // in the case we don't have a result yet, we need to calculate it :)
             task = await processFunctionTask(task, taskManager.getTools());
             processTasksQueue.push(taskId); // send the task back into the queue
-            task.state = 'Queued';
+            task.state = 'Queued'; // and we queue the functino again, to be processed again, this time with an LLM
           }
         } else {
           console.log("We don't know what to do with this task:", taskId);
