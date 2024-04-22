@@ -244,7 +244,7 @@ async function parseChatResponse(
   }
   // Parse the extracted or original YAML content
   const parsedYaml = load(yamlContent);
-  const toolChatResult = await yamlToolChatType.safeParseAsync(parsedYaml);
+  const toolChatResult = await yamlToolChatType.strict().safeParseAsync(parsedYaml);
   if (toolChatResult.success) {
     console.log(toolChatResult);
     if (toolChatResult.data.toolCommand) {
@@ -356,6 +356,9 @@ async function generateFollowUpTasksFromResult(
       taskTokens: finishedTask.debugging.taskTokens,
       taskCosts: finishedTask.debugging.taskCosts,
     };
+
+    // and finally convert the entire list of tasks to
+    // a real task.
     for (const taskDraft of taskDraftList) {
       taskDraft.debugging = { ...taskDraft.debugging, ...childCosts };
       const newId = await addTask2Tree(

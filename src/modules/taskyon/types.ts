@@ -171,6 +171,7 @@ export type FunctionCall = z.infer<typeof FunctionCall>;
 export const LLMTask = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   name: z.string().optional(),
+  // this is the actual content of the task which holds the description
   content: z.string().nullable(),
   state: TaskState,
   context: z.record(z.string(), z.string()).optional(),
@@ -187,6 +188,7 @@ export const LLMTask = z.object({
     .optional(),
   parentID: z.string().optional(),
   childrenIDs: z.array(z.string()),
+  // provide debugging information about the task execution
   debugging: z.object({
     threadMessage: z.any().optional(), // Replace with the correct Zod schema if available
     promptTokens: z.number().optional(),
@@ -206,6 +208,8 @@ export const LLMTask = z.object({
     taskCosts: z.number().optional(),
     aiResponse: z.any().optional(), // Replace with the correct Zod schema if available
     error: z.unknown().optional(),
+    // the taskprompt is the full chat which leads to the result. This is important that we have this
+    // for to debugging reasons...
     taskPrompt: z.union([z.array(OpenAIMessage), z.any()]).optional(), // Replace 'z.any()' with the correct Zod type
     followUpError: z.unknown().optional(),
   }),
