@@ -95,7 +95,7 @@ export const TaskResult = z.object({
     'ToolResult', // the result is the result of a tool function execution
     'ToolError',
     'ToolChatResult', // a chat with taskyon tools enabled
-    'ToolResultInterpretation' // a formalized interpretation of the result with an LLM
+    'ToolResultInterpretation', // a formalized interpretation of the result with an LLM
   ]),
   assistantResponse: z.array(assistantThreadMessage).optional(),
   chatResponse: chatResponse.optional(),
@@ -128,53 +128,13 @@ export const FunctionCall = z.object({
 });
 export type FunctionCall = z.infer<typeof FunctionCall>;
 
-/*export type LLMTask = {
-  role: 'system' | 'user' | 'assistant' | 'function';
-  content: string | null;
-  state: TaskState;
-  configuration?: {
-    message?: OpenAIMessage;
-    function?: FunctionCall;
-    model?: string;
-    uploadedFiles?: string[];
-  };
-  // is undefined in the case it is an "initial" task
-  parentID?: string | undefined;
-  childrenIDs: string[];
-  debugging: {
-    threadMessage?: OpenAI.Beta.Threads.Messages.ThreadMessage;
-    promptTokens?: number;
-    resultTokens?: number;
-    taskTokens?: number;
-    estimatedTokens?: {
-      resultTokens?: number;
-      taskCosts?: number;
-      functionTokens?: number;
-      promptTokens?: number;
-      singlePromptTokens?: number;
-    };
-    toolStreamArgsContent?: Record<string, string>;
-    streamContent?: string;
-    // the costs used to solve this task...
-    taskCosts?: number;
-    aiResponse?: ChatCompletionResponse;
-    error?: unknown;
-    taskPrompt?: OpenAIMessage[] | OpenAI.ChatCompletionMessageParam[];
-    followUpError?: unknown;
-  };
-  result?: TaskResult;
-  id: string;
-  allowedTools?: string[];
-  authorId?: string;
-  created_at?: number; //unix timestamp
-};*/
-
 export const LLMTask = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   name: z.string().optional(),
   // this is the actual content of the task which holds the description
   content: z.string().nullable(),
   state: TaskState,
+  label: z.array(z.string()).optional(),
   context: z.record(z.string(), z.string()).optional(),
   // somehow configure our configuration in a way that e.g. when it has a function, model
   // or chatApi become optional?
@@ -190,6 +150,7 @@ export const LLMTask = z.object({
   parentID: z.string().optional(),
   childrenIDs: z.array(z.string()),
   // provide debugging information about the task execution
+  // all debugging information should be purely optional...
   debugging: z.object({
     threadMessage: z.any().optional(), // Replace with the correct Zod schema if available
     promptTokens: z.number().optional(),

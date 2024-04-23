@@ -20,8 +20,12 @@ addRxPlugin(RxDBJsonDumpPlugin);
 addRxPlugin(RxDBMigrationPlugin);
 
 const llmTaskSchemaLiteral = {
+  // TODO: remove everything thats "local" from task schema.
+  //       we would like to try to make every task "immutable"
+  //       so this include for example he state of the task.
+  //       and other things that right now get changed "later". 
   title: 'LLMTask schema',
-  version: 2,
+  version: 3,
   type: 'object',
   primaryKey: 'id',
   properties: {
@@ -70,6 +74,14 @@ const llmTaskSchemaLiteral = {
       type: 'string', // Storing result as a JSON string
     },
     allowedTools: {
+      type: 'array',
+      items: {
+        type: 'string',
+      },
+    },
+    // this can be used to give permissions to tasks,
+    // declare functions, UI elements and other things.
+    label: {
       type: 'array',
       items: {
         type: 'string',
@@ -176,7 +188,10 @@ export const collections = {
         return null;
       },
       2: function (oldDoc: LLMTaskDocType) {
-        // for this version we simply discard everything from version 0
+        return oldDoc;
+      },
+      3: function (oldDoc: LLMTaskDocType) {
+        // we simply added additional fields, so no problem here :).
         return oldDoc;
       },
     },
@@ -241,10 +256,9 @@ export function transformLLMTaskToDocType(llmTask: LLMTask): LLMTaskDocType {
 export function transformDocToLLMTask(
   doc: RxDocument<LLMTaskDocType>
 ): LLMTask {
-  // Convert the database document to a JSON string
+  // Convert the database document to a JSON string in order to make a copy of it.
   const jsonString = JSON.stringify(doc.toJSON());
-
-  const parsedDoc = JSON.parse(jsonString) as Record<string, unknown>;
+  const parsedDoc = JSON.parse(jsonString) as RxDocument<LLMTaskDocType>;
 
   // Safely parse the debugging, configuration, and result fields
   const parsedDebugging =
@@ -261,6 +275,7 @@ export function transformDocToLLMTask(
       : undefined;
 
   // Parse the JSON string and transform it into an LLMTask object
+  // TODO:  try to throw errors here, when our LLMTask object and our database object differ.
   const tmpObj = {
     ...parsedDoc,
     debugging: parsedDebugging,

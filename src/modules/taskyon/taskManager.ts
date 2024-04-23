@@ -205,7 +205,7 @@ export async function addTask2Tree(
   chatState: ChatStateType,
   taskManager: TaskManager,
   execute = true
-) {
+): Promise<LLMTask['id']> {
   const uuid = base64Uuid();
   const parent = parentID ? await taskManager.getTask(parentID) : undefined;
 
@@ -362,6 +362,12 @@ export class TaskManager {
     unlock();
   }
 
+  // in order to make our database and all task objects pure,
+  // we have to re-model trees when using this function.
+  // so whenever we update a task, we recreate the tree path
+  // updating all childen/parent properties in the path.
+  // we do *not* need to edit any branches, as long as 
+  // they only have chilren properties and no parent properties...
   async updateTask(
     updateData: Partial<LLMTask> & { id: string },
     save: boolean

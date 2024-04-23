@@ -99,26 +99,6 @@ export async function handleFunctionExecution(
   }
 }
 
-export const addTool2DB: Tool = {
-  state: () => 'available',
-  function: (toolCode) => {
-    console.log('add a new tool:', toolCode);
-  },
-  description: 'Takes code as a string and inserts it into our tool database',
-  name: 'addTool2DB',
-  parameters: {
-    type: 'object',
-    properties: {
-      toolCode: {
-        type: 'string',
-        description:
-          'A string with the javascript code that we want to add as a tool',
-      },
-    },
-    required: ['searchTerm'],
-  },
-};
-
 export const localVectorStoreSearch: Tool = {
   state: () => 'available',
   function: async ({ searchTerm }: { searchTerm: string }) => {
