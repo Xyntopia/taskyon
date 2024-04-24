@@ -3,51 +3,17 @@
   <div>
     <!--Task Creation-->
     <div>
-      <q-input
-        v-if="!selectedTaskType"
-        autogrow
-        filled
-        dense
-        color="secondary"
+      <taskContentEdit
+        :selectedTaskType="selectedTaskType"
         v-model="content"
-        label="Type your message or instruction..."
-        :bottom-slots="expertMode"
-        :counter="expertMode"
-        clearable
-        @keyup="checkKeyboardEvents"
-        input-style="max-height: 300px"
-      >
-        <template v-slot:append>
-          <q-btn flat dense round icon="send" @click="executeTask">
-            <q-tooltip>
-              Press to send or alternatively send with &lt;shift&gt; +
-              &lt;enter&gt;
-            </q-tooltip>
-          </q-btn>
-        </template>
-        <template v-slot:before>
-          <FileDropzone class="fit" @update:model-value="attachFileToTask">
-            <q-btn dense class="fit" flat>
-              <q-icon class="gt-sm" name="upload_file" />
-              <q-icon name="attachment" />
-              <q-tooltip>Attach file to message</q-tooltip>
-            </q-btn>
-          </FileDropzone>
-        </template>
-        <template v-slot:after>
-          <taskSettingsButton v-model="expandedTaskCreation" />
-        </template>
-        <template v-slot:counter>
-          <div>
-            {{ `approx. token count: ${estimatedTokens}` }}
-          </div>
-        </template>
-        <template v-slot:hint>
-          <div class="ellipsis">
-            {{ `${currentModel} (selected AI)` }}
-          </div>
-        </template>
-      </q-input>
+        :expertMode="expertMode"
+        :checkKeyboardEvents="checkKeyboardEvents"
+        :executeTask="executeTask"
+        :attachFileToTask="attachFileToTask"
+        v-model:expandedTaskCreation="expandedTaskCreation"
+        :estimatedTokens="estimatedTokens"
+        :currentModel="currentModel"
+      />
       <div v-if="fileMappings.length">
         <div>Attached files:</div>
         <q-chip
@@ -213,7 +179,6 @@ import { FunctionArguments } from 'src/modules/taskyon/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import type { LLMTask } from 'src/modules/taskyon/types';
-import FileDropzone from './FileDropzone.vue';
 import ModelSelection from 'components/ModelSelection.vue';
 import { writeFiles } from 'src/modules/taskyon/OPFS';
 import {
@@ -224,6 +189,7 @@ import ObjectTreeView from './ObjectTreeView.vue';
 import { getTaskManager } from 'boot/taskyon';
 import type { Tool } from 'src/modules/taskyon/tools';
 import taskSettingsButton from './taskSettingsButton.vue';
+import taskContentEdit from './taskContentEdit.vue';
 
 const state = useTaskyonStore();
 const { showTaskData, expandedTaskCreation } = toRefs(state);
