@@ -42,7 +42,7 @@
             icon="tune"
             @click="
               () => {
-                state.expandedTaskCreation = !state.expandedTaskCreation;
+                expandedTaskCreation = !expandedTaskCreation;
               }
             "
             ><q-tooltip> Toggle Task Settings </q-tooltip>
@@ -84,18 +84,7 @@
           input-field-behavior="textarea"
           :separate-labels="false"
         />
-        <q-btn
-          class="col-auto"
-          flat
-          dense
-          icon="tune"
-          @click="
-            () => {
-              state.expandedTaskCreation = !state.expandedTaskCreation;
-            }
-          "
-          ><q-tooltip> Toggle Task Settings </q-tooltip>
-        </q-btn>
+        <taskSettingsButton v-model="expandedTaskCreation" />
       </div>
       <div
         class="row items-center"
@@ -155,7 +144,7 @@
     </div>
     <q-slide-transition>
       <q-list dense v-show="state.expandedTaskCreation">
-        <div v-if="state.showTaskData && state.appConfiguration.expertMode">
+        <div v-if="showTaskData && expertMode">
           {{ currentnewTask }}
         </div>
         <q-separator class="q-my-sm" />
@@ -165,11 +154,9 @@
           <ModelSelection
             @updateBotName="handleBotNameUpdate"
             :bot-name="currentModel || currentDefaultBotName || ''"
-            v-model:selected-api="state.chatState.selectedApi"
-            v-model:enable-open-a-i-assistants="
-              state.chatState.useOpenAIAssistants
-            "
-            v-model:open-a-i-assistant-id="state.chatState.openAIAssistantId"
+            v-model:selected-api="selectedApi"
+            v-model:enable-open-a-i-assistants="useOpenAIAssistants"
+            v-model:open-a-i-assistant-id="openAIAssistantId"
           ></ModelSelection>
         </q-item>
         <!--Allowed Tools Selection-->
@@ -223,18 +210,7 @@
             </q-item-section>
           </q-expansion-item>
           <q-space />
-          <q-btn
-            class="col-auto self-end"
-            flat
-            dense
-            icon="tune"
-            @click="
-              () => {
-                state.expandedTaskCreation = !state.expandedTaskCreation;
-              }
-            "
-            ><q-tooltip> Toggle Task Settings </q-tooltip>
-          </q-btn>
+          <taskSettingsButton v-model="expandedTaskCreation" />
         </q-item>
       </q-list>
     </q-slide-transition>
@@ -242,7 +218,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, toRaw } from 'vue';
+import { computed, ref, watch, toRaw, toRefs } from 'vue';
 import { countStringTokens, getApiConfig } from 'src/modules/taskyon/chat';
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools';
 import { FunctionArguments } from 'src/modules/taskyon/types';
@@ -259,8 +235,14 @@ import {
 import ObjectTreeView from './ObjectTreeView.vue';
 import { getTaskManager } from 'boot/taskyon';
 import type { Tool } from 'src/modules/taskyon/tools';
+import taskSettingsButton from './taskSettingsButton.vue';
 
 const state = useTaskyonStore();
+const { showTaskData, expandedTaskCreation } = toRefs(state);
+const { expertMode } = toRefs(state.appConfiguration);
+const { selectedApi, useOpenAIAssistants, openAIAssistantId } = toRefs(
+  state.chatState
+);
 
 //const funcArgs = computed(() => );
 
@@ -430,8 +412,10 @@ async function attachFileToTask(newFiles: File[]) {
 
   const tm = await getTaskManager();
   for (const [, savedFilename] of Object.entries(opfsMapping)) {
-    const uuid = tm.addFile({ opfs: savedFilename });
-    uuids.push(uuid);
+    const uuid = await tm.addFile({ opfs: savedFilename });
+    if (uuid) {
+      uuids.push(uuid);
+    }
   }
 
   // Ensure '.configuration' and 'uploadedFiles' are initialized in 'state.taskDraft'

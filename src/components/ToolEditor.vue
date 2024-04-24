@@ -32,10 +32,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, computed } from 'vue';
+import { ref, computed } from 'vue';
 import { getTaskManager } from 'src/boot/taskyon';
 import { useQuasar } from 'quasar';
-import type { Tool, ToolBase } from 'src/modules/taskyon/tools';
+import type { Tool } from 'src/modules/taskyon/tools';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { Codemirror } from 'vue-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
