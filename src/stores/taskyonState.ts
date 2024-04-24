@@ -49,7 +49,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
       showCosts: false,
       gdriveDir: 'taskyon',
       useEnterToSend: true,
-      enableTaskSettingsButton: true,
     },
     // chatState & appConfiguration define the state of our app!
     // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
@@ -72,7 +71,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     taskDraft: {} as Partial<LLMTask>,
     toolDraft: {
       name: '' as string,
-      code: '' as string
+      code: '' as string,
     },
     newToolDraftCode: '' as string,
     draftParameters: {} as Record<string, FunctionArguments>,

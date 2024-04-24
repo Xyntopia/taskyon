@@ -9,10 +9,10 @@
         filled
         dense
         color="secondary"
-        v-model="state.taskDraft.content"
+        v-model="content"
         label="Type your message or instruction..."
-        :bottom-slots="state.appConfiguration.expertMode"
-        :counter="state.appConfiguration.expertMode"
+        :bottom-slots="expertMode"
+        :counter="expertMode"
         clearable
         @keyup="checkKeyboardEvents"
         input-style="max-height: 300px"
@@ -35,18 +35,7 @@
           </FileDropzone>
         </template>
         <template v-slot:after>
-          <q-btn
-            v-if="state.appConfiguration.enableTaskSettingsButton"
-            flat
-            dense
-            icon="tune"
-            @click="
-              () => {
-                expandedTaskCreation = !expandedTaskCreation;
-              }
-            "
-            ><q-tooltip> Toggle Task Settings </q-tooltip>
-          </q-btn>
+          <taskSettingsButton v-model="expandedTaskCreation" />
         </template>
         <template v-slot:counter>
           <div>
@@ -88,7 +77,7 @@
       </div>
       <div
         class="row items-center"
-        v-if="selectedTaskType || state.expandedTaskCreation"
+        v-if="selectedTaskType || expandedTaskCreation"
       >
         <q-btn
           v-if="selectedTaskType"
@@ -101,12 +90,11 @@
           flat
           dense
           icon="chat"
-          :color="selectedTaskType ? '' : 'secondary'"
           @click="setTaskType(undefined)"
           ><q-tooltip>Select Simple Chat</q-tooltip>
         </q-btn>
         <q-select
-          v-if="state.appConfiguration.expertMode"
+          v-if="expertMode"
           style="min-width: 200px"
           class="q-pt-xs q-px-md"
           dense
@@ -119,7 +107,7 @@
           :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
         />
         <q-toggle
-          v-if="state.appConfiguration.expertMode"
+          v-if="expertMode"
           icon="handyman"
           left-label
           color="secondary"
@@ -132,7 +120,7 @@
           ></q-toggle
         >
         <q-btn
-          v-if="state.appConfiguration.expertMode"
+          v-if="expertMode"
           class="q-ma-md"
           dense
           flat
@@ -143,7 +131,7 @@
       </div>
     </div>
     <q-slide-transition>
-      <q-list dense v-show="state.expandedTaskCreation">
+      <q-list dense v-show="expandedTaskCreation">
         <div v-if="showTaskData && expertMode">
           {{ currentnewTask }}
         </div>
@@ -243,6 +231,7 @@ const { expertMode } = toRefs(state.appConfiguration);
 const { selectedApi, useOpenAIAssistants, openAIAssistantId } = toRefs(
   state.chatState
 );
+const { content } = toRefs(state.taskDraft);
 
 //const funcArgs = computed(() => );
 
