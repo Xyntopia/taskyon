@@ -1,6 +1,5 @@
 <template>
   <q-input
-    v-if="!selectedTaskType"
     autogrow
     filled
     dense
@@ -55,7 +54,6 @@ const expandedTaskCreation = defineModel<boolean>('expandedTaskCreation', {
   required: true,
 });
 defineProps<{
-  selectedTaskType: string | undefined;
   expertMode: boolean;
   checkKeyboardEvents: (event: KeyboardEvent) => void;
   executeTask: () => Promise<void>;

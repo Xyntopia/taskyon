@@ -69,10 +69,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
     drawerOpen: true,
     drawerRight: false,
     taskDraft: {} as Partial<LLMTask>,
-    toolDraft: {
-      name: '' as string,
-      code: '' as string,
-    },
     newToolDraftCode: '' as string,
     draftParameters: {} as Record<string, FunctionArguments>,
     taskState: {} as Record<string, TaskStateType>,

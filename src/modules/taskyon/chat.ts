@@ -459,7 +459,7 @@ async function buildChatFromTask(
         if (t.role === 'function' && t?.configuration?.function?.name) {
           message = {
             role: t.role,
-            content: t.content,
+            content: t.content || null,
             name: t.configuration?.function?.name,
           };
           const functionContent = dump({

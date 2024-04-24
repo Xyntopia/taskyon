@@ -132,7 +132,7 @@ export const LLMTask = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   name: z.string().optional(),
   // this is the actual content of the task which holds the description
-  content: z.string().nullable(),
+  content: z.string().optional(),
   state: TaskState,
   label: z.array(z.string()).optional(),
   context: z.record(z.string(), z.string()).optional(),

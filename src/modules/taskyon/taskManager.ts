@@ -212,7 +212,7 @@ export async function addTask2Tree(
   const newTask: LLMTask = {
     role: task.role,
     parentID,
-    content: task.content || null,
+    content: task.content,
     state: task.state || 'Open',
     childrenIDs: [],
     debugging: task.debugging || {},

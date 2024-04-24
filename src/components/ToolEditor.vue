@@ -8,45 +8,27 @@
       v-model="selectedToolName"
       input-debounce="100"
     />
-    <q-input
+    <!--<q-input
       v-model="state.toolDraft.name"
       label="Specify the Name of the new Tool"
-    />
-    <codemirror
-      v-model="state.toolDraft.code"
-      placeholder="Code goes here..."
-      :style="{ height: '400px' }"
-      :autofocus="true"
-      :indent-with-tab="true"
-      :tab-size="2"
-      :extensions="extensions"
-      @change="console.log('change', $event)"
-      @focus="console.log('focus', $event)"
-      @blur="console.log('blur', $event)"
-    />
+    />-->
+    <CreateNewTask />
     <q-btn
       label="new tool"
-      @click="state.toolDraft.code = newToolStructure()"
+      @click="state.taskDraft.content = newToolStructure()"
     ></q-btn>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import { getTaskManager } from 'src/boot/taskyon';
-import { useQuasar } from 'quasar';
 import type { Tool } from 'src/modules/taskyon/tools';
 import { useTaskyonStore } from 'src/stores/taskyonState';
-import { Codemirror } from 'vue-codemirror';
-import { javascript } from '@codemirror/lang-javascript';
-import { oneDark } from '@codemirror/theme-one-dark';
+import CreateNewTask from 'components/CreateNewTask.vue';
 
 const state = useTaskyonStore();
 
-const $q = useQuasar();
-const extensions = computed(() =>
-  $q.dark.isActive ? [javascript(), oneDark] : [javascript()]
-);
 /*//this is only needed if we need direct access to the codemirror element
 //  add this to the <codemirror ...       @ready="handleReady" />
 const view = shallowRef()

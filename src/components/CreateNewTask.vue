@@ -4,13 +4,13 @@
     <!--Task Creation-->
     <div>
       <taskContentEdit
-        :selectedTaskType="selectedTaskType"
+        v-if="!selectedTaskType"
         v-model="content"
+        v-model:expandedTaskCreation="expandedTaskCreation"
         :expertMode="expertMode"
         :checkKeyboardEvents="checkKeyboardEvents"
         :executeTask="executeTask"
         :attachFileToTask="attachFileToTask"
-        v-model:expandedTaskCreation="expandedTaskCreation"
         :estimatedTokens="estimatedTokens"
         :currentModel="currentModel"
       />
@@ -31,6 +31,7 @@
           }}</q-tooltip>
         </q-chip>
       </div>
+      <CodeEditor v-if="false" v-model="content" />
       <!--function task type-->
       <div v-if="selectedTaskType" class="row">
         <ObjectTreeView
@@ -190,6 +191,7 @@ import { getTaskManager } from 'boot/taskyon';
 import type { Tool } from 'src/modules/taskyon/tools';
 import taskSettingsButton from './taskSettingsButton.vue';
 import taskContentEdit from './taskContentEdit.vue';
+import CodeEditor from './CodeEditor.vue';
 
 const state = useTaskyonStore();
 const { showTaskData, expandedTaskCreation } = toRefs(state);

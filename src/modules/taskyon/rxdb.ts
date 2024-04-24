@@ -25,7 +25,7 @@ const llmTaskSchemaLiteral = {
   //       so this include for example he state of the task.
   //       and other things that right now get changed "later". 
   title: 'LLMTask schema',
-  version: 3,
+  version: 4,
   type: 'object',
   primaryKey: 'id',
   properties: {
@@ -42,7 +42,7 @@ const llmTaskSchemaLiteral = {
       enum: ['system', 'user', 'assistant', 'function'],
     },
     content: {
-      type: ['string', 'null'],
+      type: ['string'],
     },
     state: {
       type: 'string',
@@ -94,7 +94,7 @@ const llmTaskSchemaLiteral = {
       type: ['number', 'null'],
     },
   },
-  required: ['id', 'role', 'state', 'content'],
+  required: ['id', 'role', 'state'],
 } as const;
 
 const llmTaskSchemaTyped = toTypedRxJsonSchema(llmTaskSchemaLiteral);
@@ -191,6 +191,10 @@ export const collections = {
         return oldDoc;
       },
       3: function (oldDoc: LLMTaskDocType) {
+        // we simply added additional fields, so no problem here :).
+        return oldDoc;
+      },
+      4: function (oldDoc: LLMTaskDocType) {
         // we simply added additional fields, so no problem here :).
         return oldDoc;
       },

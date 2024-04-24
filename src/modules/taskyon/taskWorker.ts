@@ -264,7 +264,6 @@ async function parseChatResponse(
       return {
         taskDraft: {
           role: 'function',
-          content: null,
           configuration: {
             function: {
               name: toolChatResult.data.toolCommand.name,
@@ -323,7 +322,7 @@ async function generateFollowUpTasksFromResult(
         taskDraftList.push({
           state: 'Completed',
           role: choice.message.role,
-          content: choice.message.content,
+          content: choice.message.content || undefined,
         });
       }
     } else if (finishedTask.result.type === 'AssistantAnswer') {
