@@ -148,6 +148,24 @@
     <q-slide-transition>
       <div v-show="state.messageDebug[task.id]">
         <q-separator spaced />
+        <q-select
+          class="fit q-pb-xs"
+          dense
+          label="Task Labels"
+          filled
+          :model-value="task.label || []"
+          @update:model-value="updateLabels"
+          use-input
+          use-chips
+          multiple
+          hide-dropdown-icon
+          input-debounce="300"
+          new-value-mode="add-unique"
+        >
+          <template v-slot:prepend>
+            <q-icon name="new_label" />
+          </template>
+        </q-select>
         <q-tabs dense v-model="state.messageDebug[task.id]" no-caps>
           <q-tab name="ERROR" label="Error" />
           <q-tab name="FOLLOWUPERROR" label="Follow-up task error" />
@@ -268,14 +286,13 @@ import TokenUsage from 'components/TokenUsage.vue';
 import type { LLMTask } from 'src/modules/taskyon/types';
 import { getTaskManager } from 'src/boot/taskyon';
 import tyMarkdown from './tyMarkdown.vue';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps<{
   task: LLMTask;
 }>();
 
 const state = useTaskyonStore();
-const taskManagerPromise = getTaskManager();
 
 function copyToClipboard(text: string) {
   navigator.clipboard
@@ -291,7 +308,7 @@ function copyToClipboard(text: string) {
 async function taskDraftFromTask(taskId: string) {
   // we are copying the current task with json stringify
   const jsonTask = JSON.stringify(
-    await (await taskManagerPromise).getTask(taskId)
+    await (await getTaskManager()).getTask(taskId)
   );
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const task: Partial<LLMTask> = JSON.parse(jsonTask);
@@ -351,5 +368,17 @@ function toggleMarkdown(id: string) {
   // If it does exist, toggle the boolean.
   state.taskState[id].markdownEnabled = !state.taskState[id].markdownEnabled;
   console.log(`markdown for ${id}`, state.taskState[id].markdownEnabled);
+}
+
+async function updateLabels(labels: string[]) {
+  console.log(labels);
+  const tm = await getTaskManager();
+  await tm.updateTask(
+    {
+      id: props.task.id,
+      label: labels,
+    },
+    true
+  );
 }
 </script>

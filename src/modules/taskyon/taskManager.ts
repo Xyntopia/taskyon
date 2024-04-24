@@ -362,12 +362,14 @@ export class TaskManager {
     unlock();
   }
 
-  // in order to make our database and all task objects pure,
+  // TODO: in order to make our database and all task objects pure,
   // we have to re-model trees when using this function.
   // so whenever we update a task, we recreate the tree path
   // updating all childen/parent properties in the path.
   // we do *not* need to edit any branches, as long as 
   // they only have chilren properties and no parent properties...
+  // if we only have parent properties, we can update   
+  // maybe also give an option to delete previous trees...
   async updateTask(
     updateData: Partial<LLMTask> & { id: string },
     save: boolean
@@ -386,6 +388,7 @@ export class TaskManager {
       unlock();
       this.notifySubscribers(updateData.id);
     });
+    // TODO: return the root or leave of the new tree ;).
   }
 
   async syncVectorIndexWithTasks(
