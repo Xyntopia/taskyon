@@ -12,11 +12,8 @@
       v-model="state.toolDraft.name"
       label="Specify the Name of the new Tool"
     />-->
-    <CreateNewTask coding-mode/>
-    <q-btn
-      label="new tool"
-      @click="state.taskDraft.content = newToolStructure()"
-    ></q-btn>
+    <CreateNewTask coding-mode />
+    <q-btn label="new tool" @click="newToolStructure()"></q-btn>
   </div>
 </template>
 
@@ -46,7 +43,7 @@ const toolCollection = ref<Record<string, Tool>>({});
 
 const selectedToolName = ref<string>('');
 
-function newToolStructure(): string {
+function newToolStructure() {
   const tool = `{
   name: 'myExampleStringAdder',
   description: 'provide a short description which an AI can understand',
@@ -70,6 +67,7 @@ function newToolStructure(): string {
     required: ['parameter1'],
   },
 };`;
-  return tool;
+  state.taskDraft.content = tool;
+  state.taskDraft.label = ['function'];
 }
 </script>

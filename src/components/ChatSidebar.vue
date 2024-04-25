@@ -60,8 +60,8 @@
     <!-- App Links -->
     <div class="q-pa-md q-gutter-xs">
       <Settings reduced></Settings>
-      <q-btn flat icon="mdi-tools" label="Tool Editor" to="/tools"></q-btn>
-      <q-btn flat icon="manage_accounts" label="accounts" to="/settings"></q-btn>
+      <q-btn flat icon="mdi-tools" label="Tools" to="/tools"></q-btn>
+      <q-btn flat icon="manage_accounts" label="Accounts" to="/settings"></q-btn>
     </div>
     <!-- Settings Area -->
     <!--
@@ -73,11 +73,10 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { deleteTaskThread } from 'src/modules/taskyon/taskManager';
+import { deleteTaskThread, TaskManager } from 'src/modules/taskyon/taskManager';
 import Settings from 'components/Settings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { getTaskManager } from 'boot/taskyon';
-import type { TaskManager } from 'src/modules/taskyon/taskManager';
 
 const state = useTaskyonStore();
 

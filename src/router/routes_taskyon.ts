@@ -29,7 +29,7 @@ export const taskyonRoutes = {
     },
     {
       path: 'tools',
-      component: () => import('components/ToolEditor.vue'),
+      component: () => import('components/ToolManager.vue'),
     },
     ...authRoutes
   ],

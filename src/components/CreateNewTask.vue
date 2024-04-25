@@ -133,7 +133,7 @@
           >
             <template v-slot:header>
               <div class="row items-center q-gutter-sm">
-                <q-btn dense icon="edit" label="edit/create tools" to="tools" />
+                <q-btn dense icon="edit" label="manage tools" to="tools" />
                 <q-btn
                   dense
                   icon="checklist"

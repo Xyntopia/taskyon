@@ -210,6 +210,7 @@ export async function addTask2Tree(
   const parent = parentID ? await taskManager.getTask(parentID) : undefined;
 
   const newTask: LLMTask = {
+    ...task,
     role: task.role,
     parentID,
     content: task.content,
@@ -366,9 +367,9 @@ export class TaskManager {
   // we have to re-model trees when using this function.
   // so whenever we update a task, we recreate the tree path
   // updating all childen/parent properties in the path.
-  // we do *not* need to edit any branches, as long as 
+  // we do *not* need to edit any branches, as long as
   // they only have chilren properties and no parent properties...
-  // if we only have parent properties, we can update   
+  // if we only have parent properties, we can update
   // maybe also give an option to delete previous trees...
   async updateTask(
     updateData: Partial<LLMTask> & { id: string },
