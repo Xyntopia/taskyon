@@ -12,6 +12,7 @@
       v-model="state.toolDraft.name"
       label="Specify the Name of the new Tool"
     />-->
+    {{ toolCollection }}
     <CreateNewTask coding-mode />
     <q-btn label="new tool" @click="newToolStructure()"></q-btn>
   </div>
@@ -35,10 +36,15 @@ const handleReady = (payload) => {
 */
 
 async function getAllTools() {
-  return (await getTaskManager()).getTools();
+  return (await getTaskManager()).searchToolDefinitions();
 }
 
-const toolCollection = ref<Record<string, Tool>>({});
+const toolCollection = ref<unknown[]>([]);
+void getAllTools().then((tools) => {
+  console.log('tools:', tools);
+  toolCollection.value = tools;
+});
+
 //void getAllTools().then((tools) => (toolCollection.value = tools));
 
 const selectedToolName = ref<string>('');

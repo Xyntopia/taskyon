@@ -50,6 +50,9 @@ export async function findRootTask(
  * @param {string} taskId - The ID of the task.
  * @param {Function} getTask - Function to retrieve a task by its ID.
  * @returns {Promise<string[]>} - An array of IDs of the leaf tasks.
+ *
+ * TODO: we need to change this to become independent from "childrenIDs"
+ *       an easy algoithm would be:  build a map of all tasks and check whether they have a parent or not.
  */
 export async function findLeafTasks(
   taskId: string,
@@ -322,6 +325,8 @@ export class TaskManager {
   }
 
   async initializeTasksFromDB() {
+    // TODO: wondering if we should maybe get rid of this?  its pretty inefficient to do this
+    //       on every reload of our app :P
     if (this.taskyonDB) {
       const tasksFromDb = await this.taskyonDB.llmtasks.find().exec();
       tasksFromDb.forEach((taskDoc) => {
@@ -564,6 +569,7 @@ export class TaskManager {
     );
   }
 
+  // TODO:  we need to rewrite this, so that we only use parents and not children!
   getLeafTasks() {
     console.log('get leaf tasks...');
     const orphanTasks = [];
@@ -608,6 +614,31 @@ export class TaskManager {
 
     const taskCountChanged = this.tasks.size !== prevTaskCount;
     this.notifySubscribers(taskId, taskCountChanged);
+  }
+
+  async searchToolDefinitions() {
+    // TODO: make sure, its clear that we return non-partial tool types here...
+    if (this.taskyonDB) {
+      const tasks = await this.taskyonDB.llmtasks
+        .find({
+          selector: {
+            label: {
+              $elemMatch: {
+                $eq: 'function',
+              },
+            },
+          },
+        })
+        .exec();
+
+      return tasks.map((taskDoc) => {
+        const task = transformDocToLLMTask(taskDoc);
+        // update our function cache :)
+        this.tasks.set(task.id, task);
+        return task;
+      });
+    }
+    return [];
   }
 
   getTools() {

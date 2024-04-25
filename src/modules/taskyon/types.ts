@@ -148,6 +148,7 @@ export const LLMTask = z.object({
     })
     .optional(),
   parentID: z.string().optional(),
+  // TODO: get rid of this parameter in order to make our tasktree 
   childrenIDs: z.array(z.string()),
   // provide debugging information about the task execution
   // all debugging information should be purely optional...
@@ -176,7 +177,7 @@ export const LLMTask = z.object({
     followUpError: z.unknown().optional(),
   }),
   result: TaskResult.optional(),
-  id: z.string(),
+  id: z.string(), // can we make the id an SHA-1 value like in git? in that case we should simply remove this value...
   allowedTools: z.array(z.string()).optional(),
   authorId: z.string().optional(),
   created_at: z.number().optional(),
