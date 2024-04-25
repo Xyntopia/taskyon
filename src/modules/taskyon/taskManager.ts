@@ -293,29 +293,29 @@ export class TaskManager {
     this.defaultTools = defaultTools;
   }
 
-  async initVectorStore(loadIfExists = true) {
+  private initVectorStore = async (loadIfExists = true) => {
     const maxElements = 10000;
     this.vectorIndex = await loadOrCreateVectorStore(
       this.vectorIndexName,
       maxElements,
       loadIfExists
     );
-  }
+  };
 
   // Lock a task and returns a function closure which can be used to unlock it again...
-  async lockTask(taskId: string): Promise<() => void> {
+  private lockTask = async (taskId: string) => {
     const newLock = new Lock();
     this.taskLocks.set(taskId, newLock);
     return newLock.lock();
-  }
+  };
 
-  async waitForTaskUnlock(taskId: string): Promise<void> {
+  private waitForTaskUnlock = async (taskId: string) => {
     const lock = this.taskLocks.get(taskId);
     if (lock) {
       console.log('wait for unlock!');
       await lock.waitForUnlock();
     }
-  }
+  };
 
   count() {
     return this.tasks.size;
