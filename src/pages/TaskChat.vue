@@ -92,7 +92,11 @@
       <!-- Welcome Message -->
       <div v-else class="col welcome-message column items-center q-pa-xl">
         <div class="col-auto">
-          <q-icon class="q-pa-xl" size="10rem" name="svguse:taskyon_mono_opt.svg#taskyon"></q-icon>
+          <q-icon
+            class="q-pa-xl"
+            size="10rem"
+            name="svguse:taskyon_mono_opt.svg#taskyon"
+          ></q-icon>
           <!--<q-img
             width="150px"
             alt="Quasar logo"

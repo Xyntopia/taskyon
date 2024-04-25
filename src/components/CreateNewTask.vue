@@ -9,7 +9,7 @@
         v-model:expandedTaskCreation="expandedTaskCreation"
         :expertMode="expertMode"
         :checkKeyboardEvents="checkKeyboardEvents"
-        :executeTask="executeTask"
+        :executeTask="addNewTask"
         :attachFileToTask="attachFileToTask"
         :estimatedTokens="estimatedTokens"
         :currentModel="currentModel"
@@ -17,6 +17,9 @@
       <div v-else-if="!selectedTaskType && codingMode">
         <CodeEditor v-model="content" />
         <taskSettingsButton v-model="expandedTaskCreation" />
+        <q-btn icon="save" label="save task" @click="addNewTask(false)"
+          ><q-tooltip>Save task without executing it...</q-tooltip></q-btn
+        >
       </div>
       <div v-else-if="selectedTaskType" class="row">
         <ObjectTreeView
@@ -52,7 +55,7 @@
           v-if="selectedTaskType"
           class="q-ma-md"
           label="Execute Task"
-          @click="executeTask"
+          @click="addNewTask()"
         />
         <q-btn
           v-if="selectedTaskType"
@@ -334,14 +337,18 @@ const currentnewTask = computed(() => {
   return task as LLMTask; // we can do this, because we defined the "role"
 });
 
-async function executeTask() {
-  console.log('executing task!');
+async function addNewTask(execute = true) {
+  // execute: if true, we immediatly queue the task for execution in the taskManager
+  //          otherwise, it won't get executed but simply saved into the tree
+  console.log('adding new task, execute?', execute);
+  const newTask = { ...currentnewTask.value };
+  if (!execute) newTask.state = 'Completed';
   void addTask2Tree(
-    currentnewTask.value,
+    newTask,
     state.chatState.selectedTaskId, //parent
     state.chatState,
     await getTaskManager(),
-    true // execute right away...
+    execute // execute right away...
   );
   if (currentnewTask.value.role === 'user') {
     state.taskDraft.content = '';
@@ -352,14 +359,14 @@ async function executeTask() {
 const checkKeyboardEvents = (event: KeyboardEvent) => {
   if (state.appConfiguration.useEnterToSend) {
     if (!event.shiftKey && event.key === 'Enter') {
-      void executeTask();
+      void addNewTask();
       // Prevent a new line from being added to the input (optional)
       event.preventDefault();
     }
     // otherwise it'll simply be the default action and inserting a newline :)
   } else {
     if (event.shiftKey && event.key === 'Enter') {
-      void executeTask();
+      void addNewTask();
       // Prevent a new line from being added to the input (optional)
       event.preventDefault();
     }
