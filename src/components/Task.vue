@@ -286,7 +286,7 @@ import TokenUsage from 'components/TokenUsage.vue';
 import type { LLMTask } from 'src/modules/taskyon/types';
 import { getTaskManager } from 'src/boot/taskyon';
 import tyMarkdown from './tyMarkdown.vue';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 
 const props = defineProps<{
   task: LLMTask;

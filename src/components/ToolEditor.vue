@@ -12,7 +12,7 @@
       v-model="state.toolDraft.name"
       label="Specify the Name of the new Tool"
     />-->
-    <CreateNewTask />
+    <CreateNewTask coding-mode/>
     <q-btn
       label="new tool"
       @click="state.taskDraft.content = newToolStructure()"
@@ -48,28 +48,28 @@ const selectedToolName = ref<string>('');
 
 function newToolStructure(): string {
   const tool = `{
-    name: 'myExampleStringAdder',
-    description: 'provide a short description which an AI can understand',
-    longDescription: 'provide a long description if the AI/Human needs more details',
-    // this is the actual function code which gets executed by the AI.
-    function: (parameter1, parameter2 = 'default parameter :)')=>{
-      return parameter1 + ' ' + parameter2;
-    },
-    parameters: {
-      type: 'object',
-      properties: {
-        parameter1: {
-          type: 'string',
-          description: 'This is an example parameter!',
-        },
-        parameter2: {
-          type: 'string',
-          description: 'This is another example parameter, but not required!',
-        },
+  name: 'myExampleStringAdder',
+  description: 'provide a short description which an AI can understand',
+  longDescription: 'provide a long description if the AI/Human needs more details',
+  // this is the actual function code which gets executed by the AI.
+  function: (parameter1, parameter2 = 'default parameter :)')=>{
+    return parameter1 + ' ' + parameter2;
+  },
+  parameters: {
+    type: 'object',
+    properties: {
+      parameter1: {
+        type: 'string',
+        description: 'This is an example parameter!',
       },
-      required: ['parameter1'],
+      parameter2: {
+        type: 'string',
+        description: 'This is another example parameter, but not required!',
+      },
     },
-  };`;
+    required: ['parameter1'],
+  },
+};`;
   return tool;
 }
 </script>

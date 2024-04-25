@@ -4,7 +4,7 @@
     <!--Task Creation-->
     <div>
       <taskContentEdit
-        v-if="!selectedTaskType"
+        v-if="!selectedTaskType && !codingMode"
         v-model="content"
         v-model:expandedTaskCreation="expandedTaskCreation"
         :expertMode="expertMode"
@@ -14,6 +14,19 @@
         :estimatedTokens="estimatedTokens"
         :currentModel="currentModel"
       />
+      <div v-else-if="!selectedTaskType && codingMode">
+        <CodeEditor v-model="content" />
+        <taskSettingsButton v-model="expandedTaskCreation" />
+      </div>
+      <div v-else-if="selectedTaskType" class="row">
+        <ObjectTreeView
+          class="col"
+          :model-value="state.taskDraft.configuration?.function?.arguments"
+          input-field-behavior="textarea"
+          :separate-labels="false"
+        />
+        <taskSettingsButton v-model="expandedTaskCreation" />
+      </div>
       <div v-if="fileMappings.length">
         <div>Attached files:</div>
         <q-chip
@@ -30,17 +43,6 @@
             `${fileMapping.opfsName} (taskyon-id: ${fileMapping.uuid})`
           }}</q-tooltip>
         </q-chip>
-      </div>
-      <CodeEditor v-if="false" v-model="content" />
-      <!--function task type-->
-      <div v-if="selectedTaskType" class="row">
-        <ObjectTreeView
-          class="col"
-          :model-value="state.taskDraft.configuration?.function?.arguments"
-          input-field-behavior="textarea"
-          :separate-labels="false"
-        />
-        <taskSettingsButton v-model="expandedTaskCreation" />
       </div>
       <div
         class="row items-center"
@@ -193,6 +195,13 @@ import taskSettingsButton from './taskSettingsButton.vue';
 import taskContentEdit from './taskContentEdit.vue';
 import CodeEditor from './CodeEditor.vue';
 
+withDefaults(
+  defineProps<{
+    codingMode: boolean;
+  }>(),
+  { codingMode: false }
+);
+
 const state = useTaskyonStore();
 const { showTaskData, expandedTaskCreation } = toRefs(state);
 const { expertMode } = toRefs(state.appConfiguration);
@@ -312,7 +321,6 @@ const currentnewTask = computed(() => {
       chatApi: currentChatApi.value,
     };
     task.role = 'function';
-    task.content = null;
   } else {
     task.configuration = {
       ...task.configuration,
