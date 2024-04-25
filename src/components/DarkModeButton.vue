@@ -24,7 +24,6 @@
 
 <script setup lang="ts">
 import { useQuasar } from 'quasar';
-import { defineEmits } from 'vue';
 
 // Emits an event when the theme is changed
 const emit = defineEmits(['themeChanged']);

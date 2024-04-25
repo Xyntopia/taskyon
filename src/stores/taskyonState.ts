@@ -6,6 +6,7 @@ import type { FunctionArguments } from 'src/modules/taskyon/types';
 import axios from 'axios';
 import { LocalStorage, Notify } from 'quasar';
 import { deepMerge, deepMergeReactive } from 'src/modules/taskyon/utils';
+import { useQuasar } from 'quasar';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -21,14 +22,33 @@ interface TaskStateType {
 }
 
 function setupIframeApi() {
-  // Listen for messages from the parent page
-  window.addEventListener(
-    'message',
-    function (event) {
-      console.log('request from parent:', event);
-    },
-    false
-  );
+  const $q = useQuasar();
+  if ($q.platform.within.iframe) {
+    console.log('Turn on iframe API.');
+    // Listen for messages from the parent page
+    window.addEventListener(
+      'message',
+      function (event) {
+        // Check if the iframe is not the top-level window
+        if (window !== window.top) {
+          // Check if the message is from the parent window
+          if (event.source === window.parent) {
+            // Optionally, check the origin if you know what it should be
+            // For example, if you expect messages only from 'https://example.com'
+            /*if (event.origin === 'https://example.com') {
+          console.log('Request from parent:', event.data);
+        } else {
+          console.error('Message from unknown origin:', event.origin);
+        }*/
+            console.log('Message from unknown origin:', event.origin, event);
+          } else {
+            console.error('Message not from parent window.');
+          }
+        }
+      },
+      false
+    );
+  }
 }
 
 export const useTaskyonStore = defineStore(storeName, () => {
