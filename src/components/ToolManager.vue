@@ -12,7 +12,12 @@
       v-model="state.toolDraft.name"
       label="Specify the Name of the new Tool"
     />-->
-    {{ toolCollection }}
+    Currently defined custom tools:
+    <q-list dense bordered separator>
+      <q-expansion-item v-for="f in toolCollection" :key="f.name" :label="f.name">
+        <ObjectTreeView :model-value="f"></ObjectTreeView>
+      </q-expansion-item>
+    </q-list>
     <CreateNewTask coding-mode />
     <q-btn label="new tool" @click="newToolStructure()"></q-btn>
   </div>
@@ -21,9 +26,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { getTaskManager } from 'src/boot/taskyon';
-import type { Tool } from 'src/modules/taskyon/tools';
+import type { ToolBase } from 'src/modules/taskyon/tools';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
+import ObjectTreeView from './ObjectTreeView.vue';
 
 const state = useTaskyonStore();
 
@@ -39,7 +45,7 @@ async function getAllTools() {
   return (await getTaskManager()).searchToolDefinitions();
 }
 
-const toolCollection = ref<unknown[]>([]);
+const toolCollection = ref<ToolBase[]>([]);
 void getAllTools().then((tools) => {
   console.log('tools:', tools);
   toolCollection.value = tools;
@@ -50,29 +56,27 @@ void getAllTools().then((tools) => {
 const selectedToolName = ref<string>('');
 
 function newToolStructure() {
-  const tool = `{
-  name: 'myExampleStringAdder',
-  description: 'provide a short description which an AI can understand',
-  longDescription: 'provide a long description if the AI/Human needs more details',
-  // this is the actual function code which gets executed by the AI.
-  function: (parameter1, parameter2 = 'default parameter :)')=>{
-    return parameter1 + ' ' + parameter2;
-  },
-  parameters: {
-    type: 'object',
-    properties: {
-      parameter1: {
-        type: 'string',
-        description: 'This is an example parameter!',
+  const tool = `
+{
+  "name": "myExampleStringAdderAlone",
+  "description": "provide a short description which an AI can understand",
+  "longDescription": "provide a long description if the AI/Human needs more details",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "parameter1": {
+        "type": "string",
+        "description": "This is an example parameter!"
       },
-      parameter2: {
-        type: 'string',
-        description: 'This is another example parameter, but not required!',
-      },
+      "parameter2": {
+        "type": "string",
+        "description": "This is another example parameter, but not required!"
+      }
     },
-    required: ['parameter1'],
+    "required": ["parameter1"]
   },
-};`;
+  "code": "(parameter1, parameter2 = 'default parameter :)') => {return parameter1 + ' ' + parameter2;}"
+}`;
   state.taskDraft.content = tool;
   state.taskDraft.label = ['function'];
 }

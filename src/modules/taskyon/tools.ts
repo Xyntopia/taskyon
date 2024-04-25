@@ -50,12 +50,17 @@ const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionParameter> 
     required: z.array(z.string()).optional(),
   });
 
-const ToolBase = z.object({
+export const ToolBase = z.object({
   description: z.string(),
   longDescription: z.string().optional(),
-  name: z.string(),
+  name: z.string().describe(''),
   parameters: JSONSchemaForFunctionParameter,
-  code: z.string().optional(),
+  code: z
+    .string()
+    .optional()
+    .describe(
+      "If a function description doesn't include any code taskyon will call a postMessage to the parent window with the function name."
+    ),
 });
 export type ToolBase = z.infer<typeof ToolBase>;
 
@@ -75,7 +80,6 @@ const Tool = ToolBase.extend({
     toolStateType,
   ]),
   function: arbitraryFunctionSchema,
-  code: z.string().optional(),
 });
 export type Tool = z.infer<typeof Tool>;
 

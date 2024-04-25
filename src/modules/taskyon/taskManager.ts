@@ -16,7 +16,7 @@ import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { AsyncQueue } from './utils';
 import { loadOrCreateVectorStore } from './vectorSearch';
 import { extractKeywords, vectorizeText } from './webWorkerApi';
-import { Tool } from './tools';
+import { Tool, ToolBase } from './tools';
 
 /**
  * Finds the root task of a given task.
@@ -635,7 +635,9 @@ export class TaskManager {
         const task = transformDocToLLMTask(taskDoc);
         // update our function cache :)
         this.tasks.set(task.id, task);
-        return task;
+
+        const toolDef = ToolBase.parse(JSON.parse(task.content || ''));
+        return toolDef;
       });
     }
     return [];
