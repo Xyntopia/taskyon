@@ -9,7 +9,7 @@ import {
   YamlRepresentation,
 } from './types';
 import { z } from 'zod';
-import { toolStateType, FunctionCall, ParamType } from './types';
+import { FunctionCall, ParamType } from './types';
 
 export const vectorStore = useVectorStore();
 
@@ -74,37 +74,45 @@ const arbitraryFunctionSchema = z.custom<
 export type arbitraryFunction = z.infer<typeof arbitraryFunctionSchema>;
 
 const Tool = ToolBase.extend({
-  state: z.union([
-    z.function().returns(z.promise(toolStateType)),
-    z.function().returns(toolStateType),
-    toolStateType,
-  ]),
   function: arbitraryFunctionSchema,
 });
 export type Tool = z.infer<typeof Tool>;
 
 export async function handleFunctionExecution(
   func: FunctionCall,
-  tools: Record<string, Tool>
+  tools: Record<string, ToolBase | Tool>
 ): Promise<TaskResult> {
   try {
-    let funcR: unknown = await tools[func.name].function(func.arguments);
-    funcR = bigIntToString(funcR);
-    const result: TaskResult = {
-      type: 'ToolResult',
-      toolResult: { result: dump(funcR) },
-    };
-    return result;
+    const tool = tools[func.name];
+    let funcR: unknown;
+    if ('function' in tool && tool.function) {
+      funcR = await tool.function(func.arguments);
+      funcR = bigIntToString(funcR);
+      return {
+        type: 'ToolResult',
+        toolResult: { result: dump(funcR) },
+      };
+    } else {
+      return {
+        type: 'ToolError',
+        toolResult: {
+          result: {
+            error: `The tool: ${func.name} could not be executed, as no tool code was included`,
+          },
+        },
+      };
+    }
   } catch (error) {
     return {
       type: 'ToolError',
-      toolResult: { error: JSON.stringify(error) },
+      toolResult: {
+        error: { message: JSON.stringify(error), functionName: func.name },
+      },
     };
   }
 }
 
 export const localVectorStoreSearch: Tool = {
-  state: () => 'available',
   function: async ({ searchTerm }: { searchTerm: string }) => {
     const k = 3;
     console.log(`Searching for ${searchTerm}`);
@@ -127,7 +135,6 @@ for retrieving documents or data segments with high relevance to natural languag
 };
 
 export const executePythonScript: Tool = {
-  state: () => 'available',
   function: async ({
     pythonScript,
   }: {
@@ -162,8 +169,7 @@ export function createToolExampleTool(tools: Record<string, Tool>): Tool {
     const tool = tools[toolName];
     if (tool) {
       const functionCode = tool.function.toString();
-      const stateCode = tool.state.toString();
-      return `Tool Name: ${toolName}\nFunction Code:\n${functionCode}\n\nState Code:\n${stateCode}`;
+      return `Tool Name: ${toolName}\nFunction Code:\n${functionCode}`;
     } else {
       return `Tool ${toolName} not found.`;
     }
@@ -183,11 +189,9 @@ export function createToolExampleTool(tools: Record<string, Tool>): Tool {
     const tool = tools[toolName];
     if (tool) {
       const functionSignature = getFunctionSignature(tool.function);
-      const stateSignature = getFunctionSignature(tool.state);
       const toolExample = {
         ...tool,
         function: functionSignature,
-        state: stateSignature,
       };
       return JSON.stringify(toolExample, null, 2); // Pretty print the JSON string
     } else {
@@ -196,7 +200,6 @@ export function createToolExampleTool(tools: Record<string, Tool>): Tool {
   }
 
   const getToolExample: Tool = {
-    state: () => 'available',
     function: ({
       toolName,
       viewSource,
@@ -318,7 +321,10 @@ function convertToToolCommandString(tool: ToolBase): string {
   return yamlSchema;
 }
 
-export function summarizeTools(toolIDs: string[], tools: Record<string, ToolBase>) {
+export function summarizeTools(
+  toolIDs: string[],
+  tools: Record<string, ToolBase>
+) {
   const toolStr = toolIDs
     .map((t) => {
       const tool = tools[t];

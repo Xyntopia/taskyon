@@ -270,7 +270,7 @@ export class TaskManager {
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
   private taskyonDB: TaskyonDatabase | undefined;
   private tasks: Map<string, LLMTask>;
-  private defaultTools: Record<string, Tool>;
+  private defaultTools: Tool[];
   private vectorIndex: HierarchicalNSW | undefined;
   // we need these locks in order to sync our databases..
   private taskLocks: Map<string, Lock> = new Map();
@@ -616,7 +616,7 @@ export class TaskManager {
     this.notifySubscribers(taskId, taskCountChanged);
   }
 
-  async searchToolDefinitions(): Promise<Record<string, ToolBase>> {
+  async searchToolDefinitions(): Promise<Record<string, ToolBase | Tool>> {
     // TODO: make sure, its clear that we return non-partial tool types here...
     if (this.taskyonDB) {
       const tasks = await this.taskyonDB.llmtasks
@@ -643,20 +643,13 @@ export class TaskManager {
       });
 
       return toolDefs
-        .concat(
-          Object.values(this.defaultTools).map((tool) => ToolBase.parse(tool))
-        )
+        .concat(Object.values(this.defaultTools))
         .reduce((pv, cv) => {
           pv[cv.name] = cv;
           return pv;
         }, {} as Record<string, ToolBase>);
     }
     return {};
-  }
-
-  getTools() {
-    // TODO: make sure, its clear that we return non-partial tool types here...
-    return this.defaultTools;
   }
 
   addToolCode(toolCode: string) {

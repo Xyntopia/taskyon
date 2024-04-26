@@ -246,7 +246,7 @@ export function countToolTokens(functionList: ToolBase[]): number {
 export function estimateChatTokens(
   task: LLMTask,
   chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  tools: Record<string, Tool>
+  tools: Record<string, ToolBase>
 ): LLMTask['debugging']['estimatedTokens'] {
   const functions: ToolBase[] = mapFunctionNames(
     task.allowedTools || [],

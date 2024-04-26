@@ -38,7 +38,6 @@ export function executeInDynamicWorker(javascriptCode: string) {
 
 // Tool to Execute JavaScript Code
 export const executeJavaScript: Tool = {
-  state: () => 'available',
   function: async ({ javascriptCode, useWorker = false }) => {
     console.log('Executing JavaScript code...');
     if (useWorker) {

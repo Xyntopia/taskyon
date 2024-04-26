@@ -102,14 +102,6 @@ export const TaskResult = z.object({
   toolResult: ToolResult.optional(), // Replace 'z.any()' with the specific type if available
 });
 export type TaskResult = z.infer<typeof TaskResult>;
-
-export const toolStateType = z.enum([
-  'available',
-  'starting',
-  'unavailable',
-  'error',
-]);
-export type toolStateType = z.infer<typeof toolStateType>;
 export const ParamType = z.union([
   z.string(),
   z.number(),

@@ -20,7 +20,7 @@ import {
 import { addTask2Tree, processTasksQueue } from './taskManager';
 import type { OpenAI } from 'openai';
 import { TaskManager } from './taskManager';
-import { Tool, handleFunctionExecution } from './tools';
+import { Tool, ToolBase, handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
 import { deepMerge } from './utils';
 
@@ -36,7 +36,7 @@ function isOpenAIFunctionCall(
 
 function extractOpenAIFunctions(
   choice: OpenAI.ChatCompletion['choices'][0],
-  tools: Record<string, Tool>
+  tools: Record<string, ToolBase>
 ) {
   const functionCalls: FunctionCall[] = [];
   for (const toolCall of choice.message.tool_calls || []) {
@@ -189,7 +189,7 @@ export async function processChatTask(
           task.debugging.estimatedTokens = estimateChatTokens(
             task,
             openAIConversationThread,
-            taskManager.getTools()
+            await taskManager.searchToolDefinitions()
           );
         }
       }
@@ -201,7 +201,10 @@ export async function processChatTask(
   return task;
 }
 
-async function processFunctionTask(task: LLMTask, tools: Record<string, Tool>) {
+async function processFunctionTask(
+  task: LLMTask,
+  tools: Record<string, ToolBase | Tool>
+) {
   if (task.configuration?.function) {
     const func = task.configuration.function;
     console.log(`Calling function ${func.name}`);
@@ -357,7 +360,7 @@ async function generateFollowUpTasksFromResult(
       if (choice) {
         const functionCall = extractOpenAIFunctions(
           choice,
-          taskManager.getTools()
+          await taskManager.searchToolDefinitions()
         );
         if (functionCall) {
           taskDraftList.push(
@@ -532,7 +535,10 @@ async function taskWorker(
             task.state = 'Completed';
           } else {
             // in the case we don't have a result yet, we need to calculate it :)
-            task = await processFunctionTask(task, taskManager.getTools());
+            task = await processFunctionTask(
+              task,
+              await taskManager.searchToolDefinitions()
+            );
             processTasksQueue.push(taskId); // send the task back into the queue
             task.state = 'Queued'; // and we queue the functino again, to be processed again, this time with an LLM
           }

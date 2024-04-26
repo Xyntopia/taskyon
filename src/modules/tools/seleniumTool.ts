@@ -111,12 +111,7 @@ async function fetchPageContent(sessionId: string) {
   return pageSourceResponse.data.value;
 }
 
-type toolStateType = 'available' | 'starting' | 'unavailable' | 'error';
-
 export const seleniumBrowser: Tool = {
-  state: () => {
-    return 'available' as toolStateType;
-  },
   function: (async ({ url }: { url: string }) => {
     console.log(`Browsing to ${url}...`);
 

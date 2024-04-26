@@ -29,15 +29,20 @@ export async function getTaskManager() {
   const state = useTaskyonStore();
 
   if (!taskManagerInstance) {
-    const ToolList = reactive<Record<string, Tool>>({});
-    // initialize some of our default tools:
-    Object.assign(ToolList, {
+    const ToolList = reactive<Tool[]>([
       executePythonScript,
-      getToolExample: createToolExampleTool(ToolList),
       // TODO: add local context(task) search
       localVectorStoreSearch,
       executeJavaScript,
-    });
+    ]);
+    ToolList.push(
+      createToolExampleTool(
+        ToolList.reduce((p, c) => {
+          p[c.name] = c;
+          return p;
+        }, {} as Record<string, Tool>)
+      )
+    );
 
     // we are creating a reactive map for our memory-based task databae
     // this ensures, that we receive upates for our task in our UI.
