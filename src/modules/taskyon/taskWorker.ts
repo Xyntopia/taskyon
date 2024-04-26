@@ -110,7 +110,7 @@ export async function processChatTask(
       const { openAIConversationThread, tools } =
         await prepareTasksForInference(
           task,
-          taskManager.getTools(),
+          await taskManager.searchToolDefinitions(),
           chatState,
           (taskID) => taskManager.getTask(taskID),
           useToolChat ? 'toolchat' : 'chat'

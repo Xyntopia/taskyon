@@ -1,6 +1,6 @@
 import axios from 'axios';
 //import { useCachedModels } from './mlModels';
-import { Tool, summarizeTools } from './tools';
+import { Tool, ToolBase, summarizeTools } from './tools';
 import { LLMTask, OpenAIMessage, OpenRouterGenerationInfo } from './types';
 import {
   taskChain,
@@ -223,7 +223,7 @@ function countChatTokens(
   return totalTokens;
 }
 
-export function countToolTokens(functionList: Tool[]): number {
+export function countToolTokens(functionList: ToolBase[]): number {
   let totalTokens = 0;
 
   // Iterate through each tool in the functionList array
@@ -248,7 +248,10 @@ export function estimateChatTokens(
   chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   tools: Record<string, Tool>
 ): LLMTask['debugging']['estimatedTokens'] {
-  const functions: Tool[] = mapFunctionNames(task.allowedTools || [], tools);
+  const functions: ToolBase[] = mapFunctionNames(
+    task.allowedTools || [],
+    tools
+  );
   const singlePromptTokens = countStringTokens(task.content || '');
   const promptTokens = countChatTokens(chat);
   const functionTokens = Math.floor(countToolTokens(functions) * 0.7);
@@ -509,7 +512,10 @@ export function bigIntToString(obj: unknown): unknown {
   return obj;
 }
 
-function mapFunctionNames(toolNames: string[], tools: Record<string, Tool>) {
+function mapFunctionNames(
+  toolNames: string[],
+  tools: Record<string, ToolBase>
+) {
   return toolNames?.map((t) => tools[t]);
 }
 
@@ -540,7 +546,7 @@ function createTaskChatMessages(
 
 export async function prepareTasksForInference(
   task: LLMTask,
-  toolCollection: Record<string, Tool>,
+  toolCollection: Record<string, ToolBase>,
   chatState: ChatStateType,
   getTask: InstanceType<typeof TaskManager>['getTask'],
   method: 'toolchat' | 'chat' | 'taskAgent'
@@ -551,7 +557,7 @@ export async function prepareTasksForInference(
   console.log('Prepare task tree for inference');
   let openAIConversationThread = await buildChatFromTask(task.id, getTask);
 
-  let tools: Tool[] = [];
+  let tools: ToolBase[] = [];
 
   // Check if task has tools and OpenAI tools are not enabled
   if (

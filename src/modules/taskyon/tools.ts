@@ -289,7 +289,7 @@ export interface WorkerMessage {
   error?: string;
 }
 
-function convertToToolCommandString(tool: Tool): string {
+function convertToToolCommandString(tool: ToolBase): string {
   // convert a tool into a schema which is compatible ti toolCommandChat
   const args: YamlRepresentation = {};
 
@@ -318,7 +318,7 @@ function convertToToolCommandString(tool: Tool): string {
   return yamlSchema;
 }
 
-export function summarizeTools(toolIDs: string[], tools: Record<string, Tool>) {
+export function summarizeTools(toolIDs: string[], tools: Record<string, ToolBase>) {
   const toolStr = toolIDs
     .map((t) => {
       const tool = tools[t];
