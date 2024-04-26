@@ -246,7 +246,7 @@ understanding tool functionalities and aiding in tool development or adaptation.
     .join('\n');
 }*/
 
-export function getDefaultParametersForTool(tool: Tool) {
+export function getDefaultParametersForTool(tool: Tool | ToolBase) {
   const params = tool.parameters;
   if (!params || !params.properties) {
     console.log(`No parameters defined for tool ${tool.name}.`);

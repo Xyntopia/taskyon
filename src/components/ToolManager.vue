@@ -14,7 +14,11 @@
     />-->
     Currently defined custom tools:
     <q-list dense bordered separator>
-      <q-expansion-item v-for="f in toolCollection" :key="f.name" :label="f.name">
+      <q-expansion-item
+        v-for="f in toolCollection"
+        :key="f.name"
+        :label="f.name"
+      >
         <ObjectTreeView :model-value="f"></ObjectTreeView>
       </q-expansion-item>
     </q-list>
@@ -45,7 +49,7 @@ async function getAllTools() {
   return (await getTaskManager()).searchToolDefinitions();
 }
 
-const toolCollection = ref<ToolBase[]>([]);
+const toolCollection = ref<Awaited<ReturnType<typeof getAllTools>>>({});
 void getAllTools().then((tools) => {
   console.log('tools:', tools);
   toolCollection.value = tools;

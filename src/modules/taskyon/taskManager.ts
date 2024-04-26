@@ -616,7 +616,7 @@ export class TaskManager {
     this.notifySubscribers(taskId, taskCountChanged);
   }
 
-  async searchToolDefinitions() {
+  async searchToolDefinitions(): Promise<Record<string, ToolBase>> {
     // TODO: make sure, its clear that we return non-partial tool types here...
     if (this.taskyonDB) {
       const tasks = await this.taskyonDB.llmtasks
@@ -631,16 +631,27 @@ export class TaskManager {
         })
         .exec();
 
-      return tasks.map((taskDoc) => {
-        const task = transformDocToLLMTask(taskDoc);
+      const llmtasks = tasks.map((toolDoc) => {
+        const task = transformDocToLLMTask(toolDoc);
         // update our function cache :)
         this.tasks.set(task.id, task);
-
+        return task;
+      });
+      const toolDefs = llmtasks.map((task) => {
         const toolDef = ToolBase.parse(JSON.parse(task.content || ''));
         return toolDef;
       });
+
+      return toolDefs
+        .concat(
+          Object.values(this.defaultTools).map((tool) => ToolBase.parse(tool))
+        )
+        .reduce((pv, cv) => {
+          pv[cv.name] = cv;
+          return pv;
+        }, {} as Record<string, ToolBase>);
     }
-    return [];
+    return {};
   }
 
   getTools() {

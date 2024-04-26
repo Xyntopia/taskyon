@@ -193,7 +193,7 @@ import {
 } from 'src/modules/taskyon/taskManager';
 import ObjectTreeView from './ObjectTreeView.vue';
 import { getTaskManager } from 'boot/taskyon';
-import type { Tool } from 'src/modules/taskyon/tools';
+import type { ToolBase } from 'src/modules/taskyon/tools';
 import taskSettingsButton from './taskSettingsButton.vue';
 import taskContentEdit from './taskContentEdit.vue';
 import CodeEditor from './CodeEditor.vue';
@@ -216,10 +216,10 @@ const { content } = toRefs(state.taskDraft);
 //const funcArgs = computed(() => );
 
 async function getAllTools() {
-  return (await getTaskManager()).getTools();
+  return (await getTaskManager()).searchToolDefinitions();
 }
 
-const toolCollection = ref<Record<string, Tool>>({});
+const toolCollection = ref<Record<string,ToolBase>>({});
 void getAllTools().then((tools) => (toolCollection.value = tools));
 
 // Computed property to determine the currently selected bot name
