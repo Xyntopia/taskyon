@@ -120,6 +120,17 @@ export const FunctionCall = z.object({
 });
 export type FunctionCall = z.infer<typeof FunctionCall>;
 
+export const FunctionCallMessage = z
+  .object({
+    type: z.enum(['functionCall', 'functionResponse']),
+    functionName: z.string(),
+    arguments: FunctionArguments.optional(),
+  })
+  .describe(
+    'This type is used for sending messages with function calls between windows. E.g. from iframe to parent and back'
+  );
+export type FunctionCallMessage = z.infer<typeof FunctionCallMessage>;
+
 export const LLMTask = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   name: z.string().optional(),
@@ -140,7 +151,7 @@ export const LLMTask = z.object({
     })
     .optional(),
   parentID: z.string().optional(),
-  // TODO: get rid of this parameter in order to make our tasktree 
+  // TODO: get rid of this parameter in order to make our tasktree
   childrenIDs: z.array(z.string()),
   // provide debugging information about the task execution
   // all debugging information should be purely optional...

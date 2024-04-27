@@ -7,6 +7,7 @@ import {
   TaskResult,
   convertToYamlWComments,
   YamlRepresentation,
+  FunctionCallMessage,
 } from './types';
 import { z } from 'zod';
 import { FunctionCall, ParamType } from './types';
@@ -92,21 +93,77 @@ export async function handleFunctionExecution(
         type: 'ToolResult',
         toolResult: { result: dump(funcR) },
       };
-    } else {
+    } else if (tool.code) {
+      console.log('compiling function code', tool);
       return {
         type: 'ToolError',
         toolResult: {
           result: {
-            error: `The tool: ${func.name} could not be executed, as no tool code was included`,
+            error: `The tool: ${func.name} could not be executed, as we can not compile function code right now`,
           },
         },
+      };
+    } else {
+      // we do the zod object parsing/validation here, because we might have a proxy object from upstream
+      // and want to make sure its serializable for a postMessage function.
+      const message = FunctionCallMessage.parse({
+        type: 'functionCall',
+        functionName: func.name,
+        arguments: func.arguments,
+      });
+      console.log('no tool code found, posting a function message to', message);
+
+      // set up listener to listen for function call result.
+      const funcRP: Promise<FunctionCallMessage> = new Promise(
+        (resolve, reject) => {
+          const listener = (event: MessageEvent) => {
+            // TODO: Add security checks here, e.g., verify event.origin
+            if (event.source === window.parent && event.data) {
+              const response = FunctionCallMessage.parse(event.data);
+              if (response.functionName === func.name) {
+                resolve(response);
+              } else {
+                reject(
+                  new Error(
+                    `The response message for functionCall to ${func.name} had the wrong format!`
+                  )
+                );
+              }
+            }
+          };
+
+          // Set a timeout to reject the promise if no response is received within a certain time frame
+          const timeoutSeconds = 100;
+          setTimeout(() => {
+            reject(
+              new Error(
+                `Response timeout (${timeoutSeconds}) for function ${func.name}`
+              )
+            );
+          }, timeoutSeconds * 1000); // 100 seconds timeout for example
+          // TODO: make timeout configurable
+
+          window.addEventListener('message', listener, { once: true });
+        }
+      );
+
+      // after we've set up the listener, initiate the function call
+      window.parent.postMessage(message, '*'); // TODO. Specify the exact origin instead of '*'
+
+      const funcR = await funcRP;
+      return {
+        type: 'ToolResult',
+        toolResult: { result: dump(funcR) },
       };
     }
   } catch (error) {
     return {
       type: 'ToolError',
       toolResult: {
-        error: { message: JSON.stringify(error), functionName: func.name },
+        error: {
+          message: error instanceof Error ? error.message : 'unknown error during function execution!!',
+          functionName: func.name,
+        },
       },
     };
   }
