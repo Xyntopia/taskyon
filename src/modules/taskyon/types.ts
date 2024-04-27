@@ -131,6 +131,9 @@ export const FunctionCallMessage = z
   );
 export type FunctionCallMessage = z.infer<typeof FunctionCallMessage>;
 
+// TODO: add an "extended" task and put all information in there which we don't really "need"
+//       to save in the database. E.g. how many follow-up tasks are allowed, how many
+//       errors are allowed for function tasks  etc...  so mostly runtime-logic
 export const LLMTask = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   name: z.string().optional(),

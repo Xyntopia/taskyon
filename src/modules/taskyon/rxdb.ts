@@ -23,7 +23,7 @@ const llmTaskSchemaLiteral = {
   // TODO: remove everything thats "local" from task schema.
   //       we would like to try to make every task "immutable"
   //       so this include for example he state of the task.
-  //       and other things that right now get changed "later". 
+  //       and other things that right now get changed "later".
   title: 'LLMTask schema',
   version: 4,
   type: 'object',
@@ -244,6 +244,8 @@ export async function createTaskyonDatabase(
 
 export function transformLLMTaskToDocType(llmTask: LLMTask): LLMTaskDocType {
   // Mapping and transforming fields from LLMTask to LLMTaskDocType of taskyonDB/RxDB
+  // TODO: maybe we can do the same thing here using zod parse? This would also add some more validation
+  //       capabilities before saving anything in the db..
   const nonReactiveLLMTask = JSON.parse(JSON.stringify(llmTask)) as LLMTask;
   return {
     ...nonReactiveLLMTask,
