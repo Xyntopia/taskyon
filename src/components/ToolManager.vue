@@ -27,15 +27,16 @@
         <ObjectTreeView :model-value="f"></ObjectTreeView>
       </q-expansion-item>
     </q-list>
-    <CreateNewTask coding-mode />
+    <CreateNewTask coding-mode :labels="['function']" />
+    {{ taskParser }}
     <q-btn label="new tool" @click="newToolStructure()"></q-btn>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { getTaskManager } from 'src/boot/taskyon';
-import type { ToolBase } from 'src/modules/taskyon/tools';
+import { ToolBase } from 'src/modules/taskyon/tools';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
 import ObjectTreeView from './ObjectTreeView.vue';
@@ -64,6 +65,17 @@ void getAllTools().then((tools) => {
 
 const selectedToolName = ref<string>('');
 
+const taskParser = computed(() => {
+  try {
+    const jsonTool = ToolBase.strict().safeParse(
+      JSON.parse(state.taskDraft.content || '')
+    );
+    return jsonTool.success ? jsonTool.success : jsonTool.error;
+  } catch (error) {
+    return error;
+  }
+});
+
 function newToolStructure() {
   const tool = `
 {
@@ -87,6 +99,5 @@ function newToolStructure() {
   "code": "(parameter1, parameter2 = 'default parameter :)') => {return parameter1 + ' ' + parameter2;}"
 }`;
   state.taskDraft.content = tool;
-  state.taskDraft.label = ['function'];
 }
 </script>

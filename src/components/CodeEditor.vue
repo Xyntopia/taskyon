@@ -8,9 +8,6 @@
     :line-wrapping="true"
     :tab-size="2"
     :extensions="extensions"
-    @change="console.log('change', $event)"
-    @focus="console.log('focus', $event)"
-    @blur="console.log('blur', $event)"
   />
 </template>
 

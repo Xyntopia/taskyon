@@ -9,6 +9,7 @@
     :bottom-slots="expertMode"
     :counter="expertMode"
     clearable
+    debounce="500"
     @keyup="checkKeyboardEvents"
     input-style="max-height: 300px"
   >

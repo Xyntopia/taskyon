@@ -198,12 +198,10 @@ import taskSettingsButton from './taskSettingsButton.vue';
 import taskContentEdit from './taskContentEdit.vue';
 import CodeEditor from './CodeEditor.vue';
 
-withDefaults(
-  defineProps<{
-    codingMode: boolean;
-  }>(),
-  { codingMode: false }
-);
+const props = defineProps<{
+  codingMode?: boolean;
+  labels?: string[];
+}>();
 
 const state = useTaskyonStore();
 const { showTaskData, expandedTaskCreation } = toRefs(state);
@@ -219,7 +217,7 @@ async function getAllTools() {
   return (await getTaskManager()).searchToolDefinitions();
 }
 
-const toolCollection = ref<Record<string,ToolBase>>({});
+const toolCollection = ref<Record<string, ToolBase>>({});
 void getAllTools().then((tools) => (toolCollection.value = tools));
 
 // Computed property to determine the currently selected bot name
@@ -341,7 +339,7 @@ async function addNewTask(execute = true) {
   // execute: if true, we immediatly queue the task for execution in the taskManager
   //          otherwise, it won't get executed but simply saved into the tree
   console.log('adding new task, execute?', execute);
-  const newTask = { ...currentnewTask.value };
+  const newTask = { ...currentnewTask.value, label: props.labels };
   if (!execute) newTask.state = 'Completed';
   void addTask2Tree(
     newTask,
