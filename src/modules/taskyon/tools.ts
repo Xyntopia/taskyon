@@ -133,7 +133,7 @@ export async function handleFunctionExecution(
           };
 
           // Set a timeout to reject the promise if no response is received within a certain time frame
-          const timeoutSeconds = 100;
+          const timeoutSeconds = 10;
           setTimeout(() => {
             reject(
               new Error(

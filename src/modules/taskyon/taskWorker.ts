@@ -149,13 +149,13 @@ export async function processChatTask(
           }
         );
 
-        // choose the tye of the result.
+        // choose the type of the result, based on previous result type.
         if (chatCompletion) {
           if ('choices' in chatCompletion) {
             const choice = chatCompletion?.choices[0];
             if (choice) {
               let resultType: TaskResult['type'] = 'ChatAnswer';
-              if (task.result?.type === 'ToolResult') {
+              if (task.result?.type === 'ToolResult' || task.result?.type === 'ToolError') {
                 resultType = 'ToolResultInterpretation';
               } else if (useToolChat) {
                 resultType = 'ToolChatResult';
