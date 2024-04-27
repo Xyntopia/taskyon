@@ -5,10 +5,8 @@
       :class="[$q.dark.isActive ? 'bg-secondary' : 'bg-primary', 'print-hide']"
     >
       <component
-        :is="!$q.platform.within.iframe ? 'q-toolbar' : 'div'"
-        :class="
-          $q.platform.within.iframe ? 'q-gutter-xs row q-px-sm' : 'q-gutter-xs'
-        "
+        :is="!minMode ? 'q-toolbar' : 'div'"
+        :class="minMode ? 'q-gutter-xs row q-px-sm' : 'q-gutter-xs'"
       >
         <q-btn
           flat
@@ -20,7 +18,7 @@
         />
         <q-separator vertical :dark="!$q.dark.isActive"></q-separator>
         <q-btn
-          v-if="!$q.platform.within.iframe"
+          v-if="!minMode"
           flat
           round
           dense
@@ -31,7 +29,7 @@
           <q-tooltip>Search Conversations</q-tooltip>
         </q-btn>
         <q-btn
-          v-if="!$q.platform.within.iframe"
+          v-if="!minMode"
           flat
           round
           dense
@@ -50,9 +48,9 @@
           @click="state.chatState.selectedTaskId = undefined"
           ><q-tooltip>Create New Chat</q-tooltip>
         </q-btn>
-        <q-space v-if="!$q.platform.within.iframe" />
+        <q-space v-if="!minMode" />
         <q-btn
-          v-if="!$q.platform.within.iframe"
+          v-if="!minMode"
           flat
           dense
           class="desktop-only"
@@ -76,7 +74,7 @@
           >
         </q-btn>
         <q-btn
-          v-if="!$q.platform.within.iframe"
+          v-if="!minMode"
           flat
           :size="btnSize"
           dense
@@ -91,14 +89,14 @@
           @theme-changed="(newMode) => (state.darkTheme = newMode)"
         />
         <q-separator
-          v-if="!$q.platform.within.iframe"
+          v-if="!minMode"
           class="desktop-only"
           vertical
           :dark="!$q.dark.isActive"
         ></q-separator>
         <!-- GitHub Link -->
         <q-btn
-          v-if="!$q.platform.within.iframe"
+          v-if="!minMode"
           class="desktop-only"
           flat
           :size="btnSize"
@@ -184,9 +182,7 @@ import ChatSidebar from 'components/ChatSidebar.vue';
 import DarkModeButton from 'components/DarkModeButton.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { errors } from 'boot/taskyon';
-import { useQuasar } from 'quasar';
-const $q = useQuasar();
-
 const state = useTaskyonStore();
-const btnSize = $q.platform.within.iframe ? 'xs' : 'md';
+const minMode = state.minimalGui;
+const btnSize = minMode ? 'xs' : 'md';
 </script>

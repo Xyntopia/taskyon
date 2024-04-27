@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { defaultLLMSettings } from 'src/modules/taskyon/chat';
-import { ref, Ref, watch } from 'vue';
+import { ref, Ref, watch, computed } from 'vue';
 import type { LLMTask } from 'src/modules/taskyon/types';
 import type { FunctionArguments } from 'src/modules/taskyon/types';
 import axios from 'axios';
@@ -22,44 +22,47 @@ interface TaskStateType {
 }
 
 function setupIframeApi() {
-  const $q = useQuasar();
-  if ($q.platform.within.iframe) {
-    console.log('Turn on iframe API.');
-    // Listen for messages from the parent page
-    window.addEventListener(
-      'message',
-      function (event) {
-        // Check if the iframe is not the top-level window
-        if (window !== window.top) {
-          // Check if the message is from the parent window
-          if (event.source === window.parent) {
-            // Optionally, check the origin if you know what it should be
-            // For example, if you expect messages only from 'https://example.com'
-            /*if (event.origin === 'https://example.com') {
+  console.log('Turn on iframe API.');
+  // Listen for messages from the parent page
+  window.addEventListener(
+    'message',
+    function (event) {
+      // Check if the iframe is not the top-level window
+      if (window !== window.top) {
+        // Check if the message is from the parent window
+        if (event.source === window.parent) {
+          // Optionally, check the origin if you know what it should be
+          // For example, if you expect messages only from 'https://example.com'
+          /*if (event.origin === 'https://example.com') {
           console.log('Request from parent:', event.data);
         } else {
           console.error('Message from unknown origin:', event.origin);
         }*/
-            console.log('Message from unknown origin:', event.origin, event);
-          } else {
-            console.error('Message not from parent window.');
-          }
+          console.log('Message from unknown origin:', event.origin, event);
+        } else {
+          console.error('Message not from parent window.');
         }
-      },
-      false
-    );
-  }
+      }
+    },
+    false
+  );
 }
 
 export const useTaskyonStore = defineStore(storeName, () => {
+  const $q = useQuasar();
+
   console.log('initialize taskyon');
 
-  setupIframeApi();
+  if ($q.platform.within.iframe) {
+    setupIframeApi();
+  }
 
   const llmSettings = defaultLLMSettings();
 
   const initialState = {
+    // chatState is also part of the configuration we can store "somewhere else"
     chatState: llmSettings,
+    // appConfiguration is also part of the configuration we can store "somewhere else"
     appConfiguration: {
       supabase_url: '',
       supabase_anon_key: '',
@@ -69,6 +72,8 @@ export const useTaskyonStore = defineStore(storeName, () => {
       showCosts: false,
       gdriveDir: 'taskyon',
       useEnterToSend: true,
+      // sets whether we want to have a minimalist chat or the full app..
+      guiMode: 'auto' as 'auto' | 'iframe' | 'default',
     },
     // chatState & appConfiguration define the state of our app!
     // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
@@ -193,5 +198,26 @@ export const useTaskyonStore = defineStore(storeName, () => {
     }
   }
 
-  return { ...stateRefs, setDraftFunctionArgs, getOpenRouterPKCEKey };
+  const minimalGui = computed(() => {
+    let mode = false;
+    switch (stateRefs.appConfiguration.value.guiMode) {
+      case 'default':
+        mode = false;
+        break;
+      case 'iframe':
+        mode = true;
+        break;
+      case 'auto':
+        mode = $q.platform.within.iframe;
+        break;
+    }
+    return mode;
+  });
+
+  return {
+    ...stateRefs,
+    setDraftFunctionArgs,
+    getOpenRouterPKCEKey,
+    minimalGui,
+  };
 });
