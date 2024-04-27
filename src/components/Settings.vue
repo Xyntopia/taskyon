@@ -22,7 +22,7 @@
         color="secondary"
       />
     </div>
-    <OpenRouterPKCE v-if="!reduced"/>
+    <OpenRouterPKCE v-if="!reduced" />
     <div v-if="!reduced">
       <q-separator spaced />
       <div class="q-pa-sm q-gutter-md">
@@ -60,11 +60,19 @@
         <q-input
           v-for="keyname of filteredKeys"
           :key="keyname"
+          :type="keyVisible[keyname] ? 'text' : 'password'"
           placeholder="Add API key here!"
           filled
           v-model="state.keys[keyname]"
           :label="`${keyname} API key`"
-        />
+          ><template v-slot:append>
+            <q-icon
+              :name="keyVisible[keyname] ? 'visibility' : 'visibility_off'"
+              class="cursor-pointer"
+              @click="keyVisible[keyname] = !keyVisible[keyname]"
+            />
+          </template>
+        </q-input>
       </div>
     </div>
   </div>
@@ -73,7 +81,7 @@
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
 import OpenRouterPKCE from './OpenRouterPKCE.vue';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 defineProps({
   reduced: {
@@ -81,6 +89,8 @@ defineProps({
     required: false,
   },
 });
+
+const keyVisible = ref<Record<string, boolean>>({});
 
 const state = useTaskyonStore();
 const filteredKeys = computed(() => {
