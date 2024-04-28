@@ -68,20 +68,9 @@
                     outline
                     color="secondary"
                     icon="stop"
-                    @click="emitCancelCurrentTask"
+                    @click="state.executionContext.interrupt(currentTask.id)"
                   >
                     <q-tooltip> Stop processing current task. </q-tooltip>
-                  </q-btn>
-                  <q-btn
-                    v-if="state.appConfiguration.expertMode"
-                    round
-                    outline
-                    color="secondary"
-                    icon="block"
-                    @click="emitCancelAllTasks"
-                    class="q-ml-xs"
-                  >
-                    <q-tooltip> Cancel all tasks. </q-tooltip>
                   </q-btn>
                 </div>
               </div>
@@ -269,10 +258,6 @@ import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
 import OpenRouterPKCE from 'src/components/OpenRouterPKCE.vue';
 import InfoDialog from 'src/components/InfoDialog.vue';
-import {
-  emitCancelAllTasks,
-  emitCancelCurrentTask,
-} from 'src/modules/taskyon/taskWorker';
 import axios from 'axios';
 import { getTaskManager } from 'boot/taskyon';
 import { LLMTask } from 'src/modules/taskyon/types';

@@ -20,7 +20,6 @@ import {
 } from './utils';
 import type { FileMappingDocType } from './rxdb';
 import { zodToYamlString, yamlToolChatType, toolResultChat } from './types';
-import { CURRENT_TASK_CANCELLATION_EVENT } from './taskWorker';
 
 const getOpenai = lruCache<OpenAI>(5)(
   (apiKey: string, baseURL?: string, headers?: Record<string, string>) => {
@@ -381,7 +380,10 @@ export async function callLLM(
   siteUrl: string,
   apiKey: string,
   stream: false | true | null | undefined = false,
-  contentCallBack: (chunk?: OpenAI.Chat.Completions.ChatCompletionChunk) => void
+  contentCallBack: (
+    chunk?: OpenAI.Chat.Completions.ChatCompletionChunk
+  ) => void,
+  cancelStream: () => boolean // a function which we can call and which indicates that we should cancel the stream
 ): Promise<OpenAI.ChatCompletion | undefined | MessageError> {
   const headers: Record<string, string> = generateHeaders(
     apiKey,
@@ -407,35 +409,25 @@ export async function callLLM(
   }
 
   if (payload.stream) {
-    let cancelStreaming = false;
-    function cancelStreamListener() {
-      cancelStreaming = true;
-    }
-    document.addEventListener(
-      CURRENT_TASK_CANCELLATION_EVENT,
-      cancelStreamListener
-    );
     try {
       const completion = await openai.chat.completions.create(payload);
 
       const chunks = [];
       for await (const chunk of completion) {
-        if (cancelStreaming) {
-          return;
-        }
         chunks.push(chunk);
         if (chunk) {
           contentCallBack(chunk);
+        }
+        // TODO: also cancel the completion request itself by giving it an abort signal which can be released
+        //       by a callback from our executionContext...
+        if (cancelStream()) {
+          break; // --> and take everything that we have already accumulated so far
         }
       }
       chatCompletion = accumulateChatCompletion(chunks);
     } catch (error) {
       console.error('Error during streaming:', error);
     }
-    document.removeEventListener(
-      CURRENT_TASK_CANCELLATION_EVENT,
-      cancelStreamListener
-    );
   } else {
     const completion = await openai.chat.completions.create(payload);
     chatCompletion = completion;

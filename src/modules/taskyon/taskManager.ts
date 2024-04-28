@@ -460,6 +460,9 @@ export class TaskManager {
   }
 
   private async saveTask(taskId: string): Promise<void> {
+    // TODO: throw an error, if we save an already existing task!
+    //       because we want to make sure, that tasks in the db are immutable.
+    //       so we can never update a task with an already existing id...
     const task = this.tasks.get(taskId);
     console.log('save task: ', task);
     if (task && this.taskyonDB) {

@@ -70,7 +70,8 @@ export async function processChatTask(
   task: LLMTask,
   chatState: ChatStateType,
   apiKeys: Record<string, string>,
-  taskManager: TaskManager
+  taskManager: TaskManager,
+  executionContext: TaskWorkerController
 ) {
   // TODO: refactor this function!
   let apiKey = apiKeys[chatState.selectedApi];
@@ -146,7 +147,10 @@ export async function processChatTask(
                 (task.debugging.streamContent || '') +
                 chunk.choices[0].delta.content;
             }
-          }
+          },
+          () => {
+            return false;
+          } // define a function to check whether we should cancel the stream ...
         );
 
         // choose the type of the result, based on previous result type.
@@ -155,7 +159,10 @@ export async function processChatTask(
             const choice = chatCompletion?.choices[0];
             if (choice) {
               let resultType: TaskResult['type'] = 'ChatAnswer';
-              if (task.result?.type === 'ToolResult' || task.result?.type === 'ToolError') {
+              if (
+                task.result?.type === 'ToolResult' ||
+                task.result?.type === 'ToolError'
+              ) {
                 resultType = 'ToolResultInterpretation';
               } else if (useToolChat) {
                 resultType = 'ToolChatResult';
@@ -203,7 +210,8 @@ export async function processChatTask(
 
 async function processFunctionTask(
   task: LLMTask,
-  tools: Record<string, ToolBase | Tool>
+  tools: Record<string, ToolBase | Tool>,
+  executionContext: TaskWorkerController
 ) {
   if (task.configuration?.function) {
     const func = task.configuration.function;
@@ -304,6 +312,8 @@ async function parseChatResponse(
   }
 }
 
+// this function takes a task and generates follow up tasks automatically
+// it also checks whether we should immediatly execute them or not...
 async function generateFollowUpTasksFromResult(
   finishedTask: LLMTask,
   chatState: ChatStateType,
@@ -397,111 +407,75 @@ async function generateFollowUpTasksFromResult(
   }
 }
 
-const TASK_CANCELLATION_EVENT = 'cancelTasks';
-export const CURRENT_TASK_CANCELLATION_EVENT = 'cancelCurrentTask';
-const RUNNING_TASK_WORKER_CANCELLATION_EVENT = 'cancelRunningTaskWorker';
-
-export function emitCancelAllTasks() {
-  document.dispatchEvent(new CustomEvent(TASK_CANCELLATION_EVENT));
+class InterruptError extends Error {
+  // TODO: make sure, we can throw that error in a few spots! :)
+  constructor(reason: string) {
+    super(`Interrupted with reason: ${reason}`);
+  }
 }
 
-export function emitCancelTaskWorker() {
-  document.dispatchEvent(
-    new CustomEvent(RUNNING_TASK_WORKER_CANCELLATION_EVENT)
-  );
-}
+export class TaskWorkerController {
+  /* This class adds context to task executions during the runtime.
+  We don't necessarily need to save this information in the database
+  It also gives us the ability to control the task worker process
 
-export function emitCancelCurrentTask() {
-  document.dispatchEvent(new CustomEvent(CURRENT_TASK_CANCELLATION_EVENT));
-}
+  - We can interrupt/cancel task processing
+  - we can track number of error in a task chain and cancel, if too many errors appear
+  - we can track other information
+  - we can gracefully exist streamed tasks 
+  - and more..
+  */
+  interrupted: boolean;
+  interruptReason: string | null;
+  interruptCallbacks: ((reason: string | null) => void)[];
 
-function initCancelCallbacks(taskManager: TaskManager) {
-  let cancelAllTasks = false;
-  let cancelImmediately = false;
-  let cancelCurrenTask = false;
+  constructor() {
+    this.interrupted = false;
+    this.interruptReason = null;
+    this.interruptCallbacks = [];
+  }
 
-  const cancelCurrentTaskListener = () => {
-    cancelCurrenTask = true;
-    console.log('Received signal to cancel current task');
-  };
+  interrupt(reason: string | null = null): void {
+    console.log('interrupting: ', reason);
+    this.interrupted = true;
+    this.interruptReason = reason;
+    this.interruptCallbacks.forEach((callback) => callback(reason));
+  }
 
-  const cancelTasksListener = () => {
-    cancelAllTasks = true;
-    console.log('Received signal to cancel all queued tasks');
-  };
+  isInterrupted(): boolean {
+    return this.interrupted;
+  }
 
-  const cancelImmediatelyListener = () => {
-    cancelImmediately = true;
-    console.log('Received signal for immediate cancellation');
-    document.removeEventListener(
-      RUNNING_TASK_WORKER_CANCELLATION_EVENT,
-      cancelImmediatelyListener
-    );
-    throw new Error('Task Worker immediately cancelled');
-  };
+  getInterruptReason(): string | null {
+    return this.interruptReason;
+  }
 
-  document.addEventListener(
-    CURRENT_TASK_CANCELLATION_EVENT,
-    cancelCurrentTaskListener
-  );
-  document.addEventListener(TASK_CANCELLATION_EVENT, cancelTasksListener);
-  document.addEventListener(
-    RUNNING_TASK_WORKER_CANCELLATION_EVENT,
-    cancelImmediatelyListener
-  );
-
-  window.addEventListener('beforeunload', () => {
-    processTasksQueue.clear().forEach(
-      (tId) =>
-        void taskManager.updateTask(
-          {
-            id: tId,
-            state: 'Cancelled',
-          },
-          true
-        )
-    );
-  });
-  return {
-    cancelImmediately,
-    cancelAllTasks,
-    cancelCurrenTask,
-    cancelCurrentTaskListener,
-  };
-}
-
-async function taskWorker(
-  chatState: ChatStateType,
-  taskManager: TaskManager,
-  apiKeys: Record<string, string>
-) {
-  // TODO: refactor taskWorker to make it even nicer...
-  let {
-    // eslint-disable-next-line prefer-const
-    cancelImmediately,
-    cancelAllTasks,
-    cancelCurrenTask,
-    // eslint-disable-next-line prefer-const
-    cancelCurrentTaskListener,
-  } = initCancelCallbacks(taskManager);
-
-  console.log('entering task worker loop...');
-  while (!cancelImmediately) {
-    console.log('waiting for next task!');
-    const taskId = await processTasksQueue.pop();
-    if (!processTasksQueue.count()) {
-      cancelAllTasks = false;
-      cancelCurrenTask = false;
-    } else if (cancelAllTasks) {
-      void taskManager.updateTask(
-        {
-          id: taskId,
-          state: 'Cancelled',
-        },
-        true
-      );
-      continue;
+  reset(full = true): void {
+    this.interrupted = false;
+    this.interruptReason = null;
+    if (full) {
+      this.interruptCallbacks = [];
     }
+  }
+
+  onInterrupt(callback: (reason: string | null) => void): void {
+    this.interruptCallbacks.push(callback);
+  }
+}
+
+async function processTask(
+  task: LLMTask,
+  taskManager: TaskManager,
+  taskId: string,
+  chatState: ChatStateType,
+  apiKeys: Record<string, string>,
+  executionContext: TaskWorkerController
+) {
+  // TODO: this whole function needs to be more "functional" e.g. we need to make sure, that we don't "alter" existing tasks which
+  //       are already in the db and throw errors if we do that.
+  // TODO: make this function return a promise so taht we can interrupt it anytime!
+  // return new Promise((resolve, reject) => {
+  try {
     void taskManager.updateTask(
       {
         id: taskId,
@@ -509,93 +483,116 @@ async function taskWorker(
       },
       false
     );
-    console.log('processing task:', taskId);
-    let task = await taskManager.getTask(taskId);
-    if (task) {
-      try {
-        if (task.role == 'user') {
-          // TODO: get rid of "taskManager" in processChatTask
-          task = await processChatTask(task, chatState, apiKeys, taskManager);
-          task.state = 'Completed';
-        } else if (task?.role == 'function') {
-          // in the case of 'FunctionCall' result, we run it twice:
-          // 1. calculate function result
-          //   then, we set it to "queued" status in order to prevent it form being deleted from the queue.
-          //   this time, it has a "ToolResult" which means, we are sending it to an LLM for interpretation:
-          // 2. send function to LLM inference
-          // the task could potentially come back as another functionCall!
-          // the way this works: -> task state is "Completed" with "FunctionCall" and follow-up
-          // functiontask will be generated
-          if (
-            task.result?.type === 'ToolResult' ||
-            task.result?.type === 'ToolError'
-          ) {
-            // here we send the task to our LLM inference
-            task = await processChatTask(task, chatState, apiKeys, taskManager);
-            task.state = 'Completed';
-          } else {
-            // in the case we don't have a result yet, we need to calculate it :)
-            task = await processFunctionTask(
-              task,
-              await taskManager.searchToolDefinitions()
-            );
-            processTasksQueue.push(taskId); // send the task back into the queue
-            task.state = 'Queued'; // and we queue the functino again, to be processed again, this time with an LLM
-          }
-        } else {
-          console.log("We don't know what to do with this task:", taskId);
-          task.state = 'Error';
-        }
-      } catch (error) {
-        task.state = 'Error';
-        if (error instanceof Error) {
-          task.debugging.error = { message: error.message, stack: error.stack };
-        }
-        console.error('Error processing task:', error);
-      }
-      // if we cancelled a task we need to prevent it from creating any follow-up tasks.
+
+    if (task.role == 'user') {
+      // TODO: get rid of "taskManager" in processChatTask
+      task = await processChatTask(
+        task,
+        chatState,
+        apiKeys,
+        taskManager,
+        executionContext
+      );
+      task.state = 'Completed';
+    } else if (task?.role == 'function') {
+      // in the case of 'FunctionCall' result, we run it twice:
+      // 1. calculate function result
+      //   then, we set it to "queued" status in order to prevent it form being deleted from the queue.
+      //   this time, it has a "ToolResult" which means, we are sending it to an LLM for interpretation:
+      // 2. send function to LLM inference
+      // the task could potentially come back as another functionCall!
+      // the way this works: -> task state is "Completed" with "FunctionCall" and follow-up
+      // functiontask will be generated
       if (
-        (cancelCurrenTask && task.id == chatState.selectedTaskId) ||
-        cancelAllTasks
+        task.result?.type === 'ToolResult' ||
+        task.result?.type === 'ToolError'
       ) {
-        // current task cancellation should only be done once, so we set the flag to "false"
-        cancelCurrenTask = false;
-        task.state = 'Cancelled';
+        // here we send the task to our LLM inference
+        task = await processChatTask(
+          task,
+          chatState,
+          apiKeys,
+          taskManager,
+          executionContext
+        );
+        task.state = 'Completed';
       } else {
-        try {
-          await generateFollowUpTasksFromResult(task, chatState, taskManager);
-        } catch (error) {
-          task.state = 'Error';
-          if (error instanceof Error) {
-            task.debugging.followUpError = {
-              message: error.message,
-              stack: error.stack,
-            };
-          }
-          console.log('We were not able to create a follow up task:', error);
-        }
-
-        void taskManager.setTask(task, true);
+        // in the case we don't have a result yet, we need to calculate it :)
+        task = await processFunctionTask(
+          task,
+          await taskManager.searchToolDefinitions(),
+          executionContext
+        );
+        processTasksQueue.push(taskId); // send the task back into the queue
+        task.state = 'Queued'; // and we queue the functino again, to be processed again, this time with an LLM
       }
+    } else {
+      console.log("We don't know what to do with this task:", taskId);
+      task.state = 'Error';
     }
+  } catch (error) {
+    task.state = 'Error';
+    if (error instanceof Error) {
+      task.debugging.error = {
+        message: error.message,
+        stack: error.stack,
+      };
+    }
+    console.error('Error processing task:', error);
   }
-
-  document.removeEventListener(
-    TASK_CANCELLATION_EVENT,
-    cancelCurrentTaskListener
-  );
-  document.removeEventListener(
-    CURRENT_TASK_CANCELLATION_EVENT,
-    cancelCurrentTaskListener
-  );
+  return task
 }
 
-export function run(
+export async function taskWorker(
   chatState: ChatStateType,
   taskManager: TaskManager,
-  apiKeys: Record<string, string>
+  apiKeys: Record<string, string>,
+  executionContext: TaskWorkerController
 ) {
-  console.log('start task taskWorker');
-  //launch taskworker as an asnyc worker
-  void taskWorker(chatState, taskManager, apiKeys);
-} // Helper function to handle function execution
+  console.log('entering task worker loop...');
+  while (true) {
+    console.log('waiting for next task!');
+    executionContext.reset(); // make sure we reset our execution context interrupt, so that we can interrupt in the next loop again :)
+    try {
+      // in case of errors, especially if its an interrupt event we simply want to cancel everything :P
+      const taskId = await processTasksQueue.pop();
+      console.log('processing task:', taskId);
+      let task = await taskManager.getTask(taskId);
+      if (task) {
+        task = await processTask(
+          task,
+          taskManager,
+          taskId,
+          chatState,
+          apiKeys,
+          executionContext
+        );
+        await generateFollowUpTasksFromResult(task, chatState, taskManager);
+        void taskManager.setTask(task, true);
+      }
+    } catch (error) {
+      console.error('Could not process task:', error);
+      // TODO: Depending on error, clean out the queue...
+      if (error instanceof InterruptError) {
+        console.log(`Loop interrupted with reason: ${error.message}`);
+        break;
+      } else {
+        throw error;
+      }
+      // if we realize that a cancellation event was sent, empty the queue and set all tasks to "Cancelled"
+      /*if (!processTasksQueue.count()) {
+        cancelAllTasks = false;
+        cancelCurrenTask = false;
+      } else if (cancelAllTasks) {
+        void taskManager.updateTask(
+          {
+            id: taskId,
+            state: 'Cancelled',
+          },
+          true
+        );
+        continue;
+      }*/
+    }
+  }
+}

@@ -6,7 +6,7 @@ import {
   createTaskyonDatabase,
   TaskyonDatabase,
 } from 'src/modules/taskyon/rxdb';
-import { run } from 'src/modules/taskyon/taskWorker';
+import { taskWorker } from 'src/modules/taskyon/taskWorker';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import {
   executePythonScript,
@@ -78,5 +78,10 @@ export default boot(async (/* { app, router, ... } */) => {
   // keys are reactive here, so in theory, when they change, taskyon should automatically
   // pick up on this...
   console.log('starting taskyon worker');
-  void run(state.chatState, taskManagerRef, state.keys);
+  void taskWorker(
+    state.chatState,
+    taskManagerRef,
+    state.keys,
+    state.taskWorkerController
+  );
 });

@@ -7,6 +7,7 @@ import axios from 'axios';
 import { LocalStorage, Notify } from 'quasar';
 import { deepMerge, deepMergeReactive } from 'src/modules/taskyon/utils';
 import { useQuasar } from 'quasar';
+import { TaskWorkerController } from 'src/modules/taskyon/taskWorker';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -52,6 +53,9 @@ export const useTaskyonStore = defineStore(storeName, () => {
   const $q = useQuasar();
 
   console.log('initialize taskyon');
+
+  // callin ExecutionContext.interrupt();  cancels processing of current task
+  const taskWorkerController = new TaskWorkerController();
 
   if ($q.platform.within.iframe) {
     setupIframeApi();
@@ -219,5 +223,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
     setDraftFunctionArgs,
     getOpenRouterPKCEKey,
     minimalGui,
+    taskWorkerController,
   };
 });
