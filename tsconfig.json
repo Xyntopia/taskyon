@@ -7,6 +7,5 @@
     "target": "es2022",
     "noUncheckedIndexedAccess": false,
   },
-  "exclude": ["src-tauri"]
-  
+  "exclude": ["src-tauri", ".direnv", "dist"]
 }
