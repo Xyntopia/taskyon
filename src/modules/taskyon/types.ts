@@ -61,15 +61,23 @@ export type ChatCompletionResponse = {
 export interface OpenRouterGenerationInfo {
   data: {
     id: string;
+    total_cost: number;
+    created_at: string; // ISO 8601 date string
     model: string;
+    app_id: number;
     streamed: boolean;
+    cancelled: boolean;
+    provider_name: string;
+    latency: number;
+    moderation_latency: null | number; // can be null
     generation_time: number;
-    created_at: string;
+    finish_reason: string;
     tokens_prompt: number;
     tokens_completion: number;
-    native_tokens_prompt: null | number;
-    native_tokens_completion: null | number;
-    num_media_generations: null | number;
+    native_tokens_prompt: number;
+    native_tokens_completion: number;
+    num_media_prompt: null | number; // can be null
+    num_media_completion: null | number; // can be null
     origin: string;
     usage: number;
   };

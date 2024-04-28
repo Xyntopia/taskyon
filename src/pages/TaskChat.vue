@@ -31,48 +31,38 @@
             />
           </div>
           <!--Render tasks which are in progress-->
-          <div
-            v-if="
-              ['Open', 'In Progress'].some((subs) =>
-                subs.includes(currentTask?.state || '')
-              )
-            "
-          >
+          <div v-if="['Open', 'In Progress'].includes(currentTask.state)">
             <div
               :class="[
                 $q.dark.isActive
                   ? 'bg-primary text-white'
                   : 'bg-white text-black',
                 'rounded-borders',
+                'row',
               ]"
             >
-              <div>
-                <div>
-                  <q-markdown
-                    no-line-numbers
-                    :src="currentTask.debugging.streamContent"
-                  />
-                  <q-markdown
-                    no-line-numbers
-                    :src="
-                      JSON.stringify(
-                        currentTask.debugging.toolStreamArgsContent
-                      )
-                    "
-                  />
-                  <q-spinner-dots size="2rem" color="secondary" />
-                </div>
-                <div class="row justify-end">
-                  <q-btn
-                    round
-                    outline
-                    color="secondary"
-                    icon="stop"
-                    @click="state.executionContext.interrupt(currentTask.id)"
-                  >
-                    <q-tooltip> Stop processing current task. </q-tooltip>
-                  </q-btn>
-                </div>
+              <q-btn
+                class="q-ma-xs"
+                dense
+                outline
+                color="secondary"
+                icon="stop"
+                @click="state.taskWorkerController.interrupt(currentTask.id)"
+              >
+                <q-tooltip> Stop processing current task. </q-tooltip>
+              </q-btn>
+              <div class="col">
+                <q-markdown
+                  no-line-numbers
+                  :src="currentTask.debugging.streamContent"
+                />
+                <q-markdown
+                  no-line-numbers
+                  :src="
+                    JSON.stringify(currentTask.debugging.toolStreamArgsContent)
+                  "
+                />
+                <q-spinner-dots size="2rem" color="secondary" />
               </div>
             </div>
           </div>
@@ -184,6 +174,23 @@
           </q-card-section>
         </q-card>
       </div>
+    </q-page-sticky>
+    <!--Task controller buttons-->
+    <q-page-sticky
+      v-if="currentTask && ['Open', 'In Progress'].includes(currentTask.state)"
+      position="bottom-left"
+      :offset="[10, bottomPadding + 5]"
+      class="print-hide"
+    >
+      <q-btn
+        fab-mini
+        class="scroll-to-bottom-button"
+        icon="stop"
+        size="md"
+        @click="state.taskWorkerController.interrupt(currentTask.id)"
+      >
+        <q-tooltip> Stop processing current task. </q-tooltip>
+      </q-btn>
     </q-page-sticky>
     <!--Bottom scroll button-->
     <q-page-sticky

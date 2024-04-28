@@ -168,7 +168,6 @@
         </q-select>
         <q-tabs dense v-model="state.messageDebug[task.id]" no-caps>
           <q-tab name="ERROR" label="Error" />
-          <q-tab name="FOLLOWUPERROR" label="Follow-up task error" />
           <q-tab name="RAW" label="raw task data" />
           <q-tab name="RAWTASK" label="task prompt" />
           <q-tab name="MESSAGECONTENT" label="raw result" />
@@ -184,20 +183,6 @@
           <q-tab-panel name="ERROR">
             <textarea
               :value="JSON.stringify(task.debugging.error, null, 2)"
-              readonly
-              wrap="soft"
-              style="
-                width: 100%;
-                height: 200px;
-                background-color: inherit;
-                color: inherit;
-              "
-            >
-            </textarea>
-          </q-tab-panel>
-          <q-tab-panel name="FOLLOWUPERROR">
-            <textarea
-              :value="JSON.stringify(task.debugging.followUpError, null, 2)"
               readonly
               wrap="soft"
               style="

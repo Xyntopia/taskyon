@@ -649,21 +649,36 @@ async function getOpenRouterGenerationInfo(
   generationId: string,
   headers: Record<string, string>
 ) {
-  try {
-    const generation = await axios.get<OpenRouterGenerationInfo>(
+  let retryCount = 0;
+  let delay = 5000; // initial delay
+
+  while (retryCount < 3) {
+    const response = await fetch(
       `https://openrouter.ai/api/v1/generation?id=${generationId}`,
-      { headers }
+      {
+        headers,
+      }
     );
-    const generationInfo = generation.data.data;
-    console.log('received generation info for task');
-    return generationInfo;
-  } catch (err) {
-    console.log(
-      'failed to get cost information for Openrouter.ai: ',
-      generationId,
-      err
-    );
+
+    if (response.ok) {
+      const generationInfo =
+        (await response.json()) as OpenRouterGenerationInfo;
+      console.log('received generation info for task');
+      return generationInfo.data;
+    } else if (response.status === 404) {
+      console.log(`Received 404, retrying in ${delay}ms`);
+      await sleep(delay);
+      retryCount++;
+      delay *= 2; // increase delay for next retry
+    } else {
+      throw new Error(
+        `Failed to get cost information for Openrouter.ai: ${generationId} - ${response.status}`
+      );
+    }
   }
+  throw new Error(
+    `Failed to get generation info after 3 retries for ${generationId}`
+  );
 }
 
 export async function enrichWithDelayedUsageInfos(
@@ -672,6 +687,7 @@ export async function enrichWithDelayedUsageInfos(
   task: LLMTask,
   taskManager: TaskManager
 ) {
+  // TODO:  if we get a 404.. try again   sometimes the dat just isn't there yet ;)
   await sleep(5000);
   const generationInfo = await getOpenRouterGenerationInfo(
     generationId,

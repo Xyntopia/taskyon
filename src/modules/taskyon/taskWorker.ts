@@ -71,13 +71,14 @@ export async function processChatTask(
   chatState: ChatStateType,
   apiKeys: Record<string, string>,
   taskManager: TaskManager,
-  executionContext: TaskWorkerController
+  taskWorkerController: TaskWorkerController
 ) {
   // TODO: refactor this function!
   let apiKey = apiKeys[chatState.selectedApi];
   if (!apiKey || apiKey.trim() === '') {
     apiKey = apiKeys['taskyon'] || 'free';
   }
+  // TODO: can we interrupt non-streaming tasks? possibly using an AbortController.
   //TODO: merge this function with the assistants function
   if (chatState.useOpenAIAssistants && chatState.selectedApi == 'openai') {
     const messages = await getOpenAIAssistantResponse(
@@ -149,7 +150,7 @@ export async function processChatTask(
             }
           },
           () => {
-            return false;
+            return taskWorkerController.interrupted;
           } // define a function to check whether we should cancel the stream ...
         );
 
@@ -317,7 +318,8 @@ async function parseChatResponse(
 async function generateFollowUpTasksFromResult(
   finishedTask: LLMTask,
   chatState: ChatStateType,
-  taskManager: TaskManager
+  taskManager: TaskManager,
+  taskWorkerController: TaskWorkerController
 ) {
   console.log('generate follow up task');
   if (finishedTask.result) {
@@ -395,6 +397,9 @@ async function generateFollowUpTasksFromResult(
     // a real task.
     for (const taskDraft of taskDraftList) {
       taskDraft.debugging = { ...taskDraft.debugging, ...childCosts };
+      // we do not want to queue up follow-up tasks for execution, if the task flow was
+      // interrupted
+      execute = taskWorkerController.interrupted ? false : execute;
       const newId = await addTask2Tree(
         taskDraft,
         parentTaskId,
@@ -408,7 +413,7 @@ async function generateFollowUpTasksFromResult(
 }
 
 class InterruptError extends Error {
-  // TODO: make sure, we can throw that error in a few spots! :)
+  // TODO: make sure, we can throw that error in a few spots! :) E.g. Function processing
   constructor(reason: string) {
     super(`Interrupted with reason: ${reason}`);
   }
@@ -469,7 +474,7 @@ async function processTask(
   taskId: string,
   chatState: ChatStateType,
   apiKeys: Record<string, string>,
-  executionContext: TaskWorkerController
+  taskWorkerController: TaskWorkerController
 ) {
   // TODO: this whole function needs to be more "functional" e.g. we need to make sure, that we don't "alter" existing tasks which
   //       are already in the db and throw errors if we do that.
@@ -491,7 +496,7 @@ async function processTask(
         chatState,
         apiKeys,
         taskManager,
-        executionContext
+        taskWorkerController
       );
       task.state = 'Completed';
     } else if (task?.role == 'function') {
@@ -513,7 +518,7 @@ async function processTask(
           chatState,
           apiKeys,
           taskManager,
-          executionContext
+          taskWorkerController
         );
         task.state = 'Completed';
       } else {
@@ -521,7 +526,7 @@ async function processTask(
         task = await processFunctionTask(
           task,
           await taskManager.searchToolDefinitions(),
-          executionContext
+          taskWorkerController
         );
         processTasksQueue.push(taskId); // send the task back into the queue
         task.state = 'Queued'; // and we queue the functino again, to be processed again, this time with an LLM
@@ -540,19 +545,19 @@ async function processTask(
     }
     console.error('Error processing task:', error);
   }
-  return task
+  return task;
 }
 
 export async function taskWorker(
   chatState: ChatStateType,
   taskManager: TaskManager,
   apiKeys: Record<string, string>,
-  executionContext: TaskWorkerController
+  taskWorkerController: TaskWorkerController
 ) {
   console.log('entering task worker loop...');
   while (true) {
     console.log('waiting for next task!');
-    executionContext.reset(); // make sure we reset our execution context interrupt, so that we can interrupt in the next loop again :)
+    taskWorkerController.reset(); // make sure we reset our execution context interrupt, so that we can interrupt in the next loop again :)
     try {
       // in case of errors, especially if its an interrupt event we simply want to cancel everything :P
       const taskId = await processTasksQueue.pop();
@@ -565,9 +570,17 @@ export async function taskWorker(
           taskId,
           chatState,
           apiKeys,
-          executionContext
+          taskWorkerController
         );
-        await generateFollowUpTasksFromResult(task, chatState, taskManager);
+        // create a new task form the result. E.g. in the case of a simple chat, this will
+        // create a task with the Answer of the LLM which then gets displayed in the chatwindow...
+        await generateFollowUpTasksFromResult(
+          task,
+          chatState,
+          taskManager,
+          taskWorkerController
+        );
+        // and finally save the task, because
         void taskManager.setTask(task, true);
       }
     } catch (error) {
