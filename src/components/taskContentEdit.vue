@@ -8,9 +8,9 @@
     label="Type your message or instruction..."
     :counter="expertMode"
     clearable
-    debounce="500"
     @keyup="checkKeyboardEvents"
     input-style="max-height: 300px"
+    v-bind="$attrs"
   >
     <template v-slot:append>
       <q-btn flat dense round icon="send" @click="executeTask">
@@ -53,12 +53,30 @@ const content = defineModel<string | null | undefined>({
 const expandedTaskCreation = defineModel<boolean>('expandedTaskCreation', {
   required: true,
 });
-defineProps<{
+const props = defineProps<{
   expertMode: boolean;
-  checkKeyboardEvents: (event: KeyboardEvent) => void;
   executeTask: () => Promise<void>;
   attachFileToTask: (newFiles: File[]) => Promise<void>;
   estimatedTokens: number;
   currentModel: string | undefined;
+  useEnterToSend: boolean;
 }>();
+
+const checkKeyboardEvents = (event: KeyboardEvent) => {
+  if (props.useEnterToSend) {
+    if (!event.shiftKey && event.key === 'Enter') {
+      void props.executeTask();
+      // Prevent a new line from being added to the input (optional)
+      event.preventDefault();
+    }
+    // otherwise it'll simply be the default action and inserting a newline :)
+  } else {
+    if (event.shiftKey && event.key === 'Enter') {
+      void props.executeTask();
+      // Prevent a new line from being added to the input (optional)
+      event.preventDefault();
+    }
+    // otherwise it'll simply be the default action and inserting a newline :)
+  }
+};
 </script>

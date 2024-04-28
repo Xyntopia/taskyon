@@ -5,14 +5,19 @@
     <div>
       <taskContentEdit
         v-if="!selectedTaskType && !codingMode"
-        v-model="content"
+        :model-value="state.taskDraft.content"
+        @update:modelValue="
+          (value) => {
+            state.taskDraft.content = value;
+          }
+        "
         v-model:expandedTaskCreation="expandedTaskCreation"
-        :expertMode="expertMode"
-        :checkKeyboardEvents="checkKeyboardEvents"
-        :executeTask="addNewTask"
-        :attachFileToTask="attachFileToTask"
-        :estimatedTokens="estimatedTokens"
-        :currentModel="currentModel"
+        :expert-mode="expertMode"
+        :execute-task="addNewTask"
+        :attach-file-to-task="attachFileToTask"
+        :estimated-tokens="estimatedTokens"
+        :current-model="currentModel"
+        :use-enter-to-send="state.appConfiguration.useEnterToSend"
       />
       <div v-else-if="!selectedTaskType && codingMode">
         <CodeEditor v-model="content" />
@@ -353,24 +358,6 @@ async function addNewTask(execute = true) {
     await setTaskType(undefined);
   }
 }
-
-const checkKeyboardEvents = (event: KeyboardEvent) => {
-  if (state.appConfiguration.useEnterToSend) {
-    if (!event.shiftKey && event.key === 'Enter') {
-      void addNewTask();
-      // Prevent a new line from being added to the input (optional)
-      event.preventDefault();
-    }
-    // otherwise it'll simply be the default action and inserting a newline :)
-  } else {
-    if (event.shiftKey && event.key === 'Enter') {
-      void addNewTask();
-      // Prevent a new line from being added to the input (optional)
-      event.preventDefault();
-    }
-    // otherwise it'll simply be the default action and inserting a newline :)
-  }
-};
 
 async function attachFileToTask(newFiles: File[]) {
   console.log('attach file to ask');
