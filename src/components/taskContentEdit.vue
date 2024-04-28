@@ -6,7 +6,6 @@
     color="secondary"
     v-model="content"
     label="Type your message or instruction..."
-    :bottom-slots="expertMode"
     :counter="expertMode"
     clearable
     debounce="500"
