@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { defaultLLMSettings } from 'src/modules/taskyon/chat';
 import { ref, Ref, watch, computed } from 'vue';
-import type { LLMTask } from 'src/modules/taskyon/types';
+import { LLMTask } from 'src/modules/taskyon/types';
 import type { FunctionArguments } from 'src/modules/taskyon/types';
 import axios from 'axios';
 import { LocalStorage, Notify } from 'quasar';
@@ -22,33 +22,6 @@ interface TaskStateType {
   markdownEnabled: boolean;
 }
 
-function setupIframeApi() {
-  console.log('Turn on iframe API.');
-  // Listen for messages from the parent page
-  window.addEventListener(
-    'message',
-    function (event) {
-      // Check if the iframe is not the top-level window
-      if (window !== window.top) {
-        // Check if the message is from the parent window
-        if (event.source === window.parent) {
-          // Optionally, check the origin if you know what it should be
-          // For example, if you expect messages only from 'https://example.com'
-          /*if (event.origin === 'https://example.com') {
-          console.log('Request from parent:', event.data);
-        } else {
-          console.error('Message from unknown origin:', event.origin);
-        }*/
-          console.log('Message from unknown origin:', event.origin, event);
-        } else {
-          console.error('Message not from parent window.');
-        }
-      }
-    },
-    false
-  );
-}
-
 export const useTaskyonStore = defineStore(storeName, () => {
   const $q = useQuasar();
 
@@ -56,10 +29,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
 
   // callin ExecutionContext.interrupt();  cancels processing of current task
   const taskWorkerController = new TaskWorkerController();
-
-  if ($q.platform.within.iframe) {
-    setupIframeApi();
-  }
 
   const llmSettings = defaultLLMSettings();
 

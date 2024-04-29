@@ -67,10 +67,10 @@ const selectedToolName = ref<string>('');
 
 const taskParser = computed(() => {
   try {
-    const jsonTool = ToolBase.strict().safeParse(
+    const jsonToolResult = ToolBase.strict().safeParse(
       JSON.parse(state.taskDraft.content || '')
     );
-    return jsonTool.success ? jsonTool.success : jsonTool.error;
+    return jsonToolResult.success ? jsonToolResult.success : jsonToolResult.error;
   } catch (error) {
     return error;
   }

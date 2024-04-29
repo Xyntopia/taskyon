@@ -1,7 +1,7 @@
 import { boot } from 'quasar/wrappers';
 import { reactive } from 'vue';
-import { TaskManager } from 'src/modules/taskyon/taskManager';
-import { LLMTask } from 'src/modules/taskyon/types';
+import { TaskManager, addTask2Tree } from 'src/modules/taskyon/taskManager';
+import { LLMTask, partialTaskDraft } from 'src/modules/taskyon/types';
 import {
   createTaskyonDatabase,
   TaskyonDatabase,
@@ -15,6 +15,8 @@ import {
   Tool,
 } from 'src/modules/taskyon/tools';
 import { executeJavaScript } from 'src/modules/tools/executeJavaScript';
+import { useQuasar } from 'quasar';
+import { ChatStateType } from 'src/modules/taskyon/chat';
 
 // Singleton holder for TaskManager
 let taskManagerInstance: TaskManager;
@@ -69,12 +71,50 @@ export async function getTaskManager() {
   return taskManagerInstance;
 }
 
+function setupIframeApi(chatState: ChatStateType, taskManager: TaskManager) {
+  console.log('Turn on iframe API.');
+  // Listen for messages from the parent page
+  window.addEventListener(
+    'message',
+    function (event: MessageEvent<{ task?: unknown; result?: unknown }>) {
+      // Check if the iframe is not the top-level window
+      if (window !== window.top) {
+        // Check if the message is from the parent window
+        if (event.source === window.parent) {
+          // Optionally, check the origin if you know what it should be
+          // For example, if you expect messages only from 'https://example.com'
+          /*if (event.origin === 'https://example.com') {
+          console.log('Request from parent:', event.data);
+        } else {
+          console.error('Message from unknown origin:', event.origin);
+        }*/
+          console.log('Message from unknown origin:', event.origin, event);
+          if ('task' in event.data) {
+            const result = partialTaskDraft.strict().safeParse(event.data.task);
+            if (result.success) {
+              void addTask2Tree(result.data, undefined, chatState, taskManager);
+            } else {
+              console.log(
+                'could not convert message to task:',
+                result.error,
+                event
+              );
+            }
+          }
+        } else {
+          console.error('Message not from parent window.');
+        }
+      }
+    },
+    false
+  );
+}
+
 // "async" is optional;
 // more info on params: https://v2.quasar.dev/quasar-cli/boot-files
-export default boot(async (/* { app, router, ... } */) => {
+export default boot(async (/*{ app, router, ... }*/) => {
   const state = useTaskyonStore();
   const taskManagerRef = await getTaskManager();
-
   // keys are reactive here, so in theory, when they change, taskyon should automatically
   // pick up on this...
   console.log('starting taskyon worker');
@@ -84,4 +124,9 @@ export default boot(async (/* { app, router, ... } */) => {
     state.keys,
     state.taskWorkerController
   );
+
+  //  const $q = useQuasar();
+  //if ($q.platform.within.iframe) {
+    void setupIframeApi(state.chatState, taskManagerRef);
+  //}
 });
