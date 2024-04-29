@@ -34,6 +34,7 @@ function myTaskyonFunction(data) {
 // Send function definition to the iframe
 var taskyon = document.getElementById('taskyon');
 taskyon.addEventListener('load', function () {
+  console.log('sending our function!')
   taskyon.contentWindow.postMessage({ task: functionTask }, iframeTarget);
 });
 

@@ -188,7 +188,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
   });
 
   return {
-    ...stateRefs,
+    ...stateRefs, // only the refs will get saved when soring the state!!
     setDraftFunctionArgs,
     getOpenRouterPKCEKey,
     minimalGui,

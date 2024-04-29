@@ -23,6 +23,8 @@ export default store((/* { ssrContext } */) => {
     //const storedState = LocalStorage.getItem(store.$id) as string;
     //const oldState = JSON.parse(storedState) as typeof store.$state;
     //store.$state = deepMerge(store.$state, oldState);
+    // this works, because only refs appear in the state here. Everything else
+    // e.g. if we define classes isn't subject to this :P
     store.$subscribe(() => {
       LocalStorage.set(store.$id, JSON.stringify(store.$state));
     });
