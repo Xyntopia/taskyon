@@ -150,7 +150,7 @@ export async function processChatTask(
             }
           },
           () => {
-            return taskWorkerController.interrupted;
+            return taskWorkerController.isInterrupted();
           } // define a function to check whether we should cancel the stream ...
         );
 
@@ -399,7 +399,7 @@ async function generateFollowUpTasksFromResult(
       taskDraft.debugging = { ...taskDraft.debugging, ...childCosts };
       // we do not want to queue up follow-up tasks for execution, if the task flow was
       // interrupted
-      execute = taskWorkerController.interrupted ? false : execute;
+      execute = taskWorkerController.isInterrupted() ? false : execute;
       const newId = await addTask2Tree(
         taskDraft,
         parentTaskId,
@@ -528,8 +528,12 @@ async function processTask(
           await taskManager.searchToolDefinitions(),
           taskWorkerController
         );
-        processTasksQueue.push(taskId); // send the task back into the queue
-        task.state = 'Queued'; // and we queue the functino again, to be processed again, this time with an LLM
+        if (!taskWorkerController.isInterrupted()) {
+          processTasksQueue.push(taskId); // send the task back into the queue
+          task.state = 'Queued'; // and we queue the functino again, to be processed again, this time with an LLM
+        } else {
+          task.state = 'Completed';
+        }
       }
     } else {
       console.log("We don't know what to do with this task:", taskId);
