@@ -330,8 +330,13 @@ export class TaskManager {
     if (this.taskyonDB) {
       const tasksFromDb = await this.taskyonDB.llmtasks.find().exec();
       tasksFromDb.forEach((taskDoc) => {
-        const task = transformDocToLLMTask(taskDoc);
-        this.tasks.set(task.id, task);
+        try {
+          const task = transformDocToLLMTask(taskDoc);
+          this.tasks.set(task.id, task);
+        } catch (error) {
+          console.error('Error transforming task doc:', error);
+          // skip this task and continue with the next one
+        }
       });
       console.log('all tasks loaded from DB!');
       this.notifySubscribers(undefined, true);

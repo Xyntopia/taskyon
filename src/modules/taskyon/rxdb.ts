@@ -284,6 +284,7 @@ export function transformDocToLLMTask(
   // TODO:  try to throw errors here, when our LLMTask object and our database object differ.
   const tmpObj = {
     ...parsedDoc,
+    content: parsedDoc.content || undefined, // we do this here, because in some situations the task has the wrong format...
     debugging: parsedDebugging,
     configuration: parsedConfiguration,
     result: parsedResult,
@@ -292,20 +293,3 @@ export function transformDocToLLMTask(
 
   return llmTask;
 }
-
-/*async function main() {
-  const db = await createDatabase("")
-
-  // Example usage
-  const llmTaskDoc = await db.llmtasks.insert({
-    id: 'task1',
-    role: 'user',
-    content: 'Some content',
-    state: 'Open',
-  });
-
-  // ... other operations ...
-}
-
-main().catch((err) => console.error(err));
-*/
