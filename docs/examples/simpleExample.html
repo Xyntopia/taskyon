@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Taskyon Chat Integration</title>
+    <style>
+      body,
+      html {
+        height: 100%;
+        margin: 0;
+        font-family: Arial, sans-serif;
+      }
+      #chat-container {
+        height: 70%;
+        width: 100%;
+        float: top;
+      }
+      #output-container {
+        height: 20%;
+        width: 100%;
+        float: bottom;
+        padding: 10px;
+        border-left: 1px solid #ccc;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="chat-container">
+      <iframe id="taskyon" frameborder="0" src="http://localhost:8080" width="100%" height="100%"></iframe>
+    </div>
+    <div id="output-container">
+      <h2>Function Call Output</h2>
+      <div id="output"></div>
+    </div>
+
+    <script src="exampleToolDefinition.js"></script>
+  </body>
+</html>

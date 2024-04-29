@@ -13,12 +13,12 @@
       }
       #map {
         height: 100%;
-        width: 50%;
+        width: 30%;
         float: left;
       }
       #chat {
         height: 100%;
-        width: 49%;
+        width: 69%;
         float: right;
       }
     </style>
@@ -29,6 +29,7 @@
     <div id="map"></div>
 
     <!--<iframe id="chat" frameborder="0" src="https://taskyon.space/chat"></iframe>-->
+    <!--<iframe id="chat" frameborder="0" src="http://localhost:8080"></iframe>-->
     <iframe id="chat" frameborder="0" src="http://localhost:8080"></iframe>
 
     <script>
@@ -43,6 +44,30 @@
         L.marker([lat, lon]).addTo(map);
       }
 
+      const myTaskyonFunction = {
+        name: 'myExampleStringAdderAlone',
+        description: 'provide a short description which an AI can understand',
+        longDescription:
+          'provide a long description if the AI/Human needs more details',
+        parameters: {
+          type: 'object',
+          properties: {
+            parameter1: {
+              type: 'string',
+              description: 'This is an example parameter!',
+            },
+            parameter2: {
+              type: 'string',
+              description:
+                'This is another example parameter, but not required!',
+            },
+          },
+          required: ['parameter1'],
+        },
+      };
+
+      const iframeTarget = 'http://localhost:8080';
+
       // Example: Add a marker at a specific location
       addMarker(51.505, -0.09); // Coordinates for London
 
@@ -55,19 +80,18 @@
           theme: 'light',
           allowedActions: ['postMessage', 'receiveMessage'],
         };
-        chatFrame.contentWindow.postMessage(
-          configData,
-          'http://localhost:8080'
-        );
+        chatFrame.contentWindow.postMessage(configData, iframeTarget);
+        chatFrame.contentWindow.postMessage(myTaskyonFunction, iframeTarget);
       });
 
       window.addEventListener('message', function (event) {
         // Check the origin to ensure security
-        if (event.origin !== 'http://localhost:8080') {
+        if (event.origin !== iframeTarget) {
           console.log('Received message from unauthorized origin');
           return;
         }
 
+        console.log('received message:', event);
         // Handle different types of messages
         if (
           event.data.type === 'addMarker' &&
