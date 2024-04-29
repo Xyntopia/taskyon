@@ -198,13 +198,26 @@ export const LLMTask = z.object({
 });
 export type LLMTask = z.infer<typeof LLMTask>;
 
-export type partialTaskDraft = {
-  role: LLMTask['role'];
-  content?: LLMTask['content'];
-  configuration?: LLMTask['configuration'];
-  state?: LLMTask['state'];
-  allowedTools?: LLMTask['allowedTools'];
-  debugging?: LLMTask['debugging'];
+export const partialTaskDraft = LLMTask.pick({
+  content: true,
+  configuration: true,
+  state: true,
+  allowedTools: true,
+  debugging: true,
+})
+  .partial()
+  .merge(LLMTask.pick({ role: true }));
+export type partialTaskDraft = z.infer<typeof partialTaskDraft>;
+
+export const taskTemplates = {
+  function: {
+    role: 'system',
+    state: 'Completed',
+  } as partialTaskDraft,
+  chat: {
+    role: 'user',
+    state: '',
+  },
 };
 interface YamlObjectRepresentation {
   [key: string]: YamlRepresentation;
