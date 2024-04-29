@@ -6,7 +6,6 @@
     color="secondary"
     v-model="content"
     label="Type your message or instruction..."
-    :counter="expertMode"
     clearable
     @keyup="checkKeyboardEvents"
     input-style="max-height: 300px"

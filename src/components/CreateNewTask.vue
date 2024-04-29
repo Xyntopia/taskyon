@@ -18,6 +18,7 @@
         :estimated-tokens="estimatedTokens"
         :current-model="currentModel"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
+        :bottom-slots="!state.minimalGui"
       />
       <div v-else-if="!selectedTaskType && codingMode">
         <CodeEditor v-model="content" />
