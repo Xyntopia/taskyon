@@ -220,6 +220,8 @@ is the outcome of the last expression in the script. Outcomes should be of the t
 // the following tool is "self-referential" and because of this we can not initialize it yet
 // we instead write a factory function which creates this tool using a reference to our tools
 // variable
+// TODO: we need to give crateExampleTool the full list of tools with their *code*
+// definitions. Basically it becomes a task-search tool.
 export function createToolExampleTool(tools: Record<string, Tool>): Tool {
   // used to get the code from our tools :)
   function inspectToolCode(toolName: string) {

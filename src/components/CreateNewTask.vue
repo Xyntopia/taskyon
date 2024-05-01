@@ -190,7 +190,7 @@ import { getDefaultParametersForTool } from 'src/modules/taskyon/tools';
 import { FunctionArguments } from 'src/modules/taskyon/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
-import type { LLMTask } from 'src/modules/taskyon/types';
+import type { LLMTask, partialTaskDraft } from 'src/modules/taskyon/types';
 import ModelSelection from 'components/ModelSelection.vue';
 import { writeFiles } from 'src/modules/taskyon/OPFS';
 import {
@@ -198,7 +198,6 @@ import {
   getFileMappingByUuid,
 } from 'src/modules/taskyon/taskManager';
 import ObjectTreeView from './ObjectTreeView.vue';
-import { getTaskManager } from 'boot/taskyon';
 import type { ToolBase } from 'src/modules/taskyon/tools';
 import taskSettingsButton from './taskSettingsButton.vue';
 import taskContentEdit from './taskContentEdit.vue';
@@ -206,7 +205,7 @@ import CodeEditor from './CodeEditor.vue';
 
 const props = defineProps<{
   codingMode?: boolean;
-  labels?: string[];
+  forceTaskProps?: partialTaskDraft[];
 }>();
 
 const state = useTaskyonStore();
@@ -220,7 +219,7 @@ const { content } = toRefs(state.taskDraft);
 //const funcArgs = computed(() => );
 
 async function getAllTools() {
-  return (await getTaskManager()).searchToolDefinitions();
+  return (await state.getTaskManager()).searchToolDefinitions();
 }
 
 const toolCollection = ref<Record<string, ToolBase>>({});
@@ -345,13 +344,13 @@ async function addNewTask(execute = true) {
   // execute: if true, we immediatly queue the task for execution in the taskManager
   //          otherwise, it won't get executed but simply saved into the tree
   console.log('adding new task, execute?', execute);
-  const newTask = { ...currentnewTask.value, label: props.labels };
+  const newTask = { ...currentnewTask.value, ...(props.forceTaskProps || {}) };
   if (!execute) newTask.state = 'Completed';
   void addTask2Tree(
     newTask,
     state.chatState.selectedTaskId, //parent
     state.chatState,
-    await getTaskManager(),
+    await state.getTaskManager(),
     execute // execute right away...
   );
   if (currentnewTask.value.role === 'user') {
@@ -368,7 +367,7 @@ async function attachFileToTask(newFiles: File[]) {
   // Collect UUIDs from added files
   const uuids = [];
 
-  const tm = await getTaskManager();
+  const tm = await state.getTaskManager();
   for (const [, savedFilename] of Object.entries(opfsMapping)) {
     const uuid = await tm.addFile({ opfs: savedFilename });
     if (uuid) {
@@ -411,7 +410,7 @@ async function updateFileMappings(newUploadedFiles: string[] | undefined) {
       try {
         const fileMapping = await getFileMappingByUuid(
           uuid,
-          await getTaskManager()
+          await state.getTaskManager()
         );
         if (fileMapping) {
           newMappings.push({

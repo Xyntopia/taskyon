@@ -59,7 +59,7 @@
         ></q-btn>
         <q-space />
         <q-btn
-          v-if="errors.length > 0"
+          v-if="state.getErrors().length > 0"
           flat
           dense
           round
@@ -181,7 +181,6 @@
 import ChatSidebar from 'components/ChatSidebar.vue';
 import DarkModeButton from 'components/DarkModeButton.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { errors } from 'boot/taskyon';
 const state = useTaskyonStore();
 const minMode = state.minimalGui;
 const btnSize = minMode ? 'xs' : 'md';

@@ -35,7 +35,6 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { getTaskManager } from 'src/boot/taskyon';
 import { ToolBase } from 'src/modules/taskyon/tools';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
@@ -52,7 +51,7 @@ const handleReady = (payload) => {
 */
 
 async function getAllTools() {
-  return (await getTaskManager()).searchToolDefinitions();
+  return (await state.getTaskManager()).searchToolDefinitions();
 }
 
 const toolCollection = ref<Awaited<ReturnType<typeof getAllTools>>>({});

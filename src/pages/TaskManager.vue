@@ -67,7 +67,6 @@
 import { ref } from 'vue';
 import Search from 'components/Search.vue';
 import { LLMTask } from 'src/modules/taskyon/types';
-import { getTaskManager } from 'boot/taskyon';
 import Task from 'src/components/Task.vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { findLeafTasks } from 'src/modules/taskyon/taskManager';
@@ -78,10 +77,10 @@ const syncProgressString = ref('0/0');
 const syncProgress = ref(0.0);
 const taskCount = ref(0);
 
-let taskManager: Awaited<ReturnType<typeof getTaskManager>>;
-void getTaskManager().then(
-  (tm) => ((taskManager = tm), (taskCount.value = taskManager.count()))
-);
+let taskManager: Awaited<ReturnType<typeof state.getTaskManager>>;
+void state
+  .getTaskManager()
+  .then((tm) => ((taskManager = tm), (taskCount.value = taskManager.count())));
 
 async function onUpdateSearchIndex() {
   if (taskManager) {
@@ -130,7 +129,7 @@ const initialPagination = {
 };
 
 async function setConversation(taskId: string) {
-  taskManager = await getTaskManager();
+  taskManager = await state.getTaskManager();
   const leafTasks = await findLeafTasks(taskId, (taskID) =>
     taskManager.getTask(taskID)
   );

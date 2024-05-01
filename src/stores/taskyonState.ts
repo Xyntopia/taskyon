@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { defaultLLMSettings } from 'src/modules/taskyon/chat';
-import { ref, Ref, watch, computed } from 'vue';
+import { ref, Ref, watch, computed, reactive, toRefs, toRef } from 'vue';
 import { LLMTask } from 'src/modules/taskyon/types';
 import type { FunctionArguments } from 'src/modules/taskyon/types';
 import axios from 'axios';
@@ -8,6 +8,8 @@ import { LocalStorage, Notify } from 'quasar';
 import { deepMerge, deepMergeReactive } from 'src/modules/taskyon/utils';
 import { useQuasar } from 'quasar';
 import { TaskWorkerController } from 'src/modules/taskyon/taskWorker';
+import { initTaskyon } from 'src/modules/taskyon/init';
+import { TaskManager } from 'src/modules/taskyon/taskManager';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -25,15 +27,28 @@ interface TaskStateType {
 export const useTaskyonStore = defineStore(storeName, () => {
   const $q = useQuasar();
 
-  console.log('initialize taskyon');
-
-  // callin ExecutionContext.interrupt();  cancels processing of current task
-  const taskWorkerController = new TaskWorkerController();
+  const errors: string[] = [];
+  function logError(message: string) {
+    errors.push(message);
+  }
+  function getErrors() {
+    return errors;
+  }
 
   const llmSettings = defaultLLMSettings();
+  // chatState & appConfiguration define the state of our app!
+  // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
+  // initialize keys with all available apis...
+  const keys = reactive(
+    llmSettings.llmApis.reduce((keys, api) => {
+      keys[api.name] = '';
+      return keys;
+    }, {} as Record<string, string>)
+  );
 
   const initialState = {
     // chatState is also part of the configuration we can store "somewhere else"
+    // TODO: rename chatState to llmSettings
     chatState: llmSettings,
     // appConfiguration is also part of the configuration we can store "somewhere else"
     appConfiguration: {
@@ -48,13 +63,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
       // sets whether we want to have a minimalist chat or the full app..
       guiMode: 'auto' as 'auto' | 'iframe' | 'default',
     },
-    // chatState & appConfiguration define the state of our app!
-    // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
-    // initialize keys with all available apis...
-    keys: llmSettings.llmApis.reduce((keys, api) => {
-      keys[api.name] = '';
-      return keys;
-    }, {} as Record<string, string>),
+    keys,
     // app State which should be part of the configuration
     // the things below should only represent transitional states
     // which have no relevance in the actual configuration of the app.
@@ -187,11 +196,31 @@ export const useTaskyonStore = defineStore(storeName, () => {
     return mode;
   });
 
+  // last thing we do after having loaded all settings is to actually start taskyon! :)
+  const TaskList = reactive<Map<string, LLMTask>>(new Map());
+  // callin ExecutionContext.interrupt();  cancels processing of current task
+  const taskWorkerController = new TaskWorkerController();
+  console.log('initialize taskyon');
+  const taskManager = initTaskyon(
+    llmSettings,
+    keys,
+    taskWorkerController,
+    logError,
+    TaskList,
+    $q.platform.within.iframe
+  );
+  async function getTaskManager() {
+    return await taskManager;
+  }
+
   return {
     ...stateRefs, // only the refs will get saved when soring the state!!
     setDraftFunctionArgs,
     getOpenRouterPKCEKey,
     minimalGui,
     taskWorkerController,
+    getTaskManager,
+    logError,
+    getErrors,
   };
 });

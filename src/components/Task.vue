@@ -269,7 +269,6 @@ import ToolResultWidget from 'components/ToolResultWidget.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import TokenUsage from 'components/TokenUsage.vue';
 import type { LLMTask } from 'src/modules/taskyon/types';
-import { getTaskManager } from 'src/boot/taskyon';
 import tyMarkdown from './tyMarkdown.vue';
 import { computed } from 'vue';
 
@@ -293,7 +292,7 @@ function copyToClipboard(text: string) {
 async function taskDraftFromTask(taskId: string) {
   // we are copying the current task with json stringify
   const jsonTask = JSON.stringify(
-    await (await getTaskManager()).getTask(taskId)
+    await (await state.getTaskManager()).getTask(taskId)
   );
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const task: Partial<LLMTask> = JSON.parse(jsonTask);
@@ -357,7 +356,7 @@ function toggleMarkdown(id: string) {
 
 async function updateLabels(labels: string[]) {
   console.log(labels);
-  const tm = await getTaskManager();
+  const tm = await state.getTaskManager();
   await tm.updateTask(
     {
       id: props.task.id,

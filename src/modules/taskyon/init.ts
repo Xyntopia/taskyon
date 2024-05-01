@@ -1,74 +1,10 @@
-import { boot } from 'quasar/wrappers';
-import { reactive } from 'vue';
-import { TaskManager, addTask2Tree } from 'src/modules/taskyon/taskManager';
-import { LLMTask, partialTaskDraft } from 'src/modules/taskyon/types';
-import {
-  createTaskyonDatabase,
-  TaskyonDatabase,
-} from 'src/modules/taskyon/rxdb';
-import { taskWorker } from 'src/modules/taskyon/taskWorker';
-import { useTaskyonStore } from 'src/stores/taskyonState';
-import {
-  executePythonScript,
-  localVectorStoreSearch,
-  createToolExampleTool,
-  Tool,
-} from 'src/modules/taskyon/tools';
-import { executeJavaScript } from 'src/modules/tools/executeJavaScript';
-import { ChatStateType } from 'src/modules/taskyon/chat';
-
-// Singleton holder for TaskManager
-let taskManagerInstance: TaskManager;
-export const errors: string[] = [];
-
-export function logError(message: string) {
-  errors.push(message);
-}
-
-// Function to get or create the TaskManager instance
-export async function getTaskManager() {
-  const state = useTaskyonStore();
-
-  if (!taskManagerInstance) {
-    const ToolList = reactive<Tool[]>([
-      executePythonScript,
-      // TODO: add local context(task) search
-      localVectorStoreSearch,
-      executeJavaScript,
-    ]);
-    ToolList.push(
-      createToolExampleTool(
-        ToolList.reduce((p, c) => {
-          p[c.name] = c;
-          return p;
-        }, {} as Record<string, Tool>)
-      )
-    );
-
-    // we are creating a reactive map for our memory-based task databae
-    // this ensures, that we receive upates for our task in our UI.
-    const TaskList = reactive<Map<string, LLMTask>>(new Map());
-    console.log('initializing taskyondb');
-    let taskyonDBInstance: TaskyonDatabase | undefined = undefined;
-    try {
-      taskyonDBInstance = await createTaskyonDatabase('taskyondb');
-    } catch (err) {
-      console.log('could not initialize taskyonDB', err);
-      logError(
-        `could not initialize taskyonDB:\n ${JSON.stringify(err, null, 2)}`
-      );
-    }
-    console.log('initializing task manager');
-    taskManagerInstance = new TaskManager(
-      TaskList,
-      ToolList,
-      taskyonDBInstance,
-      state.chatState.vectorizationModel
-    );
-    console.log('finished initialization');
-  }
-  return taskManagerInstance;
-}
+import { TaskManager, addTask2Tree } from './taskManager';
+import { LLMTask, partialTaskDraft } from './types';
+import { createTaskyonDatabase, TaskyonDatabase } from './rxdb';
+import { TaskWorkerController, taskWorker as runTaskWorker } from './taskWorker';
+import { executePythonScript, createToolExampleTool, Tool } from './tools';
+import { executeJavaScript } from '../tools/executeJavaScript';
+import { ChatStateType } from './chat';
 
 function setupIframeApi(chatState: ChatStateType, taskManager: TaskManager) {
   console.log('Turn on iframe API.');
@@ -109,23 +45,55 @@ function setupIframeApi(chatState: ChatStateType, taskManager: TaskManager) {
   );
 }
 
-// "async" is optional;
-// more info on params: https://v2.quasar.dev/quasar-cli/boot-files
-export default boot(async (/*{ app, router, ... }*/) => {
-  const state = useTaskyonStore();
-  const taskManagerRef = await getTaskManager();
-  // keys are reactive here, so in theory, when they change, taskyon should automatically
-  // pick up on this...
+export async function initTaskyon(
+  chatState: ChatStateType,
+  apiKeys: Record<string, string>,
+  taskWorkerController: TaskWorkerController,
+  logError: (message: string) => void,
+  // we explicitly provide a tasklist here, this gives us the chance to provide a reactive
+  // value in order to get updates to the list of tasks immediatly reflected in the UI.
+  TaskList: Map<string, LLMTask>,
+  withAPI = false
+) {
+  const ToolList: Tool[] = [
+    executePythonScript,
+    // TODO: add local context(task) search
+    // localVectorStoreSearch,
+    executeJavaScript,
+  ];
+
+  console.log('initializing taskyondb');
+  let taskyonDBInstance: TaskyonDatabase | undefined = undefined;
+  try {
+    taskyonDBInstance = await createTaskyonDatabase('taskyondb');
+  } catch (err) {
+    console.log('could not initialize taskyonDB', err);
+    logError(
+      `could not initialize taskyonDB:\n ${JSON.stringify(err, null, 2)}`
+    );
+  }
+  console.log('initializing task manager');
+  const taskManagerInstance = new TaskManager(
+    TaskList,
+    ToolList,
+    taskyonDBInstance,
+    chatState.vectorizationModel
+  );
+  console.log('finished taskManager initialization');
+
+  // keys could porentially be reactive here, so in theory, when they change in the GUI,
+  // taskyon should automatically pick up on this...
   console.log('starting taskyon worker');
-  void taskWorker(
-    state.chatState,
-    taskManagerRef,
-    state.keys,
-    state.taskWorkerController
+  void runTaskWorker(
+    chatState,
+    taskManagerInstance,
+    apiKeys,
+    taskWorkerController
   );
 
-  //  const $q = useQuasar();
-  //if ($q.platform.within.iframe) {
-    void setupIframeApi(state.chatState, taskManagerRef);
-  //}
-});
+  if (withAPI) {
+    void setupIframeApi(chatState, taskManagerInstance);
+  }
+
+  return taskManagerInstance;
+}

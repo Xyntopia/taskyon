@@ -21,7 +21,7 @@
       </q-btn>
       <q-space />
       <q-btn
-        v-if="errors.length > 0"
+        v-if="state.getErrors().length > 0"
         flat
         dense
         round
@@ -78,7 +78,6 @@ route.query; //has all the parameters :)
 
 import DarkModeButton from 'components/DarkModeButton.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { errors } from 'boot/taskyon';
 
 const state = useTaskyonStore();
 const btnsize = 'xs';

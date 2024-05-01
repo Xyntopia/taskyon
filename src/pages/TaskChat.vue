@@ -266,7 +266,6 @@ import CreateNewTask from 'components/CreateNewTask.vue';
 import OpenRouterPKCE from 'src/components/OpenRouterPKCE.vue';
 import InfoDialog from 'src/components/InfoDialog.vue';
 import axios from 'axios';
-import { getTaskManager } from 'boot/taskyon';
 import { LLMTask } from 'src/modules/taskyon/types';
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
@@ -282,7 +281,7 @@ const selectedThread = ref<LLMTask[]>([]);
 
 async function updateCurrentTask(taskId: string | undefined) {
   if (taskId) {
-    currentTask.value = await (await getTaskManager()).getTask(taskId);
+    currentTask.value = await (await state.getTaskManager()).getTask(taskId);
   }
 }
 void updateCurrentTask(state.chatState.selectedTaskId);
@@ -343,9 +342,9 @@ void axios.get('main_content/frontpage.md').then((jsonconfig) => {
 async function updateTaskThread(taskId: string | undefined) {
   if (taskId) {
     const threadIDChain = await taskChain(taskId, async (taskId) =>
-      (await getTaskManager()).getTask(taskId)
+      (await state.getTaskManager()).getTask(taskId)
     );
-    const TM = await getTaskManager();
+    const TM = await state.getTaskManager();
     const thread = (await Promise.all(
       threadIDChain.map(async (tId) => {
         return await TM.getTask(tId);

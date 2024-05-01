@@ -76,7 +76,6 @@ import { ref } from 'vue';
 import { deleteTaskThread, TaskManager } from 'src/modules/taskyon/taskManager';
 import Settings from 'components/Settings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { getTaskManager } from 'boot/taskyon';
 
 const state = useTaskyonStore();
 
@@ -93,7 +92,7 @@ async function getLeafTaskNames(tm: TaskManager) {
   return taskList;
 }
 
-void getTaskManager().then(async (tm) => {
+void state.getTaskManager().then(async (tm) => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   tm.subscribeToTaskChanges(() => {
     console.log('update threads!!');
@@ -106,7 +105,7 @@ void getTaskManager().then(async (tm) => {
 
 async function onDeleteThread(conversationId: string) {
   console.log('deleting thread!!', conversationId);
-  const tm = await getTaskManager();
+  const tm = await state.getTaskManager();
   state.chatState.selectedTaskId = undefined;
   await deleteTaskThread(conversationId, tm);
   conversationIDs.value = await getLeafTaskNames(tm);
