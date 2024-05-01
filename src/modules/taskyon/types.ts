@@ -204,10 +204,16 @@ export const partialTaskDraft = LLMTask.pick({
   state: true,
   allowedTools: true,
   debugging: true,
+  label: true,
 })
   .partial()
   .merge(LLMTask.pick({ role: true }));
 export type partialTaskDraft = z.infer<typeof partialTaskDraft>;
+
+export const functionTaskTemplate: partialTaskDraft = {
+  role: 'system',
+  label: ['function'],
+};
 
 export const taskTemplates = {
   function: {

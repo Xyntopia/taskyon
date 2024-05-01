@@ -27,7 +27,7 @@
         <ObjectTreeView :model-value="f"></ObjectTreeView>
       </q-expansion-item>
     </q-list>
-    <CreateNewTask coding-mode :labels="['function']" />
+    <CreateNewTask coding-mode :force-task-props="functionTaskTemplate" />
     {{ taskParser }}
     <q-btn label="new tool" @click="newToolStructure()"></q-btn>
   </div>
@@ -39,6 +39,7 @@ import { ToolBase } from 'src/modules/taskyon/tools';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
 import ObjectTreeView from './ObjectTreeView.vue';
+import { functionTaskTemplate } from 'src/modules/taskyon/types';
 
 const state = useTaskyonStore();
 
@@ -69,7 +70,9 @@ const taskParser = computed(() => {
     const jsonToolResult = ToolBase.strict().safeParse(
       JSON.parse(state.taskDraft.content || '')
     );
-    return jsonToolResult.success ? jsonToolResult.success : jsonToolResult.error;
+    return jsonToolResult.success
+      ? jsonToolResult.success
+      : jsonToolResult.error;
   } catch (error) {
     return error;
   }

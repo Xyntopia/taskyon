@@ -205,7 +205,7 @@ import CodeEditor from './CodeEditor.vue';
 
 const props = defineProps<{
   codingMode?: boolean;
-  forceTaskProps?: partialTaskDraft[];
+  forceTaskProps?: partialTaskDraft;
 }>();
 
 const state = useTaskyonStore();
