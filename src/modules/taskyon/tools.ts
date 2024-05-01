@@ -8,6 +8,7 @@ import {
   convertToYamlWComments,
   YamlRepresentation,
   FunctionCallMessage,
+  FunctionArguments,
 } from './types';
 import { z } from 'zod';
 import { FunctionCall, ParamType } from './types';
@@ -79,6 +80,60 @@ const Tool = ToolBase.extend({
 });
 export type Tool = z.infer<typeof Tool>;
 
+// This function executes code in a different browser context. E.g. executing a
+// function in the context of the parent of an iframe!
+async function handleRemoteFunction(name: string, args: FunctionArguments) {
+  const message = FunctionCallMessage.parse({
+    type: 'functionCall',
+    functionName: name,
+    arguments: args,
+  });
+  console.log('no tool code found, posting a function message to', message);
+
+  // set up listener to listen for function call result.
+  const funcRP: Promise<FunctionCallMessage> = new Promise(
+    (resolve, reject) => {
+      const listener = (event: MessageEvent) => {
+        // TODO: Add security checks here, e.g., verify event.origin
+        if (event.source === window.parent && event.data) {
+          const response = FunctionCallMessage.parse(event.data);
+          if (response.functionName === name) {
+            resolve(response);
+          } else {
+            reject(
+              new Error(
+                `The response message for functionCall to ${name} had the wrong format!`
+              )
+            );
+          }
+        }
+      };
+
+      // Set a timeout to reject the promise if no response is received within a certain time frame
+      const timeoutSeconds = 10;
+      setTimeout(() => {
+        reject(
+          new Error(`Response timeout (${timeoutSeconds}) for function ${name}`)
+        );
+      }, timeoutSeconds * 1000); // 100 seconds timeout for example
+
+      // TODO: make timeout configurable
+      // TODO: not sure, but we might need to remove the "once" part because we would like to wait until
+      // we get an answer from the actual function with the correct function name if multiple functions are involved....
+      // https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener
+      //  we probably also have to paly around with the "catch" parameter, making sure, once we handle the event, it dosn't get
+      // dispatched to other handlers anymore...
+      window.addEventListener('message', listener, { once: true });
+    }
+  );
+
+  // after we've set up the listener, initiate the function call
+  window.parent.postMessage(message, '*'); // TODO. Specify the exact origin instead of '*'
+
+  const funcR = await funcRP;
+  return funcR.response;
+}
+
 export async function handleFunctionExecution(
   func: FunctionCall,
   tools: Record<string, ToolBase | Tool>
@@ -95,6 +150,9 @@ export async function handleFunctionExecution(
       };
     } else if (tool.code) {
       console.log('compiling function code', tool);
+      console.error(
+        'compiling js code into a function is not yet available in the official version!'
+      );
       return {
         type: 'ToolError',
         toolResult: {
@@ -106,51 +164,7 @@ export async function handleFunctionExecution(
     } else {
       // we do the zod object parsing/validation here, because we might have a proxy object from upstream
       // and want to make sure its serializable for a postMessage function.
-      const message = FunctionCallMessage.parse({
-        type: 'functionCall',
-        functionName: func.name,
-        arguments: func.arguments,
-      });
-      console.log('no tool code found, posting a function message to', message);
-
-      // set up listener to listen for function call result.
-      const funcRP: Promise<FunctionCallMessage> = new Promise(
-        (resolve, reject) => {
-          const listener = (event: MessageEvent) => {
-            // TODO: Add security checks here, e.g., verify event.origin
-            if (event.source === window.parent && event.data) {
-              const response = FunctionCallMessage.parse(event.data);
-              if (response.functionName === func.name) {
-                resolve(response);
-              } else {
-                reject(
-                  new Error(
-                    `The response message for functionCall to ${func.name} had the wrong format!`
-                  )
-                );
-              }
-            }
-          };
-
-          // Set a timeout to reject the promise if no response is received within a certain time frame
-          const timeoutSeconds = 10;
-          setTimeout(() => {
-            reject(
-              new Error(
-                `Response timeout (${timeoutSeconds}) for function ${func.name}`
-              )
-            );
-          }, timeoutSeconds * 1000); // 100 seconds timeout for example
-          // TODO: make timeout configurable
-
-          window.addEventListener('message', listener, { once: true });
-        }
-      );
-
-      // after we've set up the listener, initiate the function call
-      window.parent.postMessage(message, '*'); // TODO. Specify the exact origin instead of '*'
-
-      const funcR = await funcRP;
+      const funcR = await handleRemoteFunction(func.name, func.arguments);
       return {
         type: 'ToolResult',
         toolResult: { result: dump(funcR) },
@@ -161,7 +175,10 @@ export async function handleFunctionExecution(
       type: 'ToolError',
       toolResult: {
         error: {
-          message: error instanceof Error ? error.message : 'unknown error during function execution!!',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'unknown error during function execution!!',
           functionName: func.name,
         },
       },

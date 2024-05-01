@@ -44,28 +44,6 @@
         L.marker([lat, lon]).addTo(map);
       }
 
-      const myTaskyonFunction = {
-        name: 'myExampleStringAdderAlone',
-        description: 'provide a short description which an AI can understand',
-        longDescription:
-          'provide a long description if the AI/Human needs more details',
-        parameters: {
-          type: 'object',
-          properties: {
-            parameter1: {
-              type: 'string',
-              description: 'This is an example parameter!',
-            },
-            parameter2: {
-              type: 'string',
-              description:
-                'This is another example parameter, but not required!',
-            },
-          },
-          required: ['parameter1'],
-        },
-      };
-
       const iframeTarget = 'http://localhost:8080';
 
       // Example: Add a marker at a specific location
@@ -81,7 +59,7 @@
           allowedActions: ['postMessage', 'receiveMessage'],
         };
         chatFrame.contentWindow.postMessage(configData, iframeTarget);
-        chatFrame.contentWindow.postMessage(myTaskyonFunction, iframeTarget);
+        chatFrame.contentWindow.postMessage({myTaskyonFunction, }, iframeTarget);
       });
 
       window.addEventListener('message', function (event) {

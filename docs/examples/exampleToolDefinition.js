@@ -27,14 +27,14 @@ const functionTask = {
 // Function to be called from the iframe
 function myTaskyonFunction(data) {
   console.log('Received function call with data:', data);
-  const result = `You sent: ${data.parameter1} and ${data.parameter2}`;
+  const result = `${data.parameter1}${data.parameter2}`;
   return result;
 }
 
 // Send function definition to the iframe
 var taskyon = document.getElementById('taskyon');
 taskyon.addEventListener('load', function () {
-  console.log('sending our function!')
+  console.log('sending our function!');
   taskyon.contentWindow.postMessage({ task: functionTask }, iframeTarget);
 });
 
@@ -46,16 +46,34 @@ window.addEventListener('message', function (event) {
   }
 
   console.log('received message:', event);
+  /* definition: function call looks like this:
+event.data = {
+  "type": "functionCall",
+  "functionName": "myExampleStringAdderAlone",
+  "arguments": {
+      "parameter1": "hello",
+      "parameter2": "worldasdas"
+  }
+}*/
+
   // Handle function call
-  if (event.data.type === 'callFunction') {
+  if (event.data.type === 'functionCall') {
+    //if the message comes from taskyon, we can be sure that its the correct type.
     const data = event.data;
-    const result = myTaskyonFunction(data);
-    taskyon.contentWindow.postMessage({ result }, iframeTarget);
+    const result = myTaskyonFunction(data.arguments);
 
     // Display function call information
     const output = `Function called with parameters: ${JSON.stringify(
       data
     )}<br>Returned: ${result}`;
     outputDiv.innerHTML = output;
+
+    // Send response to iframe
+    const response = {
+      type: 'functionResponse',
+      functionName: 'myExampleStringAdderAlone',
+      response: result,
+    };
+    taskyon.contentWindow.postMessage(response, iframeTarget);
   }
 });

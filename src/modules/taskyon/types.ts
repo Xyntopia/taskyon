@@ -119,7 +119,9 @@ export const ParamType = z.union([
   z.null(),
 ]);
 export type ParamType = z.infer<typeof ParamType>;
-const FunctionArguments = z.record(ParamType);
+const FunctionArguments = z
+  .record(ParamType)
+  .describe('arguments of a function specified by json schema');
 export type FunctionArguments = z.infer<typeof FunctionArguments>;
 
 export const FunctionCall = z.object({
@@ -130,9 +132,17 @@ export type FunctionCall = z.infer<typeof FunctionCall>;
 
 export const FunctionCallMessage = z
   .object({
-    type: z.enum(['functionCall', 'functionResponse']),
-    functionName: z.string(),
+    type: z
+      .enum(['functionCall', 'functionResponse'])
+      .describe('are we deaing with a functionCall or a functionResponse?'),
+    functionName: z.string().describe('the name of the function'),
     arguments: FunctionArguments.optional(),
+    response: z
+      .unknown()
+      .optional()
+      .describe(
+        'response of a FunctionCall, e.g. through postMessage with iframes.'
+      ),
   })
   .describe(
     'This type is used for sending messages with function calls between windows. E.g. from iframe to parent and back'
