@@ -5,7 +5,7 @@
     <q-expansion-item
       dense
       label="Conversation Threads"
-      icon="list"
+      icon="forum"
       default-opened
     >
       <div class="column items-stretch">
@@ -32,11 +32,12 @@
             to="/"
             clickable
             v-ripple
-            active-class=""
+            active-class="text-secondary"
+            :active="state.chatState.selectedTaskId == conversationId.id"
           >
-            <q-item-section avatar>
+            <!--q-item-section avatar>
               <q-icon name="chat_bubble" size="xs" />
-            </q-item-section>
+            </!q-item-section-->
             <q-item-section>
               {{
                 conversationId.name ||
@@ -61,7 +62,12 @@
     <div class="q-pa-md q-gutter-xs">
       <Settings reduced></Settings>
       <q-btn flat icon="mdi-tools" label="Tools" to="/tools"></q-btn>
-      <q-btn flat icon="manage_accounts" label="Accounts" to="/settings"></q-btn>
+      <q-btn
+        flat
+        icon="manage_accounts"
+        label="Accounts"
+        to="/settings"
+      ></q-btn>
     </div>
     <!-- Settings Area -->
     <!--
