@@ -7,8 +7,43 @@
       label="Conversation Threads"
       icon="forum"
       default-opened
+      hide-expand-icon
     >
       <div class="column items-stretch">
+        <q-list>
+          <q-item
+            dense
+            v-for="conversationId in conversationIDs"
+            :key="conversationId.id"
+            @click="state.chatState.selectedTaskId = conversationId.id"
+            to="/"
+            clickable
+            v-ripple
+            active-class="text-weight-bolder"
+            :active="state.chatState.selectedTaskId == conversationId.id"
+          >
+            <!--q-item-section avatar>
+              <q-icon name="chat_bubble" size="xs" />
+            </!q-item-section-->
+            <q-item-section lines>
+              {{
+                conversationId.name ||
+                'Thread' + conversationId.id.substring(0, 3)
+              }}
+            </q-item-section>
+            <q-item-section side>
+              <q-btn
+                dense
+                icon="delete"
+                size="sm"
+                flat
+                @click="onDeleteThread(conversationId.id)"
+              ></q-btn>
+              <q-tooltip> Create a new conversation </q-tooltip>
+            </q-item-section>
+            <q-tooltip> Select conversation</q-tooltip>
+          </q-item>
+        </q-list>
         <div class="row">
           <q-btn
             class="col"
@@ -23,38 +58,6 @@
             ><q-tooltip>Search for more conversations</q-tooltip></q-btn
           >
         </div>
-        <q-list>
-          <q-item
-            dense
-            v-for="conversationId in conversationIDs"
-            :key="conversationId.id"
-            @click="state.chatState.selectedTaskId = conversationId.id"
-            to="/"
-            clickable
-            v-ripple
-            active-class="text-secondary"
-            :active="state.chatState.selectedTaskId == conversationId.id"
-          >
-            <!--q-item-section avatar>
-              <q-icon name="chat_bubble" size="xs" />
-            </!q-item-section-->
-            <q-item-section>
-              {{
-                conversationId.name ||
-                'Thread' + conversationId.id.substring(0, 3)
-              }}
-            </q-item-section>
-            <q-item-section side>
-              <q-btn
-                dense
-                icon="delete"
-                size="sm"
-                flat
-                @click="onDeleteThread(conversationId.id)"
-              ></q-btn>
-            </q-item-section>
-          </q-item>
-        </q-list>
       </div>
     </q-expansion-item>
     <q-separator spaced />
