@@ -21,7 +21,7 @@ import {
 } from './utils';
 import type { FileMappingDocType } from './rxdb';
 import { zodToYamlString, yamlToolChatType, toolResultChat } from './types';
-import { buildChatFromTask, taskChain } from './buildChatFromTask';
+import { buildChatFromTask, taskChain } from './taskUtils';
 
 const getOpenai = lruCache<OpenAI>(5)(
   (apiKey: string, baseURL?: string, headers?: Record<string, string>) => {

@@ -14,6 +14,7 @@ import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { loadOrCreateVectorStore } from './vectorSearch';
 import { extractKeywords, vectorizeText } from './webWorkerApi';
 import { Tool, ToolBase } from './tools';
+import { buildChatFromTask } from './taskUtils';
 
 /**
  * Finds the root task of a given task.
@@ -163,13 +164,6 @@ export async function addTask2Tree(
 
   console.log('create new Task:', newTask.id);
 
-  if (task.content) {
-    void extractKeywords(task.content, 5).then((kws) => {
-      console.log('update task with kw: ', kws);
-      void taskManager.updateTask({ id: uuid, name: kws[0] }, true);
-    });
-  }
-
   if (parent) {
     parent.childrenIDs.push(newTask.id);
     await taskManager.updateTask(parent, true);
@@ -185,6 +179,24 @@ export async function addTask2Tree(
     newTask.state = 'Completed';
     await taskManager.setTask(newTask, true);
   }
+
+  // extract keywordsfrom entire chat and use it to name the task...
+  if (task.content) {
+    const chat = buildChatFromTask(newTask.id, (tId: string) =>
+      taskManager.getTask(tId)
+    );
+    const chatString = (await chat).reduce((p, n) => {
+      if (typeof n.content === 'string') {
+        return p + '\n\n' + n.content;
+      }
+      return p;
+    }, '');
+    void extractKeywords(chatString, 5).then((kws) => {
+      console.log('update task with kw: ', kws);
+      void taskManager.updateTask({ id: uuid, name: kws[0] }, true);
+    });
+  }
+
   chatState.selectedTaskId = newTask.id;
   return newTask.id;
 }
