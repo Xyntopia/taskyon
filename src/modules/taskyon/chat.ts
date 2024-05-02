@@ -68,7 +68,7 @@ export function defaultLLMSettings() {
         name: 'taskyon',
         baseURL: 'https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/api',
         defaultModel: 'mistralai/mistral-7b-instruct',
-        streamSupport: false,
+        streamSupport: true,
         routes: {
           chatCompletion: '/chat/completions',
           models: '/models',

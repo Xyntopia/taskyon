@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { defaultLLMSettings } from 'src/modules/taskyon/chat';
-import { ref, Ref, watch, computed, reactive, toRefs, toRef } from 'vue';
+import { ref, Ref, watch, computed, reactive } from 'vue';
 import { LLMTask } from 'src/modules/taskyon/types';
 import type { FunctionArguments } from 'src/modules/taskyon/types';
 import axios from 'axios';
@@ -9,7 +9,6 @@ import { deepMerge, deepMergeReactive } from 'src/modules/taskyon/utils';
 import { useQuasar } from 'quasar';
 import { TaskWorkerController } from 'src/modules/taskyon/taskWorker';
 import { initTaskyon } from 'src/modules/taskyon/init';
-import { TaskManager } from 'src/modules/taskyon/taskManager';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -38,14 +37,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
   const llmSettings = defaultLLMSettings();
   // chatState & appConfiguration define the state of our app!
   // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
-  // initialize keys with all available apis...
-  const keys = reactive(
-    llmSettings.llmApis.reduce((keys, api) => {
-      keys[api.name] = '';
-      return keys;
-    }, {} as Record<string, string>)
-  );
-
   const initialState = {
     // chatState is also part of the configuration we can store "somewhere else"
     // TODO: rename chatState to llmSettings
@@ -63,7 +54,11 @@ export const useTaskyonStore = defineStore(storeName, () => {
       // sets whether we want to have a minimalist chat or the full app..
       guiMode: 'auto' as 'auto' | 'iframe' | 'default',
     },
-    keys,
+    // initialize keys with all available apis...
+    keys: llmSettings.llmApis.reduce((keys, api) => {
+      keys[api.name] = '';
+      return keys;
+    }, {} as Record<string, string>),
     // app State which should be part of the configuration
     // the things below should only represent transitional states
     // which have no relevance in the actual configuration of the app.
@@ -111,15 +106,16 @@ export const useTaskyonStore = defineStore(storeName, () => {
   );
 
   // Create refs for each property and adjust the type assertion
-  const stateRefs = Object.fromEntries(
-    Object.entries(storedInitialState).map(([key, value]) => [key, ref(value)])
-  ) as { [K in keyof typeof initialState]: Ref<(typeof initialState)[K]> };
+  //const stateRefs = Object.fromEntries(
+  //  Object.entries(storedInitialState).map(([key, value]) => [key, ref(value)])
+  //) as { [K in keyof typeof initialState]: Ref<(typeof initialState)[K]> };
+  const stateRefs = reactive(storedInitialState);
 
-  if (stateRefs.initialLoad.value) {
+  if (stateRefs.initialLoad) {
     // this file can be replaced in kubernetes  using a configmap!
     // that way we can configure our webapp even if its already compiled...
     void axios
-      .get(stateRefs.appConfiguration.value.appConfigurationUrl)
+      .get(stateRefs.appConfiguration.appConfigurationUrl)
       .then((jsonconfig) => {
         // we only want to load the initial configuration the first time we are loading the page...
         console.log('load App Config', jsonconfig.data);
@@ -127,27 +123,24 @@ export const useTaskyonStore = defineStore(storeName, () => {
           chatState: typeof initialState.chatState;
           appConfiguration: typeof initialState.appConfiguration;
         };
-        deepMergeReactive(
-          stateRefs.appConfiguration.value,
-          config.appConfiguration
-        );
-        deepMergeReactive(stateRefs.chatState.value, config.chatState);
-        stateRefs.initialLoad.value = false;
+        deepMergeReactive(stateRefs.appConfiguration, config.appConfiguration);
+        deepMergeReactive(stateRefs.chatState, config.chatState);
+        stateRefs.initialLoad = false;
       });
   } else {
     console.log('loading previous configuration');
   }
 
   watch(
-    () => stateRefs.chatState.value.selectedApi,
+    () => stateRefs.chatState.selectedApi,
     (newValue) => {
       console.log('api switch detected', newValue);
     }
   );
 
   function setDraftFunctionArgs(newValue: FunctionArguments) {
-    if (stateRefs.taskDraft.value.configuration?.function) {
-      stateRefs.taskDraft.value.configuration.function.arguments = newValue;
+    if (stateRefs.taskDraft.configuration?.function) {
+      stateRefs.taskDraft.configuration.function.arguments = newValue;
     }
   }
 
@@ -167,7 +160,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
         console.log('downloaded key:', data.key);
         if (data.key) {
           Notify.create('API Key retrieved successfully');
-          stateRefs.keys.value['openrouter.ai'] = data.key;
+          stateRefs.keys['openrouter.ai'] = data.key;
         } else {
           Notify.create('Failed to retrieve API Key');
         }
@@ -182,7 +175,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
 
   const minimalGui = computed(() => {
     let mode = false;
-    switch (stateRefs.appConfiguration.value.guiMode) {
+    switch (stateRefs.appConfiguration.guiMode) {
       case 'default':
         mode = false;
         break;
@@ -202,8 +195,8 @@ export const useTaskyonStore = defineStore(storeName, () => {
   const taskWorkerController = new TaskWorkerController();
   console.log('initialize taskyon');
   const taskManager = initTaskyon(
-    llmSettings,
-    keys,
+    stateRefs.chatState,
+    stateRefs.keys,
     taskWorkerController,
     logError,
     TaskList,
