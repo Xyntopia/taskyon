@@ -1,6 +1,6 @@
 import type OpenAI from 'openai';
 import { dump } from 'js-yaml';
-import { z } from 'zod';
+import { boolean, z } from 'zod';
 
 const TaskState = z.enum([
   'Open',
@@ -124,30 +124,43 @@ const FunctionArguments = z
   .describe('arguments of a function specified by json schema');
 export type FunctionArguments = z.infer<typeof FunctionArguments>;
 
+/* here we are essentiall declaring the taskyon API */
 export const FunctionCall = z.object({
   name: z.string(),
   arguments: FunctionArguments,
 });
 export type FunctionCall = z.infer<typeof FunctionCall>;
 
-export const FunctionCallMessage = z
-  .object({
-    type: z
-      .enum(['functionCall', 'functionResponse'])
-      .describe('are we deaing with a functionCall or a functionResponse?'),
-    functionName: z.string().describe('the name of the function'),
-    arguments: FunctionArguments.optional(),
-    response: z
-      .unknown()
-      .optional()
-      .describe(
-        'response of a FunctionCall, e.g. through postMessage with iframes.'
-      ),
-  })
-  .describe(
-    'This type is used for sending messages with function calls between windows. E.g. from iframe to parent and back'
-  );
-export type FunctionCallMessage = z.infer<typeof FunctionCallMessage>;
+export const RemoteFunctionBase = z.object({
+  functionName: z.string().describe('the name of the function'),
+});
+
+export const RemoteFunctionCall = RemoteFunctionBase.extend({
+  type: z
+    .enum(['functionCall'])
+    .describe('Field to indicate what kind of a message we have here.'),
+  arguments: FunctionArguments.optional().describe(
+    'the arguments for the function as a json object'
+  ),
+}).describe(
+  'This type is used for sending messages with function calls between windows. E.g. from iframe to parent'
+);
+export type RemoteFunctionCall = z.infer<typeof RemoteFunctionCall>;
+
+export const RemoteFunctionResponse = RemoteFunctionBase.extend({
+  type: z
+    .enum(['functionResponse'])
+    .describe('Field to indicate what kind of a message we have here.'),
+  response: z
+    .unknown()
+    .optional()
+    .describe(
+      'response of a FunctionCall, e.g. through postMessage with iframes.'
+    ),
+}).describe(
+  'This type is used for sending messages with the result of a remote function call between windows. E.g. from parent to taskyon iframe'
+);
+export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>;
 
 // TODO: add an "extended" task and put all information in there which we don't really "need"
 //       to save in the database. E.g. how many follow-up tasks are allowed, how many
@@ -217,7 +230,10 @@ export const partialTaskDraft = LLMTask.pick({
   label: true,
 })
   .partial()
-  .merge(LLMTask.pick({ role: true }));
+  .merge(LLMTask.pick({ role: true }))
+  .describe(
+    'This is just a subset of the task properties which can be used to define new tasks in various places.'
+  );
 export type partialTaskDraft = z.infer<typeof partialTaskDraft>;
 
 export const functionTaskTemplate: partialTaskDraft = {
@@ -225,16 +241,29 @@ export const functionTaskTemplate: partialTaskDraft = {
   label: ['function'],
 };
 
-export const taskTemplates = {
-  function: {
-    role: 'system',
-    state: 'Completed',
-  } as partialTaskDraft,
-  chat: {
-    role: 'user',
-    state: '',
-  },
-};
+export const TaskMessage = z
+  .object({
+    type: z
+      .enum(['task'])
+      .describe('Field to indicate what kind of a message we have here.'),
+    task: partialTaskDraft,
+    execute: z.boolean().describe('should the task be queued for execution?'),
+  })
+  .describe(
+    'With this message type we can send tasks to taskyon from outside, e.g. a parent to a taskyon iframe'
+  );
+export type TaskMessage = z.infer<typeof TaskMessage>;
+
+export const TaskyonMessages = z.union([
+  RemoteFunctionCall,
+  RemoteFunctionResponse,
+  TaskMessage,
+  z
+    .object({ type: z.enum(['taskyonReady']) })
+    .describe('signals, that our API is ready!'),
+]);
+export type TaskyonMessages = z.infer<typeof TaskyonMessages>;
+
 interface YamlObjectRepresentation {
   [key: string]: YamlRepresentation;
 }

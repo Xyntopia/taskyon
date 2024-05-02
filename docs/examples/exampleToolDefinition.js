@@ -2,6 +2,7 @@ const iframeTarget = 'http://localhost:8080';
 const outputDiv = document.getElementById('output');
 
 const functionTask = {
+  role: 'system',
   content: `{
   "name": "myExampleStringAdderAlone",
   "description": "provide a short description which an AI can understand",
@@ -33,9 +34,17 @@ function myTaskyonFunction(data) {
 
 // Send function definition to the iframe
 var taskyon = document.getElementById('taskyon');
-taskyon.addEventListener('load', function () {
+window.addEventListener('message', function (event) {
+  if (event.origin !== iframeTarget && event.data.type === 'taskyonReady') {
+    console.log('Received message that taskyon is ready!', event);
+    return;
+  }
+
   console.log('sending our function!');
-  taskyon.contentWindow.postMessage({ task: functionTask }, iframeTarget);
+  taskyon.contentWindow.postMessage(
+    { type: 'task', task: functionTask, execute: false },
+    iframeTarget
+  );
 });
 
 window.addEventListener('message', function (event) {

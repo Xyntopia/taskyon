@@ -7,8 +7,10 @@ import {
   TaskResult,
   convertToYamlWComments,
   YamlRepresentation,
-  FunctionCallMessage,
+  TaskyonMessages,
   FunctionArguments,
+  RemoteFunctionCall,
+  RemoteFunctionResponse,
 } from './types';
 import { z } from 'zod';
 import { FunctionCall, ParamType } from './types';
@@ -83,21 +85,17 @@ export type Tool = z.infer<typeof Tool>;
 // This function executes code in a different browser context. E.g. executing a
 // function in the context of the parent of an iframe!
 async function handleRemoteFunction(name: string, args: FunctionArguments) {
-  const message = FunctionCallMessage.parse({
-    type: 'functionCall',
-    functionName: name,
-    arguments: args,
-  });
-  console.log('no tool code found, posting a function message to', message);
-
   // set up listener to listen for function call result.
-  const funcRP: Promise<FunctionCallMessage> = new Promise(
+  const funcRP: Promise<RemoteFunctionResponse> = new Promise(
     (resolve, reject) => {
       const listener = (event: MessageEvent) => {
         // TODO: Add security checks here, e.g., verify event.origin
         if (event.source === window.parent && event.data) {
-          const response = FunctionCallMessage.parse(event.data);
-          if (response.functionName === name) {
+          const response = TaskyonMessages.parse(event.data);
+          if (
+            response.type == 'functionResponse' &&
+            response.functionName === name
+          ) {
             resolve(response);
           } else {
             reject(
@@ -127,6 +125,14 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
     }
   );
 
+  // we do this also in order to make sure we have a defined object
+  // which we can send through postMessage without any functions etc...
+  const message = RemoteFunctionCall.parse({
+    type: 'functionCall',
+    functionName: name,
+    arguments: args,
+  });
+  console.log('no tool code found, posting a function message to', message);
   // after we've set up the listener, initiate the function call
   window.parent.postMessage(message, '*'); // TODO. Specify the exact origin instead of '*'
 

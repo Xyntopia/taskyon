@@ -345,7 +345,6 @@ async function addNewTask(execute = true) {
   //          otherwise, it won't get executed but simply saved into the tree
   console.log('adding new task, execute?', execute);
   const newTask = { ...currentnewTask.value, ...(props.forceTaskProps || {}) };
-  if (!execute) newTask.state = 'Completed';
   void addTask2Tree(
     newTask,
     state.chatState.selectedTaskId, //parent

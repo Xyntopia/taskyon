@@ -247,6 +247,7 @@ export async function addTask2Tree(
     await taskManager.setTask(newTask, false);
   } else {
     // in the case of a task which is not processed, we can save it :)
+    newTask.state = 'Completed';
     await taskManager.setTask(newTask, true);
   }
   chatState.selectedTaskId = newTask.id;

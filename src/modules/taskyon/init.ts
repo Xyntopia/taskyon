@@ -1,7 +1,10 @@
 import { TaskManager, addTask2Tree } from './taskManager';
-import { LLMTask, partialTaskDraft } from './types';
+import { LLMTask, partialTaskDraft, TaskyonMessages } from './types';
 import { createTaskyonDatabase, TaskyonDatabase } from './rxdb';
-import { TaskWorkerController, taskWorker as runTaskWorker } from './taskWorker';
+import {
+  TaskWorkerController,
+  taskWorker as runTaskWorker,
+} from './taskWorker';
 import { executePythonScript, createToolExampleTool, Tool } from './tools';
 import { executeJavaScript } from '../tools/executeJavaScript';
 import { ChatStateType } from './chat';
@@ -24,17 +27,18 @@ function setupIframeApi(chatState: ChatStateType, taskManager: TaskManager) {
           console.error('Message from unknown origin:', event.origin);
         }*/
           console.log('Message from unknown origin:', event.origin, event);
-          if ('task' in event.data) {
-            const result = partialTaskDraft.strict().safeParse(event.data.task);
-            if (result.success) {
-              void addTask2Tree(result.data, undefined, chatState, taskManager);
-            } else {
-              console.log(
-                'could not convert message to task:',
-                result.error,
-                event
-              );
-            }
+          const msg = TaskyonMessages.safeParse(event.data);
+          if (msg.success && msg.data.type === 'task') {
+            console.log(`task was sent by ${event.origin}`, msg.data);
+            void addTask2Tree(
+              msg.data.task,
+              undefined,
+              chatState,
+              taskManager,
+              false
+            );
+          } else {
+            console.log('could not convert message to task:', msg, event);
           }
         } else {
           console.error('Message not from parent window.');
@@ -43,6 +47,9 @@ function setupIframeApi(chatState: ChatStateType, taskManager: TaskManager) {
     },
     false
   );
+
+  const readyMessage: TaskyonMessages = { type: 'taskyonReady' };
+  window.parent.postMessage(readyMessage, '*');
 }
 
 export async function initTaskyon(
