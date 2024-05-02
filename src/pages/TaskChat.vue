@@ -185,7 +185,7 @@
       <div class="column q-gutter-xs">
         <div class="col-auto">
           <q-btn
-            v-if="!lockBottomScroll || true"
+            v-if="!lockBottomScroll"
             fab-mini
             class="taskyon-control-button"
             icon="keyboard_double_arrow_down"
@@ -198,9 +198,7 @@
         <div class="col-auto">
           <q-btn
             v-if="
-              (currentTask &&
-                ['Open', 'In Progress'].includes(currentTask.state)) ||
-              true
+              currentTask && ['Open', 'In Progress'].includes(currentTask.state)
             "
             fab-mini
             class="taskyon-control-button"
@@ -263,7 +261,7 @@ import Task from 'components/Task.vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import { ref, UnwrapRef, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
-import { taskChain } from 'src/modules/taskyon/taskManager';
+import { taskChain } from 'src/modules/taskyon/chat';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';

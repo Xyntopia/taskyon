@@ -1,7 +1,6 @@
-import type { LLMTask } from './types';
+import type { LLMTask, partialTaskDraft } from './types';
 import type { ChatStateType } from './chat';
 import { v1 as uuidv1 } from 'uuid';
-import type { partialTaskDraft } from './types';
 import {
   TaskyonDatabase,
   FileMappingDocType,
@@ -10,10 +9,8 @@ import {
   collections,
 } from './rxdb';
 import { openFile } from './OPFS';
-import { Lock, sleep } from 'src/modules/taskyon/utils';
-import { deepMerge } from './utils';
+import { Lock, sleep, deepMerge, AsyncQueue } from './utils';
 import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
-import { AsyncQueue } from './utils';
 import { loadOrCreateVectorStore } from './vectorSearch';
 import { extractKeywords, vectorizeText } from './webWorkerApi';
 import { Tool, ToolBase } from './tools';
@@ -80,58 +77,6 @@ export async function findLeafTasks(
   return leafTasks;
 }
 
-// get a taskchain from a task ID: following parent and/or child links
-export async function taskChain(
-  taskId: string,
-  getTask: InstanceType<typeof TaskManager>['getTask'],
-  parents = true,
-  children = false
-) {
-  const conversationList: string[] = [taskId];
-
-  if (parents) {
-    // Start with the selected task
-    let currentTaskID = taskId;
-
-    // Trace back the parentIDs to the original task in the chain
-    while (currentTaskID) {
-      // Get the current task
-      const currentTask = await getTask(currentTaskID);
-      if (!currentTask) break; // Break if we reach a task that doesn't exist
-
-      // Move to the parent task
-      if (currentTask.parentID) {
-        currentTaskID = currentTask.parentID; // This can now be string | undefined
-      } else break; // Break if we reach an "initial" task
-
-      // Prepend the current task to the conversation list so the selected task ends up being the last in the list
-      conversationList.unshift(currentTaskID);
-    }
-  }
-
-  if (children) {
-    // Start with the first child of the selected task
-    let currentTaskID = taskId;
-
-    // Follow the first child in the task list
-    while (currentTaskID) {
-      // Get the current task
-      const currentTask = await getTask(currentTaskID);
-      if (!currentTask) break; // Break if we reach a task that doesn't exist
-
-      // Move to the first child task, if it exists
-      if (currentTask.childrenIDs.length) {
-        currentTaskID = currentTask.childrenIDs[0];
-      } else break;
-
-      // Append the current task to the conversation list
-      conversationList.push(currentTaskID);
-    }
-  }
-
-  return conversationList;
-}
-
 function base64Uuid() {
   // Generate a UUID
   const hexUuid = uuidv1();
@@ -188,16 +133,6 @@ export async function getFile(uuid: string, taskManager: TaskManager) {
     const file = openFile(fileMap.opfs);
     return file;
   }
-}
-
-export function findAllFilesInTasks(taskList: LLMTask[]): string[] {
-  const fileSet = new Set<string>();
-  taskList.forEach((task) => {
-    (task.configuration?.uploadedFiles || []).forEach((file) =>
-      fileSet.add(file)
-    );
-  });
-  return Array.from(fileSet);
 }
 
 export const processTasksQueue = new AsyncQueue<string>();

@@ -2,12 +2,8 @@ import axios from 'axios';
 //import { useCachedModels } from './mlModels';
 import { ToolBase, summarizeTools } from './tools';
 import { LLMTask, OpenAIMessage, OpenRouterGenerationInfo } from './types';
-import {
-  taskChain,
-  getFileMappingByUuid,
-  findAllFilesInTasks,
-  TaskManager,
-} from './taskManager';
+import type { TaskManager } from './taskManager';
+import { getFileMappingByUuid } from './taskManager';
 import OpenAI from 'openai';
 import { openFile } from './OPFS';
 import { dump } from 'js-yaml';
@@ -437,6 +433,57 @@ export async function callLLM(
   return chatCompletion;
 }
 
+export async function taskChain(
+  taskId: string,
+  getTask: InstanceType<typeof TaskManager>['getTask'],
+  parents = true,
+  children = false
+) {
+  const conversationList: string[] = [taskId];
+
+  if (parents) {
+    // Start with the selected task
+    let currentTaskID = taskId;
+
+    // Trace back the parentIDs to the original task in the chain
+    while (currentTaskID) {
+      // Get the current task
+      const currentTask = await getTask(currentTaskID);
+      if (!currentTask) break; // Break if we reach a task that doesn't exist
+
+      // Move to the parent task
+      if (currentTask.parentID) {
+        currentTaskID = currentTask.parentID; // This can now be string | undefined
+      } else break; // Break if we reach an "initial" task
+
+      // Prepend the current task to the conversation list so the selected task ends up being the last in the list
+      conversationList.unshift(currentTaskID);
+    }
+  }
+
+  if (children) {
+    // Start with the first child of the selected task
+    let currentTaskID = taskId;
+
+    // Follow the first child in the task list
+    while (currentTaskID) {
+      // Get the current task
+      const currentTask = await getTask(currentTaskID);
+      if (!currentTask) break; // Break if we reach a task that doesn't exist
+
+      // Move to the first child task, if it exists
+      if (currentTask.childrenIDs.length) {
+        currentTaskID = currentTask.childrenIDs[0];
+      } else break;
+
+      // Append the current task to the conversation list
+      conversationList.push(currentTaskID);
+    }
+  }
+
+  return conversationList;
+}
+
 async function buildChatFromTask(
   taskId: string,
   getTask: InstanceType<typeof TaskManager>['getTask']
@@ -755,6 +802,16 @@ function convertTasksToOpenAIThread(
       .map((file) => fileMappings[file])
       .filter((id) => id !== undefined),
   }));
+}
+
+export function findAllFilesInTasks(taskList: LLMTask[]): string[] {
+  const fileSet = new Set<string>();
+  taskList.forEach((task) => {
+    (task.configuration?.uploadedFiles || []).forEach((file) =>
+      fileSet.add(file)
+    );
+  });
+  return Array.from(fileSet);
 }
 
 export async function getOpenAIAssistantResponse(
