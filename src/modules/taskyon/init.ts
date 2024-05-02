@@ -15,7 +15,6 @@ import {
   Tool,
 } from 'src/modules/taskyon/tools';
 import { executeJavaScript } from 'src/modules/tools/executeJavaScript';
-import { useQuasar } from 'quasar';
 import { ChatStateType } from 'src/modules/taskyon/chat';
 
 // Singleton holder for TaskManager
