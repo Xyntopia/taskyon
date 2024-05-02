@@ -176,45 +176,48 @@
         </q-card>
       </div>
     </q-page-sticky>
-    <!--Task controller buttons-->
+    <!--Task Chat Control Buttons-->
     <q-page-sticky
-      v-if="currentTask && ['Open', 'In Progress'].includes(currentTask.state)"
-      position="bottom-left"
-      :offset="[10, bottomPadding + 5]"
-      class="print-hide"
-    >
-      <q-btn
-        fab-mini
-        class="scroll-to-bottom-button"
-        icon="stop"
-        size="md"
-        @click="state.taskWorkerController.interrupt(currentTask.id)"
-      >
-        <q-tooltip> Stop processing current task. </q-tooltip>
-      </q-btn>
-    </q-page-sticky>
-    <!--Bottom scroll button-->
-    <q-page-sticky
-      v-if="!lockBottomScroll"
       position="bottom-right"
       :offset="[10, bottomPadding + 5]"
       class="print-hide"
     >
-      <q-btn
-        fab-mini
-        class="scroll-to-bottom-button"
-        icon="keyboard_double_arrow_down"
-        @click="scrollToThreadEnd"
-        size="md"
-      >
-        <q-tooltip> Scroll To Bottom </q-tooltip>
-      </q-btn>
+      <div class="column q-gutter-xs">
+        <div class="col-auto">
+          <q-btn
+            v-if="!lockBottomScroll || true"
+            fab-mini
+            class="taskyon-control-button"
+            icon="keyboard_double_arrow_down"
+            @click="scrollToThreadEnd"
+            size="md"
+          >
+            <q-tooltip> Scroll To Bottom </q-tooltip>
+          </q-btn>
+        </div>
+        <div class="col-auto">
+          <q-btn
+            v-if="
+              (currentTask &&
+                ['Open', 'In Progress'].includes(currentTask.state)) ||
+              true
+            "
+            fab-mini
+            class="taskyon-control-button"
+            icon="stop"
+            size="md"
+            @click="state.taskWorkerController.interrupt(currentTask.id)"
+          >
+            <q-tooltip> Stop processing current task. </q-tooltip>
+          </q-btn>
+        </div>
+      </div>
     </q-page-sticky>
   </q-page>
 </template>
 
 <style lang="sass" scoped>
-.scroll-to-bottom-button
+.taskyon-control-button
   background-color: rgba($primary, .7) // Adjust the alpha value as needed
   color: white
 
