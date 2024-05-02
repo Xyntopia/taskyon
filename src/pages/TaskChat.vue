@@ -261,7 +261,7 @@ import Task from 'components/Task.vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import { ref, UnwrapRef, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
-import { taskChain } from 'src/modules/taskyon/chat';
+import { taskChain } from 'src/modules/taskyon/taskUtils';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';

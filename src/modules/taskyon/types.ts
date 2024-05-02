@@ -221,6 +221,8 @@ export const LLMTask = z.object({
 });
 export type LLMTask = z.infer<typeof LLMTask>;
 
+export type TaskGetter = (input: string) => Promise<LLMTask | undefined>;
+
 export const partialTaskDraft = LLMTask.pick({
   content: true,
   configuration: true,
