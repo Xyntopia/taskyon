@@ -212,12 +212,12 @@ export async function processChatTask(
 async function processFunctionTask(
   task: LLMTask,
   tools: Record<string, ToolBase | Tool>,
-  executionContext: TaskWorkerController
+  taskWorkerController: TaskWorkerController
 ) {
   if (task.configuration?.function) {
     const func = task.configuration.function;
     console.log(`Calling function ${func.name}`);
-    if (tools[func.name]) {
+    if (tools[func.name] && (!taskWorkerController.isInterrupted())) {
       const result = await handleFunctionExecution(func, tools);
       task.result = result;
     } else {

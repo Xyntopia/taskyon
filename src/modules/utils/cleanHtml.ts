@@ -1,12 +1,13 @@
 import { Readability } from '@mozilla/readability';
 
-function extractText(html: string) {
+/*function extractText(html: string) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
 
   const article = new Readability(doc).parse();
   return article;
-}
+}*/
+
 export function cleanWebpageEnhanced(htmlString: string): string {
   // Parse the HTML string into a DOM object
   const parser: DOMParser = new DOMParser();

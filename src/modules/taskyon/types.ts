@@ -1,6 +1,6 @@
 import type OpenAI from 'openai';
 import { dump } from 'js-yaml';
-import { boolean, z } from 'zod';
+import { z } from 'zod';
 
 const TaskState = z.enum([
   'Open',

@@ -1,11 +1,11 @@
 import { TaskManager, addTask2Tree } from './taskManager';
-import { LLMTask, partialTaskDraft, TaskyonMessages } from './types';
+import { LLMTask, TaskyonMessages } from './types';
 import { createTaskyonDatabase, TaskyonDatabase } from './rxdb';
 import {
   TaskWorkerController,
   taskWorker as runTaskWorker,
 } from './taskWorker';
-import { executePythonScript, createToolExampleTool, Tool } from './tools';
+import { executePythonScript, Tool } from './tools';
 import { executeJavaScript } from '../tools/executeJavaScript';
 import { ChatStateType } from './chat';
 

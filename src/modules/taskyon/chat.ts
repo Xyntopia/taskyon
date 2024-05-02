@@ -1,6 +1,6 @@
 import axios from 'axios';
 //import { useCachedModels } from './mlModels';
-import { Tool, ToolBase, summarizeTools } from './tools';
+import { ToolBase, summarizeTools } from './tools';
 import { LLMTask, OpenAIMessage, OpenRouterGenerationInfo } from './types';
 import {
   taskChain,
