@@ -42,6 +42,7 @@
               ]"
             >
               <q-btn
+                v-if="false"
                 class="q-ma-xs"
                 dense
                 outline

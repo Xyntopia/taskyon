@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { defaultLLMSettings } from 'src/modules/taskyon/chat';
-import { ref, Ref, watch, computed, reactive } from 'vue';
+import { watch, computed, reactive } from 'vue';
 import { LLMTask } from 'src/modules/taskyon/types';
 import type { FunctionArguments } from 'src/modules/taskyon/types';
 import axios from 'axios';
@@ -105,10 +105,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     'overwrite'
   );
 
-  // Create refs for each property and adjust the type assertion
-  //const stateRefs = Object.fromEntries(
-  //  Object.entries(storedInitialState).map(([key, value]) => [key, ref(value)])
-  //) as { [K in keyof typeof initialState]: Ref<(typeof initialState)[K]> };
+  // make our state deep-reactive :)
   const stateRefs = reactive(storedInitialState);
 
   if (stateRefs.initialLoad) {
