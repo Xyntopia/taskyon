@@ -39,9 +39,10 @@
               "
             >
               {{
-                (selected ? '> ' : '') +
-                (conversationId.name ||
-                  'Thread' + conversationId.id.substring(0, 3))
+                selected
+                  ? '> ' + activeTask?.name
+                  : conversationId.name ||
+                    'Thread' + conversationId.id.substring(0, 3)
               }}
             </q-item-section>
             <q-item-section side>
@@ -94,10 +95,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { deleteTaskThread, TaskManager } from 'src/modules/taskyon/taskManager';
 import Settings from 'components/Settings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
+import { LLMTask } from 'src/modules/taskyon/types';
 
 const state = useTaskyonStore();
 
@@ -114,8 +116,19 @@ async function getLeafTaskNames(tm: TaskManager) {
   return taskList;
 }
 
+const activeTask = ref<LLMTask | undefined>();
+
+watch(
+  () => state.chatState.selectedTaskId,
+  async (newTaskId) => {
+    const tm = await state.getTaskManager();
+    if (newTaskId) {
+      activeTask.value = await tm.getTask(newTaskId);
+    }
+  }
+);
+
 void state.getTaskManager().then(async (tm) => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   tm.subscribeToTaskChanges(() => {
     console.log('update threads!!');
     void getLeafTaskNames(tm).then((res) => {
