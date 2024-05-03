@@ -138,6 +138,34 @@ export async function getFile(uuid: string, taskManager: TaskManager) {
 
 export const processTasksQueue = new AsyncQueue<string>();
 
+// use this to create hashes for every task
+async function hashObject(obj: unknown) {
+  const jsonString = JSON.stringify(obj);
+  const encoder = new TextEncoder();
+  const dataBytes = encoder.encode(jsonString);
+
+  const hash = await crypto.subtle.digest('SHA-256', dataBytes);
+  const hashHex = Array.prototype.map
+    .call(new Uint8Array(hash), (x) => `00${x.toString(16)}`.slice(-2))
+    .join('');
+  return hashHex;
+}
+
+async function taskContentHash(task: LLMTask) {
+  console.log('generating new hash ID for task');
+  // generate this hash ID to check of there are any duplicate tasks or anything like that...
+  const hashId = await hashObject([
+    task.parentID,
+    task.content,
+    task.role,
+    task.allowedTools,
+    task.configuration,
+    task.label,
+    task.result,
+  ]);
+  return hashId;
+}
+
 export async function addTask2Tree(
   task: partialTaskDraft,
   parentID: string | undefined,
@@ -146,6 +174,7 @@ export async function addTask2Tree(
   execute = true
 ): Promise<LLMTask['id']> {
   const uuid = base64Uuid();
+
   const parent = parentID ? await taskManager.getTask(parentID) : undefined;
 
   const newTask: LLMTask = {
@@ -161,6 +190,10 @@ export async function addTask2Tree(
     configuration: task.configuration,
     allowedTools: task.allowedTools || parent?.allowedTools,
   };
+
+  // TODO: register this in a list in taskyon so that figure out how
+  // to make use of this...
+  void taskContentHash(newTask);
 
   console.log('create new Task:', newTask.id);
 
@@ -193,7 +226,7 @@ export async function addTask2Tree(
     }, '');
     void extractKeywords(chatString, 5).then((kws) => {
       console.log('update task with kw: ', kws);
-      void taskManager.updateTask({ id: uuid, name: kws[0] }, true);
+      void taskManager.updateTask({ id: newTask.id, name: kws[0] }, true);
     });
   }
 
