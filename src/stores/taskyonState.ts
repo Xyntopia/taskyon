@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { defaultLLMSettings } from 'src/modules/taskyon/chat';
-import { watch, computed, reactive } from 'vue';
+import { watch, computed, reactive, toRefs } from 'vue';
 import { LLMTask } from 'src/modules/taskyon/types';
 import type { FunctionArguments } from 'src/modules/taskyon/types';
 import axios from 'axios';
@@ -105,8 +105,15 @@ export const useTaskyonStore = defineStore(storeName, () => {
     'overwrite'
   );
 
-  // make our state deep-reactive :)
+  // manually make our state deep-reactive, becuase "reactive" doesn't make scalar values reactive :)
+  // Create refs for each property and adjust the type assertion
+  // Because of this, pini doesn't recognize the values as states.
   const stateRefs = reactive(storedInitialState);
+  /*const stateRefs = Object.fromEntries(
+    Object.entries(storedInitialState).map(([key, value]) => {
+      return [key, typeof value === 'object' ? reactive(value) : ref(value)];
+    })
+  ) as { [K in keyof typeof initialState]: Ref<(typeof initialState)[K]> };*/
 
   if (stateRefs.initialLoad) {
     // this file can be replaced in kubernetes  using a configmap!
@@ -203,8 +210,14 @@ export const useTaskyonStore = defineStore(storeName, () => {
     return await taskManager;
   }
 
+  // we do this funny next line, because our store is currently "reactive" which means
+  // all scalars like strings, numbers etc..  ar actually non-reactive (vue reactive only converts
+  // nested objects into reactive as well). So by doing "toRefs" we ensure that all values are reactive
+  // even after destructuring. The next issue is that typescript isn't able to recognize the type anymore when
+  // we do the toRefs operation, so we simply reassign the same type "stateRefs" to it again which seems to work...
+  const allRefs = toRefs(stateRefs) as unknown as typeof stateRefs;
   return {
-    ...stateRefs, // only the refs will get saved when soring the state!!
+    ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
     setDraftFunctionArgs,
     getOpenRouterPKCEKey,
     minimalGui,

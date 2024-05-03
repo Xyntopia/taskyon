@@ -19,16 +19,29 @@
             to="/"
             clickable
             v-ripple
-            active-class="text-weight-bolder"
-            :active="state.chatState.selectedTaskId == conversationId.id"
           >
             <!--q-item-section avatar>
               <q-icon name="chat_bubble" size="xs" />
             </!q-item-section-->
-            <q-item-section lines>
+            <q-item-section
+              v-for="(selected, idx) in [
+                state.chatState.selectedTaskId == conversationId.id,
+              ]"
+              :key="idx"
+              lines
+              :class="
+                selected
+                  ? [
+                      'text-weight-bolder',
+                      $q.dark.isActive ? 'text-secondary' : 'text-black',
+                    ]
+                  : [$q.dark.isActive ? 'text-white' : 'text-primary']
+              "
+            >
               {{
-                conversationId.name ||
-                'Thread' + conversationId.id.substring(0, 3)
+                (selected ? '> ' : '') +
+                (conversationId.name ||
+                  'Thread' + conversationId.id.substring(0, 3))
               }}
             </q-item-section>
             <q-item-section side>
