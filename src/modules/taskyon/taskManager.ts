@@ -222,7 +222,9 @@ export class TaskManager {
   private vectorIndex: HierarchicalNSW | undefined;
   // we need these locks in order to sync our databases..
   private taskLocks: Map<string, Lock> = new Map();
-  private subscribers: Array<(task?: LLMTask, taskNum?: number) => void> = [];
+  private subscribers: Array<
+    (task?: LLMTask, taskNum?: number) => void | Promise<void>
+  > = [];
   private taskCountSubscribers: Array<
     (task?: LLMTask, taskNum?: number) => void
   > = [];
@@ -505,7 +507,7 @@ export class TaskManager {
   }
 
   subscribeToTaskChanges(
-    callback: (task?: LLMTask, taskNum?: number) => void,
+    callback: (task?: LLMTask, taskNum?: number) => void | Promise<void>,
     subscribeToTaskCountOnly = false
   ): void {
     if (subscribeToTaskCountOnly) {
@@ -517,7 +519,7 @@ export class TaskManager {
 
   // You may also need a method to unsubscribe if required
   unsubscribeFromTaskChanges(
-    callback: (task?: LLMTask, taskNum?: number) => void
+    callback: (task?: LLMTask, taskNum?: number) => void | Promise<void>
   ): void {
     this.subscribers = this.subscribers.filter((sub) => sub !== callback);
     this.taskCountSubscribers = this.taskCountSubscribers.filter(
@@ -546,10 +548,10 @@ export class TaskManager {
     if (taskId) {
       const task = this.tasks.get(taskId);
       if (task) {
-        this.subscribers.forEach((callback) => callback(task, taskNum));
+        this.subscribers.forEach((callback) => void callback(task, taskNum));
       }
     } else {
-      this.subscribers.forEach((callback) => callback(undefined, taskNum));
+      this.subscribers.forEach((callback) => void callback(undefined, taskNum));
     }
 
     // Notify subscribers interested in task count changes
