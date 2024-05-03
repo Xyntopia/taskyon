@@ -3,6 +3,12 @@ const outputDiv = document.getElementById('output');
 
 const functionTask = {
   role: 'system',
+  // this is important!, Taskyon can be configured to prevent tasks from getting created if they already exist with the same name!
+  // this helps in making sure, that tasks & tools which we upload to taskyon on pageload don't get duplicated
+  // on every pageload.
+  // If that option is turned on, we can use this as a version string for our tasks... And every time we want
+  // to update our webpage with a new AI tool, we simply change the version string...
+  name: 'simpleExampleTaskV1',
   content: `{
   "name": "myExampleStringAdderAlone",
   "description": "provide a short description which an AI can understand",
@@ -42,7 +48,12 @@ window.addEventListener('message', function (event) {
 
   console.log('sending our function!');
   taskyon.contentWindow.postMessage(
-    { type: 'task', task: functionTask, execute: false },
+    {
+      type: 'task',
+      task: functionTask,
+      execute: false,
+      duplicateTaskName: false, // we use this here in order to prevent duplicate creation of our function declaration task
+    },
     iframeTarget
   );
 });

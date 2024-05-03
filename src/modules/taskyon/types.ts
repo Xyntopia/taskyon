@@ -225,6 +225,7 @@ export type TaskGetter = (input: string) => Promise<LLMTask | undefined>;
 
 export const partialTaskDraft = LLMTask.pick({
   content: true,
+  name: true,
   configuration: true,
   state: true,
   allowedTools: true,
@@ -249,7 +250,17 @@ export const TaskMessage = z
       .enum(['task'])
       .describe('Field to indicate what kind of a message we have here.'),
     task: partialTaskDraft,
-    execute: z.boolean().describe('should the task be queued for execution?'),
+    execute: z
+      .boolean()
+      .default(false)
+      .describe('should the task be queued for execution?'),
+    duplicateTaskName: z
+      .boolean()
+      .default(true)
+      .describe(
+        `Only add the task if a task with this name doesn't exist. We do this, because otherwise tasks get 
+        added on every page-load if we configure our app through an iframe parent.`
+      ),
   })
   .describe(
     'With this message type we can send tasks to taskyon from outside, e.g. a parent to a taskyon iframe'

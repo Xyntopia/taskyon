@@ -27,18 +27,26 @@ function setupIframeApi(chatState: ChatStateType, taskManager: TaskManager) {
           console.error('Message from unknown origin:', event.origin);
         }*/
           console.log('Message from unknown origin:', event.origin, event);
-          const msg = TaskyonMessages.safeParse(event.data);
-          if (msg.success && msg.data.type === 'task') {
-            console.log(`task was sent by ${event.origin}`, msg.data);
-            void addTask2Tree(
-              msg.data.task,
-              undefined,
-              chatState,
-              taskManager,
-              false
-            );
-          } else {
-            console.log('could not convert message to task:', msg, event);
+          try {
+            // we wrap every call to the API in a try clause in order to make sure it doesn't blow up ;)
+            const msg = TaskyonMessages.safeParse(event.data);
+            if (msg.success && msg.data.type === 'task') {
+              console.log(`task was sent by ${event.origin}`, msg.data);
+              void addTask2Tree(
+                msg.data.task,
+                undefined,
+                chatState,
+                taskManager,
+                false,
+                false
+              );
+            } else {
+              // TODO: also add this as error, so that it gets thrown back to the parent
+              console.log('could not convert message to task:', msg, event);
+            }
+          } catch (err) {
+            // TODO: return this to the parent, in order to indicate any errors..
+            console.error(err);
           }
         } else {
           console.error('Message not from parent window.');

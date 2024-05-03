@@ -15,6 +15,7 @@ import { loadOrCreateVectorStore } from './vectorSearch';
 import { extractKeywords, vectorizeText } from './webWorkerApi';
 import { Tool, ToolBase } from './tools';
 import { buildChatFromTask } from './taskUtils';
+import { MangoQuery } from 'rxdb';
 
 /**
  * Finds the root task of a given task.
@@ -145,9 +146,10 @@ async function hashObject(obj: unknown) {
   const dataBytes = encoder.encode(jsonString);
 
   const hash = await crypto.subtle.digest('SHA-256', dataBytes);
-  const hashHex = Array.prototype.map
-    .call(new Uint8Array(hash), (x) => `00${x.toString(16)}`.slice(-2))
-    .join('');
+  const hashArray = Array.from(new Uint8Array(hash)); // convert buffer to byte array
+  const hashHex = hashArray
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join(''); // convert bytes to hex string
   return hashHex;
 }
 
@@ -155,13 +157,10 @@ async function taskContentHash(task: LLMTask) {
   console.log('generating new hash ID for task');
   // generate this hash ID to check of there are any duplicate tasks or anything like that...
   const hashId = await hashObject([
-    task.parentID,
     task.content,
     task.role,
     task.allowedTools,
-    task.configuration,
     task.label,
-    task.result,
   ]);
   return hashId;
 }
@@ -171,8 +170,20 @@ export async function addTask2Tree(
   parentID: string | undefined,
   chatState: ChatStateType,
   taskManager: TaskManager,
-  execute = true
+  execute = true,
+  duplicateTaskName = true
 ): Promise<LLMTask['id']> {
+  if (!duplicateTaskName && task.name) {
+    // check if task already exists and throw an error, if it does, because
+    // we are not supposed to create it in that case ;)
+    const tasks = await taskManager.searchTasks({
+      selector: { name: task.name },
+    });
+    if (tasks.length > 0) {
+      throw `The task ${task.name} already exists!`;
+    }
+  }
+
   const uuid = base64Uuid();
 
   const parent = parentID ? await taskManager.getTask(parentID) : undefined;
@@ -197,10 +208,13 @@ export async function addTask2Tree(
 
   console.log('create new Task:', newTask.id);
 
+  // TODO: get rid of this section..   we don't want task children, because
+  //       they prevent us from creating immutable task trees
   if (parent) {
     parent.childrenIDs.push(newTask.id);
     await taskManager.updateTask(parent, true);
   }
+
   // Push the new function task to processTasksQueue
   // we are not saving yet, as it is going to be processed :)
   if (execute) {
@@ -214,7 +228,8 @@ export async function addTask2Tree(
   }
 
   // extract keywordsfrom entire chat and use it to name the task...
-  if (task.content) {
+  // but only if a taskname doesn't exist yet.
+  if (!newTask.name && task.content) {
     const chat = buildChatFromTask(newTask.id, (tId: string) =>
       taskManager.getTask(tId)
     );
@@ -228,6 +243,8 @@ export async function addTask2Tree(
       console.log('update task with kw: ', kws);
       void taskManager.updateTask({ id: newTask.id, name: kws[0] }, true);
     });
+  } else if (newTask.name) {
+    console.log('task already has a name:', newTask.name);
   }
 
   chatState.selectedTaskId = newTask.id;
@@ -607,20 +624,11 @@ export class TaskManager {
     this.notifySubscribers(taskId, taskCountChanged);
   }
 
-  async searchToolDefinitions(): Promise<Record<string, ToolBase | Tool>> {
-    // TODO: make sure, its clear that we return non-partial tool types here...
+  // we can search tasks here using a mongo-db query object
+  // find out more here:  https://rxdb.info/rx-query.html
+  async searchTasks(query: MangoQuery): Promise<LLMTask[]> {
     if (this.taskyonDB) {
-      const tasks = await this.taskyonDB.llmtasks
-        .find({
-          selector: {
-            label: {
-              $elemMatch: {
-                $eq: 'function',
-              },
-            },
-          },
-        })
-        .exec();
+      const tasks = await this.taskyonDB.llmtasks.find(query).exec();
 
       const llmtasks = tasks.map((toolDoc) => {
         const task = transformDocToLLMTask(toolDoc);
@@ -628,7 +636,25 @@ export class TaskManager {
         this.tasks.set(task.id, task);
         return task;
       });
-      const toolDefs = llmtasks.map((task) => {
+      return llmtasks;
+    }
+    return [];
+  }
+
+  async searchToolDefinitions(): Promise<Record<string, ToolBase | Tool>> {
+    // TODO: make sure, its clear that we return non-partial tool types here...
+    if (this.taskyonDB) {
+      const tasks = await this.searchTasks({
+        selector: {
+          label: {
+            $elemMatch: {
+              $eq: 'function',
+            },
+          },
+        },
+      });
+
+      const toolDefs = tasks.map((task) => {
         const toolDef = ToolBase.parse(JSON.parse(task.content || ''));
         return toolDef;
       });
