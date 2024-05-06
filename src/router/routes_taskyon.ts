@@ -12,7 +12,7 @@ export const taskyonRoutes = {
       component: () => import('pages/TaskChat.vue'),
     },
     {
-      path: 'settings',
+      path: 'settings/:tab?',
       component: () => import('pages/Settings.vue'),
     },
     {

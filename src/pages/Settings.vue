@@ -4,27 +4,46 @@
       <div class="text-h6 q-pr-md">Basic Settings:</div>
       <SimpleSettings />
     </div>
-    <q-tabs v-model="state.guiState.settingsTab" align="justify">
-      <q-tab name="llmproviders" label="LLM Providers" />
-      <q-tab name="sync" label="Sync & Backup" />
-      <q-tab name="instructions" label="AI/LLM Instructions" />
-      <q-tab name="agent config" label="Agent Configuration" />
-      <q-tab
-        v-if="state.appConfiguration.expertMode"
-        name="app config"
+    <q-tabs :model-value="selectedTab" align="justify">
+      <q-route-tab
+        :to="{ params: { tab: 'llmproviders' } }"
+        exact
+        label="LLM Providers"
+      />
+      <q-route-tab
+        :to="{ params: { tab: 'sync' } }"
+        exact
+        label="Sync & Backup"
+      />
+      <q-route-tab
+        :to="{ params: { tab: 'instructions' } }"
+        exact
+        label="AI/LLM Instructions"
+      />
+      <q-route-tab
+        :to="{ params: { tab: 'agent config' } }"
+        exact
+        label="Agent Configuration"
+      />
+      <q-route-tab
+        v-if="state.appConfiguration.expertMode || selectedTab == 'app config'"
+        :to="{ params: { tab: 'app config' } }"
+        exact
         label="Expert App Configuration"
       />
     </q-tabs>
     <q-tab-panels
-      v-model="state.guiState.settingsTab"
+      :model-value="selectedTab"
       animated
+      swipeable
+      infinite
       :class="$q.dark.isActive ? 'bg-primary' : 'white'"
     >
       <q-tab-panel name="llmproviders">
         <LLMProviders></LLMProviders>
       </q-tab-panel>
       <q-tab-panel name="sync">
-        <SyncTaskyon style="max-width: 600px;"/>
+        <SyncTaskyon style="max-width: 600px" />
       </q-tab-panel>
       <q-tab-panel name="instructions">
         <div>Set custom instructions for the AI Model</div>
@@ -43,12 +62,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed } from 'vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import LLMProviders from 'components/LLMProviders.vue';
 import SimpleSettings from 'components/SimpleSettings.vue';
 import ObjectTreeView from 'components/ObjectTreeView.vue';
 import SyncTaskyon from 'components/SyncTaskyon.vue';
+import { useRoute } from 'vue-router';
+
+const route = useRoute();
 
 const state = useTaskyonStore();
+const selectedTab = computed(() => {
+  return (route.params.tab as string) || 'llmproviders';
+});
 </script>
