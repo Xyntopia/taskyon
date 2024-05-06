@@ -75,9 +75,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
     draftParameters: {} as Record<string, FunctionArguments>,
     taskState: {} as Record<string, TaskStateType>,
     darkTheme: 'auto' as boolean | 'auto',
-    guiState: {
-      settingsTab: 'llmproviders',
-    },
     // this store everything relevant to iframes
     iframe: {
       accessGranted: false,
