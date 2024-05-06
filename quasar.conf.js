@@ -236,6 +236,7 @@ module.exports = configure(function (ctx) {
         // also needs:
         //    yarn add --dev node-polyfill-webpack-plugin browserify-zlib
         const nodePolyfillWebpackPlugin = require('node-polyfill-webpack-plugin');
+        
         // we need the bwloe so that uglify can remove the console. because we want
         //  check this:  https://stackoverflow.com/questions/76979427/quasar-app-does-not-remove-console-log-for-production-builds
         // and this:  https://github.com/quasarframework/quasar/issues/11186
@@ -244,7 +245,7 @@ module.exports = configure(function (ctx) {
           .use(nodePolyfillWebpackPlugin, [{ excludeAliases: ['console'] }]);
         // chain.plugin('node-polyfill').use(nodePolyfillWebpackPlugin);
         // TODO: find out, why we did this?
-        chain.resolve.alias.set('zlib', 'browserify-zlib');
+        //chain.resolve.alias.set('zlib', 'browserify-zlib');
       },
     },
 
