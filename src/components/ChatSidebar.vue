@@ -44,6 +44,7 @@
                   : conversationId.name ||
                     'Thread' + conversationId.id.substring(0, 3)
               }}
+              <q-tooltip> Select Conversation </q-tooltip>
             </q-item-section>
             <q-item-section side>
               <q-btn
@@ -52,10 +53,10 @@
                 size="sm"
                 flat
                 @click="onDeleteThread(conversationId.id)"
-              ></q-btn>
-              <q-tooltip> Create a new conversation </q-tooltip>
+              >
+                <q-tooltip anchor="center right" self="center left"> Delete Conversation </q-tooltip>
+              </q-btn>
             </q-item-section>
-            <q-tooltip> Select conversation</q-tooltip>
           </q-item>
         </q-list>
         <div class="row">
@@ -65,6 +66,7 @@
             flat
             icon="reviews"
             @click="state.chatState.selectedTaskId = undefined"
+            to="/"
           >
             <q-tooltip> Create a new conversation </q-tooltip>
           </q-btn>
