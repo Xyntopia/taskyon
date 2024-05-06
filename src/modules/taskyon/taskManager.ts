@@ -324,6 +324,7 @@ export class TaskManager {
     return this.tasks.size;
   }
 
+  // TODO: get rid of this...
   async initializeTasksFromDB() {
     // TODO: wondering if we should maybe get rid of this?  its pretty inefficient to do this
     //       on every reload of our app :P
@@ -538,6 +539,16 @@ export class TaskManager {
     }
   }
 
+  async deleteAllTasks() {
+    // TODO: manually re-initiailized taskyondb after remove...
+    if (this.taskyonDB) {
+      console.log('delete the entire database!');
+      await this.taskyonDB.remove();
+    }
+    this.tasks.clear();
+    this.notifySubscribers(undefined, true);
+  }
+
   async deleteTask(taskId: string): Promise<void> {
     const unlock = await this.lockTask(taskId);
     console.log('deleting task:', taskId);
@@ -669,6 +680,7 @@ export class TaskManager {
     return {};
   }
 
+  // TODO: evaluate js code from an actual function :). Put it into a secure iframe?
   addToolCode(toolCode: string) {
     console.log('add tool code:', toolCode);
 
@@ -680,6 +692,32 @@ export class TaskManager {
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const myFunction = new Function(myString);
     myFunction('Hello, World!');
+  }
+
+  async getJsonTaskBackup() {
+    // TODO: give this a callback so that we can save it in "chunks"
+    if (this.taskyonDB) {
+      console.log('exporting json backup db!');
+      const dbobject = await this.taskyonDB.exportJSON([
+        'llmtasks',
+        'filemappings',
+        //'vectormappings'
+      ]);
+      return dbobject;
+    }
+  }
+
+  async addTaskBackup(jsonObjString: string) {
+    // TODO: add some zod validation here!
+    if (this.taskyonDB) {
+      type ImportJSONFunction = typeof this.taskyonDB.importJSON;
+      type FirstArgumentType = Parameters<ImportJSONFunction>[0];
+      const jsonObj = JSON.parse(jsonObjString) as FirstArgumentType;
+      console.log('importing json backup to db!');
+      const dbobject = await this.taskyonDB.importJSON(jsonObj);
+      return dbobject;
+    }
+    this.notifySubscribers(undefined, true);
   }
 }
 
