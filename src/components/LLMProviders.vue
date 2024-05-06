@@ -35,7 +35,12 @@
         />
       </template>
     </q-input>
-    <q-expansion-item v-if="state.appConfiguration.expertMode" dense label="Edit Apis" icon="edit">
+    <q-expansion-item
+      v-if="state.appConfiguration.expertMode"
+      dense
+      label="Edit Apis"
+      icon="edit"
+    >
       <TyMarkdown
         src="Here, we can add new, custom APIs to taskyon that we can connect to
 it is possible to add your own LLM Inference Server to connect
