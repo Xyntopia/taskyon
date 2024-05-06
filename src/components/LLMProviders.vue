@@ -1,59 +1,54 @@
 <!-- Sidebar -->
 <template>
-  <div>
+  <div class="q-gutter-md">
     <OpenRouterPKCE />
-    <div>
-      <q-separator spaced />
-      <div class="q-pa-sm q-gutter-md">
-        <div>Select Default AI Provider</div>
-        <div>
-          you can find available models here:
-          <q-btn
-            flat
-            color="accent"
-            href="https://openrouter.ai/api/v1/models"
-            target="_blank"
-            >https://openrouter.ai/api/v1/models</q-btn
-          >
-          as soon as you have logged in to your openrouter account:
-          <q-btn
-            flat
-            color="accent"
-            href="https://accounts.openrouter.ai/sign-in"
-            target="_blank"
-            >https://accounts.openrouter.ai/sign-in</q-btn
-          >
-        </div>
-        <q-select
-          v-model="state.chatState.selectedApi"
-          emit-value
-          dense
-          label="select Api"
-          :options="
-            state.chatState.llmApis.map((api) => ({
-              value: api.name,
-              label: api.name,
-            }))
-          "
+    <q-select
+      v-model="state.chatState.selectedApi"
+      emit-value
+      dense
+      label="connect to LLM Backend"
+      :options="
+        state.chatState.llmApis.map((api) => ({
+          value: api.name,
+          label: api.name,
+        }))
+      "
+    >
+      <template v-slot:before>
+        <q-icon name="electrical_services"></q-icon>
+      </template>
+    </q-select>
+    <q-item-label header>API keys</q-item-label>
+    <q-input
+      v-for="keyname of filteredKeys"
+      :key="keyname"
+      :type="keyVisible[keyname] ? 'text' : 'password'"
+      placeholder="Add API key here!"
+      filled
+      v-model="state.keys[keyname]"
+      :label="`${keyname} API key`"
+      ><template v-slot:append>
+        <q-icon
+          :name="keyVisible[keyname] ? 'visibility' : 'visibility_off'"
+          class="cursor-pointer"
+          @click="keyVisible[keyname] = !keyVisible[keyname]"
         />
-        <q-input
-          v-for="keyname of filteredKeys"
-          :key="keyname"
-          :type="keyVisible[keyname] ? 'text' : 'password'"
-          placeholder="Add API key here!"
-          filled
-          v-model="state.keys[keyname]"
-          :label="`${keyname} API key`"
-          ><template v-slot:append>
-            <q-icon
-              :name="keyVisible[keyname] ? 'visibility' : 'visibility_off'"
-              class="cursor-pointer"
-              @click="keyVisible[keyname] = !keyVisible[keyname]"
-            />
-          </template>
-        </q-input>
-      </div>
-    </div>
+      </template>
+    </q-input>
+    <q-expansion-item dense label="Edit Apis" icon="edit">
+      <TyMarkdown
+        src="Here, we can add new, custom APIs to taskyon that we can connect to
+it is possible to add your own LLM Inference Server to connect
+to your own AI this way. E.g. using these methods: 
+
+- https://huggingface.co/blog/tgi-messages-api
+- https://github.com/bentoml/OpenLLM
+
+or with an llm proxy such as this one:  https://github.com/BerriAI/liteLLM-proxy
+"
+      />
+      <JsonInput v-model="state.chatState.llmApis" />
+    </q-expansion-item>
   </div>
 </template>
 
@@ -61,6 +56,8 @@
 import { useTaskyonStore } from 'stores/taskyonState';
 import OpenRouterPKCE from './OpenRouterPKCE.vue';
 import { computed, ref } from 'vue';
+import JsonInput from './JsonInput.vue';
+import TyMarkdown from './tyMarkdown.vue';
 
 const keyVisible = ref<Record<string, boolean>>({});
 

@@ -40,7 +40,7 @@
       :class="$q.dark.isActive ? 'bg-primary' : 'white'"
     >
       <q-tab-panel name="llmproviders">
-        <LLMProviders></LLMProviders>
+        <LLMProviders style="max-width: 600px"/>
       </q-tab-panel>
       <q-tab-panel name="sync">
         <SyncTaskyon style="max-width: 600px" />

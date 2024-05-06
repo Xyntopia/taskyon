@@ -123,6 +123,8 @@
               <span class="text-bold">{{ state.chatState.selectedApi }}</span>
               . Either choose a different API by pressing one of the following
               buttons:
+            </p>
+            <div class="self-center q-gutter-md">
               <q-btn
                 outline
                 dense
@@ -133,26 +135,27 @@
                 :label="keyname"
                 @click="state.chatState.selectedApi = keyname"
               />
-            </p>
-            <p>Or Generate a new API key:</p>
+            </div>
+            <p>Or Generate a new API key in various ways:</p>
             <OpenRouterPKCE />
+            <q-item-label header>More Options (not recommended)</q-item-label>
             <div class="row">
               <q-btn
                 class="col"
-                label="Go to OpenAI"
+                label="Go to OpenAI to retrieve an API key from OpenAI (not recommended)"
                 outline
                 noCaps
                 href="https://platform.openai.com/account/api-keys"
                 target="_blank"
               />
               <InfoDialog
-                info-text="Get an API key from https://openrouter.ai/keys and use it for inference tasks"
+                info-text="You can also get an API key from https://openrouter.ai/keys and manually insert into the settings."
               />
             </div>
             <div class="row">
               <q-btn
                 class="col"
-                label="Access keys via OpenRouter Dashboard"
+                label="Access keys via OpenRouter Dashboard (not recommended)"
                 outline
                 noCaps
                 href="https://openrouter.ai/keys"
@@ -164,11 +167,12 @@
             </div>
           </q-card-section>
           <q-card-section>
-            If getting keys manually, add them to settings manually:
+            If getting keys manually or for your own server, add them to settings here:
+            The server must be compatible with OpenAI API.
             <q-btn
               class="q-mx-sm"
               dense
-              to="/settings"
+              to="/settings/llmproviders"
               label="settings"
               icon="settings"
             ></q-btn>

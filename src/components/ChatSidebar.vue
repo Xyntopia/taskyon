@@ -85,7 +85,7 @@
         flat
         icon="manage_accounts"
         label="Accounts"
-        to="/settings"
+        to="/settings/llmproviders"
       ></q-btn>
     </div>
     <!-- Settings Area -->

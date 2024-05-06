@@ -3,7 +3,7 @@
     <div class="col">
       <q-btn
         class="fit"
-        label="Login to Openrouter.ai service"
+        label="Connect Taskyon to Openrouter.ai AI service"
         icon="key"
         noCaps
         outline
@@ -17,10 +17,10 @@
 www.openrouter.ai is a service which brings you a large number of AI
 models: Once registered you have access to a large number of models:
 
-- The free mistral model 
-- All OpenAI Models including ChatGPT4 
-- LLama2 
-- ... and a lot more!"
+GPT3/4, Google Palm, LLama2/3  and more..
+
+By clicking on this button you can connect taskyon to openrouter.ai service.
+"
       />
     </div>
   </div>
