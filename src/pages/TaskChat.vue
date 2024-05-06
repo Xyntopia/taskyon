@@ -119,7 +119,7 @@
         <q-card v-else>
           <q-card-section class="q-gutter-md column">
             <p>
-              No API key found for selected API:
+              No API key found for currently selected API:
               <span class="text-bold">{{ state.chatState.selectedApi }}</span>
               . Either choose a different API by pressing one of the following
               buttons:
