@@ -1,29 +1,8 @@
 <!-- Sidebar -->
 <template>
   <div>
+    <OpenRouterPKCE />
     <div>
-      <q-toggle
-        v-model="state.appConfiguration.expertMode"
-        label="Expert mode"
-        left-label
-        color="secondary"
-      />
-      <q-toggle
-        v-model="state.appConfiguration.showCosts"
-        label="Show task costs"
-        left-label
-        color="secondary"
-      />
-      <q-toggle
-        v-if="!reduced"
-        v-model="state.appConfiguration.useEnterToSend"
-        label="Enter to send message"
-        left-label
-        color="secondary"
-      />
-    </div>
-    <OpenRouterPKCE v-if="!reduced" />
-    <div v-if="!reduced">
       <q-separator spaced />
       <div class="q-pa-sm q-gutter-md">
         <div>Select Default AI Provider</div>
@@ -82,13 +61,6 @@
 import { useTaskyonStore } from 'stores/taskyonState';
 import OpenRouterPKCE from './OpenRouterPKCE.vue';
 import { computed, ref } from 'vue';
-
-defineProps({
-  reduced: {
-    type: Boolean,
-    required: false,
-  },
-});
 
 const keyVisible = ref<Record<string, boolean>>({});
 

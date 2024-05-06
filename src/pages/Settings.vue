@@ -38,8 +38,12 @@
         <q-tooltip> Restore app configuration from gdrive</q-tooltip>
       </q-btn>
     </div>
+    <div class="q-pa-md row items-center">
+      <div class="text-h6 q-pr-md">Basic Settings:</div>
+      <SimpleSettings />
+    </div>
     <q-tabs v-model="tab" align="justify">
-      <q-tab name="settings" label="Settings" />
+      <q-tab name="llmproviders" label="LLM Providers" />
       <q-tab name="instructions" label="AI/LLM Instructions" />
       <q-tab name="agent config" label="Agent Configuration" />
       <q-tab
@@ -53,8 +57,8 @@
       animated
       :class="$q.dark.isActive ? 'bg-primary' : 'white'"
     >
-      <q-tab-panel name="settings">
-        <Settings></Settings>
+      <q-tab-panel name="llmproviders">
+        <LLMProviders></LLMProviders>
       </q-tab-panel>
       <q-tab-panel name="instructions">
         <div>Set custom instructions for the AI Model</div>
@@ -76,14 +80,15 @@
 import { exportFile, extend } from 'quasar';
 import { ref } from 'vue';
 import { useTaskyonStore } from 'stores/taskyonState';
-import Settings from 'components/Settings.vue';
+import LLMProviders from 'components/LLMProviders.vue';
+import SimpleSettings from 'components/SimpleSettings.vue';
 import ObjectTreeView from 'components/ObjectTreeView.vue';
 import yaml from 'js-yaml';
 import { onSyncGdrive, onUpdateAppConfiguration } from 'src/modules/gdrive';
 import FileDropzone from 'components/FileDropzone.vue';
 import { deepMergeReactive } from 'src/modules/taskyon/utils';
 
-const tab = ref('settings'); // Default to the first tab
+const tab = ref('llmproviders'); // Default to the first tab
 const state = useTaskyonStore();
 
 // Function to load JSON settings

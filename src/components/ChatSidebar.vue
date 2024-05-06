@@ -97,7 +97,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { deleteTaskThread, TaskManager } from 'src/modules/taskyon/taskManager';
-import Settings from 'components/Settings.vue';
+import Settings from 'components/SimpleSettings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { LLMTask } from 'src/modules/taskyon/types';
 
