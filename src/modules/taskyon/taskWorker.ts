@@ -66,6 +66,7 @@ function extractOpenAIFunctions(
   return functionCalls;
 }
 
+// this function processes all tasks which go to any sort of an LLM
 export async function processChatTask(
   task: LLMTask,
   chatState: ChatStateType,

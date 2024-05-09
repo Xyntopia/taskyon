@@ -119,7 +119,7 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
       // TODO: not sure, but we might need to remove the "once" part because we would like to wait until
       // we get an answer from the actual function with the correct function name if multiple functions are involved....
       // https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener
-      //  we probably also have to paly around with the "catch" parameter, making sure, once we handle the event, it dosn't get
+      //  we probably also have to play around with the "catch" parameter, making sure, once we handle the event, it dosn't get
       // dispatched to other handlers anymore...
       window.addEventListener('message', listener, { once: true });
     }
