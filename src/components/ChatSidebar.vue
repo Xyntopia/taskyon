@@ -81,8 +81,8 @@
     </q-expansion-item>
     <q-separator spaced />
     <!-- Settings Area -->
-    <q-item class="q-pa-md q-gutter-xs items-stretch">
-      <SimpleSettings class="col" vertical reduced></SimpleSettings>
+    <q-item class="fit column items-center">
+      <SimpleSettings class="col-auto" vertical reduced></SimpleSettings>
     </q-item>
     <q-item>
       <q-btn flat icon="mdi-tools" label="Tools" to="/tools"></q-btn>
