@@ -1,9 +1,6 @@
 <template>
-  <q-layout view="hHh LpR lfr">
-    <q-header
-      elevated
-      :class="[$q.dark.isActive ? 'bg-secondary' : 'bg-primary', 'print-hide']"
-    >
+  <q-layout view="lHh lpR lfr">
+    <q-header elevated class="bg-primary print-hide">
       <component
         :is="!minMode ? 'q-toolbar' : 'div'"
         :class="minMode ? 'q-gutter-xs row q-px-sm' : 'q-gutter-xs'"
@@ -16,47 +13,30 @@
           :size="btnSize"
           icon="menu"
         />
-        <q-separator vertical :dark="!$q.dark.isActive"></q-separator>
-        <q-btn
-          v-if="!minMode"
-          flat
-          round
-          dense
-          :size="btnSize"
-          icon="search"
-          to="/taskmanager"
-        >
-          <q-tooltip>Search Conversations</q-tooltip>
-        </q-btn>
-        <q-btn
-          v-if="!minMode"
-          flat
-          round
-          dense
-          icon="chat"
-          to="/"
-          :size="btnSize"
-          ><q-tooltip>Go to Chat</q-tooltip>
-        </q-btn>
-        <q-btn
-          flat
-          round
-          dense
-          icon="reviews"
-          :size="btnSize"
-          to="/"
-          @click="state.chatState.selectedTaskId = undefined"
-          ><q-tooltip>Create New Chat</q-tooltip>
-        </q-btn>
-        <q-space v-if="!minMode" />
-        <q-btn
-          v-if="!minMode"
-          flat
-          dense
-          class="desktop-only"
-          :size="btnSize"
-          icon="svguse:taskyon_mono_opt.svg#taskyon"
-        ></q-btn>
+        <div class="button-group">
+          <q-btn
+            v-if="!minMode"
+            flat
+            dense
+            :size="btnSize"
+            icon="search"
+            to="/taskmanager"
+          >
+            <q-tooltip>Search Conversations</q-tooltip>
+          </q-btn>
+          <q-btn v-if="!minMode" flat dense icon="chat" to="/" :size="btnSize"
+            ><q-tooltip>Go to Chat</q-tooltip>
+          </q-btn>
+          <q-btn
+            flat
+            dense
+            icon="add_comment"
+            :size="btnSize"
+            to="/"
+            @click="state.chatState.selectedTaskId = undefined"
+            ><q-tooltip>Create New Chat</q-tooltip>
+          </q-btn>
+        </div>
         <q-space />
         <q-btn
           v-if="state.getErrors().length > 0"
@@ -92,9 +72,8 @@
           v-if="!minMode"
           class="desktop-only"
           vertical
-          :dark="!$q.dark.isActive"
+          :color="$q.dark.isActive ? 'secondary' : 'white'"
         ></q-separator>
-        <!-- GitHub Link -->
         <q-btn
           v-if="!minMode"
           class="desktop-only"
@@ -147,6 +126,12 @@
 </template>
 
 <style>
+.button-group {
+  display: inline-block;
+  border: 1px solid #fff; /* add white outline */
+  border-radius: 5px; /* optional, to match the rounded-borders class */
+}
+
 @media print {
   /* Hide everything initially */
   body * {

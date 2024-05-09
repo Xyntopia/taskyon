@@ -1,14 +1,16 @@
 <!-- Sidebar -->
 <template>
-  <q-list class="q-pa-xs">
+  <q-list dense class="q-pa-xs">
     <!-- Conversation Area -->
-    <q-expansion-item
-      dense
-      label="Conversation Threads"
-      icon="forum"
-      default-opened
-      hide-expand-icon
-    >
+    <q-expansion-item dense default-opened hide-expand-icon>
+      <template v-slot:header>
+        <div class="col row q-gutter-sm items-end justify-around">
+          <div class="col-auto">
+            <q-icon name="svguse:taskyon_mono_opt.svg#taskyon" size="sm" />
+          </div>
+          <div class="col-auto text-weight-medium">Conversation Threads</div>
+        </div>
+      </template>
       <div class="column items-stretch">
         <q-list>
           <q-item
@@ -54,32 +56,35 @@
                 flat
                 @click="onDeleteThread(conversationId.id)"
               >
-                <q-tooltip anchor="center right" self="center left"> Delete Conversation </q-tooltip>
+                <q-tooltip anchor="center right" self="center left">
+                  Delete Conversation
+                </q-tooltip>
               </q-btn>
             </q-item-section>
           </q-item>
         </q-list>
-        <div class="row">
+        <div class="row justify-around items-center">
           <q-btn
-            class="col"
             dense
             flat
-            icon="reviews"
             @click="state.chatState.selectedTaskId = undefined"
             to="/"
           >
+            <q-icon name="add" />
             <q-tooltip> Create a new conversation </q-tooltip>
           </q-btn>
-          <q-btn class="col" dense flat icon="search" to="/TaskManager"
+          <q-btn dense flat icon="search" to="/TaskManager"
             ><q-tooltip>Search for more conversations</q-tooltip></q-btn
           >
         </div>
       </div>
     </q-expansion-item>
     <q-separator spaced />
-    <!-- App Links -->
-    <div class="q-pa-md q-gutter-xs">
+    <!-- Settings Area -->
+    <q-item class="q-pa-md q-gutter-xs">
       <Settings reduced></Settings>
+    </q-item>
+    <q-item>
       <q-btn flat icon="mdi-tools" label="Tools" to="/tools"></q-btn>
       <q-btn
         flat
@@ -87,12 +92,7 @@
         label="Accounts"
         to="/settings/llmproviders"
       ></q-btn>
-    </div>
-    <!-- Settings Area -->
-    <!--
-    <q-expansion-item dense label="Menu" icon="settings" default-closed>
-    </q-expansion-item>
-    -->
+    </q-item>
   </q-list>
 </template>
 
