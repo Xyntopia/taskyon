@@ -31,7 +31,7 @@
         <ObjectTreeView
           class="col"
           :model-value="state.taskDraft.configuration?.function?.arguments"
-          input-field-behavior="textarea"
+          input-field-behavior="auto"
           :separate-labels="false"
         />
         <taskSettingsButton v-model="expandedTaskCreation" />
