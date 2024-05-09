@@ -2,14 +2,14 @@ const outputDiv = document.getElementById('output');
 
 const tools = [
   {
-    role: 'system',
-    // this is important!, Taskyon can be configured to prevent tasks from getting created if they already exist with the same name!
-    // this helps in making sure, that tasks & tools which we upload to taskyon on pageload don't get duplicated
-    // on every pageload.
-    // If that option is turned on, we can use this as a version string for our tasks... And every time we want
-    // to update our webpage with a new AI tool, we simply change the version string...
-    name: 'simpleExampleTask.V1',
-    content: `{
+    description: {
+      // this is important!, Taskyon can be configured to prevent tasks from getting created if they already exist with the same name!
+      // this helps in making sure, that tasks & tools which we upload to taskyon on pageload don't get duplicated
+      // on every pageload.
+      // If that option is turned on, we can use this as a version string for our tasks... And every time we want
+      // to update our webpage with a new AI tool, we simply change the version string...
+      name: 'simpleExampleTask.V1',
+      content: `{
   "name": "myExampleStringAdderAlone",
   "description": "provide a short description which an AI can understand",
   "longDescription": "provide a long description if the AI/Human needs more details",
@@ -28,7 +28,7 @@ const tools = [
     "required": ["parameter1"]
   }
 }`,
-    label: ['function'],
+    },
     function: (data) => {
       console.log('Received function call with data:', data);
       const result = `${data.parameter1}${data.parameter2}`;
@@ -43,17 +43,18 @@ async function initializeTaskyon(tools) {
   function waitForTaskyonReady() {
     return new Promise((resolve, reject) => {
       const handleMessage = function (event) {
+        console.log('received event:', event);
         if (
-          event.origin !== iframeTarget &&
+          event.origin === iframeTarget &&
           event.data.type === 'taskyonReady'
         ) {
-          console.log('Received message that taskyon is ready!', event);
-          clearTimeout(timeoutId);
           window.removeEventListener('message', handleMessage);
+          console.log('Received message that taskyon is ready!', event);
           resolve(event);
         }
       };
 
+      console.log('waiting for taskyon to be ready....');
       window.addEventListener('message', handleMessage);
     });
   }
@@ -64,7 +65,11 @@ async function initializeTaskyon(tools) {
     taskyon.contentWindow.postMessage(
       {
         type: 'task',
-        task: toolDescription,
+        task: {
+          role: 'system',
+          label: ['function'],
+          ...toolDescription
+        },
         execute: false,
         duplicateTaskName: false, // we use this here in order to prevent duplicate creation of our function declaration task
       },
@@ -72,7 +77,7 @@ async function initializeTaskyon(tools) {
     );
   }
 
-  function setUpToolsListener(Tools) {
+  function setUpToolsListener(tools) {
     window.addEventListener('message', function (event) {
       // Check the origin to ensure security
       if (event.origin !== iframeTarget) {
@@ -82,10 +87,11 @@ async function initializeTaskyon(tools) {
 
       console.log('received message:', event);
       // Handle function call
+      const tool = tools[0];
       if (event.data.type === 'functionCall') {
         //if the message comes from taskyon, we can be sure that its the correct type.
         const data = event.data;
-        const result = myTaskyonFunction(data.arguments);
+        const result = tool.function(data.arguments);
 
         // Display function call information
         const output = `Function called with parameters: ${JSON.stringify(
@@ -96,7 +102,7 @@ async function initializeTaskyon(tools) {
         // Send response to iframe
         const response = {
           type: 'functionResponse',
-          functionName: 'myExampleStringAdderAlone',
+          functionName: tool.description.name,
           response: result,
         };
         taskyon.contentWindow.postMessage(response, iframeTarget);
@@ -106,7 +112,8 @@ async function initializeTaskyon(tools) {
 
   await waitForTaskyonReady();
   console.log('sending our function!');
-  sendFunctionToTaskyon(tools);
+  sendFunctionToTaskyon(tools[0].description);
+  console.log('set up function listener!');
   setUpToolsListener(tools);
 }
 
