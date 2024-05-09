@@ -137,7 +137,7 @@ export const RemoteFunctionBase = z.object({
 
 export const RemoteFunctionCall = RemoteFunctionBase.extend({
   type: z
-    .enum(['functionCall'])
+    .literal('functionCall')
     .describe('Field to indicate what kind of a message we have here.'),
   arguments: FunctionArguments.optional().describe(
     'the arguments for the function as a json object'
@@ -149,7 +149,7 @@ export type RemoteFunctionCall = z.infer<typeof RemoteFunctionCall>;
 
 export const RemoteFunctionResponse = RemoteFunctionBase.extend({
   type: z
-    .enum(['functionResponse'])
+    .literal('functionResponse')
     .describe('Field to indicate what kind of a message we have here.'),
   response: z
     .unknown()
@@ -247,9 +247,18 @@ export const functionTaskTemplate: partialTaskDraft = {
 export const TaskMessage = z
   .object({
     type: z
-      .enum(['task'])
+      .literal('task')
       .describe('Field to indicate what kind of a message we have here.'),
-    task: partialTaskDraft,
+    task: partialTaskDraft
+      .merge(
+        z.object({
+          content: z.string().or(z.record(z.string(), z.unknown())).optional(),
+        })
+      )
+      .describe(
+        `A task definition, but with the ability to define the task content as an 
+        object... (which we can translate into a string)`
+      ),
     execute: z
       .boolean()
       .default(false)
@@ -267,7 +276,7 @@ export const TaskMessage = z
   );
 export type TaskMessage = z.infer<typeof TaskMessage>;
 
-export const TaskyonMessages = z.union([
+export const TaskyonMessages = z.discriminatedUnion('type', [
   RemoteFunctionCall,
   RemoteFunctionResponse,
   TaskMessage,

@@ -9,6 +9,11 @@ import { executePythonScript, Tool } from './tools';
 import { executeJavaScript } from '../tools/executeJavaScript';
 import { ChatStateType } from './chat';
 
+function stringifyIfNotString(obj: any): string | undefined {
+  if (typeof obj === 'undefined') return undefined;
+  return typeof obj === 'string' ? obj : JSON.stringify(obj);
+}
+
 function setupIframeApi(chatState: ChatStateType, taskManager: TaskManager) {
   console.log('Turn on iframe API.');
   // Listen for messages from the parent page
@@ -32,8 +37,12 @@ function setupIframeApi(chatState: ChatStateType, taskManager: TaskManager) {
             const msg = TaskyonMessages.safeParse(event.data);
             if (msg.success && msg.data.type === 'task') {
               console.log(`task was sent by ${event.origin}`, msg.data);
+              const newTask = {
+                ...msg.data.task,
+                content: stringifyIfNotString(msg.data.task.content),
+              };
               void addTask2Tree(
-                msg.data.task,
+                newTask,
                 undefined,
                 chatState,
                 taskManager,

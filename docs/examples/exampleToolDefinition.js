@@ -1,5 +1,10 @@
 const outputDiv = document.getElementById('output');
 
+const configuration = {
+  model: 'llama-3',
+  verificationcode: '2o8zbackwughbck73tqbc3r',
+};
+
 const tools = [
   {
     description: {
@@ -9,25 +14,27 @@ const tools = [
       // If that option is turned on, we can use this as a version string for our tasks... And every time we want
       // to update our webpage with a new AI tool, we simply change the version string...
       name: 'simpleExampleTask.V1',
-      content: `{
-  "name": "myExampleStringAdderAlone",
-  "description": "provide a short description which an AI can understand",
-  "longDescription": "provide a long description if the AI/Human needs more details",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "parameter1": {
-        "type": "string",
-        "description": "This is an example parameter!"
+      content: {
+        name: 'myExampleStringAdderAlone',
+        description: 'provide a short description which an AI can understand',
+        longDescription:
+          'provide a long description if the AI/Human needs more details',
+        parameters: {
+          type: 'object',
+          properties: {
+            parameter1: {
+              type: 'string',
+              description: 'This is an example parameter!',
+            },
+            parameter2: {
+              type: 'string',
+              description:
+                'This is another example parameter, but not required!',
+            },
+          },
+          required: ['parameter1'],
+        },
       },
-      "parameter2": {
-        "type": "string",
-        "description": "This is another example parameter, but not required!"
-      }
-    },
-    "required": ["parameter1"]
-  }
-}`,
     },
     function: (data) => {
       console.log('Received function call with data:', data);
@@ -68,7 +75,7 @@ async function initializeTaskyon(tools) {
         task: {
           role: 'system',
           label: ['function'],
-          ...toolDescription
+          ...toolDescription,
         },
         execute: false,
         duplicateTaskName: false, // we use this here in order to prevent duplicate creation of our function declaration task
@@ -102,7 +109,7 @@ async function initializeTaskyon(tools) {
         // Send response to iframe
         const response = {
           type: 'functionResponse',
-          functionName: tool.description.name,
+          functionName: tool.description.content.name,
           response: result,
         };
         taskyon.contentWindow.postMessage(response, iframeTarget);

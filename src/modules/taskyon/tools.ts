@@ -89,6 +89,7 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
   const funcRP: Promise<RemoteFunctionResponse> = new Promise(
     (resolve, reject) => {
       const listener = (event: MessageEvent) => {
+        console.log('remoteHandler received message', event)
         // TODO: Add security checks here, e.g., verify event.origin
         if (event.source === window.parent && event.data) {
           const response = TaskyonMessages.parse(event.data);
