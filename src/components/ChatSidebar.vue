@@ -81,8 +81,8 @@
     </q-expansion-item>
     <q-separator spaced />
     <!-- Settings Area -->
-    <q-item class="q-pa-md q-gutter-xs">
-      <Settings reduced></Settings>
+    <q-item class="q-pa-md q-gutter-xs items-stretch">
+      <SimpleSettings class="col" vertical reduced></SimpleSettings>
     </q-item>
     <q-item>
       <q-btn flat icon="mdi-tools" label="Tools" to="/tools"></q-btn>
@@ -99,7 +99,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { deleteTaskThread, TaskManager } from 'src/modules/taskyon/taskManager';
-import Settings from 'components/SimpleSettings.vue';
+import SimpleSettings from 'components/SimpleSettings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { LLMTask } from 'src/modules/taskyon/types';
 
