@@ -89,7 +89,7 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
   const funcRP: Promise<RemoteFunctionResponse> = new Promise(
     (resolve, reject) => {
       const listener = (event: MessageEvent) => {
-        console.log('remoteHandler received message', event)
+        console.log('remoteHandler received message', event);
         // TODO: Add security checks here, e.g., verify event.origin
         if (event.source === window.parent && event.data) {
           const response = TaskyonMessages.parse(event.data);
@@ -97,6 +97,7 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
             response.type == 'functionResponse' &&
             response.functionName === name
           ) {
+            window.removeEventListener('message', listener); // remove listener
             resolve(response);
           } else {
             reject(
@@ -114,15 +115,11 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
         reject(
           new Error(`Response timeout (${timeoutSeconds}) for function ${name}`)
         );
+        window.removeEventListener('message', listener); // remove listener on timeout
       }, timeoutSeconds * 1000); // 100 seconds timeout for example
 
       // TODO: make timeout configurable
-      // TODO: not sure, but we might need to remove the "once" part because we would like to wait until
-      // we get an answer from the actual function with the correct function name if multiple functions are involved....
-      // https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener
-      //  we probably also have to play around with the "catch" parameter, making sure, once we handle the event, it dosn't get
-      // dispatched to other handlers anymore...
-      window.addEventListener('message', listener, { once: true });
+      window.addEventListener('message', listener);
     }
   );
 
