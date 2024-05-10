@@ -142,6 +142,9 @@ export type FileMappingDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
 export const fileMappingSchema: RxJsonSchema<FileMappingDocType> =
   fileMappingSchemaLiteral;
 
+/* this is used to map our db objects to the labels in the 
+vector index we can also save our calculated vectors in this in order to
+exchange them between different taskyon nodes. */
 const vectorMappingSchemaLiteral = {
   title: 'VectorMapping schema',
   version: 1,

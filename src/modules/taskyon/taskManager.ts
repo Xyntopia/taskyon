@@ -12,10 +12,11 @@ import { openFile } from './OPFS';
 import { Lock, sleep, deepMerge, AsyncQueue } from './utils';
 import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { loadOrCreateHNSWIndex } from './hnswIndex';
-import { extractKeywords, vectorizeText } from './webWorkerApi';
+import { extractKeywords, useNlpWorker } from './webWorkerApi';
 import { Tool, ToolBase } from './tools';
 import { buildChatFromTask } from './taskUtils';
 import { MangoQuery } from 'rxdb';
+import { loadModel } from './mlModels';
 
 /**
  * Finds the root task of a given task.
@@ -289,6 +290,8 @@ export class TaskManager {
   private vectorizerModel: string;
   private vectorIndexName: string;
 
+  private vectorizeText: ReturnType<typeof useNlpWorker>['vectorizeText'];
+
   constructor(
     tasks: TaskManager['tasks'],
     defaultTools: TaskManager['defaultTools'],
@@ -302,6 +305,12 @@ export class TaskManager {
     this.vectorIndexName = 'taskyondbv';
     void this.initVectorStore();
     this.defaultTools = defaultTools;
+
+    const { vectorizeText } = useNlpWorker();
+    this.vectorizeText = vectorizeText;
+    // make sure our search if prepared:
+    // by calling this function, we initialize our search model and other things :)
+    void vectorizeText(undefined, this.vectorizerModel);
   }
 
   private initVectorStore = async (loadIfExists = true) => {
@@ -456,7 +465,7 @@ export class TaskManager {
 
   private async addtoVectorDB(task: LLMTask) {
     if (this.vectorIndex && this.taskyonDB) {
-      const vec = await vectorizeText(
+      const vec = await this.vectorizeText(
         JSON.stringify(task),
         this.vectorizerModel
       );
@@ -491,7 +500,10 @@ export class TaskManager {
     console.log('search for', searchTerm);
     const result = { tasks: [] as LLMTask[], distances: [] as number[] };
     if (this.vectorIndex) {
-      const queryVec = await vectorizeText(searchTerm, this.vectorizerModel);
+      const queryVec = await this.vectorizeText(
+        searchTerm,
+        this.vectorizerModel
+      );
       if (queryVec && this.taskyonDB) {
         const res = this.vectorIndex.searchKnn(queryVec, k, undefined);
         const neighborIndices = res.neighbors.map((r) => String(r));

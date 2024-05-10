@@ -22,22 +22,45 @@ fetch('compressed_array.b64')
 const modelStore = {
   models: {} as Record<string, PreTrainedModel>,
   tokenizers: {} as Record<string, PreTrainedTokenizer>,
+  loading: {} as Record<string, boolean>,
 };
 
+async function waitForModelToLoad(modelName: string) {
+  while (modelStore.loading[modelName] === false) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+}
+
 export async function loadModel(modelName: string) {
-  if (!modelStore.models[modelName]) {
-    console.log(`load model: ${modelName}`);
-    modelStore.models[modelName] = await AutoModel.from_pretrained(modelName);
+  if (modelStore.loading[modelName] === true) {
+    // Model is already being loaded, wait for it to finish
+    await waitForModelToLoad(modelName);
+  } else {
+    modelStore.loading[modelName] = true;
+    try {
+      console.log(`load model: ${modelName}`);
+      modelStore.models[modelName] = await AutoModel.from_pretrained(modelName);
+    } finally {
+      modelStore.loading[modelName] = false;
+    }
   }
   return modelStore.models[modelName];
 }
 
 export async function loadTokenizer(modelName: string) {
-  if (!modelStore.tokenizers[modelName]) {
-    console.log(`load tokenizer: ${modelName}`);
-    modelStore.tokenizers[modelName] = await AutoTokenizer.from_pretrained(
-      modelName
-    );
+  if (modelStore.loading[modelName] === true) {
+    // Tokenizer is already being loaded, wait for it to finish
+    await waitForModelToLoad(modelName);
+  } else {
+    modelStore.loading[modelName] = true;
+    try {
+      console.log(`load tokenizer: ${modelName}`);
+      modelStore.tokenizers[modelName] = await AutoTokenizer.from_pretrained(
+        modelName
+      );
+    } finally {
+      modelStore.loading[modelName] = false;
+    }
   }
   return modelStore.tokenizers[modelName];
 }
