@@ -9,7 +9,7 @@ import { executePythonScript, Tool } from './tools';
 import { executeJavaScript } from '../tools/executeJavaScript';
 import { ChatStateType } from './chat';
 
-function stringifyIfNotString(obj: any): string | undefined {
+function stringifyIfNotString(obj: unknown): string | undefined {
   if (typeof obj === 'undefined') return undefined;
   return typeof obj === 'string' ? obj : JSON.stringify(obj);
 }

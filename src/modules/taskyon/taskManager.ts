@@ -727,6 +727,7 @@ export function useTyTaskManager(
     searchToolDefinitions,
     getLeafTasks,
     subscribeToTaskChanges,
+    unsubscribeFromTaskChanges,
     addFile,
     getJsonTaskBackup,
     addTaskBackup,
@@ -734,6 +735,7 @@ export function useTyTaskManager(
     count,
     syncVectorIndexWithTasks,
     vectorSearchTasks,
+    addToolCode
   };
 }
 export type TyTaskManager = ReturnType<typeof useTyTaskManager>;
