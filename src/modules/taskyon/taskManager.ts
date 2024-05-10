@@ -26,7 +26,7 @@ import { loadModel } from './mlModels';
  */
 export async function findRootTask(
   taskId: string,
-  getTask: InstanceType<typeof TaskManager>['getTask']
+  getTask: InstanceType<typeof useTaskManager>['getTask']
 ) {
   let currentTaskID = taskId;
 
@@ -56,7 +56,7 @@ export async function findRootTask(
  */
 export async function findLeafTasks(
   taskId: string,
-  getTask: InstanceType<typeof TaskManager>['getTask']
+  getTask: InstanceType<typeof useTaskManager>['getTask']
 ): Promise<string[]> {
   const stack: string[] = [taskId];
   const leafTasks: string[] = [];
@@ -111,7 +111,7 @@ function base64Uuid() {
 
 export async function getFileMappingByUuid(
   uuid: string,
-  taskManager: TaskManager
+  taskManager: useTaskManager
 ): Promise<FileMappingDocType | null> {
   // Find the document with the matching UUID
   const fileMappingDoc = await taskManager.getFileMappingByUuid(uuid);
@@ -130,7 +130,7 @@ export async function getFileMappingByUuid(
   };
 }
 
-export async function getFile(uuid: string, taskManager: TaskManager) {
+export async function getFile(uuid: string, taskManager: useTaskManager) {
   const fileMap = await getFileMappingByUuid(uuid, taskManager);
   if (fileMap?.opfs) {
     const file = openFile(fileMap.opfs);
@@ -170,7 +170,7 @@ export async function addTask2Tree(
   task: partialTaskDraft,
   parentID: string | undefined,
   chatState: ChatStateType,
-  taskManager: TaskManager,
+  taskManager: useTaskManager,
   execute = true,
   duplicateTaskName = true
 ): Promise<LLMTask['id']> {
@@ -271,7 +271,7 @@ export async function addTask2Tree(
 //        - the vector store part
 //        - the taskDB part
 //        - he file search part etc...
-export class TaskManager {
+export class useTaskManager {
   // uses RxDB as a DB backend..
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
@@ -293,8 +293,8 @@ export class TaskManager {
   private vectorizeText: ReturnType<typeof useNlpWorker>['vectorizeText'];
 
   constructor(
-    tasks: TaskManager['tasks'],
-    defaultTools: TaskManager['defaultTools'],
+    tasks: useTaskManager['tasks'],
+    defaultTools: useTaskManager['defaultTools'],
     taskyonDB?: TaskyonDatabase,
     vectorizerModel?: string
   ) {
@@ -745,7 +745,7 @@ export class TaskManager {
 // which is defined by the leaf and preceding, exclusive tasks
 export async function deleteTaskThread(
   leafId: string,
-  taskManager: TaskManager
+  taskManager: useTaskManager
 ) {
   let currentTaskId = leafId;
   while (currentTaskId) {

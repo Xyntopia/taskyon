@@ -1,4 +1,4 @@
-import { TaskManager, addTask2Tree } from './taskManager';
+import { useTaskManager, addTask2Tree } from './taskManager';
 import { LLMTask, TaskyonMessages } from './types';
 import { createTaskyonDatabase, TaskyonDatabase } from './rxdb';
 import {
@@ -14,7 +14,7 @@ function stringifyIfNotString(obj: any): string | undefined {
   return typeof obj === 'string' ? obj : JSON.stringify(obj);
 }
 
-function setupIframeApi(chatState: ChatStateType, taskManager: TaskManager) {
+function setupIframeApi(chatState: ChatStateType, taskManager: useTaskManager) {
   console.log('Turn on iframe API.');
   // Listen for messages from the parent page
   window.addEventListener(
@@ -97,7 +97,7 @@ export async function initTaskyon(
     );
   }
   console.log('initializing task manager');
-  const taskManagerInstance = new TaskManager(
+  const taskManagerInstance = new useTaskManager(
     TaskList,
     ToolList,
     taskyonDBInstance,

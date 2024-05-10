@@ -7,7 +7,7 @@ import {
   OpenRouterGenerationInfo,
   TaskGetter,
 } from './types';
-import type { TaskManager } from './taskManager';
+import type { useTaskManager } from './taskManager';
 import { getFileMappingByUuid } from './taskManager';
 import OpenAI from 'openai';
 import { openFile } from './OPFS';
@@ -646,7 +646,7 @@ export async function enrichWithDelayedUsageInfos(
   generationId: string,
   headers: Record<string, string>,
   task: LLMTask,
-  taskManager: TaskManager
+  taskManager: useTaskManager
 ) {
   // TODO:  if we get a 404.. try again   sometimes the dat just isn't there yet ;)
   await sleep(5000);
@@ -732,7 +732,7 @@ export async function getOpenAIAssistantResponse(
   task: LLMTask,
   openAIApiKey: string,
   openAIAssistantId: string,
-  taskManager: TaskManager
+  taskManager: useTaskManager
 ) {
   if (task.content) {
     const openai = getOpenai(openAIApiKey);
