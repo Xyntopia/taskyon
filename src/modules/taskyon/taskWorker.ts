@@ -19,7 +19,7 @@ import {
 } from './types';
 import { addTask2Tree, processTasksQueue } from './taskManager';
 import type { OpenAI } from 'openai';
-import { useTaskManager } from './taskManager';
+import { TyTaskManager } from './taskManager';
 import { Tool, ToolBase, handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
 import { deepMerge } from './utils';
@@ -71,7 +71,7 @@ export async function processChatTask(
   task: LLMTask,
   chatState: ChatStateType,
   apiKeys: Record<string, string>,
-  taskManager: useTaskManager,
+  taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController
 ) {
   // TODO: refactor this function!
@@ -218,7 +218,7 @@ async function processFunctionTask(
   if (task.configuration?.function) {
     const func = task.configuration.function;
     console.log(`Calling function ${func.name}`);
-    if (tools[func.name] && (!taskWorkerController.isInterrupted())) {
+    if (tools[func.name] && !taskWorkerController.isInterrupted()) {
       const result = await handleFunctionExecution(func, tools);
       task.result = result;
     } else {
@@ -319,7 +319,7 @@ async function parseChatResponse(
 async function generateFollowUpTasksFromResult(
   finishedTask: LLMTask,
   chatState: ChatStateType,
-  taskManager: useTaskManager,
+  taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController
 ) {
   console.log('generate follow up task');
@@ -471,7 +471,7 @@ export class TaskWorkerController {
 
 async function processTask(
   task: LLMTask,
-  taskManager: useTaskManager,
+  taskManager: TyTaskManager,
   taskId: string,
   chatState: ChatStateType,
   apiKeys: Record<string, string>,
@@ -555,7 +555,7 @@ async function processTask(
 
 export async function taskWorker(
   chatState: ChatStateType,
-  taskManager: useTaskManager,
+  taskManager: TyTaskManager,
   apiKeys: Record<string, string>,
   taskWorkerController: TaskWorkerController
 ) {

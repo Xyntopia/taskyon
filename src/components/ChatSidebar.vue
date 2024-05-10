@@ -98,7 +98,10 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { deleteTaskThread, TaskManager } from 'src/modules/taskyon/taskManager';
+import {
+  deleteTaskThread,
+  TyTaskManager,
+} from 'src/modules/taskyon/taskManager';
 import SimpleSettings from 'components/SimpleSettings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { LLMTask } from 'src/modules/taskyon/types';
@@ -109,7 +112,7 @@ type taskEntry = { id: string; name: string | undefined };
 
 const conversationIDs = ref<taskEntry[]>([]);
 
-async function getLeafTaskNames(tm: TaskManager) {
+async function getLeafTaskNames(tm: TyTaskManager) {
   const leafTaskIds = tm.getLeafTasks().reverse().slice(0, 10);
   let taskList: taskEntry[] = [];
   for (const id of leafTaskIds) {

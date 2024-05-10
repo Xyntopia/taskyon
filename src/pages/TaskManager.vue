@@ -78,9 +78,10 @@ const syncProgress = ref(0.0);
 const taskCount = ref(0);
 
 let taskManager: Awaited<ReturnType<typeof state.getTaskManager>>;
-void state
-  .getTaskManager()
-  .then((tm) => ((taskManager = tm), (taskCount.value = taskManager.count())));
+void state.getTaskManager().then((tm) => {
+  taskManager = tm;
+  taskCount.value = taskManager.count();
+});
 
 async function onUpdateSearchIndex() {
   if (taskManager) {
