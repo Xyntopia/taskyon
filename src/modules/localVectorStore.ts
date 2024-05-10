@@ -8,7 +8,7 @@ import type { HierarchicalNSW } from 'hnswlib-wasm';
 import { LocalStorage } from 'quasar';
 import Dexie from 'dexie';
 import { getVector } from './taskyon/nlp';
-import { loadOrCreateVectorStore } from './taskyon/vectorSearch';
+import { loadOrCreateHNSWIndex } from './taskyon/hnswIndex';
 //TODO: maybe use yarn add hnsw  (pure javascript library)
 //TODO: make everything functional... no side effects etc...
 
@@ -84,7 +84,7 @@ let documentStore: documentStoreType | undefined = undefined;
 async function loadDocumentStore(name: string): Promise<documentStoreType> {
   //TODO: reload index if name change detected
   const vecdbName = name + '_vecs';
-  const newindex = await loadOrCreateVectorStore(
+  const newindex = await loadOrCreateHNSWIndex(
     vecdbName,
     vecStoreUploaderConfigurationState.value.MAX_ELEMENTS
   );

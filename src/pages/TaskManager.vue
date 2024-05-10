@@ -124,7 +124,7 @@ const initialPagination = {
   sortBy: 'score',
   descending: true,
   //page: 2,
-  rowsPerPage: 5,
+  rowsPerPage: 50,
   // rowsNumber: xx if getting data from a server
 };
 

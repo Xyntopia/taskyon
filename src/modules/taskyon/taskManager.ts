@@ -11,7 +11,7 @@ import {
 import { openFile } from './OPFS';
 import { Lock, sleep, deepMerge, AsyncQueue } from './utils';
 import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
-import { loadOrCreateVectorStore } from './vectorSearch';
+import { loadOrCreateHNSWIndex } from './hnswIndex';
 import { extractKeywords, vectorizeText } from './webWorkerApi';
 import { Tool, ToolBase } from './tools';
 import { buildChatFromTask } from './taskUtils';
@@ -262,6 +262,14 @@ export async function addTask2Tree(
     const taskyonDBInstance = await createTaskyonDatabase('taskyondb');
     taskManagerInstance = new TaskManager(TaskList, taskyonDBInstance);
 */
+
+// TODO: refactor TaskManager into a module (function which returns a subset of functions)
+//       when we do this it becomes much easier to pass around the individual functions....
+//       and we can include most of the functions above in this as well...
+// TODO:  we cna also break down  the individual parts of TaskManager this way into smaller parts:
+//        - the vector store part
+//        - the taskDB part
+//        - he file search part etc...
 export class TaskManager {
   // uses RxDB as a DB backend..
   // Usage example:
@@ -298,7 +306,7 @@ export class TaskManager {
 
   private initVectorStore = async (loadIfExists = true) => {
     const maxElements = 10000;
-    this.vectorIndex = await loadOrCreateVectorStore(
+    this.vectorIndex = await loadOrCreateHNSWIndex(
       this.vectorIndexName,
       maxElements,
       loadIfExists

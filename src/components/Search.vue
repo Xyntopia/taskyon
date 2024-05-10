@@ -56,6 +56,11 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 
+const numberOfSearchResults = defineModel<number>('numberOfSearchResults', {
+  required: false,
+  default: 50,
+});
+
 defineProps({
   searchState: {
     type: Boolean,
@@ -82,15 +87,14 @@ defineProps({
 const emit = defineEmits(['search', 'toggleFilter']);
 
 const searchString = ref<string>('');
-const numberOfSearchResults = ref<number>(5);
 
 function onQChange(value: string | null | number) {
   searchString.value = (value as string) || '';
-  emit('search', value, Number(numberOfSearchResults.value));
+  emit('search', value, numberOfSearchResults.value);
 }
 
 const requestSearch = () => {
-  emit('search', searchString.value, Number(numberOfSearchResults.value));
+  emit('search', searchString.value, numberOfSearchResults.value);
 };
 
 const toggleFilter = () => {
