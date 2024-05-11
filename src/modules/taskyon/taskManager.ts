@@ -274,6 +274,79 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
   return { addFile, bulkUpsertFiles, getFileMappingByUuid };
 }
 
+function tyMechanisms() {
+  // we need these locks in order to sync our databases..
+  const taskLocks: Map<string, Lock> = new Map();
+  let subscribers: Array<
+    (task?: LLMTask, taskNum?: number) => void | Promise<void>
+  > = [];
+  let taskCountSubscribers: Array<(task?: LLMTask, taskNum?: number) => void> =
+    [];
+
+  // Lock a task and returns a function closure which can be used to unlock it again...
+  async function lockTask(taskId: string) {
+    const newLock = new Lock();
+    taskLocks.set(taskId, newLock);
+    return newLock.lock();
+  }
+
+  async function waitForTaskUnlock(taskId: string) {
+    const lock = taskLocks.get(taskId);
+    if (lock) {
+      console.log('wait for unlock!');
+      await lock.waitForUnlock();
+    }
+  }
+
+  function subscribeToTaskChanges(
+    callback: (task?: LLMTask, taskNum?: number) => void | Promise<void>,
+    subscribeToTaskCountOnly = false
+  ): void {
+    if (subscribeToTaskCountOnly) {
+      taskCountSubscribers.push(callback);
+    } else {
+      subscribers.push(callback);
+    }
+  }
+
+  // You may also need a method to unsubscribe if required
+  function unsubscribeFromTaskChanges(
+    callback: (task?: LLMTask, taskNum?: number) => void | Promise<void>
+  ): void {
+    subscribers = subscribers.filter((sub) => sub !== callback);
+    taskCountSubscribers = taskCountSubscribers.filter(
+      (sub) => sub !== callback
+    );
+  }
+
+  function notifySubscribers(
+    task: LLMTask | undefined,
+    taskNum: number | undefined = undefined
+  ): void {
+    /*if (!task && !taskNum) {
+      subscribers.forEach((callback) => void callback(undefined, undefined));
+    }*/
+
+    if (task) {
+      subscribers.forEach((callback) => void callback(task, taskNum));
+    }
+
+    // Notify subscribers interested in task count changes
+    if (taskNum) {
+      taskCountSubscribers.forEach((callback) => callback(undefined, taskNum));
+    }
+  }
+
+  // this class holds utilitiy funcions to manage taskyons infrastructure
+  return {
+    lockTask,
+    waitForTaskUnlock,
+    subscribeToTaskChanges,
+    unsubscribeFromTaskChanges,
+    notifySubscribers,
+  };
+}
+
 // TODO:  break down  the individual parts of TaskManager this way into smaller parts:
 //        - on top of that build a function which encapsulates all the "high-level  function such as getting files etc..."
 //        - the vector store part
@@ -296,16 +369,16 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
   let vectorIndex: HierarchicalNSW | undefined;
-  // we need these locks in order to sync our databases..
-  const taskLocks: Map<string, Lock> = new Map();
-  let subscribers: Array<
-    (task?: LLMTask, taskNum?: number) => void | Promise<void>
-  > = [];
-  let taskCountSubscribers: Array<(task?: LLMTask, taskNum?: number) => void> =
-    [];
-
   const vectorIndexName = 'taskyondbv';
   const { vectorizeText } = useNlpWorker();
+
+  const {
+    lockTask,
+    waitForTaskUnlock,
+    subscribeToTaskChanges,
+    unsubscribeFromTaskChanges,
+    notifySubscribers,
+  } = tyMechanisms();
 
   if (vectorizerModel) {
     // make sure our search if prepared:
@@ -322,21 +395,6 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     );
   }
   void initVectorStore();
-
-  // Lock a task and returns a function closure which can be used to unlock it again...
-  async function lockTask(taskId: string) {
-    const newLock = new Lock();
-    taskLocks.set(taskId, newLock);
-    return newLock.lock();
-  }
-
-  async function waitForTaskUnlock(taskId: string) {
-    const lock = taskLocks.get(taskId);
-    if (lock) {
-      console.log('wait for unlock!');
-      await lock.waitForUnlock();
-    }
-  }
 
   function count() {
     return tasks.size;
@@ -358,7 +416,8 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
         }
       });
       console.log('all tasks loaded from DB!');
-      notifySubscribers(undefined, true);
+
+      notifySubscribers(undefined, count());
     }
   }
   void initializeTasksFromDB();
@@ -419,7 +478,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
         }
       }
       unlock();
-      notifySubscribers(updateData.id);
+      notifySubscribers(tasks.get(updateData.id));
     });
     // TODO: return the root or leave of the new tree ;).
   }
@@ -535,7 +594,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       await taskyonDB.remove();
     }
     tasks.clear();
-    notifySubscribers(undefined, true);
+    notifySubscribers(undefined, count());
   }
 
   async function deleteTask(taskId: string): Promise<void> {
@@ -552,29 +611,8 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       }
     }
     console.log('done deleting task:', taskId);
-    notifySubscribers(taskId, true);
+    notifySubscribers(tasks.get(taskId), count());
     unlock();
-  }
-
-  function subscribeToTaskChanges(
-    callback: (task?: LLMTask, taskNum?: number) => void | Promise<void>,
-    subscribeToTaskCountOnly = false
-  ): void {
-    if (subscribeToTaskCountOnly) {
-      taskCountSubscribers.push(callback);
-    } else {
-      subscribers.push(callback);
-    }
-  }
-
-  // You may also need a method to unsubscribe if required
-  function unsubscribeFromTaskChanges(
-    callback: (task?: LLMTask, taskNum?: number) => void | Promise<void>
-  ): void {
-    subscribers = subscribers.filter((sub) => sub !== callback);
-    taskCountSubscribers = taskCountSubscribers.filter(
-      (sub) => sub !== callback
-    );
   }
 
   // TODO:  we need to rewrite this, so that we only use parents and not children!
@@ -591,25 +629,6 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       .map((t) => t.id);
   }
 
-  function notifySubscribers(taskId?: string, taskCountChanged = false): void {
-    const taskNum = taskCountChanged ? tasks.size : undefined;
-
-    // Notify subscribers interested in task changes
-    if (taskId) {
-      const task = tasks.get(taskId);
-      if (task) {
-        subscribers.forEach((callback) => void callback(task, taskNum));
-      }
-    } else {
-      subscribers.forEach((callback) => void callback(undefined, taskNum));
-    }
-
-    // Notify subscribers interested in task count changes
-    if (taskCountChanged) {
-      taskCountSubscribers.forEach((callback) => callback(undefined, taskNum));
-    }
-  }
-
   async function withTaskCountCheck(
     taskId: string,
     operation: () => void | Promise<void>
@@ -619,7 +638,10 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     void (await Promise.resolve(operation()));
 
     const taskCountChanged = tasks.size !== prevTaskCount;
-    notifySubscribers(taskId, taskCountChanged);
+    notifySubscribers(
+      tasks.get(taskId),
+      taskCountChanged ? count() : undefined
+    );
   }
 
   // we can search tasks here using a mongo-db query object
@@ -704,7 +726,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       const dbobject = await taskyonDB.importJSON(jsonObj);
       return dbobject;
     }
-    notifySubscribers(undefined, true);
+    notifySubscribers(undefined, count());
   }
 
   const defaultMode = {
