@@ -25,7 +25,7 @@ const llmTaskSchemaLiteral = {
   //       so this include for example he state of the task.
   //       and other things that right now get changed "later".
   title: 'LLMTask schema',
-  version: 4,
+  version: 5,
   type: 'object',
   primaryKey: 'id',
   properties: {
@@ -41,8 +41,9 @@ const llmTaskSchemaLiteral = {
       type: 'string',
       enum: ['system', 'user', 'assistant', 'function'],
     },
+    // this can also be a json file...
     content: {
-      type: ['string'],
+      type: 'string',
     },
     state: {
       type: 'string',
@@ -202,6 +203,12 @@ export const collections = {
         // we simply added additional fields, so no problem here :).
         return oldDoc;
       },
+      5: function (oldDoc: LLMTaskDocType) {
+        // we simply added additional fields, so no problem here :).
+        const newDoc = oldDoc
+        newDoc.content = JSON.stringify({message: oldDoc.content || ''})
+        return newDoc
+      },
     },
   },
   filemappings: {
@@ -257,6 +264,7 @@ export function transformLLMTaskToDocType(llmTask: LLMTask): LLMTaskDocType {
   const nonReactiveLLMTask = JSON.parse(JSON.stringify(llmTask)) as LLMTask;
   return {
     ...nonReactiveLLMTask,
+    content: JSON.stringify(llmTask.configuration),
     configuration: llmTask.configuration
       ? JSON.stringify(llmTask.configuration)
       : undefined,
@@ -275,6 +283,10 @@ export function transformDocToLLMTask(
   const parsedDoc = JSON.parse(jsonString) as RxDocument<LLMTaskDocType>;
 
   // Safely parse the debugging, configuration, and result fields
+  const parsedContent =
+    typeof parsedDoc.content === 'string'
+      ? (JSON.parse(parsedDoc.content) as Record<string, unknown>)
+      : {};
   const parsedDebugging =
     typeof parsedDoc.debugging === 'string'
       ? (JSON.parse(parsedDoc.debugging) as Record<string, unknown>)
@@ -292,7 +304,7 @@ export function transformDocToLLMTask(
   // TODO:  try to throw errors here, when our LLMTask object and our database object differ.
   const tmpObj = {
     ...parsedDoc,
-    content: parsedDoc.content || undefined, // we do this here, because in some situations the task has the wrong format...
+    content: parsedContent, // we do this here, because in some situations the task has the wrong format...
     debugging: parsedDebugging,
     configuration: parsedConfiguration,
     result: parsedResult,
