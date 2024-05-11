@@ -216,8 +216,8 @@ async function processFunctionTask(
   taskWorkerController: TaskWorkerController,
   taskManager: TyTaskManager
 ) {
-  if (task.configuration?.function) {
-    const func = task.configuration.function;
+  if ('functionCall' in task.content) {
+    const func = task.content.functionCall;
     console.log(`Calling function ${func.name}`);
     if (tools[func.name] && !taskWorkerController.isInterrupted()) {
       const result = await handleFunctionExecution(func, tools, taskManager);

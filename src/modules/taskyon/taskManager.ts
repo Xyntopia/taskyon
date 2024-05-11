@@ -265,6 +265,15 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
     }
   }
 
+  // TODO: this function needs to be changes to search for names, instead of UUIDs
+  async function getFileByName(name: string) {
+    const fileMap = await getFileMappingByUuid(name);
+    if (fileMap?.opfs) {
+      const file = openFile(fileMap.opfs);
+      return file;
+    }
+  }
+
   return { addFile, bulkUpsertFiles, getFileMappingByUuid, getFile };
 }
 
@@ -670,15 +679,24 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
         },
       });
 
-      const toolDefs = tasks.map((task) => {
-        const toolDef = ToolBase.parse(JSON.parse(task.content || ''));
+      function hasMessage(
+        task: LLMTask
+      ): task is LLMTask & { content: { message: string } } {
+        return 'message' in task.content;
+      }
+      const toolDefs = tasks.filter(hasMessage);
+      //const toolDefs = tasks.filter((task) => 'message' in task);
+      const parsedToolDefs = toolDefs.map((task) => {
+        const toolDef = ToolBase.parse(JSON.parse(task.content.message));
         return toolDef;
       });
 
-      return toolDefs.concat(Object.values(defaultTools)).reduce((pv, cv) => {
-        pv[cv.name] = cv;
-        return pv;
-      }, {} as Record<string, ToolBase>);
+      return parsedToolDefs
+        .concat(Object.values(parsedToolDefs))
+        .reduce((pv, cv) => {
+          pv[cv.name] = cv;
+          return pv;
+        }, {} as Record<string, ToolBase>);
     }
     return {};
   }

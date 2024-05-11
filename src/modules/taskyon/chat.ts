@@ -252,7 +252,10 @@ export function estimateChatTokens(
     task.allowedTools || [],
     tools
   );
-  const singlePromptTokens = countStringTokens(task.content || '');
+  // TODO: convert task.content into a legitimate string first, using the
+  //       "original" functions toshow what actually gets sent to the LLM!
+  const contentStr = JSON.stringify(Object.values(task.content)[0]);
+  const singlePromptTokens = countStringTokens(contentStr);
   const promptTokens = countChatTokens(chat);
   const functionTokens = Math.floor(countToolTokens(functions) * 0.7);
   const resultTokens = countStringTokens(
@@ -704,25 +707,35 @@ async function uploadFileToOpenAI(
   }
 }
 
+// TODO: merge this with our taskyon "internal" agents...
 function convertTasksToOpenAIThread(
   taskList: LLMTask[],
   fileMappings: Record<string, string>
 ): OpenAI.Beta.ThreadCreateParams.Message[] {
-  return taskList.map((task) => ({
-    role: 'user',
-    content: task.content || '',
-    file_ids: (task.configuration?.uploadedFiles || [])
-      .map((file) => fileMappings[file])
-      .filter((id) => id !== undefined),
-  }));
+  const messageList = taskList.map((task) => {
+    let content = '';
+    if ('message' in task.content) {
+      content = task.content.message;
+    }
+    return {
+      role: 'user' as const,
+      content,
+      // TODO: attach file ids to chatmessage
+      /*file_ids: (task.configuration?.uploadedFiles || [])
+          .map((file) => fileMappings[file])
+          .filter((id) => id !== undefined),*/
+    };
+  });
+
+  return messageList;
 }
 
 export function findAllFilesInTasks(taskList: LLMTask[]): string[] {
   const fileSet = new Set<string>();
   taskList.forEach((task) => {
-    (task.configuration?.uploadedFiles || []).forEach((file) =>
-      fileSet.add(file)
-    );
+    if ('uploadedFiles' in task.content) {
+      task.content.uploadedFiles.forEach((file) => fileSet.add(file));
+    }
   });
   return Array.from(fileSet);
 }
@@ -753,9 +766,7 @@ export async function getOpenAIAssistantResponse(
     // Get all corresponding filemapping entries from our database
     const currentTaskListfileMappings = (
       await Promise.all(
-        fileIDs.map(
-          async (fuuid) => taskManager.getFileMappingByUuid(fuuid)
-        )
+        fileIDs.map(async (fuuid) => taskManager.getFileMappingByUuid(fuuid))
       )
     ).filter((fm) => fm !== null) as FileMappingDocType[];
 

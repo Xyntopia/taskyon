@@ -39,7 +39,7 @@ function setupIframeApi(chatState: ChatStateType, taskManager: TyTaskManager) {
               console.log(`task was sent by ${event.origin}`, msg.data);
               const newTask = {
                 ...msg.data.task,
-                content: stringifyIfNotString(msg.data.task.content),
+                content: msg.data.task.content,
               };
               void addTask2Tree(
                 newTask,

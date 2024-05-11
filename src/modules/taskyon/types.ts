@@ -1,6 +1,7 @@
 import type OpenAI from 'openai';
 import { dump } from 'js-yaml';
-import { z } from 'zod';
+import { boolean, z } from 'zod';
+import { ToolBase } from './tools';
 
 const TaskState = z.enum([
   'Open',
@@ -168,22 +169,23 @@ export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>;
 export const LLMTask = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   name: z.string().optional(),
-  // this is the actual content of the task which holds the description
-  content: z.string().optional(),
+  // this is the actual content of the task
+  content: z.union([
+    z.object({ message: z.string() }),
+    z.object({ functionCall: FunctionCall }),
+    z.object({ uploadedFiles: z.array(z.string()) }),
+  ]),
   state: TaskState,
   label: z.array(z.string()).optional(),
   context: z.record(z.string(), z.string()).optional(),
-  // somehow configure our configuration in a way that e.g. when it has a function, model
-  // or chatApi become optional?
   configuration: z
     .object({
-      message: OpenAIMessage.optional(), // TODO: move this into content
-      function: FunctionCall.optional(), // TODO: move this into content
-      model: z.string().optional(),
-      chatApi: z.string().optional(),
-      uploadedFiles: z.array(z.string()).optional(), // TODO: move this into
+      //message: OpenAIMessage.optional(), // TODO: move this into content
+      model: z.string(),
+      chatApi: z.string(),
     })
-    .optional(),
+    .optional()
+    .describe('Holds the configuration for the LLM'),
   parentID: z.string().optional(),
   // TODO: get rid of this parameter in order to make our tasktree
   childrenIDs: z.array(z.string()),
@@ -224,6 +226,7 @@ export type LLMTask = z.infer<typeof LLMTask>;
 export type TaskGetter = (input: string) => Promise<LLMTask | undefined>;
 
 export const partialTaskDraft = LLMTask.pick({
+  role: true,
   content: true,
   name: true,
   configuration: true,
@@ -233,7 +236,7 @@ export const partialTaskDraft = LLMTask.pick({
   label: true,
 })
   .partial()
-  .merge(LLMTask.pick({ role: true }))
+  .required({ role: true, content: true })
   .describe(
     'This is just a subset of the task properties which can be used to define new tasks in various places.'
   );
@@ -244,6 +247,7 @@ export const taskTemplateTypes = z.object({
     .required({ label: true })
     .merge(z.object({ role: z.literal('system') }))
     .default({
+      content: { message: 'Tool Description here!' },
       role: 'system',
       label: ['function'],
     }),
@@ -262,16 +266,7 @@ export const TaskMessage = z
     type: z
       .literal('task')
       .describe('Field to indicate what kind of a message we have here.'),
-    task: partialTaskDraft
-      .merge(
-        z.object({
-          content: z.string().or(z.record(z.string(), z.unknown())).optional(),
-        })
-      )
-      .describe(
-        `A task definition, but with the ability to define the task content as an 
-        object... (which we can translate into a string)`
-      ),
+    task: partialTaskDraft,
     execute: z
       .boolean()
       .default(false)
@@ -288,6 +283,23 @@ export const TaskMessage = z
     'With this message type we can send tasks to taskyon from outside, e.g. a parent to a taskyon iframe'
   );
 export type TaskMessage = z.infer<typeof TaskMessage>;
+
+export const FunctionDescriptionMessage = z
+  .object({
+    type: z
+      .literal('functionDescription')
+      .describe(
+        'Field to indicate that this is a function description message.'
+      ),
+    functionDescription: ToolBase.or(z.string()),
+    activate: z
+      .boolean()
+      .describe('activate the function immediatly after declaration'),
+  })
+  .describe(
+    `With this message type we can send new functions to taskyon from outside, e.g. a parent to a taskyon iframe
+  taskyon will recognize them as`
+  );
 
 export const TaskyonMessages = z.discriminatedUnion('type', [
   RemoteFunctionCall,
