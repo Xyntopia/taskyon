@@ -112,11 +112,12 @@ export const llmTaskSchema: RxJsonSchema<LLMTaskDocType> = llmTaskSchemaLiteral;
 
 const fileMappingSchemaLiteral = {
   title: 'FileMapping schema',
-  version: 2,
+  version: 3,
   type: 'object',
   primaryKey: 'uuid',
   properties: {
     uuid: { type: 'string', maxLength: 128 },
+    name: { type: 'string' },
     // filename in opfs
     opfs: { type: 'string' },
     openAIFileId: { type: 'string' },
@@ -212,6 +213,10 @@ export const collections = {
         return null;
       },
       2: function (/*oldDoc*/) {
+        // for this version we simply discard everything from version 0
+        return null;
+      },
+      3: function (/*oldDoc*/) {
         // for this version we simply discard everything from version 0
         return null;
       },
