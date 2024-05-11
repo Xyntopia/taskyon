@@ -8,7 +8,6 @@ import {
   TaskGetter,
 } from './types';
 import type { TyTaskManager } from './taskManager';
-import { getFileMappingByUuid } from './taskManager';
 import OpenAI from 'openai';
 import { openFile } from './OPFS';
 import { dump } from 'js-yaml';
@@ -755,7 +754,7 @@ export async function getOpenAIAssistantResponse(
     const currentTaskListfileMappings = (
       await Promise.all(
         fileIDs.map(
-          async (fuuid) => await getFileMappingByUuid(fuuid, taskManager)
+          async (fuuid) => taskManager.getFileMappingByUuid(fuuid)
         )
       )
     ).filter((fm) => fm !== null) as FileMappingDocType[];

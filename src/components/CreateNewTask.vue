@@ -193,10 +193,7 @@ import { useTaskyonStore } from 'stores/taskyonState';
 import type { LLMTask, partialTaskDraft } from 'src/modules/taskyon/types';
 import ModelSelection from 'components/ModelSelection.vue';
 import { writeFiles } from 'src/modules/taskyon/OPFS';
-import {
-  addTask2Tree,
-  getFileMappingByUuid,
-} from 'src/modules/taskyon/taskManager';
+import { addTask2Tree } from 'src/modules/taskyon/taskManager';
 import ObjectTreeView from './ObjectTreeView.vue';
 import type { ToolBase } from 'src/modules/taskyon/tools';
 import taskSettingsButton from './taskSettingsButton.vue';
@@ -407,10 +404,9 @@ async function updateFileMappings(newUploadedFiles: string[] | undefined) {
   if (newUploadedFiles) {
     for (const uuid of newUploadedFiles) {
       try {
-        const fileMapping = await getFileMappingByUuid(
-          uuid,
+        const fileMapping = await (
           await state.getTaskManager()
-        );
+        ).getFileMappingByUuid(uuid);
         if (fileMapping) {
           newMappings.push({
             uuid,

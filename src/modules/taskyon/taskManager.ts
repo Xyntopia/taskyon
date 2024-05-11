@@ -108,35 +108,6 @@ function base64Uuid() {
   return bigint;
 }*/
 
-export async function getFileMappingByUuid(
-  uuid: string,
-  taskManager: TyTaskManager
-): Promise<FileMappingDocType | null> {
-  // Find the document with the matching UUID
-  const fileMappingDoc = await taskManager.getFileMappingByUuid(uuid);
-
-  // Check if the document exists
-  if (!fileMappingDoc) {
-    console.log(`No file mapping found for UUID: ${uuid}`);
-    return null;
-  }
-
-  // Return the found document
-  return {
-    uuid: fileMappingDoc.uuid,
-    opfs: fileMappingDoc.opfs,
-    openAIFileId: fileMappingDoc.openAIFileId,
-  };
-}
-
-export async function getFile(uuid: string, taskManager: TyTaskManager) {
-  const fileMap = await getFileMappingByUuid(uuid, taskManager);
-  if (fileMap?.opfs) {
-    const file = openFile(fileMap.opfs);
-    return file;
-  }
-}
-
 export const processTasksQueue = new AsyncQueue<string>();
 
 // use this to create hashes for every task
@@ -266,12 +237,35 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
     await fileMappingDb?.bulkUpsert(filemappings);
   }
 
-  async function getFileMappingByUuid(uuid: string) {
+  async function getFileMappingByUuid(
+    uuid: string
+  ): Promise<FileMappingDocType | null> {
+    // Find the document with the matching UUID
     const fileMappingDoc = await fileMappingDb?.findOne(uuid).exec();
-    return fileMappingDoc;
+
+    // Check if the document exists
+    if (!fileMappingDoc) {
+      console.log(`No file mapping found for UUID: ${uuid}`);
+      return null;
+    }
+
+    // Return the found document
+    return {
+      uuid: fileMappingDoc.uuid,
+      opfs: fileMappingDoc.opfs,
+      openAIFileId: fileMappingDoc.openAIFileId,
+    };
   }
 
-  return { addFile, bulkUpsertFiles, getFileMappingByUuid };
+  async function getFile(uuid: string) {
+    const fileMap = await getFileMappingByUuid(uuid);
+    if (fileMap?.opfs) {
+      const file = openFile(fileMap.opfs);
+      return file;
+    }
+  }
+
+  return { addFile, bulkUpsertFiles, getFileMappingByUuid, getFile };
 }
 
 function tyMechanisms() {

@@ -585,7 +585,7 @@ export async function taskWorker(
           taskManager,
           taskWorkerController
         );
-        // and finally save the task, because
+        // and finally save the task
         void taskManager.setTask(task, true);
       }
     } catch (error) {
