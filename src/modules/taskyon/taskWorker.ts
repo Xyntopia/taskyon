@@ -213,13 +213,14 @@ export async function processChatTask(
 async function processFunctionTask(
   task: LLMTask,
   tools: Record<string, ToolBase | Tool>,
-  taskWorkerController: TaskWorkerController
+  taskWorkerController: TaskWorkerController,
+  taskManager: TyTaskManager
 ) {
   if (task.configuration?.function) {
     const func = task.configuration.function;
     console.log(`Calling function ${func.name}`);
     if (tools[func.name] && !taskWorkerController.isInterrupted()) {
-      const result = await handleFunctionExecution(func, tools);
+      const result = await handleFunctionExecution(func, tools, taskManager);
       task.result = result;
     } else {
       const toolnames = JSON.stringify(task.allowedTools);
@@ -527,7 +528,8 @@ async function processTask(
         task = await processFunctionTask(
           task,
           await taskManager.searchToolDefinitions(),
-          taskWorkerController
+          taskWorkerController,
+          taskManager
         );
         if (!taskWorkerController.isInterrupted()) {
           processTasksQueue.push(taskId); // send the task back into the queue

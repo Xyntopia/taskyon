@@ -27,7 +27,11 @@
         <ObjectTreeView :model-value="f"></ObjectTreeView>
       </q-expansion-item>
     </q-list>
-    <CreateNewTask coding-mode :force-task-props="functionTaskTemplate" />
+    <CreateNewTask
+      coding-mode
+      :force-task-props="functionTemplate"
+      :send-allowed="taskParser === true ? true : false"
+    />
     {{ taskParser }}
     <q-btn label="new tool" @click="newToolStructure()"></q-btn>
   </div>
@@ -39,7 +43,10 @@ import { ToolBase } from 'src/modules/taskyon/tools';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
 import ObjectTreeView from './ObjectTreeView.vue';
-import { functionTaskTemplate } from 'src/modules/taskyon/types';
+import { taskTemplateTypes } from 'src/modules/taskyon/types';
+
+const functionTemplate =
+  taskTemplateTypes.shape.toolDescription.parse(undefined);
 
 const state = useTaskyonStore();
 

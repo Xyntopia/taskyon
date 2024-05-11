@@ -177,11 +177,11 @@ export const LLMTask = z.object({
   // or chatApi become optional?
   configuration: z
     .object({
-      message: OpenAIMessage.optional(),
-      function: FunctionCall.optional(),
+      message: OpenAIMessage.optional(), // TODO: move this into content
+      function: FunctionCall.optional(), // TODO: move this into content
       model: z.string().optional(),
       chatApi: z.string().optional(),
-      uploadedFiles: z.array(z.string()).optional(),
+      uploadedFiles: z.array(z.string()).optional(), // TODO: move this into
     })
     .optional(),
   parentID: z.string().optional(),
@@ -239,10 +239,23 @@ export const partialTaskDraft = LLMTask.pick({
   );
 export type partialTaskDraft = z.infer<typeof partialTaskDraft>;
 
-export const functionTaskTemplate: partialTaskDraft = {
-  role: 'system',
-  label: ['function'],
-};
+export const taskTemplateTypes = z.object({
+  toolDescription: partialTaskDraft
+    .required({ label: true })
+    .merge(z.object({ role: z.literal('system') }))
+    .default({
+      role: 'system',
+      label: ['function'],
+    }),
+  /*file: partialTaskDraft.required({role: true, label: true})
+  .merge(LLMTask['configuration']).default({
+    role: 'system',
+    configuration: {
+      message: "test"
+    },
+    label: ['file']
+  })*/
+});
 
 export const TaskMessage = z
   .object({

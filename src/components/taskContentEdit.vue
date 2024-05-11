@@ -19,7 +19,7 @@
       </q-btn>
     </template>
     <template v-slot:before>
-      <FileDropzone class="fit" @update:model-value="attachFileToTask">
+      <FileDropzone class="fit" @update:model-value="attachFileToChat">
         <q-btn dense class="fit" flat>
           <q-icon class="gt-sm" name="upload_file" />
           <q-icon name="attachment" />
@@ -55,7 +55,7 @@ const expandedTaskCreation = defineModel<boolean>('expandedTaskCreation', {
 const props = defineProps<{
   expertMode: boolean;
   executeTask: () => Promise<void>;
-  attachFileToTask: (newFiles: File[]) => Promise<void>;
+  attachFileToChat: (newFiles: File[]) => Promise<void>;
   estimatedTokens: number;
   currentModel: string | undefined;
   useEnterToSend: boolean;

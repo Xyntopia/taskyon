@@ -14,6 +14,7 @@ import {
 } from './types';
 import { z } from 'zod';
 import { FunctionCall, ParamType } from './types';
+import type { TyTaskManager } from './taskManager';
 
 export const vectorStore = useVectorStore();
 
@@ -140,13 +141,14 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
 
 export async function handleFunctionExecution(
   func: FunctionCall,
-  tools: Record<string, ToolBase | Tool>
+  tools: Record<string, ToolBase | Tool>,
+  taskManager: TyTaskManager
 ): Promise<TaskResult> {
   try {
     const tool = tools[func.name];
     let funcR: unknown;
     if ('function' in tool && tool.function) {
-      funcR = await tool.function(func.arguments);
+      funcR = await tool.function(func.arguments, taskManager);
       funcR = bigIntToString(funcR);
       return {
         type: 'ToolResult',
@@ -190,6 +192,28 @@ export async function handleFunctionExecution(
   }
 }
 
+export const getFileContent: Tool = {
+  function: (
+    { fileName }: { fileName: string },
+    taskManager: TyTaskManager
+  ) => {
+    const result = fileName;
+    return result;
+  },
+  description: `Performs semantic search in a local vectorized database, ideal 
+for retrieving documents or data segments with high relevance to natural language queries.`,
+  name: 'localVectorStoreSearch',
+  parameters: {
+    type: 'object',
+    properties: {
+      searchTerm: {
+        type: 'string',
+        description: 'The search term to use in the vector store search.',
+      },
+    },
+    required: ['searchTerm'],
+  },
+};
 export const localVectorStoreSearch: Tool = {
   function: async ({ searchTerm }: { searchTerm: string }) => {
     const k = 3;

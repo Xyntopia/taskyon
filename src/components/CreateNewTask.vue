@@ -14,7 +14,7 @@
         v-model:expandedTaskCreation="expandedTaskCreation"
         :expert-mode="expertMode"
         :execute-task="addNewTask"
-        :attach-file-to-task="attachFileToTask"
+        :attach-file-to-chat="attachFileToChat"
         :estimated-tokens="estimatedTokens"
         :current-model="currentModel"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
@@ -23,7 +23,12 @@
       <div v-else-if="!selectedTaskType && codingMode">
         <CodeEditor v-model="content" />
         <taskSettingsButton v-model="expandedTaskCreation" />
-        <q-btn icon="save" label="save task" @click="addNewTask(false)"
+        <q-btn
+          :disable="!sendAllowed"
+          :color="sendAllowed ? 'positive' : 'negative'"
+          icon="save"
+          label="save task"
+          @click="addNewTask(false)"
           ><q-tooltip>Save task without executing it...</q-tooltip></q-btn
         >
       </div>
@@ -203,6 +208,7 @@ import CodeEditor from './CodeEditor.vue';
 const props = defineProps<{
   codingMode?: boolean;
   forceTaskProps?: partialTaskDraft;
+  sendAllowed?: boolean;
 }>();
 
 const state = useTaskyonStore();
@@ -355,8 +361,8 @@ async function addNewTask(execute = true) {
   }
 }
 
-async function attachFileToTask(newFiles: File[]) {
-  console.log('attach file to ask');
+async function attachFileToChat(newFiles: File[]) {
+  console.log('attach file to chat');
   //first, upload file into our OPFS file system:
   const opfsMapping = await writeFiles(newFiles);
 
