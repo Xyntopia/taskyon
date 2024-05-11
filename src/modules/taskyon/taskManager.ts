@@ -251,27 +251,45 @@ export async function addTask2Tree(
   return newTask.id;
 }
 
-// Function to create the database
-/*
-  TaskyonManager is build with reactivity in mind. you can supply a reactive map
-  to the constructor. it will be kept in sync with the taskdb and supplies reactive changes
-  to the UI. We could have used the function of RxDB for this. But this approach would have been
-  less flexible...
+function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
+  async function addFile(fileMapping: Partial<FileMappingDocType>) {
+    const uuidFileMapping: FileMappingDocType = {
+      uuid: base64Uuid(),
+      ...fileMapping,
+    };
 
-    const TaskList = reactive<Map<string, LLMTask>>(new Map());
-    const taskyonDBInstance = await createTaskyonDatabase('taskyondb');
-    taskManagerInstance = new TaskManager(TaskList, taskyonDBInstance);
-*/
+    const fileMappingDoc = await fileMappingDb?.insert(uuidFileMapping);
+    return fileMappingDoc?.uuid;
+  }
+
+  async function bulkUpsertFiles(filemappings: FileMappingDocType[]) {
+    await fileMappingDb?.bulkUpsert(filemappings);
+  }
+
+  async function getFileMappingByUuid(uuid: string) {
+    const fileMappingDoc = await fileMappingDb?.findOne(uuid).exec();
+    return fileMappingDoc;
+  }
+
+  return { addFile, bulkUpsertFiles, getFileMappingByUuid };
+}
 
 // TODO:  break down  the individual parts of TaskManager this way into smaller parts:
 //        - on top of that build a function which encapsulates all the "high-level  function such as getting files etc..."
 //        - the vector store part
 //        - the taskDB part
 //        - he file search part etc...
-export function useTyTaskManager(
+// Function to create the database
+/*
+  TyTaskManager is build with reactivity in mind. you can supply a reactive map
+  to the constructor. it will be kept in sync with the taskdb and supplies reactive changes
+  to the UI. We could have used the function of RxDB for this. But this approach would have been
+  less flexible...
+*/
+export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   tasks: Map<string, LLMTask>,
   defaultTools: Tool[],
-  taskyonDB?: TaskyonDatabase,
+  taskyonDB?: T,
   vectorizerModel?: string
 ) {
   // uses RxDB as a DB backend..
@@ -510,33 +528,6 @@ export function useTyTaskManager(
     return result;
   }
 
-  async function addFile(fileMapping: Partial<FileMappingDocType>) {
-    const uuidFileMapping: FileMappingDocType = {
-      uuid: base64Uuid(),
-      ...fileMapping,
-    };
-
-    if (taskyonDB) {
-      const fileMappingDoc = await taskyonDB.filemappings.insert(
-        uuidFileMapping
-      );
-      return fileMappingDoc?.uuid;
-    }
-  }
-
-  async function bulkUpsertFiles(filemappings: FileMappingDocType[]) {
-    if (taskyonDB) {
-      await taskyonDB.filemappings.bulkUpsert(filemappings);
-    }
-  }
-
-  async function getFileMappingByUuid(uuid: string) {
-    if (taskyonDB) {
-      const fileMappingDoc = await taskyonDB.filemappings.findOne(uuid).exec();
-      return fileMappingDoc;
-    }
-  }
-
   async function deleteAllTasks() {
     // TODO: manually re-initiailized taskyondb after remove...
     if (taskyonDB) {
@@ -716,26 +707,28 @@ export function useTyTaskManager(
     notifySubscribers(undefined, true);
   }
 
-  return {
+  const defaultMode = {
     getTask,
     updateTask,
     deleteTask,
-    getFileMappingByUuid,
     searchTasks,
     setTask,
-    bulkUpsertFiles,
     searchToolDefinitions,
     getLeafTasks,
     subscribeToTaskChanges,
     unsubscribeFromTaskChanges,
-    addFile,
     getJsonTaskBackup,
     addTaskBackup,
     deleteAllTasks,
     count,
     syncVectorIndexWithTasks,
     vectorSearchTasks,
-    addToolCode
+    addToolCode,
+  };
+
+  return {
+    ...defaultMode,
+    ...useFileManager(taskyonDB?.filemappings),
   };
 }
 export type TyTaskManager = ReturnType<typeof useTyTaskManager>;
