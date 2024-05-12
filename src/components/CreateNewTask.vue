@@ -8,7 +8,9 @@
         :model-value="state.taskDraft.content?.message"
         @update:modelValue="
           (value) => {
-            state.taskDraft.content = value;
+            state.taskDraft.content = {
+              message: value,
+            };
           }
         "
         v-model:expandedTaskCreation="expandedTaskCreation"
@@ -63,6 +65,7 @@
           <q-tooltip :delay="0.5">{{ `${file.name}` }}</q-tooltip>
         </q-chip>
       </div>
+      <!--Task type selection and execution-->
       <div
         class="row items-center"
         v-if="selectedTaskType || expandedTaskCreation"
@@ -194,7 +197,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, toRaw, toRefs } from 'vue';
+import { computed, ref, toRaw, toRefs } from 'vue';
 import { countStringTokens, getApiConfig } from 'src/modules/taskyon/chat';
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools';
 import { FunctionArguments } from 'src/modules/taskyon/types';
@@ -230,7 +233,10 @@ const { selectedApi, useOpenAIAssistants, openAIAssistantId } = toRefs(
 //const funcArgs = computed(() => );
 
 async function getAllTools() {
-  return (await state.getTaskManager()).searchToolDefinitions();
+  const foundTools = await (
+    await state.getTaskManager()
+  ).searchToolDefinitions();
+  return foundTools;
 }
 
 const toolCollection = ref<Record<string, ToolBase>>({});
@@ -283,7 +289,7 @@ const selectedTaskType = computed(() => {
   return state.taskDraft.content?.functionCall?.name;
 });
 
-async function setTaskType(tasktype: string | undefined) {
+async function setTaskType(tasktype: string | undefined | null) {
   console.log('change tasktype to:', tasktype);
   if (tasktype) {
     state.taskDraft.role = 'function';
@@ -308,13 +314,15 @@ async function setTaskType(tasktype: string | undefined) {
     };
   } else {
     state.taskDraft.role = 'user';
-    delete state.taskDraft.configuration;
+    delete state.taskDraft.content?.functionCall;
   }
 }
 
 const estimatedTokens = computed(() => {
   // Tokenize the message
-  const tokens = countStringTokens(JSON.stringify(state.taskDraft.content));
+  const tokens = countStringTokens(
+    JSON.stringify(state.taskDraft.content) || ''
+  );
 
   // Return the token count
   return tokens;

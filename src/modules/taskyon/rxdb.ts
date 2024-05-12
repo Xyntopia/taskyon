@@ -205,9 +205,10 @@ export const collections = {
       },
       5: function (oldDoc: LLMTaskDocType) {
         // we simply added additional fields, so no problem here :).
-        const newDoc = oldDoc
-        newDoc.content = JSON.stringify({message: oldDoc.content || ''})
-        return newDoc
+        const newDoc = oldDoc;
+        newDoc.content = JSON.stringify({ message: oldDoc.content || '' });
+        newDoc.configuration = undefined;
+        return newDoc;
       },
     },
   },
@@ -264,7 +265,7 @@ export function transformLLMTaskToDocType(llmTask: LLMTask): LLMTaskDocType {
   const nonReactiveLLMTask = JSON.parse(JSON.stringify(llmTask)) as LLMTask;
   return {
     ...nonReactiveLLMTask,
-    content: JSON.stringify(llmTask.configuration),
+    content: JSON.stringify(llmTask.content),
     configuration: llmTask.configuration
       ? JSON.stringify(llmTask.configuration)
       : undefined,

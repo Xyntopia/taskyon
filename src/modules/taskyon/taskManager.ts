@@ -696,7 +696,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       });
 
       return parsedToolDefs
-        .concat(Object.values(parsedToolDefs))
+        .concat(Object.values(defaultTools))
         .reduce((pv, cv) => {
           pv[cv.name] = cv;
           return pv;
