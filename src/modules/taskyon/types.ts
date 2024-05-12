@@ -1,20 +1,23 @@
 import type OpenAI from 'openai';
 import { dump } from 'js-yaml';
-import { boolean, z } from 'zod';
+import { z } from 'zod';
 import { ToolBase } from './tools';
 
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type RequireSome<T, K extends keyof T> = Omit<T, K> &
   Required<Pick<T, K>>;
 
+// TODO: the goal should be to slowly replace this state by the "result of the task"
+//       E.g. when a task had an error, this would be represented in the task result as an "error"
 const TaskState = z.enum([
   'Open',
   'Queued',
   'In Progress',
   'Completed',
-  'Error',
   'Cancelled',
-]);
+]).describe(`The task state indicates on what is happening with the task: for example
+it shows whether a task flow is seen as "completed" or whether its waiting
+to be further processed... E.g. there could be a task with no results, which stil counts as "completed"`);
 export type TaskState = z.infer<typeof TaskState>;
 
 const OpenAIMessage = z.object({
@@ -115,6 +118,7 @@ export const TaskResult = z.object({
   toolResult: ToolResult.optional(), // Replace 'z.any()' with the specific type if available
 });
 export type TaskResult = z.infer<typeof TaskResult>;
+
 export const ParamType = z.union([
   z.string(),
   z.number(),
@@ -193,7 +197,6 @@ export const LLMTask = z.object({
   context: z.record(z.string(), z.string()).optional(),
   configuration: z
     .object({
-      //message: OpenAIMessage.optional(), // TODO: move this into content
       model: z.string(),
       chatApi: z.string(),
     })

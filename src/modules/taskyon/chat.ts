@@ -721,7 +721,7 @@ function convertTasksToOpenAIThread(
       role: 'user' as const,
       content,
       // TODO: attach file ids to chatmessage
-      /*file_ids: (task.configuration?.uploadedFiles || [])
+      /*file_ids: (task.content?.uploadedFiles || [])
           .map((file) => fileMappings[file])
           .filter((id) => id !== undefined),*/
     };

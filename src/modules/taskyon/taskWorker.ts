@@ -385,8 +385,7 @@ async function generateFollowUpTasksFromResult(
           taskDraftList.push(
             deepMerge(taskTemplate, {
               role: 'function',
-              content: null,
-              configuration: { function: functionCall[0] },
+              content: { function: functionCall[0] },
             })
           );
           execute = true;
@@ -483,8 +482,6 @@ async function processTask(
   apiKeys: Record<string, string>,
   taskWorkerController: TaskWorkerController
 ) {
-  // TODO: this whole function needs to be more "functional" e.g. we need to make sure, that we don't "alter" existing tasks which
-  //       are already in the db and throw errors if we do that.
   // TODO: make this function return a promise so taht we can interrupt it anytime!
   // return new Promise((resolve, reject) => {
   try {
@@ -496,7 +493,7 @@ async function processTask(
       false
     );
 
-    if (task.role == 'user') {
+    if ('message' in task.content) {
       // TODO: get rid of "taskManager" in processChatTask
       task = await processChatTask(
         task,
@@ -505,58 +502,30 @@ async function processTask(
         taskManager,
         taskWorkerController
       );
-      task.state = 'Completed';
-    } else if (task?.role == 'function') {
-      // in the case of 'FunctionCall' result, we run it twice:
-      // 1. calculate function result
-      //   then, we set it to "queued" status in order to prevent it form being deleted from the queue.
-      //   this time, it has a "ToolResult" which means, we are sending it to an LLM for interpretation:
-      // 2. send function to LLM inference
-      // the task could potentially come back as another functionCall!
-      // the way this works: -> task state is "Completed" with "FunctionCall" and follow-up
-      // functiontask will be generated
-      if (
-        task.result?.type === 'ToolResult' ||
-        task.result?.type === 'ToolError'
-      ) {
-        // here we send the task to our LLM inference
-        task = await processChatTask(
-          task,
-          chatState,
-          apiKeys,
-          taskManager,
-          taskWorkerController
-        );
-        task.state = 'Completed';
-      } else {
-        // in the case we don't have a result yet, we need to calculate it :)
-        task = await processFunctionTask(
-          task,
-          await taskManager.searchToolDefinitions(),
-          taskWorkerController,
-          taskManager
-        );
-        if (!taskWorkerController.isInterrupted()) {
-          processTasksQueue.push(taskId); // send the task back into the queue
-          task.state = 'Queued'; // and we queue the functino again, to be processed again, this time with an LLM
-        } else {
-          task.state = 'Completed';
-        }
-      }
+    } else if ('functionCall' in task.content) {
+      // calculate function result
+      // in the case we don't have a result yet, we need to calculate it :)
+      task = await processFunctionTask(
+        task,
+        await taskManager.searchToolDefinitions(),
+        taskWorkerController,
+        taskManager
+      );
     } else {
-      console.log("We don't know what to do with this task:", taskId);
-      task.state = 'Error';
+      throw new Error("We don't know what to do with this task");
     }
   } catch (error) {
-    task.state = 'Error';
     if (error instanceof Error) {
       task.debugging.error = {
         message: error.message,
         stack: error.stack,
+        location: 'task processing',
       };
     }
     console.error('Error processing task:', error);
+    return task;
   }
+  task.state = 'Completed';
   return task;
 }
 
@@ -596,14 +565,15 @@ export async function taskWorker(
         void taskManager.setTask(task, true);
       }
     } catch (error) {
-      console.error('Could not process task:', error);
+      console.error('Could complete task iteration:', error);
       // TODO: Depending on error, clean out the queue...
       if (error instanceof InterruptError) {
         console.log(`Loop interrupted with reason: ${error.message}`);
-        break;
-      } else {
-        throw error;
+        continue;
       }
+
+      // TODO: clean up task, create a new task with the error and  & decide if we want to try this task again!
+
       // if we realize that a cancellation event was sent, empty the queue and set all tasks to "Cancelled"
       /*if (!processTasksQueue.count()) {
         cancelAllTasks = false;
