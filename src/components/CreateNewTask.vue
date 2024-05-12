@@ -48,21 +48,19 @@
         />
         <taskSettingsButton v-model="expandedTaskCreation" />
       </div>
-      <div v-if="fileMappings.length">
+      <div v-if="fileAttachments.length">
         <div>Attached files:</div>
         <q-chip
-          v-for="fileMapping in fileMappings"
-          :key="fileMapping.uuid"
+          v-for="file in fileAttachments"
+          :key="file.name"
           removable
-          @remove="removeFileFromTask(fileMapping.uuid)"
+          @remove="fileAttachments = fileAttachments.filter((f) => f !== file)"
           icon="upload_file"
         >
           <div class="ellipsis" style="max-width: 100px">
-            {{ `${fileMapping.opfsName} (${fileMapping.uuid})` }}
+            {{ `${file.name}` }}
           </div>
-          <q-tooltip :delay="0.5">{{
-            `${fileMapping.opfsName} (taskyon-id: ${fileMapping.uuid})`
-          }}</q-tooltip>
+          <q-tooltip :delay="0.5">{{ `${file.name}` }}</q-tooltip>
         </q-chip>
       </div>
       <div
