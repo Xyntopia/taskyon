@@ -1,5 +1,5 @@
 <template>
-  <q-layout view="lHh lpR lfr">
+  <q-layout view="lHh LpR lfr">
     <q-header elevated class="bg-primary print-hide">
       <component
         :is="!minMode ? 'q-toolbar' : 'div'"
