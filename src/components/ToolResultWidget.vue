@@ -1,10 +1,10 @@
 <template>
-  <div v-if="props.task.configuration?.function" class="q-gutter-md q-px-xs">
+  <div v-if="'functionCall' in task.content" class="q-gutter-md q-px-xs">
     <div>
       <div class="text-bold">arguments (yaml):</div>
       <div caption>
         <div class="scroll-area">
-          {{ dump(task.configuration?.function?.arguments) }}
+          {{ dump(task.content.functionCall.arguments) }}
         </div>
       </div>
     </div>
@@ -24,7 +24,14 @@
         <div v-if="!isHtmlResult && !useIframe" class="scroll-area">
           {{ dump(task.result?.toolResult) }}
         </div>
-        <iframe v-else :srcdoc="task.result?.toolResult?.result"></iframe>
+        <iframe
+          v-else
+          :srcdoc="
+            typeof task.result?.toolResult?.result === 'string'
+              ? task.result.toolResult.result
+              : undefined
+          "
+        ></iframe>
         <q-btn
           class="scroll-area-btn"
           flat
@@ -58,7 +65,7 @@
 
 <script setup lang="ts">
 import { dump } from 'js-yaml';
-import { LLMTask } from 'src/modules/taskyon/types';
+import type { LLMTask } from 'src/modules/taskyon/types';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{

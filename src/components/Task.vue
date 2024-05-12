@@ -10,21 +10,21 @@
             ><q-tooltip class="bg-warning">Error!</q-tooltip>
           </q-icon>
         </div>
-        <div v-if="task.role == 'function'" class="col q-pb-md">
+        <div v-if="'functionCall' in task.content" class="col q-pb-md">
           <q-expansion-item
             dense
             icon="calculate"
-            :label="task.configuration?.function?.name"
+            :label="task.content.functionCall.name"
             :header-class="task.state == 'Error' ? 'text-red' : 'text-green'"
           >
             <ToolResultWidget :task="task" />
           </q-expansion-item>
         </div>
-        <div v-else-if="task.content" class="col">
+        <div v-else-if="'message' in task.content" class="col">
           <tyMarkdown
             style="min-width: 50px"
             v-if="state.taskState[task.id]?.markdownEnabled != false"
-            :src="task.content"
+            :src="task.content.message"
           />
           <div v-else class="raw-markdown q-mb-md">{{ task.content }}</div>
         </div>
@@ -67,12 +67,13 @@
         class="row justify-start items-stretch message-buttons absolute-bottom-left print-hide rounded-borders"
       >
         <q-btn
+          v-if="'message' in task.content"
           class="col-auto"
           icon="content_copy"
           dense
           flat
           size="sm"
-          @click="copyToClipboard(task.content || '')"
+          @click="copyToClipboard(task.content.message || '')"
         >
           <q-tooltip :delay="0">Copy raw text.</q-tooltip>
         </q-btn>

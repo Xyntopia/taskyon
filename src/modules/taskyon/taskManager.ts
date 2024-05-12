@@ -1,4 +1,4 @@
-import type { LLMTask, partialTaskDraft } from './types';
+import type { LLMTask, RequireSome } from './types';
 import type { ChatStateType } from './chat';
 import { v1 as uuidv1 } from 'uuid';
 import {
@@ -136,8 +136,12 @@ async function taskContentHash(task: LLMTask) {
   return hashId;
 }
 
+// add a task to the db. Adding some default information such as timestamps etc...
+// whats important here is that the LLMtask can only have one type of content
+// so when calling the function, we need to pre-select which type of task
+// we want to have.
 export async function addTask2Tree(
-  task: partialTaskDraft,
+  task: RequireSome<Partial<LLMTask>, 'role' | 'content'>,
   parentID: string | undefined,
   chatState: ChatStateType,
   taskManager: TyTaskManager,

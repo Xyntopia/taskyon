@@ -3,6 +3,10 @@ import { dump } from 'js-yaml';
 import { boolean, z } from 'zod';
 import { ToolBase } from './tools';
 
+//type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+export type RequireSome<T, K extends keyof T> = Omit<T, K> &
+  Required<Pick<T, K>>;
+
 const TaskState = z.enum([
   'Open',
   'Queued',
@@ -163,6 +167,19 @@ export const RemoteFunctionResponse = RemoteFunctionBase.extend({
 );
 export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>;
 
+const MessageContent = z.object({ message: z.string() });
+const FunctionCallContent = z.object({ functionCall: FunctionCall });
+const UploadedFilesContent = z.object({ uploadedFiles: z.array(z.string()) });
+const TaskContent = z.union([
+  MessageContent,
+  FunctionCallContent,
+  UploadedFilesContent,
+]);
+export const ContentDraft = MessageContent.merge(FunctionCallContent)
+  .merge(UploadedFilesContent)
+  .partial();
+export type ContentDraft = z.infer<typeof ContentDraft>;
+
 // TODO: add an "extended" task and put all information in there which we don't really "need"
 //       to save in the database. E.g. how many follow-up tasks are allowed, how many
 //       errors are allowed for function tasks  etc...  so mostly runtime-logic
@@ -170,11 +187,7 @@ export const LLMTask = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   name: z.string().optional(),
   // this is the actual content of the task
-  content: z.union([
-    z.object({ message: z.string() }),
-    z.object({ functionCall: FunctionCall }),
-    z.object({ uploadedFiles: z.array(z.string()) }),
-  ]),
+  content: TaskContent,
   state: TaskState,
   label: z.array(z.string()).optional(),
   context: z.record(z.string(), z.string()).optional(),
@@ -242,7 +255,7 @@ export const partialTaskDraft = LLMTask.pick({
   );
 export type partialTaskDraft = z.infer<typeof partialTaskDraft>;
 
-export const taskTemplateTypes = z.object({
+export const taskTemplateTypes = {
   toolDescription: partialTaskDraft
     .required({ label: true })
     .merge(z.object({ role: z.literal('system') }))
@@ -250,6 +263,14 @@ export const taskTemplateTypes = z.object({
       content: { message: 'Tool Description here!' },
       role: 'system',
       label: ['function'],
+    }),
+  file: partialTaskDraft
+    .required({ label: true })
+    .merge(z.object({ role: z.literal('system') }))
+    .default({
+      content: { uploadedFiles: [] },
+      role: 'system',
+      label: ['files'],
     }),
   /*file: partialTaskDraft.required({role: true, label: true})
   .merge(LLMTask['configuration']).default({
@@ -259,7 +280,7 @@ export const taskTemplateTypes = z.object({
     },
     label: ['file']
   })*/
-});
+};
 
 export const TaskMessage = z
   .object({

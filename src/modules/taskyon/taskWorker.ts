@@ -249,7 +249,11 @@ function createNewAssistantResponseTask(
     );
     taskListFromResponse.push({
       role: tm.role,
-      content: allText.map((textContent) => textContent.text.value).join('\n'),
+      content: {
+        message: allText
+          .map((textContent) => textContent.text.value)
+          .join('\n'),
+      },
       debugging: { threadMessage: tm },
     });
   }
@@ -278,8 +282,8 @@ async function parseChatResponse(
       return {
         taskDraft: {
           role: 'function',
-          configuration: {
-            function: {
+          content: {
+            functionCall: {
               name: toolChatResult.data.toolCommand.name,
               arguments: toolChatResult.data.toolCommand.args,
             },
@@ -292,10 +296,12 @@ async function parseChatResponse(
         taskDraft: {
           state: 'Completed',
           role: role || 'assistant',
-          content:
-            toolChatResult.data.answer ||
-            toolChatResult.data.thought ||
-            message,
+          content: {
+            message:
+              toolChatResult.data.answer ||
+              toolChatResult.data.thought ||
+              message,
+          },
         },
         execute: false,
       };
@@ -306,9 +312,11 @@ async function parseChatResponse(
       taskDraft: {
         state: 'Completed',
         role: role || 'system',
-        content: `Error parsing response:\n${
-          delimiters + yamlContent + '\n' + delimiters
-        }\nError: ${toolChatResult.error.toString()}`,
+        content: {
+          message: `Error parsing response:\n${
+            delimiters + yamlContent + '\n' + delimiters
+          }\nError: ${toolChatResult.error.toString()}`,
+        },
       },
       execute: false,
     };
@@ -327,10 +335,7 @@ async function generateFollowUpTasksFromResult(
   if (finishedTask.result) {
     const taskDraftList: partialTaskDraft[] = [];
     const taskTemplate: Partial<LLMTask> = {
-      configuration: {
-        chatApi: finishedTask.configuration?.chatApi,
-        model: finishedTask.configuration?.model,
-      },
+      configuration: finishedTask.configuration,
     };
     let execute = false;
     if (finishedTask.result.type === 'ChatAnswer') {
@@ -339,7 +344,7 @@ async function generateFollowUpTasksFromResult(
         taskDraftList.push({
           state: 'Completed',
           role: choice.message.role,
-          content: choice.message.content || undefined,
+          content: { message: choice.message.content || '' },
         });
       }
     } else if (finishedTask.result.type === 'AssistantAnswer') {

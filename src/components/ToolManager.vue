@@ -45,8 +45,7 @@ import CreateNewTask from 'components/CreateNewTask.vue';
 import ObjectTreeView from './ObjectTreeView.vue';
 import { taskTemplateTypes } from 'src/modules/taskyon/types';
 
-const functionTemplate =
-  taskTemplateTypes.shape.toolDescription.parse(undefined);
+const functionTemplate = taskTemplateTypes.toolDescription.parse(undefined);
 
 const state = useTaskyonStore();
 
@@ -75,7 +74,7 @@ const selectedToolName = ref<string>('');
 const taskParser = computed(() => {
   try {
     const jsonToolResult = ToolBase.strict().safeParse(
-      JSON.parse(state.taskDraft.content || '')
+      JSON.parse(state.taskDraft.content?.message || '')
     );
     return jsonToolResult.success
       ? jsonToolResult.success
@@ -107,6 +106,9 @@ function newToolStructure() {
   },
   "code": "(parameter1, parameter2 = 'default parameter :)') => {return parameter1 + ' ' + parameter2;}"
 }`;
-  state.taskDraft.content = tool;
+  state.taskDraft.content = {
+    ...state.taskDraft.content,
+    message: tool,
+  };
 }
 </script>

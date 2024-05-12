@@ -55,7 +55,7 @@ const expandedTaskCreation = defineModel<boolean>('expandedTaskCreation', {
 const props = defineProps<{
   expertMode: boolean;
   executeTask: () => Promise<void>;
-  attachFileToChat: (newFiles: File[]) => Promise<void>;
+  attachFileToChat: (newFiles: File[]) => void;
   estimatedTokens: number;
   currentModel: string | undefined;
   useEnterToSend: boolean;

@@ -5,7 +5,7 @@
     <div>
       <taskContentEdit
         v-if="!selectedTaskType && !codingMode"
-        :model-value="state.taskDraft.content"
+        :model-value="state.taskDraft.content?.message"
         @update:modelValue="
           (value) => {
             state.taskDraft.content = value;
@@ -21,7 +21,14 @@
         :bottom-slots="!state.minimalGui"
       />
       <div v-else-if="!selectedTaskType && codingMode">
-        <CodeEditor v-model="content" />
+        <CodeEditor
+          :model-value="state.taskDraft.content?.message"
+          @update:modelValue="
+            (value) => {
+              state.taskDraft.content = value;
+            }
+          "
+        />
         <taskSettingsButton v-model="expandedTaskCreation" />
         <q-btn
           :disable="!sendAllowed"
@@ -35,7 +42,7 @@
       <div v-else-if="selectedTaskType" class="row">
         <ObjectTreeView
           class="col"
-          :model-value="state.taskDraft.configuration?.function?.arguments"
+          :model-value="state.taskDraft.content?.functionCall?.arguments"
           input-field-behavior="auto"
           :separate-labels="false"
         />
@@ -195,7 +202,11 @@ import { getDefaultParametersForTool } from 'src/modules/taskyon/tools';
 import { FunctionArguments } from 'src/modules/taskyon/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
-import type { LLMTask, partialTaskDraft } from 'src/modules/taskyon/types';
+import {
+  LLMTask,
+  partialTaskDraft,
+  taskTemplateTypes,
+} from 'src/modules/taskyon/types';
 import ModelSelection from 'components/ModelSelection.vue';
 import { writeFiles } from 'src/modules/taskyon/OPFS';
 import { addTask2Tree } from 'src/modules/taskyon/taskManager';
@@ -217,7 +228,6 @@ const { expertMode } = toRefs(state.appConfiguration);
 const { selectedApi, useOpenAIAssistants, openAIAssistantId } = toRefs(
   state.chatState
 );
-const { content } = toRefs(state.taskDraft);
 
 //const funcArgs = computed(() => );
 
@@ -272,7 +282,7 @@ const handleBotNameUpdate = ({
 };
 
 const selectedTaskType = computed(() => {
-  return state.taskDraft.configuration?.function?.name;
+  return state.taskDraft.content?.functionCall?.name;
 });
 
 async function setTaskType(tasktype: string | undefined) {
@@ -291,8 +301,9 @@ async function setTaskType(tasktype: string | undefined) {
       ...(defaultParams || {}),
       ...(savedParams || {}),
     };
-    state.taskDraft.configuration = {
-      function: {
+    state.taskDraft.content = {
+      ...state.taskDraft.content,
+      functionCall: {
         name: tasktype,
         arguments: funcArguments,
       },
@@ -305,7 +316,7 @@ async function setTaskType(tasktype: string | undefined) {
 
 const estimatedTokens = computed(() => {
   // Tokenize the message
-  const tokens = countStringTokens(state.taskDraft.content || '');
+  const tokens = countStringTokens(JSON.stringify(state.taskDraft.content));
 
   // Return the token count
   return tokens;
@@ -323,22 +334,24 @@ async function toggleSelectedTools() {
 
 const currentnewTask = computed(() => {
   let task: Partial<LLMTask> = { ...state.taskDraft };
-  if (selectedTaskType.value) {
-    task.configuration = {
-      ...task.configuration,
-      model: currentModel.value,
-      chatApi: currentChatApi.value,
-    };
-    task.role = 'function';
-  } else {
-    task.configuration = {
-      ...task.configuration,
-      model: currentModel.value,
-      chatApi: currentChatApi.value,
-    };
-    task.role = 'user';
-    task.debugging = {};
-    task.content = state.taskDraft.content?.trim();
+  if (currentModel.value) {
+    if (selectedTaskType.value) {
+      // here we have a function task ;)
+      task.configuration = {
+        model: currentModel.value,
+        chatApi: currentChatApi.value,
+      };
+      task.role = 'function';
+    } else if (state.taskDraft.content?.message) {
+      // chat Task
+      task.configuration = {
+        model: currentModel.value,
+        chatApi: currentChatApi.value,
+      };
+      task.role = 'user';
+      task.debugging = {};
+      task.content = { message: state.taskDraft.content.message.trim() };
+    }
   }
   return task as LLMTask; // we can do this, because we defined the "role"
 });
@@ -356,19 +369,26 @@ async function addNewTask(execute = true) {
     execute // execute right away...
   );
   if (currentnewTask.value.role === 'user') {
-    state.taskDraft.content = '';
+    state.taskDraft.content = undefined;
     await setTaskType(undefined);
   }
 }
 
-async function attachFileToChat(newFiles: File[]) {
+const fileAttachments = ref<File[]>([]); // holds all attached files as a "tasklist"
+
+function attachFileToChat(newFiles: File[]) {
   console.log('attach file to chat');
+
+  fileAttachments.value.push(...newFiles);
+}
+
+async function addFileTasks(newFiles: File[]) {
+  console.log('add files to our chat!');
   //first, upload file into our OPFS file system:
   const opfsMapping = await writeFiles(newFiles);
 
   // Collect UUIDs from added files
   const uuids = [];
-
   const tm = await state.getTaskManager();
   for (const [, savedFilename] of Object.entries(opfsMapping)) {
     const uuid = await tm.addFile({ opfs: savedFilename });
@@ -377,24 +397,10 @@ async function attachFileToChat(newFiles: File[]) {
     }
   }
 
+  const newFileObject = taskTemplateTypes.file.parse(undefined);
   // Ensure '.configuration' and 'uploadedFiles' are initialized in 'state.taskDraft'
-  state.taskDraft.configuration = state.taskDraft.configuration || {};
-  state.taskDraft.configuration.uploadedFiles =
-    state.taskDraft.configuration.uploadedFiles || [];
-
-  // Append the UUIDs to 'uploadedFiles'
-  state.taskDraft.configuration.uploadedFiles.push(...uuids);
-}
-
-function removeFileFromTask(fileName: string) {
-  console.log('delete file from task:', fileName);
-  const fileIndex =
-    state.taskDraft.configuration?.uploadedFiles?.indexOf(fileName);
-  if (fileIndex != undefined) {
-    if (fileIndex > -1) {
-      state.taskDraft.configuration?.uploadedFiles?.splice(fileIndex, 1);
-    }
-  }
+  newFileObject.configuration = state.taskDraft.configuration;
+  newFileObject.content = { uploadedFiles: uuids };
 }
 
 // Reactive property to store file mappings
@@ -428,14 +434,14 @@ async function updateFileMappings(newUploadedFiles: string[] | undefined) {
   fileMappings.value = newMappings;
 }
 
-void updateFileMappings(state.taskDraft.configuration?.uploadedFiles);
+//void updateFileMappings(state.taskDraft.configuration?.uploadedFiles);
 
 // Watcher to update file mappings when uploaded files change
-watch(
+/*watch(
   () => state.taskDraft.configuration?.uploadedFiles, // reactive source
   (newUploadedFiles) => updateFileMappings(newUploadedFiles),
   {
     deep: true, // Use this if the watched source is an object/array
   }
-);
+);*/
 </script>

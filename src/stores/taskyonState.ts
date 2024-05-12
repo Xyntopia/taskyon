@@ -2,7 +2,10 @@ import { defineStore } from 'pinia';
 import { defaultLLMSettings } from 'src/modules/taskyon/chat';
 import { watch, computed, reactive, toRefs } from 'vue';
 import { LLMTask } from 'src/modules/taskyon/types';
-import type { FunctionArguments } from 'src/modules/taskyon/types';
+import type {
+  ContentDraft,
+  FunctionArguments,
+} from 'src/modules/taskyon/types';
 import axios from 'axios';
 import { LocalStorage, Notify } from 'quasar';
 import { deepMerge, deepMergeReactive } from 'src/modules/taskyon/utils';
@@ -70,7 +73,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     showTaskData: false,
     drawerOpen: true,
     drawerRight: false,
-    taskDraft: {} as Partial<LLMTask>,
+    taskDraft: {} as Partial<LLMTask> & { content?: ContentDraft },
     newToolDraftCode: '' as string,
     draftParameters: {} as Record<string, FunctionArguments>,
     taskState: {} as Record<string, TaskStateType>,
@@ -142,12 +145,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
     }
   );
 
-  function setDraftFunctionArgs(newValue: FunctionArguments) {
-    if (stateRefs.taskDraft.configuration?.function) {
-      stateRefs.taskDraft.configuration.function.arguments = newValue;
-    }
-  }
-
   let loadingKey = false;
   async function getOpenRouterPKCEKey(code: string) {
     if (loadingKey == false) {
@@ -218,7 +215,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
   const allRefs = toRefs(stateRefs) as unknown as typeof stateRefs;
   return {
     ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
-    setDraftFunctionArgs,
     getOpenRouterPKCEKey,
     minimalGui,
     taskWorkerController,
