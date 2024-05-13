@@ -85,9 +85,25 @@
       <SimpleSettings class="col-auto" vertical reduced></SimpleSettings>
     </q-item>
     <q-item>
-      <q-btn flat icon="mdi-tools" label="Tools" to="/tools"></q-btn>
+      <q-btn
+        v-if="state.appConfiguration.expertMode"
+        dense
+        flat
+        icon="mdi-tools"
+        label="Tools"
+        to="/tools"
+      ></q-btn>
+      <q-btn
+        v-if="state.appConfiguration.expertMode"
+        dense
+        flat
+        icon="mdi-robot-confused-outline"
+        label="Prompts"
+        to="/prompts"
+      ></q-btn>
       <q-btn
         flat
+        dense
         icon="manage_accounts"
         label="Accounts"
         to="/settings/llmproviders"

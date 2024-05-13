@@ -31,6 +31,10 @@ export const taskyonRoutes = {
       path: 'tools',
       component: () => import('components/ToolManager.vue'),
     },
+    {
+      path: 'prompts',
+      component: () => import('components/PromptManager.vue'),
+    },
     ...authRoutes
   ],
 }
