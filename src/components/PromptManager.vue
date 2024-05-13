@@ -11,11 +11,19 @@
           <CreateNewTask />
           <div>This is what the current prompt would look like:</div>
         </q-card-section>
-        {{ state.taskDraft }}
-        and the prompts:
-        <CodeEditor
-          :model-value="structuredResponse"
-        />
+        <q-card-section>
+          and the prompts:
+          <q-card
+            class="q-pa-xs q-my-xs"
+            bordered flat
+            style="white-space: pre-wrap"
+            v-for="prompt in structuredResponsePrompt"
+            :key="prompt"
+            :model-value="prompt"
+          >
+            {{ prompt }}
+          </q-card>
+        </q-card-section>
       </q-card>
     </div>
   </div>
@@ -32,7 +40,6 @@ import UnderConstructionHint from './UnderConstructionHint.vue';
 import { createStructuredResponsePrompt } from 'src/modules/taskyon/chat';
 import { dump } from 'js-yaml';
 import CodeEditor from './CodeEditor.vue';
-
 
 const functionTemplate = taskTemplateTypes.toolDescription.parse(undefined);
 
@@ -56,8 +63,8 @@ void getAllTools().then((tools) => {
   toolCollection.value = tools;
 });
 
-const structuredResponse = computed(() => {
-  let structuredResponse;
+const structuredResponsePrompt = computed(() => {
+  let structuredResponse: string[] = [];
   if (state.taskDraft.content) {
     const task: Pick<LLMTask, 'role' | 'content' | 'allowedTools' | 'result'> =
       {
@@ -69,13 +76,16 @@ const structuredResponse = computed(() => {
 
     console.log('create structured example', toolCollection.value);
     if (Object.keys(toolCollection.value).length !== 0) {
-      structuredResponse = createStructuredResponsePrompt(
+      const rp = createStructuredResponsePrompt(
         task,
         toolCollection.value,
         state.chatState
       );
+      structuredResponse = rp.map((r) => {
+        return dump(r);
+      });
     }
   }
-  return dump(structuredResponse);
+  return structuredResponse;
 });
 </script>
