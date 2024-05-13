@@ -3,10 +3,11 @@
     <UnderConstructionHint />
     <div class="row q-gutter-md">
       <ObjectTreeView
+        style="min-width: 500px"
         class="col"
         :model-value="state.chatState.taskChatTemplates"
       />
-      <q-card class="col">
+      <q-card flat class="col" style="min-width: 500px">
         <q-card-section>
           <CreateNewTask />
           <div>This is what the current prompt would look like:</div>
@@ -15,13 +16,17 @@
           and the prompts:
           <q-card
             class="q-pa-xs q-my-xs"
-            bordered flat
-            style="white-space: pre-wrap"
-            v-for="prompt in structuredResponsePrompt"
-            :key="prompt"
+            bordered
+            flat
+            v-for="(prompt, index) in structuredResponsePrompt"
+            :key="index"
             :model-value="prompt"
           >
-            {{ prompt }}
+            <p class="text-bold">role: {{ prompt.role }}</p>
+            <p style="white-space: pre-wrap">
+              {{ prompt.content }}
+            </p>
+            <tyMarkdown v-if="false" :src="prompt" />
           </q-card>
         </q-card-section>
       </q-card>
@@ -30,18 +35,14 @@
 </template>
 
 <script setup lang="ts">
+import tyMarkdown from './tyMarkdown.vue';
 import { ref, computed } from 'vue';
-import { ToolBase } from 'src/modules/taskyon/tools';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
 import ObjectTreeView from './ObjectTreeView.vue';
 import { LLMTask, taskTemplateTypes } from 'src/modules/taskyon/types';
 import UnderConstructionHint from './UnderConstructionHint.vue';
-import { createStructuredResponsePrompt } from 'src/modules/taskyon/chat';
-import { dump } from 'js-yaml';
-import CodeEditor from './CodeEditor.vue';
-
-const functionTemplate = taskTemplateTypes.toolDescription.parse(undefined);
+import { createStructuredResponsePrompt } from 'src/modules/taskyon/promptCreation';
 
 const state = useTaskyonStore();
 
@@ -64,7 +65,6 @@ void getAllTools().then((tools) => {
 });
 
 const structuredResponsePrompt = computed(() => {
-  let structuredResponse: string[] = [];
   if (state.taskDraft.content) {
     const task: Pick<LLMTask, 'role' | 'content' | 'allowedTools' | 'result'> =
       {
@@ -81,11 +81,9 @@ const structuredResponsePrompt = computed(() => {
         toolCollection.value,
         state.chatState
       );
-      structuredResponse = rp.map((r) => {
-        return dump(r);
-      });
+      return rp;
     }
   }
-  return structuredResponse;
+  return [];
 });
 </script>
