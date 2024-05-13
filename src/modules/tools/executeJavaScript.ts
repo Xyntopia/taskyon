@@ -80,24 +80,24 @@ export const executeJavaScript: Tool = {
       }
     }
   },
-  description: `Runs JavaScript code either in the main thread or using a Web Worker, useful
+  description: 'Runs JavaScript code',
+  longDescription: `Runs JavaScript code either in the main thread or using a Web Worker, useful
 for tasks requiring DOM manipulation, data processing, or dynamic web content generation.`,
   name: 'executeJavaScript',
   parameters: {
     type: 'object',
     properties: {
-      javascriptCode: {
+      code: {
         type: 'string',
         description: 'The JavaScript code to be executed.',
       },
       useWebWorker: {
         type: 'boolean',
-        description: `Whether to execute the code in a Web Worker or main thread.
-If the javascript code is executed in the main thread, it can manipulate
-the DOM where it is currently running.`,
+        description:
+          'Whether to execute the code in a Web Worker or main thread.',
         default: false,
       },
     },
-    required: ['javascriptCode'],
+    required: ['code'],
   },
 };

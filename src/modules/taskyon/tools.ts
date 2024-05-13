@@ -237,15 +237,12 @@ for retrieving documents or data segments with high relevance to natural languag
 };
 
 export const executePythonScript: Tool = {
-  function: async ({
-    pythonScript,
-  }: {
-    pythonScript: string;
-  }): Promise<PythonScriptResult> => {
+  function: async ({ code }: { code: string }): Promise<PythonScriptResult> => {
     console.log('execute python code...');
-    return await asyncRunPython(pythonScript);
+    return await asyncRunPython(code);
   },
-  description: `Executes Python scripts for data processing, calculations, or library interactions, 
+  description: 'Executes a Python script and returns the result.',
+  longDescription: `Executes Python scripts for data processing, calculations, or library interactions, 
 ideal for data analysis, machine learning tasks, or custom algorithm execution.
 It's important to structure the Python code such that the desired result
 is the outcome of the last expression in the script. Outcomes should be of the types String, Number, Array, Map, Set.`,
@@ -253,12 +250,12 @@ is the outcome of the last expression in the script. Outcomes should be of the t
   parameters: {
     type: 'object',
     properties: {
-      pythonScript: {
+      code: {
         type: 'string',
-        description: 'The Python code to be executed.',
+        description: 'The Python script code to be executed.',
       },
     },
-    required: ['pythonScript'],
+    required: ['code'],
   },
 };
 
@@ -406,7 +403,7 @@ function convertToToolCommandString(tool: ToolBase): string {
   for (const key in tool.parameters.properties) {
     const param = tool.parameters.properties[key];
     // Check if the key is in the list of required properties
-    const isRequired = requiredProperties.has(key);
+    // const isRequired = requiredProperties.has(key);
     // If the property is required, use the key as is, otherwise add a "?" to the key
     if (param.description) {
       const descriptionKey = `# ${key} description`;
@@ -414,17 +411,22 @@ function convertToToolCommandString(tool: ToolBase): string {
     }
     /*   the question mark doesn work!!!
     const argKey = isRequired ? key : `${key}?`;
-    args[argKey] = param.type;
     */
+    const argKey = key;
+    args[argKey] = param.type;
   }
 
-  const objrepr: YamlRepresentation = {
-    '# description': tool.description.replace(/\n/g, ' '),
-    name: tool.name,
-    args,
-  };
-  const yamlSchema = convertToYamlWComments(dump(objrepr));
-  return yamlSchema;
+  const argStrRaw = dump({
+    'FUNCTION ARGUMENTS': args,
+  });
+  const argStr = convertToYamlWComments(argStrRaw);
+  const cmdString = `NAME: ${tool.name}:
+
+DESCRIPTION: ${tool.description.replace(/\n/g, ' ')}
+
+${argStr}
+REQUIRED: ${[...requiredProperties].join(', ')}`;
+  return cmdString;
 }
 
 export function summarizeTools(
@@ -439,5 +441,5 @@ export function summarizeTools(
     })
     .join('\n---\n');
 
-  return toolStr;
+  return `-----\n${toolStr}\n-----`;
 }

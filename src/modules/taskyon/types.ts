@@ -111,7 +111,7 @@ export const TaskResult = z.object({
     'ToolResult', // the result is the result of a tool function execution
     'ToolError',
     'ToolCall',
-    // TODO: It might be a good idea to get rid of "ToolCall" and integrate it with 
+    // TODO: It might be a good idea to get rid of "ToolCall" and integrate it with
     // StructuredChatResponse
     // sometimes the result is a direct tool call (e.g. from an OpenAI API response).
     // And this gets indicated here
@@ -353,7 +353,15 @@ interface YamlArrayRepresentation {
   type: 'array';
   items: YamlRepresentation;
 }
-export function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
+
+/* convert a zod schema into a nested object where the description
+appear in keys starting with '#'
+*/
+export function zodToYAMLObject(
+  schema: z.ZodTypeAny,
+  optionalSymbol = '',
+  unwrapUnions = false
+): YamlRepresentation {
   // Base case for primitive types
   if (schema instanceof z.ZodString) {
     return 'string';
@@ -363,6 +371,8 @@ export function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
     return 'boolean';
   } else if (schema instanceof z.ZodNull) {
     return 'null';
+  } else if (schema instanceof z.ZodEnum) {
+    return Object.keys(schema.Values).join('|');
   }
 
   // Modified ZodObject case to handle optionals
@@ -374,11 +384,13 @@ export function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
     const yamlObject: YamlObjectRepresentation = {};
     for (const key in shape) {
       const fieldSchema = shape[key];
-      const optionalSuffix = fieldSchema instanceof z.ZodOptional ? '?' : '';
+      const optionalSuffix =
+        fieldSchema instanceof z.ZodOptional ? optionalSymbol : '';
       if (fieldSchema?.description) {
-        yamlObject[`# ${key} description`] = fieldSchema.description;
+        yamlObject[`# ${key} description`] =
+          `${fieldSchema.description} ${optionalSuffix}`.trim();
       }
-      yamlObject[key + optionalSuffix] = zodToYAMLObject(fieldSchema);
+      yamlObject[key] = zodToYAMLObject(fieldSchema);
     }
     return yamlObject;
   }
@@ -401,11 +413,18 @@ export function zodToYAMLObject(schema: z.ZodTypeAny): YamlRepresentation {
     };
   }
 
+  // TODO: what do we do with arrays & objects in this example?
   // Handle union types
   if (schema instanceof z.ZodUnion) {
-    const options = (schema.options as z.ZodTypeAny[]).map((option) =>
-      zodToYAMLObject(option)
-    );
+    const options = (schema.options as z.ZodTypeAny[])
+      .map((option) => {
+        const val = zodToYAMLObject(option);
+        if (typeof val === 'object') {
+          return undefined;
+        }
+        return val;
+      })
+      .filter((r) => r);
     return options.join('|');
   }
 
@@ -431,11 +450,7 @@ export function zodToYamlString(schema: z.ZodTypeAny): string {
 }
 
 const answer = z.string().nullish();
-const yesno = z
-  .enum(['yes', 'no'])
-  .or(z.boolean())
-  .nullish()
-  .describe('yes/no');
+const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish();
 
 const ToolResultBase = z
   .object({
@@ -489,7 +504,28 @@ type yamlTaskSchema = z.infer<typeof yamlTaskSchema>;
  * Converts a string representation of an object to YAML format with comments.
  * 
  * This function takes a string representation of an object as input, extracts comments
- * from it, and returns a new string in YAML format with the comments preserved.
+ * from it, which are represented by a key, starting with an '#'
+ * and returns a new string in YAML format with the comments preserved, but the keys removed.
+ * 
+ * this:
+ * 
+  # comment: >-
+        # This is a comment
+        # spanning multiple lines
+  bar: baz
+  qux: quux
+
+  becomes:
+
+  # This is a comment
+  # spanning multiple lines
+  bar: baz
+  qux: quux
+
+and this:
+
+
+
  * 
  * @param {string} objrepr - The string representation of the object to be converted.
  * @returns {string} The converted YAML string with comments.
@@ -514,7 +550,7 @@ export function convertToYamlWComments(objrepr: string) {
       keyEnd: string, // the optional '>-'
       commentBlock: string // the comment block (group 4)
     ) => {
-      const isMultiline = !!keyEnd;  // check if the comment block is multiline (i.e., has a '>-')
+      const isMultiline = !!keyEnd; // check if the comment block is multiline (i.e., has a '>-')
       // Modify each line of the comment block
       let modifiedCommentBlock = [];
       if (isMultiline) {
