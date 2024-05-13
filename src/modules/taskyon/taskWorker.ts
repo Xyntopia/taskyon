@@ -360,7 +360,7 @@ async function generateFollowUpTasksFromResult(
         taskWorkerController.isInterrupted() ? false : execute
       );
     };
-    
+
     if (finishedTask.result.type === 'ChatAnswer') {
       if (choice) {
         addFollowUpTask(false, {

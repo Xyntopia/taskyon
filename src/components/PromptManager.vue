@@ -1,7 +1,23 @@
 <template>
-  <div>
+  <div class="q-ma-sm">
     <UnderConstructionHint />
-    <ObjectTreeView :model-value="state.chatState.taskChatTemplates" />
+    <div class="row q-gutter-md">
+      <ObjectTreeView
+        class="col"
+        :model-value="state.chatState.taskChatTemplates"
+      />
+      <q-card class="col">
+        <q-card-section>
+          <CreateNewTask />
+          <div>This is what the current prompt would look like:</div>
+        </q-card-section>
+        {{ state.taskDraft }}
+        and the prompts:
+        <CodeEditor
+          :model-value="structuredResponse"
+        />
+      </q-card>
+    </div>
   </div>
 </template>
 
@@ -11,8 +27,12 @@ import { ToolBase } from 'src/modules/taskyon/tools';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
 import ObjectTreeView from './ObjectTreeView.vue';
-import { taskTemplateTypes } from 'src/modules/taskyon/types';
+import { LLMTask, taskTemplateTypes } from 'src/modules/taskyon/types';
 import UnderConstructionHint from './UnderConstructionHint.vue';
+import { createStructuredResponsePrompt } from 'src/modules/taskyon/chat';
+import { dump } from 'js-yaml';
+import CodeEditor from './CodeEditor.vue';
+
 
 const functionTemplate = taskTemplateTypes.toolDescription.parse(undefined);
 
@@ -36,48 +56,26 @@ void getAllTools().then((tools) => {
   toolCollection.value = tools;
 });
 
-//void getAllTools().then((tools) => (toolCollection.value = tools));
+const structuredResponse = computed(() => {
+  let structuredResponse;
+  if (state.taskDraft.content) {
+    const task: Pick<LLMTask, 'role' | 'content' | 'allowedTools' | 'result'> =
+      {
+        content: state.taskDraft.content,
+        allowedTools: state.taskDraft.allowedTools,
+        role: 'user',
+      };
+    task.role = 'user';
 
-const selectedToolName = ref<string>('');
-
-const taskParser = computed(() => {
-  try {
-    const jsonToolResult = ToolBase.strict().safeParse(
-      JSON.parse(state.taskDraft.content?.message || '')
-    );
-    return jsonToolResult.success
-      ? jsonToolResult.success
-      : jsonToolResult.error;
-  } catch (error) {
-    return error;
+    console.log('create structured example', toolCollection.value);
+    if (Object.keys(toolCollection.value).length !== 0) {
+      structuredResponse = createStructuredResponsePrompt(
+        task,
+        toolCollection.value,
+        state.chatState
+      );
+    }
   }
+  return dump(structuredResponse);
 });
-
-function newToolStructure() {
-  const tool = `
-{
-  "name": "myExampleStringAdderAlone",
-  "description": "provide a short description which an AI can understand",
-  "longDescription": "provide a long description if the AI/Human needs more details",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "parameter1": {
-        "type": "string",
-        "description": "This is an example parameter!"
-      },
-      "parameter2": {
-        "type": "string",
-        "description": "This is another example parameter, but not required!"
-      }
-    },
-    "required": ["parameter1"]
-  },
-  "code": "(parameter1, parameter2 = 'default parameter :)') => {return parameter1 + ' ' + parameter2;}"
-}`;
-  state.taskDraft.content = {
-    ...state.taskDraft.content,
-    message: tool,
-  };
-}
 </script>

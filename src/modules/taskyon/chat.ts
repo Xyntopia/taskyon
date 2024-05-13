@@ -554,12 +554,14 @@ export async function prepareTasksForInference(
   return { openAIConversationThread, tools: openAITools };
 }
 
-function createStructuredResponsePrompt(
-  task: LLMTask,
+export function createStructuredResponsePrompt(
+  task: Pick<LLMTask, 'role' | 'content' | 'allowedTools' | 'result'>,
   toolCollection: Record<string, ToolBase>,
   chatState: ChatStateType
 ) {
   let variables = {};
+  // TODO: we need to have a better way then checking the role. We need to check the content
+  //       of the task.
   if (task.role === 'user') {
     const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolSelection);
     variables = {
@@ -573,6 +575,9 @@ function createStructuredResponsePrompt(
     const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolResultBase);
 
     variables = {
+      // TODO: remove this, because we only want to include prompts. This should be removed
+      //       and a task created in followuptaskcreation which has the toolResult as content!
+      //       in that case we still need to know what kind of prompt we need here? Is it a follow-up prompt?
       toolResult: dump({
         successfullExecution: task.result?.toolResult?.error ? 'no' : 'yes',
         ...task.result?.toolResult,

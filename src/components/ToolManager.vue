@@ -1,10 +1,6 @@
 <template>
   <div class="column q-pa-md q-gutter-sm">
-    <div class="row q-gutter-sm items-center text-white bg-negative">
-      <q-icon name="science" size="md" />
-      <div>This page is under construction. And not fully functional</div>
-      <q-icon size="md" name="engineering" />
-    </div>
+    <UnderConstructionHint />
     <q-select
       filled
       dense
@@ -44,6 +40,7 @@ import { useTaskyonStore } from 'src/stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
 import ObjectTreeView from './ObjectTreeView.vue';
 import { taskTemplateTypes } from 'src/modules/taskyon/types';
+import UnderConstructionHint from './UnderConstructionHint.vue';
 
 const functionTemplate = taskTemplateTypes.toolDescription.parse(undefined);
 
