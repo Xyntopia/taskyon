@@ -474,7 +474,7 @@ function mapFunctionNames(
   return toolNames?.map((t) => tools[t]);
 }
 
-function createTaskChatMessages(
+function substituteTemplateVariables(
   templates: Record<string, string>,
   variables: Record<string, string>
 ) {
@@ -562,14 +562,15 @@ export function createStructuredResponsePrompt(
   let variables = {};
   // TODO: we need to have a better way then checking the role. We need to check the content
   //       of the task.
-  if (task.role === 'user') {
+  const toolList = task.allowedTools?.map((t) => `- ${t}`).join('\n');
+  if ('message' in task.content) {
     const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolSelection);
     variables = {
-      taskContent: task.content || '',
+      taskContent: task.content.message || '',
       schema: yamlRepr,
       format: 'yaml',
       tools: summarizeTools(task.allowedTools || [], toolCollection),
-      toolList: JSON.stringify(task.allowedTools),
+      toolList: toolList,
     };
   } else {
     const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolResultBase);
@@ -585,12 +586,12 @@ export function createStructuredResponsePrompt(
       resultSchema: yamlRepr,
       format: 'yaml',
       tools: summarizeTools(task.allowedTools || [], toolCollection),
-      toolList: JSON.stringify(task.allowedTools),
+      toolList: toolList,
     };
   }
 
   // Create additional messages using createTaskChatMessages
-  const filledTemplates = createTaskChatMessages(
+  const filledTemplates = substituteTemplateVariables(
     chatState.taskChatTemplates,
     variables
   );
