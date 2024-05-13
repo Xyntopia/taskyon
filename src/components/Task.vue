@@ -170,7 +170,7 @@
         <q-tabs dense v-model="state.messageDebug[task.id]" no-caps>
           <q-tab name="ERROR" label="Error" />
           <q-tab name="RAW" label="raw task data" />
-          <q-tab name="RAWTASK" label="task prompt" />
+          <q-tab v-if="task.debugging.taskPrompt" name="TASKPROMPT" label="task prompt" />
           <q-tab name="MESSAGECONTENT" label="raw result" />
         </q-tabs>
         <q-tab-panels
@@ -225,7 +225,7 @@
             >
             </textarea>
           </q-tab-panel>
-          <q-tab-panel name="RAWTASK">
+          <q-tab-panel name="TASKPROMPT">
             <textarea
               v-for="(tp, idx) in task.debugging.taskPrompt"
               :key="idx"
