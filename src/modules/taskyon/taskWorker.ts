@@ -11,11 +11,10 @@ import {
 import {
   FunctionArguments,
   FunctionCall,
-  yamlToolChatType,
   partialTaskDraft,
-  toolResultChat,
   LLMTask,
   TaskResult,
+  StructuredResponse,
 } from './types';
 import { addTask2Tree, processTasksQueue } from './taskManager';
 import type { OpenAI } from 'openai';
@@ -163,11 +162,12 @@ export async function processChatTask(
               let resultType: TaskResult['type'] = 'ChatAnswer';
               if (
                 task.result?.type === 'ToolResult' ||
-                task.result?.type === 'ToolError'
+                task.result?.type === 'ToolError' ||
+                useToolChat
               ) {
-                resultType = 'ToolResultInterpretation';
-              } else if (useToolChat) {
-                resultType = 'ToolChatResult';
+                resultType = 'StructuredChatResponse';
+                // TODO: also add ToolCall to StructuredChatResponse by converting the result into
+                // a structured response
               } else if (isOpenAIFunctionCall(choice)) {
                 resultType = 'ToolCall';
               }
@@ -178,10 +178,14 @@ export async function processChatTask(
               };
             }
           } else {
+            // if something goes wrong on the LLM side
+            // (OpenAI e.g. usually reports back the error in chatCompletion...)
             throw new Error(JSON.stringify(chatCompletion));
           }
         }
 
+        // get llm inference stats
+        // TODO: we should replace this with an inference task which has the LLM as a parent...
         if (chatCompletion && chatState.selectedApi == 'openrouter.ai') {
           void enrichWithDelayedUsageInfos(
             chatCompletion.id,
@@ -260,10 +264,8 @@ function createNewAssistantResponseTask(
   return taskListFromResponse;
 }
 
-async function parseChatResponse(
-  message: string,
-  role: partialTaskDraft['role'] | undefined,
-  zodSchema: typeof yamlToolChatType | typeof toolResultChat
+async function parseChatResponse2TaskDraft(
+  message: string
 ): Promise<{ taskDraft: partialTaskDraft; execute: boolean }> {
   // parse the response and create a new task filled with the correct parameters
   let yamlContent = message.trim();
@@ -275,18 +277,19 @@ async function parseChatResponse(
   }
   // Parse the extracted or original YAML content
   const parsedYaml = load(yamlContent);
-  const toolChatResult = await zodSchema.strict().safeParseAsync(parsedYaml);
-  if (toolChatResult.success) {
-    console.log(toolChatResult);
-    if (toolChatResult.data.toolCommand) {
+  const structuredResponse = await StructuredResponse.safeParseAsync(
+    parsedYaml
+  );
+  // TODO: test & handle more special cases such as when we have an asnwer & toolcall, or if our tool descriptions
+  //       don't really work very well...
+  if (structuredResponse.success) {
+    console.log(structuredResponse);
+    if (structuredResponse.data.toolCommand) {
       return {
         taskDraft: {
           role: 'function',
           content: {
-            functionCall: {
-              name: toolChatResult.data.toolCommand.name,
-              arguments: toolChatResult.data.toolCommand.args,
-            },
+            functionCall: structuredResponse.data.toolCommand,
           },
         },
         execute: true,
@@ -295,11 +298,11 @@ async function parseChatResponse(
       return {
         taskDraft: {
           state: 'Completed',
-          role: role || 'assistant',
+          role: 'assistant',
           content: {
             message:
-              toolChatResult.data.answer ||
-              toolChatResult.data.thought ||
+              structuredResponse.data.answer ||
+              structuredResponse.data['describe your thoughts'] ||
               message,
           },
         },
@@ -311,11 +314,11 @@ async function parseChatResponse(
     return {
       taskDraft: {
         state: 'Completed',
-        role: role || 'system',
+        role: 'system',
         content: {
           message: `Error parsing response:\n${
             delimiters + yamlContent + '\n' + delimiters
-          }\nError: ${toolChatResult.error.toString()}`,
+          }\nError: ${structuredResponse.error.toString()}`,
         },
       },
       execute: false,
@@ -338,8 +341,8 @@ async function generateFollowUpTasksFromResult(
       configuration: finishedTask.configuration,
     };
     let execute = false;
+    const choice = finishedTask.result.chatResponse?.choices[0];
     if (finishedTask.result.type === 'ChatAnswer') {
-      const choice = finishedTask.result.chatResponse?.choices[0];
       if (choice) {
         taskDraftList.push({
           state: 'Completed',
@@ -355,27 +358,17 @@ async function generateFollowUpTasksFromResult(
           ...td,
         });
       }
-    } else if (
-      finishedTask.result.type === 'ToolChatResult' ||
-      finishedTask.result.type === 'ToolResultInterpretation'
-    ) {
-      const choice = finishedTask.result.chatResponse?.choices[0];
+    } else if (finishedTask.result.type === 'StructuredChatResponse') {
       let taskDraft: partialTaskDraft | undefined = undefined;
-      ({ taskDraft, execute } = await parseChatResponse(
-        choice?.message.content || '',
-        choice?.message.role,
-        finishedTask.result.type == 'ToolResultInterpretation'
-          ? toolResultChat
-          : yamlToolChatType
+      ({ taskDraft, execute } = await parseChatResponse2TaskDraft(
+        choice?.message.content || ''
       ));
       if (taskDraft && execute) {
         taskDraft = deepMerge(taskTemplate, taskDraft);
-      }
-      if (taskDraft) {
         taskDraftList.push(taskDraft);
       }
+      // TODO: integrate ToolCall with StruturedChatResponse
     } else if (finishedTask.result.type === 'ToolCall') {
-      const choice = finishedTask.result.chatResponse?.choices[0];
       if (choice) {
         const functionCall = extractOpenAIFunctions(
           choice,

@@ -19,7 +19,7 @@ import {
   deepCopy,
 } from './utils';
 import type { FileMappingDocType } from './rxdb';
-import { zodToYamlString, yamlToolChatType, toolResultChat } from './types';
+import { zodToYamlString, StructuredResponseTypes } from './types';
 import { buildChatFromTask, taskChain } from './taskUtils';
 
 const getOpenai = lruCache<OpenAI>(5)(
@@ -522,62 +522,8 @@ export async function prepareTasksForInference(
   ) {
     console.log('Creating chat task messages');
     // Prepare the variables for createTaskChatMessages
-    let variables = {};
-    if (task.role === 'user') {
-      const yamlRepr = zodToYamlString(yamlToolChatType);
-
-      variables = {
-        taskContent: task.content || '',
-        schema: yamlRepr,
-        format: 'yaml',
-        tools: summarizeTools(task.allowedTools, toolCollection),
-        toolList: JSON.stringify(task.allowedTools),
-      };
-    } else {
-      const yamlRepr = zodToYamlString(toolResultChat);
-
-      variables = {
-        toolResult: dump({
-          successfullExecution: task.result?.toolResult?.error ? 'no' : 'yes',
-          ...task.result?.toolResult,
-        }),
-        resultSchema: yamlRepr,
-        format: 'yaml',
-        tools: summarizeTools(task.allowedTools, toolCollection),
-        toolList: JSON.stringify(task.allowedTools),
-      };
-    }
-
-    // Create additional messages using createTaskChatMessages
-    const filledTemplates = createTaskChatMessages(
-      chatState.taskChatTemplates,
-      variables
-    );
-
-    const taskPrompt = (
-      task.role === 'user'
-        ? [filledTemplates['task']]
-        : [filledTemplates['toolResult']]
-    )
-      .map((x) => x.trim())
-      .join('\n\n');
-
-    const toolMessage: OpenAI.ChatCompletionMessageParam = {
-      role: 'user',
-      content: filledTemplates['tools'],
-    };
-
-    const additionalMessages: OpenAI.ChatCompletionMessageParam[] = [
-      {
-        role: 'system',
-        content: filledTemplates['instruction'],
-      },
-      toolMessage,
-      {
-        role: 'user',
-        content: taskPrompt,
-      },
-    ];
+    const additionalMessages: OpenAI.ChatCompletionMessageParam[] =
+      createStructuredResponsePrompt(task, toolCollection, chatState);
 
     task.debugging.taskPrompt = additionalMessages;
     // Remove the last message from openAIConversationThread
@@ -606,6 +552,72 @@ export async function prepareTasksForInference(
   });
 
   return { openAIConversationThread, tools: openAITools };
+}
+
+function createStructuredResponsePrompt(
+  task: LLMTask,
+  toolCollection: Record<string, ToolBase>,
+  chatState: ChatStateType
+) {
+  let variables = {};
+  if (task.role === 'user') {
+    const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolSelection);
+    variables = {
+      taskContent: task.content || '',
+      schema: yamlRepr,
+      format: 'yaml',
+      tools: summarizeTools(task.allowedTools || [], toolCollection),
+      toolList: JSON.stringify(task.allowedTools),
+    };
+  } else {
+    const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolResultBase);
+
+    variables = {
+      toolResult: dump({
+        successfullExecution: task.result?.toolResult?.error ? 'no' : 'yes',
+        ...task.result?.toolResult,
+      }),
+      resultSchema: yamlRepr,
+      format: 'yaml',
+      tools: summarizeTools(task.allowedTools || [], toolCollection),
+      toolList: JSON.stringify(task.allowedTools),
+    };
+  }
+
+  // Create additional messages using createTaskChatMessages
+  const filledTemplates = createTaskChatMessages(
+    chatState.taskChatTemplates,
+    variables
+  );
+
+  // TODO: wth is going on here? this needs to be done in a better way...
+  //       e.g. don't rely on task.role. we need to check the contents of the previous
+  //       in order to know what we should use here. maybe just use the "method"
+  const taskPrompt = (
+    task.role === 'user'
+      ? [filledTemplates['task']]
+      : [filledTemplates['toolResult']]
+  )
+    .map((x) => x.trim())
+    .join('\n\n');
+
+  const toolMessage: OpenAI.ChatCompletionMessageParam = {
+    role: 'user',
+    content: filledTemplates['tools'],
+  };
+
+  const additionalMessages: OpenAI.ChatCompletionMessageParam[] = [
+    {
+      role: 'system',
+      content: filledTemplates['instruction'],
+    },
+    toolMessage,
+    {
+      role: 'user',
+      content: taskPrompt,
+    },
+  ];
+  return additionalMessages;
 }
 
 async function getOpenRouterGenerationInfo(

@@ -15,7 +15,8 @@ const TaskState = z.enum([
   'In Progress',
   'Completed',
   'Cancelled',
-]).describe(`The task state indicates on what is happening with the task: for example
+])
+  .describe(`The task state indicates on what is happening with the task: for example
 it shows whether a task flow is seen as "completed" or whether its waiting
 to be further processed... E.g. there could be a task with no results, which stil counts as "completed"`);
 export type TaskState = z.infer<typeof TaskState>;
@@ -107,11 +108,16 @@ export const TaskResult = z.object({
   type: z.enum([
     'ChatAnswer',
     'AssistantAnswer',
-    'ToolCall',
     'ToolResult', // the result is the result of a tool function execution
     'ToolError',
-    'ToolChatResult', // a chat with taskyon tools enabled
-    'ToolResultInterpretation', // a formalized interpretation of the result with an LLM
+    'ToolCall',
+    // TODO: It might be a good idea to get rid of "ToolCall" and integrate it with 
+    // StructuredChatResponse
+    // sometimes the result is a direct tool call (e.g. from an OpenAI API response).
+    // And this gets indicated here
+    // when we want to get a structured response about how to continue from our LLM e.g.
+    // to start a tool or interprete a function result or create new tasks...
+    'StructuredChatResponse',
   ]),
   assistantResponse: z.array(assistantThreadMessage).optional(),
   chatResponse: chatResponse.optional(),
@@ -135,7 +141,7 @@ export type FunctionArguments = z.infer<typeof FunctionArguments>;
 
 /* here we are essentiall declaring the taskyon API */
 export const FunctionCall = z.object({
-  name: z.string(),
+  name: z.string().describe('name of function'),
   arguments: FunctionArguments,
 });
 export type FunctionCall = z.infer<typeof FunctionCall>;
@@ -424,67 +430,60 @@ export function zodToYamlString(schema: z.ZodTypeAny): string {
   return yamlSchema;
 }
 
-export const toolCommandChat = z.object({
-  name: z.string(),
-  args: z.record(z.union([z.string(), z.number(), z.boolean()])),
-});
+const answer = z.string().nullish();
+const yesno = z
+  .enum(['yes', 'no'])
+  .or(z.boolean())
+  .nullish()
+  .describe('yes/no');
 
-export type toolCommandChat = z.infer<typeof toolCommandChat>;
-
-const answer = z.string().nullable();
-
-export const toolResultChat = z
+const ToolResultBase = z
   .object({
-    thought: z.string().optional(),
-    satisfactory: z.boolean().describe('was the result satisfactory?'),
-    answer: answer
-      .optional()
-      .describe('Only provide answer if result was satisfactory.'),
-    useToolReason: z
-      .optional(z.string())
-      .describe('Reason, why we should (not) use a tool/function again?'),
-    useTool: z
-      .optional(z.boolean())
-      .describe('Only use a tool, if the result was not satisfactory!!'),
-    toolCommand: toolCommandChat
-      .describe(
-        'Only fill toolCommand if useTool = true otherwise provide answer!'
-      )
-      .optional(),
-  })
-  .describe('format required to comment on a toolResult');
-export type toolResultChat = z.infer<typeof toolResultChat>;
-
-export const yamlToolChatType = z
-  .object({
-    thought: z
-      .string()
-      .optional()
-      .describe('your thoughts about what to do about the task'),
-    useTool: z.optional(z.boolean()),
-    toolCommand: toolCommandChat
-      .describe(
-        'Only fill toolCommand if useTool = true otherwise provide answer!'
-      )
-      .optional(),
-    answer: answer
-      .optional()
-      .describe('Only provide answer if we are not using a tool.'),
+    'describe your thoughts': answer,
+    'was the tool call successfull?': answer,
+    'should we retry?': yesno,
+    'should we use another tool?': answer,
+    'use tool': yesno,
+    toolCommand: FunctionCall.optional().describe(
+      'If you want to use a tool, provide the function call parameters'
+    ),
+    answer: answer.describe('Otherwise provide a final answer'),
   })
   .describe(
-    'Format required whether we should use a tool or not and and how to use it...'
+    'Structured answer schema for processing the result of a function call.'
   );
 
-export type yamlToolChatType = z.infer<typeof yamlToolChatType>;
+const ToolSelection = z
+  .object({
+    'describe your thoughts': answer,
+    'use tool': yesno,
+    'which tool': answer,
+    toolCommand: FunctionCall.optional().describe(
+      'If you want to use a tool, provide the function call parameters'
+    ),
+    answer: answer.describe('Otherwise provide a final answer'),
+  })
+  .describe('Structured answer schema for a task including the use of tools');
 
-export const yamlTaskSchema = yamlToolChatType.extend({
+export const StructuredResponseTypes = {
+  ToolResultBase,
+  ToolSelection,
+};
+export const StructuredResponse = z.union([ToolResultBase, ToolSelection]);
+export type StructuredResponse = z.infer<typeof StructuredResponse>;
+
+/*
+TODO: for longer, autonomous agent processes & when errors happen, we might need this
+TODO: if we want to create multiple tasks for a larger project, we should use schema like the following
+      to create/refine tasks..
+const yamlTaskSchema = yamlToolChatType.extend({
   thoughts: z.string(),
   reasoning: z.string(),
   plan: z.string().array(),
   criticism: z.string(),
 });
-
-export type yamlTaskSchema = z.infer<typeof yamlTaskSchema>;
+type yamlTaskSchema = z.infer<typeof yamlTaskSchema>;
+*/
 
 export function convertToYamlWComments(objrepr: string) {
   // Regular expression to match the entire comment section, including the key and optional '>-'

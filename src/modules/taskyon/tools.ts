@@ -397,7 +397,7 @@ export interface WorkerMessage {
 }
 
 function convertToToolCommandString(tool: ToolBase): string {
-  // convert a tool into a schema which is compatible ti toolCommandChat
+  // convert a tool into a schema which is compatible with toolCommandChat
   const args: YamlRepresentation = {};
 
   const requiredProperties = new Set(tool.parameters.required || []);
@@ -412,8 +412,10 @@ function convertToToolCommandString(tool: ToolBase): string {
       const descriptionKey = `# ${key} description`;
       args[descriptionKey] = param.description.replace(/\n/g, ' ');
     }
+    /*   the question mark doesn work!!!
     const argKey = isRequired ? key : `${key}?`;
     args[argKey] = param.type;
+    */
   }
 
   const objrepr: YamlRepresentation = {
