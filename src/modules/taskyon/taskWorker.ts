@@ -2,12 +2,12 @@ import {
   callLLM,
   getOpenAIAssistantResponse,
   ChatStateType,
-  prepareTasksForInference,
   enrichWithDelayedUsageInfos,
   estimateChatTokens,
   generateHeaders,
   getApiConfigCopy,
 } from './chat';
+import { prepareTasksForInference } from './promptCreation';
 import {
   FunctionArguments,
   FunctionCall,
