@@ -335,16 +335,34 @@ async function generateFollowUpTasksFromResult(
   taskWorkerController: TaskWorkerController
 ) {
   console.log('generate follow up task');
+  const childCosts = {
+    promptTokens: finishedTask.debugging.resultTokens,
+    taskTokens: finishedTask.debugging.taskTokens,
+    taskCosts: finishedTask.debugging.taskCosts,
+  };
   if (finishedTask.result) {
-    const taskDraftList: partialTaskDraft[] = [];
     const taskTemplate: Partial<LLMTask> = {
       configuration: finishedTask.configuration,
     };
-    let execute = false;
     const choice = finishedTask.result.chatResponse?.choices[0];
+
+    // use helper function to make code more concise ;)
+    const addFollowUpTask = (execute: boolean, taskDraft: partialTaskDraft) => {
+      taskDraft.debugging = { ...taskDraft.debugging, ...childCosts };
+      void addTask2Tree(
+        taskDraft,
+        finishedTask.id,
+        chatState,
+        taskManager,
+        // interrupt execution if interrupted flag is shown!
+        // this makes sure that results are still saved, even if we stop any
+        // further execution
+        taskWorkerController.isInterrupted() ? false : execute
+      );
+    };
     if (finishedTask.result.type === 'ChatAnswer') {
       if (choice) {
-        taskDraftList.push({
+        addFollowUpTask(false, {
           state: 'Completed',
           role: choice.message.role,
           content: { message: choice.message.content || '' },
@@ -353,19 +371,20 @@ async function generateFollowUpTasksFromResult(
     } else if (finishedTask.result.type === 'AssistantAnswer') {
       const newTaskDraftList = createNewAssistantResponseTask(finishedTask);
       for (const td of newTaskDraftList) {
-        taskDraftList.push({
+        throw Error(
+          'we need to createa sequential task chain here and add each tasks new ID to the net one as a parent'
+        );
+        addFollowUpTask(false, {
           state: 'Completed',
           ...td,
         });
       }
     } else if (finishedTask.result.type === 'StructuredChatResponse') {
-      let taskDraft: partialTaskDraft | undefined = undefined;
-      ({ taskDraft, execute } = await parseChatResponse2TaskDraft(
+      const { taskDraft, execute } = await parseChatResponse2TaskDraft(
         choice?.message.content || ''
-      ));
-      if (taskDraft && execute) {
-        taskDraft = deepMerge(taskTemplate, taskDraft);
-        taskDraftList.push(taskDraft);
+      );
+      if (taskDraft) {
+        addFollowUpTask(execute, deepMerge(taskTemplate, taskDraft));
       }
       // TODO: integrate ToolCall with StruturedChatResponse
     } else if (finishedTask.result.type === 'ToolCall') {
@@ -375,38 +394,15 @@ async function generateFollowUpTasksFromResult(
           await taskManager.searchToolDefinitions()
         );
         if (functionCall) {
-          taskDraftList.push(
+          addFollowUpTask(
+            true,
             deepMerge(taskTemplate, {
               role: 'function',
               content: { function: functionCall[0] },
             })
           );
-          execute = true;
         }
       }
-    }
-    let parentTaskId = finishedTask.id;
-    const childCosts = {
-      promptTokens: finishedTask.debugging.resultTokens,
-      taskTokens: finishedTask.debugging.taskTokens,
-      taskCosts: finishedTask.debugging.taskCosts,
-    };
-
-    // and finally convert the entire list of tasks to
-    // a real task.
-    for (const taskDraft of taskDraftList) {
-      taskDraft.debugging = { ...taskDraft.debugging, ...childCosts };
-      // we do not want to queue up follow-up tasks for execution, if the task flow was
-      // interrupted
-      execute = taskWorkerController.isInterrupted() ? false : execute;
-      const newId = await addTask2Tree(
-        taskDraft,
-        parentTaskId,
-        chatState,
-        taskManager,
-        execute
-      );
-      parentTaskId = newId; // create sequental task chain
     }
   }
 }
