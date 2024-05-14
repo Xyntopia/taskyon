@@ -46,7 +46,6 @@
         <div
           v-else-if="'uploadedFiles' in task.content"
           class="col"
-          style="max-width: 500px"
         >
           <div>Uploaded files:</div>
           <q-list>
