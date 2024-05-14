@@ -455,7 +455,7 @@ export function zodToYamlString(schema: z.ZodTypeAny): string {
 const answer = z.string().nullish();
 const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish();
 
-const ToolResultBase = z
+const FunctionResultBase = z
   .object({
     'describe your thoughts': answer,
     'was the tool call successfull?': answer,
@@ -465,7 +465,9 @@ const ToolResultBase = z
     toolCommand: FunctionCall.optional().describe(
       'If you want to use a tool, provide the function call parameters'
     ),
-    answer: answer.describe('Otherwise provide a final answer'),
+    answer: answer.describe(
+      'Otherwise provide a final answer summarizing the result.'
+    ),
   })
   .describe(
     'Structured answer schema for processing the result of a function call.'
@@ -479,15 +481,17 @@ const ToolSelection = z
     toolCommand: FunctionCall.optional().describe(
       'If you want to use a tool, provide the function call parameters'
     ),
-    answer: answer.describe('Otherwise provide a final answer'),
+    answer: answer.describe(
+      'Otherwise provide a final answer with your thoughts'
+    ),
   })
   .describe('Structured answer schema for a task including the use of tools');
 
 export const StructuredResponseTypes = {
-  FunctionResultBase: ToolResultBase,
+  FunctionResultBase,
   ToolSelection,
 };
-export const StructuredResponse = z.union([ToolResultBase, ToolSelection]);
+export const StructuredResponse = z.union([FunctionResultBase, ToolSelection]);
 export type StructuredResponse = z.infer<typeof StructuredResponse>;
 
 /*

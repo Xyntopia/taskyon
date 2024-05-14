@@ -561,7 +561,7 @@ export async function taskWorker(
         void taskManager.setTask(task, true);
       }
     } catch (error) {
-      console.error('Could complete task iteration:', error);
+      console.error('Could not complete task iteration:', error);
       // TODO: Depending on error, clean out the queue...
       if (error instanceof InterruptError) {
         console.log(`Loop interrupted with reason: ${error.message}`);
