@@ -26,7 +26,7 @@
             <p style="white-space: pre-wrap">
               {{ prompt.content }}
             </p>
-            <tyMarkdown v-if="false" :src="prompt" />
+            <tyMarkdown v-if="false" :src="`${prompt.content}`" />
           </q-card>
         </q-card-section>
       </q-card>
@@ -42,7 +42,7 @@ import CreateNewTask from 'components/CreateNewTask.vue';
 import ObjectTreeView from './ObjectTreeView.vue';
 import { LLMTask, taskTemplateTypes } from 'src/modules/taskyon/types';
 import UnderConstructionHint from './UnderConstructionHint.vue';
-import { createStructuredResponsePrompt } from 'src/modules/taskyon/promptCreation';
+import { renderTaskPrompt4Chat } from 'src/modules/taskyon/promptCreation';
 
 const state = useTaskyonStore();
 
@@ -76,7 +76,7 @@ const structuredResponsePrompt = computed(() => {
 
     console.log('create structured example', toolCollection.value);
     if (Object.keys(toolCollection.value).length !== 0) {
-      const rp = createStructuredResponsePrompt(
+      const rp = renderTaskPrompt4Chat(
         task,
         toolCollection.value,
         state.chatState

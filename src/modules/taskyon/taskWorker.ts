@@ -113,7 +113,8 @@ export async function processChatTask(
         task,
         await taskManager.searchToolDefinitions(),
         chatState,
-        (taskID) => taskManager.getTask(taskID),
+        taskManager.getTask,
+        taskManager.getFileMappingByUuid,
         useToolChat ? 'toolchat' : 'chat'
       );
 

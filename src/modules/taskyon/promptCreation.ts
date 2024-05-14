@@ -5,6 +5,7 @@ import { dump } from 'js-yaml';
 import { zodToYamlString, StructuredResponseTypes } from './types';
 import { buildChatFromTask } from './taskUtils';
 import { ChatStateType, mapFunctionNames } from './chat';
+import type { TyTaskManager } from './taskManager';
 
 function substituteTemplateVariables(
   templates: Record<string, string>,
@@ -36,13 +37,14 @@ export async function renderTasks4Chat(
   toolCollection: Record<string, ToolBase>,
   chatState: ChatStateType,
   getTask: TaskGetter,
+  getFileMapping: TyTaskManager['getFileMappingByUuid'],
   method: 'toolchat' | 'chat' | 'taskAgent'
 ): Promise<{
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
   tools: OpenAI.ChatCompletionTool[];
 }> {
   console.log('Prepare task tree for inference');
-  let openAIConversationThread = await buildChatFromTask(task.id, getTask);
+  let openAIConversationThread = await buildChatFromTask(task.id, getTask, getFileMapping);
 
   let tools: ToolBase[] = [];
   

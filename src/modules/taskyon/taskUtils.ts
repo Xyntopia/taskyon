@@ -1,6 +1,7 @@
-import { TaskGetter } from './types';
+import type { TaskGetter } from './types';
 import OpenAI from 'openai';
 import { dump } from 'js-yaml';
+import type { TyTaskManager } from './taskManager';
 
 export async function taskChain(
   taskId: string,
@@ -52,7 +53,12 @@ export async function taskChain(
 
   return conversationList;
 }
-export async function buildChatFromTask(taskId: string, getTask: TaskGetter) {
+
+export async function buildChatFromTask(
+  taskId: string,
+  getTask: TaskGetter,
+  getFileMapping: TyTaskManager['getFileMappingByUuid']
+) {
   const openAIMessageThread = [] as OpenAI.ChatCompletionMessageParam[];
   const conversationThread = await taskChain(taskId, getTask);
 
@@ -94,9 +100,16 @@ export async function buildChatFromTask(taskId: string, getTask: TaskGetter) {
           >;
           openAIMessageThread.push(message);
         } else if ('uploadedFiles' in t.content) {
+          const fileNames = (
+            await Promise.all(
+              t.content.uploadedFiles.map((uuid) => getFileMapping(uuid))
+            )
+          )
+            .map((fm) => '- ' + (fm?.name || fm?.opfs || 'unknown'))
+            .join('\n');
           message = {
             role: t.role,
-            content: JSON.stringify(t.content.uploadedFiles),
+            content: `uploaded files:\n${fileNames}`,
           } as Exclude<
             OpenAI.ChatCompletionMessageParam,
             OpenAI.ChatCompletionFunctionMessageParam

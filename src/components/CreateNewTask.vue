@@ -16,7 +16,7 @@
         v-model:expandedTaskCreation="expandedTaskCreation"
         :expert-mode="expertMode"
         :execute-task="addNewTask"
-        :attach-file-to-chat="attachFileToChat"
+        :attach-file-to-chat="attachFileToDraft"
         :estimated-tokens="estimatedTokens"
         :current-model="currentModel"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
@@ -362,33 +362,7 @@ const currentnewTask = computed(() => {
   return task as LLMTask; // we can do this, because we defined the "role"
 });
 
-async function addNewTask(execute = true) {
-  // execute: if true, we immediatly queue the task for execution in the taskManager
-  //          otherwise, it won't get executed but simply saved into the tree
-  console.log('adding new task, execute?', execute);
-  const newTask = { ...currentnewTask.value, ...(props.forceTaskProps || {}) };
-  void addTask2Tree(
-    newTask,
-    state.chatState.selectedTaskId, //parent
-    state.chatState,
-    await state.getTaskManager(),
-    execute // execute right away...
-  );
-  if (currentnewTask.value.role === 'user') {
-    state.taskDraft.content = undefined;
-    await setTaskType(undefined);
-  }
-}
-
-const fileAttachments = ref<File[]>([]); // holds all attached files as a "tasklist"
-
-function attachFileToChat(newFiles: File[]) {
-  console.log('attach file to chat');
-
-  fileAttachments.value.push(...newFiles);
-}
-
-async function addFileTasks(newFiles: File[]) {
+async function addFiles2Taskyon(newFiles: File[]) {
   console.log('add files to our chat!');
   //first, upload file into our OPFS file system:
   const opfsMapping = await writeFiles(newFiles);
@@ -402,52 +376,69 @@ async function addFileTasks(newFiles: File[]) {
       uuids.push(uuid);
     }
   }
-
-  const newFileObject = taskTemplateTypes.file.parse(undefined);
-  // Ensure '.configuration' and 'uploadedFiles' are initialized in 'state.taskDraft'
-  newFileObject.configuration = state.taskDraft.configuration;
-  newFileObject.content = { uploadedFiles: uuids };
+  return uuids;
 }
 
-// Reactive property to store file mappings
-const fileMappings = ref<
-  {
-    uuid: string;
-    opfsName: string | undefined;
-  }[]
->([]);
+// all our files are added to a "file task"
+async function getCurrentFileTask(files: File[]) {
+  // first add files to our DB & save them, then get uuids for each file.
+  const fileUuids = await addFiles2Taskyon(files);
 
-async function updateFileMappings(newUploadedFiles: string[] | undefined) {
-  const newMappings = [];
-  if (newUploadedFiles) {
-    for (const uuid of newUploadedFiles) {
-      try {
-        const fileMapping = await (
-          await state.getTaskManager()
-        ).getFileMappingByUuid(uuid);
-        if (fileMapping) {
-          newMappings.push({
-            uuid,
-            opfsName: fileMapping.opfs, // Assuming 'opfs' holds the OPFS filename
-          });
-        }
-      } catch (error) {
-        console.error(`Error fetching file mapping for UUID: ${uuid}`, error);
-      }
-    }
+  if (fileUuids.length) {
+    const task: Parameters<typeof addTask2Tree>[0] = {
+      role: 'user',
+      configuration: currentModel.value
+        ? {
+            model: currentModel.value,
+            chatApi: currentChatApi.value,
+          }
+        : undefined,
+      content: {
+        uploadedFiles: fileUuids,
+      },
+    };
+    return task;
   }
-
-  fileMappings.value = newMappings;
+  return undefined;
 }
 
-//void updateFileMappings(state.taskDraft.configuration?.uploadedFiles);
-
-// Watcher to update file mappings when uploaded files change
-/*watch(
-  () => state.taskDraft.configuration?.uploadedFiles, // reactive source
-  (newUploadedFiles) => updateFileMappings(newUploadedFiles),
-  {
-    deep: true, // Use this if the watched source is an object/array
+async function addNewTask(execute = true) {
+  const fileobj = await getCurrentFileTask(fileAttachments.value);
+  let fileTaskId = undefined;
+  if (fileobj) {
+    console.log('add files to chat:', fileobj);
+    fileTaskId = await addTask2Tree(
+      fileobj,
+      state.chatState.selectedTaskId, // parent
+      state.chatState,
+      await state.getTaskManager(),
+      false // we do not want to execute the file object, we want to use the users prompt...
+    );
   }
-);*/
+
+  // execute: if true, we immediatly queue the task for execution in the taskManager
+  //          otherwise, it won't get executed but simply saved into the tree
+  console.log('adding new task, execute?', execute);
+  const newTask = { ...currentnewTask.value, ...(props.forceTaskProps || {}) };
+  void addTask2Tree(
+    newTask,
+    fileTaskId || state.chatState.selectedTaskId, //parent
+    state.chatState,
+    await state.getTaskManager(),
+    execute // execute right away...
+  );
+
+  // and empty out the contents for the next chat message :)
+  if (currentnewTask.value.role === 'user') {
+    state.taskDraft.content = undefined;
+    await setTaskType(undefined);
+  }
+}
+
+const fileAttachments = ref<File[]>([]); // holds all attached files as a "tasklist"
+
+function attachFileToDraft(newFiles: File[]) {
+  console.log('attach file to chat');
+  fileAttachments.value.push(...newFiles);
+}
 </script>

@@ -23,7 +23,11 @@
           </q-expansion-item>
         </div>
         <div v-if="'functionResult' in task.content" class="col q-pb-md">
-          <q-expansion-item dense icon="mdi-head-cog" label="Analyzing result...">
+          <q-expansion-item
+            dense
+            icon="mdi-head-cog"
+            label="Analyzing result..."
+          >
             <p style="white-space: pre-wrap">
               {{ task.result?.chatResponse?.choices[0].message.content }}
             </p>
@@ -35,7 +39,29 @@
             v-if="state.taskState[task.id]?.markdownEnabled != false"
             :src="task.content.message"
           />
-          <div v-else class="raw-markdown q-mb-md">{{ task.content.message }}</div>
+          <div v-else class="raw-markdown q-mb-md">
+            {{ task.content.message }}
+          </div>
+        </div>
+        <div
+          v-else-if="'uploadedFiles' in task.content"
+          class="col"
+          style="max-width: 500px"
+        >
+          <div>Uploaded files:</div>
+          <q-list>
+            <q-item v-for="file in fileMappings" :key="file?.uuid">
+              <q-item-section side>
+                <q-icon name="mdi-file-document" size="sm"></q-icon>
+              </q-item-section>
+              <q-item-section class="ellipsis">{{
+                file?.name || file?.opfs
+              }}</q-item-section>
+              <q-tooltip :delay="500"
+                ><div>{{ dump(file) }}</div></q-tooltip
+              >
+            </q-item>
+          </q-list>
         </div>
         <!--task costs-->
         <div
@@ -87,6 +113,7 @@
           <q-tooltip :delay="0">Copy raw text.</q-tooltip>
         </q-btn>
         <q-btn
+          v-if="'message' in task.content"
           class="col-auto"
           :icon="
             state.taskState[task.id]?.markdownEnabled != false
@@ -100,8 +127,13 @@
         >
           <q-tooltip :delay="0">Toggle Markdown</q-tooltip>
         </q-btn>
-        <q-separator vertical class="q-mx-sm" />
+        <q-separator
+          v-if="'message' in task.content"
+          vertical
+          class="q-mx-sm"
+        />
         <q-btn
+          v-if="'message' in task.content"
           class="col-auto"
           size="sm"
           dense
@@ -127,6 +159,7 @@
           >
         </q-btn>
         <q-btn
+          v-if="'message' in task.content || 'functionCall' in task.content"
           class="col-auto"
           icon="edit"
           dense
@@ -284,13 +317,28 @@ import { useTaskyonStore } from 'stores/taskyonState';
 import TokenUsage from 'components/TokenUsage.vue';
 import type { LLMTask } from 'src/modules/taskyon/types';
 import tyMarkdown from './tyMarkdown.vue';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import { FileMappingDocType } from 'src/modules/taskyon/rxdb';
+import InfoDialog from './InfoDialog.vue';
+import { dump } from 'js-yaml';
 
 const props = defineProps<{
   task: LLMTask;
 }>();
 
 const state = useTaskyonStore();
+const fileMappings = ref<(FileMappingDocType | null)[]>([]);
+
+if ('uploadedFiles' in props.task.content) {
+  console.log('get uploaded files');
+  void (async (fileUuids: string[]) => {
+    const tm = await state.getTaskManager();
+    const fm = await Promise.all(
+      fileUuids.map((uuid) => tm.getFileMappingByUuid(uuid))
+    );
+    fileMappings.value = fm;
+  })(props.task.content.uploadedFiles);
+}
 
 function copyToClipboard(text: string) {
   navigator.clipboard
