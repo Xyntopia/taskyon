@@ -7,7 +7,7 @@ import {
   generateHeaders,
   getApiConfigCopy,
 } from './chat';
-import { prepareTasksForInference } from './promptCreation';
+import { prepareTasksPrompts } from './promptCreation';
 import {
   FunctionArguments,
   FunctionCall,
@@ -109,14 +109,13 @@ export async function processChatTask(
       const useToolChat =
         task.allowedTools?.length && !chatState.enableOpenAiTools;
 
-      const { openAIConversationThread, tools } =
-        await prepareTasksForInference(
-          task,
-          await taskManager.searchToolDefinitions(),
-          chatState,
-          (taskID) => taskManager.getTask(taskID),
-          useToolChat ? 'toolchat' : 'chat'
-        );
+      const { openAIConversationThread, tools } = await prepareTasksPrompts(
+        task,
+        await taskManager.searchToolDefinitions(),
+        chatState,
+        (taskID) => taskManager.getTask(taskID),
+        useToolChat ? 'toolchat' : 'chat'
+      );
 
       if (openAIConversationThread.length > 0) {
         const chatCompletion = await callLLM(
@@ -171,6 +170,7 @@ export async function processChatTask(
               } else if (isOpenAIFunctionCall(choice)) {
                 resultType = 'ToolCall';
               }
+              // TODO: remove the following default result merge and only use the chatcompletion result...
               task.result = {
                 ...task.result,
                 type: resultType,
@@ -231,7 +231,9 @@ async function processFunctionTask(
       task.result = {
         type: 'ToolError',
         toolResult: {
-          error: `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`,
+          error: taskWorkerController.isInterrupted()
+            ? `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`
+            : 'The function execution was cancelled by taskyon',
         },
       };
     }
@@ -311,22 +313,15 @@ async function parseChatResponse2TaskDraft(
     }
   } else {
     const delimiters = '```';
-    return {
-      taskDraft: {
-        state: 'Completed',
-        role: 'system',
-        content: {
-          message: `Error parsing response:\n${
-            delimiters + yamlContent + '\n' + delimiters
-          }\nError: ${structuredResponse.error.toString()}`,
-        },
-      },
-      execute: false,
-    };
+    const message = `Error parsing response:\n${
+      delimiters + yamlContent + '\n' + delimiters
+    }\nError: ${structuredResponse.error.toString()}`;
+    throw Error(message);
   }
 }
 
 // this function takes a task and generates follow up tasks automatically
+// based on the type of result that we got.
 // it also checks whether we should immediatly execute them or not...
 async function generateFollowUpTasksFromResult(
   finishedTask: LLMTask,
@@ -361,6 +356,7 @@ async function generateFollowUpTasksFromResult(
       );
     };
 
+    // TODO: use a switch statement here :)
     if (finishedTask.result.type === 'ChatAnswer') {
       if (choice) {
         addFollowUpTask(false, {
@@ -373,13 +369,23 @@ async function generateFollowUpTasksFromResult(
       const newTaskDraftList = createNewAssistantResponseTask(finishedTask);
       for (const td of newTaskDraftList) {
         throw Error(
-          'we need to createa sequential task chain here and add each tasks new ID to the net one as a parent'
+          "It doesn't work right now! we need to create a sequential task chain here and add each tasks new ID to the net one as a parent"
         );
         addFollowUpTask(false, {
           state: 'Completed',
           ...td,
         });
       }
+    } else if (
+      finishedTask.result.toolResult &&
+      ['ToolResult', 'ToolError'].includes(finishedTask.result.type)
+    ) {
+      addFollowUpTask(true, {
+        ...taskTemplate,
+        state: 'Open',
+        role: 'assistant',
+        content: { functionResult: finishedTask.result.toolResult },
+      });
     } else if (finishedTask.result.type === 'StructuredChatResponse') {
       const { taskDraft, execute } = await parseChatResponse2TaskDraft(
         choice?.message.content || ''
@@ -483,7 +489,7 @@ async function processTask(
       false
     );
 
-    if ('message' in task.content) {
+    if ('message' in task.content || 'functionResult' in task.content) {
       // TODO: get rid of "taskManager" in processChatTask
       task = await processChatTask(
         task,

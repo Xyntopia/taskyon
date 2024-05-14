@@ -31,7 +31,7 @@ function substituteTemplateVariables(
   return messages;
 }
 
-export async function prepareTasksForInference(
+export async function prepareTasksPrompts(
   task: LLMTask,
   toolCollection: Record<string, ToolBase>,
   chatState: ChatStateType,
@@ -55,7 +55,7 @@ export async function prepareTasksForInference(
     console.log('Creating chat task messages');
     // Prepare the variables for createTaskChatMessages
     const additionalMessages: OpenAI.ChatCompletionMessageParam[] =
-      createStructuredResponsePrompt(task, toolCollection, chatState);
+      renderTask4Chat(task, toolCollection, chatState);
 
     task.debugging.taskPrompt = additionalMessages;
     // Remove the last message from openAIConversationThread
@@ -86,7 +86,7 @@ export async function prepareTasksForInference(
   return { openAIConversationThread, tools: openAITools };
 }
 
-export function createStructuredResponsePrompt(
+export function renderTask4Chat(
   task: Pick<LLMTask, 'role' | 'content' | 'allowedTools' | 'result'>,
   toolCollection: Record<string, ToolBase>,
   chatState: ChatStateType
@@ -104,13 +104,12 @@ export function createStructuredResponsePrompt(
       tools: summarizeTools(task.allowedTools || [], toolCollection),
       toolList: toolList,
     };
-  } else {
-    const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolResultBase);
-
+    // TODO: to something with file tasks and
+  } else if ('functionResult' in task.content) {
+    const yamlRepr = zodToYamlString(
+      StructuredResponseTypes.FunctionResultBase
+    );
     variables = {
-      // TODO: remove this, because we only want to include prompts. This should be removed
-      //       and a task created in followuptaskcreation which has the toolResult as content!
-      //       in that case we still need to know what kind of prompt we need here? Is it a follow-up prompt?
       toolResult: dump({
         successfullExecution: task.result?.toolResult?.error ? 'no' : 'yes',
         ...task.result?.toolResult,

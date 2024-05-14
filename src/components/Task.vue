@@ -15,9 +15,22 @@
             dense
             icon="calculate"
             :label="task.content.functionCall.name"
-            :header-class="task.state == 'Error' ? 'text-red' : 'text-green'"
+            :header-class="
+              task.result?.toolResult?.error ? 'text-red' : 'text-green'
+            "
           >
             <ToolResultWidget :task="task" />
+          </q-expansion-item>
+        </div>
+        <div v-if="'functionResult' in task.content" class="col q-pb-md">
+          <q-expansion-item
+            dense
+            icon="calculate"
+            label="Analyzing..."
+          >
+          <p style="white-space: pre-wrap">
+            {{ task.result?.chatResponse }}
+          </p>
           </q-expansion-item>
         </div>
         <div v-else-if="'message' in task.content" class="col">

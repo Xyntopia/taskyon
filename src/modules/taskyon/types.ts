@@ -180,13 +180,16 @@ export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>;
 const MessageContent = z.object({ message: z.string() });
 const FunctionCallContent = z.object({ functionCall: FunctionCall });
 const UploadedFilesContent = z.object({ uploadedFiles: z.array(z.string()) });
+const ToolResultContent = z.object({ functionResult: ToolResult });
 const TaskContent = z.union([
   MessageContent,
   FunctionCallContent,
   UploadedFilesContent,
+  ToolResultContent,
 ]);
 export const ContentDraft = MessageContent.merge(FunctionCallContent)
   .merge(UploadedFilesContent)
+  .merge(ToolResultContent)
   .partial();
 export type ContentDraft = z.infer<typeof ContentDraft>;
 
@@ -481,7 +484,7 @@ const ToolSelection = z
   .describe('Structured answer schema for a task including the use of tools');
 
 export const StructuredResponseTypes = {
-  ToolResultBase,
+  FunctionResultBase: ToolResultBase,
   ToolSelection,
 };
 export const StructuredResponse = z.union([ToolResultBase, ToolSelection]);

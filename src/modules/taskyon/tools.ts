@@ -157,7 +157,7 @@ export async function handleFunctionExecution(
     } else if (tool.code) {
       console.log('compiling function code', tool);
       console.error(
-        'compiling js code into a function is not yet available in the official version!'
+        'compiling js code into a function is only available in the development version of taskyon!'
       );
       return {
         type: 'ToolError',
