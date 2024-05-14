@@ -95,8 +95,8 @@
       </div>
       <!--buttons-->
       <TaskButtons
+        class="message-buttons absolute-bottom-left print-hide rounded-borders"
         :task="task"
-        :state="state"
         :toggleMarkdown="toggleMarkdown"
         :createNewConversation="createNewConversation"
         :editTask="editTask"

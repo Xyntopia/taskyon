@@ -1,6 +1,6 @@
 <template>
   <div
-    class="row justify-start items-stretch message-buttons absolute-bottom-left print-hide rounded-borders"
+    class="row justify-start items-stretch"
   >
     <q-btn
       v-if="'message' in task.content"
