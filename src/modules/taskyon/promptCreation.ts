@@ -3,7 +3,6 @@ import { LLMTask, TaskGetter } from './types';
 import OpenAI from 'openai';
 import { dump } from 'js-yaml';
 import { zodToYamlString, StructuredResponseTypes } from './types';
-import { buildChatFromTask } from './taskUtils';
 import { ChatStateType, mapFunctionNames } from './chat';
 import type { TyTaskManager } from './taskManager';
 
@@ -36,18 +35,17 @@ export async function renderTasks4Chat(
   task: LLMTask,
   toolCollection: Record<string, ToolBase>,
   chatState: ChatStateType,
-  getTask: TaskGetter,
-  getFileMapping: TyTaskManager['getFileMappingByUuid'],
+  buildChatFromTask: TyTaskManager['buildChatFromTask'],
   method: 'toolchat' | 'chat' | 'taskAgent'
 ): Promise<{
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
   tools: OpenAI.ChatCompletionTool[];
 }> {
   console.log('Prepare task tree for inference');
-  let openAIConversationThread = await buildChatFromTask(task.id, getTask, getFileMapping);
+  let openAIConversationThread = await buildChatFromTask(task.id);
 
   let tools: ToolBase[] = [];
-  
+
   // Check if task has tools and OpenAI tools are not enabled
   if (
     task.allowedTools?.length &&

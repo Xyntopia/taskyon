@@ -14,7 +14,7 @@ import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { loadOrCreateHNSWIndex } from './hnswIndex';
 import { extractKeywords, useNlpWorker } from './webWorkerApi';
 import { Tool, ToolBase } from './tools';
-import { buildChatFromTask } from './taskUtils';
+import { taskUtils } from './taskUtils';
 import { MangoQuery } from 'rxdb';
 
 /**
@@ -205,11 +205,7 @@ export async function addTask2Tree(
   // extract keywordsfrom entire chat and use it to name the task...
   // but only if a taskname doesn't exist yet.
   if (!newTask.name && task.content) {
-    const chat = buildChatFromTask(
-      newTask.id,
-      taskManager.getTask,
-      taskManager.getFileMappingByUuid
-    );
+    const chat = taskManager.buildChatFromTask(newTask.id);
     const chatString = (await chat).reduce((p, n) => {
       if (typeof n.content === 'string') {
         return p + '\n\n' + n.content;
@@ -280,7 +276,12 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
     }
   }
 
-  return { addFile, bulkUpsertFiles, getFileMappingByUuid, getFile };
+  return {
+    addFile,
+    bulkUpsertFiles,
+    getFileMappingByUuid,
+    getFile,
+  };
 }
 
 function tyMechanisms() {
@@ -766,9 +767,12 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     addToolCode,
   };
 
+  const fm = useFileManager(taskyonDB?.filemappings);
+
   return {
     ...defaultMode,
-    ...useFileManager(taskyonDB?.filemappings),
+    ...fm,
+    ...taskUtils(getTask, fm.getFileMappingByUuid),
   };
 }
 export type TyTaskManager = ReturnType<typeof useTyTaskManager>;

@@ -20,7 +20,7 @@
           <div v-for="task in selectedThread" :key="task.id" :class="task.role">
             <Task
               :task="task"
-              style="min-width: 200px;"
+              style="min-width: 200px"
               :class="[
                 $q.dark.isActive
                   ? 'bg-primary text-white'
@@ -168,8 +168,8 @@
             </div>
           </q-card-section>
           <q-card-section>
-            If getting keys manually or for your own server, add them to settings here:
-            The server must be compatible with OpenAI API.
+            If getting keys manually or for your own server, add them to
+            settings here: The server must be compatible with OpenAI API.
             <q-btn
               class="q-mx-sm"
               dense
@@ -266,7 +266,6 @@ import Task from 'components/Task.vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import { ref, UnwrapRef, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
-import { taskChain } from 'src/modules/taskyon/taskUtils';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
@@ -348,9 +347,9 @@ void axios.get('main_content/frontpage.md').then((jsonconfig) => {
 
 async function updateTaskThread(taskId: string | undefined) {
   if (taskId) {
-    const threadIDChain = await taskChain(taskId, async (taskId) =>
-      (await state.getTaskManager()).getTask(taskId)
-    );
+    const threadIDChain = await (
+      await state.getTaskManager()
+    ).taskChain(taskId);
     const TM = await state.getTaskManager();
     const thread = (await Promise.all(
       threadIDChain.map(async (tId) => {

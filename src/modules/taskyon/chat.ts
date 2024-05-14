@@ -13,7 +13,7 @@ import {
   deepCopy,
 } from './utils';
 import type { FileMappingDocType } from './rxdb';
-import { taskChain } from './taskUtils';
+import { findAllFilesInTasks } from './taskUtils';
 
 const getOpenai = lruCache<OpenAI>(5)(
   (apiKey: string, baseURL?: string, headers?: Record<string, string>) => {
@@ -589,16 +589,6 @@ function convertTasksToOpenAIThread(
   return messageList;
 }
 
-export function findAllFilesInTasks(taskList: LLMTask[]): string[] {
-  const fileSet = new Set<string>();
-  taskList.forEach((task) => {
-    if ('uploadedFiles' in task.content) {
-      task.content.uploadedFiles.forEach((file) => fileSet.add(file));
-    }
-  });
-  return Array.from(fileSet);
-}
-
 export async function getOpenAIAssistantResponse(
   task: LLMTask,
   openAIApiKey: string,
@@ -611,9 +601,7 @@ export async function getOpenAIAssistantResponse(
 
     // get all messages from a chat
     const taskList: LLMTask[] = [];
-    const taskIdChain = await taskChain(task.id, (taskId) =>
-      taskManager.getTask(taskId)
-    );
+    const taskIdChain = await taskManager.taskChain(task.id);
     for (const t of taskIdChain) {
       const T = await taskManager.getTask(t);
       if (T) taskList.push();
