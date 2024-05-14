@@ -2,15 +2,24 @@
 <template>
   <q-list dense class="q-pa-xs">
     <!-- Conversation Area -->
-    <q-expansion-item dense default-opened hide-expand-icon>
-      <template v-slot:header>
-        <div class="col row q-gutter-sm items-end justify-around">
-          <div class="col-auto">
-            <q-icon name="svguse:taskyon_mono_opt.svg#taskyon" size="sm" />
-          </div>
-          <div class="col-auto text-weight-medium">Conversation Threads</div>
-        </div>
-      </template>
+    <q-item
+      v-ripple
+      default-opened
+      hide-expand-icon
+      clickable
+      @click="state.drawerOpen = !state.drawerOpen"
+    >
+      <div class="col row q-gutter-sm items-end justify-around">
+        <q-icon
+          class="col-auto"
+          name="svguse:taskyon_mono_opt.svg#taskyon"
+          size="sm"
+        />
+        <div class="col-auto text-weight-medium">Conversation Threads</div>
+        <q-icon class="col-auto" name="menu" size="sm" />
+      </div>
+    </q-item>
+    <div class="q-pt-md">
       <div class="column items-stretch">
         <q-list>
           <q-item
@@ -78,7 +87,7 @@
           >
         </div>
       </div>
-    </q-expansion-item>
+    </div>
     <q-separator spaced />
     <!-- Settings Area -->
     <q-item class="fit column items-center">

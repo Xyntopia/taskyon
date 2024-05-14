@@ -6,6 +6,7 @@
         :class="minMode ? 'q-gutter-xs row q-px-sm' : 'q-gutter-xs'"
       >
         <q-btn
+          v-if="!state.drawerOpen"
           flat
           @click="state.drawerOpen = !state.drawerOpen"
           round
@@ -13,7 +14,7 @@
           :size="btnSize"
           icon="menu"
         />
-        <div class="button-group">
+        <div class="q-ml-lg button-group">
           <q-btn
             v-if="!minMode"
             flat
