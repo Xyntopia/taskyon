@@ -35,7 +35,7 @@
             v-if="state.taskState[task.id]?.markdownEnabled != false"
             :src="task.content.message"
           />
-          <div v-else class="raw-markdown q-mb-md">{{ task.content }}</div>
+          <div v-else class="raw-markdown q-mb-md">{{ task.content.message }}</div>
         </div>
         <!--task costs-->
         <div
