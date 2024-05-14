@@ -23,7 +23,7 @@
           </q-expansion-item>
         </div>
         <div v-if="'functionResult' in task.content" class="col q-pb-md">
-          <q-expansion-item dense icon="mdi-head-cog" label="Analyzing...">
+          <q-expansion-item dense icon="mdi-head-cog" label="Analyzing result...">
             <p style="white-space: pre-wrap">
               {{ task.result?.chatResponse?.choices[0].message.content }}
             </p>

@@ -7,7 +7,7 @@ import {
   generateHeaders,
   getApiConfigCopy,
 } from './chat';
-import { prepareTasksPrompts } from './promptCreation';
+import { renderTasks4Chat } from './promptCreation';
 import {
   FunctionArguments,
   FunctionCall,
@@ -109,7 +109,7 @@ export async function processChatTask(
       const useToolChat =
         task.allowedTools?.length && !chatState.enableOpenAiTools;
 
-      const { openAIConversationThread, tools } = await prepareTasksPrompts(
+      const { openAIConversationThread, tools } = await renderTasks4Chat(
         task,
         await taskManager.searchToolDefinitions(),
         chatState,

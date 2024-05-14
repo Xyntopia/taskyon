@@ -62,18 +62,29 @@ export async function buildChatFromTask(taskId: string, getTask: TaskGetter) {
       const t = await getTask(mId);
       let message: OpenAI.ChatCompletionMessageParam | undefined = undefined;
       if (t) {
-        if (t.role === 'function' && 'functionCall' in t.content) {
+        if ('functionCall' in t.content) {
           const functionContent = dump({
             arguments: t.content.functionCall.arguments,
             ...t.result?.toolResult,
           });
           message = {
-            role: t.role,
+            role: 'function',
             name: t.content.functionCall.name,
             content: functionContent,
           };
           openAIMessageThread.push(message);
-        } else if (t.role != 'function' && 'message' in t.content) {
+        } else if ('functionResult' in t.content) {
+          message = {
+            role: 'system',
+            content: dump({
+              'result of the function': t.content.functionResult,
+            }),
+          } as Exclude<
+            OpenAI.ChatCompletionMessageParam,
+            OpenAI.ChatCompletionFunctionMessageParam
+          >;
+          openAIMessageThread.push(message);
+        } else if ('message' in t.content) {
           message = {
             role: t.role,
             content: t.content.message,
@@ -82,7 +93,7 @@ export async function buildChatFromTask(taskId: string, getTask: TaskGetter) {
             OpenAI.ChatCompletionFunctionMessageParam
           >;
           openAIMessageThread.push(message);
-        } else if (t.role != 'function' && 'uploadedFiles' in t.content) {
+        } else if ('uploadedFiles' in t.content) {
           message = {
             role: t.role,
             content: JSON.stringify(t.content.uploadedFiles),

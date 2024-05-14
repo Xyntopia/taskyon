@@ -31,7 +31,7 @@ function substituteTemplateVariables(
   return messages;
 }
 
-export async function prepareTasksPrompts(
+export async function renderTasks4Chat(
   task: LLMTask,
   toolCollection: Record<string, ToolBase>,
   chatState: ChatStateType,
@@ -45,7 +45,7 @@ export async function prepareTasksPrompts(
   let openAIConversationThread = await buildChatFromTask(task.id, getTask);
 
   let tools: ToolBase[] = [];
-
+  
   // Check if task has tools and OpenAI tools are not enabled
   if (
     task.allowedTools?.length &&
@@ -55,7 +55,7 @@ export async function prepareTasksPrompts(
     console.log('Creating chat task messages');
     // Prepare the variables for createTaskChatMessages
     const additionalMessages: OpenAI.ChatCompletionMessageParam[] =
-      renderTask4Chat(task, toolCollection, chatState);
+      renderTaskPrompt4Chat(task, toolCollection, chatState);
 
     task.debugging.taskPrompt = additionalMessages;
     // Remove the last message from openAIConversationThread
@@ -86,7 +86,7 @@ export async function prepareTasksPrompts(
   return { openAIConversationThread, tools: openAITools };
 }
 
-export function renderTask4Chat(
+export function renderTaskPrompt4Chat(
   task: Pick<LLMTask, 'role' | 'content' | 'allowedTools' | 'result'>,
   toolCollection: Record<string, ToolBase>,
   chatState: ChatStateType
