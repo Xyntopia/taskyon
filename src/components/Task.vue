@@ -5,7 +5,7 @@
       <!--Message Display-->
       <div class="row items-end q-gutter-xs">
         <!--task icon-->
-        <div v-if="task.state == 'Error'" class="col-auto">
+        <div v-if="task.debugging.error" class="col-auto">
           <q-icon name="warning" color="warning" size="sm"
             ><q-tooltip class="bg-warning">Error!</q-tooltip>
           </q-icon>
@@ -170,7 +170,11 @@
         <q-tabs dense v-model="state.messageDebug[task.id]" no-caps>
           <q-tab name="ERROR" label="Error" />
           <q-tab name="RAW" label="raw task data" />
-          <q-tab v-if="task.debugging.taskPrompt" name="TASKPROMPT" label="task prompt" />
+          <q-tab
+            v-if="task.debugging.taskPrompt"
+            name="TASKPROMPT"
+            label="task prompt"
+          />
           <q-tab name="MESSAGECONTENT" label="raw result" />
         </q-tabs>
         <q-tab-panels
@@ -252,7 +256,7 @@
     .message-buttons
         position: absolute
         bottom: -2px  // To move up by 6px
-        left: -2px   // To move left by 6px
+        left: 20px   // To move left by 6px
         opacity: 0
         transition: opacity 0.3s
         background-color: rgba($secondary, .2)

@@ -20,6 +20,7 @@
           <div v-for="task in selectedThread" :key="task.id" :class="task.role">
             <Task
               :task="task"
+              style="min-width: 200px;"
               :class="[
                 $q.dark.isActive
                   ? 'bg-primary text-white'
