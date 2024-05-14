@@ -58,17 +58,29 @@
               <q-tooltip> Select Conversation </q-tooltip>
             </q-item-section>
             <q-item-section side>
-              <q-btn
-                dense
-                icon="delete"
-                size="sm"
-                flat
-                @click="onDeleteThread(conversationId.id)"
-              >
-                <q-tooltip anchor="center right" self="center left">
-                  Delete Conversation
-                </q-tooltip>
-              </q-btn>
+              <div>
+                <q-btn
+                  v-if="state.chatState.selectedTaskId == conversationId.id"
+                  flat
+                  dense
+                  icon="download_for_offline"
+                  size="sm"
+                  to="/"
+                  @click="onDownloadChat(conversationId.id)"
+                  ><q-tooltip>Download Chat</q-tooltip>
+                </q-btn>
+                <q-btn
+                  dense
+                  icon="delete"
+                  size="sm"
+                  flat
+                  @click="onDeleteThread(conversationId.id)"
+                >
+                  <q-tooltip anchor="center right" self="center left">
+                    Delete Conversation
+                  </q-tooltip>
+                </q-btn>
+              </div>
             </q-item-section>
           </q-item>
         </q-list>
@@ -130,6 +142,8 @@ import {
 import SimpleSettings from 'components/SimpleSettings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { LLMTask } from 'src/modules/taskyon/types';
+import { exportFile } from 'quasar';
+import { dump } from 'js-yaml';
 
 const state = useTaskyonStore();
 
@@ -174,5 +188,22 @@ async function onDeleteThread(conversationId: string) {
   state.chatState.selectedTaskId = undefined;
   await deleteTaskThread(conversationId, tm);
   conversationIDs.value = await getLeafTaskNames(tm);
+}
+
+async function onDownloadChat(conversationId: string) {
+  console.log('deleting thread!!', conversationId);
+  const tm = await state.getTaskManager();
+  const taskList = await tm.getTaskChain(conversationId);
+
+  if (taskList.length) {
+    const lastTask = taskList[taskList.length - 1];
+
+    const fileName = `tyconv-${lastTask?.name || ''}.yaml`;
+    const fileContent = dump(taskList);
+    const mimeType = 'text/yaml';
+
+    // Use Quasar's exportFile function for download
+    exportFile(fileName, fileContent, mimeType);
+  }
 }
 </script>

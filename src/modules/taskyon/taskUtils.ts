@@ -7,7 +7,12 @@ export const taskUtils = (
   getTask: TaskGetter,
   getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>
 ) => {
-  async function taskChain(taskId: string, parents = true, children = false) {
+  /* get a chain of tasks with the last task being the last element in the list */
+  async function getTaskIdChain(
+    taskId: string,
+    parents = true,
+    children = false
+  ) {
     const conversationList: string[] = [taskId];
 
     if (parents) {
@@ -53,9 +58,15 @@ export const taskUtils = (
     return conversationList;
   }
 
+  async function getTaskChain(taskId: string) {
+    const taskIds = await getTaskIdChain(taskId);
+    const taskList = await Promise.all(taskIds.map((tid) => getTask(tid)));
+    return taskList;
+  }
+
   async function buildChatFromTask(taskId: string) {
     const openAIMessageThread = [] as OpenAI.ChatCompletionMessageParam[];
-    const conversationThread = await taskChain(taskId);
+    const conversationThread = await getTaskIdChain(taskId);
 
     //TODO:  add instructions
     if (conversationThread) {
@@ -117,8 +128,9 @@ export const taskUtils = (
     return openAIMessageThread;
   }
   return {
-    taskChain,
+    taskChain: getTaskIdChain,
     buildChatFromTask,
+    getTaskChain,
   };
 };
 
