@@ -413,3 +413,29 @@ export class AsyncQueue<T> {
     return oldQueue;
   }
 }
+
+export function bigIntToString(obj: unknown): unknown {
+  if (obj === null) {
+    return obj;
+  }
+
+  if (typeof obj === 'bigint') {
+    return obj.toString();
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => bigIntToString(item));
+  }
+
+  if (typeof obj === 'object') {
+    const result: { [key: string]: unknown; } = {};
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        result[key] = bigIntToString((obj as Record<string, unknown>)[key]);
+      }
+    }
+    return result;
+  }
+
+  return obj;
+}

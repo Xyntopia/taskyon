@@ -203,16 +203,12 @@ import { getDefaultParametersForTool } from 'src/modules/taskyon/tools';
 import { FunctionArguments } from 'src/modules/taskyon/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
-import {
-  LLMTask,
-  partialTaskDraft,
-  taskTemplateTypes,
-} from 'src/modules/taskyon/types';
+import { LLMTask, partialTaskDraft } from 'src/modules/taskyon/types';
 import ModelSelection from 'components/ModelSelection.vue';
 import { writeFiles } from 'src/modules/taskyon/OPFS';
 import { addTask2Tree } from 'src/modules/taskyon/taskManager';
 import ObjectTreeView from './ObjectTreeView.vue';
-import type { ToolBase } from 'src/modules/taskyon/tools';
+import type { ToolBase } from 'src/modules/taskyon/types';
 import taskSettingsButton from './taskSettingsButton.vue';
 import taskContentEdit from './taskContentEdit.vue';
 import CodeEditor from './CodeEditor.vue';

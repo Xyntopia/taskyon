@@ -272,7 +272,7 @@ import CreateNewTask from 'components/CreateNewTask.vue';
 import OpenRouterPKCE from 'src/components/OpenRouterPKCE.vue';
 import InfoDialog from 'src/components/InfoDialog.vue';
 import axios from 'axios';
-import { LLMTask } from 'src/modules/taskyon/types';
+import type { LLMTask } from 'src/modules/taskyon/types';
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
 const welcomeText = ref<string>('');

@@ -1,4 +1,5 @@
-import { ToolBase, summarizeTools } from './tools';
+import { summarizeTools } from './tools';
+import { ToolBase } from './types';
 import { LLMTask, TaskGetter } from './types';
 import OpenAI from 'openai';
 import { dump } from 'js-yaml';

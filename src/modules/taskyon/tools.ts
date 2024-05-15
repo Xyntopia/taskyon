@@ -1,7 +1,7 @@
 import { useVectorStore } from 'src/modules/localVectorStore';
 import type { PythonScriptResult } from './pyodide';
 import { dump } from 'js-yaml';
-import { bigIntToString } from './chat';
+import { bigIntToString } from './utils';
 import { asyncRunPython } from 'src/modules/taskyon/webWorkerApi';
 import {
   TaskResult,
@@ -11,63 +11,14 @@ import {
   FunctionArguments,
   RemoteFunctionCall,
   RemoteFunctionResponse,
+  FunctionCall,
+  ParamType,
+  ToolBase,
 } from './types';
 import { z } from 'zod';
-import { FunctionCall, ParamType } from './types';
 import type { TyTaskManager } from './taskManager';
 
 export const vectorStore = useVectorStore();
-
-// this reflects json schema:  https://json-schema.org/specification-links
-interface JSONSchemaForFunctionParameter {
-  $schema?: string;
-  type: 'object';
-  properties: {
-    [key: string]: {
-      type: string;
-      description?: string;
-      default?: unknown;
-      items?: JSONSchemaForFunctionParameter | JSONSchemaForFunctionParameter[];
-    };
-  };
-  required?: string[];
-}
-
-const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionParameter> =
-  z.object({
-    $schema: z.string().optional(),
-    type: z.literal('object'),
-    properties: z.record(
-      z.object({
-        type: z.string(),
-        description: z.string().optional(),
-        default: z.unknown().optional(),
-        items: z
-          .lazy(() =>
-            z.union([
-              JSONSchemaForFunctionParameter,
-              z.array(JSONSchemaForFunctionParameter),
-            ])
-          )
-          .optional(),
-      })
-    ),
-    required: z.array(z.string()).optional(),
-  });
-
-export const ToolBase = z.object({
-  description: z.string(),
-  longDescription: z.string().optional(),
-  name: z.string().describe(''),
-  parameters: JSONSchemaForFunctionParameter,
-  code: z
-    .string()
-    .optional()
-    .describe(
-      "If a function description doesn't include any code taskyon will call a postMessage to the parent window with the function name."
-    ),
-});
-export type ToolBase = z.infer<typeof ToolBase>;
 
 const arbitraryFunctionSchema = z.custom<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

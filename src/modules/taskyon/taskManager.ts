@@ -13,7 +13,8 @@ import { Lock, sleep, deepMerge, AsyncQueue } from './utils';
 import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { loadOrCreateHNSWIndex } from './hnswIndex';
 import { extractKeywords, useNlpWorker } from './webWorkerApi';
-import { Tool, ToolBase } from './tools';
+import { Tool } from './tools';
+import { ToolBase } from './types';
 import { taskUtils } from './taskUtils';
 import { MangoQuery } from 'rxdb';
 

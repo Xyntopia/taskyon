@@ -19,7 +19,8 @@ import {
 import { addTask2Tree, processTasksQueue } from './taskManager';
 import type { OpenAI } from 'openai';
 import { TyTaskManager } from './taskManager';
-import { Tool, ToolBase, handleFunctionExecution } from './tools';
+import { Tool, handleFunctionExecution } from './tools';
+import { ToolBase } from './types';
 import { load } from 'js-yaml';
 import { deepMerge } from './utils';
 

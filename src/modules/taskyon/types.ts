@@ -1,7 +1,6 @@
 import type OpenAI from 'openai';
 import { dump } from 'js-yaml';
 import { z } from 'zod';
-import { ToolBase } from './tools';
 
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type RequireSome<T, K extends keyof T> = Omit<T, K> &
@@ -91,6 +90,56 @@ export interface OpenRouterGenerationInfo {
     usage: number;
   };
 }
+
+export interface JSONSchemaForFunctionParameter {
+  $schema?: string;
+  type: 'object';
+  properties: {
+    [key: string]: {
+      type: string;
+      description?: string;
+      default?: unknown;
+      items?: JSONSchemaForFunctionParameter | JSONSchemaForFunctionParameter[];
+    };
+  };
+  required?: string[];
+}
+
+export const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionParameter> =
+  z.object({
+    $schema: z.string().optional(),
+    type: z.literal('object'),
+    properties: z.record(
+      z.object({
+        type: z.string(),
+        description: z.string().optional(),
+        default: z.unknown().optional(),
+        items: z
+          .lazy(() =>
+            z.union([
+              JSONSchemaForFunctionParameter,
+              z.array(JSONSchemaForFunctionParameter),
+            ])
+          )
+          .optional(),
+      })
+    ),
+    required: z.array(z.string()).optional(),
+  });
+
+export const ToolBase = z.object({
+  description: z.string(),
+  longDescription: z.string().optional(),
+  name: z.string().describe(''),
+  parameters: JSONSchemaForFunctionParameter,
+  code: z
+    .string()
+    .optional()
+    .describe(
+      "If a function description doesn't include any code taskyon will call a postMessage to the parent window with the function name."
+    ),
+});
+export type ToolBase = z.infer<typeof ToolBase>; // this reflects json schema:  https://json-schema.org/specification-links
 
 const ToolResult = z.object({
   result: z.union([z.string(), z.record(z.unknown())]).optional(),

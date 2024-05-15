@@ -1,6 +1,6 @@
 import axios from 'axios';
 //import { useCachedModels } from './mlModels';
-import { ToolBase } from './tools';
+import { ToolBase } from './types';
 import { LLMTask, OpenAIMessage, OpenRouterGenerationInfo } from './types';
 import type { TyTaskManager } from './taskManager';
 import OpenAI from 'openai';
@@ -432,32 +432,6 @@ export async function callLLM(
 
   console.log('AI responded:', chatCompletion);
   return chatCompletion;
-}
-
-export function bigIntToString(obj: unknown): unknown {
-  if (obj === null) {
-    return obj;
-  }
-
-  if (typeof obj === 'bigint') {
-    return obj.toString();
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map((item) => bigIntToString(item));
-  }
-
-  if (typeof obj === 'object') {
-    const result: { [key: string]: unknown } = {};
-    for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        result[key] = bigIntToString((obj as Record<string, unknown>)[key]);
-      }
-    }
-    return result;
-  }
-
-  return obj;
 }
 
 export function mapFunctionNames(
