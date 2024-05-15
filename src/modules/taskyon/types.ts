@@ -411,8 +411,7 @@ appear in keys starting with '#'
 */
 export function zodToYAMLObject(
   schema: z.ZodTypeAny,
-  optionalSymbol = '',
-  unwrapUnions = false
+  optionalSymbol = ''
 ): YamlRepresentation {
   // Base case for primitive types
   if (schema instanceof z.ZodString) {

@@ -40,7 +40,7 @@ import { ref, computed } from 'vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
 import ObjectTreeView from './ObjectTreeView.vue';
-import { LLMTask, taskTemplateTypes } from 'src/modules/taskyon/types';
+import { LLMTask } from 'src/modules/taskyon/types';
 import UnderConstructionHint from './UnderConstructionHint.vue';
 import { renderTaskPrompt4Chat } from 'src/modules/taskyon/promptCreation';
 
