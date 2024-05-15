@@ -52,8 +52,7 @@
               <q-item-section class="ellipsis">{{
                 file?.name || file?.opfs
               }}</q-item-section>
-              <q-tooltip :delay="500" v-if="state.appConfiguration.expertMode"
-                >
+              <q-tooltip :delay="500" v-if="state.appConfiguration.expertMode">
                 <p class="text-bold">uploaded file:</p>
                 <p style="white-space: pre-wrap">
                   {{ dump(file) }}

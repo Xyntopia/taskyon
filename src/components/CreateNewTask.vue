@@ -367,8 +367,8 @@ async function addFiles2Taskyon(newFiles: File[]) {
   // Collect UUIDs from added files
   const uuids = [];
   const tm = await state.getTaskManager();
-  for (const [, savedFilename] of Object.entries(opfsMapping)) {
-    const uuid = await tm.addFile({ opfs: savedFilename });
+  for (const [name, savedFilename] of Object.entries(opfsMapping)) {
+    const uuid = await tm.addFile({ opfs: savedFilename, name });
     if (uuid) {
       uuids.push(uuid);
     }

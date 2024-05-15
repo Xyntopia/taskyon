@@ -253,11 +253,17 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
     }
 
     // Return the found document
-    return {
-      uuid: fileMappingDoc.uuid,
-      opfs: fileMappingDoc.opfs,
-      openAIFileId: fileMappingDoc.openAIFileId,
-    };
+    return fileMappingDoc;
+  }
+
+  // we can search tasks here using a mongo-db query object
+  // find out more here:  https://rxdb.info/rx-query.html
+  async function searchFiles(query: MangoQuery): Promise<FileMappingDocType[]> {
+    if (fileMappingDb) {
+      const fileMappingList = await fileMappingDb.find(query).exec();
+      return fileMappingList;
+    }
+    return [];
   }
 
   async function getFile(uuid: string) {
@@ -269,19 +275,35 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
   }
 
   // TODO: this function needs to be changes to search for names, instead of UUIDs
-  async function getFileByName(name: string) {
-    const fileMap = await getFileMappingByUuid(name);
-    if (fileMap?.opfs) {
-      const file = openFile(fileMap.opfs);
-      return file;
+  async function getFileByName(name: string): Promise<File> {
+    const fileMaps = await searchFiles({
+      selector: {
+        name: name,
+      },
+    });
+    if (fileMaps.length) {
+      // TODO: what do we do if we have multiple files with the same name?
+      const fileName = fileMaps[0].opfs;
+      if (fileName) {
+        const file = await openFile(fileName);
+        if (file) {
+          return file;
+        }
+      }
+      throw new Error(
+        `We could not find the file locally:  ${name}. Was it uploaded somewhere else?`
+      );
     }
+    throw new Error(`File not found: ${name}`);
   }
 
   return {
     addFile,
+    searchFiles,
     bulkUpsertFiles,
     getFileMappingByUuid,
     getFile,
+    getFileByName,
   };
 }
 

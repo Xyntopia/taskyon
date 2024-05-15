@@ -5,7 +5,7 @@ import {
   TaskWorkerController,
   taskWorker as runTaskWorker,
 } from './taskWorker';
-import { executePythonScript, Tool } from './tools';
+import { executePythonScript, getFileContent, Tool } from './tools';
 import { executeJavaScript } from '../tools/executeJavaScript';
 import { ChatStateType } from './chat';
 
@@ -84,6 +84,7 @@ export async function initTaskyon(
     // TODO: add local context(task) search
     // localVectorStoreSearch,
     executeJavaScript,
+    getFileContent,
   ];
 
   console.log('initializing taskyondb');

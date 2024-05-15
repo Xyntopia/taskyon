@@ -17,6 +17,7 @@ import {
 } from './types';
 import { z } from 'zod';
 import type { TyTaskManager } from './taskManager';
+import { loadFile } from '../loadFiles';
 
 export const vectorStore = useVectorStore();
 
@@ -144,27 +145,27 @@ export async function handleFunctionExecution(
 }
 
 export const getFileContent: Tool = {
-  function: (
-    { fileName }: { fileName: string },
+  function: async (
+    { filename }: { filename: string },
     taskManager: TyTaskManager
   ) => {
-    const result = fileName;
-    return result;
+    const file = await taskManager.getFileByName(filename);
+    const fileContent = await loadFile(file);
+    return fileContent;
   },
-  description: `Performs semantic search in a local vectorized database, ideal 
-for retrieving documents or data segments with high relevance to natural language queries.`,
-  name: 'localVectorStoreSearch',
+  description: 'Get the contents of an uploaded file',
+  name: 'getFileContent',
   parameters: {
     type: 'object',
     properties: {
-      searchTerm: {
+      filename: {
         type: 'string',
-        description: 'The search term to use in the vector store search.',
       },
     },
-    required: ['searchTerm'],
+    required: ['filename'],
   },
 };
+
 export const localVectorStoreSearch: Tool = {
   function: async ({ searchTerm }: { searchTerm: string }) => {
     const k = 3;
