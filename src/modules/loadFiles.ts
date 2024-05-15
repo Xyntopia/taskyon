@@ -50,9 +50,7 @@ export async function loadFile(file: File) {
     default:
       if (file.type.startsWith('text')) {
         return file.text();
-      } else {
-        console.log(`unknown file type: ${file.type} from ${file.name}`);
-        return undefined;
       }
+      throw new Error(`unknown file type: ${file.type} from ${file.name}`);
   }
 }

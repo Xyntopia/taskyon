@@ -111,10 +111,7 @@ export function renderTaskPrompt4Chat(
       StructuredResponseTypes.FunctionResultBase
     );
     variables = {
-      toolResult: dump({
-        successfullExecution: task.result?.toolResult?.error ? 'no' : 'yes',
-        ...task.result?.toolResult,
-      }),
+      toolResult: dump(task.content.functionResult),
       resultSchema: yamlRepr,
       format: 'yaml',
       tools: summarizeTools(task.allowedTools || [], toolCollection),
