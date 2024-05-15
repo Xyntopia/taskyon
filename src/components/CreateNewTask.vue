@@ -225,6 +225,7 @@ const { expertMode } = toRefs(state.appConfiguration);
 const { selectedApi, useOpenAIAssistants, openAIAssistantId } = toRefs(
   state.chatState
 );
+const fileAttachments = ref<File[]>([]); // holds all attached files as a "tasklist"
 
 //const funcArgs = computed(() => );
 
@@ -376,7 +377,7 @@ async function addFiles2Taskyon(newFiles: File[]) {
 }
 
 // all our files are added to a "file task"
-async function getCurrentFileTask(files: File[]) {
+async function createFileTask(files: File[]) {
   // first add files to our DB & save them, then get uuids for each file.
   const fileUuids = await addFiles2Taskyon(files);
 
@@ -399,17 +400,18 @@ async function getCurrentFileTask(files: File[]) {
 }
 
 async function addNewTask(execute = true) {
-  const fileobj = await getCurrentFileTask(fileAttachments.value);
+  const fileTaskObj = await createFileTask(fileAttachments.value);
   let fileTaskId = undefined;
-  if (fileobj) {
-    console.log('add files to chat:', fileobj);
+  if (fileTaskObj) {
+    console.log('add files to chat:', fileTaskObj);
     fileTaskId = await addTask2Tree(
-      fileobj,
+      fileTaskObj,
       state.chatState.selectedTaskId, // parent
       state.chatState,
       await state.getTaskManager(),
       false // we do not want to execute the file object, we want to use the users prompt...
     );
+    fileAttachments.value = []
   }
 
   // execute: if true, we immediatly queue the task for execution in the taskManager
@@ -430,8 +432,6 @@ async function addNewTask(execute = true) {
     await setTaskType(undefined);
   }
 }
-
-const fileAttachments = ref<File[]>([]); // holds all attached files as a "tasklist"
 
 function attachFileToDraft(newFiles: File[]) {
   console.log('attach file to chat');
