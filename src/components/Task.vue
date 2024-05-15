@@ -44,7 +44,6 @@
           </div>
         </div>
         <div v-else-if="'uploadedFiles' in task.content" class="col">
-          <div>Uploaded files:</div>
           <q-list>
             <q-item v-for="file in fileMappings" :key="file?.uuid">
               <q-item-section side>
@@ -53,8 +52,12 @@
               <q-item-section class="ellipsis">{{
                 file?.name || file?.opfs
               }}</q-item-section>
-              <q-tooltip :delay="500"
-                ><div>{{ dump(file) }}</div></q-tooltip
+              <q-tooltip :delay="500" v-if="state.appConfiguration.expertMode"
+                >
+                <p class="text-bold">uploaded file:</p>
+                <p style="white-space: pre-wrap">
+                  {{ dump(file) }}
+                </p></q-tooltip
               >
             </q-item>
           </q-list>

@@ -383,7 +383,7 @@ async function createFileTask(files: File[]) {
 
   if (fileUuids.length) {
     const task: Parameters<typeof addTask2Tree>[0] = {
-      role: 'user',
+      role: 'system',
       configuration: currentModel.value
         ? {
             model: currentModel.value,
@@ -411,7 +411,7 @@ async function addNewTask(execute = true) {
       await state.getTaskManager(),
       false // we do not want to execute the file object, we want to use the users prompt...
     );
-    fileAttachments.value = []
+    fileAttachments.value = [];
   }
 
   // execute: if true, we immediatly queue the task for execution in the taskManager

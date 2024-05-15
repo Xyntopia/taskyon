@@ -7,7 +7,7 @@ export const taskUtils = (
   getTask: TaskGetter,
   getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>
 ) => {
-  /* get a chain of tasks with the last task being the last element in the list */
+  /* get a chain of taskss with the last task being the last element in the list */
   async function getTaskIdChain(
     taskId: string,
     parents = true,
@@ -115,7 +115,7 @@ export const taskUtils = (
               .join('\n');
             message = {
               role: t.role,
-              content: `uploaded files:\n${fileNames}`,
+              content: `user uploaded files:\n${fileNames}`,
             } as Exclude<
               OpenAI.ChatCompletionMessageParam,
               OpenAI.ChatCompletionFunctionMessageParam
