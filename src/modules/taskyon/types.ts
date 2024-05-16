@@ -257,6 +257,7 @@ export const LLMTask = z.object({
     .object({
       model: z.string(),
       chatApi: z.string(),
+      maxFollowUps: z.number().optional(),
     })
     .optional()
     .describe('Holds the configuration for the LLM'),
@@ -287,7 +288,6 @@ export const LLMTask = z.object({
     // the taskprompt is the full chat which leads to the result. This is important that we have this
     // for to debugging reasons...
     taskPrompt: z.union([z.array(OpenAIMessage), z.any()]).optional(), // Replace 'z.any()' with the correct Zod type
-    followUpError: z.unknown().optional(),
   }),
   result: TaskResult.optional(),
   id: z.string(), // can we make the id an SHA-1 value like in git? in that case we should simply remove this value...

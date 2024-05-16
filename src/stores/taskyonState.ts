@@ -90,7 +90,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
       | 'MESSAGECONTENT'
       | 'RAWTASK'
       | 'ERROR'
-      | 'FOLLOWUPERROR'
       | undefined
     >, // whether message with ID should be open or not...
   };

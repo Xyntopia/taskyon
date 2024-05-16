@@ -423,7 +423,9 @@ export async function callLLM(
       }
       chatCompletion = accumulateChatCompletion(chunks);
     } catch (error) {
-      console.error('Error during streaming:', error);
+      const err = new Error('Error during streaming');
+      err.cause = error;
+      throw err;
     }
   } else {
     const completion = await openai.chat.completions.create(payload);
@@ -535,7 +537,9 @@ async function uploadFileToOpenAI(
     });
     return response.id;
   } catch (error) {
-    console.error('Error uploading file to OpenAI:', error);
+    const err = new Error('Error uploading file to OpenAI:');
+    err.cause = error;
+    throw err;
     // Handle the error as per your application's error handling policy
   }
 }

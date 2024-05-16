@@ -21,8 +21,9 @@ import type { OpenAI } from 'openai';
 import { TyTaskManager } from './taskManager';
 import { Tool, handleFunctionExecution } from './tools';
 import { ToolBase } from './types';
-import { load } from 'js-yaml';
+import { dump, load } from 'js-yaml';
 import { deepMerge } from './utils';
+import { string } from 'zod';
 
 function isOpenAIFunctionCall(
   choice: OpenAI.ChatCompletion['choices'][0]
@@ -336,26 +337,25 @@ async function generateFollowUpTasksFromResult(
     taskTokens: finishedTask.debugging.taskTokens,
     taskCosts: finishedTask.debugging.taskCosts,
   };
+  // use helper function to make code more concise ;)
+  const addFollowUpTask = (execute: boolean, taskDraft: partialTaskDraft) => {
+    taskDraft.debugging = { ...taskDraft.debugging, ...childCosts };
+    void addTask2Tree(
+      taskDraft,
+      finishedTask.id,
+      chatState,
+      taskManager,
+      // interrupt execution if interrupted flag is shown!
+      // this makes sure that results are still saved, even if we stop any
+      // further execution
+      taskWorkerController.isInterrupted() ? false : execute
+    );
+  };
+  const taskTemplate: Partial<LLMTask> = {
+    configuration: finishedTask.configuration,
+  };
   if (finishedTask.result) {
-    const taskTemplate: Partial<LLMTask> = {
-      configuration: finishedTask.configuration,
-    };
     const choice = finishedTask.result.chatResponse?.choices[0];
-
-    // use helper function to make code more concise ;)
-    const addFollowUpTask = (execute: boolean, taskDraft: partialTaskDraft) => {
-      taskDraft.debugging = { ...taskDraft.debugging, ...childCosts };
-      void addTask2Tree(
-        taskDraft,
-        finishedTask.id,
-        chatState,
-        taskManager,
-        // interrupt execution if interrupted flag is shown!
-        // this makes sure that results are still saved, even if we stop any
-        // further execution
-        taskWorkerController.isInterrupted() ? false : execute
-      );
-    };
 
     // TODO: use a switch statement here :)
     if (finishedTask.result.type === 'ChatAnswer') {
@@ -412,6 +412,26 @@ async function generateFollowUpTasksFromResult(
         }
       }
     }
+  }
+  if (finishedTask.debugging.error) {
+    console.log('creating error-follow up!');
+    const error = finishedTask.debugging.error as {
+      message?: string;
+      cause?: unknown;
+    };
+    const message = dump(
+      JSON.parse(
+        JSON.stringify({ message: error.message, cause: error.cause }, null, 3)
+      )
+    );
+    addFollowUpTask(
+      false,
+      deepMerge(taskTemplate, {
+        state: 'Completed',
+        role: 'system',
+        content: { message },
+      })
+    );
   }
 }
 
@@ -517,6 +537,7 @@ async function processTask(
         message: error.message,
         stack: error.stack,
         location: 'task processing',
+        cause: error.cause,
       };
     }
     console.error('Error processing task:', error);
