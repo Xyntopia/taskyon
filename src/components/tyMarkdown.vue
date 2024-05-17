@@ -1,7 +1,7 @@
 <template>
   <q-markdown
     no-line-numbers
-    :plugins="[switchThemeMermaid, addCopyButtons]"
+    :plugins="[switchThemeMermaid, addCopyButtons, mathjax3]"
     :src="src"
     @click="handleMarkdownClick"
   />
@@ -28,11 +28,16 @@
 <script setup lang="ts">
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import markdownItMermaid from '@datatraccorporation/markdown-it-mermaid';
+//import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
+//import katex from  '@mdit/plugin-katex-slim'
+import mathjax3 from 'markdown-it-mathjax3'
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import type MarkdownIt from 'markdown-it/lib';
 import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-rust';
+import 'prismjs/components/prism-javascript';
 import { useQuasar } from 'quasar';
+
 
 const $q = useQuasar();
 
@@ -49,6 +54,9 @@ const switchThemeMermaid: MarkdownIt.PluginSimple = (md: MarkdownIt) => {
     },
   });
 };
+
+// https://mdit-plugins.github.io/mathjax.html#usage
+//const mathjaxInstance = createMathjaxInstance();
 
 defineProps<{
   src: string;
