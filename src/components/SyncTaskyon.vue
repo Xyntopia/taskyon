@@ -159,7 +159,8 @@ async function onDownloadTaskyonData() {
   const jsonBackup = await tm.getJsonTaskBackup();
   const fileContent = JSON.stringify(jsonBackup);
   console.log('downloading tasks in json format');
-  exportFile('taskyon_data.json', fileContent, 'application/json');
+  const timestamp = new Date().toISOString();
+  exportFile(`${timestamp}_taskyon_data.json`, fileContent, 'application/json');
 }
 
 async function onUploadTaskyonData(newFiles: File[]) {
