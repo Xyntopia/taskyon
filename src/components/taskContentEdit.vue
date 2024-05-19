@@ -30,34 +30,24 @@
     <template v-slot:after>
       <taskSettingsButton v-model="expandedTaskCreation" />
     </template>
-    <template v-slot:counter>
-      <div>
-        {{ `approx. token count: ${estimatedTokens}` }}
-      </div>
-    </template>
-    <template v-slot:hint>
-      <div class="ellipsis">
-        {{ `${currentModel} (selected AI)` }}
-      </div>
-    </template>
   </q-input>
 </template>
 
 <script setup lang="ts">
 import FileDropzone from './FileDropzone.vue';
 import taskSettingsButton from './taskSettingsButton.vue';
+
 const content = defineModel<string | null | undefined>({
   required: true,
 });
 const expandedTaskCreation = defineModel<boolean>('expandedTaskCreation', {
   required: true,
 });
+
 const props = defineProps<{
   expertMode: boolean;
   executeTask: () => Promise<void>;
   attachFileToChat: (newFiles: File[]) => void;
-  estimatedTokens: number;
-  currentModel: string | undefined;
   useEnterToSend: boolean;
 }>();
 

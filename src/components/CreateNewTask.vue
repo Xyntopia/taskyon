@@ -20,7 +20,6 @@
         :estimated-tokens="estimatedTokens"
         :current-model="currentModel"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
-        :bottom-slots="!state.minimalGui"
       />
       <div v-else-if="!selectedTaskType && codingMode">
         <CodeEditor
@@ -50,20 +49,34 @@
         />
         <taskSettingsButton v-model="expandedTaskCreation" />
       </div>
-      <div v-if="fileAttachments.length">
-        <div>Attached files:</div>
-        <q-chip
-          v-for="file in fileAttachments"
-          :key="file.name"
-          removable
-          @remove="fileAttachments = fileAttachments.filter((f) => f !== file)"
-          icon="upload_file"
-        >
-          <div class="ellipsis" style="max-width: 100px">
-            {{ `${file.name}` }}
+      <!--Task Creation State-->
+      <div class="q-px-sm">
+        <div class="row">
+          <div class="ellipsis">
+            {{ `${currentModel} (selected AI)` }}
           </div>
-          <q-tooltip :delay="0.5">{{ `${file.name}` }}</q-tooltip>
-        </q-chip>
+          <q-space></q-space>
+          <div>
+            {{ `approx. token count: ${estimatedTokens}` }}
+          </div>
+        </div>
+        <div v-if="fileAttachments.length">
+          <div>Attached files:</div>
+          <q-chip
+            v-for="file in fileAttachments"
+            :key="file.name"
+            removable
+            @remove="
+              fileAttachments = fileAttachments.filter((f) => f !== file)
+            "
+            icon="upload_file"
+          >
+            <div class="ellipsis" style="max-width: 100px">
+              {{ `${file.name}` }}
+            </div>
+            <q-tooltip :delay="0.5">{{ `${file.name}` }}</q-tooltip>
+          </q-chip>
+        </div>
       </div>
       <!--Task type selection and execution-->
       <div
