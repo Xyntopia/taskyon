@@ -85,6 +85,16 @@
           </q-item>
         </q-list>
         <div class="row justify-around items-center">
+          <FileDropzone
+            @update:model-value="loadConversation"
+            accept="*"
+            disable-dropzone-border
+          >
+            <q-btn dense class="fit" flat>
+              <q-icon name="file_upload" />
+              <q-tooltip>Upload Conversation</q-tooltip>
+            </q-btn>
+          </FileDropzone>
           <q-btn
             dense
             flat
@@ -141,9 +151,10 @@ import {
 } from 'src/modules/taskyon/taskManager';
 import SimpleSettings from 'components/SimpleSettings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { LLMTask } from 'src/modules/taskyon/types';
+import { LLMTask, TaskListType } from 'src/modules/taskyon/types';
 import { exportFile } from 'quasar';
-import { dump } from 'js-yaml';
+import { dump, load } from 'js-yaml';
+import FileDropzone from 'components/FileDropzone.vue';
 
 const state = useTaskyonStore();
 
@@ -204,6 +215,29 @@ async function onDownloadChat(conversationId: string) {
 
     // Use Quasar's exportFile function for download
     exportFile(fileName, fileContent, mimeType);
+  }
+}
+
+async function loadConversation(files: File[]) {
+  if (files) {
+    console.log('adding files to our conversations!');
+
+    const tm = await state.getTaskManager();
+    let last_task_id: string | undefined = undefined;
+    for (let i = 0; i < files.length; i++) {
+      console.log(files[i]);
+      const fileStr = await files[i].text();
+      const taskListRaw = load(fileStr);
+      const result = await TaskListType.safeParseAsync(taskListRaw);
+      if (result.success) {
+        const taskList = result.data;
+        taskList.forEach((t) => {
+          void tm.setTask(t, true);
+          last_task_id = t.id;
+        });
+      }
+    }
+    state.chatState.selectedTaskId = last_task_id;
   }
 }
 </script>

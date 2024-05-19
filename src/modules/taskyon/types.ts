@@ -297,6 +297,9 @@ export const LLMTask = z.object({
 });
 export type LLMTask = z.infer<typeof LLMTask>;
 
+export const TaskListType = z.array(LLMTask);
+export type TaskListType = z.infer<typeof TaskListType>;
+
 export type TaskGetter = (input: string) => Promise<LLMTask | undefined>;
 
 export const partialTaskDraft = LLMTask.pick({
