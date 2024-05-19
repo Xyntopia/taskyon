@@ -4,6 +4,7 @@
     <!--Task Creation-->
     <div>
       <taskContentEdit
+        class="text-body1"
         v-if="!selectedTaskType && !codingMode"
         :model-value="state.taskDraft.content?.message"
         @update:modelValue="
@@ -50,14 +51,57 @@
         <taskSettingsButton v-model="expandedTaskCreation" />
       </div>
       <!--Task Creation State-->
-      <div class="q-px-sm">
-        <div class="row">
-          <div class="ellipsis">
-            {{ `${currentModel} (selected AI)` }}
+      <div class="q-px-sm q-pt-xs text-caption">
+        <div class="row items-center">
+          <div>
+            <q-btn flat dense size="sm" no-caps>
+              <q-icon class="q-pr-sm" name="history"></q-icon>
+              <div class="ellipsis">
+                {{ `${currentModel}` }}
+              </div>
+              <q-tooltip>Select Model</q-tooltip>
+              <q-menu color="secondary">
+                <q-list style="min-width: 100px">
+                  <q-item-label header>Select previous AI model!</q-item-label>
+                  <q-item
+                    v-for="(m, idx) in state.modelHistory"
+                    :key="m"
+                    clickable
+                    v-close-popup
+                    @click="handleBotNameUpdate({ newName: m })"
+                  >
+                    <q-item-section
+                      >{{ state.modelHistory.length - idx }}:
+                      {{ m }}</q-item-section
+                    >
+                  </q-item>
+                </q-list>
+              </q-menu>
+            </q-btn>
           </div>
           <q-space></q-space>
+          <div class="gt-xs">
+            {{ `approx. new token count: ${estimatedTokens}` }}
+          </div>
+          <div class="lt-sm">{{ `t/c: ${estimatedTokens}` }}</div>
+          <q-space></q-space>
           <div>
-            {{ `approx. token count: ${estimatedTokens}` }}
+            <q-btn
+              flat
+              size="sm"
+              @click="expandedTaskCreation = !expandedTaskCreation"
+            >
+              <q-icon size="xs" name="tune" class="q-pl-sm"></q-icon>
+              <q-icon
+                size="xs"
+                :name="
+                  expandedTaskCreation
+                    ? 'keyboard_arrow_up'
+                    : 'keyboard_arrow_down'
+                "
+              ></q-icon>
+              <q-tooltip>Chat Settings</q-tooltip>
+            </q-btn>
           </div>
         </div>
         <div v-if="fileAttachments.length">
@@ -283,16 +327,19 @@ const handleBotNameUpdate = ({
   newService,
 }: {
   newName: string;
-  newService: string;
+  newService?: string;
 }) => {
   console.log('getting an api & bot update :)', newName, newService);
   currentModel.value = newName;
-  currentChatApi.value = newService;
-  state.chatState.selectedApi = newService;
+  if (newService) {
+    currentChatApi.value = newService;
+    state.chatState.selectedApi = newService;
+  }
   const api = getApiConfig(state.chatState);
   if (api) {
     api.defaultModel = newName;
   }
+  state.addModelToHistory(newName);
 };
 
 const selectedTaskType = computed(() => {

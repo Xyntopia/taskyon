@@ -74,6 +74,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     drawerOpen: true,
     drawerRight: false,
     taskDraft: {} as Partial<LLMTask> & { content?: ContentDraft },
+    modelHistory: [] as string[],
     newToolDraftCode: '' as string,
     draftParameters: {} as Record<string, FunctionArguments>,
     taskState: {} as Record<string, TaskStateType>,
@@ -86,11 +87,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     },
     messageDebug: {} as Record<
       string,
-      | 'RAW'
-      | 'MESSAGECONTENT'
-      | 'RAWTASK'
-      | 'ERROR'
-      | undefined
+      'RAW' | 'MESSAGECONTENT' | 'RAWTASK' | 'ERROR' | undefined
     >, // whether message with ID should be open or not...
   };
   initialState.keys['taskyon'] = 'anonymous';
@@ -206,6 +203,13 @@ export const useTaskyonStore = defineStore(storeName, () => {
     return await taskManager;
   }
 
+  function addModelToHistory(model: string) {
+    if (stateRefs.modelHistory.length >= 5) {
+      stateRefs.modelHistory.shift(); // remove oldest element
+    }
+    stateRefs.modelHistory.push(model);
+  }
+
   // we do this funny next line, because our store is currently "reactive" which means
   // all scalars like strings, numbers etc..  ar actually non-reactive (vue reactive only converts
   // nested objects into reactive as well). So by doing "toRefs" we ensure that all values are reactive
@@ -215,6 +219,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
   return {
     ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
     getOpenRouterPKCEKey,
+    addModelToHistory,
     minimalGui,
     taskWorkerController,
     getTaskManager,

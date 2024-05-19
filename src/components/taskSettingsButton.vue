@@ -9,6 +9,7 @@
         expandedTaskCreation = !expandedTaskCreation;
       }
     "
+    v-bind="$attrs"
     ><q-tooltip> Toggle Task Settings </q-tooltip>
   </q-btn>
 </template>
@@ -17,4 +18,5 @@
 const expandedTaskCreation = defineModel<boolean>({
   required: true,
 });
-</script>sw
+</script>
+sw

@@ -21,14 +21,11 @@
     <template v-slot:before>
       <FileDropzone class="fit" @update:model-value="attachFileToChat">
         <q-btn dense class="fit" flat>
-          <q-icon class="gt-sm" name="upload_file" />
+          <q-icon class="gt-xs" name="upload_file" />
           <q-icon name="attachment" />
           <q-tooltip>Attach file to message</q-tooltip>
         </q-btn>
       </FileDropzone>
-    </template>
-    <template v-slot:after>
-      <taskSettingsButton v-model="expandedTaskCreation" />
     </template>
   </q-input>
 </template>
