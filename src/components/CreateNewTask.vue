@@ -63,6 +63,9 @@
               <q-menu color="secondary">
                 <q-list style="min-width: 100px">
                   <q-item-label header>Select previous AI model!</q-item-label>
+                  <q-item v-if="state.modelHistory.length === 0" v-close-popup>
+                    No other models were selected yet!
+                  </q-item>
                   <q-item
                     v-for="(m, idx) in state.modelHistory"
                     :key="m"
@@ -74,6 +77,19 @@
                       >{{ state.modelHistory.length - idx }}:
                       {{ m }}</q-item-section
                     >
+                  </q-item>
+                  <q-item
+                    clickable
+                    v-close-popup
+                    @click="expandedTaskCreation = !expandedTaskCreation"
+                  >
+                    <q-item-section avatar>
+                      <q-icon name="smart_toy"></q-icon>
+                    </q-item-section>
+                    <q-item-section> More AI Settings </q-item-section>
+                    <q-item-section side>
+                      <q-icon name="navigate_next"></q-icon>
+                    </q-item-section>
                   </q-item>
                 </q-list>
               </q-menu>
