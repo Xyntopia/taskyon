@@ -2,7 +2,6 @@
   <q-input
     autogrow
     filled
-    dense
     color="secondary"
     v-model="content"
     label="Type your message or instruction..."
