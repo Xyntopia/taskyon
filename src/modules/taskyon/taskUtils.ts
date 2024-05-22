@@ -8,51 +8,23 @@ export const taskUtils = (
   getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>
 ) => {
   /* get a chain of taskss with the last task being the last element in the list */
-  async function getTaskIdChain(
-    taskId: string,
-    parents = true,
-    children = false
-  ) {
-    const conversationList: string[] = [taskId];
+  async function getTaskIdChain(taskId: string) {
+    const conversationList: string[] = [];
 
-    if (parents) {
-      // Start with the selected task
-      let currentTaskID = taskId;
+    // Start with the selected task
+    let currentTaskID: string | undefined = taskId;
 
-      // Trace back the parentIDs to the original task in the chain
-      while (currentTaskID) {
-        // Get the current task
-        const currentTask = await getTask(currentTaskID);
-        if (!currentTask) break; // Break if we reach a task that doesn't exist
-
-        // Move to the parent task
-        if (currentTask.parentID) {
-          currentTaskID = currentTask.parentID; // This can now be string | undefined
-        } else break; // Break if we reach an "initial" task
-
+    // Trace back the parentIDs to the original task in the chain
+    while (currentTaskID) {
+      // Get the current task
+      const currentTask: LLMTask | undefined = await getTask(currentTaskID);
+      if (currentTask) {
         // Prepend the current task to the conversation list so the selected task ends up being the last in the list
         conversationList.unshift(currentTaskID);
-      }
-    }
-
-    if (children) {
-      // Start with the first child of the selected task
-      let currentTaskID = taskId;
-
-      // Follow the first child in the task list
-      while (currentTaskID) {
-        // Get the current task
-        const currentTask = await getTask(currentTaskID);
-        if (!currentTask) break; // Break if we reach a task that doesn't exist
-
-        // Move to the first child task, if it exists
-        if (currentTask.childrenIDs.length) {
-          currentTaskID = currentTask.childrenIDs[0];
-        } else break;
-
-        // Append the current task to the conversation list
-        conversationList.push(currentTaskID);
-      }
+        currentTaskID = currentTask.parentID;
+      } else {
+        currentTaskID = undefined;
+      } // Break if we reach a task that doesn't exist
     }
 
     return conversationList;
