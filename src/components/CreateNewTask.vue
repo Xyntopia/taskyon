@@ -27,7 +27,9 @@
           :model-value="state.taskDraft.content?.message"
           @update:modelValue="
             (value) => {
-              state.taskDraft.content = value;
+              state.taskDraft.content = {
+                message: value,
+              };
             }
           "
         />
@@ -300,6 +302,9 @@ const { selectedApi, useOpenAIAssistants, openAIAssistantId } = toRefs(
 );
 const fileAttachments = ref<File[]>([]); // holds all attached files as a "tasklist"
 
+// we initialize our taskDraft with the state of this window!
+state.taskDraft = { ...state.taskDraft, ...(props.forceTaskProps || {}) };
+
 //const funcArgs = computed(() => );
 
 async function getAllTools() {
@@ -489,7 +494,7 @@ async function addNewTask(execute = true) {
   // execute: if true, we immediatly queue the task for execution in the taskManager
   //          otherwise, it won't get executed but simply saved into the tree
   console.log('adding new task, execute?', execute);
-  const newTask = { ...currentnewTask.value, ...(props.forceTaskProps || {}) };
+  const newTask = { ...currentnewTask.value };
   void addTask2Tree(
     newTask,
     fileTaskId || state.chatState.selectedTaskId, //parent

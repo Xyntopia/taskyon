@@ -259,6 +259,7 @@ void axios.get('main_content/frontpage.md').then((jsonconfig) => {
 });
 
 async function updateTaskThread(taskId: string | undefined) {
+  console.log('update task thread...')
   if (taskId) {
     const threadIDChain = await (
       await state.getTaskManager()
