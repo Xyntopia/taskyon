@@ -47,7 +47,7 @@
           :size="btnSize"
           color="warning"
           icon="warning"
-          to="diagnostics"
+          to="/diagnostics"
         >
           <q-tooltip
             >There was problem with taskyon!, click here to find out
@@ -61,7 +61,7 @@
           dense
           round
           icon="settings"
-          to="settings"
+          to="/settings"
         >
           <q-tooltip>Open settings</q-tooltip>
         </q-btn>
