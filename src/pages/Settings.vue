@@ -40,7 +40,7 @@
       :class="$q.dark.isActive ? 'bg-primary' : 'white'"
     >
       <q-tab-panel name="llmproviders">
-        <LLMProviders style="max-width: 600px"/>
+        <LLMProviders style="max-width: 600px" />
       </q-tab-panel>
       <q-tab-panel name="sync">
         <SyncTaskyon style="max-width: 600px" />
@@ -50,8 +50,9 @@
         <ObjectTreeView :model-value="state.chatState.taskChatTemplates" />
       </q-tab-panel>
       <q-tab-panel name="agent config">
-        <div>ALl of the Agent configuration</div>
+        <div>All of the Agent configuration</div>
         <ObjectTreeView :model-value="state.chatState" />
+        <!--{{ state.chatState }}-->
       </q-tab-panel>
       <q-tab-panel name="app config">
         <div>All of the app configurations</div>
@@ -71,8 +72,8 @@ import SyncTaskyon from 'components/SyncTaskyon.vue';
 import { useRoute } from 'vue-router';
 
 const route = useRoute();
-
 const state = useTaskyonStore();
+
 const selectedTab = computed(() => {
   return (route.params.tab as string) || 'llmproviders';
 });
