@@ -21,12 +21,48 @@
       </q-item-section>
       <q-item-section>
         <q-btn
-          @click="onDeleteTaskyonData"
+          @click="showDeleteDialog = true"
           icon="delete_forever"
           label="Delete Taskyon Chat Data"
           text-color="red"
         >
         </q-btn>
+        <q-dialog v-model="showDeleteDialog">
+          <q-card>
+            <q-card-section>
+              <div class="text-h6 text-red text-center">
+                <q-icon name="warning" size="md" />
+                Warning: Delete Taskyon Chat Data
+              </div>
+            </q-card-section>
+            <q-card-section class="q-pt-none">
+              <p>
+                <strong>Warning:</strong> This operation will permanently delete
+                all Taskyon chat data. This action cannot be undone.
+              </p>
+              <p>
+                Before proceeding, please make sure you have a backup of your
+                data. You can download your data in JSON or YAML format using
+                the buttons above.
+              </p>
+              <!--<p>
+          If you're sure you want to delete all Taskyon chat data, enter "DELETE" in the field below to confirm:
+        </p>
+        <q-input v-model="deleteConfirmation" label="Confirmation" />-->
+            </q-card-section>
+            <q-card-actions align="right">
+              <q-btn flat label="Cancel" v-close-popup />
+              <q-btn
+                flat
+                label="Delete"
+                color="negative"
+                icon="delete_forever"
+                @click="onDeleteTaskyonData"
+                v-close-popup
+              />
+            </q-card-actions>
+          </q-card>
+        </q-dialog>
       </q-item-section>
     </q-item>
     <q-separator spaced />
@@ -86,6 +122,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import FileDropzone from 'components/FileDropzone.vue';
 import { exportFile, extend } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
@@ -177,6 +214,8 @@ async function onUploadTaskyonData(newFiles: File[]) {
     console.error('Error processing file', error);
   }
 }
+
+const showDeleteDialog = ref(false);
 
 async function onDeleteTaskyonData() {
   const tm = await state.getTaskManager();
