@@ -36,6 +36,7 @@ import type MarkdownIt from 'markdown-it/lib';
 import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-rust';
 import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-typescript';
 import { useQuasar } from 'quasar';
 
 
