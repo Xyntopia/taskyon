@@ -57,7 +57,11 @@ export function defaultLLMSettings() {
     openAIAssistantId: '',
     useOpenAIAssistants: false,
     enableOpenAiTools: false,
-    selectedApi: 'openrouter.ai' as string | 'openrouter.ai' | 'openai',
+    selectedApi: 'openrouter.ai' as
+      | string
+      | 'openrouter.ai'
+      | 'openai'
+      | 'taskyon',
     llmApis: {
       taskyon: {
         name: 'taskyon',

@@ -63,8 +63,8 @@ const keyVisible = ref<Record<string, boolean>>({});
 
 const state = useTaskyonStore();
 const filteredKeys = computed(() => {
-  return Object.keys(state.keys).filter(
+  return Object.keys(state.keys); /*.filter(
     (name) => !['taskyon', 'jwt'].includes(name)
-  );
+  );*/
 });
 </script>

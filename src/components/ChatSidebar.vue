@@ -92,7 +92,7 @@
           >
             <q-btn dense class="fit" flat>
               <q-icon name="file_upload" />
-              <q-tooltip>Upload Conversation</q-tooltip>
+              <q-tooltip>Upload Chat</q-tooltip>
             </q-btn>
           </FileDropzone>
           <q-btn

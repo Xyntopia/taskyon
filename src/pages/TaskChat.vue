@@ -14,7 +14,9 @@
         style="background-color: inherit; color: inherit"
         flat
         square
-        v-if="(selectedThread.length > 0) && state.keys[state.chatState.selectedApi]"
+        v-if="
+          selectedThread.length > 0 && state.keys[state.chatState.selectedApi]
+        "
       >
         <div v-if="currentTask" class="q-gutter-xs q-px-xs task-container">
           <div v-for="task in selectedThread" :key="task.id" :class="task.role">
@@ -259,7 +261,7 @@ void axios.get('main_content/frontpage.md').then((jsonconfig) => {
 });
 
 async function updateTaskThread(taskId: string | undefined) {
-  console.log('update task thread...')
+  console.log('update task thread...');
   if (taskId) {
     const threadIDChain = await (
       await state.getTaskManager()

@@ -1,46 +1,62 @@
 <template>
   <div class="welcome-message column items-center q-pa-xl">
-    <div class="col-auto">
+    <div
+      class="text-h6 col-auto text-center"
+      v-if="state.keys[state.chatState.selectedApi]"
+    >
       <q-icon
         class="q-pa-xl"
         size="10rem"
         name="svguse:taskyon_mono_opt.svg#taskyon"
       ></q-icon>
-      <!--<q-img
-	            width="150px"
-	            alt="Quasar logo"
-	            src="~assets/taskyon_mono.svg"
-	          ></q-img>-->
+      <p>Welcome! Just type a message below to start using Taskyon!</p>
     </div>
-    <div
-      class="text-h6 col-auto text-center"
-      v-if="state.keys[state.chatState.selectedApi]"
-    >
-      Welcome! Just type a message below to start using Taskyon!
-    </div>
-    <div v-else class="text-h6 col-auto text-center">
+    <div v-else class="col-auto text-body1">
       <!--API Key hint-->
-      <q-card-section class="q-gutter-md column">
+      <q-card-section class="column">
         <p>
           No API key found for currently selected API:
-          <span class="text-bold">{{ state.chatState.selectedApi }}</span>
-          . Either choose a different API by pressing one of the following
-          buttons:
+          <span class="text-weight-bolder q-pa-md">{{
+            state.chatState.selectedApi
+          }}</span
+          >.
         </p>
-        <div class="self-center q-gutter-md">
+        <div class="row items-center">
+          <p class="col-auto col-sm">
+            Choose one of the following APIs that are already ready for use:
+          </p>
+          <div class="col row q-gutter-sm q-px-md">
+            <div
+              v-for="keyname of Object.keys(state.keys).filter(
+                (k) => state.keys[k]
+              )"
+              :key="keyname"
+              class="col-auto"
+            >
+              <q-btn
+                :label="keyname"
+                color="secondary"
+                @click="state.chatState.selectedApi = keyname"
+              />
+            </div>
+          </div>
+        </div>
+        <q-item-label header>Custom LLM Servers</q-item-label>
+        <div class="row">
           <q-btn
-            v-for="keyname of Object.keys(state.keys).filter(
-              (k) => state.keys[k]
-            )"
-            :key="keyname"
-            :label="keyname"
-            color="secondary"
-            @click="state.chatState.selectedApi = keyname"
+            class="col"
+            outline
+            noCaps
+            to="/settings/llmproviders"
+            label="Manually provide settings for a custom LLM server"
+            icon="settings"
+          ></q-btn>
+          <InfoDialog
+            info-text="Examples are:  setup a local, privacy-presevering server, A custom LLM AI server in your company etc..."
           />
         </div>
-        <p>Or Generate a new API key in various ways:</p>
+        <q-item-label header>More Options</q-item-label>
         <OpenRouterPKCE />
-        <q-item-label header>More Options (not recommended)</q-item-label>
         <div class="row">
           <q-btn
             class="col"
@@ -67,17 +83,6 @@
             info-text="Get an API key from https://www.openrouter.ai and use it for inference tasks"
           />
         </div>
-      </q-card-section>
-      <q-card-section>
-        If getting keys manually or for your own server, add them to settings
-        here: The server must be compatible with OpenAI API.
-        <q-btn
-          class="q-mx-sm"
-          dense
-          to="/settings/llmproviders"
-          label="settings"
-          icon="settings"
-        ></q-btn>
       </q-card-section>
     </div>
   </div>
