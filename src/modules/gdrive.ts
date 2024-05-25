@@ -117,11 +117,13 @@ export async function onUpdateAppConfiguration() {
       >;
       deepMergeReactive(
         state.appConfiguration,
-        (loadedConfig.appConfiguration || {}) as Record<string, unknown>
+        (loadedConfig.appConfiguration || {}) as Record<string, unknown>,
+        'overwrite'
       );
       deepMergeReactive(
         state.chatState,
-        (loadedConfig.chatState || {}) as Record<string, unknown>
+        (loadedConfig.chatState || {}) as Record<string, unknown>,
+        'overwrite'
       );
     } else {
       console.error('File not found in GDrive.');

@@ -147,10 +147,10 @@ async function loadSettingsFromFile(
     const loadedData = parseFunction(fileContent) as Record<string, unknown>;
 
     if (loadedData?.chatState) {
-      deepMergeReactive(state.chatState, loadedData.chatState);
+      deepMergeReactive(state.chatState, loadedData.chatState, 'overwrite');
     }
     if (loadedData?.appConfiguration) {
-      deepMergeReactive(state.appConfiguration, loadedData.appConfiguration);
+      deepMergeReactive(state.appConfiguration, loadedData.appConfiguration, 'overwrite');
     }
   } catch (error) {
     console.error('Error processing file', error);

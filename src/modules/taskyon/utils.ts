@@ -250,10 +250,24 @@ export class Lock {
   }
 }
 
+/**
+ * Checks if the given item is an object (excluding null and arrays).
+ *
+ * @param item - The item to check.
+ * @returns True if the item is an object, false otherwise.
+ */
 function isObject(item: unknown): item is Record<string, unknown> {
   return item !== null && typeof item === 'object' && !Array.isArray(item);
 }
 
+/**
+ * Creates a new array that is a union of the elements in arr1 and arr2.
+ * Duplicates are removed so that the resulting array contains only unique elements.
+ *
+ * @param arr1 - The first array.
+ * @param arr2 - The second array.
+ * @returns A new array with unique elements from both input arrays.
+ */
 function unionArrays(arr1: unknown[], arr2: unknown[]) {
   const combined = arr1.concat(arr2);
   return combined.filter(
@@ -262,15 +276,15 @@ function unionArrays(arr1: unknown[], arr2: unknown[]) {
 }
 
 /**
- * Deeply merges two objects, obj1 and obj2.
+ * Deeply merges two objects.
  * For objects, it recursively merges their properties.
  * For arrays, it either overwrites (obj1's array is replaced by obj2's) or
  * performs a union (combines arrays without duplicates) based on the strategy specified.
  *
- * @param {Object} obj1 - The first object to merge.
- * @param {Object} obj2 - The second object to merge.
- * @param {String} arrayMergeStrategy - The strategy for array merging: 'overwrite' or 'union'.
- * @returns {Object} - The deeply merged object.
+ * @param obj1 - The first object to merge.
+ * @param obj2 - The second object to merge.
+ * @param arrayMergeStrategy - The strategy for merging arrays: 'overwrite' or 'union'. Defaults to 'overwrite'.
+ * @returns The deeply merged object.
  */
 export function deepMerge<A, B>(
   obj1: A,
@@ -304,32 +318,85 @@ export function deepMerge<A, B>(
   return output as A & B;
 }
 
-export function deepMergeReactive<A, B>(obj1: A, obj2: B): A & B {
+/**
+ * Deeply merges two objects reactively.
+ * Unlike `deepMerge`, this function modifies `obj1` directly, providing a reactive merge.
+ * Supports 'overwrite' and 'additive' strategies for non-object properties.
+ *
+ * @param obj1 - The first object to merge (will be modified).
+ * @param obj2 - The second object to merge.
+ * @param mergeStrategy - The strategy for merging: 'overwrite' or 'additive'.
+ * @returns The deeply merged object.
+ * @throws If either argument is not an object.
+ */
+export function deepMergeReactive<A, B>(
+  obj1: A,
+  obj2: B,
+  mergeStrategy: 'overwrite' | 'additive'
+): A & B {
   if (!isObject(obj1) || !isObject(obj2)) {
     throw new Error('Both arguments must be objects.');
   }
 
   const obj1AsRecord = obj1 as unknown as Record<string, unknown>;
 
-  Object.keys(obj2).forEach((key) => {
-    const obj2Value = obj2[key];
-    if (isObject(obj2Value)) {
-      if (!isObject(obj1AsRecord[key])) {
-        // If obj1[key] is not an object, initialize it as an empty object
-        obj1AsRecord[key] = {};
-      }
-      // Recursively merge objects
-      deepMergeReactive(
-        obj1AsRecord[key] as Record<string, unknown>,
-        obj2Value
+  for (const [key, obj2Value] of Object.entries(obj2)) {
+    const obj1Value = obj1AsRecord[key];
+    if (!(key in obj1AsRecord)) {
+      obj1AsRecord[key] = obj2Value;
+    } else if (isObject(obj2Value) && isObject(obj1Value)) {
+      deepMergeReactive(obj1Value, obj2Value, mergeStrategy);
+    } else if (Array.isArray(obj2Value) && Array.isArray(obj1Value)) {
+      obj1AsRecord[key] = mergeArraysReactive(
+        obj1Value,
+        obj2Value,
+        mergeStrategy
       );
-    } else {
-      // Assign non-object values directly
+    } else if (mergeStrategy === 'overwrite') {
+      // if the key exists, and one of the objects isn't an array or object
+      // In 'overwrite' mode, assign non-object values directly
+      // as we iterate through obj2, we know this value always exists...
       obj1AsRecord[key] = obj2Value;
     }
-  });
+  }
 
   return obj1AsRecord as A & B;
+}
+
+/**
+ * Merges two reactive arrays based on the specified strategy.
+ * Elements are merged element-wise with support for 'overwrite' and 'additive' strategies.
+ *
+ * @param arr1 - The first array.
+ * @param arr2 - The second array.
+ * @param mergeStrategy - The strategy for merging: 'overwrite' or 'additive'.
+ * @returns The merged array.
+ */
+function mergeArraysReactive(
+  arr1: unknown[],
+  arr2: unknown[],
+  mergeStrategy: 'overwrite' | 'additive'
+): unknown[] {
+  for (let i = 0; i < arr1.length || i < arr2.length; i++) {
+    const element1 = arr1[i];
+    const element2 = arr2[i];
+
+    if (isObject(element1) && isObject(element2)) {
+      arr1[i] = deepMergeReactive(element1, element2, mergeStrategy);
+    } else if (Array.isArray(element1) && Array.isArray(element2)) {
+      arr1[i] = mergeArraysReactive(
+        element1 as unknown[],
+        element2 as unknown[],
+        mergeStrategy
+      );
+    } else if (element1 === undefined && element2 !== undefined) {
+      arr1.push(element2);
+    } else if (element2 !== undefined && mergeStrategy === 'overwrite') {
+      arr1[i] = element2;
+    }
+  }
+
+  return arr1;
 }
 
 export function deepCopy<T>(item: T): T {
@@ -428,7 +495,7 @@ export function bigIntToString(obj: unknown): unknown {
   }
 
   if (typeof obj === 'object') {
-    const result: { [key: string]: unknown; } = {};
+    const result: { [key: string]: unknown } = {};
     for (const key in obj) {
       if (Object.prototype.hasOwnProperty.call(obj, key)) {
         result[key] = bigIntToString((obj as Record<string, unknown>)[key]);
