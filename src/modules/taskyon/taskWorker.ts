@@ -72,15 +72,11 @@ function extractOpenAIFunctions(
 export async function processChatTask(
   task: LLMTask,
   chatState: ChatStateType,
-  apiKeys: Record<string, string>,
+  apiKey: string,
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController
 ) {
   // TODO: refactor this function!
-  let apiKey = apiKeys[chatState.selectedApi];
-  if (!apiKey || apiKey.trim() === '') {
-    apiKey = apiKeys['taskyon'] || 'free';
-  }
   // TODO: can we interrupt non-streaming tasks? possibly using an AbortController.
   //TODO: merge this function with the assistants function
   if (chatState.useOpenAIAssistants && chatState.selectedApi == 'openai') {
@@ -199,36 +195,37 @@ export async function processChatTask(
             });
           });
         } else if (chatCompletion && chatState.selectedApi === 'taskyon') {
-          // TODO: cancel this section, if we're not logged in to taskyon...
-          void sleep(5000).then(() => {
-            const headers = generateHeaders(
-              apiKey,
-              chatState.siteUrl,
-              api.name
-            );
-            const baseUrl = new URL(api.baseURL).origin;
-            console.log('get generation info from ', baseUrl);
-            const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${chatCompletion.id}`;
-            void fetch(url, { headers })
-              .then((response) => {
-                if (!response.ok) {
-                  throw new Error(
-                    `Could not find generation information for task ${task.id}`
+          if (apiKey) {
+            void sleep(5000).then(() => {
+              const headers = generateHeaders(
+                apiKey,
+                chatState.siteUrl,
+                api.name
+              );
+              const baseUrl = new URL(api.baseURL).origin;
+              console.log('get generation info from ', baseUrl);
+              const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${chatCompletion.id}`;
+              void fetch(url, { headers })
+                .then((response) => {
+                  if (!response.ok) {
+                    throw new Error(
+                      `Could not find generation information for task ${task.id}`
+                    );
+                  }
+                  return response.json() as Promise<
+                    { reference_data: OpenRouterGenerationInfo }[]
+                  >;
+                })
+                .then((data) => {
+                  console.log('taskyon generation info:', data);
+                  enrichWithDelayedUsageInfos(
+                    task,
+                    taskManager,
+                    data[0].reference_data
                   );
-                }
-                return response.json() as Promise<
-                  { reference_data: OpenRouterGenerationInfo }[]
-                >;
-              })
-              .then((data) => {
-                console.log('taskyon generation info:', data);
-                enrichWithDelayedUsageInfos(
-                  task,
-                  taskManager,
-                  data[0].reference_data
-                );
-              });
-          });
+                });
+            });
+          }
         } else if (chatCompletion?.usage) {
           // openai sends back the exact number of prompt tokens :)
           task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
@@ -546,10 +543,11 @@ async function processTask(
 
     if ('message' in task.content || 'functionResult' in task.content) {
       // TODO: get rid of "taskManager" in processChatTask
+      const apiKey = apiKeys[chatState.selectedApi];
       task = await processChatTask(
         task,
         chatState,
-        apiKeys,
+        apiKey,
         taskManager,
         taskWorkerController
       );
