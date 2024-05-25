@@ -443,12 +443,12 @@ export function mapFunctionNames(
   return toolNames?.map((t) => tools[t]);
 }
 
-async function getOpenRouterGenerationInfo(
+export async function getOpenRouterGenerationInfo(
   generationId: string,
   headers: Record<string, string>
 ) {
   let retryCount = 0;
-  let delay = 5000; // initial delay
+  let delay = 5000; // first delay
 
   while (retryCount < 3) {
     const response = await fetch(
@@ -459,8 +459,9 @@ async function getOpenRouterGenerationInfo(
     );
 
     if (response.ok) {
-      const generationInfo =
-        (await response.json()) as OpenRouterGenerationInfo;
+      const generationInfo = (await response.json()) as {
+        data: OpenRouterGenerationInfo;
+      };
       console.log('received generation info for task');
       return generationInfo.data;
     } else if (response.status === 404) {
@@ -479,19 +480,11 @@ async function getOpenRouterGenerationInfo(
   );
 }
 
-export async function enrichWithDelayedUsageInfos(
-  generationId: string,
-  headers: Record<string, string>,
+export function enrichWithDelayedUsageInfos(
   task: LLMTask,
-  taskManager: TyTaskManager
+  taskManager: TyTaskManager,
+  generationInfo: OpenRouterGenerationInfo
 ) {
-  // TODO:  if we get a 404.. try again   sometimes the dat just isn't there yet ;)
-  await sleep(5000);
-  const generationInfo = await getOpenRouterGenerationInfo(
-    generationId,
-    headers
-  );
-
   if (generationInfo) {
     if (
       generationInfo.native_tokens_completion &&

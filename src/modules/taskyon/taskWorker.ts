@@ -6,6 +6,7 @@ import {
   estimateChatTokens,
   generateHeaders,
   getApiConfigCopy,
+  getOpenRouterGenerationInfo,
 } from './chat';
 import { renderTasks4Chat } from './promptCreation';
 import {
@@ -15,6 +16,7 @@ import {
   LLMTask,
   TaskResult,
   StructuredResponse,
+  OpenRouterGenerationInfo,
 } from './types';
 import { addTask2Tree, processTasksQueue } from './taskManager';
 import type { OpenAI } from 'openai';
@@ -22,8 +24,7 @@ import { TyTaskManager } from './taskManager';
 import { Tool, handleFunctionExecution } from './tools';
 import { ToolBase } from './types';
 import { dump, load } from 'js-yaml';
-import { deepMerge } from './utils';
-import { string } from 'zod';
+import { deepMerge, sleep } from './utils';
 
 function isOpenAIFunctionCall(
   choice: OpenAI.ChatCompletion['choices'][0]
@@ -188,13 +189,46 @@ export async function processChatTask(
 
         // get llm inference stats
         // TODO: we should replace this with an inference task which has the LLM as a parent...
-        if (chatCompletion && chatState.selectedApi == 'openrouter.ai') {
-          void enrichWithDelayedUsageInfos(
-            chatCompletion.id,
-            generateHeaders(apiKey, chatState.siteUrl, chatState.selectedApi),
-            task,
-            taskManager
-          );
+        if (chatCompletion && chatState.selectedApi === 'openrouter.ai') {
+          void sleep(5000).then(() => {
+            void getOpenRouterGenerationInfo(
+              chatCompletion.id,
+              generateHeaders(apiKey, chatState.siteUrl, chatState.selectedApi)
+            ).then((generationInfo) => {
+              enrichWithDelayedUsageInfos(task, taskManager, generationInfo);
+            });
+          });
+        } else if (chatCompletion && chatState.selectedApi === 'taskyon') {
+          // TODO: cancel this section, if we're not logged in to taskyon...
+          void sleep(5000).then(() => {
+            const headers = generateHeaders(
+              apiKey,
+              chatState.siteUrl,
+              api.name
+            );
+            const baseUrl = new URL(api.baseURL).origin;
+            console.log('get generation info from ', baseUrl);
+            const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${chatCompletion.id}`;
+            void fetch(url, { headers })
+              .then((response) => {
+                if (!response.ok) {
+                  throw new Error(
+                    `Could not find generation information for task ${task.id}`
+                  );
+                }
+                return response.json() as Promise<
+                  { reference_data: OpenRouterGenerationInfo }[]
+                >;
+              })
+              .then((data) => {
+                console.log('taskyon generation info:', data);
+                enrichWithDelayedUsageInfos(
+                  task,
+                  taskManager,
+                  data[0].reference_data
+                );
+              });
+          });
         } else if (chatCompletion?.usage) {
           // openai sends back the exact number of prompt tokens :)
           task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
