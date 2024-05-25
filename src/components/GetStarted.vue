@@ -1,5 +1,5 @@
 <template>
-  <div class="welcome-message column items-center q-pa-xl">
+  <div class="welcome-message column items-center">
     <div
       class="text-h6 col-auto text-center"
       v-if="state.keys[state.chatState.selectedApi]"
@@ -14,14 +14,23 @@
     <div v-else class="col-auto text-body1">
       <!--API Key hint-->
       <q-card-section class="column">
-        <p>
-          No API key found for currently selected API:
-          <span class="text-weight-bolder q-pa-md">{{
-            state.chatState.selectedApi
-          }}</span
-          >.
-        </p>
-        <div class="row items-center">
+        <div class="row items-center justify-center q-pb-lg">
+          <q-icon
+            class="q-pa-md col-auto"
+            size="lg"
+            name="svguse:taskyon_mono_opt.svg#taskyon"
+          ></q-icon>
+          <div class="col-auto column items-center">
+            <div>No API key found for currently selected API:</div>
+            <span class="text-weight-bolder q-pt-sm">{{
+              state.chatState.selectedApi
+            }}</span>
+          </div>
+        </div>
+        <div
+          v-if="Object.keys(state.keys).filter((k) => state.keys[k]).length"
+          class="row items-center q-py-sm"
+        >
           <p class="col-auto col-sm">
             Choose one of the following APIs that are already ready for use:
           </p>
@@ -41,7 +50,25 @@
             </div>
           </div>
         </div>
-        <q-item-label header>Custom LLM Servers</q-item-label>
+        <q-item-label header>Taskyon</q-item-label>
+        <div class="row q-gutter-sm justify-center items-center">
+          <q-btn
+            class="col-5"
+            outline
+            noCaps
+            label="Use free Taskyon"
+            icon="svguse:taskyon_mono_opt.svg#taskyon"
+            @click="
+              state.chatState.selectedApi = 'taskyon';
+              state.keys['taskyon'] = 'anonymous';
+            "
+          ></q-btn>
+          <InfoDialog
+            class="col-auto"
+            info-text="Xyntopia Taskyon provides access to free LLM services for testing purposes."
+          />
+        </div>
+        <q-item-label header>Or: Custom LLM Servers</q-item-label>
         <div class="row">
           <q-btn
             class="col"
