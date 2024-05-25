@@ -93,7 +93,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
   initialState.keys['taskyon'] = 'anonymous';
 
   // overwrite with saved configuration:
-  console.log(`load ${storeName} state!`);
+  console.log(`load saved ${storeName} state!`);
   const storedStateString = LocalStorage.getItem(storeName) as string;
   const storedStateObj = JSON.parse(storedStateString) as Partial<
     typeof initialState
@@ -108,31 +108,29 @@ export const useTaskyonStore = defineStore(storeName, () => {
   // Create refs for each property and adjust the type assertion
   // Because of this, pini doesn't recognize the values as states.
   const stateRefs = reactive(storedInitialState);
-  /*const stateRefs = Object.fromEntries(
-    Object.entries(storedInitialState).map(([key, value]) => {
-      return [key, typeof value === 'object' ? reactive(value) : ref(value)];
-    })
-  ) as { [K in keyof typeof initialState]: Ref<(typeof initialState)[K]> };*/
 
-  if (stateRefs.initialLoad) {
-    // this file can be replaced in kubernetes  using a configmap!
-    // that way we can configure our webapp even if its already compiled...
-    void axios
-      .get(stateRefs.appConfiguration.appConfigurationUrl)
-      .then((jsonconfig) => {
-        // we only want to load the initial configuration the first time we are loading the page...
-        console.log('load App Config', jsonconfig.data);
-        const config = jsonconfig.data as {
-          chatState: typeof initialState.chatState;
-          appConfiguration: typeof initialState.appConfiguration;
-        };
-        deepMergeReactive(stateRefs.appConfiguration, config.appConfiguration);
-        deepMergeReactive(stateRefs.chatState, config.chatState);
-        stateRefs.initialLoad = false;
-      });
-  } else {
-    console.log('loading previous configuration');
-  }
+  // this file could potentially be replaced in kubernetes or docker using a configmap!
+  // that way we can configure our webapp even if its already compiled...
+  // this is done asynchrounously, because we want to be able to dynamically
+  // change our config without having to recompile taskyon.
+  void axios
+    .get(stateRefs.appConfiguration.appConfigurationUrl)
+    .then((jsonconfig) => {
+      // we only want to load the initial configuration the first time we are loading the page...
+      console.log('merge dynamic app config', jsonconfig.data);
+      const config = jsonconfig.data as {
+        chatState: typeof initialState.chatState;
+        appConfiguration: typeof initialState.appConfiguration;
+      };
+      const mergeStrategy = stateRefs.initialLoad ? 'overwrite' : 'additive';
+      deepMergeReactive(
+        stateRefs.appConfiguration,
+        config.appConfiguration,
+        mergeStrategy
+      );
+      deepMergeReactive(stateRefs.chatState, config.chatState, mergeStrategy);
+      stateRefs.initialLoad = false;
+    });
 
   watch(
     () => stateRefs.chatState.selectedApi,
