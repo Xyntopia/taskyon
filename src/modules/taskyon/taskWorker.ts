@@ -196,7 +196,9 @@ export async function processChatTask(
           });
         } else if (chatCompletion && chatState.selectedApi === 'taskyon') {
           if (apiKey) {
-            void sleep(5000).then(() => {
+            // our backend tries to get the finished costs
+            // after ~4000ms, so we wait for 6000 here...
+            void sleep(6000).then(() => {
               const headers = generateHeaders(
                 apiKey,
                 chatState.siteUrl,
