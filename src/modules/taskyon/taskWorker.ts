@@ -199,11 +199,10 @@ export async function processChatTask(
             // our backend tries to get the finished costs
             // after ~4000ms, so we wait for 6000 here...
             void sleep(6000).then(() => {
-              const headers = generateHeaders(
-                apiKey,
-                chatState.siteUrl,
-                api.name
-              );
+              const headers = {
+                ...chatState.llmApis['taskyon'].defaultHeaders,
+                ...generateHeaders(apiKey, chatState.siteUrl, api.name),
+              };
               const baseUrl = new URL(api.baseURL).origin;
               console.log('get generation info from ', baseUrl);
               const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${chatCompletion.id}`;
