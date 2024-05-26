@@ -273,10 +273,16 @@ module.exports = configure(function (ctx) {
       https: false,
       port: 8080,
       open: false, // opens browser window automatically
-      before(app, server) {
-        server.middleware.waitUntilValid(() => {
+      setupMiddlewares(middlewares, devServer) {
+        if (!devServer) {
+          throw new Error('webpack-dev-server is not defined');
+        }
+
+        devServer.middleware.waitUntilValid(() => {
           copyTaskyonSettings();
         });
+
+        return middlewares;
       },
     },
 

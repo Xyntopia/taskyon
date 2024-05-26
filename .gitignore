@@ -60,3 +60,6 @@ amplifytools.xcconfig
 
 .direnv/
 .envrc
+
+# this file automatically gets copied from quasar.conf.js
+public/taskyon_settings.json
