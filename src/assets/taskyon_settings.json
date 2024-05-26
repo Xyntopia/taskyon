@@ -1,4 +1,5 @@
 {
+  "version": 3,
   "appConfiguration": {
     "supabase_url": "https://sicynrpldixtrddgqnpm.supabase.co",
     "supabase_anon_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpY3lucnBsZGl4dHJkZGdxbnBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwNzgxMTYsImV4cCI6MjAxNTY1NDExNn0.EwuXaxbRPvSZNlce3E_FjylLFrxSMV3tbz8JHR8GuJI",
@@ -10,23 +11,26 @@
     "useEnterToSend": true,
     "guiMode": "auto"
   },
-  "chatState": {
+  "llmSettings": {
     "openAIAssistantId": "",
     "useOpenAIAssistants": false,
     "enableOpenAiTools": false,
     "selectedApi": "taskyon",
-    "llmApis": [
-      {
+    "llmApis": {
+      "taskyon": {
         "name": "taskyon",
         "baseURL": "https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/api",
         "defaultModel": "mistralai/mistral-7b-instruct:free",
         "streamSupport": true,
+        "defaultHeaders": {
+          "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpY3lucnBsZGl4dHJkZGdxbnBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwNzgxMTYsImV4cCI6MjAxNTY1NDExNn0.EwuXaxbRPvSZNlce3E_FjylLFrxSMV3tbz8JHR8GuJI"
+        },
         "routes": {
           "chatCompletion": "/chat/completions",
           "models": "/models"
         }
       },
-      {
+      "openai": {
         "name": "openai",
         "baseURL": "https://api.openai.com/v1/",
         "defaultModel": "gpt-3.5-turbo",
@@ -36,7 +40,7 @@
           "models": "/models"
         }
       },
-      {
+      "openrouter.ai": {
         "name": "openrouter.ai",
         "baseURL": "https://openrouter.ai/api/v1",
         "defaultModel": "mistralai/mistral-7b-instruct:free",
@@ -46,7 +50,7 @@
           "models": "/models"
         }
       }
-    ],
+    },
     "siteUrl": "https://taskyon.space",
     "summaryModel": "Xenova/distilbart-cnn-6-6",
     "vectorizationModel": "Xenova/all-MiniLM-L6-v2",

@@ -14,6 +14,8 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 const { env } = require('process');
 const { configure } = require('quasar/wrappers');
+const path = require('path');
+const fs = require('fs');
 
 // check parent folder for configuration
 const buildConfig = require('dotenv').config({
@@ -25,7 +27,24 @@ DESCRIPTION = buildConfig.DESCRIPTION || '';
 
 console.log('compile app: ', APPNAME, DESCRIPTION);
 
+// Function to copy the taskyon_settings.json file
+function copyTaskyonSettings() {
+  const srcPath = path.resolve(__dirname, 'src/assets/taskyon_settings.json');
+  const destPath = path.resolve(__dirname, 'public/taskyon_settings.json');
+
+  if (fs.existsSync(srcPath)) {
+    fs.copyFileSync(srcPath, destPath);
+    console.log('Copied taskyon_settings.json to public folder');
+  } else {
+    console.error('taskyon_settings.json not found in src/assets');
+  }
+}
+
 module.exports = configure(function (ctx) {
+  if (ctx.prod) {
+    copyTaskyonSettings();
+  }
+
   return {
     // https://v2.quasar.dev/quasar-cli/supporting-ts
     supportTS: {
@@ -236,7 +255,7 @@ module.exports = configure(function (ctx) {
         // also needs:
         //    yarn add --dev node-polyfill-webpack-plugin browserify-zlib
         const nodePolyfillWebpackPlugin = require('node-polyfill-webpack-plugin');
-        
+
         // we need the bwloe so that uglify can remove the console. because we want
         //  check this:  https://stackoverflow.com/questions/76979427/quasar-app-does-not-remove-console-log-for-production-builds
         // and this:  https://github.com/quasarframework/quasar/issues/11186
@@ -254,6 +273,11 @@ module.exports = configure(function (ctx) {
       https: false,
       port: 8080,
       open: false, // opens browser window automatically
+      before(app, server) {
+        server.middleware.waitUntilValid(() => {
+          copyTaskyonSettings();
+        });
+      },
     },
 
     // https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-framework
