@@ -43,7 +43,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
   const initialState = {
     // chatState is also part of the configuration we can store "somewhere else"
     // TODO: rename chatState to llmSettings
-    version: 'v1',
+    version: 3,
     chatState: llmSettings,
     // appConfiguration is also part of the configuration we can store "somewhere else"
     appConfiguration: {
@@ -99,16 +99,28 @@ export const useTaskyonStore = defineStore(storeName, () => {
   const storedStateObj = JSON.parse(storedStateString) as Partial<
     typeof initialState
   >;
-  const storedInitialState = deepMerge(
-    initialState,
-    storedStateObj,
-    'overwrite'
-  );
-
-  // manually make our state deep-reactive, becuase "reactive" doesn't make scalar values reactive :)
-  // Create refs for each property and adjust the type assertion
-  // Because of this, pini doesn't recognize the values as states.
-  const stateRefs = reactive(storedInitialState);
+  let stateRefs: typeof initialState;
+  if (
+    storedStateObj.version &&
+    storedStateObj.version === initialState.version
+  ) {
+    console.log(`load saved ${storeName} state!`);
+    const storedInitialState = deepMerge(
+      initialState,
+      storedStateObj,
+      'overwrite'
+    );
+    stateRefs = reactive(storedInitialState);
+  } else {
+    console.warn(
+      `Stored settings version (${
+        storedStateObj.version || 'undefined'
+      }) is not compatible with current version (${
+        initialState.version
+      }). Using default settings.`
+    );
+    stateRefs = reactive(initialState);
+  }
 
   // this file could potentially be replaced in kubernetes or docker using a configmap!
   // that way we can configure our webapp even if its already compiled...
@@ -117,20 +129,34 @@ export const useTaskyonStore = defineStore(storeName, () => {
   void axios
     .get(stateRefs.appConfiguration.appConfigurationUrl)
     .then((jsonconfig) => {
-      // we only want to load the initial configuration the first time we are loading the page...
-      console.log('merge dynamic app config', jsonconfig.data);
       const config = jsonconfig.data as {
+        version?: number;
         chatState: typeof initialState.chatState;
         appConfiguration: typeof initialState.appConfiguration;
       };
-      const mergeStrategy = stateRefs.initialLoad ? 'overwrite' : 'additive';
-      deepMergeReactive(
-        stateRefs.appConfiguration,
-        config.appConfiguration,
-        mergeStrategy
-      );
-      deepMergeReactive(stateRefs.chatState, config.chatState, mergeStrategy);
+      const isVersionCompatible =
+        config.version && config.version === initialState.version;
+
+      if (isVersionCompatible) {
+        // we only want to load the initial configuration the first time we are loading the page...
+        console.log('merge dynamic app config', jsonconfig.data);
+
+        const mergeStrategy = stateRefs.initialLoad ? 'overwrite' : 'additive';
+        deepMergeReactive(
+          stateRefs.appConfiguration,
+          config.appConfiguration,
+          mergeStrategy
+        );
+        deepMergeReactive(stateRefs.chatState, config.chatState, mergeStrategy);
+      } else {
+        console.warn(
+          `Config version (${config.version || 'undefined'}) is not compatible with current version (${initialState.version}). Skipping dynamic config merge.`
+        );
+      }
       stateRefs.initialLoad = false;
+    })
+    .catch((error) => {
+      console.error('Failed to load dynamic app config:', error);
     });
 
   watch(
