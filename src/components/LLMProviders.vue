@@ -7,12 +7,7 @@
       emit-value
       dense
       label="connect to LLM Backend"
-      :options="
-        state.chatState.llmApis.map((api) => ({
-          value: api.name,
-          label: api.name,
-        }))
-      "
+      :options="Object.keys(state.chatState.llmApis)"
     >
       <template v-slot:before>
         <q-icon name="electrical_services"></q-icon>

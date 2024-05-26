@@ -40,6 +40,7 @@ export interface apiConfig {
   baseURL: string;
   defaultModel: string;
   streamSupport: boolean;
+  defaultHeaders?: Record<string, string>;
   routes: {
     chatCompletion: string;
     models: string;
@@ -57,8 +58,8 @@ export function defaultLLMSettings() {
     useOpenAIAssistants: false,
     enableOpenAiTools: false,
     selectedApi: 'openrouter.ai' as string | 'openrouter.ai' | 'openai',
-    llmApis: [
-      {
+    llmApis: {
+      taskyon: {
         name: 'taskyon',
         baseURL: 'https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/api',
         defaultModel: 'mistralai/mistral-7b-instruct',
@@ -68,7 +69,7 @@ export function defaultLLMSettings() {
           models: '/models',
         },
       },
-      {
+      openai: {
         name: 'openai',
         baseURL: 'https://api.openai.com/v1/',
         defaultModel: 'gpt-3.5-turbo',
@@ -78,7 +79,7 @@ export function defaultLLMSettings() {
           models: '/models',
         },
       },
-      {
+      'openrouter.ai': {
         name: 'openrouter.ai',
         baseURL: 'https://openrouter.ai/api/v1',
         defaultModel: 'mistralai/mistral-7b-instruct',
@@ -88,7 +89,7 @@ export function defaultLLMSettings() {
           models: '/models',
         },
       },
-    ] as apiConfig[],
+    } as Record<string, apiConfig>,
     siteUrl: 'https://taskyon.space',
     summaryModel: 'Xenova/distilbart-cnn-6-6',
     vectorizationModel: 'Xenova/all-MiniLM-L6-v2',
@@ -136,18 +137,13 @@ FORMAT THE RESULT WITH THE FOLLOWING SCHEMA VERY STRICT ({format}):
   };
 }
 
-export function getApiByName(chatState: ChatStateType, searchName: string) {
-  const api = chatState.llmApis.find((api) => searchName === api.name);
-  return api;
-}
-
 export function getApiConfig(chatState: ChatStateType) {
-  return getApiByName(chatState, chatState.selectedApi);
+  return chatState.llmApis[chatState.selectedApi];
 }
 
 export function getApiConfigCopy(chatState: ChatStateType, apiName?: string) {
   const searchName = apiName || chatState.selectedApi;
-  const api = getApiByName(chatState, searchName);
+  const api = chatState.llmApis[searchName];
   return deepCopy(api);
 }
 
@@ -263,12 +259,12 @@ export function estimateChatTokens(
 }
 
 export function generateHeaders(
-  apiKey: string,
+  apiSecret: string,
   siteUrl: string,
   selectedApi: string
 ) {
   let headers: Record<string, string> = {
-    Authorization: `Bearer ${apiKey}`,
+    Authorization: `Bearer ${apiSecret}`,
     'Content-Type': 'application/json',
   };
 

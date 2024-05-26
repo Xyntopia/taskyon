@@ -43,6 +43,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
   const initialState = {
     // chatState is also part of the configuration we can store "somewhere else"
     // TODO: rename chatState to llmSettings
+    version: 'v1',
     chatState: llmSettings,
     // appConfiguration is also part of the configuration we can store "somewhere else"
     appConfiguration: {
@@ -58,8 +59,8 @@ export const useTaskyonStore = defineStore(storeName, () => {
       guiMode: 'auto' as 'auto' | 'iframe' | 'default',
     },
     // initialize keys with all available apis...
-    keys: llmSettings.llmApis.reduce((keys, api) => {
-      keys[api.name] = '';
+    keys: Object.keys(llmSettings.llmApis).reduce((keys, apiName) => {
+      keys[apiName] = '';
       return keys;
     }, {} as Record<string, string>),
     // app State which should be part of the configuration

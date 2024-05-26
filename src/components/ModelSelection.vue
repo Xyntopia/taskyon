@@ -99,16 +99,11 @@
       dense
       outlined
       label="select Api"
-      :options="
-        state.chatState.llmApis.map((api) => ({
-          value: api.name,
-          label: api.name,
-        }))
-      "
+      :options="Object.keys(state.chatState.llmApis)"
       ><q-tooltip>Choose LLM Api</q-tooltip>
     </q-select>
     <InfoDialog
-      v-if="!enableOpenAIAssistants && state.chatState.selectedApi!='taskyon'"
+      v-if="!enableOpenAIAssistants && state.chatState.selectedApi != 'taskyon'"
       class="col-auto"
       info-text="For a list of supported models go here:
 
@@ -129,7 +124,6 @@ import {
   Model,
   getAssistants,
   getApiConfig,
-  getApiByName,
 } from 'src/modules/taskyon/chat';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import openrouterModules from 'assets/openrouter_models.json';
@@ -171,7 +165,7 @@ watch(
   () => {
     console.log('downloading models...');
     const api = getApiConfig(state.chatState);
-    const taskyonApi = getApiByName(state.chatState, 'taskyon');
+    const taskyonApi = state.chatState.llmApis['taskyon'];
     if (api && taskyonApi) {
       llmModels.value =
         api.name === 'openai' ? openaiModels.data : openrouterModules.data;
@@ -253,7 +247,7 @@ function onModelSelect(value: string) {
 }
 
 function onApiSelect(value: string) {
-  const newBotName = getApiByName(state.chatState, value)?.defaultModel;
+  const newBotName = state.chatState.llmApis[value]?.defaultModel;
   emit('updateBotName', {
     newName: newBotName,
     newService: value,
