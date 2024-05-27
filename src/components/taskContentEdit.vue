@@ -18,7 +18,11 @@
       </q-btn>
     </template>
     <template v-slot:before>
-      <FileDropzone class="fit" @update:model-value="attachFileToChat" accept="*">
+      <FileDropzone
+        class="fit"
+        @update:model-value="attachFileToChat"
+        accept="*"
+      >
         <q-btn dense class="fit" flat>
           <q-icon class="gt-xs" name="upload_file" />
           <q-icon name="attachment" />
@@ -31,12 +35,8 @@
 
 <script setup lang="ts">
 import FileDropzone from './FileDropzone.vue';
-import taskSettingsButton from './taskSettingsButton.vue';
 
 const content = defineModel<string | null | undefined>({
-  required: true,
-});
-const expandedTaskCreation = defineModel<boolean>('expandedTaskCreation', {
   required: true,
 });
 
