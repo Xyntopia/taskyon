@@ -189,12 +189,20 @@ export async function processChatTask(
           void sleep(5000).then(() => {
             void getOpenRouterGenerationInfo(
               chatCompletion.id,
-              generateHeaders(apiKey, llmSettings.siteUrl, llmSettings.selectedApi)
+              generateHeaders(
+                apiKey,
+                llmSettings.siteUrl,
+                llmSettings.selectedApi
+              )
             ).then((generationInfo) => {
               enrichWithDelayedUsageInfos(task, taskManager, generationInfo);
             });
           });
-        } else if (chatCompletion && llmSettings.selectedApi === 'taskyon') {
+        } else if (
+          chatCompletion &&
+          llmSettings.selectedApi === 'taskyon' &&
+          !chatCompletion.model.endsWith(':free')
+        ) {
           if (apiKey) {
             // our backend tries to get the finished costs
             // after ~4000ms, so we wait for 6000 here...
@@ -219,11 +227,13 @@ export async function processChatTask(
                 })
                 .then((data) => {
                   console.log('taskyon generation info:', data);
-                  enrichWithDelayedUsageInfos(
-                    task,
-                    taskManager,
-                    data[0].reference_data
-                  );
+                  if (data.length) {
+                    enrichWithDelayedUsageInfos(
+                      task,
+                      taskManager,
+                      data[0].reference_data
+                    );
+                  }
                 });
             });
           }

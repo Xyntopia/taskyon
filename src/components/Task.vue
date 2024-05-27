@@ -65,7 +65,7 @@
         <div
           v-if="state.appConfiguration.showCosts"
           style="font-size: xx-small"
-          class="col-auto column items-center print-hide"
+          class="col-auto column items-center print-hide task-costs"
         >
           <div v-if="task.debugging.taskCosts">
             {{ humanReadableTaskCosts }}
