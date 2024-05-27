@@ -5,6 +5,7 @@ import { LLMTask, OpenAIMessage, OpenRouterGenerationInfo } from './types';
 import type { TyTaskManager } from './taskManager';
 import OpenAI from 'openai';
 import { openFile } from './OPFS';
+import { z } from 'zod';
 import {
   lruCache,
   sleep,
@@ -14,6 +15,7 @@ import {
 } from './utils';
 import type { FileMappingDocType } from './rxdb';
 import { findAllFilesInTasks } from './taskUtils';
+import defaultSettings from 'src/assets/taskyon_settings.json';
 
 const getOpenai = lruCache<OpenAI>(5)(
   (apiKey: string, baseURL?: string, headers?: Record<string, string>) => {
@@ -35,110 +37,87 @@ const getOpenai = lruCache<OpenAI>(5)(
   }
 );
 
-export interface apiConfig {
-  name: string;
-  baseURL: string;
-  defaultModel: string;
-  streamSupport: boolean;
-  defaultHeaders?: Record<string, string>;
-  routes: {
-    chatCompletion: string;
-    models: string;
-  };
-}
+const apiConfig = z.object({
+  name: z.string(),
+  baseURL: z.string(),
+  defaultModel: z.string(),
+  streamSupport: z.boolean(),
+  defaultHeaders: z.record(z.string(), z.string()).optional(),
+  routes: z.object({
+    chatCompletion: z.string(),
+    models: z.string(),
+  }),
+});
+export type apiConfig = z.infer<typeof apiConfig>;
+
+const llmSettings = z.object({
+  // this refers to the task chain that we have currently selected. We select one task and then
+  // put the chain together by following the parentIds.
+  selectedTaskId: z.string().optional(),
+  openAIAssistantId: z.string().default(''),
+  useOpenAIAssistants: z.boolean().default(false),
+  enableOpenAiTools: z.boolean().default(false),
+  selectedApi: z.string().default('taskyon'),
+  llmApis: z.record(apiConfig).default({}),
+  siteUrl: z.string().default('https://taskyon.space'),
+  summaryModel: z.string().default('Xenova/distilbart-cnn-6-6'),
+  vectorizationModel: z.string().default('Xenova/all-MiniLM-L6-v2'),
+  maxAutonomousTasks: z.number().default(3),
+  taskChatTemplates: z.object({
+    constraints: z.string().default(''),
+    instruction: z.string().default(''),
+    objective: z.string().default(''),
+    tools: z.string().default(''),
+    previousTasks: z.string().default(''),
+    context: z.string().default(''),
+    toolResult: z.string().default(''),
+    task: z.string().default(''),
+  }),
+});
+export type llmSettings = z.infer<typeof llmSettings>;
+
+const appConfiguration = z.object({
+  supabase_url: z.string().default(''),
+  supabase_anon_key: z.string().default(''),
+  appConfigurationUrl: z
+    .string()
+    .default('/taskyon_settings.json')
+    .describe('URL from which to load the initial app configuration'),
+  gdriveConfigurationFile: z
+    .string()
+    .default('taskyon_settings.json')
+    .describe('gDrive fileid of the configuration'),
+  expertMode: z.boolean().default(false),
+  showCosts: z.boolean().default(false),
+  gdriveDir: z.string().default('taskyon'), // not sure, if we need this here?
+  useEnterToSend: z
+    .boolean()
+    .default(true)
+    .describe(
+      'Determines, if enter will automatically send a message or rather shift-enter'
+    ),
+  guiMode: z
+    .enum(['auto', 'iframe', 'default'])
+    .default('auto')
+    .describe('Sets whether we want to have a minimalist chat or the full app'),
+});
+export type appConfiguration = z.infer<typeof appConfiguration>;
+
+export const storedSettings = z.object({
+  version: z
+    .literal(3)
+    .describe(
+      'whenever the settings change, this number will get changed as well...'
+    ),
+  appConfiguration,
+  llmSettings,
+});
+export type storedSettings = z.infer<typeof storedSettings>;
 
 // this state stores all information which
 // should be stored e.g. in browser LocalStorage
 export function defaultLLMSettings() {
-  return {
-    // this refers to the task chain that we have selected. We select one task and then
-    // put the chain together by following the parentIds.
-    selectedTaskId: undefined as string | undefined,
-    openAIAssistantId: '',
-    useOpenAIAssistants: false,
-    enableOpenAiTools: false,
-    selectedApi: 'openrouter.ai' as
-      | string
-      | 'openrouter.ai'
-      | 'openai'
-      | 'taskyon',
-    llmApis: {
-      taskyon: {
-        name: 'taskyon',
-        baseURL: 'https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/api',
-        defaultModel: 'mistralai/mistral-7b-instruct',
-        streamSupport: true,
-        routes: {
-          chatCompletion: '/chat/completions',
-          models: '/models',
-        },
-      },
-      openai: {
-        name: 'openai',
-        baseURL: 'https://api.openai.com/v1/',
-        defaultModel: 'gpt-3.5-turbo',
-        streamSupport: true,
-        routes: {
-          chatCompletion: '/chat/completions',
-          models: '/models',
-        },
-      },
-      'openrouter.ai': {
-        name: 'openrouter.ai',
-        baseURL: 'https://openrouter.ai/api/v1',
-        defaultModel: 'mistralai/mistral-7b-instruct',
-        streamSupport: true,
-        routes: {
-          chatCompletion: '/chat/completions',
-          models: '/models',
-        },
-      },
-    } as Record<string, apiConfig>,
-    siteUrl: 'https://taskyon.space',
-    summaryModel: 'Xenova/distilbart-cnn-6-6',
-    vectorizationModel: 'Xenova/all-MiniLM-L6-v2',
-    maxAutonomousTasks: 3,
-    taskChatTemplates: {
-      constraints: `CONSTRAINTS:
-
-{constraints}`,
-      instruction: `You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented,
-and adheres to YAML standards. Do not include explanatory text in your YAML responses. 
-
-You can make use of the following Tools: {toolList}
-
-Remember, the focus is on the precision and correctness of the YAML output.`,
-      objective: 'OVERALL OBJECTIVE:\n\n{objective}\n',
-      tools: `AVAILABLE TOOLS TO CALL:
-
-{tools}`,
-      previousTasks: 'PREVIOUSLY COMPLETED TASKS:\n\n{previousTasks}\n',
-      context: 'TAKE INTO ACCOUNT THIS CONTEXT:\n\n{context}\n',
-      toolResult: `THE RESULT OF THE TOOL/FUNCTION WHICH WAS CALLED BY THE SYSTEM IS:
-
-{toolResult}
-
-Provide only the precise information requested without context, 
-Make sure we can parse the entire response as {format}.
-
-COMMENT THE RESULT VERY STRICTLY FOLLOWING SCHEMA ({format}):
-
-# keys with '?' are optional
-{resultSchema}`,
-      task: `
-COMPLETE THE FOLLOWING TASK:
-
-{taskContent}
-
-Provide only the precise information requested without context, 
-Make sure we can parse the response as {format}.
-
-FORMAT THE RESULT WITH THE FOLLOWING SCHEMA VERY STRICT ({format}):
-
-# keys with '?' are optional
-{schema}`,
-    },
-  };
+  return storedSettings.parse(defaultSettings).llmSettings;
 }
 
 export function getApiConfig(chatState: ChatStateType) {

@@ -96,11 +96,12 @@ export const useTaskyonStore = defineStore(storeName, () => {
   // overwrite with saved configuration:
   console.log(`load saved ${storeName} state!`);
   const storedStateString = LocalStorage.getItem(storeName) as string;
-  const storedStateObj = JSON.parse(storedStateString) as Partial<
-    typeof initialState
-  >;
+  const storedStateObj = JSON.parse(storedStateString) as
+    | Partial<typeof initialState>
+    | undefined;
   let stateRefs: typeof initialState;
   if (
+    storedStateObj &&
     storedStateObj.version &&
     storedStateObj.version === initialState.version
   ) {
@@ -114,7 +115,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
   } else {
     console.warn(
       `Stored settings version (${
-        storedStateObj.version || 'undefined'
+        storedStateObj?.version || 'undefined'
       }) is not compatible with current version (${
         initialState.version
       }). Using default settings.`
@@ -127,33 +128,50 @@ export const useTaskyonStore = defineStore(storeName, () => {
   // this is done asynchrounously, because we want to be able to dynamically
   // change our config without having to recompile taskyon.
   void axios
-    .get(stateRefs.appConfiguration.appConfigurationUrl)
+    .get<
+      | {
+          version?: number;
+          chatState: typeof initialState.chatState;
+          appConfiguration: typeof initialState.appConfiguration;
+        }
+      | undefined
+    >(stateRefs.appConfiguration.appConfigurationUrl)
     .then((jsonconfig) => {
-      const config = jsonconfig.data as {
-        version?: number;
-        chatState: typeof initialState.chatState;
-        appConfiguration: typeof initialState.appConfiguration;
-      };
-      const isVersionCompatible =
-        config.version && config.version === initialState.version;
+      const config = jsonconfig.data;
+      // TODO: we need to do much better parsing here...  possibly with zod to make sure
+      //       we get back correct configuration versions etc..
+      if (config) {
+        const isVersionCompatible =
+          config.version && config.version === initialState.version;
 
-      if (isVersionCompatible) {
-        // we only want to load the initial configuration the first time we are loading the page...
-        console.log('merge dynamic app config', jsonconfig.data);
+        if (isVersionCompatible) {
+          // we only want to load the initial configuration the first time we are loading the page...
+          console.log('merge dynamic app config', jsonconfig.data);
 
-        const mergeStrategy = stateRefs.initialLoad ? 'overwrite' : 'additive';
-        deepMergeReactive(
-          stateRefs.appConfiguration,
-          config.appConfiguration,
-          mergeStrategy
-        );
-        deepMergeReactive(stateRefs.chatState, config.chatState, mergeStrategy);
-      } else {
-        console.warn(
-          `Config version (${config.version || 'undefined'}) is not compatible with current version (${initialState.version}). Skipping dynamic config merge.`
-        );
+          const mergeStrategy = stateRefs.initialLoad
+            ? 'overwrite'
+            : 'additive';
+          deepMergeReactive(
+            stateRefs.appConfiguration,
+            config.appConfiguration,
+            mergeStrategy
+          );
+          deepMergeReactive(
+            stateRefs.chatState,
+            config.chatState,
+            mergeStrategy
+          );
+        } else {
+          console.warn(
+            `Config version (${
+              config.version || 'undefined'
+            }) is not compatible with current version (${
+              initialState.version
+            }). Skipping dynamic config merge.`
+          );
+        }
+        stateRefs.initialLoad = false;
       }
-      stateRefs.initialLoad = false;
     })
     .catch((error) => {
       console.error('Failed to load dynamic app config:', error);

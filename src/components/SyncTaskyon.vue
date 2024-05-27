@@ -142,6 +142,8 @@ async function loadSettingsFromFile(
 
   const file = newFiles[0]; // Assuming only one file is uploaded
 
+  // TODO: merge this function with the one we're using in tyState and make sure we do version
+  //       checks...
   try {
     const fileContent = await file.text();
     const loadedData = parseFunction(fileContent) as Record<string, unknown>;
@@ -150,7 +152,11 @@ async function loadSettingsFromFile(
       deepMergeReactive(state.chatState, loadedData.chatState, 'overwrite');
     }
     if (loadedData?.appConfiguration) {
-      deepMergeReactive(state.appConfiguration, loadedData.appConfiguration, 'overwrite');
+      deepMergeReactive(
+        state.appConfiguration,
+        loadedData.appConfiguration,
+        'overwrite'
+      );
     }
   } catch (error) {
     console.error('Error processing file', error);
@@ -171,9 +177,13 @@ function loadSettingsYaml(newFiles: File[]) {
 const downloadSettings = (format: string) => {
   console.log('download settings');
   //relevant settings:
-  const { chatState, appConfiguration } = state;
+  const { chatState, appConfiguration, version } = state;
   // Convert reactive chatStateProperties to a raw object
-  const deepCopiedSettings = extend(true, {}, { appConfiguration, chatState });
+  const deepCopiedSettings = extend(
+    true,
+    {},
+    { version, appConfiguration, chatState }
+  );
 
   let fileName, fileContent, mimeType;
 
