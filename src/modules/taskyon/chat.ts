@@ -15,7 +15,6 @@ import {
 } from './utils';
 import type { FileMappingDocType } from './rxdb';
 import { findAllFilesInTasks } from './taskUtils';
-import defaultSettings from 'src/assets/taskyon_settings.json';
 
 const getOpenai = lruCache<OpenAI>(5)(
   (apiKey: string, baseURL?: string, headers?: Record<string, string>) => {
@@ -114,12 +113,6 @@ export const storedSettings = z.object({
 });
 export type storedSettings = z.infer<typeof storedSettings>;
 
-// this state stores all information which
-// should be stored e.g. in browser LocalStorage
-export function defaultLLMSettings() {
-  return storedSettings.parse(defaultSettings).llmSettings;
-}
-
 export function getApiConfig(llmSettings: llmSettings) {
   return llmSettings.llmApis[llmSettings.selectedApi];
 }
@@ -132,8 +125,6 @@ export function getApiConfigCopy(
   const api = llmSettings.llmApis[searchName];
   return deepCopy(api);
 }
-
-export type LLMSettingsType = ReturnType<typeof defaultLLMSettings>;
 
 export const getAssistants = asyncTimeLruCache<
   Record<string, OpenAI.Beta.Assistant>

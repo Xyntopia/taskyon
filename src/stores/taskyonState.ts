@@ -1,5 +1,4 @@
 import { defineStore } from 'pinia';
-import { defaultLLMSettings } from 'src/modules/taskyon/chat';
 import { watch, computed, reactive, toRefs } from 'vue';
 import { LLMTask } from 'src/modules/taskyon/types';
 import type {
@@ -12,6 +11,8 @@ import { deepMerge, deepMergeReactive } from 'src/modules/taskyon/utils';
 import { useQuasar } from 'quasar';
 import { TaskWorkerController } from 'src/modules/taskyon/taskWorker';
 import { initTaskyon } from 'src/modules/taskyon/init';
+import defaultSettings from 'src/assets/taskyon_settings.json';
+import { storedSettings } from 'src/modules/taskyon/chat';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -37,32 +38,19 @@ export const useTaskyonStore = defineStore(storeName, () => {
     return errors;
   }
 
-  const llmSettings = defaultLLMSettings();
+  const defaultStorableSettings = storedSettings.parse(defaultSettings);
   // llmSettings & appConfiguration define the state of our app!
   // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
   const initialState = {
-    // llmSettings is also part of the configuration we can store "somewhere else"
-    // TODO: rename llmSettings to llmSettings
-    version: 4,
-    llmSettings,
-    // appConfiguration is also part of the configuration we can store "somewhere else"
-    appConfiguration: {
-      supabase_url: '',
-      supabase_anon_key: '',
-      appConfigurationUrl: '/taskyon_settings.json', // URL from which to load the initial app configuration
-      gdriveConfigurationFile: 'taskyon_settings.json', // gDrive fileid of the configuration
-      expertMode: false,
-      showCosts: false,
-      gdriveDir: 'taskyon',
-      useEnterToSend: true,
-      // sets whether we want to have a minimalist chat or the full app..
-      guiMode: 'auto' as 'auto' | 'iframe' | 'default',
-    },
+    ...defaultStorableSettings,
     // initialize keys with all available apis...
-    keys: Object.keys(llmSettings.llmApis).reduce((keys, apiName) => {
-      keys[apiName] = '';
-      return keys;
-    }, {} as Record<string, string>),
+    keys: Object.keys(defaultStorableSettings.llmSettings.llmApis).reduce(
+      (keys, apiName) => {
+        keys[apiName] = '';
+        return keys;
+      },
+      {} as Record<string, string>
+    ),
     // app State which should be part of the configuration
     // the things below should only represent transitional states
     // which have no relevance in the actual configuration of the app.
@@ -269,4 +257,5 @@ export const useTaskyonStore = defineStore(storeName, () => {
     logError,
     getErrors,
   };
-});
+}); // this state stores all information which
+// should be stored e.g. in browser LocalStorage
