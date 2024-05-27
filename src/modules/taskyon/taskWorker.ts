@@ -1,7 +1,7 @@
 import {
   callLLM,
   getOpenAIAssistantResponse,
-  ChatStateType,
+  LLMSettingsType,
   enrichWithDelayedUsageInfos,
   estimateChatTokens,
   generateHeaders,
@@ -71,7 +71,7 @@ function extractOpenAIFunctions(
 // this function processes all tasks which go to any sort of an LLM
 export async function processChatTask(
   task: LLMTask,
-  chatState: ChatStateType,
+  llmSettings: LLMSettingsType,
   apiKey: string,
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController
@@ -79,11 +79,11 @@ export async function processChatTask(
   // TODO: refactor this function!
   // TODO: can we interrupt non-streaming tasks? possibly using an AbortController.
   //TODO: merge this function with the assistants function
-  if (chatState.useOpenAIAssistants && chatState.selectedApi == 'openai') {
+  if (llmSettings.useOpenAIAssistants && llmSettings.selectedApi == 'openai') {
     const messages = await getOpenAIAssistantResponse(
       task,
       apiKey,
-      chatState.openAIAssistantId,
+      llmSettings.openAIAssistantId,
       taskManager
     );
     if (messages) {
@@ -93,9 +93,9 @@ export async function processChatTask(
       };
     }
   } else {
-    const api = getApiConfigCopy(chatState, task.configuration?.chatApi);
+    const api = getApiConfigCopy(llmSettings, task.configuration?.chatApi);
     if (!api) {
-      throw new Error(`api doesn\'t exist! ${chatState.selectedApi}`);
+      throw new Error(`api doesn\'t exist! ${llmSettings.selectedApi}`);
     }
     const selectedModel = task.configuration?.model;
     if (selectedModel) {
@@ -106,12 +106,12 @@ export async function processChatTask(
       //TODO: we can create more things here like giving it context form other tasks, lookup
       //      main objective, previous tasks etc....
       const useToolChat =
-        task.allowedTools?.length && !chatState.enableOpenAiTools;
+        task.allowedTools?.length && !llmSettings.enableOpenAiTools;
 
       const { openAIConversationThread, tools } = await renderTasks4Chat(
         task,
         await taskManager.searchToolDefinitions(),
-        chatState,
+        llmSettings,
         taskManager.buildChatFromTask,
         useToolChat ? 'toolchat' : 'chat'
       );
@@ -121,10 +121,10 @@ export async function processChatTask(
           openAIConversationThread,
           tools,
           api,
-          chatState.siteUrl,
+          llmSettings.siteUrl,
           apiKey,
           // if the task runs in the "foreground", stream it :)
-          task.id == chatState.selectedTaskId ? true : false,
+          task.id == llmSettings.selectedTaskId ? true : false,
           // this function receives chunks if we stream and senfs them into
           // our original task in the debugging property to be displayed
           // "live" (this only works if our tasks structure in task manager is
@@ -185,23 +185,23 @@ export async function processChatTask(
 
         // get llm inference stats
         // TODO: we should replace this with an inference task which has the LLM as a parent...
-        if (chatCompletion && chatState.selectedApi === 'openrouter.ai') {
+        if (chatCompletion && llmSettings.selectedApi === 'openrouter.ai') {
           void sleep(5000).then(() => {
             void getOpenRouterGenerationInfo(
               chatCompletion.id,
-              generateHeaders(apiKey, chatState.siteUrl, chatState.selectedApi)
+              generateHeaders(apiKey, llmSettings.siteUrl, llmSettings.selectedApi)
             ).then((generationInfo) => {
               enrichWithDelayedUsageInfos(task, taskManager, generationInfo);
             });
           });
-        } else if (chatCompletion && chatState.selectedApi === 'taskyon') {
+        } else if (chatCompletion && llmSettings.selectedApi === 'taskyon') {
           if (apiKey) {
             // our backend tries to get the finished costs
             // after ~4000ms, so we wait for 6000 here...
             void sleep(6000).then(() => {
               const headers = {
-                ...chatState.llmApis['taskyon'].defaultHeaders,
-                ...generateHeaders(apiKey, chatState.siteUrl, api.name),
+                ...llmSettings.llmApis['taskyon'].defaultHeaders,
+                ...generateHeaders(apiKey, llmSettings.siteUrl, api.name),
               };
               const baseUrl = new URL(api.baseURL).origin;
               console.log('get generation info from ', baseUrl);
@@ -359,7 +359,7 @@ async function parseChatResponse2TaskDraft(
 // it also checks whether we should immediatly execute them or not...
 async function generateFollowUpTasksFromResult(
   finishedTask: LLMTask,
-  chatState: ChatStateType,
+  llmSettings: LLMSettingsType,
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController
 ) {
@@ -375,7 +375,7 @@ async function generateFollowUpTasksFromResult(
     void addTask2Tree(
       taskDraft,
       finishedTask.id,
-      chatState,
+      llmSettings,
       taskManager,
       // interrupt execution if interrupted flag is shown!
       // this makes sure that results are still saved, even if we stop any
@@ -527,7 +527,7 @@ async function processTask(
   task: LLMTask,
   taskManager: TyTaskManager,
   taskId: string,
-  chatState: ChatStateType,
+  llmSettings: LLMSettingsType,
   apiKeys: Record<string, string>,
   taskWorkerController: TaskWorkerController
 ) {
@@ -544,10 +544,10 @@ async function processTask(
 
     if ('message' in task.content || 'functionResult' in task.content) {
       // TODO: get rid of "taskManager" in processChatTask
-      const apiKey = apiKeys[chatState.selectedApi];
+      const apiKey = apiKeys[llmSettings.selectedApi];
       task = await processChatTask(
         task,
-        chatState,
+        llmSettings,
         apiKey,
         taskManager,
         taskWorkerController
@@ -581,7 +581,7 @@ async function processTask(
 }
 
 export async function taskWorker(
-  chatState: ChatStateType,
+  llmSettings: LLMSettingsType,
   taskManager: TyTaskManager,
   apiKeys: Record<string, string>,
   taskWorkerController: TaskWorkerController
@@ -600,7 +600,7 @@ export async function taskWorker(
           task,
           taskManager,
           taskId,
-          chatState,
+          llmSettings,
           apiKeys,
           taskWorkerController
         );
@@ -608,7 +608,7 @@ export async function taskWorker(
         // create a task with the Answer of the LLM which then gets displayed in the chatwindow...
         await generateFollowUpTasksFromResult(
           task,
-          chatState,
+          llmSettings,
           taskManager,
           taskWorkerController
         );

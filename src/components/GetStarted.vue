@@ -2,7 +2,7 @@
   <div class="welcome-message column items-center">
     <div
       class="text-h6 col-auto text-center"
-      v-if="state.keys[state.chatState.selectedApi]"
+      v-if="state.keys[state.llmSettings.selectedApi]"
     >
       <q-icon
         class="q-pa-xl"
@@ -23,7 +23,7 @@
           <div class="col-auto column items-center">
             <div>No API key found for currently selected API:</div>
             <span class="text-weight-bolder q-pt-sm">{{
-              state.chatState.selectedApi
+              state.llmSettings.selectedApi
             }}</span>
           </div>
         </div>
@@ -45,7 +45,7 @@
               <q-btn
                 :label="keyname"
                 color="secondary"
-                @click="state.chatState.selectedApi = keyname"
+                @click="state.llmSettings.selectedApi = keyname"
               />
             </div>
           </div>
@@ -59,7 +59,7 @@
             label="Use free Taskyon"
             icon="svguse:taskyon_mono_opt.svg#taskyon"
             @click="
-              state.chatState.selectedApi = 'taskyon';
+              state.llmSettings.selectedApi = 'taskyon';
               state.keys['taskyon'] = 'anonymous';
             "
           ></q-btn>

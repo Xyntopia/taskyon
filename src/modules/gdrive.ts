@@ -81,7 +81,7 @@ export async function onSyncGdrive() {
   if (validAccessToken) {
     console.log('sync settings to gdrive');
     const jsonString = JSON.stringify({
-      chatState: state.chatState,
+      llmSettings: state.llmSettings,
       appConfiguration: state.appConfiguration,
     });
     const fileBlob = new Blob([jsonString], { type: 'application/json' });
@@ -121,8 +121,8 @@ export async function onUpdateAppConfiguration() {
         'overwrite'
       );
       deepMergeReactive(
-        state.chatState,
-        (loadedConfig.chatState || {}) as Record<string, unknown>,
+        state.llmSettings,
+        (loadedConfig.llmSettings || {}) as Record<string, unknown>,
         'overwrite'
       );
     } else {

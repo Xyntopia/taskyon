@@ -179,7 +179,7 @@
           color="secondary"
           dense
           size="xl"
-          v-model="state.chatState.enableOpenAiTools"
+          v-model="state.llmSettings.enableOpenAiTools"
           ><q-tooltip
             >Enable OpenAI Functions (use built-in function selection mode for
             OpenAI)</q-tooltip
@@ -298,7 +298,7 @@ const state = useTaskyonStore();
 const { showTaskData, expandedTaskCreation } = toRefs(state);
 const { expertMode } = toRefs(state.appConfiguration);
 const { selectedApi, useOpenAIAssistants, openAIAssistantId } = toRefs(
-  state.chatState
+  state.llmSettings
 );
 const fileAttachments = ref<File[]>([]); // holds all attached files as a "tasklist"
 
@@ -319,19 +319,19 @@ void getAllTools().then((tools) => (toolCollection.value = tools));
 
 // Computed property to determine the currently selected bot name
 const currentDefaultBotName = computed(() => {
-  if (state.chatState.selectedApi === 'openai') {
-    if (state.chatState.useOpenAIAssistants) {
-      return state.chatState.openAIAssistantId;
+  if (state.llmSettings.selectedApi === 'openai') {
+    if (state.llmSettings.useOpenAIAssistants) {
+      return state.llmSettings.openAIAssistantId;
     }
   }
   const modelName =
     state.taskDraft.configuration?.model ||
-    getApiConfig(state.chatState)?.defaultModel;
+    getApiConfig(state.llmSettings)?.defaultModel;
   return modelName;
 });
 
 const currentModel = ref(toRaw(currentDefaultBotName.value));
-const currentChatApi = ref(toRaw(state.chatState.selectedApi));
+const currentChatApi = ref(toRaw(state.llmSettings.selectedApi));
 
 const allowedTools = computed({
   get() {
@@ -354,9 +354,9 @@ const handleBotNameUpdate = ({
   currentModel.value = newName;
   if (newService) {
     currentChatApi.value = newService;
-    state.chatState.selectedApi = newService;
+    state.llmSettings.selectedApi = newService;
   }
-  const api = getApiConfig(state.chatState);
+  const api = getApiConfig(state.llmSettings);
   if (api) {
     api.defaultModel = newName;
   }
@@ -483,8 +483,8 @@ async function addNewTask(execute = true) {
     console.log('add files to chat:', fileTaskObj);
     fileTaskId = await addTask2Tree(
       fileTaskObj,
-      state.chatState.selectedTaskId, // parent
-      state.chatState,
+      state.llmSettings.selectedTaskId, // parent
+      state.llmSettings,
       await state.getTaskManager(),
       false // we do not want to execute the file object, we want to use the users prompt...
     );
@@ -497,8 +497,8 @@ async function addNewTask(execute = true) {
   const newTask = { ...currentnewTask.value };
   void addTask2Tree(
     newTask,
-    fileTaskId || state.chatState.selectedTaskId, //parent
-    state.chatState,
+    fileTaskId || state.llmSettings.selectedTaskId, //parent
+    state.llmSettings,
     await state.getTaskManager(),
     execute // execute right away...
   );

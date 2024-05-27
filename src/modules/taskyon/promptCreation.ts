@@ -4,7 +4,7 @@ import type { LLMTask } from './types';
 import OpenAI from 'openai';
 import { dump } from 'js-yaml';
 import { zodToYamlString, StructuredResponseTypes } from './types';
-import { ChatStateType, mapFunctionNames } from './chat';
+import { LLMSettingsType, mapFunctionNames } from './chat';
 import type { TyTaskManager } from './taskManager';
 
 function substituteTemplateVariables(
@@ -35,7 +35,7 @@ function substituteTemplateVariables(
 export async function renderTasks4Chat(
   task: LLMTask,
   toolCollection: Record<string, ToolBase>,
-  chatState: ChatStateType,
+  llmSettings: LLMSettingsType,
   buildChatFromTask: TyTaskManager['buildChatFromTask'],
   method: 'toolchat' | 'chat' | 'taskAgent'
 ): Promise<{
@@ -50,13 +50,13 @@ export async function renderTasks4Chat(
   // Check if task has tools and OpenAI tools are not enabled
   if (
     task.allowedTools?.length &&
-    !chatState.enableOpenAiTools &&
+    !llmSettings.enableOpenAiTools &&
     method === 'toolchat'
   ) {
     console.log('Creating chat task messages');
     // Prepare the variables for createTaskChatMessages
     const additionalMessages: OpenAI.ChatCompletionMessageParam[] =
-      renderTaskPrompt4Chat(task, toolCollection, chatState);
+      renderTaskPrompt4Chat(task, toolCollection, llmSettings);
 
     task.debugging.taskPrompt = additionalMessages;
     // Remove the last message from openAIConversationThread
@@ -90,7 +90,7 @@ export async function renderTasks4Chat(
 export function renderTaskPrompt4Chat(
   task: Pick<LLMTask, 'role' | 'content' | 'allowedTools' | 'result'>,
   toolCollection: Record<string, ToolBase>,
-  chatState: ChatStateType
+  llmSettings: LLMSettingsType
 ) {
   let variables = {};
   // TODO: we need to have a better way then checking the role. We need to check the content
@@ -121,7 +121,7 @@ export function renderTaskPrompt4Chat(
 
   // Create additional messages using createTaskChatMessages
   const filledTemplates = substituteTemplateVariables(
-    chatState.taskChatTemplates,
+    llmSettings.taskChatTemplates,
     variables
   );
 

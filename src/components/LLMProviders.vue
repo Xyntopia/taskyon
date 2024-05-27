@@ -3,11 +3,11 @@
   <div class="q-gutter-md">
     <OpenRouterPKCE />
     <q-select
-      v-model="state.chatState.selectedApi"
+      v-model="state.llmSettings.selectedApi"
       emit-value
       dense
       label="connect to LLM Backend"
-      :options="Object.keys(state.chatState.llmApis)"
+      :options="Object.keys(state.llmSettings.llmApis)"
     >
       <template v-slot:before>
         <q-icon name="electrical_services"></q-icon>
@@ -47,7 +47,7 @@ to your own AI this way. E.g. using these methods:
 or with an llm proxy such as this one:  https://github.com/BerriAI/liteLLM-proxy
 "
       />
-      <JsonInput v-model="state.chatState.llmApis" />
+      <JsonInput v-model="state.llmSettings.llmApis" />
     </q-expansion-item>
   </div>
 </template>

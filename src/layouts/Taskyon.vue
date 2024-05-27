@@ -34,7 +34,7 @@
             icon="add_comment"
             :size="btnSize"
             to="/"
-            @click="state.chatState.selectedTaskId = undefined"
+            @click="state.llmSettings.selectedTaskId = undefined"
             ><q-tooltip>Create New Chat</q-tooltip>
           </q-btn>
         </div>

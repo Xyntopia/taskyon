@@ -47,12 +47,12 @@
       </q-tab-panel>
       <q-tab-panel name="instructions">
         <div>Set custom instructions for the AI Model</div>
-        <ObjectTreeView :model-value="state.chatState.taskChatTemplates" />
+        <ObjectTreeView :model-value="state.llmSettings.taskChatTemplates" />
       </q-tab-panel>
       <q-tab-panel name="agent config">
         <div>All of the Agent configuration</div>
-        <ObjectTreeView :model-value="state.chatState" />
-        <!--{{ state.chatState }}-->
+        <ObjectTreeView :model-value="state.llmSettings" />
+        <!--{{ state.llmSettings }}-->
       </q-tab-panel>
       <q-tab-panel name="app config">
         <div>All of the app configurations</div>

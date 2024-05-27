@@ -46,7 +46,7 @@
       size="sm"
       dense
       flat
-      @click="state.chatState.selectedTaskId = task.id"
+      @click="state.llmSettings.selectedTaskId = task.id"
     >
       <q-icon class="rotate-180" name="alt_route"></q-icon>
       <q-tooltip :delay="0"

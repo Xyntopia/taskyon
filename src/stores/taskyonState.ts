@@ -38,13 +38,13 @@ export const useTaskyonStore = defineStore(storeName, () => {
   }
 
   const llmSettings = defaultLLMSettings();
-  // chatState & appConfiguration define the state of our app!
+  // llmSettings & appConfiguration define the state of our app!
   // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
   const initialState = {
-    // chatState is also part of the configuration we can store "somewhere else"
-    // TODO: rename chatState to llmSettings
-    version: 3,
-    chatState: llmSettings,
+    // llmSettings is also part of the configuration we can store "somewhere else"
+    // TODO: rename llmSettings to llmSettings
+    version: 4,
+    llmSettings,
     // appConfiguration is also part of the configuration we can store "somewhere else"
     appConfiguration: {
       supabase_url: '',
@@ -131,7 +131,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     .get<
       | {
           version?: number;
-          chatState: typeof initialState.chatState;
+          llmSettings: typeof initialState.llmSettings;
           appConfiguration: typeof initialState.appConfiguration;
         }
       | undefined
@@ -157,8 +157,8 @@ export const useTaskyonStore = defineStore(storeName, () => {
             mergeStrategy
           );
           deepMergeReactive(
-            stateRefs.chatState,
-            config.chatState,
+            stateRefs.llmSettings,
+            config.llmSettings,
             mergeStrategy
           );
         } else {
@@ -178,7 +178,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     });
 
   watch(
-    () => stateRefs.chatState.selectedApi,
+    () => stateRefs.llmSettings.selectedApi,
     (newValue) => {
       console.log('api switch detected', newValue);
     }
@@ -235,7 +235,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
   const taskWorkerController = new TaskWorkerController();
   console.log('initialize taskyon');
   const taskManager = initTaskyon(
-    stateRefs.chatState,
+    stateRefs.llmSettings,
     stateRefs.keys,
     taskWorkerController,
     logError,

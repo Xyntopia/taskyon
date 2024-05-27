@@ -148,8 +148,8 @@ async function loadSettingsFromFile(
     const fileContent = await file.text();
     const loadedData = parseFunction(fileContent) as Record<string, unknown>;
 
-    if (loadedData?.chatState) {
-      deepMergeReactive(state.chatState, loadedData.chatState, 'overwrite');
+    if (loadedData?.llmSettings) {
+      deepMergeReactive(state.llmSettings, loadedData.llmSettings, 'overwrite');
     }
     if (loadedData?.appConfiguration) {
       deepMergeReactive(
@@ -177,12 +177,12 @@ function loadSettingsYaml(newFiles: File[]) {
 const downloadSettings = (format: string) => {
   console.log('download settings');
   //relevant settings:
-  const { chatState, appConfiguration, version } = state;
-  // Convert reactive chatStateProperties to a raw object
+  const { llmSettings, appConfiguration, version } = state;
+  // Convert reactive llmSettingsProperties to a raw object
   const deepCopiedSettings = extend(
     true,
     {},
-    { version, appConfiguration, chatState }
+    { version, appConfiguration, llmSettings }
   );
 
   let fileName, fileContent, mimeType;

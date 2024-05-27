@@ -7,14 +7,14 @@ import {
 } from './taskWorker';
 import { executePythonScript, getFileContent, Tool } from './tools';
 import { executeJavaScript } from '../tools/executeJavaScript';
-import { ChatStateType } from './chat';
+import { LLMSettingsType } from './chat';
 
 function stringifyIfNotString(obj: unknown): string | undefined {
   if (typeof obj === 'undefined') return undefined;
   return typeof obj === 'string' ? obj : JSON.stringify(obj);
 }
 
-function setupIframeApi(chatState: ChatStateType, taskManager: TyTaskManager) {
+function setupIframeApi(llmSettings: LLMSettingsType, taskManager: TyTaskManager) {
   console.log('Turn on iframe API.');
   // Listen for messages from the parent page
   window.addEventListener(
@@ -44,7 +44,7 @@ function setupIframeApi(chatState: ChatStateType, taskManager: TyTaskManager) {
               void addTask2Tree(
                 newTask,
                 undefined,
-                chatState,
+                llmSettings,
                 taskManager,
                 false,
                 false
@@ -70,7 +70,7 @@ function setupIframeApi(chatState: ChatStateType, taskManager: TyTaskManager) {
 }
 
 export async function initTaskyon(
-  chatState: ChatStateType,
+  llmSettings: LLMSettingsType,
   apiKeys: Record<string, string>,
   taskWorkerController: TaskWorkerController,
   logError: (message: string) => void,
@@ -102,7 +102,7 @@ export async function initTaskyon(
     TaskList,
     ToolList,
     taskyonDBInstance,
-    chatState.vectorizationModel
+    llmSettings.vectorizationModel
   );
   console.log('finished taskManager initialization');
 
@@ -110,14 +110,14 @@ export async function initTaskyon(
   // taskyon should automatically pick up on this...
   console.log('starting taskyon worker');
   void runTaskWorker(
-    chatState,
+    llmSettings,
     taskManagerInstance,
     apiKeys,
     taskWorkerController
   );
 
   if (withAPI) {
-    void setupIframeApi(chatState, taskManagerInstance);
+    void setupIframeApi(llmSettings, taskManagerInstance);
   }
 
   return taskManagerInstance;

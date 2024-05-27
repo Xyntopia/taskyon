@@ -105,7 +105,7 @@ export type appConfiguration = z.infer<typeof appConfiguration>;
 
 export const storedSettings = z.object({
   version: z
-    .literal(3)
+    .literal(4)
     .describe(
       'whenever the settings change, this number will get changed as well...'
     ),
@@ -120,17 +120,20 @@ export function defaultLLMSettings() {
   return storedSettings.parse(defaultSettings).llmSettings;
 }
 
-export function getApiConfig(chatState: ChatStateType) {
-  return chatState.llmApis[chatState.selectedApi];
+export function getApiConfig(llmSettings: LLMSettingsType) {
+  return llmSettings.llmApis[llmSettings.selectedApi];
 }
 
-export function getApiConfigCopy(chatState: ChatStateType, apiName?: string) {
-  const searchName = apiName || chatState.selectedApi;
-  const api = chatState.llmApis[searchName];
+export function getApiConfigCopy(
+  llmSettings: LLMSettingsType,
+  apiName?: string
+) {
+  const searchName = apiName || llmSettings.selectedApi;
+  const api = llmSettings.llmApis[searchName];
   return deepCopy(api);
 }
 
-export type ChatStateType = ReturnType<typeof defaultLLMSettings>;
+export type LLMSettingsType = ReturnType<typeof defaultLLMSettings>;
 
 export const getAssistants = asyncTimeLruCache<
   Record<string, OpenAI.Beta.Assistant>

@@ -134,6 +134,6 @@ async function setConversation(taskId: string) {
   const leafTasks = await findLeafTasks(taskId, (taskID) =>
     taskManager.getTask(taskID)
   );
-  state.chatState.selectedTaskId = leafTasks[0];
+  state.llmSettings.selectedTaskId = leafTasks[0];
 }
 </script>

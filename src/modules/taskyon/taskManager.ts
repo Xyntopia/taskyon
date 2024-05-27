@@ -1,5 +1,5 @@
 import type { LLMTask, RequireSome } from './types';
-import type { ChatStateType } from './chat';
+import type { LLMSettingsType } from './chat';
 import { v1 as uuidv1 } from 'uuid';
 import {
   TaskyonDatabase,
@@ -144,7 +144,7 @@ async function taskContentHash(task: LLMTask) {
 export async function addTask2Tree(
   task: RequireSome<Partial<LLMTask>, 'role' | 'content'>,
   parentID: string | undefined,
-  chatState: ChatStateType,
+  llmSettings: LLMSettingsType,
   taskManager: TyTaskManager,
   execute = true,
   duplicateTaskName = true
@@ -221,7 +221,7 @@ export async function addTask2Tree(
     console.log('task already has a name:', newTask.name);
   }
 
-  chatState.selectedTaskId = newTask.id;
+  llmSettings.selectedTaskId = newTask.id;
   return newTask.id;
 }
 

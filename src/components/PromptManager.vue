@@ -5,7 +5,7 @@
       <ObjectTreeView
         style="min-width: 500px"
         class="col"
-        :model-value="state.chatState.taskChatTemplates"
+        :model-value="state.llmSettings.taskChatTemplates"
       />
       <q-card flat class="col" style="min-width: 500px">
         <q-card-section>
@@ -79,7 +79,7 @@ const structuredResponsePrompt = computed(() => {
       const rp = renderTaskPrompt4Chat(
         task,
         toolCollection.value,
-        state.chatState
+        state.llmSettings
       );
       return rp;
     }

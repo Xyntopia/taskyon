@@ -16,7 +16,7 @@
         :size="btnsize"
         icon="reviews"
         to="/"
-        @click="state.chatState.selectedTaskId = undefined"
+        @click="state.llmSettings.selectedTaskId = undefined"
         ><q-tooltip>Create New Chat</q-tooltip>
       </q-btn>
       <q-space />

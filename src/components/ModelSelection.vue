@@ -99,11 +99,11 @@
       dense
       outlined
       label="select Api"
-      :options="Object.keys(state.chatState.llmApis)"
+      :options="Object.keys(state.llmSettings.llmApis)"
       ><q-tooltip>Choose LLM Api</q-tooltip>
     </q-select>
     <InfoDialog
-      v-if="!enableOpenAIAssistants && state.chatState.selectedApi != 'taskyon'"
+      v-if="!enableOpenAIAssistants && state.llmSettings.selectedApi != 'taskyon'"
       class="col-auto"
       info-text="For a list of supported models go here:
 
@@ -161,11 +161,11 @@ const assistants = ref<Awaited<ReturnType<typeof getAssistants>>>({});
 
 const llmModels = ref<Model[]>([]);
 watch(
-  () => state.chatState.selectedApi,
+  () => state.llmSettings.selectedApi,
   () => {
     console.log('downloading models...');
-    const api = getApiConfig(state.chatState);
-    const taskyonApi = state.chatState.llmApis['taskyon'];
+    const api = getApiConfig(state.llmSettings);
+    const taskyonApi = state.llmSettings.llmApis['taskyon'];
     if (api && taskyonApi) {
       llmModels.value =
         api.name === 'openai' ? openaiModels.data : openrouterModules.data;
@@ -186,7 +186,7 @@ watch(
 );
 
 watch(
-  () => state.chatState.useOpenAIAssistants,
+  () => state.llmSettings.useOpenAIAssistants,
   (newValue) => {
     if (newValue) {
       void getAssistants(state.keys.openai).then((assitantDict) => {
@@ -247,7 +247,7 @@ function onModelSelect(value: string) {
 }
 
 function onApiSelect(value: string) {
-  const newBotName = state.chatState.llmApis[value]?.defaultModel;
+  const newBotName = state.llmSettings.llmApis[value]?.defaultModel;
   emit('updateBotName', {
     newName: newBotName,
     newService: value,

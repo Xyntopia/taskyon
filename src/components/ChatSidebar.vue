@@ -26,7 +26,7 @@
             dense
             v-for="conversationId in conversationIDs"
             :key="conversationId.id"
-            @click="state.chatState.selectedTaskId = conversationId.id"
+            @click="state.llmSettings.selectedTaskId = conversationId.id"
             to="/"
             clickable
             v-ripple
@@ -36,7 +36,7 @@
             </!q-item-section-->
             <q-item-section
               v-for="(selected, idx) in [
-                state.chatState.selectedTaskId == conversationId.id,
+                state.llmSettings.selectedTaskId == conversationId.id,
               ]"
               :key="idx"
               lines
@@ -60,7 +60,7 @@
             <q-item-section side>
               <div>
                 <q-btn
-                  v-if="state.chatState.selectedTaskId == conversationId.id"
+                  v-if="state.llmSettings.selectedTaskId == conversationId.id"
                   flat
                   dense
                   icon="download_for_offline"
@@ -98,7 +98,7 @@
           <q-btn
             dense
             flat
-            @click="state.chatState.selectedTaskId = undefined"
+            @click="state.llmSettings.selectedTaskId = undefined"
             to="/"
           >
             <q-icon name="add" />
@@ -174,7 +174,7 @@ async function getLeafTaskNames(tm: TyTaskManager) {
 const activeTask = ref<LLMTask | undefined>();
 
 watch(
-  () => state.chatState.selectedTaskId,
+  () => state.llmSettings.selectedTaskId,
   async (newTaskId) => {
     const tm = await state.getTaskManager();
     if (newTaskId) {
@@ -196,7 +196,7 @@ void state.getTaskManager().then(async (tm) => {
 async function onDeleteThread(conversationId: string) {
   console.log('deleting thread!!', conversationId);
   const tm = await state.getTaskManager();
-  state.chatState.selectedTaskId = undefined;
+  state.llmSettings.selectedTaskId = undefined;
   await deleteTaskThread(conversationId, tm);
   conversationIDs.value = await getLeafTaskNames(tm);
 }
@@ -237,7 +237,7 @@ async function loadConversation(files: File[]) {
         });
       }
     }
-    state.chatState.selectedTaskId = last_task_id;
+    state.llmSettings.selectedTaskId = last_task_id;
   }
 }
 </script>
