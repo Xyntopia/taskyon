@@ -250,9 +250,12 @@ export function generateHeaders(
   selectedApi: string
 ) {
   let headers: Record<string, string> = {
-    Authorization: `Bearer ${apiSecret}`,
     'Content-Type': 'application/json',
   };
+
+  if (apiSecret && !(selectedApi === 'taskyon' && apiSecret === 'anonymous')) {
+    headers.Authorization = `Bearer ${apiSecret}`;
+  }
 
   if (selectedApi == 'openrouter.ai') {
     headers = {
