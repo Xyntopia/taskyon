@@ -120,12 +120,12 @@ export function defaultLLMSettings() {
   return storedSettings.parse(defaultSettings).llmSettings;
 }
 
-export function getApiConfig(llmSettings: LLMSettingsType) {
+export function getApiConfig(llmSettings: llmSettings) {
   return llmSettings.llmApis[llmSettings.selectedApi];
 }
 
 export function getApiConfigCopy(
-  llmSettings: LLMSettingsType,
+  llmSettings: llmSettings,
   apiName?: string
 ) {
   const searchName = apiName || llmSettings.selectedApi;

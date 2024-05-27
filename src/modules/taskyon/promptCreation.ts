@@ -4,7 +4,7 @@ import type { LLMTask } from './types';
 import OpenAI from 'openai';
 import { dump } from 'js-yaml';
 import { zodToYamlString, StructuredResponseTypes } from './types';
-import { LLMSettingsType, mapFunctionNames } from './chat';
+import { llmSettings, mapFunctionNames } from './chat';
 import type { TyTaskManager } from './taskManager';
 
 function substituteTemplateVariables(
@@ -35,7 +35,7 @@ function substituteTemplateVariables(
 export async function renderTasks4Chat(
   task: LLMTask,
   toolCollection: Record<string, ToolBase>,
-  llmSettings: LLMSettingsType,
+  llmSettings: llmSettings,
   buildChatFromTask: TyTaskManager['buildChatFromTask'],
   method: 'toolchat' | 'chat' | 'taskAgent'
 ): Promise<{
@@ -90,7 +90,7 @@ export async function renderTasks4Chat(
 export function renderTaskPrompt4Chat(
   task: Pick<LLMTask, 'role' | 'content' | 'allowedTools' | 'result'>,
   toolCollection: Record<string, ToolBase>,
-  llmSettings: LLMSettingsType
+  llmSettings: llmSettings
 ) {
   let variables = {};
   // TODO: we need to have a better way then checking the role. We need to check the content

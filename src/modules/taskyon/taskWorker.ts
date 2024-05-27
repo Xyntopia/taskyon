@@ -1,7 +1,7 @@
 import {
   callLLM,
   getOpenAIAssistantResponse,
-  LLMSettingsType,
+  llmSettings,
   enrichWithDelayedUsageInfos,
   estimateChatTokens,
   generateHeaders,
@@ -71,7 +71,7 @@ function extractOpenAIFunctions(
 // this function processes all tasks which go to any sort of an LLM
 export async function processChatTask(
   task: LLMTask,
-  llmSettings: LLMSettingsType,
+  llmSettings: llmSettings,
   apiKey: string,
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController
@@ -359,7 +359,7 @@ async function parseChatResponse2TaskDraft(
 // it also checks whether we should immediatly execute them or not...
 async function generateFollowUpTasksFromResult(
   finishedTask: LLMTask,
-  llmSettings: LLMSettingsType,
+  llmSettings: llmSettings,
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController
 ) {
@@ -527,7 +527,7 @@ async function processTask(
   task: LLMTask,
   taskManager: TyTaskManager,
   taskId: string,
-  llmSettings: LLMSettingsType,
+  llmSettings: llmSettings,
   apiKeys: Record<string, string>,
   taskWorkerController: TaskWorkerController
 ) {
@@ -581,7 +581,7 @@ async function processTask(
 }
 
 export async function taskWorker(
-  llmSettings: LLMSettingsType,
+  llmSettings: llmSettings,
   taskManager: TyTaskManager,
   apiKeys: Record<string, string>,
   taskWorkerController: TaskWorkerController

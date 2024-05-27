@@ -7,14 +7,14 @@ import {
 } from './taskWorker';
 import { executePythonScript, getFileContent, Tool } from './tools';
 import { executeJavaScript } from '../tools/executeJavaScript';
-import { LLMSettingsType } from './chat';
+import type { llmSettings } from './chat';
 
 function stringifyIfNotString(obj: unknown): string | undefined {
   if (typeof obj === 'undefined') return undefined;
   return typeof obj === 'string' ? obj : JSON.stringify(obj);
 }
 
-function setupIframeApi(llmSettings: LLMSettingsType, taskManager: TyTaskManager) {
+function setupIframeApi(llmSettings: llmSettings, taskManager: TyTaskManager) {
   console.log('Turn on iframe API.');
   // Listen for messages from the parent page
   window.addEventListener(
@@ -70,7 +70,7 @@ function setupIframeApi(llmSettings: LLMSettingsType, taskManager: TyTaskManager
 }
 
 export async function initTaskyon(
-  llmSettings: LLMSettingsType,
+  llmSettings: llmSettings,
   apiKeys: Record<string, string>,
   taskWorkerController: TaskWorkerController,
   logError: (message: string) => void,
