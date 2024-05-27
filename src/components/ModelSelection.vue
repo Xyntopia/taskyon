@@ -48,11 +48,11 @@
       <div v-if="state.modelDetails">
         <div>
           <b>Assistant instructions:</b><br />
-          {{ assistants[openAIAssistantId || '']?.instructions }}
+          {{ state.assistants[openAIAssistantId || '']?.instructions }}
         </div>
         <q-scroll-area style="height: 230px; max-width: 100%">
           <pre>
-          {{ assistants[openAIAssistantId || ''] }}
+          {{ state.assistants[openAIAssistantId || ''] }}
           </pre>
         </q-scroll-area>
       </div>
@@ -81,11 +81,11 @@
             <q-tooltip>Prompt costs</q-tooltip>
             <div>
               prompt:
-              {{ modelLookUp[botName]?.pricing?.prompt || '?' }}
+              {{ state.modelLookUp[botName]?.pricing?.prompt || '?' }}
             </div>
             <div>
               completion:
-              {{ modelLookUp[botName]?.pricing?.completion || '?' }}
+              {{ state.modelLookUp[botName]?.pricing?.completion || '?' }}
             </div>
           </div>
         </template>
@@ -103,7 +103,9 @@
       ><q-tooltip>Choose LLM Api</q-tooltip>
     </q-select>
     <InfoDialog
-      v-if="!enableOpenAIAssistants && state.llmSettings.selectedApi != 'taskyon'"
+      v-if="
+        !enableOpenAIAssistants && state.llmSettings.selectedApi != 'taskyon'
+      "
       class="col-auto"
       info-text="For a list of supported models go here:
 
@@ -118,17 +120,9 @@ or here:
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import {
-  availableModels,
-  Model,
-  getAssistants,
-  getApiConfig,
-} from 'src/modules/taskyon/chat';
+import { computed, ref } from 'vue';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
-import openrouterModules from 'assets/openrouter_models.json';
 import { useTaskyonStore } from 'stores/taskyonState';
-import openaiModels from 'assets/openai_models.json';
 import InfoDialog from './InfoDialog.vue';
 
 const props = defineProps({
@@ -157,56 +151,18 @@ const emit = defineEmits([
 ]);
 
 const state = useTaskyonStore();
-const assistants = ref<Awaited<ReturnType<typeof getAssistants>>>({});
-
-const llmModels = ref<Model[]>([]);
-watch(
-  () => state.llmSettings.selectedApi,
-  () => {
-    console.log('downloading models...');
-    const api = getApiConfig(state.llmSettings);
-    const taskyonApi = state.llmSettings.llmApis['taskyon'];
-    if (api && taskyonApi) {
-      llmModels.value =
-        api.name === 'openai' ? openaiModels.data : openrouterModules.data;
-      const baseurl =
-        api.name === 'openrouter.ai'
-          ? taskyonApi.baseURL + '/models_openrouter'
-          : api.baseURL + api.routes.models;
-      try {
-        void availableModels(baseurl, state.keys.taskyon).then(
-          (res) => (llmModels.value = res)
-        );
-      } catch {
-        console.log("couldn't download models from", baseurl);
-      }
-    }
-  },
-  { immediate: true }
-);
-
-watch(
-  () => state.llmSettings.useOpenAIAssistants,
-  (newValue) => {
-    if (newValue) {
-      void getAssistants(state.keys.openai).then((assitantDict) => {
-        assistants.value = assitantDict;
-      });
-    }
-  }
-);
 
 const modelOptions = computed(() => {
   // openai has no pricing information attached, so we sort it in different ways...
   if (props.selectedApi === 'openai') {
     if (props.enableOpenAIAssistants) {
-      const options = Object.values(assistants.value).map((a) => ({
+      const options = Object.values(state.assistants).map((a) => ({
         value: a.id,
         label: a.name || '',
       }));
       return options;
     } else {
-      const options = [...llmModels.value]
+      const options = [...state.llmModels]
         .sort((m1, m2) => m1.id.localeCompare(m2.id))
         .map((m) => ({
           label: `${m.id}`,
@@ -215,7 +171,7 @@ const modelOptions = computed(() => {
       return options;
     }
   } else {
-    const options = llmModels.value
+    const options = state.llmModels
       .map((m) => {
         const p = parseFloat(m.pricing?.prompt || '');
         const c = parseFloat(m.pricing?.completion || '');
@@ -232,12 +188,7 @@ const modelOptions = computed(() => {
   }
 });
 
-const modelLookUp = computed(() =>
-  llmModels.value.reduce((acc, m) => {
-    acc[m.id] = m;
-    return acc;
-  }, {} as Record<string, Model>)
-);
+
 
 function onModelSelect(value: string) {
   emit('updateBotName', {

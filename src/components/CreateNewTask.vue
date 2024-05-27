@@ -99,7 +99,13 @@
           </div>
           <q-space></q-space>
           <div class="gt-xs">
-            {{ `approx. new token count: ${estimatedTokens}` }}
+            {{
+              `approx. new token count: ${estimatedTokens}/${state.modelLookUp[currentModel].context_length}`
+            }}
+            <q-tooltip :delay="1000">
+              Token number is the length of a that that an AI can understand.
+              Tokens are roughly similar to a syllables.
+            </q-tooltip>
           </div>
           <div class="lt-sm">{{ `t/c: ${estimatedTokens}` }}</div>
           <q-space></q-space>

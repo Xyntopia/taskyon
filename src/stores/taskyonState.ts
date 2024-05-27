@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { watch, computed, reactive, toRefs } from 'vue';
+import { watch, computed, reactive, toRefs, ref } from 'vue';
 import { LLMTask } from 'src/modules/taskyon/types';
 import type {
   ContentDraft,
@@ -12,7 +12,15 @@ import { useQuasar } from 'quasar';
 import { TaskWorkerController } from 'src/modules/taskyon/taskWorker';
 import { initTaskyon } from 'src/modules/taskyon/init';
 import defaultSettings from 'src/assets/taskyon_settings.json';
-import { storedSettings } from 'src/modules/taskyon/chat';
+import {
+  storedSettings,
+  availableModels,
+  Model,
+  getAssistants,
+  getApiConfig,
+} from 'src/modules/taskyon/chat';
+import openrouterModules from 'assets/openrouter_models.json';
+import openaiModels from 'assets/openai_models.json';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -241,6 +249,51 @@ export const useTaskyonStore = defineStore(storeName, () => {
     stateRefs.modelHistory.push(model);
   }
 
+  const assistants = ref<Awaited<ReturnType<typeof getAssistants>>>({});
+  const llmModels = ref<Model[]>([]);
+  watch(
+    () => stateRefs.llmSettings.selectedApi,
+    () => {
+      console.log('downloading models...');
+      const api = getApiConfig(stateRefs.llmSettings);
+      const taskyonApi = stateRefs.llmSettings.llmApis['taskyon'];
+      if (api && taskyonApi) {
+        llmModels.value =
+          api.name === 'openai' ? openaiModels.data : openrouterModules.data;
+        const baseurl =
+          api.name === 'openrouter.ai'
+            ? taskyonApi.baseURL + '/models_openrouter'
+            : api.baseURL + api.routes.models;
+        try {
+          void availableModels(baseurl, stateRefs.keys.taskyon).then(
+            (res) => (llmModels.value = res)
+          );
+        } catch {
+          console.log("couldn't download models from", baseurl);
+        }
+      }
+    },
+    { immediate: true }
+  );
+
+  watch(
+    () => stateRefs.llmSettings.useOpenAIAssistants,
+    (newValue) => {
+      if (newValue) {
+        void getAssistants(stateRefs.keys.openai).then((assitantDict) => {
+          assistants.value = assitantDict;
+        });
+      }
+    }
+  );
+
+  const modelLookUp = computed(() =>
+    llmModels.value.reduce((acc, m) => {
+      acc[m.id] = m;
+      return acc;
+    }, {} as Record<string, Model>)
+  );
+
   // we do this funny next line, because our store is currently "reactive" which means
   // all scalars like strings, numbers etc..  ar actually non-reactive (vue reactive only converts
   // nested objects into reactive as well). So by doing "toRefs" we ensure that all values are reactive
@@ -256,6 +309,9 @@ export const useTaskyonStore = defineStore(storeName, () => {
     getTaskManager,
     logError,
     getErrors,
+    assistants,
+    llmModels,
+    modelLookUp,
   };
 }); // this state stores all information which
 // should be stored e.g. in browser LocalStorage
