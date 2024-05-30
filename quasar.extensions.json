@@ -1,8 +1,4 @@
 {
-  "ssg": {
-    "scripts": true,
-    "inlineCriticalCss": true
-  },
   "@quasar/testing-unit-jest": {
     "options": [
       "majestic"
@@ -11,5 +7,11 @@
   "@quasar/testing-e2e-cypress": {
     "port": 8080,
     "options": []
+  },
+  "ssg": {
+    "scripts": true,
+    "IDE": true,
+    "inlineCriticalCss": true,
+    "inlineCssFromSFC": true
   }
 }
