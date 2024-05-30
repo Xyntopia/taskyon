@@ -1,12 +1,12 @@
 import { defineStore } from 'pinia';
 import { watch, computed, reactive, toRefs, ref } from 'vue';
-import { LLMTask } from 'src/modules/taskyon/types';
+import type { LLMTask } from 'src/modules/taskyon/types';
 import type {
   ContentDraft,
   FunctionArguments,
 } from 'src/modules/taskyon/types';
-import axios from 'axios';
-import { LocalStorage, Notify } from 'quasar';
+import axios from 'axios'; // TODO: replace with fetch
+import { LocalStorage, Notify } from 'quasar'; // load dynamically! :)
 import { deepMerge, deepMergeReactive } from 'src/modules/taskyon/utils';
 import { useQuasar } from 'quasar';
 import { TaskWorkerController } from 'src/modules/taskyon/taskWorker';
