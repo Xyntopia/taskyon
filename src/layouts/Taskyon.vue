@@ -164,9 +164,14 @@
 </style>
 
 <script setup lang="ts">
-import ChatSidebar from 'components/ChatSidebar.vue';
 import DarkModeButton from 'components/DarkModeButton.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
+import { defineAsyncComponent } from 'vue';
+
+const ChatSidebar = defineAsyncComponent(
+  () => import('components/ChatSidebar.vue')
+);
+
 const state = useTaskyonStore();
 const minMode = state.minimalGui;
 const btnSize = minMode ? 'xs' : 'md';
