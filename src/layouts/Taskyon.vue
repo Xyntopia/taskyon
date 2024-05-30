@@ -164,15 +164,25 @@
 </style>
 
 <script setup lang="ts">
+import {reactive} from 'vue'
 import DarkModeButton from 'components/DarkModeButton.vue';
-import { useTaskyonStore } from 'stores/taskyonState';
+//import { useTaskyonStore } from 'stores/taskyonState';
 import { defineAsyncComponent } from 'vue';
 
 const ChatSidebar = defineAsyncComponent(
   () => import('components/ChatSidebar.vue')
 );
 
-const state = useTaskyonStore();
+//const state = useTaskyonStore();
+const state = reactive({
+  drawerOpen: false,
+  drawerRight: false,
+  minimalGui: false,
+  darkTheme: false,
+  getErrors: () => [],
+  llmSettings: { selectedTaskId: undefined }
+});
+
 const minMode = state.minimalGui;
 const btnSize = minMode ? 'xs' : 'md';
 </script>

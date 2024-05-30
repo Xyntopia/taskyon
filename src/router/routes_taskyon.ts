@@ -5,7 +5,7 @@ export const taskyonRoutes = {
   path: '/',
   component: () => import('layouts/Taskyon.vue'),
   children: [
-    { path: '', component: () => import('pages/TaskChat.vue') },
+    { path: '', component: () => import('pages/Welcome.vue') },
     { path: 'taskmanager', component: () => import('pages/TaskManager.vue') },
     {
       path: 'chat',
