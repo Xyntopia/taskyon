@@ -1,7 +1,11 @@
 import axios from 'axios';
 //import { useCachedModels } from './mlModels';
-import { ToolBase } from './types';
-import { LLMTask, OpenAIMessage, OpenRouterGenerationInfo } from './types';
+import type {
+  ToolBase,
+  LLMTask,
+  OpenAIMessage,
+  OpenRouterGenerationInfo,
+} from './types';
 import type { TyTaskManager } from './taskManager';
 import OpenAI from 'openai';
 import { openFile } from './OPFS';
@@ -117,10 +121,7 @@ export function getApiConfig(llmSettings: llmSettings) {
   return llmSettings.llmApis[llmSettings.selectedApi];
 }
 
-export function getApiConfigCopy(
-  llmSettings: llmSettings,
-  apiName?: string
-) {
+export function getApiConfigCopy(llmSettings: llmSettings, apiName?: string) {
   const searchName = apiName || llmSettings.selectedApi;
   const api = llmSettings.llmApis[searchName];
   return deepCopy(api);
@@ -158,38 +159,42 @@ export type OpenAIChatMessage = {
 };
 
 //import { getEncoding } from 'js-tiktoken';
-const { getEncoding } = await import(
-  /* webpackChunkName: "tiktoken" */
-  /* webpackMode: "lazy" */
-  /* webpackExports: ["getEncoding"] */
-  /* webpackFetchPriority: "high" */
-  'js-tiktoken'
-);
-const enc = getEncoding('gpt2');
+async function loadTikTokenEncoder() {
+  const { getEncoding } = await import(
+    /* webpackChunkName: "tiktoken" */
+    /* webpackMode: "lazy" */
+    /* webpackExports: ["getEncoding"] */
+    /* webpackFetchPriority: "low" */
+    'js-tiktoken'
+  );
+  const enc = getEncoding('gpt2');
+  return enc;
+}
 
-export function countStringTokens(txt: string) {
+export async function countStringTokens(txt: string) {
+  const enc = await loadTikTokenEncoder();
   // Tokenize the content
   const content = enc.encode(txt);
   return content.length;
 }
 
-function countChatTokens(
+async function countChatTokens(
   chatMessages: (
     | OpenAIMessage
     | OpenAI.ChatCompletionMessage
     | OpenAI.ChatCompletionMessageParam
   )[]
-): number {
+) {
   let totalTokens = 0;
   for (const message of chatMessages) {
     if (message.content && typeof message.content == 'string') {
-      totalTokens += countStringTokens(message.content);
+      totalTokens += await countStringTokens(message.content);
     }
   }
   return totalTokens;
 }
 
-export function countToolTokens(functionList: ToolBase[]): number {
+export async function countToolTokens(functionList: ToolBase[]) {
   let totalTokens = 0;
 
   // Iterate through each tool in the functionList array
@@ -199,8 +204,8 @@ export function countToolTokens(functionList: ToolBase[]): number {
     const stringifiedParameters = JSON.stringify(tool.parameters, null, 2); // Pretty print the JSON string
 
     // Count the tokens in the description and stringified parameters using countStringTokens
-    const descriptionTokens = countStringTokens(description);
-    const parametersTokens = countStringTokens(stringifiedParameters);
+    const descriptionTokens = await countStringTokens(description);
+    const parametersTokens = await countStringTokens(stringifiedParameters);
 
     // Sum the tokens of the description and stringified parameters for this tool
     totalTokens += descriptionTokens + parametersTokens;
@@ -209,11 +214,11 @@ export function countToolTokens(functionList: ToolBase[]): number {
   return totalTokens;
 }
 
-export function estimateChatTokens(
+export async function estimateChatTokens(
   task: LLMTask,
   chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   tools: Record<string, ToolBase>
-): LLMTask['debugging']['estimatedTokens'] {
+): Promise<LLMTask['debugging']['estimatedTokens']> {
   const functions: ToolBase[] = mapFunctionNames(
     task.allowedTools || [],
     tools
@@ -221,10 +226,10 @@ export function estimateChatTokens(
   // TODO: convert task.content into a legitimate string first, using the
   //       "original" functions toshow what actually gets sent to the LLM!
   const contentStr = JSON.stringify(Object.values(task.content)[0]);
-  const singlePromptTokens = countStringTokens(contentStr);
-  const promptTokens = countChatTokens(chat);
-  const functionTokens = Math.floor(countToolTokens(functions) * 0.7);
-  const resultTokens = countStringTokens(
+  const singlePromptTokens = await countStringTokens(contentStr);
+  const promptTokens = await countChatTokens(chat);
+  const functionTokens = Math.floor((await countToolTokens(functions)) * 0.7);
+  const resultTokens = await countStringTokens(
     task.result?.chatResponse?.choices[0]?.message.content || ''
   );
   return {

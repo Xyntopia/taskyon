@@ -243,7 +243,7 @@ export async function processChatTask(
           task.debugging.resultTokens = chatCompletion.usage.completion_tokens;
           task.debugging.taskTokens = chatCompletion.usage.total_tokens;
         } else {
-          task.debugging.estimatedTokens = estimateChatTokens(
+          task.debugging.estimatedTokens = await estimateChatTokens(
             task,
             openAIConversationThread,
             await taskManager.searchToolDefinitions()
