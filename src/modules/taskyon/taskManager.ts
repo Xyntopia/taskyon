@@ -10,7 +10,7 @@ import {
 } from './rxdb';
 import { openFile } from './OPFS';
 import { Lock, sleep, deepMerge, AsyncQueue } from './utils';
-import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
+import type { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { loadOrCreateHNSWIndex } from './hnswIndex';
 import { extractKeywords, useNlpWorker } from './webWorkerApi';
 import { Tool } from './tools';
