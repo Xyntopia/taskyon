@@ -1,10 +1,3 @@
-import {
-  PreTrainedModel,
-  PreTrainedTokenizer,
-  AutoModel,
-  AutoTokenizer,
-} from '@xenova/transformers';
-
 // Include pako library
 // this piece of code loads a compressed vocabulary for vectorization tasks...
 /*import pako from 'pako';
@@ -18,6 +11,25 @@ fetch('compressed_array.b64')
         let myArray = new Float32Array(decompressedData.buffer);
     });
 */
+
+import type {
+  PreTrainedModel,
+  PreTrainedTokenizer,
+} from '@xenova/transformers';
+
+async function loadTransformers() {
+  const { AutoModel, AutoTokenizer } = await import(
+    /* webpackChunkName: "transformers" */
+    /* webpackMode: "lazy" */
+    /* webpackExports: ["getEncoding"] */
+    /* webpackFetchPriority: "low" */
+    '@xenova/transformers'
+  );
+  return {
+    AutoModel,
+    AutoTokenizer,
+  };
+}
 
 const modelStore = {
   models: {} as Record<string, PreTrainedModel>,
@@ -39,7 +51,10 @@ export async function loadModel(modelName: string) {
     modelStore.loading[modelName] = true;
     try {
       console.log(`load model: ${modelName}`);
-      modelStore.models[modelName] = await AutoModel.from_pretrained(modelName);
+      const tf = await loadTransformers();
+      modelStore.models[modelName] = await tf.AutoModel.from_pretrained(
+        modelName
+      );
     } finally {
       modelStore.loading[modelName] = false;
     }
@@ -55,7 +70,8 @@ export async function loadTokenizer(modelName: string) {
     modelStore.loading[modelName] = true;
     try {
       console.log(`load tokenizer: ${modelName}`);
-      modelStore.tokenizers[modelName] = await AutoTokenizer.from_pretrained(
+      const tf = await loadTransformers();
+      modelStore.tokenizers[modelName] = await tf.AutoTokenizer.from_pretrained(
         modelName
       );
     } finally {
