@@ -170,7 +170,11 @@ import DarkModeButton from 'components/DarkModeButton.vue';
 import { defineAsyncComponent } from 'vue';
 
 const ChatSidebar = defineAsyncComponent(
-  () => import('components/ChatSidebar.vue')
+  () => import(
+    /* webpackChunkName: "ChatSidebar" */
+    /* webpackMode: "lazy" */
+    /* webpackFetchPriority: "low" */
+    'components/ChatSidebar.vue')
 );
 
 //const state = useTaskyonStore();

@@ -3,9 +3,24 @@ import authRoutes from './routes_default';
 
 export const taskyonRoutes = {
   path: '/',
-  component: () => import('layouts/Taskyon.vue'),
+  component: () =>
+    import(
+      /* webpackChunkName: "layouts/Taskyon.vue" */
+      /* webpackMode: "lazy" */
+      /* webpackFetchPriority: "low" */
+      'layouts/Taskyon.vue'
+    ),
   children: [
-    { path: '', component: () => import('pages/Welcome.vue') },
+    {
+      path: '',
+      component: () =>
+        import(
+          /* webpackChunkName: "pages/Welcome.vue" */
+          /* webpackMode: "lazy" */
+          /* webpackFetchPriority: "low" */
+          'pages/Welcome.vue'
+        ),
+    },
     { path: 'taskmanager', component: () => import('pages/TaskManager.vue') },
     {
       path: 'chat',
@@ -35,9 +50,9 @@ export const taskyonRoutes = {
       path: 'prompts',
       component: () => import('components/PromptManager.vue'),
     },
-    ...authRoutes
+    ...authRoutes,
   ],
-}
+};
 
 const routes: RouteRecordRaw[] = [
   {
@@ -45,7 +60,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('layouts/Widgets.vue'),
     children: [{ path: 'chat', component: () => import('pages/TaskChat.vue') }],
   },
-  
+
   taskyonRoutes,
 
   // Always leave this as last one,

@@ -36,6 +36,8 @@ interface TaskStateType {
 }
 
 export const useTaskyonStore = defineStore(storeName, () => {
+  console.log('loading taskyon store!')
+
   const $q = useQuasar();
 
   const errors: string[] = [];

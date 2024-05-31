@@ -207,42 +207,100 @@ module.exports = configure(function (ctx) {
 
       // https://v2.quasar.dev/quasar-cli/handling-webpack
       // "chain" is a webpack-chain object https://github.com/neutrinojs/webpack-chain
+      // https://webpack.js.org/plugins/split-chunks-plugin/#splitchunkschunks
       chainWebpack(chain) {
         // TODO: add better chunk code split behaviour
         if (ctx.prod) {
           chain.optimization.splitChunks({
-            ...chain.optimization.get('splitChunks'),
-            /*chunks: 'async',
-            minSize: 20000, //Minimum size, in bytes, for a chunk to be generated.
-            minChunks: 1, //The minimum times must a module be shared among chunks before splitting.
-            maxAsyncRequests: 30,
-            maxInitialRequests: 30,
-            //Size threshold at which splitting is enforced and other restrictions (minRemainingSize,
-            // maxAsyncRequests, maxInitialRequests) are ignored.
-            //enforceSizeThreshold: 50000, [groups]
-            //maxSize: 200000,// max size per (cache group)
-            */
+            //...chain.optimization.get('splitChunks'),
+            /*chunks: 'all',
             minSize: 20000,
+            minRemainingSize: 0,
+            minChunks: 1,
+            maxAsyncRequests: 30,
+            maxInitialRequests: 2,
+            enforceSizeThreshold: 50000,
+            name: 'rest',*/
             cacheGroups: {
-              vendor_initial: {
-                test: /[\\/]node_modules[\\/]/, //(vue|@quasar|quasar|axios|core-js)[\\/]/,
-                priority: 20,
+              page: {
+                /*name(module, chunks, cacheGroupKey) {
+                  const moduleFileName = module
+                    .identifier()
+                    .split('/')
+                    .reduceRight((item) => item);
+
+                  const { chunk: largestChunk } = chunks.reduce(
+                    (largest, chunk) => {
+                      return chunk.size() > largest.size
+                        ? { chunk, size: chunk.size() }
+                        : largest;
+                    },
+                    { chunk: undefined, size: 0 }
+                  );
+
+                  // Get the largest chunk's name
+                  const largestChunkName = largestChunk.name;
+
+                  // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+                  return `${cacheGroupKey}-${largestChunkName}-${moduleFileName}`;
+                },*/
+                name: 'page',
+                test: /.*src[\\/]page.+/,
+                priority: 25,
                 reuseExistingChunk: true,
-                name: 'vendor',
-                chunks: 'initial',
-                //maxSize: 5000000,
-                //maxAsyncSize: 1000000,
-                //minSize: 1000000
+                enforce: true,
+                chunks: 'async',
               },
               vendor_whitelist: {
-                test: /[\\/]node_modules[\\/](vue|quasar|axios|core-js)[\\/]/,
-                priority: 20,
+                test: /[\\/]node_modules[\\/](vue|quasar|core-js)[\\/]/,
+                priority: 30,
                 reuseExistingChunk: true,
                 name: 'vendor',
                 chunks: 'all',
                 //maxSize: 5000000,
                 //maxAsyncSize: 1000000,
                 //minSize: 1000000
+              },
+              commons: {
+                test: /.*/,
+                name: 'initial',
+                chunks: 'initial',
+                minChunks: 1,
+                priority: 40,
+                enforce: true, // Ensure this chunk is always created
+              },
+              node: {
+                name(module, chunks, cacheGroupKey) {
+                  const moduleFileName = module
+                    .identifier()
+                    .split('/')
+                    .reduceRight((item) => item);
+
+                  const { chunk: largestChunk } = chunks.reduce(
+                    (largest, chunk) => {
+                      return chunk.size() > largest.size
+                        ? { chunk, size: chunk.size() }
+                        : largest;
+                    },
+                    { chunk: undefined, size: 0 }
+                  );
+
+                  // Get the largest chunk's name
+                  const largestChunkName = largestChunk.name;
+
+                  // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+                  return `${cacheGroupKey}-${largestChunkName}-${moduleFileName}`;
+                },
+                test: /[\\/]node_modules[\\/]/,
+                priority: 10,
+                reuseExistingChunk: true,
+                chunks: 'all',
+              },
+              default: {
+                name: 'default',
+                minChunks: 2,
+                priority: -20,
+                reuseExistingChunk: true,
               },
             },
           });
