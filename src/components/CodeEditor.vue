@@ -16,8 +16,15 @@ import { computed } from 'vue';
 import { useQuasar } from 'quasar';
 import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { Codemirror } from 'vue-codemirror';
 import { basicSetup } from 'codemirror';
+import { defineAsyncComponent } from 'vue';
+
+const Codemirror = defineAsyncComponent(
+  /* webpackChunkName: "codemirror" */
+  /* webpackMode: "lazy" */
+  /* webpackFetchPriority: "low" */
+  () => import('vue-codemirror')
+);
 
 const content = defineModel<string | undefined>({
   required: true,
