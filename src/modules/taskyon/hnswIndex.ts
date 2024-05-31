@@ -1,4 +1,4 @@
-import { HnswlibModule, loadHnswlib } from 'hnswlib-wasm';
+import type { HnswlibModule } from 'hnswlib-wasm';
 import { Lock, sleep } from './utils';
 
 const numDimensions = 384;
@@ -7,11 +7,19 @@ let lib: HnswlibModule | undefined = undefined;
 async function getHnswLib(): Promise<HnswlibModule> {
   if (lib) {
     return lib;
+  } else {
+    const { loadHnswlib } = await import(
+      /* webpackChunkName: "hnswlib" */
+      /* webpackMode: "lazy" */
+      /* webpackExports: ["loadHnswlib"] */
+      /* webpackFetchPriority: "low" */
+      'hnswlib-wasm'
+    );
+    lib = await loadHnswlib();
+    //TODO: we might need to run this off!
+    lib.EmscriptenFileSystemManager.setDebugLogs(true);
+    return lib;
   }
-  lib = await loadHnswlib();
-  //TODO: we might need to run this off!
-  lib.EmscriptenFileSystemManager.setDebugLogs(true);
-  return lib;
 }
 
 async function loadIndex(
