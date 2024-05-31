@@ -11,7 +11,7 @@
     v-bind="$attrs"
   >
     <template v-slot:append>
-      <q-btn flat dense round icon="send" @click="executeTask">
+      <q-btn flat dense round :icon="matSend" @click="executeTask">
         <q-tooltip>
           Press to send or alternatively send with &lt;shift&gt; + &lt;enter&gt;
         </q-tooltip>
@@ -24,8 +24,8 @@
         accept="*"
       >
         <q-btn dense class="fit" flat>
-          <q-icon class="gt-xs" name="upload_file" />
-          <q-icon name="attachment" />
+          <q-icon class="gt-xs" :name="matUploadFile" />
+          <q-icon :name="matAttachment" />
           <q-tooltip>Attach file to message</q-tooltip>
         </q-btn>
       </FileDropzone>
@@ -34,6 +34,11 @@
 </template>
 
 <script setup lang="ts">
+import {
+  matAttachment,
+  matSend,
+  matUploadFile,
+} from '@quasar/extras/material-icons';
 import FileDropzone from './FileDropzone.vue';
 
 const content = defineModel<string | null | undefined>({

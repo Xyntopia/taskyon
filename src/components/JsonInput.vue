@@ -1,7 +1,7 @@
 <template>
   <q-input type="textarea" filled v-model="jsonString">
     <template v-slot:append>
-      <q-btn flat dense @click="onSave" icon="save" />
+      <q-btn flat dense @click="onSave" :icon="matSave" />
     </template>
   </q-input>
 </template>
@@ -9,6 +9,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
+import { matSave } from '@quasar/extras/material-icons';
 
 const props = defineProps({
   modelValue: {

@@ -13,7 +13,7 @@
         result (yaml):
         <q-btn
           class="q-ml-md"
-          icon="html"
+          :icon="matHtml"
           dense
           flat
           @click="useIframe = !useIframe"
@@ -35,7 +35,7 @@
         <q-btn
           class="scroll-area-btn"
           flat
-          icon="content_copy"
+          :icon="matContentCopy"
           @click="copyToClipboard(task.result?.toolResult)"
         />
       </div>
@@ -64,6 +64,7 @@
 </style>
 
 <script setup lang="ts">
+import { matContentCopy, matHtml } from '@quasar/extras/material-icons';
 import { dump } from 'js-yaml';
 import type { LLMTask } from 'src/modules/taskyon/types';
 import { computed, ref } from 'vue';

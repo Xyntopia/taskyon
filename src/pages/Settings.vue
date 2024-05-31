@@ -4,7 +4,12 @@
       <div class="text-h6 q-pr-md">Basic Settings:</div>
       <SimpleSettings />
     </div>
-    <q-tabs :model-value="selectedTab" align="justify">
+    <q-tabs
+      :model-value="selectedTab"
+      align="justify"
+      :right-icon="matChevronRight"
+      :left-icon="matChevronLeft"
+    >
       <q-route-tab
         :to="{ params: { tab: 'llmproviders' } }"
         exact
@@ -70,6 +75,7 @@ import SimpleSettings from 'components/SimpleSettings.vue';
 import ObjectTreeView from 'components/ObjectTreeView.vue';
 import SyncTaskyon from 'components/SyncTaskyon.vue';
 import { useRoute } from 'vue-router';
+import { matChevronLeft, matChevronRight } from '@quasar/extras/material-icons';
 
 const route = useRoute();
 const state = useTaskyonStore();

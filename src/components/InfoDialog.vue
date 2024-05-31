@@ -1,5 +1,5 @@
 <template>
-  <q-btn flat rounded dense icon="info" @click="showInfo = true">
+  <q-btn flat rounded dense :icon="matInfo" @click="showInfo = true">
     <q-dialog v-model="showInfo">
       <q-card>
         <q-card-section>
@@ -14,7 +14,7 @@
 import { ref } from 'vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 const showInfo = ref(false);
-
+import { matInfo } from '@quasar/extras/material-icons';
 defineProps({
   infoText: {
     type: String,

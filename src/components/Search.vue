@@ -18,7 +18,7 @@
           @update:model-value="onQChange"
         >
           <template v-slot:append>
-            <q-btn round flat @click="requestSearch" icon="search" />
+            <q-btn round flat @click="requestSearch" :icon="matSearch" />
           </template>
         </q-input>
         <q-select
@@ -39,7 +39,7 @@
           v-if="showFilterButton"
           flat
           stretch
-          icon="filter_alt"
+          :icon="matFilterAlt"
           @click="toggleFilter"
         >
           <q-tooltip>Toggle Filter Options</q-tooltip>
@@ -55,6 +55,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+import { matFilterAlt, matSearch } from '@quasar/extras/material-icons';
 
 const numberOfSearchResults = defineModel<number>('numberOfSearchResults', {
   required: false,

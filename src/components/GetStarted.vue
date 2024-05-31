@@ -76,7 +76,7 @@
             noCaps
             to="/settings/llmproviders"
             label="Manually provide settings for a custom LLM server"
-            icon="settings"
+            :icon="matSettings"
           ></q-btn>
           <InfoDialog
             info-text="Examples are:  setup a local, privacy-presevering server, A custom LLM AI server in your company etc..."
@@ -119,6 +119,7 @@
 import { useTaskyonStore } from 'stores/taskyonState';
 import OpenRouterPKCE from 'src/components/OpenRouterPKCE.vue';
 import InfoDialog from 'src/components/InfoDialog.vue';
+import { matSettings } from '@quasar/extras/material-icons';
 
 const state = useTaskyonStore();
 </script>

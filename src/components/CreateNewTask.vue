@@ -37,7 +37,7 @@
         <q-btn
           :disable="!sendAllowed"
           :color="sendAllowed ? 'positive' : 'negative'"
-          icon="save"
+          :icon="matSave"
           label="save task"
           @click="addNewTask(false)"
           ><q-tooltip>Save task without executing it...</q-tooltip></q-btn
@@ -57,7 +57,7 @@
         <div class="row items-center">
           <div>
             <q-btn flat dense size="sm" no-caps>
-              <q-icon class="q-pr-sm" name="history"></q-icon>
+              <q-icon class="q-pr-sm" :name="matHistory"></q-icon>
               <div class="ellipsis">
                 {{ `${currentModel}` }}
               </div>
@@ -86,11 +86,11 @@
                     @click="expandedTaskCreation = !expandedTaskCreation"
                   >
                     <q-item-section avatar>
-                      <q-icon name="smart_toy"></q-icon>
+                      <q-icon :name="matSmartToy"></q-icon>
                     </q-item-section>
                     <q-item-section> More AI Settings </q-item-section>
                     <q-item-section side>
-                      <q-icon name="navigate_next"></q-icon>
+                      <q-icon :name="matNavigateNext"></q-icon>
                     </q-item-section>
                   </q-item>
                 </q-list>
@@ -115,13 +115,13 @@
               size="sm"
               @click="expandedTaskCreation = !expandedTaskCreation"
             >
-              <q-icon size="xs" name="tune" class="q-pl-sm"></q-icon>
+              <q-icon size="xs" name="matTune" class="q-pl-sm"></q-icon>
               <q-icon
                 size="xs"
                 :name="
                   expandedTaskCreation
-                    ? 'keyboard_arrow_up'
-                    : 'keyboard_arrow_down'
+                    ? matKeyboardArrowUp
+                    : matKeyboardArrowDown
                 "
               ></q-icon>
               <q-tooltip>Chat Settings</q-tooltip>
@@ -137,7 +137,7 @@
             @remove="
               fileAttachments = fileAttachments.filter((f) => f !== file)
             "
-            icon="upload_file"
+            :icon="matUploadFile"
           >
             <div class="ellipsis" style="max-width: 100px">
               {{ `${file.name}` }}
@@ -161,7 +161,7 @@
           v-if="selectedTaskType"
           flat
           dense
-          icon="chat"
+          :icon="matChat"
           @click="setTaskType(undefined)"
           ><q-tooltip>Select Simple Chat</q-tooltip>
         </q-btn>
@@ -180,7 +180,7 @@
         />
         <q-toggle
           v-if="expertMode"
-          icon="handyman"
+          :icon="matHandyman"
           left-label
           color="secondary"
           dense
@@ -196,7 +196,7 @@
           class="q-ma-md"
           dense
           flat
-          icon="code"
+          :icon="matCode"
           @click="state.showTaskData = !state.showTaskData"
           ><q-tooltip>Show Draft Task Data</q-tooltip></q-btn
         >
@@ -210,7 +210,7 @@
         <q-separator class="q-my-sm" />
         <!--Model Selection-->
         <q-item class="row items-center">
-          <q-icon name="smart_toy" size="sm" class="q-pr-sm"></q-icon>
+          <q-icon :name="matSmartToy" size="sm" class="q-pr-sm"></q-icon>
           <ModelSelection
             @updateBotName="handleBotNameUpdate"
             :bot-name="currentModel || currentDefaultBotName || ''"
@@ -222,21 +222,21 @@
         <!--Allowed Tools Selection-->
         <q-separator class="q-my-sm" />
         <q-item class="row items-center">
-          <q-icon name="mdi-tools" size="sm" />
+          <q-icon :name="mdiTools" size="sm" />
           <q-expansion-item
             class="col"
             dense
-            icon="handyman"
+            :icon="matHandyman"
             expand-icon-toggle
             label="Tools"
             v-model="state.allowedToolsExpand"
           >
             <template v-slot:header>
               <div class="row items-center q-gutter-sm">
-                <q-btn dense icon="edit" label="manage tools" to="tools" />
+                <q-btn dense :icon="matEdit" label="manage tools" to="tools" />
                 <q-btn
                   dense
-                  icon="checklist"
+                  :icon="matChecklist"
                   label="toggle tools"
                   @click="toggleSelectedTools"
                 />
@@ -293,6 +293,22 @@ import type { ToolBase } from 'src/modules/taskyon/types';
 import taskSettingsButton from './taskSettingsButton.vue';
 import taskContentEdit from './taskContentEdit.vue';
 import CodeEditor from './CodeEditor.vue';
+
+import {
+  matSave,
+  matUploadFile,
+  matChat,
+  matHandyman,
+  matCode,
+  matEdit,
+  matChecklist,
+matHistory,
+matSmartToy,
+matNavigateNext,
+matKeyboardArrowUp,
+matKeyboardArrowDown,
+} from '@quasar/extras/material-icons';
+import { mdiTools } from '@quasar/extras/mdi-v6';
 
 const props = defineProps<{
   codingMode?: boolean;

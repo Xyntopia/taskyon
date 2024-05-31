@@ -5,7 +5,7 @@
       <q-item-section>
         <q-btn
           @click="onDownloadTaskyonData"
-          icon="download"
+          :icon="matDownload"
           label="Save all Chats & Tasks"
         >
         </q-btn>
@@ -16,13 +16,13 @@
           @update:model-value="onUploadTaskyonData"
           accept="*"
         >
-          <q-btn icon="upload" label="Upload Tasks from file"> </q-btn>
+          <q-btn :icon="matUpload" label="Upload Tasks from file"> </q-btn>
         </FileDropzone>
       </q-item-section>
       <q-item-section>
         <q-btn
           @click="showDeleteDialog = true"
-          icon="delete_forever"
+          :icon="matDeleteForever"
           label="Delete Taskyon Chat Data"
           text-color="red"
         >
@@ -31,7 +31,7 @@
           <q-card>
             <q-card-section>
               <div class="text-h6 text-red text-center">
-                <q-icon name="warning" size="md" />
+                <q-icon :name="matWarning" size="md" />
                 Warning: Delete Taskyon Chat Data
               </div>
             </q-card-section>
@@ -56,7 +56,7 @@
                 flat
                 label="Delete"
                 color="negative"
-                icon="delete_forever"
+                :icon="matDeleteForever"
                 @click="onDeleteTaskyonData"
                 v-close-popup
               />
@@ -68,7 +68,7 @@
     <q-separator spaced />
     <q-item-label header>Taskyon Configuration Backup</q-item-label>
     <q-item>
-      <q-item-section avatar> <q-icon name="save" size="md" /> </q-item-section>
+      <q-item-section avatar> <q-icon :name="matSave" size="md" /> </q-item-section>
       <q-item-section>Download Settings:</q-item-section>
       <q-item-section>
         <q-btn label="JSON" @click="downloadSettings('json')"></q-btn>
@@ -77,7 +77,7 @@
     </q-item>
     <q-item>
       <q-item-section avatar>
-        <q-icon name="settings_backup_restore" size="md" />
+        <q-icon :name="matSettingsBackupRestore" size="md" />
       </q-item-section>
       <q-item-section>Load Settings:</q-item-section>
       <q-item-section>
@@ -105,15 +105,15 @@
     </q-item>
     <q-item class="q-pa-md q-gutter-sm">
       <q-item-section avatar>
-        <q-icon size="md" name="mdi-google-drive" />
+        <q-icon size="md" :name="mdiGoogleDrive" />
       </q-item-section>
 
       <q-item-section> Export app & settings to gdrive: </q-item-section>
       <q-item-section>
-        <q-btn @click="onSyncGdrive" icon="save">
+        <q-btn @click="onSyncGdrive" :icon="matSave">
           <q-tooltip> Save configuration to gdrive</q-tooltip>
         </q-btn>
-        <q-btn @click="onUpdateAppConfiguration" icon="sync">
+        <q-btn @click="onUpdateAppConfiguration" :icon="matSync">
           <q-tooltip> Restore app configuration from gdrive</q-tooltip>
         </q-btn>
       </q-item-section>
@@ -129,6 +129,16 @@ import { useTaskyonStore } from 'stores/taskyonState';
 import yaml from 'js-yaml';
 import { onSyncGdrive, onUpdateAppConfiguration } from 'src/modules/gdrive';
 import { deepMergeReactive } from 'src/modules/taskyon/utils';
+import {
+  matSync,
+  matSave,
+  matDownload,
+  matDeleteForever,
+  matUpload,
+matWarning,
+matSettingsBackupRestore,
+} from '@quasar/extras/material-icons';
+import { mdiGoogleDrive } from '@quasar/extras/mdi-v6';
 
 const state = useTaskyonStore();
 

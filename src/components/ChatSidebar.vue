@@ -16,7 +16,7 @@
           size="sm"
         />
         <div class="col-auto text-weight-medium">Conversation Threads</div>
-        <q-icon class="col-auto" name="menu" size="sm" />
+        <q-icon class="col-auto" :name="matMenu" size="sm" />
       </div>
     </q-item>
     <div class="q-pt-md">
@@ -32,7 +32,7 @@
             v-ripple
           >
             <!--q-item-section avatar>
-              <q-icon name="chat_bubble" size="xs" />
+              <q-icon name="matChatBubble" size="xs" />
             </!q-item-section-->
             <q-item-section
               v-for="(selected, idx) in [
@@ -63,7 +63,7 @@
                   v-if="state.llmSettings.selectedTaskId == conversationId.id"
                   flat
                   dense
-                  icon="download_for_offline"
+                  :icon="matDownloadForOffline"
                   size="sm"
                   to="/"
                   @click="onDownloadChat(conversationId.id)"
@@ -71,7 +71,7 @@
                 </q-btn>
                 <q-btn
                   dense
-                  icon="delete"
+                  :icon="matDelete"
                   size="sm"
                   flat
                   @click="onDeleteThread(conversationId.id)"
@@ -91,7 +91,7 @@
             disable-dropzone-border
           >
             <q-btn dense class="fit" flat>
-              <q-icon name="file_upload" />
+              <q-icon :name="matFileUpload" />
               <q-tooltip>Upload Chat</q-tooltip>
             </q-btn>
           </FileDropzone>
@@ -101,10 +101,10 @@
             @click="state.llmSettings.selectedTaskId = undefined"
             to="/"
           >
-            <q-icon name="add" />
+            <q-icon :name="matAdd" />
             <q-tooltip> Create a new conversation </q-tooltip>
           </q-btn>
-          <q-btn dense flat icon="search" to="/TaskManager"
+          <q-btn dense flat :icon="matSearch" to="/TaskManager"
             ><q-tooltip>Search for more conversations</q-tooltip></q-btn
           >
         </div>
@@ -120,7 +120,7 @@
         v-if="state.appConfiguration.expertMode"
         dense
         flat
-        icon="mdi-tools"
+        :icon="mdiTools"
         label="Tools"
         to="/tools"
       ></q-btn>
@@ -128,14 +128,14 @@
         v-if="state.appConfiguration.expertMode"
         dense
         flat
-        icon="mdi-robot-confused-outline"
+        :icon="mdiRobotConfusedOutline"
         label="Prompts"
         to="/prompts"
       ></q-btn>
       <q-btn
         flat
         dense
-        icon="manage_accounts"
+        :icon="matManageAccounts"
         label="Accounts"
         to="/settings/llmproviders"
       ></q-btn>
@@ -155,6 +155,17 @@ import { LLMTask, TaskListType } from 'src/modules/taskyon/types';
 import { exportFile } from 'quasar';
 import { dump, load } from 'js-yaml';
 import FileDropzone from 'components/FileDropzone.vue';
+
+import {
+  matDownloadForOffline,
+  matDelete,
+  matSearch,
+  matManageAccounts,
+  matMenu,
+  matFileUpload,
+  matAdd,
+} from '@quasar/extras/material-icons';
+import { mdiTools, mdiRobotConfusedOutline } from '@quasar/extras/mdi-v6';
 
 const state = useTaskyonStore();
 

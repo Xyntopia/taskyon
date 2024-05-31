@@ -24,8 +24,8 @@
         <div>
           <q-btn v-if="progress == 0" flat>
             <div clas="row">
-              <q-icon name="upload_file" />
-              <q-icon name="add_a_photo" />
+              <q-icon :name="matUploadFile" />
+              <q-icon :name="matAddAPhoto" />
             </div>
           </q-btn>
           <q-circular-progress
@@ -46,8 +46,8 @@
       <div class="row items-stretch q-gutter-x-xs">
         <q-btn class="col-3" color="primary" text-color="white" stack @click="filePicker?.pickFiles()">
           <div clas="row">
-            <q-icon name="upload_file" />
-            <q-icon name="add_a_photo" />
+            <q-icon :name="matUploadFile" />
+            <q-icon :name="matAddAPhoto" />
           </div>
           add file(s)
         </q-btn>
@@ -70,6 +70,7 @@
 </style>
 
 <script setup lang="ts">
+import { matAddAPhoto, matUploadFile } from '@quasar/extras/material-icons';
 import { ref, Ref } from 'vue';
 
 const emit = defineEmits(['update:modelValue']);

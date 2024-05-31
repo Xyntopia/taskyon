@@ -6,7 +6,7 @@
         flat
         @click="state.drawerOpen = !state.drawerOpen"
         dense
-        icon="menu"
+        :icon="matMenu"
         :size="btnsize"
       />
       <q-separator vertical :dark="!$q.dark.isActive"></q-separator>
@@ -14,7 +14,7 @@
         flat
         dense
         :size="btnsize"
-        icon="reviews"
+        :icon="matReviews"
         to="/"
         @click="state.llmSettings.selectedTaskId = undefined"
         ><q-tooltip>Create New Chat</q-tooltip>
@@ -26,7 +26,7 @@
         dense
         round
         color="warning"
-        icon="warning"
+        :icon="matWarning"
         to="diagnostics"
       >
         <q-tooltip
@@ -52,7 +52,7 @@
         flat
         dense
         size="xs"
-        icon="launch"
+        :icon="matLaunch"
         color="grey-6"
         type="a"
         href="http://www.xyntopia.com"
@@ -78,6 +78,12 @@ route.query; //has all the parameters :)
 
 import DarkModeButton from 'components/DarkModeButton.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
+import {
+  matLaunch,
+  matMenu,
+  matReviews,
+  matWarning,
+} from '@quasar/extras/material-icons';
 
 const state = useTaskyonStore();
 const btnsize = 'xs';

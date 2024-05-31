@@ -57,7 +57,7 @@ module.exports = configure(function (ctx) {
     },
 
     // https://v2.quasar.dev/quasar-cli/prefetch-feature
-    preFetch: true,
+    // preFetch: true,
 
     // https://quasar.dev/quasar-cli/quasar-conf-js#property-vendor
     // if we include files such as "danfojs" the library gets huge, so we are disabling this
@@ -94,6 +94,8 @@ module.exports = configure(function (ctx) {
 
     // https://github.com/quasarframework/quasar/tree/dev/extras
     extras: [
+      // we don't use webfont icons anymore.. svg icons look better and support treeshaking
+      // and make the app faster this way...
       // 'ionicons-v4',
       // 'mdi-v5',
       // 'fontawesome-v5',
@@ -101,10 +103,9 @@ module.exports = configure(function (ctx) {
       // 'themify',
       // 'line-awesome',
       // 'roboto-font-latin-ext', // this or either 'roboto-font', NEVER both!
-
-      'roboto-font', // optional, you are not bound to it
-      'material-icons', // optional, you are not bound to it
-      'mdi-v5',
+      //'roboto-font', // optional, you are not bound to it
+      //'material-icons', // optional, you are not bound to it
+      //'mdi-v5',
     ],
 
     // specify variables for index.template.html
@@ -214,13 +215,13 @@ module.exports = configure(function (ctx) {
           chain.optimization.splitChunks({
             //...chain.optimization.get('splitChunks'),
             /*chunks: 'all',
-            minSize: 20000,
             minRemainingSize: 0,
             minChunks: 1,
             maxAsyncRequests: 30,
             maxInitialRequests: 2,
             enforceSizeThreshold: 50000,
             name: 'rest',*/
+            minSize: 20000,
             cacheGroups: {
               page: {
                 /*name(module, chunks, cacheGroupKey) {
@@ -250,6 +251,7 @@ module.exports = configure(function (ctx) {
                 reuseExistingChunk: true,
                 enforce: true,
                 chunks: 'async',
+                minSize: 20000,
               },
               vendor_whitelist: {
                 test: /[\\/]node_modules[\\/](vue|quasar|core-js)[\\/]/,
@@ -257,7 +259,8 @@ module.exports = configure(function (ctx) {
                 reuseExistingChunk: true,
                 name: 'vendor',
                 chunks: 'all',
-                //maxSize: 5000000,
+                minSize: 20000,
+                //maxSize: 5000000,s
                 //maxAsyncSize: 1000000,
                 //minSize: 1000000
               },
@@ -295,6 +298,7 @@ module.exports = configure(function (ctx) {
                 priority: 10,
                 reuseExistingChunk: true,
                 chunks: 'all',
+                minSize: 20000,
               },
               default: {
                 name: 'default',
@@ -346,7 +350,7 @@ module.exports = configure(function (ctx) {
 
     // https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-framework
     framework: {
-      iconSet: 'material-icons', // Quasar icon set
+      //iconSet: 'material-icons', // Quasar icon set
       lang: 'en-US', // Quasar language pack
       config: {
         dark: 'auto', // 'auto' or Boolean true/false

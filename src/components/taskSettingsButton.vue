@@ -3,7 +3,7 @@
     class="col-auto self-end"
     flat
     dense
-    icon="tune"
+    :icon="matTune"
     @click="
       () => {
         expandedTaskCreation = !expandedTaskCreation;
@@ -15,6 +15,8 @@
 </template>
 
 <script setup lang="ts">
+import { matTune } from '@quasar/extras/material-icons';
+
 const expandedTaskCreation = defineModel<boolean>({
   required: true,
 });

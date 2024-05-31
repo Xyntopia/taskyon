@@ -28,7 +28,7 @@
         filled
         dense
         label="Select OpenAI Assistant"
-        icon="smart_toy"
+        :icon="matSmartToy"
         :options="modelOptions"
         emit-value
         map-options
@@ -37,7 +37,7 @@
       >
         <template v-slot:after>
           <q-btn
-            :icon="state.modelDetails ? 'expand_less' : 'expand_more'"
+            :icon="state.modelDetails ? matExpandLess : matExpandMore"
             flat
             @click="state.modelDetails = !state.modelDetails"
           >
@@ -62,7 +62,7 @@
       <q-select
         dense
         label="Select LLM Model for answering/solving the task."
-        icon="smart_toy"
+        :icon="matSmartToy"
         :options="filteredOptions"
         emit-value
         :model-value="botName"
@@ -124,6 +124,11 @@ import { computed, ref } from 'vue';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import InfoDialog from './InfoDialog.vue';
+import {
+  matSmartToy,
+  matExpandLess,
+  matExpandMore,
+} from '@quasar/extras/material-icons';
 
 const props = defineProps({
   botName: {
@@ -187,8 +192,6 @@ const modelOptions = computed(() => {
     return options;
   }
 });
-
-
 
 function onModelSelect(value: string) {
   emit('updateBotName', {

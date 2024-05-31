@@ -4,7 +4,7 @@
       <q-btn
         class="fit"
         label="Connect Taskyon to Openrouter.ai AI service"
-        icon="key"
+        :icon="matKey"
         noCaps
         outline
         @click="onGetOpenRouterKey"
@@ -31,6 +31,7 @@ import { onMounted, computed } from 'vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { useRoute } from 'vue-router';
 import InfoDialog from 'components/InfoDialog.vue';
+import { matKey } from '@quasar/extras/material-icons';
 
 const state = useTaskyonStore();
 const route = useRoute();

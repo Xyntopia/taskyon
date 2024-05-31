@@ -5,10 +5,10 @@
     round
     :icon="
       $q.dark.mode === 'auto'
-        ? 'contrast'
+        ? matContrast
         : $q.dark.mode
-        ? 'dark_mode'
-        : 'light_mode'
+        ? matDarkMode
+        : matLightMode
     "
     @click="toggleTheme"
     v-bind="$attrs"
@@ -24,6 +24,12 @@
 
 <script setup lang="ts">
 import { useQuasar } from 'quasar';
+
+import {
+  matContrast,
+  matDarkMode,
+  matLightMode,
+} from '@quasar/extras/material-icons';
 
 // Emits an event when the theme is changed
 const emit = defineEmits(['themeChanged']);

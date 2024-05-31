@@ -1,6 +1,10 @@
 <template>
   <q-page class="q-gutter-xs q-pa-xs">
-    <q-btn :percentage="syncProgress" icon="sync" @click="onUpdateSearchIndex">
+    <q-btn
+      :percentage="syncProgress"
+      :icon="matSync"
+      @click="onUpdateSearchIndex"
+    >
       update search index {{ syncProgressString }}</q-btn
     >
     <q-table
@@ -44,7 +48,7 @@
               <q-btn
                 flat
                 stretch
-                icon="play_arrow"
+                :icon="matPlayArrow"
                 dense
                 @click="setConversation(props.row.id)"
                 to="chat"
@@ -70,6 +74,7 @@ import { LLMTask } from 'src/modules/taskyon/types';
 import Task from 'src/components/Task.vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { findLeafTasks } from 'src/modules/taskyon/taskManager';
+import { matPlayArrow, matSync } from '@quasar/extras/material-icons';
 
 const state = useTaskyonStore();
 const searchResults = ref<LLMTask[]>([]);

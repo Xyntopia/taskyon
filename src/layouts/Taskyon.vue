@@ -12,7 +12,7 @@
           round
           dense
           :size="btnSize"
-          icon="menu"
+          :icon="matMenu"
         />
         <div class="q-ml-lg button-group">
           <q-btn
@@ -20,18 +20,24 @@
             flat
             dense
             :size="btnSize"
-            icon="search"
+            :icon="matSearch"
             to="/taskmanager"
           >
             <q-tooltip>Search Conversations</q-tooltip>
           </q-btn>
-          <q-btn v-if="!minMode" flat dense icon="chat" to="/" :size="btnSize"
+          <q-btn
+            v-if="!minMode"
+            flat
+            dense
+            :icon="matChat"
+            to="/"
+            :size="btnSize"
             ><q-tooltip>Go to Chat</q-tooltip>
           </q-btn>
           <q-btn
             flat
             dense
-            icon="add_comment"
+            :icon="matAddComment"
             :size="btnSize"
             to="/"
             @click="state.llmSettings.selectedTaskId = undefined"
@@ -46,7 +52,7 @@
           round
           :size="btnSize"
           color="warning"
-          icon="warning"
+          :icon="matWarning"
           to="/diagnostics"
         >
           <q-tooltip
@@ -60,7 +66,7 @@
           :size="btnSize"
           dense
           round
-          icon="settings"
+          :icon="matSettings"
           to="/settings"
         >
           <q-tooltip>Open settings</q-tooltip>
@@ -82,7 +88,7 @@
           :size="btnSize"
           dense
           round
-          icon="mdi-github"
+          :icon="mdiGithub"
           href="https://github.com/xyntopia/taskyon"
           target="_blank"
         >
@@ -164,17 +170,28 @@
 </style>
 
 <script setup lang="ts">
-import {reactive} from 'vue'
+import { reactive } from 'vue';
 import DarkModeButton from 'components/DarkModeButton.vue';
 //import { useTaskyonStore } from 'stores/taskyonState';
 import { defineAsyncComponent } from 'vue';
+import {
+  matAddComment,
+  matChat,
+  matMenu,
+  matSearch,
+  matSettings,
+  matWarning,
+} from '@quasar/extras/material-icons';
+import { mdiGithub } from '@quasar/extras/mdi-v6';
 
 const ChatSidebar = defineAsyncComponent(
-  () => import(
-    /* webpackChunkName: "ChatSidebar" */
-    /* webpackMode: "lazy" */
-    /* webpackFetchPriority: "low" */
-    'components/ChatSidebar.vue')
+  () =>
+    import(
+      /* webpackChunkName: "ChatSidebar" */
+      /* webpackMode: "lazy" */
+      /* webpackFetchPriority: "low" */
+      'components/ChatSidebar.vue'
+    )
 );
 
 //const state = useTaskyonStore();
@@ -184,7 +201,7 @@ const state = reactive({
   minimalGui: false,
   darkTheme: false,
   getErrors: () => [],
-  llmSettings: { selectedTaskId: undefined }
+  llmSettings: { selectedTaskId: undefined },
 });
 
 const minMode = state.minimalGui;

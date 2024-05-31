@@ -50,7 +50,7 @@
                 dense
                 outline
                 color="secondary"
-                icon="stop"
+                :icon="matStop"
                 @click="state.taskWorkerController.interrupt(currentTask.id)"
               >
                 <q-tooltip> Stop processing current task. </q-tooltip>
@@ -109,7 +109,7 @@
             v-if="!lockBottomScroll"
             fab-mini
             class="taskyon-control-button"
-            icon="keyboard_double_arrow_down"
+            :icon="matKeyboardDoubleArrowDown"
             @click="scrollToThreadEnd"
             size="md"
           >
@@ -123,7 +123,7 @@
             "
             fab-mini
             class="taskyon-control-button"
-            icon="stop"
+            :icon="matStop"
             size="md"
             @click="state.taskWorkerController.interrupt(currentTask.id)"
           >
@@ -188,6 +188,10 @@ import CreateNewTask from 'components/CreateNewTask.vue';
 import axios from 'axios';
 import type { LLMTask } from 'src/modules/taskyon/types';
 import GetStarted from 'src/components/GetStarted.vue';
+import {
+  matKeyboardDoubleArrowDown,
+  matStop,
+} from '@quasar/extras/material-icons';
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
 const welcomeText = ref<string>('');

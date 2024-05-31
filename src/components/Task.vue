@@ -6,14 +6,14 @@
       <div class="row items-end q-gutter-xs">
         <!--task icon-->
         <div v-if="task.debugging.error" class="col-auto">
-          <q-icon name="warning" color="warning" size="sm"
+          <q-icon :name="matWarning" color="warning" size="sm"
             ><q-tooltip class="bg-warning">Error!</q-tooltip>
           </q-icon>
         </div>
         <div v-if="'functionCall' in task.content" class="col q-pb-md">
           <q-expansion-item
             dense
-            icon="calculate"
+            :icon="matCalculate"
             :label="task.content.functionCall.name"
             :header-class="
               task.result?.toolResult?.error ? 'text-red' : 'text-green'
@@ -25,7 +25,7 @@
         <div v-if="'functionResult' in task.content" class="col q-pb-md">
           <q-expansion-item
             dense
-            icon="mdi-head-cog"
+            :icon="mdiHeadCog"
             label="Analyzing result..."
           >
             <p style="white-space: pre-wrap">
@@ -47,7 +47,7 @@
           <q-list>
             <q-item v-for="file in fileMappings" :key="file?.uuid">
               <q-item-section side>
-                <q-icon name="mdi-file-document" size="sm"></q-icon>
+                <q-icon :name="mdiFileDocument" size="sm"></q-icon>
               </q-item-section>
               <q-item-section class="ellipsis">{{
                 file?.name || file?.opfs
@@ -71,7 +71,7 @@
             {{ humanReadableTaskCosts }}
           </div>
           <q-icon
-            name="monetization_on"
+            :name="matMonetizationOn"
             size="xs"
             :color="
               task.debugging.taskCosts
@@ -124,7 +124,7 @@
           new-value-mode="add-unique"
         >
           <template v-slot:prepend>
-            <q-icon name="new_label" />
+            <q-icon :name="matNewLabel" />
           </template>
         </q-select>
         <q-tabs dense v-model="state.messageDebug[task.id]" no-caps>
@@ -239,6 +239,8 @@ import { computed, ref } from 'vue';
 import { FileMappingDocType } from 'src/modules/taskyon/rxdb';
 import { dump } from 'js-yaml';
 import TaskButtons from './TaskButtons.vue';
+import { mdiFileDocument, mdiHeadCog } from '@quasar/extras/mdi-v6';
+import { matCalculate, matMonetizationOn, matNewLabel } from '@quasar/extras/material-icons';
 
 const props = defineProps<{
   task: LLMTask;

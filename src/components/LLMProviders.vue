@@ -10,7 +10,7 @@
       :options="Object.keys(state.llmSettings.llmApis)"
     >
       <template v-slot:before>
-        <q-icon name="electrical_services"></q-icon>
+        <q-icon :name="matElectricalServices"></q-icon>
       </template>
     </q-select>
     <q-item-label header>API keys</q-item-label>
@@ -24,7 +24,7 @@
       :label="`${keyname} API key`"
       ><template v-slot:append>
         <q-icon
-          :name="keyVisible[keyname] ? 'visibility' : 'visibility_off'"
+          :name="keyVisible[keyname] ? matVisibility : matVisibilityOff"
           class="cursor-pointer"
           @click="keyVisible[keyname] = !keyVisible[keyname]"
         />
@@ -34,7 +34,7 @@
       v-if="state.appConfiguration.expertMode"
       dense
       label="Edit Apis"
-      icon="edit"
+      :icon="matEdit"
     >
       <TyMarkdown
         src="Here, we can add new, custom APIs to taskyon that we can connect to
@@ -58,6 +58,12 @@ import OpenRouterPKCE from './OpenRouterPKCE.vue';
 import { computed, ref } from 'vue';
 import JsonInput from './JsonInput.vue';
 import TyMarkdown from './tyMarkdown.vue';
+import {
+  matEdit,
+  matElectricalServices,
+  matVisibility,
+  matVisibilityOff,
+} from '@quasar/extras/material-icons';
 
 const keyVisible = ref<Record<string, boolean>>({});
 
