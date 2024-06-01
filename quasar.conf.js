@@ -126,6 +126,7 @@ module.exports = configure(function (ctx) {
         APPNAME: APPNAME,
         DESCRIPTION: DESCRIPTION,
       },
+      //devtool: 'source-map', // TODO: turn this off for actua production...
       vueRouterMode: 'history', // available values: 'hash', 'history'
       vueLoaderOptions: {
         compilerOptions: {
@@ -281,23 +282,24 @@ module.exports = configure(function (ctx) {
                 name(module, chunks, cacheGroupKey) {
                   const moduleFileName = module
                     .identifier()
-                    .split('/')
+                    .split('node_modules')
                     .reduceRight((item) => item);
 
-                  const { chunk: largestChunk } = chunks.reduce(
+                  /*const { chunk: largestChunk } = chunks.reduce(
                     (largest, chunk) => {
                       return chunk.size() > largest.size
                         ? { chunk, size: chunk.size() }
                         : largest;
                     },
                     { chunk: undefined, size: 0 }
-                  );
+                  );*/
 
                   // Get the largest chunk's name
-                  const largestChunkName = largestChunk.name;
+                  //const largestChunkName = largestChunk.name;
 
+                  //return `l-${largestChunkName}-${moduleFileName}`;
                   // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-                  return `${cacheGroupKey}-${largestChunkName}-${moduleFileName}`;
+                  return `l-${moduleFileName}`;
                 },
                 test: /[\\/]node_modules[\\/]/,
                 priority: 10,

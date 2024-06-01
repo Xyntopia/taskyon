@@ -7,7 +7,7 @@ export const taskyonRoutes = {
   children: [
     {
       path: '',
-      component: () => import('pages/Welcome.vue'),
+      component: () => import('pages/TaskChat.vue'),
     },
     { path: 'taskmanager', component: () => import('pages/TaskManager.vue') },
     {

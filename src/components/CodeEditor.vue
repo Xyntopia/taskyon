@@ -20,6 +20,7 @@ import { basicSetup } from 'codemirror';
 import { defineAsyncComponent } from 'vue';
 
 const Codemirror = defineAsyncComponent(
+  /* webpackPrefetch: true */
   /* webpackChunkName: "codemirror" */
   /* webpackMode: "lazy" */
   /* webpackFetchPriority: "low" */

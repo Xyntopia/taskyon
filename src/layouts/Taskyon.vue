@@ -184,6 +184,7 @@ import {
 } from '@quasar/extras/material-icons';
 import { mdiGithub } from '@quasar/extras/mdi-v6';
 
+
 const ChatSidebar = defineAsyncComponent(
   () =>
     import(
