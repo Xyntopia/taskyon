@@ -161,6 +161,13 @@ module.exports = configure(function (ctx) {
           },
         });
 
+        // Add chunkFilename option
+        // make sure all our chunks are named in a nicer way :)
+        /*cfg.output = {
+          ...cfg.output,
+          chunkFilename: 'js/[name].[chunkhash:8].js',
+        };*/
+
         /*if (process.env.NODE_ENV === "production") {
             // ...
             cfg.plugins.push(
@@ -198,9 +205,12 @@ module.exports = configure(function (ctx) {
       // showProgress: false,
       // gzip: true,
       //analyze: false,
+      // also check this page:  https://webpack-stats-viewer.moonrailgun.com/   to see where large chunks get loaded from...
       analyze: {
         analyzerMode: 'static', // static generates a static html file, 'server' has more options but can not be used with CI/CD
         reportFilename: '../analyze_report.html',
+        generateStatsFile: true, // in stats.json
+        statsFilename: '../stats.json',
       }, // do this in order to debug our large bundle sizes...
 
       // Options below are automatically set depending on the env, set them if you want to override
@@ -221,37 +231,44 @@ module.exports = configure(function (ctx) {
             maxInitialRequests: 2,
             enforceSizeThreshold: 50000,
             name: 'rest',*/
-            minSize: 20000,
+            //minSize: 20000,
+            minSize: 50000,
+            maxInitialRequests: 2,
+            hidePathInfo: false,
             cacheGroups: {
               page: {
-                /*name(module, chunks, cacheGroupKey) {
-                  const moduleFileName = module
-                    .identifier()
-                    .split('/')
-                    .reduceRight((item) => item);
-
-                  const { chunk: largestChunk } = chunks.reduce(
-                    (largest, chunk) => {
-                      return chunk.size() > largest.size
-                        ? { chunk, size: chunk.size() }
-                        : largest;
-                    },
-                    { chunk: undefined, size: 0 }
-                  );
-
-                  // Get the largest chunk's name
-                  const largestChunkName = largestChunk.name;
-
-                  // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-                  return `${cacheGroupKey}-${largestChunkName}-${moduleFileName}`;
-                },*/
                 name: 'page',
-                test: /.*src[\\/]page.+/,
+                test: /src[\\/](pages|layout|router)/,
+                //test: /[\\/]src[\\/](pages|layout)[\\/]/,
                 priority: 25,
                 reuseExistingChunk: true,
                 enforce: true,
-                chunks: 'async',
-                minSize: 20000,
+                chunks: 'all',
+                minChunks: 1,
+              },
+              taskyon: {
+                name: 'taskyon',
+                test: /src[\\/](modules)/,
+                //test: /[\\/]src[\\/](pages|layout)[\\/]/,
+                priority: 20,
+                reuseExistingChunk: true,
+                enforce: true,
+                chunks: 'all',
+                minChunks: 1,
+              },
+              components: {
+                name: 'components',
+                test: (module) => {
+                  const name = module.resource;
+                  const valid = /src[\\/](components|assets)/.test(name);
+                  return valid;
+                },
+                //test: /[\\/]src[\\/](pages|layout)[\\/]/,
+                priority: 25,
+                reuseExistingChunk: true,
+                enforce: true,
+                chunks: 'all',
+                minChunks: 1,
               },
               vendor_whitelist: {
                 test: /[\\/]node_modules[\\/](vue|quasar|core-js)[\\/]/,
@@ -259,20 +276,8 @@ module.exports = configure(function (ctx) {
                 reuseExistingChunk: true,
                 name: 'vendor',
                 chunks: 'all',
-                minSize: 20000,
-                //maxSize: 5000000,s
-                //maxAsyncSize: 1000000,
-                //minSize: 1000000
               },
-              commons: {
-                test: /.*/,
-                name: 'initial',
-                chunks: 'initial',
-                minChunks: 1,
-                priority: 40,
-                enforce: true, // Ensure this chunk is always created
-              },
-              node: {
+              libs: {
                 name(module, chunks, cacheGroupKey) {
                   const moduleFileName = module
                     .identifier()
@@ -298,13 +303,18 @@ module.exports = configure(function (ctx) {
                 priority: 10,
                 reuseExistingChunk: true,
                 chunks: 'all',
-                minSize: 20000,
+                minSize: 50000,
               },
-              default: {
-                name: 'default',
-                minChunks: 2,
-                priority: -20,
-                reuseExistingChunk: true,
+              commons: {
+                name: 'initial',
+                chunks: 'initial',
+                minChunks: 1,
+                priority: 40,
+                enforce: true, // Ensure this chunk is always created
+              },
+              json: {
+                type: 'json',
+                name: 'json',
               },
             },
           });

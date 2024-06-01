@@ -3,23 +3,11 @@ import authRoutes from './routes_default';
 
 export const taskyonRoutes = {
   path: '/',
-  component: () =>
-    import(
-      /* webpackChunkName: "layouts/Taskyon.vue" */
-      /* webpackMode: "lazy" */
-      /* webpackFetchPriority: "low" */
-      'layouts/Taskyon.vue'
-    ),
+  component: () => import('layouts/Taskyon.vue'),
   children: [
     {
       path: '',
-      component: () =>
-        import(
-          /* webpackChunkName: "pages/Welcome.vue" */
-          /* webpackMode: "lazy" */
-          /* webpackFetchPriority: "low" */
-          'pages/Welcome.vue'
-        ),
+      component: () => import('pages/Welcome.vue'),
     },
     { path: 'taskmanager', component: () => import('pages/TaskManager.vue') },
     {
