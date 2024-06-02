@@ -30,7 +30,7 @@ import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 import markdownItMermaid from '@datatraccorporation/markdown-it-mermaid';
 //import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
 //import katex from  '@mdit/plugin-katex-slim'
-import mathjax3 from 'markdown-it-mathjax3'
+import mathjax3 from 'markdown-it-mathjax3';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import type MarkdownIt from 'markdown-it/lib';
 import 'prismjs/components/prism-python';
@@ -38,8 +38,6 @@ import 'prismjs/components/prism-rust';
 import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-typescript';
 import { useQuasar } from 'quasar';
-
-
 const $q = useQuasar();
 
 const switchThemeMermaid: MarkdownIt.PluginSimple = (md: MarkdownIt) => {
@@ -88,7 +86,15 @@ function addCopyButtons(md: MarkdownIt) {
             q-btn--actionable q-focusable q-hoverable q-btn--dense copy-button print-hide">
             <span class="q-focus-helper"></span>
             <span class="q-btn__content text-center col items-center q-anchor--skip justify-center row">
-              <i class="q-icon notranslate material-icons" aria-hidden="true" role="img">content_copy</i>
+              <i class="q-icon" aria-hidden="true" role="img">
+                <svg viewBox="0 0 24 24">
+                  <path d="M0 0h24v24H0z" style="fill: none;">
+                  </path>
+                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 
+                  1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z">
+                  </path>
+                </svg>
+              </i>
             </span>
           </button>
         </div>

@@ -56,11 +56,11 @@
                 <q-tooltip> Stop processing current task. </q-tooltip>
               </q-btn>
               <div class="col">
-                <q-markdown
+                <ty-markdown
                   no-line-numbers
-                  :src="currentTask.debugging.streamContent"
+                  :src="currentTask.debugging.streamContent || ''"
                 />
-                <q-markdown
+                <ty-markdown
                   no-line-numbers
                   :src="
                     JSON.stringify(currentTask.debugging.toolStreamArgsContent)
@@ -179,10 +179,9 @@
 
 <script setup lang="ts">
 import Task from 'components/Task.vue';
-import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
+import tyMarkdown from 'src/components/tyMarkdown.vue';
 import { ref, UnwrapRef, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
-import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
 import axios from 'axios';
