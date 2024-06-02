@@ -16,22 +16,16 @@
       </template>
     </q-select>
     <q-item-label header>API keys</q-item-label>
-    <q-input
+
+    <SecretInput
       v-for="keyname of filteredKeys"
       :key="keyname"
-      :type="keyVisible[keyname] ? 'text' : 'password'"
       placeholder="Add API key here!"
       filled
       v-model="state.keys[keyname]"
       :label="`${keyname} API key`"
-      ><template v-slot:append>
-        <q-icon
-          :name="keyVisible[keyname] ? matVisibility : matVisibilityOff"
-          class="cursor-pointer"
-          @click="keyVisible[keyname] = !keyVisible[keyname]"
-        />
-      </template>
-    </q-input>
+    >
+    </SecretInput>
     <q-expansion-item
       v-if="state.appConfiguration.expertMode"
       dense
@@ -57,18 +51,11 @@ or with an llm proxy such as this one:  https://github.com/BerriAI/liteLLM-proxy
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
 import OpenRouterPKCE from './OpenRouterPKCE.vue';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import JsonInput from './JsonInput.vue';
 import TyMarkdown from './tyMarkdown.vue';
-import {
-  matEdit,
-  matElectricalServices,
-  matKeyboardArrowDown,
-  matVisibility,
-  matVisibilityOff,
-} from '@quasar/extras/material-icons';
-
-const keyVisible = ref<Record<string, boolean>>({});
+import SecretInput from './SecretInput.vue';
+import { matEdit, matElectricalServices } from '@quasar/extras/material-icons';
 
 const state = useTaskyonStore();
 const filteredKeys = computed(() => {
