@@ -56,7 +56,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { matClear, matFilterAlt, matSearch } from '@quasar/extras/material-icons';
+import { matFilterAlt, matSearch } from '@quasar/extras/material-icons';
 
 const numberOfSearchResults = defineModel<number>('numberOfSearchResults', {
   required: false,

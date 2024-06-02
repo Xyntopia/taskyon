@@ -22,14 +22,14 @@
         },
         {
           name: 'score',
-          sortable: false,
+          sortable: true,
           required: true,
           label: 'score',
           field: (row) => 1 / (row.distance + 0.001),
         },
         {
           name: 'task',
-          sortable: false,
+          sortable: true,
           required: true,
           label: 'task',
           field: (task: LLMTask) => task.id,
