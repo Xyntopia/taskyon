@@ -355,7 +355,8 @@ module.exports = configure(function (ctx) {
 
     // https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-framework
     framework: {
-      iconSet: 'svg-mdi-v7',
+      // https://quasar.dev/vue-components/icon#options-api
+      iconSet: 'svg-material-icons',
       lang: 'en-US', // Quasar language pack
       config: {
         dark: 'auto', // 'auto' or Boolean true/false
