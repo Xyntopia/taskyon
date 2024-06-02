@@ -279,7 +279,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRaw, toRefs } from 'vue';
+import { computed, ref, toRaw, toRefs, watchEffect } from 'vue';
 import { countStringTokens, getApiConfig } from 'src/modules/taskyon/chat';
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools';
 import { FunctionArguments } from 'src/modules/taskyon/types';
@@ -309,7 +309,6 @@ import {
   matKeyboardArrowUp,
   matKeyboardArrowDown,
   matTune,
-  matClear,
 } from '@quasar/extras/material-icons';
 import { mdiTools } from '@quasar/extras/mdi-v6';
 
@@ -421,14 +420,14 @@ async function setTaskType(tasktype: string | undefined | null) {
   }
 }
 
-const estimatedTokens = computed(() => {
-  // Tokenize the message
-  const tokens = countStringTokens(
-    JSON.stringify(state.taskDraft.content) || ''
-  );
-
-  // Return the token count
-  return tokens;
+const estimatedTokens = ref<number>(0);
+watchEffect(() => {
+  void (async () => {
+    // Tokenize the message
+    estimatedTokens.value = await countStringTokens(
+      JSON.stringify(state.taskDraft.content) || ''
+    );
+  })();
 });
 
 async function toggleSelectedTools() {
