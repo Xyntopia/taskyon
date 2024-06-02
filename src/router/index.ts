@@ -9,7 +9,7 @@ import {
 //import DoxcavatorRoutes  from './routes_doxcavator'
 //import DefaultRoutes from './routes'
 //import { RouteRecordRaw } from 'vue-router';
-import TaskyonRoutes from './routes_taskyon'
+import TaskyonRoutes from './routes_taskyon';
 
 // TODO: do the following with #ifdef preprocessor webpack plugin
 /*let routes: RouteRecordRaw[] = []
@@ -21,7 +21,7 @@ if(process.env.APPNAME==='Spacemarket'){
   routes = DefaultRoutes
 }*/
 
-const routes = TaskyonRoutes
+const routes = TaskyonRoutes;
 //const routes = await import('./routes_doxcavator')
 
 /*
@@ -36,7 +36,9 @@ const routes = TaskyonRoutes
 export default route(function (/* { store, ssrContext } */) {
   const createHistory = process.env.SERVER
     ? createMemoryHistory
-    : (process.env.VUE_ROUTER_MODE === 'history' ? createWebHistory : createWebHashHistory);
+    : process.env.VUE_ROUTER_MODE === 'history'
+    ? createWebHistory
+    : createWebHashHistory;
 
   const Router = createRouter({
     scrollBehavior: () => ({ left: 0, top: 0 }),

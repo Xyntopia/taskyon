@@ -184,7 +184,6 @@ import {
 } from '@quasar/extras/material-icons';
 import { mdiGithub } from '@quasar/extras/mdi-v6';
 
-
 const ChatSidebar = defineAsyncComponent(
   () =>
     import(
@@ -200,7 +199,7 @@ const state = reactive({
   drawerOpen: false,
   drawerRight: false,
   minimalGui: false,
-  darkTheme: false,
+  darkTheme: false as unknown as boolean | 'auto',
   getErrors: () => [],
   llmSettings: { selectedTaskId: undefined },
 });

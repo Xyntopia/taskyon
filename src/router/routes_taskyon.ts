@@ -1,5 +1,7 @@
 import { RouteRecordRaw } from 'vue-router';
 import authRoutes from './routes_default';
+import { defineAsyncComponent } from 'vue';
+import Load from 'components/Loading.vue';
 
 export const taskyonRoutes = {
   path: '/',
@@ -7,12 +9,24 @@ export const taskyonRoutes = {
   children: [
     {
       path: '',
-      component: () => import('pages/TaskChat.vue'),
+      //component: defineAsyncComponent(() => import('pages/TaskChat.vue')),
+      component: defineAsyncComponent({
+        loader: () => import('pages/TaskChat.vue'),
+        loadingComponent: Load,
+        delay: 200,
+      }),
+      /*component: defineAsyncComponent({
+        loader: () => import('pages/TaskChat.vue'),
+        loadingComponent: () => import('src/components/Loading.vue'),
+      }),*/
     },
-    { path: 'taskmanager', component: () => import('pages/TaskManager.vue') },
+    {
+      path: 'taskmanager',
+      component: defineAsyncComponent(() => import('pages/TaskManager.vue')),
+    },
     {
       path: 'chat',
-      component: () => import('pages/TaskChat.vue'),
+      component: defineAsyncComponent(() => import('pages/TaskChat.vue')),
     },
     {
       path: 'settings/:tab?',

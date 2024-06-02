@@ -32,7 +32,9 @@ import {
 } from '@quasar/extras/material-icons';
 
 // Emits an event when the theme is changed
-const emit = defineEmits(['themeChanged']);
+const emit = defineEmits<{
+  themeChanged: [newMode: boolean | 'auto'];
+}>();
 
 const $q = useQuasar();
 
