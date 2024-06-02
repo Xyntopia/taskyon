@@ -279,28 +279,21 @@ module.exports = configure(function (ctx) {
                 chunks: 'all',
               },
               libs: {
-                name(module, chunks, cacheGroupKey) {
+                /*name(module, chunks, cacheGroupKey) {
+                  // this gives us the concrete filenames for each module:
                   const moduleFileName = module
                     .identifier()
                     .split('node_modules')
-                    .reduceRight((item) => item);
-
-                  /*const { chunk: largestChunk } = chunks.reduce(
-                    (largest, chunk) => {
-                      return chunk.size() > largest.size
-                        ? { chunk, size: chunk.size() }
-                        : largest;
-                    },
-                    { chunk: undefined, size: 0 }
-                  );*/
+                    .reduceRight((item) => item)
+                    .replace(/[\\/]/g, '.');
 
                   // Get the largest chunk's name
                   //const largestChunkName = largestChunk.name;
 
                   //return `l-${largestChunkName}-${moduleFileName}`;
                   // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-                  return `l-${moduleFileName}`;
-                },
+                  return `l-${moduleFileName}`; // we can use this for debugging purposes...
+                },*/
                 test: /[\\/]node_modules[\\/]/,
                 priority: 10,
                 reuseExistingChunk: true,
