@@ -22,14 +22,14 @@
         },
         {
           name: 'score',
-          sortable: true,
+          sortable: false,
           required: true,
           label: 'score',
           field: (row) => 1 / (row.distance + 0.001),
         },
         {
           name: 'task',
-          sortable: true,
+          sortable: false,
           required: true,
           label: 'task',
           field: (task: LLMTask) => task.id,
@@ -37,6 +37,7 @@
       ]"
       row-key="name"
     >
+      <template v-slot:no-data> No search results! </template>
       <template v-slot:top>
         <Search @search="onSearchChange" class="fit" />
         <div class="text-caption"># of tasks: {{ taskCount }}</div>

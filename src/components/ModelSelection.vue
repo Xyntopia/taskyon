@@ -26,7 +26,9 @@
     >
       <q-select
         filled
+        hide-dropdown-icon
         dense
+        color="secondary"
         label="Select OpenAI Assistant"
         :icon="matSmartToy"
         :options="modelOptions"
@@ -61,6 +63,8 @@
     <div v-else class="col" style="min-width: 200px">
       <q-select
         dense
+        hide-dropdown-icon
+        color="secondary"
         label="Select LLM Model for answering/solving the task."
         :icon="matSmartToy"
         :options="filteredOptions"
@@ -92,6 +96,8 @@
       </q-select>
     </div>
     <q-select
+      color="secondary"
+      hide-dropdown-icon
       style="min-width: 150px"
       :model-value="selectedApi"
       @update:model-value="onApiSelect"

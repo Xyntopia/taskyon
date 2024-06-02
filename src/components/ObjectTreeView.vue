@@ -1,5 +1,10 @@
 <template>
-  <q-tree v-if="modelValue" :nodes="nodeTree" node-key="label">
+  <q-tree
+    v-if="modelValue"
+    :nodes="nodeTree"
+    node-key="label"
+    :icon="matPlayArrow"
+  >
     <template v-slot:body-text="prop">
       <div class="row">
         <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
@@ -20,17 +25,17 @@
     </template>
     <template v-slot:header-none> </template>
     <template v-slot:body-list="prop">
-    <div class="row">
-      <div class="col-auto" style="min-width: 200px">
-        {{ prop.node.label }}:
+      <div class="row">
+        <div class="col-auto" style="min-width: 200px">
+          {{ prop.node.label }}:
+        </div>
+        <json-input
+          class="col"
+          :model-value="prop.node.value"
+          @update:modelValue="(value) => updateValue(prop.node.path, value)"
+        />
       </div>
-      <json-input
-        class="col"
-        :model-value="prop.node.value"
-        @update:modelValue="(value) => updateValue(prop.node.path, value)"
-      />
-    </div>
-  </template>
+    </template>
     <template v-slot:body-string="prop">
       <div class="row">
         <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
@@ -70,6 +75,7 @@
 import { computed, toRefs, PropType } from 'vue';
 import { QTreeNode } from 'quasar';
 import JsonInput from 'components/JsonInput.vue'; // Adjust the path as necessary
+import { matPlayArrow } from '@quasar/extras/material-icons';
 
 const props = defineProps({
   disableEdit: {

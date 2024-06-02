@@ -12,6 +12,7 @@
           autofocus
           :dense="false"
           clearable
+          :clear-icon="matClear"
           debounce="1000"
           :label="searchHint"
           :model-value="searchString || ''"
@@ -26,7 +27,9 @@
           flat
           dense
           debounce="300"
-          color="primary"
+          color="secondary"
+          outlined
+          hide-dropdown-icon
           type="number"
           style="max-width: 100px"
           v-model="numberOfSearchResults"
@@ -55,7 +58,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { matFilterAlt, matSearch } from '@quasar/extras/material-icons';
+import { matClear, matFilterAlt, matSearch } from '@quasar/extras/material-icons';
 
 const numberOfSearchResults = defineModel<number>('numberOfSearchResults', {
   required: false,

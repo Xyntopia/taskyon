@@ -115,7 +115,7 @@
               size="sm"
               @click="expandedTaskCreation = !expandedTaskCreation"
             >
-              <q-icon size="xs" name="matTune" class="q-pl-sm"></q-icon>
+              <q-icon size="xs" :name="matTune" class="q-pl-sm"></q-icon>
               <q-icon
                 size="xs"
                 :name="
@@ -167,11 +167,14 @@
         </q-btn>
         <q-select
           v-if="expertMode"
+          hide-dropdown-icon
           style="min-width: 200px"
           class="q-pt-xs q-px-md"
           dense
           outlined
+          color="secondary"
           clearable
+          :clear-icon="matClear"
           :bg-color="selectedTaskType ? 'secondary' : ''"
           :model-value="selectedTaskType"
           @update:modelValue="setTaskType"
@@ -230,6 +233,7 @@
             expand-icon-toggle
             label="Tools"
             v-model="state.allowedToolsExpand"
+            :expand-icon="matKeyboardArrowDown"
           >
             <template v-slot:header>
               <div class="row items-center q-gutter-sm">
@@ -302,11 +306,13 @@ import {
   matCode,
   matEdit,
   matChecklist,
-matHistory,
-matSmartToy,
-matNavigateNext,
-matKeyboardArrowUp,
-matKeyboardArrowDown,
+  matHistory,
+  matSmartToy,
+  matNavigateNext,
+  matKeyboardArrowUp,
+  matKeyboardArrowDown,
+  matTune,
+  matClear,
 } from '@quasar/extras/material-icons';
 import { mdiTools } from '@quasar/extras/mdi-v6';
 

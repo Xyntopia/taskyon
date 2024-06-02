@@ -5,6 +5,9 @@
     <q-select
       v-model="state.llmSettings.selectedApi"
       emit-value
+      outlined
+      hide-dropdown-icon
+      color="secondary"
       dense
       label="connect to LLM Backend"
       :options="Object.keys(state.llmSettings.llmApis)"
@@ -35,6 +38,7 @@
       dense
       label="Edit Apis"
       :icon="matEdit"
+      :expand-icon="matKeyboardArrowDown"
     >
       <TyMarkdown
         src="Here, we can add new, custom APIs to taskyon that we can connect to
@@ -61,6 +65,7 @@ import TyMarkdown from './tyMarkdown.vue';
 import {
   matEdit,
   matElectricalServices,
+  matKeyboardArrowDown,
   matVisibility,
   matVisibilityOff,
 } from '@quasar/extras/material-icons';
