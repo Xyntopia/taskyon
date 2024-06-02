@@ -12,7 +12,6 @@
           autofocus
           :dense="false"
           clearable
-          :clear-icon="matClear"
           debounce="1000"
           :label="searchHint"
           :model-value="searchString || ''"
@@ -29,7 +28,6 @@
           debounce="300"
           color="secondary"
           outlined
-          hide-dropdown-icon
           type="number"
           style="max-width: 100px"
           v-model="numberOfSearchResults"

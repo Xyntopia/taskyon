@@ -1,10 +1,5 @@
 <template>
-  <q-tree
-    v-if="modelValue"
-    :nodes="nodeTree"
-    node-key="label"
-    :icon="matPlayArrow"
-  >
+  <q-tree v-if="modelValue" :nodes="nodeTree" node-key="label">
     <template v-slot:body-text="prop">
       <div class="row">
         <div v-if="separateLabels" class="col-auto" style="min-width: 200px">

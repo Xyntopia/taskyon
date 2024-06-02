@@ -119,7 +119,6 @@
           use-input
           use-chips
           multiple
-          hide-dropdown-icon
           input-debounce="300"
           new-value-mode="add-unique"
         >
@@ -240,7 +239,11 @@ import { FileMappingDocType } from 'src/modules/taskyon/rxdb';
 import { dump } from 'js-yaml';
 import TaskButtons from './TaskButtons.vue';
 import { mdiFileDocument, mdiHeadCog } from '@quasar/extras/mdi-v6';
-import { matCalculate, matMonetizationOn, matNewLabel } from '@quasar/extras/material-icons';
+import {
+  matCalculate,
+  matMonetizationOn,
+  matNewLabel,
+} from '@quasar/extras/material-icons';
 
 const props = defineProps<{
   task: LLMTask;

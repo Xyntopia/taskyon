@@ -7,8 +7,6 @@
     <q-tabs
       :model-value="selectedTab"
       align="justify"
-      :right-icon="matChevronRight"
-      :left-icon="matChevronLeft"
     >
       <q-route-tab
         :to="{ params: { tab: 'llmproviders' } }"

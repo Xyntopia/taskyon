@@ -6,7 +6,6 @@
       v-model="state.llmSettings.selectedApi"
       emit-value
       outlined
-      hide-dropdown-icon
       color="secondary"
       dense
       label="connect to LLM Backend"
@@ -38,7 +37,6 @@
       dense
       label="Edit Apis"
       :icon="matEdit"
-      :expand-icon="matKeyboardArrowDown"
     >
       <TyMarkdown
         src="Here, we can add new, custom APIs to taskyon that we can connect to

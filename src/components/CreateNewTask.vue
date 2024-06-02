@@ -167,14 +167,12 @@
         </q-btn>
         <q-select
           v-if="expertMode"
-          hide-dropdown-icon
           style="min-width: 200px"
           class="q-pt-xs q-px-md"
           dense
           outlined
           color="secondary"
           clearable
-          :clear-icon="matClear"
           :bg-color="selectedTaskType ? 'secondary' : ''"
           :model-value="selectedTaskType"
           @update:modelValue="setTaskType"
@@ -233,7 +231,6 @@
             expand-icon-toggle
             label="Tools"
             v-model="state.allowedToolsExpand"
-            :expand-icon="matKeyboardArrowDown"
           >
             <template v-slot:header>
               <div class="row items-center q-gutter-sm">
