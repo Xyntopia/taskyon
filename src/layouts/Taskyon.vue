@@ -6,7 +6,7 @@
         :class="minMode ? 'q-gutter-xs row q-px-sm' : 'q-gutter-xs'"
       >
         <q-btn
-          v-if="!state.drawerOpen"
+          v-if="state && !state.drawerOpen"
           flat
           @click="state.drawerOpen = !state.drawerOpen"
           round
@@ -14,7 +14,7 @@
           :size="btnSize"
           :icon="matMenu"
         />
-        <div class="q-ml-lg button-group">
+        <div v-if="state" class="q-ml-lg button-group">
           <q-btn
             v-if="!minMode"
             flat
@@ -46,7 +46,7 @@
         </div>
         <q-space />
         <q-btn
-          v-if="state.getErrors().length > 0"
+          v-if="state && state.getErrors().length > 0"
           flat
           dense
           round
@@ -72,8 +72,9 @@
           <q-tooltip>Open settings</q-tooltip>
         </q-btn>
         <dark-mode-button
+          v-if="state"
           :size="btnSize"
-          @theme-changed="(newMode) => (state.darkTheme = newMode)"
+          @theme-changed="(newMode) => (state!.darkTheme = newMode)"
         />
         <q-separator
           v-if="!minMode"
@@ -98,6 +99,7 @@
     </q-header>
 
     <q-drawer
+      v-if="state"
       v-model="state.drawerOpen"
       elevated
       persistent
@@ -170,10 +172,10 @@
 </style>
 
 <script setup lang="ts">
-import { reactive } from 'vue';
+import { reactive, ref } from 'vue';
 import DarkModeButton from 'components/DarkModeButton.vue';
-//import { useTaskyonStore } from 'stores/taskyonState';
 import { defineAsyncComponent } from 'vue';
+import type { useTaskyonStore } from 'stores/taskyonState';
 import {
   matAddComment,
   matChat,
@@ -195,15 +197,12 @@ const ChatSidebar = defineAsyncComponent(
 );
 
 //const state = useTaskyonStore();
-const state = reactive({
-  drawerOpen: false,
-  drawerRight: false,
-  minimalGui: false,
-  darkTheme: false as unknown as boolean | 'auto',
-  getErrors: () => [],
-  llmSettings: { selectedTaskId: undefined },
+let state = ref<undefined | ReturnType<typeof useTaskyonStore>>();
+
+void import('stores/taskyonState').then(({ useTaskyonStore }) => {
+  state.value = useTaskyonStore();
 });
 
-const minMode = state.minimalGui;
+const minMode = state.value?.minimalGui || false;
 const btnSize = minMode ? 'xs' : 'md';
 </script>
