@@ -63,3 +63,5 @@ amplifytools.xcconfig
 
 # this file automatically gets copied from quasar.conf.js
 public/taskyon_settings.json
+
+cypress.env.json
