@@ -67,7 +67,7 @@
     "node-polyfill-webpack-plugin": "^2.0.1",
     "openai": "^4.17.3",
     "path": "^0.12.7",
-    "pdfjs-dist": "^3.7.107",
+    "pdfjs-dist": "^4.3.136",
     "pinia": "^2.0.12",
     "pyodide": "^0.24.1",
     "quasar": "^2.14.1",
