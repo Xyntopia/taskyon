@@ -35,6 +35,9 @@ describe('Landing', () => {
     cy.get('[aria-label="Expert mode"] > .q-toggle__inner').click();
     cy.get('[aria-label="Show task costs"] > .q-toggle__inner').click();
 
+    cy.reload();
+    // TODO: check if expert mode is still there...
+
     cy.get(
       '.user > .message-container > :nth-child(1) > .items-end > .col > .q-markdown > p'
     ).should('have.text', 'hello world!');
