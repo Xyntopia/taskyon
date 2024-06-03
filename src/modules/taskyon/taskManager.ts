@@ -716,11 +716,14 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       }
       const toolDefs = tasks.filter(hasMessage);
       //const toolDefs = tasks.filter((task) => 'message' in task);
-      const parsedToolDefs = toolDefs.map((task) => {
-        const toolDef = ToolBase.parse(JSON.parse(task.content.message));
-        return toolDef;
+      const parsedToolDefs = toolDefs.flatMap((task) => {
+        try {
+          const toolDef = ToolBase.parse(JSON.parse(task.content.message));
+          return [toolDef];
+        } catch (e) {
+          return [];
+        }
       });
-
       return parsedToolDefs
         .concat(Object.values(defaultTools))
         .reduce((pv, cv) => {
