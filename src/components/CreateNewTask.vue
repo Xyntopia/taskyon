@@ -296,7 +296,18 @@ import ObjectTreeView from './ObjectTreeView.vue';
 import type { ToolBase } from 'src/modules/taskyon/types';
 import taskSettingsButton from './taskSettingsButton.vue';
 import taskContentEdit from './taskContentEdit.vue';
-import CodeEditor from './CodeEditor.vue';
+//import CodeEditor from './CodeEditor.vue';
+
+import { defineAsyncComponent } from 'vue';
+
+const CodeEditor = defineAsyncComponent(
+  /* webpackPrefetch: true */
+  /* webpackChunkName: "codemirror" */
+  /* webpackMode: "lazy" */
+  /* webpackFetchPriority: "low" */
+  () => import('./CodeEditor.vue')
+);
+
 
 import {
   matSave,

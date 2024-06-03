@@ -17,15 +17,7 @@ import { useQuasar } from 'quasar';
 import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { basicSetup } from 'codemirror';
-import { defineAsyncComponent } from 'vue';
-
-const Codemirror = defineAsyncComponent(
-  /* webpackPrefetch: true */
-  /* webpackChunkName: "codemirror" */
-  /* webpackMode: "lazy" */
-  /* webpackFetchPriority: "low" */
-  () => import('vue-codemirror')
-);
+import { Codemirror } from 'vue-codemirror';
 
 const content = defineModel<string | undefined>({
   required: true,
