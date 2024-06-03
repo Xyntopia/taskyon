@@ -100,7 +100,7 @@
           <q-space></q-space>
           <div class="gt-xs">
             {{
-              `approx. new token count: ${estimatedTokens}/${state.modelLookUp[currentModel].context_length}`
+              `approx. new token count: ${estimatedTokens}/${state.modelLookUp[currentModel]?.context_length}`
             }}
             <q-tooltip :delay="1000" class="q-gutter-sm">
               <div>
