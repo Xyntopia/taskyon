@@ -200,7 +200,7 @@ const taskThreadContainer = ref<HTMLElement | undefined>();
 const currentTask = ref<LLMTask>();
 const $q = useQuasar();
 const state = useTaskyonStore();
-$q.dark.set(state.darkTheme);
+$q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store...
 const selectedThread = ref<LLMTask[]>([]);
 
 async function updateCurrentTask(taskId: string | undefined) {

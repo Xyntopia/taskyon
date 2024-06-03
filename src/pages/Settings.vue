@@ -1,13 +1,14 @@
 <template>
   <q-page :class="$q.dark.isActive ? 'bg-primary' : 'white'">
-    <div class="q-pa-md row items-center">
-      <div class="text-h6 q-pr-md">Basic Settings:</div>
-      <SimpleSettings />
-    </div>
-    <q-tabs
-      :model-value="selectedTab"
-      align="justify"
-    >
+    <q-toggle
+      class="q-pa-sm"
+      dense
+      v-model="state.appConfiguration.expertMode"
+      label="Extended Settings"
+      left-label
+      color="secondary"
+    />
+    <q-tabs :model-value="selectedTab" align="justify">
       <q-route-tab
         :to="{ params: { tab: 'llmproviders' } }"
         exact
