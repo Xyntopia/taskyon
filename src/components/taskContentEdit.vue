@@ -9,7 +9,6 @@
     @keyup="checkKeyboardEvents"
     input-style="max-height: 300px"
     v-bind="$attrs"
-    :debounce="10"
   >
     <template v-slot:append>
       <q-btn flat dense round :icon="matSend" @click="executeTask">

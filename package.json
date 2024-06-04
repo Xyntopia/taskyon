@@ -46,6 +46,7 @@
     "@supabase/supabase-js": "^2.39.0",
     "@tauri-apps/api": "^1.1.0",
     "@types/node": "^17.0.17",
+    "@vueuse/core": "^10.10.0",
     "@xenova/transformers": "^2.11.0",
     "axios": "^0.21.1",
     "babel-loader": "^9.1.3",

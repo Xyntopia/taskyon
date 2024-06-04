@@ -33,7 +33,10 @@
             }
           "
         />
-        <taskSettingsButton v-model="expandedTaskCreation" aria-label="task settings"/>
+        <taskSettingsButton
+          v-model="expandedTaskCreation"
+          aria-label="task settings"
+        />
         <q-btn
           :disable="!sendAllowed"
           :color="sendAllowed ? 'positive' : 'negative'"
@@ -304,8 +307,8 @@ import type { ToolBase } from 'src/modules/taskyon/types';
 import taskSettingsButton from './taskSettingsButton.vue';
 import taskContentEdit from './taskContentEdit.vue';
 //import CodeEditor from './CodeEditor.vue';
-
 import { defineAsyncComponent } from 'vue';
+import { watchDebounced } from '@vueuse/core';
 
 const CodeEditor = defineAsyncComponent(
   /* webpackPrefetch: true */
@@ -441,14 +444,18 @@ async function setTaskType(tasktype: string | undefined | null) {
 }
 
 const estimatedTokens = ref<number>(0);
-watchEffect(() => {
-  void (async () => {
-    // Tokenize the message
-    estimatedTokens.value = await countStringTokens(
-      JSON.stringify(state.taskDraft.content) || ''
-    );
-  })();
-});
+watchDebounced(
+  () => state.taskDraft.content,
+  () => {
+    void (async () => {
+      // Tokenize the message
+      estimatedTokens.value = await countStringTokens(
+        JSON.stringify(state.taskDraft.content) || ''
+      );
+    })();
+  },
+  { debounce: 500, maxWait: 1000 }
+);
 
 async function toggleSelectedTools() {
   if (state.taskDraft.allowedTools) {
