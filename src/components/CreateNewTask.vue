@@ -350,7 +350,6 @@ const { selectedApi, useOpenAIAssistants, openAIAssistantId } = toRefs(
 const fileAttachments = ref<File[]>([]); // holds all attached files as a "tasklist"
 
 // we initialize our taskDraft with the state of this window!
-state.taskDraft = { ...state.taskDraft, ...(props.forceTaskProps || {}) };
 
 //const funcArgs = computed(() => );
 
@@ -468,7 +467,10 @@ async function toggleSelectedTools() {
 }
 
 const currentnewTask = computed(() => {
-  let task: Partial<LLMTask> = { ...state.taskDraft };
+  let task: Partial<LLMTask> = {
+    ...state.taskDraft,
+    ...(props.forceTaskProps || {}),
+  };
   if (currentModel.value) {
     task.configuration = {
       model: currentModel.value,

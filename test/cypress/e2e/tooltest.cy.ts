@@ -37,7 +37,11 @@ describe('Tool Tests', () => {
     cy.get('.q-toggle').contains('Expert mode').click();
     cy.get('.q-btn').contains('Tools').click();
 
+    cy.get('.q-btn').contains('Tools').click();
     cy.get('.q-btn').contains('new tool').click();
+    // check if codemirror editor was already loaded..
+    cy.get('.cm-content').should('exist');
+
     cy.get('.q-btn').contains('save task').click();
 
     cy.get('[aria-label="go to chat"]').click();
@@ -70,7 +74,6 @@ describe('Tool Tests', () => {
       .get('.message-container')
       .eq(0)
       .get('.q-field .q-chip')
-      .contains('function')
       .should('not.exist');
   });
 });
