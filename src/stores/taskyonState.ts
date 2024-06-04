@@ -7,7 +7,7 @@ import type {
 } from 'src/modules/taskyon/types';
 import axios from 'axios'; // TODO: replace with fetch
 import { LocalStorage, Notify } from 'quasar'; // load dynamically! :)
-import { deepMerge, deepMergeReactive } from 'src/modules/taskyon/utils';
+import { deepMerge, deepMergeReactive, sleep } from 'src/modules/taskyon/utils';
 import { useQuasar } from 'quasar';
 import { TaskWorkerController } from 'src/modules/taskyon/taskWorker';
 import { initTaskyon } from 'src/modules/taskyon/init';
@@ -36,7 +36,7 @@ interface TaskStateType {
 }
 
 export const useTaskyonStore = defineStore(storeName, () => {
-  console.log('loading taskyon store!')
+  console.log('loading taskyon store!');
 
   const $q = useQuasar();
 
@@ -89,7 +89,8 @@ export const useTaskyonStore = defineStore(storeName, () => {
       'RAW' | 'MESSAGECONTENT' | 'RAWTASK' | 'ERROR' | undefined
     >, // whether message with ID should be open or not...
   };
-  initialState.keys['taskyon'] = 'anonymous';
+  // this should be done intentionally by the user when visiting the first time!
+  // initialState.keys['taskyon'] = 'anonymous';
 
   // overwrite with saved configuration:
   console.log(`load saved ${storeName} state!`);
@@ -302,8 +303,17 @@ export const useTaskyonStore = defineStore(storeName, () => {
   // even after destructuring. The next issue is that typescript isn't able to recognize the type anymore when
   // we do the toRefs operation, so we simply reassign the same type "stateRefs" to it again which seems to work...
   const allRefs = toRefs(stateRefs) as unknown as typeof stateRefs;
+
+  function $reset() {
+    console.log('Resetting Taskyon!!');
+    stateRefs.appConfiguration = defaultStorableSettings.appConfiguration;
+    stateRefs.llmSettings = defaultStorableSettings.llmSettings;
+    LocalStorage.clear();
+    void sleep(1000).then(() => (window.location.href = '/'));
+  }
   return {
     ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
+    $reset,
     getOpenRouterPKCEKey,
     addModelToHistory,
     minimalGui,

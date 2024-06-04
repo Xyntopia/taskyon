@@ -14,11 +14,12 @@
       ></q-icon>
       <p>Welcome! Just type a message below to start using Taskyon!</p>
     </div>
+    <LLMProviders v-else/>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
-import { matKey, matSettings } from '@quasar/extras/material-icons';
+import LLMProviders from './LLMProviders.vue';
 const state = useTaskyonStore();
 </script>

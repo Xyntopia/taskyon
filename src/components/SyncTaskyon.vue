@@ -120,6 +120,53 @@
         </q-btn>
       </q-item-section>
     </q-item>
+    <q-item>
+      <q-item-section>
+        <q-btn
+          :icon="matWarning"
+          label="Reset Taskyon Settings"
+          class="q-ma-md"
+          text-color="red"
+          @click="showResetDialog = true"
+        />
+      </q-item-section>
+      <q-dialog v-model="showResetDialog">
+        <q-card>
+          <q-card-section>
+            <div class="text-h6 text-red text-center">
+              <q-icon :name="matWarning" size="md" />
+              Warning: Reset all Taskyon Settings
+            </div>
+          </q-card-section>
+          <q-card-section class="q-pt-none">
+            <p>
+              <strong>Warning:</strong> This operation will reset all taskyon
+              settings.
+            </p>
+            <p>
+              Before proceeding, please make sure you have a backup of the
+              settings. You can download your data in JSON or YAML format using
+              the buttons above.
+            </p>
+            <!--<p>
+          If you're sure you want to delete all Taskyon chat data, enter "DELETE" in the field below to confirm:
+        </p>
+        <q-input v-model="deleteConfirmation" label="Confirmation" />-->
+          </q-card-section>
+          <q-card-actions align="right">
+            <q-btn flat label="Cancel" v-close-popup />
+            <q-btn
+              flat
+              label="Reset"
+              color="negative"
+              :icon="matDeleteForever"
+              @click="onResetTaskyon"
+              v-close-popup
+            />
+          </q-card-actions>
+        </q-card>
+      </q-dialog>
+    </q-item>
   </q-list>
 </template>
 
@@ -238,11 +285,18 @@ async function onUploadTaskyonData(newFiles: File[]) {
 }
 
 const showDeleteDialog = ref(false);
+const showResetDialog = ref(false);
 
 async function onDeleteTaskyonData() {
   const tm = await state.getTaskManager();
   await tm.deleteAllTasks();
   // TODO: this is a superdirty version..  it would be much better to manually reinit the taskyondb in the deleteAllTasks function
   location.reload(); // reload browser window to reinitialize the db...
+}
+
+function onResetTaskyon() {
+  console.log('reset taskyon!')
+  state.$reset()
+  //location.reload(); // reload browser window to reinitialize the db...
 }
 </script>
