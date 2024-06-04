@@ -68,7 +68,9 @@
     <q-separator spaced />
     <q-item-label header>Taskyon Configuration Backup</q-item-label>
     <q-item>
-      <q-item-section avatar> <q-icon :name="matSave" size="md" /> </q-item-section>
+      <q-item-section avatar>
+        <q-icon :name="matSave" size="md" />
+      </q-item-section>
       <q-item-section>Download Settings:</q-item-section>
       <q-item-section>
         <q-btn label="JSON" @click="downloadSettings('json')"></q-btn>
@@ -79,14 +81,14 @@
       <q-item-section avatar>
         <q-icon :name="matSettingsBackupRestore" size="md" />
       </q-item-section>
-      <q-item-section>Load Settings:</q-item-section>
+      <q-item-section>Upload Settings:</q-item-section>
       <q-item-section>
         <FileDropzone
           disable-dropzone-border
           @update:model-value="loadSettingsJson"
           accept="*"
         >
-          <q-btn>
+          <q-btn class="fit">
             JSON
             <q-tooltip>Select Json file for upload!</q-tooltip>
           </q-btn>
@@ -96,7 +98,7 @@
           @update:model-value="loadSettingsYaml"
           accept="*"
         >
-          <q-btn>
+          <q-btn class="fit">
             YAML
             <q-tooltip>Select YAML file for upload!</q-tooltip>
           </q-btn>
@@ -135,8 +137,8 @@ import {
   matDownload,
   matDeleteForever,
   matUpload,
-matWarning,
-matSettingsBackupRestore,
+  matWarning,
+  matSettingsBackupRestore,
 } from '@quasar/extras/material-icons';
 import { mdiGoogleDrive } from '@quasar/extras/mdi-v6';
 

@@ -9,7 +9,7 @@
       <q-route-tab
         :to="{ params: { tab: 'sync' } }"
         exact
-        label="Sync & Backup"
+        label="Reset & Backup"
       />
       <q-route-tab
         :to="{ params: { tab: 'instructions' } }"
