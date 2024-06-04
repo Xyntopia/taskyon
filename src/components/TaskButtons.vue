@@ -8,6 +8,7 @@
       flat
       size="sm"
       @click="copyToClipboard(task.content.message || '')"
+      aria-label="copy raw text"
     >
       <q-tooltip :delay="0">Copy raw text.</q-tooltip>
     </q-btn>
@@ -75,6 +76,7 @@
       flat
       size="sm"
       @click="toggleMessageDebug(task.id)"
+      aria-label="show message context"
     >
       <q-tooltip :delay="0">Show message context</q-tooltip>
     </q-btn>

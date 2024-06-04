@@ -13,6 +13,7 @@
           dense
           :size="btnSize"
           :icon="matMenu"
+          aria-label="Open Sidebar"
         />
         <div v-if="state" class="q-ml-lg button-group">
           <q-btn
@@ -22,6 +23,7 @@
             :size="btnSize"
             :icon="matSearch"
             to="/taskmanager"
+            aria-label="go to taskmanager"
           >
             <q-tooltip>Search Conversations</q-tooltip>
           </q-btn>
@@ -32,6 +34,7 @@
             :icon="matChat"
             to="/"
             :size="btnSize"
+            aria-label="go to chat"
             ><q-tooltip>Go to Chat</q-tooltip>
           </q-btn>
           <q-btn
@@ -41,6 +44,7 @@
             :size="btnSize"
             to="/"
             @click="state.llmSettings.selectedTaskId = undefined"
+            aria-label="start new chat"
             ><q-tooltip>Create New Chat</q-tooltip>
           </q-btn>
         </div>

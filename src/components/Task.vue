@@ -243,6 +243,7 @@ import {
   matCalculate,
   matMonetizationOn,
   matNewLabel,
+  matWarning,
 } from '@quasar/extras/material-icons';
 
 const props = defineProps<{

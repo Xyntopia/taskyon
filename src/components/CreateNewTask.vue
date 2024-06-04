@@ -33,7 +33,7 @@
             }
           "
         />
-        <taskSettingsButton v-model="expandedTaskCreation" />
+        <taskSettingsButton v-model="expandedTaskCreation" aria-label="task settings"/>
         <q-btn
           :disable="!sendAllowed"
           :color="sendAllowed ? 'positive' : 'negative'"
