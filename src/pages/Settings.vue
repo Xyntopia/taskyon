@@ -29,7 +29,7 @@
       />
     </q-tabs>
     <div class="fit text-center">
-      <ExpertEnable/>
+      <ExpertEnable />
     </div>
     <q-tab-panels
       :model-value="selectedTab"
@@ -39,7 +39,10 @@
       :class="[$q.dark.isActive ? 'bg-primary' : 'white']"
     >
       <q-tab-panel name="llmproviders" :class="tabPanelClass">
-        <LLMProviders style="max-width: 600px" />
+        <LLMProviders
+          style="max-width: 600px"
+          v-model:expertModeOn="state.appConfiguration.expertMode"
+        />
       </q-tab-panel>
       <q-tab-panel name="sync" :class="tabPanelClass">
         <SyncTaskyon style="max-width: 600px" />

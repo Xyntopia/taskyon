@@ -24,6 +24,7 @@
           noCaps
           label="Use free Taskyon (low quality)"
           icon="svguse:taskyon_mono_opt.svg#taskyon"
+          to="/"
           @click="
             state.llmSettings.selectedApi = 'taskyon';
             state.keys['taskyon'] = 'anonymous';
@@ -40,15 +41,15 @@
       <div class="col">
         If you want to manually configure which API is used, enable expert mode:
       </div>
-      <ExpertEnable label="" class="col-auto" />
+      <q-toggle v-model="expertModeOn" color="secondary" />
     </div>
     <q-space></q-space>
-    <q-item-label header v-if="state.appConfiguration.expertMode"
+<q-item-label header v-if="expertModeOn"
       >Or: Manually configure & retrieve API keys (Setup a local,
       privacy-presevering server, A custom LLM AI server in your company etc...)
       Everything with en OpenAI compatible API will work:</q-item-label
     >
-    <div class="row q-gutter-xs" v-if="state.appConfiguration.expertMode">
+    <div class="row q-gutter-xs" v-if="expertModeOn">
       <div class="col">
         <q-btn
           class="col"
@@ -75,11 +76,11 @@
         />
       </div>
     </div>
-    <div v-if="state.appConfiguration.expertMode">
+    <div v-if="expertModeOn">
       Alternativly you can connect to other APIs that are configured. You can
       even setup your own server anc connect to it:
     </div>
-    <q-card v-if="state.appConfiguration.expertMode" flat bordered>
+    <q-card v-if="expertModeOn" flat bordered>
       <q-card-section class="q-gutter-md">
         <div>
           <ApiSelect v-model="state.llmSettings.selectedApi" />
@@ -93,13 +94,13 @@
             filled
             v-model="state.keys[keyname]"
             :label="`${keyname} API key`"
-          >
+            >
           </SecretInput>
         </div>
       </q-card-section>
     </q-card>
     <q-expansion-item
-      v-if="state.appConfiguration.expertMode"
+      v-if="expertModeOn"
       dense
       label="Edit Apis"
       :icon="matEdit"
@@ -127,11 +128,10 @@ import { computed } from 'vue';
 import JsonInput from './JsonInput.vue';
 import TyMarkdown from './tyMarkdown.vue';
 import SecretInput from './SecretInput.vue';
-import { matEdit, matKey, matSettings } from '@quasar/extras/material-icons';
+import { matEdit, matKey } from '@quasar/extras/material-icons';
 import { user } from 'src/modules/auth/supabase';
 import ApiSelect from './ApiSelect.vue';
 import InfoDialog from './InfoDialog.vue';
-import ExpertEnable from 'src/pages/ExpertEnable.vue';
 
 const state = useTaskyonStore();
 const filteredKeys = computed(() => {
@@ -139,4 +139,6 @@ const filteredKeys = computed(() => {
     (name) => !['taskyon', 'jwt'].includes(name)
   );*/
 });
+
+const expertModeOn = defineModel<boolean>('expertModeOn', { default: false });
 </script>

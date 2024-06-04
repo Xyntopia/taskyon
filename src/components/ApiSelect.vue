@@ -37,7 +37,7 @@ import { useTaskyonStore } from 'stores/taskyonState';
 import { matElectricalServices } from '@quasar/extras/material-icons';
 import InfoDialog from './InfoDialog.vue';
 
-const model = defineModel<string>();
+const model = defineModel<string | null>();
 
 defineProps<{
   moreSettings?: boolean;
