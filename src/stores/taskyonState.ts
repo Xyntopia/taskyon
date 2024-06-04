@@ -21,7 +21,6 @@ import {
 } from 'src/modules/taskyon/chat';
 import openrouterModules from 'assets/openrouter_models.json';
 import openaiModels from 'assets/openai_models.json';
-import { state } from 'src/modules/gdrive';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
