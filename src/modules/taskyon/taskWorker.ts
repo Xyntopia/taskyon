@@ -95,7 +95,9 @@ export async function processChatTask(
   } else {
     const api = getApiConfigCopy(llmSettings, task.configuration?.chatApi);
     if (!api) {
-      throw new Error(`api doesn\'t exist! ${llmSettings.selectedApi}`);
+      throw new Error(
+        `api doesn\'t exist! ${llmSettings.selectedApi || 'no api selected!'}`
+      );
     }
     const selectedModel = task.configuration?.model;
     if (selectedModel) {
@@ -192,7 +194,7 @@ export async function processChatTask(
               generateHeaders(
                 apiKey,
                 llmSettings.siteUrl,
-                llmSettings.selectedApi
+                llmSettings.selectedApi || ''
               )
             ).then((generationInfo) => {
               enrichWithDelayedUsageInfos(task, taskManager, generationInfo);
@@ -554,14 +556,18 @@ async function processTask(
 
     if ('message' in task.content || 'functionResult' in task.content) {
       // TODO: get rid of "taskManager" in processChatTask
-      const apiKey = apiKeys[llmSettings.selectedApi];
-      task = await processChatTask(
-        task,
-        llmSettings,
-        apiKey,
-        taskManager,
-        taskWorkerController
-      );
+      if (llmSettings.selectedApi) {
+        const apiKey = apiKeys[llmSettings.selectedApi];
+        task = await processChatTask(
+          task,
+          llmSettings,
+          apiKey,
+          taskManager,
+          taskWorkerController
+        );
+      } else {
+        throw new Error("we don't have any APIs selected!");
+      }
     } else if ('functionCall' in task.content) {
       // calculate function result
       // in the case we don't have a result yet, we need to calculate it :)

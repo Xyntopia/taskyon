@@ -3,10 +3,7 @@
     <div v-if="selectedApi === 'openai'" class="q-pt-xs">
       <q-btn-toggle
         label="mode"
-        :model-value="enableOpenAIAssistants"
-        @update:model-value="
-          (val) => emit('update:enableOpenAIAssistants', val)
-        "
+        v-model="useOpenAIAssistants"
         dense
         outline
         toggle-color="secondary"
@@ -20,7 +17,7 @@
     </div>
     <!--OpenAI Assistant selection-->
     <div
-      v-if="enableOpenAIAssistants && selectedApi === 'openai'"
+      v-if="useOpenAIAssistants && selectedApi === 'openai'"
       class="col"
       style="min-width: 200px"
     >
@@ -33,8 +30,7 @@
         :options="modelOptions"
         emit-value
         map-options
-        :model-value="openAIAssistantId"
-        @update:model-value="(val) => emit('update:openAIAssistantId', val)"
+        v-model="openAIAssistantId"
       >
         <template v-slot:after>
           <q-btn
@@ -113,37 +109,33 @@ import {
 } from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
 
-const props = defineProps({
+defineProps({
   botName: {
     type: String,
     required: true,
   },
-  selectedApi: {
-    type: String,
-    required: true,
-  },
-  enableOpenAIAssistants: {
-    type: Boolean,
-    required: true,
-  },
-  openAIAssistantId: {
-    type: String,
-    required: false,
-  },
 });
 
-const emit = defineEmits([
-  'update:openAIAssistantId',
-  'update:enableOpenAIAssistants',
-  'updateBotName',
-]);
+const selectedApi = defineModel<string | null>('selectedApi', {
+  required: true,
+});
+
+const useOpenAIAssistants = defineModel<boolean>('useOpenAIAssistants', {
+  required: true,
+});
+
+const openAIAssistantId = defineModel<string>('openAIAssistantId', {
+  required: false,
+});
+
+const emit = defineEmits(['updateBotName']);
 
 const state = useTaskyonStore();
 
 const modelOptions = computed(() => {
   // openai has no pricing information attached, so we sort it in different ways...
-  if (props.selectedApi === 'openai') {
-    if (props.enableOpenAIAssistants) {
+  if (selectedApi.value === 'openai') {
+    if (useOpenAIAssistants) {
       const options = Object.values(state.assistants).map((a) => ({
         value: a.id,
         label: a.name || '',
@@ -179,7 +171,7 @@ const modelOptions = computed(() => {
 function onModelSelect(value: string) {
   emit('updateBotName', {
     newName: value,
-    newService: props.selectedApi,
+    newService: selectedApi.value,
   });
 }
 

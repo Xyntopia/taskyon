@@ -2,7 +2,10 @@
   <div class="welcome-message column items-center">
     <div
       class="text-h6 col-auto text-center"
-      v-if="state.keys[state.llmSettings.selectedApi]"
+      v-if="
+        state.llmSettings.selectedApi &&
+        state.keys[state.llmSettings.selectedApi]
+      "
     >
       <q-icon
         class="q-pa-xl"

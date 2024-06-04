@@ -15,7 +15,7 @@
     "openAIAssistantId": "",
     "useOpenAIAssistants": false,
     "enableOpenAiTools": false,
-    "selectedApi": "taskyon",
+    "selectedApi": null,
     "llmApis": {
       "taskyon": {
         "name": "taskyon",

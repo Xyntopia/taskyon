@@ -98,7 +98,7 @@
             </q-btn>
           </div>
           <q-space></q-space>
-          <div class="gt-xs">
+          <div class="gt-xs" v-if="currentModel">
             {{
               `approx. new token count: ${estimatedTokens}/${state.modelLookUp[currentModel]?.context_length}`
             }}
@@ -219,8 +219,8 @@
             class="col"
             @updateBotName="handleBotNameUpdate"
             :bot-name="currentModel || currentDefaultBotName || ''"
-            v-model:selected-api="selectedApi"
-            v-model:enable-open-a-i-assistants="useOpenAIAssistants"
+            v-model:selectedApi="selectedApi"
+            v-model:useOpenAIAssistants="useOpenAIAssistants"
             v-model:open-a-i-assistant-id="openAIAssistantId"
           ></ModelSelection>
         </q-item>
@@ -244,7 +244,13 @@
                   label="toggle tools"
                   @click="toggleSelectedTools"
                 />
-                <q-btn v-if="state.appConfiguration.expertMode" dense :icon="matEdit" label="manage tools" to="tools" />
+                <q-btn
+                  v-if="state.appConfiguration.expertMode"
+                  dense
+                  :icon="matEdit"
+                  label="manage tools"
+                  to="tools"
+                />
               </div>
             </template>
             <q-item-section>
@@ -369,7 +375,7 @@ const currentDefaultBotName = computed(() => {
 });
 
 const currentModel = ref(toRaw(currentDefaultBotName.value));
-const currentChatApi = ref(toRaw(state.llmSettings.selectedApi));
+const currentChatApi = ref<string>(toRaw(state.llmSettings.selectedApi) || '');
 
 const allowedTools = computed({
   get() {

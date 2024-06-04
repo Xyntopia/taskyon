@@ -60,7 +60,7 @@ const llmSettings = z.object({
   openAIAssistantId: z.string().default(''),
   useOpenAIAssistants: z.boolean().default(false),
   enableOpenAiTools: z.boolean().default(false),
-  selectedApi: z.string().default('taskyon'),
+  selectedApi: z.string().nullable().default('taskyon'),
   llmApis: z.record(apiConfig).default({}),
   siteUrl: z.string().default('https://taskyon.space'),
   summaryModel: z.string().default('Xenova/distilbart-cnn-6-6'),
@@ -118,13 +118,17 @@ export const storedSettings = z.object({
 export type storedSettings = z.infer<typeof storedSettings>;
 
 export function getApiConfig(llmSettings: llmSettings) {
-  return llmSettings.llmApis[llmSettings.selectedApi];
+  if (llmSettings.selectedApi) {
+    return llmSettings.llmApis[llmSettings.selectedApi];
+  }
 }
 
 export function getApiConfigCopy(llmSettings: llmSettings, apiName?: string) {
   const searchName = apiName || llmSettings.selectedApi;
-  const api = llmSettings.llmApis[searchName];
-  return deepCopy(api);
+  if (searchName) {
+    const api = llmSettings.llmApis[searchName];
+    return deepCopy(api);
+  }
 }
 
 export const getAssistants = asyncTimeLruCache<

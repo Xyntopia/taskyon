@@ -70,7 +70,6 @@
 import { computed, toRefs, PropType } from 'vue';
 import { QTreeNode } from 'quasar';
 import JsonInput from 'components/JsonInput.vue'; // Adjust the path as necessary
-import { matPlayArrow } from '@quasar/extras/material-icons';
 
 const props = defineProps({
   disableEdit: {
