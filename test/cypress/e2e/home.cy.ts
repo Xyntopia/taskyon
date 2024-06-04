@@ -27,9 +27,7 @@ describe('Landing', () => {
   it('should be able to send a free message and  get a response', () => {
     cy.title().should('include', 'taskyon');
 
-    cy.contains('your message').type('hello world!{enter}');
-    //cy.get('li').first().click();
-    //cy.contains('Clicks on todos: 1').should('exist');
+    cy.get('.q-btn').contains('Use free Taskyon (low quality)').click();
 
     // enable task cost display & expert mode...
     cy.get('[aria-label="Expert mode"] > .q-toggle__inner').click();
@@ -37,6 +35,11 @@ describe('Landing', () => {
 
     cy.reload();
     // TODO: check if expert mode is still there...
+    
+
+    cy.contains('your message').type('hello world!{enter}');
+    //cy.get('li').first().click();
+    //cy.contains('Clicks on todos: 1').should('exist');
 
     cy.get(
       '.user > .message-container > :nth-child(1) > .items-end > .col > .q-markdown > p'
