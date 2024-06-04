@@ -21,6 +21,7 @@ import {
 } from 'src/modules/taskyon/chat';
 import openrouterModules from 'assets/openrouter_models.json';
 import openaiModels from 'assets/openai_models.json';
+import { state } from 'src/modules/gdrive';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -305,10 +306,15 @@ export const useTaskyonStore = defineStore(storeName, () => {
   const allRefs = toRefs(stateRefs) as unknown as typeof stateRefs;
 
   function $reset() {
+    // this function doesn't 100% work.  each of the following
+    // sould theoretically be enough to do the reset. But somehow they are not.
+    // I assume it is some synchronization issue with localstorage.
+    // But this is why we are trying several methods of deletion..
     console.log('Resetting Taskyon!!');
     stateRefs.appConfiguration = defaultStorableSettings.appConfiguration;
     stateRefs.llmSettings = defaultStorableSettings.llmSettings;
     LocalStorage.clear();
+    stateRefs.version = 0 as typeof stateRefs.version; // set the version to 0, hoping, that this will trigger a reset on page reload..
     void sleep(1000).then(() => (window.location.href = '/'));
   }
   return {
