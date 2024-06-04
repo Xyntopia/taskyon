@@ -1,6 +1,6 @@
 <!-- Sidebar -->
 <template>
-  <div class="q-gutter-md">
+  <div class="q-gutter-md llm-providers">
     <div>You can acquire API keys from these services:</div>
     <div class="column q-gutter-sm">
       <div class="row">
@@ -44,7 +44,7 @@
       <q-toggle v-model="expertModeOn" color="secondary" />
     </div>
     <q-space></q-space>
-<q-item-label header v-if="expertModeOn"
+    <q-item-label header v-if="expertModeOn"
       >Or: Manually configure & retrieve API keys (Setup a local,
       privacy-presevering server, A custom LLM AI server in your company etc...)
       Everything with en OpenAI compatible API will work:</q-item-label

@@ -141,7 +141,7 @@
           <q-card-section class="q-pt-none">
             <p>
               <strong>Warning:</strong> This operation will reset all taskyon
-              settings.
+              settings. It will *not* delete any of your chats.
             </p>
             <p>
               Before proceeding, please make sure you have a backup of the

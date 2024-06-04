@@ -1,16 +1,17 @@
 <template>
   <!--Task Page-->
-  <q-page :class="[$q.dark.isActive ? 'black' : 'primarylight']">
+  <q-page :class="[$q.dark.isActive ? 'black' : 'primarylight', 'column']">
     <q-resize-observer @resize="onResize" :debounce="50" />
     <!--Chat Area-->
     <div
-      class="items-center"
+      class="col column items-center"
       :style="`padding-bottom: ${bottomPadding}px;`"
       ref="taskThreadContainer"
     >
       <q-scroll-observer @scroll="onScroll" axis="vertical" :debounce="500" />
       <!-- "Task" Display -->
       <div
+        class="col"
         style="background-color: inherit; color: inherit"
         flat
         square
@@ -75,7 +76,19 @@
         </div>
       </div>
       <!-- Welcome Message -->
-      <GetStarted v-else />
+      <div
+        v-else
+        class="col column justify-center items-center q-pa-sm welcome"
+        style="max-width: 600px"
+      >
+        <q-icon
+          class="q-pa-xl"
+          size="10rem"
+          name="svguse:taskyon_mono_opt.svg#taskyon"
+          :color="$q.dark.isActive ? 'secondary' : 'primary'"
+        ></q-icon>
+        <GetStarted />
+      </div>
     </div>
     <!--Create new task area-->
     <q-page-sticky position="bottom" :offset="[0, 0]" expand class="print-hide">
@@ -140,7 +153,29 @@
   </q-page>
 </template>
 
-<style lang="sass" scoped>
+<style lang="sass">
+.body--light
+  .q-card
+    background-color: white
+    color: black
+
+
+.body--dark
+  .welcome .q-card
+    background-color: $primary
+    color: white
+    //box-shadow: 0px 0px 10px $secondary
+    box-shadow: none
+    border-radius: 15px
+
+    svg
+      filter: drop-shadow(0 0 5px $secondary) drop-shadow(0 0 20px $secondary)
+
+  .welcome > .q-icon
+    svg
+      filter: drop-shadow(0 0 5px $secondary) drop-shadow(0 0 150px rgba($secondary,1.0))
+
+
 .taskyon-control-button
   background-color: rgba($primary, .7) // Adjust the alpha value as needed
   color: white

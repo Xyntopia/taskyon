@@ -200,6 +200,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
         if (data.key) {
           Notify.create('API Key retrieved successfully');
           stateRefs.keys['openrouter.ai'] = data.key;
+          stateRefs.llmSettings.selectedApi = 'openrouter.ai';
         } else {
           Notify.create('Failed to retrieve API Key');
         }
