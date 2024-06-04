@@ -4,9 +4,10 @@
     dense
     size="xs"
     v-model="state.appConfiguration.expertMode"
-    label="Extended Settings"
+    label="Expert Settings"
     left-label
     color="secondary"
+    v-bind="$attrs"
   />
 </template>
 

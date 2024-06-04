@@ -29,7 +29,7 @@
       />
     </q-tabs>
     <div class="fit text-center">
-      <ExpertEnable />
+      <ExpertEnable/>
     </div>
     <q-tab-panels
       :model-value="selectedTab"
@@ -46,16 +46,19 @@
       </q-tab-panel>
       <q-tab-panel name="instructions" :class="tabPanelClass">
         <div>Set custom instructions for the AI Model</div>
-        <ObjectTreeView :model-value="state.llmSettings.taskChatTemplates" />
+        <ObjectTreeView
+          :model-value="state.llmSettings.taskChatTemplates"
+          class="fit"
+        />
       </q-tab-panel>
       <q-tab-panel name="agent config" :class="tabPanelClass">
         <div>All of the Agent configuration</div>
-        <ObjectTreeView :model-value="state.llmSettings" />
+        <ObjectTreeView :model-value="state.llmSettings" class="fit" />
         <!--{{ state.llmSettings }}-->
       </q-tab-panel>
       <q-tab-panel name="app config" :class="tabPanelClass">
         <div>All of the app configurations</div>
-        <ObjectTreeView :model-value="state.appConfiguration" />
+        <ObjectTreeView :model-value="state.appConfiguration" class="fit" />
       </q-tab-panel>
     </q-tab-panels>
   </q-page>
