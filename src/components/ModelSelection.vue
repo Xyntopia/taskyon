@@ -93,32 +93,12 @@
         </template>
       </q-select>
     </div>
-    <q-select
-      color="secondary"
-      style="min-width: 150px"
-      :model-value="selectedApi"
+    <ApiSelect
+      v-if="state.appConfiguration.expertMode"
+      :model-value="state.llmSettings.selectedApi"
       @update:model-value="onApiSelect"
-      emit-value
-      dense
-      outlined
-      label="select Api"
-      :options="Object.keys(state.llmSettings.llmApis)"
-      ><q-tooltip>Choose LLM Api</q-tooltip>
-    </q-select>
-    <InfoDialog
-      v-if="
-        !enableOpenAIAssistants && state.llmSettings.selectedApi != 'taskyon'
-      "
-      class="col-auto"
-      info-text="For a list of supported models go here:
-
-- https://platform.openai.com/docs/models
-
-or here:
-
-- https://openrouter.ai/docs#models"
-    >
-    </InfoDialog>
+      more-settings
+    />
   </div>
 </template>
 
@@ -126,12 +106,12 @@ or here:
 import { computed, ref } from 'vue';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
-import InfoDialog from './InfoDialog.vue';
 import {
   matSmartToy,
   matExpandLess,
   matExpandMore,
 } from '@quasar/extras/material-icons';
+import ApiSelect from './ApiSelect.vue';
 
 const props = defineProps({
   botName: {

@@ -1,13 +1,5 @@
 <template>
   <q-page :class="$q.dark.isActive ? 'bg-primary' : 'white'">
-    <q-toggle
-      class="q-pa-sm"
-      dense
-      v-model="state.appConfiguration.expertMode"
-      label="Extended Settings"
-      left-label
-      color="secondary"
-    />
     <q-tabs :model-value="selectedTab" align="justify">
       <q-route-tab
         :to="{ params: { tab: 'llmproviders' } }"
@@ -36,29 +28,32 @@
         label="Expert App Configuration"
       />
     </q-tabs>
+    <div class="fit text-center">
+      <ExpertEnable />
+    </div>
     <q-tab-panels
       :model-value="selectedTab"
       animated
       swipeable
       infinite
-      :class="$q.dark.isActive ? 'bg-primary' : 'white'"
+      :class="[$q.dark.isActive ? 'bg-primary' : 'white']"
     >
-      <q-tab-panel name="llmproviders">
+      <q-tab-panel name="llmproviders" :class="tabPanelClass">
         <LLMProviders style="max-width: 600px" />
       </q-tab-panel>
-      <q-tab-panel name="sync">
+      <q-tab-panel name="sync" :class="tabPanelClass">
         <SyncTaskyon style="max-width: 600px" />
       </q-tab-panel>
-      <q-tab-panel name="instructions">
+      <q-tab-panel name="instructions" :class="tabPanelClass">
         <div>Set custom instructions for the AI Model</div>
         <ObjectTreeView :model-value="state.llmSettings.taskChatTemplates" />
       </q-tab-panel>
-      <q-tab-panel name="agent config">
+      <q-tab-panel name="agent config" :class="tabPanelClass">
         <div>All of the Agent configuration</div>
         <ObjectTreeView :model-value="state.llmSettings" />
         <!--{{ state.llmSettings }}-->
       </q-tab-panel>
-      <q-tab-panel name="app config">
+      <q-tab-panel name="app config" :class="tabPanelClass">
         <div>All of the app configurations</div>
         <ObjectTreeView :model-value="state.appConfiguration" />
       </q-tab-panel>
@@ -70,14 +65,15 @@
 import { computed } from 'vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import LLMProviders from 'components/LLMProviders.vue';
-import SimpleSettings from 'components/SimpleSettings.vue';
 import ObjectTreeView from 'components/ObjectTreeView.vue';
 import SyncTaskyon from 'components/SyncTaskyon.vue';
 import { useRoute } from 'vue-router';
-import { matChevronLeft, matChevronRight } from '@quasar/extras/material-icons';
+import ExpertEnable from './ExpertEnable.vue';
 
 const route = useRoute();
 const state = useTaskyonStore();
+
+const tabPanelClass = 'column items-center';
 
 const selectedTab = computed(() => {
   return (route.params.tab as string) || 'llmproviders';

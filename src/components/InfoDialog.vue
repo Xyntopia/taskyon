@@ -1,13 +1,16 @@
 <template>
-  <q-btn flat rounded dense :icon="matInfo" @click="showInfo = true">
-    <q-dialog v-model="showInfo">
-      <q-card>
-        <q-card-section>
-          <QMarkdown :src="infoText" />
-        </q-card-section>
-      </q-card>
-    </q-dialog>
-  </q-btn>
+  <div>
+    <q-btn flat rounded dense :icon="matInfo" @click="showInfo = true">
+      <q-dialog v-model="showInfo">
+        <q-card>
+          <q-card-section>
+            <QMarkdown v-if="infoText" :src="infoText" />
+            <slot></slot>
+          </q-card-section>
+        </q-card>
+      </q-dialog>
+    </q-btn>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -18,7 +21,7 @@ import { matInfo } from '@quasar/extras/material-icons';
 defineProps({
   infoText: {
     type: String,
-    required: true,
+    required: false,
   },
 });
 </script>

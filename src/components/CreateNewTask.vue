@@ -214,8 +214,9 @@
         <q-separator class="q-my-sm" />
         <!--Model Selection-->
         <q-item class="row items-center">
-          <q-icon :name="matSmartToy" size="sm" class="q-pr-sm"></q-icon>
+          <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
           <ModelSelection
+            class="col"
             @updateBotName="handleBotNameUpdate"
             :bot-name="currentModel || currentDefaultBotName || ''"
             v-model:selected-api="selectedApi"
@@ -237,13 +238,13 @@
           >
             <template v-slot:header>
               <div class="row items-center q-gutter-sm">
-                <q-btn dense :icon="matEdit" label="manage tools" to="tools" />
                 <q-btn
                   dense
                   :icon="matChecklist"
                   label="toggle tools"
                   @click="toggleSelectedTools"
                 />
+                <q-btn v-if="state.appConfiguration.expertMode" dense :icon="matEdit" label="manage tools" to="tools" />
               </div>
             </template>
             <q-item-section>
@@ -307,7 +308,6 @@ const CodeEditor = defineAsyncComponent(
   /* webpackFetchPriority: "low" */
   () => import('./CodeEditor.vue')
 );
-
 
 import {
   matSave,
