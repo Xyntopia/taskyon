@@ -15,7 +15,9 @@
         flat
         square
         v-if="
-          selectedThread.length > 0 && state.keys[state.llmSettings.selectedApi]
+          selectedThread.length > 0 &&
+          state.llmSettings.selectedApi &&
+          state.keys[state.llmSettings.selectedApi]
         "
       >
         <div v-if="currentTask" class="q-gutter-xs q-px-xs task-container">
@@ -86,7 +88,10 @@
       />
       <div class="col q-pa-xs" style="max-width: 48rem">
         <CreateNewTask
-          v-if="state.keys[state.llmSettings.selectedApi]"
+          v-if="
+            state.llmSettings.selectedApi &&
+            state.keys[state.llmSettings.selectedApi]
+          "
           :class="[
             $q.dark.isActive ? 'bg-primary' : 'bg-grey-2',
             'rounded-borders',
