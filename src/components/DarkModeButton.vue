@@ -14,7 +14,7 @@
     v-bind="$attrs"
   >
     <q-tooltip
-      >Theme:
+      >Dark Mode:
       {{
         $q.dark.mode === 'auto' ? 'auto' : $q.dark.mode ? 'dark' : 'light'
       }}</q-tooltip
