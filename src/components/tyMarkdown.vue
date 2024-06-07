@@ -1,14 +1,34 @@
 <template>
   <q-markdown
-    no-line-numbers
     :plugins="[switchThemeMermaid, addCopyButtons, mathjax3]"
     :src="src"
     @click="handleMarkdownClick"
+    v-bind="$attrs"
   />
 </template>
 
-<style lang="sass" scoped>
-::v-deep(.code-block-with-overlay)
+<style lang="sass">
+// we need this, because otherwise long words like links will
+// completly mess up our scrolling and overflow etc...
+.q-markdown
+  word-break: break-word
+  overflow-wrap: break-word
+
+.q-markdown
+  color: $primary
+
+.q-markdown--note--info .q-markdown--note-title
+  color: $accent
+
+.q-markdown p
+  text-align: justify
+
+.q-markdown--note--info
+  background-color: lighten($secondary, 35%)
+  border: 0
+  border-radius: 10px 10px 10px 10px
+
+.code-block-with-overlay
   position: relative
 
   .copy-button
@@ -17,7 +37,7 @@
     right: 0
 
 // this is in order to make mermaid sequence diagrams work on dark backgrounds
-::v-deep(.mermaid svg)
+.mermaid svg
   .messageLine0
     stroke: $secondary !important
   .messageText
@@ -33,6 +53,8 @@ import markdownItMermaid from '@datatraccorporation/markdown-it-mermaid';
 import mathjax3 from 'markdown-it-mathjax3';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import type MarkdownIt from 'markdown-it/lib';
+// !!!!!!!!!!! it is superimportant, that our "prismjs" imports come AFTER the QMarkdown import !!!!!
+// otherwise this will result in errors for some reason...
 import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-rust';
 import 'prismjs/components/prism-javascript';
@@ -69,6 +91,7 @@ function addCopyButtons(md: MarkdownIt) {
     });
 
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+    console.log('render code fence blocks...');
     // Original rendered HTML of the code block
     const originalRenderedHtml = defaultFenceRenderer(
       tokens,
@@ -99,6 +122,10 @@ function addCopyButtons(md: MarkdownIt) {
           </button>
         </div>
       `;
+
+    //const customHtml = originalRenderedHtml;
+
+    //const customHtml = tokens[idx].content;
 
     return customHtml;
   };
