@@ -3,8 +3,6 @@
     <q-markdown
       v-if="markdownContent"
       :src="markdownContent"
-      no-line-numbers
-      style="max-width: 800px"
     />
   </q-page>
 </template>

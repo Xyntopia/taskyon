@@ -8,6 +8,20 @@
 </template>
 
 <style lang="sass">
+/*.code-block-with-overlay
+  pre.q-markdown--code__inner
+    overflow: auto !important
+    max-width: 100% !important
+    white-space: pre !important
+    word-wrap: normal !important
+    max-height: 300px !important // adjust the height to your liking
+
+.q-markdown pre,
+.q-markdown code
+  white-space: pre-wrap // Ensure that long lines of code wrap within the container
+  word-break: break-word // Break long words to fit within the container
+
+
 // we need this, because otherwise long words like links will
 // completly mess up our scrolling and overflow etc...
 .q-markdown
@@ -103,7 +117,7 @@ function addCopyButtons(md: MarkdownIt) {
 
     // Custom HTML for the button
     const customHtml = `
-        <div class="code-block-with-overlay">
+        <div class="code-block-with-overlay q-ma-xs">
           ${originalRenderedHtml}
           <button class="copy-button q-btn q-btn-item non-selectable transparent q-btn--flat q-btn--rectangle
             q-btn--actionable q-focusable q-hoverable q-btn--dense copy-button print-hide">
