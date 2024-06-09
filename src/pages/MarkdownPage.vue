@@ -1,16 +1,12 @@
 <template>
   <q-page padding>
-    <q-markdown
-      v-if="markdownContent"
-      :src="markdownContent"
-    />
+    <ty-markdown v-if="markdownContent" :src="markdownContent" />
   </q-page>
 </template>
 
 <script setup lang="ts">
+import TyMarkdown from 'src/components/tyMarkdown.vue';
 import { ref, onMounted } from 'vue';
-import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
-import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
