@@ -21,5 +21,3 @@ export const mdRoutes: RouteRecordRaw[] = [
     }),
   },
 ];
-
-export default authRoutes;
