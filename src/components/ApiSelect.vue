@@ -5,7 +5,7 @@
     outlined
     color="secondary"
     dense
-    label="Choose AI (Chat-) Service"
+    label="Provider"
     :options="
       Object.keys(state.llmSettings.llmApis).filter(
         (apiName) => state.keys[apiName]
