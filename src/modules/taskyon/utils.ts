@@ -1,5 +1,30 @@
 import equal from 'fast-deep-equal/es6';
 
+export function openrouterPricing(price: number | string, digits=1) {
+  if (typeof price === 'string') {
+    price = parseFloat(price);
+  }
+  return price >= 0 ? humanReadablePrice(price, digits) : 'dynamic';
+  //return price >= 0 ? price.toPrecision(5) : 'dynamic';
+  //return humanReadablePrice(price);
+}
+
+export function humanReadablePrice(price: number | string, digits: number) {
+  if (typeof price === 'string') {
+    price = parseFloat(price);
+  }
+  if (price < 0.001) {
+    price = parseFloat((price * 1e6).toPrecision(5));
+    return `${price.toFixed(digits)} μ$`;
+  } else if (price < 1.0) {
+    price = parseFloat((price * 1e2).toPrecision(5));
+    return `${price.toFixed(digits)} ¢`;
+  }
+  //return `${Math.round(price * 1e6)} μ$`;
+  price = parseFloat(price.toPrecision(5));
+  return `${price.toFixed(digits)} $`;
+}
+
 /**
  * Type describing a generic function.
  */

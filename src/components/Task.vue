@@ -245,6 +245,7 @@ import {
   matNewLabel,
   matWarning,
 } from '@quasar/extras/material-icons';
+import { openrouterPricing } from 'src/modules/taskyon/utils';
 
 const props = defineProps<{
   task: LLMTask;
@@ -282,16 +283,10 @@ async function taskDraftFromTask(taskId: string) {
 
 const humanReadableTaskCosts = computed(() => {
   if (props.task.debugging.taskCosts) {
-    if (props.task.debugging.taskCosts > 1.0) {
-      return `${props.task.debugging.taskCosts.toFixed(1)} $`;
-    } else if (props.task.debugging.taskCosts > 0.001) {
-      return `${(props.task.debugging.taskCosts * 1e2).toFixed(1)} ¢`;
-    }
-    return `${Math.round(
-      props.task.debugging.taskCosts * 1e6
-    ).toLocaleString()} μ$`;
+    return openrouterPricing(props.task.debugging.taskCosts);
+  } else {
+    return '';
   }
-  return '';
 });
 
 async function editTask(taskId: string) {
