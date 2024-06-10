@@ -33,6 +33,10 @@ export const taskyonRoutes = {
       component: () => import('pages/Settings.vue'),
     },
     {
+      path: 'pricing',
+      component: () => import('pages/PricePage.vue'),
+    },
+    {
       path: 'diagnostics',
       component: () => import('pages/Diagnostics.vue'),
     },

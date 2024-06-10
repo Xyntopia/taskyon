@@ -94,7 +94,7 @@
           icon="svguse:taskyon_mono_opt.svg#taskyon"
         >
           <q-menu>
-            <q-list>
+            <q-list dense>
               <q-item
                 clickable
                 v-ripple
@@ -106,6 +106,9 @@
                   <q-icon :name="mdiGithub" />
                 </q-item-section>
                 <q-item-section>Visit our Taskyon repository</q-item-section>
+              </q-item>
+              <q-item clickable v-ripple to="/pricing" exact>
+                <q-item-section> Taskyon Pricing </q-item-section>
               </q-item>
             </q-list>
           </q-menu>

@@ -697,6 +697,8 @@ interface Permission {
 export interface Model {
   id: string;
   name?: string;
+  description?: string;
+  context_length?: number;
   object?: string;
   created?: number;
   owned_by?: string;
@@ -707,12 +709,14 @@ export interface Model {
     prompt: string;
     completion: string;
     discount?: number;
+    image?: string;
+    request?: string;
   };
-  context_length?: number;
   top_provider?: {
     max_completion_tokens: number | null;
   };
   architecture?: {
+    modality?: string;
     tokenizer?: string;
     instruct_type?: string | null;
   };
