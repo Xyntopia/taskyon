@@ -2,9 +2,9 @@
   <q-page padding>
     <q-card>
       <q-card-section>
-        <p class="text-h5">Taskyon AI Price for available Models.</p>
+        <p class="text-h5">Price for available Models.</p>
         <p>
-          List of all currently available models in taskyon and their prices
+          List of all currently available models in {{ state.llmSettings.selectedApi }} and their prices
         </p>
       </q-card-section>
       <q-table

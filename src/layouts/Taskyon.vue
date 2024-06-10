@@ -108,7 +108,7 @@
                 <q-item-section>Visit our Taskyon repository</q-item-section>
               </q-item>
               <q-item clickable v-ripple to="/pricing" exact>
-                <q-item-section> Taskyon Pricing </q-item-section>
+                <q-item-section> AI chat price list </q-item-section>
               </q-item>
             </q-list>
           </q-menu>
