@@ -6,10 +6,11 @@
 
 <script setup lang="ts">
 import TyMarkdown from 'src/components/tyMarkdown.vue';
-import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted, watch } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 
 const router = useRouter();
+const route = useRoute();
 const props = defineProps<{
   folder: string;
   filePath: string;
@@ -31,10 +32,21 @@ const fetchMarkdown = async (folder: string, filePath: string) => {
   }
 };
 
-onMounted(() => {
+const loadMarkdown = () => {
   const folder = props.folder;
   const filePath = props.filePath;
   console.log('download markdown file...');
   void fetchMarkdown(folder, filePath);
+};
+
+onMounted(() => {
+  loadMarkdown();
 });
+
+watch(
+  () => route.fullPath,
+  () => {
+    loadMarkdown();
+  }
+);
 </script>
