@@ -88,16 +88,27 @@
         ></q-separator>
         <q-btn
           v-if="!minMode"
-          class="desktop-only"
-          flat
-          :size="btnSize"
-          dense
           round
-          :icon="mdiGithub"
-          href="https://github.com/xyntopia/taskyon"
-          target="_blank"
+          flat
+          dense
+          icon="svguse:taskyon_mono_opt.svg#taskyon"
         >
-          <q-tooltip>Visit our GitHub</q-tooltip>
+          <q-menu>
+            <q-list>
+              <q-item
+                clickable
+                v-ripple
+                href="https://github.com/xyntopia/taskyon"
+                target="_blank"
+                exact
+              >
+                <q-item-section avatar>
+                  <q-icon :name="mdiGithub" />
+                </q-item-section>
+                <q-item-section>Visit our Taskyon repository</q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
         </q-btn>
       </component>
     </q-header>
@@ -176,7 +187,7 @@
 </style>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { ref } from 'vue';
 import DarkModeButton from 'components/DarkModeButton.vue';
 import { defineAsyncComponent } from 'vue';
 import type { useTaskyonStore } from 'stores/taskyonState';
