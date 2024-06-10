@@ -4,7 +4,8 @@
       <q-card-section>
         <p class="text-h5">Price for available Models.</p>
         <p>
-          List of all currently available models in {{ state.llmSettings.selectedApi }} and their prices
+          List of all currently available models in
+          {{ state.llmSettings.selectedApi }} and their prices
         </p>
       </q-card-section>
       <q-table
@@ -25,6 +26,7 @@
         <template v-slot:top-left>
           <q-input
             dense
+            clearable
             debounce="300"
             v-model="filter"
             placeholder="Filter Models"
@@ -33,6 +35,13 @@
               <q-icon :name="matFilterList" />
             </template>
           </q-input>
+        </template>
+        <template v-slot:top-right>
+          <q-toggle
+            label="Calculate price information as pages/0.01$ (assuming 500 token/page)"
+            left-label
+            v-model="pricingPerPage"
+          />
         </template>
         <template v-slot:body-cell-name="props">
           <q-td :props="props">
@@ -44,17 +53,32 @@
             </div>
           </q-td>
         </template>
-
         <template v-slot:body-cell-prompt_price="props">
           <q-td :props="props">
-            {{ openrouterPricing(props.value, 3) }}
-            <q-tooltip :delay="500">exact price: {{ props.value }}</q-tooltip>
+            <div v-if="!pricingPerPage">
+              {{ openrouterPricing(props.value, 3) }}
+            </div>
+            <div v-else>
+              {{ calculatePricePerPage(props.value) }}
+            </div>
+            <q-tooltip :delay="500">
+              exact price: {{ props.value }}$/token <br />
+              {{ calculatePricePerPage(props.value) }} pages/¢
+            </q-tooltip>
           </q-td>
         </template>
         <template v-slot:body-cell-completion_price="props">
           <q-td :props="props">
-            {{ openrouterPricing(props.value, 3) }}
-            <q-tooltip :delay="500">exact price: {{ props.value }}</q-tooltip>
+            <div v-if="!pricingPerPage">
+              {{ openrouterPricing(props.value, 3) }}
+            </div>
+            <div v-else>
+              {{ calculatePricePerPage(props.value) }}
+            </div>
+            <q-tooltip :delay="500">
+              exact price: {{ props.value }}$/token <br />
+              {{ calculatePricePerPage(props.value) }} pages/¢
+            </q-tooltip>
           </q-td>
         </template>
       </q-table>
@@ -71,14 +95,15 @@ import { ref, computed } from 'vue';
 import { matFilterList } from '@quasar/extras/material-icons';
 
 const state = useTaskyonStore();
-const filter = ref('');
+const filter = ref<string | null>('');
+const pricingPerPage = ref(true);
 //const { llmModels: tableData } = storeToRefs(state);
 
 type rowType = (typeof state.llmModels)[0];
 
 const filteredTableData = computed(() => {
   return state.llmModels.filter((model) =>
-    model.name?.toLowerCase().includes(filter.value.toLowerCase())
+    model.name?.toLowerCase().includes((filter.value || '').toLowerCase())
   );
 });
 
@@ -133,4 +158,15 @@ const columns: QTableProps['columns'] = [
     sortable: true,
   },*/
 ];
+
+function calculatePricePerPage(value: number) {
+  if (value < 0) {
+    return 'dynamic';
+  } else if (value == 0) {
+    return 'free';
+  } else {
+    const ppt = 0.01 / (value * 500);
+    return ppt.toFixed(1);
+  }
+}
 </script>
