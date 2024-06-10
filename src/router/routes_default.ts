@@ -1,16 +1,5 @@
 import { RouteRecordRaw } from 'vue-router';
 
-export const authRoutes = [
-  {
-    path: 'account',
-    component: () => import('pages/auth/Account.vue'),
-  },
-  {
-    path: 'auth',
-    component: () => import('pages/auth/Account.vue'),
-  },
-];
-
 export const mdRoutes: RouteRecordRaw[] = [
   {
     path: '/md/:filePath+',

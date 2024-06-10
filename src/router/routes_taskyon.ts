@@ -1,5 +1,5 @@
 import { RouteRecordRaw } from 'vue-router';
-import { mdRoutes, authRoutes } from './routes_default';
+import { mdRoutes } from './routes_default';
 import { defineAsyncComponent } from 'vue';
 import Load from 'components/Loading.vue';
 
@@ -52,8 +52,7 @@ export const taskyonRoutes = {
       path: 'prompts',
       component: () => import('components/PromptManager.vue'),
     },
-    ...authRoutes,
-    ...mdRoutes
+    ...mdRoutes,
   ],
 };
 

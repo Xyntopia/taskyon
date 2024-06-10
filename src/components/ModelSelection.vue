@@ -79,11 +79,11 @@
             <q-tooltip>Prompt costs</q-tooltip>
             <div>
               prompt:
-              {{ state.modelLookUp[botName]?.pricing?.prompt || '?' }}
+              {{ openrouterPricing(state.modelLookUp[botName]?.pricing?.prompt || '?') }}
             </div>
             <div>
               completion:
-              {{ state.modelLookUp[botName]?.pricing?.completion || '?' }}
+              {{ openrouterPricing(state.modelLookUp[botName]?.pricing?.completion  || '?') }}
             </div>
           </div>
         </template>
@@ -108,6 +108,7 @@ import {
   matExpandMore,
 } from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
+import { openrouterPricing } from 'src/modules/taskyon/utils';
 
 defineProps({
   botName: {
@@ -175,12 +176,14 @@ function onModelSelect(value: string) {
   });
 }
 
-function onApiSelect(value: string) {
-  const newBotName = state.llmSettings.llmApis[value]?.defaultModel;
-  emit('updateBotName', {
-    newName: newBotName,
-    newService: value,
-  });
+function onApiSelect(modelValue: string | null) {
+  if (modelValue) {
+    const newBotName = state.llmSettings.llmApis[modelValue]?.defaultModel;
+    emit('updateBotName', {
+      newName: newBotName,
+      newService: modelValue,
+    });
+  }
 }
 
 const filteredOptions = ref<{ label: string; value: string }[]>([]);

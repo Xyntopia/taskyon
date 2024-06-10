@@ -10,7 +10,7 @@
         @update:modelValue="
           (value) => {
             state.taskDraft.content = {
-              message: value,
+              message: value || '',
             };
           }
         "
@@ -28,7 +28,7 @@
           @update:modelValue="
             (value) => {
               state.taskDraft.content = {
-                message: value,
+                message: value || '',
               };
             }
           "
