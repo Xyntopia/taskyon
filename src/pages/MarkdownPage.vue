@@ -1,5 +1,9 @@
 <template>
   <q-page padding>
+    <div>
+      <div>Folder: {{ folder }}</div>
+      <div>Path: {{ filePath }}</div>
+    </div>
     <ty-markdown
       v-if="markdownContent"
       :src="markdownContent"
