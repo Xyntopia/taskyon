@@ -34,7 +34,8 @@
           </q-expansion-item>
         </div>
         <div v-else-if="'message' in task.content" class="col">
-          <tyMarkdown
+          <ty-markdown
+            no-line-numbers
             style="min-width: 50px"
             v-if="state.taskState[task.id]?.markdownEnabled != false"
             :src="task.content.message"

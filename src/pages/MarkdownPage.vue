@@ -1,6 +1,10 @@
 <template>
   <q-page padding>
-    <ty-markdown v-if="markdownContent" :src="markdownContent" />
+    <ty-markdown
+      v-if="markdownContent"
+      :src="markdownContent"
+      no-line-numbers
+    />
   </q-page>
 </template>
 
