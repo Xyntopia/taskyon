@@ -3,23 +3,10 @@
   <div>
     <!--Task Creation-->
     <div>
-      <taskContentEdit
-        class="text-body1"
-        v-if="!selectedTaskType && !codingMode"
-        :model-value="state.taskDraft.content?.message"
-        @update:modelValue="
-          (value) => {
-            state.taskDraft.content = {
-              message: value || '',
-            };
-          }
-        "
-        :execute-task="addNewTask"
-        :attach-file-to-chat="attachFileToDraft"
-        :use-enter-to-send="state.appConfiguration.useEnterToSend"
-      />
-      <div v-else-if="!selectedTaskType && codingMode">
-        <CodeEditor
+      <div>
+        <taskContentEdit
+          class="text-body1"
+          v-if="!selectedTaskType && !codingMode"
           :model-value="state.taskDraft.content?.message"
           @update:modelValue="
             (value) => {
@@ -28,27 +15,42 @@
               };
             }
           "
+          :execute-task="addNewTask"
+          :attach-file-to-chat="attachFileToDraft"
+          :use-enter-to-send="state.appConfiguration.useEnterToSend"
         />
-        <taskSettingsButton
-          v-model="expandedTaskCreation"
-          aria-label="task settings"
-        />
-        <q-btn
-          :disable="!sendAllowed"
-          :color="sendAllowed ? 'positive' : 'negative'"
-          :icon="matSave"
-          label="save task"
-          @click="addNewTask(false)"
-          ><q-tooltip>Save task without executing it...</q-tooltip></q-btn
-        >
-      </div>
-      <div v-else-if="selectedTaskType" class="row">
-        <ObjectTreeView
-          class="col"
-          :model-value="state.taskDraft.content?.functionCall?.arguments"
-          input-field-behavior="auto"
-          :separate-labels="false"
-        />
+        <div v-else-if="!selectedTaskType && codingMode">
+          <CodeEditor
+            :model-value="state.taskDraft.content?.message"
+            @update:modelValue="
+              (value) => {
+                state.taskDraft.content = {
+                  message: value || '',
+                };
+              }
+            "
+          />
+          <taskSettingsButton
+            v-model="expandedTaskCreation"
+            aria-label="task settings"
+          />
+          <q-btn
+            :disable="!sendAllowed"
+            :color="sendAllowed ? 'positive' : 'negative'"
+            :icon="matSave"
+            label="save task"
+            @click="addNewTask(false)"
+            ><q-tooltip>Save task without executing it...</q-tooltip></q-btn
+          >
+        </div>
+        <div v-else-if="selectedTaskType" class="row">
+          <ObjectTreeView
+            class="col"
+            :model-value="state.taskDraft.content?.functionCall?.arguments"
+            input-field-behavior="auto"
+            :separate-labels="false"
+          />
+        </div>
       </div>
       <!--Task Creation State-->
       <div class="q-px-sm q-pt-xs text-caption">

@@ -10,6 +10,7 @@
           class="col"
           filled
           :label="prop.node.label"
+          input-style="max-height: 300px"
           type="textarea"
           :debounce="debounce"
           :model-value="prop.node.value"
