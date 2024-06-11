@@ -14,12 +14,8 @@
             };
           }
         "
-        v-model:expandedTaskCreation="expandedTaskCreation"
-        :expert-mode="expertMode"
         :execute-task="addNewTask"
         :attach-file-to-chat="attachFileToDraft"
-        :estimated-tokens="estimatedTokens"
-        :current-model="currentModel"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
       />
       <div v-else-if="!selectedTaskType && codingMode">
@@ -53,7 +49,6 @@
           input-field-behavior="auto"
           :separate-labels="false"
         />
-        <taskSettingsButton v-model="expandedTaskCreation" />
       </div>
       <!--Task Creation State-->
       <div class="q-px-sm q-pt-xs text-caption">

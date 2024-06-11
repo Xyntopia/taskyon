@@ -46,7 +46,6 @@ const content = defineModel<string | null | undefined>({
 });
 
 const props = defineProps<{
-  expertMode: boolean;
   executeTask: () => Promise<void>;
   attachFileToChat: (newFiles: File[]) => void;
   useEnterToSend: boolean;
