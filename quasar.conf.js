@@ -127,12 +127,16 @@ module.exports = configure(function (ctx) {
         DESCRIPTION: DESCRIPTION,
       },
       //devtool: 'source-map', // TODO: turn this off for actua production...
+      //publicPath:  TODO: check if we ca us this to deploy a "test" version of our app on gitlab pages..
       vueRouterMode: 'history', // available values: 'hash', 'history'
       vueLoaderOptions: {
         compilerOptions: {
+          // from here: https://qmarkdown.netlify.app/all-about-qmarkdown/installation-types
           // this handles the whitespace for the q-markdown component.
           // we need this in order to be able to use newlines in q-markdown...
-          isPreTag: (tag) => tag === 'pre ' || tag === 'q-markdown',
+          // update: 20240608: we are shutting this down for now, because w have a lot of problems with
+          // q-markdown and new lines..  maybe this is a related problem?
+          // isPreTag: (tag) => tag === 'pre ' || tag === 'q-markdown',
         },
 
         // there HAS to be  frontend_config file in the parent directory

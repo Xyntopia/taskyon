@@ -4,7 +4,11 @@
       <p class="text-bold">{{ idx }}:</p>
       <pre>{{ e }}</pre>
     </div>
-    <object-tree-view :model-value="stateView" />
+    <q-expansion-item label="state">
+      <object-tree-view :model-value="stateView" />
+    </q-expansion-item>
+    <q-expansion-item label="router">{{ $router }}</q-expansion-item>
+    <q-expansion-item label="route">{{ $route }}</q-expansion-item>
   </q-page>
 </template>
 
