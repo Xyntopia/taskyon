@@ -1,6 +1,6 @@
 <template>
   <q-page padding>
-    <div>
+    <div v-if="$route.query.debug !== undefined">
       <div>Folder: {{ folder }}</div>
       <div>Path: {{ filePath }}</div>
     </div>
