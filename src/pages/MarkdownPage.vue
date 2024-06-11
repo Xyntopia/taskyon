@@ -43,7 +43,7 @@ const fetchMarkdown = async (folder: string, filePath: string) => {
 const loadMarkdown = () => {
   const folder = props.folder;
   const filePath = props.filePath;
-  console.log('download markdown file...');
+  console.log('download markdown file...', folder, filePath);
   void fetchMarkdown(folder, filePath);
 };
 

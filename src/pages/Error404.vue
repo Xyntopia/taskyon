@@ -9,6 +9,10 @@
         Oops. Nothing here...
       </div>
 
+      <q-expansion-item style="opacity:.4">
+        {{ $route }}
+      </q-expansion-item>
+
       <q-btn
         class="q-mt-xl"
         color="white"
