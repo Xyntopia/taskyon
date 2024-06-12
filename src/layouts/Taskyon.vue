@@ -107,7 +107,14 @@
                 </q-item-section>
                 <q-item-section>Visit our Taskyon repository</q-item-section>
               </q-item>
-              <q-item clickable v-ripple to="/pricing" exact>
+<q-separator />
+              <q-item
+                clickable
+                v-ripple
+                to="/pricing"
+                exact
+                active-class="text-secondary"
+              >
                 <q-item-section> AI chat price list </q-item-section>
               </q-item>
             </q-list>
