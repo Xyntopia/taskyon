@@ -80,8 +80,6 @@ const llmSettings = z.object({
 export type llmSettings = z.infer<typeof llmSettings>;
 
 const appConfiguration = z.object({
-  supabase_url: z.string().default(''),
-  supabase_anon_key: z.string().default(''),
   appConfigurationUrl: z
     .string()
     .default('/taskyon_settings.json')
@@ -108,7 +106,7 @@ export type appConfiguration = z.infer<typeof appConfiguration>;
 
 export const storedSettings = z.object({
   version: z
-    .literal(5)
+    .literal(6)
     .describe(
       'whenever the settings change, this number will get changed as well...'
     ),
