@@ -624,3 +624,49 @@ export function convertToYamlWComments(objrepr: string) {
     }
   );
 }
+interface Permission {
+  id: string;
+  object: string;
+  created: number;
+  allow_create_engine: boolean;
+  allow_sampling: boolean;
+  allow_logprobs: boolean;
+  allow_search_indices: boolean;
+  allow_view: boolean;
+  allow_fine_tuning: boolean;
+  organization: string;
+  group: null | string;
+  is_blocking: boolean;
+}
+
+export interface Model {
+  id: string;
+  name?: string;
+  description?: string;
+  context_length?: number;
+  object?: string;
+  created?: number;
+  owned_by?: string;
+  permission?: Permission[];
+  root?: string;
+  parent?: null | string;
+  pricing?: {
+    prompt: string;
+    completion: string;
+    discount?: number;
+    image?: string;
+    request?: string;
+  };
+  top_provider?: {
+    max_completion_tokens: number | null;
+  };
+  architecture?: {
+    modality?: string;
+    tokenizer?: string;
+    instruct_type?: string | null;
+  };
+  per_request_limits?: {
+    prompt_tokens: string;
+    completion_tokens: string;
+  } | null;
+}

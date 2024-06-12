@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia';
 import { watch, computed, reactive, toRefs, ref } from 'vue';
-import type { LLMTask } from 'src/modules/taskyon/types';
 import type {
   ContentDraft,
   FunctionArguments,
+  Model,
+  LLMTask,
 } from 'src/modules/taskyon/types';
 import axios from 'axios'; // TODO: replace with fetch
 import { LocalStorage, Notify } from 'quasar'; // load dynamically! :)
@@ -15,7 +16,6 @@ import defaultSettings from 'src/assets/taskyon_settings.json';
 import {
   storedSettings,
   availableModels,
-  Model,
   getAssistants,
   getApiConfig,
 } from 'src/modules/taskyon/chat';
