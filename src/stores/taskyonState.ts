@@ -83,6 +83,9 @@ export const useTaskyonStore = defineStore(storeName, () => {
       accessWhiteList: [] as string[],
       parentUrl: '',
     },
+    // can be used to exchange certain keys and make taskyon
+    // aware of different URLs etc...
+    developerMode: false,
     messageDebug: {} as Record<
       string,
       'RAW' | 'MESSAGECONTENT' | 'RAWTASK' | 'ERROR' | undefined
