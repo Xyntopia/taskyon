@@ -4,7 +4,7 @@
       <!-- Be sure to play with the Layout demo on docs -->
       <q-btn
         flat
-        @click="state.drawerOpen = !state.drawerOpen"
+        @click="drawerOpen = !drawerOpen"
         dense
         :icon="matMenu"
         :size="btnsize"
@@ -77,6 +77,7 @@ const route = useRoute();
 route.query; //has all the parameters :)
 
 import DarkModeButton from 'components/DarkModeButton.vue';
+import { ref } from 'vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import {
   matLaunch,
@@ -87,4 +88,5 @@ import {
 
 const state = useTaskyonStore();
 const btnsize = 'xs';
+const drawerOpen = ref(false);
 </script>

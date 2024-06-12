@@ -6,9 +6,8 @@
         :class="minMode ? 'q-gutter-xs row q-px-sm' : 'q-gutter-xs'"
       >
         <q-btn
-          v-if="state && !state.drawerOpen"
           flat
-          @click="state.drawerOpen = !state.drawerOpen"
+          @click="drawerOpen = !drawerOpen"
           round
           dense
           :size="btnSize"
@@ -107,7 +106,7 @@
                 </q-item-section>
                 <q-item-section>Visit our Taskyon repository</q-item-section>
               </q-item>
-<q-separator />
+              <q-separator />
               <q-item
                 clickable
                 v-ripple
@@ -125,7 +124,7 @@
 
     <q-drawer
       v-if="state"
-      v-model="state.drawerOpen"
+      v-model="drawerOpen"
       elevated
       persistent
       :width="250"
@@ -210,6 +209,8 @@ import {
   matWarning,
 } from '@quasar/extras/material-icons';
 import { mdiGithub } from '@quasar/extras/mdi-v6';
+
+const drawerOpen = ref(false);
 
 const ChatSidebar = defineAsyncComponent(
   () =>

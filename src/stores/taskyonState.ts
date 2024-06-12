@@ -70,7 +70,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
     selectChatBotExpand: true,
     allowedToolsExpand: true,
     showTaskData: false,
-    drawerOpen: true,
     drawerRight: false,
     taskDraft: {} as Partial<LLMTask> & { content?: ContentDraft },
     modelHistory: [] as string[],

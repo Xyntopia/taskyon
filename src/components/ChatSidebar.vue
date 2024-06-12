@@ -2,13 +2,7 @@
 <template>
   <q-list dense class="q-pa-xs">
     <!-- Conversation Area -->
-    <q-item
-      v-ripple
-      default-opened
-      hide-expand-icon
-      clickable
-      @click="state.drawerOpen = !state.drawerOpen"
-    >
+    <q-item v-ripple default-opened hide-expand-icon clickable>
       <div class="col row q-gutter-sm items-end justify-around">
         <q-icon
           class="col-auto"
@@ -16,7 +10,6 @@
           size="sm"
         />
         <div class="col-auto text-weight-medium">Conversation Threads</div>
-        <q-icon class="col-auto" :name="matMenu" size="sm" />
       </div>
     </q-item>
     <div class="q-pt-md">
