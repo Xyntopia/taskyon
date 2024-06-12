@@ -2,11 +2,15 @@
   <q-page padding>
     <q-card>
       <q-card-section>
-        <p class="text-h5">Price for available Models.</p>
-        <p>
-          List of all currently available models in
-          {{ state.llmSettings.selectedApi }} and their prices
-        </p>
+        <ty-markdown
+          :src="`
+##  Infos and pricing for all available Models.
+
+List of all of our currently available models in ${state.llmSettings.selectedApi} and their prices.
+Most of these models are integrated through openrouter right now. We are working on
+including additional providers to make even more use of the pricing competition in the current market.
+`"
+        />
       </q-card-section>
       <q-table
         flat
@@ -41,6 +45,7 @@
             label="Calculate price information as pages/0.01$ (assuming 500 token/page)"
             left-label
             v-model="pricingPerPage"
+            color="secondary"
           />
         </template>
         <template v-slot:body-cell-name="props">
@@ -48,10 +53,15 @@
             <div class="row items-center">
               {{ props.value }}
               <info-dialog>
-                {{ props.row.description }}
+                <ty-markdown :src="props.row.description" />
               </info-dialog>
             </div>
           </q-td>
+        </template>
+        <template v-slot:header-cell-prompt_price="props">
+          <q-th :props="props">
+            {{ pricingPerPage ? 'pages/0.01$' : 'μ$ / token' }}
+          </q-th>
         </template>
         <template v-slot:body-cell-prompt_price="props">
           <q-td :props="props">
@@ -66,6 +76,11 @@
               {{ calculatePricePerPage(props.value) }} pages/¢
             </q-tooltip>
           </q-td>
+        </template>
+        <template v-slot:header-cell-completion_price="props">
+          <q-th :props="props">
+            {{ pricingPerPage ? 'pages/0.01$' : 'μ$ / token' }}
+          </q-th>
         </template>
         <template v-slot:body-cell-completion_price="props">
           <q-td :props="props">
@@ -93,6 +108,7 @@ import { openrouterPricing } from 'src/modules/taskyon/utils';
 import InfoDialog from 'src/components/InfoDialog.vue';
 import { ref, computed } from 'vue';
 import { matFilterList } from '@quasar/extras/material-icons';
+import tyMarkdown from 'src/components/tyMarkdown.vue';
 
 const state = useTaskyonStore();
 const filter = ref<string | null>('');
@@ -124,7 +140,7 @@ const columns: QTableProps['columns'] = [
   },*/
   {
     name: 'prompt_price',
-    label: 'Prompt Price',
+    label: 'pages/0.01$',
     align: 'center',
     field: (row: rowType) => row.pricing?.prompt,
     sortable: true,
