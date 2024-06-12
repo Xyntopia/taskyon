@@ -74,11 +74,6 @@
         >
           <q-tooltip>Open settings</q-tooltip>
         </q-btn>
-        <dark-mode-button
-          v-if="state"
-          :size="btnSize"
-          @theme-changed="(newMode) => (state!.darkTheme = newMode)"
-        />
         <q-separator
           v-if="!minMode"
           class="desktop-only"
@@ -115,6 +110,19 @@
                 active-class="text-secondary"
               >
                 <q-item-section> AI chat price list </q-item-section>
+              </q-item>
+              <q-separator />
+              <q-item>
+                <q-item-section>
+                  <DarkModeButton
+                    v-if="state"
+                    dense
+                    flat
+                    label="Change Theme"
+                    :size="btnSize"
+                    @theme-changed="(newMode) => (state!.darkTheme = newMode)"
+                  />
+                </q-item-section>
               </q-item>
             </q-list>
           </q-menu>

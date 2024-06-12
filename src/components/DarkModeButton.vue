@@ -1,9 +1,6 @@
 <template>
   <q-btn
-    dense
-    flat
-    round
-    :icon="
+    :icon-right="
       $q.dark.mode === 'auto'
         ? matContrast
         : $q.dark.mode
