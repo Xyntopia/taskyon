@@ -126,6 +126,7 @@
       v-if="state"
       v-model="drawerOpen"
       elevated
+      show-if-above
       persistent
       :width="250"
       :breakpoint="800"
