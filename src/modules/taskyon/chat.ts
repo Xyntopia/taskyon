@@ -11,13 +11,7 @@ import type { TyTaskManager } from './taskManager';
 import OpenAI from 'openai';
 import { openFile } from './OPFS';
 import { z } from 'zod';
-import {
-  lruCache,
-  sleep,
-  asyncTimeLruCache,
-  asyncLruCache,
-  deepCopy,
-} from './utils';
+import { lruCache, sleep, asnycasyncTimeLruCache, deepCopy } from './utils';
 import type { FileMappingDocType } from './rxdb';
 import { findAllFilesInTasks } from './taskUtils';
 
@@ -130,11 +124,11 @@ export function getApiConfigCopy(llmSettings: llmSettings, apiName?: string) {
   }
 }
 
-export const getAssistants = asyncTimeLruCache<
+export const getAssistants = asnycasyncTimeLruCache<
   Record<string, OpenAI.Beta.Assistant>
 >(
   1,
-  60000 * 10 * 60 //1h
+  60 * 60 * 1000 //1h
 )(async (openAIApiKey: string) => {
   console.log('get list of openai assistants');
   const response = await getOpenai(openAIApiKey).beta.assistants.list({
@@ -678,19 +672,43 @@ export async function getOpenAIAssistantResponse(
   }
 }
 
-export const availableModels = asyncLruCache<Model[]>(3)(
-  async (modelsUrl: string, apiKey: string): Promise<Model[]> => {
+export const availableModels = asnycasyncTimeLruCache<Model[]>(
+  10, // max 10 entries
+  60 * 60 * 1000, //1h
+  true, // use localStorage for persistence
+  'modelCache' // save it here..
+)(
+  async (
+    modelsUrl: string,
+    apiKey: string,
+    invalidateCache = false
+  ): Promise<Model[]> => {
     try {
-      // Setting up the Axios requsest
-      const response = await axios.get<{ data: Model[] }>(modelsUrl, {
+      // Construct the URL with an optional cache-busting query parameter
+      const url = invalidateCache
+        ? `${modelsUrl}?_=${new Date().getTime()}`
+        : modelsUrl;
+
+      // Setting up the Fetch request
+      const response = await fetch(url, {
+        method: 'GET',
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          'Cache-Control': 'max-stale=3600',
+          //'Cache-Control': 'max-stale=3600',
+          'Cache-Control': 'no-cache', // Ensure the freshest data is fetched as we're caching this function anyways...
         },
       });
 
+      // Check if the response is ok (status in the range 200-299)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Parse the JSON response
+      const data = (await response.json()) as { data: Model[] };
+
       // Return the list of models directly
-      return response.data.data;
+      return data.data;
     } catch (error) {
       console.error('Error fetching models:', error);
       throw error; // re-throwing the error to be handled by the calling code

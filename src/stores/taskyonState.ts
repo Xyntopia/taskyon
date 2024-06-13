@@ -19,8 +19,6 @@ import {
   getAssistants,
   getApiConfig,
 } from 'src/modules/taskyon/chat';
-import openrouterModules from 'assets/openrouter_models.json';
-import openaiModels from 'assets/openai_models.json';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -53,14 +51,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
   // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
   const initialState = {
     ...defaultStorableSettings,
-    // initialize keys with all available apis...
-    keys: Object.keys(defaultStorableSettings.llmSettings.llmApis).reduce(
-      (keys, apiName) => {
-        keys[apiName] = '';
-        return keys;
-      },
-      {} as Record<string, string>
-    ),
+    keys: {} as Record<string, string>,
     // app State which should be part of the configuration
     // the things below should only represent transitional states
     // which have no relevance in the actual configuration of the app.
@@ -255,46 +246,59 @@ export const useTaskyonStore = defineStore(storeName, () => {
     stateRefs.modelHistory.push(model);
   }
 
-  const assistants = ref<Awaited<ReturnType<typeof getAssistants>>>({});
-  const llmModels = ref<Model[]>([]);
-  watch(
-    () => stateRefs.llmSettings.selectedApi,
-    () => {
-      console.log('downloading models...');
-      const api = getApiConfig(stateRefs.llmSettings);
+  const llmModelsInternal = ref<Model[]>([]);
+  function updateLlmModels() {
+    console.log('downloading models...');
+    const api = getApiConfig(stateRefs.llmSettings);
+    if (api) {
+      // and also get a "fresh" list of models from the server...
+      let baseurl: string;
       const taskyonApi = stateRefs.llmSettings.llmApis['taskyon'];
-      if (api && taskyonApi) {
-        llmModels.value =
-          api.name === 'openai' ? openaiModels.data : openrouterModules.data;
-        const baseurl =
-          api.name === 'openrouter.ai'
-            ? taskyonApi.baseURL + '/models_openrouter'
-            : api.baseURL + api.routes.models;
-        try {
-          void availableModels(baseurl, stateRefs.keys.taskyon).then(
-            (res) => (llmModels.value = res)
-          );
-        } catch {
-          console.log("couldn't download models from", baseurl);
-        }
+      if (taskyonApi && api?.name === 'openrouter.ai') {
+        baseurl = taskyonApi.baseURL + '/models_openrouter';
+      } else {
+        baseurl = api.baseURL + api.routes.models;
       }
-    },
-    { immediate: true }
+      try {
+        void availableModels(baseurl, stateRefs.keys.taskyon).then(
+          (res) => (llmModelsInternal.value = res)
+        );
+      } catch {
+        console.log("couldn't download models from", baseurl);
+      }
+    } else {
+      llmModelsInternal.value = [];
+    }
+  }
+
+  // make sure we update our model list whenever anything changes for our
+  // endpoints...
+  watch(
+    [
+      () => stateRefs.llmSettings.selectedApi,
+      stateRefs.keys,
+      stateRefs.llmSettings.llmApis,
+    ],
+    updateLlmModels,
+    {
+      immediate: true,
+    }
   );
 
+  const assistantsInternal = ref<Awaited<ReturnType<typeof getAssistants>>>({});
   watch(
     () => stateRefs.llmSettings.useOpenAIAssistants,
     (newValue) => {
       if (newValue) {
         void getAssistants(stateRefs.keys.openai).then((assitantDict) => {
-          assistants.value = assitantDict;
+          assistantsInternal.value = assitantDict;
         });
       }
     }
   );
 
   const modelLookUp = computed(() =>
-    llmModels.value.reduce((acc, m) => {
+    llmModelsInternal.value.reduce((acc, m) => {
       acc[m.id] = m;
       return acc;
     }, {} as Record<string, Model>)
@@ -319,6 +323,9 @@ export const useTaskyonStore = defineStore(storeName, () => {
     stateRefs.version = 0 as typeof stateRefs.version; // set the version to 0, hoping, that this will trigger a reset on page reload..
     void sleep(1000).then(() => (window.location.href = '/'));
   }
+  // it is *SUPERIMPORTANT*  that we ONLY return computed refs & functions in the store EXCEPT
+  // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
+  // hydration mechanism to automatically save & load the store from localStorage
   return {
     ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
     $reset,
@@ -329,9 +336,9 @@ export const useTaskyonStore = defineStore(storeName, () => {
     getTaskManager,
     logError,
     getErrors,
-    assistants,
-    llmModels,
     modelLookUp,
+    llmModels: computed(() => llmModelsInternal.value),
+    assistants: computed(() => assistantsInternal.value),
   };
 }); // this state stores all information which
 // should be stored e.g. in browser LocalStorage
