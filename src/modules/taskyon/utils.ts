@@ -178,12 +178,30 @@ export function asyncTimeLruCache<ReturnType>(
   maxAge: number, // Maximum age in milliseconds
   useLocalStorage = false,
   storageKey = 'asyncTimeLruCache',
+  lazyUpdate = false, // New parameter for lazy update
   ignoreIndices: number[] = []
 ): (fn: AnyFunction<Promise<ReturnType>>) => AnyFunction<Promise<ReturnType>> {
   // The cache for storing function call results.
   const cache = useLocalStorage
     ? loadFromLocalStorage<ReturnType>(storageKey)
     : new Map<string, AsyncCacheEntry<ReturnType>>();
+
+  const updateCache = (
+    key: string,
+    result: Promise<ReturnType>,
+    now: number
+  ) => {
+    cache.set(key, { value: result, timestamp: now });
+    // Check the cache size and evict the least recently used item if necessary.
+    if (cache.size > size) {
+      const oldestKey = Array.from(cache.keys())[0];
+      cache.delete(oldestKey);
+      console.log('Evicted:', oldestKey);
+    }
+    if (useLocalStorage) {
+      saveToLocalStorage(storageKey, cache);
+    }
+  };
 
   return (
     fn: AnyFunction<Promise<ReturnType>>
@@ -205,24 +223,20 @@ export function asyncTimeLruCache<ReturnType>(
           return entry.value;
         } else {
           console.log('Cache expired:', key);
-          cache.delete(key); // Remove the expired entry.
+          if (lazyUpdate) {
+            // Start updating the cache in the background
+            fn(...args)
+              .then((result) => updateCache(key, Promise.resolve(result), now))
+              .catch(console.error);
+            // Return the stale value
+            return entry.value;
+          }
         }
       }
 
-      // Call the original function and cache the result.
+      // Call the original function and cache the result if lazyUpdate is false or cache miss occurs.
       const result = fn(...args);
-      cache.set(key, { value: result, timestamp: now });
-
-      // Check the cache size and evict the least recently used item if necessary.
-      if (cache.size > size) {
-        const oldestKey = Array.from(cache.keys())[0];
-        cache.delete(oldestKey);
-        console.log('Evicted:', oldestKey);
-      }
-
-      if (useLocalStorage) {
-        saveToLocalStorage(storageKey, cache);
-      }
+      updateCache(key, result, now);
 
       // Return the result.
       return result;
