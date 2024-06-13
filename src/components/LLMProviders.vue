@@ -88,12 +88,13 @@
         <div>Provide more API keys in order to activate other APIs:</div>
         <div>
           <SecretInput
-            v-for="keyname of filteredKeys"
-            :key="keyname"
+            v-for="apiName of Object.keys(state.llmSettings.llmApis)"
+            :key="apiName"
             placeholder="Add API key here!"
             filled
-            v-model="state.keys[keyname]"
-            :label="`${keyname} API key`"
+            :model-value="state.keys[apiName] || ''"
+            @update:model-value="(value) => (state.keys[apiName] = value)"
+            :label="`${apiName} API key`"
             >
           </SecretInput>
         </div>
@@ -134,11 +135,6 @@ import ApiSelect from './ApiSelect.vue';
 import InfoDialog from './InfoDialog.vue';
 
 const state = useTaskyonStore();
-const filteredKeys = computed(() => {
-  return Object.keys(state.keys); /*.filter(
-    (name) => !['taskyon', 'jwt'].includes(name)
-  );*/
-});
 
 const expertModeOn = defineModel<boolean>('expertModeOn', { default: false });
 </script>
