@@ -11,6 +11,7 @@ Most of these models are integrated through openrouter right now. We are working
 including additional providers to make even more use of the pricing competition in the current market.
 `"
         />
+        <api-select v-model="state.llmSettings.selectedApi" />
       </q-card-section>
       <q-table
         flat
@@ -109,6 +110,7 @@ import InfoDialog from 'src/components/InfoDialog.vue';
 import { ref, computed } from 'vue';
 import { matFilterList } from '@quasar/extras/material-icons';
 import tyMarkdown from 'src/components/tyMarkdown.vue';
+import ApiSelect from 'src/components/ApiSelect.vue';
 
 const state = useTaskyonStore();
 const filter = ref<string | null>('');
@@ -142,7 +144,7 @@ const columns: QTableProps['columns'] = [
     name: 'prompt_price',
     label: 'pages/0.01$',
     align: 'center',
-    field: (row: rowType) => row.pricing?.prompt,
+    field: (row: rowType) => parseFloat(row.pricing?.prompt || '0'),
     sortable: true,
   },
   {

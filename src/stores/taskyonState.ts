@@ -260,9 +260,9 @@ export const useTaskyonStore = defineStore(storeName, () => {
         baseurl = api.baseURL + api.routes.models;
       }
       try {
-        void availableModels(baseurl, stateRefs.keys.taskyon).then(
-          (res) => (llmModelsInternal.value = res)
-        );
+        void availableModels(baseurl, stateRefs.keys.taskyon).then((res) => {
+          llmModelsInternal.value = res;
+        });
       } catch {
         console.log("couldn't download models from", baseurl);
       }
