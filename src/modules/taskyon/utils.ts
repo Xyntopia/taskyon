@@ -146,10 +146,28 @@ export function timeLruCache<ReturnType>(
   };
 }
 
-type AsyncCacheEntry<ReturnType> = {
-  value: Promise<ReturnType>;
-  timestamp: number;
-};
+// The cache for storing function call results.
+function saveToLocalStorage<ReturnType>(
+  key: string,
+  cache: Map<string, CacheEntry<ReturnType>>
+) {
+  const serializedCache = JSON.stringify(Array.from(cache.entries()));
+  localStorage.setItem(key, serializedCache);
+}
+
+function loadFromLocalStorage<ReturnType>(
+  key: string
+): Map<string, CacheEntry<ReturnType>> {
+  const serializedCache = localStorage.getItem(key);
+  if (serializedCache) {
+    const parsedCache = JSON.parse(serializedCache) as [
+      string,
+      CacheEntry<ReturnType>
+    ][];
+    return new Map(parsedCache);
+  }
+  return new Map();
+}
 
 export function asnycasyncTimeLruCache<ReturnType>(
   size: number,
@@ -159,41 +177,11 @@ export function asnycasyncTimeLruCache<ReturnType>(
   lazyUpdate = false, // New parameter for lazy update
   ignoreIndices: number[] = []
 ): (fn: AnyFunction<Promise<ReturnType>>) => AnyFunction<Promise<ReturnType>> {
-  throw new Error(
-    'something ain#t right here!!   why do we store Promises in the storage & map??'
-  );
-  // The cache for storing function call results.
   const cache = useLocalStorage
     ? loadFromLocalStorage<ReturnType>(storageKey)
-    : new Map<string, AsyncCacheEntry<ReturnType>>();
+    : new Map<string, CacheEntry<ReturnType>>();
 
-  function saveToLocalStorage<ReturnType>(
-    key: string,
-    cache: Map<string, AsyncCacheEntry<ReturnType>>
-  ) {
-    const serializedCache = JSON.stringify(Array.from(cache.entries()));
-    localStorage.setItem(key, serializedCache);
-  }
-
-  function loadFromLocalStorage<ReturnType>(
-    key: string
-  ): Map<string, AsyncCacheEntry<ReturnType>> {
-    const serializedCache = localStorage.getItem(key);
-    if (serializedCache) {
-      const parsedCache = JSON.parse(serializedCache) as [
-        string,
-        AsyncCacheEntry<ReturnType>
-      ][];
-      return new Map(parsedCache);
-    }
-    return new Map();
-  }
-
-  const updateCache = (
-    key: string,
-    result: Promise<ReturnType>,
-    now: number
-  ) => {
+  const updateCache = (key: string, result: ReturnType, now: number) => {
     cache.set(key, { value: result, timestamp: now });
     // Check the cache size and evict the least recently used item if necessary.
     if (cache.size > size) {
@@ -217,8 +205,8 @@ export function asnycasyncTimeLruCache<ReturnType>(
       const now = Date.now();
 
       // Check for a cache hit.
-      if (cache.has(key)) {
-        const entry = cache.get(key) as AsyncCacheEntry<ReturnType>;
+      const entry = cache.get(key);
+      if (entry) {
         const age = now - entry.timestamp;
 
         if (age <= maxAge) {
@@ -229,7 +217,7 @@ export function asnycasyncTimeLruCache<ReturnType>(
           if (lazyUpdate) {
             // Start updating the cache in the background
             fn(...args)
-              .then((result) => updateCache(key, Promise.resolve(result), now))
+              .then((result) => updateCache(key, result, now))
               .catch(console.error);
             // Return the stale value
             return entry.value;
@@ -238,35 +226,13 @@ export function asnycasyncTimeLruCache<ReturnType>(
       }
 
       // Call the original function and cache the result if lazyUpdate is false or cache miss occurs.
-      const result = fn(...args);
+      const result = await fn(...args);
       updateCache(key, result, now);
 
       // Return the result.
       return result;
     };
   };
-}
-
-function saveToLocalStorage<ReturnType>(
-  key: string,
-  cache: Map<string, CacheEntry<ReturnType>>
-) {
-  const serializedCache = JSON.stringify(Array.from(cache.entries()));
-  localStorage.setItem(key, serializedCache);
-}
-
-function loadFromLocalStorage<ReturnType>(
-  key: string
-): Map<string, CacheEntry<ReturnType>> {
-  const serializedCache = localStorage.getItem(key);
-  if (serializedCache) {
-    const parsedCache = JSON.parse(serializedCache) as [
-      string,
-      CacheEntry<ReturnType>
-    ][];
-    return new Map(parsedCache);
-  }
-  return new Map();
 }
 
 export function asyncTimeLruCache<ReturnType>(
