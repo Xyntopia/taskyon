@@ -151,29 +151,7 @@ type AsyncCacheEntry<ReturnType> = {
   timestamp: number;
 };
 
-function saveToLocalStorage<ReturnType>(
-  key: string,
-  cache: Map<string, AsyncCacheEntry<ReturnType>>
-) {
-  const serializedCache = JSON.stringify(Array.from(cache.entries()));
-  localStorage.setItem(key, serializedCache);
-}
-
-function loadFromLocalStorage<ReturnType>(
-  key: string
-): Map<string, AsyncCacheEntry<ReturnType>> {
-  const serializedCache = localStorage.getItem(key);
-  if (serializedCache) {
-    const parsedCache = JSON.parse(serializedCache) as [
-      string,
-      AsyncCacheEntry<ReturnType>
-    ][];
-    return new Map(parsedCache);
-  }
-  return new Map();
-}
-
-export function asyncTimeLruCache<ReturnType>(
+export function asnycasyncTimeLruCache<ReturnType>(
   size: number,
   maxAge: number, // Maximum age in milliseconds
   useLocalStorage = false,
@@ -181,10 +159,35 @@ export function asyncTimeLruCache<ReturnType>(
   lazyUpdate = false, // New parameter for lazy update
   ignoreIndices: number[] = []
 ): (fn: AnyFunction<Promise<ReturnType>>) => AnyFunction<Promise<ReturnType>> {
+  throw new Error(
+    'something ain#t right here!!   why do we store Promises in the storage & map??'
+  );
   // The cache for storing function call results.
   const cache = useLocalStorage
     ? loadFromLocalStorage<ReturnType>(storageKey)
     : new Map<string, AsyncCacheEntry<ReturnType>>();
+
+  function saveToLocalStorage<ReturnType>(
+    key: string,
+    cache: Map<string, AsyncCacheEntry<ReturnType>>
+  ) {
+    const serializedCache = JSON.stringify(Array.from(cache.entries()));
+    localStorage.setItem(key, serializedCache);
+  }
+
+  function loadFromLocalStorage<ReturnType>(
+    key: string
+  ): Map<string, AsyncCacheEntry<ReturnType>> {
+    const serializedCache = localStorage.getItem(key);
+    if (serializedCache) {
+      const parsedCache = JSON.parse(serializedCache) as [
+        string,
+        AsyncCacheEntry<ReturnType>
+      ][];
+      return new Map(parsedCache);
+    }
+    return new Map();
+  }
 
   const updateCache = (
     key: string,
@@ -240,6 +243,87 @@ export function asyncTimeLruCache<ReturnType>(
 
       // Return the result.
       return result;
+    };
+  };
+}
+
+function saveToLocalStorage<ReturnType>(
+  key: string,
+  cache: Map<string, CacheEntry<ReturnType>>
+) {
+  const serializedCache = JSON.stringify(Array.from(cache.entries()));
+  localStorage.setItem(key, serializedCache);
+}
+
+function loadFromLocalStorage<ReturnType>(
+  key: string
+): Map<string, CacheEntry<ReturnType>> {
+  const serializedCache = localStorage.getItem(key);
+  if (serializedCache) {
+    const parsedCache = JSON.parse(serializedCache) as [
+      string,
+      CacheEntry<ReturnType>
+    ][];
+    return new Map(parsedCache);
+  }
+  return new Map();
+}
+
+export function asyncTimeLruCache<ReturnType>(
+  initialResult: ReturnType,
+  size: number,
+  maxAge: number, // Maximum age in milliseconds
+  useLocalStorage = false,
+  storageKey = 'asyncTimeLruCache',
+  ignoreIndices: number[] = []
+): (fn: AnyFunction<Promise<ReturnType>>) => AnyFunction<ReturnType> {
+  // The cache for storing function call results.
+  const cache = useLocalStorage
+    ? loadFromLocalStorage<ReturnType>(storageKey)
+    : new Map<string, CacheEntry<ReturnType>>();
+
+  const updateCache = (key: string, result: ReturnType, now: number) => {
+    cache.set(key, { value: result, timestamp: now });
+    // Check the cache size and evict the least recently used item if necessary.
+    if (cache.size > size) {
+      const oldestKey = Array.from(cache.keys())[0];
+      cache.delete(oldestKey);
+      console.log('Evicted:', oldestKey);
+    }
+    if (useLocalStorage) {
+      saveToLocalStorage(storageKey, cache);
+    }
+  };
+
+  return (fn: AnyFunction<Promise<ReturnType>>): AnyFunction<ReturnType> => {
+    return function (...args: unknown[]): ReturnType {
+      // Generate a cache key, ignoring specified arguments.
+      const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index));
+      const key = JSON.stringify(keyArgs);
+
+      const now = Date.now();
+
+      // Check for a cache hit.
+      const entry = cache.get(key);
+      if (entry) {
+        const age = now - entry.timestamp;
+
+        if (age <= maxAge) {
+          console.log('Cache hit:', key);
+          return entry.value;
+        } else {
+          console.log('Cache expired:', key);
+          // Start updating the cache in the background
+          fn(...args)
+            .then((result) => updateCache(key, result, now))
+            .catch(console.error);
+          // Return the stale value
+          return entry.value;
+        }
+      }
+
+      // Return the initial result if cache miss occurs.
+      return initialResult;
     };
   };
 }
