@@ -1,6 +1,6 @@
 import equal from 'fast-deep-equal/es6';
 
-export function openrouterPricing(price: number | string, digits=1) {
+export function openrouterPricing(price: number | string, digits = 1) {
   if (typeof price === 'string') {
     price = parseFloat(price);
   }
@@ -146,18 +146,44 @@ export function timeLruCache<ReturnType>(
   };
 }
 
-type asyncCacheEntry<ReturnType> = {
+type AsyncCacheEntry<ReturnType> = {
   value: Promise<ReturnType>;
   timestamp: number;
 };
 
+function saveToLocalStorage<ReturnType>(
+  key: string,
+  cache: Map<string, AsyncCacheEntry<ReturnType>>
+) {
+  const serializedCache = JSON.stringify(Array.from(cache.entries()));
+  localStorage.setItem(key, serializedCache);
+}
+
+function loadFromLocalStorage<ReturnType>(
+  key: string
+): Map<string, AsyncCacheEntry<ReturnType>> {
+  const serializedCache = localStorage.getItem(key);
+  if (serializedCache) {
+    const parsedCache = JSON.parse(serializedCache) as [
+      string,
+      AsyncCacheEntry<ReturnType>
+    ][];
+    return new Map(parsedCache);
+  }
+  return new Map();
+}
+
 export function asyncTimeLruCache<ReturnType>(
   size: number,
   maxAge: number, // Maximum age in milliseconds
+  useLocalStorage = false,
+  storageKey = 'asyncTimeLruCache',
   ignoreIndices: number[] = []
 ): (fn: AnyFunction<Promise<ReturnType>>) => AnyFunction<Promise<ReturnType>> {
   // The cache for storing function call results.
-  const cache = new Map<string, asyncCacheEntry<ReturnType>>();
+  const cache = useLocalStorage
+    ? loadFromLocalStorage<ReturnType>(storageKey)
+    : new Map<string, AsyncCacheEntry<ReturnType>>();
 
   return (
     fn: AnyFunction<Promise<ReturnType>>
@@ -171,14 +197,14 @@ export function asyncTimeLruCache<ReturnType>(
 
       // Check for a cache hit.
       if (cache.has(key)) {
-        const entry = cache.get(key) as asyncCacheEntry<ReturnType>;
+        const entry = cache.get(key) as AsyncCacheEntry<ReturnType>;
         const age = now - entry.timestamp;
 
         if (age <= maxAge) {
-          //console.log('Cache hit:', key);
+          console.log('Cache hit:', key);
           return entry.value;
         } else {
-          //console.log('Cache expired:', key);
+          console.log('Cache expired:', key);
           cache.delete(key); // Remove the expired entry.
         }
       }
@@ -192,6 +218,10 @@ export function asyncTimeLruCache<ReturnType>(
         const oldestKey = Array.from(cache.keys())[0];
         cache.delete(oldestKey);
         console.log('Evicted:', oldestKey);
+      }
+
+      if (useLocalStorage) {
+        saveToLocalStorage(storageKey, cache);
       }
 
       // Return the result.
