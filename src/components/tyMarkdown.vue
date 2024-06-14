@@ -159,6 +159,16 @@ function handleMarkdownClick(event: MouseEvent) {
   }
 }
 
+const mermaidSettings = {
+  startOnLoad: false, // if false: prevent mermaid.run  to start automatically after load...
+  securityLevel: 'sandbox',
+  theme: $q.dark.isActive ? 'dark' : 'default',
+  flowchart: {
+    htmlLabels: false,
+    useMaxWidth: true,
+  },
+};
+
 const renderMermaid = (md: MarkdownIt) => {
   const htmlEntities = (str) =>
     String(str)
@@ -167,15 +177,7 @@ const renderMermaid = (md: MarkdownIt) => {
       .replace(/>/g, '&gt;');
 
   // if we are using the plugin, initialize mermaid as well :)
-  mermaid.initialize({
-    startOnLoad: false, // if false: prevent mermaid.run  to start automatically after load...
-    securityLevel: 'sandbox',
-    theme: $q.dark.isActive ? 'dark' : 'default',
-    flowchart: {
-      htmlLabels: false,
-      useMaxWidth: true,
-    },
-  });
+  mermaid.initialize(mermaidSettings);
 
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
@@ -197,15 +199,7 @@ const plugins = computed(() => {
 
 onMounted(() => {
   // if we are using the plugin, initialize mermaid as well :)
-  mermaid.initialize({
-    startOnLoad: false, // if false: prevent mermaid.run  to start automatically after load...
-    securityLevel: 'sandbox',
-    theme: $q.dark.isActive ? 'dark' : 'default',
-    flowchart: {
-      htmlLabels: false,
-      useMaxWidth: true,
-    },
-  });
+  mermaid.initialize(mermaidSettings);
   void mermaid.run();
 });
 </script>
