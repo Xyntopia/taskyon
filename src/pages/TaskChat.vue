@@ -61,10 +61,12 @@
               <div class="col">
                 <ty-markdown
                   no-line-numbers
+                  no-mermaid
                   :src="currentTask.debugging.streamContent || ''"
                 />
                 <ty-markdown
                   no-line-numbers
+                  no-mermaid
                   :src="
                     JSON.stringify(currentTask.debugging.toolStreamArgsContent)
                   "

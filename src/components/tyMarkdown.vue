@@ -1,6 +1,6 @@
 <template>
   <q-markdown
-    :plugins="[switchThemeMermaid, addCopyButtons, mathjax3]"
+    :plugins="plugins"
     :src="src"
     @click="handleMarkdownClick"
     v-bind="$attrs"
@@ -74,6 +74,7 @@ import 'prismjs/components/prism-rust';
 import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-typescript';
 import { useQuasar } from 'quasar';
+import { computed } from 'vue';
 const $q = useQuasar();
 
 const switchThemeMermaid: MarkdownIt.PluginSimple = (md: MarkdownIt) => {
@@ -93,8 +94,9 @@ const switchThemeMermaid: MarkdownIt.PluginSimple = (md: MarkdownIt) => {
 // https://mdit-plugins.github.io/mathjax.html#usage
 //const mathjaxInstance = createMathjaxInstance();
 
-defineProps<{
+const props = defineProps<{
   src: string;
+  noMermaid?: boolean;
 }>();
 
 function addCopyButtons(md: MarkdownIt) {
@@ -170,4 +172,11 @@ function handleMarkdownClick(event: MouseEvent) {
     }
   }
 }
+
+const plugins = computed(() => {
+  if (props.noMermaid) {
+    return [addCopyButtons, mathjax3];
+  }
+  return [switchThemeMermaid, addCopyButtons, mathjax3];
+});
 </script>
