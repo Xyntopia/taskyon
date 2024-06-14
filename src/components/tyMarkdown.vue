@@ -61,10 +61,10 @@
 
 <script setup lang="ts">
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
-import markdownItMermaid from '@datatraccorporation/markdown-it-mermaid';
 //import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
 //import katex from  '@mdit/plugin-katex-slim'
 import mathjax3 from 'markdown-it-mathjax3';
+import mermaid from 'mermaid';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import type MarkdownIt from 'markdown-it/lib';
 // !!!!!!!!!!! it is superimportant, that our "prismjs" imports come AFTER the QMarkdown import !!!!!
@@ -74,22 +74,8 @@ import 'prismjs/components/prism-rust';
 import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-typescript';
 import { useQuasar } from 'quasar';
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 const $q = useQuasar();
-
-const switchThemeMermaid: MarkdownIt.PluginSimple = (md: MarkdownIt) => {
-  (
-    markdownItMermaid as (md: MarkdownIt, opts: Record<string, unknown>) => void
-  )(md, {
-    startOnLoad: false,
-    securityLevel: 'true',
-    theme: $q.dark.isActive ? 'dark' : 'default',
-    flowchart: {
-      htmlLabels: false,
-      useMaxWidth: true,
-    },
-  });
-};
 
 // https://mdit-plugins.github.io/mathjax.html#usage
 //const mathjaxInstance = createMathjaxInstance();
@@ -173,10 +159,53 @@ function handleMarkdownClick(event: MouseEvent) {
   }
 }
 
+const renderMermaid = (md: MarkdownIt) => {
+  const htmlEntities = (str) =>
+    String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+  // if we are using the plugin, initialize mermaid as well :)
+  mermaid.initialize({
+    startOnLoad: false, // if false: prevent mermaid.run  to start automatically after load...
+    securityLevel: 'sandbox',
+    theme: $q.dark.isActive ? 'dark' : 'default',
+    flowchart: {
+      htmlLabels: false,
+      useMaxWidth: true,
+    },
+  });
+
+  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    if (token.info.trim() === 'mermaid') {
+      //void mermaid.render(idx.toString(), token.content.trim(), );
+      return `<div class="mermaid">${token.content.trim()}</div>`;
+      //return `<pre>${md.utils.escapeHtml(token.content)}</pre>`;
+    }
+    return self.renderToken(tokens, idx, options);
+  };
+};
+
 const plugins = computed(() => {
   if (props.noMermaid) {
     return [addCopyButtons, mathjax3];
   }
-  return [switchThemeMermaid, addCopyButtons, mathjax3];
+  return [renderMermaid, addCopyButtons, mathjax3];
+});
+
+onMounted(() => {
+  // if we are using the plugin, initialize mermaid as well :)
+  mermaid.initialize({
+    startOnLoad: false, // if false: prevent mermaid.run  to start automatically after load...
+    securityLevel: 'sandbox',
+    theme: $q.dark.isActive ? 'dark' : 'default',
+    flowchart: {
+      htmlLabels: false,
+      useMaxWidth: true,
+    },
+  });
+  void mermaid.run();
 });
 </script>
