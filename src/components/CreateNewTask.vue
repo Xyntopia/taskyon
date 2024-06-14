@@ -55,13 +55,21 @@
       <!--Task Creation State-->
       <div class="q-px-sm q-pt-xs text-caption">
         <div class="row items-center">
-          <div>
+          <div class="row">
+            <info-dialog
+              v-if="currentModel"
+              dense
+              flat
+              size="xs"
+              small
+              :icon="matInfo"
+              :info-text="state.modelLookUp[currentModel]?.description"
+            />
             <q-btn flat dense size="sm" no-caps>
-              <q-icon class="q-pr-sm" :name="matHistory"></q-icon>
               <div class="ellipsis">
                 {{ `${currentModel}` }}
               </div>
-              <q-tooltip>Select Model</q-tooltip>
+              <q-tooltip>Select AI Model</q-tooltip>
               <q-menu color="secondary">
                 <q-list style="min-width: 100px">
                   <q-item-label header>Select previous AI model!</q-item-label>
@@ -306,6 +314,7 @@ import taskContentEdit from './taskContentEdit.vue';
 //import CodeEditor from './CodeEditor.vue';
 import { defineAsyncComponent } from 'vue';
 import { watchDebounced } from '@vueuse/core';
+import InfoDialog from './InfoDialog.vue';
 
 const CodeEditor = defineAsyncComponent(
   /* webpackPrefetch: true */
@@ -329,6 +338,7 @@ import {
   matKeyboardArrowUp,
   matKeyboardArrowDown,
   matTune,
+  matInfo,
 } from '@quasar/extras/material-icons';
 import { mdiTools } from '@quasar/extras/mdi-v6';
 
