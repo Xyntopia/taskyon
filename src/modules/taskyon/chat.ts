@@ -60,7 +60,9 @@ const llmSettings = z.object({
   summaryModel: z.string().default('Xenova/distilbart-cnn-6-6'),
   vectorizationModel: z.string().default('Xenova/all-MiniLM-L6-v2'),
   maxAutonomousTasks: z.number().default(3),
+  useBasePrompt: z.boolean().default(true),
   taskChatTemplates: z.object({
+    basePrompt: z.string().default(''),
     constraints: z.string().default(''),
     instruction: z.string().default(''),
     objective: z.string().default(''),

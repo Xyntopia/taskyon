@@ -7,6 +7,10 @@ import { zodToYamlString, StructuredResponseTypes } from './types';
 import { llmSettings, mapFunctionNames } from './chat';
 import type { TyTaskManager } from './taskManager';
 
+/**
+ * This function renders templates, substituting the necessary variables
+ *
+ */
 function substituteTemplateVariables(
   templates: Record<string, string>,
   variables: Record<string, string>
@@ -62,6 +66,7 @@ export async function addPrompts(
   console.log('Prepare task tree for inference');
   let openAIConversationThread = await buildChatFromTask(task.id);
 
+  let additionalMessages: OpenAI.ChatCompletionMessageParam[] = [];
   // Check if task has tools and OpenAI tools are not enabled
   if (
     task.allowedTools?.length &&
@@ -70,8 +75,11 @@ export async function addPrompts(
   ) {
     console.log('Creating chat task messages');
     // Prepare the variables for createTaskChatMessages
-    const additionalMessages: OpenAI.ChatCompletionMessageParam[] =
-      renderTaskPrompt4Chat(task, toolCollection, llmSettings);
+    additionalMessages = renderTaskPrompt4Chat(
+      task,
+      toolCollection,
+      llmSettings
+    );
 
     task.debugging.taskPrompt = additionalMessages;
     // Remove the last message from openAIConversationThread
@@ -83,6 +91,20 @@ export async function addPrompts(
       ...additionalMessages,
     ];
   }
+
+  if (llmSettings.useBasePrompt) {
+    const { basePrompt } = substituteTemplateVariables(
+      { basePrompt: llmSettings.taskChatTemplates.basePrompt },
+      {}
+    );
+    const basePromptMessage: OpenAI.ChatCompletionMessageParam = {
+      role: 'system',
+      content: basePrompt,
+    };
+    task.debugging.taskPrompt = [basePromptMessage, ...additionalMessages];
+    openAIConversationThread = [basePromptMessage, ...openAIConversationThread];
+  }
+
   return openAIConversationThread;
 }
 

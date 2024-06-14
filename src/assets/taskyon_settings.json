@@ -53,7 +53,9 @@
     "summaryModel": "Xenova/distilbart-cnn-6-6",
     "vectorizationModel": "Xenova/all-MiniLM-L6-v2",
     "maxAutonomousTasks": 3,
+    "useBasePrompt": true,
     "taskChatTemplates": {
+      "basePrompt": "You can use the following features in the chat window:\nMermaid charts: Supports standard charts, mindmaps, Gantt diagrams, quadrants, and XY charts.\nSVG graphics: HTML is enabled, allowing SVG usage.\nHTML widgets: Create interactive elements within the markdown.\nMathJax: Use $$ ... $$ for block formulas and $ ... $ for inline formulas.",
       "constraints": "CONSTRAINTS:\n\n{constraints}",
       "instruction": "You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented,\nand adheres to YAML standards. Do not include any explanatory text in your YAML responses. \nRemember, the focus is on the precision and correctness of the YAML output.",
       "objective": "OVERALL OBJECTIVE:\n\n{objective}\n",
