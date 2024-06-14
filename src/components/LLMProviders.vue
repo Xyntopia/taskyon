@@ -95,7 +95,7 @@
             :model-value="state.keys[apiName] || ''"
             @update:model-value="(value) => (state.keys[apiName] = value)"
             :label="`${apiName} API key`"
-            >
+          >
           </SecretInput>
         </div>
       </q-card-section>
@@ -125,12 +125,10 @@ or with an llm proxy such as this one:  https://github.com/BerriAI/liteLLM-proxy
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
 import OpenRouterPKCE from './OpenRouterPKCE.vue';
-import { computed } from 'vue';
 import JsonInput from './JsonInput.vue';
 import TyMarkdown from './tyMarkdown.vue';
 import SecretInput from './SecretInput.vue';
-import { matEdit, matKey } from '@quasar/extras/material-icons';
-import { user } from 'src/modules/auth/supabase';
+import { matEdit } from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
 import InfoDialog from './InfoDialog.vue';
 

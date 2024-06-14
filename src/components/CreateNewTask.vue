@@ -289,7 +289,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRaw, toRefs, watchEffect } from 'vue';
+import { computed, ref, toRaw, toRefs } from 'vue';
 import { countStringTokens, getApiConfig } from 'src/modules/taskyon/chat';
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools';
 import { FunctionArguments } from 'src/modules/taskyon/types';

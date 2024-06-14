@@ -154,7 +154,6 @@ import {
   matDelete,
   matSearch,
   matManageAccounts,
-  matMenu,
   matFileUpload,
   matAdd,
 } from '@quasar/extras/material-icons';

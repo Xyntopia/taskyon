@@ -75,7 +75,6 @@ import ObjectTreeView from 'components/ObjectTreeView.vue';
 import SyncTaskyon from 'components/SyncTaskyon.vue';
 import { useRoute } from 'vue-router';
 import ExpertEnable from './ExpertEnable.vue';
-import { matMenu } from '@quasar/extras/material-icons';
 
 const route = useRoute();
 const state = useTaskyonStore();
