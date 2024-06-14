@@ -40,7 +40,7 @@ export const taskUtils = (
     const openAIMessageThread = [] as OpenAI.ChatCompletionMessageParam[];
     const conversationThread = await getTaskIdChain(taskId);
 
-    //TODO:  add instructions
+    // instructions & prompts are added at a later stage...
     if (conversationThread) {
       for (const mId of conversationThread) {
         const t = await getTask(mId);

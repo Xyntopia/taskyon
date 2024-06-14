@@ -8,7 +8,7 @@ import {
   getApiConfigCopy,
   getOpenRouterGenerationInfo,
 } from './chat';
-import { renderTasks4Chat } from './promptCreation';
+import { addPrompts, generateOpenAIToolDeclarations } from './promptCreation';
 import {
   FunctionArguments,
   FunctionCall,
@@ -110,12 +110,16 @@ export async function processChatTask(
       const useToolChat =
         task.allowedTools?.length && !llmSettings.enableOpenAiTools;
 
-      const { openAIConversationThread, tools } = await renderTasks4Chat(
+      const openAIConversationThread = await addPrompts(
         task,
         await taskManager.searchToolDefinitions(),
         llmSettings,
         taskManager.buildChatFromTask,
         useToolChat ? 'toolchat' : 'chat'
+      );
+      const tools = generateOpenAIToolDeclarations(
+        task,
+        await taskManager.searchToolDefinitions()
       );
 
       if (openAIConversationThread.length > 0) {

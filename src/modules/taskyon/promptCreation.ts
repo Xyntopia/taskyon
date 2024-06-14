@@ -32,20 +32,35 @@ function substituteTemplateVariables(
   return messages;
 }
 
-export async function renderTasks4Chat(
+export function generateOpenAIToolDeclarations(
+  task: LLMTask,
+  toolCollection: Record<string, ToolBase>
+): OpenAI.ChatCompletionTool[] {
+  const tools: ToolBase[] =
+    mapFunctionNames(task.allowedTools || [], toolCollection) || [];
+  const openAITools: OpenAI.ChatCompletionTool[] = tools.map((t) => {
+    const functionDef: OpenAI.FunctionDefinition = {
+      name: t.name,
+      parameters: t.parameters as unknown as Record<string, unknown>,
+      description: t.description,
+    };
+    return {
+      function: functionDef,
+      type: 'function',
+    };
+  });
+  return openAITools;
+}
+
+export async function addPrompts(
   task: LLMTask,
   toolCollection: Record<string, ToolBase>,
   llmSettings: llmSettings,
   buildChatFromTask: TyTaskManager['buildChatFromTask'],
   method: 'toolchat' | 'chat' | 'taskAgent'
-): Promise<{
-  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
-  tools: OpenAI.ChatCompletionTool[];
-}> {
+): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[]> {
   console.log('Prepare task tree for inference');
   let openAIConversationThread = await buildChatFromTask(task.id);
-
-  let tools: ToolBase[] = [];
 
   // Check if task has tools and OpenAI tools are not enabled
   if (
@@ -67,24 +82,8 @@ export async function renderTasks4Chat(
       ...openAIConversationThread,
       ...additionalMessages,
     ];
-  } else {
-    // TODO: add possible instructions here :) like mentioning that
-    //       we can use mermaid and html/svg in our frontend markdown-it
-    tools = mapFunctionNames(task.allowedTools || [], toolCollection) || [];
   }
-  const openAITools: OpenAI.ChatCompletionTool[] = tools.map((t) => {
-    const functionDef: OpenAI.FunctionDefinition = {
-      name: t.name,
-      parameters: t.parameters as unknown as Record<string, unknown>,
-      description: t.description,
-    };
-    return {
-      function: functionDef,
-      type: 'function',
-    };
-  });
-
-  return { openAIConversationThread, tools: openAITools };
+  return openAIConversationThread;
 }
 
 export function renderTaskPrompt4Chat(
