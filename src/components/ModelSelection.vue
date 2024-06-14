@@ -79,11 +79,19 @@
             <q-tooltip>Prompt costs</q-tooltip>
             <div>
               prompt:
-              {{ openrouterPricing(state.modelLookUp[botName]?.pricing?.prompt || '?') }}
+              {{
+                openrouterPricing(
+                  state.modelLookUp[botName]?.pricing?.prompt || '?'
+                )
+              }}
             </div>
             <div>
               completion:
-              {{ openrouterPricing(state.modelLookUp[botName]?.pricing?.completion  || '?') }}
+              {{
+                openrouterPricing(
+                  state.modelLookUp[botName]?.pricing?.completion || '?'
+                )
+              }}
             </div>
           </div>
         </template>
@@ -135,8 +143,9 @@ const state = useTaskyonStore();
 
 const modelOptions = computed(() => {
   // openai has no pricing information attached, so we sort it in different ways...
+  console.log('calculate model options!');
   if (selectedApi.value === 'openai') {
-    if (useOpenAIAssistants) {
+    if (useOpenAIAssistants.value) {
       const options = Object.values(state.assistants).map((a) => ({
         value: a.id,
         label: a.name || '',

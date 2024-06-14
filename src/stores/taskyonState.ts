@@ -253,14 +253,17 @@ export const useTaskyonStore = defineStore(storeName, () => {
     if (api) {
       // and also get a "fresh" list of models from the server...
       let baseurl: string;
+      let key: string;
       const taskyonApi = stateRefs.llmSettings.llmApis['taskyon'];
       if (taskyonApi && api?.name === 'openrouter.ai') {
         baseurl = taskyonApi.baseURL + '/models_openrouter';
+        key = stateRefs.keys.taskyon;
       } else {
         baseurl = api.baseURL + api.routes.models;
+        key = stateRefs.keys[api?.name];
       }
       try {
-        void availableModels(baseurl, stateRefs.keys.taskyon).then((res) => {
+        void availableModels(baseurl, key).then((res) => {
           llmModelsInternal.value = res;
         });
       } catch {

@@ -1,4 +1,3 @@
-import axios from 'axios';
 //import { useCachedModels } from './mlModels';
 import type {
   ToolBase,
