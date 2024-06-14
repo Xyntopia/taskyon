@@ -57,7 +57,7 @@
         <div class="row items-center">
           <div class="row">
             <info-dialog
-              v-if="currentModel"
+              v-if="currentModel && state.modelLookUp[currentModel]?.description"
               dense
               flat
               size="xs"
@@ -332,7 +332,6 @@ import {
   matCode,
   matEdit,
   matChecklist,
-  matHistory,
   matSmartToy,
   matNavigateNext,
   matKeyboardArrowUp,
