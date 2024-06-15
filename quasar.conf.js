@@ -330,10 +330,13 @@ module.exports = configure(function (ctx) {
         // we need the bwloe so that uglify can remove the console. because we want
         //  check this:  https://stackoverflow.com/questions/76979427/quasar-app-does-not-remove-console-log-for-production-builds
         // and this:  https://github.com/quasarframework/quasar/issues/11186
-        chain
-          .plugin('node-polyfill')
-          .use(nodePolyfillWebpackPlugin, [{ excludeAliases: ['console'] }]);
-        // chain.plugin('node-polyfill').use(nodePolyfillWebpackPlugin);
+        if (ctx.prod) {
+          chain
+            .plugin('node-polyfill')
+            .use(nodePolyfillWebpackPlugin, [{ excludeAliases: ['console'] }]);
+        } else {
+          chain.plugin('node-polyfill').use(nodePolyfillWebpackPlugin);
+        }
         // TODO: find out, why we did this?
         //chain.resolve.alias.set('zlib', 'browserify-zlib');
       },
