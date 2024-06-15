@@ -151,18 +151,15 @@ function copyToClipboard(code: string) {
 }
 
 async function copyPngToClipboard(pngBuffer: Uint8Array) {
-  // Step 1: Convert the Uint8Array to a Blob
   const blob = new Blob([pngBuffer], { type: 'image/png' });
+  //const url = URL.createObjectURL(blob);
 
-  // Check if ClipboardItem is supported
   if (typeof ClipboardItem !== 'undefined') {
     try {
-      // Step 2: Create an image from the Blob
       const clipboardItem = new ClipboardItem({ 'image/png': blob });
-
-      // Step 3: Use the Clipboard API to copy the image
       await navigator.clipboard.write([clipboardItem]);
       console.log('Image copied to clipboard successfully!');
+      //URL.revokeObjectURL(url); // revoke the URL to free up memory
     } catch (err) {
       console.error('Failed to copy image to clipboard:', err);
     }
@@ -183,16 +180,19 @@ function handleMarkdownClick(event: MouseEvent) {
     // Find the closest .code-block-with-overlay and then find the <code> element inside it
     const codeBlockContainer = target.closest('.code-block-with-overlay');
     if (codeBlockContainer) {
-      const svgElement = codeBlockContainer.querySelector('.mermaid svg');
-      if (svgElement) {
-        // we copy everything here including tags, because that belongs to the svg..
-        const codeText = svgElement.outerHTML; // Get the text content of the <code> element
-        void svgToPng(codeText).then((res) => {
-          if (res) {
-            void copyPngToClipboard(res);
-          }
-        });
-        return;
+      const imgElement = codeBlockContainer.querySelector('.mermaid img');
+      if (imgElement && imgElement instanceof HTMLImageElement) {
+        const svgUrl = imgElement.src;
+        fetch(svgUrl)
+          .then((response) => response.text())
+          .then((svgString) => {
+            void svgToPng(svgString).then((res) => {
+              if (res) {
+                void copyPngToClipboard(res);
+              }
+            });
+          })
+          .catch((err) => console.error('Error fetching SVG: ', err));
       }
       const codeElement = codeBlockContainer.querySelector('code');
       if (codeElement) {
