@@ -189,6 +189,13 @@ function handleMarkdownClick(event: MouseEvent) {
             void svgToPng(svgString).then((res) => {
               if (res) {
                 void copyPngToClipboard(res);
+                $q.notify({
+                  message: 'Copied image to clipboard as png!',
+                  type: 'info',
+                  position: 'right',
+                  timeout: 500,
+                  html: false,
+                });
               }
             });
           })
@@ -198,6 +205,13 @@ function handleMarkdownClick(event: MouseEvent) {
       if (codeElement) {
         const codeText = codeElement.textContent || ''; // Get the text content of the <code> element
         copyToClipboard(codeText);
+        $q.notify({
+          message: 'Copied text to clipboard!',
+          type: 'info',
+          position: 'right',
+          timeout: 500,
+          html: false,
+        });
         return;
       }
     }
