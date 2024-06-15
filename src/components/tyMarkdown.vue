@@ -78,6 +78,7 @@ import 'prismjs/components/prism-typescript';
 import { uid, useQuasar } from 'quasar';
 import { computed, onMounted, getCurrentInstance } from 'vue';
 import Renderer from 'markdown-it/lib/renderer';
+import { svgToPng } from 'src/modules/svgUtils';
 const $q = useQuasar();
 
 // https://mdit-plugins.github.io/mathjax.html#usage
@@ -149,6 +150,24 @@ function copyToClipboard(code: string) {
     });
 }
 
+async function copyPngToClipboard(pngBuffer: Uint8Array) {
+  // Step 1: Convert the Uint8Array to a Blob
+  const blob = new Blob([pngBuffer], { type: 'image/png' });
+
+  // Step 2: Create an image from the Blob
+  const clipboardItem = new ClipboardItem({
+    'image/png': blob,
+  });
+
+  // Step 3: Use the Clipboard API to copy the image
+  try {
+    await navigator.clipboard.write([clipboardItem]);
+    console.log('Image copied to clipboard successfully!');
+  } catch (err) {
+    console.error('Failed to copy image to clipboard:', err);
+  }
+}
+
 function handleMarkdownClick(event: MouseEvent) {
   const target = (event.target as HTMLElement).closest('.copy-button');
   if (target) {
@@ -159,7 +178,9 @@ function handleMarkdownClick(event: MouseEvent) {
       if (svgElement) {
         // we copy everything here including tags, because that belongs to the svg..
         const codeText = svgElement.outerHTML; // Get the text content of the <code> element
-        copyToClipboard(codeText);
+        void svgToPng(codeText).then((res) => {
+          void copyPngToClipboard(res);
+        });
         return;
       }
       const codeElement = codeBlockContainer.querySelector('code');
