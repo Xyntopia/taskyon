@@ -194,26 +194,28 @@ const renderMermaid = (md: MarkdownIt) => {
   ) {
     const graphDefinition = code;
     // Create element to render into
-    const element = document.createElement('div');
-    document.body.appendChild(element);
-    let element2: Element | null;
-
+    const velement = document.createElement('div');
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(velement);
+    document.body.appendChild(velement);
     let innerHTML: string;
     try {
       const { svg } = await mermaid.render(
         `mg${selector}`,
         graphDefinition,
-        element
+        velement
       );
       innerHTML = svg;
     } catch (err) {
-      console.log('error rendering mermaid!!');
-      innerHTML = JSON.stringify(err);
+      console.log('error rendering mermaid!!', err);
+      innerHTML = `${code}\n<div>${JSON.stringify(err)}</div>`;
+    } finally {
+      velement.remove();
     }
 
     // now, that we have the svg, remove all of our dummy elements and add the "real ones"
-    element2 = document.querySelector(`#${img_id}`);
-    if (element2) element2.innerHTML = innerHTML;
+    const element = document.querySelector(`#${img_id}`);
+    if (element) element.innerHTML = innerHTML;
 
     // Create a copy button
     // TODO: right now, the "svg"  includes the iframe with the svg...
