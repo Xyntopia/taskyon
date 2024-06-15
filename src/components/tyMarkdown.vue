@@ -1,5 +1,6 @@
 <template>
   <q-markdown
+    :id="id"
     :plugins="plugins"
     :src="src"
     @click="handleMarkdownClick"
@@ -51,7 +52,7 @@
     right: 0
 
 // this is in order to make mermaid sequence diagrams work on dark backgrounds
-.mermaid svg
+/*.mermaid svg
   .messageLine0
     stroke: $secondary !important
   .messageText
@@ -65,6 +66,7 @@ import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 //import katex from  '@mdit/plugin-katex-slim'
 import mathjax3 from 'markdown-it-mathjax3';
 import mermaid from 'mermaid';
+import type { MermaidConfig } from 'mermaid';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import type MarkdownIt from 'markdown-it/lib';
 // !!!!!!!!!!! it is superimportant, that our "prismjs" imports come AFTER the QMarkdown import !!!!!
@@ -73,12 +75,15 @@ import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-rust';
 import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-typescript';
-import { useQuasar } from 'quasar';
-import { computed, onMounted } from 'vue';
+import { uid, useQuasar } from 'quasar';
+import { computed, onMounted, getCurrentInstance } from 'vue';
+import Renderer from 'markdown-it/lib/renderer';
 const $q = useQuasar();
 
 // https://mdit-plugins.github.io/mathjax.html#usage
 //const mathjaxInstance = createMathjaxInstance();
+
+const id = getCurrentInstance()?.uid || '';
 
 const props = defineProps<{
   src: string;
@@ -159,9 +164,9 @@ function handleMarkdownClick(event: MouseEvent) {
   }
 }
 
-const mermaidSettings = {
+const mermaidSettings: MermaidConfig = {
   startOnLoad: false, // if false: prevent mermaid.run  to start automatically after load...
-  securityLevel: 'sandbox',
+  securityLevel: 'loose',
   theme: $q.dark.isActive ? 'dark' : 'default',
   flowchart: {
     htmlLabels: false,
@@ -170,23 +175,70 @@ const mermaidSettings = {
 };
 
 const renderMermaid = (md: MarkdownIt) => {
-  const htmlEntities = (str) =>
+  /*
+  not sure, if we will need this...
+  const htmlEntities = (str: unknown) =>
     String(str)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+      .replace(/>/g, '&gt;');*/
 
   // if we are using the plugin, initialize mermaid as well :)
   mermaid.initialize(mermaidSettings);
 
+  // Example of using the render function
+  const drawDiagram = async function (
+    code: string,
+    selector: string,
+    element: Element
+  ) {
+    const graphDefinition = code;
+    try {
+      const { svg } = await mermaid.render(
+        `mg${selector}`,
+        graphDefinition,
+        element
+      );
+      element.innerHTML = svg;
+
+      // Create a copy button
+      // TODO: right now, the "svg"  includes the iframe with the svg...
+      /*const copyButton = document.createElement('button');
+        copyButton.textContent = 'Copy SVG';
+        element.appendChild(copyButton);
+
+        // Add event listener to copy button
+        copyButton.addEventListener('click', () => {
+          void navigator.clipboard.writeText(svg);
+        });*/
+    } catch (err) {
+      console.log('error rendering mermaid!!');
+      element.innerHTML = JSON.stringify(err);
+    }
+  };
+
+  let defaultRenderer: Renderer.RenderRule;
+  if (md.renderer.rules.fence) {
+    defaultRenderer = md.renderer.rules.fence.bind(md.renderer.rules);
+  }
+
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
     if (token.info.trim() === 'mermaid') {
+      // Create element to render into
+      const mid = uid();
+      const element = document.createElement('div');
+      element.id = `d${mid}`;
+      document.body.appendChild(element);
+
+      const mm_code = token.content.trim();
+      void drawDiagram(mm_code, mid, element);
+
       //void mermaid.render(idx.toString(), token.content.trim(), );
-      return `<div class="mermaid">${token.content.trim()}</div>`;
+      return `<div id="dt${mid}" class="mermaid">${mm_code}</div>`;
       //return `<pre>${md.utils.escapeHtml(token.content)}</pre>`;
     }
-    return self.renderToken(tokens, idx, options);
+    return defaultRenderer(tokens, idx, options, env, self);
   };
 };
 
@@ -200,6 +252,18 @@ const plugins = computed(() => {
 onMounted(() => {
   // if we are using the plugin, initialize mermaid as well :)
   mermaid.initialize(mermaidSettings);
-  void mermaid.run();
+  let parentElement = document.getElementById('unique-id');
+  if (parentElement) {
+    //let mermaidElements = parentElement.querySelectorAll('.mermaid');
+    /*mermaidElements.forEach(element => {
+          // Do something with each .mermaid element
+          console.log(element);
+      });*/
+    /*void mermaid.run({
+      nodes: [...mermaidElements] as HTMLElement[],
+      postRenderCallback: (id: string) => console.log('postRenderHook', id),
+      //suppressErrors: true,
+    });*/
+  }
 });
 </script>
