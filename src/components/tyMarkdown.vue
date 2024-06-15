@@ -190,20 +190,34 @@ const renderMermaid = (md: MarkdownIt) => {
   const drawDiagram = async function (
     code: string,
     selector: string,
-    element: Element
+    img_id: string
   ) {
     const graphDefinition = code;
+    // Create element to render into
+    const element = document.createElement('div');
+    document.body.appendChild(element);
+    let element2: Element | null;
+
+    let innerHTML: string;
     try {
       const { svg } = await mermaid.render(
         `mg${selector}`,
         graphDefinition,
         element
       );
-      element.innerHTML = svg;
+      innerHTML = svg;
+    } catch (err) {
+      console.log('error rendering mermaid!!');
+      innerHTML = JSON.stringify(err);
+    }
 
-      // Create a copy button
-      // TODO: right now, the "svg"  includes the iframe with the svg...
-      /*const copyButton = document.createElement('button');
+    // now, that we have the svg, remove all of our dummy elements and add the "real ones"
+    element2 = document.querySelector(`#${img_id}`);
+    if (element2) element2.innerHTML = innerHTML;
+
+    // Create a copy button
+    // TODO: right now, the "svg"  includes the iframe with the svg...
+    /*const copyButton = document.createElement('button');
         copyButton.textContent = 'Copy SVG';
         element.appendChild(copyButton);
 
@@ -211,10 +225,6 @@ const renderMermaid = (md: MarkdownIt) => {
         copyButton.addEventListener('click', () => {
           void navigator.clipboard.writeText(svg);
         });*/
-    } catch (err) {
-      console.log('error rendering mermaid!!');
-      element.innerHTML = JSON.stringify(err);
-    }
   };
 
   let defaultRenderer: Renderer.RenderRule;
@@ -225,17 +235,13 @@ const renderMermaid = (md: MarkdownIt) => {
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
     if (token.info.trim() === 'mermaid') {
-      // Create element to render into
       const mid = uid();
-      const element = document.createElement('div');
-      element.id = `d${mid}`;
-      document.body.appendChild(element);
-
+      const img_id = `d${mid}`;
       const mm_code = token.content.trim();
-      void drawDiagram(mm_code, mid, element);
+      void drawDiagram(mm_code, mid, img_id);
 
       //void mermaid.render(idx.toString(), token.content.trim(), );
-      return `<div id="dt${mid}" class="mermaid">${mm_code}</div>`;
+      return `<div id="${img_id}" class="mermaid">${mm_code}</div>`;
       //return `<pre>${md.utils.escapeHtml(token.content)}</pre>`;
     }
     return defaultRenderer(tokens, idx, options, env, self);
