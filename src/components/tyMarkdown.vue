@@ -121,7 +121,7 @@ function addCopyButtons(md: MarkdownIt) {
                 <svg viewBox="0 0 24 24">
                   <path d="M0 0h24v24H0z" style="fill: none;">
                   </path>
-                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 
+                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0
                   1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z">
                   </path>
                 </svg>
@@ -154,17 +154,26 @@ async function copyPngToClipboard(pngBuffer: Uint8Array) {
   // Step 1: Convert the Uint8Array to a Blob
   const blob = new Blob([pngBuffer], { type: 'image/png' });
 
-  // Step 2: Create an image from the Blob
-  const clipboardItem = new ClipboardItem({
-    'image/png': blob,
-  });
+  // Check if ClipboardItem is supported
+  if (typeof ClipboardItem !== 'undefined') {
+    try {
+      // Step 2: Create an image from the Blob
+      const clipboardItem = new ClipboardItem({ 'image/png': blob });
 
-  // Step 3: Use the Clipboard API to copy the image
-  try {
-    await navigator.clipboard.write([clipboardItem]);
-    console.log('Image copied to clipboard successfully!');
-  } catch (err) {
-    console.error('Failed to copy image to clipboard:', err);
+      // Step 3: Use the Clipboard API to copy the image
+      await navigator.clipboard.write([clipboardItem]);
+      console.log('Image copied to clipboard successfully!');
+    } catch (err) {
+      console.error('Failed to copy image to clipboard:', err);
+    }
+  } else {
+    console.warn(
+      'ClipboardItem is not supported in this browser. Using fallback method.'
+    );
+
+    alert(
+      'Your browser is too old to support image copying with "ClipboardItem", please upgrade your browser!'
+    );
   }
 }
 
