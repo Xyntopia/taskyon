@@ -233,7 +233,6 @@ const renderMermaid = (md: MarkdownIt) => {
     img_id: string
   ) {
     const graphDefinition = code;
-    // Create element to render into
     const velement = document.createElement('div');
     const fragment = document.createDocumentFragment();
     fragment.appendChild(velement);
@@ -245,7 +244,9 @@ const renderMermaid = (md: MarkdownIt) => {
         graphDefinition,
         velement
       );
-      innerHTML = svg;
+      const svgBlob = new Blob([svg], { type: 'image/svg+xml' });
+      const svgUrl = URL.createObjectURL(svgBlob);
+      innerHTML = `<img src="${svgUrl}" alt="Mermaid diagram" />`;
     } catch (err) {
       console.log('error rendering mermaid!!', err);
       innerHTML = `${code}\n<div>${JSON.stringify(err)}</div>`;
@@ -253,11 +254,10 @@ const renderMermaid = (md: MarkdownIt) => {
       velement.remove();
     }
 
-    // now, that we have the svg, remove all of our dummy elements and add the "real ones"
     const element = document.querySelector(`#${img_id}`);
     if (element) element.innerHTML = innerHTML;
 
-    // Create a copy button
+    // Create a save as button
     // TODO: right now, the "svg"  includes the iframe with the svg...
     /*const copyButton = document.createElement('button');
         copyButton.textContent = 'Copy SVG';
@@ -282,9 +282,7 @@ const renderMermaid = (md: MarkdownIt) => {
       const mm_code = token.content.trim();
       void drawDiagram(mm_code, mid, img_id);
 
-      //void mermaid.render(idx.toString(), token.content.trim(), );
       return `<div id="${img_id}" class="mermaid">${mm_code}</div>`;
-      //return `<pre>${md.utils.escapeHtml(token.content)}</pre>`;
     }
     return defaultRenderer(tokens, idx, options, env, self);
   };
