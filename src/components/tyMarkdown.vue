@@ -155,10 +155,18 @@ function handleMarkdownClick(event: MouseEvent) {
     // Find the closest .code-block-with-overlay and then find the <code> element inside it
     const codeBlockContainer = target.closest('.code-block-with-overlay');
     if (codeBlockContainer) {
+      const svgElement = codeBlockContainer.querySelector('svg');
+      if (svgElement) {
+        // we copy everything here including tags, because that belongs to the svg..
+        const codeText = svgElement.outerHTML; // Get the text content of the <code> element
+        copyToClipboard(codeText);
+        return;
+      }
       const codeElement = codeBlockContainer.querySelector('code');
       if (codeElement) {
         const codeText = codeElement.textContent || ''; // Get the text content of the <code> element
         copyToClipboard(codeText);
+        return;
       }
     }
   }
