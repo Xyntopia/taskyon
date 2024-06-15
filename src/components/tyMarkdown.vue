@@ -174,12 +174,14 @@ function handleMarkdownClick(event: MouseEvent) {
     // Find the closest .code-block-with-overlay and then find the <code> element inside it
     const codeBlockContainer = target.closest('.code-block-with-overlay');
     if (codeBlockContainer) {
-      const svgElement = codeBlockContainer.querySelector('svg');
+      const svgElement = codeBlockContainer.querySelector('.mermaid svg');
       if (svgElement) {
         // we copy everything here including tags, because that belongs to the svg..
         const codeText = svgElement.outerHTML; // Get the text content of the <code> element
         void svgToPng(codeText).then((res) => {
-          void copyPngToClipboard(res);
+          if (res) {
+            void copyPngToClipboard(res);
+          }
         });
         return;
       }
