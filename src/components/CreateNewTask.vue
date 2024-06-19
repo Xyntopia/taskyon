@@ -57,7 +57,9 @@
         <div class="row items-center">
           <div class="row">
             <info-dialog
-              v-if="currentModel && state.modelLookUp[currentModel]?.description"
+              v-if="
+                currentModel && state.modelLookUp[currentModel]?.description
+              "
               dense
               flat
               size="xs"
@@ -305,7 +307,7 @@ import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { LLMTask, partialTaskDraft } from 'src/modules/taskyon/types';
 import ModelSelection from 'components/ModelSelection.vue';
-import { writeFiles } from 'src/modules/taskyon/OPFS';
+import { writeFilesToOpfs } from 'src/modules/taskyon/OPFS';
 import { addTask2Tree } from 'src/modules/taskyon/taskManager';
 import ObjectTreeView from './ObjectTreeView.vue';
 import type { ToolBase } from 'src/modules/taskyon/types';
@@ -498,13 +500,17 @@ const currentnewTask = computed(() => {
 async function addFiles2Taskyon(newFiles: File[]) {
   console.log('add files to our chat!');
   //first, upload file into our OPFS file system:
-  const opfsMapping = await writeFiles(newFiles);
+  const opfsMapping = await writeFilesToOpfs(newFiles);
 
   // Collect UUIDs from added files
   const uuids = [];
   const tm = await state.getTaskManager();
-  for (const [name, savedFilename] of Object.entries(opfsMapping)) {
-    const uuid = await tm.addFile({ opfs: savedFilename, name });
+  for (const [fileIdx, file] of newFiles.entries()) {
+    const uuid = await tm.addFile({
+      opfs: opfsMapping[fileIdx],
+      name: file.name,
+      fileType: file.type,
+    });
     if (uuid) {
       uuids.push(uuid);
     }

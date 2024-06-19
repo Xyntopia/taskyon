@@ -1,7 +1,3 @@
-export async function write(file: File) {
-  await writeFiles([file]);
-}
-
 async function getRoot() {
   // Open the "root" of the website's (origin's) private filesystem (OPFS):
   let storageRoot: FileSystemDirectoryHandle | undefined = undefined;
@@ -16,9 +12,9 @@ async function getRoot() {
   return storageRoot;
 }
 
-export async function writeFiles(
-  newFiles: File[]
-): Promise<{ [key: string]: string }> {
+export async function writeFilesToOpfs(
+  newFiles: File[] // string is an id e.g. the uuid of our file!
+): Promise<{ [key: number]: string }> {
   console.log('save file to OPFS', newFiles);
   if (!newFiles.length) return {};
 
@@ -26,8 +22,7 @@ export async function writeFiles(
   const filenameMapping: { [key: string]: string } = {};
 
   if (storageRoot) {
-    for (const file of newFiles) {
-      const originalFileName = file.name;
+    for (const [fileId, file] of newFiles.entries()) {
       const newSubDir = await storageRoot.getDirectoryHandle('fileuploads', {
         create: true,
       });
@@ -49,7 +44,7 @@ export async function writeFiles(
       const wtr = await newFile.createWritable();
       try {
         await wtr.write(await file.arrayBuffer());
-        filenameMapping[originalFileName] = newFileName; // Map the original filename to the new filename
+        filenameMapping[fileId] = newFileName; // Map the original filename to the new filename
       } finally {
         await wtr.close();
       }

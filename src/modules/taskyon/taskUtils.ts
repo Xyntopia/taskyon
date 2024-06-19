@@ -3,6 +3,23 @@ import OpenAI from 'openai';
 import { dump } from 'js-yaml';
 import { FileMappingDocType } from './rxdb';
 
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onloadend = () => {
+      const base64String = reader.result?.toString().split(',')[1];
+      if (base64String) {
+        resolve(base64String);
+      } else {
+        reject(new Error('Failed to convert file to base64'));
+      }
+    };
+    reader.onerror = () => {
+      reject(new Error('FileReader error'));
+    };
+  });
+}
 export const taskUtils = (
   getTask: TaskGetter,
   getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
@@ -84,24 +101,40 @@ export const taskUtils = (
             };
             openAIMessageThread.push(message);
 
-            const imageFiles = fileMappings.map((fm) => {
-              fm?.fileType;
-            });
+            if (useVisionModels) {
+              // build data strings for all of our images in order o send them to vision...
+              const imageContent: OpenAI.ChatCompletionUserMessageParam['content'] =
+                [];
+              for (const fm of fileMappings) {
+                if (fm) {
+                  const name = fm?.name || fm?.opfs || 'unknown';
+                  if (name.endsWith('png') || name.endsWith('jpg')) {
+                    const file: File | undefined = await getFile(fm.uuid);
+                    if (file) {
+                      const base64Image = await fileToBase64(file);
+                      const msgContent: OpenAI.Chat.Completions.ChatCompletionContentPartImage =
+                        {
+                          type: 'image_url',
+                          //TODO: enable "real" image urls from another webpage ....
+                          image_url: {
+                            url: `data:image/jpeg;base64,${base64Image}`,
+                            detail: 'auto',
+                          },
+                        };
+                      imageContent.push(msgContent);
+                    }
+                  }
+                }
+              }
 
-            const imageMessage: OpenAI.ChatCompletionMessageParam = {
-              role: 'user',
-              content: [
+              const imageMessage: OpenAI.ChatCompletionMessageParam = {
+                role: 'user',
+                content: imageContent,
                 // TODO: we need to experiment with sending additional text here?
                 //{"type": "text", "text": "What’s in this image?"},
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg',
-                  },
-                },
-              ],
-            };
-            openAIMessageThread.push(imageMessage);
+              };
+              openAIMessageThread.push(imageMessage);
+            }
           }
         }
       }

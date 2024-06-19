@@ -226,6 +226,7 @@ export async function addTask2Tree(
 }
 
 function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
+  // TODO: make sure, we add the correct file type!
   async function addFile(fileMapping: Partial<FileMappingDocType>) {
     const uuidFileMapping: FileMappingDocType = {
       uuid: base64Uuid(),
@@ -266,7 +267,7 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
     return [];
   }
 
-  async function getFile(uuid: string) {
+  async function getFile(uuid: string): Promise<File | undefined> {
     const fileMap = await getFileMappingByUuid(uuid);
     if (fileMap?.opfs) {
       const file = openFile(fileMap.opfs);
@@ -798,7 +799,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   return {
     ...defaultMode,
     ...fm,
-    ...taskUtils(getTask, fm.getFileMappingByUuid),
+    ...taskUtils(getTask, fm.getFileMappingByUuid, fm.getFile),
   };
 }
 export type TyTaskManager = ReturnType<typeof useTyTaskManager>;
