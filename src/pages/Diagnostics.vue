@@ -5,7 +5,7 @@
       <pre>{{ e }}</pre>
     </div>
     <q-expansion-item label="state">
-      <object-tree-view :model-value="stateView" />
+      <object-tree-view :model-value="appConfiguration" />
     </q-expansion-item>
     <q-expansion-item label="router">{{ $router }}</q-expansion-item>
     <q-expansion-item label="route">{{ $route }}</q-expansion-item>
@@ -15,7 +15,9 @@
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
 import ObjectTreeView from 'src/components/ObjectTreeView.vue';
+import { storeToRefs } from 'pinia';
 const state = useTaskyonStore();
 
-const stateView = { ...state };
+const { appConfiguration } = storeToRefs(state);
+//const stateView = {...state}
 </script>
