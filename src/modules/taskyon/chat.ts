@@ -47,7 +47,7 @@ const apiConfig = z.object({
 });
 export type apiConfig = z.infer<typeof apiConfig>;
 
-const llmSettings = z.object({
+export const llmSettings = z.object({
   // this refers to the task chain that we have currently selected. We select one task and then
   // put the chain together by following the parentIds.
   selectedTaskId: z.string().optional(),
@@ -60,7 +60,18 @@ const llmSettings = z.object({
   summaryModel: z.string().default('Xenova/distilbart-cnn-6-6'),
   vectorizationModel: z.string().default('Xenova/all-MiniLM-L6-v2'),
   maxAutonomousTasks: z.number().default(3),
-  useBasePrompt: z.boolean().default(true),
+  useBasePrompt: z.boolean().default(true).describe(`
+  <p>Toggle the base prompt on/off.</p>
+  
+  This gives the AI instructions how to draw better graphics, math
+  formulas and generally make the chat a little more fancy than just plain
+  text. You can check/change the base prompt in the settings...`),
+  tryUsingVisionModels: z
+    .boolean()
+    .default(true)
+    .describe(
+      'If a model supports vision, we wil ry to use that for uploaded images'
+    ),
   taskChatTemplates: z.object({
     basePrompt: z.string().default(''),
     constraints: z.string().default(''),

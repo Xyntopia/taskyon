@@ -193,7 +193,7 @@ export async function generateCompleteChat(
     task.allowedTools?.length && !llmSettings.enableOpenAiTools;
 
   const toolDefs = await taskManager.searchToolDefinitions();
-  let openAIConversationThread = await taskManager.buildChatThread(task.id);
+  let openAIConversationThread = await taskManager.buildChatThread(task.id, llmSettings.tryUsingVisionModels);
   openAIConversationThread = addPrompts(
     task,
     toolDefs,

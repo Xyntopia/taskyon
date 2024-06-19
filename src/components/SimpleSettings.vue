@@ -8,13 +8,10 @@
       color="secondary"
     />
     <div class="row items-center" v-if="state.appConfiguration.expertMode">
-      <info-dialog size="md">
-        <p>Toggle the base prompt on/off.</p>
-
-        This gives the AI instructions how to draw better graphics, math
-        formulas and generally make the chat a little more fancy than just plain
-        text. You can check/change the base prompt in the settings...
-      </info-dialog>
+      <info-dialog
+        size="sm"
+        :info-text="llmSettings.shape.useBasePrompt.description"
+      />
       <q-toggle
         v-model="state.llmSettings.useBasePrompt"
         label="Fancy AI"
@@ -42,6 +39,7 @@
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
 import InfoDialog from './InfoDialog.vue';
+import { llmSettings } from 'src/modules/taskyon/chat';
 
 defineProps({
   reduced: {

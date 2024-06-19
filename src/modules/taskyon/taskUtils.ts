@@ -36,13 +36,13 @@ export const taskUtils = (
     return taskList;
   }
 
-  async function buildChatThread(taskId: string) {
+  async function buildChatThread(taskId: string, useVisionModels: boolean) {
     const openAIMessageThread = [] as OpenAI.ChatCompletionMessageParam[];
-    const conversationThread = await getTaskIdChain(taskId);
+    const taskIdChain = await getTaskIdChain(taskId);
 
     // instructions & prompts are added at a later stage...
-    if (conversationThread) {
-      for (const mId of conversationThread) {
+    if (taskIdChain) {
+      for (const mId of taskIdChain) {
         const t = await getTask(mId);
         let message: OpenAI.ChatCompletionMessageParam | undefined = undefined;
         if (t) {
