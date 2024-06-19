@@ -5,7 +5,8 @@ import { FileMappingDocType } from './rxdb';
 
 export const taskUtils = (
   getTask: TaskGetter,
-  getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>
+  getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
+  getFile: (uuid: string) => Promise<File | undefined>
 ) => {
   /* get a chain of taskss with the last task being the last element in the list */
   async function getTaskIdChain(taskId: string) {
@@ -44,55 +45,63 @@ export const taskUtils = (
     if (taskIdChain) {
       for (const mId of taskIdChain) {
         const t = await getTask(mId);
-        let message: OpenAI.ChatCompletionMessageParam | undefined = undefined;
         if (t) {
           if ('functionCall' in t.content) {
             const functionContent = dump({
               arguments: t.content.functionCall.arguments,
               ...t.result?.toolResult,
             });
-            message = {
+            const message: OpenAI.ChatCompletionMessageParam = {
               role: 'function',
               name: t.content.functionCall.name,
               content: functionContent,
             };
             openAIMessageThread.push(message);
           } else if ('functionResult' in t.content) {
-            message = {
+            const message: OpenAI.ChatCompletionMessageParam = {
               role: 'system',
               content: dump({
                 'result of the function': t.content.functionResult,
               }),
-            } as Exclude<
-              OpenAI.ChatCompletionMessageParam,
-              OpenAI.ChatCompletionFunctionMessageParam
-            >;
+            };
             openAIMessageThread.push(message);
-          } else if ('message' in t.content) {
-            message = {
+          } else if ('message' in t.content && t.role != 'function') {
+            const message: OpenAI.ChatCompletionMessageParam = {
               role: t.role,
               content: t.content.message,
-            } as Exclude<
-              OpenAI.ChatCompletionMessageParam,
-              OpenAI.ChatCompletionFunctionMessageParam
-            >;
+            };
             openAIMessageThread.push(message);
-          } else if ('uploadedFiles' in t.content) {
-            const fileNames = (
-              await Promise.all(
-                t.content.uploadedFiles.map((uuid) => getFileMapping(uuid))
-              )
-            )
+          } else if ('uploadedFiles' in t.content && t.role != 'function') {
+            const fileMappings = await Promise.all(
+              t.content.uploadedFiles.map((uuid) => getFileMapping(uuid))
+            );
+            const fileNames = fileMappings
               .map((fm) => '- ' + (fm?.name || fm?.opfs || 'unknown'))
               .join('\n');
-            message = {
+            const message: OpenAI.ChatCompletionMessageParam = {
               role: t.role,
               content: `user uploaded files:\n${fileNames}`,
-            } as Exclude<
-              OpenAI.ChatCompletionMessageParam,
-              OpenAI.ChatCompletionFunctionMessageParam
-            >;
+            };
             openAIMessageThread.push(message);
+
+            const imageFiles = fileMappings.map((fm) => {
+              fm?.fileType;
+            });
+
+            const imageMessage: OpenAI.ChatCompletionMessageParam = {
+              role: 'user',
+              content: [
+                // TODO: we need to experiment with sending additional text here?
+                //{"type": "text", "text": "What’s in this image?"},
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg',
+                  },
+                },
+              ],
+            };
+            openAIMessageThread.push(imageMessage);
           }
         }
       }
