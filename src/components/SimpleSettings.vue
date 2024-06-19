@@ -7,17 +7,15 @@
       left-label
       color="secondary"
     />
-    <div class="row items-center">
+    <div class="row items-center" v-if="state.appConfiguration.expertMode">
       <info-dialog size="md">
         <p>Toggle the base prompt on/off.</p>
 
-        This gives the AI instructions how to draw better graphics, math formulas and generally
-        make the chat a little more fancy than just plain text.
-
-        You can check/change the base prompt in the settings...
+        This gives the AI instructions how to draw better graphics, math
+        formulas and generally make the chat a little more fancy than just plain
+        text. You can check/change the base prompt in the settings...
       </info-dialog>
       <q-toggle
-        v-if="state.appConfiguration.expertMode"
         v-model="state.llmSettings.useBasePrompt"
         label="Fancy AI"
         left-label
