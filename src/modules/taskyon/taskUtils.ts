@@ -36,7 +36,7 @@ export const taskUtils = (
     return taskList;
   }
 
-  async function buildChatFromTask(taskId: string) {
+  async function buildChatThread(taskId: string) {
     const openAIMessageThread = [] as OpenAI.ChatCompletionMessageParam[];
     const conversationThread = await getTaskIdChain(taskId);
 
@@ -99,9 +99,10 @@ export const taskUtils = (
     }
     return openAIMessageThread;
   }
+
   return {
     taskChain: getTaskIdChain,
-    buildChatFromTask,
+    buildChatThread,
     getTaskChain,
   };
 };

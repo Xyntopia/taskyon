@@ -183,3 +183,23 @@ export function renderTaskPrompt4Chat(
   ];
   return additionalMessages;
 }
+
+export async function generateCompleteChat(
+  task: LLMTask,
+  llmSettings: llmSettings,
+  taskManager: TyTaskManager
+) {
+  const useToolChat =
+    task.allowedTools?.length && !llmSettings.enableOpenAiTools;
+
+  const toolDefs = await taskManager.searchToolDefinitions();
+  let openAIConversationThread = await taskManager.buildChatThread(task.id);
+  openAIConversationThread = addPrompts(
+    task,
+    toolDefs,
+    llmSettings,
+    openAIConversationThread,
+    useToolChat ? 'toolchat' : 'chat'
+  );
+  return { openAIConversationThread, useToolChat, toolDefs };
+}
