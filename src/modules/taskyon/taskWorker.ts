@@ -111,11 +111,14 @@ export async function processChatTask(
         task.allowedTools?.length && !llmSettings.enableOpenAiTools;
 
       const toolDefs = await taskManager.searchToolDefinitions();
-      const openAIConversationThread = await addPrompts(
+      let openAIConversationThread = await taskManager.buildChatFromTask(
+        task.id
+      );
+      openAIConversationThread = addPrompts(
         task,
         toolDefs,
         llmSettings,
-        taskManager.buildChatFromTask,
+        openAIConversationThread,
         useToolChat ? 'toolchat' : 'chat'
       );
       const tools = generateOpenAIToolDeclarations(task, toolDefs);

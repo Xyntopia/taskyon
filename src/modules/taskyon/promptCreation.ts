@@ -56,17 +56,20 @@ export function generateOpenAIToolDeclarations(
   return openAITools;
 }
 
-export async function addPrompts(
+export function addPrompts(
   task: LLMTask,
   toolCollection: Record<string, ToolBase>,
   llmSettings: llmSettings,
-  buildChatFromTask: TyTaskManager['buildChatFromTask'],
+  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   method: 'toolchat' | 'chat' | 'taskAgent'
-): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[]> {
+): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
   console.log('Prepare task tree for inference');
-  let openAIConversationThread = await buildChatFromTask(task.id);
 
   let additionalMessages: OpenAI.ChatCompletionMessageParam[] = [];
+  let modifiedOpenAIConversationThread = structuredClone(
+    openAIConversationThread
+  );
+
   // Check if task has tools and OpenAI tools are not enabled
   if (
     task.allowedTools?.length &&
@@ -74,6 +77,7 @@ export async function addPrompts(
     method === 'toolchat'
   ) {
     console.log('Creating chat task messages');
+
     // Prepare the variables for createTaskChatMessages
     additionalMessages = renderTaskPrompt4Chat(
       task,
@@ -83,11 +87,12 @@ export async function addPrompts(
 
     task.debugging.taskPrompt = additionalMessages;
     // Remove the last message from openAIConversationThread
-    // because it will be replaced by our additional message
-    openAIConversationThread.pop();
+    // because it will be replaced by our task message
+    // where we have wrapped the original message...
+    modifiedOpenAIConversationThread.pop();
     // Append additional messages to the conversation thread
-    openAIConversationThread = [
-      ...openAIConversationThread,
+    modifiedOpenAIConversationThread = [
+      ...modifiedOpenAIConversationThread,
       ...additionalMessages,
     ];
   }
@@ -102,10 +107,13 @@ export async function addPrompts(
       content: basePrompt,
     };
     task.debugging.taskPrompt = [basePromptMessage, ...additionalMessages];
-    openAIConversationThread = [basePromptMessage, ...openAIConversationThread];
+    modifiedOpenAIConversationThread = [
+      basePromptMessage,
+      ...modifiedOpenAIConversationThread,
+    ];
   }
 
-  return openAIConversationThread;
+  return modifiedOpenAIConversationThread;
 }
 
 export function renderTaskPrompt4Chat(
