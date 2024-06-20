@@ -178,6 +178,7 @@
           @click="setTaskType(undefined)"
           ><q-tooltip>Select Simple Chat</q-tooltip>
         </q-btn>
+
         <q-select
           v-if="expertMode"
           style="min-width: 200px"
@@ -233,6 +234,36 @@
             v-model:useOpenAIAssistants="useOpenAIAssistants"
             v-model:open-a-i-assistant-id="openAIAssistantId"
           ></ModelSelection>
+        </q-item>
+        <q-item
+          v-if="state.appConfiguration.expertMode"
+          class="row items-center"
+        >
+          <ToggleButton
+            v-model="state.llmSettings.useBasePrompt"
+            outline
+            dense
+            :on-icon="mdiAutoFix"
+            :off-icon="mdiAlphabeticalVariant"
+            size="md"
+          >
+            <div class="q-pl-sm">Fancy AI</div>
+            <q-tooltip :delay="1000">
+              {{ llmSettings.shape.useBasePrompt.description }}
+            </q-tooltip>
+          </ToggleButton>
+          <ToggleButton
+            v-model="state.llmSettings.tryUsingVisionModels"
+            outline
+            dense
+            :on-icon="matVisibility"
+            :off-icon="matVisibilityOff"
+          >
+            <div class="q-pl-sm">Vision</div>
+            <q-tooltip :delay="1000">
+              {{ llmSettings.shape.tryUsingVisionModels.description }}
+            </q-tooltip>
+          </ToggleButton>
         </q-item>
         <!--Allowed Tools Selection-->
         <q-separator class="q-my-sm" />
@@ -317,6 +348,8 @@ import taskContentEdit from './taskContentEdit.vue';
 import { defineAsyncComponent } from 'vue';
 import { watchDebounced } from '@vueuse/core';
 import InfoDialog from './InfoDialog.vue';
+import { llmSettings } from 'src/modules/taskyon/chat';
+import ToggleButton from './ToggleButton.vue';
 
 const CodeEditor = defineAsyncComponent(
   /* webpackPrefetch: true */
@@ -340,8 +373,14 @@ import {
   matKeyboardArrowDown,
   matTune,
   matInfo,
+  matVisibility,
+  matVisibilityOff,
 } from '@quasar/extras/material-icons';
-import { mdiTools } from '@quasar/extras/mdi-v6';
+import {
+  mdiAlphabeticalVariant,
+  mdiAutoFix,
+  mdiTools,
+} from '@quasar/extras/mdi-v6';
 
 const props = defineProps<{
   codingMode?: boolean;

@@ -12,29 +12,29 @@
       )
     "
   >
-    <template v-slot:before>
-      <q-icon :name="matElectricalServices"></q-icon>
-    </template>
     <template v-slot:after>
-      <InfoDialog>
-        <div>
-          You can add more api Keys in settings if you want to activate
-          additional backends
-        </div>
-      </InfoDialog>
       <q-btn
         v-if="moreSettings"
         to="/settings/llmproviders"
         flat
-        label="More Settings"
-      />
+        :icon="matSettings"
+      >
+        <q-icon :name="matElectricalServices"></q-icon>
+        <q-tooltip>
+          You can add more api Keys in settings if you want to activate
+          additional backends.
+        </q-tooltip>
+      </q-btn>
     </template>
   </q-select>
 </template>
 
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
-import { matElectricalServices } from '@quasar/extras/material-icons';
+import {
+  matElectricalServices,
+  matSettings,
+} from '@quasar/extras/material-icons';
 import InfoDialog from './InfoDialog.vue';
 
 const model = defineModel<string | null>();

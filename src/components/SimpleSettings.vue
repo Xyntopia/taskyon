@@ -7,19 +7,6 @@
       left-label
       color="secondary"
     />
-    <div class="row items-center" v-if="state.appConfiguration.expertMode">
-      <info-dialog
-        size="sm"
-        :info-text="llmSettings.shape.useBasePrompt.description"
-      />
-      <q-toggle
-        v-model="state.llmSettings.useBasePrompt"
-        label="Fancy AI"
-        left-label
-        color="secondary"
-      >
-      </q-toggle>
-    </div>
     <q-toggle
       v-model="state.appConfiguration.showCosts"
       label="Show task costs"
@@ -38,8 +25,6 @@
 
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
-import InfoDialog from './InfoDialog.vue';
-import { llmSettings } from 'src/modules/taskyon/chat';
 
 defineProps({
   reduced: {

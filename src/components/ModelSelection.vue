@@ -1,6 +1,6 @@
 <template>
   <div class="row items-start q-gutter-xs">
-    <div v-if="selectedApi === 'openai'" class="q-pt-xs">
+    <div v-if="false && selectedApi === 'openai'" class="q-pt-xs">
       <q-btn-toggle
         label="mode"
         v-model="useOpenAIAssistants"
@@ -76,23 +76,9 @@
             v-if="state.appConfiguration.expertMode"
             style="font-size: 0.5em"
           >
-            <q-tooltip>Prompt costs</q-tooltip>
-            <div>
-              prompt:
-              {{
-                openrouterPricing(
-                  state.modelLookUp[botName]?.pricing?.prompt || '?'
-                )
-              }}
-            </div>
-            <div>
-              completion:
-              {{
-                openrouterPricing(
-                  state.modelLookUp[botName]?.pricing?.completion || '?'
-                )
-              }}
-            </div>
+            <q-btn :icon="matList" flat to="pricing">
+              <q-tooltip>List of models</q-tooltip>
+            </q-btn>
           </div>
         </template>
       </q-select>
@@ -114,6 +100,7 @@ import {
   matSmartToy,
   matExpandLess,
   matExpandMore,
+  matList,
 } from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
 import { openrouterPricing } from 'src/modules/taskyon/utils';
