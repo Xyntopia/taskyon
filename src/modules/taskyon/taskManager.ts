@@ -226,7 +226,7 @@ export async function addTask2Tree(
 }
 
 function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
-  // TODO: make sure, we add the correct file type!
+  // TODO: make sure, we add the correct file type here!
   async function addFile(fileMapping: Partial<FileMappingDocType>) {
     const uuidFileMapping: FileMappingDocType = {
       uuid: base64Uuid(),

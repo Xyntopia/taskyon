@@ -68,7 +68,7 @@
         hide-selected
         fill-input
         use-input
-        input-debounce="100"
+        input-debounce="0"
         @filter="(val, update) => filterModels(val, update, modelOptions)"
       >
         <template v-slot:after>
@@ -103,7 +103,6 @@ import {
   matList,
 } from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
-import { openrouterPricing } from 'src/modules/taskyon/utils';
 
 defineProps({
   botName: {

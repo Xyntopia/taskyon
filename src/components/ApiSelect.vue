@@ -13,12 +13,8 @@
     "
   >
     <template v-slot:after>
-      <q-btn
-        v-if="moreSettings"
-        to="/settings/llmproviders"
-        flat
-        :icon="matSettings"
-      >
+      <q-btn v-if="moreSettings" to="/settings/llmproviders" flat aria-label="llm provider settings">
+        ><q-icon :name="matSettings"></q-icon>
         <q-icon :name="matElectricalServices"></q-icon>
         <q-tooltip>
           You can add more api Keys in settings if you want to activate
@@ -35,7 +31,6 @@ import {
   matElectricalServices,
   matSettings,
 } from '@quasar/extras/material-icons';
-import InfoDialog from './InfoDialog.vue';
 
 const model = defineModel<string | null>();
 

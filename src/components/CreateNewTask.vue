@@ -127,6 +127,7 @@
               flat
               size="sm"
               @click="expandedTaskCreation = !expandedTaskCreation"
+              aria-label="toggle task settings"
             >
               <q-icon size="xs" :name="matTune" class="q-pl-sm"></q-icon>
               <q-icon
@@ -288,8 +289,9 @@
                 <q-btn
                   v-if="state.appConfiguration.expertMode"
                   dense
+                  flat
                   :icon="matEdit"
-                  label="manage tools"
+                  label="> manage tools"
                   to="tools"
                 />
               </div>
