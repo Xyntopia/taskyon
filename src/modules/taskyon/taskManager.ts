@@ -141,6 +141,7 @@ async function taskContentHash(task: LLMTask) {
 // whats important here is that the LLMtask can only have one type of content
 // so when calling the function, we need to pre-select which type of task
 // we want to have.
+// TODO: move this into tyManager and rename ot to "addPartialTask2Tree"
 export async function addTask2Tree(
   task: RequireSome<Partial<LLMTask>, 'role' | 'content'>,
   parentID: string | undefined,
@@ -221,6 +222,8 @@ export async function addTask2Tree(
     console.log('task already has a name:', newTask.name);
   }
 
+  // TODO: move this out of here..  this should be done in a different location...
+  //       its more part of the UI.
   llmSettings.selectedTaskId = newTask.id;
   return newTask.id;
 }

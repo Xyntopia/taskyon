@@ -1,12 +1,16 @@
 <template>
-  <q-btn v-bind="$attrs" no-caps :label="mainTask?.name"> </q-btn>
+  <q-btn v-bind="$attrs" no-caps :label="mainTask?.name" @click="addTasks">
+  </q-btn>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { computed } from 'vue';
 import { load } from 'js-yaml';
 import { LLMTask, partialTaskDraft } from 'src/modules/taskyon/types';
-import type { SafeParseSuccess, SafeParseReturnType } from 'zod';
+import { addTask2Tree } from 'src/modules/taskyon/taskManager';
+import { useTaskyonStore } from 'src/stores/taskyonState';
+
+const state = useTaskyonStore();
 
 const props = defineProps<{
   markdown: string;
@@ -47,4 +51,18 @@ const taskList = computed(() => fetchAndProcessMarkdown(props.markdown));
 const mainTask = computed(() => {
   return taskList.value[0] as LLMTask | undefined;
 });
+
+async function addTasks() {
+  let parentId: string | undefined = undefined;
+  for (const task of taskList.value) {
+    parentId = await addTask2Tree(
+      task,
+      parentId, //parent
+      state.llmSettings,
+      await state.getTaskManager(),
+      false // should we execute the task? // only the last one obviously ;)
+    );
+  }
+  // TODO: optionally execute the last task...
+}
 </script>
