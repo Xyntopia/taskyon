@@ -11,7 +11,7 @@ browser-based vector store. makes vector stores for giving  generative AI/LLMs a
 - easy compliance due to data stored client-side, in browser
 - scalable
 - no installation, works out of the box.
-- large amounts of data (essentially unlimited. chrome & firefox typicall 80% of avaiable disk space)
+- large amounts of data (essentially unlimited. chrome & firefox typicall 80% of available disk space)
 - document upload (pdf/txt/md/docx are already supported, and more to come)
 - protects your data
 - 0 costs.
