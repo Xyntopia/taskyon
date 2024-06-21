@@ -36,6 +36,7 @@ Local First Principle: Taskyon embraces the Local First approach, prioritizing u
 
 - **Local First Architecture**: Taskyon's design incorporates the Local First principle, ensuring enhanced data privacy and security while maintaining high performance and user control.
 - **Service Integration:** Utilizes various LLM providers for executing tasks within the conversation threads.
+- **OpenAI API compatibility:** Taskyon can interface with any openai API compatible endpoint. Including locally deployed (e.g. with docker). 
 - **Task-Based Conversations:** Each message within a conversation is treated as a task with the role "user", forming a branch in the task tree.
 - **Function Tasks:** Execute and manage function tasks with adjustable parameters directly within the interface.
 - **Frontend Capabilities:** Python and JavaScript code execution within a secure sandbox, access to a local browser-based vector store leveraging HNSWlib, and tool generation on-the-fly with JavaScript or Python.
@@ -82,7 +83,6 @@ Taskyon's commitment to security is evident in its Local First approach, which i
 
 - _P2P Task Synchronization:_ Facilitate team collaboration with peer-to-peer task synchronization.
 - _Autonomous Agents:_ Incorporate agents that independently work on task trees, enhancing automation and efficiency.
-- _Integrate Local LLM Inference:_ Taskyon's philosophy is to preserve data privacy as much as possible. We are working on integrating LLMs that run on your local computer, eliminating the need to send requests to external services.
 - _Desktop App and Container:_ Develop a desktop application and container for easy deployment and enhanced security.
 
 ## Contributing
