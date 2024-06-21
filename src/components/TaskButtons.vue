@@ -83,8 +83,6 @@
 
 <script setup lang="ts">
 import {
-  matAddComment,
-  matAltRoute,
   matCode,
   matContentCopy,
   matEdit,
@@ -94,7 +92,6 @@ import {
   mdiForumPlus,
   mdiLanguageMarkdown,
   mdiMessagePlus,
-  mdiStarFourPoints,
 } from '@quasar/extras/mdi-v6';
 import type { LLMTask } from 'src/modules/taskyon/types';
 import { useTaskyonStore } from 'src/stores/taskyonState';
