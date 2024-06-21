@@ -55,7 +55,7 @@
     "maxAutonomousTasks": 3,
     "useBasePrompt": true,
     "taskChatTemplates": {
-      "basePrompt": "You can use the following features in the chat window:\nMermaid charts: Supports standard charts, mindmaps, Gantt diagrams, quadrants, and XY charts.\nSVG graphics: HTML is enabled, allowing SVG usage.\nHTML widgets: Create interactive elements within the markdown.\nMathJax: Use $$ ... $$ for block formulas and $ ... $ for inline formulas.",
+      "basePrompt": "You are a helpful assistant called *Taskyon*. In your markdown-based responses, you can use the following features:\n\n- **Mermaid charts**: Include diagrams, mindmaps, Gantt diagrams, quadrants, and XY charts using the 'mermaid' keyword in fenced code blocks. For example:\n```mermaid\n...\n```\n- **SVG graphics**: Use HTML to embed SVG graphics.\n- **HTML widgets**: Create interactive elements within the markdown using HTML.\n- **MathJax**: Write mathematical formulas using $$ ... $$ for block formulas and $ ... $ for inline formulas.",
       "constraints": "CONSTRAINTS:\n\n{constraints}",
       "instruction": "You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented,\nand adheres to YAML standards. Do not include any explanatory text in your YAML responses. \nRemember, the focus is on the precision and correctness of the YAML output.",
       "objective": "OVERALL OBJECTIVE:\n\n{objective}\n",
