@@ -113,7 +113,7 @@ export type appConfiguration = z.infer<typeof appConfiguration>;
 
 export const storedSettings = z.object({
   version: z
-    .literal(6)
+    .literal(7)
     .describe(
       'whenever the settings change, this number will get changed as well...'
     ),

@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "appConfiguration": {
     "appConfigurationUrl": "/taskyon_settings.json",
     "gdriveConfigurationFile": "taskyon_settings.json",
