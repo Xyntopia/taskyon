@@ -34,9 +34,9 @@
       size="sm"
       dense
       flat
+      :icon="mdiForumPlus"
       @click="createNewConversation(task.id)"
     >
-      <q-icon :name="mdiStarFourPoints" size="xs"></q-icon>
       <q-tooltip :delay="0"> Start a new thread with this message! </q-tooltip>
     </q-btn>
     <q-btn
@@ -45,12 +45,10 @@
       size="sm"
       dense
       flat
+      :icon="mdiMessagePlus"
       @click="state.llmSettings.selectedTaskId = task.id"
     >
-      <q-icon class="rotate-180" :name="matAltRoute"></q-icon>
-      <q-tooltip :delay="0"
-        >Start alternative conversation branch from here</q-tooltip
-      >
+      <q-tooltip :delay="0">Start alternative chat from here</q-tooltip>
     </q-btn>
     <q-btn
       v-if="'message' in task.content || 'functionCall' in task.content"
@@ -85,13 +83,19 @@
 
 <script setup lang="ts">
 import {
+  matAddComment,
   matAltRoute,
   matCode,
   matContentCopy,
   matEdit,
   matRawOn,
 } from '@quasar/extras/material-icons';
-import { mdiLanguageMarkdown, mdiStarFourPoints } from '@quasar/extras/mdi-v6';
+import {
+  mdiForumPlus,
+  mdiLanguageMarkdown,
+  mdiMessagePlus,
+  mdiStarFourPoints,
+} from '@quasar/extras/mdi-v6';
 import type { LLMTask } from 'src/modules/taskyon/types';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 

@@ -30,7 +30,7 @@
             v-if="!minMode"
             flat
             dense
-            :icon="matChat"
+            :icon="mdiForum"
             to="/"
             :size="btnSize"
             aria-label="go to chat"
@@ -39,7 +39,7 @@
           <q-btn
             flat
             dense
-            :icon="matAddComment"
+            :icon="mdiForumPlus"
             :size="btnSize"
             to="/"
             @click="state.llmSettings.selectedTaskId = undefined"
@@ -210,14 +210,12 @@ import DarkModeButton from 'components/DarkModeButton.vue';
 import { defineAsyncComponent } from 'vue';
 import type { useTaskyonStore } from 'stores/taskyonState';
 import {
-  matAddComment,
-  matChat,
   matMenu,
   matSearch,
   matSettings,
   matWarning,
 } from '@quasar/extras/material-icons';
-import { mdiGithub } from '@quasar/extras/mdi-v6';
+import { mdiForum, mdiForumPlus, mdiGithub } from '@quasar/extras/mdi-v6';
 
 const drawerOpen = ref(false);
 

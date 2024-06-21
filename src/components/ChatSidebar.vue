@@ -93,8 +93,8 @@
             flat
             @click="state.llmSettings.selectedTaskId = undefined"
             to="/"
+            :icon="mdiForumPlus"
           >
-            <q-icon :name="matAdd" />
             <q-tooltip> Create a new conversation </q-tooltip>
           </q-btn>
           <q-btn dense flat :icon="matSearch" to="/TaskManager"
@@ -148,16 +148,18 @@ import { LLMTask, TaskListType } from 'src/modules/taskyon/types';
 import { exportFile } from 'quasar';
 import { dump, load } from 'js-yaml';
 import FileDropzone from 'components/FileDropzone.vue';
-
 import {
   matDownloadForOffline,
   matDelete,
   matSearch,
   matManageAccounts,
   matFileUpload,
-  matAdd,
 } from '@quasar/extras/material-icons';
-import { mdiTools, mdiRobotConfusedOutline } from '@quasar/extras/mdi-v6';
+import {
+  mdiTools,
+  mdiRobotConfusedOutline,
+  mdiForumPlus,
+} from '@quasar/extras/mdi-v6';
 
 const state = useTaskyonStore();
 
