@@ -249,7 +249,7 @@
             size="md"
           >
             <div class="q-pl-sm">Fancy AI</div>
-            <q-tooltip :delay="1000">
+            <q-tooltip :delay="200">
               {{ llmSettings.shape.useBasePrompt.description }}
             </q-tooltip>
           </ToggleButton>
@@ -261,7 +261,7 @@
             :off-icon="matVisibilityOff"
           >
             <div class="q-pl-sm">Vision</div>
-            <q-tooltip :delay="1000">
+            <q-tooltip :delay="200">
               {{ llmSettings.shape.tryUsingVisionModels.description }}
             </q-tooltip>
           </ToggleButton>

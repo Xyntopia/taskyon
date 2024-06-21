@@ -53,7 +53,22 @@ describe('Landing', () => {
     cy.get('.q-menu').contains('openrouter.ai').click();
     cy.wait(2000)
       .contains('Select LLM Model for answering/solving the task.')
-      .type('meta-llama/llama-3-70b{enter}');
+      .type('meta-llama/llama-3-70b');
+    cy.contains('meta-llama/llama-3-70b-instruct').click();
+    cy.contains('test').type('hello world!{enter}');
+
+    cy.wait(1000).reload();
+
+    cy.contains('Select LLM Model for answering/solving the task.')
+      //  .parent()
+      .get('.q-field__input.q-placeholder.col')
+      .invoke('val')
+      .then((val) => {
+        cy.log(JSON.stringify(val));
+        expect(val).to.eq('meta-llama/llama-3-70b-instruct'); // Check if the text is a number
+      });
+    //.should('have.string', 'meta-llama/llama-3-70b-instruct');
+    //.should('meta-llama/llama-3-70b-instruct');
 
     // Check if the task costs element is present and contains the expected text
     /*cy.get('.task-costs')
