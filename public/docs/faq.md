@@ -1,127 +1,162 @@
-answering the questions:
+## FAQ
 
-1.
+### 1. Local AI Processing Capabilities
 
-How are the local AI processing capabilities implemented? Are there specific libraries or frameworks used for local inference?
- - all that is needed is an "inference endpoint" for the API. The endpoint should be OpenAI API compatible. As long as that is the case Taskyon can talk to the endpoint. Endpoints are configurable in the settings of taskyon in the frontend!
-Hardware requirements depend on the AI
+**How are the local AI processing capabilities implemented? Are there specific libraries or frameworks used for local inference?**
 
-What are the hardware requirements or recommendations for running AI models locally?
- - about hardware requirements:  its possible to run qunatized 7B/12B models on laptops. But better graphciscards will help and this is also very slow. This is much better explained on other webpages... Otherwise you can always host your own LLM in the cloud. there is a lot of options out there now. E.g. huggingface with their text genration endpoint.
+Taskyon requires an OpenAI API-compatible inference endpoint for communication. The hardware requirements vary based on the AI model's complexity and can range from laptops to systems with enhanced graphics cards. For more details, refer to specific AI documentation available elsewhere.
 
-2. Security and Privacy:
+**What are the hardware requirements or recommendations for running AI models locally?**
 
-Could you provide more details on the security measures within the sandboxed environments? How is user data isolated and protected?
- - data doesn't leave the browser
- - right now, the only data which leaves the browser is for inference. If the endpoint is private, full data protection is achieved.
- - if a "public" inference endpoint is chosen such as OpenAI, the chat history will be visible to them. But they will not see the execution of tools & functions. This stays only local. Additionally, Chat history is saved locally.
- - inside taskyon iframes & webworkers are used for isolation. Additionally, taskyons asks for explicit permission if foreign datasources are added to it.
+Quantized 7B/12B models can run on laptops, though better graphics cards improve performance significantly. Alternatively, cloud-hosted LLMs, such as those from Huggingface, offer diverse options.
 
-How does Taskyon handle potential vulnerabilities in the local execution of code and AI models?
- - by encouraging local deployment and a label-based permission system which data an AI can access.
+### 2. Security and Privacy
 
-3. Service Integration:
+**Could you provide more details on the security measures within the sandboxed environments? How is user data isolated and protected?**
 
-What LLM providers are currently supported, and how does Taskyon manage switching between different providers?
- - providers supported are all which support OpenAI API compatible endpoints. Among them are
-   [LocalAI](https://github.com/mudler/LocalAI), [Huggingface Text Generation Inference](https://huggingface.co/docs/text-generation-inference/en/index), [Openrouter](https://openrouter.ai/), [Taskyon.space](taskyon.space).
- - These providers offer a broad collection of models and also route to ChatGPT, Gemini, Anthropic, Google, Meta with all their respective models.
- - Adding an API can be done in the frontend or by configuring taskyon with a json file. Or by directly configuring taskyon through an iframe when integrating it into a webpage.
+User data remains within the browser except during inference, where data protection depends on endpoint privacy settings. If the endpoint is private, full data protection is achieved. Taskyon uses iframes and web workers for isolation and requests explicit permissions for external data sources.
 
-Are there any plans to support more providers in the future or integrate additional types of services?
- - Yes, taskyon is activly being worked on. Whatever is integrated into taskyon will always follow the local first principles. This also means that taskyon will always be open source. Taskyon is meant to be a platform which can be adapted to different applications in a very flexible and modern way. Xyntopia uses taskyon for engineering applications and is developing tools for this.
+**How does Taskyon handle potential vulnerabilities in the local execution of code and AI models?**
 
-4. Function Tasks:
+Taskyon promotes local deployment and employs a label-based permission system to control AI data access.
 
-Can you elaborate on the types of function tasks that can be executed? Are there predefined templates or examples?
- - Yes!  there is a template and instructions! go to this link [https://taskyon.space/tools](https://taskyon.space/tools). It rarely gets more complicated then filling out a few lines of a json file! You can even ask Taskyon to do this for you!
+### 3. Service Integration
 
-How flexible is the interface for creating and managing custom function tasks?
- - Everythig happens in the frontend. This makes execution of functions inherently a lot more scalable and secure.
- - this makes taskyon also very flexible. if run as a desktop app  functions have access to the local environment if given permission.
- - in the browser functions are restricted to what the browser allows, which automatically makes them run in a sandboxed environment. Making it again a lot more secure, than if they were run on your backend.
- - additionally, when integrating taskyon into an app, the declaration of functions happens *inside the app* not in taskyon. This limits function declaration only to what the app can offer.
+**What LLM providers are currently supported, and how does Taskyon manage switching between different providers?**
 
-5. Contextual Task Management:
+Taskyon supports providers with OpenAI API-compatible endpoints, including LocalAI, Huggingface, Openrouter, and others. Integration can be done via frontend configuration or JSON files. Examples are: [LocalAI](https://github.com/mudler/LocalAI), [Huggingface Text Generation Inference](https://huggingface.co/docs/text-generation-inference/en/index), [Openrouter](https://openrouter.ai/), [Taskyon.space](taskyon.space).
 
-How is the context attached to tasks managed and utilized? Are there specific formats or standards for attaching context like files or other tasks?
- - taskyon maintains a decentralized database of all chats and uploaded files. The database is stored in the browser, but can also be shared among teams in a p2p fashion. Additionally, the database can be stored on a MongoDB backend.
- - taskyon stores everything in a "tasktree" each node in the tree is a task with follow up & parent tasks. These tasks have a standardized format (TODO: link)
+**Are there any plans to support more providers in the future or integrate additional types of services?**
 
-How does Taskyon ensure the relevance and accuracy of context in task execution?
- - taskyon vectorizes all tasks and stores them in a local vector store. This way it can choose the right context
- - additionally, taskyon tasks can be labeled. This gives user in taskyon more options to carefully select which context taskyon should be working in. It also helps to make sure which tasks should be allowed to share.
+Taskyon is actively developed with a commitment to open-source principles, ensuring adaptability for various applications.
 
-6. Frontend Capabilities:
+### 4. Function Tasks
 
-How are the secure sandbox environments for Python and JavaScript code execution managed? Are there limitations to the code that can be run within these sandboxes?
- - First layer of security is that functions are run in the browser itself. So they are restricted to the context of the domain they're run and automatically sandboxed without access to the backend or server.
- - The second layer can be chosen by the user:  it can either be run inside the context of the domain, in an isolated webworker or an iframe. wich iframe being the most secure. All the browser restrictions on each environment apply.
+**Can you elaborate on the types of function tasks that can be executed? Are there predefined templates or examples?**
 
-Can you provide examples of the types of tools that can be generated on-the-fly using JavaScript or Python?
- - Tools right now are only JS-based. Py based tools are in development.
- - Python code can already be executed in taskyon though! It is based on [https://pyodide.org](https://pyodide.org)
- - We are working on more documentation right now, stay tuned. Some examples are:
-   * Interacting with Google Maps and other apps.
-   * Interfacing with Email accounts.
-   * doing data analysis using python.
-   * Act as a financial advisor by interacting with a wealth Management webpage.
+Function tasks are frontend-driven, facilitating scalability and security. Tasks range from simple JSON configuration to complex tool generation. Templates can be found here: [https://taskyon.space/tools](https://taskyon.space/tools).
 
-7. Webpage Integration:
+**How flexible is the interface for creating and managing custom function tasks?**
 
-How can webpage owners integrate Taskyon into their sites? Are there specific scripts or APIs provided for this integration?
- - By including taskyon as an iframe. Taskyon does NOT require you to run any backend for AI! It can be *completly* configured from the html code of your app (E.g. pure js, ts, vue/react/svelte/angular  there are no restrictions on frameworks ).
- - example code is given here:  [https://taskyon.space/tools](https://taskyon.space/tools).
- - A webpage configures taskyon through the iframe. E.g. configure rate limits, and restrictions on which LLM to use.
- - A webpage declares functions/tools to taskyon which taskyon can then call when users interact with it. Through this
-   mechamism taskyon can essentially interact with any part of the webpage.
- - Security is maintained through the browsers sandboxing mechanisms. Taskyon wil be run in its own context for every webpage which calls it in an iframe. This prevents X-site attacks.
- - taskyon only has access to the functions it was explicitly given access to.
+Taskyon's frontend-based execution enhances scalability and security:
 
+- All function execution occurs in the frontend, ensuring scalability and security.
+- When run as a desktop app, functions can access the local environment with appropriate permissions.
+- Browser-based execution restricts functions to browser capabilities, enforcing sandboxed security.
+- Integrating Taskyon into an app confines function declarations to app-defined capabilities, enhancing control and security.
 
-Are there any security concerns or best practices for integrating Taskyon into external webpages?
- - check [https://taskyon.space/tools](https://taskyon.space/tools)
- - security concerns are the same as when you integrate an iframe into your webpage. In short:  everythig evreywhere is sandboxed and
-   only explicit messages are exchanged between systems.
+### 5. Contextual Task Management
 
-8. Enhanced Markdown Support:
+**How is the context attached to tasks managed and utilized? Are there specific formats or standards for attaching context like files or other tasks?**
 
-What are some use cases for the enhanced markdown features like mermaid graphics, SVG drawings, and embedded HTML widgets?
- - generating flow charts, gantt diagrams and mindmaps
- - project management
- - generating reports
- - generating presentations
- - generate an html widget to let the user select between multiple choices.
- - provide answers and explanations with sophisticated math (e.g. use python sympy for calculation and then present the result)
-   in a visual appealing way with correct math notation.
+Taskyon manages task context through a decentralized task tree:
 
-Are there any limitations or performance considerations when using these enhanced markdown features?
- - The limits are the capabilities of the LLMs right now. Some of them are not good enough yet to generate
-   good mermaid code.
+- Task context and uploaded files are stored in a decentralized task tree within the browser or optionally on a DB backend. Or shared via p2p.
+- Each task in the task tree is structured with parent and follow-up tasks, ensuring organized management.
+- Tasks follow standardized formats for consistency and accessibility.
 
-9. Vision Models:
+**How does Taskyon ensure the relevance and accuracy of context in task execution?**
 
-Can you provide more information on the vision models integrated with Taskyon? What tasks or functionalities do they support?
-Are there any examples or use cases demonstrating the capabilities of these vision models?
- - You can add images and models with multi-modal vision cabability can itnerprete those images. The quality depends on the model used.
-   Best way is to simply try it out!
+Taskyon enhances task relevance and accuracy through:
 
-10. Roadmap:
+- Vectorization of tasks stored in a local vector store, optimizing task selection based on context.
+- Labeling of tasks for precise context control and selection, facilitating accurate task execution.
 
-Can you provide more details on the upcoming features like P2P task synchronization and autonomous agents? What are the expected benefits and use cases?
- - p2p task synchronization enables teams to work in the same context with AI. This enables teams to have project-based contexts and exchange information quickly between team members.
+### 6. Frontend Capabilities
 
-What is the timeline for the integration of local LLM inference and the release of the desktop app and container?
- - local LLM inference can already be used right now simply by using a local OpenAI API-compatible endpoint.
- - release of desktop app and container: container will be first, desktop second. Additionally, we will add a "static" version of taskyon for simply copy & paste onto any http-capable webserver. All of these versions are used in different projects at Xyntopia already.
+**How are the secure sandbox environments for Python and JavaScript code execution managed? Are there limitations to the code that can be run within these sandboxes?**
 
-11. Contribution Guidelines:
+Taskyon's frontend manages secure sandbox environments:
 
-What are the specific areas where you need the most help from contributors?
- - bug reports
- - writing a library of standard tools
- - enhance UI experience
+- Functions execute within browser sandboxes, limiting access to the current domain and enhancing security.
+- Users can choose sandbox types such as web workers or iframes for additional isolation, ensuring robust security measures.
+- Code execution adheres to browser restrictions, bolstering sandboxed security.
 
-Are there any coding standards or guidelines that contributors should follow?
- - Taskyon provides standardized coding styles & eslint configurations in the project!
+**Can you provide examples of the types of tools that can be generated on-the-fly using JavaScript or Python?**
 
+Taskyon supports dynamic tool generation primarily in JavaScript:
+
+- Current tools include integrations with APIs, data analysis tools, and interactive elements like Google Maps.
+- Python-based tools are under development, leveraging platforms like Pyodide for broader functionality.
+- We are working on more documentation right now, stay tuned. Some examples are:
+  - Interacting with Google Maps and other apps.
+  - Interfacing with Email accounts.
+  - doing data analysis using python.
+  - Act as a financial advisor by interacting with a wealth Management webpage.
+
+### 7. Webpage Integration
+
+**How can webpage owners integrate Taskyon into their sites? Are there specific scripts or APIs provided for this integration?**
+
+- By including taskyon as an iframe. Taskyon does NOT require you to run any backend for AI! It can be _completly_ configured from the html code of your app (E.g. pure js, ts, vue/react/svelte/angular there are no restrictions on frameworks ).
+- example code is given here: [https://taskyon.space/tools](https://taskyon.space/tools).
+- A webpage configures taskyon through the iframe. E.g. configure rate limits, and restrictions on which LLM to use.
+- A webpage declares functions/tools to taskyon which taskyon can then call when users interact with it. Through this
+  mechamism taskyon can essentially interact with any part of the webpage.
+- Security is maintained through the browsers sandboxing mechanisms. Taskyon wil be run in its own context for every webpage which calls it in an iframe. This prevents X-site attacks.
+- taskyon only has access to the functions it was explicitly given access to.
+
+**Are there any security concerns or best practices for integrating Taskyon into external webpages?**
+
+Taskyon integration adheres to standard iframe security practices:
+
+- Check [https://taskyon.space/tools](https://taskyon.space/tools)
+- Embedded Taskyon instances operate within isolated iframes, preventing cross-site scripting and maintaining data security.
+- Taskyon interacts solely with functions explicitly granted access by the hosting webpage.
+
+### 8. Enhanced Markdown Support
+
+**What are some use cases for the enhanced markdown features like mermaid graphics, SVG drawings, and embedded HTML widgets?**
+
+Enhanced Markdown in Taskyon supports diverse applications:
+
+- Use cases include generating flowcharts, Gantt diagrams, and interactive presentations.
+- Markdown features facilitate complex data visualization, mathematical calculations, and interactive content.
+- provide answers and explanations with sophisticated math (e.g. use python sympy for calculation and then present the result) in a visual appealing way with correct math notation.
+- Project management tasks
+
+**Are there any limitations or performance considerations when using these enhanced markdown features?**
+
+Performance varies based on LLM capabilities and feature complexity:
+
+- Taskyon's Markdown capabilities rely on LLM performance for tasks like generating mermaid graphics and interactive widgets.
+- Ongoing improvements enhance feature robustness and performance.
+
+### 9. Vision Models
+
+**Can you provide more information on the vision models integrated with Taskyon? What tasks or functionalities do they support?**
+
+Taskyon integrates vision models for image interpretation:
+
+- Models support multi-modal functionalities, interpreting images with varying levels of complexity.
+- Use cases include image analysis, object recognition, and visual data processing.
+
+### 10. Roadmap
+
+**Can you provide more details on the upcoming features like P2P task synchronization and autonomous agents?**
+
+Upcoming Taskyon features include:
+
+- P2P task synchronization enabling collaborative project contexts and efficient information exchange.
+- Autonomous agents for automated task management, enhancing productivity and workflow efficiency.
+
+**What is the timeline for the integration of local LLM inference and the release of the desktop app and container?**
+
+- Taskyon already supports local LLM inference via OpenAI API-compatible endpoints.
+- Container deployment precedes the desktop app release, with plans for a static web server version for easy deployment.
+
+### 11. Contribution Guidelines
+
+**What are the specific areas where you need the most help from contributors?**
+
+Taskyon welcomes contributions in several areas:
+
+- Reporting bugs and issues for continuous improvement.
+- Developing a library of standard tools to enhance Taskyon's functionality.
+- Improving UI/UX to provide a seamless user experience.
+
+**Are there any coding standards or guidelines that contributors should follow?**
+
+Taskyon maintains standardized coding styles and eslint configurations within the project:
+
+- Contributors are encouraged to adhere to these guidelines for consistent code quality and compatibility.
