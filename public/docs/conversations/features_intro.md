@@ -15,8 +15,7 @@ I'd be happy to showcase some of my features.
 
 **MathJax**
 
-I can use MathJax to render mathematical formulas and equations. Here
-are a few examples:
+I can use MathJax to render mathematical formulas and equations. Here are a few examples:
 
 - Inline formula: $x^2 + y^2 = z^2$
 
@@ -48,8 +47,7 @@ $$
 
 **Mermaid Charts**
 
-I can create a variety of diagrams, including flowcharts,
-sequence diagrams, Gantt charts, and more. Here are a few examples:
+I can create a variety of diagrams, including flowcharts, sequence diagrams, Gantt charts, and more. Here are a few examples:
 
 For more documentation, go to this webpage:
 
@@ -92,6 +90,4 @@ gantt
     another task      : 24d
 ```
 
-These are just a few examples of what I can do with MathJax and charts.
-Let me know if you have any specific questions or if you'd like to see
-more examples!
+These are just a few examples of what I can do with MathJax and charts. Let me know if you have any specific questions or if you'd like to see more examples!
