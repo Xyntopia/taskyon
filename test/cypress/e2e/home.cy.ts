@@ -35,7 +35,11 @@ describe('Landing', () => {
 
     cy.reload();
     // TODO: check if expert mode is still there...
-    
+
+    cy.get('[aria-label="toggle task settings"]').click();
+
+    cy.contains('Vision').click();
+    cy.contains('Fancy AI').click();
 
     cy.contains('your message').type('hello world!{enter}');
     //cy.get('li').first().click();
