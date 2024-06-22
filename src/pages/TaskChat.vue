@@ -150,6 +150,7 @@
 </template>
 
 <style lang="sass">
+
 .task-container
   display: flex
   flex-direction: column
@@ -195,7 +196,6 @@ import {
 } from '@quasar/extras/material-icons';
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
-const welcomeText = ref<string>('');
 const bottomPadding = ref(100);
 const lockBottomScroll = ref(true); // State to track if the user is at the bottom of scroll page
 const taskThreadContainer = ref<HTMLElement | undefined>();
@@ -260,10 +260,6 @@ function scrollToThreadEnd() {
   lockBottomScroll.value = true;
   setVerticalScrollPosition(window, offset, duration);
 }
-
-void axios.get('main_content/frontpage.md').then((jsonconfig) => {
-  welcomeText.value = jsonconfig.data as string;
-});
 
 async function updateTaskThread(taskId: string | undefined) {
   console.log('update task thread...');
