@@ -194,6 +194,34 @@
           :options="Object.keys(toolCollection)"
           :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
         />
+        <ToggleButton
+          v-if="expertMode"
+          v-model="state.llmSettings.useBasePrompt"
+          outline
+          dense
+          :on-icon="mdiAutoFix"
+          :off-icon="mdiAlphabeticalVariant"
+          size="md"
+        >
+          <div class="q-pl-sm">Fancy AI</div>
+          <q-tooltip :delay="200">
+            {{ llmSettings.shape.useBasePrompt.description }}
+          </q-tooltip>
+        </ToggleButton>
+        <ToggleButton
+          v-if="expertMode"
+          v-model="state.llmSettings.tryUsingVisionModels"
+          outline
+          dense
+          :on-icon="matVisibility"
+          :off-icon="matVisibilityOff"
+        >
+          <div class="q-pl-sm">Vision</div>
+          <q-tooltip :delay="200">
+            {{ llmSettings.shape.tryUsingVisionModels.description }}
+          </q-tooltip>
+        </ToggleButton>
+        <!--
         <q-toggle
           v-if="expertMode"
           :icon="matHandyman"
@@ -206,7 +234,7 @@
             >Enable OpenAI Functions (use built-in function selection mode for
             OpenAI)</q-tooltip
           ></q-toggle
-        >
+        >-->
         <q-btn
           v-if="expertMode"
           class="q-ma-md"
@@ -235,36 +263,6 @@
             v-model:useOpenAIAssistants="useOpenAIAssistants"
             v-model:open-a-i-assistant-id="openAIAssistantId"
           ></ModelSelection>
-        </q-item>
-        <q-item
-          v-if="state.appConfiguration.expertMode"
-          class="row items-center"
-        >
-          <ToggleButton
-            v-model="state.llmSettings.useBasePrompt"
-            outline
-            dense
-            :on-icon="mdiAutoFix"
-            :off-icon="mdiAlphabeticalVariant"
-            size="md"
-          >
-            <div class="q-pl-sm">Fancy AI</div>
-            <q-tooltip :delay="200">
-              {{ llmSettings.shape.useBasePrompt.description }}
-            </q-tooltip>
-          </ToggleButton>
-          <ToggleButton
-            v-model="state.llmSettings.tryUsingVisionModels"
-            outline
-            dense
-            :on-icon="matVisibility"
-            :off-icon="matVisibilityOff"
-          >
-            <div class="q-pl-sm">Vision</div>
-            <q-tooltip :delay="200">
-              {{ llmSettings.shape.tryUsingVisionModels.description }}
-            </q-tooltip>
-          </ToggleButton>
         </q-item>
         <!--Allowed Tools Selection-->
         <q-separator class="q-my-sm" />
