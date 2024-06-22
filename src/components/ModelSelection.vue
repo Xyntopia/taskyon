@@ -55,8 +55,9 @@
       </div>
     </div>
     <!--LLM Model selection-->
-    <div v-else class="col" style="min-width: 200px">
+    <div v-else class="col row items-center" style="min-width: 200px">
       <q-select
+        class="col"
         dense
         color="secondary"
         label="Select LLM Model for answering/solving the task."
@@ -71,17 +72,13 @@
         input-debounce="0"
         @filter="(val, update) => filterModels(val, update, modelOptions)"
       >
-        <template v-slot:after>
-          <div
-            v-if="state.appConfiguration.expertMode"
-            style="font-size: 0.5em"
-          >
-            <q-btn :icon="matList" flat to="pricing">
-              <q-tooltip>List of models</q-tooltip>
-            </q-btn>
-          </div>
-        </template>
       </q-select>
+      <div v-if="state.appConfiguration.expertMode" style="font-size: 0.5em">
+        <q-btn :icon-right="matList" flat to="pricing">
+          >
+          <q-tooltip>List of models</q-tooltip>
+        </q-btn>
+      </div>
     </div>
     <ApiSelect
       v-if="state.appConfiguration.expertMode"

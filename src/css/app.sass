@@ -1,5 +1,26 @@
 // app global css in Sass form
 
+$primary-light: scale-color($primary, $lightness: 90%)
+$primary-dark: scale-color($primary, $blackness: 30%)
+
+.body--light
+  .bg-primary2
+    background-color: $primary-light
+    color: $primary
+
+.body--dark
+  .bg-primary2
+    background-color: $primary
+    text-color: white
+
+//derived colors
+$tools: scale-color($secondary, $lightness: 80%)
+//$bg-tools: scale-color($secondary, $lightness: 80%)
+//$primary-light: scale-color($primary, $lightness: 99%)
+//$primary2: scale-color($primary, $blackness: 30%)
+//$text-tools: $primary*/
+//$tools2: scale-color($primary, $lightness: 80%)
+
 .text-tools
   color: $primary
 

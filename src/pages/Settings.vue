@@ -1,6 +1,6 @@
 <template>
-  <q-page :class="$q.dark.isActive ? 'bg-primary' : 'white'">
-    <q-toolbar :class="$q.dark.isActive ? 'bg-primary' : 'white'">
+  <q-page>
+    <q-toolbar>
       <q-tabs class="col-auto" dense v-model="selectedTab" no-caps>
         <q-route-tab
           to="/settings/llmproviders"
@@ -29,14 +29,8 @@
       </q-tabs>
     </q-toolbar>
     <div class="fit text-center"><ExpertEnable /></div>
-    <div>
-      <q-tab-panels
-        :model-value="selectedTab"
-        animated
-        swipeable
-        infinite
-        :class="[$q.dark.isActive ? 'bg-primary' : 'white']"
-      >
+    <q-card class="q-ma-xs">
+      <q-tab-panels :model-value="selectedTab" animated swipeable infinite>
         <q-tab-panel name="llmproviders" :class="tabPanelClass">
           <LLMProviders
             style="max-width: 600px"
@@ -63,7 +57,7 @@
           <ObjectTreeView :model-value="state.appConfiguration" class="fit" />
         </q-tab-panel>
       </q-tab-panels>
-    </div>
+    </q-card>
   </q-page>
 </template>
 

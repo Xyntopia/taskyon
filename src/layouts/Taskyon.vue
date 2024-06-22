@@ -1,6 +1,6 @@
 <template>
   <q-layout view="lHh LpR lfr">
-    <q-header elevated class="bg-primary print-hide">
+    <q-header class="bg-primary2 column print-hide">
       <component
         :is="!minMode ? 'q-toolbar' : 'div'"
         :class="minMode ? 'q-gutter-xs row q-px-sm' : 'q-gutter-xs'"
@@ -78,7 +78,6 @@
           v-if="!minMode"
           class="desktop-only"
           vertical
-          :color="$q.dark.isActive ? 'secondary' : 'white'"
         ></q-separator>
         <q-btn
           v-if="!minMode"
@@ -92,6 +91,7 @@
               <q-item
                 clickable
                 v-ripple
+                class=""
                 href="https://github.com/xyntopia/taskyon"
                 target="_blank"
                 exact
@@ -133,12 +133,11 @@
     <q-drawer
       v-if="state"
       v-model="drawerOpen"
-      elevated
       show-if-above
       persistent
       :width="250"
       :breakpoint="800"
-      :class="[$q.dark.isActive ? 'bg-primary' : 'bg-grey-3', 'print-hide']"
+      class="bg-primary2 print-hide"
     >
       <ChatSidebar />
     </q-drawer>
@@ -162,46 +161,48 @@
 
     <!-- Main Content Area -->
     <q-page-container>
-      <router-view />
+      <router-view class="bg-primary2" />
     </q-page-container>
   </q-layout>
 </template>
 
-<style>
-.button-group {
-  display: inline-block;
-  border: 1px solid #fff; /* add white outline */
-  border-radius: 5px; /* optional, to match the rounded-borders class */
-}
+<style lang="sass">
 
-@media print {
+.body--light
+  .button-group
+    display: inline-block
+    border: 1px solid $primary /* add white outline */
+    border-radius: 5px /* optional, to match the rounded-borders class */
+
+.body--dark
+  .button-group
+    display: inline-block
+    border: 1px solid white /* add white outline */
+    border-radius: 5px /* optional, to match the rounded-borders class */
+
+@media print
   /* Hide everything initially */
-  body * {
-    visibility: hidden;
-  }
+  body *
+    visibility: hidden
 
   /* Only display the q-page and its children */
   .q-page,
-  .q-page * {
-    visibility: visible;
-  }
+  .q-page *
+    visibility: visible
 
   /* Override the page container padding for print */
-  .q-page-container {
-    padding: 0 !important;
-  }
+  .q-page-container
+    padding: 0 !important
 
-  .q-page {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 0;
-    box-shadow: none; /* Remove shadows, if any */
-    min-height: 0 !important; /* Override min-height if necessary */
-  }
-}
+  .q-page
+    position: absolute
+    left: 0
+    top: 0
+    width: 100%
+    margin: 0
+    padding: 0
+    box-shadow: none /* Remove shadows, if any */
+    min-height: 0 !important /* Override min-height if necessary */
 </style>
 
 <script setup lang="ts">

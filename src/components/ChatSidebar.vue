@@ -8,6 +8,7 @@
           class="col-auto"
           name="svguse:taskyon_mono_opt.svg#taskyon"
           size="sm"
+          color="primary"
         />
         <div class="col-auto text-weight-medium">Conversation Threads</div>
       </div>
@@ -37,7 +38,7 @@
                 selected
                   ? [
                       'text-weight-bolder',
-                      $q.dark.isActive ? 'text-secondary' : 'text-black',
+                      $q.dark.isActive ? 'text-secondary' : 'text-primary',
                     ]
                   : [$q.dark.isActive ? 'text-white' : 'text-primary']
               "
@@ -50,7 +51,7 @@
               }}
               <q-tooltip> Select Conversation </q-tooltip>
             </q-item-section>
-            <q-item-section side>
+            <q-item-section side class="bg-primary2">
               <div>
                 <q-btn
                   v-if="state.llmSettings.selectedTaskId == conversationId.id"

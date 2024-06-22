@@ -1,6 +1,6 @@
 <template>
   <!--Task Page-->
-  <q-page :class="[$q.dark.isActive ? 'black' : 'primarylight', 'column']">
+  <q-page class="column">
     <q-resize-observer @resize="onResize" :debounce="50" />
     <!--Chat Area-->
     <div
@@ -108,7 +108,7 @@
             state.keys[state.llmSettings.selectedApi]
           "
           :class="[
-            $q.dark.isActive ? 'bg-primary' : 'bg-grey-2',
+            $q.dark.isActive ? 'bg-primary' : 'bg-white',
             'rounded-borders',
             'q-pa-xs',
             'shadow-5',
@@ -199,9 +199,6 @@
   .user
     align-self: flex-end // Aligns to the right
 
-
-
-
 .user-message
   position: relative
 .user-message::after
@@ -212,11 +209,6 @@
   bottom: 0
   width: 5px /* Width of the fading effect */
   background: linear-gradient(to top, rgba(255, 255, 255, 0), $secondary)
-
-.primarylight
-  background-color: scale-color($primary, $lightness: 80%)
-.primarydark
-  background-color: scale-color($primary, $blackness: 30%)
 </style>
 
 <script setup lang="ts">
