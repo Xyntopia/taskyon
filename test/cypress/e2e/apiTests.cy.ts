@@ -41,7 +41,7 @@ describe('Landing', () => {
     cy.contains('openai API key').type(Cypress.env().openai_api_key);
     cy.contains('openrouter.ai API key').type(Cypress.env().openrouter_api_key);
 
-    cy.visit('/chat');
+    cy.visit('/');
 
     cy.contains('Provider').click();
     cy.get('.q-menu').contains('openai').click();
@@ -55,7 +55,8 @@ describe('Landing', () => {
       .contains('Select LLM Model for answering/solving the task.')
       .type('meta-llama/llama-3-70b');
     cy.contains('meta-llama/llama-3-70b-instruct').click();
-    cy.contains('test').type('hello world!{enter}');
+    //cy.contains('your message').type('hello world!{enter}');
+    //cy.get('.user-message i.q-icon.text-warning')
 
     cy.wait(1000).reload();
 

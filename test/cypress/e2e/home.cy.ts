@@ -6,6 +6,7 @@
 // This test will pass when run against a clean Quasar project
 describe('Landing', () => {
   beforeEach(() => {
+    //cy.intercept('**').as('requests')
     cy.visit('/');
 
     // Clear local storage
@@ -26,6 +27,8 @@ describe('Landing', () => {
   });
   it('should be able to send a free message and  get a response', () => {
     cy.title().should('include', 'taskyon');
+
+    cy.log('starting tests!')
 
     cy.get('.q-btn').contains('Use free Taskyon (low quality)').click();
 
