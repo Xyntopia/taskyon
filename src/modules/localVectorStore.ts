@@ -349,7 +349,7 @@ if (storedState) {
 }
 
 // finally, make sure we load the correct collection
-loadCollection(vecStoreUploaderConfigurationState.value.collectionName);
+// loadCollection(vecStoreUploaderConfigurationState.value.collectionName);
 
 export const useVectorStore = () => {
   return {

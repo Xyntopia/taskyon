@@ -41,14 +41,6 @@ export const taskyonRoutes = {
       component: () => import('pages/Diagnostics.vue'),
     },
     {
-      path: 'uploader',
-      component: () => import('components/VecStoreUploader.vue'),
-    },
-    {
-      path: 'search',
-      component: () => import('components/VecStoreSearch.vue'),
-    },
-    {
       path: 'tools',
       component: () => import('components/ToolManager.vue'),
     },

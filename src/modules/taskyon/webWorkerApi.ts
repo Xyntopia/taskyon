@@ -1,22 +1,33 @@
 import type { PythonScriptResult } from './pyodide';
 import type { nlpWorkerResult } from './nlp.worker';
+import { lruCache } from './utils';
 
 export const useNlpWorker = () => {
-  const nlpWorker = new Worker(new URL('./nlp.worker.ts', import.meta.url));
+  const getWebWorker = lruCache<Worker>(10)(() => {
+    const nlpWorker = new Worker(
+      /* webpackChunkName: "nlpworker" */
+      /* webpackMode: "lazy" */
+      /* webpackFetchPriority: "low" */
+      /* webpackIgnore: "true" */
+      new URL('./nlp.worker.ts', import.meta.url)
+    );
+
+    nlpWorker.onmessage = ({
+      data,
+    }: {
+      data: nlpWorkerResult & { id: number };
+    }) => {
+      const { id, ...res } = data;
+      const onSuccess = nlpCallbacks[id];
+      delete nlpCallbacks[id];
+      onSuccess(res.vector);
+    };
+
+    return nlpWorker;
+  });
 
   const nlpCallbacks: Record<number, (vector: number[] | undefined) => void> =
     {};
-
-  nlpWorker.onmessage = ({
-    data,
-  }: {
-    data: nlpWorkerResult & { id: number };
-  }) => {
-    const { id, ...res } = data;
-    const onSuccess = nlpCallbacks[id];
-    delete nlpCallbacks[id];
-    onSuccess(res.vector);
-  };
 
   const vectorizeText = (() => {
     let id = 0; // identify a Promise
@@ -26,7 +37,7 @@ export const useNlpWorker = () => {
       return new Promise<number[] | undefined>((onSuccess) => {
         nlpCallbacks[id] = onSuccess;
         console.log('calling nlp webworker');
-        nlpWorker.postMessage({
+        getWebWorker().postMessage({
           text,
           modelName,
           id,

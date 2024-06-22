@@ -19,8 +19,6 @@ import { z } from 'zod';
 import type { TyTaskManager } from './taskManager';
 import { loadFile } from '../loadFiles';
 
-export const vectorStore = useVectorStore();
-
 const arbitraryFunctionSchema = z.custom<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (...args: any[]) => unknown | Promise<unknown>
@@ -168,6 +166,7 @@ export const getFileContent: Tool = {
 
 export const localVectorStoreSearch: Tool = {
   function: async ({ searchTerm }: { searchTerm: string }) => {
+    const vectorStore = useVectorStore();
     const k = 3;
     console.log(`Searching for ${searchTerm}`);
     const results = await vectorStore.query(searchTerm, k);

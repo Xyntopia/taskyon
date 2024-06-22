@@ -417,12 +417,6 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     notifySubscribers,
   } = tyMechanisms();
 
-  if (vectorizerModel) {
-    // make sure our search if prepared:
-    // by calling this function, we initialize our search model and other things :)
-    void vectorizeText(undefined, vectorizerModel);
-  }
-
   async function initVectorStore(loadIfExists = true) {
     const maxElements = 10000;
     vectorIndex = await loadOrCreateHNSWIndex(
