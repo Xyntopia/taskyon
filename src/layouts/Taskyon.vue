@@ -160,7 +160,7 @@
     </q-drawer>-->
 
     <!-- Main Content Area -->
-    <q-page-container>
+    <q-page-container class="bg-primary2">
       <router-view class="bg-primary2" />
     </q-page-container>
   </q-layout>

@@ -14,6 +14,7 @@ including additional providers to make even more use of the pricing competition 
         <api-select v-model="state.llmSettings.selectedApi" />
       </q-card-section>
       <q-table
+        class="q-card"
         flat
         dense
         no-results-label="Could not find this model!"

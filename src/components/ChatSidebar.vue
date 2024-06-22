@@ -8,7 +8,6 @@
           class="col-auto"
           name="svguse:taskyon_mono_opt.svg#taskyon"
           size="sm"
-          color="primary"
         />
         <div class="col-auto text-weight-medium">Conversation Threads</div>
       </div>

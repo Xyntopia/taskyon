@@ -30,7 +30,7 @@
   overflow-wrap: break-word
 
 .q-markdown
-  color: $primary
+  color: black
 
 .q-markdown--note--info .q-markdown--note-title
   color: $accent

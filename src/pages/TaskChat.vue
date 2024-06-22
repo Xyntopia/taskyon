@@ -22,59 +22,53 @@
         "
       >
         <div v-if="currentTask" class="q-gutter-xs q-px-xs task-container">
-          <div v-for="task in selectedThread" :key="task.id" :class="task.role">
+          <q-card
+            :flat="$q.dark.isActive"
+            v-for="task in selectedThread"
+            :key="task.id"
+            :class="task.role"
+          >
             <Task
               :task="task"
               style="min-width: 300px"
               :class="[
-                $q.dark.isActive
-                  ? 'bg-primary text-white'
-                  : 'bg-white text-black',
-                'rounded-borders',
                 'q-pa-xs',
                 task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
               ]"
             />
-          </div>
+          </q-card>
           <!--Render tasks which are in progress-->
-          <div v-if="['Open', 'In Progress'].includes(currentTask.state)">
-            <div
-              :class="[
-                $q.dark.isActive
-                  ? 'bg-primary text-white'
-                  : 'bg-white text-black',
-                'rounded-borders',
-                'row',
-              ]"
+          <q-card
+            v-if="['Open', 'In Progress'].includes(currentTask.state)"
+            class="row"
+          >
+            <q-btn
+              v-if="false"
+              class="q-ma-xs"
+              dense
+              outline
+              color="secondary"
+              :icon="matStop"
+              @click="state.taskWorkerController.interrupt(currentTask.id)"
             >
-              <q-btn
-                v-if="false"
-                class="q-ma-xs"
-                dense
-                outline
-                color="secondary"
-                :icon="matStop"
-                @click="state.taskWorkerController.interrupt(currentTask.id)"
-              >
-                <q-tooltip> Stop processing current task. </q-tooltip>
-              </q-btn>
-              <div class="col">
-                <ty-markdown
-                  no-line-numbers
-                  no-mermaid
-                  :src="currentTask.debugging.streamContent || ''"
-                />
-                <ty-markdown
-                  no-line-numbers
-                  no-mermaid
-                  :src="
-                    JSON.stringify(currentTask.debugging.toolStreamArgsContent)
-                  "
-                />
-                <q-spinner-dots size="2rem" color="secondary" />
-              </div>
+              <q-tooltip> Stop processing current task. </q-tooltip>
+            </q-btn>
+            <div class="col">
+              <ty-markdown
+                no-line-numbers
+                no-mermaid
+                :src="currentTask.debugging.streamContent || ''"
+              />
+              <ty-markdown
+                no-line-numbers
+                no-mermaid
+                :src="
+                  JSON.stringify(currentTask.debugging.toolStreamArgsContent)
+                "
+              />
+              <q-spinner-dots size="2rem" color="secondary" />
             </div>
-          </div>
+          </q-card>
         </div>
       </div>
       <!-- Welcome Message -->
@@ -108,7 +102,7 @@
             state.keys[state.llmSettings.selectedApi]
           "
           :class="[
-            $q.dark.isActive ? 'bg-primary' : 'bg-white',
+            $q.dark.isActive ? 'bg-primary2' : 'bg-white',
             'rounded-borders',
             'q-pa-xs',
             'shadow-5',
@@ -156,15 +150,9 @@
 </template>
 
 <style lang="sass">
-.body--light
-  .q-card
-    background-color: white
-    color: black
-
-
 .body--dark
   .welcome .q-card
-    background-color: $primary
+    background-color: black
     color: white
     //box-shadow: 0px 0px 10px $secondary
     box-shadow: none

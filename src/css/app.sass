@@ -1,17 +1,33 @@
 // app global css in Sass form
 
-$primary-light: scale-color($primary, $lightness: 90%)
-$primary-dark: scale-color($primary, $blackness: 30%)
+$primary-light: lighten($primary, 70%)
+$primary-dark: darken($primary, 10%)
 
 .body--light
   .bg-primary2
     background-color: $primary-light
     color: $primary
+  .q-card
+    background-color: white
+    color: black
 
 .body--dark
+  background-color: $primary-dark
+  text-color: white
+
   .bg-primary2
-    background-color: $primary
+    background-color: $primary-dark
     text-color: white
+  .q-card
+    background-color: $primary-dark
+    color: white
+  .q-tab-panel
+    background-color: $primary-dark
+    color: white
+  .q-page
+    background-color: black
+    //border: 1px solid $primary-dark // Adjust border color as needed
+    border-radius: 10px // Adjust border radius as needed
 
 //derived colors
 $tools: scale-color($secondary, $lightness: 80%)
