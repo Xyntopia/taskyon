@@ -1,14 +1,16 @@
 <template>
-  <q-page padding>
+  <q-page class="q-pa-xs">
     <div v-if="$route.query.debug !== undefined">
       <div>Folder: {{ folder }}</div>
       <div>Path: {{ filePath }}</div>
     </div>
-    <ty-markdown
-      v-if="markdownContent"
-      :src="markdownContent"
-      no-line-numbers
-    />
+    <q-card class="q-pa-sm">
+      <ty-markdown
+        v-if="markdownContent"
+        :src="markdownContent"
+        no-line-numbers
+      />
+    </q-card>
   </q-page>
 </template>
 
