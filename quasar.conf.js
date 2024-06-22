@@ -12,18 +12,12 @@
 
 /* eslint-env node */
 /* eslint-disable @typescript-eslint/no-var-requires */
-const { env } = require('process');
 const { configure } = require('quasar/wrappers');
 const path = require('path');
 const fs = require('fs');
 
-// check parent folder for configuration
-const buildConfig = require('dotenv').config({
-  path: '../build_configuration',
-});
-
-APPNAME = env.APPNAME || buildConfig.APPNAME || 'Taskyon';
-DESCRIPTION = buildConfig.DESCRIPTION || '';
+APPNAME = 'taskyon';
+DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid';
 
 console.log('compile app: ', APPNAME, DESCRIPTION);
 
