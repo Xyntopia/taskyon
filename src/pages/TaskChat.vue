@@ -150,26 +150,6 @@
 </template>
 
 <style lang="sass">
-.body--dark
-  .welcome .q-card
-    background-color: black
-    color: white
-    //box-shadow: 0px 0px 10px $secondary
-    box-shadow: none
-    border-radius: 15px
-
-    svg
-      filter: drop-shadow(0 0 5px $secondary) drop-shadow(0 0 20px $secondary)
-
-  .welcome > .q-icon
-    svg
-      filter: drop-shadow(0 0 5px $secondary) drop-shadow(0 0 150px rgba($secondary,1.0))
-
-
-.taskyon-control-button
-  background-color: rgba($primary, .7) // Adjust the alpha value as needed
-  color: white
-
 .task-container
   display: flex
   flex-direction: column

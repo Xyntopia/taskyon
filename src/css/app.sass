@@ -29,6 +29,30 @@ $primary-dark: darken($primary, 10%)
     //border: 1px solid $primary-dark // Adjust border color as needed
     border-radius: 10px // Adjust border radius as needed
 
+  .welcome .q-card
+    background-color: black
+    color: white
+    //box-shadow: 0px 0px 10px $secondary
+    box-shadow: none
+    border-radius: 15px
+
+    svg
+      filter: drop-shadow(0 0 5px $secondary) drop-shadow(0 0 20px $secondary)
+
+  .welcome > .q-icon
+    svg
+      filter: drop-shadow(0 0 5px $secondary) drop-shadow(0 0 150px rgba($secondary,1.0))
+
+.body--dark
+  .taskyon-control-button
+    background-color: rgba($secondary, .2) // Adjust the alpha value as needed
+    color: white
+
+.body--light
+  .taskyon-control-button
+    background-color: rgba($primary, .7) // Adjust the alpha value as needed
+    color: white
+
 //derived colors
 $tools: scale-color($secondary, $lightness: 80%)
 //$bg-tools: scale-color($secondary, $lightness: 80%)
@@ -36,9 +60,3 @@ $tools: scale-color($secondary, $lightness: 80%)
 //$primary2: scale-color($primary, $blackness: 30%)
 //$text-tools: $primary*/
 //$tools2: scale-color($primary, $lightness: 80%)
-
-.text-tools
-  color: $primary
-
-.bg-tools
-  background: $tools

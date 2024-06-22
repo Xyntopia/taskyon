@@ -7,23 +7,36 @@
         state.keys[state.llmSettings.selectedApi]
       "
     >
-      <p class="text-center text-secondary">
+      <p class="text-center welcome-message-text">
         Welcome! Just type a message below to start using Taskyon!
       </p>
-      <CreateTaskButton :markdown="introTask" />
-      <!--<div class="row">
+      <div class="row q-gutter-xs items-top justify-around">
         <div
-          class="col text-caption text-secondary"
+          class="col-2 text-caption text-secondary"
           v-for="(s, idx) in starters"
           :key="idx"
         >
-          <CreateTaskButton :markdown="s" />
+          <CreateTaskButton
+            :markdown="s"
+            outline
+            :color="$q.dark.isActive ? 'secondary' : 'primary'"
+          />
         </div>
-      </div>-->
+      </div>
     </div>
     <LLMProviders v-else />
   </div>
 </template>
+
+<style lang="sass">
+.body--light
+  .welcome-message-text
+    filter: drop-shadow(0 0 1px $secondary)
+
+.body--dark
+  .welcome-message-text
+    color: $secondary
+</style>
 
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
@@ -47,18 +60,24 @@ void (async () => {
 const starters = computed(() => {
   return [
     introTask.value,
-    `Current recommended Models:
-  - the free versions
+    `
+<!--taskyon
+name: Currently recommended models
+role: "assistant"
+-->
+Currently we recommended the following Models:
   - llama-3
   - GPT4o
   - Gemini
   - try out more!
+
+You can select them in the "Chat Settings" section in the message input window.
 `,
-    "how about trying out fun with 'mermaid'?  E.g. create a gantt chart for your project!",
-    'how about creating some python programs?',
-    'how about testing out javascript? e.g. create some widgets on the fly...',
-    'how about creating a new tool?',
-    'integration of taskyon into your webpage is so easy!',
+    // TODO:
+    //'How do I execute python code?',
+    //'how about testing out javascript? e.g. create some widgets on the fly...',
+    //'What are AI tools?',
+    //'How do I integrate Taskyon into my webpage?',
   ];
 });
 </script>
