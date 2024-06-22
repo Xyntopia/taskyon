@@ -203,7 +203,7 @@
           :off-icon="mdiAlphabeticalVariant"
           size="md"
         >
-          <div class="q-pl-sm">Fancy AI</div>
+          <div class="q-pl-sm gt-xs">Fancy AI</div>
           <q-tooltip :delay="200">
             {{ llmSettings.shape.useBasePrompt.description }}
           </q-tooltip>
@@ -216,7 +216,7 @@
           :on-icon="matVisibility"
           :off-icon="matVisibilityOff"
         >
-          <div class="q-pl-sm">Vision</div>
+          <div class="q-pl-sm gt-xs">Vision</div>
           <q-tooltip :delay="200">
             {{ llmSettings.shape.tryUsingVisionModels.description }}
           </q-tooltip>
