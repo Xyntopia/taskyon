@@ -2,6 +2,7 @@
 
 $primary-light: lighten($primary, 70%)
 $primary-dark: darken($primary, 10%)
+$secondary-dark: darken($secondary, 48%)
 
 .body--light
   .bg-primary2
@@ -14,6 +15,9 @@ $primary-dark: darken($primary, 10%)
 .body--dark
   background-color: $primary-dark
   text-color: white
+
+  .q-page.bg-primary2
+    background: radial-gradient(circle, $secondary-dark 0%, $secondary-dark 20%, black 70%)
 
   .bg-primary2
     background-color: $primary-dark
@@ -30,18 +34,27 @@ $primary-dark: darken($primary, 10%)
     border-radius: 10px // Adjust border radius as needed
 
   .welcome .q-card
-    background-color: black
+    background-color: inherit
     color: white
     //box-shadow: 0px 0px 10px $secondary
     box-shadow: none
     border-radius: 15px
 
+    .text-h6
+      filter: drop-shadow(0 0 5px $secondary) drop-shadow(0 0 20px $secondary)
+
     svg
       filter: drop-shadow(0 0 5px $secondary) drop-shadow(0 0 20px $secondary)
 
+    .q-panel-parent
+      background-color: inherit
+
+      svg
+        filter: drop-shadow(0 0 5px $secondary)
+
   .welcome > .q-icon
     svg
-      filter: drop-shadow(0 0 5px $secondary) drop-shadow(0 0 150px rgba($secondary,1.0))
+      filter: drop-shadow(0 0 10px $secondary)
 
 .body--dark
   .taskyon-control-button
