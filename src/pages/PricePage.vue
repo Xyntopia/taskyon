@@ -156,6 +156,14 @@ const columns: QTableProps['columns'] = [
     sortable: true,
   },
   {
+    name: 'modality',
+    label: 'vision?',
+    align: 'center',
+    field: (row: rowType) => row.architecture?.modality,
+    format: (value) => value == 'multimodal',
+    sortable: true,
+  },
+  {
     name: 'context_length',
     label: 'Context Length',
     align: 'center',
