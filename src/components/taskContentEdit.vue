@@ -22,6 +22,7 @@
         class="fit"
         @update:model-value="attachFileToChat"
         accept="*"
+        enable-paste
       >
         <q-btn dense class="fit" flat>
           <q-icon class="gt-xs" :name="matUploadFile" />

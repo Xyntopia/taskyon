@@ -187,7 +187,6 @@ import { ref, UnwrapRef, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
-import axios from 'axios';
 import type { LLMTask } from 'src/modules/taskyon/types';
 import GetStarted from 'src/components/GetStarted.vue';
 import {

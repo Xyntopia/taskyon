@@ -71,11 +71,12 @@
 
 <script setup lang="ts">
 import { matAddAPhoto, matUploadFile } from '@quasar/extras/material-icons';
-import { ref, Ref } from 'vue';
+import { onBeforeUnmount } from 'vue';
+import { onMounted, ref, Ref } from 'vue';
 
 const emit = defineEmits(['update:modelValue']);
 
-defineProps({
+const props = defineProps({
   accept: {
     type: String,
     default: 'image/*,text/*,.pdf,application/*',
@@ -92,6 +93,14 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  enablePaste: {
+    type: Boolean,
+    default: false,
+  },
+  enableWholeWindowDrop: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 //name: 'DropZone',
@@ -104,6 +113,30 @@ const handleDrop = (e: DragEvent) => {
   }
 };
 
+const handleDragOver = (e: DragEvent) => {
+  e.preventDefault();
+};
+
+const handlePaste = (e: ClipboardEvent) => {
+  console.log('paste event occured!! :)');
+  const items = e.clipboardData?.items;
+  if (items) {
+    const files: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file) {
+          files.push(file);
+        }
+      }
+    }
+    if (files.length > 0) {
+      handleFiles(files);
+    }
+  }
+};
+
 const handleFileInput = (e: Event) => {
   const files = (e.target as HTMLInputElement).files;
   if (files) {
@@ -111,7 +144,7 @@ const handleFileInput = (e: Event) => {
   }
 };
 
-const handleFiles = (files: FileList) => {
+const handleFiles = (files: FileList | File[]) => {
   const fileList = Array.from(files);
   emit('update:modelValue', fileList);
 };
@@ -121,6 +154,22 @@ const openFileInput = (/*event: Event*/) => {
     fileInput.value.click();
   }
 };
+
+onMounted(() => {
+  if (props.enablePaste) {
+    document.addEventListener('paste', handlePaste);
+  }
+  if (props.enableWholeWindowDrop) {
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('drop', handleDrop);
+  }
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('paste', handlePaste);
+  window.removeEventListener('dragover', handleDragOver);
+  window.removeEventListener('drop', handleDrop);
+});
 
 /*
 TODO: add native file directory function in case we're using tauri
