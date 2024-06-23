@@ -145,7 +145,7 @@ const columns: QTableProps['columns'] = [
     name: 'prompt_price',
     label: 'pages/0.01$',
     align: 'center',
-    field: (row: rowType) => parseFloat(row.pricing?.prompt || '0'),
+    field: (row: rowType) => row.pricing?.prompt,
     sortable: true,
   },
   {
@@ -186,13 +186,15 @@ const columns: QTableProps['columns'] = [
   },*/
 ];
 
-function calculatePricePerPage(value: number) {
-  if (value < 0) {
+function calculatePricePerPage(value: string) {
+  const price = parseFloat(value);
+  if (isNaN(price) || price < 0) {
+    console.log('nan price');
     return 'dynamic';
-  } else if (value == 0) {
+  } else if (price === 0) {
     return 'free';
   } else {
-    const ppt = 0.01 / (value * 500);
+    const ppt = 0.01 / (price * 500);
     return ppt.toFixed(1);
   }
 }
