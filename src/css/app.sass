@@ -1,6 +1,7 @@
 // app global css in Sass form
 
 $primary-light: lighten($primary, 70%)
+$primary-light-dark: lighten($primary, 65%)
 $primary-dark: darken($primary, 10%)
 $secondary-dark: darken($secondary, 48%)
 
@@ -12,12 +13,58 @@ $secondary-dark: darken($secondary, 48%)
     background-color: white
     color: black
 
+  /*.q-page.bg-primary2
+   background: radial-gradient(circle, $primary-light-dark 0%, $primary-light-dark 20%, $primary-light 50%)
+
+  .q-drawer
+    background: linear-gradient(to bottom, $primary-light, $primary-light 10%, $primary-light-dark 90%)
+
+    .q-drawer__content.bg-primary2
+      background: linear-gradient(to right, $primary-light, rgba(0, 0, 0, 0))
+
+      .q-item__section.bg-primary2
+        background: inherit
+
+  main.q-page
+    //background: radial-gradient(circle, $primary-light-dark 0%, $primary-light-dark 20%, $primary-light 75%)
+    // Define the gradient
+    background: linear-gradient(to bottom, $primary-light, $primary-light 10%, $primary-light-dark 90%)
+    //linear-gradient(to right, $primary-light 5%, black 40%, black 60%)
+    //background: linear-gradient(to right, $primary-light 5%, black 40%, black 60%)
+    //background-blend-mode: overlay
+    background-attachment: fixed
+    //background-attachment: fixed
+    background-repeat: no-repeat
+    //background-size: cover // Ensure the background covers the entire element
+
+  .welcome > .q-icon
+    svg
+      filter: drop-shadow(0 0 5px white)
+    //background: radial-gradient(circle, $primary-light-dark 0%, $primary-light-dark 20%, $primary-light 70%)
+
+  //filter: drop-shadow(0 0 5px white) drop-shadow(0 0 20px white)
+
+.body--light
+  .welcome-message-text
+    filter: drop-shadow(0 0 5px white) drop-shadow(0 0 20px white)
+
+  .welcome
+    button
+      filter: drop-shadow(0 0 2px white) drop-shadow(0 0 5px white)
+
+.body--dark
+  .welcome-message-text
+    color: $secondary
+
 .body--dark
   background-color: $primary-dark
   text-color: white
 
   .q-page.bg-primary2
     background: radial-gradient(circle, $secondary-dark 0%, $secondary-dark 20%, black 70%)
+    background-attachment: fixed
+    background-repeat: no-repeat
+    background-size: cover // Ensure the background covers the entire element
 
   .bg-primary2
     background-color: $primary-dark

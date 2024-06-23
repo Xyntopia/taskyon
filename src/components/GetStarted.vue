@@ -28,16 +28,6 @@
   </div>
 </template>
 
-<style lang="sass">
-.body--light
-  .welcome-message-text
-    filter: drop-shadow(0 0 1px $secondary)
-
-.body--dark
-  .welcome-message-text
-    color: $secondary
-</style>
-
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
 import LLMProviders from './LLMProviders.vue';
