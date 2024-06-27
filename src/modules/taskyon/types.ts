@@ -367,29 +367,48 @@ export const TaskMessage = z
   );
 export type TaskMessage = z.infer<typeof TaskMessage>;
 
-export const FunctionDescriptionMessage = z
-  .object({
-    type: z
-      .literal('functionDescription')
-      .describe(
-        'Field to indicate that this is a function description message.'
-      ),
-    functionDescription: ToolBase.or(z.string()),
-    activate: z
-      .boolean()
-      .describe('activate the function immediatly after declaration'),
-  })
-  .describe(
-    `With this message type we can send new functions to taskyon from outside, e.g. a parent to a taskyon iframe
-  taskyon will recognize them as`
-  );
+export const FunctionDescriptionMessage = ToolBase.extend({
+  type: z
+    .literal('functionDescription')
+    .describe('Field to indicate that this is a function description message.'),
+  id: z.string()
+    .describe(`A unique id for the function task. Tasks with the same id "overwrite" each other. The last one
+is the relevant one. Functions will get saved as a task object with the id as their name.
+
+this is important!, Taskyon can be configured to prevent tasks from getting created if they already exist with the same name!
+this helps in making sure, that tasks & tools which we upload to taskyon on pageload don't get duplicated
+on every pageload.
+If that option is turned on, we can use this as a version string for our tasks... And every time we want
+to update our webpage with a new AI tool, we simply change the version string...
+`),
+  duplicateTaskName: z
+    .boolean()
+    .describe(
+      'we use this here in order to prevent duplicate creation of our function declaration task'
+    ),
+});
+export type FunctionDescriptionMessage = z.infer<
+  typeof FunctionDescriptionMessage
+>;
+
+export const ClientFunctionDescription = FunctionDescriptionMessage.extend({
+  function: z
+    .function()
+    .describe(
+      'The client-side callback function which taskyon is allowed to call.'
+    ),
+}).omit({ type: true, duplicateTaskName: true });
+export type ClientFunctionDescription = z.infer<
+  typeof ClientFunctionDescription
+>;
 
 export const TaskyonMessages = z.discriminatedUnion('type', [
   RemoteFunctionCall,
   RemoteFunctionResponse,
   TaskMessage,
+  FunctionDescriptionMessage,
   z
-    .object({ type: z.enum(['taskyonReady']) })
+    .object({ type: z.literal('taskyonReady') })
     .describe('signals, that our API is ready!'),
 ]);
 export type TaskyonMessages = z.infer<typeof TaskyonMessages>;

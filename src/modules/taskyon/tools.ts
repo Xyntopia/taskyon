@@ -35,6 +35,7 @@ export type Tool = z.infer<typeof Tool>;
 
 // This function executes code in a different browser context. E.g. executing a
 // function in the context of the parent of an iframe!
+// TODO: move this into our iframe API?
 async function handleRemoteFunction(name: string, args: FunctionArguments) {
   // set up listener to listen for function call result.
   const funcRP: Promise<RemoteFunctionResponse> = new Promise(

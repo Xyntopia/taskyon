@@ -31,6 +31,9 @@
       ],
       "vue$": [
         "node_modules/vue/dist/vue.esm.js"
+      ],
+      "public": [
+        "public/*"
       ]
     }
   },

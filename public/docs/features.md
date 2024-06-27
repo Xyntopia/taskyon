@@ -10,6 +10,15 @@
 - connect to multiple LLM APIs
 - Agents
 
+## controls
+
+- copy & paste files via ctrl-v
+- upload files via button
+
+## settings:
+
+TOOD: generate using ZoD
+
 ## integration features
 
 - integrate taskyon as an iframe
