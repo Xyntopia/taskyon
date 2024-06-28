@@ -1,3 +1,6 @@
+// we can compile this file to js using:
+// swc --config-file ./swcrc exampleToolDefinition.ts -o exampleToolDefinition.js
+
 import type {
   ClientFunctionDescription,
   FunctionDescriptionMessage,
@@ -6,7 +9,7 @@ import type {
 
 const configuration = {
   model: 'llama-3',
-  verificationcode: '2o8zbackwughbck73tqbc3r',
+  config_signature: '2o8zbackwughbck73tqbc3r',
 };
 
 const tools: ClientFunctionDescription[] = [
