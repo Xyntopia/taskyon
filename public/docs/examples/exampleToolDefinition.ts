@@ -1,8 +1,8 @@
 import type {
   ClientFunctionDescription,
   FunctionDescriptionMessage,
-  RemoteFunctionCall,
-} from 'src/modules/taskyon/types';
+  TaskyonMessages,
+} from '../../../src/modules/taskyon/types';
 
 const configuration = {
   model: 'llama-3',
@@ -58,9 +58,7 @@ async function initializeTaskyon(tools: ClientFunctionDescription[]) {
 
     function waitForTaskyonReady() {
       return new Promise((resolve, reject) => {
-        const handleMessage = function (
-          event: MessageEvent<{ type?: string }>
-        ) {
+        const handleMessage = function (event: MessageEvent<TaskyonMessages>) {
           console.log('received event:', event);
           if (
             event.origin === iframeTarget &&
@@ -90,7 +88,7 @@ async function initializeTaskyon(tools: ClientFunctionDescription[]) {
     function setUpToolsListener(tools: ClientFunctionDescription[]) {
       window.addEventListener(
         'message',
-        function (event: MessageEvent<RemoteFunctionCall>) {
+        function (event: MessageEvent<TaskyonMessages>) {
           // Check the origin to ensure security
           if (event.origin !== iframeTarget) {
             console.log('Received message from unauthorized origin');

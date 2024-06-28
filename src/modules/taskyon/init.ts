@@ -1,5 +1,5 @@
 import { useTyTaskManager, addTask2Tree, TyTaskManager } from './taskManager';
-import { LLMTask, TaskyonMessages } from './types';
+import { LLMTask, TaskyonMessages, ToolBase, partialTaskDraft } from './types';
 import { createTaskyonDatabase, TaskyonDatabase } from './rxdb';
 import {
   TaskWorkerController,
@@ -19,7 +19,7 @@ function setupIframeApi(llmSettings: llmSettings, taskManager: TyTaskManager) {
   // Listen for messages from the parent page
   window.addEventListener(
     'message',
-    function (event: MessageEvent<{ task?: unknown; result?: unknown }>) {
+    function (event: MessageEvent<TaskyonMessages>) {
       // Check if the iframe is not the top-level window
       if (window !== window.top) {
         // Check if the message is from the parent window
@@ -40,6 +40,26 @@ function setupIframeApi(llmSettings: llmSettings, taskManager: TyTaskManager) {
               const newTask = {
                 ...msg.data.task,
                 content: msg.data.task.content,
+              };
+              void addTask2Tree(
+                newTask,
+                undefined,
+                llmSettings,
+                taskManager,
+                false,
+                false
+              );
+            } else if (msg.success && msg.data.type === 'functionDescription') {
+              const newFunc = ToolBase.parse(msg);
+              console.log(
+                `functionDescription was sent by ${event.origin}`,
+                newFunc
+              );
+              const newTask: partialTaskDraft = {
+                role: 'system',
+                content: {
+                  message: JSON.stringify(newFunc),
+                },
               };
               void addTask2Tree(
                 newTask,
