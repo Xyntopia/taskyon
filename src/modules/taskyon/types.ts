@@ -1,6 +1,7 @@
 import type OpenAI from 'openai';
 import { dump } from 'js-yaml';
 import { z } from 'zod';
+import { deepCopy } from './utils';
 
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type RequireSome<T, K extends keyof T> = Omit<T, K> &
@@ -688,4 +689,105 @@ export interface Model {
     prompt_tokens: string;
     completion_tokens: string;
   } | null;
+}
+const apiConfig = z.object({
+  name: z.string(),
+  baseURL: z.string(),
+  defaultModel: z.string(),
+  streamSupport: z.boolean(),
+  defaultHeaders: z.record(z.string(), z.string()).optional(),
+  routes: z.object({
+    chatCompletion: z.string(),
+    models: z.string(),
+  }),
+});
+export type apiConfig = z.infer<typeof apiConfig>;
+
+export const llmSettings = z.object({
+  // this refers to the task chain that we have currently selected. We select one task and then
+  // put the chain together by following the parentIds.
+  selectedTaskId: z.string().optional(),
+  openAIAssistantId: z.string().default(''),
+  useOpenAIAssistants: z.boolean().default(false),
+  enableOpenAiTools: z.boolean().default(false),
+  selectedApi: z.string().nullable().default('taskyon'),
+  llmApis: z.record(apiConfig).default({}),
+  siteUrl: z.string().default('https://taskyon.space'),
+  summaryModel: z.string().default('Xenova/distilbart-cnn-6-6'),
+  vectorizationModel: z.string().default('Xenova/all-MiniLM-L6-v2'),
+  maxAutonomousTasks: z.number().default(3),
+  useBasePrompt: z.boolean().default(true).describe(`
+  <p>Toggle the base prompt on/off.</p>
+  
+  This gives the AI instructions how to draw better graphics, math
+  formulas and generally make the chat a little more fancy than just plain
+  text. You can check/change the base prompt in the settings...`),
+  tryUsingVisionModels: z
+    .boolean()
+    .default(true)
+    .describe(
+      'Toggle Vision ON/OFF. If a model supports vision, we wil ry to use that for uploaded images'
+    ),
+  taskChatTemplates: z.object({
+    basePrompt: z.string().default(''),
+    constraints: z.string().default(''),
+    instruction: z.string().default(''),
+    objective: z.string().default(''),
+    tools: z.string().default(''),
+    previousTasks: z.string().default(''),
+    context: z.string().default(''),
+    toolResult: z.string().default(''),
+    task: z.string().default(''),
+  }),
+});
+
+export type llmSettings = z.infer<typeof llmSettings>;
+const appConfiguration = z.object({
+  appConfigurationUrl: z
+    .string()
+    .default('/taskyon_settings.json')
+    .describe('URL from which to load the initial app configuration'),
+  gdriveConfigurationFile: z
+    .string()
+    .default('taskyon_settings.json')
+    .describe('gDrive fileid of the configuration'),
+  expertMode: z.boolean().default(false),
+  showCosts: z.boolean().default(false),
+  gdriveDir: z.string().default('taskyon'), // not sure, if we need this here?
+  useEnterToSend: z
+    .boolean()
+    .default(true)
+    .describe(
+      'Determines, if enter will automatically send a message or rather shift-enter'
+    ),
+  guiMode: z
+    .enum(['auto', 'iframe', 'default'])
+    .default('auto')
+    .describe('Sets whether we want to have a minimalist chat or the full app'),
+});
+export type appConfiguration = z.infer<typeof appConfiguration>;
+
+export const storedSettings = z.object({
+  version: z
+    .literal(7)
+    .describe(
+      'whenever the settings change, this number will get changed as well...'
+    ),
+  appConfiguration,
+  llmSettings,
+});
+export type storedSettings = z.infer<typeof storedSettings>;
+
+export function getApiConfig(llmSettings: llmSettings) {
+  if (llmSettings.selectedApi) {
+    return llmSettings.llmApis[llmSettings.selectedApi];
+  }
+}
+
+export function getApiConfigCopy(llmSettings: llmSettings, apiName?: string) {
+  const searchName = apiName || llmSettings.selectedApi;
+  if (searchName) {
+    const api = llmSettings.llmApis[searchName];
+    return deepCopy(api);
+  }
 }

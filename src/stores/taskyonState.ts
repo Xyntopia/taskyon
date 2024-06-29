@@ -14,11 +14,10 @@ import { TaskWorkerController } from 'src/modules/taskyon/taskWorker';
 import { initTaskyon } from 'src/modules/taskyon/init';
 import defaultSettings from 'src/assets/taskyon_settings.json';
 import {
-  storedSettings,
   availableModels,
   getAssistants,
-  getApiConfig,
 } from 'src/modules/taskyon/chat';
+import { storedSettings, getApiConfig } from 'src/modules/taskyon/types';
 import { setupIframeApi } from 'src/modules/iframeApi';
 
 function removeCodeFromUrl() {

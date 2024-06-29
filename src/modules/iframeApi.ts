@@ -1,6 +1,6 @@
 import { addTask2Tree, TyTaskManager } from './taskyon/taskManager';
 import { TaskyonMessages, ToolBase, partialTaskDraft } from './taskyon/types';
-import type { llmSettings } from './taskyon/chat';
+import type { llmSettings } from './taskyon/types';
 
 /*function stringifyIfNotString(obj: unknown): string | undefined {
     if (typeof obj === 'undefined') return undefined;

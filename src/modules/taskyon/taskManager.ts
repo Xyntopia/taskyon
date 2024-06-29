@@ -1,5 +1,4 @@
-import type { LLMTask, RequireSome } from './types';
-import type { llmSettings } from './chat';
+import { LLMTask, RequireSome, llmSettings, ToolBase } from './types';
 import { v1 as uuidv1 } from 'uuid';
 import {
   TaskyonDatabase,
@@ -14,7 +13,6 @@ import type { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { loadOrCreateHNSWIndex } from './hnswIndex';
 import { extractKeywords, useNlpWorker } from './webWorkerApi';
 import { Tool } from './tools';
-import { ToolBase } from './types';
 import { taskUtils } from './taskUtils';
 import { MangoQuery } from 'rxdb';
 

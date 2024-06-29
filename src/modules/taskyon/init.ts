@@ -7,7 +7,7 @@ import {
 } from './taskWorker';
 import { executePythonScript, getFileContent, Tool } from './tools';
 import { executeJavaScript } from '../tools/executeJavaScript';
-import type { llmSettings } from './chat';
+import { llmSettings } from './types';
 
 export async function initTaskyon(
   llmSettings: llmSettings,

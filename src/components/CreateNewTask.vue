@@ -331,9 +331,14 @@
 
 <script setup lang="ts">
 import { computed, ref, toRaw, toRefs } from 'vue';
-import { countStringTokens, getApiConfig } from 'src/modules/taskyon/chat';
+import { countStringTokens } from 'src/modules/taskyon/chat';
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools';
-import { FunctionArguments } from 'src/modules/taskyon/types';
+import {
+  FunctionArguments,
+  llmSettings,
+  getApiConfig,
+  ToolBase,
+} from 'src/modules/taskyon/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { LLMTask, partialTaskDraft } from 'src/modules/taskyon/types';
@@ -341,14 +346,12 @@ import ModelSelection from 'components/ModelSelection.vue';
 import { writeFilesToOpfs } from 'src/modules/taskyon/OPFS';
 import { addTask2Tree } from 'src/modules/taskyon/taskManager';
 import ObjectTreeView from './ObjectTreeView.vue';
-import type { ToolBase } from 'src/modules/taskyon/types';
 import taskSettingsButton from './taskSettingsButton.vue';
 import taskContentEdit from './taskContentEdit.vue';
 //import CodeEditor from './CodeEditor.vue';
 import { defineAsyncComponent } from 'vue';
 import { watchDebounced } from '@vueuse/core';
 import InfoDialog from './InfoDialog.vue';
-import { llmSettings } from 'src/modules/taskyon/chat';
 import ToggleButton from './ToggleButton.vue';
 
 const CodeEditor = defineAsyncComponent(

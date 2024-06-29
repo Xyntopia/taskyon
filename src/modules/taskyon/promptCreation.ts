@@ -1,10 +1,14 @@
 import { summarizeTools } from './tools';
-import { ToolBase } from './types';
-import type { LLMTask } from './types';
+import {
+  ToolBase,
+  LLMTask,
+  llmSettings,
+  zodToYamlString,
+  StructuredResponseTypes,
+} from './types';
 import OpenAI from 'openai';
 import { dump } from 'js-yaml';
-import { zodToYamlString, StructuredResponseTypes } from './types';
-import { llmSettings, mapFunctionNames } from './chat';
+import { mapFunctionNames } from './chat';
 import type { TyTaskManager } from './taskManager';
 
 /**
@@ -193,7 +197,10 @@ export async function generateCompleteChat(
     task.allowedTools?.length && !llmSettings.enableOpenAiTools;
 
   const toolDefs = await taskManager.searchToolDefinitions();
-  let openAIConversationThread = await taskManager.buildChatThread(task.id, llmSettings.tryUsingVisionModels);
+  let openAIConversationThread = await taskManager.buildChatThread(
+    task.id,
+    llmSettings.tryUsingVisionModels
+  );
   openAIConversationThread = addPrompts(
     task,
     toolDefs,
