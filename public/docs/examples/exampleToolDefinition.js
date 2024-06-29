@@ -41,13 +41,13 @@
       },
       function: (data) => {
         console.log('Received function call with data:', data);
-        const result = `${data.parameter1}${data.parameter2}`;
+        const result = ''.concat(data.parameter1).concat(data.parameter2);
         const outputDiv = document.getElementById('output');
         if (outputDiv) {
           // Display function call information
-          const output = `Function called with parameters: ${JSON.stringify(
-            data
-          )}<br>Returned: ${JSON.stringify(result)}`;
+          const output = 'Function called with parameters: '
+            .concat(JSON.stringify(data), '<br>Returned: ')
+            .concat(JSON.stringify(result));
           outputDiv.innerHTML = output;
         }
         return result;
@@ -81,6 +81,7 @@
       }
       // Send function definition to the taskyon so that the taskyon is aware of it.
       function sendFunctionToTaskyon(toolDescription) {
+        var _taskyon_contentWindow;
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { function: _toolfunc, ...fdescr } = toolDescription;
         const fdMessage = {
@@ -88,7 +89,10 @@
           duplicateTaskName: false,
           ...fdescr,
         };
-        taskyon.contentWindow?.postMessage(fdMessage, iframeTarget);
+        (_taskyon_contentWindow = taskyon.contentWindow) === null ||
+        _taskyon_contentWindow === void 0
+          ? void 0
+          : _taskyon_contentWindow.postMessage(fdMessage, iframeTarget);
       }
       function setUpToolsListener(tools) {
         window.addEventListener('message', function (event) {
@@ -102,6 +106,7 @@
           const tool = tools[0];
           if (tool && event.data) {
             if (event.data.type === 'functionCall') {
+              var _taskyon_contentWindow;
               //if the message comes from taskyon, we can be sure that its the correct type.
               const data = event.data;
               const result = tool.function(data.arguments);
@@ -111,7 +116,10 @@
                 functionName: tool.id,
                 response: result,
               };
-              taskyon.contentWindow?.postMessage(response, iframeTarget);
+              (_taskyon_contentWindow = taskyon.contentWindow) === null ||
+              _taskyon_contentWindow === void 0
+                ? void 0
+                : _taskyon_contentWindow.postMessage(response, iframeTarget);
             }
           }
         });
