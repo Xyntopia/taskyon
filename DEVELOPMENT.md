@@ -2,7 +2,7 @@
 
 Taskyon is built on Vue3/Quasar and follows most of its best practices.
 
-For more information follow this link:  [quasar documentation](https://quasar.dev/)
+For more information follow this link: [quasar documentation](https://quasar.dev/)
 
 ## Install the project
 
@@ -20,4 +20,21 @@ quasar dev
 
 # build static webpage
 quasar build
+```
+
+## Code formatting
+
+Quasar provides a built-int code formatter. New commits can only be merged once they have been formatted with it.
+
+In visual studio code you can do it like this:
+
+- press `ctrl - shift - p`
+- search for "Format Document". If a formatter hasn#t been configured yet, choose "prettier"
+
+alternativly like this:
+
+```bash
+yarn format
+# or
+npm run format
 ```

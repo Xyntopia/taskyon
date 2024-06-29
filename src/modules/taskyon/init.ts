@@ -50,7 +50,7 @@ function setupIframeApi(llmSettings: llmSettings, taskManager: TyTaskManager) {
                 false
               );
             } else if (msg.success && msg.data.type === 'functionDescription') {
-              const newFunc = ToolBase.parse(msg);
+              const newFunc = ToolBase.parse(msg.data);
               console.log(
                 `functionDescription was sent by ${event.origin}`,
                 newFunc

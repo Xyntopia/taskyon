@@ -57,14 +57,14 @@ async function initializeTaskyon(tools: ClientFunctionDescription[]) {
     taskyon.tagName === 'IFRAME' &&
     taskyon.contentWindow !== null
   ) {
-    const iframeTarget = taskyon.src;
+    const iframeTarget = new URL(taskyon.src).origin;
 
     function waitForTaskyonReady() {
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve /*reject*/) => {
         const handleMessage = function (event: MessageEvent<TaskyonMessages>) {
-          console.log('received event:', event);
+          const eventOrigin = new URL(event.origin).origin;
           if (
-            event.origin === iframeTarget &&
+            eventOrigin === iframeTarget &&
             event.data.type === 'taskyonReady'
           ) {
             window.removeEventListener('message', handleMessage);
@@ -80,10 +80,12 @@ async function initializeTaskyon(tools: ClientFunctionDescription[]) {
 
     // Send function definition to the taskyon so that the taskyon is aware of it.
     function sendFunctionToTaskyon(toolDescription: ClientFunctionDescription) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { function: _toolfunc, ...fdescr } = toolDescription;
       const fdMessage: FunctionDescriptionMessage = {
         type: 'functionDescription',
-        ...toolDescription,
         duplicateTaskName: false, // we use this here in order to prevent duplicate creation of our function declaration task
+        ...fdescr,
       };
       taskyon.contentWindow?.postMessage(fdMessage, iframeTarget);
     }
@@ -128,4 +130,4 @@ async function initializeTaskyon(tools: ClientFunctionDescription[]) {
   }
 }
 
-void initializeTaskyon(tools);
+void initializeTaskyon(tools)

@@ -1,6 +1,8 @@
+// we can compile this file to js using:
+// swc --config-file ./swcrc exampleToolDefinition.ts -o exampleToolDefinition.js
 const configuration = {
   model: 'llama-3',
-  verificationcode: '2o8zbackwughbck73tqbc3r',
+  config_signature: '2o8zbackwughbck73tqbc3r',
 };
 const tools = [
   {
@@ -45,13 +47,13 @@ async function initializeTaskyon(tools) {
     taskyon.tagName === 'IFRAME' &&
     taskyon.contentWindow !== null
   ) {
-    const iframeTarget = taskyon.src;
+    const iframeTarget = new URL(taskyon.src).origin;
     function waitForTaskyonReady() {
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve /*reject*/) => {
         const handleMessage = function (event) {
-          console.log('received event:', event);
+          const eventOrigin = new URL(event.origin).origin;
           if (
-            event.origin === iframeTarget &&
+            eventOrigin === iframeTarget &&
             event.data.type === 'taskyonReady'
           ) {
             window.removeEventListener('message', handleMessage);
@@ -65,10 +67,12 @@ async function initializeTaskyon(tools) {
     }
     // Send function definition to the taskyon so that the taskyon is aware of it.
     function sendFunctionToTaskyon(toolDescription) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { function: _toolfunc, ...fdescr } = toolDescription;
       const fdMessage = {
         type: 'functionDescription',
-        ...toolDescription,
         duplicateTaskName: false,
+        ...fdescr,
       };
       taskyon.contentWindow?.postMessage(fdMessage, iframeTarget);
     }
