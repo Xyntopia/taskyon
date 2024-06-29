@@ -19,6 +19,7 @@ import {
   getAssistants,
   getApiConfig,
 } from 'src/modules/taskyon/chat';
+import { setupIframeApi } from 'src/modules/iframeApi';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -232,8 +233,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     stateRefs.keys,
     taskWorkerController,
     logError,
-    TaskList,
-    $q.platform.within.iframe
+    TaskList
   );
   async function getTaskManager() {
     return await taskManager;
@@ -326,6 +326,14 @@ export const useTaskyonStore = defineStore(storeName, () => {
     stateRefs.version = 0 as typeof stateRefs.version; // set the version to 0, hoping, that this will trigger a reset on page reload..
     void sleep(1000).then(() => (window.location.href = '/'));
   }
+  
+  // set up iframe API
+  void getTaskManager().then((tm) => {
+    if ($q.platform.within.iframe) {
+      void setupIframeApi(stateRefs.llmSettings, tm);
+    }
+  });
+
   // it is *SUPERIMPORTANT*  that we ONLY return computed refs & functions in the store EXCEPT
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
