@@ -7,6 +7,6 @@
     "target": "es2022"
   },
   "module": {
-    "type": "nodenext"
+    "type": "umd"
   }
 }
