@@ -46,13 +46,17 @@ export function setupIframeApi(
                 false
               );
             } else if (msg.success && msg.data.type === 'functionDescription') {
-              const newFunc = ToolBase.parse(msg.data);
+              // TODO: somehow eslint doesn't recognize problems here, when there is a type mismatch
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              const { id, type, duplicateTaskName, ...rest } = msg.data;
+              const newFunc: ToolBase = rest;
               console.log(
                 `functionDescription was sent by ${event.origin}`,
                 newFunc
               );
               const newTask: partialTaskDraft = {
                 role: 'system',
+                name: id,
                 content: {
                   message: JSON.stringify(newFunc),
                 },
@@ -64,7 +68,7 @@ export function setupIframeApi(
                 llmSettings,
                 taskManager,
                 false,
-                false
+                duplicateTaskName
               );
             } else {
               // TODO: also add this as error, so that it gets thrown back to the parent
