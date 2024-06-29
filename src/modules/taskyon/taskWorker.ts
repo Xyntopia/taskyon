@@ -378,10 +378,10 @@ async function generateFollowUpTasksFromResult(
     taskCosts: finishedTask.debugging.taskCosts,
   };
   // use helper function to make code more concise ;)
-  const addFollowUpTask = (execute: boolean, taskDraft: partialTaskDraft) => {
-    taskDraft.debugging = { ...taskDraft.debugging, ...childCosts };
+  const addFollowUpTask = (execute: boolean, partialTask: partialTaskDraft) => {
+    partialTask.debugging = { ...partialTask.debugging, ...childCosts };
     void addTask2Tree(
-      taskDraft,
+      partialTask,
       finishedTask.id,
       llmSettings,
       taskManager,
