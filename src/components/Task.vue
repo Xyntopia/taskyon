@@ -34,10 +34,20 @@
           </q-expansion-item>
         </div>
         <div v-else-if="'message' in task.content" class="col">
+          <q-expansion-item
+            v-if="taskFunction"
+            dense
+            :icon="mdiTools"
+            :label="`function: ${taskFunction.name}`"
+          >
+            <p style="white-space: pre-wrap">
+              {{ task.content.message }}
+            </p>
+          </q-expansion-item>
           <ty-markdown
             no-line-numbers
             style="min-width: 50px"
-            v-if="
+            v-else-if="
               state.taskState[task.id]?.markdownEnabled != false &&
               'message' in task.content
             "
@@ -236,13 +246,13 @@
 import ToolResultWidget from 'components/ToolResultWidget.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import TokenUsage from 'components/TokenUsage.vue';
-import { LLMTask, partialTaskDraft } from 'src/modules/taskyon/types';
+import { LLMTask, partialTaskDraft, ToolBase } from 'src/modules/taskyon/types';
 import tyMarkdown from './tyMarkdown.vue';
 import { computed, ref } from 'vue';
 import { FileMappingDocType } from 'src/modules/taskyon/rxdb';
 import { dump } from 'js-yaml';
 import TaskButtons from './TaskButtons.vue';
-import { mdiFileDocument, mdiHeadCog } from '@quasar/extras/mdi-v6';
+import { mdiFileDocument, mdiHeadCog, mdiTools } from '@quasar/extras/mdi-v6';
 import {
   matCalculate,
   matMonetizationOn,
@@ -268,6 +278,22 @@ if ('uploadedFiles' in props.task.content) {
     fileMappings.value = fm;
   })(props.task.content.uploadedFiles);
 }
+
+const taskFunction = computed(() => {
+  if (
+    props.task.label?.includes('function') &&
+    'message' in props.task.content
+  ) {
+    try {
+      const res = ToolBase.safeParse(JSON.parse(props.task.content.message));
+      return res.success ? res.data : undefined;
+    } catch (err) {
+      return undefined;
+    }
+  } else {
+    return undefined;
+  }
+});
 
 async function taskDraftFromTask(taskId: string) {
   // we are copying the current task with json stringify
