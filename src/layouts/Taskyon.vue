@@ -127,6 +127,16 @@
             </q-list>
           </q-menu>
         </q-btn>
+        <q-btn
+          v-else
+          flat
+          dense
+          size="xs"
+          icon-right="svguse:taskyon_mono_opt.svg#taskyon"
+          no-caps
+        >
+          <div class="q-px-sm">taskyon.space</div>
+        </q-btn>
       </component>
     </q-header>
 
@@ -206,7 +216,7 @@
 </style>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import DarkModeButton from 'components/DarkModeButton.vue';
 import { defineAsyncComponent } from 'vue';
 import type { useTaskyonStore } from 'stores/taskyonState';
@@ -237,6 +247,10 @@ void import('stores/taskyonState').then(({ useTaskyonStore }) => {
   state.value = useTaskyonStore();
 });
 
-const minMode = state.value?.minimalGui || false;
-const btnSize = minMode ? 'xs' : 'md';
+const minMode = computed(() => {
+  return state.value?.minimalGui;
+});
+const btnSize = computed(() => {
+  return minMode.value ? 'xs' : 'md';
+});
 </script>

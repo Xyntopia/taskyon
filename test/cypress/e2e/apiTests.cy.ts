@@ -4,7 +4,7 @@
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
 // This test will pass when run against a clean Quasar project
-describe('Landing', () => {
+describe('taskyon API', () => {
   beforeEach(() => {
     cy.visit('/');
 
@@ -24,7 +24,7 @@ describe('Landing', () => {
       });
     });*/
   });
-  it('should be able to send a free message and  get a response', () => {
+  it('should be able to interact with taskyon API', () => {
     cy.title().should('include', 'taskyon');
 
     cy.get('.q-btn').contains('Use free Taskyon (low quality)').click();
@@ -86,7 +86,7 @@ describe('Landing', () => {
       .should('exist')
       .and('match', /\d+/); // Check if it contains a number*/
 
-    // Check if the estimated tokens element is present and contains a number
+    // Check Tool Testsif the estimated tokens element is present and contains a number
 
     //.and('match', /^\d+/); // Check if it contains a number
 
