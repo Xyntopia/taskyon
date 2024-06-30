@@ -412,6 +412,7 @@ async function generateFollowUpTasksFromResult(
         throw Error(
           "It doesn't work right now! we need to create a sequential task chain here and add each tasks new ID to the net one as a parent"
         );
+        // TODO:  enable this in case of an error...
         addFollowUpTask(false, {
           state: 'Completed',
           ...td,
