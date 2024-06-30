@@ -37,14 +37,7 @@ export function setupIframeApi(
                 ...msg.data.task,
                 content: msg.data.task.content,
               };
-              void addTask2Tree(
-                newTask,
-                undefined,
-                llmSettings,
-                taskManager,
-                false,
-                false
-              );
+              void addTask2Tree(newTask, undefined, taskManager, false, false);
             } else if (msg.success && msg.data.type === 'functionDescription') {
               // TODO: somehow eslint doesn't recognize problems here, when there is a type mismatch
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -65,7 +58,6 @@ export function setupIframeApi(
               void addTask2Tree(
                 newTask,
                 undefined,
-                llmSettings,
                 taskManager,
                 false,
                 duplicateTaskName

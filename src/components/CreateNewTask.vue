@@ -620,10 +620,10 @@ async function addNewTask(execute = true) {
     fileTaskId = await addTask2Tree(
       fileTaskObj,
       state.llmSettings.selectedTaskId, // parent
-      state.llmSettings,
       await state.getTaskManager(),
       false // we do not want to execute the file object, we want to use the users prompt...
     );
+    state.llmSettings.selectedTaskId = fileTaskId;
     fileAttachments.value = [];
   }
 
@@ -631,13 +631,13 @@ async function addNewTask(execute = true) {
   //          otherwise, it won't get executed but simply saved into the tree
   console.log('adding new task, execute?', execute);
   const newTask = { ...currentnewTask.value };
-  void addTask2Tree(
+  const newTaskId = await addTask2Tree(
     newTask,
     fileTaskId || state.llmSettings.selectedTaskId, //parent
-    state.llmSettings,
     await state.getTaskManager(),
     execute // execute right away...
   );
+  state.llmSettings.selectedTaskId = newTaskId;
 
   // and empty out the contents for the next chat message :)
   if (currentnewTask.value.role === 'user') {

@@ -378,18 +378,21 @@ async function generateFollowUpTasksFromResult(
     taskCosts: finishedTask.debugging.taskCosts,
   };
   // use helper function to make code more concise ;)
-  const addFollowUpTask = (execute: boolean, partialTask: partialTaskDraft) => {
+  const addFollowUpTask = async (
+    execute: boolean,
+    partialTask: partialTaskDraft
+  ) => {
     partialTask.debugging = { ...partialTask.debugging, ...childCosts };
-    void addTask2Tree(
+    const newTaskId = await addTask2Tree(
       partialTask,
       finishedTask.id,
-      llmSettings,
       taskManager,
       // interrupt execution if interrupted flag is shown!
       // this makes sure that results are still saved, even if we stop any
       // further execution
       taskWorkerController.isInterrupted() ? false : execute
     );
+    llmSettings.selectedTaskId = newTaskId;
   };
   const taskTemplate: Partial<LLMTask> = {
     configuration: finishedTask.configuration,
@@ -400,7 +403,7 @@ async function generateFollowUpTasksFromResult(
     // TODO: use a switch statement here :)
     if (finishedTask.result.type === 'ChatAnswer') {
       if (choice) {
-        addFollowUpTask(false, {
+        void addFollowUpTask(false, {
           state: 'Completed',
           role: choice.message.role,
           content: { message: choice.message.content || '' },
@@ -413,7 +416,7 @@ async function generateFollowUpTasksFromResult(
           "It doesn't work right now! we need to create a sequential task chain here and add each tasks new ID to the net one as a parent"
         );
         // TODO:  enable this in case of an error...
-        addFollowUpTask(false, {
+        void addFollowUpTask(false, {
           state: 'Completed',
           ...td,
         });
@@ -422,7 +425,7 @@ async function generateFollowUpTasksFromResult(
       finishedTask.result.toolResult &&
       ['ToolResult', 'ToolError'].includes(finishedTask.result.type)
     ) {
-      addFollowUpTask(true, {
+      void addFollowUpTask(true, {
         ...taskTemplate,
         state: 'Open',
         role: 'assistant',
@@ -433,7 +436,7 @@ async function generateFollowUpTasksFromResult(
         choice?.message.content || ''
       );
       if (taskDraft) {
-        addFollowUpTask(execute, deepMerge(taskTemplate, taskDraft));
+        await addFollowUpTask(execute, deepMerge(taskTemplate, taskDraft));
       }
       // TODO: integrate ToolCall with StruturedChatResponse
     } else if (finishedTask.result.type === 'ToolCall') {
@@ -443,7 +446,7 @@ async function generateFollowUpTasksFromResult(
           await taskManager.searchToolDefinitions()
         );
         if (functionCall) {
-          addFollowUpTask(
+          void addFollowUpTask(
             true,
             deepMerge(taskTemplate, {
               role: 'function',
@@ -465,7 +468,7 @@ async function generateFollowUpTasksFromResult(
         JSON.stringify({ message: error.message, cause: error.cause }, null, 3)
       )
     );
-    addFollowUpTask(
+    void addFollowUpTask(
       false,
       deepMerge(taskTemplate, {
         state: 'Completed',

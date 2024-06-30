@@ -143,7 +143,6 @@ async function taskContentHash(task: LLMTask) {
 export async function addTask2Tree(
   task: RequireSome<Partial<LLMTask>, 'role' | 'content'>,
   parentID: string | undefined,
-  llmSettings: llmSettings,
   taskManager: TyTaskManager,
   execute = true,
   duplicateTaskName = true
@@ -220,9 +219,6 @@ export async function addTask2Tree(
     console.log('task already has a name:', newTask.name);
   }
 
-  // TODO: move this out of here..  this should be done in a different location...
-  //       its more part of the UI.
-  llmSettings.selectedTaskId = newTask.id;
   return newTask.id;
 }
 

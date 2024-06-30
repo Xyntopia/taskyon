@@ -58,10 +58,10 @@ async function addTasks() {
     parentId = await addTask2Tree(
       task,
       parentId, //parent
-      state.llmSettings,
       await state.getTaskManager(),
       false // should we execute the task? // only the last one obviously ;)
     );
+    state.llmSettings.selectedTaskId = parentId;
   }
   // TODO: optionally execute the last task...
 }
