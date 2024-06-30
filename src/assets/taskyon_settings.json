@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "appConfiguration": {
     "appConfigurationUrl": "/taskyon_settings.json",
     "gdriveConfigurationFile": "taskyon_settings.json",
@@ -14,6 +14,12 @@
     "useOpenAIAssistants": false,
     "enableOpenAiTools": false,
     "selectedApi": null,
+    "taskDraft": {
+      "role": "user",
+      "content": {
+        "message": ""
+      }
+    },
     "llmApis": {
       "taskyon": {
         "name": "taskyon",

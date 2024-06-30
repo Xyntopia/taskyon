@@ -235,11 +235,6 @@ const TaskContent = z.union([
   UploadedFilesContent,
   ToolResultContent,
 ]);
-export const ContentDraft = MessageContent.merge(FunctionCallContent)
-  .merge(UploadedFilesContent)
-  .merge(ToolResultContent)
-  .partial();
-export type ContentDraft = z.infer<typeof ContentDraft>;
 
 // TODO: add an "extended" task and put all information in there which we don't really "need"
 //       to save in the database. E.g. how many follow-up tasks are allowed, how many
@@ -247,8 +242,9 @@ export type ContentDraft = z.infer<typeof ContentDraft>;
 export const LLMTask = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   name: z.string().optional(),
-  // this is the actual content of the task
-  content: TaskContent,
+  content: TaskContent.default({ message: '' }).describe(
+    'this is the actual content of the task'
+  ),
   state: TaskState,
   label: z.array(z.string()).optional(),
   context: z.record(z.string(), z.string()).optional(),
@@ -716,6 +712,12 @@ export const llmSettings = z.object({
   summaryModel: z.string().default('Xenova/distilbart-cnn-6-6'),
   vectorizationModel: z.string().default('Xenova/all-MiniLM-L6-v2'),
   maxAutonomousTasks: z.number().default(3),
+  taskDraft: partialTaskDraft.default({
+    role: 'user',
+    content: {
+      message: '',
+    },
+  }),
   useBasePrompt: z.boolean().default(true).describe(`
   <p>Toggle the base prompt on/off.</p>
   
@@ -740,8 +742,8 @@ export const llmSettings = z.object({
     task: z.string().default(''),
   }),
 });
-
 export type llmSettings = z.infer<typeof llmSettings>;
+
 const appConfiguration = z.object({
   appConfigurationUrl: z
     .string()
@@ -769,9 +771,9 @@ export type appConfiguration = z.infer<typeof appConfiguration>;
 
 export const storedSettings = z.object({
   version: z
-    .literal(7)
+    .literal(8)
     .describe(
-      'whenever the settings change, this number will get changed as well...'
+      'whenever the schema of the settings change, this number will get changed as well...'
     ),
   appConfiguration,
   llmSettings,
