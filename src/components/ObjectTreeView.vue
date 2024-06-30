@@ -14,7 +14,7 @@
           type="textarea"
           :debounce="debounce"
           :model-value="prop.node.value"
-          @update:modelValue="(value) => updateValue(prop.node.path, value)"
+          @update:modelValue="(value: unknown) => updateValue(prop.node.path, value)"
         >
         </q-input>
       </div>
@@ -28,7 +28,7 @@
         <json-input
           class="col"
           :model-value="prop.node.value"
-          @update:modelValue="(value) => updateValue(prop.node.path, value)"
+          @update:modelValue="(value: unknown) => updateValue(prop.node.path, value)"
         />
       </div>
     </template>
@@ -47,7 +47,7 @@
           autogrow
           :debounce="debounce"
           :model-value="prop.node.value"
-          @update:modelValue="(value) => updateValue(prop.node.path, value)"
+          @update:modelValue="(value: unknown) => updateValue(prop.node.path, value)"
         >
         </q-input>
       </div>
@@ -60,7 +60,7 @@
         left-label
         color="secondary"
         :model-value="prop.node.value"
-        @update:modelValue="(value) => updateValue(prop.node.path, value)"
+        @update:modelValue="(value: unknown) => updateValue(prop.node.path, value)"
       />
     </template>
   </q-tree>

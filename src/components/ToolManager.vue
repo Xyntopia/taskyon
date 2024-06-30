@@ -69,16 +69,19 @@ void getAllTools().then((tools) => {
 const selectedToolName = ref<string>('');
 
 const taskParser = computed(() => {
-  try {
-    const jsonToolResult = ToolBase.strict().safeParse(
-      JSON.parse(state.taskDraft.content?.message || '')
-    );
-    return jsonToolResult.success
-      ? jsonToolResult.success
-      : jsonToolResult.error;
-  } catch (error) {
-    return error;
+  if ('message' in state.llmSettings.taskDraft.content) {
+    try {
+      const jsonToolResult = ToolBase.strict().safeParse(
+        JSON.parse(state.llmSettings.taskDraft.content.message)
+      );
+      return jsonToolResult.success
+        ? jsonToolResult.success
+        : jsonToolResult.error;
+    } catch (error) {
+      return error;
+    }
   }
+  return 'task is not a message task!';
 });
 
 function newToolStructure() {
@@ -103,8 +106,8 @@ function newToolStructure() {
   },
   "code": "(parameter1, parameter2 = 'default parameter :)') => {return parameter1 + ' ' + parameter2;}"
 }`;
-  state.taskDraft.content = {
-    ...state.taskDraft.content,
+  state.llmSettings.taskDraft.content = {
+    ...state.llmSettings.taskDraft.content,
     message: tool,
   };
 }

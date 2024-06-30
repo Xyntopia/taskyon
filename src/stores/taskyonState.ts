@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia';
 import { watch, computed, reactive, toRefs, ref } from 'vue';
 import type {
-  ContentDraft,
   FunctionArguments,
   Model,
   LLMTask,
@@ -13,10 +12,7 @@ import { useQuasar } from 'quasar';
 import { TaskWorkerController } from 'src/modules/taskyon/taskWorker';
 import { initTaskyon } from 'src/modules/taskyon/init';
 import defaultSettings from 'src/assets/taskyon_settings.json';
-import {
-  availableModels,
-  getAssistants,
-} from 'src/modules/taskyon/chat';
+import { availableModels, getAssistants } from 'src/modules/taskyon/chat';
 import { storedSettings, getApiConfig } from 'src/modules/taskyon/types';
 import { setupIframeApi } from 'src/modules/iframeApi';
 
@@ -62,7 +58,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
     allowedToolsExpand: true,
     showTaskData: false,
     drawerRight: false,
-    taskDraft: {} as Partial<LLMTask> & { content?: ContentDraft },
     modelHistory: [] as string[],
     newToolDraftCode: '' as string,
     draftParameters: {} as Record<string, FunctionArguments>,
@@ -325,7 +320,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     stateRefs.version = 0 as typeof stateRefs.version; // set the version to 0, hoping, that this will trigger a reset on page reload..
     void sleep(1000).then(() => (window.location.href = '/'));
   }
-  
+
   // set up iframe API
   void getTaskManager().then((tm) => {
     if ($q.platform.within.iframe) {

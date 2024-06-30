@@ -65,11 +65,11 @@ void getAllTools().then((tools) => {
 });
 
 const structuredResponsePrompt = computed(() => {
-  if (state.taskDraft.content) {
+  if (state.llmSettings.taskDraft.content) {
     const task: Pick<LLMTask, 'role' | 'content' | 'allowedTools' | 'result'> =
       {
-        content: state.taskDraft.content,
-        allowedTools: state.taskDraft.allowedTools,
+        content: state.llmSettings.taskDraft.content,
+        allowedTools: state.llmSettings.taskDraft.allowedTools,
         role: 'user',
       };
     task.role = 'user';

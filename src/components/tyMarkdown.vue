@@ -87,7 +87,7 @@ const $q = useQuasar();
 const id = getCurrentInstance()?.uid || '';
 
 const props = defineProps<{
-  src: string;
+  src?: string;
   noMermaid?: boolean;
 }>();
 

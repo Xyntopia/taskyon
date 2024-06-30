@@ -70,7 +70,7 @@
         fill-input
         use-input
         input-debounce="0"
-        @filter="(val, update) => filterModels(val, update, modelOptions)"
+        @filter="(val: string, update: updateCallBack) => filterModels(val, update, modelOptions)"
       >
       </q-select>
       <div v-if="state.appConfiguration.expertMode" style="font-size: 0.5em">
@@ -180,9 +180,11 @@ function onApiSelect(modelValue: string | null) {
 
 const filteredOptions = ref<{ label: string; value: string }[]>([]);
 
+type updateCallBack = (callback: () => void) => void;
+
 const filterModels = (
   val: string,
-  update: (callback: () => void) => void,
+  update: updateCallBack,
   optionsRef: { label: string; value: string }[]
 ) => {
   update(() => {

@@ -88,13 +88,7 @@
     </div>
     <!--Create new task area-->
     <q-page-sticky position="bottom" :offset="[0, 0]" expand class="print-hide">
-      <q-resize-observer
-        @resize="
-          (size) => {
-            bottomPadding = size.height;
-          }
-        "
-      />
+      <q-resize-observer @resize="handleResize" />
       <div class="col q-pa-xs" style="max-width: 48rem">
         <CreateNewTask
           v-if="
@@ -280,4 +274,8 @@ async function updateTaskThread(taskId: string | undefined) {
 
 void updateTaskThread(state.llmSettings.selectedTaskId);
 watch(() => state.llmSettings.selectedTaskId, updateTaskThread);
+
+function handleResize(size: { height: number }) {
+  bottomPadding.value = size.height;
+}
 </script>

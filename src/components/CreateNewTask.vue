@@ -6,11 +6,15 @@
       <div>
         <taskContentEdit
           class="text-body1"
-          v-if="!selectedTaskType && !codingMode"
-          :model-value="state.taskDraft.content?.message"
+          v-if="
+            !selectedTaskType &&
+            !codingMode &&
+            'message' in state.llmSettings.taskDraft.content
+          "
+          :model-value="state.llmSettings.taskDraft.content.message"
           @update:modelValue="
             (value) => {
-              state.taskDraft.content = {
+              state.llmSettings.taskDraft.content = {
                 message: value || '',
               };
             }
@@ -19,12 +23,18 @@
           :attach-file-to-chat="attachFileToDraft"
           :use-enter-to-send="state.appConfiguration.useEnterToSend"
         />
-        <div v-else-if="!selectedTaskType && codingMode">
+        <div
+          v-else-if="
+            !selectedTaskType &&
+            codingMode &&
+            'message' in state.llmSettings.taskDraft.content
+          "
+        >
           <CodeEditor
-            :model-value="state.taskDraft.content?.message"
+            :model-value="state.llmSettings.taskDraft.content.message"
             @update:modelValue="
               (value) => {
-                state.taskDraft.content = {
+                state.llmSettings.taskDraft.content = {
                   message: value || '',
                 };
               }
@@ -43,10 +53,18 @@
             ><q-tooltip>Save task without executing it...</q-tooltip></q-btn
           >
         </div>
-        <div v-else-if="selectedTaskType" class="row">
+        <div
+          v-else-if="
+            selectedTaskType &&
+            'functionCall' in state.llmSettings.taskDraft.content
+          "
+          class="row"
+        >
           <ObjectTreeView
             class="col"
-            :model-value="state.taskDraft.content?.functionCall?.arguments"
+            :model-value="
+              state.llmSettings.taskDraft.content.functionCall.arguments
+            "
             input-field-behavior="auto"
             :separate-labels="false"
           />
@@ -421,7 +439,7 @@ const currentDefaultBotName = computed(() => {
     }
   }
   const modelName =
-    state.taskDraft.configuration?.model ||
+    state.llmSettings.taskDraft.configuration?.model ||
     getApiConfig(state.llmSettings)?.defaultModel;
   return modelName;
 });
@@ -431,10 +449,10 @@ const currentChatApi = ref<string>(toRaw(state.llmSettings.selectedApi) || '');
 
 const allowedTools = computed({
   get() {
-    return state.taskDraft.allowedTools || [];
+    return state.llmSettings.taskDraft.allowedTools || [];
   },
   set(newValue) {
-    state.taskDraft.allowedTools = newValue;
+    state.llmSettings.taskDraft.allowedTools = newValue;
   },
 });
 
@@ -460,13 +478,17 @@ const handleBotNameUpdate = ({
 };
 
 const selectedTaskType = computed(() => {
-  return state.taskDraft.content?.functionCall?.name;
+  const task = state.llmSettings.taskDraft;
+  if (task.content && 'functionCall' in task.content) {
+    return task.content.functionCall.name;
+  }
+  return undefined;
 });
 
 async function setTaskType(tasktype: string | undefined | null) {
   console.log('change tasktype to:', tasktype);
   if (tasktype) {
-    state.taskDraft.role = 'function';
+    state.llmSettings.taskDraft.role = 'function';
     const toolName = tasktype;
     const tool = (await getAllTools())[tasktype];
     if (!tool) {
@@ -479,27 +501,29 @@ async function setTaskType(tasktype: string | undefined | null) {
       ...(defaultParams || {}),
       ...(savedParams || {}),
     };
-    state.taskDraft.content = {
-      ...state.taskDraft.content,
+    state.llmSettings.taskDraft.content = {
+      ...state.llmSettings.taskDraft.content,
       functionCall: {
         name: tasktype,
         arguments: funcArguments,
       },
     };
   } else {
-    state.taskDraft.role = 'user';
-    delete state.taskDraft.content?.functionCall;
+    state.llmSettings.taskDraft.role = 'user';
+    state.llmSettings.taskDraft.content = {
+      message: '',
+    };
   }
 }
 
 const estimatedTokens = ref<number>(0);
 watchDebounced(
-  () => state.taskDraft.content,
+  () => state.llmSettings.taskDraft.content,
   () => {
     void (async () => {
       // Tokenize the message
       estimatedTokens.value = await countStringTokens(
-        JSON.stringify(state.taskDraft.content) || ''
+        JSON.stringify(state.llmSettings.taskDraft.content) || ''
       );
     })();
   },
@@ -507,18 +531,18 @@ watchDebounced(
 );
 
 async function toggleSelectedTools() {
-  if (state.taskDraft.allowedTools) {
-    if (state.taskDraft.allowedTools.length > 0) {
-      state.taskDraft.allowedTools = [];
+  if (state.llmSettings.taskDraft.allowedTools) {
+    if (state.llmSettings.taskDraft.allowedTools.length > 0) {
+      state.llmSettings.taskDraft.allowedTools = [];
       return;
     }
   }
-  state.taskDraft.allowedTools = Object.keys(await getAllTools());
+  state.llmSettings.taskDraft.allowedTools = Object.keys(await getAllTools());
 }
 
 const currentnewTask = computed(() => {
   let task: Partial<LLMTask> = {
-    ...state.taskDraft,
+    ...state.llmSettings.taskDraft,
     ...(props.forceTaskProps || {}),
   };
   if (currentModel.value) {
@@ -531,9 +555,14 @@ const currentnewTask = computed(() => {
     if (selectedTaskType.value) {
       // here we have a function task ;)
       task.role = 'function';
-    } else if (state.taskDraft.content?.message) {
+    } else if (
+      state.llmSettings.taskDraft.content &&
+      'message' in state.llmSettings.taskDraft.content
+    ) {
       task.role = 'user';
-      task.content = { message: state.taskDraft.content.message.trim() };
+      task.content = {
+        message: state.llmSettings.taskDraft.content.message.trim(),
+      };
     }
   }
   return task as LLMTask; // we can do this, because we defined the "role"
@@ -612,7 +641,7 @@ async function addNewTask(execute = true) {
 
   // and empty out the contents for the next chat message :)
   if (currentnewTask.value.role === 'user') {
-    state.taskDraft.content = undefined;
+    state.llmSettings.taskDraft.content = { message: '' };
     await setTaskType(undefined);
   }
 }

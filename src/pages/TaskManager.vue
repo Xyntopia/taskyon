@@ -18,14 +18,14 @@
           name: 'id',
           required: true,
           label: 'id',
-          field: (task) => task.id,
+          field: (task: LLMTask) => task.id,
         },
         {
           name: 'score',
           sortable: true,
           required: true,
           label: 'score',
-          field: (row) => 1 / (row.distance + 0.001),
+          field: (row: typeof searchResults.value) => 1 / (row.distance + 0.001),
         },
         {
           name: 'task',
@@ -78,7 +78,7 @@ import { findLeafTasks } from 'src/modules/taskyon/taskManager';
 import { matPlayArrow, matSync } from '@quasar/extras/material-icons';
 
 const state = useTaskyonStore();
-const searchResults = ref<LLMTask[]>([]);
+const searchResults = ref<(LLMTask & { distance: number })[]>([]);
 const syncProgressString = ref('0/0');
 const syncProgress = ref(0.0);
 const taskCount = ref(0);

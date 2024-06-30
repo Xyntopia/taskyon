@@ -37,7 +37,10 @@
           <ty-markdown
             no-line-numbers
             style="min-width: 50px"
-            v-if="state.taskState[task.id]?.markdownEnabled != false"
+            v-if="
+              state.taskState[task.id]?.markdownEnabled != false &&
+              'message' in task.content
+            "
             :src="task.content.message"
           />
           <div v-else class="raw-markdown q-mb-md">
@@ -233,7 +236,7 @@
 import ToolResultWidget from 'components/ToolResultWidget.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import TokenUsage from 'components/TokenUsage.vue';
-import type { LLMTask } from 'src/modules/taskyon/types';
+import { LLMTask, partialTaskDraft } from 'src/modules/taskyon/types';
 import tyMarkdown from './tyMarkdown.vue';
 import { computed, ref } from 'vue';
 import { FileMappingDocType } from 'src/modules/taskyon/rxdb';
@@ -272,13 +275,10 @@ async function taskDraftFromTask(taskId: string) {
     await (await state.getTaskManager()).getTask(taskId)
   );
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-  const task: Partial<LLMTask> = JSON.parse(jsonTask);
-  task.id = 'draft';
+  const task = LLMTask.partial().parse(JSON.parse(jsonTask));
   task.debugging = {};
-  task.childrenIDs = [];
   task.state = 'Open';
-  delete task.result;
-  state.taskDraft = task;
+  state.llmSettings.taskDraft = partialTaskDraft.parse(task);
   return task;
 }
 
