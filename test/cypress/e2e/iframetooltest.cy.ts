@@ -4,15 +4,15 @@
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
 // This test will pass when run against a clean Quasar project
-describe('Tool Tests', () => {
+describe('iframe integration', () => {
   beforeEach(() => {
-    cy.visit('/');
+    /*cy.visit('./public/docs/examples/simpleExample.html');
 
     // Clear local storage
     cy.clearLocalStorage();
 
     // Clear cookies
-    cy.clearCookies();
+    cy.clearCookies();*/
 
     // Optionally, you can clear indexedDB if your app uses it
     // somehow we're getting a lot of errors here...
@@ -28,9 +28,24 @@ describe('Tool Tests', () => {
     'Should be able to create a tool and use it through the iframe',
     { baseUrl: null },
     () => {
-      cy.title().should('include', 'taskyon');
+      cy.visit('./public/docs/examples/simpleExample.html');
 
-      // cy.contains('your message').type('hello world!{enter}');
+      // Clear local storage
+      cy.clearLocalStorage();
+  
+      // Clear cookies
+      cy.clearCookies();
+  
+      cy.get('#taskyon').should('exist')
+
+      cy.get('a[href="/settings"]').should('not.exist');
+
+
+      // TODO: make sure we are in minimal mode and all the other stuff required for embedded taskyon
+
+      //cy.title().should('include', 'taskyon');
+
+      cy.contains('your message').type('hello world!{enter}');
       //cy.get('li').first().click();
       //cy.contains('Clicks on todos: 1').should('exist');
 
