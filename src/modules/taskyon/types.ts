@@ -777,8 +777,22 @@ export const storedSettings = z.object({
     ),
   appConfiguration,
   llmSettings,
+  signature: z.string().optional()
+    .describe(`By specifying a signature it is possible to circumvent
+usage of an API key. This way you can give your users access to taskyon with your own restrictions.`),
 });
 export type storedSettings = z.infer<typeof storedSettings>;
+
+export const partialTyConfiguration = storedSettings
+  .extend({
+    appConfiguration: appConfiguration.partial(),
+    llmSettings: llmSettings.partial(),
+  })
+  .partial()
+  .describe(
+    'This can be used to update the configuration through iframe, json or URL'
+  );
+export type partialTyConfiguration = z.infer<typeof partialTyConfiguration>;
 
 export function getApiConfig(llmSettings: llmSettings) {
   if (llmSettings.selectedApi) {
