@@ -6,6 +6,7 @@ export default defineConfig({
   screenshotsFolder: 'test/cypress/screenshots',
   videosFolder: 'test/cypress/videos',
   video: true,
+  chromeWebSecurity: false,
   e2e: {
     // setupNodeEvents(on, config) {},
     baseUrl: 'http://localhost:8080',
