@@ -4,7 +4,7 @@
       flat
       rounded
       dense
-      :icon="matInfo"
+      :icon="matHelpOutline"
       @click="showInfo = true"
       v-bind="$attrs"
     >
@@ -24,7 +24,7 @@
 import { ref } from 'vue';
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
 const showInfo = ref(false);
-import { matInfo } from '@quasar/extras/material-icons';
+import { matHelpOutline } from '@quasar/extras/material-icons';
 defineProps({
   infoText: {
     type: String,

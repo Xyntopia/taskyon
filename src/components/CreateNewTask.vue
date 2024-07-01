@@ -78,11 +78,7 @@
               v-if="
                 currentModel && state.modelLookUp[currentModel]?.description
               "
-              dense
-              flat
               size="xs"
-              small
-              :icon="matInfo"
               :info-text="state.modelLookUp[currentModel]?.description"
             />
             <q-btn flat dense size="sm" no-caps>
