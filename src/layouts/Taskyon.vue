@@ -91,7 +91,6 @@
               <q-item
                 clickable
                 v-ripple
-                class=""
                 href="https://github.com/xyntopia/taskyon"
                 target="_blank"
                 exact
@@ -134,6 +133,9 @@
           size="xs"
           icon-right="svguse:taskyon_mono_opt.svg#taskyon"
           no-caps
+          href="https://taskyon.space"
+          target="_blank"
+          exact
         >
           <div class="q-px-sm">taskyon.space</div>
         </q-btn>
