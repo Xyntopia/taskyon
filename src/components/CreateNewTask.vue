@@ -402,10 +402,11 @@ import {
   mdiAutoFix,
   mdiTools,
 } from '@quasar/extras/mdi-v6';
+import { deepMerge } from 'src/modules/taskyon/utils';
 
 const props = defineProps<{
   codingMode?: boolean;
-  forceTaskProps?: partialTaskDraft;
+  forceTaskProps?: llmSettings['taskTemplate'];
   sendAllowed?: boolean;
 }>();
 
@@ -541,10 +542,7 @@ async function toggleSelectedTools() {
 }
 
 const currentnewTask = computed(() => {
-  let task: Partial<LLMTask> = {
-    ...state.llmSettings.taskDraft,
-    ...(props.forceTaskProps || {}),
-  };
+  let task = deepMerge(state.llmSettings.taskDraft, props.forceTaskProps || {});
   if (currentModel.value) {
     task.configuration = {
       model: currentModel.value,

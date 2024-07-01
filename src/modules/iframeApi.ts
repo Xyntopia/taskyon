@@ -47,12 +47,16 @@ export function setupIframeApi(
               const newConfig = msg.data.conf;
               console.log('setting our configuration');
               if (newConfig.llmSettings) {
+                // TODO: add an "update settings" function which can also handle
+                //       side effects such as setting the taskDrafts etc...
                 deepMergeReactive(
                   llmSettings,
                   newConfig.llmSettings,
                   'overwrite'
                 );
               }
+              llmSettings.taskDraft.allowedTools =
+                llmSettings.taskTemplate?.allowedTools;
               // and also set a possible signature as the api key!
               if (llmSettings.selectedApi) {
                 const newKey = newConfig.signatureOrKey || 'anonymous';
@@ -81,7 +85,7 @@ export function setupIframeApi(
                 taskManager,
                 false,
                 duplicateTaskName
-              );
+              ).catch((err) => console.warn(err));
             } else {
               // TODO: also add this as error, so that it gets thrown back to the parent
               console.log('could not convert message to task:', msg, event);

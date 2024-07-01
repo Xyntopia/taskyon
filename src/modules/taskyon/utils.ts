@@ -1,5 +1,11 @@
 import equal from 'fast-deep-equal/es6';
 
+export type DeepPartial<T> = T extends Record<string, unknown>
+  ? {
+      [P in keyof T]?: DeepPartial<T[P]>;
+    }
+  : T;
+
 export function openrouterPricing(price: number | string, digits = 1) {
   if (typeof price === 'string') {
     price = parseFloat(price);

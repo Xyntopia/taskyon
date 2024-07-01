@@ -644,7 +644,7 @@ export const llmSettings = z.object({
   summaryModel: z.string().default('Xenova/distilbart-cnn-6-6'),
   vectorizationModel: z.string().default('Xenova/all-MiniLM-L6-v2'),
   maxAutonomousTasks: z.number().default(3),
-  taskTemplate: partialTaskDraft.partial().optional(),
+  taskTemplate: partialTaskDraft.deepPartial().optional(),
   taskDraft: partialTaskDraft.default({
     role: 'user',
     content: {

@@ -12,6 +12,9 @@ import {
 const configuration: partialTyConfiguration = {
   llmSettings: {
     selectedApi: 'taskyon',
+    taskTemplate: {
+      allowedTools: ['myExampleStringAdderAlone'],
+    },
   },
   signatureOrKey: '2o8zbackwughbck73tqbc3r',
 };

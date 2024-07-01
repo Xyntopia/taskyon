@@ -101,6 +101,7 @@
             'q-pa-xs',
             'shadow-5',
           ]"
+          :force-task-props="state.llmSettings.taskTemplate"
         >
         </CreateNewTask>
       </div>

@@ -13,7 +13,12 @@
     });
     const configuration = {
         llmSettings: {
-            selectedApi: 'taskyon'
+            selectedApi: 'taskyon',
+            taskTemplate: {
+                allowedTools: [
+                    'myExampleStringAdderAlone'
+                ]
+            }
         },
         signatureOrKey: '2o8zbackwughbck73tqbc3r'
     };
