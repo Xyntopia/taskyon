@@ -324,7 +324,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
   // set up iframe API
   void getTaskManager().then((tm) => {
     if ($q.platform.within.iframe) {
-      void setupIframeApi(stateRefs.llmSettings, tm);
+      void setupIframeApi(stateRefs.llmSettings, stateRefs.keys, tm);
     }
   });
 

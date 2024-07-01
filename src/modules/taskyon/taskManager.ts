@@ -1,4 +1,4 @@
-import { LLMTask, RequireSome, llmSettings, ToolBase } from './types';
+import { LLMTask, RequireSome, ToolBase } from './types';
 import { v1 as uuidv1 } from 'uuid';
 import {
   TaskyonDatabase,

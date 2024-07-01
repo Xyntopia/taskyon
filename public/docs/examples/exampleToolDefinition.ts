@@ -1,15 +1,19 @@
 // we can compile this file to js using:
 // swc --config-file ./swcrc exampleToolDefinition.ts -o exampleToolDefinition.js
 
-import type {
+import {
   ClientFunctionDescription,
   FunctionDescriptionMessage,
   TaskyonMessages,
+  partialTyConfiguration,
+  tyConfigurationMessage,
 } from '../../../src/modules/taskyon/types';
 
-const configuration = {
-  model: 'llama-3',
-  config_signature: '2o8zbackwughbck73tqbc3r',
+const configuration: partialTyConfiguration = {
+  llmSettings: {
+    selectedApi: 'taskyon',
+  },
+  signatureOrKey: '2o8zbackwughbck73tqbc3r',
 };
 
 const tools: ClientFunctionDescription[] = [
@@ -49,7 +53,10 @@ const tools: ClientFunctionDescription[] = [
   },
 ];
 
-async function initializeTaskyon(tools: ClientFunctionDescription[]) {
+async function initializeTaskyon(
+  tools: ClientFunctionDescription[],
+  configuration: partialTyConfiguration
+) {
   const taskyon = document.getElementById('taskyon') as HTMLIFrameElement;
 
   if (
@@ -76,6 +83,15 @@ async function initializeTaskyon(tools: ClientFunctionDescription[]) {
         console.log('waiting for taskyon to be ready....');
         window.addEventListener('message', handleMessage);
       });
+    }
+
+    // Send function definition to the taskyon so that the taskyon is aware of it.
+    function sendConfigurationToTaskyon(configuration: partialTyConfiguration) {
+      const message: tyConfigurationMessage = {
+        type: 'configurationMessage',
+        conf: configuration,
+      };
+      taskyon.contentWindow?.postMessage(message, iframeTarget);
     }
 
     // Send function definition to the taskyon so that the taskyon is aware of it.
@@ -123,11 +139,15 @@ async function initializeTaskyon(tools: ClientFunctionDescription[]) {
     }
 
     await waitForTaskyonReady();
-    console.log('sending our function!');
-    sendFunctionToTaskyon(tools[0]);
-    console.log('set up function listener!');
-    setUpToolsListener(tools);
+    console.log('send our configuration!');
+    sendConfigurationToTaskyon(configuration);
+    tools.forEach((t) => {
+      console.log('sending our functions!');
+      sendFunctionToTaskyon(t);
+      console.log('set up function listener!');
+      setUpToolsListener(tools);
+    });
   }
 }
 
-void initializeTaskyon(tools)
+void initializeTaskyon(tools, configuration);

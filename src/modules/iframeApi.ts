@@ -1,6 +1,7 @@
 import { addTask2Tree, TyTaskManager } from './taskyon/taskManager';
 import { TaskyonMessages, ToolBase, partialTaskDraft } from './taskyon/types';
 import type { llmSettings } from './taskyon/types';
+import { deepMergeReactive } from './taskyon/utils';
 
 /*function stringifyIfNotString(obj: unknown): string | undefined {
     if (typeof obj === 'undefined') return undefined;
@@ -9,6 +10,7 @@ import type { llmSettings } from './taskyon/types';
 
 export function setupIframeApi(
   llmSettings: llmSettings,
+  keys: Record<string, string>,
   taskManager: TyTaskManager
 ) {
   console.log('Turn on iframe API.');
@@ -38,6 +40,24 @@ export function setupIframeApi(
                 content: msg.data.task.content,
               };
               void addTask2Tree(newTask, undefined, taskManager, false, false);
+            } else if (
+              msg.success &&
+              msg.data.type === 'configurationMessage'
+            ) {
+              const newConfig = msg.data.conf;
+              console.log('setting our configuration');
+              if (newConfig.llmSettings) {
+                deepMergeReactive(
+                  llmSettings,
+                  newConfig.llmSettings,
+                  'overwrite'
+                );
+              }
+              // and also set a possible signature as the api key!
+              if (llmSettings.selectedApi) {
+                const newKey = newConfig.signatureOrKey || 'anonymous';
+                keys[llmSettings.selectedApi] = newKey;
+              }
             } else if (msg.success && msg.data.type === 'functionDescription') {
               // TODO: somehow eslint doesn't recognize problems here, when there is a type mismatch
               // eslint-disable-next-line @typescript-eslint/no-unused-vars

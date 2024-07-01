@@ -150,6 +150,7 @@ export type ToolResult = z.infer<typeof ToolResult>;
 const assistantThreadMessage: z.ZodType<OpenAI.Beta.Threads.Messages.ThreadMessage> =
   z.any();
 
+// TODO: get rid of OpenAI dependency...
 const chatResponse: z.ZodType<OpenAI.ChatCompletion> = z.any();
 
 export const TaskResult = z.object({
@@ -340,75 +341,6 @@ export const taskTemplateTypes = {
     label: ['file']
   })*/
 };
-
-export const TaskMessage = z
-  .object({
-    type: z
-      .literal('task')
-      .describe('Field to indicate what kind of a message we have here.'),
-    task: partialTaskDraft,
-    execute: z
-      .boolean()
-      .default(false)
-      .describe('should the task be queued for execution?'),
-    duplicateTaskName: z
-      .boolean()
-      .default(true)
-      .describe(
-        `Only add the task if a task with this name doesn't exist. We do this, because otherwise tasks get 
-        added on every page-load if we configure our app through an iframe parent.`
-      ),
-  })
-  .describe(
-    'With this message type we can send tasks to taskyon from outside, e.g. a parent to a taskyon iframe'
-  );
-export type TaskMessage = z.infer<typeof TaskMessage>;
-
-export const FunctionDescriptionMessage = ToolBase.extend({
-  type: z
-    .literal('functionDescription')
-    .describe('Field to indicate that this is a function description message.'),
-  id: z.string()
-    .describe(`A unique id for the function task. Tasks with the same id "overwrite" each other. The last one
-is the relevant one. Functions will get saved as a task object with the id as their name.
-
-this is important!, Taskyon can be configured to prevent tasks from getting created if they already exist with the same name!
-this helps in making sure, that tasks & tools which we upload to taskyon on pageload don't get duplicated
-on every pageload.
-If that option is turned on, we can use this as a version string for our tasks... And every time we want
-to update our webpage with a new AI tool, we simply change the version string...
-`),
-  duplicateTaskName: z
-    .boolean()
-    .describe(
-      'we use this here in order to prevent duplicate creation of our function declaration task'
-    ),
-});
-export type FunctionDescriptionMessage = z.infer<
-  typeof FunctionDescriptionMessage
->;
-
-export const ClientFunctionDescription = FunctionDescriptionMessage.extend({
-  function: z
-    .function()
-    .describe(
-      'The client-side callback function which taskyon is allowed to call.'
-    ),
-}).omit({ type: true, duplicateTaskName: true });
-export type ClientFunctionDescription = z.infer<
-  typeof ClientFunctionDescription
->;
-
-export const TaskyonMessages = z.discriminatedUnion('type', [
-  RemoteFunctionCall,
-  RemoteFunctionResponse,
-  TaskMessage,
-  FunctionDescriptionMessage,
-  z
-    .object({ type: z.literal('taskyonReady') })
-    .describe('signals, that our API is ready!'),
-]);
-export type TaskyonMessages = z.infer<typeof TaskyonMessages>;
 
 interface YamlObjectRepresentation {
   [key: string]: YamlRepresentation;
@@ -712,6 +644,7 @@ export const llmSettings = z.object({
   summaryModel: z.string().default('Xenova/distilbart-cnn-6-6'),
   vectorizationModel: z.string().default('Xenova/all-MiniLM-L6-v2'),
   maxAutonomousTasks: z.number().default(3),
+  taskTemplate: partialTaskDraft.partial().optional(),
   taskDraft: partialTaskDraft.default({
     role: 'user',
     content: {
@@ -777,18 +710,14 @@ export const storedSettings = z.object({
     ),
   appConfiguration,
   llmSettings,
-  signature: z.string().optional()
+  signatureOrKey: z.string().optional()
     .describe(`By specifying a signature it is possible to circumvent
 usage of an API key. This way you can give your users access to taskyon with your own restrictions.`),
 });
 export type storedSettings = z.infer<typeof storedSettings>;
 
 export const partialTyConfiguration = storedSettings
-  .extend({
-    appConfiguration: appConfiguration.partial(),
-    llmSettings: llmSettings.partial(),
-  })
-  .partial()
+  .deepPartial()
   .describe(
     'This can be used to update the configuration through iframe, json or URL'
   );
@@ -807,3 +736,81 @@ export function getApiConfigCopy(llmSettings: llmSettings, apiName?: string) {
     return deepCopy(api);
   }
 }
+
+export const TaskMessage = z
+  .object({
+    type: z
+      .literal('task')
+      .describe('Field to indicate what kind of a message we have here.'),
+    task: partialTaskDraft,
+    execute: z
+      .boolean()
+      .default(false)
+      .describe('should the task be queued for execution?'),
+    duplicateTaskName: z
+      .boolean()
+      .default(true)
+      .describe(
+        `Only add the task if a task with this name doesn't exist. We do this, because otherwise tasks get 
+        added on every page-load if we configure our app through an iframe parent.`
+      ),
+  })
+  .describe(
+    'With this message type we can send tasks to taskyon from outside, e.g. a parent to a taskyon iframe'
+  );
+export type TaskMessage = z.infer<typeof TaskMessage>;
+
+export const FunctionDescriptionMessage = ToolBase.extend({
+  type: z
+    .literal('functionDescription')
+    .describe('Field to indicate that this is a function description message.'),
+  id: z.string()
+    .describe(`A unique id for the function task. Tasks with the same id "overwrite" each other. The last one
+is the relevant one. Functions will get saved as a task object with the id as their name.
+
+this is important!, Taskyon can be configured to prevent tasks from getting created if they already exist with the same name!
+this helps in making sure, that tasks & tools which we upload to taskyon on pageload don't get duplicated
+on every pageload.
+If that option is turned on, we can use this as a version string for our tasks... And every time we want
+to update our webpage with a new AI tool, we simply change the version string...
+`),
+  duplicateTaskName: z
+    .boolean()
+    .describe(
+      'we use this here in order to prevent duplicate creation of our function declaration task'
+    ),
+});
+export type FunctionDescriptionMessage = z.infer<
+  typeof FunctionDescriptionMessage
+>;
+
+export const ClientFunctionDescription = FunctionDescriptionMessage.extend({
+  function: z
+    .function()
+    .describe(
+      'The client-side callback function which taskyon is allowed to call.'
+    ),
+}).omit({ type: true, duplicateTaskName: true });
+export type ClientFunctionDescription = z.infer<
+  typeof ClientFunctionDescription
+>;
+
+export const tyConfigurationMessage = z.object({
+  type: z
+    .literal('configurationMessage')
+    .describe('Field to indicate that this is a function description message.'),
+  conf: partialTyConfiguration,
+});
+export type tyConfigurationMessage = z.infer<typeof tyConfigurationMessage>;
+
+export const TaskyonMessages = z.discriminatedUnion('type', [
+  RemoteFunctionCall,
+  RemoteFunctionResponse,
+  TaskMessage,
+  FunctionDescriptionMessage,
+  z
+    .object({ type: z.literal('taskyonReady') })
+    .describe('simple message which signals, that our API is ready!'),
+  tyConfigurationMessage,
+]);
+export type TaskyonMessages = z.infer<typeof TaskyonMessages>;
