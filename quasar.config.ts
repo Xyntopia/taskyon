@@ -15,7 +15,6 @@ import fs from 'fs';
 //    yarn add --dev node-polyfill-webpack-plugin browserify-zlib
 import nodePolyfillWebpackPlugin from 'node-polyfill-webpack-plugin';
 
-
 const APPNAME = 'taskyon';
 const DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid';
 
@@ -55,16 +54,14 @@ export default configure((ctx) => {
 
     // https://quasar.dev/quasar-cli/quasar-conf-js#property-vendor
     // if we include files such as "danfojs" the library gets huge, so we are disabling this
-    // TODO: make sure this still works after upgrade!
-    //vendor: {
-    /** optional; we want a maximum of max ~200kb in the chunk when landing on our page in order to give users
+    vendor: {
+      /** optional; we want a maximum of max ~200kb in the chunk when landing on our page in order to give users
          a "good" experience...  as things like danfojs alone are already at 9MB, it'll take a long time for users to make use of this,,
          therefore we should load those libraries lazily and only manually add some important libraries to the vendor chunk
 
          disables vendor chunk:*/
-    //disable: true,
-
-    /*remove: ['danfojs', 'vue$', 'amplify']
+      disable: true,
+      /*remove: ['danfojs', 'vue$', 'amplify']
       // we need to remove large libraries that we don't need in our index page!!
       remove: [
         // remove danfojs dependencies (we can get them by checking the outnput of: yarn list):
@@ -73,7 +70,7 @@ export default configure((ctx) => {
         // non-initially-required aws amplify libraries
         '@aws-amplify/ui-vue/dist'
       ]*/
-    //},
+    },
 
     // app boot file (/src/boot)
     // --> boot files are part of "main.js"
