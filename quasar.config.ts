@@ -7,6 +7,14 @@
 import { configure } from 'quasar/wrappers';
 import path from 'path';
 import fs from 'fs';
+// this is in order to support the not-updated version of danfojs (and other libraries which need
+// polyfills) in webpack 5:
+// also read https://quasar.dev/start/upgrade-guide#nodejs-polyfills
+// and https://github.com/quasarframework/quasar/issues/9780
+// also needs:
+//    yarn add --dev node-polyfill-webpack-plugin browserify-zlib
+import nodePolyfillWebpackPlugin from 'node-polyfill-webpack-plugin';
+
 
 const APPNAME = 'taskyon';
 const DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid';
@@ -313,14 +321,6 @@ export default configure((ctx) => {
           });
         }
 
-        // this is in order to support the not-updated version of danfojs (and other libraries which need
-        // polyfills) in webpack 5:
-        // also read https://quasar.dev/start/upgrade-guide#nodejs-polyfills
-        // and https://github.com/quasarframework/quasar/issues/9780
-        // also needs:
-        //    yarn add --dev node-polyfill-webpack-plugin browserify-zlib
-        const nodePolyfillWebpackPlugin = require('node-polyfill-webpack-plugin');
-
         // we need the bwloe so that uglify can remove the console. because we want
         //  check this:  https://stackoverflow.com/questions/76979427/quasar-app-does-not-remove-console-log-for-production-builds
         // and this:  https://github.com/quasarframework/quasar/issues/11186
@@ -406,7 +406,7 @@ export default configure((ctx) => {
       // (gets superseded if process.env.PORT is specified at runtime)
 
       middlewares: [
-        'render' // keep this as last one
+        'render', // keep this as last one
       ],
 
       // extendPackageJson (json) {},
@@ -417,10 +417,10 @@ export default configure((ctx) => {
       // manualStoreHydration: true,
       // manualPostHydrationTrigger: true,
 
-      pwa: false
+      pwa: false,
 
       // pwaOfflineHtmlFilename: 'offline.html', // do NOT use index.html as name!
-                                                 // will mess up SSR
+      // will mess up SSR
 
       // pwaExtendGenerateSWOptions (cfg) {},
       // pwaExtendInjectManifestOptions (cfg) {}
@@ -428,7 +428,7 @@ export default configure((ctx) => {
 
     // https://v2.quasar.dev/quasar-cli-webpack/developing-pwa/configuring-pwa
     pwa: {
-      workboxMode: 'GenerateSW' // 'GenerateSW' or 'InjectManifest'
+      workboxMode: 'GenerateSW', // 'GenerateSW' or 'InjectManifest'
       // swFilename: 'sw.js',
       // manifestFilename: 'manifest.json'
       // extendManifestJson (json) {},
@@ -446,7 +446,7 @@ export default configure((ctx) => {
 
     // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/developing-capacitor-apps/configuring-capacitor
     capacitor: {
-      hideSplashscreen: true
+      hideSplashscreen: true,
     },
 
     // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/developing-electron-apps/configuring-electron
@@ -457,7 +457,7 @@ export default configure((ctx) => {
       // extendPackageJson (json) {},
 
       // Electron preload scripts (if any) from /src-electron, WITHOUT file extension
-      preloadScripts: [ 'electron-preload' ],
+      preloadScripts: ['electron-preload'],
 
       // specify the debugging port to use for the Electron app when running in development mode
       inspectPort: 5858,
@@ -466,13 +466,11 @@ export default configure((ctx) => {
 
       packager: {
         // https://github.com/electron-userland/electron-packager/blob/master/docs/api.md#options
-
         // OS X / Mac App Store
         // appBundleId: '',
         // appCategoryType: '',
         // osxSign: '',
         // protocol: 'myapp://path',
-
         // Windows only
         // win32metadata: { ... }
       },
@@ -483,14 +481,13 @@ export default configure((ctx) => {
         appId: 'xyntopia',
       },
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/developing-browser-extensions/configuring-bex
-    bex: {
-      // extendBexScriptsConf (esbuildConf) {},
-      // extendBexManifestJson (json) {},
+      // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/developing-browser-extensions/configuring-bex
+      bex: {
+        // extendBexScriptsConf (esbuildConf) {},
+        // extendBexManifestJson (json) {},
 
-      contentScripts: [
-        'my-content-script'
-      ]
-    }
-  }
+        contentScripts: ['my-content-script'],
+      },
+    },
+  };
 });
