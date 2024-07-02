@@ -115,7 +115,7 @@
                             // Send response to iframe
                             const response = {
                                 type: 'functionResponse',
-                                functionName: tool.id,
+                                functionName: tool.name,
                                 response: result
                             };
                             (_taskyon_contentWindow = taskyon.contentWindow) === null || _taskyon_contentWindow === void 0 ? void 0 : _taskyon_contentWindow.postMessage(response, iframeTarget);

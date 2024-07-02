@@ -131,7 +131,7 @@ async function initializeTaskyon(
               // Send response to iframe
               const response = {
                 type: 'functionResponse',
-                functionName: tool.id,
+                functionName: tool.name,
                 response: result,
               };
               taskyon.contentWindow?.postMessage(response, iframeTarget);
