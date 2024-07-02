@@ -9,7 +9,7 @@ import axios from 'axios'; // TODO: replace with fetch
 import { LocalStorage, Notify } from 'quasar'; // load dynamically! :)
 import { deepMerge, deepMergeReactive, sleep } from 'src/modules/taskyon/utils';
 import { useQuasar } from 'quasar';
-import { TaskWorkerController } from 'src/modules/taskyon/taskWorker';
+import { useTaskWorkerController } from 'src/modules/taskyon/taskWorker';
 import { initTaskyon } from 'src/modules/taskyon/init';
 import defaultSettings from 'src/assets/taskyon_settings.json';
 import { availableModels, getAssistants } from 'src/modules/taskyon/chat';
@@ -220,7 +220,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
   // last thing we do after having loaded all settings is to actually start taskyon! :)
   const TaskList = reactive<Map<string, LLMTask>>(new Map());
   // callin ExecutionContext.interrupt();  cancels processing of current task
-  const taskWorkerController = new TaskWorkerController();
+  const taskWorkerController = useTaskWorkerController();
   console.log('initialize taskyon');
   const taskManager = initTaskyon(
     stateRefs.llmSettings,

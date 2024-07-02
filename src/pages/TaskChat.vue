@@ -39,7 +39,7 @@
           </q-card>
           <!--Render tasks which are in progress-->
           <q-card
-            v-if="['Open', 'In Progress'].includes(currentTask.state)"
+            v-if="!state.taskWorkerController.isInterrupted()"
             class="row"
           >
             <q-btn
@@ -127,9 +127,7 @@
         </div>
         <div class="col-auto">
           <q-btn
-            v-if="
-              currentTask && ['Open', 'In Progress'].includes(currentTask.state)
-            "
+            v-if="currentTask && !state.taskWorkerController.isInterrupted()"
             fab-mini
             class="taskyon-control-button"
             :icon="matStop"

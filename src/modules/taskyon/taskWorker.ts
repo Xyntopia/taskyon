@@ -39,6 +39,8 @@ function isOpenAIFunctionCall(
   );
 }
 
+const delimiters = '```';
+
 function extractOpenAIFunctions(
   choice: OpenAI.ChatCompletion['choices'][0],
   tools: Record<string, ToolBase>
@@ -308,6 +310,45 @@ function createNewAssistantResponseTask(
   return taskListFromResponse;
 }
 
+function createParsingErrorTask(
+  err: unknown,
+  yamlContent: string
+): partialTaskDraft {
+  let message: string;
+  let debugging: Record<string, unknown>;
+  if (err instanceof Error) {
+    message = `Error parsing previous response:\n${
+      delimiters + yamlContent + '\n' + delimiters
+    }\n\nError: ${err.message}`;
+    debugging = {
+      error: {
+        message: err.message,
+        stack: err.stack,
+        location: 'yaml parsing',
+        cause: err.cause,
+      },
+    };
+  } else {
+    const jsonerr = JSON.stringify(err);
+    message = `Error parsing previous response:\n${
+      delimiters + yamlContent + '\n' + delimiters
+    }\n\nError: ${jsonerr}`;
+    debugging = {
+      error: {
+        message: jsonerr,
+      },
+    };
+  }
+
+  return {
+    role: 'system',
+    content: {
+      message,
+    },
+    debugging,
+  };
+}
+
 async function parseChatResponse2TaskDraft(
   message: string
 ): Promise<{ taskDraft: partialTaskDraft; execute: boolean }> {
@@ -319,11 +360,21 @@ async function parseChatResponse2TaskDraft(
   if (yamlMatch) {
     yamlContent = yamlMatch[2]; // Use the captured group
   }
-  // Parse the extracted or original YAML content
-  const parsedYaml = load(yamlContent);
+
+  let parsedYaml: unknown = undefined;
+  try {
+    // Parse the extracted or original YAML content
+    parsedYaml = load(yamlContent);
+  } catch (err) {
+    return {
+      taskDraft: createParsingErrorTask(err, yamlContent),
+      execute: true,
+    };
+  }
   const structuredResponse = await StructuredResponse.safeParseAsync(
     parsedYaml
   );
+
   // TODO: test & handle more special cases such as when we have an asnwer & toolcall, or if our tool descriptions
   //       don't really work very well...
   if (structuredResponse.success) {
@@ -354,17 +405,21 @@ async function parseChatResponse2TaskDraft(
       };
     }
   } else {
-    const delimiters = '```';
-    const message = `Error parsing response:\n${
-      delimiters + yamlContent + '\n' + delimiters
-    }\nError: ${structuredResponse.error.toString()}`;
-    throw Error(message);
+    return {
+      taskDraft: createParsingErrorTask(
+        structuredResponse.error.toString(),
+        yamlContent
+      ),
+      execute: true,
+    };
   }
 }
 
 // this function takes a task and generates follow up tasks automatically
 // based on the type of result that we got.
 // it also checks whether we should immediatly execute them or not...
+// TODO: split up this function into a "parse" and "addTask part"
+//       this would give us better error information. and better code ;).
 async function generateFollowUpTasksFromResult(
   finishedTask: LLMTask,
   llmSettings: llmSettings,
@@ -486,7 +541,7 @@ class InterruptError extends Error {
   }
 }
 
-export class TaskWorkerController {
+export function useTaskWorkerController() {
   /* This class adds context to task executions during the runtime.
   We don't necessarily need to save this information in the database
   It also gives us the ability to control the task worker process
@@ -497,43 +552,46 @@ export class TaskWorkerController {
   - we can gracefully exist streamed tasks 
   - and more..
   */
-  interrupted: boolean;
-  interruptReason: string | null;
-  interruptCallbacks: ((reason: string | null) => void)[];
+  let interrupted = true;
+  let interruptReason: string | null = null;
+  let interruptCallbacks: ((reason: string | null) => void)[] = [];
 
-  constructor() {
-    this.interrupted = false;
-    this.interruptReason = null;
-    this.interruptCallbacks = [];
-  }
-
-  interrupt(reason: string | null = null): void {
+  function interrupt(reason: string | null = null): void {
     console.log('interrupting: ', reason);
-    this.interrupted = true;
-    this.interruptReason = reason;
-    this.interruptCallbacks.forEach((callback) => callback(reason));
+    interrupted = true;
+    interruptReason = reason;
+    interruptCallbacks.forEach((callback) => callback(reason));
   }
 
-  isInterrupted(): boolean {
-    return this.interrupted;
+  function isInterrupted(): boolean {
+    return interrupted;
   }
 
-  getInterruptReason(): string | null {
-    return this.interruptReason;
+  function getInterruptReason(): string | null {
+    return interruptReason;
   }
 
-  reset(full = true): void {
-    this.interrupted = false;
-    this.interruptReason = null;
+  function reset(full = true): void {
+    interrupted = false;
+    interruptReason = null;
     if (full) {
-      this.interruptCallbacks = [];
+      interruptCallbacks = [];
     }
   }
 
-  onInterrupt(callback: (reason: string | null) => void): void {
-    this.interruptCallbacks.push(callback);
+  function onInterrupt(callback: (reason: string | null) => void): void {
+    interruptCallbacks.push(callback);
   }
+
+  return {
+    interrupt,
+    isInterrupted,
+    getInterruptReason,
+    reset,
+    onInterrupt,
+  };
 }
+export type TaskWorkerController = ReturnType<typeof useTaskWorkerController>;
 
 async function processTask(
   task: LLMTask,
@@ -570,7 +628,7 @@ async function processTask(
       }
     } else if ('functionCall' in task.content) {
       // calculate function result
-      // in the case we don't have a result yet, we need to calculate it :)
+      // in the case we don't have a result yet, wPe need to calculate it :)
       task = await processFunctionTask(
         task,
         await taskManager.searchToolDefinitions(),
@@ -605,12 +663,18 @@ export async function taskWorker(
   console.log('entering task worker loop...');
   while (true) {
     console.log('waiting for next task!');
-    taskWorkerController.reset(); // make sure we reset our execution context interrupt, so that we can interrupt in the next loop again :)
+    let task: LLMTask | undefined = undefined;
     try {
       // in case of errors, especially if its an interrupt event we simply want to cancel everything :P
+      if (processTasksQueue.count() === 0) {
+        taskWorkerController.interrupt('waiting for new task...');
+      }
       const taskId = await processTasksQueue.pop();
+      taskWorkerController.reset(); // make sure we reset our execution context interrupt, so that we can interrupt in the next loop again :)
+
+      // make sure we know from outside that the worker is active...
       console.log('processing task:', taskId);
-      let task = await taskManager.getTask(taskId);
+      task = await taskManager.getTask(taskId);
       if (task) {
         task = await processTask(
           task,
@@ -633,6 +697,36 @@ export async function taskWorker(
       }
     } catch (error) {
       console.error('Could not complete task iteration:', error);
+
+      const errorTask: partialTaskDraft = {
+        role: 'system',
+        configuration: task?.configuration,
+        content: { message: `An error occured: ${JSON.stringify(error)}` },
+      };
+      if (error instanceof Error) {
+        errorTask.content = {
+          message: `An error occured: ${error.message}`,
+        };
+        errorTask.debugging = {
+          error: {
+            message: error.message,
+            stack: error.stack,
+            location: 'task processing',
+            cause: error.cause,
+          },
+        };
+      }
+      const newTaskId = await addTask2Tree(
+        errorTask,
+        task?.id,
+        taskManager,
+        // interrupt execution if interrupted flag is shown!
+        // this makes sure that results are still saved, even if we stop any
+        // further execution
+        taskWorkerController.isInterrupted() ? false : true
+      );
+      llmSettings.selectedTaskId = newTaskId;
+
       // TODO: Depending on error, clean out the queue...
       if (error instanceof InterruptError) {
         console.log(`Loop interrupted with reason: ${error.message}`);

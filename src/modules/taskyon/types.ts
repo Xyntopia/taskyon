@@ -229,6 +229,7 @@ export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>;
 const MessageContent = z.object({ message: z.string() });
 const FunctionCallContent = z.object({ functionCall: FunctionCall });
 const UploadedFilesContent = z.object({ uploadedFiles: z.array(z.string()) });
+// TODO: restructure ToolResultContent to be a "normal message"
 const ToolResultContent = z.object({ functionResult: ToolResult });
 const TaskContent = z.union([
   MessageContent,
@@ -244,7 +245,9 @@ export const LLMTask = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   name: z.string().optional(),
   content: TaskContent.default({ message: '' }).describe(
-    'this is the actual content of the task'
+    `This is the actual content of the task. This is the actual content which is process at each step.
+For example this is, what an LLM would actually get to see. There are only a few different ways
+of how content can be structured. `
   ),
   state: TaskState,
   label: z.array(z.string()).optional(),
