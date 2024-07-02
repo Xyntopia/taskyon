@@ -24,7 +24,7 @@
       "taskyon": {
         "name": "taskyon",
         "baseURL": "https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/api",
-        "defaultModel": "mistralai/mistral-7b-instruct:free",
+        "defaultModel": "meta-llama/llama-3-8b-instruct:free",
         "streamSupport": true,
         "defaultHeaders": {
           "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpY3lucnBsZGl4dHJkZGdxbnBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwNzgxMTYsImV4cCI6MjAxNTY1NDExNn0.EwuXaxbRPvSZNlce3E_FjylLFrxSMV3tbz8JHR8GuJI"
