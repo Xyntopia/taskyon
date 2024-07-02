@@ -1,37 +1,47 @@
 {
   "name": "taskyon",
   "version": "0.2.0",
-  "description": "Modular Frontend for Xyntopia Applications and Company Page",
-  "productName": "Taskyon",
-  "author": "thomas meschede / yeus <thomas.meschede@web.de>",
   "private": true,
+  "description": "Modular Frontend for Xyntopia Applications and Company Page",
+  "author": "thomas meschede / yeus <thomas.meschede@web.de>",
   "scripts": {
-    "lint": "eslint --ext .js,.ts,.vue ./",
-    "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .gitignore",
-    "test": "echo \"No test specified\" && exit 0",
-    "dev": "quasar dev",
     "build": "quasar build",
     "build-2specs": "APPMODE=2specs quasar build",
-    "pwadev": "quasar dev -m pwa",
-    "pwabuild": "quasar build -m pwa",
     "build:ssg": "quasar ssg generate",
-    "serve:ssg": "quasar ssg serve dist/ssg",
     "build:tauri": "tauri build",
+    "dev": "quasar dev",
+    "dev:ssg": "quasar ssg dev",
     "dev:tauri": "tauri dev",
+    "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .gitignore",
+    "lint": "eslint --ext .js,.ts,.vue ./",
+    "pwabuild": "quasar build -m pwa",
+    "pwadev": "quasar dev -m pwa",
+    "serve:ssg": "quasar ssg serve dist/ssg",
     "tauri:cmd": "tauri",
     "tauricon": "tauricon",
-    "test:unit:ui": "majestic",
+    "test": "echo \"No test specified\" && exit 0",
+    "test:component": "cross-env NODE_ENV=test cypress open --component",
+    "test:component:ci": "cross-env NODE_ENV=test cypress run --component",
+    "test:e2e": "cross-env NODE_ENV=test start-test \"quasar dev\" http-get://127.0.0.1:8080 \"cypress open --e2e\"",
+    "test:e2e:ci": "cross-env NODE_ENV=test start-test \"quasar dev\" http-get://127.0.0.1:8080 \"cypress run --e2e\"",
     "test:unit": "jest",
     "test:unit:ci": "jest --ci",
     "test:unit:coverage": "jest --coverage",
+    "test:unit:ui": "majestic",
     "test:unit:watch": "jest --watch",
-    "test:unit:watchAll": "jest --watchAll=false",
-    "test:e2e": "cross-env NODE_ENV=test start-test \"quasar dev\" http-get://127.0.0.1:8080 \"cypress open --e2e\"",
-    "test:e2e:ci": "cross-env NODE_ENV=test start-test \"quasar dev\" http-get://127.0.0.1:8080 \"cypress run --e2e\"",
-    "test:component": "cross-env NODE_ENV=test cypress open --component",
-    "test:component:ci": "cross-env NODE_ENV=test cypress run --component",
-    "dev:ssg": "quasar ssg dev"
+    "test:unit:watchAll": "jest --watchAll=false"
   },
+  "browserslist": [
+    "last 10 Chrome versions",
+    "last 10 Firefox versions",
+    "last 4 Edge versions",
+    "last 7 Safari versions",
+    "last 8 Android versions",
+    "last 8 ChromeAndroid versions",
+    "last 8 FirefoxAndroid versions",
+    "last 10 iOS versions",
+    "last 5 Opera versions"
+  ],
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.2",
     "@codemirror/lang-json": "^6.0.1",
@@ -87,7 +97,7 @@
   },
   "devDependencies": {
     "@quasar/app-webpack": "^4.0.0-beta.13",
-
+    "@quasar/cli": "^2.4.1",
     "@quasar/quasar-app-extension-testing-e2e-cypress": "^6.1.0",
     "@swc/cli": "^0.3.14",
     "@swc/core": "^1.6.5",
@@ -111,30 +121,19 @@
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-cypress": "^2.15.1",
     "eslint-plugin-vue": "^9.0.0",
+    "eslint-webpack-plugin": "^4.0.1",
     "ifdef-loader": "^2.3.2",
     "openapi-types": "^12.1.3",
     "openapi-typescript": "^7.0.0-next.7",
-
-    "eslint-webpack-plugin": "^4.0.1",
-
     "prettier": "^3.0.3",
+    "sort-package-json": "^2.10.0",
     "ts-loader": "^9.4.2",
     "typescript": "^5.2.2"
   },
-  "browserslist": [
-    "last 10 Chrome versions",
-    "last 10 Firefox versions",
-    "last 4 Edge versions",
-    "last 7 Safari versions",
-    "last 8 Android versions",
-    "last 8 ChromeAndroid versions",
-    "last 8 FirefoxAndroid versions",
-    "last 10 iOS versions",
-    "last 5 Opera versions"
-  ],
   "engines": {
     "node": "^24 || ^22 || ^20 || ^18",
     "npm": ">= 6.13.4",
     "yarn": ">= 1.21.1"
-  }
+  },
+  "productName": "Taskyon"
 }
