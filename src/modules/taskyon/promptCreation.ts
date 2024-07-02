@@ -99,9 +99,7 @@ export function addPrompts(
       ...modifiedOpenAIConversationThread,
       ...additionalMessages,
     ];
-  }
-
-  if (llmSettings.useBasePrompt) {
+  } else if (llmSettings.useBasePrompt) {
     const { basePrompt } = substituteTemplateVariables(
       { basePrompt: llmSettings.taskChatTemplates.basePrompt },
       {}
