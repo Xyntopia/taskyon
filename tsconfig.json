@@ -7,5 +7,14 @@
     "target": "es2022",
     "noUncheckedIndexedAccess": false
   },
-  "exclude": ["src-tauri", ".direnv", "dist"]
+  "exclude": [
+    ".direnv",
+    "./src-tauri",
+    "./dist",
+    "./.quasar",
+    "./node_modules",
+    "./src-capacitor",
+    "./src-cordova",
+    "./quasar.config.*.temporary.compiled*"
+  ]
 }

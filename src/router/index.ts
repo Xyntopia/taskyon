@@ -5,24 +5,9 @@ import {
   createWebHashHistory,
   createWebHistory,
 } from 'vue-router';
-//import SpaceMarketRoutes  from './routes_spacemarket'
-//import DoxcavatorRoutes  from './routes_doxcavator'
-//import DefaultRoutes from './routes'
-//import { RouteRecordRaw } from 'vue-router';
 import TaskyonRoutes from './routes_taskyon';
 
-// TODO: do the following with #ifdef preprocessor webpack plugin
-/*let routes: RouteRecordRaw[] = []
-if(process.env.APPNAME==='Spacemarket'){
-  routes = SpaceMarketRoutes
-} else if(process.env.APPNAME==='Doxcavator'){
-  routes = DoxcavatorRoutes
-}else {
-  routes = DefaultRoutes
-}*/
-
 const routes = TaskyonRoutes;
-//const routes = await import('./routes_doxcavator')
 
 /*
  * If not building with SSR mode, you can
@@ -47,9 +32,7 @@ export default route(function (/* { store, ssrContext } */) {
     // Leave this as is and make changes in quasar.conf.js instead!
     // quasar.conf.js -> build -> vueRouterMode
     // quasar.conf.js -> build -> publicPath
-    history: createHistory(
-      process.env.MODE === 'ssr' ? void 0 : process.env.VUE_ROUTER_BASE
-    ),
+    history: createHistory(process.env.VUE_ROUTER_BASE),
   });
 
   return Router;

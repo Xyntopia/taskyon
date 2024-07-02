@@ -2,8 +2,9 @@
 /src-bex/www
 /src-capacitor
 /src-cordova
+/src-ssr
 /.quasar
 /node_modules
-.eslintrc.js
-babel.config.js
-/src-ssr
+.eslintrc.cjs
+babel.config.cjs
+/quasar.config.*.temporary.compiled*
