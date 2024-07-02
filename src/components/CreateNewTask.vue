@@ -12,13 +12,7 @@
             'message' in state.llmSettings.taskDraft.content
           "
           :model-value="state.llmSettings.taskDraft.content.message"
-          @update:modelValue="
-            (value) => {
-              state.llmSettings.taskDraft.content = {
-                message: value || '',
-              };
-            }
-          "
+          @update:modelValue="updateContent"
           :execute-task="addNewTask"
           :attach-file-to-chat="attachFileToDraft"
           :use-enter-to-send="state.appConfiguration.useEnterToSend"
@@ -32,13 +26,7 @@
         >
           <CodeEditor
             :model-value="state.llmSettings.taskDraft.content.message"
-            @update:modelValue="
-              (value) => {
-                state.llmSettings.taskDraft.content = {
-                  message: value || '',
-                };
-              }
-            "
+            @update:modelValue="updateContent"
           />
           <taskSettingsButton
             v-model="expandedTaskCreation"
@@ -373,7 +361,7 @@ const CodeEditor = defineAsyncComponent(
   /* webpackChunkName: "codemirror" */
   /* webpackMode: "lazy" */
   /* webpackFetchPriority: "low" */
-  () => import('./CodeEditor.vue')
+  () => import('./CodeEditor.vue'),
 );
 
 import {
@@ -405,11 +393,17 @@ const props = defineProps<{
   sendAllowed?: boolean;
 }>();
 
+function updateContent(value: string | null | undefined) {
+  state.llmSettings.taskDraft.content = {
+    message: value || '',
+  };
+}
+
 const state = useTaskyonStore();
 const { showTaskData, expandedTaskCreation } = toRefs(state);
 const { expertMode } = toRefs(state.appConfiguration);
 const { selectedApi, useOpenAIAssistants, openAIAssistantId } = toRefs(
-  state.llmSettings
+  state.llmSettings,
 );
 const fileAttachments = ref<File[]>([]); // holds all attached files as a "tasklist"
 
@@ -519,11 +513,11 @@ watchDebounced(
     void (async () => {
       // Tokenize the message
       estimatedTokens.value = await countStringTokens(
-        JSON.stringify(state.llmSettings.taskDraft.content) || ''
+        JSON.stringify(state.llmSettings.taskDraft.content) || '',
       );
     })();
   },
-  { debounce: 500, maxWait: 1000 }
+  { debounce: 500, maxWait: 1000 },
 );
 
 async function toggleSelectedTools() {
@@ -614,7 +608,7 @@ async function addNewTask(execute = true) {
       fileTaskObj,
       state.llmSettings.selectedTaskId, // parent
       await state.getTaskManager(),
-      false // we do not want to execute the file object, we want to use the users prompt...
+      false, // we do not want to execute the file object, we want to use the users prompt...
     );
     state.llmSettings.selectedTaskId = fileTaskId;
     fileAttachments.value = [];
@@ -628,7 +622,7 @@ async function addNewTask(execute = true) {
     newTask,
     fileTaskId || state.llmSettings.selectedTaskId, //parent
     await state.getTaskManager(),
-    execute // execute right away...
+    execute, // execute right away...
   );
   state.llmSettings.selectedTaskId = newTaskId;
 
