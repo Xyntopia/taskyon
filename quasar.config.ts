@@ -1,23 +1,15 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/*
- * This file runs in a Node context (it's NOT transpiled by Babel), so use only
- * the ES6 features that are supported by your Node version. https://node.green/
- */
+/* eslint-env node */
 
 // Configuration for your app
-// https://v2.quasar.dev/quasar-cli/quasar-conf-js
+// https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js
 
-/* eslint-env node */
 /* eslint-disable @typescript-eslint/no-var-requires */
-const { configure } = require('quasar/wrappers');
-const path = require('path');
-const fs = require('fs');
+import { configure } from 'quasar/wrappers';
+import path from 'path';
+import fs from 'fs';
 
-APPNAME = 'taskyon';
-DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid';
+const APPNAME = 'taskyon';
+const DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid';
 
 console.log('compile app: ', APPNAME, DESCRIPTION);
 
@@ -34,35 +26,37 @@ function copyTaskyonSettings() {
   }
 }
 
-module.exports = configure(function (ctx) {
+export default configure((ctx) => {
   if (ctx.prod) {
     copyTaskyonSettings();
   }
 
   return {
-    // https://v2.quasar.dev/quasar-cli/supporting-ts
-    supportTS: {
-      tsCheckerConfig: {
-        eslint: {
-          enabled: true,
-          files: './src/**/*.{ts,tsx,js,jsx,vue}',
-        },
-      },
+    eslint: {
+      // fix: true,
+      // include: [],
+      // exclude: [],
+      // cache: false,
+      // rawEsbuildEslintOptions: {},
+      // rawWebpackEslintPluginOptions: {},
+      warnings: true,
+      errors: true,
     },
-
-    // https://v2.quasar.dev/quasar-cli/prefetch-feature
+    // https://v2.quasar.dev/quasar-cli-webpack/prefetch-feature
     // preFetch: true,
 
     // https://quasar.dev/quasar-cli/quasar-conf-js#property-vendor
     // if we include files such as "danfojs" the library gets huge, so we are disabling this
-    vendor: {
-      /* optional; we want a maximum of max ~200kb in the chunk when landing on our page in order to give users
+    // TODO: make sure this still works after upgrade!
+    //vendor: {
+    /** optional; we want a maximum of max ~200kb in the chunk when landing on our page in order to give users
          a "good" experience...  as things like danfojs alone are already at 9MB, it'll take a long time for users to make use of this,,
          therefore we should load those libraries lazily and only manually add some important libraries to the vendor chunk
 
-         disables vendor chunk:*/ disable: true,
+         disables vendor chunk:*/
+    //disable: true,
 
-      /*remove: ['danfojs', 'vue$', 'amplify']
+    /*remove: ['danfojs', 'vue$', 'amplify']
       // we need to remove large libraries that we don't need in our index page!!
       remove: [
         // remove danfojs dependencies (we can get them by checking the outnput of: yarn list):
@@ -71,7 +65,7 @@ module.exports = configure(function (ctx) {
         // non-initially-required aws amplify libraries
         '@aws-amplify/ui-vue/dist'
       ]*/
-    },
+    //},
 
     // app boot file (/src/boot)
     // --> boot files are part of "main.js"
@@ -113,6 +107,9 @@ module.exports = configure(function (ctx) {
 
     // Full list of options: https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-build
     build: {
+      //publicPath:  '/', TODO: check if we ca us this to deploy a "test" version of our app on gitlab pages..
+      vueRouterMode: 'history', // available values: 'hash', 'history'
+
       uglifyOptions: {
         compress: { drop_console: true },
       },
@@ -121,8 +118,6 @@ module.exports = configure(function (ctx) {
         DESCRIPTION: DESCRIPTION,
       },
       //devtool: 'source-map', // TODO: turn this off for actua production...
-      //publicPath:  TODO: check if we ca us this to deploy a "test" version of our app on gitlab pages..
-      vueRouterMode: 'history', // available values: 'hash', 'history'
       vueLoaderOptions: {
         compilerOptions: {
           // from here: https://qmarkdown.netlify.app/all-about-qmarkdown/installation-types
@@ -141,7 +136,7 @@ module.exports = configure(function (ctx) {
         cfg,
         {
           /*isServer, isClient*/
-        }
+        },
       ) {
         // use new webpack5 loaders for asset importing
         cfg.module.rules.push({
@@ -192,14 +187,19 @@ module.exports = configure(function (ctx) {
           }*/
       },
 
-      // transpile: false,
+      // webpackTranspile: false,
 
       // Add dependencies for transpiling with Babel (Array of string/regex)
       // (from node_modules, which are by default not transpiled).
-      // Applies only if "transpile" is set to true.
-      // transpileDependencies: [],
+      // Applies only if "webpackTranspile" is set to true.
+      // webpackTranspileDependencies: [],
 
-      // rtl: true, // https://v2.quasar.dev/options/rtl-support
+      esbuildTarget: {
+        browser: ['es2022', 'firefox115', 'chrome115', 'safari14'],
+        node: 'node20',
+      },
+
+      // rtl: true, // https://quasar.dev/options/rtl-support
       // preloadChunks: true,
       // showProgress: false,
       // gzip: true,
@@ -215,8 +215,8 @@ module.exports = configure(function (ctx) {
       // Options below are automatically set depending on the env, set them if you want to override
       // extractCSS: false,
 
-      // https://v2.quasar.dev/quasar-cli/handling-webpack
-      // "chain" is a webpack-chain object https://github.com/neutrinojs/webpack-chain
+      // https://v2.quasar.dev/quasar-cli-webpack/handling-webpack
+      // "chain" is a webpack-chain object https://github.com/sorrycc/webpack-chain
       // https://webpack.js.org/plugins/split-chunks-plugin/#splitchunkschunks
       chainWebpack(chain) {
         // TODO: add better chunk code split behaviour
@@ -336,10 +336,11 @@ module.exports = configure(function (ctx) {
       },
     },
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-devServer
+    // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js#Property%3A-devServer
     devServer: {
-      https: false,
-      port: 8080,
+      server: {
+        type: 'http',
+      },
       open: false, // opens browser window automatically
       setupMiddlewares(middlewares, devServer) {
         if (!devServer) {
@@ -354,30 +355,13 @@ module.exports = configure(function (ctx) {
       },
     },
 
-    // https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-framework
+    // https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js#Property%3A-framework
     framework: {
       // https://quasar.dev/vue-components/icon#options-api
       iconSet: 'svg-material-icons',
       lang: 'en-US', // Quasar language pack
       config: {
         dark: 'auto', // 'auto' or Boolean true/false
-        // https://coolors.co/003459-c46e72-820263-061623-618b25-e43a64-b0bbbf-e6af2e
-        // TODO: these colors are currently defined in ./css/quasar.variables.sass
-        /* brand: {
-          secondary: '#F78F3B',
-          primary: '#2A3548',
-          // darkaccent: '#7fa042',
-          accent: '#7fa042',
-          // lightaccent: '#8BA7B9',
-
-          dark: '#0d1117',
-          // lightshades: '#FBFAFB',
-
-          positive: '#7fa042',
-          negative: '#a04242',
-          info: '#8BA7B9',
-          warning: '#ff118c'
-        } */
         notify: {
           /* look at QuasarConfOptions from the API card */
         },
@@ -399,112 +383,96 @@ module.exports = configure(function (ctx) {
     },
 
     // animations: 'all', // --- includes all animations
-    // https://v2.quasar.dev/options/animations
+    // https://quasar.dev/options/animations
     animations: [],
-    // Possible values for "importStrategy":
-    // * 'auto' - (DEFAULT) Auto-import needed Quasar components & directives
-    // * 'all'  - Manually specify what to import
-    importStrategy: 'auto',
-    // For special cases outside of where "auto" importStrategy can have an impact
-    // https://v2.quasar.dev/quasar-cli/developing-ssr/configuring-ssr
+
+    // https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js#property-sourcefiles
+    // sourceFiles: {
+    //   rootComponent: 'src/App.vue',
+    //   router: 'src/router/index',
+    //   store: 'src/store/index',
+    //   indexHtmlTemplate: 'index.html',
+    //   pwaRegisterServiceWorker: 'src-pwa/register-service-worker',
+    //   pwaServiceWorker: 'src-pwa/custom-service-worker',
+    //   pwaManifestFile: 'src-pwa/manifest.json',
+    //   electronMain: 'src-electron/electron-main',
+    //   electronPreload: 'src-electron/electron-preload'
+    //   bexManifestFile: 'src-bex/manifest.json
+    // },
+
+    // https://v2.quasar.dev/quasar-cli-webpack/developing-ssr/configuring-ssr
     ssr: {
-      pwa: false,
-
-      // manualStoreHydration: true,
-      // manualPostHydrationTrigger: true,
-
       prodPort: 3000, // The default port that the production server should use
       // (gets superseded if process.env.PORT is specified at runtime)
 
-      maxAge: 5, //1000 * 60 * 60 * 24 * 30, // 1 month
-      // Tell browser when a file from the server should expire from cache (in ms)
-
-      chainWebpackWebserver(/* chain */) {
-        //
-      },
-
       middlewares: [
-        ctx.prod ? 'compression' : '',
-        'render', // keep this as last one
+        'render' // keep this as last one
       ],
+
+      // extendPackageJson (json) {},
+      // extendSSRWebserverConf (esbuildConf) {},
+
+      // manualStoreSerialization: true,
+      // manualStoreSsrContextInjection: true,
+      // manualStoreHydration: true,
+      // manualPostHydrationTrigger: true,
+
+      pwa: false
+
+      // pwaOfflineHtmlFilename: 'offline.html', // do NOT use index.html as name!
+                                                 // will mess up SSR
+
+      // pwaExtendGenerateSWOptions (cfg) {},
+      // pwaExtendInjectManifestOptions (cfg) {}
     },
 
-    ssg: {
-      // pass options here
-      concurrency: 2, // we don't want to make to many requests simultanously to stripe
-      interval: 10000,
-    },
-
-    // https://v2.quasar.dev/quasar-cli/developing-pwa/configuring-pwa
+    // https://v2.quasar.dev/quasar-cli-webpack/developing-pwa/configuring-pwa
     pwa: {
-      workboxPluginMode: 'GenerateSW', // 'GenerateSW' or 'InjectManifest'
-      workboxOptions: {}, // only for GenerateSW
-
-      // for the custom service worker ONLY (/src-pwa/custom-service-worker.[js|ts])
-      // if using workbox in InjectManifest mode
-      chainWebpackCustomSW(/* chain */) {
-        //
-      },
-
-      manifest: {
-        name: 'taskyon',
-        short_name: 'taskyon',
-        description: 'AI chat application for projects.',
-        display: 'standalone',
-        orientation: 'portrait',
-        background_color: '#F78F3B',
-        theme_color: '#2A3548',
-        icons: [
-          {
-            src: 'icons/icon-128x128.png',
-            sizes: '128x128',
-            type: 'image/png',
-          },
-          {
-            src: 'icons/icon-192x192.png',
-            sizes: '192x192',
-            type: 'image/png',
-          },
-          {
-            src: 'icons/icon-256x256.png',
-            sizes: '256x256',
-            type: 'image/png',
-          },
-          {
-            src: 'icons/icon-384x384.png',
-            sizes: '384x384',
-            type: 'image/png',
-          },
-          {
-            src: 'icons/icon-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-          },
-        ],
-      },
+      workboxMode: 'GenerateSW' // 'GenerateSW' or 'InjectManifest'
+      // swFilename: 'sw.js',
+      // manifestFilename: 'manifest.json'
+      // extendManifestJson (json) {},
+      // useCredentialsForManifestTag: true,
+      // injectPwaMetaTags: false,
+      // extendPWACustomSWConf (esbuildConf) {},
+      // extendGenerateSWOptions (cfg) {},
+      // extendInjectManifestOptions (cfg) {}
     },
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli/developing-cordova-apps/configuring-cordova
+    // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/developing-cordova-apps/configuring-cordova
     cordova: {
       // noIosLegacyBuildFlag: true, // uncomment only if you know what you are doing
     },
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli/developing-capacitor-apps/configuring-capacitor
+    // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/developing-capacitor-apps/configuring-capacitor
     capacitor: {
-      hideSplashscreen: true,
+      hideSplashscreen: true
     },
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli/developing-electron-apps/configuring-electron
+    // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/developing-electron-apps/configuring-electron
     electron: {
+      // extendElectronMainConf (esbuildConf) {},
+      // extendElectronPreloadConf (esbuildConf) {},
+
+      // extendPackageJson (json) {},
+
+      // Electron preload scripts (if any) from /src-electron, WITHOUT file extension
+      preloadScripts: [ 'electron-preload' ],
+
+      // specify the debugging port to use for the Electron app when running in development mode
+      inspectPort: 5858,
+
       bundler: 'packager', // 'packager' or 'builder'
 
       packager: {
         // https://github.com/electron-userland/electron-packager/blob/master/docs/api.md#options
+
         // OS X / Mac App Store
         // appBundleId: '',
         // appCategoryType: '',
         // osxSign: '',
         // protocol: 'myapp://path',
+
         // Windows only
         // win32metadata: { ... }
       },
@@ -515,17 +483,14 @@ module.exports = configure(function (ctx) {
         appId: 'xyntopia',
       },
 
-      // "chain" is a webpack-chain object https://github.com/neutrinojs/webpack-chain
-      chainWebpack(/* chain */) {
-        // do something with the Electron main process Webpack cfg
-        // extendWebpackMain also available besides this chainWebpackMain
-      },
+    // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/developing-browser-extensions/configuring-bex
+    bex: {
+      // extendBexScriptsConf (esbuildConf) {},
+      // extendBexManifestJson (json) {},
 
-      // "chain" is a webpack-chain object https://github.com/neutrinojs/webpack-chain
-      chainWebpackPreload(/* chain */) {
-        // do something with the Electron main process Webpack cfg
-        // extendWebpackPreload also available besides this chainWebpackPreload
-      },
-    },
-  };
+      contentScripts: [
+        'my-content-script'
+      ]
+    }
+  }
 });
