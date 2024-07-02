@@ -174,7 +174,7 @@
 </style>
 
 <script setup lang="ts">
-import Task from 'components/Task.vue';
+import Task from 'components/TaskWidget.vue';
 import tyMarkdown from 'src/components/tyMarkdown.vue';
 import { ref, UnwrapRef, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';

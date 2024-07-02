@@ -70,9 +70,9 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import Search from 'components/Search.vue';
+import Search from 'components/SearchInput.vue';
 import { LLMTask } from 'src/modules/taskyon/types';
-import Task from 'src/components/Task.vue';
+import Task from 'src/components/TaskWidget.vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { findLeafTasks } from 'src/modules/taskyon/taskManager';
 import { matPlayArrow, matSync } from '@quasar/extras/material-icons';

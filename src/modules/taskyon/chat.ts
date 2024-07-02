@@ -14,31 +14,33 @@ import type { FileMappingDocType } from './rxdb';
 import { findAllFilesInTasks } from './taskUtils';
 import { apiConfig } from './types';
 
-const getOpenai = lruCache<OpenAI>(5)(
-  (apiKey: string, baseURL?: string, headers?: Record<string, string>) => {
-    if (baseURL) {
-      const openai = new OpenAI({
-        baseURL: baseURL,
-        apiKey: apiKey,
-        defaultHeaders: headers,
-        dangerouslyAllowBrowser: true,
-      });
-      return openai;
-    } else {
-      const api = new OpenAI({
-        apiKey: apiKey,
-        dangerouslyAllowBrowser: true,
-      });
-      return api;
-    }
+const getOpenai = lruCache<OpenAI>(5)((
+  apiKey: string,
+  baseURL?: string,
+  headers?: Record<string, string>,
+) => {
+  if (baseURL) {
+    const openai = new OpenAI({
+      baseURL: baseURL,
+      apiKey: apiKey,
+      defaultHeaders: headers,
+      dangerouslyAllowBrowser: true,
+    });
+    return openai;
+  } else {
+    const api = new OpenAI({
+      apiKey: apiKey,
+      dangerouslyAllowBrowser: true,
+    });
+    return api;
   }
-);
+});
 
 export const getAssistants = asnycasyncTimeLruCache<
   Record<string, OpenAI.Beta.Assistant>
 >(
   1,
-  60 * 60 * 1000 //1h
+  60 * 60 * 1000, //1h
 )(async (openAIApiKey: string) => {
   console.log('get list of openai assistants');
   const response = await getOpenai(openAIApiKey).beta.assistants.list({
@@ -47,10 +49,13 @@ export const getAssistants = asnycasyncTimeLruCache<
   });
 
   const assistantsArray = response.data;
-  const assistantsDict = assistantsArray.reduce((dict, assistant) => {
-    dict[assistant.id] = assistant;
-    return dict;
-  }, {} as Record<string, OpenAI.Beta.Assistant>);
+  const assistantsDict = assistantsArray.reduce(
+    (dict, assistant) => {
+      dict[assistant.id] = assistant;
+      return dict;
+    },
+    {} as Record<string, OpenAI.Beta.Assistant>,
+  );
 
   return assistantsDict;
 });
@@ -90,7 +95,7 @@ async function countChatTokens(
     | OpenAIMessage
     | OpenAI.ChatCompletionMessage
     | OpenAI.ChatCompletionMessageParam
-  )[]
+  )[],
 ) {
   let totalTokens = 0;
   for (const message of chatMessages) {
@@ -124,11 +129,11 @@ export async function countToolTokens(functionList: ToolBase[]) {
 export async function estimateChatTokens(
   task: LLMTask,
   chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  tools: Record<string, ToolBase>
+  tools: Record<string, ToolBase>,
 ): Promise<LLMTask['debugging']['estimatedTokens']> {
   const functions: ToolBase[] = mapFunctionNames(
     task.allowedTools || [],
-    tools
+    tools,
   );
   // TODO: convert task.content into a legitimate string first, using the
   //       "original" functions toshow what actually gets sent to the LLM!
@@ -137,7 +142,7 @@ export async function estimateChatTokens(
   const promptTokens = await countChatTokens(chat);
   const functionTokens = Math.floor((await countToolTokens(functions)) * 0.7);
   const resultTokens = await countStringTokens(
-    task.result?.chatResponse?.choices[0]?.message.content || ''
+    task.result?.chatResponse?.choices[0]?.message.content || '',
   );
   return {
     singlePromptTokens,
@@ -150,7 +155,7 @@ export async function estimateChatTokens(
 export function generateHeaders(
   apiSecret: string,
   siteUrl: string,
-  selectedApi: string
+  selectedApi: string,
 ) {
   let headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -172,7 +177,7 @@ export function generateHeaders(
 }
 
 function accumulateChatCompletion(
-  chunks: OpenAI.ChatCompletionChunk[]
+  chunks: OpenAI.ChatCompletionChunk[],
 ): OpenAI.ChatCompletion {
   if (chunks.length === 0) {
     throw new Error('No chunks provided');
@@ -246,7 +251,7 @@ function accumulateChatCompletion(
         role: 'assistant', // or other roles as per your logic
       },
       finish_reason: 'stop',
-    } as OpenAI.ChatCompletion['choices'][0]
+    } as OpenAI.ChatCompletion['choices'][0],
   );
 
   choice.message.tool_calls = Object.values(toolCalls).map((t) => t);
@@ -266,14 +271,14 @@ export async function callLLM(
   apiKey: string,
   stream: false | true | null | undefined = false,
   contentCallBack: (
-    chunk?: OpenAI.Chat.Completions.ChatCompletionChunk
+    chunk?: OpenAI.Chat.Completions.ChatCompletionChunk,
   ) => void,
-  cancelStream: () => boolean // a function which we can call and which indicates that we should cancel the stream
+  cancelStream: () => boolean, // a function which we can call and which indicates that we should cancel the stream
 ): Promise<OpenAI.ChatCompletion | undefined | MessageError> {
   const headers: Record<string, string> = generateHeaders(
     apiKey,
     siteUrl,
-    api.name
+    api.name,
   );
   let chatCompletion: OpenAI.ChatCompletion | undefined | MessageError =
     undefined;
@@ -326,14 +331,14 @@ export async function callLLM(
 
 export function mapFunctionNames(
   toolNames: string[],
-  tools: Record<string, ToolBase>
+  tools: Record<string, ToolBase>,
 ) {
   return toolNames?.map((t) => tools[t]);
 }
 
 export async function getOpenRouterGenerationInfo(
   generationId: string,
-  headers: Record<string, string>
+  headers: Record<string, string>,
 ) {
   let retryCount = 0;
   let delay = 5000; // first delay
@@ -343,7 +348,7 @@ export async function getOpenRouterGenerationInfo(
       `https://openrouter.ai/api/v1/generation?id=${generationId}`,
       {
         headers,
-      }
+      },
     );
 
     if (response.ok) {
@@ -359,19 +364,19 @@ export async function getOpenRouterGenerationInfo(
       delay *= 2; // increase delay for next retry
     } else {
       throw new Error(
-        `Failed to get cost information for Openrouter.ai: ${generationId} - ${response.status}`
+        `Failed to get cost information for Openrouter.ai: ${generationId} - ${response.status}`,
       );
     }
   }
   throw new Error(
-    `Failed to get generation info after 3 retries for ${generationId}`
+    `Failed to get generation info after 3 retries for ${generationId}`,
   );
 }
 
 export function enrichWithDelayedUsageInfos(
   task: LLMTask,
   taskManager: TyTaskManager,
-  generationInfo: OpenRouterGenerationInfo
+  generationInfo: OpenRouterGenerationInfo,
 ) {
   if (generationInfo) {
     if (
@@ -398,7 +403,7 @@ export function enrichWithDelayedUsageInfos(
                 id: child.id,
                 debugging: { promptTokens: task.debugging.resultTokens },
               },
-              true
+              true,
             );
           }
         });
@@ -409,7 +414,7 @@ export function enrichWithDelayedUsageInfos(
 
 async function uploadFileToOpenAI(
   file: File,
-  openaiKey: string
+  openaiKey: string,
 ): Promise<string | undefined> {
   try {
     const response = await getOpenai(openaiKey).files.create({
@@ -428,7 +433,7 @@ async function uploadFileToOpenAI(
 // TODO: merge this with our taskyon "internal" agents...
 function convertTasksToOpenAIThread(
   taskList: LLMTask[],
-  fileMappings: Record<string, string>
+  /*fileMappings: Record<string, string>*/
 ): OpenAI.Beta.ThreadCreateParams.Message[] {
   const messageList = taskList.map((task) => {
     let content = '';
@@ -452,7 +457,7 @@ export async function getOpenAIAssistantResponse(
   task: LLMTask,
   openAIApiKey: string,
   openAIAssistantId: string,
-  taskManager: TyTaskManager
+  taskManager: TyTaskManager,
 ) {
   if (task.content) {
     const openai = getOpenai(openAIApiKey);
@@ -472,7 +477,7 @@ export async function getOpenAIAssistantResponse(
     // Get all corresponding filemapping entries from our database
     const currentTaskListfileMappings = (
       await Promise.all(
-        fileIDs.map(async (fuuid) => taskManager.getFileMappingByUuid(fuuid))
+        fileIDs.map(async (fuuid) => taskManager.getFileMappingByUuid(fuuid)),
       )
     ).filter((fm) => fm !== null) as FileMappingDocType[];
 
@@ -498,7 +503,7 @@ export async function getOpenAIAssistantResponse(
     // Finally, Convert task list to OpenAI thread messages
     const openAIConversationThread = convertTasksToOpenAIThread(
       taskList,
-      openAIFileMappings
+      /*openAIFileMappings*/
     );
 
     // then upload the taskThread and execute it.
@@ -536,7 +541,7 @@ export async function getOpenAIAssistantResponse(
       // Retrieve the steps of the run
       const runStep = await openai.beta.threads.runs.steps.list(
         threadId,
-        run.id
+        run.id,
       );
       for (const step of runStep.data) {
         if (step.type === 'message_creation' && step.status === 'completed') {
@@ -547,7 +552,7 @@ export async function getOpenAIAssistantResponse(
           ).message_creation.message_id;
           const message = await openai.beta.threads.messages.retrieve(
             threadId,
-            messageId
+            messageId,
           );
 
           // Add the retrieved message to the newMessages list
@@ -586,42 +591,40 @@ export const availableModels = asnycasyncTimeLruCache<Model[]>(
   10, // max 10 entries
   60 * 60 * 1000, //1h
   true, // use localStorage for persistence
-  'modelCache' // save it here..
-)(
-  async (
-    modelsUrl: string,
-    apiKey: string,
-    invalidateCache = false
-  ): Promise<Model[]> => {
-    try {
-      // Construct the URL with an optional cache-busting query parameter
-      const url = invalidateCache
-        ? `${modelsUrl}?_=${new Date().getTime()}`
-        : modelsUrl;
+  'modelCache', // save it here..
+)(async (
+  modelsUrl: string,
+  apiKey: string,
+  invalidateCache = false,
+): Promise<Model[]> => {
+  try {
+    // Construct the URL with an optional cache-busting query parameter
+    const url = invalidateCache
+      ? `${modelsUrl}?_=${new Date().getTime()}`
+      : modelsUrl;
 
-      // Setting up the Fetch request
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          //'Cache-Control': 'max-stale=3600',
-          'Cache-Control': 'no-cache', // Ensure the freshest data is fetched as we're caching this function anyways...
-        },
-      });
+    // Setting up the Fetch request
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        //'Cache-Control': 'max-stale=3600',
+        'Cache-Control': 'no-cache', // Ensure the freshest data is fetched as we're caching this function anyways...
+      },
+    });
 
-      // Check if the response is ok (status in the range 200-299)
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      // Parse the JSON response
-      const data = (await response.json()) as { data: Model[] };
-
-      // Return the list of models directly
-      return data.data;
-    } catch (error) {
-      console.error('Error fetching models:', error);
-      throw error; // re-throwing the error to be handled by the calling code
+    // Check if the response is ok (status in the range 200-299)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
+
+    // Parse the JSON response
+    const data = (await response.json()) as { data: Model[] };
+
+    // Return the list of models directly
+    return data.data;
+  } catch (error) {
+    console.error('Error fetching models:', error);
+    throw error; // re-throwing the error to be handled by the calling code
   }
-);
+});

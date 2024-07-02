@@ -12,14 +12,14 @@ async function initResvg() {
   }
 }
 
-async function loadFont(url: string) {
+/*async function loadFont(url: string) {
   const fontResponse = await fetch(url);
   if (!fontResponse.ok) {
     throw new Error('Failed to load font');
   }
   const fontData = await fontResponse.arrayBuffer();
   return new Uint8Array(fontData);
-}
+}*/
 
 /*
 example options:

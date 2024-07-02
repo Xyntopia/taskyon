@@ -1,18 +1,18 @@
 import { RouteRecordRaw } from 'vue-router';
 import { mdRoutes } from './routes_default';
 import { defineAsyncComponent } from 'vue';
-import Load from 'components/Loading.vue';
+import LoadCircle from 'components/LoadingCircle.vue';
 
 export const taskyonRoutes = {
   path: '/',
-  component: () => import('layouts/Taskyon.vue'),
+  component: () => import('layouts/TaskyonLayout.vue'),
   children: [
     {
       path: '',
       //component: defineAsyncComponent(() => import('pages/TaskChat.vue')),
       component: defineAsyncComponent({
         loader: () => import('pages/TaskChat.vue'),
-        loadingComponent: Load,
+        loadingComponent: LoadCircle,
         delay: 200,
       }),
       /*component: defineAsyncComponent({
@@ -30,7 +30,7 @@ export const taskyonRoutes = {
     },
     {
       path: 'settings/:tab?',
-      component: () => import('pages/Settings.vue'),
+      component: () => import('pages/SettingsPage.vue'),
     },
     {
       path: 'pricing',
@@ -38,7 +38,7 @@ export const taskyonRoutes = {
     },
     {
       path: 'diagnostics',
-      component: () => import('pages/Diagnostics.vue'),
+      component: () => import('pages/DiagnosticsPage.vue'),
     },
     {
       path: 'tools',
@@ -55,7 +55,7 @@ export const taskyonRoutes = {
 const routes: RouteRecordRaw[] = [
   {
     path: '/widgets',
-    component: () => import('layouts/Widgets.vue'),
+    component: () => import('layouts/WidgetsLayout.vue'),
     children: [{ path: 'chat', component: () => import('pages/TaskChat.vue') }],
   },
 
@@ -65,7 +65,7 @@ const routes: RouteRecordRaw[] = [
   // but you can also remove it
   {
     path: '/:catchAll(.*)*',
-    component: () => import('pages/Error404.vue'),
+    component: () => import('src/pages/Error404Page.vue'),
   },
 ];
 

@@ -355,7 +355,7 @@ import {
 } from 'src/modules/taskyon/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { LLMTask, partialTaskDraft } from 'src/modules/taskyon/types';
+import { LLMTask } from 'src/modules/taskyon/types';
 import ModelSelection from 'components/ModelSelection.vue';
 import { writeFilesToOpfs } from 'src/modules/taskyon/OPFS';
 import { addTask2Tree } from 'src/modules/taskyon/taskManager';
@@ -389,7 +389,6 @@ import {
   matKeyboardArrowUp,
   matKeyboardArrowDown,
   matTune,
-  matInfo,
   matVisibility,
   matVisibilityOff,
 } from '@quasar/extras/material-icons';
