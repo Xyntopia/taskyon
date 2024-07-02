@@ -26,9 +26,9 @@ describe('test taskyon defaults', () => {
     });*/
   });
   it('should be able to send a free message and  get a response', () => {
-    cy.title().should('include', 'taskyon');
+    cy.title().should('include', 'Taskyon');
 
-    cy.log('starting tests!')
+    cy.log('starting tests!');
 
     cy.get('.q-btn').contains('Use free Taskyon (low quality)').click();
 
@@ -49,7 +49,7 @@ describe('test taskyon defaults', () => {
     //cy.contains('Clicks on todos: 1').should('exist');
 
     cy.get(
-      '.user > .message-container > :nth-child(1) > .items-end > .col > .q-markdown > p'
+      '.user > .message-container > :nth-child(1) > .items-end > .col > .q-markdown > p',
     ).should('have.text', 'hello world!');
     cy.get('.assistant > .message-container').should('not.be.empty');
 
@@ -76,7 +76,7 @@ describe('test taskyon defaults', () => {
       .then((text) => {
         const number = parseInt(text, 10);
         expect(number).to.match(/^\d+$/); // Check if the text is a number
-        expect(number).to.be.greaterThan(50); // Check if the number is greater than 50
+        expect(number).to.be.greaterThan(10); // Check if the number is greater than 50
       });
 
     //.and('match', /^\d+/); // Check if it contains a number

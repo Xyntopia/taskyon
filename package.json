@@ -1,8 +1,8 @@
 {
-  "name": "xyntopia",
+  "name": "taskyon",
   "version": "0.2.0",
   "description": "Modular Frontend for Xyntopia Applications and Company Page",
-  "productName": "Xyntopia",
+  "productName": "Taskyon",
   "author": "thomas meschede / yeus <thomas.meschede@web.de>",
   "private": true,
   "scripts": {

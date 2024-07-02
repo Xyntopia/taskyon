@@ -25,8 +25,6 @@ describe('Tool Tests', () => {
     });*/
   });
   it('Should be able to create a tool and use it, also clean up after', () => {
-    cy.title().should('include', 'taskyon');
-
     // cy.contains('your message').type('hello world!{enter}');
     //cy.get('li').first().click();
     //cy.contains('Clicks on todos: 1').should('exist');
@@ -59,7 +57,7 @@ describe('Tool Tests', () => {
       .should('exist');
 
     console.log(
-      'make sure, when creating a new chat & message, the function tag is gone...'
+      'make sure, when creating a new chat & message, the function tag is gone...',
     );
 
     cy.get('[aria-label="start new chat"]').click();

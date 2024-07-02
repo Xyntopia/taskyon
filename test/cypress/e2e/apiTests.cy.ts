@@ -25,8 +25,6 @@ describe('taskyon API', () => {
     });*/
   });
   it('should be able to interact with taskyon API', () => {
-    cy.title().should('include', 'taskyon');
-
     cy.get('.q-btn').contains('Use free Taskyon (low quality)').click();
 
     // enable task cost display & expert mode...

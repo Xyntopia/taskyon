@@ -9,7 +9,7 @@ export default defineConfig({
   chromeWebSecurity: false,
   e2e: {
     // setupNodeEvents(on, config) {},
-    baseUrl: 'http://localhost:8080',
+    baseUrl: 'http://localhost:9000',
     //baseUrl: 'http://localhost:4000',
     //baseUrl: 'https://taskyon.space',
     supportFile: 'test/cypress/support/e2e.ts',
