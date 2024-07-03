@@ -1,10 +1,12 @@
-import equal from 'fast-deep-equal/es6';
+//import equal from 'fast-deep-equal/es6';
+import { deepEqual } from 'fast-equals';
 
-export type DeepPartial<T> = T extends Record<string, unknown>
-  ? {
-      [P in keyof T]?: DeepPartial<T[P]>;
-    }
-  : T;
+export type DeepPartial<T> =
+  T extends Record<string, unknown>
+    ? {
+        [P in keyof T]?: DeepPartial<T[P]>;
+      }
+    : T;
 
 export function openrouterPricing(price: number | string, digits = 1) {
   if (typeof price === 'string') {
@@ -66,7 +68,7 @@ export function sleep(ms: number) {
 
 export function lruCache<ReturnType>(
   size: number,
-  ignoreIndices: number[] = []
+  ignoreIndices: number[] = [],
 ): (fn: AnyFunction<ReturnType>) => AnyFunction<ReturnType> {
   // The cache for storing function call results.
   const cache = new Map<string, ReturnType>();
@@ -108,7 +110,7 @@ type CacheEntry<ReturnType> = {
 export function timeLruCache<ReturnType>(
   size: number,
   maxAge: number, // Maximum age in milliseconds
-  ignoreIndices: number[] = []
+  ignoreIndices: number[] = [],
 ): (fn: AnyFunction<ReturnType>) => AnyFunction<ReturnType> {
   // The cache for storing function call results.
   const cache = new Map<string, CacheEntry<ReturnType>>();
@@ -155,20 +157,20 @@ export function timeLruCache<ReturnType>(
 // The cache for storing function call results.
 function saveToLocalStorage<ReturnType>(
   key: string,
-  cache: Map<string, CacheEntry<ReturnType>>
+  cache: Map<string, CacheEntry<ReturnType>>,
 ) {
   const serializedCache = JSON.stringify(Array.from(cache.entries()));
   localStorage.setItem(key, serializedCache);
 }
 
 function loadFromLocalStorage<ReturnType>(
-  key: string
+  key: string,
 ): Map<string, CacheEntry<ReturnType>> {
   const serializedCache = localStorage.getItem(key);
   if (serializedCache) {
     const parsedCache = JSON.parse(serializedCache) as [
       string,
-      CacheEntry<ReturnType>
+      CacheEntry<ReturnType>,
     ][];
     return new Map(parsedCache);
   }
@@ -181,7 +183,7 @@ export function asnycasyncTimeLruCache<ReturnType>(
   useLocalStorage = false,
   storageKey = 'asyncTimeLruCache',
   lazyUpdate = false, // New parameter for lazy update
-  ignoreIndices: number[] = []
+  ignoreIndices: number[] = [],
 ): (fn: AnyFunction<Promise<ReturnType>>) => AnyFunction<Promise<ReturnType>> {
   const cache = useLocalStorage
     ? loadFromLocalStorage<ReturnType>(storageKey)
@@ -201,7 +203,7 @@ export function asnycasyncTimeLruCache<ReturnType>(
   };
 
   return (
-    fn: AnyFunction<Promise<ReturnType>>
+    fn: AnyFunction<Promise<ReturnType>>,
   ): AnyFunction<Promise<ReturnType>> => {
     return async function (...args: unknown[]): Promise<ReturnType> {
       // Generate a cache key, ignoring specified arguments.
@@ -247,7 +249,7 @@ export function asyncTimeLruCache<ReturnType>(
   maxAge: number, // Maximum age in milliseconds
   useLocalStorage = false,
   storageKey = 'asyncTimeLruCache',
-  ignoreIndices: number[] = []
+  ignoreIndices: number[] = [],
 ): (fn: AnyFunction<Promise<ReturnType>>) => AnyFunction<ReturnType> {
   // The cache for storing function call results.
   const cache = useLocalStorage
@@ -302,13 +304,13 @@ export function asyncTimeLruCache<ReturnType>(
 
 export function asyncLruCache<ReturnType>(
   size: number,
-  ignoreIndices: number[] = []
+  ignoreIndices: number[] = [],
 ): (fn: AnyFunction<Promise<ReturnType>>) => AnyFunction<Promise<ReturnType>> {
   // The cache for storing function call results.
   const cache = new Map<string, Promise<ReturnType>>();
 
   return (
-    fn: AnyFunction<Promise<ReturnType>>
+    fn: AnyFunction<Promise<ReturnType>>,
   ): AnyFunction<Promise<ReturnType>> => {
     return async function (...args: unknown[]): Promise<ReturnType> {
       // Generate a cache key, ignoring specified arguments.
@@ -396,7 +398,8 @@ function isObject(item: unknown): item is Record<string, unknown> {
 function unionArrays(arr1: unknown[], arr2: unknown[]) {
   const combined = arr1.concat(arr2);
   return combined.filter(
-    (item, index) => combined.findIndex((obj) => equal(obj, item)) === index
+    (item, index) =>
+      combined.findIndex((obj) => deepEqual(obj, item)) === index,
   );
 }
 
@@ -414,7 +417,7 @@ function unionArrays(arr1: unknown[], arr2: unknown[]) {
 export function deepMerge<A, B>(
   obj1: A,
   obj2: B,
-  arrayMergeStrategy: 'overwrite' | 'union' = 'overwrite'
+  arrayMergeStrategy: 'overwrite' | 'union' = 'overwrite',
 ): A & B {
   const output: Record<string, unknown> = Object.assign({}, obj1); // Start with a shallow copy of obj1
   if (isObject(obj1) && isObject(obj2)) {
@@ -457,7 +460,7 @@ export function deepMerge<A, B>(
 export function deepMergeReactive<A, B>(
   obj1: A,
   obj2: B,
-  mergeStrategy: 'overwrite' | 'additive'
+  mergeStrategy: 'overwrite' | 'additive',
 ): A & B {
   if (!isObject(obj1) || !isObject(obj2)) {
     throw new Error('Both arguments must be objects.');
@@ -475,7 +478,7 @@ export function deepMergeReactive<A, B>(
       obj1AsRecord[key] = mergeArraysReactive(
         obj1Value,
         obj2Value,
-        mergeStrategy
+        mergeStrategy,
       );
     } else if (mergeStrategy === 'overwrite') {
       // if the key exists, and one of the objects isn't an array or object
@@ -500,7 +503,7 @@ export function deepMergeReactive<A, B>(
 function mergeArraysReactive(
   arr1: unknown[],
   arr2: unknown[],
-  mergeStrategy: 'overwrite' | 'additive'
+  mergeStrategy: 'overwrite' | 'additive',
 ): unknown[] {
   for (let i = 0; i < arr1.length || i < arr2.length; i++) {
     const element1 = arr1[i];
@@ -512,7 +515,7 @@ function mergeArraysReactive(
       arr1[i] = mergeArraysReactive(
         element1 as unknown[],
         element2 as unknown[],
-        mergeStrategy
+        mergeStrategy,
       );
     } else if (element1 === undefined && element2 !== undefined) {
       arr1.push(element2);
