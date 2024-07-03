@@ -72,6 +72,10 @@ function zodToOpenApiSchema(schema: z.ZodTypeAny): tyYamlObjectRepresentation {
       ...zodToOpenApiSchema(schema.unwrap()),
       nullable: true,
     };
+  } else if (schema instanceof z.ZodDiscriminatedUnion) {
+    return {
+      oneOf: schema.options.map(zodToOpenApiSchema),
+    };
   }
 
   // Fallback for unsupported types
@@ -83,6 +87,7 @@ export function zodSchemasToOpenApi(
   schemas: Record<string, z.ZodTypeAny>,
   title: string,
   version: string,
+  messageTypes: string[],
   format: 'json' | 'yaml' = 'json',
 ): string {
   const openApiSpec = {
@@ -91,7 +96,16 @@ export function zodSchemasToOpenApi(
       title,
       version,
     },
-    paths: {},
+    transport: [
+      {
+        postMessage: {
+          schemes: ['postMessage'],
+          consumes: ['application/json'],
+          produces: ['application/json'],
+        },
+      },
+    ],
+    paths: {} as tyYamlObjectRepresentation,
     components: {
       schemas: {} as tyYamlObjectRepresentation,
     },
@@ -99,6 +113,24 @@ export function zodSchemasToOpenApi(
 
   for (const [name, schema] of Object.entries(schemas)) {
     openApiSpec.components.schemas[name] = zodToOpenApiSchema(schema);
+  }
+
+  // Generate paths for each message type
+  for (const messageType of messageTypes) {
+    const schema = schemas[messageType];
+    if (schema instanceof z.ZodObject) {
+      openApiSpec.paths[`/messages/${messageType}`] = {
+        post: {
+          summary: `Handle ${messageType} message`,
+          requestBody: {
+            content: {},
+          },
+          responses: {
+            // TODO:
+          },
+        },
+      };
+    }
   }
 
   if (format === 'yaml') {

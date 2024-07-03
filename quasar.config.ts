@@ -7,7 +7,6 @@
 import { configure } from 'quasar/wrappers';
 import path from 'path';
 import fs from 'fs';
-import yaml from 'js-yaml';
 // this is in order to support the not-updated version of danfojs (and other libraries which need
 // polyfills) in webpack 5:
 // also read https://quasar.dev/start/upgrade-guide#nodejs-polyfills
@@ -15,8 +14,9 @@ import yaml from 'js-yaml';
 // also needs:
 //    yarn add --dev node-polyfill-webpack-plugin browserify-zlib
 import nodePolyfillWebpackPlugin from 'node-polyfill-webpack-plugin';
-import { ToolBase } from './src/modules/taskyon/types';
+import { TaskyonMessages, ToolBase } from './src/modules/taskyon/types';
 import { zodSchemasToOpenApi } from 'src/modules/taskyon/openapi';
+import { ZodAny, ZodObject } from 'zod';
 
 const APPNAME = 'taskyon';
 const DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid';
@@ -49,12 +49,22 @@ function createOpenAPIDocs() {
 
   console.log('generate docs...');
 
+  const messages = TaskyonMessages.options.reduce(
+    (p, n) => {
+      p[n.shape.type.value] = n;
+      return p;
+    },
+    {} as Record<string, unknown>,
+  );
+
   const openApiYaml = zodSchemasToOpenApi(
     {
       ToolBase,
+      ...messages,
     },
     'Taskyon API',
     '1.0.0',
+    Object.keys(messages),
     'yaml',
   );
   //console.log(openApiYaml);
