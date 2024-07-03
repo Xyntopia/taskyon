@@ -5,8 +5,6 @@ import { bigIntToString } from './utils';
 import { asyncRunPython } from 'src/modules/taskyon/webWorkerApi';
 import {
   TaskResult,
-  convertToYamlWComments,
-  YamlRepresentation,
   TaskyonMessages,
   FunctionArguments,
   RemoteFunctionCall,
@@ -18,6 +16,7 @@ import {
 import { z } from 'zod';
 import type { TyTaskManager } from './taskManager';
 import { loadFile } from '../loadFiles';
+import { YamlRepresentation, convertToYamlWComments } from './openapi';
 
 const arbitraryFunctionSchema = z.custom<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -54,8 +53,8 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
           } else {
             reject(
               new Error(
-                `The response message for functionCall to ${name} had the wrong format!`
-              )
+                `The response message for functionCall to ${name} had the wrong format!`,
+              ),
             );
           }
         }
@@ -65,14 +64,16 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
       const timeoutSeconds = 10;
       setTimeout(() => {
         reject(
-          new Error(`Response timeout (${timeoutSeconds}) for function ${name}`)
+          new Error(
+            `Response timeout (${timeoutSeconds}) for function ${name}`,
+          ),
         );
         window.removeEventListener('message', listener); // remove listener on timeout
       }, timeoutSeconds * 1000); // 100 seconds timeout for example
 
       // TODO: make timeout configurable
       window.addEventListener('message', listener);
-    }
+    },
   );
 
   // we do this also in order to make sure we have a defined object
@@ -93,7 +94,7 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
 export async function handleFunctionExecution(
   func: FunctionCall,
   tools: Record<string, ToolBase | Tool>,
-  taskManager: TyTaskManager
+  taskManager: TyTaskManager,
 ): Promise<TaskResult> {
   try {
     const tool = tools[func.name];
@@ -108,7 +109,7 @@ export async function handleFunctionExecution(
     } else if (tool.code) {
       console.log('compiling function code', tool);
       console.error(
-        'compiling js code into a function is only available in the development version of taskyon!'
+        'compiling js code into a function is only available in the development version of taskyon!',
       );
       return {
         type: 'ToolError',
@@ -146,7 +147,7 @@ export async function handleFunctionExecution(
 export const getFileContent: Tool = {
   function: async (
     { filename }: { filename: string },
-    taskManager: TyTaskManager
+    taskManager: TyTaskManager,
   ) => {
     const file = await taskManager.getFileByName(filename);
     const fileContent = await loadFile(file);
@@ -232,7 +233,7 @@ export function createToolExampleTool(tools: Record<string, Tool>): Tool {
   function getFunctionSignature(func: arbitraryFunction | string) {
     const funcString = func.toString();
     const signatureMatch = /(function\s.*?\(.*?\))|((\w+|\((.*?)\))\s*=>)/.exec(
-      funcString
+      funcString,
     );
     return signatureMatch ? signatureMatch[0] : 'function signature not found';
   }
@@ -383,7 +384,7 @@ REQUIRED: ${[...requiredProperties].join(', ')}`;
 
 export function summarizeTools(
   toolIDs: string[],
-  tools: Record<string, ToolBase>
+  tools: Record<string, ToolBase>,
 ) {
   const toolStr = toolIDs
     .map((t) => {

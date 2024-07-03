@@ -343,19 +343,6 @@ export const taskTemplateTypes = {
   })*/
 };
 
-export interface YamlObjectRepresentation {
-  [key: string]: YamlRepresentation;
-}
-
-export type YamlRepresentation =
-  | string
-  | YamlObjectRepresentation
-  | YamlArrayRepresentation;
-interface YamlArrayRepresentation {
-  type: 'array';
-  items: YamlRepresentation;
-}
-
 const answer = z.string().nullish();
 const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish();
 
@@ -411,74 +398,6 @@ const yamlTaskSchema = yamlToolChatType.extend({
 type yamlTaskSchema = z.infer<typeof yamlTaskSchema>;
 */
 
-/**
- * Converts a string representation of an object to YAML format with comments.
- * 
- * This function takes a string representation of an object as input, extracts comments
- * from it, which are represented by a key, starting with an '#'
- * and returns a new string in YAML format with the comments preserved, but the keys removed.
- * 
- * this:
- * 
-  # comment: >-
-        # This is a comment
-        # spanning multiple lines
-  bar: baz
-  qux: quux
-
-  becomes:
-
-  # This is a comment
-  # spanning multiple lines
-  bar: baz
-  qux: quux
-
-and this:
-
-
-
- * 
- * @param {string} objrepr - The string representation of the object to be converted.
- * @returns {string} The converted YAML string with comments.
- */
-export function convertToYamlWComments(objrepr: string) {
-  // Regular expression to match the entire comment section, including the key and optional '>-'
-  // The regex pattern is broken down as follows:
-  // ( *) - captures the indentation (group 1)
-  // (# .*:) - captures the key (group 2)
-  // \s*(>-)? - captures the optional '>-'
-  // ([\s\S]*?) - captures the comment block (group 4)
-  // (?=\n\s*\S+:|$) - ensures the match is followed by a newline and indentation, or the end of the string
-  const regex = /( *)(('# .*:)\s*(>-)?)([\s\S]*?)(?=\n\s*\S+:|$)/g;
-
-  return objrepr.replace(
-    regex,
-    (
-      match, // the entire match
-      indent: string, // the indentation (group 1)
-      keyX, // the key (group 2, not used)
-      key, // the key (group 3, not used)
-      keyEnd: string, // the optional '>-'
-      commentBlock: string, // the comment block (group 4)
-    ) => {
-      const isMultiline = !!keyEnd; // check if the comment block is multiline (i.e., has a '>-')
-      // Modify each line of the comment block
-      let modifiedCommentBlock = [];
-      if (isMultiline) {
-        // Split the comment block into individual lines
-        const commentLines = commentBlock.split('\n').filter((l) => l.trim());
-        // Trim the first line and apply the indentation to all other lines
-        modifiedCommentBlock = commentLines.map((line) => {
-          return indent + '# ' + line.trim(); // add the indentation and '#' to each line
-        });
-      } else {
-        // If the comment block is not multiline, simply add the indentation and '#' to it
-        modifiedCommentBlock = [indent + '# ' + commentBlock];
-      }
-      return modifiedCommentBlock.join('\n');
-    },
-  );
-}
 interface Permission {
   id: string;
   object: string;
