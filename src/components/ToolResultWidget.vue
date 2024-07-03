@@ -20,7 +20,6 @@
         />
       </div>
       <div caption class="relative-position">
-        {{ useIframe }}
         <div v-if="!isHtmlResult && !useIframe" class="scroll-area">
           {{ dump(task.result?.toolResult) }}
         </div>

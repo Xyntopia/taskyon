@@ -9,7 +9,7 @@ describe('iframe integration', () => {
     cy.wrap(
       Cypress.automation('remote:debugger:protocol', {
         command: 'Network.clearBrowserCache',
-      })
+      }),
     );
     /*cy.visit('./public/docs/examples/simpleExample.html');
 
@@ -61,7 +61,29 @@ describe('iframe integration', () => {
         .find('button[aria-label="Open Sidebar"]')
         .should('exist')
         .click();
-      //getIframeBody().get('a[href="/settings"]').should('not.exist');
+
+      getIframeBody()
+        .find('[aria-label="Expert mode"] > .q-toggle__inner')
+        .click();
+      getIframeBody()
+        .find('[aria-label="Show task costs"] > .q-toggle__inner')
+        .click();
+
+      //getIframeBody().find('button[aria-label="Open Sidebar"]').click();
+      getIframeBody().click();
+
+      getIframeBody()
+        .contains('your message')
+        .type(
+          'Can you add the two strings: "cypress" and "test function"  for me using the provided tool?  {enter}',
+        );
+
+      cy.get('#output').contains('cypresstest function');
+
+      getIframeBody().contains('myExampleStringAdderAlone').click();
+      getIframeBody()
+        .contains(/^result:[\|\s]*cypresstest function/)
+        .should('exist');
 
       // TODO: make sure we are in minimal mode and all the other stuff required for embedded taskyon
 
@@ -115,6 +137,6 @@ describe('iframe integration', () => {
         .eq(0)
         .get('.q-field .q-chip')
         .should('not.exist');*/
-    }
+    },
   );
 });
