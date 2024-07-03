@@ -19,7 +19,6 @@ import {
   StructuredResponse,
   OpenRouterGenerationInfo,
   llmSettings,
-  getApiConfigCopy,
   ToolBase,
 } from './types';
 import { addTask2Tree, processTasksQueue } from './taskManager';
@@ -27,10 +26,10 @@ import type { OpenAI } from 'openai';
 import { TyTaskManager } from './taskManager';
 import { Tool, handleFunctionExecution } from './tools';
 import { dump, load } from 'js-yaml';
-import { deepMerge, sleep } from './utils';
+import { deepCopy, deepMerge, sleep } from './utils';
 
 function isOpenAIFunctionCall(
-  choice: OpenAI.ChatCompletion['choices'][0]
+  choice: OpenAI.ChatCompletion['choices'][0],
 ): boolean {
   return (
     (choice.finish_reason === 'function_call' ||
@@ -43,7 +42,7 @@ const delimiters = '```';
 
 function extractOpenAIFunctions(
   choice: OpenAI.ChatCompletion['choices'][0],
-  tools: Record<string, ToolBase>
+  tools: Record<string, ToolBase>,
 ) {
   const functionCalls: FunctionCall[] = [];
   for (const toolCall of choice.message.tool_calls || []) {
@@ -79,7 +78,7 @@ export async function processChatTask(
   llmSettings: llmSettings,
   apiKey: string,
   taskManager: TyTaskManager,
-  taskWorkerController: TaskWorkerController
+  taskWorkerController: TaskWorkerController,
 ) {
   // TODO: refactor this function!
   // TODO: can we interrupt non-streaming tasks? possibly using an AbortController.
@@ -89,7 +88,7 @@ export async function processChatTask(
       task,
       apiKey,
       llmSettings.openAIAssistantId,
-      taskManager
+      taskManager,
     );
     if (messages) {
       task.result = {
@@ -101,7 +100,7 @@ export async function processChatTask(
     const api = getApiConfigCopy(llmSettings, task.configuration?.chatApi);
     if (!api) {
       throw new Error(
-        `api doesn\'t exist! ${llmSettings.selectedApi || 'no api selected!'}`
+        `api doesn\'t exist! ${llmSettings.selectedApi || 'no api selected!'}`,
       );
     }
     const selectedModel = task.configuration?.model;
@@ -149,7 +148,7 @@ export async function processChatTask(
           },
           () => {
             return taskWorkerController.isInterrupted();
-          } // define a function to check whether we should cancel the stream ...
+          }, // define a function to check whether we should cancel the stream ...
         );
 
         // choose the type of the result, based on previous result type.
@@ -192,8 +191,8 @@ export async function processChatTask(
               generateHeaders(
                 apiKey,
                 llmSettings.siteUrl,
-                llmSettings.selectedApi || ''
-              )
+                llmSettings.selectedApi || '',
+              ),
             ).then((generationInfo) => {
               enrichWithDelayedUsageInfos(task, taskManager, generationInfo);
             });
@@ -218,7 +217,7 @@ export async function processChatTask(
                 .then((response) => {
                   if (!response.ok) {
                     throw new Error(
-                      `Could not find generation information for task ${task.id}`
+                      `Could not find generation information for task ${task.id}`,
                     );
                   }
                   return response.json() as Promise<
@@ -231,7 +230,7 @@ export async function processChatTask(
                     enrichWithDelayedUsageInfos(
                       task,
                       taskManager,
-                      data[0].reference_data
+                      data[0].reference_data,
                     );
                   }
                 });
@@ -246,7 +245,7 @@ export async function processChatTask(
           task.debugging.estimatedTokens = await estimateChatTokens(
             task,
             openAIConversationThread,
-            await taskManager.searchToolDefinitions()
+            await taskManager.searchToolDefinitions(),
           );
         }
       }
@@ -262,7 +261,7 @@ async function processFunctionTask(
   task: LLMTask,
   tools: Record<string, ToolBase | Tool>,
   taskWorkerController: TaskWorkerController,
-  taskManager: TyTaskManager
+  taskManager: TyTaskManager,
 ) {
   if ('functionCall' in task.content) {
     const func = task.content.functionCall;
@@ -286,7 +285,7 @@ async function processFunctionTask(
 }
 
 function createNewAssistantResponseTask(
-  parentTask: LLMTask
+  parentTask: LLMTask,
 ): partialTaskDraft[] {
   // Process the response and create new tasks if necessary
   console.log('create new response task');
@@ -295,7 +294,7 @@ function createNewAssistantResponseTask(
   console.log('create a new assistant response tasks...', messages);
   for (const tm of messages) {
     const allText = tm.content.filter(
-      (m): m is OpenAI.Beta.Threads.MessageContentText => m.type === 'text'
+      (m): m is OpenAI.Beta.Threads.MessageContentText => m.type === 'text',
     );
     taskListFromResponse.push({
       role: tm.role,
@@ -312,7 +311,7 @@ function createNewAssistantResponseTask(
 
 function createParsingErrorTask(
   err: unknown,
-  yamlContent: string
+  yamlContent: string,
 ): partialTaskDraft {
   let message: string;
   let debugging: Record<string, unknown>;
@@ -350,7 +349,7 @@ function createParsingErrorTask(
 }
 
 async function parseChatResponse2TaskDraft(
-  message: string
+  message: string,
 ): Promise<{ taskDraft: partialTaskDraft; execute: boolean }> {
   // parse the response and create a new task filled with the correct parameters
   let yamlContent = message.trim();
@@ -371,9 +370,8 @@ async function parseChatResponse2TaskDraft(
       execute: true,
     };
   }
-  const structuredResponse = await StructuredResponse.safeParseAsync(
-    parsedYaml
-  );
+  const structuredResponse =
+    await StructuredResponse.safeParseAsync(parsedYaml);
 
   // TODO: test & handle more special cases such as when we have an asnwer & toolcall, or if our tool descriptions
   //       don't really work very well...
@@ -408,7 +406,7 @@ async function parseChatResponse2TaskDraft(
     return {
       taskDraft: createParsingErrorTask(
         structuredResponse.error.toString(),
-        yamlContent
+        yamlContent,
       ),
       execute: true,
     };
@@ -424,7 +422,7 @@ async function generateFollowUpTasksFromResult(
   finishedTask: LLMTask,
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
-  taskWorkerController: TaskWorkerController
+  taskWorkerController: TaskWorkerController,
 ) {
   console.log('generate follow up task');
   const childCosts = {
@@ -435,7 +433,7 @@ async function generateFollowUpTasksFromResult(
   // use helper function to make code more concise ;)
   const addFollowUpTask = async (
     execute: boolean,
-    partialTask: partialTaskDraft
+    partialTask: partialTaskDraft,
   ) => {
     partialTask.debugging = { ...partialTask.debugging, ...childCosts };
     const newTaskId = await addTask2Tree(
@@ -445,7 +443,7 @@ async function generateFollowUpTasksFromResult(
       // interrupt execution if interrupted flag is shown!
       // this makes sure that results are still saved, even if we stop any
       // further execution
-      taskWorkerController.isInterrupted() ? false : execute
+      taskWorkerController.isInterrupted() ? false : execute,
     );
     llmSettings.selectedTaskId = newTaskId;
   };
@@ -468,7 +466,7 @@ async function generateFollowUpTasksFromResult(
       const newTaskDraftList = createNewAssistantResponseTask(finishedTask);
       for (const td of newTaskDraftList) {
         throw Error(
-          "It doesn't work right now! we need to create a sequential task chain here and add each tasks new ID to the net one as a parent"
+          "It doesn't work right now! we need to create a sequential task chain here and add each tasks new ID to the net one as a parent",
         );
         // TODO:  enable this in case of an error...
         void addFollowUpTask(false, {
@@ -488,7 +486,7 @@ async function generateFollowUpTasksFromResult(
       });
     } else if (finishedTask.result.type === 'StructuredChatResponse') {
       const { taskDraft, execute } = await parseChatResponse2TaskDraft(
-        choice?.message.content || ''
+        choice?.message.content || '',
       );
       if (taskDraft) {
         await addFollowUpTask(execute, deepMerge(taskTemplate, taskDraft));
@@ -498,7 +496,7 @@ async function generateFollowUpTasksFromResult(
       if (choice) {
         const functionCall = extractOpenAIFunctions(
           choice,
-          await taskManager.searchToolDefinitions()
+          await taskManager.searchToolDefinitions(),
         );
         if (functionCall) {
           void addFollowUpTask(
@@ -506,7 +504,7 @@ async function generateFollowUpTasksFromResult(
             deepMerge(taskTemplate, {
               role: 'function',
               content: { function: functionCall[0] },
-            })
+            }),
           );
         }
       }
@@ -520,8 +518,8 @@ async function generateFollowUpTasksFromResult(
     };
     const message = dump(
       JSON.parse(
-        JSON.stringify({ message: error.message, cause: error.cause }, null, 3)
-      )
+        JSON.stringify({ message: error.message, cause: error.cause }, null, 3),
+      ),
     );
     void addFollowUpTask(
       false,
@@ -529,7 +527,7 @@ async function generateFollowUpTasksFromResult(
         state: 'Completed',
         role: 'system',
         content: { message },
-      })
+      }),
     );
   }
 }
@@ -599,7 +597,7 @@ async function processTask(
   taskId: string,
   llmSettings: llmSettings,
   apiKeys: Record<string, string>,
-  taskWorkerController: TaskWorkerController
+  taskWorkerController: TaskWorkerController,
 ) {
   // TODO: make this function return a promise so taht we can interrupt it anytime!
   // return new Promise((resolve, reject) => {
@@ -609,7 +607,7 @@ async function processTask(
         id: taskId,
         state: 'In Progress',
       },
-      false
+      false,
     );
 
     if ('message' in task.content || 'functionResult' in task.content) {
@@ -621,7 +619,7 @@ async function processTask(
           llmSettings,
           apiKey,
           taskManager,
-          taskWorkerController
+          taskWorkerController,
         );
       } else {
         throw new Error("we don't have any APIs selected!");
@@ -633,7 +631,7 @@ async function processTask(
         task,
         await taskManager.searchToolDefinitions(),
         taskWorkerController,
-        taskManager
+        taskManager,
       );
     } else {
       throw new Error("We don't know what to do with this task");
@@ -658,7 +656,7 @@ export async function taskWorker(
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
   apiKeys: Record<string, string>,
-  taskWorkerController: TaskWorkerController
+  taskWorkerController: TaskWorkerController,
 ) {
   console.log('entering task worker loop...');
   while (true) {
@@ -682,7 +680,7 @@ export async function taskWorker(
           taskId,
           llmSettings,
           apiKeys,
-          taskWorkerController
+          taskWorkerController,
         );
         // create a new task form the result. E.g. in the case of a simple chat, this will
         // create a task with the Answer of the LLM which then gets displayed in the chatwindow...
@@ -690,7 +688,7 @@ export async function taskWorker(
           task,
           llmSettings,
           taskManager,
-          taskWorkerController
+          taskWorkerController,
         );
         // and finally save the task
         void taskManager.setTask(task, true);
@@ -723,7 +721,7 @@ export async function taskWorker(
         // interrupt execution if interrupted flag is shown!
         // this makes sure that results are still saved, even if we stop any
         // further execution
-        taskWorkerController.isInterrupted() ? false : true
+        taskWorkerController.isInterrupted() ? false : true,
       );
       llmSettings.selectedTaskId = newTaskId;
 
@@ -750,5 +748,18 @@ export async function taskWorker(
         continue;
       }*/
     }
+  }
+}
+export function getApiConfig(llmSettings: llmSettings) {
+  if (llmSettings.selectedApi) {
+    return llmSettings.llmApis[llmSettings.selectedApi];
+  }
+}
+
+function getApiConfigCopy(llmSettings: llmSettings, apiName?: string) {
+  const searchName = apiName || llmSettings.selectedApi;
+  if (searchName) {
+    const api = llmSettings.llmApis[searchName];
+    return deepCopy(api);
   }
 }

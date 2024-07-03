@@ -1,7 +1,5 @@
 import type OpenAI from 'openai';
-import { dump } from 'js-yaml';
 import { z } from 'zod';
-import { deepCopy } from './utils';
 
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type RequireSome<T, K extends keyof T> = Omit<T, K> &
@@ -34,7 +32,7 @@ const OpenAIMessage = z.object({
       z.object({
         name: z.string(),
         arguments: z.string(),
-      })
+      }),
     )
     .optional(),
   name: z.string().optional(),
@@ -118,10 +116,10 @@ export const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionPara
             z.union([
               JSONSchemaForFunctionParameter,
               z.array(JSONSchemaForFunctionParameter),
-            ])
+            ]),
           )
           .optional(),
-      })
+      }),
     ),
     required: z.array(z.string()).optional(),
   });
@@ -135,7 +133,7 @@ export const ToolBase = z.object({
     .string()
     .optional()
     .describe(
-      "If a function description doesn't include any code taskyon will call a postMessage to the parent window with the function name."
+      "If a function description doesn't include any code taskyon will call a postMessage to the parent window with the function name.",
     ),
 });
 export type ToolBase = z.infer<typeof ToolBase>; // this reflects json schema:  https://json-schema.org/specification-links
@@ -204,10 +202,10 @@ export const RemoteFunctionCall = RemoteFunctionBase.extend({
     .literal('functionCall')
     .describe('Field to indicate what kind of a message we have here.'),
   arguments: FunctionArguments.optional().describe(
-    'the arguments for the function as a json object'
+    'the arguments for the function as a json object',
   ),
 }).describe(
-  'This type is used for sending messages with function calls between windows. E.g. from iframe to parent'
+  'This type is used for sending messages with function calls between windows. E.g. from iframe to parent',
 );
 export type RemoteFunctionCall = z.infer<typeof RemoteFunctionCall>;
 
@@ -219,10 +217,10 @@ export const RemoteFunctionResponse = RemoteFunctionBase.extend({
     .unknown()
     .optional()
     .describe(
-      'response of a FunctionCall, e.g. through postMessage with iframes.'
+      'response of a FunctionCall, e.g. through postMessage with iframes.',
     ),
 }).describe(
-  'This type is used for sending messages with the result of a remote function call between windows. E.g. from parent to taskyon iframe'
+  'This type is used for sending messages with the result of a remote function call between windows. E.g. from parent to taskyon iframe',
 );
 export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>;
 
@@ -247,7 +245,7 @@ export const LLMTask = z.object({
   content: TaskContent.default({ message: '' }).describe(
     `This is the actual content of the task. This is the actual content which is process at each step.
 For example this is, what an LLM would actually get to see. There are only a few different ways
-of how content can be structured. `
+of how content can be structured. `,
   ),
   state: TaskState,
   label: z.array(z.string()).optional(),
@@ -314,7 +312,7 @@ export const partialTaskDraft = LLMTask.pick({
   .partial()
   .required({ role: true, content: true })
   .describe(
-    'This is just a subset of the task properties which can be used to define new tasks in various places.'
+    'This is just a subset of the task properties which can be used to define new tasks in various places.',
   );
 export type partialTaskDraft = z.infer<typeof partialTaskDraft>;
 
@@ -345,7 +343,7 @@ export const taskTemplateTypes = {
   })*/
 };
 
-interface YamlObjectRepresentation {
+export interface YamlObjectRepresentation {
   [key: string]: YamlRepresentation;
 }
 
@@ -356,100 +354,6 @@ export type YamlRepresentation =
 interface YamlArrayRepresentation {
   type: 'array';
   items: YamlRepresentation;
-}
-
-/* convert a zod schema into a nested object where the description
-appear in keys starting with '#'
-*/
-export function zodToYAMLObject(
-  schema: z.ZodTypeAny,
-  optionalSymbol = ''
-): YamlRepresentation {
-  // Base case for primitive types
-  if (schema instanceof z.ZodString) {
-    return 'string';
-  } else if (schema instanceof z.ZodNumber) {
-    return 'number';
-  } else if (schema instanceof z.ZodBoolean) {
-    return 'boolean';
-  } else if (schema instanceof z.ZodNull) {
-    return 'null';
-  } else if (schema instanceof z.ZodEnum) {
-    return Object.keys(schema.Values).join('|');
-  }
-
-  // Modified ZodObject case to handle optionals
-  if (schema instanceof z.ZodObject) {
-    const shape: Record<string, z.ZodTypeAny> = schema.shape as Record<
-      string,
-      z.ZodTypeAny
-    >;
-    const yamlObject: YamlObjectRepresentation = {};
-    for (const key in shape) {
-      const fieldSchema = shape[key];
-      const optionalSuffix =
-        fieldSchema instanceof z.ZodOptional ? optionalSymbol : '';
-      if (fieldSchema?.description) {
-        yamlObject[`# ${key} description`] =
-          `${fieldSchema.description} ${optionalSuffix}`.trim();
-      }
-      yamlObject[key] = zodToYAMLObject(fieldSchema);
-    }
-    return yamlObject;
-  }
-
-  // Handle arrays
-  if (schema instanceof z.ZodArray) {
-    return {
-      type: 'array',
-      items: zodToYAMLObject(schema.element),
-    };
-  }
-
-  // records
-  if (schema instanceof z.ZodRecord) {
-    const values = zodToYAMLObject(schema.element);
-    return {
-      key1: values,
-      key2: values,
-      '...': '...',
-    };
-  }
-
-  // TODO: what do we do with arrays & objects in this example?
-  // Handle union types
-  if (schema instanceof z.ZodUnion) {
-    const options = (schema.options as z.ZodTypeAny[])
-      .map((option) => {
-        const val = zodToYAMLObject(option);
-        if (typeof val === 'object') {
-          return undefined;
-        }
-        return val;
-      })
-      .filter((r) => r);
-    return options.join('|');
-  }
-
-  // Modified ZodOptional case
-  if (schema instanceof z.ZodOptional) {
-    return zodToYAMLObject(schema.unwrap());
-  }
-
-  // Modified ZodOptional case
-  if (schema instanceof z.ZodNullable) {
-    return zodToYAMLObject(schema.unwrap());
-  }
-
-  // Add more cases as needed for other Zod types (unions, etc.)
-  // Fallback for unsupported types
-  return 'unsupported';
-}
-
-export function zodToYamlString(schema: z.ZodTypeAny): string {
-  const objrepr = zodToYAMLObject(schema);
-  const yamlSchema = convertToYamlWComments(dump(objrepr));
-  return yamlSchema;
 }
 
 const answer = z.string().nullish();
@@ -463,14 +367,14 @@ const FunctionResultBase = z
     'should we use another tool?': answer,
     'use tool': yesno,
     toolCommand: FunctionCall.optional().describe(
-      'If you want to use a tool, provide the function call parameters'
+      'If you want to use a tool, provide the function call parameters',
     ),
     answer: answer.describe(
-      'Otherwise provide a final answer summarizing the result.'
+      'Otherwise provide a final answer summarizing the result.',
     ),
   })
   .describe(
-    'Structured answer schema for processing the result of a function call.'
+    'Structured answer schema for processing the result of a function call.',
   );
 
 const ToolSelection = z
@@ -479,10 +383,10 @@ const ToolSelection = z
     'use tool': yesno,
     'which tool': answer,
     toolCommand: FunctionCall.optional().describe(
-      'If you want to use a tool, provide the function call parameters'
+      'If you want to use a tool, provide the function call parameters',
     ),
     answer: answer.describe(
-      'Otherwise provide a final answer with your thoughts'
+      'Otherwise provide a final answer with your thoughts',
     ),
   })
   .describe('Structured answer schema for a task including the use of tools');
@@ -555,7 +459,7 @@ export function convertToYamlWComments(objrepr: string) {
       keyX, // the key (group 2, not used)
       key, // the key (group 3, not used)
       keyEnd: string, // the optional '>-'
-      commentBlock: string // the comment block (group 4)
+      commentBlock: string, // the comment block (group 4)
     ) => {
       const isMultiline = !!keyEnd; // check if the comment block is multiline (i.e., has a '>-')
       // Modify each line of the comment block
@@ -572,7 +476,7 @@ export function convertToYamlWComments(objrepr: string) {
         modifiedCommentBlock = [indent + '# ' + commentBlock];
       }
       return modifiedCommentBlock.join('\n');
-    }
+    },
   );
 }
 interface Permission {
@@ -664,7 +568,7 @@ export const llmSettings = z.object({
     .boolean()
     .default(true)
     .describe(
-      'Toggle Vision ON/OFF. If a model supports vision, we wil ry to use that for uploaded images'
+      'Toggle Vision ON/OFF. If a model supports vision, we wil ry to use that for uploaded images',
     ),
   taskChatTemplates: z.object({
     basePrompt: z.string().default(''),
@@ -696,7 +600,7 @@ const appConfiguration = z.object({
     .boolean()
     .default(true)
     .describe(
-      'Determines, if enter will automatically send a message or rather shift-enter'
+      'Determines, if enter will automatically send a message or rather shift-enter',
     ),
   guiMode: z
     .enum(['auto', 'iframe', 'default'])
@@ -709,7 +613,7 @@ export const storedSettings = z.object({
   version: z
     .literal(8)
     .describe(
-      'whenever the schema of the settings change, this number will get changed as well...'
+      'whenever the schema of the settings change, this number will get changed as well...',
     ),
   appConfiguration,
   llmSettings,
@@ -722,23 +626,9 @@ export type storedSettings = z.infer<typeof storedSettings>;
 export const partialTyConfiguration = storedSettings
   .deepPartial()
   .describe(
-    'This can be used to update the configuration through iframe, json or URL'
+    'This can be used to update the configuration through iframe, json or URL',
   );
 export type partialTyConfiguration = z.infer<typeof partialTyConfiguration>;
-
-export function getApiConfig(llmSettings: llmSettings) {
-  if (llmSettings.selectedApi) {
-    return llmSettings.llmApis[llmSettings.selectedApi];
-  }
-}
-
-export function getApiConfigCopy(llmSettings: llmSettings, apiName?: string) {
-  const searchName = apiName || llmSettings.selectedApi;
-  if (searchName) {
-    const api = llmSettings.llmApis[searchName];
-    return deepCopy(api);
-  }
-}
 
 export const TaskMessage = z
   .object({
@@ -755,11 +645,11 @@ export const TaskMessage = z
       .default(true)
       .describe(
         `Only add the task if a task with this name doesn't exist. We do this, because otherwise tasks get 
-        added on every page-load if we configure our app through an iframe parent.`
+        added on every page-load if we configure our app through an iframe parent.`,
       ),
   })
   .describe(
-    'With this message type we can send tasks to taskyon from outside, e.g. a parent to a taskyon iframe'
+    'With this message type we can send tasks to taskyon from outside, e.g. a parent to a taskyon iframe',
   );
 export type TaskMessage = z.infer<typeof TaskMessage>;
 
@@ -780,7 +670,7 @@ to update our webpage with a new AI tool, we simply change the version string...
   duplicateTaskName: z
     .boolean()
     .describe(
-      'we use this here in order to prevent duplicate creation of our function declaration task'
+      'we use this here in order to prevent duplicate creation of our function declaration task',
     ),
 });
 export type FunctionDescriptionMessage = z.infer<
@@ -791,7 +681,7 @@ export const ClientFunctionDescription = FunctionDescriptionMessage.extend({
   function: z
     .function()
     .describe(
-      'The client-side callback function which taskyon is allowed to call.'
+      'The client-side callback function which taskyon is allowed to call.',
     ),
 }).omit({ type: true, duplicateTaskName: true });
 export type ClientFunctionDescription = z.infer<

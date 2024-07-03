@@ -3,9 +3,9 @@ import {
   ToolBase,
   LLMTask,
   llmSettings,
-  zodToYamlString,
   StructuredResponseTypes,
 } from './types';
+import { zodToYamlString } from './openapi';
 import OpenAI from 'openai';
 import { dump } from 'js-yaml';
 import { mapFunctionNames } from './chat';

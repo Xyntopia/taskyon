@@ -9,11 +9,14 @@ import axios from 'axios'; // TODO: replace with fetch
 import { LocalStorage, Notify } from 'quasar'; // load dynamically! :)
 import { deepMerge, deepMergeReactive, sleep } from 'src/modules/taskyon/utils';
 import { useQuasar } from 'quasar';
-import { useTaskWorkerController } from 'src/modules/taskyon/taskWorker';
+import {
+  useTaskWorkerController,
+  getApiConfig,
+} from 'src/modules/taskyon/taskWorker';
 import { initTaskyon } from 'src/modules/taskyon/init';
 import defaultSettings from 'src/assets/taskyon_settings.json';
 import { availableModels, getAssistants } from 'src/modules/taskyon/chat';
-import { storedSettings, getApiConfig } from 'src/modules/taskyon/types';
+import { storedSettings } from 'src/modules/taskyon/types';
 import { setupIframeApi } from 'src/modules/iframeApi';
 
 function removeCodeFromUrl() {
@@ -96,7 +99,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     const storedInitialState = deepMerge(
       initialState,
       storedStateObj,
-      'overwrite'
+      'overwrite',
     );
     stateRefs = reactive(storedInitialState);
   } else {
@@ -105,7 +108,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
         storedStateObj?.version || 'undefined'
       }) is not compatible with current version (${
         initialState.version
-      }). Using default settings.`
+      }). Using default settings.`,
     );
     stateRefs = reactive(initialState);
   }
@@ -141,12 +144,12 @@ export const useTaskyonStore = defineStore(storeName, () => {
           deepMergeReactive(
             stateRefs.appConfiguration,
             config.appConfiguration,
-            mergeStrategy
+            mergeStrategy,
           );
           deepMergeReactive(
             stateRefs.llmSettings,
             config.llmSettings,
-            mergeStrategy
+            mergeStrategy,
           );
         } else {
           console.warn(
@@ -154,7 +157,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
               config.version || 'undefined'
             }) is not compatible with current version (${
               initialState.version
-            }). Skipping dynamic config merge.`
+            }). Skipping dynamic config merge.`,
           );
         }
         stateRefs.initialLoad = false;
@@ -168,7 +171,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     () => stateRefs.llmSettings.selectedApi,
     (newValue) => {
       console.log('api switch detected', newValue);
-    }
+    },
   );
 
   let loadingKey = false;
@@ -181,7 +184,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
           'https://openrouter.ai/api/v1/auth/keys',
           {
             code: code,
-          }
+          },
         );
         const data = response.data;
         console.log('downloaded key:', data.key);
@@ -227,7 +230,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     stateRefs.keys,
     taskWorkerController,
     logError,
-    TaskList
+    TaskList,
   );
   async function getTaskManager() {
     return await taskManager;
@@ -279,7 +282,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     updateLlmModels,
     {
       immediate: true,
-    }
+    },
   );
 
   const assistantsInternal = ref<Awaited<ReturnType<typeof getAssistants>>>({});
@@ -291,14 +294,17 @@ export const useTaskyonStore = defineStore(storeName, () => {
           assistantsInternal.value = assitantDict;
         });
       }
-    }
+    },
   );
 
   const modelLookUp = computed(() =>
-    llmModelsInternal.value.reduce((acc, m) => {
-      acc[m.id] = m;
-      return acc;
-    }, {} as Record<string, Model>)
+    llmModelsInternal.value.reduce(
+      (acc, m) => {
+        acc[m.id] = m;
+        return acc;
+      },
+      {} as Record<string, Model>,
+    ),
   );
 
   // we do this funny next line, because our store is currently "reactive" which means

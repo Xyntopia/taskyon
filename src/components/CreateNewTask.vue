@@ -338,7 +338,6 @@ import { getDefaultParametersForTool } from 'src/modules/taskyon/tools';
 import {
   FunctionArguments,
   llmSettings,
-  getApiConfig,
   ToolBase,
 } from 'src/modules/taskyon/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
@@ -355,15 +354,6 @@ import { defineAsyncComponent } from 'vue';
 import { watchDebounced } from '@vueuse/core';
 import InfoDialog from './InfoDialog.vue';
 import ToggleButton from './ToggleButton.vue';
-
-const CodeEditor = defineAsyncComponent(
-  /* webpackPrefetch: true */
-  /* webpackChunkName: "codemirror" */
-  /* webpackMode: "lazy" */
-  /* webpackFetchPriority: "low" */
-  () => import('./CodeEditor.vue'),
-);
-
 import {
   matSave,
   matUploadFile,
@@ -386,6 +376,15 @@ import {
   mdiTools,
 } from '@quasar/extras/mdi-v6';
 import { deepMerge } from 'src/modules/taskyon/utils';
+import { getApiConfig } from 'src/modules/taskyon/taskWorker';
+
+const CodeEditor = defineAsyncComponent(
+  /* webpackPrefetch: true */
+  /* webpackChunkName: "codemirror" */
+  /* webpackMode: "lazy" */
+  /* webpackFetchPriority: "low" */
+  () => import('./CodeEditor.vue'),
+);
 
 const props = defineProps<{
   codingMode?: boolean;
