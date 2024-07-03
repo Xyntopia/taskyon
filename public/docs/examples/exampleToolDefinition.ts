@@ -1,15 +1,7 @@
 // we can compile this file to js using:
 // swc --config-file ./swcrc exampleToolDefinition.ts -o exampleToolDefinition.js
 
-import {
-  ClientFunctionDescription,
-  FunctionDescriptionMessage,
-  TaskyonMessages,
-  partialTyConfiguration,
-  tyConfigurationMessage,
-} from '../../../src/modules/taskyon/types';
-
-const configuration: partialTyConfiguration = {
+const configuration = {
   llmSettings: {
     selectedApi: 'taskyon',
     taskTemplate: {
@@ -19,7 +11,12 @@ const configuration: partialTyConfiguration = {
   signatureOrKey: '2o8zbackwughbck73tqbc3r',
 };
 
-const tools: ClientFunctionDescription[] = [
+type Tool = Record<string, unknown> & {
+  function: (...args: unknown[]) => unknown;
+  name: string;
+};
+
+const tools: Tool[] = [
   {
     id: 'simpleExampleTask.V1',
     name: 'myExampleStringAdderAlone',
@@ -47,7 +44,7 @@ const tools: ClientFunctionDescription[] = [
       if (outputDiv) {
         // Display function call information
         const output = `Function called with parameters: ${JSON.stringify(
-          data
+          data,
         )}<br>Returned: ${JSON.stringify(result)}`;
         outputDiv.innerHTML = output;
       }
@@ -57,8 +54,8 @@ const tools: ClientFunctionDescription[] = [
 ];
 
 async function initializeTaskyon(
-  tools: ClientFunctionDescription[],
-  configuration: partialTyConfiguration
+  tools: Tool[],
+  configuration: Record<string, unknown>,
 ) {
   const taskyon = document.getElementById('taskyon') as HTMLIFrameElement;
 
@@ -71,7 +68,7 @@ async function initializeTaskyon(
 
     function waitForTaskyonReady() {
       return new Promise((resolve /*reject*/) => {
-        const handleMessage = function (event: MessageEvent<TaskyonMessages>) {
+        const handleMessage = function (event: MessageEvent<{ type: string }>) {
           const eventOrigin = new URL(event.origin).origin;
           if (
             eventOrigin === iframeTarget &&
@@ -89,8 +86,8 @@ async function initializeTaskyon(
     }
 
     // Send function definition to the taskyon so that the taskyon is aware of it.
-    function sendConfigurationToTaskyon(configuration: partialTyConfiguration) {
-      const message: tyConfigurationMessage = {
+    function sendConfigurationToTaskyon(configuration: unknown) {
+      const message = {
         type: 'configurationMessage',
         conf: configuration,
       };
@@ -98,10 +95,10 @@ async function initializeTaskyon(
     }
 
     // Send function definition to the taskyon so that the taskyon is aware of it.
-    function sendFunctionToTaskyon(toolDescription: ClientFunctionDescription) {
+    function sendFunctionToTaskyon(toolDescription: Record<string, unknown>) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { function: _toolfunc, ...fdescr } = toolDescription;
-      const fdMessage: FunctionDescriptionMessage = {
+      const fdMessage = {
         type: 'functionDescription',
         duplicateTaskName: false, // we use this here in order to prevent duplicate creation of our function declaration task
         ...fdescr,
@@ -109,10 +106,10 @@ async function initializeTaskyon(
       taskyon.contentWindow?.postMessage(fdMessage, iframeTarget);
     }
 
-    function setUpToolsListener(tools: ClientFunctionDescription[]) {
+    function setUpToolsListener(tools: Tool[]) {
       window.addEventListener(
         'message',
-        function (event: MessageEvent<TaskyonMessages>) {
+        function (event: MessageEvent<{ type: string; arguments: unknown }>) {
           // Check the origin to ensure security
           if (event.origin !== iframeTarget) {
             console.log('Received message from unauthorized origin');
@@ -137,7 +134,7 @@ async function initializeTaskyon(
               taskyon.contentWindow?.postMessage(response, iframeTarget);
             }
           }
-        }
+        },
       );
     }
 
