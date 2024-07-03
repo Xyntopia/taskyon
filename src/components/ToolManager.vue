@@ -13,16 +13,28 @@
       v-model="state.toolDraft.name"
       label="Specify the Name of the new Tool"
     />-->
-    Currently defined custom tools:
-    <q-list dense bordered separator>
-      <q-expansion-item
-        v-for="f in toolCollection"
-        :key="f.name"
-        :label="f.name"
+    <q-expansion-item
+      label="Currently defined custom tools:"
+      :icon="mdiToolbox"
+    >
+      <q-list dense bordered separator>
+        <q-expansion-item
+          v-for="f in toolCollection"
+          :key="f.name"
+          :label="f.name"
+        >
+          <ObjectTreeView :model-value="f"></ObjectTreeView>
+        </q-expansion-item>
+      </q-list>
+    </q-expansion-item>
+    <div>
+      You can find a openapi spec of the taskyon iframe API here:
+      <a href="https://rest.wiki/https://taskyon.space/docs/openapi-docs.yml"
+        >In a viewer</a
       >
-        <ObjectTreeView :model-value="f"></ObjectTreeView>
-      </q-expansion-item>
-    </q-list>
+      or here:
+      <a href="/docs/openapi-docs.yml" target="_blank">openapi-docs.yaml</a>
+    </div>
     <CreateNewTask
       coding-mode
       :force-task-props="functionTemplate"
@@ -41,6 +53,7 @@ import CreateNewTask from 'components/CreateNewTask.vue';
 import ObjectTreeView from './ObjectTreeView.vue';
 import { taskTemplateTypes } from 'src/modules/taskyon/types';
 import UnderConstructionHint from './UnderConstructionHint.vue';
+import { mdiToolbox } from '@quasar/extras/mdi-v6';
 
 const functionTemplate = taskTemplateTypes.toolDescription.parse(undefined);
 
@@ -72,7 +85,7 @@ const taskParser = computed(() => {
   if ('message' in state.llmSettings.taskDraft.content) {
     try {
       const jsonToolResult = ToolBase.strict().safeParse(
-        JSON.parse(state.llmSettings.taskDraft.content.message)
+        JSON.parse(state.llmSettings.taskDraft.content.message),
       );
       return jsonToolResult.success
         ? jsonToolResult.success

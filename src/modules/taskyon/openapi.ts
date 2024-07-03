@@ -79,7 +79,7 @@ function zodToOpenApiSchema(schema: z.ZodTypeAny): tyYamlObjectRepresentation {
   }
 
   // Fallback for unsupported types
-  return { type: 'unsupported' };
+  return { type: 'object' };
 }
 
 // Main function to build OpenAPI specification from Zod schemas
@@ -100,8 +100,8 @@ export function zodSchemasToOpenApi(
       {
         postMessage: {
           schemes: ['postMessage'],
-          consumes: ['application/json'],
-          produces: ['application/json'],
+          //consumes: ['application/json'],
+          //produces: ['application/json'],
         },
       },
     ],
@@ -119,15 +119,21 @@ export function zodSchemasToOpenApi(
   for (const messageType of messageTypes) {
     const schema = schemas[messageType];
     if (schema instanceof z.ZodObject) {
-      openApiSpec.paths[`/messages/${messageType}`] = {
+      openApiSpec.paths[`/${messageType}`] = {
         post: {
           summary: `Handle ${messageType} message`,
           requestBody: {
-            content: {},
+            content: {
+              'window.postMessage': {
+                schema: {
+                  $ref: `#/components/schemas/${messageType}`,
+                },
+              },
+            },
           },
-          responses: {
+          /*responses: {
             // TODO:
-          },
+          },*/
         },
       };
     }
