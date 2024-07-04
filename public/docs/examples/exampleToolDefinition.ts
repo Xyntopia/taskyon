@@ -1,6 +1,7 @@
 // we can compile this file to js using:
 // swc --config-file ./swcrc exampleToolDefinition.ts -o exampleToolDefinition.js
 
+// TODO: move configuration & tools into the html file itself!  only use taskyon as a simple, very small library...
 const configuration = {
   llmSettings: {
     selectedApi: 'taskyon',
@@ -11,7 +12,7 @@ const configuration = {
   signatureOrKey: '2o8zbackwughbck73tqbc3r',
 };
 
-type Tool = Record<string, unknown> & {
+export type Tool = Record<string, unknown> & {
   function: (...args: unknown[]) => unknown;
   name: string;
 };
@@ -53,7 +54,7 @@ const tools: Tool[] = [
   },
 ];
 
-async function initializeTaskyon(
+export async function initializeTaskyon(
   tools: Tool[],
   configuration: Record<string, unknown>,
 ) {
