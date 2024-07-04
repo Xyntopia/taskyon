@@ -69,7 +69,7 @@
         <q-icon
           class="q-pa-xl"
           size="10rem"
-          name="svguse:taskyon_mono_opt.svg#taskyon"
+          name="svguse:/taskyon_mono_opt.svg#taskyon"
           :color="$q.dark.isActive ? 'secondary' : 'primary'"
         ></q-icon>
         <GetStarted />

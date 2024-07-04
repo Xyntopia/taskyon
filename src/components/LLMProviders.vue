@@ -23,7 +23,7 @@
           outline
           noCaps
           label="Use free Taskyon (low quality)"
-          icon="svguse:taskyon_mono_opt.svg#taskyon"
+          icon="svguse:/taskyon_mono_opt.svg#taskyon"
           to="/"
           @click="
             state.llmSettings.selectedApi = 'taskyon';

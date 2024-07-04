@@ -43,7 +43,7 @@
         flat
         dense
         size="xs"
-        icon="svguse:taskyon_mono_opt.svg#taskyon"
+        icon="svguse:/taskyon_mono_opt.svg#taskyon"
         type="a"
         href="/chat"
         target="_blank"

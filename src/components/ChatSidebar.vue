@@ -6,7 +6,7 @@
       <div class="col row q-gutter-sm items-end justify-around">
         <q-icon
           class="col-auto"
-          name="svguse:taskyon_mono_opt.svg#taskyon"
+          name="svguse:/taskyon_mono_opt.svg#taskyon"
           size="sm"
         />
         <div class="col-auto text-weight-medium">Conversation Threads</div>

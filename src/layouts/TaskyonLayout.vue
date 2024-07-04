@@ -84,7 +84,7 @@
           round
           flat
           dense
-          icon="svguse:taskyon_mono_opt.svg#taskyon"
+          icon="svguse:/taskyon_mono_opt.svg#taskyon"
         >
           <q-menu>
             <q-list dense>
@@ -131,7 +131,7 @@
           flat
           dense
           size="xs"
-          icon-right="svguse:taskyon_mono_opt.svg#taskyon"
+          icon-right="svguse:/taskyon_mono_opt.svg#taskyon"
           no-caps
           href="https://taskyon.space"
           target="_blank"
