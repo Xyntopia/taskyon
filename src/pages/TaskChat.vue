@@ -42,17 +42,6 @@
             v-if="!state.taskWorkerController.isInterrupted()"
             class="row"
           >
-            <q-btn
-              v-if="false"
-              class="q-ma-xs"
-              dense
-              outline
-              color="secondary"
-              :icon="matStop"
-              @click="state.taskWorkerController.interrupt(currentTask.id)"
-            >
-              <q-tooltip> Stop processing current task. </q-tooltip>
-            </q-btn>
             <div class="col">
               <ty-markdown
                 no-line-numbers
@@ -132,7 +121,7 @@
             class="taskyon-control-button"
             :icon="matStop"
             size="md"
-            @click="state.taskWorkerController.interrupt(currentTask.id)"
+            @click="stopTasks"
           >
             <q-tooltip> Stop processing current task. </q-tooltip>
           </q-btn>
@@ -205,12 +194,18 @@ async function updateCurrentTask(taskId: string | undefined) {
 void updateCurrentTask(state.llmSettings.selectedTaskId);
 watch(() => state.llmSettings.selectedTaskId, updateCurrentTask);
 
+const taskWorkerInterrupted = ref(true);
+function stopTasks() {
+  state.taskWorkerController.interrupt(currentTask.value?.id);
+  taskWorkerInterrupted.value = true;
+}
+
 function onScroll(
   details: UnwrapRef<{
     direction: string;
     position: { top: number };
     delta: { top: number };
-  }>
+  }>,
 ) {
   //  const currentPosition = getVerticalScrollPosition(scrollTargetDomElement); // returns a Number (pixels);
   //const taskThreadArea = document.getElementsByClassName('taskThreadArea')[0];
@@ -263,7 +258,7 @@ async function updateTaskThread(taskId: string | undefined) {
     const thread = (await Promise.all(
       threadIDChain.map(async (tId) => {
         return await TM.getTask(tId);
-      })
+      }),
     )) as LLMTask[];
     selectedThread.value = thread;
   } else {
