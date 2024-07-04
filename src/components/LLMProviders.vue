@@ -9,7 +9,7 @@
           label="Go to Taskyon.space to retrieve an API key."
           outline
           noCaps
-          icon="svguse:taskyon_mono_opt.svg#taskyon"
+          icon="svguse:/taskyon_mono_opt.svg#taskyon"
           href="https://taskyon.space"
           target="_blank"
         />
