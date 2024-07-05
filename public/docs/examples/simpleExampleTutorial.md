@@ -259,3 +259,56 @@ By enabling browser debugging you can check the soruce code of the files!
 - [exampleToolDefinition.js](https://taskyon.space/docs/examples/exampleToolDefinition.js)
 
 By following these steps, you can easily integrate the Taskyon AI app into your webpage and allow users to interact with it. Happy coding!
+
+---
+
+<!--taskyon
+role: user
+-->
+
+can you create a sequence diagram
+for me, how taskyon communicates with an app which integrates it as an iframe?
+
+---
+
+<!--taskyon
+role: assistant
+-->
+
+Sure! Below is a sequence diagram that illustrates how Taskyon communicates with an app that integrates it as an iframe.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Browser
+    participant App as Your App
+    participant Taskyon as Taskyon Iframe
+
+    User->>Browser: Open Your App
+    Browser->>App: Load HTML and JavaScript
+    App->>Taskyon: Load Taskyon Iframe
+    Taskyon-->>App: taskyonReady message
+    App->>Taskyon: Send configurationMessage
+    App->>Taskyon: Send functionDescription
+    User->>Taskyon: Interact with Taskyon
+    Taskyon->>App: functionCall message
+    App->>App: Execute function
+    App->>Taskyon: Send functionResponse
+    Taskyon->>User: Display result
+```
+
+### Explanation
+
+1. **User Interaction**: The user opens your app in a browser.
+2. **App Initialization**: The browser loads the HTML and JavaScript files of your app.
+3. **Taskyon Iframe Loading**: Your app loads the Taskyon iframe.
+4. **Taskyon Ready**: Taskyon iframe sends a `taskyonReady` message to your app.
+5. **Configuration Message**: Your app sends a `configurationMessage` to Taskyon iframe.
+6. **Function Description**: Your app sends a `functionDescription` to Taskyon iframe.
+7. **User Interaction with Taskyon**: The user interacts with Taskyon through the iframe.
+8. **Function Call**: Taskyon sends a `functionCall` message to your app.
+9. **Function Execution**: Your app executes the corresponding function.
+10. **Function Response**: Your app sends a `functionResponse` back to Taskyon.
+11. **Display Result**: Taskyon displays the result to the user.
+
+This sequence diagram provides a clear overview of the communication flow between Taskyon and your app when integrated as an iframe.
