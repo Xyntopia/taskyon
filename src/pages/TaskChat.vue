@@ -38,10 +38,7 @@
             />
           </q-card>
           <!--Render tasks which are in progress-->
-          <q-card
-            v-if="!state.taskWorkerController.isInterrupted()"
-            class="row"
-          >
+          <q-card v-if="!taskWorkerInterrupted" class="row">
             <div class="col">
               <ty-markdown
                 no-line-numbers
@@ -116,12 +113,14 @@
         </div>
         <div class="col-auto">
           <q-btn
-            v-if="currentTask && !state.taskWorkerController.isInterrupted()"
+            v-if="currentTask && !taskWorkerInterrupted"
             fab-mini
             class="taskyon-control-button"
             :icon="matStop"
             size="md"
             @click="stopTasks"
+            :color="stoppingTasks ? 'secondary' : 'primary'"
+            :loading="stoppingTasks"
           >
             <q-tooltip> Stop processing current task. </q-tooltip>
           </q-btn>
@@ -175,6 +174,7 @@ import {
   matKeyboardDoubleArrowDown,
   matStop,
 } from '@quasar/extras/material-icons';
+import { sleep } from 'src/modules/taskyon/utils';
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
 const bottomPadding = ref(100);
@@ -190,14 +190,26 @@ async function updateCurrentTask(taskId: string | undefined) {
   if (taskId) {
     currentTask.value = await (await state.getTaskManager()).getTask(taskId);
   }
+  taskWorkerInterrupted.value = state.taskWorkerController.isInterrupted();
 }
 void updateCurrentTask(state.llmSettings.selectedTaskId);
 watch(() => state.llmSettings.selectedTaskId, updateCurrentTask);
 
 const taskWorkerInterrupted = ref(true);
-function stopTasks() {
+const stoppingTasks = ref(false);
+async function stopTasks() {
+  console.log('stopping!');
+  stoppingTasks.value = true;
   state.taskWorkerController.interrupt(currentTask.value?.id);
+
+  await sleep(1000);
+  // Poll every 500ms to check if the task is stopped
+  while (!state.taskWorkerController.isInterrupted()) {
+    console.log('waiting for task to stop...');
+    await sleep(500);
+  }
   taskWorkerInterrupted.value = true;
+  stoppingTasks.value = false;
 }
 
 function onScroll(

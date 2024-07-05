@@ -663,6 +663,10 @@ export async function taskWorker(
     console.log('waiting for next task!');
     let task: LLMTask | undefined = undefined;
     try {
+      if (taskWorkerController.isInterrupted()) {
+        // empty our task queue :)
+        processTasksQueue.clear();
+      }
       // in case of errors, especially if its an interrupt event we simply want to cancel everything :P
       if (processTasksQueue.count() === 0) {
         taskWorkerController.interrupt('waiting for new task...');
@@ -673,7 +677,7 @@ export async function taskWorker(
       // make sure we know from outside that the worker is active...
       console.log('processing task:', taskId);
       task = await taskManager.getTask(taskId);
-      if (task) {
+      if (task && !taskWorkerController.isInterrupted()) {
         task = await processTask(
           task,
           taskManager,
