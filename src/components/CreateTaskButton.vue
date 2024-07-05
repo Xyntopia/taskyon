@@ -13,7 +13,7 @@ const state = useTaskyonStore();
 const props = defineProps<{
   markdown?: string;
   markdownUrl?: URL;
-  scrollToBottom: false;
+  scrollToBottom?: boolean;
 }>();
 
 async function getMarkdown(url: URL) {
