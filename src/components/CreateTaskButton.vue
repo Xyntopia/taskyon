@@ -13,6 +13,7 @@ const state = useTaskyonStore();
 const props = defineProps<{
   markdown?: string;
   markdownUrl?: URL;
+  scrollToBottom: false;
 }>();
 
 async function getMarkdown(url: URL) {
@@ -72,6 +73,7 @@ async function addTasks() {
         false, // should we execute the task? // only the last one obviously ;)
       );
       state.llmSettings.selectedTaskId = parentId;
+      state.lockBottomScroll = props.scrollToBottom;
     }
   }
   // TODO: optionally execute the last task...

@@ -101,7 +101,7 @@
       <div class="column q-gutter-xs">
         <div class="col-auto">
           <q-btn
-            v-if="!lockBottomScroll"
+            v-if="!state.lockBottomScroll"
             fab-mini
             class="taskyon-control-button"
             :icon="matKeyboardDoubleArrowDown"
@@ -178,7 +178,6 @@ import { sleep } from 'src/modules/taskyon/utils';
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
 const bottomPadding = ref(100);
-const lockBottomScroll = ref(true); // State to track if the user is at the bottom of scroll page
 const taskThreadContainer = ref<HTMLElement | undefined>();
 const currentTask = ref<LLMTask>();
 const $q = useQuasar();
@@ -234,20 +233,20 @@ function onScroll(
       details.direction === 'down' &&
       scrollEnd - details.position.top < bottomTolerance
     ) {
-      lockBottomScroll.value = true;
+      state.lockBottomScroll = true;
       //console.log('lock bottom scroll!', lockBottomScroll.value);
     } else if (
       details.direction === 'up' &&
       scrollEnd - details.position.top > bottomTolerance + 20
     ) {
       //console.log('release bottom lock!');
-      lockBottomScroll.value = false;
+      state.lockBottomScroll = false;
     }
   }
 }
 
 function onResize() {
-  if (lockBottomScroll.value) {
+  if (state.lockBottomScroll) {
     //console.log('scroll to bottom');
     scrollToThreadEnd();
   }
@@ -256,7 +255,7 @@ function onResize() {
 function scrollToThreadEnd() {
   const offset = document.body.scrollHeight - window.innerHeight;
   const duration = 300;
-  lockBottomScroll.value = true;
+  state.lockBottomScroll = true;
   setVerticalScrollPosition(window, offset, duration);
 }
 
