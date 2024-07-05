@@ -185,6 +185,7 @@ const $q = useQuasar();
 const state = useTaskyonStore();
 $q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store...
 const selectedThread = ref<LLMTask[]>([]);
+const taskWorkerInterrupted = ref(true);
 
 async function updateCurrentTask(taskId: string | undefined) {
   if (taskId) {
@@ -195,7 +196,6 @@ async function updateCurrentTask(taskId: string | undefined) {
 void updateCurrentTask(state.llmSettings.selectedTaskId);
 watch(() => state.llmSettings.selectedTaskId, updateCurrentTask);
 
-const taskWorkerInterrupted = ref(true);
 const stoppingTasks = ref(false);
 async function stopTasks() {
   console.log('stopping!');
