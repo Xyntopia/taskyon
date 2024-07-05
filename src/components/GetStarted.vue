@@ -10,12 +10,8 @@
       <p class="text-center welcome-message-text">
         Welcome! Just type a message below to start using Taskyon!
       </p>
-      <div class="row q-gutter-xs items-top justify-around">
-        <div
-          class="col-2 text-caption text-secondary"
-          v-for="(s, idx) in starters"
-          :key="idx"
-        >
+      <div class="row q-gutter-xs justify-about">
+        <div class="col" v-for="(s, idx) in starters" :key="idx">
           <CreateTaskButton
             v-if="s.md"
             :markdown="s.md"
@@ -48,8 +44,12 @@ const state = useTaskyonStore();
 const starters = computed(() => {
   return [
     {
-      url: new URL('./docs/conversations/features_intro.md', window.origin),
+      url: new URL('docs/conversations/features_intro.md', window.origin),
       label: 'Showcase Taskyons features',
+    },
+    {
+      url: new URL('docs/examples/simpleExampleTutorial.md', window.origin),
+      label: 'How do I integrate taskyon into my own webpage?',
     },
     {
       md: `
