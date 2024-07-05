@@ -17,7 +17,16 @@
           :key="idx"
         >
           <CreateTaskButton
-            :markdown="s"
+            v-if="s.md"
+            :markdown="s.md"
+            :label="s.label"
+            outline
+            :color="$q.dark.isActive ? 'secondary' : 'primary'"
+          />
+          <CreateTaskButton
+            v-else-if="s.url"
+            :markdown-url="s.url"
+            :label="s.label"
             outline
             :color="$q.dark.isActive ? 'secondary' : 'primary'"
           />
@@ -32,37 +41,40 @@
 import { useTaskyonStore } from 'stores/taskyonState';
 import LLMProviders from './LLMProviders.vue';
 import CreateTaskButton from './CreateTaskButton.vue';
-import { ref, computed } from 'vue';
+import { computed } from 'vue';
 
 const state = useTaskyonStore();
 
-const introTask = ref('');
-
-void (async () => {
-  // Fetch the markdown file from the URL
-  const response = await fetch('/docs/conversations/features_intro.md');
-  if (!response.ok) {
-    throw new Error(`Failed to fetch markdown file: ${response.statusText}`);
-  }
-  introTask.value = await response.text();
-})();
-
 const starters = computed(() => {
   return [
-    introTask.value,
-    `
+    {
+      url: new URL('./docs/conversations/features_intro.md', window.origin),
+      label: 'Showcase Taskyons features',
+    },
+    {
+      md: `
+<!--taskyon
+name: Currently recommended models
+role: "user"
+-->
+
+Which models do you currently recommend?
+
+---
 <!--taskyon
 name: Currently recommended models
 role: "assistant"
 -->
 Currently we recommended the following Models:
-  - llama-3
-  - GPT4o
-  - Gemini
-  - try out more!
+  - llama-3: much cheaper than GPT4o and best for most tasks (including coding) and if you want to use "tools"
+  - GPT4o: visual tasks and if you need t work in languages other than english
+  - llama-3-8b:  the best "free" model
+  - checkout the entire list of models and descriptions [here](https://taskyon.space/pricing)!
 
 You can select them in the "Chat Settings" section in the message input window.
 `,
+      label: 'Show currently recommend models',
+    },
     // TODO:
     //'How do I execute python code?',
     //'how about testing out javascript? e.g. create some widgets on the fly...',

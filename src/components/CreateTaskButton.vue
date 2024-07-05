@@ -1,25 +1,32 @@
 <template>
-  <q-btn v-bind="$attrs" no-caps :label="mainTask?.name" @click="addTasks">
-  </q-btn>
+  <q-btn v-bind="$attrs" no-caps @click="addTasks"> </q-btn>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
 import { load } from 'js-yaml';
-import { LLMTask, partialTaskDraft } from 'src/modules/taskyon/types';
+import { partialTaskDraft } from 'src/modules/taskyon/types';
 import { addTask2Tree } from 'src/modules/taskyon/taskManager';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 
 const state = useTaskyonStore();
 
 const props = defineProps<{
-  markdown: string;
+  markdown?: string;
+  markdownUrl?: URL;
 }>();
 
+async function getMarkdown(url: URL) {
+  // Fetch the markdown file from the URL
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch markdown file: ${response.statusText}`);
+  }
+  const mdString = await response.text();
+  return mdString;
+}
+
 // Fetch, split, and parse the markdown file
-function fetchAndProcessMarkdown(
-  markdown: string
-) /*: Promise<partialTaskDraft[]>*/ {
+function processMarkdown(markdown: string) /*: Promise<partialTaskDraft[]>*/ {
   // Split the markdown content by the separator
   const messages = markdown.split('---').map((message) => message.trim());
 
@@ -47,21 +54,25 @@ function fetchAndProcessMarkdown(
   return tasks;
 }
 
-const taskList = computed(() => fetchAndProcessMarkdown(props.markdown));
-const mainTask = computed(() => {
-  return taskList.value[0] as LLMTask | undefined;
-});
-
 async function addTasks() {
   let parentId: string | undefined = undefined;
-  for (const task of taskList.value) {
-    parentId = await addTask2Tree(
-      task,
-      parentId, //parent
-      await state.getTaskManager(),
-      false // should we execute the task? // only the last one obviously ;)
-    );
-    state.llmSettings.selectedTaskId = parentId;
+  let markdown: string | undefined = undefined;
+  if (props.markdown) {
+    markdown = props.markdown;
+  } else if (props.markdownUrl) {
+    markdown = await getMarkdown(props.markdownUrl);
+  }
+  if (markdown) {
+    const taskList = processMarkdown(markdown);
+    for (const task of taskList) {
+      parentId = await addTask2Tree(
+        task,
+        parentId, //parent
+        await state.getTaskManager(),
+        false, // should we execute the task? // only the last one obviously ;)
+      );
+      state.llmSettings.selectedTaskId = parentId;
+    }
   }
   // TODO: optionally execute the last task...
 }
