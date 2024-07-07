@@ -417,8 +417,8 @@ async function generateFollowUpTasksFromResult(
         finishedTask.role === 'user' &&
         !useTyTools
       ) {
-        void addFollowUpTask(true, {
-          state: 'Open',
+        void addFollowUpTask(false, {
+          state: 'Completed',
           role: 'assistant',
           content: { message: choice.message.content },
         });
