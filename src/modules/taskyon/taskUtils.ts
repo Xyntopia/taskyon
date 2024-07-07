@@ -23,7 +23,7 @@ async function fileToBase64(file: File): Promise<string> {
 export const taskUtils = (
   getTask: TaskGetter,
   getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
-  getFile: (uuid: string) => Promise<File | undefined>
+  getFile: (uuid: string) => Promise<File | undefined>,
 ) => {
   /* get a chain of taskss with the last task being the last element in the list */
   async function getTaskIdChain(taskId: string) {
@@ -64,6 +64,8 @@ export const taskUtils = (
         const t = await getTask(mId);
         if (t) {
           if ('functionCall' in t.content) {
+            // TODO: its probably a good idea to make this shorter...
+            // TODO:  not sure, if this is a good idea with OpenAI Tools...
             const functionContent = dump({
               arguments: t.content.functionCall.arguments,
               ...t.result?.toolResult,
@@ -74,11 +76,11 @@ export const taskUtils = (
               content: functionContent,
             };
             openAIMessageThread.push(message);
-          } else if ('functionResult' in t.content) {
+          } else if ('toolResult' in t.content) {
             const message: OpenAI.ChatCompletionMessageParam = {
               role: 'system',
               content: dump({
-                'result of the function': t.content.functionResult,
+                'result of the function': t.content.toolResult,
               }),
             };
             openAIMessageThread.push(message);
@@ -90,7 +92,7 @@ export const taskUtils = (
             openAIMessageThread.push(message);
           } else if ('uploadedFiles' in t.content && t.role != 'function') {
             const fileMappings = await Promise.all(
-              t.content.uploadedFiles.map((uuid) => getFileMapping(uuid))
+              t.content.uploadedFiles.map((uuid) => getFileMapping(uuid)),
             );
             const fileNames = fileMappings
               .map((fm) => '- ' + (fm?.name || fm?.opfs || 'unknown'))

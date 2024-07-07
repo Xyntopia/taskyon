@@ -17,7 +17,7 @@ import type { TyTaskManager } from './taskManager';
  */
 function substituteTemplateVariables(
   templates: Record<string, string>,
-  variables: Record<string, string>
+  variables: Record<string, string>,
 ) {
   // TODO: can we do this as a javascript tag function? https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals
   const messages: Record<string, string> = {};
@@ -30,7 +30,7 @@ function substituteTemplateVariables(
     for (const [variableKey, variableValue] of Object.entries(variables)) {
       content = content.replace(
         new RegExp(`{${variableKey}}`, 'g'),
-        variableValue
+        variableValue,
       );
     }
 
@@ -42,7 +42,7 @@ function substituteTemplateVariables(
 
 export function generateOpenAIToolDeclarations(
   task: LLMTask,
-  toolCollection: Record<string, ToolBase>
+  toolCollection: Record<string, ToolBase>,
 ): OpenAI.ChatCompletionTool[] {
   const tools: ToolBase[] =
     mapFunctionNames(task.allowedTools || [], toolCollection) || [];
@@ -65,13 +65,13 @@ export function addPrompts(
   toolCollection: Record<string, ToolBase>,
   llmSettings: llmSettings,
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  method: 'toolchat' | 'chat' | 'taskAgent'
+  method: 'toolchat' | 'chat' | 'taskAgent',
 ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
   console.log('Prepare task tree for inference');
 
   let additionalMessages: OpenAI.ChatCompletionMessageParam[] = [];
   let modifiedOpenAIConversationThread = structuredClone(
-    openAIConversationThread
+    openAIConversationThread,
   );
 
   // Check if task has tools and OpenAI tools are not enabled
@@ -86,7 +86,7 @@ export function addPrompts(
     additionalMessages = renderTaskPrompt4Chat(
       task,
       toolCollection,
-      llmSettings
+      llmSettings,
     );
 
     task.debugging.taskPrompt = additionalMessages;
@@ -102,7 +102,7 @@ export function addPrompts(
   } else if (llmSettings.useBasePrompt) {
     const { basePrompt } = substituteTemplateVariables(
       { basePrompt: llmSettings.taskChatTemplates.basePrompt },
-      {}
+      {},
     );
     const basePromptMessage: OpenAI.ChatCompletionMessageParam = {
       role: 'system',
@@ -121,7 +121,7 @@ export function addPrompts(
 export function renderTaskPrompt4Chat(
   task: Pick<LLMTask, 'role' | 'content' | 'allowedTools' | 'result'>,
   toolCollection: Record<string, ToolBase>,
-  llmSettings: llmSettings
+  llmSettings: llmSettings,
 ) {
   let variables = {};
   // TODO: we need to have a better way then checking the role. We need to check the content
@@ -137,12 +137,12 @@ export function renderTaskPrompt4Chat(
       toolList: toolList,
     };
     // TODO: to something with file tasks and
-  } else if ('functionResult' in task.content) {
+  } else if ('toolResult' in task.content) {
     const yamlRepr = zodToYamlString(
-      StructuredResponseTypes.FunctionResultBase
+      StructuredResponseTypes.ToolResultBase,
     );
     variables = {
-      toolResult: dump(task.content.functionResult),
+      toolResult: dump(task.content.toolResult),
       resultSchema: yamlRepr,
       format: 'yaml',
       tools: summarizeTools(task.allowedTools || [], toolCollection),
@@ -153,7 +153,7 @@ export function renderTaskPrompt4Chat(
   // Create additional messages using createTaskChatMessages
   const filledTemplates = substituteTemplateVariables(
     llmSettings.taskChatTemplates,
-    variables
+    variables,
   );
 
   // TODO: wth is going on here? this needs to be done in a better way...
@@ -189,7 +189,7 @@ export function renderTaskPrompt4Chat(
 export async function generateCompleteChat(
   task: LLMTask,
   llmSettings: llmSettings,
-  taskManager: TyTaskManager
+  taskManager: TyTaskManager,
 ) {
   const useToolChat =
     task.allowedTools?.length && !llmSettings.enableOpenAiTools;
@@ -197,14 +197,14 @@ export async function generateCompleteChat(
   const toolDefs = await taskManager.searchToolDefinitions();
   let openAIConversationThread = await taskManager.buildChatThread(
     task.id,
-    llmSettings.tryUsingVisionModels
+    llmSettings.tryUsingVisionModels,
   );
   openAIConversationThread = addPrompts(
     task,
     toolDefs,
     llmSettings,
     openAIConversationThread,
-    useToolChat ? 'toolchat' : 'chat'
+    useToolChat ? 'toolchat' : 'chat',
   );
-  return { openAIConversationThread, useToolChat, toolDefs };
+  return { openAIConversationThread, toolDefs };
 }

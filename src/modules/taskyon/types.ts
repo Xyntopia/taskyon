@@ -13,6 +13,7 @@ const TaskState = z.enum([
   'In Progress',
   'Completed',
   'Cancelled',
+  'Error',
 ])
   .describe(`The task state indicates on what is happening with the task: for example
 it shows whether a task flow is seen as "completed" or whether its waiting
@@ -152,20 +153,6 @@ const assistantThreadMessage: z.ZodType<OpenAI.Beta.Threads.Messages.ThreadMessa
 const chatResponse: z.ZodType<OpenAI.ChatCompletion> = z.any();
 
 export const TaskResult = z.object({
-  type: z.enum([
-    'ChatAnswer',
-    'AssistantAnswer',
-    'ToolResult', // the result is the result of a tool function execution
-    'ToolError',
-    'ToolCall',
-    // TODO: It might be a good idea to get rid of "ToolCall" and integrate it with
-    // StructuredChatResponse
-    // sometimes the result is a direct tool call (e.g. from an OpenAI API response).
-    // And this gets indicated here
-    // when we want to get a structured response about how to continue from our LLM e.g.
-    // to start a tool or interprete a function result or create new tasks...
-    'StructuredChatResponse',
-  ]),
   assistantResponse: z.array(assistantThreadMessage).optional(),
   chatResponse: chatResponse.optional(),
   toolResult: ToolResult.optional(), // Replace 'z.any()' with the specific type if available
@@ -224,14 +211,70 @@ export const RemoteFunctionResponse = RemoteFunctionBase.extend({
 );
 export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>;
 
+const answer = z.string().nullish();
+const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish();
+
+const toolCommand = FunctionCall.describe(
+  'If you want to use a tool, provide the function call parameters',
+);
+
+const ErrorEvaluation = z
+  .object({
+    'was there an error?': yesno,
+    'try again?': yesno,
+    'Should we use one of the mentioned tools to answer the task?:': yesno,
+  })
+  .describe(
+    'This is used as a short prompt for tasks in order to determine whether we should use a more detailed task prompt',
+  );
+
+const ToolResultBase = z
+  .object({
+    'describe your thoughts': answer,
+    'was the tool call successfull?': answer,
+    'was there an error?': yesno,
+    'should we retry?': yesno,
+    'should we use another tool?': answer,
+    'use tool': yesno,
+    toolCommand,
+  })
+  .describe(
+    'Structured answer schema for processing the result of a function call.',
+  );
+
+const ToolSelection = z
+  .object({
+    'describe your thoughts': answer,
+    'use tool': yesno,
+    'which tool': answer,
+    toolCommand,
+  })
+  .describe('Structured answer schema for a task including the use of tools');
+
+export const StructuredResponseTypes = {
+  ToolResultBase,
+  ToolSelection,
+  ErrorEvaluation,
+};
+export const StructuredResponse = z.union([
+  ToolResultBase.partial(),
+  ToolSelection.partial(),
+  ErrorEvaluation.partial(),
+]);
+export type StructuredResponse = z.infer<typeof StructuredResponse>;
+
 const MessageContent = z.object({ message: z.string() });
-const FunctionCallContent = z.object({ functionCall: FunctionCall });
+const StructuredMessageContent = z.object({
+  structuredMessage: StructuredResponse,
+});
+const ToolCallContent = z.object({ functionCall: FunctionCall });
 const UploadedFilesContent = z.object({ uploadedFiles: z.array(z.string()) });
 // TODO: restructure ToolResultContent to be a "normal message"
-const ToolResultContent = z.object({ functionResult: ToolResult });
+const ToolResultContent = z.object({ toolResult: ToolResult });
 const TaskContent = z.union([
   MessageContent,
-  FunctionCallContent,
+  StructuredMessageContent,
+  ToolCallContent,
   UploadedFilesContent,
   ToolResultContent,
 ]);
@@ -342,48 +385,6 @@ export const taskTemplateTypes = {
     label: ['file']
   })*/
 };
-
-const answer = z.string().nullish();
-const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish();
-
-const FunctionResultBase = z
-  .object({
-    'describe your thoughts': answer,
-    'was the tool call successfull?': answer,
-    'should we retry?': yesno,
-    'should we use another tool?': answer,
-    'use tool': yesno,
-    toolCommand: FunctionCall.optional().describe(
-      'If you want to use a tool, provide the function call parameters',
-    ),
-    answer: answer.describe(
-      'Otherwise provide a final answer summarizing the result.',
-    ),
-  })
-  .describe(
-    'Structured answer schema for processing the result of a function call.',
-  );
-
-const ToolSelection = z
-  .object({
-    'describe your thoughts': answer,
-    'use tool': yesno,
-    'which tool': answer,
-    toolCommand: FunctionCall.optional().describe(
-      'If you want to use a tool, provide the function call parameters',
-    ),
-    answer: answer.describe(
-      'Otherwise provide a final answer with your thoughts',
-    ),
-  })
-  .describe('Structured answer schema for a task including the use of tools');
-
-export const StructuredResponseTypes = {
-  FunctionResultBase,
-  ToolSelection,
-};
-export const StructuredResponse = z.union([FunctionResultBase, ToolSelection]);
-export type StructuredResponse = z.infer<typeof StructuredResponse>;
 
 /*
 TODO: for longer, autonomous agent processes & when errors happen, we might need this
