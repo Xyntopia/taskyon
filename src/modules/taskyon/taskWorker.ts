@@ -11,11 +11,9 @@ import {
   generateOpenAIToolDeclarations,
 } from './promptCreation';
 import {
-  FunctionArguments,
   FunctionCall,
   partialTaskDraft,
   LLMTask,
-  TaskResult,
   StructuredResponse,
   OpenRouterGenerationInfo,
   llmSettings,
@@ -25,21 +23,18 @@ import { addTask2Tree, processTasksQueue } from './taskManager';
 import type { OpenAI } from 'openai';
 import { TyTaskManager } from './taskManager';
 import { Tool, handleFunctionExecution } from './tools';
-import { dump, load } from 'js-yaml';
+import { load } from 'js-yaml';
 import { deepCopy, deepMerge, sleep } from './utils';
-import { SafeParseReturnType } from 'zod';
 
-function isOpenAIFunctionCall(
-  choice: OpenAI.ChatCompletion['choices'][0],
-): boolean {
-  return (
-    (choice.finish_reason === 'function_call' ||
-      choice.finish_reason === 'tool_calls') &&
-    !!choice.message.tool_calls?.length
-  );
+class TaskProcessingError extends Error {
+  details: Record<string, unknown> | undefined;
+
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message);
+    this.name = 'TaskFollowUpError';
+    this.details = details;
+  }
 }
-
-const delimiters = '```';
 
 function extractOpenAIFunctions(
   choice: OpenAI.ChatCompletion['choices'][0],
@@ -261,7 +256,7 @@ async function parseChatResponse2TaskDraft(
     // Parse the extracted or original YAML content
     parsedYaml = load(yamlContent);
   } catch (err) {
-    throw new TaskFollowUpError('Error converting the response to yaml', {
+    throw new TaskProcessingError('Error converting the response to yaml', {
       yamlString: yamlContent,
       error: err instanceof Error ? err.message : JSON.stringify(err),
     });
@@ -270,22 +265,12 @@ async function parseChatResponse2TaskDraft(
     await StructuredResponse.safeParseAsync(parsedYaml);
 
   if (!structuredResponseResult.success) {
-    throw new TaskFollowUpError(
+    throw new TaskProcessingError(
       'ZOD parse error: Unknown response object type:',
       structuredResponseResult.error.format(),
     );
   }
   return structuredResponseResult.data;
-}
-
-class TaskFollowUpError extends Error {
-  details: Record<string, unknown> | undefined;
-
-  constructor(message: string, details?: Record<string, unknown>) {
-    super(message);
-    this.name = 'TaskFollowUpError';
-    this.details = details;
-  }
 }
 
 /**
@@ -386,12 +371,16 @@ async function generateFollowUpTasksFromResult(
       taskWorkerController.isInterrupted() ? false : execute,
     );
     llmSettings.selectedTaskId = newTaskId;
+    return newTaskId;
   };
 
   // TODO: what do we do in case of an empty user message, but only a file?
   //       right now, we assume, that user message always comes after uploaded file message :)
   if (finishedTask.result) {
-    if (finishedTask.result.toolResult) {
+    if (
+      'functionCall' in finishedTask.content &&
+      finishedTask.result.toolResult
+    ) {
       void addFollowUpTask(true, {
         state: 'Open',
         role: 'system',
@@ -418,27 +407,61 @@ async function generateFollowUpTasksFromResult(
       }
 
       if (!choice.message.content) {
-        throw new TaskFollowUpError('The response from the AI was empty!', {
+        throw new TaskProcessingError('The response from the AI was empty!', {
           choice,
         });
       }
       // simply return the answer as a normal chat message
-      if (finishedTask.role === 'user' && !useTyTools) {
+      if (
+        'message' in finishedTask.content &&
+        finishedTask.role === 'user' &&
+        !useTyTools
+      ) {
         void addFollowUpTask(true, {
           state: 'Open',
           role: 'assistant',
           content: { message: choice.message.content },
         });
         return;
-      } else if (finishedTask.role === 'user' && useTyTools) {
+      } else if (
+        'message' in finishedTask.content &&
+        ((finishedTask.role === 'user' && useTyTools) ||
+          (finishedTask.role === 'system' &&
+            'toolResult' in finishedTask.content) ||
+          finishedTask.role === 'system') // this happens e.g. in the case of an error...
+      ) {
+        // depending on what role and tasktype the finishedTask has, we
+        // expect different results from our structuredResponse
+        // TODO: we need to do some plausibilitychecks here:
+        //       - e.g. if use tool=true, but no toolCommand present
+        // actually, it would be better to do this in the structreReponse processing ? :)
         const structResponse = await parseChatResponse2TaskDraft(
           choice?.message.content || '',
         );
-        void addFollowUpTask(true, {
-          state: 'Open',
-          role: 'assistant',
-          content: { structuredMessage: structResponse },
-        });
+        // we immediatly generate a follow up response here based on the structResponse. This avoids
+        // having to process it in another loop as we know the result already anyways.
+        // the "structuredMessage" type is mainly there so that the LLM can see what it said :).
+        // e.g. in case there is an error...
+        if ('toolCommand' in structResponse && structResponse.toolCommand) {
+          const newTaskid = await addFollowUpTask(false, {
+            state: 'Completed',
+            role: 'assistant',
+            content: { structuredMessage: structResponse },
+          });
+          addFollowUpTask(true, {
+            parentID: newTaskid,
+            state: 'Open',
+            role: 'assistant',
+            content: { functionCall: structResponse.toolCommand },
+          });
+        } else {
+          // in the case that we don't call a tool, provide a "normal" answer :)
+          addFollowUpTask(true, {
+            state: 'Open',
+            role: 'assistant',
+            content: { structuredMessage: structResponse },
+          });
+        }
         return;
       } else if (
         'message' in finishedTask.content &&
@@ -446,52 +469,12 @@ async function generateFollowUpTasksFromResult(
         !useTyTools
       ) {
         // this is the final response, so we simply return without creating new messages!
+        console.log('No more follow up tasks!');
         return;
       }
-
-      if (structResponse.toolCommand) {
-        void addFollowUpTask(
-          true,
-          deepMerge(taskTemplate, {
-            state: 'Open',
-            role: 'function',
-            content: { function: structResponse.toolCommand },
-          }),
-        );
-        return;
-      }
-      // TODO: parse answer and check what types of results we got ;) / can work with...
-      void addFollowUpTask(false, {
-        state: 'Completed',
-        role: choice.message.role,
-        content: { message: choice.message.content || '' },
-      });
       //const newTaskDraftList = createNewAssistantResponseTask(finishedTask);
       // TODO: Assistants don't work right now! we need to create a sequential
       //       task chain here and add each tasks new ID to the net one as a parent",
-    } else if (finishedTask.debugging.error) {
-      console.log('creating error-follow up!');
-      const error = finishedTask.debugging.error as {
-        message?: string;
-        cause?: unknown;
-      };
-      const message = dump(
-        JSON.parse(
-          JSON.stringify(
-            { message: error.message, cause: error.cause },
-            null,
-            3,
-          ),
-        ),
-      );
-      void addFollowUpTask(
-        false,
-        deepMerge(taskTemplate, {
-          state: 'Completed',
-          role: 'system',
-          content: { message },
-        }),
-      );
     }
   }
 }
@@ -574,7 +557,7 @@ async function getTaskResult(
       false,
     );
 
-    if ('message' in task.content || 'toolResult' in task.content) {
+    if ('message' in task.content || 'toolResult' in task.content || '') {
       // TODO: get rid of "taskManager" in processChatTask
       if (llmSettings.selectedApi) {
         const apiKey = apiKeys[llmSettings.selectedApi];
@@ -586,7 +569,7 @@ async function getTaskResult(
           taskWorkerController,
         );
       } else {
-        throw new Error("we don't have any APIs selected!");
+        throw new TaskProcessingError("we don't have any APIs selected!");
       }
     } else if ('functionCall' in task.content) {
       // calculate function result
@@ -598,19 +581,13 @@ async function getTaskResult(
         taskManager,
       );
     } else {
-      throw new Error("We don't know what to do with this task");
+      throw new TaskProcessingError("We don't know what to do with this task");
     }
-  } catch (error) {
-    if (error instanceof Error) {
-      task.debugging.error = {
-        message: error.message,
-        stack: error.stack,
-        location: 'task processing',
-        cause: error.cause,
-      };
-    }
-    console.error('Error processing task:', error);
-    return task;
+  } catch (err) {
+    console.error('Error processing task:', err);
+    throw new TaskProcessingError('Error processing task:', {
+      error: err,
+    });
   }
   task.state = 'Completed';
   return task;
@@ -673,14 +650,25 @@ export async function taskWorker(
         errorTask.content = {
           message: `An error occured: ${error.message}`,
         };
-        errorTask.debugging = {
-          error: {
-            message: error.message,
-            stack: error.stack,
-            location: 'task processing',
-            cause: error.cause,
-          },
+        if (task) {
+          task.debugging = {
+            error: {
+              message: error.message,
+              stack: error.stack,
+              location: 'task processing',
+              cause: error.cause,
+            },
+          };
+        }
+      } else if (error instanceof TaskProcessingError) {
+        errorTask.content = {
+          message: `An error occured: ${error.message}`,
         };
+        if (task) {
+          task.debugging = {
+            error: error,
+          };
+        }
       }
       const newTaskId = await addTask2Tree(
         errorTask,

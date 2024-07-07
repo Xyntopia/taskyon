@@ -260,8 +260,6 @@ function accumulateChatCompletion(
   return response;
 }
 
-type MessageError = { error: { code: number; message: string } };
-
 // calls openRouter OR OpenAI  chatmodels
 export async function callLLM(
   chatMessages: OpenAI.ChatCompletionMessageParam[],
@@ -274,13 +272,13 @@ export async function callLLM(
     chunk?: OpenAI.Chat.Completions.ChatCompletionChunk,
   ) => void,
   cancelStream: () => boolean, // a function which we can call and which indicates that we should cancel the stream
-): Promise<OpenAI.ChatCompletion | undefined | MessageError> {
+): Promise<OpenAI.ChatCompletion | undefined> {
   const headers: Record<string, string> = generateHeaders(
     apiKey,
     siteUrl,
     api.name,
   );
-  let chatCompletion: OpenAI.ChatCompletion | undefined | MessageError =
+  let chatCompletion: OpenAI.ChatCompletion | undefined =
     undefined;
   const openai = getOpenai(apiKey, api.baseURL, headers);
 

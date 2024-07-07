@@ -345,6 +345,7 @@ export type TaskGetter = (input: string) => Promise<LLMTask | undefined>;
 export const partialTaskDraft = LLMTask.pick({
   role: true,
   content: true,
+  parentID: true,
   name: true,
   configuration: true,
   state: true,

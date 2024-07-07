@@ -50,18 +50,18 @@ flowchart TD
         ERROR{{ERROR}}
     end
 
-#    MessageContent_A --> TERMINATION
+    MessageContent_A --> TERMINATION
     MessageContent_U -- if tools enabled--> MessageContent_s_A
-#    MessageContent_U -- with llm tool support & tool action--> ToolCallContent
-#    MessageContent_U --> MessageContent_A
+    MessageContent_U -- with llm tool support & tool action--> ToolCallContent
+    MessageContent_U --> MessageContent_A
     MessageContent_s_A --> MessageContent_A
-    MessageContent_s_A --> ToolCallContent
-#    ToolCallContent --> ToolResultContent_F
-#    UploadedFilesContent --> MessageContent_U
-#    UploadedFilesContent -.-> MessageContent_A
-#    UploadedFilesContent -.if tools enabled.-> MessageContent_s_A
-#    ToolResultContent_F --> MessageContent_s_A
-     ERROR --> MessageContent_S
-     MessageContent_S --> MessageContent_s_A
-#    MessageContent_A -. if autonomous agents enabled .-> MessageContent_s_A
+    MessageContent_s_A --if toolCommand--> ToolCallContent
+    ToolCallContent --> ToolResultContent_F
+    UploadedFilesContent --> MessageContent_U
+    UploadedFilesContent -.-> MessageContent_A
+    UploadedFilesContent -.if tools enabled.-> MessageContent_s_A
+    ToolResultContent_F --> MessageContent_s_A
+    ERROR --> MessageContent_S
+    MessageContent_S --> MessageContent_s_A
+    MessageContent_A -. if autonomous agents enabled .-> MessageContent_s_A
 ```
