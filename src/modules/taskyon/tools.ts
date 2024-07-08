@@ -95,6 +95,16 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
   return funcR.response;
 }
 
+function getTool(tools: Record<string, ToolBase | Tool>, name: string) {
+  const tool = tools[name];
+  if (!tool) {
+    throw new TaskProcessingError("Tool doesn't exist", {
+      toolName: name,
+    });
+  }
+  return tool;
+}
+
 /**
  * Handle function execution for LLMs.
  * All errors of this function result in an error task in the main task worker!
@@ -110,8 +120,8 @@ export async function handleFunctionExecution(
   tools: Record<string, ToolBase | Tool>,
   taskManager: TyTaskManager,
 ): Promise<TaskResult> {
-  const tool = tools[func.name];
   let funcR: unknown;
+  const tool = getTool(tools, func.name);
   if ('function' in tool && tool.function) {
     funcR = await tool.function(func.arguments, taskManager);
     funcR = bigIntToString(funcR);
@@ -304,7 +314,7 @@ export function getDefaultParametersForTool(tool: Tool | ToolBase) {
 
   const defaultParams: Record<string, ParamType> = {};
   Object.keys(params.properties).forEach((key) => {
-    const type = params.properties[key].type;
+    const type = params.properties[key]?.type;
     // Assign a default value based on the parameter's type.
     switch (type) {
       case 'string':
@@ -345,8 +355,7 @@ function convertToToolCommandString(tool: ToolBase): string {
   const requiredProperties = new Set(tool.parameters.required || []);
 
   // Loop over each property in the tool's parameters
-  for (const key in tool.parameters.properties) {
-    const param = tool.parameters.properties[key];
+  Object.entries(tool.parameters.properties).forEach(([key, param]) => {
     // Check if the key is in the list of required properties
     // const isRequired = requiredProperties.has(key);
     // If the property is required, use the key as is, otherwise add a "?" to the key
@@ -354,12 +363,10 @@ function convertToToolCommandString(tool: ToolBase): string {
       const descriptionKey = `# ${key} description`;
       args[descriptionKey] = param.description.replace(/\n/g, ' ');
     }
-    /*   the question mark doesn work!!!
-    const argKey = isRequired ? key : `${key}?`;
-    */
+
     const argKey = key;
     args[argKey] = param.type;
-  }
+  });
 
   const argStrRaw = dump({
     'FUNCTION ARGUMENTS': args,
@@ -380,7 +387,7 @@ export function summarizeTools(
 ) {
   const toolStr = toolIDs
     .map((t) => {
-      const tool = tools[t];
+      const tool = getTool(tools, t);
       const toolStr = convertToToolCommandString(tool);
       return toolStr;
     })
