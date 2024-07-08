@@ -5,24 +5,35 @@
       <!--Message Display-->
       <div class="row items-end q-gutter-xs">
         <!--task icon-->
-        <div v-if="task.debugging.error" class="col-auto">
-          <q-icon :name="matWarning" color="warning" size="sm"
+        <div
+          v-if="task.state === 'Error' || task.result?.toolResult?.error"
+          class="col-auto self-center"
+        >
+          <q-icon :name="matWarning" color="negative" size="sm"
             ><q-tooltip class="bg-warning">Error!</q-tooltip>
           </q-icon>
         </div>
+        <div v-else-if="task.role === 'system'" class="col-auto self-center">
+          <q-icon :name="mdiDesktopTower" color="info" size="sm"
+            ><q-tooltip class="bg-warning">Error!</q-tooltip>
+          </q-icon>
+        </div>
+        <!--task content-->
         <div v-if="'functionCall' in task.content" class="col q-pb-md">
           <q-expansion-item
             dense
             :icon="matCalculate"
             :label="task.content.functionCall.name"
             :header-class="
-              task.result?.toolResult?.error ? 'text-red' : 'text-green'
+              task.state === 'Error' || task.result?.toolResult?.error
+                ? 'text-negative'
+                : 'text-green'
             "
           >
             <ToolResultWidget :task="task" />
           </q-expansion-item>
         </div>
-        <div v-if="'functionResult' in task.content" class="col q-pb-md">
+        <div v-if="'toolResult' in task.content" class="col q-pb-md">
           <q-expansion-item
             dense
             :icon="mdiHeadCog"
@@ -91,8 +102,8 @@
               task.debugging.taskCosts
                 ? 'secondary'
                 : task.debugging.promptTokens
-                ? 'positive'
-                : 'info'
+                  ? 'positive'
+                  : 'info'
             "
           ></q-icon>
           <div v-if="task.debugging.promptTokens">
@@ -252,7 +263,7 @@ import { computed, ref } from 'vue';
 import { FileMappingDocType } from 'src/modules/taskyon/rxdb';
 import { dump } from 'js-yaml';
 import TaskButtons from './TaskButtons.vue';
-import { mdiFileDocument, mdiHeadCog, mdiTools } from '@quasar/extras/mdi-v6';
+import { mdiDesktopTower, mdiFileDocument, mdiHeadCog, mdiTools } from '@quasar/extras/mdi-v6';
 import {
   matCalculate,
   matMonetizationOn,
@@ -273,7 +284,7 @@ if ('uploadedFiles' in props.task.content) {
   void (async (fileUuids: string[]) => {
     const tm = await state.getTaskManager();
     const fm = await Promise.all(
-      fileUuids.map((uuid) => tm.getFileMappingByUuid(uuid))
+      fileUuids.map((uuid) => tm.getFileMappingByUuid(uuid)),
     );
     fileMappings.value = fm;
   })(props.task.content.uploadedFiles);
@@ -298,7 +309,7 @@ const taskFunction = computed(() => {
 async function taskDraftFromTask(taskId: string) {
   // we are copying the current task with json stringify
   const jsonTask = JSON.stringify(
-    await (await state.getTaskManager()).getTask(taskId)
+    await (await state.getTaskManager()).getTask(taskId),
   );
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const task = LLMTask.partial().parse(JSON.parse(jsonTask));
@@ -359,7 +370,7 @@ async function updateLabels(labels: string[]) {
       id: props.task.id,
       label: labels,
     },
-    true
+    true,
   );
 }
 </script>
