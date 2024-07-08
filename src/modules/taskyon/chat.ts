@@ -13,6 +13,7 @@ import { lruCache, sleep, asnycasyncTimeLruCache } from './utils';
 import type { FileMappingDocType } from './rxdb';
 import { findAllFilesInTasks } from './taskUtils';
 import { apiConfig } from './types';
+import { Tool } from './tools';
 
 const getOpenai = lruCache<OpenAI>(5)((
   apiKey: string,
@@ -329,8 +330,8 @@ export async function callLLM(
 export function mapFunctionNames(
   toolNames: string[],
   tools: Record<string, ToolBase>,
-) {
-  return toolNames?.map((t) => tools[t]);
+): ToolBase[] {
+  return toolNames?.map((t) => tools[t] as ToolBase).filter((t) => t);
 }
 
 export async function getOpenRouterGenerationInfo(

@@ -104,15 +104,17 @@ export function addPrompts(
       { basePrompt: llmSettings.taskChatTemplates.basePrompt },
       {},
     );
-    const basePromptMessage: OpenAI.ChatCompletionMessageParam = {
-      role: 'system',
-      content: basePrompt,
-    };
-    task.debugging.taskPrompt = [basePromptMessage, ...additionalMessages];
-    modifiedOpenAIConversationThread = [
-      basePromptMessage,
-      ...modifiedOpenAIConversationThread,
-    ];
+    if (basePrompt) {
+      const basePromptMessage: OpenAI.ChatCompletionMessageParam = {
+        role: 'system',
+        content: basePrompt,
+      };
+      task.debugging.taskPrompt = [basePromptMessage, ...additionalMessages];
+      modifiedOpenAIConversationThread = [
+        basePromptMessage,
+        ...modifiedOpenAIConversationThread,
+      ];
+    }
   }
 
   return modifiedOpenAIConversationThread;
@@ -138,9 +140,7 @@ export function renderTaskPrompt4Chat(
     };
     // TODO: to something with file tasks and
   } else if ('toolResult' in task.content) {
-    const yamlRepr = zodToYamlString(
-      StructuredResponseTypes.ToolResultBase,
-    );
+    const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolResultBase);
     variables = {
       toolResult: dump(task.content.toolResult),
       resultSchema: yamlRepr,
@@ -164,18 +164,19 @@ export function renderTaskPrompt4Chat(
       ? [filledTemplates['task']]
       : [filledTemplates['toolResult']]
   )
+    .filter((x): x is string => (x ? true : false))
     .map((x) => x.trim())
     .join('\n\n');
 
   const toolMessage: OpenAI.ChatCompletionMessageParam = {
     role: 'user',
-    content: filledTemplates['tools'],
+    content: filledTemplates['tools'] || '',
   };
 
   const additionalMessages: OpenAI.ChatCompletionMessageParam[] = [
     {
       role: 'system',
-      content: filledTemplates['instruction'],
+      content: filledTemplates['instruction'] || '',
     },
     toolMessage,
     {
