@@ -5,17 +5,17 @@
     <div>
       <div>
         <taskContentEdit
-          class="text-body1"
           v-if="
             !selectedTaskType &&
             !codingMode &&
             'message' in state.llmSettings.taskDraft.content
           "
+          class="text-body1"
           :model-value="state.llmSettings.taskDraft.content.message"
-          @update:modelValue="updateContent"
           :execute-task="addNewTask"
           :attach-file-to-chat="attachFileToDraft"
           :use-enter-to-send="state.appConfiguration.useEnterToSend"
+          @update:model-value="updateContent"
         />
         <div
           v-else-if="
@@ -26,7 +26,7 @@
         >
           <CodeEditor
             :model-value="state.llmSettings.taskDraft.content.message"
-            @update:modelValue="updateContent"
+            @update:model-value="updateContent"
           />
           <taskSettingsButton
             v-model="expandedTaskCreation"
@@ -83,8 +83,8 @@
                   <q-item
                     v-for="(m, idx) in state.modelHistory"
                     :key="m"
-                    clickable
                     v-close-popup
+                    clickable
                     @click="handleBotNameUpdate({ newName: m })"
                   >
                     <q-item-section
@@ -93,8 +93,8 @@
                     >
                   </q-item>
                   <q-item
-                    clickable
                     v-close-popup
+                    clickable
                     @click="expandedTaskCreation = !expandedTaskCreation"
                   >
                     <q-item-section avatar>
@@ -110,7 +110,7 @@
             </q-btn>
           </div>
           <q-space></q-space>
-          <div class="gt-xs" v-if="currentModel">
+          <div v-if="currentModel" class="gt-xs">
             {{
               `approx. new token count: ${estimatedTokens}/${state.modelLookUp[currentModel]?.context_length}`
             }}
@@ -128,8 +128,8 @@
             <q-btn
               flat
               size="sm"
-              @click="expandedTaskCreation = !expandedTaskCreation"
               aria-label="toggle task settings"
+              @click="expandedTaskCreation = !expandedTaskCreation"
             >
               <q-icon size="xs" :name="matTune" class="q-pl-sm"></q-icon>
               <q-icon
@@ -150,10 +150,10 @@
             v-for="file in fileAttachments"
             :key="file.name"
             removable
+            :icon="matUploadFile"
             @remove="
               fileAttachments = fileAttachments.filter((f) => f !== file)
             "
-            :icon="matUploadFile"
           >
             <div class="ellipsis" style="max-width: 100px">
               {{ `${file.name}` }}
@@ -164,8 +164,8 @@
       </div>
       <!--Task type selection and execution-->
       <div
-        class="row items-center"
         v-if="selectedTaskType || expandedTaskCreation"
+        class="row items-center"
       >
         <q-btn
           v-if="selectedTaskType"
@@ -192,9 +192,9 @@
           clearable
           :bg-color="selectedTaskType ? 'secondary' : ''"
           :model-value="selectedTaskType"
-          @update:modelValue="setTaskType"
           :options="Object.keys(toolCollection)"
           :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
+          @update:model-value="setTaskType"
         />
         <ToggleButton
           v-if="expertMode"
@@ -249,7 +249,7 @@
       </div>
     </div>
     <q-slide-transition>
-      <q-list dense v-show="expandedTaskCreation">
+      <q-list v-show="expandedTaskCreation" dense>
         <div v-if="showTaskData && expertMode">
           {{ currentnewTask }}
         </div>
@@ -258,12 +258,12 @@
         <q-item class="row items-center">
           <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
           <ModelSelection
-            class="col"
-            @updateBotName="handleBotNameUpdate"
-            :bot-name="currentModel || currentDefaultBotName || ''"
             v-model:selectedApi="selectedApi"
             v-model:useOpenAIAssistants="useOpenAIAssistants"
             v-model:open-a-i-assistant-id="openAIAssistantId"
+            class="col"
+            :bot-name="currentModel || currentDefaultBotName || ''"
+            @update-bot-name="handleBotNameUpdate"
           ></ModelSelection>
         </q-item>
         <!--Allowed Tools Selection-->
@@ -271,14 +271,14 @@
         <q-item class="row items-center">
           <q-icon :name="mdiTools" size="sm" />
           <q-expansion-item
+            v-model="state.allowedToolsExpand"
             class="col"
             dense
             :icon="matHandyman"
             expand-icon-toggle
             label="Tools"
-            v-model="state.allowedToolsExpand"
           >
-            <template v-slot:header>
+            <template #header>
               <div class="row items-center q-gutter-sm">
                 <q-btn
                   dense
@@ -298,13 +298,13 @@
             </template>
             <q-item-section>
               <q-option-group
-                class="q-ma-md"
                 v-model="allowedTools"
+                class="q-ma-md"
                 :options="
                   Object.keys(toolCollection).map((name) => ({
                     label: name,
                     value: name,
-                    description: toolCollection[name].description,
+                    description: toolCollection[name]?.description,
                   }))
                 "
                 color="secondary"
@@ -312,7 +312,7 @@
                 inline
                 dense
               >
-                <template v-slot:label="opt">
+                <template #label="opt">
                   <div>
                     {{ opt.label }}
                   </div>
@@ -599,7 +599,9 @@ async function createFileTask(files: File[]) {
 }
 
 async function addNewTask(execute = true) {
-  state.taskWorkerController.reset(); // make sure we reset our execution context interrupt, so that we can interrupt in the next loop again :)
+  // make sure we reset our execution context interrupt We do this right before adding another
+  // task, because we want to make sure that
+  state.taskWorkerController.reset();
   const fileTaskObj = await createFileTask(fileAttachments.value);
   let fileTaskId = undefined;
   if (fileTaskObj) {
