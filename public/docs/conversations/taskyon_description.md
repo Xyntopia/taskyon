@@ -33,6 +33,13 @@ roles: described with an underscore:
 
 This diagram provides a clear visualization of how different content types are processed and how they interact within the AI system, ensuring a structured and efficient workflow.
 
+What _kind_ of data we can encounter in a structured message (MessageContent_s_A) is determined by the previous
+prompts. And those are determined by the kind of tasks which requests a structured Message....
+
+- MessageContent_U -> tool prompt, if tools enabled
+- ToolResultContent-F -> tool result prompt.
+- MessageContent_S -> system prompt/error prompt
+
 ```mermaid
 flowchart TD
     subgraph ContentTypes

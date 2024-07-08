@@ -468,13 +468,6 @@ async function generateFollowUpTasksFromResult(
   }
 }
 
-class InterruptError extends Error {
-  // TODO: make sure, we can throw that error in a few spots! :) E.g. Function processing
-  constructor(reason: string) {
-    super(`Interrupted with reason: ${reason}`);
-  }
-}
-
 export function useTaskWorkerController() {
   /* This class adds context to task executions during the runtime.
   We don't necessarily need to save this information in the database
@@ -681,7 +674,7 @@ export async function taskWorker(
           };
         }
       }
-      void addTask2Tree(
+      const newTaskId = await addTask2Tree(
         errorTask,
         task?.id,
         taskManager,
@@ -689,16 +682,10 @@ export async function taskWorker(
         // this makes sure that results are still saved, even if we stop any
         // further execution
         taskWorkerController.isInterrupted() ? false : true,
-      ).then((newTaskId) => {
-        llmSettings.selectedTaskId = newTaskId;
-      });
+      );
+      llmSettings.selectedTaskId = newTaskId;
 
-      // TODO: Depending on error, clean out the queue...
-      if (error instanceof InterruptError) {
-        console.log(`Loop interrupted with reason: ${error.message}`);
-        continue;
-      }
-
+      // TODO: run this taskWorker in a separate worker js/browser thread!
       // TODO: clean up task, create a new task with the error and  & decide if we want to try this task again!
 
       // if we realize that a cancellation event was sent, empty the queue and set all tasks to "Cancelled"
