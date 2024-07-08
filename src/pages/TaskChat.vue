@@ -203,7 +203,7 @@ async function stopTasks() {
 
   await sleep(1000);
   // Poll every 500ms to check if the task is stopped
-  while (!state.taskWorkerController.isInterrupted()) {
+  while (!state.taskWorkerController.isWaiting()) {
     console.log('waiting for task to stop...');
     await sleep(500);
   }

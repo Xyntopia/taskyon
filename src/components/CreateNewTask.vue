@@ -599,6 +599,7 @@ async function createFileTask(files: File[]) {
 }
 
 async function addNewTask(execute = true) {
+  state.taskWorkerController.reset(); // make sure we reset our execution context interrupt, so that we can interrupt in the next loop again :)
   const fileTaskObj = await createFileTask(fileAttachments.value);
   let fileTaskId = undefined;
   if (fileTaskObj) {

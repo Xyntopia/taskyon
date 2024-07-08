@@ -437,7 +437,7 @@ async function generateFollowUpTasksFromResult(
             role: 'assistant',
             content: { structuredMessage: structResponse },
           });
-          addFollowUpTask(true, {
+          void addFollowUpTask(true, {
             parentID: newTaskid,
             state: 'Open',
             role: 'assistant',
@@ -489,12 +489,21 @@ export function useTaskWorkerController() {
   let interrupted = true;
   let interruptReason: string | null = null;
   let interruptCallbacks: ((reason: string | null) => void)[] = [];
+  let waiting = false;
 
   function interrupt(reason: string | null = null): void {
     console.log('interrupting: ', reason);
     interrupted = true;
     interruptReason = reason;
     interruptCallbacks.forEach((callback) => callback(reason));
+  }
+
+  function isWaiting() {
+    return waiting;
+  }
+
+  function setWaiting(value: boolean) {
+    waiting = value;
   }
 
   function isInterrupted(): boolean {
@@ -523,6 +532,8 @@ export function useTaskWorkerController() {
     getInterruptReason,
     reset,
     onInterrupt,
+    isWaiting,
+    setWaiting,
   };
 }
 export type TaskWorkerController = ReturnType<typeof useTaskWorkerController>;
@@ -537,47 +548,41 @@ async function getTaskResult(
 ) {
   // TODO: make this function return a promise so taht we can interrupt it anytime!
   // return new Promise((resolve, reject) => {
-  try {
-    void taskManager.updateTask(
-      {
-        id: taskId,
-        state: 'In Progress',
-      },
-      false,
-    );
+  void taskManager.updateTask(
+    {
+      id: taskId,
+      state: 'In Progress',
+    },
+    false,
+  );
 
-    if ('message' in task.content || 'toolResult' in task.content || '') {
-      // TODO: get rid of "taskManager" in processChatTask
-      if (llmSettings.selectedApi) {
-        const apiKey = apiKeys[llmSettings.selectedApi];
-        task = await processChatTask(
-          task,
-          llmSettings,
-          apiKey,
-          taskManager,
-          taskWorkerController,
-        );
-      } else {
-        throw new TaskProcessingError("we don't have any APIs selected!");
-      }
-    } else if ('functionCall' in task.content) {
-      // calculate function result
-      // in the case we don't have a result yet, wPe need to calculate it :)
-      task = await processFunctionTask(
+  if ('message' in task.content || 'toolResult' in task.content || '') {
+    // TODO: get rid of "taskManager" in processChatTask
+    if (llmSettings.selectedApi) {
+      const apiKey = apiKeys[llmSettings.selectedApi];
+      task = await processChatTask(
         task,
-        await taskManager.searchToolDefinitions(),
-        taskWorkerController,
+        llmSettings,
+        apiKey,
         taskManager,
+        taskWorkerController,
       );
     } else {
-      throw new TaskProcessingError("We don't know what to do with this task");
+      throw new TaskProcessingError("we don't have any APIs selected!");
     }
-  } catch (err) {
-    console.error('Error processing task:', err);
-    throw new TaskProcessingError('Error processing task:', {
-      error: err,
-    });
+  } else if ('functionCall' in task.content) {
+    // calculate function result
+    // in the case we don't have a result yet, wPe need to calculate it :)
+    task = await processFunctionTask(
+      task,
+      await taskManager.searchToolDefinitions(),
+      taskWorkerController,
+      taskManager,
+    );
+  } else {
+    throw new TaskProcessingError("We don't know what to do with this task");
   }
+
   task.state = 'Completed';
   return task;
 }
@@ -594,15 +599,21 @@ export async function taskWorker(
     let task: LLMTask | undefined = undefined;
     try {
       if (taskWorkerController.isInterrupted()) {
+        // in case of errors, especially if its an interrupt event we simply want to cancel everything :P
         // empty our task queue :)
         processTasksQueue.clear();
       }
-      // in case of errors, especially if its an interrupt event we simply want to cancel everything :P
+
       if (processTasksQueue.count() === 0) {
-        taskWorkerController.interrupt('waiting for new task...');
+        taskWorkerController.setWaiting(true);
       }
       const taskId = await processTasksQueue.pop();
-      taskWorkerController.reset(); // make sure we reset our execution context interrupt, so that we can interrupt in the next loop again :)
+      taskWorkerController.setWaiting(false);
+      if (taskWorkerController.isInterrupted()) {
+        // don't process tasks anymore..  all we can do now is to wait until the user manually presses the
+        // "reset" button ;)
+        continue;
+      }
 
       // make sure we know from outside that the worker is active...
       console.log('processing task:', taskId);
@@ -630,14 +641,34 @@ export async function taskWorker(
     } catch (error) {
       console.error('Could not complete task iteration:', error);
 
+      if (task) {
+        task.state = 'Error';
+      }
+
       const errorTask: partialTaskDraft = {
         role: 'system',
         configuration: task?.configuration,
-        content: { message: `An error occured: ${JSON.stringify(error)}` },
+        content: {
+          message: `An error occured:\n\n${JSON.stringify(error)}`,
+        },
       };
-      if (error instanceof Error) {
+      if (error instanceof TaskProcessingError) {
         errorTask.content = {
-          message: `An error occured: ${error.message}`,
+          //message: `An error occured: ${error.message}:\n\n${dump(error.details, { skipInvalid: true })}`,
+          message: `An error occured:\n\n${error.message}${error.details ? ':\n\n' + JSON.stringify(error.details) : ''}`,
+        };
+        if (task) {
+          task.debugging = {
+            error: {
+              message: error.message,
+              name: error.name,
+              details: error.details,
+            },
+          };
+        }
+      } else if (error instanceof Error) {
+        errorTask.content = {
+          message: `An error occured:\n\n${error.message}\n\n${JSON.stringify(error)}`,
         };
         if (task) {
           task.debugging = {
@@ -649,17 +680,8 @@ export async function taskWorker(
             },
           };
         }
-      } else if (error instanceof TaskProcessingError) {
-        errorTask.content = {
-          message: `An error occured: ${error.message}`,
-        };
-        if (task) {
-          task.debugging = {
-            error: error,
-          };
-        }
       }
-      const newTaskId = await addTask2Tree(
+      void addTask2Tree(
         errorTask,
         task?.id,
         taskManager,
@@ -667,8 +689,9 @@ export async function taskWorker(
         // this makes sure that results are still saved, even if we stop any
         // further execution
         taskWorkerController.isInterrupted() ? false : true,
-      );
-      llmSettings.selectedTaskId = newTaskId;
+      ).then((newTaskId) => {
+        llmSettings.selectedTaskId = newTaskId;
+      });
 
       // TODO: Depending on error, clean out the queue...
       if (error instanceof InterruptError) {
