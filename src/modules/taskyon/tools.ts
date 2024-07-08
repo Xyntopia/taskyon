@@ -95,47 +95,43 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
   return funcR.response;
 }
 
+/**
+ * Handle function execution for LLMs.
+ * All errors of this function result in an error task in the main task worker!
+ *
+ *
+ * @param func
+ * @param tools
+ * @param taskManager
+ * @returns
+ */
 export async function handleFunctionExecution(
   func: FunctionCall,
   tools: Record<string, ToolBase | Tool>,
   taskManager: TyTaskManager,
 ): Promise<TaskResult> {
-  try {
-    const tool = tools[func.name];
-    let funcR: unknown;
-    if ('function' in tool && tool.function) {
-      funcR = await tool.function(func.arguments, taskManager);
-      funcR = bigIntToString(funcR);
-      return {
-        toolResult: { result: dump(funcR) },
-      };
-    } else if (tool.code) {
-      console.log('compiling function code', tool);
-      console.error(
-        'compiling js code into a function is only available in the development version of taskyon!',
-      );
-      throw new TaskProcessingError(
-        `The tool: ${func.name} could not be executed, as the compile function code is in development right now.`,
-      );
-    } else {
-      // we do the zod object parsing/validation here, because we might have a proxy object from upstream
-      // and want to make sure its serializable for a postMessage function.
-      const funcR = await handleRemoteFunction(func.name, func.arguments);
-      return {
-        toolResult: { result: dump(funcR) },
-      };
-    }
-  } catch (error) {
+  const tool = tools[func.name];
+  let funcR: unknown;
+  if ('function' in tool && tool.function) {
+    funcR = await tool.function(func.arguments, taskManager);
+    funcR = bigIntToString(funcR);
     return {
-      toolResult: {
-        error: {
-          message:
-            error instanceof Error
-              ? error.message
-              : 'unknown error during function execution!!',
-          functionName: func.name,
-        },
-      },
+      toolResult: { result: dump(funcR) },
+    };
+  } else if (tool.code) {
+    console.log('compiling function code', tool);
+    console.error(
+      'compiling js code into a function is only available in the development version of taskyon!',
+    );
+    throw new TaskProcessingError(
+      `The tool: ${func.name} could not be executed, as the feature to compile code for functions is in development right now.`,
+    );
+  } else {
+    // we do the zod object parsing/validation here, because we might have a proxy object from upstream
+    // and want to make sure its serializable for a postMessage function.
+    const funcR = await handleRemoteFunction(func.name, func.arguments);
+    return {
+      toolResult: { result: dump(funcR) },
     };
   }
 }
