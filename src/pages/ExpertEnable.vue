@@ -1,9 +1,9 @@
 <template>
   <q-toggle
+    v-model="state.appConfiguration.expertMode"
     class="q-pa-sm"
     dense
     size="xs"
-    v-model="state.appConfiguration.expertMode"
     label="Expert Settings"
     left-label
     color="secondary"

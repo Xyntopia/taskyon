@@ -1,31 +1,31 @@
 <template>
   <!--Task Page-->
   <q-page class="column">
-    <q-resize-observer @resize="onResize" :debounce="50" />
+    <q-resize-observer :debounce="50" @resize="onResize" />
     <!--Chat Area-->
     <div
+      ref="taskThreadContainer"
       class="col column items-center"
       :style="`padding-bottom: ${bottomPadding}px;`"
-      ref="taskThreadContainer"
     >
-      <q-scroll-observer @scroll="onScroll" axis="vertical" :debounce="500" />
+      <q-scroll-observer axis="vertical" :debounce="500" @scroll="onScroll" />
       <!-- "Task" Display -->
       <div
-        class="col"
-        style="background-color: inherit; color: inherit"
-        flat
-        square
         v-if="
           selectedThread.length > 0 &&
           state.llmSettings.selectedApi &&
           state.keys[state.llmSettings.selectedApi]
         "
+        class="col"
+        style="background-color: inherit; color: inherit"
+        flat
+        square
       >
         <div v-if="currentTask" class="q-gutter-xs q-px-xs task-container">
           <q-card
-            :flat="$q.dark.isActive"
             v-for="task in selectedThread"
             :key="task.id"
+            :flat="$q.dark.isActive"
             :class="task.role"
           >
             <Task
@@ -105,8 +105,8 @@
             fab-mini
             class="taskyon-control-button"
             :icon="matKeyboardDoubleArrowDown"
-            @click="scrollToThreadEnd"
             size="md"
+            @click="scrollToThreadEnd"
           >
             <q-tooltip> Scroll To Bottom </q-tooltip>
           </q-btn>
@@ -118,9 +118,9 @@
             class="taskyon-control-button"
             :icon="matStop"
             size="md"
-            @click="stopTasks"
             :color="stoppingTasks ? 'secondary' : 'primary'"
             :loading="stoppingTasks"
+            @click="stopTasks"
           >
             <q-tooltip> Stop processing current task. </q-tooltip>
           </q-btn>
@@ -129,37 +129,6 @@
     </q-page-sticky>
   </q-page>
 </template>
-
-<style lang="sass">
-
-.task-container
-  display: flex
-  flex-direction: column
-  max-width: 800px
-  margin: 0 auto // Centers the container
-
-  // Default style for all tasks
-  > div
-    width: fit-content // Makes the width of the task as small as its content
-    max-width: 99% // Prevents the task from growing beyond the container width
-    box-sizing: border-box // Ensures padding and borders are included in width calculation
-    align-self: flex-start // Aligns to the left by default
-
-  // Specific style for tasks with the 'user' role
-  .user
-    align-self: flex-end // Aligns to the right
-
-.user-message
-  position: relative
-.user-message::after
-  content: ''
-  position: absolute
-  top: 0
-  right: 0
-  bottom: 0
-  width: 5px /* Width of the fading effect */
-  background: linear-gradient(to top, rgba(255, 255, 255, 0), $secondary)
-</style>
 
 <script setup lang="ts">
 import Task from 'components/TaskWidget.vue';
@@ -284,3 +253,34 @@ function handleResize(size: { height: number }) {
   bottomPadding.value = size.height;
 }
 </script>
+
+<style lang="sass">
+
+.task-container
+  display: flex
+  flex-direction: column
+  max-width: 800px
+  margin: 0 auto // Centers the container
+
+  // Default style for all tasks
+  > div
+    width: fit-content // Makes the width of the task as small as its content
+    max-width: 99% // Prevents the task from growing beyond the container width
+    box-sizing: border-box // Ensures padding and borders are included in width calculation
+    align-self: flex-start // Aligns to the left by default
+
+  // Specific style for tasks with the 'user' role
+  .user
+    align-self: flex-end // Aligns to the right
+
+.user-message
+  position: relative
+.user-message::after
+  content: ''
+  position: absolute
+  top: 0
+  right: 0
+  bottom: 0
+  width: 5px /* Width of the fading effect */
+  background: linear-gradient(to top, rgba(255, 255, 255, 0), $secondary)
+</style>

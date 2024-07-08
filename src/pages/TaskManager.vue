@@ -25,7 +25,8 @@
           sortable: true,
           required: true,
           label: 'score',
-          field: (row: typeof searchResults.value) => 1 / (row.distance + 0.001),
+          field: (row: typeof searchResults.value) =>
+            1 / (row.distance + 0.001),
         },
         {
           name: 'task',
@@ -33,16 +34,16 @@
           required: true,
           label: 'task',
           field: (task: LLMTask) => task.id,
-        }
+        },
       ]"
       row-key="name"
     >
-      <template v-slot:no-data> No search results! </template>
-      <template v-slot:top>
-        <Search @search="onSearchChange" class="fit" />
+      <template #no-data> No search results! </template>
+      <template #top>
+        <Search class="fit" @search="onSearchChange" />
         <div class="text-caption"># of tasks: {{ taskCount }}</div>
       </template>
-      <template v-slot:body-cell-task="props">
+      <template #body-cell-task="props">
         <td>
           <div class="row items-stretch">
             <div class="col-auto">
@@ -51,8 +52,8 @@
                 stretch
                 :icon="matPlayArrow"
                 dense
-                @click="setConversation(props.row.id)"
                 to="chat"
+                @click="setConversation(props.row.id)"
                 ><q-tooltip>View entire conversation</q-tooltip></q-btn
               >
             </div>
@@ -78,7 +79,7 @@ import { findLeafTasks } from 'src/modules/taskyon/taskManager';
 import { matPlayArrow, matSync } from '@quasar/extras/material-icons';
 
 const state = useTaskyonStore();
-const searchResults = ref<(LLMTask & { distance: number })[]>([]);
+const searchResults = ref<(LLMTask & { distance: number | undefined })[]>([]);
 const syncProgressString = ref('0/0');
 const syncProgress = ref(0.0);
 const taskCount = ref(0);
@@ -112,7 +113,7 @@ async function onSearchChange(searchTerm: string | Event, k: number) {
     if (taskManager) {
       const { tasks, distances } = await taskManager.vectorSearchTasks(
         searchTerm,
-        k
+        k,
       );
       // Add score to each task
       searchResults.value = tasks.map((task, index) => ({
@@ -138,7 +139,7 @@ const initialPagination = {
 async function setConversation(taskId: string) {
   taskManager = await state.getTaskManager();
   const leafTasks = await findLeafTasks(taskId, (taskID) =>
-    taskManager.getTask(taskID)
+    taskManager.getTask(taskID),
   );
   state.llmSettings.selectedTaskId = leafTasks[0];
 }

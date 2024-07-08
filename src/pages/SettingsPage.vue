@@ -1,7 +1,7 @@
 <template>
   <q-page>
     <q-toolbar>
-      <q-tabs class="col-auto" dense v-model="selectedTab" no-caps>
+      <q-tabs v-model="selectedTab" class="col-auto" dense no-caps>
         <q-route-tab
           to="/settings/llmproviders"
           label="LLM Providers"
@@ -33,8 +33,8 @@
       <q-tab-panels :model-value="selectedTab" animated swipeable infinite>
         <q-tab-panel name="llmproviders" :class="tabPanelClass">
           <LLMProviders
-            style="max-width: 600px"
             v-model:expertModeOn="state.appConfiguration.expertMode"
+            style="max-width: 600px"
           />
         </q-tab-panel>
         <q-tab-panel name="sync" :class="tabPanelClass">

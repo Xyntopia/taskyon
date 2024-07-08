@@ -29,28 +29,28 @@ including additional providers to make even more use of the pricing competition 
           // rowsNumber: xx if getting data from a server
         }"
       >
-        <template v-slot:top-left>
+        <template #top-left>
           <q-input
+            v-model="filter"
             dense
             clearable
             debounce="300"
-            v-model="filter"
             placeholder="Filter Models"
           >
-            <template v-slot:append>
+            <template #append>
               <q-icon :name="matFilterList" />
             </template>
           </q-input>
         </template>
-        <template v-slot:top-right>
+        <template #top-right>
           <q-toggle
+            v-model="pricingPerPage"
             label="Calculate price information as pages/0.01$ (assuming 500 token/page)"
             left-label
-            v-model="pricingPerPage"
             color="secondary"
           />
         </template>
-        <template v-slot:body-cell-name="props">
+        <template #body-cell-name="props">
           <q-td :props="props">
             <div class="row items-center">
               {{ props.value }}
@@ -60,12 +60,12 @@ including additional providers to make even more use of the pricing competition 
             </div>
           </q-td>
         </template>
-        <template v-slot:header-cell-prompt_price="props">
+        <template #header-cell-prompt_price="props">
           <q-th :props="props">
             {{ pricingPerPage ? 'pages/0.01$' : 'μ$ / token' }}
           </q-th>
         </template>
-        <template v-slot:body-cell-prompt_price="props">
+        <template #body-cell-prompt_price="props">
           <q-td :props="props">
             <div v-if="!pricingPerPage">
               {{ openrouterPricing(props.value, 3) }}
@@ -79,12 +79,12 @@ including additional providers to make even more use of the pricing competition 
             </q-tooltip>
           </q-td>
         </template>
-        <template v-slot:header-cell-completion_price="props">
+        <template #header-cell-completion_price="props">
           <q-th :props="props">
             {{ pricingPerPage ? 'pages/0.01$' : 'μ$ / token' }}
           </q-th>
         </template>
-        <template v-slot:body-cell-completion_price="props">
+        <template #body-cell-completion_price="props">
           <q-td :props="props">
             <div v-if="!pricingPerPage">
               {{ openrouterPricing(props.value, 3) }}
