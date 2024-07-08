@@ -18,6 +18,7 @@ import {
   OpenRouterGenerationInfo,
   llmSettings,
   ToolBase,
+  TaskProcessingError,
 } from './types';
 import { addTask2Tree, processTasksQueue } from './taskManager';
 import type { OpenAI } from 'openai';
@@ -25,16 +26,6 @@ import { TyTaskManager } from './taskManager';
 import { Tool, handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
 import { deepCopy, deepMerge, sleep } from './utils';
-
-class TaskProcessingError extends Error {
-  details: Record<string, unknown> | undefined;
-
-  constructor(message: string, details?: Record<string, unknown>) {
-    super(message);
-    this.name = 'TaskFollowUpError';
-    this.details = details;
-  }
-}
 
 function extractOpenAIFunctions(
   choice: OpenAI.ChatCompletion['choices'][0],
@@ -227,13 +218,11 @@ async function processFunctionTask(
       task.result = result;
     } else {
       const toolnames = JSON.stringify(task.allowedTools);
-      task.result = {
-        toolResult: {
-          error: taskWorkerController.isInterrupted()
-            ? `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`
-            : 'The function execution was cancelled by taskyon',
-        },
-      };
+      throw new TaskProcessingError(
+        taskWorkerController.isInterrupted()
+          ? `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`
+          : 'The function execution was cancelled by taskyon',
+      );
     }
   }
   return task;

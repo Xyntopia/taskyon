@@ -5,6 +5,16 @@ import { z } from 'zod';
 export type RequireSome<T, K extends keyof T> = Omit<T, K> &
   Required<Pick<T, K>>;
 
+export class TaskProcessingError extends Error {
+  details: Record<string, unknown> | undefined;
+
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message);
+    this.name = 'TaskFollowUpError';
+    this.details = details;
+  }
+}
+
 // TODO: the goal should be to slowly replace this state by the "result of the task"
 //       E.g. when a task had an error, this would be represented in the task result as an "error"
 const TaskState = z.enum([

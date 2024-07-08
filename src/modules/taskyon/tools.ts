@@ -12,6 +12,7 @@ import {
   FunctionCall,
   ParamType,
   ToolBase,
+  TaskProcessingError,
 } from './types';
 import { z } from 'zod';
 import type { TyTaskManager } from './taskManager';
@@ -43,17 +44,20 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
         console.log('remoteHandler received message', event);
         // TODO: Add security checks here, e.g., verify event.origin
         if (event.source === window.parent && event.data) {
-          const response = TaskyonMessages.parse(event.data);
-          if (
-            response.type == 'functionResponse' &&
-            response.functionName === name
-          ) {
-            window.removeEventListener('message', listener); // remove listener
-            resolve(response);
+          const response = TaskyonMessages.safeParse(event.data);
+          if (response.success) {
+            if (
+              response.data.type == 'functionResponse' &&
+              response.data.functionName === name
+            ) {
+              window.removeEventListener('message', listener); // remove listener
+              resolve(response.data);
+            }
           } else {
             reject(
-              new Error(
-                `The response message for functionCall to ${name} had the wrong format!`,
+              new TaskProcessingError(
+                'The message had the wrong format for taskyon!',
+                { error: response.error },
               ),
             );
           }
@@ -64,8 +68,8 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
       const timeoutSeconds = 10;
       setTimeout(() => {
         reject(
-          new Error(
-            `Response timeout (${timeoutSeconds}) for function ${name}`,
+          new TaskProcessingError(
+            `Response timeout (${timeoutSeconds}). Waiting for function ${name} more than ${timeoutSeconds}s`,
           ),
         );
         window.removeEventListener('message', listener); // remove listener on timeout
@@ -103,7 +107,6 @@ export async function handleFunctionExecution(
       funcR = await tool.function(func.arguments, taskManager);
       funcR = bigIntToString(funcR);
       return {
-        type: 'ToolResult',
         toolResult: { result: dump(funcR) },
       };
     } else if (tool.code) {
@@ -111,26 +114,19 @@ export async function handleFunctionExecution(
       console.error(
         'compiling js code into a function is only available in the development version of taskyon!',
       );
-      return {
-        type: 'ToolError',
-        toolResult: {
-          result: {
-            error: `The tool: ${func.name} could not be executed, as we can not compile function code right now`,
-          },
-        },
-      };
+      throw new TaskProcessingError(
+        `The tool: ${func.name} could not be executed, as the compile function code is in development right now.`,
+      );
     } else {
       // we do the zod object parsing/validation here, because we might have a proxy object from upstream
       // and want to make sure its serializable for a postMessage function.
       const funcR = await handleRemoteFunction(func.name, func.arguments);
       return {
-        type: 'ToolResult',
         toolResult: { result: dump(funcR) },
       };
     }
   } catch (error) {
     return {
-      type: 'ToolError',
       toolResult: {
         error: {
           message:
