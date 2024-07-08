@@ -154,7 +154,7 @@ export async function processChatTask(
             // after ~4000ms, so we wait for 6000 here...
             void sleep(6000).then(() => {
               const headers = {
-                ...llmSettings.llmApis['taskyon'].defaultHeaders,
+                ...llmSettings.llmApis['taskyon']?.defaultHeaders,
                 ...generateHeaders(apiKey, llmSettings.siteUrl, api.name),
               };
               const baseUrl = new URL(api.baseURL).origin;
@@ -177,7 +177,7 @@ export async function processChatTask(
                     enrichWithDelayedUsageInfos(
                       task,
                       taskManager,
-                      data[0].reference_data,
+                      data[0]?.reference_data,
                     );
                   }
                 });
@@ -236,7 +236,7 @@ async function parseChatResponse2TaskDraft(
   // Use exec() to find a match
   const yamlBlockRegex = /```(yaml|YAML)\n?([\s\S]*?)\n?```/;
   const yamlMatch = yamlBlockRegex.exec(yamlContent);
-  if (yamlMatch) {
+  if (yamlMatch && yamlMatch[2]) {
     yamlContent = yamlMatch[2]; // Use the captured group
   }
 
@@ -385,7 +385,7 @@ async function generateFollowUpTasksFromResult(
         choice,
         await taskManager.searchToolDefinitions(),
       );
-      if (functionCall.length) {
+      if (functionCall[0]) {
         // TODO: enable multiple parallel function calls
         void addFollowUpTask(true, {
           state: 'Open',
@@ -556,7 +556,7 @@ async function getTaskResult(
       task = await processChatTask(
         task,
         llmSettings,
-        apiKey,
+        apiKey || '',
         taskManager,
         taskWorkerController,
       );

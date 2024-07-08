@@ -179,7 +179,7 @@ export function generateHeaders(
 function accumulateChatCompletion(
   chunks: OpenAI.ChatCompletionChunk[],
 ): OpenAI.ChatCompletion {
-  if (chunks.length === 0) {
+  if (!chunks[0]) {
     throw new Error('No chunks provided');
   }
 
@@ -227,7 +227,7 @@ function accumulateChatCompletion(
         previous.message.role;
       previous.finish_reason =
         chunk.choices[choiceIdx]?.finish_reason || previous.finish_reason;
-      for (const tc of chunk.choices[choiceIdx].delta?.tool_calls || []) {
+      for (const tc of chunk.choices[choiceIdx]?.delta?.tool_calls || []) {
         // initialize toolCalls if it doesn't exist
         const tcnew = toolCalls[tc.index] || {
           id: '',
@@ -278,8 +278,7 @@ export async function callLLM(
     siteUrl,
     api.name,
   );
-  let chatCompletion: OpenAI.ChatCompletion | undefined =
-    undefined;
+  let chatCompletion: OpenAI.ChatCompletion | undefined = undefined;
   const openai = getOpenai(apiKey, api.baseURL, headers);
 
   const payload: OpenAI.ChatCompletionCreateParams = {
@@ -374,7 +373,7 @@ export async function getOpenRouterGenerationInfo(
 export function enrichWithDelayedUsageInfos(
   task: LLMTask,
   taskManager: TyTaskManager,
-  generationInfo: OpenRouterGenerationInfo,
+  generationInfo?: OpenRouterGenerationInfo,
 ) {
   if (generationInfo) {
     if (
