@@ -88,7 +88,7 @@ export const taskUtils = (
             openAIMessageThread.push(message);
           } else if ('message' in t.content && t.role != 'function') {
             const message: OpenAI.ChatCompletionMessageParam = {
-              role: 'user',
+              role: t.role,
               content: t.content.message,
             };
             openAIMessageThread.push(message);
