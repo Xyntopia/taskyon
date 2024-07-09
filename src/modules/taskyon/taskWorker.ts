@@ -413,11 +413,11 @@ async function generateFollowUpTasksFromResult(
         });
         return;
       } else if (
-        'message' in finishedTask.content &&
-        ((finishedTask.role === 'user' && useTyTools) ||
-          (finishedTask.role === 'system' &&
-            'toolResult' in finishedTask.content) ||
-          finishedTask.role === 'system') // this happens e.g. in the case of an error...
+        ('message' in finishedTask.content &&
+          finishedTask.role === 'user' &&
+          useTyTools) ||
+        'toolResult' in finishedTask.content ||
+        finishedTask.role === 'system' // this happens e.g. in the case of an error...
       ) {
         // depending on what role and tasktype the finishedTask has, we
         // expect different results from our structuredResponse
