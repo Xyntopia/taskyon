@@ -2,11 +2,11 @@
   <div class="column q-pa-md q-gutter-sm">
     <UnderConstructionHint />
     <q-select
+      v-model="selectedToolName"
       filled
       dense
       label="Select Tool"
       :options="Object.keys(toolCollection)"
-      v-model="selectedToolName"
       input-debounce="100"
     />
     <!--<q-input

@@ -4,27 +4,27 @@
     <q-item class="q-pa-md q-gutter-sm">
       <q-item-section>
         <q-btn
-          @click="onDownloadTaskyonData"
           :icon="matDownload"
           label="Save all Chats & Tasks"
+          @click="onDownloadTaskyonData"
         >
         </q-btn>
       </q-item-section>
       <q-item-section>
         <FileDropzone
           disable-dropzone-border
-          @update:model-value="onUploadTaskyonData"
           accept="*"
+          @update:model-value="onUploadTaskyonData"
         >
           <q-btn :icon="matUpload" label="Upload Tasks from file"> </q-btn>
         </FileDropzone>
       </q-item-section>
       <q-item-section>
         <q-btn
-          @click="showDeleteDialog = true"
           :icon="matDeleteForever"
           label="Delete Taskyon Chat Data"
           text-color="red"
+          @click="showDeleteDialog = true"
         >
         </q-btn>
         <q-dialog v-model="showDeleteDialog">
@@ -51,14 +51,14 @@
         <q-input v-model="deleteConfirmation" label="Confirmation" />-->
             </q-card-section>
             <q-card-actions align="right">
-              <q-btn flat label="Cancel" v-close-popup />
+              <q-btn v-close-popup flat label="Cancel" />
               <q-btn
+                v-close-popup
                 flat
                 label="Delete"
                 color="negative"
                 :icon="matDeleteForever"
                 @click="onDeleteTaskyonData"
-                v-close-popup
               />
             </q-card-actions>
           </q-card>
@@ -85,8 +85,8 @@
       <q-item-section>
         <FileDropzone
           disable-dropzone-border
-          @update:model-value="loadSettingsJson"
           accept="*"
+          @update:model-value="loadSettingsJson"
         >
           <q-btn class="fit">
             JSON
@@ -95,8 +95,8 @@
         </FileDropzone>
         <FileDropzone
           disable-dropzone-border
-          @update:model-value="loadSettingsYaml"
           accept="*"
+          @update:model-value="loadSettingsYaml"
         >
           <q-btn class="fit">
             YAML
@@ -112,10 +112,10 @@
 
       <q-item-section> Export app & settings to gdrive: </q-item-section>
       <q-item-section>
-        <q-btn @click="onSyncGdrive" :icon="matSave">
+        <q-btn :icon="matSave" @click="onSyncGdrive">
           <q-tooltip> Save configuration to gdrive</q-tooltip>
         </q-btn>
-        <q-btn @click="onUpdateAppConfiguration" :icon="matSync">
+        <q-btn :icon="matSync" @click="onUpdateAppConfiguration">
           <q-tooltip> Restore app configuration from gdrive</q-tooltip>
         </q-btn>
       </q-item-section>
@@ -154,14 +154,14 @@
         <q-input v-model="deleteConfirmation" label="Confirmation" />-->
           </q-card-section>
           <q-card-actions align="right">
-            <q-btn flat label="Cancel" v-close-popup />
+            <q-btn v-close-popup flat label="Cancel" />
             <q-btn
+              v-close-popup
               flat
               label="Reset"
               color="negative"
               :icon="matDeleteForever"
               @click="onResetTaskyon"
-              v-close-popup
             />
           </q-card-actions>
         </q-card>

@@ -8,7 +8,7 @@
           class="col"
           label="Go to Taskyon.space to retrieve an API key."
           outline
-          noCaps
+          no-caps
           icon="svguse:/taskyon_mono_opt.svg#taskyon"
           href="https://taskyon.space"
           target="_blank"
@@ -21,7 +21,7 @@
         <q-btn
           class="col"
           outline
-          noCaps
+          no-caps
           label="Use free Taskyon (low quality)"
           icon="svguse:/taskyon_mono_opt.svg#taskyon"
           to="/"
@@ -44,18 +44,18 @@
       <q-toggle v-model="expertModeOn" color="secondary" />
     </div>
     <q-space></q-space>
-    <q-item-label header v-if="expertModeOn"
+    <q-item-label v-if="expertModeOn" header
       >Or: Manually configure & retrieve API keys (Setup a local,
       privacy-presevering server, A custom LLM AI server in your company etc...)
       Everything with en OpenAI compatible API will work:</q-item-label
     >
-    <div class="row q-gutter-xs" v-if="expertModeOn">
+    <div v-if="expertModeOn" class="row q-gutter-xs">
       <div class="col">
         <q-btn
           class="col"
           label="Go to OpenAI to retrieve an API key from OpenAI (not recommended)"
           outline
-          noCaps
+          no-caps
           href="https://platform.openai.com/account/api-keys"
           target="_blank"
         />
@@ -67,7 +67,7 @@
         <q-btn
           label="Access keys via OpenRouter Dashboard (not recommended)"
           outline
-          noCaps
+          no-caps
           href="https://openrouter.ai/keys"
           target="_blank"
         />
@@ -93,8 +93,8 @@
             placeholder="Add API key here!"
             filled
             :model-value="state.keys[apiName] || ''"
-            @update:model-value="(value) => (state.keys[apiName] = value)"
             :label="`${apiName} API key`"
+            @update:model-value="(value) => (state.keys[apiName] = value)"
           >
           </SecretInput>
         </div>

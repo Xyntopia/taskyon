@@ -1,28 +1,28 @@
 <template>
   <q-input
+    v-model="content"
     autogrow
     filled
     color="secondary"
-    v-model="content"
     label="Type your message or instruction..."
     clearable
-    @keyup="checkKeyboardEvents"
     input-style="max-height: 300px"
     v-bind="$attrs"
+    @keyup="checkKeyboardEvents"
   >
-    <template v-slot:append>
+    <template #append>
       <q-btn flat dense round :icon="matSend" @click="executeTask">
         <q-tooltip>
           Press to send or alternatively send with &lt;shift&gt; + &lt;enter&gt;
         </q-tooltip>
       </q-btn>
     </template>
-    <template v-slot:before>
+    <template #before>
       <FileDropzone
         class="fit"
-        @update:model-value="attachFileToChat"
         accept="*"
         enable-paste
+        @update:model-value="attachFileToChat"
       >
         <q-btn dense class="fit" flat>
           <q-icon class="gt-xs" :name="matUploadFile" />

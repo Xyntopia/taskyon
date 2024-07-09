@@ -2,8 +2,8 @@
   <div class="row items-start q-gutter-xs">
     <div v-if="false && selectedApi === 'openai'" class="q-pt-xs">
       <q-btn-toggle
-        label="mode"
         v-model="useOpenAIAssistants"
+        label="mode"
         dense
         outline
         toggle-color="secondary"
@@ -22,6 +22,7 @@
       style="min-width: 200px"
     >
       <q-select
+        v-model="openAIAssistantId"
         filled
         dense
         color="secondary"
@@ -30,9 +31,8 @@
         :options="modelOptions"
         emit-value
         map-options
-        v-model="openAIAssistantId"
       >
-        <template v-slot:after>
+        <template #after>
           <q-btn
             :icon="state.modelDetails ? matExpandLess : matExpandMore"
             flat
@@ -65,11 +65,11 @@
         :options="filteredOptions"
         emit-value
         :model-value="botName"
-        @update:model-value="onModelSelect"
         hide-selected
         fill-input
         use-input
         input-debounce="0"
+        @update:model-value="onModelSelect"
         @filter="(val: string, update: updateCallBack) => filterModels(val, update, modelOptions)"
       >
       </q-select>
@@ -83,8 +83,8 @@
     <ApiSelect
       v-if="state.appConfiguration.expertMode"
       :model-value="state.llmSettings.selectedApi"
-      @update:model-value="onApiSelect"
       more-settings
+      @update:model-value="onApiSelect"
     />
   </div>
 </template>

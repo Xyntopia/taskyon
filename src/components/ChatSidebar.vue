@@ -16,13 +16,13 @@
       <div class="column items-stretch">
         <q-list>
           <q-item
-            dense
             v-for="conversationId in conversationIDs"
             :key="conversationId.id"
-            @click="state.llmSettings.selectedTaskId = conversationId.id"
+            v-ripple
+            dense
             to="/"
             clickable
-            v-ripple
+            @click="state.llmSettings.selectedTaskId = conversationId.id"
           >
             <!--q-item-section avatar>
               <q-icon name="matChatBubble" size="xs" />
@@ -79,9 +79,9 @@
         </q-list>
         <div class="row justify-around items-center">
           <FileDropzone
-            @update:model-value="loadConversation"
             accept="*"
             disable-dropzone-border
+            @update:model-value="loadConversation"
           >
             <q-btn dense class="fit" flat>
               <q-icon :name="matFileUpload" />
@@ -91,9 +91,9 @@
           <q-btn
             dense
             flat
-            @click="state.llmSettings.selectedTaskId = undefined"
             to="/"
             :icon="mdiForumPlus"
+            @click="state.llmSettings.selectedTaskId = undefined"
           >
             <q-tooltip> Create a new conversation </q-tooltip>
           </q-btn>

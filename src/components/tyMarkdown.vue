@@ -3,62 +3,10 @@
     :id="id"
     :plugins="plugins"
     :src="src"
-    @click="handleMarkdownClick"
     v-bind="$attrs"
+    @click="handleMarkdownClick"
   />
 </template>
-
-<style lang="sass">
-/*.code-block-with-overlay
-  pre.q-markdown--code__inner
-    overflow: auto !important
-    max-width: 100% !important
-    white-space: pre !important
-    word-wrap: normal !important
-    max-height: 300px !important // adjust the height to your liking
-
-.q-markdown pre,
-.q-markdown code
-  white-space: pre-wrap // Ensure that long lines of code wrap within the container
-  word-break: break-word // Break long words to fit within the container
-
-
-// we need this, because otherwise long words like links will
-// completly mess up our scrolling and overflow etc...
-.q-markdown
-  word-break: break-word
-  overflow-wrap: break-word
-
-.q-markdown
-  color: black
-
-.q-markdown--note--info .q-markdown--note-title
-  color: $accent
-
-.q-markdown p
-  text-align: justify
-
-.q-markdown--note--info
-  background-color: lighten($secondary, 35%)
-  border: 0
-  border-radius: 10px 10px 10px 10px
-
-.code-block-with-overlay
-  position: relative
-
-  .copy-button
-    position: absolute
-    top: 0
-    right: 0
-
-// this is in order to make mermaid sequence diagrams work on dark backgrounds
-/*.mermaid svg
-  .messageLine0
-    stroke: $secondary !important
-  .messageText
-    stroke: $secondary !important
-    fill: $secondary !important
-</style>
 
 <script setup lang="ts">
 import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
@@ -327,3 +275,55 @@ onMounted(() => {
   }
 });
 </script>
+
+<style lang="sass">
+/*.code-block-with-overlay
+  pre.q-markdown--code__inner
+    overflow: auto !important
+    max-width: 100% !important
+    white-space: pre !important
+    word-wrap: normal !important
+    max-height: 300px !important // adjust the height to your liking
+
+.q-markdown pre,
+.q-markdown code
+  white-space: pre-wrap // Ensure that long lines of code wrap within the container
+  word-break: break-word // Break long words to fit within the container
+
+
+// we need this, because otherwise long words like links will
+// completly mess up our scrolling and overflow etc...
+.q-markdown
+  word-break: break-word
+  overflow-wrap: break-word
+
+.q-markdown
+  color: black
+
+.q-markdown--note--info .q-markdown--note-title
+  color: $accent
+
+.q-markdown p
+  text-align: justify
+
+.q-markdown--note--info
+  background-color: lighten($secondary, 35%)
+  border: 0
+  border-radius: 10px 10px 10px 10px
+
+.code-block-with-overlay
+  position: relative
+
+  .copy-button
+    position: absolute
+    top: 0
+    right: 0
+
+// this is in order to make mermaid sequence diagrams work on dark backgrounds
+/*.mermaid svg
+  .messageLine0
+    stroke: $secondary !important
+  .messageText
+    stroke: $secondary !important
+    fill: $secondary !important
+</style>

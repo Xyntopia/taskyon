@@ -4,12 +4,12 @@
     flat
     dense
     :icon="matTune"
+    v-bind="$attrs"
     @click="
       () => {
         expandedTaskCreation = !expandedTaskCreation;
       }
     "
-    v-bind="$attrs"
     ><q-tooltip> Toggle Task Settings </q-tooltip>
   </q-btn>
 </template>

@@ -1,7 +1,7 @@
 <template>
-  <q-input type="textarea" filled v-model="jsonString">
-    <template v-slot:append>
-      <q-btn flat dense @click="onSave" :icon="matSave" />
+  <q-input v-model="jsonString" type="textarea" filled>
+    <template #append>
+      <q-btn flat dense :icon="matSave" @click="onSave" />
     </template>
   </q-input>
 </template>

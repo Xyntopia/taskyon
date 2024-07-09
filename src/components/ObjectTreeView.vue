@@ -1,6 +1,6 @@
 <template>
   <q-tree v-if="modelValue" :nodes="nodeTree" node-key="label">
-    <template v-slot:body-text="prop">
+    <template #body-text="prop">
       <div class="row">
         <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
           {{ prop.node.label }}:
@@ -14,13 +14,13 @@
           type="textarea"
           :debounce="debounce"
           :model-value="prop.node.value"
-          @update:modelValue="(value: unknown) => updateValue(prop.node.path, value)"
+          @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
         >
         </q-input>
       </div>
     </template>
-    <template v-slot:header-none> </template>
-    <template v-slot:body-list="prop">
+    <template #header-none> </template>
+    <template #body-list="prop">
       <div class="row">
         <div class="col-auto" style="min-width: 200px">
           {{ prop.node.label }}:
@@ -28,11 +28,11 @@
         <json-input
           class="col"
           :model-value="prop.node.value"
-          @update:modelValue="(value: unknown) => updateValue(prop.node.path, value)"
+          @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
         />
       </div>
     </template>
-    <template v-slot:body-string="prop">
+    <template #body-string="prop">
       <div class="row">
         <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
           {{ prop.node.label }}:
@@ -47,12 +47,12 @@
           autogrow
           :debounce="debounce"
           :model-value="prop.node.value"
-          @update:modelValue="(value: unknown) => updateValue(prop.node.path, value)"
+          @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
         >
         </q-input>
       </div>
     </template>
-    <template v-slot:header-boolean="prop">
+    <template #header-boolean="prop">
       <q-toggle
         :disable="disableEdit"
         style="min-width: 200px"
@@ -60,7 +60,7 @@
         left-label
         color="secondary"
         :model-value="prop.node.value"
-        @update:modelValue="(value: unknown) => updateValue(prop.node.path, value)"
+        @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
       />
     </template>
   </q-tree>

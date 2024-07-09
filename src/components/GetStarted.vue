@@ -1,17 +1,17 @@
 <template>
   <div class="welcome-message column items-center">
     <div
-      class="text-h6 col-auto"
       v-if="
         state.llmSettings.selectedApi &&
         state.keys[state.llmSettings.selectedApi]
       "
+      class="text-h6 col-auto"
     >
       <p class="text-center welcome-message-text">
         Welcome! Just type a message below to start using Taskyon!
       </p>
       <div class="row q-gutter-xs justify-about">
-        <div class="col" v-for="(s, idx) in starters" :key="idx">
+        <div v-for="(s, idx) in starters" :key="idx" class="col">
           <CreateTaskButton
             v-if="s.md"
             :markdown="s.md"

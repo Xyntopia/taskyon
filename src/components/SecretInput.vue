@@ -1,6 +1,6 @@
 <template>
-  <q-input :type="isPwd ? 'password' : 'text'" v-model="model" v-bind="$attrs">
-    <template v-slot:append>
+  <q-input v-model="model" :type="isPwd ? 'password' : 'text'" v-bind="$attrs">
+    <template #append>
       <q-icon
         :name="isPwd ? matVisibilityOff : matVisibility"
         class="cursor-pointer"

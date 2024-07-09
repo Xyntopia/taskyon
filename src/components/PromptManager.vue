@@ -15,11 +15,11 @@
         <q-card-section>
           and the prompts:
           <q-card
+            v-for="(prompt, index) in structuredResponsePrompt"
+            :key="index"
             class="q-pa-xs q-my-xs"
             bordered
             flat
-            v-for="(prompt, index) in structuredResponsePrompt"
-            :key="index"
             :model-value="prompt"
           >
             <p class="text-bold">role: {{ prompt.role }}</p>

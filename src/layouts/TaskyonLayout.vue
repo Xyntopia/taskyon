@@ -7,12 +7,12 @@
       >
         <q-btn
           flat
-          @click="drawerOpen = !drawerOpen"
           round
           dense
           :size="btnSize"
           :icon="matMenu"
           aria-label="Open Sidebar"
+          @click="drawerOpen = !drawerOpen"
         />
         <div v-if="state" class="q-ml-lg button-group">
           <q-btn
@@ -42,8 +42,8 @@
             :icon="mdiForumPlus"
             :size="btnSize"
             to="/"
-            @click="state.llmSettings.selectedTaskId = undefined"
             aria-label="start new chat"
+            @click="state.llmSettings.selectedTaskId = undefined"
             ><q-tooltip>Create New Chat</q-tooltip>
           </q-btn>
         </div>
@@ -89,8 +89,8 @@
           <q-menu>
             <q-list dense>
               <q-item
-                clickable
                 v-ripple
+                clickable
                 href="https://github.com/xyntopia/taskyon"
                 target="_blank"
                 exact
@@ -102,8 +102,8 @@
               </q-item>
               <q-separator />
               <q-item
-                clickable
                 v-ripple
+                clickable
                 to="/pricing"
                 exact
                 active-class="text-secondary"
@@ -178,45 +178,6 @@
   </q-layout>
 </template>
 
-<style lang="sass">
-
-.body--light
-  .button-group
-    display: inline-block
-    border: 1px solid $primary /* add white outline */
-    border-radius: 5px /* optional, to match the rounded-borders class */
-
-.body--dark
-  .button-group
-    display: inline-block
-    border: 1px solid white /* add white outline */
-    border-radius: 5px /* optional, to match the rounded-borders class */
-
-@media print
-  /* Hide everything initially */
-  body *
-    visibility: hidden
-
-  /* Only display the q-page and its children */
-  .q-page,
-  .q-page *
-    visibility: visible
-
-  /* Override the page container padding for print */
-  .q-page-container
-    padding: 0 !important
-
-  .q-page
-    position: absolute
-    left: 0
-    top: 0
-    width: 100%
-    margin: 0
-    padding: 0
-    box-shadow: none /* Remove shadows, if any */
-    min-height: 0 !important /* Override min-height if necessary */
-</style>
-
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import DarkModeButton from 'components/DarkModeButton.vue';
@@ -256,3 +217,42 @@ const btnSize = computed(() => {
   return minMode.value ? 'xs' : 'md';
 });
 </script>
+
+<style lang="sass">
+
+.body--light
+  .button-group
+    display: inline-block
+    border: 1px solid $primary /* add white outline */
+    border-radius: 5px /* optional, to match the rounded-borders class */
+
+.body--dark
+  .button-group
+    display: inline-block
+    border: 1px solid white /* add white outline */
+    border-radius: 5px /* optional, to match the rounded-borders class */
+
+@media print
+  /* Hide everything initially */
+  body *
+    visibility: hidden
+
+  /* Only display the q-page and its children */
+  .q-page,
+  .q-page *
+    visibility: visible
+
+  /* Override the page container padding for print */
+  .q-page-container
+    padding: 0 !important
+
+  .q-page
+    position: absolute
+    left: 0
+    top: 0
+    width: 100%
+    margin: 0
+    padding: 0
+    box-shadow: none /* Remove shadows, if any */
+    min-height: 0 !important /* Override min-height if necessary */
+</style>

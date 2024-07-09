@@ -7,13 +7,13 @@
     @click.stop="openFileInput"
   >
     <input
+      ref="fileInput"
       class="hidden"
       type="file"
       multiple
-      @change="handleFileInput"
-      ref="fileInput"
       :accept="accept"
       capture="environment"
+      @change="handleFileInput"
       @click.stop
     />
     <slot>
@@ -57,17 +57,6 @@
     </slot>
   </div>
 </template>
-
-<style lang="sass">
-.dashedborder
-  border-width: 2px
-  border-style: dashed
-  border-radius: 5px
-
-.dropzone
-  text-align: center
-  cursor: pointer
-</style>
 
 <script setup lang="ts">
 import { matAddAPhoto, matUploadFile } from '@quasar/extras/material-icons';
@@ -192,3 +181,14 @@ async function openDir() {
   }
 }*/
 </script>
+
+<style lang="sass">
+.dashedborder
+  border-width: 2px
+  border-style: dashed
+  border-radius: 5px
+
+.dropzone
+  text-align: center
+  cursor: pointer
+</style>

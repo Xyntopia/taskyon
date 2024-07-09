@@ -5,7 +5,7 @@
         class="fit"
         label="Connect Taskyon to Openrouter.ai AI service"
         :icon="matKey"
-        noCaps
+        no-caps
         outline
         @click="onGetOpenRouterKey"
       >

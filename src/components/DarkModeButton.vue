@@ -7,8 +7,8 @@
         ? matDarkMode
         : matLightMode
     "
-    @click="toggleTheme"
     v-bind="$attrs"
+    @click="toggleTheme"
   >
     <q-tooltip
       >Dark Mode:

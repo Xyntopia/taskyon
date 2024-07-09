@@ -17,11 +17,12 @@
           :model-value="searchString || ''"
           @update:model-value="onQChange"
         >
-          <template v-slot:append>
-            <q-btn round flat @click="requestSearch" :icon="matSearch" />
+          <template #append>
+            <q-btn round flat :icon="matSearch" @click="requestSearch" />
           </template>
         </q-input>
         <q-select
+          v-model="numberOfSearchResults"
           class="col-auto"
           flat
           dense
@@ -30,14 +31,13 @@
           outlined
           type="number"
           style="max-width: 100px"
-          v-model="numberOfSearchResults"
           :options="[5, 10, 25, 50, 100]"
         >
           <q-tooltip>Number of search results.</q-tooltip>
         </q-select>
         <q-btn
-          class="col-auto"
           v-if="showFilterButton"
+          class="col-auto"
           flat
           stretch
           :icon="matFilterAlt"

@@ -5,8 +5,8 @@
       rounded
       dense
       :icon="matHelpOutline"
-      @click="showInfo = true"
       v-bind="$attrs"
+      @click="showInfo = true"
     >
       <q-dialog v-model="showInfo">
         <q-card>

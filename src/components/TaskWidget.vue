@@ -56,12 +56,12 @@
             </p>
           </q-expansion-item>
           <ty-markdown
-            no-line-numbers
-            style="min-width: 50px"
             v-else-if="
               state.taskState[task.id]?.markdownEnabled != false &&
               'message' in task.content
             "
+            no-line-numbers
+            style="min-width: 50px"
             :src="task.content.message"
           />
           <div v-else class="raw-markdown q-mb-md">
@@ -77,7 +77,7 @@
               <q-item-section class="ellipsis">{{
                 file?.name || file?.opfs
               }}</q-item-section>
-              <q-tooltip :delay="500" v-if="state.appConfiguration.expertMode">
+              <q-tooltip v-if="state.appConfiguration.expertMode" :delay="500">
                 <p class="text-bold">uploaded file:</p>
                 <p style="white-space: pre-wrap">
                   {{ dump(file) }}
@@ -124,10 +124,10 @@
       <TaskButtons
         class="message-buttons absolute-bottom-left print-hide rounded-borders"
         :task="task"
-        :toggleMarkdown="toggleMarkdown"
-        :createNewConversation="createNewConversation"
-        :editTask="editTask"
-        :toggleMessageDebug="toggleMessageDebug"
+        :toggle-markdown="toggleMarkdown"
+        :create-new-conversation="createNewConversation"
+        :edit-task="editTask"
+        :toggle-message-debug="toggleMessageDebug"
       />
     </div>
     <!--task debugging-->
@@ -140,18 +140,18 @@
           label="Task Labels"
           filled
           :model-value="task.label || []"
-          @update:model-value="updateLabels"
           use-input
           use-chips
           multiple
           input-debounce="300"
           new-value-mode="add-unique"
+          @update:model-value="updateLabels"
         >
-          <template v-slot:prepend>
+          <template #prepend>
             <q-icon :name="matNewLabel" />
           </template>
         </q-select>
-        <q-tabs dense v-model="state.messageDebug[task.id]" no-caps>
+        <q-tabs v-model="state.messageDebug[task.id]" dense no-caps>
           <q-tab name="ERROR" label="Error" />
           <q-tab name="RAW" label="raw task data" />
           <q-tab
@@ -234,24 +234,6 @@
     </q-slide-transition>
   </div>
 </template>
-
-<style lang="sass" scoped>
-.message-container
-    .message-buttons
-        position: absolute
-        bottom: -2px  // To move up by 6px
-        left: 20px   // To move left by 6px
-        opacity: 0
-        transition: opacity 0.3s
-        background-color: rgba($secondary, .2)
-
-    &:hover
-        .message-buttons
-            opacity: 1
-
-.raw-markdown
-  white-space: pre-wrap // This will display newlines and wrap text
-</style>
 
 <script setup lang="ts">
 import ToolResultWidget from 'components/ToolResultWidget.vue';
@@ -374,3 +356,21 @@ async function updateLabels(labels: string[]) {
   );
 }
 </script>
+
+<style lang="sass" scoped>
+.message-container
+    .message-buttons
+        position: absolute
+        bottom: -2px  // To move up by 6px
+        left: 20px   // To move left by 6px
+        opacity: 0
+        transition: opacity 0.3s
+        background-color: rgba($secondary, .2)
+
+    &:hover
+        .message-buttons
+            opacity: 1
+
+.raw-markdown
+  white-space: pre-wrap // This will display newlines and wrap text
+</style>

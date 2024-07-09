@@ -4,10 +4,10 @@
       <!-- Be sure to play with the Layout demo on docs -->
       <q-btn
         flat
-        @click="drawerOpen = !drawerOpen"
         dense
         :icon="matMenu"
         :size="btnsize"
+        @click="drawerOpen = !drawerOpen"
       />
       <q-separator vertical :dark="!$q.dark.isActive"></q-separator>
       <q-btn

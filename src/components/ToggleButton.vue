@@ -1,9 +1,9 @@
 <template>
   <q-btn
-    @click="model = !model"
     v-bind="$attrs"
     :class="model ? 'bg-secondary text-primary' : ''"
     :icon="model ? onIcon : offIcon"
+    @click="model = !model"
   >
     <slot></slot>
   </q-btn>
