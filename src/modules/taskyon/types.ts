@@ -228,11 +228,13 @@ const toolCommand = FunctionCall.describe(
   'If you want to use a tool, provide the function call parameters',
 );
 
-const ErrorEvaluation = z
+const SystemResponseEvaluation = z
   .object({
     'was there an error?': yesno,
-    'try again?': yesno,
+    'do you think we can solve the error?': yesno,
     'Should we use one of the mentioned tools to answer the task?:': yesno,
+    'try again?': yesno,
+    'stop?': yesno,
   })
   .describe(
     'This is used as a short prompt for tasks in order to determine whether we should use a more detailed task prompt',
@@ -264,12 +266,12 @@ const ToolSelection = z
 export const StructuredResponseTypes = {
   ToolResultBase,
   ToolSelection,
-  ErrorEvaluation,
+  SystemResponseEvaluation,
 };
 export const StructuredResponse = z.union([
   ToolResultBase.partial(),
   ToolSelection.partial(),
-  ErrorEvaluation.partial(),
+  SystemResponseEvaluation.partial(),
 ]);
 export type StructuredResponse = z.infer<typeof StructuredResponse>;
 
@@ -511,6 +513,7 @@ export const llmSettings = z.object({
     context: z.string().default(''),
     toolResult: z.string().default(''),
     task: z.string().default(''),
+    evaluate: z.string().default(''),
   }),
 });
 export type llmSettings = z.infer<typeof llmSettings>;
@@ -542,7 +545,7 @@ export type appConfiguration = z.infer<typeof appConfiguration>;
 
 export const storedSettings = z.object({
   version: z
-    .literal(8)
+    .literal(9)
     .describe(
       'whenever the schema of the settings change, this number will get changed as well...',
     ),

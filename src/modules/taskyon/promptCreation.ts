@@ -15,12 +15,12 @@ import type { TyTaskManager } from './taskManager';
  * This function renders templates, substituting the necessary variables
  *
  */
-function substituteTemplateVariables(
-  templates: Record<string, string>,
+function substituteTemplateVariables<T extends Record<string, string>>(
+  templates: T,
   variables: Record<string, string>,
-) {
+): { [K in keyof T]: string } {
   // TODO: can we do this as a javascript tag function? https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals
-  const messages: Record<string, string> = {};
+  const messages: Record<keyof T, string> = {} as Record<keyof T, string>;
 
   // Iterate over each template
   for (const [templateKey, templateValue] of Object.entries(templates)) {
@@ -34,7 +34,7 @@ function substituteTemplateVariables(
       );
     }
 
-    messages[templateKey] = content;
+    messages[templateKey as keyof T] = content;
   }
 
   return messages;
@@ -60,131 +60,170 @@ export function generateOpenAIToolDeclarations(
   return openAITools;
 }
 
-export function addPrompts(
+/**
+ * This function adds several prompts to our AI conversation
+ * in order to provide answers with a specific schema!
+ *
+ * We need to take care of the currently 3 cases where a structured response is required:
+ *
+ * - Tool Result
+ * - Tool Selection
+ * - Evaluation of System Response
+ *
+ * Additionally, we can optionally add generic base prompts which
+ * let the AI behave in a certain way..
+ *
+ *
+ * @param task
+ * @param toolCollection
+ * @param llmSettings
+ * @param openAIConversationThread
+ * @param method
+ * @returns
+ */
+function addPrompts(
   task: LLMTask,
   toolCollection: Record<string, ToolBase>,
   llmSettings: llmSettings,
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  method: 'toolchat' | 'chat' | 'taskAgent',
 ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
   console.log('Prepare task tree for inference');
 
-  let additionalMessages: OpenAI.ChatCompletionMessageParam[] = [];
-  let modifiedOpenAIConversationThread = structuredClone(
-    openAIConversationThread,
-  );
-
   // Check if task has tools and OpenAI tools are not enabled
-  if (
-    task.allowedTools?.length &&
-    !llmSettings.enableOpenAiTools &&
-    method === 'toolchat'
-  ) {
-    console.log('Creating chat task messages');
+  console.log('Creating chat prompts');
 
-    // Prepare the variables for createTaskChatMessages
-    additionalMessages = renderTaskPrompt4Chat(
+  // Prepare the variables for createTaskChatMessages
+  const { prependMessages, modifiedOpenAIConversationThread, appendMessages } =
+    renderTaskPrompt4Chat(
       task,
       toolCollection,
       llmSettings,
+      openAIConversationThread,
     );
 
-    task.debugging.taskPrompt = additionalMessages;
-    // Remove the last message from openAIConversationThread
-    // because it will be replaced by our task message
-    // where we have wrapped the original message...
-    modifiedOpenAIConversationThread.pop();
-    // Append additional messages to the conversation thread
-    modifiedOpenAIConversationThread = [
-      ...modifiedOpenAIConversationThread,
-      ...additionalMessages,
-    ];
-  } else if (llmSettings.useBasePrompt) {
-    const { basePrompt } = substituteTemplateVariables(
-      { basePrompt: llmSettings.taskChatTemplates.basePrompt },
-      {},
-    );
-    if (basePrompt) {
-      const basePromptMessage: OpenAI.ChatCompletionMessageParam = {
-        role: 'system',
-        content: basePrompt,
-      };
-      task.debugging.taskPrompt = [basePromptMessage, ...additionalMessages];
-      modifiedOpenAIConversationThread = [
-        basePromptMessage,
-        ...modifiedOpenAIConversationThread,
-      ];
-    }
-  }
+  task.debugging.taskPrompt = [...prependMessages, ...appendMessages];
 
-  return modifiedOpenAIConversationThread;
+  // build our complete thread :)
+  return [
+    ...prependMessages,
+    ...modifiedOpenAIConversationThread,
+    ...appendMessages,
+  ];
 }
 
 export function renderTaskPrompt4Chat(
   task: Pick<LLMTask, 'role' | 'content' | 'allowedTools' | 'result'>,
   toolCollection: Record<string, ToolBase>,
   llmSettings: llmSettings,
+  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
 ) {
-  let variables = {};
-  // TODO: we need to have a better way then checking the role. We need to check the content
-  //       of the task.
+  const useToolChat =
+    task.allowedTools?.length && !llmSettings.enableOpenAiTools;
+
+  const modifiedOpenAIConversationThread = structuredClone(
+    openAIConversationThread,
+  );
+  const prependMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
+    [];
+  const appendMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
+    [];
+
   const toolList = task.allowedTools?.map((t) => `- ${t}`).join('\n');
-  if ('message' in task.content) {
+  const variables: Record<string, string> = {
+    format: 'yaml',
+    tools: summarizeTools(task.allowedTools || [], toolCollection),
+    toolList: toolList || 'N/A',
+  };
+
+  function getTemplates() {
+    const filledTemplates = substituteTemplateVariables(
+      llmSettings.taskChatTemplates,
+      variables,
+    );
+    return filledTemplates;
+  }
+
+  let structuredResponseExpected = false;
+  if ('message' in task.content && task.role === 'system') {
+    // this is most likely an error message or similar
+    // and we need a structured response in order to decide how to
+    // continue...
+    const yamlRepr = zodToYamlString(
+      StructuredResponseTypes.SystemResponseEvaluation,
+    );
+    variables.taskContent = task.content.message;
+    variables.schema = yamlRepr;
+
+    const filledTemplates = getTemplates();
+    appendMessages.push({
+      role: 'user',
+      content: filledTemplates.evaluate,
+    });
+    structuredResponseExpected = true;
+  } else if ('message' in task.content && task.role === 'user' && useToolChat) {
     const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolSelection);
-    variables = {
-      taskContent: task.content.message || '',
-      schema: yamlRepr,
-      format: 'yaml',
-      tools: summarizeTools(task.allowedTools || [], toolCollection),
-      toolList: toolList,
-    };
+    variables.taskContent = task.content.message;
+    variables.schema = yamlRepr;
+    // Remove the last message from openAIConversationThread
+    // because it will be replaced by our task message
+    // where we have wrapped the original message...
+    modifiedOpenAIConversationThread.pop();
+
+    const filledTemplates = getTemplates();
+    appendMessages.push(
+      {
+        role: 'user',
+        content: filledTemplates.instruction,
+      },
+      {
+        role: 'user',
+        content: filledTemplates.tools,
+      },
+      {
+        role: 'user',
+        content: filledTemplates.task,
+      },
+    );
+    structuredResponseExpected = true;
     // TODO: to something with file tasks and
   } else if ('toolResult' in task.content) {
     const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolResultBase);
-    variables = {
-      toolResult: dump(task.content.toolResult),
-      resultSchema: yamlRepr,
-      format: 'yaml',
-      tools: summarizeTools(task.allowedTools || [], toolCollection),
-      toolList: toolList,
-    };
+    variables.toolResult = dump(task.content.toolResult);
+    variables.resultSchema = yamlRepr;
+
+    // Remove the last message from openAIConversationThread
+    // because it will be replaced by our task message
+    // where we have wrapped the original message...
+    modifiedOpenAIConversationThread.pop();
+
+    const filledTemplates = getTemplates();
+    appendMessages.push(
+      {
+        role: 'system',
+        content: filledTemplates.instruction,
+      },
+      {
+        role: 'system',
+        content: filledTemplates.tools,
+      },
+      {
+        role: 'user',
+        content: filledTemplates.toolResult,
+      },
+    );
+    structuredResponseExpected = true;
+    //appendMessages.push()
   }
 
-  // Create additional messages using createTaskChatMessages
-  const filledTemplates = substituteTemplateVariables(
-    llmSettings.taskChatTemplates,
-    variables,
-  );
-
-  // TODO: wth is going on here? this needs to be done in a better way...
-  //       e.g. don't rely on task.role. we need to check the contents of the previous
-  //       in order to know what we should use here. maybe just use the "method"
-  const taskPrompt = (
-    task.role === 'user'
-      ? [filledTemplates['task']]
-      : [filledTemplates['toolResult']]
-  )
-    .filter((x): x is string => (x ? true : false))
-    .map((x) => x.trim())
-    .join('\n\n');
-
-  const toolMessage: OpenAI.ChatCompletionMessageParam = {
-    role: 'user',
-    content: filledTemplates['tools'] || '',
-  };
-
-  const additionalMessages: OpenAI.ChatCompletionMessageParam[] = [
-    {
+  if (llmSettings.useBasePrompt && !structuredResponseExpected) {
+    const filledTemplates = getTemplates();
+    prependMessages.push({
       role: 'system',
-      content: filledTemplates['instruction'] || '',
-    },
-    toolMessage,
-    {
-      role: 'user',
-      content: taskPrompt,
-    },
-  ];
-  return additionalMessages;
+      content: filledTemplates.basePrompt,
+    });
+  }
+
+  return { prependMessages, modifiedOpenAIConversationThread, appendMessages };
 }
 
 export async function generateCompleteChat(
@@ -192,9 +231,6 @@ export async function generateCompleteChat(
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
 ) {
-  const useToolChat =
-    task.allowedTools?.length && !llmSettings.enableOpenAiTools;
-
   const toolDefs = await taskManager.searchToolDefinitions();
   let openAIConversationThread = await taskManager.buildChatThread(
     task.id,
@@ -205,7 +241,6 @@ export async function generateCompleteChat(
     toolDefs,
     llmSettings,
     openAIConversationThread,
-    useToolChat ? 'toolchat' : 'chat',
   );
   return { openAIConversationThread, toolDefs };
 }

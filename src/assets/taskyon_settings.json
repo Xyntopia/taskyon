@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "appConfiguration": {
     "appConfigurationUrl": "/taskyon_settings.json",
     "gdriveConfigurationFile": "taskyon_settings.json",
@@ -69,7 +69,8 @@
       "previousTasks": "PREVIOUSLY COMPLETED TASKS:\n\n{previousTasks}\n",
       "context": "TAKE INTO ACCOUNT THIS CONTEXT:\n\n{context}\n",
       "toolResult": "THE RESULT OF THE TOOL/FUNCTION WHICH WAS CALLED BY THE SYSTEM IS:\n\n{toolResult}\n\nProvide only the precise information requested without context, \nMake sure we can parse the entire response as {format}.\n\nNOW PROVIDE AN ANSWER  VERY STRICTLY FOLLOWING ({format})-SCHEMA :\n\n{resultSchema}",
-      "task": "\nCOMPLETE THE FOLLOWING TASK:\n\n > {taskContent}\n\nProvide only the precise information requested without context, \nMake sure we can parse the response as {format}.\n\nFORMAT THE RESULT WITH THE FOLLOWING SCHEMA VERY STRICT ({format}):\n\n{schema}"
+      "task": "\nCOMPLETE THE FOLLOWING TASK:\n\n > {taskContent}\n\nProvide only the precise information requested without context, \nMake sure we can parse the response as {format}.\n\nFORMAT THE RESULT WITH EXACTLY THE FOLLOWING SCHEMA:\n\n{schema}",
+      "evaluate": "\nEVALUATE THE FOLLOWING MESSAGE:\n\n > {message}\n\nProvide only the precise information requested without context, \nMake sure we can parse the response as {format}.\n\nFORMAT THE RESULT WITH EXACTLY THE FOLLOWING SCHEMA:\n\n{schema}"
     }
   }
 }

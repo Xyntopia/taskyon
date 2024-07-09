@@ -77,16 +77,18 @@ export const taskUtils = (
             };
             openAIMessageThread.push(message);
           } else if ('toolResult' in t.content) {
+            // we can still slightly change the content of this message to make clear
+            // TODO: instead of using a manual "result of the tool" use the description in the type!
             const message: OpenAI.ChatCompletionMessageParam = {
               role: 'system',
               content: dump({
-                'result of the function': t.content.toolResult,
+                'result of the tool': t.content.toolResult,
               }),
             };
             openAIMessageThread.push(message);
           } else if ('message' in t.content && t.role != 'function') {
             const message: OpenAI.ChatCompletionMessageParam = {
-              role: t.role,
+              role: 'user',
               content: t.content.message,
             };
             openAIMessageThread.push(message);
@@ -98,7 +100,7 @@ export const taskUtils = (
               .map((fm) => '- ' + (fm?.name || fm?.opfs || 'unknown'))
               .join('\n');
             const message: OpenAI.ChatCompletionMessageParam = {
-              role: t.role,
+              role: 'system',
               content: `user uploaded files:\n${fileNames}`,
             };
             openAIMessageThread.push(message);

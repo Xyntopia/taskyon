@@ -13,7 +13,6 @@ import { lruCache, sleep, asnycasyncTimeLruCache } from './utils';
 import type { FileMappingDocType } from './rxdb';
 import { findAllFilesInTasks } from './taskUtils';
 import { apiConfig } from './types';
-import { Tool } from './tools';
 
 const getOpenai = lruCache<OpenAI>(5)((
   apiKey: string,
