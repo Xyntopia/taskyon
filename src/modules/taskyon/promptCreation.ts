@@ -81,42 +81,18 @@ export function generateOpenAIToolDeclarations(
  * @param method
  * @returns
  */
-function addPrompts(
-  task: LLMTask,
+export function addPrompts(
+  task: Pick<
+    LLMTask,
+    'role' | 'content' | 'allowedTools' | 'result' | 'debugging'
+  >,
   toolCollection: Record<string, ToolBase>,
   llmSettings: llmSettings,
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
 ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
-  console.log('Prepare task tree for inference');
-
   // Check if task has tools and OpenAI tools are not enabled
   console.log('Creating chat prompts');
 
-  // Prepare the variables for createTaskChatMessages
-  const { prependMessages, modifiedOpenAIConversationThread, appendMessages } =
-    renderTaskPrompt4Chat(
-      task,
-      toolCollection,
-      llmSettings,
-      openAIConversationThread,
-    );
-
-  task.debugging.taskPrompt = [...prependMessages, ...appendMessages];
-
-  // build our complete thread :)
-  return [
-    ...prependMessages,
-    ...modifiedOpenAIConversationThread,
-    ...appendMessages,
-  ];
-}
-
-export function renderTaskPrompt4Chat(
-  task: Pick<LLMTask, 'role' | 'content' | 'allowedTools' | 'result'>,
-  toolCollection: Record<string, ToolBase>,
-  llmSettings: llmSettings,
-  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-) {
   const useToolChat =
     task.allowedTools?.length && !llmSettings.enableOpenAiTools;
 
@@ -223,7 +199,14 @@ export function renderTaskPrompt4Chat(
     });
   }
 
-  return { prependMessages, modifiedOpenAIConversationThread, appendMessages };
+  task.debugging.taskPrompt = [...prependMessages, ...appendMessages];
+
+  // build our complete thread :)
+  return [
+    ...prependMessages,
+    ...modifiedOpenAIConversationThread,
+    ...appendMessages,
+  ];
 }
 
 export async function generateCompleteChat(

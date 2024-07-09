@@ -42,7 +42,7 @@ import CreateNewTask from 'components/CreateNewTask.vue';
 import ObjectTreeView from './ObjectTreeView.vue';
 import { LLMTask } from 'src/modules/taskyon/types';
 import UnderConstructionHint from './UnderConstructionHint.vue';
-import { renderTaskPrompt4Chat } from 'src/modules/taskyon/promptCreation';
+import { addPrompts } from 'src/modules/taskyon/promptCreation';
 
 const state = useTaskyonStore();
 
@@ -66,21 +66,20 @@ void getAllTools().then((tools) => {
 
 const structuredResponsePrompt = computed(() => {
   if (state.llmSettings.taskDraft.content) {
-    const task: Pick<LLMTask, 'role' | 'content' | 'allowedTools' | 'result'> =
-      {
-        content: state.llmSettings.taskDraft.content,
-        allowedTools: state.llmSettings.taskDraft.allowedTools,
-        role: 'user',
-      };
+    const task: Pick<
+      LLMTask,
+      'role' | 'content' | 'allowedTools' | 'result' | 'debugging'
+    > = {
+      content: state.llmSettings.taskDraft.content,
+      allowedTools: state.llmSettings.taskDraft.allowedTools,
+      role: 'user',
+      debugging: {},
+    };
     task.role = 'user';
 
     console.log('create structured example', toolCollection.value);
     if (Object.keys(toolCollection.value).length !== 0) {
-      const rp = renderTaskPrompt4Chat(
-        task,
-        toolCollection.value,
-        state.llmSettings
-      );
+      const rp = addPrompts(task, toolCollection.value, state.llmSettings, []);
       return rp;
     }
   }
