@@ -127,8 +127,12 @@ export function addPrompts(
     const yamlRepr = zodToYamlString(
       StructuredResponseTypes.SystemResponseEvaluation,
     );
-    variables.taskContent = task.content.message;
+    variables.message = task.content.message;
     variables.schema = yamlRepr;
+    // Remove the last message from openAIConversationThread
+    // because it will be replaced by our task message
+    // where we have wrapped the original message...
+    modifiedOpenAIConversationThread.pop();
 
     const filledTemplates = getTemplates();
     appendMessages.push({
