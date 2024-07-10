@@ -236,7 +236,7 @@ const answer = z.string().nullish();
 const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish();
 
 const toolCommand = FunctionCall.describe(
-  'If you want to use a tool, provide the function call parameters',
+  'Only provide the following information, if you really want to use a tool!!',
 );
 
 export const UseToolBase = z.object({
@@ -288,16 +288,12 @@ export const StructuredResponse = ToolResultBase.partial()
 export type StructuredResponse = z.infer<typeof StructuredResponse>;
 
 const MessageContent = z.object({ message: z.string() });
-const StructuredMessageContent = z.object({
-  structuredMessage: StructuredResponse,
-});
 const ToolCallContent = z.object({ functionCall: FunctionCall });
 const UploadedFilesContent = z.object({ uploadedFiles: z.array(z.string()) });
 // TODO: restructure ToolResultContent to be a "normal message"
 const ToolResultContent = z.object({ toolResult: ToolResult });
 const TaskContent = z.union([
   MessageContent,
-  StructuredMessageContent,
   ToolCallContent,
   UploadedFilesContent,
   ToolResultContent,

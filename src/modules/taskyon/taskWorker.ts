@@ -87,7 +87,10 @@ export async function processChatTask(
         llmSettings,
         taskManager,
       );
-      const tools = generateOpenAIToolDeclarations(task, toolDefs);
+      let tools: OpenAI.ChatCompletionTool[] = [];
+      if (llmSettings.enableOpenAiTools) {
+        tools = generateOpenAIToolDeclarations(task, toolDefs);
+      }
 
       if (openAIConversationThread.length > 0) {
         const chatCompletion = await callLLM(
@@ -220,7 +223,7 @@ async function processFunctionTask(
       const toolnames = JSON.stringify(task.allowedTools);
       throw new TaskProcessingError(
         !taskWorkerController.isInterrupted()
-          ? `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`
+          ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
           : 'The function execution was cancelled by taskyon',
       );
     }
@@ -427,7 +430,7 @@ async function generateFollowUpTasksFromResult(
         //       - e.g. if use tool=true, but no toolCommand present
         // actually, it would be better to do this in the structreReponse processing ? :)
         const structResponse = await parseChatResponse2TaskDraft(
-          choice?.message.content || '',
+          choice.message.content || '',
         );
         // we immediatly generate a follow up response here based on the structResponse. This avoids
         // having to process it in another loop as we know the result already anyways.
@@ -440,7 +443,7 @@ async function generateFollowUpTasksFromResult(
           const newTaskid = await addFollowUpTask(false, {
             state: 'Completed',
             role: 'assistant',
-            content: { structuredMessage: structResponse },
+            content: { message: choice.message.content },
           });
           void addFollowUpTask(true, {
             parentID: newTaskid,
@@ -450,10 +453,11 @@ async function generateFollowUpTasksFromResult(
           });
         } else {
           // in the case that we don't call a tool, provide a "normal" answer :)
-          addFollowUpTask(true, {
+          // this time we declare it as "Open" and set execution to "true"
+          void addFollowUpTask(true, {
             state: 'Open',
             role: 'assistant',
-            content: { structuredMessage: structResponse },
+            content: { message: choice.message.content },
           });
         }
         return;
@@ -578,7 +582,9 @@ async function getTaskResult(
       taskManager,
     );
   } else {
-    throw new TaskProcessingError("We don't know what to do with this task");
+    throw new TaskProcessingError(
+      "We don't know how to process this task to get a result.",
+    );
   }
 
   task.state = 'Completed';

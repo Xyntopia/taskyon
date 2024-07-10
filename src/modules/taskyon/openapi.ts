@@ -177,6 +177,8 @@ export function zodToYAMLObject(
     return 'null';
   } else if (schema instanceof z.ZodEnum) {
     return Object.keys(schema.Values).join('|');
+  } else if (schema instanceof z.ZodEffects) {
+    return zodToYAMLObject(schema.innerType());
   }
 
   // Modified ZodObject case to handle optionals
