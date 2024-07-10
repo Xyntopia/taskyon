@@ -436,6 +436,11 @@ async function generateFollowUpTasksFromResult(
         // having to process it in another loop as we know the result already anyways.
         // the "structuredMessage" type is mainly there so that the LLM can see what it said :).
         // e.g. in case there is an error...
+
+        // In fact we always decide right here, what we do *after* the structured response and simply add the
+        // structured response as a normal "message" task to the chain...
+        // this way we can put all the parsing logic & interpretation and all of this here. While
+        // our tasks only have to process the actual data ther're receiving
         if (
           'toolCommand' in structResponse &&
           structResponse.toolCommand?.name
@@ -463,8 +468,7 @@ async function generateFollowUpTasksFromResult(
         return;
       } else if (
         'message' in finishedTask.content &&
-        finishedTask.role === 'assistant' &&
-        !useTyTools
+        finishedTask.role === 'assistant'
       ) {
         // this is the final response, so we simply return without creating new messages!
         console.log('No more follow up tasks!');

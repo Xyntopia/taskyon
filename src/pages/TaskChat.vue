@@ -38,7 +38,7 @@
             />
           </q-card>
           <!--Render tasks which are in progress-->
-          <q-card v-if="!taskWorkerInterrupted" class="row">
+          <q-card v-if="!taskWorkerWaiting" class="row">
             <div class="col">
               <ty-markdown
                 no-line-numbers
@@ -113,7 +113,7 @@
         </div>
         <div class="col-auto">
           <q-btn
-            v-if="currentTask && !taskWorkerInterrupted"
+            v-if="currentTask && !taskWorkerWaiting"
             fab-mini
             class="taskyon-control-button"
             :icon="matStop"
@@ -153,13 +153,14 @@ const $q = useQuasar();
 const state = useTaskyonStore();
 $q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store...
 const selectedThread = ref<LLMTask[]>([]);
-const taskWorkerInterrupted = ref(true);
+const taskWorkerWaiting = ref(true);
 
 async function updateCurrentTask(taskId: string | undefined) {
   if (taskId) {
     currentTask.value = await (await state.getTaskManager()).getTask(taskId);
   }
-  taskWorkerInterrupted.value = state.taskWorkerController.isInterrupted();
+  await sleep(100);
+  taskWorkerWaiting.value = state.taskWorkerController.isWaiting();
 }
 void updateCurrentTask(state.llmSettings.selectedTaskId);
 watch(() => state.llmSettings.selectedTaskId, updateCurrentTask);
@@ -174,9 +175,9 @@ async function stopTasks() {
   // Poll every 500ms to check if the task is stopped
   while (!state.taskWorkerController.isWaiting()) {
     console.log('waiting for task to stop...');
-    await sleep(500);
+    await sleep(100);
   }
-  taskWorkerInterrupted.value = true;
+  taskWorkerWaiting.value = true;
   stoppingTasks.value = false;
 }
 
