@@ -4,6 +4,7 @@ import {
   LLMTask,
   llmSettings,
   StructuredResponseTypes,
+  UseToolBase,
 } from './types';
 import { zodToYamlString } from './openapi';
 import OpenAI from 'openai';
@@ -124,9 +125,10 @@ export function addPrompts(
     // this is most likely an error message or similar
     // and we need a structured response in order to decide how to
     // continue...
-    const yamlRepr = zodToYamlString(
-      StructuredResponseTypes.SystemResponseEvaluation,
-    );
+    const requiredSchema = useToolChat
+      ? StructuredResponseTypes.SystemResponseEvaluation.merge(UseToolBase)
+      : StructuredResponseTypes.SystemResponseEvaluation;
+    const yamlRepr = zodToYamlString(requiredSchema);
     variables.message = task.content.message;
     variables.schema = yamlRepr;
     // Remove the last message from openAIConversationThread
@@ -141,7 +143,9 @@ export function addPrompts(
     });
     structuredResponseExpected = true;
   } else if ('message' in task.content && task.role === 'user' && useToolChat) {
-    const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolSelection);
+    const yamlRepr = zodToYamlString(
+      StructuredResponseTypes.ToolSelection.merge(UseToolBase),
+    );
     variables.taskContent = task.content.message;
     variables.schema = yamlRepr;
     // Remove the last message from openAIConversationThread
@@ -167,7 +171,10 @@ export function addPrompts(
     structuredResponseExpected = true;
     // TODO: to something with file tasks and
   } else if ('toolResult' in task.content) {
-    const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolResultBase);
+    const requiredSchema = useToolChat
+      ? StructuredResponseTypes.ToolResultBase.merge(UseToolBase)
+      : StructuredResponseTypes.ToolResultBase;
+    const yamlRepr = zodToYamlString(requiredSchema);
     variables.toolResult = dump(task.content.toolResult);
     variables.resultSchema = yamlRepr;
 

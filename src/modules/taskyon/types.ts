@@ -135,10 +135,21 @@ export const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionPara
     required: z.array(z.string()).optional(),
   });
 
+export const FunctionName = z
+  .string()
+  .refine(
+    (val) => /^[a-zA-Z0-9_-]+$/.test(val),
+    (val) => ({
+      message: `The function/tool name ${val} contains illegal characters. It has to fulfill '^[a-zA-Z0-9_-]+$'`,
+    }),
+  )
+  .describe('name of function');
+export type FunctionName = z.infer<typeof FunctionName>;
+
 export const ToolBase = z.object({
   description: z.string(),
   longDescription: z.string().optional(),
-  name: z.string().describe(''),
+  name: FunctionName,
   parameters: JSONSchemaForFunctionParameter,
   code: z
     .string()
@@ -185,7 +196,7 @@ export type FunctionArguments = z.infer<typeof FunctionArguments>;
 
 /* here we are essentiall declaring the taskyon API */
 export const FunctionCall = z.object({
-  name: z.string().describe('name of function'),
+  name: FunctionName,
   arguments: FunctionArguments,
 });
 export type FunctionCall = z.infer<typeof FunctionCall>;
@@ -228,13 +239,20 @@ const toolCommand = FunctionCall.describe(
   'If you want to use a tool, provide the function call parameters',
 );
 
+export const UseToolBase = z.object({
+  'use tool': yesno,
+  'which tool': answer,
+  toolCommand,
+});
+
 const SystemResponseEvaluation = z
   .object({
+    'describe your thoughts': answer,
     'was there an error?': yesno,
     'do you think we can solve the error?': yesno,
-    'Should we use one of the mentioned tools to answer the task?:': yesno,
-    'try again?': yesno,
-    'stop?': yesno,
+    'Should we use one of the mentioned tools to answer the task?': yesno,
+    'try again': yesno,
+    stop: yesno,
   })
   .describe(
     'This is used as a short prompt for tasks in order to determine whether we should use a more detailed task prompt',
@@ -247,8 +265,6 @@ const ToolResultBase = z
     'was there an error?': yesno,
     'should we retry?': yesno,
     'should we use another tool?': answer,
-    'use tool': yesno,
-    toolCommand,
   })
   .describe(
     'Structured answer schema for processing the result of a function call.',
@@ -257,9 +273,6 @@ const ToolResultBase = z
 const ToolSelection = z
   .object({
     'describe your thoughts': answer,
-    'use tool': yesno,
-    'which tool': answer,
-    toolCommand,
   })
   .describe('Structured answer schema for a task including the use of tools');
 
@@ -268,11 +281,10 @@ export const StructuredResponseTypes = {
   ToolSelection,
   SystemResponseEvaluation,
 };
-export const StructuredResponse = z.union([
-  ToolResultBase.partial(),
-  ToolSelection.partial(),
-  SystemResponseEvaluation.partial(),
-]);
+export const StructuredResponse = ToolResultBase.partial()
+  .merge(ToolSelection.partial())
+  .merge(SystemResponseEvaluation.partial())
+  .merge(UseToolBase.partial());
 export type StructuredResponse = z.infer<typeof StructuredResponse>;
 
 const MessageContent = z.object({ message: z.string() });
