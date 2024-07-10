@@ -282,9 +282,9 @@ export const StructuredResponseTypes = {
   SystemResponseEvaluation,
 };
 export const StructuredResponse = ToolResultBase.partial()
-  .merge(ToolSelection.partial())
-  .merge(SystemResponseEvaluation.partial())
-  .merge(UseToolBase.partial());
+  .merge(ToolSelection.deepPartial())
+  .merge(SystemResponseEvaluation.deepPartial())
+  .merge(UseToolBase.deepPartial());
 export type StructuredResponse = z.infer<typeof StructuredResponse>;
 
 const MessageContent = z.object({ message: z.string() });
