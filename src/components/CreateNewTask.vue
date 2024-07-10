@@ -73,6 +73,7 @@
               <div class="ellipsis">
                 {{ `${currentModel}` }}
               </div>
+              <div class="text-weight-thin gt-xs">/{{ currentChatApi }}</div>
               <q-tooltip>Select AI Model</q-tooltip>
               <q-menu color="secondary">
                 <q-list style="min-width: 100px">
