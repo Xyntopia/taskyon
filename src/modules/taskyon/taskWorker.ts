@@ -219,7 +219,7 @@ async function processFunctionTask(
     } else {
       const toolnames = JSON.stringify(task.allowedTools);
       throw new TaskProcessingError(
-        taskWorkerController.isInterrupted()
+        !taskWorkerController.isInterrupted()
           ? `The function ${func.name} is not available in tools. Please select a valid function from this list: ${toolnames}`
           : 'The function execution was cancelled by taskyon',
       );
@@ -254,6 +254,8 @@ async function parseChatResponse2TaskDraft(
     await StructuredResponse.safeParseAsync(parsedYaml);
 
   if (!structuredResponseResult.success) {
+    // TODO: as our object is completly partial, this never gets caled
+    // right now..  do we `need` to have any checks here?
     throw new TaskProcessingError(
       'ZOD parse error: Unknown response object type:',
       structuredResponseResult.error.format(),
@@ -431,7 +433,10 @@ async function generateFollowUpTasksFromResult(
         // having to process it in another loop as we know the result already anyways.
         // the "structuredMessage" type is mainly there so that the LLM can see what it said :).
         // e.g. in case there is an error...
-        if ('toolCommand' in structResponse && structResponse.toolCommand) {
+        if (
+          'toolCommand' in structResponse &&
+          structResponse.toolCommand?.name
+        ) {
           const newTaskid = await addFollowUpTask(false, {
             state: 'Completed',
             role: 'assistant',
