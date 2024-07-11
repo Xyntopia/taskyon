@@ -1,5 +1,20 @@
 # How does Taskyon work?
 
+Every message/task in a "conversation" in taskyon has carefully designed
+transitions which define what tasks/messages follow in the chain. This works similar to a state machine.
+
+Inside the source code you can find that right now, there are three main parts to this:
+
+- the taskworker runs the worker loop and executing each task is equivalent to generating a transition
+- inside the taskworker there are:
+  - the task processor
+    - This processes each task and takes the tasks "content" as input and generates a "result"
+    - the tasks content can be a function call, a simple message or structured data.
+    - Based on the tasks content, the processor will also generate a prompts which cirect the LLM inference e.g. to create a specific data format in the response (json/yaml)
+    - the output is the result of a function or another message
+  - the follow up task generator creates new task(s) based on the result.
+- if an error occurs a new task which holds the error as content is generated.
+
 ## Task Transitions Map
 
 The Task Transitions Map illustrates the flow and transitions of various content types within taskyon, which operates as an agent. Each node in the diagram represents a specific type of task content. Depending on the content type, new tasks with specific content are created, leading to different processing paths.

@@ -200,6 +200,17 @@ export function addPrompts(
     );
     structuredResponseExpected = true;
     //appendMessages.push()
+  } else if ('message' in task.content && task.role === 'assistant') {
+    // this here gets called, if we have a structured message which was generated
+    // as the "assistant" role. In the case that we are not in an agent loop or
+    // want tools to be run. we simply want a response from the AI. we will
+    // ask it to do that from a user perspective.  Many llms will give us
+    // "null" content otherwise.
+    appendMessages.push({
+      role: 'user',
+      content:
+        'Can you please make a final comment on your previous evaluation?',
+    });
   }
 
   if (llmSettings.useBasePrompt && !structuredResponseExpected) {
