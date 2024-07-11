@@ -12,7 +12,7 @@ import { openFile } from './OPFS';
 import { lruCache, sleep, asnycasyncTimeLruCache } from './utils';
 import type { FileMappingDocType } from './rxdb';
 import { findAllFilesInTasks } from './taskUtils';
-import { apiConfig } from './types';
+import { TaskProcessingError, apiConfig } from './types';
 
 const getOpenai = lruCache<OpenAI>(5)((
   apiKey: string,
@@ -281,8 +281,14 @@ export async function callLLM(
   let chatCompletion: OpenAI.ChatCompletion | undefined = undefined;
   const openai = getOpenai(apiKey, api.baseURL, headers);
 
+  if (!api.selectedModel) {
+    throw new TaskProcessingError(
+      'You need to select an AI model in order to use the AI!',
+    );
+  }
+
   const payload: OpenAI.ChatCompletionCreateParams = {
-    model: api.defaultModel,
+    model: api.selectedModel,
     messages: chatMessages,
     user: 'taskyon',
     temperature: 0.0,

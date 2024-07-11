@@ -470,6 +470,15 @@ const apiConfig = z.object({
   name: z.string(),
   baseURL: z.string(),
   defaultModel: z.string(),
+  selectedModel: z.string().optional(),
+  models: z
+    .object({
+      instruction: z.string(),
+      chat: z.string(),
+      free: z.string(),
+    })
+    .partial()
+    .optional(),
   streamSupport: z.boolean(),
   defaultHeaders: z.record(z.string(), z.string()).optional(),
   routes: z.object({

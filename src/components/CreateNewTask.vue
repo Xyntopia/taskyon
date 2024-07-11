@@ -263,7 +263,7 @@
             v-model:useOpenAIAssistants="useOpenAIAssistants"
             v-model:open-a-i-assistant-id="openAIAssistantId"
             class="col"
-            :bot-name="currentModel || currentDefaultBotName || ''"
+            :bot-name="currentModel"
             @update-bot-name="handleBotNameUpdate"
           ></ModelSelection>
         </q-item>
@@ -422,19 +422,20 @@ const toolCollection = ref<Record<string, ToolBase>>({});
 void getAllTools().then((tools) => (toolCollection.value = tools));
 
 // Computed property to determine the currently selected bot name
-const currentDefaultBotName = computed(() => {
-  if (state.llmSettings.selectedApi === 'openai') {
-    if (state.llmSettings.useOpenAIAssistants) {
-      return state.llmSettings.openAIAssistantId;
-    }
+// TODO: we can move this into taskyonstate?
+const currentModel = computed(() => {
+  const api = getApiConfig(state.llmSettings);
+  if (api) {
+    const modelName =
+      api.selectedModel ||
+      api.defaultModel ||
+      api.models?.free ||
+      'No model selected!';
+    return modelName;
   }
-  const modelName =
-    state.llmSettings.taskDraft.configuration?.model ||
-    getApiConfig(state.llmSettings)?.defaultModel;
-  return modelName;
+  return 'No model selected!';
 });
 
-const currentModel = ref(toRaw(currentDefaultBotName.value));
 const currentChatApi = ref<string>(toRaw(state.llmSettings.selectedApi) || '');
 
 const allowedTools = computed({
@@ -455,14 +456,13 @@ const handleBotNameUpdate = ({
   newService?: string;
 }) => {
   console.log('getting an api & bot update :)', newName, newService);
-  currentModel.value = newName;
   if (newService) {
     currentChatApi.value = newService;
     state.llmSettings.selectedApi = newService;
   }
   const api = getApiConfig(state.llmSettings);
   if (api) {
-    api.defaultModel = newName;
+    api.selectedModel = newName;
   }
   state.addModelToHistory(newName);
 };

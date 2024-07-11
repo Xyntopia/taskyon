@@ -70,7 +70,10 @@
         use-input
         input-debounce="0"
         @update:model-value="onModelSelect"
-        @filter="(val: string, update: updateCallBack) => filterModels(val, update, modelOptions)"
+        @filter="
+          (val: string, update: updateCallBack) =>
+            filterModels(val, update, modelOptions)
+        "
       >
       </q-select>
       <div v-if="state.appConfiguration.expertMode" style="font-size: 0.5em">
@@ -170,7 +173,7 @@ function onModelSelect(value: string) {
 
 function onApiSelect(modelValue: string | null) {
   if (modelValue) {
-    const newBotName = state.llmSettings.llmApis[modelValue]?.defaultModel;
+    const newBotName = state.llmSettings.llmApis[modelValue]?.selectedModel;
     emit('updateBotName', {
       newName: newBotName,
       newService: modelValue,
@@ -185,13 +188,13 @@ type updateCallBack = (callback: () => void) => void;
 const filterModels = (
   val: string,
   update: updateCallBack,
-  optionsRef: { label: string; value: string }[]
+  optionsRef: { label: string; value: string }[],
 ) => {
   update(() => {
     const keyword = val.toLowerCase();
     filteredOptions.value = keyword
       ? optionsRef.filter((option) =>
-          option.label.toLowerCase().includes(keyword)
+          option.label.toLowerCase().includes(keyword),
         )
       : optionsRef;
   });

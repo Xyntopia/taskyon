@@ -254,12 +254,12 @@ export const useTaskyonStore = defineStore(storeName, () => {
       let baseurl: string;
       let key: string;
       const taskyonApi = stateRefs.llmSettings.llmApis['taskyon'];
-      if (taskyonApi && api?.name === 'openrouter.ai') {
+      if (taskyonApi && api.name === 'openrouter.ai') {
         baseurl = taskyonApi.baseURL + '/models_openrouter';
-        key = stateRefs.keys.taskyon;
+        key = stateRefs.keys.taskyon || '';
       } else {
         baseurl = api.baseURL + api.routes.models;
-        key = stateRefs.keys[api?.name];
+        key = stateRefs.keys[api?.name] || '';
       }
       try {
         void availableModels(baseurl, key).then((res) => {
@@ -267,6 +267,11 @@ export const useTaskyonStore = defineStore(storeName, () => {
         });
       } catch {
         console.log("couldn't download models from", baseurl);
+      }
+      // try to set our recommended models if ther isn't any default or anything!
+      if (!api.selectedModel) {
+        stateRefs.llmSettings.llmApis['taskyon']!.selectedModel =
+          api.models?.free;
       }
     } else {
       llmModelsInternal.value = [];

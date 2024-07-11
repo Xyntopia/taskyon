@@ -76,7 +76,7 @@ export async function processChatTask(
     }
     const selectedModel = task.configuration?.model;
     if (selectedModel) {
-      api.defaultModel = selectedModel;
+      api.selectedModel = selectedModel;
       console.log('execute chat task!', task);
       //TODO: also do this, if we start the task "autonomously" in which we basically
       //      allow it to create new tasks...

@@ -28,6 +28,8 @@
           @click="
             state.llmSettings.selectedApi = 'taskyon';
             state.keys['taskyon'] = 'anonymous';
+            state.llmSettings.llmApis['taskyon']!.selectedModel =
+              state.llmSettings.llmApis['taskyon']?.models?.free || '';
           "
         ></q-btn>
         <InfoDialog>

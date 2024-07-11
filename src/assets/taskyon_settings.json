@@ -25,6 +25,11 @@
         "name": "taskyon",
         "baseURL": "https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/api",
         "defaultModel": "meta-llama/llama-3-70b-instruct",
+        "models": {
+          "free": "google/gemma-2-9b-it:free",
+          "chat": "meta-llama/llama-3-70b-instruct",
+          "instruction": "meta-llama/llama-3-70b-instruct"
+        },
         "streamSupport": true,
         "defaultHeaders": {
           "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpY3lucnBsZGl4dHJkZGdxbnBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwNzgxMTYsImV4cCI6MjAxNTY1NDExNn0.EwuXaxbRPvSZNlce3E_FjylLFrxSMV3tbz8JHR8GuJI"
