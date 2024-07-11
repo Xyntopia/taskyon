@@ -37,10 +37,16 @@
           <q-expansion-item
             dense
             :icon="mdiHeadCog"
-            label="Analyzing result..."
+            label="Analyze the Result:"
           >
+            <q-expansion-item dense label="Result:">
+              <p style="white-space: pre-wrap">
+                {{ dump(task.content) }}
+              </p>
+            </q-expansion-item>
+            <q-separator/>
             <p style="white-space: pre-wrap">
-              {{ task.result?.chatResponse?.choices[0].message.content }}
+              {{ task.result?.chatResponse?.choices[0]?.message.content }}
             </p>
           </q-expansion-item>
         </div>
@@ -200,7 +206,7 @@
           <q-tab-panel name="MESSAGECONTENT">
             <textarea
               :value="
-                task.result?.chatResponse?.choices[0].message.content || 'N/A'
+                task.result?.chatResponse?.choices[0]?.message.content || 'N/A'
               "
               readonly
               wrap="soft"
@@ -245,7 +251,12 @@ import { computed, ref } from 'vue';
 import { FileMappingDocType } from 'src/modules/taskyon/rxdb';
 import { dump } from 'js-yaml';
 import TaskButtons from './TaskButtons.vue';
-import { mdiDesktopTower, mdiFileDocument, mdiHeadCog, mdiTools } from '@quasar/extras/mdi-v6';
+import {
+  mdiDesktopTower,
+  mdiFileDocument,
+  mdiHeadCog,
+  mdiTools,
+} from '@quasar/extras/mdi-v6';
 import {
   matCalculate,
   matMonetizationOn,

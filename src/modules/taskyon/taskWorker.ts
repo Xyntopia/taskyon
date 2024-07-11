@@ -401,9 +401,12 @@ async function generateFollowUpTasksFromResult(
       }
 
       if (!choice.message.content) {
-        throw new TaskProcessingError('The response from the AI was empty!', {
-          choice,
-        });
+        throw new TaskProcessingError(
+          'The response content from the AI was empty!',
+          {
+            choice,
+          },
+        );
       }
       // simply return the answer as a normal chat message
       if (
@@ -509,6 +512,7 @@ export function useTaskWorkerController() {
   }
 
   function setWaiting(value: boolean) {
+    console.log('task worker is waiting!')
     waiting = value;
   }
 
@@ -657,13 +661,13 @@ export async function taskWorker(
         role: 'system',
         configuration: task?.configuration,
         content: {
-          message: `An error occured:\n\n${JSON.stringify(error)}`,
+          message: `An error occured:\n\n\`\`\`\n${JSON.stringify(error)}\n\`\`\``,
         },
       };
       if (error instanceof TaskProcessingError) {
         errorTask.content = {
           //message: `An error occured: ${error.message}:\n\n${dump(error.details, { skipInvalid: true })}`,
-          message: `An error occured:\n\n${error.message}${error.details ? ':\n\n' + JSON.stringify(error.details) : ''}`,
+          message: `An error occured:\n\n\`\`\`\n${error.message}${error.details ? ':\n\n' + JSON.stringify(error.details) : ''}\n\`\`\``,
         };
         if (task) {
           task.debugging = {
@@ -676,7 +680,7 @@ export async function taskWorker(
         }
       } else if (error instanceof Error) {
         errorTask.content = {
-          message: `An error occured:\n\n${error.message}\n\n${JSON.stringify(error)}`,
+          message: `An error occured:\n\n\`\`\`\n${error.message}\n\n${JSON.stringify(error)}\n\`\`\``,
         };
         if (task) {
           task.debugging = {

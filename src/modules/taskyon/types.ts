@@ -191,7 +191,7 @@ export const ParamType = z.union([
 export type ParamType = z.infer<typeof ParamType>;
 const FunctionArguments = z
   .record(ParamType)
-  .describe('arguments of a function specified by json schema');
+  .describe('arguments of the function');
 export type FunctionArguments = z.infer<typeof FunctionArguments>;
 
 /* here we are essentiall declaring the taskyon API */
@@ -242,7 +242,7 @@ const toolCommand = FunctionCall.describe(
 export const UseToolBase = z.object({
   'use tool': yesno,
   'which tool': answer,
-  toolCommand,
+  toolCommand: toolCommand.nullish(),
 });
 
 const SystemResponseEvaluation = z

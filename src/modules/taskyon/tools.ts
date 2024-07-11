@@ -373,9 +373,7 @@ function convertToToolCommandString(tool: ToolBase): string {
   });
   const argStr = convertToYamlWComments(argStrRaw);
   const cmdString = `NAME: ${tool.name}:
-
 DESCRIPTION: ${tool.description.replace(/\n/g, ' ')}
-
 ${argStr}
 REQUIRED: ${[...requiredProperties].join(', ')}`;
   return cmdString;
