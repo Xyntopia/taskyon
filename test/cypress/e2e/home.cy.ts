@@ -6,8 +6,41 @@
 // This test will pass when run against a clean Quasar project
 describe('test taskyon defaults', () => {
   beforeEach(() => {
-    //cy.intercept('**').as('requests')
+    /*if (!window.navigator || !navigator.serviceWorker) {
+      return null;
+    }
+    const cypressPromise = new Cypress.Promise((resolve, reject) => {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        if (!registrations.length) resolve();
+        Promise.all(registrations).then(() => {
+          resolve();
+        });
+      });
+    });
+    cy.wrap('Unregister service workers').then(() => cypressPromise);*/
+
+    cy.intercept('GET', '**/*.{png,jpg,jpeg,gif}', req => {
+      req.reply({
+        statusCode: 200,
+        body: '',
+        headers: {
+              'Content-Type': 'image/png',
+             },
+        })
+    }).as('stubImages')
+
+    cy.wrap(
+      Cypress.automation('remote:debugger:protocol', {
+        command: 'Network.clearBrowserCache',
+      })
+    );
+
+    cy.intercept('**').as('requests')
+    //cy.visit('/');
+    //cy.intercept('**').as('requests');
     cy.visit('/');
+    //cy.get('@requests.all')meta-llama/llama-3-70b-instructmeta-llama/llama-3-70b-instruct.should('have.length', 10);
+    //cy.get('*/src_layouts_TaskyonLayout_vue.js')
 
     // Clear local storage
     cy.clearLocalStorage();
@@ -36,7 +69,7 @@ describe('test taskyon defaults', () => {
     cy.get('[aria-label="Expert mode"] > .q-toggle__inner').click();
     cy.get('[aria-label="Show task costs"] > .q-toggle__inner').click();
 
-    cy.reload();
+    cy.wait(2000).reload();
     // TODO: check if expert mode is still there...
 
     cy.get('[aria-label="toggle task settings"]').click();

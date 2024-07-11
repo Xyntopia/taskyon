@@ -57,6 +57,7 @@ describe('iframe integration', () => {
       getIframeBody().should('exist');
       //getIframeBody().find('#q-app').should('exist');
       //getIframeBody().get('.q-btn').should('exist');
+      //getIframeBody().contains('Use free Taskyon (low quality)').click();
       getIframeBody()
         .find('button[aria-label="Open Sidebar"]')
         .should('exist')

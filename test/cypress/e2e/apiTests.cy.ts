@@ -52,7 +52,9 @@ describe('taskyon API', () => {
     cy.wait(2000)
       .contains('Select LLM Model for answering/solving the task.')
       .type('meta-llama/llama-3-70b');
-    cy.contains('meta-llama/llama-3-70b-instruct').click();
+    cy.get('.q-menu')
+      .contains('meta-llama/llama-3-70b-instruct')
+      .click();
     //cy.contains('your message').type('hello world!{enter}');
     //cy.get('.user-message i.q-icon.text-warning')
 
