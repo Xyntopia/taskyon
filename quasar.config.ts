@@ -193,6 +193,15 @@ export default configure((ctx) => {
           type: 'asset/source',
         });
 
+        // ignore files!
+        //cfg.watchOptions = {
+        //  ignored: [
+        //    '**/public/taskyon_settings.json',
+        //    '**/node_modules',
+        //    '**/public/docs/openapi-docs.yml',
+        //  ],
+        //};
+
         // TODO: make sure these things are only used in the browser and not in the desktop app...
         /*cfg.node = {
             fs: 'empty',
