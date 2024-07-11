@@ -29,6 +29,7 @@ defineProps({
   infoText: {
     type: String,
     required: false,
+    default: undefined,
   },
 });
 </script>
