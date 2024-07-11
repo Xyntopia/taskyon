@@ -513,12 +513,7 @@ export const llmSettings = z.object({
     ),
   taskChatTemplates: z.object({
     basePrompt: z.string().default(''),
-    constraints: z.string().default(''),
     instruction: z.string().default(''),
-    objective: z.string().default(''),
-    tools: z.string().default(''),
-    previousTasks: z.string().default(''),
-    context: z.string().default(''),
     toolResult: z.string().default(''),
     task: z.string().default(''),
     evaluate: z.string().default(''),

@@ -161,7 +161,7 @@ export function addPrompts(
       },
       {
         role: 'user',
-        content: filledTemplates.tools,
+        content: `The following tools are available:\n\n${variables.tools}`,
       },
       {
         role: 'user',
@@ -191,7 +191,7 @@ export function addPrompts(
       },
       {
         role: 'system',
-        content: filledTemplates.tools,
+        content: `The following tools are available:\n\n${variables.tools}`,
       },
       {
         role: 'user',

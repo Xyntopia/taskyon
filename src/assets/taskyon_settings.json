@@ -24,7 +24,7 @@
       "taskyon": {
         "name": "taskyon",
         "baseURL": "https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/api",
-        "defaultModel": "meta-llama/llama-3-8b-instruct:free",
+        "defaultModel": "meta-llama/llama-3-70b-instruct",
         "streamSupport": true,
         "defaultHeaders": {
           "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpY3lucnBsZGl4dHJkZGdxbnBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwNzgxMTYsImV4cCI6MjAxNTY1NDExNn0.EwuXaxbRPvSZNlce3E_FjylLFrxSMV3tbz8JHR8GuJI"
@@ -37,7 +37,7 @@
       "openai": {
         "name": "openai",
         "baseURL": "https://api.openai.com/v1/",
-        "defaultModel": "gpt-3.5-turbo",
+        "defaultModel": "gpt-4o",
         "streamSupport": true,
         "routes": {
           "chatCompletion": "/chat/completions",
@@ -47,7 +47,7 @@
       "openrouter.ai": {
         "name": "openrouter.ai",
         "baseURL": "https://openrouter.ai/api/v1",
-        "defaultModel": "mistralai/mistral-7b-instruct:free",
+        "defaultModel": "meta-llama/llama-3-70b-instruct",
         "streamSupport": true,
         "routes": {
           "chatCompletion": "/chat/completions",
@@ -60,17 +60,13 @@
     "vectorizationModel": "Xenova/all-MiniLM-L6-v2",
     "maxAutonomousTasks": 3,
     "useBasePrompt": true,
+    "tryUsingVisionModels": true,
     "taskChatTemplates": {
       "basePrompt": "You are a helpful assistant called *Taskyon*. In your markdown-based responses, you can use the following features:\n\n- **Mermaid charts**: Include diagrams, mindmaps, Gantt diagrams, quadrants, and XY charts using the 'mermaid' keyword in fenced code blocks. For example:\n```mermaid\n...\n```\n- **SVG graphics**: Use HTML to embed SVG graphics.\n- **HTML widgets**: Create interactive elements within the markdown using HTML.\n- **MathJax**: Write mathematical formulas using $$ ... $$ for block formulas and $ ... $ for inline formulas.",
-      "constraints": "CONSTRAINTS:\n\n{constraints}",
       "instruction": "You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented,\nand adheres to YAML standards. Do not include any explanatory text in your YAML responses. \nRemember, the focus is on the precision and correctness of the YAML output.",
-      "objective": "OVERALL OBJECTIVE:\n\n{objective}\n",
-      "tools": "YOU CAN MAKE USE OF THE FOLLOWING TOOLS:\n\n{tools}",
-      "previousTasks": "PREVIOUSLY COMPLETED TASKS:\n\n{previousTasks}\n",
-      "context": "TAKE INTO ACCOUNT THIS CONTEXT:\n\n{context}\n",
-      "toolResult": "THE RESULT OF THE TOOL/FUNCTION WHICH WAS CALLED BY THE SYSTEM IS:\n\n{toolResult}\n\nProvide only the precise information requested without context, \nMake sure we can parse the entire response as {format}.\n\nNOW PROVIDE AN ANSWER  VERY STRICTLY FOLLOWING ({format})-SCHEMA :\n\n{resultSchema}",
-      "task": "\nCOMPLETE THE FOLLOWING TASK:\n\n > {taskContent}\n\nProvide only the precise information requested without context, \nMake sure we can parse the response as {format}.\n\nFORMAT THE RESULT WITH EXACTLY THE FOLLOWING SCHEMA:\n\n{schema}",
-      "evaluate": "\nEVALUATE THE FOLLOWING MESSAGE:\n\n > {message}\n\nProvide only the precise information requested without context, \nMake sure we can parse the response as {format}.\n\nFORMAT THE RESULT WITH EXACTLY THE FOLLOWING SCHEMA:\n\n{schema}"
+      "toolResult": "**Instruction:**\n\nPlease evaluate the tool/function result and provide the response in the specified schema format. The response should **only** contain the requested schema, formatted as {format}.\n\n---\n\n**Result of the Tool/Function:**\n\n```\n{toolResult}\n```\n---\n\n**Schema Format:**\n\n{resultSchema}\n\n---\n\nReminder: It is very important that the response can be parsed correctly as {format}, and include only the requested schema in your response.",
+      "task": "\nCOMPLETE THE FOLLOWING TASK:\n\n``` \n{taskContent}\n```\n\nProvide only the precise information requested without context, \nMake sure we can parse the response as {format}.\n\nFORMAT THE RESULT WITH EXACTLY THE FOLLOWING SCHEMA:\n\n{schema}",
+      "evaluate": "Evaluate the following message and provide the result back in the specified schema format. The response should **only** contain the requested schema, formatted as {format}.\n\nMessage:\n```\n{message}\n```\n\nSchema Format:\n\n{schema}\n\nReminder: Please ensure that the response can be parsed correctly as {format}, and include only the requested schema in your response."
     }
   }
 }
