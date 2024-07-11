@@ -671,6 +671,7 @@ export async function taskWorker(
         };
         if (task) {
           task.debugging = {
+            ...task.debugging,
             error: {
               message: error.message,
               name: error.name,
@@ -684,6 +685,7 @@ export async function taskWorker(
         };
         if (task) {
           task.debugging = {
+            ...task.debugging,
             error: {
               message: error.message,
               stack: error.stack,

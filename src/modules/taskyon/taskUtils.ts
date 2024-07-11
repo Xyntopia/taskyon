@@ -68,7 +68,7 @@ export const taskUtils = (
             // TODO:  not sure, if this is a good idea with OpenAI Functions...
             const functionContent = dump({
               arguments: t.content.functionCall.arguments,
-              ...t.result?.toolResult,
+              //...t.result?.toolResult,
             });
             const message: OpenAI.ChatCompletionMessageParam = {
               role: 'function',
@@ -82,7 +82,7 @@ export const taskUtils = (
             const message: OpenAI.ChatCompletionMessageParam = {
               role: 'system',
               content: dump({
-                'result of the tool': t.content.toolResult,
+                'The tool returned the result:': t.content.toolResult,
               }),
             };
             openAIMessageThread.push(message);
