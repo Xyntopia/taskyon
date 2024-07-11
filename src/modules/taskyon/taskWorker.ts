@@ -355,6 +355,7 @@ async function generateFollowUpTasksFromResult(
       configuration: finishedTask.configuration,
     };
     const newTask = deepMerge(taskTemplate, partialTask);
+    newTask.state = execute ? 'Open' : 'Completed';
     const newTaskId = await addTask2Tree(
       newTask,
       finishedTask.id,
@@ -376,7 +377,6 @@ async function generateFollowUpTasksFromResult(
       finishedTask.result.toolResult
     ) {
       void addFollowUpTask(true, {
-        state: 'Open',
         role: 'system',
         content: { toolResult: finishedTask.result.toolResult },
       });
@@ -393,7 +393,6 @@ async function generateFollowUpTasksFromResult(
       if (functionCall[0]) {
         // TODO: enable multiple parallel function calls
         void addFollowUpTask(true, {
-          state: 'Open',
           role: 'function',
           content: { functionCall: functionCall[0] },
         });
@@ -415,7 +414,6 @@ async function generateFollowUpTasksFromResult(
         !useTyTools
       ) {
         void addFollowUpTask(false, {
-          state: 'Completed',
           role: 'assistant',
           content: { message: choice.message.content },
         });
@@ -449,13 +447,11 @@ async function generateFollowUpTasksFromResult(
           structResponse.toolCommand?.name
         ) {
           const newTaskid = await addFollowUpTask(false, {
-            state: 'Completed',
             role: 'assistant',
             content: { message: choice.message.content },
           });
           void addFollowUpTask(true, {
             parentID: newTaskid,
-            state: 'Open',
             role: 'assistant',
             content: { functionCall: structResponse.toolCommand },
           });
@@ -463,7 +459,6 @@ async function generateFollowUpTasksFromResult(
           // in the case that we don't call a tool, provide a "normal" answer :)
           // this time we declare it as "Open" and set execution to "true"
           void addFollowUpTask(true, {
-            state: 'Open',
             role: 'assistant',
             content: { message: choice.message.content },
           });
@@ -473,7 +468,11 @@ async function generateFollowUpTasksFromResult(
         'message' in finishedTask.content &&
         finishedTask.role === 'assistant'
       ) {
-        // this is the final response, so we simply return without creating new messages!
+        // this is the final response, so we simply add it to the chain without executing it
+        void addFollowUpTask(false, {
+          role: 'assistant',
+          content: { message: choice.message.content },
+        });
         console.log('No more follow up tasks!');
         return;
       }
@@ -512,7 +511,7 @@ export function useTaskWorkerController() {
   }
 
   function setWaiting(value: boolean) {
-    console.log('task worker is waiting!')
+    console.log('task worker is waiting!');
     waiting = value;
   }
 
