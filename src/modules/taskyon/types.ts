@@ -317,8 +317,7 @@ of how content can be structured. `,
   configuration: z
     .object({
       model: z.string(),
-      chatApi: z.string(),
-      maxFollowUps: z.number().optional(),
+      chatApi: z.string()
     })
     .optional()
     .describe('Holds the configuration for the LLM'),
