@@ -20,14 +20,21 @@
         <div v-if="'functionCall' in task.content" class="col q-pb-md">
           <q-expansion-item
             dense
-            :icon="matCalculate"
-            :label="task.content.functionCall.name"
             :header-class="
               task.state === 'Error' || task.result?.toolResult?.error
                 ? 'text-negative'
-                : 'text-green'
+                : isWorking
+                  ? 'text-info'
+                  : 'text-green'
             "
           >
+            <template #header>
+              <div class="row q-gutter-sm items-center">
+                <q-spinner-orbit v-if="isWorking" size="2em"></q-spinner-orbit>
+                <q-icon :name="matCalculate" size="1.5em"></q-icon>
+                <div>{{ task.content.functionCall.name }}</div>
+              </div>
+            </template>
             <ToolResultWidget :task="task" />
           </q-expansion-item>
         </div>
@@ -265,6 +272,7 @@ import { openrouterPricing } from 'src/modules/taskyon/utils';
 
 const props = defineProps<{
   task: LLMTask;
+  isWorking?: boolean;
 }>();
 
 const state = useTaskyonStore();

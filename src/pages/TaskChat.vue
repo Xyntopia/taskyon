@@ -31,6 +31,7 @@
             <Task
               v-if="!('structuredResponse' in task.content)"
               :task="task"
+              :is-working="!taskWorkerWaiting && task.id === currentTask.id"
               style="min-width: 300px"
               :class="[
                 'q-pa-xs',
