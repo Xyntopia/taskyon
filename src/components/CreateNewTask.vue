@@ -238,22 +238,10 @@
             OpenAI)</q-tooltip
           ></q-toggle
         >-->
-        <q-btn
-          v-if="expertMode"
-          class="q-ma-md"
-          dense
-          flat
-          :icon="matCode"
-          @click="state.showTaskData = !state.showTaskData"
-          ><q-tooltip>Show Draft Task Data</q-tooltip></q-btn
-        >
       </div>
     </div>
     <q-slide-transition>
       <q-list v-show="expandedTaskCreation" dense>
-        <div v-if="showTaskData && expertMode">
-          {{ currentnewTask }}
-        </div>
         <q-separator class="q-my-sm" />
         <!--Model Selection-->
         <q-item class="row items-center">
@@ -360,7 +348,6 @@ import {
   matUploadFile,
   matChat,
   matHandyman,
-  matCode,
   matEdit,
   matChecklist,
   matSmartToy,
@@ -400,7 +387,7 @@ function updateContent(value: string | null | undefined) {
 }
 
 const state = useTaskyonStore();
-const { showTaskData, expandedTaskCreation } = toRefs(state);
+const { expandedTaskCreation } = toRefs(state);
 const { expertMode } = toRefs(state.appConfiguration);
 const { selectedApi, useOpenAIAssistants, openAIAssistantId } = toRefs(
   state.llmSettings,

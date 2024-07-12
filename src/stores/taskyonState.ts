@@ -59,7 +59,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
     expandedTaskCreation: false,
     selectChatBotExpand: true,
     allowedToolsExpand: true,
-    showTaskData: false,
     drawerRight: false,
     // variable to track if the user is at the bottom of a task chat
     lockBottomScroll: true,
