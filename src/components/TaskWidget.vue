@@ -14,9 +14,7 @@
           </q-icon>
         </div>
         <div v-else-if="task.role === 'system'" class="col-auto self-center">
-          <q-icon :name="mdiDesktopTower" color="info" size="sm"
-            ><q-tooltip class="bg-warning">Error!</q-tooltip>
-          </q-icon>
+          <q-icon :name="mdiDesktopTower" color="info" size="sm"></q-icon>
         </div>
         <!--task content-->
         <div v-if="'functionCall' in task.content" class="col q-pb-md">

@@ -526,9 +526,17 @@ const currentnewTask = computed(() => {
     };
     task.name = undefined;
     task.debugging = {};
-    if (selectedTaskType.value) {
+    if (
+      selectedTaskType.value &&
+      'functionCall' in state.llmSettings.taskDraft.content
+    ) {
       // here we have a function task ;)
       task.role = 'function';
+      // we do this to make suere we *only* have a functionCall and not a message
+      // or other things as well...
+      task.content = {
+        functionCall: state.llmSettings.taskDraft.content.functionCall,
+      };
     } else if (
       state.llmSettings.taskDraft.content &&
       'message' in state.llmSettings.taskDraft.content

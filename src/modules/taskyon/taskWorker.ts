@@ -464,10 +464,8 @@ async function generateFollowUpTasksFromResult(
           });
         }
         return;
-      } else if (
-        'message' in finishedTask.content &&
-        finishedTask.role === 'assistant'
-      ) {
+      } else {
+        // if 'message' in finishedTask.content && finishedTask.role === 'assistant'
         // this is the final response, so we simply add it to the chain without executing it
         void addFollowUpTask(false, {
           role: 'assistant',
@@ -565,7 +563,7 @@ async function getTaskResult(
     false,
   );
 
-  if ('message' in task.content || 'toolResult' in task.content || '') {
+  if ('message' in task.content || 'toolResult' in task.content) {
     // TODO: get rid of "taskManager" in processChatTask
     if (llmSettings.selectedApi) {
       const apiKey = apiKeys[llmSettings.selectedApi];

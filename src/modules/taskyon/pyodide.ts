@@ -28,7 +28,7 @@ export async function execute(python_script: string) {
 export async function executeScript(
   pyodide: PyodideInterface,
   python_script: string,
-  convert2Js = true
+  convert2Js = true,
 ) {
   try {
     let stdout_content = '';
@@ -58,8 +58,14 @@ export async function executeScript(
 
     return { result, stdout: stdout_content };
   } catch (error) {
-    console.error('Loading Pyodide failed', error);
-    return { error };
+    if (error instanceof Error) {
+      if (error.name === 'PythonError') {
+        console.error('Python error', error.message);
+        return { pythonError: error.message };
+      }
+      console.error('Python environment error:', error);
+      return { pyodideEnvironmentError: error.message };
+    }
   }
 }
 

@@ -235,14 +235,15 @@ export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>;
 const answer = z.string().nullish();
 const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish();
 
-const toolCommand = FunctionCall.describe(
-  'Only provide the following information, if you really want to use a tool!!',
-);
-
 export const UseToolBase = z.object({
   'use tool': yesno,
   'which tool': answer,
-  toolCommand: toolCommand.nullish(),
+  toolCommand: FunctionCall.nullish()
+    .optional()
+    //.or(yesno)
+    .describe(
+      'If we should use a tool in the following step, provide the tool command. Otherwise do not!!',
+    ),
 });
 
 const SystemResponseEvaluation = z
