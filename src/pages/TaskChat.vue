@@ -29,6 +29,7 @@
             :class="task.role"
           >
             <Task
+              v-if="!('structuredResponse' in task.content)"
               :task="task"
               style="min-width: 300px"
               :class="[

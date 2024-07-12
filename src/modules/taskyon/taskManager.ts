@@ -24,7 +24,7 @@ import { MangoQuery } from 'rxdb';
  */
 export async function findRootTask(
   taskId: string,
-  getTask: TyTaskManager['getTask']
+  getTask: TyTaskManager['getTask'],
 ) {
   let currentTaskID = taskId;
 
@@ -54,7 +54,7 @@ export async function findRootTask(
  */
 export async function findLeafTasks(
   taskId: string,
-  getTask: TyTaskManager['getTask']
+  getTask: TyTaskManager['getTask'],
 ): Promise<string[]> {
   const stack: string[] = [taskId];
   const leafTasks: string[] = [];
@@ -145,7 +145,7 @@ export async function addTask2Tree(
   parentID: string | undefined,
   taskManager: TyTaskManager,
   execute = true,
-  duplicateTaskName = true
+  duplicateTaskName = true,
 ): Promise<LLMTask['id']> {
   if (!duplicateTaskName && task.name) {
     // check if task already exists and throw an error, if it does, because
@@ -239,7 +239,7 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
   }
 
   async function getFileMappingByUuid(
-    uuid: string
+    uuid: string,
   ): Promise<FileMappingDocType | null> {
     // Find the document with the matching UUID
     const fileMappingDoc = await fileMappingDb?.findOne(uuid).exec();
@@ -281,7 +281,7 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
     });
     if (fileMaps.length) {
       // TODO: what do we do if we have multiple files with the same name?
-      const fileName = fileMaps[0].opfs;
+      const fileName = fileMaps[0]?.opfs;
       if (fileName) {
         const file = await openFile(fileName);
         if (file) {
@@ -289,7 +289,7 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
         }
       }
       throw new Error(
-        `We could not find the file locally:  ${name}. Was it uploaded somewhere else?`
+        `We could not find the file locally:  ${name}. Was it uploaded somewhere else?`,
       );
     }
     throw new Error(`File not found: ${name}`);
@@ -331,7 +331,7 @@ function tyMechanisms() {
 
   function subscribeToTaskChanges(
     callback: (task?: LLMTask, taskNum?: number) => void | Promise<void>,
-    subscribeToTaskCountOnly = false
+    subscribeToTaskCountOnly = false,
   ): void {
     if (subscribeToTaskCountOnly) {
       taskCountSubscribers.push(callback);
@@ -342,17 +342,17 @@ function tyMechanisms() {
 
   // You may also need a method to unsubscribe if required
   function unsubscribeFromTaskChanges(
-    callback: (task?: LLMTask, taskNum?: number) => void | Promise<void>
+    callback: (task?: LLMTask, taskNum?: number) => void | Promise<void>,
   ): void {
     subscribers = subscribers.filter((sub) => sub !== callback);
     taskCountSubscribers = taskCountSubscribers.filter(
-      (sub) => sub !== callback
+      (sub) => sub !== callback,
     );
   }
 
   function notifySubscribers(
     task: LLMTask | undefined,
-    taskNum: number | undefined = undefined
+    taskNum: number | undefined = undefined,
   ): void {
     /*if (!task && !taskNum) {
       subscribers.forEach((callback) => void callback(undefined, undefined));
@@ -394,7 +394,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   tasks: Map<string, LLMTask>,
   defaultTools: Tool[],
   taskyonDB?: T,
-  vectorizerModel?: string
+  vectorizerModel?: string,
 ) {
   // uses RxDB as a DB backend..
   // Usage example:
@@ -416,7 +416,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     vectorIndex = await loadOrCreateHNSWIndex(
       vectorIndexName,
       maxElements,
-      loadIfExists
+      loadIfExists,
     );
   }
   void initVectorStore();
@@ -448,7 +448,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   void initializeTasksFromDB();
 
   async function unblockedGetTask(
-    taskId: string
+    taskId: string,
   ): Promise<LLMTask | undefined> {
     // Check if the task exists in the local record
     let task = tasks.get(taskId);
@@ -489,7 +489,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   // maybe also give an option to delete previous trees...
   async function updateTask(
     updateData: Partial<LLMTask> & { id: string },
-    save: boolean
+    save: boolean,
   ): Promise<void> {
     await withTaskCountCheck(updateData.id, async () => {
       const unlock = await lockTask(updateData.id);
@@ -510,7 +510,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
 
   async function syncVectorIndexWithTasks(
     resetVectorIndex = false,
-    progressCallback: (done: number, total: number) => void
+    progressCallback: (done: number, total: number) => void,
   ) {
     console.log('sync vector index');
     if (!vectorIndex || !taskyonDB) {
@@ -603,7 +603,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
             const foundTask = tasks.get(uuid);
             if (foundTask) {
               result.tasks.push(foundTask);
-              result.distances.push(res.distances[searchResultIndex]);
+              result.distances.push(res.distances[searchResultIndex] || 0.0);
             }
           }
         });
@@ -656,7 +656,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
 
   async function withTaskCountCheck(
     taskId: string,
-    operation: () => void | Promise<void>
+    operation: () => void | Promise<void>,
   ) {
     const prevTaskCount = tasks.size;
 
@@ -665,7 +665,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     const taskCountChanged = tasks.size !== prevTaskCount;
     notifySubscribers(
       tasks.get(taskId),
-      taskCountChanged ? count() : undefined
+      taskCountChanged ? count() : undefined,
     );
   }
 
@@ -702,7 +702,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       });
 
       function hasMessage(
-        task: LLMTask
+        task: LLMTask,
       ): task is LLMTask & { content: { message: string } } {
         return 'message' in task.content;
       }
@@ -716,12 +716,13 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
           return [];
         }
       });
-      return parsedToolDefs
-        .concat(Object.values(defaultTools))
-        .reduce((pv, cv) => {
+      return parsedToolDefs.concat(Object.values(defaultTools)).reduce(
+        (pv, cv) => {
           pv[cv.name] = cv;
           return pv;
-        }, {} as Record<string, ToolBase>);
+        },
+        {} as Record<string, ToolBase>,
+      );
     }
     return {};
   }
@@ -799,7 +800,7 @@ export type TyTaskManager = ReturnType<typeof useTyTaskManager>;
 // which is defined by the leaf and preceding, exclusive tasks
 export async function deleteTaskThread(
   leafId: string,
-  taskManager: TyTaskManager
+  taskManager: TyTaskManager,
 ) {
   let currentTaskId = leafId;
   while (currentTaskId) {
@@ -812,7 +813,7 @@ export async function deleteTaskThread(
       if (parentTask && parentTask.childrenIDs.length > 1) {
         // in this case we need to update the parent with the fewer children
         const childrenIDs = parentTask.childrenIDs.filter(
-          (id) => id != currentTask.id
+          (id) => id != currentTask.id,
         );
         await taskManager.updateTask({ id: parentTask.id, childrenIDs }, true);
         break; // Stop deletion if the parent task has more than one child. We only want to delete this branch...

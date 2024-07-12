@@ -358,7 +358,7 @@ async function generateFollowUpTasksFromResult(
     newTask.state = execute ? 'Open' : 'Completed';
     const newTaskId = await addTask2Tree(
       newTask,
-      finishedTask.id,
+      partialTask.parentID || finishedTask.id,
       taskManager,
       // interrupt execution if interrupted flag is shown!
       // this makes sure that results are still saved, even if we stop any
@@ -448,7 +448,7 @@ async function generateFollowUpTasksFromResult(
         ) {
           const newTaskid = await addFollowUpTask(false, {
             role: 'assistant',
-            content: { message: choice.message.content },
+            content: { structuredResponse: choice.message.content },
           });
           void addFollowUpTask(true, {
             parentID: newTaskid,
@@ -460,7 +460,7 @@ async function generateFollowUpTasksFromResult(
           // this time we declare it as "Open" and set execution to "true"
           void addFollowUpTask(true, {
             role: 'assistant',
-            content: { message: choice.message.content },
+            content: { structuredResponse: choice.message.content },
           });
         }
         return;
@@ -563,7 +563,11 @@ async function getTaskResult(
     false,
   );
 
-  if ('message' in task.content || 'toolResult' in task.content) {
+  if (
+    'message' in task.content ||
+    'toolResult' in task.content ||
+    'structuredResponse' in task.content
+  ) {
     // TODO: get rid of "taskManager" in processChatTask
     if (llmSettings.selectedApi) {
       const apiKey = apiKeys[llmSettings.selectedApi];

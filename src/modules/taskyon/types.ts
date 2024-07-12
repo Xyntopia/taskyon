@@ -289,11 +289,13 @@ export const StructuredResponse = ToolResultBase.partial()
 export type StructuredResponse = z.infer<typeof StructuredResponse>;
 
 const MessageContent = z.object({ message: z.string() });
+const StructuredContent = z.object({ structuredResponse: z.string() });
 const ToolCallContent = z.object({ functionCall: FunctionCall });
 const UploadedFilesContent = z.object({ uploadedFiles: z.array(z.string()) });
 // TODO: restructure ToolResultContent to be a "normal message"
 const ToolResultContent = z.object({ toolResult: ToolResult });
 const TaskContent = z.union([
+  StructuredContent,
   MessageContent,
   ToolCallContent,
   UploadedFilesContent,
@@ -317,7 +319,7 @@ of how content can be structured. `,
   configuration: z
     .object({
       model: z.string(),
-      chatApi: z.string()
+      chatApi: z.string(),
     })
     .optional()
     .describe('Holds the configuration for the LLM'),
