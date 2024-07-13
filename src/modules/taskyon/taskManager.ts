@@ -637,7 +637,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       await taskyonDB.remove();
     }
     tasks.clear();
-    notifySubscribers(undefined, await countTasks());
+    notifySubscribers(undefined, 0);
   }
 
   async function deleteTask(taskId: string): Promise<void> {
