@@ -55,6 +55,11 @@
             </p>
           </q-expansion-item>
         </div>
+        <div v-else-if="'structuredResponse' in task.content" class="col">
+          <div class="raw-markdown q-mb-md">
+            {{ task.content.structuredResponse }}
+          </div>
+        </div>
         <div v-else-if="'message' in task.content" class="col">
           <q-expansion-item
             v-if="taskFunction"

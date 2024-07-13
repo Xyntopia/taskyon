@@ -149,30 +149,32 @@ vector index we can also save our calculated vectors in this in order to
 exchange them between different taskyon nodes. */
 const vectorMappingSchemaLiteral = {
   title: 'VectorMapping schema',
-  version: 1,
+  version: 2,
   type: 'object',
   primaryKey: 'vecid', // we do this, so that we can find documents very fast after commiting a vector search
   properties: {
     uuid: { type: 'string', maxLength: 128 },
     vecid: { type: 'string', maxLength: 128 },
+    // should be a binary-encoded vector...
+    vector: { type: 'string' },
   },
   required: ['uuid', 'vecid'],
   indexes: ['uuid'],
 } as const;
 
 const vectorMappingSchemaTyped = toTypedRxJsonSchema(
-  vectorMappingSchemaLiteral
+  vectorMappingSchemaLiteral,
 );
-export type vectorMappingDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
+type vectorMappingDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
   typeof vectorMappingSchemaTyped
 >;
-export const vectorMappingSchema: RxJsonSchema<vectorMappingDocType> =
+const vectorMappingSchema: RxJsonSchema<vectorMappingDocType> =
   vectorMappingSchemaLiteral;
 
 // Define the collection types
-export type LLMTaskCollection = RxCollection<LLMTaskDocType>;
-export type FileMappingCollection = RxCollection<FileMappingDocType>;
-export type VectorMappingCollection = RxCollection<vectorMappingDocType>;
+type LLMTaskCollection = RxCollection<LLMTaskDocType>;
+type FileMappingCollection = RxCollection<FileMappingDocType>;
+type VectorMappingCollection = RxCollection<vectorMappingDocType>;
 
 // Define the database type
 export type TaskyonDatabaseCollections = {
@@ -238,13 +240,16 @@ export const collections = {
       1: function (/*oldDoc*/) {
         return null;
       },
+      2: function (/*oldDoc*/) {
+        return null;
+      },
     },
   },
 };
 
 export async function createTaskyonDatabase(
   name: string,
-  storage: RxStorageDexie | RxStorageMemory | undefined = undefined
+  storage: RxStorageDexie | RxStorageMemory | undefined = undefined,
 ): Promise<TaskyonDatabase> {
   const newStorage = storage || getRxStorageDexie();
   const db: TaskyonDatabase =
@@ -277,7 +282,7 @@ export function transformLLMTaskToDocType(llmTask: LLMTask): LLMTaskDocType {
 }
 
 export function transformDocToLLMTask(
-  doc: RxDocument<LLMTaskDocType>
+  doc: RxDocument<LLMTaskDocType>,
 ): LLMTask {
   // Convert the database document to a JSON string in order to make a copy of it.
   const jsonString = JSON.stringify(doc.toJSON());

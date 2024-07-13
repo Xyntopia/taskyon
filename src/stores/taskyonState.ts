@@ -222,7 +222,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
   });
 
   // last thing we do after having loaded all settings is to actually start taskyon! :)
-  const TaskList = reactive<Map<string, LLMTask>>(new Map());
+  const TaskList = reactive(new Map<string, LLMTask>());
   // callin ExecutionContext.interrupt();  cancels processing of current task
   const taskWorkerController = useTaskWorkerController();
   console.log('initialize taskyon');

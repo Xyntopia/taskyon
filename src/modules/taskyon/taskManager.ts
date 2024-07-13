@@ -8,7 +8,7 @@ import {
   collections,
 } from './rxdb';
 import { openFile } from './OPFS';
-import { Lock, sleep, deepMerge, AsyncQueue } from './utils';
+import { Lock, deepMerge, AsyncQueue, sleep } from './utils';
 import type { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { loadOrCreateHNSWIndex } from './hnswIndex';
 import { extractKeywords, useNlpWorker } from './webWorkerApi';
@@ -191,6 +191,8 @@ export async function addTask2Tree(
 
   // Push the new function task to processTasksQueue
   // we are not saving yet, as it is going to be processed :)
+  // TODO:  this needs an overhaul..  we want to save tasks only once
+  //        and have them immutable...
   if (execute) {
     processTasksQueue.push(newTask.id);
     newTask.state = 'Queued';
@@ -307,7 +309,7 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
 
 function tyMechanisms() {
   // we need these locks in order to sync our databases..
-  const taskLocks: Map<string, Lock> = new Map();
+  const taskLocks = new Map<string, Lock>();
   let subscribers: Array<
     (task?: LLMTask, taskNum?: number) => void | Promise<void>
   > = [];
@@ -402,6 +404,9 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   let vectorIndex: HierarchicalNSW | undefined;
   const vectorIndexName = 'taskyondbv';
   const { vectorizeText } = useNlpWorker();
+  // this stores tasks which have already been vectorized so that they
+  // don't get vectorized twice in an efficient way.
+  const alreadyVectorized = new Set<string>();
 
   const {
     lockTask,
@@ -421,17 +426,26 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   }
   void initVectorStore();
 
-  function count() {
-    return tasks.size;
+  async function countVecs() {
+    if (taskyonDB) {
+      return await taskyonDB.vectormappings.count().exec();
+    } else return undefined;
   }
 
-  // TODO: get rid of this...
+  async function countTasks() {
+    if (taskyonDB) {
+      return await taskyonDB.llmtasks.count().exec();
+    } else return undefined;
+  }
+
+  // TODO: get rid of this...  its too slow and we want to oad tasks directly from the db...
+  //       or do this really slowly...
   async function initializeTasksFromDB() {
     // TODO: wondering if we should maybe get rid of this?  its pretty inefficient to do this
     //       on every reload of our app :P
     if (taskyonDB) {
       const tasksFromDb = await taskyonDB.llmtasks.find().exec();
-      tasksFromDb.forEach((taskDoc) => {
+      tasksFromDb.forEach(async (taskDoc) => {
         try {
           const task = transformDocToLLMTask(taskDoc);
           tasks.set(task.id, task);
@@ -439,10 +453,11 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
           console.error('Error transforming task doc:', error);
           // skip this task and continue with the next one
         }
+        await sleep(100);
       });
       console.log('all tasks loaded from DB!');
 
-      notifySubscribers(undefined, count());
+      notifySubscribers(undefined, await countTasks());
     }
   }
   void initializeTasksFromDB();
@@ -544,24 +559,28 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       counter += 1;
     }
 
-    await sleep(1000);
+    //await sleep(10);
     //await vectorIndex.writeIndex(vectorIndexName);
     progressCallback(tasks.size, tasks.size);
 
     console.log('Sync complete.');
   }
 
-  async function addtoVectorDB(task: LLMTask) {
+  async function addtoVectorDB(task: LLMTask, override = false) {
     if (vectorIndex && taskyonDB && vectorizerModel) {
-      const vec = await vectorizeText(JSON.stringify(task), vectorizerModel);
+      const vec = await vectorizeText(
+        JSON.stringify(task.content),
+        vectorizerModel,
+      );
       console.log('got a vector result.');
       //const vec = await getVector(JSON.stringify(task), vectorizerModel);
-      if (vec) {
+      if (vec && (!alreadyVectorized.has(task.id) || override)) {
         const newLabel = vectorIndex.addItems([vec], false)[0];
         void taskyonDB.vectormappings.upsert({
           uuid: task.id,
           vecid: String(newLabel),
         });
+        alreadyVectorized.add(task.id);
       }
       console.log('finished adding vector!');
     }
@@ -576,7 +595,6 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     if (task && taskyonDB) {
       const newDBTask = transformLLMTaskToDocType(task);
       await taskyonDB.llmtasks.upsert(newDBTask);
-      // async update of the vector database in order to not cause any interruptions...
       void addtoVectorDB(task);
     }
   }
@@ -619,7 +637,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       await taskyonDB.remove();
     }
     tasks.clear();
-    notifySubscribers(undefined, count());
+    notifySubscribers(undefined, await countTasks());
   }
 
   async function deleteTask(taskId: string): Promise<void> {
@@ -636,7 +654,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       }
     }
     console.log('done deleting task:', taskId);
-    notifySubscribers(tasks.get(taskId), count());
+    notifySubscribers(tasks.get(taskId), await countTasks());
     unlock();
   }
 
@@ -665,7 +683,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     const taskCountChanged = tasks.size !== prevTaskCount;
     notifySubscribers(
       tasks.get(taskId),
-      taskCountChanged ? count() : undefined,
+      taskCountChanged ? await countTasks() : undefined,
     );
   }
 
@@ -764,7 +782,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       const dbobject = await taskyonDB.importJSON(jsonObj);
       return dbobject;
     }
-    notifySubscribers(undefined, count());
+    notifySubscribers(undefined, await countTasks());
   }
 
   const defaultMode = {
@@ -780,10 +798,12 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     getJsonTaskBackup,
     addTaskBackup,
     deleteAllTasks,
-    count,
+    countTasks,
     syncVectorIndexWithTasks,
     vectorSearchTasks,
     addToolCode,
+    countVecs,
+    addtoVectorDB,
   };
 
   const fm = useFileManager(taskyonDB?.filemappings);

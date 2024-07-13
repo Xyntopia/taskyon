@@ -185,7 +185,7 @@ watch(
     if (newTaskId) {
       activeTask.value = await tm.getTask(newTaskId);
     }
-  }
+  },
 );
 
 void state.getTaskManager().then(async (tm) => {
@@ -231,8 +231,8 @@ async function loadConversation(files: File[]) {
     let last_task_id: string | undefined = undefined;
     for (let i = 0; i < files.length; i++) {
       console.log(files[i]);
-      const fileStr = await files[i].text();
-      const taskListRaw = load(fileStr);
+      const fileStr = await files[i]?.text();
+      const taskListRaw = fileStr ? load(fileStr) : [];
       const result = await TaskListType.safeParseAsync(taskListRaw);
       if (result.success) {
         const taskList = result.data;

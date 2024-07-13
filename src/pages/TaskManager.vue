@@ -41,7 +41,9 @@
       <template #no-data> No search results! </template>
       <template #top>
         <Search class="fit" @search="onSearchChange" />
-        <div class="text-caption"># of tasks: {{ taskCount }}</div>
+        <div class="text-caption">
+          # of indexed tasks/tasks: {{ indexCount }}/{{ taskCount }}
+        </div>
       </template>
       <template #body-cell-task="props">
         <td>
@@ -82,22 +84,23 @@ const state = useTaskyonStore();
 const searchResults = ref<(LLMTask & { distance: number | undefined })[]>([]);
 const syncProgressString = ref('0/0');
 const syncProgress = ref(0.0);
-const taskCount = ref(0);
+const taskCount = ref<number | string>('N/A');
+const indexCount = ref<number | string>('N/A');
 
-let taskManager: Awaited<ReturnType<typeof state.getTaskManager>>;
 void state.getTaskManager().then((tm) => {
-  taskManager = tm;
-  taskCount.value = taskManager.count();
+  void tm.countTasks().then((n) => (taskCount.value = n || 'N/A'));
+  void tm.countVecs().then((n) => (indexCount.value = n || 'N/A'));
 });
 
 async function onUpdateSearchIndex() {
+  const taskManager = await state.getTaskManager();
   if (taskManager) {
     await taskManager.syncVectorIndexWithTasks(true, (done, total) => {
       syncProgress.value = done / total;
       syncProgressString.value = `${done}/${total}`;
     });
   }
-  taskCount.value = taskManager.count();
+  taskCount.value = (await taskManager.countTasks()) || 'N/A';
 }
 
 async function onSearchChange(searchTerm: string | Event, k: number) {
@@ -109,6 +112,7 @@ async function onSearchChange(searchTerm: string | Event, k: number) {
   } else {
     // Perform your search here
     console.log(`Searching for ${searchTerm}`);
+    const taskManager = await state.getTaskManager();
     //searchResults.value = await vectorStore.query(searchTerm, k)
     if (taskManager) {
       const { tasks, distances } = await taskManager.vectorSearchTasks(
@@ -120,10 +124,10 @@ async function onSearchChange(searchTerm: string | Event, k: number) {
         ...task,
         distance: distances[index], // Calculate score based on distance
       }));
+      taskCount.value = (await taskManager.countTasks()) || 'N/A';
     }
     console.log('finished search!');
     console.log(searchResults.value);
-    taskCount.value = taskManager.count();
   }
 }
 
@@ -137,7 +141,7 @@ const initialPagination = {
 };
 
 async function setConversation(taskId: string) {
-  taskManager = await state.getTaskManager();
+  const taskManager = await state.getTaskManager();
   const leafTasks = await findLeafTasks(taskId, (taskID) =>
     taskManager.getTask(taskID),
   );
