@@ -60,12 +60,15 @@ import { useTaskyonStore } from 'src/stores/taskyonState';
 import { findLeafTasks } from 'src/modules/taskyon/taskManager';
 import { matSync } from '@quasar/extras/material-icons';
 import { mdiForum } from '@quasar/extras/mdi-v6';
+import { useRoute } from 'vue-router';
+import { onMounted } from 'vue';
 //import { useRoute, useRouter } from 'vue-router';
 
 // TODO:  do some search caching ;) so that we can move faster back & forth between
 //        pages in the browser...
 
 // Inside your <script setup> section
+const route = useRoute();
 
 const state = useTaskyonStore();
 const searchResults = ref<(LLMTask & { distance: number | undefined })[]>([]);
@@ -96,6 +99,7 @@ async function searchTasks(searchTerm: string, k: number) {
   const taskManager = await state.getTaskManager();
   //searchResults.value = await vectorStore.query(searchTerm, k)
   if (taskManager) {
+    console.log('search for', searchTerm)
     isSearching.value = true;
     const { tasks, distances } = await taskManager.vectorSearchTasks(
       searchTerm,
@@ -127,12 +131,15 @@ async function onSearchChange(searchTerm: string | Event, k: number) {
   }
 }
 
-/*if (route.query.q) {
-  await searchTasks(
-    route.query.q.toString(),
-    50//parseInt(route.query.k?.toString() || '10'),
-  );
-}*/
+onMounted(() => {
+  if (route.query.q) {
+    console.log('doing initial search!');
+    searchTasks(
+      route.query.q.toString(),
+      50, //parseInt(route.query.k?.toString() || '10'),
+    );
+  }
+});
 
 //const numberOfSearchResults = ref(5)
 const initialPagination = {

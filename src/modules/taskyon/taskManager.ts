@@ -380,6 +380,35 @@ function tyMechanisms() {
   };
 }
 
+function useTaskVectors() {
+  let vectorIndex: HierarchicalNSW | undefined;
+  const vectorIndexName = 'taskyondbv';
+
+  async function initVectorStore(loadIfExists = true) {
+    const maxElements = 10000;
+    vectorIndex = await loadOrCreateHNSWIndex(
+      vectorIndexName,
+      maxElements,
+      loadIfExists,
+    );
+  }
+  void initVectorStore();
+
+  async function getVectorIndex() {
+    if (vectorIndex) {
+      return vectorIndex;
+    }
+    // Wait for the vectorIndex to be initialized
+    await initVectorStore();
+    return vectorIndex;
+  }
+
+  return {
+    getVectorIndex,
+    initVectorStore,
+  };
+}
+
 // TODO:  break down  the individual parts of TaskManager this way into smaller parts:
 //        - on top of that build a function which encapsulates all the "high-level  function such as getting files etc..."
 //        - the vector store part
@@ -401,12 +430,12 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   // uses RxDB as a DB backend..
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
-  let vectorIndex: HierarchicalNSW | undefined;
-  const vectorIndexName = 'taskyondbv';
   const { vectorizeText } = useNlpWorker();
   // this stores tasks which have already been vectorized so that they
   // don't get vectorized twice in an efficient way.
   const alreadyVectorized = new Set<string>();
+
+  const { getVectorIndex, initVectorStore } = useTaskVectors();
 
   const {
     lockTask,
@@ -415,16 +444,6 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     unsubscribeFromTaskChanges,
     notifySubscribers,
   } = tyMechanisms();
-
-  async function initVectorStore(loadIfExists = true) {
-    const maxElements = 10000;
-    vectorIndex = await loadOrCreateHNSWIndex(
-      vectorIndexName,
-      maxElements,
-      loadIfExists,
-    );
-  }
-  void initVectorStore();
 
   async function countVecs() {
     if (taskyonDB) {
@@ -528,6 +547,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     progressCallback: (done: number, total: number) => void,
   ) {
     console.log('sync vector index');
+    const vectorIndex = await getVectorIndex();
     if (!vectorIndex || !taskyonDB) {
       console.warn('Vector index or database is not initialized.');
       return;
@@ -567,6 +587,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   }
 
   async function addtoVectorDB(task: LLMTask, override = false) {
+    const vectorIndex = await getVectorIndex();
     if (vectorIndex && taskyonDB && vectorizerModel) {
       const vec = await vectorizeText(
         JSON.stringify(task.content),
@@ -602,6 +623,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   async function vectorSearchTasks(searchTerm: string, k = 5) {
     console.log('search for', searchTerm);
     const result = { tasks: [] as LLMTask[], distances: [] as number[] };
+    const vectorIndex = await getVectorIndex();
     if (vectorIndex && vectorizerModel) {
       const queryVec = await vectorizeText(searchTerm, vectorizerModel);
       if (queryVec && taskyonDB) {
