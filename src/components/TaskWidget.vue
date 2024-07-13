@@ -72,10 +72,7 @@
             </p>
           </q-expansion-item>
           <ty-markdown
-            v-else-if="
-              state.taskState[task.id]?.markdownEnabled != false &&
-              'message' in task.content
-            "
+            v-else-if="state.taskState[task.id]?.markdownEnabled != false"
             no-line-numbers
             style="min-width: 50px"
             :src="task.content.message"
@@ -278,6 +275,7 @@ import { openrouterPricing } from 'src/modules/taskyon/utils';
 const props = defineProps<{
   task: LLMTask;
   isWorking?: boolean;
+  short?: boolean;
 }>();
 
 const state = useTaskyonStore();

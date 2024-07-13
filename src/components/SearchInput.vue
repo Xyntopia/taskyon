@@ -7,14 +7,14 @@
         <q-input
           class="col"
           outlined
-          :loading="searchState"
+          :loading="isSearching"
           type="search"
           autofocus
           :dense="false"
           clearable
           debounce="1000"
           :label="searchHint"
-          :model-value="searchString || ''"
+          :model-value="searchString"
           @update:model-value="onQChange"
         >
           <template #append>
@@ -55,16 +55,28 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
 import { matFilterAlt, matSearch } from '@quasar/extras/material-icons';
 
-const numberOfSearchResults = defineModel<number>('numberOfSearchResults', {
+const numberOfSearchResults = defineModel<number | undefined>(
+  'numberOfSearchResults',
+  {
+    required: false,
+    default: 50,
+  },
+);
+
+const showFilter = defineModel<boolean>('showFilter', {
   required: false,
-  default: 50,
+  default: false,
+});
+
+const searchString = defineModel<string>('searchString', {
+  required: false,
+  default: '',
 });
 
 defineProps({
-  searchState: {
+  isSearching: {
     type: Boolean,
     default: false,
   },
@@ -86,9 +98,7 @@ defineProps({
   },
 });
 
-const emit = defineEmits(['search', 'toggleFilter']);
-
-const searchString = ref<string>('');
+const emit = defineEmits(['search']);
 
 function onQChange(value: string | null | number) {
   searchString.value = (value as string) || '';
@@ -100,6 +110,6 @@ const requestSearch = () => {
 };
 
 const toggleFilter = () => {
-  emit('toggleFilter');
+  showFilter.value = !showFilter.value;
 };
 </script>

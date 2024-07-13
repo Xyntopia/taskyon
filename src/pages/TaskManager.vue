@@ -13,34 +13,18 @@
       title="Search Results"
       :rows="searchResults"
       :pagination="initialPagination"
-      :columns="[
-        {
-          name: 'id',
-          required: true,
-          label: 'id',
-          field: (task: LLMTask) => task.id,
-        },
-        {
-          name: 'score',
-          sortable: true,
-          required: true,
-          label: 'score',
-          field: (row: typeof searchResults.value) =>
-            1 / (row.distance + 0.001),
-        },
-        {
-          name: 'task',
-          sortable: true,
-          required: true,
-          label: 'task',
-          field: (task: LLMTask) => task.id,
-        },
-      ]"
-      row-key="name"
+      :columns="columns"
+      :visible-columns="visibleColumns"
+      row-key="id"
     >
       <template #no-data> No search results! </template>
       <template #top>
-        <Search class="fit" @search="onSearchChange" />
+        <Search
+          :search-string="$route.query.q?.toString()"
+          class="fit"
+          :is-searching="isSearching"
+          @search="onSearchChange"
+        />
         <div class="text-caption">
           # of indexed tasks/tasks: {{ indexCount }}/{{ taskCount }}
         </div>
@@ -52,18 +36,14 @@
               <q-btn
                 flat
                 stretch
-                :icon="matPlayArrow"
+                :icon="mdiForum"
                 dense
                 to="chat"
                 @click="setConversation(props.row.id)"
                 ><q-tooltip>View entire conversation</q-tooltip></q-btn
               >
             </div>
-            <Task
-              style="border: 1px solid"
-              :task="props.row"
-              class="col q-pa-xs"
-            />
+            <Task :task="props.row" class="col q-pa-xs" />
           </div>
         </td>
       </template>
@@ -78,7 +58,14 @@ import { LLMTask } from 'src/modules/taskyon/types';
 import Task from 'src/components/TaskWidget.vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { findLeafTasks } from 'src/modules/taskyon/taskManager';
-import { matPlayArrow, matSync } from '@quasar/extras/material-icons';
+import { matSync } from '@quasar/extras/material-icons';
+import { mdiForum } from '@quasar/extras/mdi-v6';
+//import { useRoute, useRouter } from 'vue-router';
+
+// TODO:  do some search caching ;) so that we can move faster back & forth between
+//        pages in the browser...
+
+// Inside your <script setup> section
 
 const state = useTaskyonStore();
 const searchResults = ref<(LLMTask & { distance: number | undefined })[]>([]);
@@ -86,6 +73,8 @@ const syncProgressString = ref('0/0');
 const syncProgress = ref(0.0);
 const taskCount = ref<number | string>('N/A');
 const indexCount = ref<number | string>('N/A');
+const visibleColumns = ref(['score']);
+const isSearching = ref(false);
 
 void state.getTaskManager().then((tm) => {
   void tm.countTasks().then((n) => (taskCount.value = n || 'N/A'));
@@ -103,6 +92,25 @@ async function onUpdateSearchIndex() {
   taskCount.value = (await taskManager.countTasks()) || 'N/A';
 }
 
+async function searchTasks(searchTerm: string, k: number) {
+  const taskManager = await state.getTaskManager();
+  //searchResults.value = await vectorStore.query(searchTerm, k)
+  if (taskManager) {
+    isSearching.value = true;
+    const { tasks, distances } = await taskManager.vectorSearchTasks(
+      searchTerm,
+      k,
+    );
+    // Add score to each task
+    searchResults.value = tasks.map((task, index) => ({
+      ...task,
+      distance: distances[index], // Calculate score based on distance
+    }));
+    taskCount.value = (await taskManager.countTasks()) || 'N/A';
+    isSearching.value = false;
+  }
+}
+
 async function onSearchChange(searchTerm: string | Event, k: number) {
   if (searchTerm instanceof Event) {
     // for some reason, in chrome, a second event with the original input-event gets fired...
@@ -110,31 +118,26 @@ async function onSearchChange(searchTerm: string | Event, k: number) {
   } else if (!searchTerm) {
     searchResults.value = [];
   } else {
-    // Perform your search here
+    // Update the URL with the search parameter
+    //router.push({ query: { q: searchTerm, k } }); // Perform your search here
     console.log(`Searching for ${searchTerm}`);
-    const taskManager = await state.getTaskManager();
-    //searchResults.value = await vectorStore.query(searchTerm, k)
-    if (taskManager) {
-      const { tasks, distances } = await taskManager.vectorSearchTasks(
-        searchTerm,
-        k,
-      );
-      // Add score to each task
-      searchResults.value = tasks.map((task, index) => ({
-        ...task,
-        distance: distances[index], // Calculate score based on distance
-      }));
-      taskCount.value = (await taskManager.countTasks()) || 'N/A';
-    }
+    await searchTasks(searchTerm, k);
     console.log('finished search!');
     console.log(searchResults.value);
   }
 }
 
+/*if (route.query.q) {
+  await searchTasks(
+    route.query.q.toString(),
+    50//parseInt(route.query.k?.toString() || '10'),
+  );
+}*/
+
 //const numberOfSearchResults = ref(5)
 const initialPagination = {
-  sortBy: 'score',
-  descending: true,
+  sortBy: 'distance',
+  descending: false,
   //page: 2,
   rowsPerPage: 50,
   // rowsNumber: xx if getting data from a server
@@ -147,4 +150,25 @@ async function setConversation(taskId: string) {
   );
   state.llmSettings.selectedTaskId = leafTasks[0];
 }
+
+const columns = [
+  {
+    name: 'id',
+    label: 'id',
+    field: (task: LLMTask) => task.id,
+  },
+  {
+    name: 'distance',
+    sortable: true,
+    label: 'distance',
+    field: (row: (typeof searchResults.value)[0]) => row.distance,
+  },
+  {
+    name: 'task',
+    sortable: true,
+    required: true,
+    label: 'task',
+    field: (task: LLMTask) => task.id,
+  },
+];
 </script>
