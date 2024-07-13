@@ -21,6 +21,9 @@
       <template #top>
         <Search
           :search-string="$route.query.q?.toString()"
+          :number-of-search-results="
+            parseInt(route.query.k?.toString() || '10')
+          "
           class="fit"
           :is-searching="isSearching"
           @search="onSearchChange"
@@ -60,8 +63,9 @@ import { useTaskyonStore } from 'src/stores/taskyonState';
 import { findLeafTasks } from 'src/modules/taskyon/taskManager';
 import { matSync } from '@quasar/extras/material-icons';
 import { mdiForum } from '@quasar/extras/mdi-v6';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { onMounted } from 'vue';
+import { watch } from 'vue';
 //import { useRoute, useRouter } from 'vue-router';
 
 // TODO:  do some search caching ;) so that we can move faster back & forth between
@@ -69,6 +73,7 @@ import { onMounted } from 'vue';
 
 // Inside your <script setup> section
 const route = useRoute();
+const router = useRouter();
 
 const state = useTaskyonStore();
 const searchResults = ref<(LLMTask & { distance: number | undefined })[]>([]);
@@ -99,7 +104,7 @@ async function searchTasks(searchTerm: string, k: number) {
   const taskManager = await state.getTaskManager();
   //searchResults.value = await vectorStore.query(searchTerm, k)
   if (taskManager) {
-    console.log('search for', searchTerm)
+    console.log('search for', searchTerm);
     isSearching.value = true;
     const { tasks, distances } = await taskManager.vectorSearchTasks(
       searchTerm,
@@ -123,7 +128,7 @@ async function onSearchChange(searchTerm: string | Event, k: number) {
     searchResults.value = [];
   } else {
     // Update the URL with the search parameter
-    //router.push({ query: { q: searchTerm, k } }); // Perform your search here
+    router.push({ query: { q: searchTerm, k } }); // Perform your search here
     console.log(`Searching for ${searchTerm}`);
     await searchTasks(searchTerm, k);
     console.log('finished search!');
@@ -136,8 +141,21 @@ onMounted(() => {
     console.log('doing initial search!');
     searchTasks(
       route.query.q.toString(),
-      50, //parseInt(route.query.k?.toString() || '10'),
+      parseInt(route.query.k?.toString() || '10'),
     );
+  } else {
+    searchResults.value = [];
+  }
+});
+
+watch(route, (newRoute) => {
+  if (newRoute.query.q) {
+    searchTasks(
+      newRoute.query.q.toString(),
+      parseInt(newRoute.query.k?.toString() || '10'),
+    );
+  } else {
+    searchResults.value = [];
   }
 });
 

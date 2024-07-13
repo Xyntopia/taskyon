@@ -32,6 +32,7 @@
           type="number"
           style="max-width: 100px"
           :options="[5, 10, 25, 50, 100]"
+          @update:model-value="requestSearch"
         >
           <q-tooltip>Number of search results.</q-tooltip>
         </q-select>
