@@ -1,10 +1,10 @@
-import { LLMTask, RequireSome, ToolBase } from './types';
+import { TaskNode, RequireSome, ToolBase } from './types';
 import { v1 as uuidv1 } from 'uuid';
 import {
   TaskyonDatabase,
   FileMappingDocType,
-  transformLLMTaskToDocType,
-  transformDocToLLMTask,
+  transformTaskNodeToDocType,
+  transformDocToTaskNode,
   collections,
 } from './rxdb';
 import { openFile } from './OPFS';
@@ -123,7 +123,7 @@ async function hashObject(obj: unknown) {
   return hashHex;
 }
 
-async function taskContentHash(task: LLMTask) {
+async function taskContentHash(task: TaskNode) {
   console.log('generating new hash ID for task');
   // generate this hash ID to check of there are any duplicate tasks or anything like that...
   const hashId = await hashObject([
@@ -136,17 +136,17 @@ async function taskContentHash(task: LLMTask) {
 }
 
 // add a task to the db. Adding some default information such as timestamps etc...
-// whats important here is that the LLMtask can only have one type of content
+// whats important here is that the TaskNode can only have one type of content
 // so when calling the function, we need to pre-select which type of task
 // we want to have.
 // TODO: move this into tyManager and rename ot to "addPartialTask2Tree"
 export async function addTask2Tree(
-  task: RequireSome<Partial<LLMTask>, 'role' | 'content'>,
+  task: RequireSome<Partial<TaskNode>, 'role' | 'content'>,
   parentID: string | undefined,
   taskManager: TyTaskManager,
   execute = true,
   duplicateTaskName = true,
-): Promise<LLMTask['id']> {
+): Promise<TaskNode['id']> {
   if (!duplicateTaskName && task.name) {
     // check if task already exists and throw an error, if it does, because
     // we are not supposed to create it in that case ;)
@@ -162,7 +162,7 @@ export async function addTask2Tree(
 
   const parent = parentID ? await taskManager.getTask(parentID) : undefined;
 
-  const newTask: LLMTask = {
+  const newTask: TaskNode = {
     ...task,
     role: task.role,
     parentID,
@@ -311,9 +311,9 @@ function tyMechanisms() {
   // we need these locks in order to sync our databases..
   const taskLocks = new Map<string, Lock>();
   let subscribers: Array<
-    (task?: LLMTask, taskNum?: number) => void | Promise<void>
+    (task?: TaskNode, taskNum?: number) => void | Promise<void>
   > = [];
-  let taskCountSubscribers: Array<(task?: LLMTask, taskNum?: number) => void> =
+  let taskCountSubscribers: Array<(task?: TaskNode, taskNum?: number) => void> =
     [];
 
   // Lock a task and returns a function closure which can be used to unlock it again...
@@ -332,7 +332,7 @@ function tyMechanisms() {
   }
 
   function subscribeToTaskChanges(
-    callback: (task?: LLMTask, taskNum?: number) => void | Promise<void>,
+    callback: (task?: TaskNode, taskNum?: number) => void | Promise<void>,
     subscribeToTaskCountOnly = false,
   ): void {
     if (subscribeToTaskCountOnly) {
@@ -344,7 +344,7 @@ function tyMechanisms() {
 
   // You may also need a method to unsubscribe if required
   function unsubscribeFromTaskChanges(
-    callback: (task?: LLMTask, taskNum?: number) => void | Promise<void>,
+    callback: (task?: TaskNode, taskNum?: number) => void | Promise<void>,
   ): void {
     subscribers = subscribers.filter((sub) => sub !== callback);
     taskCountSubscribers = taskCountSubscribers.filter(
@@ -353,7 +353,7 @@ function tyMechanisms() {
   }
 
   function notifySubscribers(
-    task: LLMTask | undefined,
+    task: TaskNode | undefined,
     taskNum: number | undefined = undefined,
   ): void {
     /*if (!task && !taskNum) {
@@ -422,7 +422,7 @@ function useTaskVectors() {
   less flexible...
 */
 export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
-  tasks: Map<string, LLMTask>,
+  tasks: Map<string, TaskNode>,
   defaultTools: Tool[],
   taskyonDB?: T,
   vectorizerModel?: string,
@@ -453,7 +453,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
 
   async function countTasks() {
     if (taskyonDB) {
-      return await taskyonDB.llmtasks.count().exec();
+      return await taskyonDB.tasknodes.count().exec();
     } else return undefined;
   }
 
@@ -463,10 +463,10 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     // TODO: wondering if we should maybe get rid of this?  its pretty inefficient to do this
     //       on every reload of our app :P
     if (taskyonDB) {
-      const tasksFromDb = await taskyonDB.llmtasks.find().exec();
+      const tasksFromDb = await taskyonDB.tasknodes.find().exec();
       tasksFromDb.forEach(async (taskDoc) => {
         try {
-          const task = transformDocToLLMTask(taskDoc);
+          const task = transformDocToTaskNode(taskDoc);
           tasks.set(task.id, task);
         } catch (error) {
           console.error('Error transforming task doc:', error);
@@ -483,26 +483,26 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
 
   async function unblockedGetTask(
     taskId: string,
-  ): Promise<LLMTask | undefined> {
+  ): Promise<TaskNode | undefined> {
     // Check if the task exists in the local record
     let task = tasks.get(taskId);
     if (!task && taskyonDB) {
       // If not, load from the database
-      const taskFromDb = await taskyonDB.llmtasks.findOne(taskId).exec();
+      const taskFromDb = await taskyonDB.tasknodes.findOne(taskId).exec();
       if (taskFromDb) {
-        task = transformDocToLLMTask(taskFromDb);
+        task = transformDocToTaskNode(taskFromDb);
         tasks.set(taskId, task); // Update local record
       }
     }
     return task;
   }
 
-  async function getTask(taskId: string): Promise<LLMTask | undefined> {
+  async function getTask(taskId: string): Promise<TaskNode | undefined> {
     await waitForTaskUnlock(taskId);
     return await unblockedGetTask(taskId);
   }
 
-  async function setTask(task: LLMTask, save: boolean): Promise<void> {
+  async function setTask(task: TaskNode, save: boolean): Promise<void> {
     const unlock = await lockTask(task.id);
     await withTaskCountCheck(task.id, async () => {
       tasks.set(task.id, task);
@@ -522,7 +522,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   // if we only have parent properties, we can update
   // maybe also give an option to delete previous trees...
   async function updateTask(
-    updateData: Partial<LLMTask> & { id: string },
+    updateData: Partial<TaskNode> & { id: string },
     save: boolean,
   ): Promise<void> {
     await withTaskCountCheck(updateData.id, async () => {
@@ -586,7 +586,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     console.log('Sync complete.');
   }
 
-  async function addtoVectorDB(task: LLMTask, override = false) {
+  async function addtoVectorDB(task: TaskNode, override = false) {
     const vectorIndex = await getVectorIndex();
     if (vectorIndex && taskyonDB && vectorizerModel) {
       const vec = await vectorizeText(
@@ -614,15 +614,15 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     const task = tasks.get(taskId);
     console.log('save task: ', task);
     if (task && taskyonDB) {
-      const newDBTask = transformLLMTaskToDocType(task);
-      await taskyonDB.llmtasks.upsert(newDBTask);
+      const newDBTask = transformTaskNodeToDocType(task);
+      await taskyonDB.tasknodes.upsert(newDBTask);
       void addtoVectorDB(task);
     }
   }
 
   async function vectorSearchTasks(searchTerm: string, k = 5) {
     console.log('search for', searchTerm);
-    const result = { tasks: [] as LLMTask[], distances: [] as number[] };
+    const result = { tasks: [] as TaskNode[], distances: [] as number[] };
     const vectorIndex = await getVectorIndex();
     if (vectorIndex && vectorizerModel) {
       const queryVec = await vectorizeText(searchTerm, vectorizerModel);
@@ -670,7 +670,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
 
     // Delete from the database
     if (taskyonDB) {
-      const taskDoc = await taskyonDB.llmtasks.findOne(taskId).exec();
+      const taskDoc = await taskyonDB.tasknodes.findOne(taskId).exec();
       if (taskDoc) {
         await taskDoc.remove();
       }
@@ -711,12 +711,12 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
 
   // we can search tasks here using a mongo-db query object
   // find out more here:  https://rxdb.info/rx-query.html
-  async function searchTasks(query: MangoQuery): Promise<LLMTask[]> {
+  async function searchTasks(query: MangoQuery): Promise<TaskNode[]> {
     if (taskyonDB) {
-      const taskList = await taskyonDB.llmtasks.find(query).exec();
+      const taskList = await taskyonDB.tasknodes.find(query).exec();
 
       const llmtasks = taskList.map((toolDoc) => {
-        const task = transformDocToLLMTask(toolDoc);
+        const task = transformDocToTaskNode(toolDoc);
         // update our function cache :)
         tasks.set(task.id, task);
         return task;
@@ -742,8 +742,8 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       });
 
       function hasMessage(
-        task: LLMTask,
-      ): task is LLMTask & { content: { message: string } } {
+        task: TaskNode,
+      ): task is TaskNode & { content: { message: string } } {
         return 'message' in task.content;
       }
       const toolDefs = tasks.filter(hasMessage);

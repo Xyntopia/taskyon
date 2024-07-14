@@ -305,7 +305,7 @@ const TaskContent = z.union([
 // TODO: add an "extended" task and put all information in there which we don't really "need"
 //       to save in the database. E.g. how many follow-up tasks are allowed, how many
 //       errors are allowed for function tasks  etc...  so mostly runtime-logic
-export const LLMTask = z.object({
+export const TaskNode = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   name: z.string().optional(),
   content: TaskContent.default({ message: '' }).describe(
@@ -357,14 +357,14 @@ of how content can be structured. `,
   authorId: z.string().optional(),
   created_at: z.number().optional(),
 });
-export type LLMTask = z.infer<typeof LLMTask>;
+export type TaskNode = z.infer<typeof TaskNode>;
 
-export const TaskListType = z.array(LLMTask);
+export const TaskListType = z.array(TaskNode);
 export type TaskListType = z.infer<typeof TaskListType>;
 
-export type TaskGetter = (input: string) => Promise<LLMTask | undefined>;
+export type TaskGetter = (input: string) => Promise<TaskNode | undefined>;
 
-export const partialTaskDraft = LLMTask.pick({
+export const partialTaskDraft = TaskNode.pick({
   role: true,
   content: true,
   parentID: true,
@@ -400,7 +400,7 @@ export const taskTemplateTypes = {
       label: ['files'],
     }),
   /*file: partialTaskDraft.required({role: true, label: true})
-  .merge(LLMTask['configuration']).default({
+  .merge(TaskNode['configuration']).default({
     role: 'system',
     configuration: {
       message: "test"

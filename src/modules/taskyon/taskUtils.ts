@@ -1,4 +1,4 @@
-import type { LLMTask, TaskGetter } from './types';
+import type { TaskNode, TaskGetter } from './types';
 import OpenAI from 'openai';
 import { dump } from 'js-yaml';
 import { FileMappingDocType } from './rxdb';
@@ -35,7 +35,7 @@ export const taskUtils = (
     // Trace back the parentIDs to the original task in the chain
     while (currentTaskID) {
       // Get the current task
-      const currentTask: LLMTask | undefined = await getTask(currentTaskID);
+      const currentTask: TaskNode | undefined = await getTask(currentTaskID);
       if (currentTask) {
         // Prepend the current task to the conversation list so the selected task ends up being the last in the list
         conversationList.unshift(currentTaskID);
@@ -153,7 +153,7 @@ export const taskUtils = (
   };
 };
 
-export function findAllFilesInTasks(taskList: LLMTask[]): string[] {
+export function findAllFilesInTasks(taskList: TaskNode[]): string[] {
   const fileSet = new Set<string>();
   taskList.forEach((task) => {
     if ('uploadedFiles' in task.content) {

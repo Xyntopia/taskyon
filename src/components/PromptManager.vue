@@ -40,7 +40,7 @@ import { ref, computed } from 'vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
 import ObjectTreeView from './ObjectTreeView.vue';
-import { LLMTask } from 'src/modules/taskyon/types';
+import { TaskNode } from 'src/modules/taskyon/types';
 import UnderConstructionHint from './UnderConstructionHint.vue';
 import { addPrompts } from 'src/modules/taskyon/promptCreation';
 
@@ -67,7 +67,7 @@ void getAllTools().then((tools) => {
 const structuredResponsePrompt = computed(() => {
   if (state.llmSettings.taskDraft.content) {
     const task: Pick<
-      LLMTask,
+      TaskNode,
       'role' | 'content' | 'allowedTools' | 'result' | 'debugging'
     > = {
       content: state.llmSettings.taskDraft.content,

@@ -48,11 +48,11 @@
 <script setup lang="ts">
 import { matContentCopy, matHtml } from '@quasar/extras/material-icons';
 import { dump } from 'js-yaml';
-import type { LLMTask } from 'src/modules/taskyon/types';
+import type { TaskNode } from 'src/modules/taskyon/types';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
-  task: LLMTask;
+  task: TaskNode;
 }>();
 
 const useIframe = ref(false);

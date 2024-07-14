@@ -3,7 +3,7 @@ import { watch, computed, reactive, toRefs, ref } from 'vue';
 import type {
   FunctionArguments,
   Model,
-  LLMTask,
+  TaskNode,
 } from 'src/modules/taskyon/types';
 import axios from 'axios'; // TODO: replace with fetch
 import { LocalStorage, Notify } from 'quasar'; // load dynamically! :)
@@ -222,7 +222,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
   });
 
   // last thing we do after having loaded all settings is to actually start taskyon! :)
-  const TaskList = reactive(new Map<string, LLMTask>());
+  const TaskList = reactive(new Map<string, TaskNode>());
   // callin ExecutionContext.interrupt();  cancels processing of current task
   const taskWorkerController = useTaskWorkerController();
   console.log('initialize taskyon');

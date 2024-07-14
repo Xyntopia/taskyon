@@ -74,12 +74,12 @@
 
 <script setup lang="ts">
 import { PropType } from 'vue';
-import { LLMTask } from 'src/modules/taskyon/types';
+import { TaskNode } from 'src/modules/taskyon/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 
 defineProps({
   task: {
-    type: Object as PropType<LLMTask>,
+    type: Object as PropType<TaskNode>,
     required: true,
   },
 });

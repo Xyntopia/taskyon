@@ -93,13 +93,13 @@ import {
   mdiLanguageMarkdown,
   mdiMessagePlus,
 } from '@quasar/extras/mdi-v6';
-import type { LLMTask } from 'src/modules/taskyon/types';
+import type { TaskNode } from 'src/modules/taskyon/types';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 
 const state = useTaskyonStore();
 
 defineProps<{
-  task: LLMTask;
+  task: TaskNode;
   toggleMarkdown: (id: string) => void;
   createNewConversation: (taskId: string) => Promise<void>;
   editTask: (taskId: string) => Promise<void>;

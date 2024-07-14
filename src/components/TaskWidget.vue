@@ -252,7 +252,7 @@
 import ToolResultWidget from 'components/ToolResultWidget.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import TokenUsage from 'components/TokenUsage.vue';
-import { LLMTask, partialTaskDraft, ToolBase } from 'src/modules/taskyon/types';
+import { TaskNode, partialTaskDraft, ToolBase } from 'src/modules/taskyon/types';
 import tyMarkdown from './tyMarkdown.vue';
 import { computed, ref } from 'vue';
 import { FileMappingDocType } from 'src/modules/taskyon/rxdb';
@@ -273,7 +273,7 @@ import {
 import { openrouterPricing } from 'src/modules/taskyon/utils';
 
 const props = defineProps<{
-  task: LLMTask;
+  task: TaskNode;
   isWorking?: boolean;
   short?: boolean;
 }>();
@@ -314,7 +314,7 @@ async function taskDraftFromTask(taskId: string) {
     await (await state.getTaskManager()).getTask(taskId),
   );
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-  const task = LLMTask.partial().parse(JSON.parse(jsonTask));
+  const task = TaskNode.partial().parse(JSON.parse(jsonTask));
   task.debugging = {};
   task.state = 'Open';
   state.llmSettings.taskDraft = partialTaskDraft.parse(task);

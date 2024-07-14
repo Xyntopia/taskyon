@@ -1,7 +1,7 @@
 import { summarizeTools } from './tools';
 import {
   ToolBase,
-  LLMTask,
+  TaskNode,
   llmSettings,
   StructuredResponseTypes,
   UseToolBase,
@@ -42,7 +42,7 @@ function substituteTemplateVariables<T extends Record<string, string>>(
 }
 
 export function generateOpenAIToolDeclarations(
-  task: LLMTask,
+  task: TaskNode,
   toolCollection: Record<string, ToolBase>,
 ): OpenAI.ChatCompletionTool[] {
   const tools: ToolBase[] =
@@ -84,7 +84,7 @@ export function generateOpenAIToolDeclarations(
  */
 export function addPrompts(
   task: Pick<
-    LLMTask,
+    TaskNode,
     'role' | 'content' | 'allowedTools' | 'result' | 'debugging'
   >,
   toolCollection: Record<string, ToolBase>,
@@ -232,7 +232,7 @@ export function addPrompts(
 }
 
 export async function generateCompleteChat(
-  task: LLMTask,
+  task: TaskNode,
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
 ) {

@@ -331,7 +331,7 @@ import {
 } from 'src/modules/taskyon/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { LLMTask } from 'src/modules/taskyon/types';
+import { TaskNode } from 'src/modules/taskyon/types';
 import ModelSelection from 'components/ModelSelection.vue';
 import { writeFilesToOpfs } from 'src/modules/taskyon/OPFS';
 import { addTask2Tree } from 'src/modules/taskyon/taskManager';
@@ -547,7 +547,7 @@ const currentnewTask = computed(() => {
       };
     }
   }
-  return task as LLMTask; // we can do this, because we defined the "role"
+  return task as TaskNode; // we can do this, because we defined the "role"
 });
 
 async function addFiles2Taskyon(newFiles: File[]) {

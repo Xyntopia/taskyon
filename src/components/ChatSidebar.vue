@@ -144,7 +144,7 @@ import {
 } from 'src/modules/taskyon/taskManager';
 import SimpleSettings from 'components/SimpleSettings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { LLMTask, TaskListType } from 'src/modules/taskyon/types';
+import { TaskNode, TaskListType } from 'src/modules/taskyon/types';
 import { exportFile } from 'quasar';
 import { dump, load } from 'js-yaml';
 import FileDropzone from 'components/FileDropzone.vue';
@@ -176,7 +176,7 @@ async function getLeafTaskNames(tm: TyTaskManager) {
   return taskList;
 }
 
-const activeTask = ref<LLMTask | undefined>();
+const activeTask = ref<TaskNode | undefined>();
 
 watch(
   () => state.llmSettings.selectedTaskId,

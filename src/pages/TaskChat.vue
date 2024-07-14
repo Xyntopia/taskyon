@@ -139,7 +139,7 @@ import { ref, UnwrapRef, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
-import type { LLMTask } from 'src/modules/taskyon/types';
+import type { TaskNode } from 'src/modules/taskyon/types';
 import GetStarted from 'src/components/GetStarted.vue';
 import {
   matKeyboardDoubleArrowDown,
@@ -150,11 +150,11 @@ const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
 const bottomPadding = ref(100);
 const taskThreadContainer = ref<HTMLElement | undefined>();
-const currentTask = ref<LLMTask>();
+const currentTask = ref<TaskNode>();
 const $q = useQuasar();
 const state = useTaskyonStore();
 $q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store...
-const selectedThread = ref<LLMTask[]>([]);
+const selectedThread = ref<TaskNode[]>([]);
 const taskWorkerWaiting = ref(true);
 
 async function updateCurrentTask(taskId: string | undefined) {
@@ -242,7 +242,7 @@ async function updateTaskThread(taskId: string | undefined) {
       threadIDChain.map(async (tId) => {
         return await TM.getTask(tId);
       }),
-    )) as LLMTask[];
+    )) as TaskNode[];
     selectedThread.value = thread;
   } else {
     selectedThread.value = [];

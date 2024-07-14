@@ -13,7 +13,7 @@ import {
 import {
   FunctionCall,
   partialTaskDraft,
-  LLMTask,
+  TaskNode,
   StructuredResponse,
   OpenRouterGenerationInfo,
   llmSettings,
@@ -46,7 +46,7 @@ function extractOpenAIFunctions(
 
 // this function processes all tasks which go to any sort of an LLM
 export async function processChatTask(
-  task: LLMTask,
+  task: TaskNode,
   llmSettings: llmSettings,
   apiKey: string,
   taskManager: TyTaskManager,
@@ -208,7 +208,7 @@ export async function processChatTask(
 }
 
 async function processFunctionTask(
-  task: LLMTask,
+  task: TaskNode,
   tools: Record<string, ToolBase | Tool>,
   taskWorkerController: TaskWorkerController,
   taskManager: TyTaskManager,
@@ -333,7 +333,7 @@ x    ToolResultContent_F --> MessageContent_s_A
 // TODO: split up this function into a "parse" and "addTask part"
 //       this would give us better error information. and better code ;).
 async function generateFollowUpTasksFromResult(
-  finishedTask: LLMTask,
+  finishedTask: TaskNode,
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController,
@@ -351,7 +351,7 @@ async function generateFollowUpTasksFromResult(
     partialTask: partialTaskDraft,
   ) => {
     partialTask.debugging = { ...partialTask.debugging, ...childCosts };
-    const taskTemplate: Partial<LLMTask> = {
+    const taskTemplate: Partial<TaskNode> = {
       configuration: finishedTask.configuration,
     };
     const newTask = deepMerge(taskTemplate, partialTask);
@@ -546,7 +546,7 @@ export function useTaskWorkerController() {
 export type TaskWorkerController = ReturnType<typeof useTaskWorkerController>;
 
 async function getTaskResult(
-  task: LLMTask,
+  task: TaskNode,
   taskManager: TyTaskManager,
   taskId: string,
   llmSettings: llmSettings,
@@ -609,7 +609,7 @@ export async function taskWorker(
   console.log('entering task worker loop...');
   while (true) {
     console.log('waiting for next task!');
-    let task: LLMTask | undefined = undefined;
+    let task: TaskNode | undefined = undefined;
     try {
       if (taskWorkerController.isInterrupted()) {
         // in case of errors, especially if its an interrupt event we simply want to cancel everything :P

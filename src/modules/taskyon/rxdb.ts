@@ -12,20 +12,20 @@ import type { RxStorageMemory } from 'rxdb/plugins/storage-memory';
 import { addRxPlugin } from 'rxdb';
 import { RxDBJsonDumpPlugin } from 'rxdb/plugins/json-dump';
 import { RxDBMigrationPlugin } from 'rxdb/plugins/migration';
-import { LLMTask } from './types';
+import { TaskNode } from './types';
 // TOOD: remove at some point in the future...
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
 addRxPlugin(RxDBDevModePlugin);
 addRxPlugin(RxDBJsonDumpPlugin);
 addRxPlugin(RxDBMigrationPlugin);
 
-const llmTaskSchemaLiteral = {
+const taskNodeSchemaLiteral = {
   // TODO: remove everything thats "local" from task schema.
   //       we would like to try to make every task "immutable"
   //       so this include for example he state of the task.
   //       and other things that right now get changed "later".
-  title: 'LLMTask schema',
-  version: 5,
+  title: 'TaskNode schema',
+  version: 0,
   type: 'object',
   primaryKey: 'id',
   properties: {
@@ -98,18 +98,19 @@ const llmTaskSchemaLiteral = {
   required: ['id', 'role', 'state'],
 } as const;
 
-const llmTaskSchemaTyped = toTypedRxJsonSchema(llmTaskSchemaLiteral);
-export type LLMTaskDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
-  typeof llmTaskSchemaTyped
+const taskNodeSchemaTyped = toTypedRxJsonSchema(taskNodeSchemaLiteral);
+export type TaskNodeDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
+  typeof taskNodeSchemaTyped
 >;
-export const llmTaskSchema: RxJsonSchema<LLMTaskDocType> = llmTaskSchemaLiteral;
+export const taskNodeSchema: RxJsonSchema<TaskNodeDocType> =
+  taskNodeSchemaLiteral;
 
-// Assert LLMTask to be LLMTaskDocType
-//const testLLMTask: LLMTaskDocType = {} as LLMTask;
-//const testLLMTaskDocType: LLMTask = {} as LLMTaskDocType;
+// Assert TaskNode to be TaskNodeDocType
+//const testTaskNode: TaskNodeDocType = {} as TaskNode;
+//const testTaskNodeDocType: TaskNode = {} as TaskNodeDocType;
 
 //type Equals<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
-//type AreEqual = Equals<LLMTask, LLMTaskDocType>;
+//type AreEqual = Equals<TaskNode, TaskNodeDocType>;
 
 const fileMappingSchemaLiteral = {
   title: 'FileMapping schema',
@@ -172,47 +173,23 @@ const vectorMappingSchema: RxJsonSchema<vectorMappingDocType> =
   vectorMappingSchemaLiteral;
 
 // Define the collection types
-type LLMTaskCollection = RxCollection<LLMTaskDocType>;
+type TaskNodeCollection = RxCollection<TaskNodeDocType>;
 type FileMappingCollection = RxCollection<FileMappingDocType>;
 type VectorMappingCollection = RxCollection<vectorMappingDocType>;
 
 // Define the database type
 export type TaskyonDatabaseCollections = {
-  llmtasks: LLMTaskCollection;
+  tasknodes: TaskNodeCollection;
   filemappings: FileMappingCollection;
   vectormappings: VectorMappingCollection;
 };
 export type TaskyonDatabase = RxDatabase<TaskyonDatabaseCollections>;
 
 export const collections = {
-  llmtasks: {
-    schema: llmTaskSchema,
+  tasknodes: {
+    schema: taskNodeSchema,
     autoMigrate: true, // <- migration will not run at creation
-    migrationStrategies: {
-      // 1 means, this transforms data from version 0 to version 1
-      1: function (/*oldDoc*/) {
-        // for this version we simply discard everything from version 0
-        return null;
-      },
-      2: function (oldDoc: LLMTaskDocType) {
-        return oldDoc;
-      },
-      3: function (oldDoc: LLMTaskDocType) {
-        // we simply added additional fields, so no problem here :).
-        return oldDoc;
-      },
-      4: function (oldDoc: LLMTaskDocType) {
-        // we simply added additional fields, so no problem here :).
-        return oldDoc;
-      },
-      5: function (oldDoc: LLMTaskDocType) {
-        // we simply added additional fields, so no problem here :).
-        const newDoc = oldDoc;
-        newDoc.content = JSON.stringify({ message: oldDoc.content || '' });
-        newDoc.configuration = undefined;
-        return newDoc;
-      },
-    },
+    migrationStrategies: {},
   },
   filemappings: {
     schema: fileMappingSchema,
@@ -263,30 +240,32 @@ export async function createTaskyonDatabase(
   return db;
 }
 
-export function transformLLMTaskToDocType(llmTask: LLMTask): LLMTaskDocType {
-  // Mapping and transforming fields from LLMTask to LLMTaskDocType of taskyonDB/RxDB
+export function transformTaskNodeToDocType(
+  taskNode: TaskNode,
+): TaskNodeDocType {
+  // Mapping and transforming fields from TaskNode to TaskNodeDocType of taskyonDB/RxDB
   // TODO: maybe we can do the same thing here using zod parse? This would also add some more validation
   //       capabilities before saving anything in the db..
-  const nonReactiveLLMTask = JSON.parse(JSON.stringify(llmTask)) as LLMTask;
+  const nonReactiveTaskNode = JSON.parse(JSON.stringify(taskNode)) as TaskNode;
   return {
-    ...nonReactiveLLMTask,
-    content: JSON.stringify(llmTask.content),
-    configuration: llmTask.configuration
-      ? JSON.stringify(llmTask.configuration)
+    ...nonReactiveTaskNode,
+    content: JSON.stringify(taskNode.content),
+    configuration: taskNode.configuration
+      ? JSON.stringify(taskNode.configuration)
       : undefined,
-    debugging: llmTask.debugging
-      ? JSON.stringify(llmTask.debugging)
+    debugging: taskNode.debugging
+      ? JSON.stringify(taskNode.debugging)
       : undefined,
-    result: llmTask.result ? JSON.stringify(llmTask.result) : undefined,
+    result: taskNode.result ? JSON.stringify(taskNode.result) : undefined,
   };
 }
 
-export function transformDocToLLMTask(
-  doc: RxDocument<LLMTaskDocType>,
-): LLMTask {
+export function transformDocToTaskNode(
+  doc: RxDocument<TaskNodeDocType>,
+): TaskNode {
   // Convert the database document to a JSON string in order to make a copy of it.
   const jsonString = JSON.stringify(doc.toJSON());
-  const parsedDoc = JSON.parse(jsonString) as RxDocument<LLMTaskDocType>;
+  const parsedDoc = JSON.parse(jsonString) as RxDocument<TaskNodeDocType>;
 
   // Safely parse the debugging, configuration, and result fields
   const parsedContent =
@@ -306,8 +285,8 @@ export function transformDocToLLMTask(
       ? (JSON.parse(parsedDoc.result) as Record<string, unknown>)
       : undefined;
 
-  // Parse the JSON string and transform it into an LLMTask object
-  // TODO:  try to throw errors here, when our LLMTask object and our database object differ.
+  // Parse the JSON string and transform it into an TaskNode object
+  // TODO:  try to throw errors here, when our TaskNode object and our database object differ.
   const tmpObj = {
     ...parsedDoc,
     content: parsedContent, // we do this here, because in some situations the task has the wrong format...
@@ -315,7 +294,7 @@ export function transformDocToLLMTask(
     configuration: parsedConfiguration,
     result: parsedResult,
   };
-  const llmTask = LLMTask.parse(tmpObj);
+  const tn = TaskNode.parse(tmpObj);
 
-  return llmTask;
+  return tn;
 }

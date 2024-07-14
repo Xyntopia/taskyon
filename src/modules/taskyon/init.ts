@@ -1,5 +1,5 @@
 import { useTyTaskManager } from './taskManager';
-import type { LLMTask } from './types';
+import type { TaskNode } from './types';
 import { createTaskyonDatabase, TaskyonDatabase } from './rxdb';
 import {
   TaskWorkerController,
@@ -16,7 +16,7 @@ export async function initTaskyon(
   logError: (message: string) => void,
   // we explicitly provide a tasklist here, this gives us the chance to provide a reactive
   // value in order to get updates to the list of tasks immediatly reflected in the UI.
-  TaskList: Map<string, LLMTask>
+  TaskList: Map<string, TaskNode>
 ) {
   const ToolList: Tool[] = [
     executePythonScript,

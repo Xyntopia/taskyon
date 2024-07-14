@@ -57,7 +57,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import Search from 'components/SearchInput.vue';
-import { LLMTask } from 'src/modules/taskyon/types';
+import { TaskNode } from 'src/modules/taskyon/types';
 import Task from 'src/components/TaskWidget.vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { findLeafTasks } from 'src/modules/taskyon/taskManager';
@@ -76,7 +76,7 @@ const route = useRoute();
 const router = useRouter();
 
 const state = useTaskyonStore();
-const searchResults = ref<(LLMTask & { distance: number | undefined })[]>([]);
+const searchResults = ref<(TaskNode & { distance: number | undefined })[]>([]);
 const syncProgressString = ref('0/0');
 const syncProgress = ref(0.0);
 const taskCount = ref<number | string>('N/A');
@@ -180,7 +180,7 @@ const columns = [
   {
     name: 'id',
     label: 'id',
-    field: (task: LLMTask) => task.id,
+    field: (task: TaskNode) => task.id,
   },
   {
     name: 'distance',
@@ -193,7 +193,7 @@ const columns = [
     sortable: true,
     required: true,
     label: 'task',
-    field: (task: LLMTask) => task.id,
+    field: (task: TaskNode) => task.id,
   },
 ];
 </script>

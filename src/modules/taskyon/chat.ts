@@ -1,7 +1,7 @@
 //import { useCachedModels } from './mlModels';
 import type {
   ToolBase,
-  LLMTask,
+  TaskNode,
   OpenAIMessage,
   OpenRouterGenerationInfo,
   Model,
@@ -127,10 +127,10 @@ export async function countToolTokens(functionList: ToolBase[]) {
 }
 
 export async function estimateChatTokens(
-  task: LLMTask,
+  task: TaskNode,
   chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   tools: Record<string, ToolBase>,
-): Promise<LLMTask['debugging']['estimatedTokens']> {
+): Promise<TaskNode['debugging']['estimatedTokens']> {
   const functions: ToolBase[] = mapFunctionNames(
     task.allowedTools || [],
     tools,
@@ -377,7 +377,7 @@ export async function getOpenRouterGenerationInfo(
 }
 
 export function enrichWithDelayedUsageInfos(
-  task: LLMTask,
+  task: TaskNode,
   taskManager: TyTaskManager,
   generationInfo?: OpenRouterGenerationInfo,
 ) {
@@ -435,7 +435,7 @@ async function uploadFileToOpenAI(
 
 // TODO: merge this with our taskyon "internal" agents...
 function convertTasksToOpenAIThread(
-  taskList: LLMTask[],
+  taskList: TaskNode[],
   /*fileMappings: Record<string, string>*/
 ): OpenAI.Beta.ThreadCreateParams.Message[] {
   const messageList = taskList.map((task) => {
@@ -457,7 +457,7 @@ function convertTasksToOpenAIThread(
 }
 
 export async function getOpenAIAssistantResponse(
-  task: LLMTask,
+  task: TaskNode,
   openAIApiKey: string,
   openAIAssistantId: string,
   taskManager: TyTaskManager,
@@ -467,7 +467,7 @@ export async function getOpenAIAssistantResponse(
     console.log('send task to assistant!', task);
 
     // get all messages from a chat
-    const taskList: LLMTask[] = [];
+    const taskList: TaskNode[] = [];
     const taskIdChain = await taskManager.taskChain(task.id);
     for (const t of taskIdChain) {
       const T = await taskManager.getTask(t);
