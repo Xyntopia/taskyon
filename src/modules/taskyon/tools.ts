@@ -168,6 +168,10 @@ export const getFileContent: Tool = {
   },
 };
 
+/*export const taskyonConfiguration: Tool = {
+
+}*/
+
 export const localVectorStoreSearch: Tool = {
   function: async ({ searchTerm }: { searchTerm: string }) => {
     const vectorStore = useVectorStore();

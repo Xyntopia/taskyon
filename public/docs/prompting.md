@@ -27,3 +27,8 @@ The user provided the additional info about how they would like you to respond:
 ````
 
 ---
+
+
+## more rules
+
+https://llama.meta.com/docs/how-to-guides/prompting/#chain-of-thought-technique
