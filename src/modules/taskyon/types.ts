@@ -234,6 +234,14 @@ export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>;
 
 const answer = z.string().nullish();
 const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish();
+type yesno = z.infer<typeof yesno>;
+
+// Convert yesno value to boolean
+export const yesnoToBoolean = (value: yesno): boolean => {
+  if (value === 'yes') return true;
+  if (value === 'no') return false;
+  return !!value; // Handles boolean, null, undefined
+};
 
 export const UseToolBase = z.object({
   'use tool': yesno,

@@ -19,6 +19,7 @@ import {
   llmSettings,
   ToolBase,
   TaskProcessingError,
+  yesnoToBoolean,
 } from './types';
 import { addTask2Tree, processTasksQueue } from './taskManager';
 import type { OpenAI } from 'openai';
@@ -442,9 +443,16 @@ async function generateFollowUpTasksFromResult(
         // structured response as a normal "message" task to the chain...
         // this way we can put all the parsing logic & interpretation and all of this here. While
         // our tasks only have to process the actual data ther're receiving
+
+        const retry =
+          !yesnoToBoolean(structResponse.stop) ||
+          yesnoToBoolean(structResponse['try again']) ||
+          yesnoToBoolean(structResponse['should we retry?']);
+
         if (
           'toolCommand' in structResponse &&
-          structResponse.toolCommand?.name
+          structResponse.toolCommand?.name &&
+          retry
         ) {
           const newTaskid = await addFollowUpTask(false, {
             role: 'assistant',
