@@ -12,14 +12,14 @@
       <!-- "Task" Display -->
       <ConversationWidget
         v-if="
-          selectedThread.length > 0 &&
+          state.selectedThread.length > 0 &&
           state.llmSettings.selectedApi &&
           state.keys[state.llmSettings.selectedApi]
         "
-        :selected-thread="selectedThread"
+        :selected-thread="state.selectedThread"
         :state="state"
-        :current-task="currentTask"
-        :task-worker-waiting="taskWorkerWaiting"
+        :current-task="state.currentTask"
+        :task-worker-waiting="state.taskWorkerWaiting"
       />
       <!-- Welcome Message -->
       <div
@@ -77,7 +77,7 @@
         </div>
         <div class="col-auto">
           <q-btn
-            v-if="currentTask && !taskWorkerWaiting"
+            v-if="state.currentTask && !state.taskWorkerWaiting"
             fab-mini
             class="taskyon-control-button"
             :icon="matStop"
@@ -95,11 +95,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, UnwrapRef, watch } from 'vue';
+import { ref, UnwrapRef } from 'vue';
 import { useQuasar, scroll } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
-import type { TaskNode } from 'src/modules/taskyon/types';
 import GetStarted from 'src/components/GetStarted.vue';
 import {
   matKeyboardDoubleArrowDown,
@@ -110,29 +109,16 @@ import ConversationWidget from 'components/ConversationWidget.vue';
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
 const bottomPadding = ref(100);
-const taskThreadContainer = ref<HTMLElement | undefined>();
 const $q = useQuasar();
 const state = useTaskyonStore();
+const taskThreadContainer = ref<HTMLElement | undefined>();
 $q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store...
-const selectedThread = ref<TaskNode[]>([]);
-const taskWorkerWaiting = ref(true);
-
-const currentTask = ref<TaskNode>();
-async function updateCurrentTask(taskId: string | undefined) {
-  if (taskId) {
-    currentTask.value = await (await state.getTaskManager()).getTask(taskId);
-  }
-  await sleep(100);
-  taskWorkerWaiting.value = state.taskWorkerController.isWaiting();
-}
-void updateCurrentTask(state.llmSettings.selectedTaskId);
-watch(() => state.llmSettings.selectedTaskId, updateCurrentTask);
 
 const stoppingTasks = ref(false);
 async function stopTasks() {
   console.log('stopping!');
   stoppingTasks.value = true;
-  state.taskWorkerController.interrupt(currentTask.value?.id);
+  state.taskWorkerController.interrupt(state.currentTask?.id);
 
   await sleep(1000);
   // Poll every 500ms to check if the task is stopped
@@ -140,7 +126,7 @@ async function stopTasks() {
     console.log('waiting for task to stop...');
     await sleep(100);
   }
-  taskWorkerWaiting.value = true;
+  state.taskWorkerWaiting = true;
   stoppingTasks.value = false;
 }
 
@@ -191,27 +177,6 @@ function scrollToThreadEnd() {
   state.lockBottomScroll = true;
   setVerticalScrollPosition(window, offset, duration);
 }
-
-async function updateTaskThread(taskId: string | undefined) {
-  console.log('update task thread...');
-  if (taskId) {
-    const threadIDChain = await (
-      await state.getTaskManager()
-    ).taskChain(taskId);
-    const TM = await state.getTaskManager();
-    const thread = (await Promise.all(
-      threadIDChain.map(async (tId) => {
-        return await TM.getTask(tId);
-      }),
-    )) as TaskNode[];
-    selectedThread.value = thread;
-  } else {
-    selectedThread.value = [];
-  }
-}
-
-void updateTaskThread(state.llmSettings.selectedTaskId);
-watch(() => state.llmSettings.selectedTaskId, updateTaskThread);
 
 function handleResize(size: { height: number }) {
   bottomPadding.value = size.height;

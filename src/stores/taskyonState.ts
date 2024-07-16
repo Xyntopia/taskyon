@@ -340,11 +340,53 @@ export const useTaskyonStore = defineStore(storeName, () => {
     }
   });
 
+  function useReactiveTasks() {
+    const selectedThread = ref<TaskNode[]>([]);
+    const taskWorkerWaiting = ref(true);
+    const currentTask = ref<TaskNode>();
+
+    async function updateCurrentTask(taskId: string | undefined) {
+      if (taskId) {
+        currentTask.value = await (await getTaskManager()).getTask(taskId);
+      }
+      await sleep(100);
+      taskWorkerWaiting.value = taskWorkerController.isWaiting();
+    }
+    void updateCurrentTask(stateRefs.llmSettings.selectedTaskId);
+    watch(() => stateRefs.llmSettings.selectedTaskId, updateCurrentTask);
+
+    async function updateTaskThread(taskId: string | undefined) {
+      console.log('update task thread...');
+      if (taskId) {
+        const threadIDChain = await (await getTaskManager()).taskChain(taskId);
+        const TM = await getTaskManager();
+        const thread = (await Promise.all(
+          threadIDChain.map(async (tId) => {
+            return await TM.getTask(tId);
+          }),
+        )) as TaskNode[];
+        selectedThread.value = thread;
+      } else {
+        selectedThread.value = [];
+      }
+    }
+
+    void updateTaskThread(stateRefs.llmSettings.selectedTaskId);
+    watch(() => stateRefs.llmSettings.selectedTaskId, updateTaskThread);
+
+    return {
+      selectedThread,
+      taskWorkerWaiting,
+      currentTask,
+    };
+  }
+
   // it is *SUPERIMPORTANT*  that we ONLY return computed refs & functions in the store EXCEPT
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
   return {
     ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
+    ...useReactiveTasks(),
     $reset,
     getOpenRouterPKCEKey,
     addModelToHistory,
