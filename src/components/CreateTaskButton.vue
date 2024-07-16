@@ -28,6 +28,7 @@ async function getMarkdown(url: URL) {
 
 // Fetch, split, and parse the markdown file
 function processMarkdown(markdown: string) /*: Promise<partialTaskDraft[]>*/ {
+  console.log('add new tasks', markdown);
   // Split the markdown content by the separator
   const messages = markdown.split('---').map((message) => message.trim());
 
@@ -37,9 +38,17 @@ function processMarkdown(markdown: string) /*: Promise<partialTaskDraft[]>*/ {
   // Extract metadata and content from each message
   const parsedData = messages.map((message) => {
     const metadataMatch = metadataRegex.exec(message);
-    const metadata = (
-      metadataMatch ? load(metadataMatch[1].trim()) : {}
-    ) as Record<string, unknown>;
+    let metadata;
+    if (metadataMatch && metadataMatch[1]) {
+      metadata = (metadataMatch ? load(metadataMatch[1].trim()) : {}) as Record<
+        string,
+        unknown
+      >;
+    } else {
+      metadata = {
+        role: 'user',
+      };
+    }
     const content = message.replace(metadataRegex, '').trim();
     const task = partialTaskDraft.safeParse({
       content: { message: content },
