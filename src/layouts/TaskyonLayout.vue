@@ -63,16 +63,11 @@
             more..</q-tooltip
           >
         </q-btn>
-        <q-btn
-          v-if="!minMode"
-          flat
-          :size="btnSize"
-          dense
-          round
-          :icon="matSettings"
-          to="/settings"
-        >
-          <q-tooltip>Open settings</q-tooltip>
+        <q-btn flat dense round :size="btnSize" :icon="matToc">
+          <q-menu>
+            <table-of-chat-content></table-of-chat-content>
+          </q-menu>
+          <q-tooltip> Table of Contents </q-tooltip>
         </q-btn>
         <q-separator
           v-if="!minMode"
@@ -88,6 +83,12 @@
         >
           <q-menu>
             <q-list dense>
+              <q-item :size="btnSize" to="/settings">
+                <q-item-section avatar>
+                  <q-icon :name="matSettings" />
+                </q-item-section>
+                <q-item-section>Open settings</q-item-section>
+              </q-item>
               <q-item
                 v-ripple
                 clickable
@@ -187,11 +188,14 @@ import {
   matMenu,
   matSearch,
   matSettings,
+  matToc,
   matWarning,
 } from '@quasar/extras/material-icons';
 import { mdiForum, mdiForumPlus, mdiGithub } from '@quasar/extras/mdi-v6';
+import TableOfChatContent from 'src/components/TableOfChatContent.vue';
 
 const drawerOpen = ref(false);
+
 
 const ChatSidebar = defineAsyncComponent(
   () =>
@@ -200,7 +204,7 @@ const ChatSidebar = defineAsyncComponent(
       /* webpackMode: "lazy" */
       /* webpackFetchPriority: "low" */
       'components/ChatSidebar.vue'
-    )
+    ),
 );
 
 //const state = useTaskyonStore();
