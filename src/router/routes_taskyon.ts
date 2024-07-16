@@ -46,7 +46,7 @@ export const taskyonRoutes = {
     },
     {
       path: 'prompts',
-      component: () => import('components/PromptManager.vue'),
+      component: () => import('pages/PromptManager.vue'),
     },
     ...mdRoutes,
   ],
