@@ -1,8 +1,8 @@
 <template>
   <q-page>
     <UnderConstructionHint />
-    <div class="row q-gutter-xs fit q-pa-xs">
-      <div class="col">
+    <div class="row q-gutter-xs q-pa-xs">
+      <div class="col fit">
         <q-toggle v-model="edit" label="Edit Prompts" />
         <ObjectTreeView
           v-if="edit"
@@ -31,6 +31,12 @@
       <div class="col-6 column">
         <div class="text-caption text-center q-pt-sm">
           You can ask the AI here to help you changing the prompts!
+          <create-task-button
+            :markdown="currentPromptYaml"
+            label="Start new conversation about prompts"
+            outline
+            :icon="mdiMagicStaff"
+          />
         </div>
         <div class="col">
           <q-scroll-area class="fit">
@@ -60,6 +66,9 @@ import { TaskNode } from 'src/modules/taskyon/types';
 import UnderConstructionHint from '../components/UnderConstructionHint.vue';
 import { addPrompts } from 'src/modules/taskyon/promptCreation';
 import ConversationWidget from 'src/components/ConversationWidget.vue';
+import { mdiMagicStaff } from '@quasar/extras/mdi-v6';
+import CreateTaskButton from 'src/components/CreateTaskButton.vue';
+import { dump } from 'js-yaml';
 
 const state = useTaskyonStore();
 
@@ -76,6 +85,23 @@ const handleReady = (payload) => {
 async function getAllTools() {
   return (await state.getTaskManager()).searchToolDefinitions();
 }
+
+const currentPromptYaml = computed(() => {
+  return `
+<!--taskyon
+role: assistant
+name: assisted prompt change 
+-->  
+
+Here are the prompts taskyon is currently using:
+
+\`\`\`yaml
+${dump(state.llmSettings.taskChatTemplates)}
+\`\`\`
+
+What would you like to change?
+`;
+});
 
 const toolCollection = ref<Awaited<ReturnType<typeof getAllTools>>>({});
 void getAllTools().then((tools) => {

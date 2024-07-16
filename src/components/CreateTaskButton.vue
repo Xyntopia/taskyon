@@ -30,7 +30,7 @@ async function getMarkdown(url: URL) {
 function processMarkdown(markdown: string) /*: Promise<partialTaskDraft[]>*/ {
   console.log('add new tasks', markdown);
   // Split the markdown content by the separator
-  const messages = markdown.split('---').map((message) => message.trim());
+  const messages = markdown.split(/^---/gm).map((message) => message.trim());
 
   // Regular expression for matching metadata
   const metadataRegex = /<!--taskyon([\s\S]*?)-->/;
