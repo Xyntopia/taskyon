@@ -192,10 +192,8 @@ import {
   matWarning,
 } from '@quasar/extras/material-icons';
 import { mdiForum, mdiForumPlus, mdiGithub } from '@quasar/extras/mdi-v6';
-import TableOfChatContent from 'src/components/TableOfChatContent.vue';
 
 const drawerOpen = ref(false);
-
 
 const ChatSidebar = defineAsyncComponent(
   () =>
@@ -204,6 +202,16 @@ const ChatSidebar = defineAsyncComponent(
       /* webpackMode: "lazy" */
       /* webpackFetchPriority: "low" */
       'components/ChatSidebar.vue'
+    ),
+);
+
+const TableOfChatContent = defineAsyncComponent(
+  () =>
+    import(
+      /* webpackChunkName: "TableOfChatContent" */
+      /* webpackMode: "lazy" */
+      /* webpackFetchPriority: "low" */
+      'components/TableOfChatContent.vue'
     ),
 );
 
