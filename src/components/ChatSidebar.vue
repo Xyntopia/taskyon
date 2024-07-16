@@ -2,17 +2,23 @@
 <template>
   <q-list dense class="q-pa-xs">
     <!-- Conversation Area -->
-    <q-item v-ripple default-opened hide-expand-icon clickable>
-      <div class="col row q-gutter-sm items-end justify-around">
-        <q-icon
-          class="col-auto"
-          name="svguse:/taskyon_mono_opt.svg#taskyon"
-          size="sm"
-        />
-        <div class="col-auto text-weight-medium">Conversation Threads</div>
-      </div>
-    </q-item>
+    <q-expansion-item
+      dense
+      label="Content"
+      icon="svguse:/taskyon_mono_opt.svg#taskyon"
+      class="column"
+      default-opened
+    >
+      <q-list dense>
+        <q-item v-for="n in conversationThread" :key="n" flat>
+          <q-item-section v-ripple clickable>
+            {{ n }}
+          </q-item-section>
+        </q-item>
+      </q-list>
+    </q-expansion-item>
     <div class="q-pt-md">
+      <div class="text-caption text-center">Conversations</div>
       <div class="column items-stretch">
         <q-list>
           <q-item
@@ -167,6 +173,8 @@ type taskEntry = { id: string; name: string | undefined };
 
 const conversationIDs = ref<taskEntry[]>([]);
 
+const conversationThread = ref<(string | undefined)[]>([]);
+
 async function getLeafTaskNames(tm: TyTaskManager) {
   const leafTaskIds = tm.getLeafTasks().reverse().slice(0, 10);
   let taskList: taskEntry[] = [];
@@ -178,12 +186,24 @@ async function getLeafTaskNames(tm: TyTaskManager) {
 
 const activeTask = ref<TaskNode | undefined>();
 
+async function updateToc(newTaskId: string) {
+  const tm = await state.getTaskManager();
+  const tasks = await tm.getTaskChain(newTaskId);
+  const toc = tasks.map((t) => t?.name).filter((n) => n);
+  conversationThread.value = toc;
+}
+
+if (state.llmSettings.selectedTaskId) {
+  updateToc(state.llmSettings.selectedTaskId);
+}
+
 watch(
   () => state.llmSettings.selectedTaskId,
   async (newTaskId) => {
     const tm = await state.getTaskManager();
     if (newTaskId) {
       activeTask.value = await tm.getTask(newTaskId);
+      updateToc(newTaskId);
     }
   },
 );
