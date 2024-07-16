@@ -29,9 +29,11 @@
         </q-card>
       </div>
       <div class="col-6 column">
-        <div class="text-caption text-center q-pt-sm">You can ask the AI here to help you changing the prompts!</div>
+        <div class="text-caption text-center q-pt-sm">
+          You can ask the AI here to help you changing the prompts!
+        </div>
         <div class="col">
-          <q-scroll-area>
+          <q-scroll-area class="fit">
             <conversation-widget
               :selected-thread="state.selectedThread"
               :state="state"
