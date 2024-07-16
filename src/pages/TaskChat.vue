@@ -10,56 +10,17 @@
     >
       <q-scroll-observer axis="vertical" :debounce="500" @scroll="onScroll" />
       <!-- "Task" Display -->
-      <div
+      <ConversationWidget
         v-if="
           selectedThread.length > 0 &&
           state.llmSettings.selectedApi &&
           state.keys[state.llmSettings.selectedApi]
         "
-        class="col"
-        style="background-color: inherit; color: inherit"
-        flat
-        square
-      >
-        <div v-if="currentTask" class="q-gutter-xs q-px-xs task-container">
-          <q-card
-            v-for="task in selectedThread"
-            :key="task.id"
-            :flat="$q.dark.isActive"
-            :class="task.role"
-          >
-            <Task
-              v-if="!('structuredResponse' in task.content)"
-              :id="task.id"
-              :task="task"
-              :is-working="!taskWorkerWaiting && task.id === currentTask.id"
-              style="min-width: 300px"
-              :class="[
-                'q-pa-xs',
-                task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
-              ]"
-            />
-          </q-card>
-          <!--Render tasks which are in progress-->
-          <q-card v-if="!taskWorkerWaiting" class="row">
-            <div class="col">
-              <ty-markdown
-                no-line-numbers
-                no-mermaid
-                :src="currentTask.debugging.streamContent || ''"
-              />
-              <ty-markdown
-                no-line-numbers
-                no-mermaid
-                :src="
-                  JSON.stringify(currentTask.debugging.toolStreamArgsContent)
-                "
-              />
-              <q-spinner-dots size="2rem" color="secondary" />
-            </div>
-          </q-card>
-        </div>
-      </div>
+        :selected-thread="selectedThread"
+        :state="state"
+        :current-task="currentTask"
+        :task-worker-waiting="taskWorkerWaiting"
+      />
       <!-- Welcome Message -->
       <div
         v-else
@@ -134,8 +95,6 @@
 </template>
 
 <script setup lang="ts">
-import Task from 'components/TaskWidget.vue';
-import tyMarkdown from 'src/components/tyMarkdown.vue';
 import { ref, UnwrapRef, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
@@ -147,17 +106,18 @@ import {
   matStop,
 } from '@quasar/extras/material-icons';
 import { sleep } from 'src/modules/taskyon/utils';
+import ConversationWidget from 'components/ConversationWidget.vue';
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
 const bottomPadding = ref(100);
 const taskThreadContainer = ref<HTMLElement | undefined>();
-const currentTask = ref<TaskNode>();
 const $q = useQuasar();
 const state = useTaskyonStore();
 $q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store...
 const selectedThread = ref<TaskNode[]>([]);
 const taskWorkerWaiting = ref(true);
 
+const currentTask = ref<TaskNode>();
 async function updateCurrentTask(taskId: string | undefined) {
   if (taskId) {
     currentTask.value = await (await state.getTaskManager()).getTask(taskId);
@@ -257,34 +217,3 @@ function handleResize(size: { height: number }) {
   bottomPadding.value = size.height;
 }
 </script>
-
-<style lang="sass">
-
-.task-container
-  display: flex
-  flex-direction: column
-  max-width: 800px
-  margin: 0 auto // Centers the container
-
-  // Default style for all tasks
-  > div
-    width: fit-content // Makes the width of the task as small as its content
-    max-width: 99% // Prevents the task from growing beyond the container width
-    box-sizing: border-box // Ensures padding and borders are included in width calculation
-    align-self: flex-start // Aligns to the left by default
-
-  // Specific style for tasks with the 'user' role
-  .user
-    align-self: flex-end // Aligns to the right
-
-.user-message
-  position: relative
-.user-message::after
-  content: ''
-  position: absolute
-  top: 0
-  right: 0
-  bottom: 0
-  width: 5px /* Width of the fading effect */
-  background: linear-gradient(to top, rgba(255, 255, 255, 0), $secondary)
-</style>

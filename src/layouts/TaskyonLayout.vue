@@ -63,7 +63,14 @@
             more..</q-tooltip
           >
         </q-btn>
-        <q-btn flat dense round :size="btnSize" :icon="matToc">
+        <q-btn
+          v-if="$route.path == '/'"
+          flat
+          dense
+          round
+          :size="btnSize"
+          :icon="matToc"
+        >
           <q-menu>
             <table-of-chat-content></table-of-chat-content>
           </q-menu>
@@ -87,7 +94,7 @@
                 <q-item-section avatar>
                   <q-icon :name="matSettings" />
                 </q-item-section>
-                <q-item-section>Open settings</q-item-section>
+                <q-item-section>Taskyon Settings</q-item-section>
               </q-item>
               <q-item
                 v-ripple

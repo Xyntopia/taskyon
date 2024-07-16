@@ -37,8 +37,7 @@
           <div class="row items-stretch">
             <div class="col-auto">
               <q-btn
-                flat
-                stretch
+                outline
                 :icon="mdiForum"
                 dense
                 to="chat"
