@@ -326,9 +326,11 @@ For more information about Taskyon tools, visit [Taskyon Tools](https://taskyon.
 
 You can view the complete code files here:
 
-the finished example: [here](https://taskyon.space/docs/examples/simpleExample.html)
+the finished example:
 
-By enabling browser debugging you can check the soruce code of the files!
+[https://codepen.io/xyntopia/pen/VwJvrLo?editors=1010](https://codepen.io/xyntopia/pen/VwJvrLo?editors=1010)
+
+By enabling browser debugging you can check the source code of the files!
 
 - [simpleExample.html](https://taskyon.space/docs/examples/simpleExample.html)
 - [exampleToolDefinition.js](https://taskyon.space/docs/examples/exampleToolDefinition.js)
