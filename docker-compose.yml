@@ -1,5 +1,6 @@
 services:
   taskyon:
+    image: xyntopia/taskyon
     build:
       context: .
       dockerfile: ./Dockerfile
