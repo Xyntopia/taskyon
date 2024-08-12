@@ -6,18 +6,18 @@ import {
   RxDocument,
   toTypedRxJsonSchema,
   ExtractDocumentTypeFromTypedRxJsonSchema,
+  addRxPlugin
 } from 'rxdb';
 import { getRxStorageDexie, RxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import type { RxStorageMemory } from 'rxdb/plugins/storage-memory';
-import { addRxPlugin } from 'rxdb';
 import { RxDBJsonDumpPlugin } from 'rxdb/plugins/json-dump';
-import { RxDBMigrationPlugin } from 'rxdb/plugins/migration';
 import { TaskNode } from './types';
 // TOOD: remove at some point in the future...
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
+import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 addRxPlugin(RxDBDevModePlugin);
 addRxPlugin(RxDBJsonDumpPlugin);
-addRxPlugin(RxDBMigrationPlugin);
+addRxPlugin(RxDBMigrationSchemaPlugin);
 
 const taskNodeSchemaLiteral = {
   // TODO: remove everything thats "local" from task schema.
