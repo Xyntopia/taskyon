@@ -55,7 +55,7 @@ Taskyon can be accessed directly at [https://taskyon.space](https://taskyon.spac
 2. Run `yarn install` to install dependencies. 🧶
 3. Use `quasar build` for a production build or `quasar dev` for a development server. 🏗️
 
-An upcoming desktop app and container for deployment will be available soon.
+You can also deploy taskyon using a docker container. An upcoming desktop app will be available soon.
 
 ## Usage
 
