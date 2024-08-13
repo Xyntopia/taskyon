@@ -77,6 +77,7 @@
     "pyodide": "^0.24.1",
     "quasar": "^2.16.0",
     "rxdb": "^15.30.2",
+    "rxdb-old": "npm:rxdb@14.17.1",
     "sqlocal": "^0.6.2",
     "stopword": "^2.0.8",
     "update-browserslist-db": "^1.0.13",

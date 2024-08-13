@@ -29,7 +29,7 @@ export async function initTaskyon(
   console.log('initializing taskyondb');
   let taskyonDBInstance: TaskyonDatabase | undefined = undefined;
   try {
-    taskyonDBInstance = await createTaskyonDatabase('taskyondb');
+    taskyonDBInstance = await createTaskyonDatabase();
   } catch (err) {
     console.log('could not initialize taskyonDB', err);
     logError(

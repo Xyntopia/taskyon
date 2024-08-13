@@ -6,15 +6,17 @@ import {
   RxDocument,
   toTypedRxJsonSchema,
   ExtractDocumentTypeFromTypedRxJsonSchema,
-  addRxPlugin
+  addRxPlugin,
 } from 'rxdb';
-import { getRxStorageDexie, RxStorageDexie } from 'rxdb/plugins/storage-dexie';
-import type { RxStorageMemory } from 'rxdb/plugins/storage-memory';
+import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { RxDBJsonDumpPlugin } from 'rxdb/plugins/json-dump';
 import { TaskNode } from './types';
 // TOOD: remove at some point in the future...
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
+/* This is used so that we can migrate from old rxdb version to new ones (currently from v14.X to v15.X) */
+import { migrateStorage } from 'rxdb/plugins/migration-storage';
+
 addRxPlugin(RxDBDevModePlugin);
 addRxPlugin(RxDBJsonDumpPlugin);
 addRxPlugin(RxDBMigrationSchemaPlugin);
@@ -224,18 +226,36 @@ export const collections = {
   },
 };
 
-export async function createTaskyonDatabase(
-  name: string,
-  storage: RxStorageDexie | RxStorageMemory | undefined = undefined,
-): Promise<TaskyonDatabase> {
-  const newStorage = storage || getRxStorageDexie();
+export async function createTaskyonDatabase(): Promise<TaskyonDatabase> {
+  const newStorage = getRxStorageDexie();
   const db: TaskyonDatabase =
     await createRxDatabase<TaskyonDatabaseCollections>({
-      name,
+      name: 'taskyondb_v15',
       storage: newStorage,
     });
 
   await db.addCollections(collections);
+
+  //here we do te migration from or old storage
+  import('rxdb-old/plugins/storage-dexie').then(
+    ({ getRxStorageDexie: getRxStorageDexieOld }) => {
+      migrateStorage({
+        database: db as unknown as RxDatabase,
+        /**
+         * Name of the old database,
+         * using the storage migration requires that the
+         * new database has a different name.
+         */
+        oldDatabaseName: 'taskyondb',
+        oldStorage: getRxStorageDexieOld(), // RxStorage of the old database
+        batchSize: 500, // batch size
+        parallel: false, // <- true if it should migrate all collections in parallel. False (default) if should migrate in serial
+        afterMigrateBatch: (/*input: AfterMigrateBatchHandlerInput*/) => {
+          console.log('storage migration: batch processed');
+        },
+      });
+    },
+  );
 
   return db;
 }
