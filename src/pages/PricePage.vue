@@ -62,6 +62,7 @@ including additional providers to make even more use of the pricing competition 
         </template>
         <template #header-cell-prompt_price="props">
           <q-th :props="props">
+            <div>prompt</div>
             {{ pricingPerPage ? 'pages/0.01$' : 'μ$ / token' }}
           </q-th>
         </template>
@@ -81,6 +82,7 @@ including additional providers to make even more use of the pricing competition 
         </template>
         <template #header-cell-completion_price="props">
           <q-th :props="props">
+            <div>completion</div>
             {{ pricingPerPage ? 'pages/0.01$' : 'μ$ / token' }}
           </q-th>
         </template>
@@ -122,9 +124,21 @@ type rowType = (typeof state.llmModels)[0];
 
 const filteredTableData = computed(() => {
   return state.llmModels.filter((model) =>
-    model.name?.toLowerCase().includes((filter.value || '').toLowerCase())
+    model.name?.toLowerCase().includes((filter.value || '').toLowerCase()),
   );
 });
+
+function floatSorter(a: string, b: string) {
+  const numA = parseFloat(a);
+  const numB = parseFloat(b);
+
+  const validA = isNaN(numA) ? -1 : numA;
+  const validB = isNaN(numB) ? -1 : numB;
+
+  const comparison = validA - validB;
+  console.log(comparison);
+  return comparison;
+}
 
 const columns: QTableProps['columns'] = [
   {
@@ -147,6 +161,7 @@ const columns: QTableProps['columns'] = [
     align: 'center',
     field: (row: rowType) => row.pricing?.prompt,
     sortable: true,
+    sort: floatSorter,
   },
   {
     name: 'completion_price',
@@ -154,6 +169,7 @@ const columns: QTableProps['columns'] = [
     align: 'center',
     field: (row: rowType) => row.pricing?.completion,
     sortable: true,
+    sort: floatSorter,
   },
   {
     name: 'modality',
