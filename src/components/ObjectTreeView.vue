@@ -14,7 +14,9 @@
           type="textarea"
           :debounce="debounce"
           :model-value="prop.node.value"
-          @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
+          @update:model-value="
+            (value: unknown) => updateValue(prop.node.path, value)
+          "
         >
         </q-input>
       </div>
@@ -28,7 +30,9 @@
         <json-input
           class="col"
           :model-value="prop.node.value"
-          @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
+          @update:model-value="
+            (value: unknown) => updateValue(prop.node.path, value)
+          "
         />
       </div>
     </template>
@@ -47,7 +51,9 @@
           autogrow
           :debounce="debounce"
           :model-value="prop.node.value"
-          @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
+          @update:model-value="
+            (value: unknown) => updateValue(prop.node.path, value)
+          "
         >
         </q-input>
       </div>
@@ -60,8 +66,31 @@
         left-label
         color="secondary"
         :model-value="prop.node.value"
-        @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
+        @update:model-value="
+          (value: unknown) => updateValue(prop.node.path, value)
+        "
       />
+    </template>
+    <template #body-number="prop">
+      <div class="row">
+        <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
+          {{ prop.node.label }}:
+        </div>
+        <q-input
+          :disable="disableEdit"
+          class="col"
+          style="min-width: 200px"
+          :label="prop.node.label"
+          filled
+          dense
+          type="number"
+          :debounce="debounce"
+          :model-value="prop.node.value"
+          @update:model-value="
+            (value: unknown) => updateValue(prop.node.path, value)
+          "
+        />
+      </div>
     </template>
   </q-tree>
   <div v-else>no input data!</div>
@@ -114,7 +143,7 @@ const updateValue = (keyPath: string[], value: unknown) => {
 
 const transformToTreeNodes = (
   obj: Record<string, unknown>,
-  keyPath: string[] = []
+  keyPath: string[] = [],
 ): QTreeNode[] => {
   return Object.entries(obj)
     .map(([key, value]) => {
@@ -130,7 +159,7 @@ const transformToTreeNodes = (
           value: null, // Placeholder, not used for objects
           children: transformToTreeNodes(
             value as Record<string, unknown>,
-            newPath
+            newPath,
           ),
         };
       } else if (Array.isArray(value)) {
@@ -163,6 +192,15 @@ const transformToTreeNodes = (
           value: value as string | boolean,
           path: newPath,
           header: 'boolean',
+        };
+      } else if (typeof value === 'number') {
+        return {
+          label: key,
+          key: newPath.join('.'),
+          value: value,
+          path: newPath,
+          header: 'none',
+          body: 'string', // or 'text' if you want to use a text input
         };
       } else {
         return {
