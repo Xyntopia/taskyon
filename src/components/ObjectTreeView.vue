@@ -9,7 +9,7 @@
           :disable="disableEdit"
           class="col"
           filled
-          :label="prop.node.label"
+          :label="separateLabels ? undefined : prop.node.label"
           input-style="max-height: 300px"
           type="textarea"
           :debounce="debounce"
@@ -45,7 +45,7 @@
           :disable="disableEdit"
           class="col"
           style="min-width: 200px"
-          :label="prop.node.label"
+          :label="separateLabels ? undefined : prop.node.label"
           filled
           dense
           autogrow
@@ -80,7 +80,7 @@
           :disable="disableEdit"
           class="col"
           style="min-width: 200px"
-          :label="prop.node.label"
+          :label="separateLabels ? undefined : prop.node.label"
           filled
           dense
           type="number"
