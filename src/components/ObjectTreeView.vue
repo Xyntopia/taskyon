@@ -134,11 +134,11 @@ const updateValue = (keyPath: string[], value: unknown) => {
 
     // Iterate over the keyPath to find the correct property to update
     for (let i = 0; i < keyPath.length - 1; i++) {
-      currentPart = currentPart[keyPath[i]] as Record<string, unknown>;
+      currentPart = currentPart[keyPath[i]!] as Record<string, unknown>;
     }
 
     // Update the value at the final key, with a type assertion
-    currentPart[keyPath[keyPath.length - 1]] = value;
+    currentPart[keyPath[keyPath.length - 1]!] = value;
   }
 };
 
