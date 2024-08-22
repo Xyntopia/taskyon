@@ -1,5 +1,5 @@
 <template>
-  <q-tree v-if="modelValue" :nodes="nodeTree" node-key="label">
+  <q-tree v-if="modelValue" :nodes="nodeTree" node-key="label" v-bind="$attrs">
     <template #body-text="prop">
       <div class="row">
         <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
