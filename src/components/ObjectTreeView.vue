@@ -6,7 +6,7 @@
           {{ prop.node.label }}:
         </div>
         <q-input
-          :disable="disableEdit"
+          :readonly="readOnly"
           class="col"
           filled
           :label="separateLabels ? undefined : prop.node.label"
@@ -28,6 +28,7 @@
           {{ prop.node.label }}:
         </div>
         <json-input
+          :readonly="readOnly"
           class="col"
           :model-value="prop.node.value"
           @update:model-value="
@@ -42,7 +43,7 @@
           {{ prop.node.label }}:
         </div>
         <q-input
-          :disable="disableEdit"
+          :readonly="readOnly"
           class="col"
           style="min-width: 200px"
           :label="separateLabels ? undefined : prop.node.label"
@@ -60,7 +61,7 @@
     </template>
     <template #header-boolean="prop">
       <q-toggle
-        :disable="disableEdit"
+        :readonly="readOnly"
         style="min-width: 200px"
         :label="prop.node.label"
         left-label
@@ -77,7 +78,7 @@
           {{ prop.node.label }}:
         </div>
         <q-input
-          :disable="disableEdit"
+          :readonly="readOnly"
           class="col"
           style="min-width: 200px"
           :label="separateLabels ? undefined : prop.node.label"
@@ -102,7 +103,7 @@ import { QTreeNode } from 'quasar';
 import JsonInput from 'components/JsonInput.vue'; // Adjust the path as necessary
 
 const props = defineProps({
-  disableEdit: {
+  readOnly: {
     type: Boolean,
     default: false,
   },

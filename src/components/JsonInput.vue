@@ -1,5 +1,5 @@
 <template>
-  <q-input v-model="jsonString" type="textarea" filled>
+  <q-input v-model="jsonString" type="textarea" filled v-bind="$attrs">
     <template #append>
       <q-btn flat dense :icon="matSave" @click="onSave" />
     </template>
@@ -29,7 +29,7 @@ watch(
   (newValue) => {
     jsonString.value = JSON.stringify(newValue, null, 2);
   },
-  { deep: true }
+  { deep: true },
 );
 
 const onSave = () => {
