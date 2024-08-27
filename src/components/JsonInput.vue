@@ -1,6 +1,12 @@
 <template>
-  <q-input v-model="jsonString" type="textarea" filled v-bind="$attrs">
-    <template #append>
+  <q-input
+    v-model="jsonString"
+    type="textarea"
+    filled
+    :readonly="readonly"
+    v-bind="$attrs"
+  >
+    <template v-if="!readonly" #append>
       <q-btn flat dense :icon="matSave" @click="onSave" />
     </template>
   </q-input>
@@ -15,6 +21,10 @@ const props = defineProps({
   modelValue: {
     type: Object,
     required: true,
+  },
+  readonly: {
+    type: Boolean,
+    default: false,
   },
 });
 
