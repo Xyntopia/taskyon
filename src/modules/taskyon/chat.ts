@@ -319,9 +319,11 @@ export async function callLLM(
       }
       chatCompletion = accumulateChatCompletion(chunks);
     } catch (error) {
-      const err = new Error('Error during streaming');
-      err.cause = error;
-      throw err;
+      if (error instanceof Error) {
+        const err = new Error(`Error during streaming: ${error.message}`);
+        err.cause = error;
+        throw err;
+      }
     }
   } else {
     const completion = await openai.chat.completions.create(payload);
