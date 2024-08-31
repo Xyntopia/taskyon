@@ -1,0 +1,77 @@
+{
+  "version": 9,
+  "appConfiguration": {
+    "appConfigurationUrl": "/taskyon_settings.dev.json",
+    "gdriveConfigurationFile": "taskyon_settings.dev.json",
+    "expertMode": false,
+    "showCosts": false,
+    "gdriveDir": "taskyon",
+    "useEnterToSend": true,
+    "guiMode": "auto"
+  },
+  "llmSettings": {
+    "openAIAssistantId": "",
+    "useOpenAIAssistants": false,
+    "enableOpenAiTools": false,
+    "selectedApi": null,
+    "taskDraft": {
+      "role": "user",
+      "content": {
+        "message": ""
+      }
+    },
+    "llmApis": {
+      "taskyon": {
+        "name": "taskyon",
+        "baseURL": "https://qdleefyerzwijfnqqwrh.supabase.co/functions/v1/api",
+        "defaultModel": "meta-llama/llama-3-70b-instruct",
+        "models": {
+          "free": "meta-llama/llama-3.1-8b-instruct:free",
+          "chat": "meta-llama/llama-3-70b-instruct",
+          "instruction": "meta-llama/llama-3-70b-instruct"
+        },
+        "streamSupport": true,
+        "defaultHeaders": {
+          "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkbGVlZnllcnp3aWpmbnFxd3JoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjUwNjE3OTQsImV4cCI6MjA0MDYzNzc5NH0.kijtE_gHwOQ4oKq2y14467vdfBQ20QTHtw5tKSVEhf8"
+        },
+        "routes": {
+          "chatCompletion": "/chat/completions",
+          "models": "/models"
+        }
+      },
+      "openai": {
+        "name": "openai",
+        "baseURL": "https://api.openai.com/v1/",
+        "defaultModel": "gpt-4o",
+        "streamSupport": true,
+        "routes": {
+          "chatCompletion": "/chat/completions",
+          "models": "/models"
+        }
+      },
+      "openrouter.ai": {
+        "name": "openrouter.ai",
+        "baseURL": "https://openrouter.ai/api/v1",
+        "defaultModel": "meta-llama/llama-3-70b-instruct",
+        "streamSupport": true,
+        "routes": {
+          "chatCompletion": "/chat/completions",
+          "models": "/models"
+        }
+      }
+    },
+    "siteUrl": "https://taskyon.space",
+    "summaryModel": "Xenova/distilbart-cnn-6-6",
+    "vectorizationModel": "Xenova/all-MiniLM-L6-v2",
+    "maxAutonomousTasks": 3,
+    "useBasePrompt": true,
+    "tryUsingVisionModels": true,
+    "taskChatTemplates": {
+      "basePrompt": "You are a helpful assistant called *Taskyon*. In your markdown-based responses, you can use the following features:\n\n- **Mermaid charts**: Include diagrams, mindmaps, Gantt diagrams, quadrants, and XY charts using the 'mermaid' keyword in fenced code blocks. For example:\n```mermaid\n...\n```\n- **SVG graphics**: Use HTML to embed SVG graphics.\n- **HTML widgets**: Create interactive elements within the markdown using HTML.\n- **MathJax**: Write mathematical formulas using $$ ... $$ for block formulas and $ ... $ for inline formulas.",
+      "instruction": "You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented,\nand adheres to YAML standards. Do not include any explanatory text in your YAML responses. \nRemember, the focus is on the precision and correctness of the YAML output.",
+      "toolResult": "**Instruction:**\n\nPlease evaluate the tool/function result and provide the response in the specified schema format. The response should **only** contain the requested schema, formatted as {format}.\n\n---\n\n**Result of the Tool/Function:**\n\n```\n{toolResult}\n```\n---\n\n**Schema Format:**\n\n{resultSchema}\n\n---\n\nReminder: It is very important that the response can be parsed correctly as {format}, and include only the requested schema in your response.",
+      "task": "\nCOMPLETE THE FOLLOWING TASK:\n\n``` \n{taskContent}\n```\n\nProvide only the precise information requested without context, \nMake sure we can parse the response as {format}.\n\nFORMAT THE RESULT WITH EXACTLY THE FOLLOWING SCHEMA:\n\n{schema}",
+      "evaluate": "Evaluate the following message and provide the result back in the specified schema format. The response should **only** contain the requested schema, formatted as {format}.\n\nMessage:\n```\n{message}\n```\n\nSchema Format:\n\n{schema}\n\nReminder: Please ensure that the response can be parsed correctly as {format}, and include only the requested schema in your response."
+    }
+  }
+}
