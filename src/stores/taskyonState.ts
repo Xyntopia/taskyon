@@ -76,6 +76,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     // can be used to exchange certain keys and make taskyon
     // aware of different URLs etc...
     developerMode: false,
+    useDevVersion: false,
     messageDebug: {} as Record<
       string,
       'RAW' | 'MESSAGECONTENT' | 'RAWTASK' | 'ERROR' | undefined
