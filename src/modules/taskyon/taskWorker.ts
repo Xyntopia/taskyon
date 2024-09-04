@@ -27,6 +27,7 @@ import { TyTaskManager } from './taskManager';
 import { Tool, handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
 import { deepCopy, deepMerge, sleep } from './utils';
+import { isTaskyonKey } from './crypto';
 
 function extractOpenAIFunctions(
   choice: OpenAI.ChatCompletion['choices'][0],
@@ -151,42 +152,42 @@ export async function processChatTask(
         } else if (
           chatCompletion &&
           llmSettings.selectedApi === 'taskyon' &&
-          !chatCompletion.model.endsWith(':free')
+          !chatCompletion.model.endsWith(':free') &&
+          apiKey &&
+          !isTaskyonKey(apiKey)
         ) {
-          if (apiKey) {
-            // our backend tries to get the finished costs
-            // after ~4000ms, so we wait for 6000 here...
-            void sleep(6000).then(() => {
-              const headers = {
-                ...llmSettings.llmApis['taskyon']?.defaultHeaders,
-                ...generateHeaders(apiKey, llmSettings.siteUrl, api.name),
-              };
-              const baseUrl = new URL(api.baseURL).origin;
-              console.log('get generation info from ', baseUrl);
-              const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${chatCompletion.id}`;
-              void fetch(url, { headers })
-                .then((response) => {
-                  if (!response.ok) {
-                    throw new Error(
-                      `Could not find generation information for task ${task.id}`,
-                    );
-                  }
-                  return response.json() as Promise<
-                    { reference_data: OpenRouterGenerationInfo }[]
-                  >;
-                })
-                .then((data) => {
-                  console.log('taskyon generation info:', data);
-                  if (data.length) {
-                    enrichWithDelayedUsageInfos(
-                      task,
-                      taskManager,
-                      data[0]?.reference_data,
-                    );
-                  }
-                });
-            });
-          }
+          // our backend tries to get the finished costs
+          // after ~4000ms, so we wait for 6000 here...
+          void sleep(6000).then(() => {
+            const headers = {
+              ...llmSettings.llmApis['taskyon']?.defaultHeaders,
+              ...generateHeaders(apiKey, llmSettings.siteUrl, api.name),
+            };
+            const baseUrl = new URL(api.baseURL).origin;
+            console.log('get generation info from ', baseUrl);
+            const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${chatCompletion.id}`;
+            void fetch(url, { headers })
+              .then((response) => {
+                if (!response.ok) {
+                  throw new Error(
+                    `Could not find generation information for task ${task.id}`,
+                  );
+                }
+                return response.json() as Promise<
+                  { reference_data: OpenRouterGenerationInfo }[]
+                >;
+              })
+              .then((data) => {
+                console.log('taskyon generation info:', data);
+                if (data.length) {
+                  enrichWithDelayedUsageInfos(
+                    task,
+                    taskManager,
+                    data[0]?.reference_data,
+                  );
+                }
+              });
+          });
         } else if (chatCompletion?.usage) {
           // openai sends back the exact number of prompt tokens :)
           task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
