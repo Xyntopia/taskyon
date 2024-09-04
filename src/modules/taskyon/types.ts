@@ -476,6 +476,7 @@ export interface Model {
     completion_tokens: string;
   } | null;
 }
+
 const apiConfig = z.object({
   name: z.string(),
   baseURL: z.string(),
@@ -663,3 +664,24 @@ export const TaskyonMessages = z.discriminatedUnion('type', [
   tyConfigurationMessage,
 ]);
 export type TaskyonMessages = z.infer<typeof TaskyonMessages>;
+
+const tyPublicKeyDraft = z.object({
+  name: z.string().describe('A name for the key.').optional(),
+  maxc: z.number().describe('Maximum allowed credits in this key').optional(),
+  cpi: z.number().describe('Credit refill per inteval'),
+  rti: z.number().describe('Refill time interval in minutes'),
+  model: z
+    .string()
+    .array()
+    .describe('The names of the models which are allowed with this key.')
+    .optional(),
+});
+
+export type tyPublicKeyDraft = z.infer<typeof tyPublicKeyDraft>;
+
+export const tyPublicApiKeyObject = tyPublicKeyDraft.extend({
+  iat: z.number().describe('Time at which the key was issued.'),
+  auid: z.string().describe('anonymous User ID for billing purposes.'),
+  v: z.number().describe('Key version'),
+  iss: z.string().describe('The Issuer of the API key.'),
+});
