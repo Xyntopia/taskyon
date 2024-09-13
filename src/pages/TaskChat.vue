@@ -20,6 +20,7 @@
         :state="state"
         :current-task="state.currentTask"
         :task-worker-waiting="state.taskWorkerWaiting"
+        :task-worker-message="taskWorkerMessage"
       />
       <!-- Welcome Message -->
       <div
@@ -95,7 +96,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, UnwrapRef } from 'vue';
+import { ref, UnwrapRef, computed } from 'vue';
 import { useQuasar, scroll } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/CreateNewTask.vue';
@@ -129,6 +130,13 @@ async function stopTasks() {
   state.taskWorkerWaiting = true;
   stoppingTasks.value = false;
 }
+
+const taskWorkerMessage = computed(() => {
+  if (state.taskWorkerWaiting) {
+    return state.taskWorkerController.getInterruptReason();
+  }
+  return '';
+});
 
 function onScroll(
   details: UnwrapRef<{

@@ -616,6 +616,7 @@ export async function taskWorker(
   taskWorkerController: TaskWorkerController,
 ) {
   console.log('entering task worker loop...');
+  let errorCount = 0;
   while (true) {
     console.log('waiting for next task!');
     let task: TaskNode | undefined = undefined;
@@ -662,6 +663,13 @@ export async function taskWorker(
       }
     } catch (error) {
       console.error('Could not complete task iteration:', error);
+      errorCount++;
+      if (errorCount >= llmSettings.maxAutonomousTasks) {
+        taskWorkerController.interrupt(
+          `Too many errors occured, interrupting execution: ${errorCount}!`,
+        );
+        errorCount = 0;
+      }
 
       if (task) {
         task.state = 'Error';
@@ -705,6 +713,7 @@ export async function taskWorker(
           };
         }
       }
+
       const newTaskId = await addTask2Tree(
         errorTask,
         task?.id,

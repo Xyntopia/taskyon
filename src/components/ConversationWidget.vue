@@ -40,6 +40,9 @@
           <q-spinner-dots size="2rem" color="secondary" />
         </div>
       </q-card>
+      <div v-else-if="taskWorkerMessage" class="transparent text-negative text-bold q-pa-md">
+        {{ taskWorkerMessage }}
+      </div>
     </div>
   </div>
 </template>
@@ -55,6 +58,7 @@ defineProps<{
   selectedThread: TaskNode[];
   currentTask?: TaskNode;
   taskWorkerWaiting: boolean;
+  taskWorkerMessage: string;
 }>();
 </script>
 
