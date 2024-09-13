@@ -20,7 +20,7 @@
         :state="state"
         :current-task="state.currentTask"
         :task-worker-waiting="state.taskWorkerWaiting"
-        :task-worker-message="taskWorkerMessage"
+        :task-worker-message="taskWorkerMessage || ''"
       />
       <!-- Welcome Message -->
       <div

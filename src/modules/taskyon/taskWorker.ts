@@ -505,6 +505,7 @@ export function useTaskWorkerController() {
   let interruptReason: string | null = null;
   let interruptCallbacks: ((reason: string | null) => void)[] = [];
   let waiting = false;
+  let errorCount = 0;
 
   function interrupt(reason: string | null = null): void {
     console.log('interrupting: ', reason);
@@ -533,6 +534,7 @@ export function useTaskWorkerController() {
   function reset(full = true): void {
     interrupted = false;
     interruptReason = null;
+    errorCount = 0;
     if (full) {
       interruptCallbacks = [];
     }
@@ -550,6 +552,12 @@ export function useTaskWorkerController() {
     onInterrupt,
     isWaiting,
     setWaiting,
+    increaseErrorCount: () => {
+      errorCount++;
+    },
+    getErrorCount: () => {
+      return errorCount;
+    },
   };
 }
 export type TaskWorkerController = ReturnType<typeof useTaskWorkerController>;
@@ -616,7 +624,6 @@ export async function taskWorker(
   taskWorkerController: TaskWorkerController,
 ) {
   console.log('entering task worker loop...');
-  let errorCount = 0;
   while (true) {
     console.log('waiting for next task!');
     let task: TaskNode | undefined = undefined;
@@ -624,6 +631,7 @@ export async function taskWorker(
       if (taskWorkerController.isInterrupted()) {
         // in case of errors, especially if its an interrupt event we simply want to cancel everything :P
         // empty our task queue :)
+        console.log('clear out task queue due to interruption');
         processTasksQueue.clear();
       }
 
@@ -663,12 +671,13 @@ export async function taskWorker(
       }
     } catch (error) {
       console.error('Could not complete task iteration:', error);
-      errorCount++;
-      if (errorCount >= llmSettings.maxAutonomousTasks) {
+      taskWorkerController.increaseErrorCount();
+      if (
+        taskWorkerController.getErrorCount() >= llmSettings.maxAutonomousTasks
+      ) {
         taskWorkerController.interrupt(
-          `Too many errors occured, interrupting execution after ${errorCount} errors!`,
+          `Too many errors occured, interrupting execution after ${taskWorkerController.getErrorCount()} errors!`,
         );
-        errorCount = 0;
       }
 
       if (task) {
