@@ -666,7 +666,7 @@ export async function taskWorker(
       errorCount++;
       if (errorCount >= llmSettings.maxAutonomousTasks) {
         taskWorkerController.interrupt(
-          `Too many errors occured, interrupting execution: ${errorCount}!`,
+          `Too many errors occured, interrupting execution after ${errorCount} errors!`,
         );
         errorCount = 0;
       }
