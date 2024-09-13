@@ -600,6 +600,7 @@ export const availableModels = asnycasyncTimeLruCache<Model[]>(
 )(async (
   modelsUrl: string,
   apiKey: string,
+  headers: Record<string, string>,
   invalidateCache = false,
 ): Promise<Model[]> => {
   try {
@@ -612,6 +613,7 @@ export const availableModels = asnycasyncTimeLruCache<Model[]>(
     const response = await fetch(url, {
       method: 'GET',
       headers: {
+        ...headers,
         Authorization: `Bearer ${apiKey}`,
         //'Cache-Control': 'max-stale=3600',
         'Cache-Control': 'no-cache', // Ensure the freshest data is fetched as we're caching this function anyways...

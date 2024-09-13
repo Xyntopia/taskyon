@@ -262,7 +262,11 @@ export const useTaskyonStore = defineStore(storeName, () => {
         key = stateRefs.keys[api?.name] || '';
       }
       try {
-        void availableModels(baseurl, key).then((res) => {
+        let headers = {};
+        if (taskyonApi && api.name == 'taskyon') {
+          headers = stateRefs.llmSettings.llmApis.taskyon?.defaultHeaders || {};
+        }
+        void availableModels(baseurl, key, headers).then((res) => {
           llmModelsInternal.value = res;
         });
       } catch {
