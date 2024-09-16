@@ -1,61 +1,7 @@
 <template>
   <div class="row items-start q-gutter-xs">
-    <div v-if="false && selectedApi === 'openai'" class="q-pt-xs">
-      <q-btn-toggle
-        v-model="useOpenAIAssistants"
-        label="mode"
-        dense
-        outline
-        toggle-color="secondary"
-        :color="$q.dark.isActive ? 'white' : 'primary'"
-        :options="[
-          { label: 'Chat', value: false },
-          { label: 'Assistant', value: true },
-        ]"
-        ><q-tooltip>Select OpenAI Mode</q-tooltip>
-      </q-btn-toggle>
-    </div>
-    <!--OpenAI Assistant selection-->
-    <div
-      v-if="useOpenAIAssistants && selectedApi === 'openai'"
-      class="col"
-      style="min-width: 200px"
-    >
-      <q-select
-        v-model="openAIAssistantId"
-        filled
-        dense
-        color="secondary"
-        label="Select OpenAI Assistant"
-        :icon="matSmartToy"
-        :options="modelOptions"
-        emit-value
-        map-options
-      >
-        <template #after>
-          <q-btn
-            :icon="state.modelDetails ? matExpandLess : matExpandMore"
-            flat
-            @click="state.modelDetails = !state.modelDetails"
-          >
-            <q-tooltip>Check & configure the Assistants' details</q-tooltip>
-          </q-btn>
-        </template>
-      </q-select>
-      <div v-if="state.modelDetails">
-        <div>
-          <b>Assistant instructions:</b><br />
-          {{ state.assistants[openAIAssistantId || '']?.instructions }}
-        </div>
-        <q-scroll-area style="height: 230px; max-width: 100%">
-          <pre>
-          {{ state.assistants[openAIAssistantId || ''] }}
-          </pre>
-        </q-scroll-area>
-      </div>
-    </div>
     <!--LLM Model selection-->
-    <div v-else class="col row items-center" style="min-width: 200px">
+    <div class="col row items-center" style="min-width: 200px">
       <q-select
         class="col"
         dense
@@ -96,12 +42,7 @@
 import { computed, ref } from 'vue';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
-import {
-  matSmartToy,
-  matExpandLess,
-  matExpandMore,
-  matList,
-} from '@quasar/extras/material-icons';
+import { matSmartToy, matList } from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
 
 defineProps({
@@ -115,14 +56,6 @@ const selectedApi = defineModel<string | null>('selectedApi', {
   required: true,
 });
 
-const useOpenAIAssistants = defineModel<boolean>('useOpenAIAssistants', {
-  required: true,
-});
-
-const openAIAssistantId = defineModel<string>('openAIAssistantId', {
-  required: false,
-});
-
 const emit = defineEmits(['updateBotName']);
 
 const state = useTaskyonStore();
@@ -131,21 +64,13 @@ const modelOptions = computed(() => {
   // openai has no pricing information attached, so we sort it in different ways...
   console.log('calculate model options!');
   if (selectedApi.value === 'openai') {
-    if (useOpenAIAssistants.value) {
-      const options = Object.values(state.assistants).map((a) => ({
-        value: a.id,
-        label: a.name || '',
+    const options = [...state.llmModels]
+      .sort((m1, m2) => m1.id.localeCompare(m2.id))
+      .map((m) => ({
+        label: `${m.id}`,
+        value: m.id,
       }));
-      return options;
-    } else {
-      const options = [...state.llmModels]
-        .sort((m1, m2) => m1.id.localeCompare(m2.id))
-        .map((m) => ({
-          label: `${m.id}`,
-          value: m.id,
-        }));
-      return options;
-    }
+    return options;
   } else {
     const options = state.llmModels
       .map((m) => {
