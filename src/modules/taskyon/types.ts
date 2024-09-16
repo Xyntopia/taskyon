@@ -665,15 +665,15 @@ export const TaskyonMessages = z.discriminatedUnion('type', [
 ]);
 export type TaskyonMessages = z.infer<typeof TaskyonMessages>;
 
-const tyPublicKeyDraft = z.object({
-  name: z.string().describe('A name for the key.').optional(),
+export const tyPublicKeyDraft = z.object({
+  name: z.string().describe('Name of the key.').optional(),
   maxc: z.number().describe('Maximum allowed credits in this key').optional(),
   cpi: z.number().describe('Credit refill per inteval'),
   rti: z.number().describe('Refill time interval in minutes'),
   model: z
     .string()
     .array()
-    .describe('The names of the models which are allowed with this key.')
+    .describe('List of models which are allowed with this key.')
     .optional(),
 });
 
