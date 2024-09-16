@@ -36,7 +36,7 @@ function zodToOpenApiSchema(schema: z.ZodTypeAny): tyYamlObjectRepresentation {
     >;
 
     for (const key in shape) {
-      const fieldSchema = shape[key];
+      const fieldSchema = shape[key]!;
       properties[key] = zodToOpenApiSchema(fieldSchema);
       if (!(fieldSchema instanceof z.ZodOptional)) {
         required.push(key);
@@ -189,7 +189,7 @@ export function zodToYAMLObject(
     >;
     const yamlObject: YamlObjectRepresentation = {};
     for (const key in shape) {
-      const fieldSchema = shape[key];
+      const fieldSchema = shape[key]!;
       const optionalSuffix =
         fieldSchema instanceof z.ZodOptional ? optionalSymbol : '';
       if (fieldSchema?.description) {
@@ -322,4 +322,30 @@ export function zodToYamlString(schema: z.ZodTypeAny): string {
   const objrepr = zodToYAMLObject(schema);
   const yamlSchema = convertToYamlWComments(dump(objrepr));
   return yamlSchema;
+}
+
+export function zodToDescriptionObject(schema: z.ZodTypeAny): {
+  [key: string]: string;
+} {
+  const descriptions: { [key: string]: string } = {};
+
+  function traverseSchema(schema: z.ZodTypeAny, path: string = '') {
+    if (schema instanceof z.ZodObject) {
+      const shape: Record<string, z.ZodTypeAny> = schema.shape as Record<
+        string,
+        z.ZodTypeAny
+      >;
+      for (const key in shape) {
+        const fieldSchema = shape[key]!;
+        const newPath = path ? `${path}.${key}` : key;
+        if (fieldSchema.description) {
+          descriptions[newPath] = fieldSchema.description;
+        }
+        traverseSchema(fieldSchema, newPath);
+      }
+    }
+  }
+
+  traverseSchema(schema);
+  return descriptions;
 }

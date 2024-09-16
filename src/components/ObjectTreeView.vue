@@ -19,6 +19,11 @@
           "
         >
         </q-input>
+        <info-dialog
+          v-if="descriptions[prop.node.path.join('.')] && !descriptionsAsLabels"
+        >
+          {{ descriptions[prop.node.path.join('.')] }}
+        </info-dialog>
       </div>
     </template>
     <template #header-none> </template>
@@ -35,6 +40,11 @@
             (value: unknown) => updateValue(prop.node.path, value)
           "
         />
+        <info-dialog
+          v-if="descriptions[prop.node.path.join('.')] && !descriptionsAsLabels"
+        >
+          {{ descriptions[prop.node.path.join('.')] }}
+        </info-dialog>
       </div>
     </template>
     <template #body-string="prop">
@@ -57,6 +67,11 @@
           "
         >
         </q-input>
+        <info-dialog
+          v-if="descriptions[prop.node.path.join('.')] && !descriptionsAsLabels"
+        >
+          {{ descriptions[prop.node.path.join('.')] }}
+        </info-dialog>
       </div>
     </template>
     <template #header-boolean="prop">
@@ -70,7 +85,13 @@
         @update:model-value="
           (value: unknown) => updateValue(prop.node.path, value)
         "
-      />
+      >
+      </q-toggle>
+      <info-dialog
+        v-if="descriptions[prop.node.path.join('.')] && !descriptionsAsLabels"
+      >
+        {{ descriptions[prop.node.path.join('.')] }}
+      </info-dialog>
     </template>
     <template #body-number="prop">
       <div class="row">
@@ -92,6 +113,11 @@
           "
         />
       </div>
+      <info-dialog
+        v-if="descriptions[prop.node.path.join('.')] && !descriptionsAsLabels"
+      >
+        {{ descriptions[prop.node.path.join('.')] }}
+      </info-dialog>
     </template>
   </q-tree>
   <div v-else>no input data!</div>
@@ -101,6 +127,7 @@
 import { computed, toRefs, PropType } from 'vue';
 import { QTreeNode } from 'quasar';
 import JsonInput from 'components/JsonInput.vue'; // Adjust the path as necessary
+import InfoDialog from 'components/InfoDialog.vue';
 
 const props = defineProps({
   readOnly: {
@@ -123,9 +150,17 @@ const props = defineProps({
     type: Number,
     default: 100,
   },
+  descriptions: {
+    type: Object as PropType<Record<string, string>>,
+    default: () => ({}),
+  },
+  descriptionsAsLabels: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const { modelValue } = toRefs(props);
+const { modelValue, descriptions } = toRefs(props);
 const treeObject = modelValue;
 
 const updateValue = (keyPath: string[], value: unknown) => {
@@ -149,13 +184,17 @@ const transformToTreeNodes = (
   return Object.entries(obj)
     .map(([key, value]) => {
       const newPath = [...keyPath, key];
+      let label = key;
+      if (props.descriptionsAsLabels) {
+        label = props.descriptions[newPath.join()] || key;
+      }
       if (
         typeof value === 'object' &&
         value !== null &&
         !Array.isArray(value)
       ) {
         return {
-          label: key,
+          label,
           key: newPath.join('.'),
           value: null, // Placeholder, not used for objects
           children: transformToTreeNodes(
@@ -165,18 +204,18 @@ const transformToTreeNodes = (
         };
       } else if (Array.isArray(value)) {
         return {
-          label: key,
+          label,
           key: newPath.join('.'),
-          value: value, // Keep the original array
+          value, // Keep the original array
           path: newPath,
           body: 'list', // Indicate this is a list
           header: 'none',
         };
       } else if (typeof value === 'string') {
         const node: QTreeNode = {
-          label: key,
+          label,
           key: newPath.join('.'),
-          value: value,
+          value,
           path: newPath,
           header: 'none',
         };
@@ -188,7 +227,7 @@ const transformToTreeNodes = (
         return node;
       } else if (typeof value === 'boolean') {
         return {
-          label: key,
+          label,
           key: newPath.join('.'),
           value: value as string | boolean,
           path: newPath,
@@ -196,16 +235,16 @@ const transformToTreeNodes = (
         };
       } else if (typeof value === 'number') {
         return {
-          label: key,
+          label,
           key: newPath.join('.'),
-          value: value,
+          value,
           path: newPath,
           header: 'none',
           body: 'string', // or 'text' if you want to use a text input
         };
       } else {
         return {
-          label: key,
+          label,
           key: newPath.join('.'),
           value: JSON.stringify(value),
           path: newPath,
