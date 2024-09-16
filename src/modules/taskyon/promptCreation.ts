@@ -6,7 +6,7 @@ import {
   StructuredResponseTypes,
   UseToolBase,
 } from './types';
-import { zodToYamlString } from './openapi';
+import { zodToYamlString } from './zodUtils';
 import OpenAI from 'openai';
 import { dump } from 'js-yaml';
 import { mapFunctionNames } from './chat';
