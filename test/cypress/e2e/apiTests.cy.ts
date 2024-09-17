@@ -52,8 +52,8 @@ describe('taskyon API', () => {
     cy.get('.q-menu').contains('openrouter.ai').click();
     cy.wait(2000)
       .contains('Select LLM Model for answering/solving the task.')
-      .type('meta-llama/llama-3-70b');
-    cy.get('.q-menu').contains('meta-llama/llama-3-70b-instruct').click();
+      .type('meta-llama/llama-3.1-8b-instruct');
+    cy.get('.q-menu').contains('meta-llama/llama-3.1-8b-instruct').click();
     //cy.contains('your message').type('hello world!{enter}');
     //cy.get('.user-message i.q-icon.text-warning')
 
@@ -65,7 +65,7 @@ describe('taskyon API', () => {
       .invoke('val')
       .then((val) => {
         cy.log(JSON.stringify(val));
-        expect(val).to.eq('meta-llama/llama-3-70b-instruct'); // Check if the text is a number
+        expect(val).to.eq('meta-llama/llama-3.1-8b-instruct'); // Check if the text is a number
       });
     //.should('have.string', 'meta-llama/llama-3-70b-instruct');
     //.should('meta-llama/llama-3-70b-instruct');
