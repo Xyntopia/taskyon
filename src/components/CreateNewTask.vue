@@ -248,10 +248,10 @@
           <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
           <ModelSelection
             v-model:selectedApi="selectedApi"
-            v-model:useOpenAIAssistants="useOpenAIAssistants"
-            v-model:open-a-i-assistant-id="openAIAssistantId"
             class="col"
             :bot-name="currentModel"
+            :model-list="expertMode"
+            :select-api="expertMode"
             @update-bot-name="handleBotNameUpdate"
           ></ModelSelection>
         </q-item>
@@ -389,9 +389,7 @@ function updateContent(value: string | null | undefined) {
 const state = useTaskyonStore();
 const { expandedTaskCreation } = toRefs(state);
 const { expertMode } = toRefs(state.appConfiguration);
-const { selectedApi, useOpenAIAssistants, openAIAssistantId } = toRefs(
-  state.llmSettings,
-);
+const { selectedApi } = toRefs(state.llmSettings);
 const fileAttachments = ref<File[]>([]); // holds all attached files as a "tasklist"
 
 // we initialize our taskDraft with the state of this window!

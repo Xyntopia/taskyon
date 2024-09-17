@@ -15,22 +15,21 @@
         fill-input
         use-input
         input-debounce="0"
+        v-bind="$attrs"
         @update:model-value="onModelSelect"
         @filter="
           (val: string, update: updateCallBack) =>
             filterModels(val, update, modelOptions)
         "
-      >
-      </q-select>
-      <div v-if="state.appConfiguration.expertMode" style="font-size: 0.5em">
+      />
+      <div v-if="modelList" style="font-size: 0.5em">
         <q-btn :icon-right="matList" flat to="pricing">
-          >
           <q-tooltip>List of models</q-tooltip>
         </q-btn>
       </div>
     </div>
     <ApiSelect
-      v-if="state.appConfiguration.expertMode"
+      v-if="selectApi"
       :model-value="state.llmSettings.selectedApi"
       more-settings
       @update:model-value="onApiSelect"
@@ -49,6 +48,14 @@ defineProps({
   botName: {
     type: String,
     required: true,
+  },
+  modelList: {
+    type: Boolean,
+    default: false,
+  },
+  selectApi: {
+    type: Boolean,
+    default: false,
   },
 });
 

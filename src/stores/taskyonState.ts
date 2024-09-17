@@ -15,9 +15,10 @@ import {
 } from 'src/modules/taskyon/taskWorker';
 import { initTaskyon } from 'src/modules/taskyon/init';
 import defaultSettings from 'src/assets/taskyon_settings.json';
-import { availableModels, getAssistants } from 'src/modules/taskyon/chat';
+import { availableModels } from 'src/modules/taskyon/chat';
 import { storedSettings } from 'src/modules/taskyon/types';
 import { setupIframeApi } from 'src/modules/iframeApi';
+import { isTaskyonKey } from 'src/modules/taskyon/crypto';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -263,12 +264,24 @@ export const useTaskyonStore = defineStore(storeName, () => {
       }
       try {
         let headers = {};
-        if (taskyonApi && api.name == 'taskyon') {
-          headers = stateRefs.llmSettings.llmApis.taskyon?.defaultHeaders || {};
+        const pubKey = isTaskyonKey(stateRefs.keys.taskyon || '', false);
+        if (pubKey?.model && pubKey.model.length > 0) {
+          llmModelsInternal.value = pubKey.model.map((m) => {
+            console.log(
+              'only models from our key are available:',
+              pubKey.model,
+            );
+            return { id: m, description: 'Model defined in ty public key.' };
+          });
+        } else {
+          if (taskyonApi && api.name == 'taskyon') {
+            headers =
+              stateRefs.llmSettings.llmApis.taskyon?.defaultHeaders || {};
+          }
+          void availableModels(baseurl, key, headers).then((res) => {
+            llmModelsInternal.value = res;
+          });
         }
-        void availableModels(baseurl, key, headers).then((res) => {
-          llmModelsInternal.value = res;
-        });
       } catch {
         console.log("couldn't download models from", baseurl);
       }
@@ -293,18 +306,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
     updateLlmModels,
     {
       immediate: true,
-    },
-  );
-
-  const assistantsInternal = ref<Awaited<ReturnType<typeof getAssistants>>>({});
-  watch(
-    () => stateRefs.llmSettings.useOpenAIAssistants,
-    (newValue) => {
-      if (newValue) {
-        void getAssistants(stateRefs.keys.openai).then((assitantDict) => {
-          assistantsInternal.value = assitantDict;
-        });
-      }
     },
   );
 
@@ -402,7 +403,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
     getErrors,
     modelLookUp,
     llmModels: computed(() => llmModelsInternal.value),
-    assistants: computed(() => assistantsInternal.value),
   };
 }); // this state stores all information which
 // should be stored e.g. in browser LocalStorage

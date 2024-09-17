@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { tyPublicApiKeyObject } from './types';
 
 export function parseJwt(
@@ -22,12 +23,21 @@ export function parseJwt(
 }
 
 // This doesn't verify the key, only looks if its contents are valid!
-export function isTaskyonKey(key: string) {
+type tyPublicApiKeyObject = z.infer<typeof tyPublicApiKeyObject>;
+export function isTaskyonKey(key: string, boolean: true): boolean;
+export function isTaskyonKey(
+  key: string,
+  boolean: false,
+): tyPublicApiKeyObject | undefined;
+export function isTaskyonKey(
+  key: string,
+  boolean = true,
+): boolean | tyPublicApiKeyObject | undefined {
   const keyObj = parseJwt(key);
   const result = tyPublicApiKeyObject.safeParse(keyObj);
   if (result.success) {
-    return true;
+    return boolean ? true : result.data;
   } else {
-    return false;
+    return boolean ? false : undefined;
   }
 }

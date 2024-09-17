@@ -154,7 +154,7 @@ export async function processChatTask(
           llmSettings.selectedApi === 'taskyon' &&
           !chatCompletion.model.endsWith(':free') &&
           apiKey &&
-          !isTaskyonKey(apiKey)
+          !isTaskyonKey(apiKey, false)
         ) {
           // our backend tries to get the finished costs
           // after ~4000ms, so we wait for 6000 here...

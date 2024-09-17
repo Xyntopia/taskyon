@@ -15,12 +15,7 @@ Taskyon needs an AI service to work. Every OpenAI compatible AI service is suffi
           no-caps
           label="Use free Taskyon service (low quality)"
           to="/"
-          @click="
-            state.llmSettings.selectedApi = 'taskyon';
-            state.keys['taskyon'] = 'anonymous';
-            state.llmSettings.llmApis['taskyon']!.selectedModel =
-              state.llmSettings.llmApis['taskyon']?.models?.free || '';
-          "
+          @click="initFreeMode"
         ></q-btn>
         <InfoDialog>
           Pressing this button will add an API key which provides free API
@@ -179,8 +174,21 @@ import SecretInput from './SecretInput.vue';
 import { matEdit } from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
 import InfoDialog from './InfoDialog.vue';
+import { isTaskyonKey } from 'src/modules/taskyon/crypto';
 
 const state = useTaskyonStore();
 
 const expertModeOn = defineModel<boolean>('expertModeOn', { default: false });
+
+function initFreeMode() {
+  state.llmSettings.selectedApi = 'taskyon';
+  state.keys['taskyon'] = taskyonConfiguration.taskyon_public_free_key;
+  const pubKey = isTaskyonKey(
+    taskyonConfiguration.taskyon_public_free_key,
+    false,
+  );
+  if (pubKey?.model) {
+    state.llmSettings.llmApis['taskyon']!.selectedModel = pubKey.model[0];
+  }
+}
 </script>
