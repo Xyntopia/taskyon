@@ -6,7 +6,8 @@
         src="
 ## Welcome to Taskyon!
         
-Taskyon needs an AI service to work. Every OpenAI compatible AI service is sufficient.
+You will need an API key for an OpenAI-compatible AI service. There are many options available for this. 
+It is even possible to run your own inference service on a server.
 "
       />
       <div class="row">
@@ -24,29 +25,6 @@ Taskyon needs an AI service to work. Every OpenAI compatible AI service is suffi
         </InfoDialog>
       </div>
       <div class="col-auto text-italic">or</div>
-      <div class="row">
-        <q-btn
-          class="col"
-          label="Go to Taskyon.space to retrieve an API key."
-          outline
-          no-caps
-          icon="svguse:/taskyon_mono_opt.svg#taskyon"
-          href="https://taskyon.space/account"
-          target="_blank"
-        />
-        <InfoDialog
-          info-text="
-  https://taskyon.space is the official webpage of taskyon. You can
-  retrieve API keys after logging in to your account.
-
-  - Easily integrate taskyon into your webpage!
-  - Access to more free models from a large selection of AI providers:
-
-    Anthropic, OpenAI/ChatGPT, Google, Mistral, Meta, Huggingface and
-    many more!
-  "
-        />
-      </div>
     </div>
     <q-expansion-item
       label="Add API keys for AI services below:"
@@ -112,8 +90,31 @@ or with an llm proxy such as this one:  https://github.com/BerriAI/liteLLM-proxy
           <JsonInput v-model="state.llmSettings.llmApis" />
         </q-expansion-item>
       </q-card>
+      <div class="row q-py-md">
+        <q-btn
+          class="col"
+          label="Go to Taskyon.space to retrieve an API key."
+          outline
+          no-caps
+          icon="svguse:/taskyon_mono_opt.svg#taskyon"
+          href="https://taskyon.space/account"
+          target="_blank"
+        />
+        <InfoDialog
+          info-text="
+  https://taskyon.space is the official webpage of taskyon. You can
+  retrieve API keys after logging in to your account.
+
+  - Easily integrate taskyon into your webpage!
+  - Access to more free models from a large selection of AI providers:
+
+    Anthropic, OpenAI/ChatGPT, Google, Mistral, Meta, Huggingface and
+    many more!
+  "
+        />
+      </div>
+      <OpenRouterPKCE class="q-py-md" />
       <q-expansion-item label="Retrieve Keys from other AI services">
-        <OpenRouterPKCE class="q-py-md" />
         <q-item-label header>
           Manually configure & retrieve API keys (Setup a local,
           privacy-presevering server, a custom LLM AI server in your company
