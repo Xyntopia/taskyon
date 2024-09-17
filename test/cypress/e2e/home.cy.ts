@@ -63,7 +63,7 @@ describe('test taskyon defaults', () => {
 
     cy.log('starting tests!');
 
-    cy.get('.q-btn').contains('Use free Taskyon (low quality)').click();
+    cy.get('.q-btn').contains('Use free Taskyon').click();
 
     // enable task cost display & expert mode...
     cy.get('[aria-label="Expert mode"] > .q-toggle__inner').click();

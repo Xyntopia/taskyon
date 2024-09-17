@@ -43,7 +43,7 @@ describe('Tool Tests', () => {
     cy.get('.q-btn').contains('save task').click();
 
     cy.get('[aria-label="go to chat"]').click();
-    cy.get('.q-btn').contains('Use free Taskyon (low quality)').click();
+    cy.get('.q-btn').contains('Use free Taskyon').click();
 
     cy.get('.message-container')
       .eq(0)
