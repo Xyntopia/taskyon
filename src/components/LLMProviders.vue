@@ -6,30 +6,16 @@
         src="
 ## Welcome to Taskyon!
         
-You will need an API key for an OpenAI-compatible AI service. There are many options available for this. 
-It is even possible to run your own inference service on a server.
+You will need an API key for an OpenAI-compatible AI service. There are many options available for this. It is even possible to run your own inference service on a server.
 "
       />
-      <div class="row">
-        <q-btn
-          flat
-          no-caps
-          label="Use free Taskyon service (low quality)"
-          to="/"
-          @click="initFreeMode"
-        ></q-btn>
-        <InfoDialog>
-          Pressing this button will add an API key which provides free API
-          access to https://taskyon.space API for testing purposes &
-          development.
-        </InfoDialog>
-      </div>
-      <div class="col-auto text-italic">or</div>
     </div>
-    <q-expansion-item
-      label="Add API keys for AI services below:"
-      class="transparent"
-    >
+    <q-expansion-item class="transparent">
+      <template #header>
+        <q-item-section class="text-secondary text-bold">
+          Add API keys for AI services below:
+        </q-item-section>
+      </template>
       <q-card flat bordered>
         <q-card-section>
           You can specify connection settings (api keys etc...) for OpenAI
@@ -175,21 +161,8 @@ import SecretInput from './SecretInput.vue';
 import { matEdit } from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
 import InfoDialog from './InfoDialog.vue';
-import { isTaskyonKey } from 'src/modules/taskyon/crypto';
 
 const state = useTaskyonStore();
 
 const expertModeOn = defineModel<boolean>('expertModeOn', { default: false });
-
-function initFreeMode() {
-  state.llmSettings.selectedApi = 'taskyon';
-  state.keys['taskyon'] = taskyonConfiguration.taskyon_public_free_key;
-  const pubKey = isTaskyonKey(
-    taskyonConfiguration.taskyon_public_free_key,
-    false,
-  );
-  if (pubKey?.model) {
-    state.llmSettings.llmApis['taskyon']!.selectedModel = pubKey.model[0];
-  }
-}
 </script>
