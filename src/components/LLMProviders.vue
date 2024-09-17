@@ -1,29 +1,19 @@
-<!-- Sidebar -->
 <template>
   <div class="q-gutter-md llm-providers">
-    <div>You can acquire API keys from these services:</div>
-    <div class="column q-gutter-sm">
+    <div class="column q-gutter-sm items-center">
+      <TyMarkdown
+        class="q-pb-md"
+        src="
+## Welcome to Taskyon!
+        
+Taskyon needs an AI service to work. Every OpenAI compatible AI service is sufficient.
+"
+      />
       <div class="row">
         <q-btn
-          class="col"
-          label="Go to Taskyon.space to retrieve an API key."
-          outline
+          flat
           no-caps
-          icon="svguse:/taskyon_mono_opt.svg#taskyon"
-          href="https://taskyon.space"
-          target="_blank"
-        />
-        <InfoDialog
-          info-text="https://Taskyon.space is the official webpage of taskyon."
-        />
-      </div>
-      <div class="row">
-        <q-btn
-          class="col"
-          outline
-          no-caps
-          label="Use free Taskyon (low quality)"
-          icon="svguse:/taskyon_mono_opt.svg#taskyon"
+          label="Use free Taskyon service (low quality)"
           to="/"
           @click="
             state.llmSettings.selectedApi = 'taskyon';
@@ -33,83 +23,88 @@
           "
         ></q-btn>
         <InfoDialog>
-          Xyntopia Taskyon provides access to free lower-quality models for
-          testing.
+          Pressing this button will add an API key which provides free API
+          access to https://taskyon.space API for testing purposes &
+          development.
         </InfoDialog>
       </div>
-      <OpenRouterPKCE />
-    </div>
-    <div class="row items-center">
-      <div class="col">
-        If you want to manually configure which API is used, enable expert mode:
-      </div>
-      <q-toggle v-model="expertModeOn" color="secondary" />
-    </div>
-    <q-space></q-space>
-    <q-item-label v-if="expertModeOn" header
-      >Or: Manually configure & retrieve API keys (Setup a local,
-      privacy-presevering server, A custom LLM AI server in your company etc...)
-      Everything with en OpenAI compatible API will work:</q-item-label
-    >
-    <div v-if="expertModeOn" class="row q-gutter-xs">
-      <div class="col">
+      <div class="col-auto text-italic">or</div>
+      <div class="row">
         <q-btn
           class="col"
-          label="Go to OpenAI to retrieve an API key from OpenAI (not recommended)"
+          label="Go to Taskyon.space to retrieve an API key."
           outline
           no-caps
-          href="https://platform.openai.com/account/api-keys"
+          icon="svguse:/taskyon_mono_opt.svg#taskyon"
+          href="https://taskyon.space/account"
           target="_blank"
         />
         <InfoDialog
-          info-text="You can also get an API key from https://openrouter.ai/keys and manually insert into the settings."
-        />
-      </div>
-      <div class="col">
-        <q-btn
-          label="Access keys via OpenRouter Dashboard (not recommended)"
-          outline
-          no-caps
-          href="https://openrouter.ai/keys"
-          target="_blank"
-        />
-        <InfoDialog
-          info-text="Get an API key from https://www.openrouter.ai and use it for inference tasks"
+          info-text="
+  https://taskyon.space is the official webpage of taskyon. You can
+  retrieve API keys after logging in to your account.
+
+  - Easily integrate taskyon into your webpage!
+  - Access to more free models from a large selection of AI providers:
+
+    Anthropic, OpenAI/ChatGPT, Google, Mistral, Meta, Huggingface and
+    many more!
+  "
         />
       </div>
     </div>
-    <div v-if="expertModeOn">
-      Alternativly you can connect to other APIs that are configured. You can
-      even setup your own server anc connect to it:
-    </div>
-    <q-card v-if="expertModeOn" flat bordered>
-      <q-card-section class="q-gutter-md">
-        <div>
-          <ApiSelect v-model="state.llmSettings.selectedApi" />
-        </div>
-        <div>Provide more API keys in order to activate other APIs:</div>
-        <div>
-          <SecretInput
-            v-for="apiName of Object.keys(state.llmSettings.llmApis)"
-            :key="apiName"
-            placeholder="Add API key here!"
-            filled
-            :model-value="state.keys[apiName] || ''"
-            :label="`${apiName} API key`"
-            @update:model-value="(value) => (state.keys[apiName] = value)"
-          >
-          </SecretInput>
-        </div>
-      </q-card-section>
-    </q-card>
     <q-expansion-item
-      v-if="expertModeOn"
-      dense
-      label="Edit Apis"
-      :icon="matEdit"
+      label="Add API keys for AI services below:"
+      class="transparent"
     >
-      <TyMarkdown
-        src="Here, we can add new, custom APIs to taskyon that we can connect to
+      <q-card flat bordered>
+        <q-card-section>
+          You can specify connection settings (api keys etc...) for OpenAI
+          compatible LLM Apis here. You can setup your own OpenAI-compatible
+          server and connect to it or use other services:
+        </q-card-section>
+
+        <q-card-section class="q-gutter-md">
+          <div class="row items-center">
+            <div class="q-pr-md">
+              Select which API to use. At least one API key needs to be
+              specified below.
+            </div>
+            <ApiSelect v-model="state.llmSettings.selectedApi" />
+          </div>
+          <div>
+            Activate API by specifying an API key (taskyon API keys can be
+            generated by a registered user here:
+            <a
+              href="https://taskyon.space/account"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Taskyon Account</a
+            >
+            ):
+          </div>
+          <div>
+            <SecretInput
+              v-for="apiName of Object.keys(state.llmSettings.llmApis)"
+              :key="apiName"
+              placeholder="Add API key here!"
+              filled
+              :model-value="state.keys[apiName] || ''"
+              :label="`${apiName} API key`"
+              @update:model-value="(value) => (state.keys[apiName] = value)"
+            >
+            </SecretInput>
+          </div>
+        </q-card-section>
+        <q-expansion-item
+          v-if="expertModeOn"
+          class="q-pa-sm"
+          dense
+          label="Edit Apis"
+          :icon="matEdit"
+        >
+          <TyMarkdown
+            src="Here, we can add new, custom APIs to taskyon that we can connect to
 it is possible to add your own LLM Inference Server to connect
 to your own AI this way. E.g. using these methods: 
 
@@ -118,8 +113,59 @@ to your own AI this way. E.g. using these methods:
 
 or with an llm proxy such as this one:  https://github.com/BerriAI/liteLLM-proxy
 "
-      />
-      <JsonInput v-model="state.llmSettings.llmApis" />
+          />
+          <JsonInput v-model="state.llmSettings.llmApis" />
+        </q-expansion-item>
+      </q-card>
+      <q-expansion-item label="Retrieve Keys from other AI services">
+        <OpenRouterPKCE class="q-py-md" />
+        <q-item-label header>
+          Manually configure & retrieve API keys (Setup a local,
+          privacy-presevering server, a custom LLM AI server in your company
+          etc...) Everything with an OpenAI compatible API will work:
+        </q-item-label>
+        <div class="row q-gutter-xs">
+          <div class="col">
+            <q-btn
+              class="col"
+              label="Use LLM inference using Huggingface Message API"
+              outline
+              no-caps
+              href="https://huggingface.co/docs/text-generation-inference/en/messages_api"
+              target="_blank"
+            />
+            <InfoDialog
+              info-text="Huggingfaces message API https://huggingface.co/docs/text-generation-inference/en/messages_api is fully OpenAI compatible."
+            />
+          </div>
+          <div class="col">
+            <q-btn
+              class="col"
+              label="Go to OpenAI to retrieve an API key from OpenAI (not recommended)"
+              outline
+              no-caps
+              href="https://platform.openai.com/account/api-keys"
+              target="_blank"
+            />
+            <InfoDialog
+              info-text="You can also get an API key from https://platform.openai.com/account/api-keys and manually 
+insert into the settings below."
+            />
+          </div>
+          <div class="col">
+            <q-btn
+              label="Access keys via OpenRouter Dashboard (not recommended)"
+              outline
+              no-caps
+              href="https://openrouter.ai/keys"
+              target="_blank"
+            />
+            <InfoDialog
+              info-text="Get an API key from https://www.openrouter.ai and use it for inference tasks"
+            />
+          </div>
+        </div>
+      </q-expansion-item>
     </q-expansion-item>
   </div>
 </template>

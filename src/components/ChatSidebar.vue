@@ -124,8 +124,8 @@
         flat
         dense
         :icon="matManageAccounts"
-        label="Accounts"
-        to="/settings/llmproviders"
+        label="AI Service"
+        to="/settings/aiserviceprovider"
       ></q-btn>
     </q-item>
   </q-list>

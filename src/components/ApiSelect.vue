@@ -9,16 +9,16 @@
       label="Provider"
       :options="
         Object.keys(state.llmSettings.llmApis).filter(
-          (apiName) => state.keys[apiName]
+          (apiName) => state.keys[apiName],
         )
       "
     >
     </q-select>
     <q-btn
       v-if="moreSettings"
-      to="/settings/llmproviders"
+      to="/settings/aiserviceprovider"
       flat
-      aria-label="llm provider settings"
+      aria-label="ai service settings"
     >
       ><q-icon :name="matSettings"></q-icon>
       <q-icon :name="matElectricalServices"></q-icon>

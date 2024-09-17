@@ -29,7 +29,7 @@
         </div>
       </div>
     </div>
-    <LLMProviders v-else />
+    <LLMProviders v-else :expert-mode-on="state.appConfiguration.expertMode" />
   </div>
 </template>
 

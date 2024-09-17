@@ -34,8 +34,9 @@ describe('taskyon API', () => {
     cy.reload();
 
     cy.get('[aria-label="toggle task settings"]').click();
-    cy.get('[aria-label="llm provider settings"]').click();
+    cy.get('[aria-label="ai service settings"]').click();
 
+    cy.contains('manually configure which AI').click();
     cy.contains('openai API key').type(Cypress.env().openai_api_key);
     cy.contains('openrouter.ai API key').type(Cypress.env().openrouter_api_key);
 
@@ -52,9 +53,7 @@ describe('taskyon API', () => {
     cy.wait(2000)
       .contains('Select LLM Model for answering/solving the task.')
       .type('meta-llama/llama-3-70b');
-    cy.get('.q-menu')
-      .contains('meta-llama/llama-3-70b-instruct')
-      .click();
+    cy.get('.q-menu').contains('meta-llama/llama-3-70b-instruct').click();
     //cy.contains('your message').type('hello world!{enter}');
     //cy.get('.user-message i.q-icon.text-warning')
 

@@ -3,9 +3,9 @@
     <q-toolbar>
       <q-tabs v-model="selectedTab" class="col-auto" dense no-caps>
         <q-route-tab
-          to="/settings/llmproviders"
-          label="LLM Providers"
-          name="llmproviders"
+          to="/settings/aiserviceprovider"
+          label="AI Service Provider"
+          name="aiserviceprovider"
         />
         <q-route-tab to="/settings/sync" label="Reset & Backup" name="sync" />
         <q-route-tab
@@ -31,7 +31,7 @@
     <div class="fit text-center"><ExpertEnable /></div>
     <q-card class="q-ma-xs">
       <q-tab-panels :model-value="selectedTab" animated swipeable infinite>
-        <q-tab-panel name="llmproviders" :class="tabPanelClass">
+        <q-tab-panel name="aiserviceprovider" :class="tabPanelClass">
           <LLMProviders
             v-model:expertModeOn="state.appConfiguration.expertMode"
             style="max-width: 600px"
@@ -76,6 +76,6 @@ const state = useTaskyonStore();
 const tabPanelClass = 'column items-center';
 
 const selectedTab = computed(() => {
-  return (route.params.tab as string) || 'llmproviders';
+  return (route.params.tab as string) || 'aiserviceprovider';
 });
 </script>
