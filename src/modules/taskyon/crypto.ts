@@ -24,20 +24,27 @@ export function parseJwt(
 
 // This doesn't verify the key, only looks if its contents are valid!
 type tyPublicApiKeyObject = z.infer<typeof tyPublicApiKeyObject>;
-export function isTaskyonKey(key: string, boolean: true): boolean;
+export function isTaskyonKey(key: string | undefined, boolean: true): boolean;
 export function isTaskyonKey(
-  key: string,
+  key: string | undefined,
   boolean: false,
 ): tyPublicApiKeyObject | undefined;
 export function isTaskyonKey(
-  key: string,
+  key: string | undefined,
   boolean = true,
 ): boolean | tyPublicApiKeyObject | undefined {
-  const keyObj = parseJwt(key);
-  const result = tyPublicApiKeyObject.safeParse(keyObj);
-  if (result.success) {
-    return boolean ? true : result.data;
-  } else {
-    return boolean ? false : undefined;
+  if (key) {
+    let keyObj;
+    try {
+      keyObj = parseJwt(key);
+    } catch {
+      console.log('could not parse key', key);
+      return boolean ? false : undefined;
+    }
+    const result = tyPublicApiKeyObject.safeParse(keyObj);
+    if (result.success) {
+      return boolean ? true : result.data;
+    }
   }
+  return boolean ? false : undefined;
 }
