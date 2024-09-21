@@ -5,6 +5,8 @@
       <q-item-section>
         <q-btn
           :icon="matDownload"
+          color="secondary"
+          unelevated
           label="Save all Chats & Tasks"
           @click="onDownloadTaskyonData"
         >
@@ -16,14 +18,20 @@
           accept="*"
           @update:model-value="onUploadTaskyonData"
         >
-          <q-btn :icon="matUpload" label="Upload Tasks from file"> </q-btn>
+          <q-btn
+            :icon="matUpload"
+            label="Upload Tasks from file"
+            color="secondary"
+            unelevated
+          />
         </FileDropzone>
       </q-item-section>
       <q-item-section>
         <q-btn
           :icon="matDeleteForever"
           label="Delete Taskyon Chat Data"
-          text-color="red"
+          color="red"
+          outline
           @click="showDeleteDialog = true"
         >
         </q-btn>
@@ -72,23 +80,23 @@
         <q-icon :name="matSave" size="md" />
       </q-item-section>
       <q-item-section>Download Settings:</q-item-section>
-      <q-item-section>
-        <q-btn label="JSON" @click="downloadSettings('json')"></q-btn>
-        <q-btn label="YAML" @click="downloadSettings('yaml')"></q-btn>
-      </q-item-section>
+      <div class="row q-gutter-xs">
+        <q-btn label="JSON" outline @click="downloadSettings('json')"></q-btn>
+        <q-btn label="YAML" outline @click="downloadSettings('yaml')"></q-btn>
+      </div>
     </q-item>
     <q-item>
       <q-item-section avatar>
-        <q-icon :name="matSettingsBackupRestore" size="md" />
+        <q-icon :name="matUpload" size="md" />
       </q-item-section>
       <q-item-section>Upload Settings:</q-item-section>
-      <q-item-section>
+      <div class="row q-gutter-xs">
         <FileDropzone
           disable-dropzone-border
           accept="*"
           @update:model-value="loadSettingsJson"
         >
-          <q-btn class="fit">
+          <q-btn outline class="fit">
             JSON
             <q-tooltip>Select Json file for upload!</q-tooltip>
           </q-btn>
@@ -98,12 +106,12 @@
           accept="*"
           @update:model-value="loadSettingsYaml"
         >
-          <q-btn class="fit">
+          <q-btn outline class="fit">
             YAML
             <q-tooltip>Select YAML file for upload!</q-tooltip>
           </q-btn>
         </FileDropzone>
-      </q-item-section>
+      </div>
     </q-item>
     <q-item class="q-pa-md q-gutter-sm">
       <q-item-section avatar>
@@ -111,20 +119,21 @@
       </q-item-section>
 
       <q-item-section> Export app & settings to gdrive: </q-item-section>
-      <q-item-section>
-        <q-btn :icon="matSave" @click="onSyncGdrive">
+      <div class="row q-gutter-xs">
+        <q-btn :icon="matSave" outline @click="onSyncGdrive">
           <q-tooltip> Save configuration to gdrive</q-tooltip>
         </q-btn>
-        <q-btn :icon="matSync" @click="onUpdateAppConfiguration">
+        <q-btn :icon="matSync" outline @click="onUpdateAppConfiguration">
           <q-tooltip> Restore app configuration from gdrive</q-tooltip>
         </q-btn>
-      </q-item-section>
+      </div>
     </q-item>
     <q-item>
       <q-item-section>
         <q-btn
           :icon="matWarning"
           label="Reset Taskyon Settings"
+          outline
           class="q-ma-md"
           text-color="red"
           @click="showResetDialog = true"
@@ -185,7 +194,6 @@ import {
   matDeleteForever,
   matUpload,
   matWarning,
-  matSettingsBackupRestore,
 } from '@quasar/extras/material-icons';
 import { mdiGoogleDrive } from '@quasar/extras/mdi-v6';
 
@@ -195,7 +203,7 @@ const state = useTaskyonStore();
 // Common function to handle file reading and state updating
 async function loadSettingsFromFile(
   newFiles: File[],
-  parseFunction: (content: string) => unknown
+  parseFunction: (content: string) => unknown,
 ) {
   if (newFiles.length === 0) return; // No file uploaded
 
@@ -214,7 +222,7 @@ async function loadSettingsFromFile(
       deepMergeReactive(
         state.appConfiguration,
         loadedData.appConfiguration,
-        'overwrite'
+        'overwrite',
       );
     }
   } catch (error) {
@@ -241,7 +249,7 @@ const downloadSettings = (format: string) => {
   const deepCopiedSettings = extend(
     true,
     {},
-    { version, appConfiguration, llmSettings }
+    { version, appConfiguration, llmSettings },
   );
 
   let fileName, fileContent, mimeType;
@@ -295,8 +303,8 @@ async function onDeleteTaskyonData() {
 }
 
 function onResetTaskyon() {
-  console.log('reset taskyon!')
-  state.$reset()
+  console.log('reset taskyon!');
+  state.$reset();
   //location.reload(); // reload browser window to reinitialize the db...
 }
 </script>
