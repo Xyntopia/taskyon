@@ -1,10 +1,5 @@
 // app global css in Sass form
 
-  // we define all of these colors in our settings!
-//$primary-light: lighten($primary, 70%)
-//$primary: var(--q-primary)
-//$primary: var(--q-primary)
-//$secondary: var(--q-secondary)
 $secondary: var(--q-secondary,#F78F3B)
 $primary: var(--q-primary,#2A3548)
 
@@ -12,29 +7,6 @@ $primary-light: color-mix(in srgb, $primary 20%, white)
 $primary-light-dark: color-mix(in srgb, $primary 25%, white)
 $primary-dark: color-mix(in srgb, $primary 90%, black)
 $secondary-dark: color-mix(in srgb, $secondary 50%, black)
-
-/*        setCssVar('primary-light', lighten(primary, 80));
- setCssVar('primary-light-dark', lighten(primary, 75));
- setCssVar('primary-dark', lighten(primary, -10));
- }
- if (secondary) {
- setCssVar('secondary', secondary);
- setCssVar('secondary-dark', lighten(secondary, -54));*/
-
-$accent: #7fa042
-$dark: #0d1117
-$positive: #7fa042
-$negative: #a04242
-$info: #8BA7B9
-$warning: #ff0000
-
-// override quasar defaults
-// TODO: this doesn't work, because it gets compiled by quasar/sass during runtime
-//       and these variables simply don't exist anymore afterwards...
-//       it might help, if we add them to quasar.variables.sass  with var(--q-secondary) or something like that...
-//$dark-shadow-color: $secondary
-//$dark: $primary
-//$dark-page: $primary
 
 .body--light
   background-color: $primary-light
