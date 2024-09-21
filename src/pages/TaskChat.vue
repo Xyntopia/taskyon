@@ -40,19 +40,14 @@
     <!--Create new task area-->
     <q-page-sticky position="bottom" :offset="[0, 0]" expand class="print-hide">
       <q-resize-observer @resize="handleResize" />
-      <div class="col q-pa-xs" style="max-width: 48rem">
+      <div class="col" style="max-width: 48rem">
         <CreateNewTask
           v-if="
             state.llmSettings.selectedApi &&
             state.keys[state.llmSettings.selectedApi]
           "
-          :class="[
-            $q.dark.isActive ? 'bg-primary2' : 'bg-white',
-            'rounded-borders',
-            'q-pa-xs',
-            'shadow-5',
-          ]"
           :force-task-props="state.llmSettings.taskTemplate"
+          class="q-pa-xs"
         >
         </CreateNewTask>
       </div>

@@ -252,7 +252,11 @@
 import ToolResultWidget from 'components/ToolResultWidget.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import TokenUsage from 'components/TokenUsage.vue';
-import { TaskNode, partialTaskDraft, ToolBase } from 'src/modules/taskyon/types';
+import {
+  TaskNode,
+  partialTaskDraft,
+  ToolBase,
+} from 'src/modules/taskyon/types';
 import tyMarkdown from './tyMarkdown.vue';
 import { computed, ref } from 'vue';
 import { FileMappingDocType } from 'src/modules/taskyon/rxdb';
@@ -385,7 +389,6 @@ async function updateLabels(labels: string[]) {
         left: 20px   // To move left by 6px
         opacity: 0
         transition: opacity 0.3s
-        background-color: rgba($secondary, .2)
 
     &:hover
         .message-buttons

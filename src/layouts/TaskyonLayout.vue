@@ -1,6 +1,6 @@
 <template>
   <q-layout view="lHh LpR lfr">
-    <q-header class="bg-primary2 column print-hide">
+    <q-header class="column print-hide">
       <component
         :is="!minMode ? 'q-toolbar' : 'div'"
         :class="minMode ? 'q-gutter-xs row q-px-sm' : 'q-gutter-xs'"
@@ -157,7 +157,7 @@
       persistent
       :width="250"
       :breakpoint="800"
-      class="bg-primary2 print-hide"
+      class="print-hide"
     >
       <ChatSidebar />
     </q-drawer>
@@ -180,8 +180,8 @@
     </q-drawer>-->
 
     <!-- Main Content Area -->
-    <q-page-container class="bg-primary2">
-      <router-view class="bg-primary2" />
+    <q-page-container>
+      <router-view/>
     </q-page-container>
   </q-layout>
 </template>
@@ -236,42 +236,3 @@ const btnSize = computed(() => {
   return minMode.value ? 'xs' : 'md';
 });
 </script>
-
-<style lang="sass">
-
-.body--light
-  .button-group
-    display: inline-block
-    border: 1px solid $primary /* add white outline */
-    border-radius: 5px /* optional, to match the rounded-borders class */
-
-.body--dark
-  .button-group
-    display: inline-block
-    border: 1px solid white /* add white outline */
-    border-radius: 5px /* optional, to match the rounded-borders class */
-
-@media print
-  /* Hide everything initially */
-  body *
-    visibility: hidden
-
-  /* Only display the q-page and its children */
-  .q-page,
-  .q-page *
-    visibility: visible
-
-  /* Override the page container padding for print */
-  .q-page-container
-    padding: 0 !important
-
-  .q-page
-    position: absolute
-    left: 0
-    top: 0
-    width: 100%
-    margin: 0
-    padding: 0
-    box-shadow: none /* Remove shadows, if any */
-    min-height: 0 !important /* Override min-height if necessary */
-</style>

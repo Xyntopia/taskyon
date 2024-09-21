@@ -45,7 +45,7 @@
               }}
               <q-tooltip> Select Conversation </q-tooltip>
             </q-item-section>
-            <q-item-section side class="bg-primary2">
+            <q-item-section side>
               <div>
                 <q-btn
                   v-if="state.llmSettings.selectedTaskId == conversationId.id"

@@ -12,7 +12,7 @@ You will need an API key for an OpenAI-compatible AI service. There are many opt
     </div>
     <q-expansion-item class="transparent">
       <template #header>
-        <q-item-section class="text-secondary text-bold">
+        <q-item-section class="text-bold">
           Add API keys for AI services below:
         </q-item-section>
       </template>

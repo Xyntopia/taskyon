@@ -1,29 +1,55 @@
 // app global css in Sass form
 
-$primary-light: lighten($primary, 70%)
-$primary-light-dark: lighten($primary, 65%)
-$primary-dark: darken($primary, 10%)
-$secondary-dark: darken($secondary, 54%)
+  // we define all of these colors in our settings!
+//$primary-light: lighten($primary, 70%)
+//$primary: var(--q-primary)
+//$primary: var(--q-primary)
+//$secondary: var(--q-secondary)
+$secondary: var(--q-secondary,#F78F3B)
+$primary: var(--q-primary,#2A3548)
+
+$primary-light: color-mix(in srgb, $primary 20%, white)
+$primary-light-dark: color-mix(in srgb, $primary 25%, white)
+$primary-dark: color-mix(in srgb, $primary 90%, black)
+$secondary-dark: color-mix(in srgb, $secondary 50%, black)
+
+/*        setCssVar('primary-light', lighten(primary, 80));
+ setCssVar('primary-light-dark', lighten(primary, 75));
+ setCssVar('primary-dark', lighten(primary, -10));
+ }
+ if (secondary) {
+ setCssVar('secondary', secondary);
+ setCssVar('secondary-dark', lighten(secondary, -54));*/
+
+$accent: #7fa042
+$dark: #0d1117
+$positive: #7fa042
+$negative: #a04242
+$info: #8BA7B9
+$warning: #ff0000
+
+// override quasar defaults
+// TODO: this doesn't work, because it gets compiled by quasar/sass during runtime
+//       and these variables simply don't exist anymore afterwards...
+//       it might help, if we add them to quasar.variables.sass  with var(--q-secondary) or something like that...
+//$dark-shadow-color: $secondary
+//$dark: $primary
+//$dark-page: $primary
 
 .body--light
-  .bg-primary2
-    background-color: $primary-light
+  background-color: $primary-light
+  //text-color: white
+
+  .q-header
+    background-color: color-mix(in srgb, $primary-light 90%, transparent)
     color: $primary
+
   .q-card
     background-color: white
     color: black
 
-  /*.q-page.bg-primary2
-   background: radial-gradient(circle, $primary-light-dark 0%, $primary-light-dark 20%, $primary-light 50%)
-
   .q-drawer
     background: linear-gradient(to bottom, $primary-light, $primary-light 10%, $primary-light-dark 90%)
-
-    .q-drawer__content.bg-primary2
-      background: linear-gradient(to right, $primary-light, rgba(0, 0, 0, 0))
-
-      .q-item__section.bg-primary2
-        background: inherit
 
   main.q-page
     //background: radial-gradient(circle, $primary-light-dark 0%, $primary-light-dark 20%, $primary-light 75%)
@@ -37,11 +63,6 @@ $secondary-dark: darken($secondary, 54%)
     background-repeat: no-repeat
     //background-size: cover // Ensure the background covers the entire element
 
-  .welcome > .q-icon
-    svg
-      filter: drop-shadow(0 0 5px white)
-    //background: radial-gradient(circle, $primary-light-dark 0%, $primary-light-dark 20%, $primary-light 70%)
-
   //filter: drop-shadow(0 0 5px white) drop-shadow(0 0 20px white)
 
 .body--light
@@ -52,29 +73,37 @@ $secondary-dark: darken($secondary, 54%)
     button
       filter: drop-shadow(0 0 2px white) drop-shadow(0 0 5px white)
 
-.body--dark
-  .welcome-message-text
-    color: $secondary
+  .welcome > .q-icon
+    svg
+      filter: drop-shadow(0 0 5px white)
+    //background: radial-gradient(circle, $primary-light-dark 0%, $primary-light-dark 20%, $primary-light 70%)
 
 .body--dark
   background-color: $primary-dark
   text-color: white
 
-  main.q-page.bg-primary2:has(.welcome)
+  .q-header
+    background-color: color-mix(in srgb, $primary-dark 90%, transparent)
+
+  .q-drawer
+    background-color: $primary-dark
+
+  main.q-page:has(.welcome)
     background: radial-gradient(circle, $secondary-dark 0%, $secondary-dark 20%, black 70%)
     //background-attachment: fixed
     //background-repeat: no-repeat
     //background-size: cover // Ensure the background covers the entire element
 
-  .bg-primary2
-    background-color: $primary-dark
-    text-color: white
   .q-card
     background-color: $primary-dark
     color: white
   .q-tab-panel
     background-color: $primary-dark
     color: white
+
+  .q-page-container
+    background-color: $primary-dark
+
   .q-page
     background-color: black
     //border: 1px solid $primary-dark // Adjust border color as needed
@@ -103,20 +132,107 @@ $secondary-dark: darken($secondary, 54%)
     svg
       filter: drop-shadow(0 0 10px $secondary)
 
+  .welcome-message-text
+    color: $secondary
+
+.create-new-task
+  //:class="['rounded-borders', 'q-pa-xs', 'shadow-5']"
+  // Round the top left and right borders
+  border-top-left-radius: 5px
+  border-top-right-radius: 5px
+
+  // Add a subtle glow around the edges
+  //box-shadow: 0 0 10px rgba(215, 23, 23, 0.2)
+
+  // Optional: Define the border and background color
+  //border: 1px solid #ccc
+  //background-color: #fff
+
 .body--dark
   .taskyon-control-button
-    background-color: rgba($secondary, .2) // Adjust the alpha value as needed
+    background-color: color-mix(in srgb, $secondary 80%, transparent)
     color: white
 
 .body--light
   .taskyon-control-button
-    background-color: rgba($primary, .7) // Adjust the alpha value as needed
+    background-color: color-mix(in srgb, $primary 80%, transparent)
     color: white
 
-//derived colors
-$tools: scale-color($secondary, $lightness: 80%)
-//$bg-tools: scale-color($secondary, $lightness: 80%)
-//$primary-light: scale-color($primary, $lightness: 99%)
-//$primary2: scale-color($primary, $blackness: 30%)
-//$text-tools: $primary*/
-//$tools2: scale-color($primary, $lightness: 80%)
+.body--light
+  .button-group
+    display: inline-block
+    border: 1px solid $primary /* add white outline */
+    border-radius: 5px /* optional, to match the rounded-borders class */
+
+.body--dark
+  .button-group
+    display: inline-block
+    border: 1px solid white /* add white outline */
+    border-radius: 5px /* optional, to match the rounded-borders class */
+
+.body--light
+  .create-new-task
+    background-color: white
+
+.body--dark
+  .create-new-task
+    background-color: $primary-dark
+    text-color: white
+
+@media print
+  /* Hide everything initially */
+  body
+    visibility: hidden
+
+  /* Only display the q-page and its children */
+  .q-page
+    visibility: visible
+
+  /* Override the page container padding for print */
+  .q-page-container
+    padding: 0 !important
+
+  .q-page
+    position: absolute
+    left: 0
+    top: 0
+    width: 100%
+    margin: 0
+    padding: 0
+    box-shadow: none /* Remove shadows, if any */
+    min-height: 0 !important /* Override min-height if necessary */
+
+.task-container
+  display: flex
+  flex-direction: column
+  max-width: 800px
+  margin: 0 auto // Centers the container
+
+  // Default style for all tasks
+  > div
+    width: fit-content // Makes the width of the task as small as its content
+    max-width: 99% // Prevents the task from growing beyond the container width
+    box-sizing: border-box // Ensures padding and borders are included in width calculation
+    align-self: flex-start // Aligns to the left by default
+
+  // Specific style for tasks with the 'user' role
+  .user
+    align-self: flex-end // Aligns to the right
+
+.user-message
+  position: relative
+.user-message::after
+  content: ''
+  position: absolute
+  top: 0
+  right: 0
+  bottom: 0
+  width: 5px /* Width of the fading effect */
+  background: linear-gradient(to top, rgba(255, 255, 255, 0), $secondary)
+
+.message-container
+  .message-buttons
+    background: color-mix(in srgb, $secondary 15%, transparent)
+
+.raw-markdown
+  white-space: pre-wrap // This will display newlines and wrap text

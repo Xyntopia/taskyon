@@ -7,7 +7,9 @@
     "showCosts": false,
     "gdriveDir": "taskyon",
     "useEnterToSend": true,
-    "guiMode": "auto"
+    "guiMode": "auto",
+    "primaryColor": "#2A3548",
+    "secondaryColor": "#F78F3B"
   },
   "llmSettings": {
     "openAIAssistantId": "",

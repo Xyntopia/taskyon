@@ -6,7 +6,7 @@ import type {
   TaskNode,
 } from 'src/modules/taskyon/types';
 import axios from 'axios'; // TODO: replace with fetch
-import { LocalStorage, Notify } from 'quasar'; // load dynamically! :)
+import { LocalStorage, Notify, setCssVar } from 'quasar'; // load dynamically! :)
 import { deepMerge, deepMergeReactive, sleep } from 'src/modules/taskyon/utils';
 import { useQuasar } from 'quasar';
 import {
@@ -345,6 +345,21 @@ export const useTaskyonStore = defineStore(storeName, () => {
       void setupIframeApi(stateRefs.llmSettings, stateRefs.keys, tm);
     }
   });
+
+  watch(
+    [
+      () => stateRefs.appConfiguration.primaryColor,
+      () => stateRefs.appConfiguration.secondaryColor,
+    ],
+    ([primary, secondary]) => {
+      console.log('Set new brand colors!!', primary, secondary);
+      if (primary) setCssVar('primary', primary);
+      if (secondary) setCssVar('secondary', secondary);
+    },
+    {
+      immediate: true,
+    },
+  );
 
   function useReactiveTasks() {
     const selectedThread = ref<TaskNode[]>([]);

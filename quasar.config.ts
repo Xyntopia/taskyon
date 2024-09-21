@@ -119,6 +119,8 @@ export default configure((ctx) => {
     // --> boot files are part of "main.js"
     // https://v2.quasar.dev/quasar-cli/boot-files
     boot: [
+      // make sure brand colors are loaded "on-time" :)
+      { server: false, path: 'brand-colors' },
       //TODO: 'addressbar-color',
       'i18n',
       //{path: 'payments', client: true, server: true }

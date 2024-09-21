@@ -61,34 +61,3 @@ defineProps<{
   taskWorkerMessage: string;
 }>();
 </script>
-
-<style lang="sass">
-
-.task-container
-  display: flex
-  flex-direction: column
-  max-width: 800px
-  margin: 0 auto // Centers the container
-
-  // Default style for all tasks
-  > div
-    width: fit-content // Makes the width of the task as small as its content
-    max-width: 99% // Prevents the task from growing beyond the container width
-    box-sizing: border-box // Ensures padding and borders are included in width calculation
-    align-self: flex-start // Aligns to the left by default
-
-  // Specific style for tasks with the 'user' role
-  .user
-    align-self: flex-end // Aligns to the right
-
-.user-message
-  position: relative
-.user-message::after
-  content: ''
-  position: absolute
-  top: 0
-  right: 0
-  bottom: 0
-  width: 5px /* Width of the fading effect */
-  background: linear-gradient(to top, rgba(255, 255, 255, 0), $secondary)
-</style>

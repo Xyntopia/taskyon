@@ -541,6 +541,17 @@ export const llmSettings = z.object({
 });
 export type llmSettings = z.infer<typeof llmSettings>;
 
+const hexColorRegex = /^#([A-Fa-f0-9]{6})$/;
+const HexColor = z.string().superRefine((value, ctx) => {
+  if (!hexColorRegex.test(value)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Invalid hexadecimal color',
+    });
+  }
+});
+type HexColor = z.infer<typeof HexColor>;
+
 const appConfiguration = z.object({
   appConfigurationUrl: z
     .string()
@@ -563,6 +574,12 @@ const appConfiguration = z.object({
     .enum(['auto', 'iframe', 'default'])
     .default('auto')
     .describe('Sets whether we want to have a minimalist chat or the full app'),
+  primaryColor: HexColor.describe(
+    'The primary color of taskyons color scheme.',
+  ).optional(),
+  secondaryColor: HexColor.describe(
+    'The secondary color of taskyons color scheme.',
+  ).optional(),
 });
 export type appConfiguration = z.infer<typeof appConfiguration>;
 

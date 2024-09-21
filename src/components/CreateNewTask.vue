@@ -1,6 +1,6 @@
 <template>
   <!--Create new task area-->
-  <div>
+  <div class="create-new-task">
     <!--Task Creation-->
     <div>
       <div>
