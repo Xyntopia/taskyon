@@ -6,7 +6,6 @@ $primary: var(--q-primary,#2A3548)
 $primary-light: color-mix(in srgb, $primary 20%, white)
 $primary-light-dark: color-mix(in srgb, $primary 25%, white)
 $primary-dark: color-mix(in srgb, $primary 90%, black)
-$secondary-dark: color-mix(in srgb, $secondary 50%, black)
 
 .body--light
   background-color: $primary-light
@@ -60,8 +59,9 @@ $secondary-dark: color-mix(in srgb, $secondary 50%, black)
   .q-drawer
     background-color: $primary-dark
 
+  $secondary-dark: color-mix(in srgb, $secondary 15%, black)
   main.q-page:has(.welcome)
-    background: radial-gradient(circle, $secondary-dark 0%, $secondary-dark 20%, black 70%)
+    background: radial-gradient(circle, $secondary-dark 0%, $secondary-dark 20%, black 80%)
     //background-attachment: fixed
     //background-repeat: no-repeat
     //background-size: cover // Ensure the background covers the entire element
