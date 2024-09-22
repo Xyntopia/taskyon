@@ -42,7 +42,6 @@
           <q-scroll-area class="fit">
             <conversation-widget
               :selected-thread="state.selectedThread"
-              :state="state"
               :current-task="state.currentTask"
               :task-worker-waiting="state.taskWorkerWaiting"
             />

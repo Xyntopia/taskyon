@@ -58,6 +58,6 @@ defineProps<{
   selectedThread: TaskNode[];
   currentTask?: TaskNode;
   taskWorkerWaiting: boolean;
-  taskWorkerMessage: string;
+  taskWorkerMessage?: string;
 }>();
 </script>
