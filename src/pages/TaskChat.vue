@@ -6,7 +6,7 @@
     <div
       ref="taskThreadContainer"
       class="col column items-center"
-      :style="`padding-bottom: ${bottomPadding}px;`"
+      :style="`padding-bottom: ${bottomPadding+5}px;`"
     >
       <q-scroll-observer axis="vertical" :debounce="500" @scroll="onScroll" />
       <!-- "Task" Display -->
