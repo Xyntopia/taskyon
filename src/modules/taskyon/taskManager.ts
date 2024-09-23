@@ -205,7 +205,7 @@ export async function addTask2Tree(
 
   // extract keywordsfrom entire chat and use it to name the task...
   // but only if a taskname doesn't exist yet.
-  if (!newTask.name && task.content) {
+  if (!newTask.name && task.content && !task.label?.includes('discard')) {
     const chat = taskManager.buildChatThread(newTask.id, false);
     const chatString = (await chat).reduce((p, n) => {
       if (typeof n.content === 'string') {
@@ -459,15 +459,18 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
 
   // TODO: get rid of this...  its too slow and we want to oad tasks directly from the db...
   //       or do this really slowly...
+  // this function slowly loads the entire db into memory cache in the background trying to speed up
+  // future access to tasks...
   async function initializeTasksFromDB() {
     // TODO: wondering if we should maybe get rid of this?  its pretty inefficient to do this
     //       on every reload of our app :P
+    console.log('Initialize our in-memory task store.');
     if (taskyonDB) {
       const tasksFromDb = await taskyonDB.tasknodes.find().exec();
       tasksFromDb.forEach(async (taskDoc) => {
         try {
-          const task = transformDocToTaskNode(taskDoc);
-          tasks.set(task.id, task);
+          // make sure we load the task into cache by calling it...
+          getTask(taskDoc.id);
         } catch (error) {
           console.error('Error transforming task doc:', error);
           // skip this task and continue with the next one
@@ -616,7 +619,8 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     if (task && taskyonDB) {
       const newDBTask = transformTaskNodeToDocType(task);
       await taskyonDB.tasknodes.upsert(newDBTask);
-      void addtoVectorDB(task);
+      // only add it to vector db if not marked as "discard"
+      if (task.label?.includes('discard')) void addtoVectorDB(task);
     }
   }
 

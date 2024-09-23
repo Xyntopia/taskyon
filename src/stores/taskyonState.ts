@@ -381,6 +381,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
       if (taskId) {
         const threadIDChain = await (await getTaskManager()).taskChain(taskId);
         const TM = await getTaskManager();
+        console.log('loading iniial thread chain');
         const thread = (await Promise.all(
           threadIDChain.map(async (tId) => {
             return await TM.getTask(tId);

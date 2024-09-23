@@ -82,6 +82,10 @@ export function generateOpenAIToolDeclarations(
  * @param method
  * @returns
  */
+
+type tyChatCompletionmessageParam =
+  OpenAI.Chat.Completions.ChatCompletionMessageParam;
+
 export function addPrompts(
   task: Pick<
     TaskNode,
@@ -90,7 +94,7 @@ export function addPrompts(
   toolCollection: Record<string, ToolBase>,
   llmSettings: llmSettings,
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+): tyChatCompletionmessageParam[] {
   // Check if task has tools and OpenAI tools are not enabled
   console.log('Creating chat prompts');
 
@@ -100,10 +104,8 @@ export function addPrompts(
   const modifiedOpenAIConversationThread = structuredClone(
     openAIConversationThread,
   );
-  const prependMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
-    [];
-  const appendMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
-    [];
+  const prependMessages: tyChatCompletionmessageParam[] = [];
+  const appendMessages: tyChatCompletionmessageParam[] = [];
 
   const toolList = task.allowedTools?.map((t) => `- ${t}`).join('\n');
   const variables: Record<string, string> = {

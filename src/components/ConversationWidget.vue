@@ -12,8 +12,9 @@
         :flat="$q.dark.isActive"
         :class="task.role"
       >
+        <div v-if="task.label?.includes('hide')">...</div>
         <Task
-          v-if="!('structuredResponse' in task.content)"
+          v-else-if="!('structuredResponse' in task.content)"
           :id="task.id"
           :task="task"
           :is-working="!taskWorkerWaiting && task.id === currentTask.id"
@@ -40,7 +41,10 @@
           <q-spinner-dots size="2rem" color="secondary" />
         </div>
       </q-card>
-      <div v-else-if="taskWorkerMessage" class="transparent text-negative text-bold q-pa-md">
+      <div
+        v-else-if="taskWorkerMessage"
+        class="transparent text-negative text-bold q-pa-md"
+      >
         {{ taskWorkerMessage }}
       </div>
     </div>
