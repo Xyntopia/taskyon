@@ -1,6 +1,7 @@
 <!--taskyon
 name: How to integrate Taskyon into a webpage
 role: "user"
+label: ["discard"]
 -->
 
 How do I integrate taskyon into my own webpage?
@@ -9,6 +10,7 @@ How do I integrate taskyon into my own webpage?
 
 <!--taskyon
 role: assistant
+label: ["discard"]
 -->
 
 Hi, this is not hard! You can integrate taskyon as an iframe. You have full control
@@ -26,6 +28,7 @@ Scroll further down in the chat to get more explanations.
 <!--taskyon
 name: How does Taskyon integration work?
 role: user
+label: ["discard"]
 -->
 
 can you create a sequence diagram
@@ -35,6 +38,7 @@ for me, how taskyon communicates with an app/webpage which integrates it as an i
 
 <!--taskyon
 role: assistant
+label: ["discard"]
 -->
 
 Sure! Below is a sequence diagram that illustrates how Taskyon communicates with an app that integrates it as an iframe.
@@ -78,6 +82,7 @@ sequenceDiagram
 <!--taskyon
 name: Step-by-step tutorial
 role: user
+label: ["discard"]
 -->
 
 Can you write a step-by-step tutorial for me?
@@ -86,6 +91,7 @@ Can you write a step-by-step tutorial for me?
 
 <!--taskyon
 role: assistant
+label: ["discard"]
 -->
 
 # Integrating Taskyon AI into Your Webpage

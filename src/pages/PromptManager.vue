@@ -10,16 +10,19 @@
         />
         <q-card v-else flat>
           <q-card-section>
-            <div>This is what the current prompt would look like:</div>
+            <div>
+              This is what the current base-prompt would look like (used in
+              every conversation):
+            </div>
             <q-card
               v-for="(prompt, index) in structuredResponsePrompt"
               :key="index"
               class="q-pa-xs q-my-xs"
-              bordereds
+              bordered
               flat
               :model-value="prompt"
             >
-              <p class="text-bold">role: {{ prompt.role }}</p>
+              <p class="text-bold text-secondary">role: {{ prompt.role }}</p>
               <p style="white-space: pre-wrap">
                 {{ prompt.content }}
               </p>
@@ -87,18 +90,56 @@ async function getAllTools() {
 
 const currentPromptYaml = computed(() => {
   return `
+
 <!--taskyon
-role: assistant
-name: assisted prompt change 
+role: user
+name: change prompts
+label: ["discard", "hide"]
+-->
+
+The following are our current taskyon prompts:
+
+---
+
+<!--taskyon
+role: system
+name: current taskyon prompts 
+label: ["discard", "hide"]
 -->  
 
-Here are the prompts taskyon is currently using:
+${dump(state.llmSettings.taskChatTemplates, { forceQuotes: true })}
 
-\`\`\`yaml
-${dump(state.llmSettings.taskChatTemplates)}
-\`\`\`
+---
 
-What would you like to change?
+<!--taskyon
+role: user
+name: request assisted prompt change 
+label: ["discard", "hide"]
+-->  
+
+I would like to change the prompts for taskyon AI. Taskyon AI uses a variety of prompts \
+which are added to the chat based on the type of expected message. For example if tools \
+are enabled, a prompt is added which informs Taskyon about the available tools. Another prompt \
+is added which explains the required return format. 
+
+Available prompts are:
+
+${Object.keys(state.llmSettings.taskChatTemplates)
+  .map((x) => '- ' + x)
+  .join('\n')}
+
+Please give back the modified object in the exact same format as above in yaml. \
+You can leave out any yaml keys, if you think its only required to change a specific key.
+
+---
+
+<!--taskyon
+role: assistant
+name: ask for prompt modification
+label: ["discard"]
+-->  
+
+How would you like to change the prompt?
 `;
 });
 

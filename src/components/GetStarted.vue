@@ -56,6 +56,7 @@ const starters = computed(() => {
 <!--taskyon
 name: Currently recommended models
 role: "user"
+label: ["discard"]
 -->
 
 Which models do you currently recommend?
@@ -64,11 +65,12 @@ Which models do you currently recommend?
 <!--taskyon
 name: Currently recommended models
 role: "assistant"
+label: ["discard"]
 -->
 Currently we recommended the following Models:
-  - llama-3: much cheaper than GPT4o and best for most tasks (including coding) and if you want to use "tools"
+  - llama-3.1: much cheaper than GPT4o and best for most tasks (including coding) and if you want to use "tools"
   - GPT4o: visual tasks and if you need t work in languages other than english
-  - llama-3-8b:  the best "free" model
+  - llama-3.1-8b:  the best "free" model
   - checkout the entire list of models and descriptions [here](https://taskyon.space/pricing)!
 
 You can select them in the "Chat Settings" section in the message input window.
