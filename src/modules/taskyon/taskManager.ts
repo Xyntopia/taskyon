@@ -790,8 +790,8 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     if (taskyonDB) {
       console.log('exporting json backup db!');
       const dbobject = await taskyonDB.exportJSON([
-        'llmtasks',
         'filemappings',
+        'tasknodes',
         //'vectormappings'
       ]);
       return dbobject;

@@ -207,7 +207,7 @@ async function loadSettingsFromFile(
 ) {
   if (newFiles.length === 0) return; // No file uploaded
 
-  const file = newFiles[0]; // Assuming only one file is uploaded
+  const file = newFiles[0]!; // Assuming only one file is uploaded
 
   // TODO: merge this function with the one we're using in tyState and make sure we do version
   //       checks...
@@ -280,7 +280,7 @@ async function onDownloadTaskyonData() {
 async function onUploadTaskyonData(newFiles: File[]) {
   if (newFiles.length === 0) return; // No file uploaded
 
-  const file = newFiles[0]; // Assuming only one file is uploaded
+  const file = newFiles[0]!; // Assuming only one file is uploaded
 
   try {
     const fileContent = await file.text();
