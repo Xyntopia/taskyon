@@ -79,6 +79,10 @@ Taskyon's commitment to security is evident in its Local First approach, which i
 - _Desktop Application:_ Offers an additional layer of security and control by running locally, ideal for users seeking an elevated level of data protection.
 - _Local data storage:_ Ensures that sensitive data is not exposed beyond the local browser environment, maintaining a secure boundary.
 
+## Support
+
+Join our taskyon channel!:  https://matrix.to/#/!UNCbKcBpdEjFduzzMv:matrix.org?via=matrix.org
+
 ## Roadmap
 
 - _P2P Task Synchronization:_ Facilitate team collaboration with peer-to-peer task synchronization.
