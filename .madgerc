@@ -1,0 +1,18 @@
+{
+  "fontSize": "8px",
+  "baseDir": "./src",
+  "graphVizOptions": {
+    "G": {
+      "rankdir": "LR"
+    }
+  },
+  "tsConfig": "tsconfig.json",
+  "webpackConfig": "quasar.config.ts",
+  "fileExtensions": ["js","ts"],
+  "detectiveOptions": {
+    "ts": {
+      "skipTypeImports": true
+    },
+    "es6": { "mixedImports": true }
+  }
+}

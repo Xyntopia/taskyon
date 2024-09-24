@@ -22,6 +22,19 @@ quasar dev
 quasar build
 ```
 
+## Analyze taskyons dependency graph
+
+There are two tools available:
+
+- [madge](https://github.com/pahen/madge/tree/master)
+- dependency-cruiser
+
+both are already specified in package.json and installed with `yarn install`
+
+```
+madge --circular --extensions ts,tsx ./
+```
+
 ## Code formatting
 
 Quasar provides a built-int code formatter. New commits can only be merged once they have been formatted with it.
