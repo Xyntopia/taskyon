@@ -4,6 +4,11 @@ Taskyon uses a **task tree** structure to manage and execute tasks, inspired by 
 
 While this idea isn't entirely new—**workflow engines**, **job schedulers**, and **dependency graphs** in systems like Apache Airflow or Luigi use similar techniques—Taskyon distinguishes itself by incorporating **Large Language Model (LLM) integration**. The LLM influences the tree's dynamic structure, allowing it to respond flexibly to user input and task evolution.
 
+TODO: write about how we can _record_ a tasktree. Afterwards, we would freeze parts of the tree and leave
+    the rest flexible. This way we could define processes in an easy way...
+    As parts of the tree can consist of arbitrary functions (e.g. python, reading file contents etc...)
+    we essentially developed an LLM program this way...
+
 #### Key Features and Challenges
 
 - **Dynamic Task Orchestration**:

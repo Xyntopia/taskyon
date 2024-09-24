@@ -31,9 +31,41 @@ There are two tools available:
 
 both are already specified in package.json and installed with `yarn install`
 
+### for dependency cruiser:
+
+We prefer this method, because it supports vue-files out-of-the-box.
+
 ```
-madge --circular --extensions ts,tsx ./
+depcruise src --include-only "^src" --output-type dot | dot -T svg > dependency-graph.svg
 ```
+
+### for madge (TODO: right now, we have the problem, that it doesn't detect references to vue files...)
+
+```
+madge  --image graph.svg ./src
+#or
+madge --circular --image graph.svg ./src
+#or
+...
+```
+
+## Testing
+
+We use cypress. All tests are located in folder ./test. To run the tests
+you simply run:
+
+```
+cypress run --e2e
+```
+
+You can find videos of the tests in th folder `test/cypress/videos/`.
+If you want to debug tests and see them live in action, run
+
+```
+cypress open --e2e
+```
+
+And select the tests you woud like to run.
 
 ## Code formatting
 
