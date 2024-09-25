@@ -41,6 +41,9 @@ Taskyon’s codebase is structured to maintain a clear separation between the **
 - **Dependency Cruiser** (preferred, as it supports Vue files):
   
 ```bash
+# perform dependency analysis e.g. in order to detect circular dependencies:
+depcruise src
+# generate a visual graph:
 depcruise src --include-only "^src" --output-type dot | dot -T svg > dependency-graph.svg
 ```
 
