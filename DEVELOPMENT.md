@@ -39,12 +39,29 @@ Here, you can define and load both **local** (development) and **production** co
 Taskyon’s codebase is structured to maintain a clear separation between the **Quasar framework** and **Taskyon’s core logic**. This not only ensures modularity but also helps prevent circular dependencies within the project. Analyzing dependencies is crucial, and we provide two tools for this purpose:
 
 - **Dependency Cruiser** (preferred, as it supports Vue files):
-  
+
+Here is one example of the structure of taskyons codebase as an interactive html:
+
+[frontend/public/docs/dependency-cruiser-graph-flat-dot.html](frontend/public/docs/dependency-cruiser-graph-flat-dot.html)
+
 ```bash
 # perform dependency analysis e.g. in order to detect circular dependencies:
 depcruise src
-# generate a visual graph:
+
+# generate a simple visual graph:
 depcruise src --include-only "^src" --output-type dot | dot -T svg > dependency-graph.svg
+
+# generate folder level interactive overview:
+depcruise src --config --output-type ddot |   dot -T svg -Grankdir=TD |   tee dependency-cruiser-dir-graph.svg | depcruise-wrap-stream-in-html > dependency-cruiser-dir-graph.html
+
+# get a nice interactive overview of our dependencies without folder groups
+depcruise src --progress \
+#    --output-type flat \
+    --include-only "^src" \
+  | dot -Tsvg \
+  | tee dependency-cruiser-graph-flat-dot.svg \
+  | npx depcruise-wrap-stream-in-html \
+  > dependency-cruiser-graph-flat-dot.html
 ```
 
 - **Madge** (useful, but currently has issues detecting Vue file references):
