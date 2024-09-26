@@ -239,10 +239,10 @@ async function parseChatResponse2TaskDraft(
   // parse the response and create a new task filled with the correct parameters
   let yamlContent = message.trim();
   // Use exec() to find a match
-  const yamlBlockRegex = /```(yaml|YAML)\n?([\s\S]*?)\n?```/;
+  const yamlBlockRegex = /```(?:yaml|YAML|[^\n]*)\n?([\s\S]*?)\n?```/;
   const yamlMatch = yamlBlockRegex.exec(yamlContent);
-  if (yamlMatch && yamlMatch[2]) {
-    yamlContent = yamlMatch[2]; // Use the captured group
+  if (yamlMatch && yamlMatch[1]) {
+    yamlContent = yamlMatch[1]; // Use the captured group
   }
 
   let parsedYaml: unknown = undefined;
