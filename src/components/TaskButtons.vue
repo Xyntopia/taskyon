@@ -29,7 +29,6 @@
     </q-btn>
     <q-separator v-if="'message' in task.content" vertical class="q-mx-sm" />
     <q-btn
-      v-if="'message' in task.content"
       class="col-auto"
       size="sm"
       dense
