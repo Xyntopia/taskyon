@@ -99,6 +99,9 @@ export interface OpenRouterGenerationInfo {
   usage: number;
 }
 
+// in order to prevent a circular reference in zod, we need to define our JSONSchemaForFunctionParameter
+// separately
+// https://zod.dev/?id=recursive-types
 export interface JSONSchemaForFunctionParameter {
   $schema?: string;
   type: 'object';

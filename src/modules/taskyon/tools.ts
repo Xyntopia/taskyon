@@ -123,6 +123,7 @@ export async function handleFunctionExecution(
   let funcR: unknown;
   const tool = getTool(tools, func.name);
   if ('function' in tool && tool.function) {
+    console.log('using tool!', tool);
     funcR = await tool.function(func.arguments, taskManager);
     funcR = bigIntToString(funcR);
     return {
@@ -223,6 +224,9 @@ is the outcome of the last expression in the script. Outcomes should be of the t
 // variable
 // TODO: we need to give crateExampleTool the full list of tools with their *code*
 // definitions. Basically it becomes a task-search tool.
+// TODO:  this is a problem, if we use webpack/ts. Because we won't be able to get the original
+//        source code of our tools. Therefore we need to parse our "actual" tools which we can find 
+//        in the task databse with *function* label.
 export function createToolExampleTool(tools: Record<string, Tool>): Tool {
   // used to get the code from our tools :)
   function inspectToolCode(toolName: string) {
