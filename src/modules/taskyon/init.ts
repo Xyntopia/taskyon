@@ -16,7 +16,8 @@ export async function initTaskyon(
   logError: (message: string) => void,
   // we explicitly provide a tasklist here, this gives us the chance to provide a reactive
   // value in order to get updates to the list of tasks immediatly reflected in the UI.
-  TaskList: Map<string, TaskNode>
+  TaskList: Map<string, TaskNode>,
+  AdditionalTools: Tool[],
 ) {
   const ToolList: Tool[] = [
     executePythonScript,
@@ -24,6 +25,7 @@ export async function initTaskyon(
     // localVectorStoreSearch,
     executeJavaScript,
     getFileContent,
+    ...AdditionalTools,
   ];
 
   console.log('initializing taskyondb');
@@ -33,7 +35,7 @@ export async function initTaskyon(
   } catch (err) {
     console.log('could not initialize taskyonDB', err);
     logError(
-      `could not initialize taskyonDB:\n ${JSON.stringify(err, null, 2)}`
+      `could not initialize taskyonDB:\n ${JSON.stringify(err, null, 2)}`,
     );
   }
   console.log('initializing task manager');
@@ -41,7 +43,7 @@ export async function initTaskyon(
     TaskList,
     ToolList,
     taskyonDBInstance,
-    llmSettings.vectorizationModel
+    llmSettings.vectorizationModel,
   );
   console.log('finished taskManager initialization');
 
@@ -52,7 +54,7 @@ export async function initTaskyon(
     llmSettings,
     taskManagerInstance,
     apiKeys,
-    taskWorkerController
+    taskWorkerController,
   );
 
   return taskManagerInstance;

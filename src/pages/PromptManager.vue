@@ -3,7 +3,7 @@
     <UnderConstructionHint />
     <div class="row q-gutter-xs q-pa-xs">
       <div class="col fit">
-        <q-toggle v-model="edit" label="Edit Prompts" />
+        <q-toggle v-model="edit" label="Manually edit prompts" />
         <ObjectTreeView
           v-if="edit"
           :model-value="state.llmSettings.taskChatTemplates"

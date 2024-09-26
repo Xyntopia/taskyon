@@ -16,9 +16,10 @@ import {
 import { initTaskyon } from 'src/modules/taskyon/init';
 import defaultSettings from 'src/assets/taskyon_settings.json';
 import { availableModels } from 'src/modules/taskyon/chat';
-import { storedSettings } from 'src/modules/taskyon/types';
+import { llmSettings, storedSettings } from 'src/modules/taskyon/types';
 import { setupIframeApi } from 'src/modules/iframeApi';
 import { isTaskyonKey } from 'src/modules/taskyon/crypto';
+import { Tool } from 'src/modules/taskyon/tools';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -223,6 +224,54 @@ export const useTaskyonStore = defineStore(storeName, () => {
     return mode;
   });
 
+  function defineTyGuiTools(): Tool[] {
+    return [
+      {
+        function: async ({
+          newPrompts,
+        }: {
+          newPrompts: { [key: string]: string };
+        }) => {
+          console.log('Modifying prompts in llmSettings...');
+          const newPromptsMerged = {
+            ...stateRefs.llmSettings.taskChatTemplates,
+            ...newPrompts,
+          };
+          const result = llmSettings.shape.taskChatTemplates
+            .strict()
+            .safeParse(newPromptsMerged);
+          if (result.success) {
+            stateRefs.llmSettings.taskChatTemplates = result.data;
+            console.log(
+              'Prompts modified:',
+              stateRefs.llmSettings.taskChatTemplates,
+            );
+          } else {
+            return `It was not possible to add prompts for ${Object.keys(newPrompts)} to
+  ${Object.keys(stateRefs.llmSettings.taskChatTemplates)}. Did you use the wrong 
+  keys and are they all defined as string?`;
+          }
+        },
+        description: 'Modify the current prompts in llmSettings',
+        longDescription:
+          'This tool allows you to modify the current prompts in llmSettings. You can provide a new set of prompts as an object, where each key is the prompt name and the value is the new prompt content.',
+        name: 'modifyPrompts',
+        parameters: {
+          type: 'object',
+          properties: {
+            newPrompts: {
+              type: 'object',
+              description:
+                'An object containing the new prompts, where each key is the prompt name and the value is the new prompt content.',
+              default: '',
+            },
+          },
+          required: ['newPrompts'],
+        },
+      },
+    ];
+  }
+
   // last thing we do after having loaded all settings is to actually start taskyon! :)
   const TaskList = reactive(new Map<string, TaskNode>());
   // callin ExecutionContext.interrupt();  cancels processing of current task
@@ -234,6 +283,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     taskWorkerController,
     logError,
     TaskList,
+    defineTyGuiTools(),
   );
   async function getTaskManager() {
     return await taskManager;
