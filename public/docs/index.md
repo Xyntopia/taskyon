@@ -17,11 +17,11 @@ New to Taskyon? Here's a step-by-step guide to help you get started:
 
 Let's get started with Taskyon!
 
-- [FAQ](/md/faq)
+- [FAQ](faq)
 
 ## What's Next?
 
-- Our [Development](/md/docs/DEVELOPMENT) section explains how to get started with development in taskyon.
+- Our [Development](DEVELOPMENT) section explains how to get started with development in taskyon.
 - Stay tuned! More to come ...
 
 <!-- Check out our [Tutorials](#) for hands-on guides and examples.
@@ -35,4 +35,4 @@ Follow us on [Github](https://github.com/Xyntopia/taskyon) and our [Blog](https:
 
 ## Documentation Index
 
-[Index](http://localhost:9000/docs/)
+[Index](/docs)

@@ -76,6 +76,18 @@
           </q-menu>
           <q-tooltip> Table of Contents </q-tooltip>
         </q-btn>
+        <q-btn
+          v-if="!minMode"
+          flat
+          class="gt-xs"
+          dense
+          round
+          :size="btnSize"
+          :icon="matHelpOutline"
+          to="/md/docs/index"
+        >
+          <q-tooltip> Open Taskyon Documentation </q-tooltip>
+        </q-btn>
         <q-separator
           v-if="!minMode"
           class="desktop-only"
