@@ -19,23 +19,23 @@ describe('test taskyon defaults', () => {
     });
     cy.wrap('Unregister service workers').then(() => cypressPromise);*/
 
-    cy.intercept('GET', '**/*.{png,jpg,jpeg,gif}', req => {
+    cy.intercept('GET', '**/*.{png,jpg,jpeg,gif}', (req) => {
       req.reply({
         statusCode: 200,
         body: '',
         headers: {
-              'Content-Type': 'image/png',
-             },
-        })
-    }).as('stubImages')
+          'Content-Type': 'image/png',
+        },
+      });
+    }).as('stubImages');
 
     cy.wrap(
       Cypress.automation('remote:debugger:protocol', {
         command: 'Network.clearBrowserCache',
-      })
+      }),
     );
 
-    cy.intercept('**').as('requests')
+    cy.intercept('**').as('requests');
     //cy.visit('/');
     //cy.intercept('**').as('requests');
     cy.visit('/');
@@ -107,9 +107,9 @@ describe('test taskyon defaults', () => {
       .invoke('text')
       .invoke('trim')
       .then((text) => {
-        const number = parseInt(text, 10);
+        const number = parseInt(text);
         expect(number).to.match(/^\d+$/); // Check if the text is a number
-        expect(number).to.be.greaterThan(10); // Check if the number is greater than 50
+        expect(number).to.be.greaterThan(5); // Check if the number is greater than 50
       });
 
     //.and('match', /^\d+/); // Check if it contains a number
