@@ -48,6 +48,10 @@ export const taskyonRoutes = {
       path: 'prompts',
       component: () => import('pages/PromptManager.vue'),
     },
+    {
+      path: 'docs',
+      component: () => import('src/pages/DocumentationIndex.vue'),
+    },
     ...mdRoutes,
   ],
 };

@@ -1,5 +1,3 @@
-Here's the updated introduction:
-
 **Welcome to Taskyon! 🤖🌳**
 
 Taskyon is a powerful AI assistant that helps you get things done in a simple and intuitive way. Imagine having a personal assistant that can understand what you need and help you accomplish tasks, all within a conversational chat interface 💬.

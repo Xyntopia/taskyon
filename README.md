@@ -1,6 +1,6 @@
-# Taskyon:
+# Taskyon
 
-<img align="left" src="src/assets/taskyon.svg" width="140">
+<img align="left" src="/public/taskyon_fancy_logo.png" onerror="this.onerror=null; this.src='/taskyon_fancy_logo.png';" alt="Taskyon Fancy Logo" width="200" style="padding-right: 50px;"/>
 
 - 👥🛠️ Personalized AI Assistant 🤖
 - 🏡🌟 Local First
@@ -9,7 +9,7 @@
 
 A Chat & Agent Interface for Users, Experts & Developers based on Tasks! 🚀
 
-You can access a version of Taskyon here: [https://taskyon.space](https://taskyon.space).
+You can access a deployed version of Taskyon here: [https://taskyon.space](https://taskyon.space).
 
 ---
 
@@ -36,7 +36,7 @@ Local First Principle: Taskyon embraces the Local First approach, prioritizing u
 
 - **Local First Architecture**: Taskyon's design incorporates the Local First principle, ensuring enhanced data privacy and security while maintaining high performance and user control.
 - **Service Integration:** Utilizes various LLM providers for executing tasks within the conversation threads.
-- **OpenAI API compatibility:** Taskyon can interface with any openai API compatible endpoint. Including locally deployed (e.g. with docker). 
+- **OpenAI API compatibility:** Taskyon can interface with any openai API compatible endpoint. Including locally deployed (e.g. with docker).
 - **Task-Based Conversations:** Each message within a conversation is treated as a task with the role "user", forming a branch in the task tree.
 - **Function Tasks:** Execute and manage function tasks with adjustable parameters directly within the interface.
 - **Frontend Capabilities:** Python and JavaScript code execution within a secure sandbox, access to a local browser-based vector store leveraging HNSWlib, and tool generation on-the-fly with JavaScript or Python.
@@ -81,7 +81,7 @@ Taskyon's commitment to security is evident in its Local First approach, which i
 
 ## Support
 
-Join our taskyon channel!:  https://matrix.to/#/!UNCbKcBpdEjFduzzMv:matrix.org?via=matrix.org
+Join our taskyon channel!: https://matrix.to/#/!UNCbKcBpdEjFduzzMv:matrix.org?via=matrix.org
 
 ## Roadmap
 

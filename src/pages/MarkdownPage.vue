@@ -38,7 +38,7 @@ const fetchMarkdown = async (folder: string, filePath: string) => {
     markdownContent.value = text;
   } catch (error) {
     console.error(error);
-    void router.replace({ name: '404' });
+    void router.replace('/404');
   }
 };
 
@@ -57,6 +57,6 @@ watch(
   () => route.fullPath,
   () => {
     loadMarkdown();
-  }
+  },
 );
 </script>

@@ -12,7 +12,7 @@ To get started with Taskyon, follow these steps:
 # download the project
 git clone https://github.com/Xyntopia/taskyon.git
 
-# install dependencies
+# install dependencies & development dependencies
 yarn install
 
 # start development server
@@ -33,6 +33,21 @@ http://localhost:9000/settings/sync
 ```
 
 Here, you can define and load both **local** (development) and **production** configurations, making it easy to switch between environments.
+
+## Building Documentation
+
+Most docs should automatically appear inside the taskyon webpage when compiling the site with webpack. Taskyon
+makes use of all markdown files in the directory `src/public/doc` for documentation. Starting with index.md.
+
+Tasyon automatically compiles a reference for the [taskyon iframe API](https://rest.wiki/https://taskyon.space/docs/openapi-docs.yml) on every build.
+
+Aditionally, we encourage to write code examples for taskyon using typescript
+and then compile them into javascript using a command like this ([swc](https://swc.rs/) comes pre-installed with the
+taskyon development environment):
+
+```
+swc --config-file src/docs/examples/swcrc exampleToolDefinition.ts -o exampleToolDefinition.js
+```
 
 ## Dependency Analysis
 
@@ -106,7 +121,16 @@ yarn format
 npm run format
 ```
 
-Make sure your code is correctly formatted and linted before committing. The configuration for ESLint is integrated into the project, and Visual Studio Code will help ensure that your contributions align with the coding standards.
+Make sure your code is correctly formatted and linted before committing. The configuration for ESLint is integrated into the project, and Visual Studio Code will help ensure that your contributions align with the coding standards (e.g. you can press
+ctrl-shift-p then search for "format" and it will give formatting options).
+
+## Docker
+
+Taskyon has a docker image available. Building the image will download taskyons dependencies and build them inside the docker image.
+
+## Nix Flake
+
+Taskyon provides a Nix flake (flake.nix) as a development environment which can be used to provide a consistent deveopment environment for taskyon.
 
 ## Debugging
 

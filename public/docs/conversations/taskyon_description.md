@@ -1,4 +1,4 @@
-# How does Taskyon work?
+# How are tasks in Taskyon processed?
 
 Every message/task in a "conversation" in taskyon has carefully designed
 transitions which define what tasks/messages follow in the chain. This works similar to a state machine.

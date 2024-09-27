@@ -112,6 +112,18 @@
               <q-item
                 v-ripple
                 clickable
+                to="/md/docs/index"
+                exact
+                active-class="text-secondary"
+              >
+                <q-item-section avatar>
+                  <q-icon :name="matHelpOutline" />
+                </q-item-section>
+                <q-item-section> Documentation </q-item-section>
+              </q-item>
+              <q-item
+                v-ripple
+                clickable
                 to="/pricing"
                 exact
                 active-class="text-secondary"
@@ -181,7 +193,7 @@
 
     <!-- Main Content Area -->
     <q-page-container>
-      <router-view/>
+      <router-view />
     </q-page-container>
   </q-layout>
 </template>
@@ -192,6 +204,7 @@ import DarkModeButton from 'components/DarkModeButton.vue';
 import { defineAsyncComponent } from 'vue';
 import type { useTaskyonStore } from 'stores/taskyonState';
 import {
+  matHelpOutline,
   matMenu,
   matSearch,
   matSettings,

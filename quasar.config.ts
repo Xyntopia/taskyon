@@ -22,18 +22,31 @@ const DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid';
 
 console.log('compile app: ', APPNAME, DESCRIPTION);
 
-// Function to copy the taskyon_settings.json file
-function copyTaskyonSettings() {
-  const srcPath = path.resolve(__dirname, 'src/assets/taskyon_settings.json');
-  const destPath = path.resolve(__dirname, 'public/taskyon_settings.json');
+// Function to copy multiple files
+function copyFiles(fileList: { src: string; dest: string }[]) {
+  fileList.forEach((file) => {
+    const srcPath = path.resolve(__dirname, file.src);
+    const destPath = path.resolve(__dirname, file.dest);
 
-  if (fs.existsSync(srcPath)) {
-    fs.copyFileSync(srcPath, destPath);
-    console.log('Copied taskyon_settings.json to public folder');
-  } else {
-    console.error('taskyon_settings.json not found in src/assets');
-  }
+    if (fs.existsSync(srcPath)) {
+      fs.copyFileSync(srcPath, destPath);
+      console.log(`Copied ${file.src} to ${file.dest}`);
+    } else {
+      console.error(`${file.src} not found`);
+    }
+  });
 }
+
+const filesToCopy = [
+  {
+    src: 'src/assets/taskyon_settings.json',
+    dest: 'public/taskyon_settings.json',
+  },
+  {
+    src: 'README.md',
+    dest: 'public/docs/README.md',
+  },
+];
 
 function createOpenAPIDocs() {
   /** This function creates openAPI docs for taskyon and saves them inside the public folder.
@@ -78,7 +91,7 @@ function createOpenAPIDocs() {
 export default configure((ctx) => {
   if (ctx.prod) {
     createOpenAPIDocs();
-    copyTaskyonSettings();
+    copyFiles(filesToCopy);
   }
 
   return {
@@ -399,7 +412,7 @@ export default configure((ctx) => {
         }
 
         devServer.middleware.waitUntilValid(() => {
-          copyTaskyonSettings();
+          copyFiles(filesToCopy);
           createOpenAPIDocs();
         });
 
