@@ -49,10 +49,10 @@
 import { ref, computed } from 'vue';
 import { ToolBase } from 'src/modules/taskyon/types';
 import { useTaskyonStore } from 'src/stores/taskyonState';
-import CreateNewTask from 'components/CreateNewTask.vue';
-import ObjectTreeView from './ObjectTreeView.vue';
+import CreateNewTask from './CreateNewTask.vue';
+import ObjectTreeView from '../ObjectTreeView.vue';
 import { taskTemplateTypes } from 'src/modules/taskyon/types';
-import UnderConstructionHint from './UnderConstructionHint.vue';
+import UnderConstructionHint from '../UnderConstructionHint.vue';
 import { mdiToolbox } from '@quasar/extras/mdi-v6';
 
 const functionTemplate = taskTemplateTypes.toolDescription.parse(undefined);

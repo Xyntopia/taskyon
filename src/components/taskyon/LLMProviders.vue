@@ -155,12 +155,12 @@ insert into the settings below."
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
 import OpenRouterPKCE from './OpenRouterPKCE.vue';
-import JsonInput from './JsonInput.vue';
-import TyMarkdown from './tyMarkdown.vue';
-import SecretInput from './SecretInput.vue';
+import JsonInput from '../JsonInput.vue';
+import TyMarkdown from '../tyMarkdown.vue';
+import SecretInput from '../SecretInput.vue';
 import { matEdit } from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
-import InfoDialog from './InfoDialog.vue';
+import InfoDialog from '../InfoDialog.vue';
 
 const state = useTaskyonStore();
 

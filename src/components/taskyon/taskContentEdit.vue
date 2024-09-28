@@ -40,7 +40,7 @@ import {
   matSend,
   matUploadFile,
 } from '@quasar/extras/material-icons';
-import FileDropzone from './FileDropzone.vue';
+import FileDropzone from '../FileDropzone.vue';
 
 const content = defineModel<string | null | undefined>({
   required: true,

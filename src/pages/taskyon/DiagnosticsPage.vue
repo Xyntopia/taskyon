@@ -17,7 +17,7 @@
 
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
-import ObjectTreeView from 'src/components/ObjectTreeView.vue';
+import ObjectTreeView from 'components/ObjectTreeView.vue';
 import { storeToRefs } from 'pinia';
 import { generateCompleteChat } from 'src/modules/taskyon/promptCreation';
 import { ref } from 'vue';

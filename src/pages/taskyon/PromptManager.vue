@@ -59,17 +59,17 @@
 </template>
 
 <script setup lang="ts">
-import tyMarkdown from '../components/tyMarkdown.vue';
+import tyMarkdown from 'components/tyMarkdown.vue';
 import { ref, computed } from 'vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
-import CreateNewTask from 'components/CreateNewTask.vue';
-import ObjectTreeView from '../components/ObjectTreeView.vue';
+import CreateNewTask from 'components/taskyon/CreateNewTask.vue';
+import ObjectTreeView from 'components/ObjectTreeView.vue';
 import { TaskNode } from 'src/modules/taskyon/types';
-import UnderConstructionHint from '../components/UnderConstructionHint.vue';
+import UnderConstructionHint from 'components/UnderConstructionHint.vue';
 import { addPrompts } from 'src/modules/taskyon/promptCreation';
-import ConversationWidget from 'src/components/ConversationWidget.vue';
+import ConversationWidget from 'components/taskyon/ConversationWidget.vue';
 import { mdiMagicStaff } from '@quasar/extras/mdi-v6';
-import CreateTaskButton from 'src/components/CreateTaskButton.vue';
+import CreateTaskButton from 'components/taskyon/CreateTaskButton.vue';
 import { dump } from 'js-yaml';
 
 const state = useTaskyonStore();

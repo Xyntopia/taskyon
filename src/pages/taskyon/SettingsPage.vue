@@ -64,11 +64,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useTaskyonStore } from 'stores/taskyonState';
-import LLMProviders from 'components/LLMProviders.vue';
+import LLMProviders from 'components/taskyon/LLMProviders.vue';
 import ObjectTreeView from 'components/ObjectTreeView.vue';
-import SyncTaskyon from 'components/SyncTaskyon.vue';
+import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue';
 import { useRoute } from 'vue-router';
-import ExpertEnable from './ExpertEnable.vue';
+import ExpertEnable from 'components/taskyon/ExpertEnable.vue';
 
 const route = useRoute();
 const state = useTaskyonStore();

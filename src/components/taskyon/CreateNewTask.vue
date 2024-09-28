@@ -332,17 +332,17 @@ import {
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { TaskNode } from 'src/modules/taskyon/types';
-import ModelSelection from 'components/ModelSelection.vue';
+import ModelSelection from 'components/taskyon/ModelSelection.vue';
 import { writeFilesToOpfs } from 'src/modules/taskyon/OPFS';
 import { addTask2Tree } from 'src/modules/taskyon/taskManager';
-import ObjectTreeView from './ObjectTreeView.vue';
-import taskSettingsButton from './taskSettingsButton.vue';
+import ObjectTreeView from '../ObjectTreeView.vue';
+import taskSettingsButton from '../taskSettingsButton.vue';
 import taskContentEdit from './taskContentEdit.vue';
 //import CodeEditor from './CodeEditor.vue';
 import { defineAsyncComponent } from 'vue';
 import { watchDebounced } from '@vueuse/core';
-import InfoDialog from './InfoDialog.vue';
-import ToggleButton from './ToggleButton.vue';
+import InfoDialog from '../InfoDialog.vue';
+import ToggleButton from '../ToggleButton.vue';
 import {
   matSave,
   matUploadFile,
@@ -371,7 +371,7 @@ const CodeEditor = defineAsyncComponent(
   /* webpackChunkName: "codemirror" */
   /* webpackMode: "lazy" */
   /* webpackFetchPriority: "low" */
-  () => import('./CodeEditor.vue'),
+  () => import('../CodeEditor.vue'),
 );
 
 const props = defineProps<{

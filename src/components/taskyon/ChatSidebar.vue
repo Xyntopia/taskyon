@@ -137,7 +137,7 @@ import {
   deleteTaskThread,
   TyTaskManager,
 } from 'src/modules/taskyon/taskManager';
-import SimpleSettings from 'components/SimpleSettings.vue';
+import SimpleSettings from './SimpleSettings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { TaskNode, TaskListType } from 'src/modules/taskyon/types';
 import { exportFile } from 'quasar';

@@ -15,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-import TyMarkdown from 'src/components/tyMarkdown.vue';
+import TyMarkdown from 'components/tyMarkdown.vue';
 import { ref, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 

@@ -249,15 +249,15 @@
 </template>
 
 <script setup lang="ts">
-import ToolResultWidget from 'components/ToolResultWidget.vue';
+import ToolResultWidget from 'components/taskyon/ToolResultWidget.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
-import TokenUsage from 'components/TokenUsage.vue';
+import TokenUsage from 'components/taskyon/TokenUsage.vue';
 import {
   TaskNode,
   partialTaskDraft,
   ToolBase,
 } from 'src/modules/taskyon/types';
-import tyMarkdown from './tyMarkdown.vue';
+import tyMarkdown from '../tyMarkdown.vue';
 import { computed, ref } from 'vue';
 import { FileMappingDocType } from 'src/modules/taskyon/rxdb';
 import { dump } from 'js-yaml';

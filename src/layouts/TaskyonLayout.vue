@@ -106,7 +106,7 @@
                 <q-item-section avatar>
                   <q-icon :name="matSettings" />
                 </q-item-section>
-                <q-item-section>Taskyon Settings</q-item-section>
+                <q-item-section>Open settings</q-item-section>
               </q-item>
               <q-item
                 v-ripple
@@ -233,7 +233,7 @@ const ChatSidebar = defineAsyncComponent(
       /* webpackChunkName: "ChatSidebar" */
       /* webpackMode: "lazy" */
       /* webpackFetchPriority: "low" */
-      'components/ChatSidebar.vue'
+      'components/taskyon/ChatSidebar.vue'
     ),
 );
 
@@ -243,7 +243,7 @@ const TableOfChatContent = defineAsyncComponent(
       /* webpackChunkName: "TableOfChatContent" */
       /* webpackMode: "lazy" */
       /* webpackFetchPriority: "low" */
-      'components/TableOfChatContent.vue'
+      'components/taskyon/TableOfChatContent.vue'
     ),
 );
 

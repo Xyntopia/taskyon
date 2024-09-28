@@ -94,14 +94,14 @@
 import { ref, UnwrapRef, computed } from 'vue';
 import { useQuasar, scroll } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
-import CreateNewTask from 'components/CreateNewTask.vue';
-import GetStarted from 'src/components/GetStarted.vue';
+import CreateNewTask from 'components/taskyon/CreateNewTask.vue';
+import GetStarted from 'components/taskyon/GetStarted.vue';
 import {
   matKeyboardDoubleArrowDown,
   matStop,
 } from '@quasar/extras/material-icons';
 import { sleep } from 'src/modules/taskyon/utils';
-import ConversationWidget from 'components/ConversationWidget.vue';
+import ConversationWidget from 'components/taskyon/ConversationWidget.vue';
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
 const bottomPadding = ref(100);

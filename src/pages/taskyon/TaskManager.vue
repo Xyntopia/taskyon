@@ -57,7 +57,7 @@
 import { ref } from 'vue';
 import Search from 'components/SearchInput.vue';
 import { TaskNode } from 'src/modules/taskyon/types';
-import Task from 'src/components/TaskWidget.vue';
+import Task from 'components/taskyon/TaskWidget.vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { findLeafTasks } from 'src/modules/taskyon/taskManager';
 import { matSync } from '@quasar/extras/material-icons';

@@ -109,11 +109,11 @@ including additional providers to make even more use of the pricing competition 
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { QTableProps } from 'quasar';
 import { openrouterPricing } from 'src/modules/taskyon/utils';
-import InfoDialog from 'src/components/InfoDialog.vue';
+import InfoDialog from 'components/InfoDialog.vue';
 import { ref, computed } from 'vue';
 import { matFilterList } from '@quasar/extras/material-icons';
-import tyMarkdown from 'src/components/tyMarkdown.vue';
-import ApiSelect from 'src/components/ApiSelect.vue';
+import tyMarkdown from 'components/tyMarkdown.vue';
+import ApiSelect from 'components/taskyon/ApiSelect.vue';
 
 const state = useTaskyonStore();
 const filter = ref<string | null>('');
