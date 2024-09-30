@@ -33,7 +33,7 @@
       <q-tab-panels :model-value="selectedTab" animated swipeable infinite>
         <q-tab-panel name="aiserviceprovider" :class="tabPanelClass">
           <LLMProviders
-            v-model:expertModeOn="state.appConfiguration.expertMode"
+            v-model:expert-mode-on="state.appConfiguration.expertMode"
             style="max-width: 600px"
           />
         </q-tab-panel>

@@ -247,7 +247,7 @@
         <q-item class="row items-center">
           <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
           <ModelSelection
-            v-model:selectedApi="selectedApi"
+            v-model:selected-api="selectedApi"
             class="col"
             :bot-name="currentModel"
             :model-list="expertMode"
