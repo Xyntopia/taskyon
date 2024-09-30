@@ -333,10 +333,10 @@ import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { TaskNode } from 'src/modules/taskyon/types';
 import ModelSelection from 'components/taskyon/ModelSelection.vue';
-import { writeFilesToOpfs } from 'src/modules/taskyon/OPFS';
+import { writeFilesToOpfs } from 'src/modules/OPFS';
 import { addTask2Tree } from 'src/modules/taskyon/taskManager';
 import ObjectTreeView from '../ObjectTreeView.vue';
-import taskSettingsButton from '../taskSettingsButton.vue';
+import taskSettingsButton from './taskSettingsButton.vue';
 import taskContentEdit from './taskContentEdit.vue';
 //import CodeEditor from './CodeEditor.vue';
 import { defineAsyncComponent } from 'vue';
@@ -363,7 +363,7 @@ import {
   mdiAutoFix,
   mdiTools,
 } from '@quasar/extras/mdi-v6';
-import { deepMerge } from 'src/modules/taskyon/utils';
+import { deepMerge } from 'src/modules/utils';
 import { getApiConfig } from 'src/modules/taskyon/taskWorker';
 
 const CodeEditor = defineAsyncComponent(

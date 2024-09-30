@@ -274,7 +274,7 @@ import {
   matNewLabel,
   matWarning,
 } from '@quasar/extras/material-icons';
-import { openrouterPricing } from 'src/modules/taskyon/utils';
+import { openrouterPricing } from 'src/modules/utils';
 
 const props = defineProps<{
   task: TaskNode;

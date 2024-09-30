@@ -7,8 +7,8 @@ import {
   transformDocToTaskNode,
   collections,
 } from './rxdb';
-import { openFile } from './OPFS';
-import { Lock, deepMerge, AsyncQueue, sleep } from './utils';
+import { openFile } from '../OPFS';
+import { Lock, deepMerge, AsyncQueue, sleep } from '../utils';
 import type { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { loadOrCreateHNSWIndex } from './hnswIndex';
 import { extractKeywords, useNlpWorker } from './webWorkerApi';

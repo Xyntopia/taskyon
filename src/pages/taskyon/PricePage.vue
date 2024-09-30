@@ -108,7 +108,7 @@ including additional providers to make even more use of the pricing competition 
 <script setup lang="ts">
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { QTableProps } from 'quasar';
-import { openrouterPricing } from 'src/modules/taskyon/utils';
+import { openrouterPricing } from 'src/modules/utils';
 import InfoDialog from 'components/InfoDialog.vue';
 import { ref, computed } from 'vue';
 import { matFilterList } from '@quasar/extras/material-icons';

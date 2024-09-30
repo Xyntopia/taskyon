@@ -26,8 +26,8 @@ import type { OpenAI } from 'openai';
 import { TyTaskManager } from './taskManager';
 import { Tool, handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
-import { deepCopy, deepMerge, sleep } from './utils';
-import { isTaskyonKey } from './crypto';
+import { deepCopy, deepMerge, sleep } from '../utils';
+import { isTaskyonKey } from '../crypto';
 
 function extractOpenAIFunctions(
   choice: OpenAI.ChatCompletion['choices'][0],

@@ -124,6 +124,8 @@ npm run format
 Make sure your code is correctly formatted and linted before committing. The configuration for ESLint is integrated into the project, and Visual Studio Code will help ensure that your contributions align with the coding standards (e.g. you can press
 ctrl-shift-p then search for "format" and it will give formatting options).
 
+In VS Code, we use "prettier" for all formatting options...
+
 ## Docker
 
 Taskyon has a docker image available. Building the image will download taskyons dependencies and build them inside the docker image.

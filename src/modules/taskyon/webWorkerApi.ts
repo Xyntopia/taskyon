@@ -1,6 +1,6 @@
 import type { PythonScriptResult } from './pyodide';
 import type { nlpWorkerResult } from './nlp.worker';
-import { lruCache } from './utils';
+import { lruCache } from '../utils';
 
 export const useNlpWorker = () => {
   const getWebWorker = lruCache<Worker>(10)(() => {

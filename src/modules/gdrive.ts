@@ -2,8 +2,8 @@ import { ref, computed } from 'vue';
 import axios from 'axios';
 import { googleSdkLoaded } from 'vue3-google-login';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { deepMergeReactive, sleep } from 'src/modules/taskyon/utils';
-import { asyncLruCache } from 'src/modules/taskyon/utils';
+import { deepMergeReactive, sleep } from 'src/modules/utils';
+import { asyncLruCache } from 'src/modules/utils';
 
 export const state = useTaskyonStore();
 

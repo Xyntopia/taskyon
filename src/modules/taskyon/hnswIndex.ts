@@ -1,5 +1,5 @@
 import type { HnswlibModule } from 'hnswlib-wasm';
-import { Lock, sleep } from './utils';
+import { Lock, sleep } from '../utils';
 
 const numDimensions = 384;
 let lib: HnswlibModule | undefined = undefined;

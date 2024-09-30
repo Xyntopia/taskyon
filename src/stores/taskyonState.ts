@@ -7,7 +7,7 @@ import type {
 } from 'src/modules/taskyon/types';
 import axios from 'axios'; // TODO: replace with fetch
 import { LocalStorage, Notify, setCssVar } from 'quasar'; // load dynamically! :)
-import { deepMerge, deepMergeReactive, sleep } from 'src/modules/taskyon/utils';
+import { deepMerge, deepMergeReactive, sleep } from 'src/modules/utils';
 import { useQuasar } from 'quasar';
 import {
   useTaskWorkerController,
@@ -17,8 +17,8 @@ import { initTaskyon } from 'src/modules/taskyon/init';
 import defaultSettings from 'src/assets/taskyon_settings.json';
 import { availableModels } from 'src/modules/taskyon/chat';
 import { llmSettings, storedSettings } from 'src/modules/taskyon/types';
-import { setupIframeApi } from 'src/modules/iframeApi';
-import { isTaskyonKey } from 'src/modules/taskyon/crypto';
+import { setupIframeApi } from 'src/modules/taskyon/iframeApi';
+import { isTaskyonKey } from 'src/modules/crypto';
 import { Tool } from 'src/modules/taskyon/tools';
 
 function removeCodeFromUrl() {

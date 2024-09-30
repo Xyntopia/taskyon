@@ -1,7 +1,7 @@
-import { addTask2Tree, TyTaskManager } from './taskyon/taskManager';
-import { TaskyonMessages, ToolBase, partialTaskDraft } from './taskyon/types';
-import type { llmSettings } from './taskyon/types';
-import { deepMergeReactive } from './taskyon/utils';
+import { addTask2Tree, TyTaskManager } from './taskManager';
+import { TaskyonMessages, ToolBase, partialTaskDraft } from './types';
+import type { llmSettings } from './types';
+import { deepMergeReactive } from '../utils';
 
 /*function stringifyIfNotString(obj: unknown): string | undefined {
     if (typeof obj === 'undefined') return undefined;

@@ -186,7 +186,7 @@ import { exportFile, extend } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
 import yaml from 'js-yaml';
 import { onSyncGdrive, onUpdateAppConfiguration } from 'src/modules/gdrive';
-import { deepMergeReactive } from 'src/modules/taskyon/utils';
+import { deepMergeReactive } from 'src/modules/utils';
 import {
   matSync,
   matSave,

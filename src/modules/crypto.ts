@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { tyPublicApiKeyObject } from './types';
+import { tyPublicApiKeyObject } from './taskyon/types';
 
 export function parseJwt(
   token: string | undefined,

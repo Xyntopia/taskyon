@@ -8,8 +8,8 @@ import type {
 } from './types';
 import type { TyTaskManager } from './taskManager';
 import OpenAI from 'openai';
-import { openFile } from './OPFS';
-import { lruCache, sleep, asnycasyncTimeLruCache } from './utils';
+import { openFile } from '../OPFS';
+import { lruCache, sleep, asnycasyncTimeLruCache } from '../utils';
 import type { FileMappingDocType } from './rxdb';
 import { findAllFilesInTasks } from './taskUtils';
 import { TaskProcessingError, apiConfig } from './types';

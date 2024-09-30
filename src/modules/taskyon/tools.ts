@@ -1,7 +1,7 @@
 import { useVectorStore } from 'src/modules/localVectorStore';
 import type { PythonScriptResult } from './pyodide';
 import { dump } from 'js-yaml';
-import { bigIntToString } from './utils';
+import { bigIntToString } from '../utils';
 import { asyncRunPython } from 'src/modules/taskyon/webWorkerApi';
 import {
   TaskResult,
@@ -17,7 +17,7 @@ import {
 import { z } from 'zod';
 import type { TyTaskManager } from './taskManager';
 import { loadFile } from '../loadFiles';
-import { YamlRepresentation, convertToYamlWComments } from './zodUtils';
+import { YamlRepresentation, convertToYamlWComments } from '../zodUtils';
 
 const arbitraryFunctionSchema = z.custom<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

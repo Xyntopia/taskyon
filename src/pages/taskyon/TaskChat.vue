@@ -100,7 +100,7 @@ import {
   matKeyboardDoubleArrowDown,
   matStop,
 } from '@quasar/extras/material-icons';
-import { sleep } from 'src/modules/taskyon/utils';
+import { sleep } from 'src/modules/utils';
 import ConversationWidget from 'components/taskyon/ConversationWidget.vue';
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
