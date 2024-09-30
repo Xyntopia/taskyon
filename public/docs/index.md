@@ -10,8 +10,9 @@ New to Taskyon? Here's a step-by-step guide to help you get started:
 
 1. [**Understand the Basics**](conversations/features_intro): Discover Taskyon's capabilities, including Math formulas support, Mermaid charts, Python & javascript coding and more.
 2. [**Prompting Best Practice**](prompting_best_practice): Some advice on how to talk with an AI.
-3. [**Integrate with Your App**](examples/simpleExampleTutorial): Discover how to integrate Taskyon into your webpage or application using our iframe-based integration.
-4. [**Explore Advanced Features**](taskyon_advanced): Learn about Taskyon's architecture, key concepts, and features.
+3. [**Taskyon Configuration**](taskyon_configuration): Available configuration options for taskyon.
+4. [**Integrate with Your App**](examples/simpleExampleTutorial): Discover how to integrate Taskyon into your webpage or application using our iframe-based integration.
+5. [**Explore Advanced Features**](taskyon_advanced): Learn about Taskyon's architecture, key concepts, and features.
 
 <!--3. [**Build Your First Tool**](): Create a simple tool using our example code and learn how to define tool functions, parameters, and responses.-->
 

@@ -480,48 +480,101 @@ export interface Model {
   } | null;
 }
 
-const apiConfig = z.object({
-  name: z.string(),
-  baseURL: z.string(),
-  defaultModel: z.string(),
-  selectedModel: z.string().optional(),
-  models: z
-    .object({
-      instruction: z.string(),
-      chat: z.string(),
-      free: z.string(),
-    })
-    .partial()
-    .optional(),
-  streamSupport: z.boolean(),
-  defaultHeaders: z.record(z.string(), z.string()).optional(),
-  routes: z.object({
-    chatCompletion: z.string(),
-    models: z.string(),
-  }),
-});
+const apiConfig = z
+  .object({
+    name: z.string().describe('The name of the API.'),
+    baseURL: z.string().describe('Base URL of the api.'),
+    defaultModel: z
+      .string()
+      .describe('the default model which should be used for this API.'),
+    selectedModel: z
+      .string()
+      .optional()
+      .describe('which model is currently selected.'),
+    models: z
+      .object({
+        instruction: z.string(),
+        chat: z.string(),
+        free: z.string(),
+      })
+      .partial()
+      .optional()
+      .describe('Define default models for some tasks.'),
+    streamSupport: z.boolean().describe('Does the API support streaming?'),
+    defaultHeaders: z
+      .record(z.string(), z.string())
+      .optional()
+      .describe(
+        'If the API needs some special headers for communication (e.g. an API key.)',
+      ),
+    routes: z.object({
+      chatCompletion: z.string().describe('Endpoint for chatcompletion.'),
+      models: z.string().describe('Endpoint for list of models.'),
+    }),
+  })
+  .describe('Definition of an OpenAI Compatible API.');
 export type apiConfig = z.infer<typeof apiConfig>;
 
 export const llmSettings = z.object({
   // this refers to the task chain that we have currently selected. We select one task and then
   // put the chain together by following the parentIds.
-  selectedTaskId: z.string().optional(),
-  openAIAssistantId: z.string().default(''),
-  useOpenAIAssistants: z.boolean().default(false),
-  enableOpenAiTools: z.boolean().default(false),
-  selectedApi: z.string().nullable().default('taskyon'),
-  llmApis: z.record(apiConfig).default({}),
-  siteUrl: z.string().default('https://taskyon.space'),
-  summaryModel: z.string().default('Xenova/distilbart-cnn-6-6'),
-  vectorizationModel: z.string().default('Xenova/all-MiniLM-L6-v2'),
-  maxAutonomousTasks: z.number().default(3),
-  taskTemplate: partialTaskDraft.deepPartial().optional(),
-  taskDraft: partialTaskDraft.default({
-    role: 'user',
-    content: {
-      message: '',
-    },
-  }),
+  selectedTaskId: z
+    .string()
+    .optional()
+    .describe(
+      'The currently selected conversation defined by the ID of its last node.',
+    ),
+  openAIAssistantId: z.string().default('').describe('deprecated'),
+  useOpenAIAssistants: z.boolean().default(false).describe('deprecated'),
+  enableOpenAiTools: z
+    .boolean()
+    .default(false)
+    .describe('Enable OpenAI function selection, currently outdated.'),
+  selectedApi: z
+    .string()
+    .nullable()
+    .default('taskyon')
+    .describe('which of the defined APIs are we currently using?'),
+  llmApis: z
+    .record(apiConfig)
+    .default({})
+    .describe('A list of OpenAI compatible API definitions.'),
+  siteUrl: z
+    .string()
+    .default('https://taskyon.space')
+    .describe(
+      'wha is the URL of this page?. This helps identifying Backends, where the request is coming from.',
+    ),
+  summaryModel: z
+    .string()
+    .default('Xenova/distilbart-cnn-6-6')
+    .describe('Which model are we using for local summary?'),
+  vectorizationModel: z
+    .string()
+    .default('Xenova/all-MiniLM-L6-v2')
+    .describe('Which model should be used for vectorization?'),
+  maxAutonomousTasks: z
+    .number()
+    .default(3)
+    .describe(
+      'Maximum number of tasks which are allowed to be performed autonomously before stopping.',
+    ),
+  taskTemplate: partialTaskDraft
+    .deepPartial()
+    .optional()
+    .describe(
+      'A task template which can be provided for new tasks (E.g. which model to use). This is important when embedding tasyon in another webpage.',
+    ),
+  taskDraft: partialTaskDraft
+    .default({
+      role: 'user',
+      content: {
+        message: '',
+      },
+    })
+    .describe(
+      'The task which is currently drafted (This could for example be a simple message).',
+    ),
   useBasePrompt: z.boolean().default(true).describe(`
   <p>Toggle the base prompt on/off.</p>
   
@@ -534,13 +587,31 @@ export const llmSettings = z.object({
     .describe(
       'Toggle Vision ON/OFF. If a model supports vision, we wil ry to use that for uploaded images',
     ),
-  taskChatTemplates: z.object({
-    basePrompt: z.string().default(''),
-    instruction: z.string().default(''),
-    toolResult: z.string().default(''),
-    task: z.string().default(''),
-    evaluate: z.string().default(''),
-  }),
+  taskChatTemplates: z
+    .object({
+      basePrompt: z
+        .string()
+        .default(
+          'The base prompt. This should be used e.g. to set the behaviour of the AI. used as a "system" prompt.',
+        ),
+      instruction: z
+        .string()
+        .default('This prompt is used to make the AI follow instructions'),
+      toolResult: z
+        .string()
+        .default(
+          'This prompt is used to make the AI display tool results in a certain structured way.',
+        ),
+      task: z
+        .string()
+        .default(
+          'This prompt is used to explain to the AI what to do with a specific task.',
+        ),
+      evaluate: z.string().default('This prompt is used to evaluate errors'),
+    })
+    .describe(
+      'These are the definitions of the prompts which are used in chats for different purposes.',
+    ),
 });
 export type llmSettings = z.infer<typeof llmSettings>;
 
@@ -564,9 +635,20 @@ const appConfiguration = z.object({
     .string()
     .default('taskyon_settings.json')
     .describe('gDrive fileid of the configuration'),
-  expertMode: z.boolean().default(false),
-  showCosts: z.boolean().default(false),
-  gdriveDir: z.string().default('taskyon'), // not sure, if we need this here?
+  expertMode: z
+    .boolean()
+    .default(false)
+    .describe('Turns on additional settings and configurations.'),
+  showCosts: z
+    .boolean()
+    .default(false)
+    .describe('Shows the costs of API calls.'),
+  gdriveDir: z
+    .string()
+    .default('taskyon')
+    .describe(
+      'The default directory in gdrive, where taskyon saves its configuration.',
+    ), // not sure, if we need this here?
   useEnterToSend: z
     .boolean()
     .default(true)
@@ -577,12 +659,18 @@ const appConfiguration = z.object({
     .enum(['auto', 'iframe', 'default'])
     .default('auto')
     .describe('Sets whether we want to have a minimalist chat or the full app'),
-  primaryColor: HexColor.describe(
-    'The primary color of taskyons color scheme.',
-  ).optional(),
+  primaryColor: HexColor.describe('The primary color of taskyons color scheme.')
+    .optional()
+    .describe(
+      'Primary color for custom taskyon theming. This should be a dark color',
+    ),
   secondaryColor: HexColor.describe(
     'The secondary color of taskyons color scheme.',
-  ).optional(),
+  )
+    .optional()
+    .describe(
+      'Secondary color for custom taskyon theming. This color should be a bright color and contrast the primary color.',
+    ),
 });
 export type appConfiguration = z.infer<typeof appConfiguration>;
 
