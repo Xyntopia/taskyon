@@ -54,7 +54,7 @@ function addCopyButtons(md: MarkdownIt) {
       idx,
       options,
       env,
-      self
+      self,
     );
 
     // Custom HTML for the button
@@ -113,11 +113,11 @@ async function copyPngToClipboard(pngBuffer: Uint8Array) {
     }
   } else {
     console.warn(
-      'ClipboardItem is not supported in this browser. Using fallback method.'
+      'ClipboardItem is not supported in this browser. Using fallback method.',
     );
 
     alert(
-      'Your browser is too old to support image copying with "ClipboardItem", please upgrade your browser!'
+      'Your browser is too old to support image copying with "ClipboardItem", please upgrade your browser!',
     );
   }
 }
@@ -192,7 +192,7 @@ const renderMermaid = (md: MarkdownIt) => {
   const drawDiagram = async function (
     code: string,
     selector: string,
-    img_id: string
+    img_id: string,
   ) {
     const graphDefinition = code;
     const velement = document.createElement('div');
@@ -204,7 +204,7 @@ const renderMermaid = (md: MarkdownIt) => {
       const { svg } = await mermaid.render(
         `mg${selector}`,
         graphDefinition,
-        velement
+        velement,
       );
       const svgBlob = new Blob([svg], { type: 'image/svg+xml' });
       const svgUrl = URL.createObjectURL(svgBlob);
@@ -307,7 +307,7 @@ onMounted(() => {
   text-align: justify
 
 .q-markdown--note--info
-  background-color: lighten($secondary, 35%)
+  background-color: scale($secondary, 87.5%)
   border: 0
   border-radius: 10px 10px 10px 10px
 

@@ -411,7 +411,7 @@ export default configure((ctx) => {
           throw new Error('webpack-dev-server is not defined');
         }
 
-        devServer.middleware.waitUntilValid(() => {
+        devServer.middleware?.waitUntilValid(() => {
           copyFiles(filesToCopy);
           createOpenAPIDocs();
         });
