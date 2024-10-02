@@ -124,28 +124,32 @@ const filterModels = (
 ) => {
   update(() => {
     const keyword = val.toLowerCase().trim();
-    const threshold = 0.7; // Set a threshold for matching (70% of characters)
+    const threshold = 0.0; // Set a threshold for matching (70% of characters)
 
-    filteredOptions.value = keyword
-      ? optionsRef.filter((option) => {
-          return isFuzzyMatch(keyword, option.label, threshold);
-        })
-      : optionsRef;
+    if (keyword) {
+      const scoredOptions = optionsRef.map((option) => {
+        const score = calculateFuzzyScore(keyword, option.label);
+        return { ...option, score };
+      });
+
+      const sortedFilteredOptions = scoredOptions
+        .filter((option) => option.score >= threshold)
+        .sort((a, b) => b.score - a.score);
+
+      filteredOptions.value = sortedFilteredOptions;
+    } else {
+      filteredOptions.value = optionsRef;
+    }
   });
 };
 
 /**
- * Function to check if the search term matches the label based on character similarity.
+ * Function to calculate a score based on the similarity between the search term and the label.
  * @param searchTerm - The user's search input.
  * @param label - The option label to compare against.
- * @param threshold - The percentage of characters that need to match.
- * @returns {boolean} - Whether the search term matches the label.
+ * @returns {number} - A score between 0 and 1 representing the similarity.
  */
-function isFuzzyMatch(
-  searchTerm: string,
-  label: string,
-  threshold: number,
-): boolean {
+function calculateFuzzyScore(searchTerm: string, label: string): number {
   let matchCount = 0;
   const lower_label = label.toLowerCase();
 
@@ -159,7 +163,6 @@ function isFuzzyMatch(
   // Calculate the match percentage
   const matchPercentage = matchCount / searchTerm.length;
 
-  // Return true if the match percentage is greater than or equal to the threshold
-  return matchPercentage >= threshold;
+  return matchPercentage;
 }
 </script>
