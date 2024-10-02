@@ -124,7 +124,7 @@ const filterModels = (
 ) => {
   update(() => {
     const keyword = val.toLowerCase().trim();
-    const threshold = 0.0; // Set a threshold for matching (70% of characters)
+    const threshold = 0.7; // Set a threshold for matching (70% of characters)
 
     if (keyword) {
       const scoredOptions = optionsRef.map((option) => {
@@ -132,11 +132,11 @@ const filterModels = (
         return { ...option, score };
       });
 
-      const sortedFilteredOptions = scoredOptions
+      const sortedOptions = scoredOptions
         .filter((option) => option.score >= threshold)
         .sort((a, b) => b.score - a.score);
 
-      filteredOptions.value = sortedFilteredOptions;
+      filteredOptions.value = sortedOptions;
     } else {
       filteredOptions.value = optionsRef;
     }
@@ -152,11 +152,14 @@ const filterModels = (
 function calculateFuzzyScore(searchTerm: string, label: string): number {
   let matchCount = 0;
   const lower_label = label.toLowerCase();
+  let labelIndex = 0;
 
-  // Count how many characters from the search term appear in the label
+  // Count how many characters from the search term appear in the label in the correct order
   for (let i = 0; i < searchTerm.length; i++) {
-    if (lower_label.includes(searchTerm[i]!)) {
+    const charIndex = lower_label.indexOf(searchTerm[i]!, labelIndex);
+    if (charIndex !== -1) {
       matchCount++;
+      labelIndex = charIndex + 1;
     }
   }
 
