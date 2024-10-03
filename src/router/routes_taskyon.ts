@@ -15,6 +15,7 @@ export const taskyonRoutes = {
         loadingComponent: LoadCircle,
         delay: 200,
       }),
+      meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
       /*component: defineAsyncComponent({
         loader: () => import('pages/TaskChat.vue'),
         loadingComponent: () => import('components/Loading.vue'),
@@ -25,48 +26,59 @@ export const taskyonRoutes = {
       component: defineAsyncComponent(
         () => import('pages/taskyon/TaskManager.vue'),
       ),
+      meta: { title: 'Task Manager', description: 'Manage Tasks & Chats' },
     },
     {
       path: 'chat',
       component: defineAsyncComponent(
         () => import('pages/taskyon/TaskChat.vue'),
       ),
+      meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
     },
     {
       path: 'settings/:tab?',
       component: () => import('pages/taskyon/SettingsPage.vue'),
+      meta: { title: 'Settings', description: 'Taskyon AI Chat Companion' },
     },
     {
       path: 'pricing',
       component: () => import('pages/taskyon/PricePage.vue'),
+      meta: {
+        title: 'Model List',
+        description: 'Model capabilities and pricing information',
+      },
     },
     {
       path: 'diagnostics',
       component: () => import('pages/taskyon/DiagnosticsPage.vue'),
+      meta: {
+        title: 'Diagnostics',
+        description: 'Error & Diagnostics display',
+      },
     },
     {
       path: 'tools',
       component: () => import('components/taskyon/ToolManager.vue'),
+      meta: { title: 'Tool Manager', description: 'Create & Manage AI Tools' },
     },
     {
       path: 'prompts',
       component: () => import('pages/taskyon/PromptManager.vue'),
+      meta: {
+        title: 'Prompt Editor',
+        description: 'Create & Manage AI Prompts',
+      },
     },
     {
-      path: 'docs',
+      path: 'docindex',
       component: () => import('pages/DocumentationIndex.vue'),
+      meta: { title: 'Documentation', description: 'Taskyon Documentation' },
     },
     ...mdRoutes,
   ],
 };
 
 const routes: RouteRecordRaw[] = [
-  {
-    path: '/widgets',
-    component: () => import('layouts/WidgetsLayout.vue'),
-    children: [{ path: 'chat', component: () => import('pages/taskyon/TaskChat.vue') }],
-  },
-
   taskyonRoutes,
 
   // Always leave this as last one,
@@ -74,6 +86,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/:catchAll(.*)*',
     component: () => import('src/pages/Error404Page.vue'),
+    meta: { title: 'ERROR', description: 'Page does not exist' },
   },
 ];
 

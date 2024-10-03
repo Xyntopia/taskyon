@@ -36,4 +36,4 @@ Follow us on [Github](https://github.com/Xyntopia/taskyon) and our [Blog](https:
 
 ## Documentation Index
 
-[Index](/docs)
+[Index](/docindex)

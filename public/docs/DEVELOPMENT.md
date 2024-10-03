@@ -57,7 +57,7 @@ Taskyon’s codebase is structured to maintain a clear separation between the **
 
 Here is one example of the structure of taskyons codebase as an interactive html:
 
-[frontend/public/docs/dependency-cruiser-graph-flat-dot.html](frontend/public/docs/dependency-cruiser-graph-flat-dot.html)
+[dependency-cruiser-graph-flat-dot.html](/docs/draft/dependency-cruiser-graph-flat-dot.html)
 
 ```bash
 # perform dependency analysis e.g. in order to detect circular dependencies:

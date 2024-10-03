@@ -442,6 +442,7 @@ export default configure((ctx) => {
       plugins: [
         'LocalStorage',
         'Notify',
+        'Meta',
         //'SessionStorage'
         // TODO: 'AddressbarColor'
       ],

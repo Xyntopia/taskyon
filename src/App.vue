@@ -4,7 +4,20 @@
 
 <script setup lang="js">
 // we are using lang=js here in order to integrate g analytics
-import { onMounted } from 'vue';
+import { onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import { generateTaskyonMeta } from './modules/meta';
+import { useMeta } from 'quasar';
+
+const route = useRoute();
+
+watch(
+  () => route.fullPath,
+  () => {
+    const meta = generateTaskyonMeta(route);
+    useMeta(meta);
+  },
+);
 
 defineOptions({
   name: 'App',

@@ -32,7 +32,7 @@ function generateTOC() {
     const fileName = file.replace('./', '').replace('.md', '');
     return {
       title: fileName, // You can enhance this to extract titles from file contents
-      link: `/md/docs/${fileName}`,
+      link: `/docs/${fileName}`,
     };
   });
 

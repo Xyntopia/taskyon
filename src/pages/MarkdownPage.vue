@@ -30,15 +30,18 @@ const markdownContent = ref('');
 
 const fetchMarkdown = async (folder: string, filePath: string) => {
   try {
-    const response = await fetch(`${folder}/${filePath}`);
+    const fileURL = folder ? `/${folder}/${filePath}` : `/${filePath}`;
+    const response = await fetch(fileURL);
     if (!response.ok) {
-      throw new Error(`Failed to load ${filePath}`);
+      throw new Error(`Failed to load ${fileURL}`);
     }
     const text = await response.text();
     markdownContent.value = text;
   } catch (error) {
     console.error(error);
-    void router.replace('/404');
+    if (process.env.PROD) {
+      void router.replace('/404');
+    }
   }
 };
 

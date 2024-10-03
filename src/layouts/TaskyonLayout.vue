@@ -84,7 +84,7 @@
           round
           :size="btnSize"
           :icon="matHelpOutline"
-          to="/md/docs/index"
+          to="/docs/index"
         >
           <q-tooltip> Open Taskyon Documentation </q-tooltip>
         </q-btn>
@@ -124,7 +124,7 @@
               <q-item
                 v-ripple
                 clickable
-                to="/md/docs/index"
+                to="/docs/index"
                 exact
                 active-class="text-secondary"
               >
