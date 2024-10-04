@@ -6,6 +6,8 @@ export function generateTaskyonMeta(
 ) {
   const fallbackTitle = route.path.split('/').filter(Boolean).pop() ?? 'Main';
   const title = (route.meta.title as string) ?? fallbackTitle;
+  const description = route.meta.description ?? 'Taskyon AI Chat';
+  const imageUrl = 'https://taskyon.space/taskyon_social_preview.png'; // Update with the actual image URL
 
   const meta: MetaOptions = {
     // sets document title
@@ -17,22 +19,72 @@ export function generateTaskyonMeta(
     meta: {
       description: {
         name: 'description',
-        content: route.meta.description ?? 'Taskyon AI Chat',
+        content: description,
       },
       keywords: { name: 'keywords', content: 'Taskyon AI Chat' },
       equiv: {
         'http-equiv': 'Content-Type',
         content: 'text/html; charset=UTF-8',
       },
-      // note: for Open Graph type metadata you will need to use SSR, to ensure page is rendered by the server
-      ogTitle: {
-        name: 'og:title',
+
+      // Google / Search Engine meta tags
+      itempropName: {
+        itemprop: 'name',
+        content: title,
+      },
+      itempropDescription: {
+        itemprop: 'description',
+        content: description,
+      },
+      itempropImage: {
+        itemprop: 'image',
+        content: imageUrl,
+      },
+
+      // Open Graph / Facebook meta tags
+      // We are doing this in index.html
+      /*ogTitle: {
+        property: 'og:title',
         // optional; similar to titleTemplate, but allows templating with other meta properties
         template(ogTitle: string) {
           return `${ogTitle} - Taskyon`;
         },
+      },*/
+      /*ogUrl: {
+        property: 'og:url',
+        content: 'https://taskyon.space/',
       },
+      ogType: {
+        property: 'og:type',
+        content: 'website',
+      },
+      ogImage: {
+        property: 'og:image',
+        content: imageUrl,
+      },*/
+
+      // Twitter meta tags
+      // also in index.html
+      /*
+      twitterCard: {
+        name: 'twitter:card',
+        content: 'summary_large_image',
+      },
+      twitterTitle: {
+        name: 'twitter:title',
+        content: title,
+      },
+      twitterDescription: {
+        name: 'twitter:description',
+        content: description,
+      },
+      twitterImage: {
+        name: 'twitter:image',
+        content: imageUrl,
+      },*/
     },
+
+    // google tags
 
     // CSS tags
     /*link: {
