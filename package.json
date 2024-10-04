@@ -97,7 +97,7 @@
     "@quasar/quasar-app-extension-testing-e2e-cypress": "^6.1.0",
     "@swc/cli": "^0.3.14",
     "@swc/core": "^1.6.5",
-    "@tauri-apps/cli": "^1.1.0",
+    "@tauri-apps/cli": "^2.0.0-rc.18",
     "@tauri-apps/tauricon": "github:tauri-apps/tauricon",
     "@types/html-to-text": "^9.0.4",
     "@types/js-yaml": "^4.0.5",

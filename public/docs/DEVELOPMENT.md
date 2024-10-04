@@ -126,6 +126,13 @@ ctrl-shift-p then search for "format" and it will give formatting options).
 
 In VS Code, we use "prettier" for all formatting options...
 
+## Build GUI using tauri
+
+Taskyon can be build as a desktop application using [tauri](https://tauri.app/). This is a rust-based
+framework and requires the following steps:
+
+1. Build taskyon normally (explained in [Installation](#install-the-project))
+
 ## Docker
 
 Taskyon has a docker image available. Building the image will download taskyons dependencies and build them inside the docker image.
