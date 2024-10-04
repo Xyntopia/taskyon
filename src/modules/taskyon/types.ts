@@ -170,14 +170,10 @@ const ToolResult = z.object({
 });
 export type ToolResult = z.infer<typeof ToolResult>;
 
-const assistantThreadMessage: z.ZodType<OpenAI.Beta.Threads.Messages.ThreadMessage> =
-  z.any();
-
 // TODO: get rid of OpenAI dependency...
 const chatResponse: z.ZodType<OpenAI.ChatCompletion> = z.any();
 
 export const TaskResult = z.object({
-  assistantResponse: z.array(assistantThreadMessage).optional(),
   chatResponse: chatResponse.optional(),
   toolResult: ToolResult.optional(), // Replace 'z.any()' with the specific type if available
 });
@@ -524,8 +520,6 @@ export const llmSettings = z.object({
     .describe(
       'The currently selected conversation defined by the ID of its last node.',
     ),
-  openAIAssistantId: z.string().default('').describe('deprecated'),
-  useOpenAIAssistants: z.boolean().default(false).describe('deprecated'),
   enableOpenAiTools: z
     .boolean()
     .default(false)
