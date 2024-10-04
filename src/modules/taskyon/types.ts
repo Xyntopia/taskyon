@@ -579,7 +579,7 @@ export const llmSettings = z.object({
     .boolean()
     .default(true)
     .describe(
-      'Toggle Vision ON/OFF. If a model supports vision, we wil ry to use that for uploaded images',
+      'Toggle Vision ON/OFF. If a model supports vision, we will try to use that for uploaded images',
     ),
   taskChatTemplates: z
     .object({

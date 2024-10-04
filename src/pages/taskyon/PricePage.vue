@@ -173,10 +173,10 @@ const columns: QTableProps['columns'] = [
   },
   {
     name: 'modality',
-    label: 'vision?',
+    label: 'Modality',
     align: 'center',
-    field: (row: rowType) => row.architecture?.modality,
-    format: (value) => value == 'multimodal',
+    field: (row: rowType) => row.architecture?.modality || 'N/A',
+    //format: (value) => value.architecture?.modality || 'N/A',
     sortable: true,
   },
   {

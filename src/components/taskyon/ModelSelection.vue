@@ -35,6 +35,17 @@
           >
         </template>
       </q-select>
+      <ToggleButton
+        v-model="showVisionModels"
+        outline
+        dense
+        :on-icon="matVisibility"
+        :off-icon="matVisibilityOff"
+      >
+        <q-tooltip :delay="200">
+          Only Show Models which support vision.
+        </q-tooltip>
+      </ToggleButton>
       <div v-if="modelList" style="font-size: 0.5em">
         <q-btn :icon-right="matList" flat to="pricing">
           <q-tooltip>List of models</q-tooltip>
@@ -54,9 +65,16 @@
 import { computed, ref } from 'vue';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { matSmartToy, matList } from '@quasar/extras/material-icons';
+import {
+  matSmartToy,
+  matList,
+  matVisibility,
+  matVisibilityOff,
+} from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
 import { mdiKeyLink } from '@quasar/extras/mdi-v6';
+import { levenshteinDistance } from 'src/modules/string_utils';
+import ToggleButton from '../ToggleButton.vue';
 
 defineProps({
   botName: {
@@ -76,6 +94,7 @@ defineProps({
 const selectedApi = defineModel<string | null>('selectedApi', {
   required: true,
 });
+const showVisionModels = ref(false);
 
 const emit = defineEmits(['updateBotName']);
 
@@ -107,9 +126,14 @@ const modelOptions = computed(() => {
       }));
     return options;
   } else {
-    const llmModels: typeof state.llmModels = tyPublicKeyModels.value.length
+    let llmModels: typeof state.llmModels = tyPublicKeyModels.value.length
       ? tyPublicKeyModels.value
       : state.llmModels;
+    if (showVisionModels.value) {
+      llmModels = llmModels.filter(
+        (m) => m.architecture?.modality === 'text+image->text',
+      );
+    }
     const options = llmModels
       .map((m) => {
         const p = parseFloat(m.pricing?.prompt || '');
@@ -118,9 +142,11 @@ const modelOptions = computed(() => {
       })
       .sort(({ p: p1 }, { p: p2 }) => p1 - p2)
       .map(({ m }) => ({
-        label: `${m.id}: ${m.pricing?.prompt || 'N/A'}/${
-          m.pricing?.completion || 'N/A'
-        }`,
+        label:
+          (m.architecture?.modality === 'text+image->text' ? '👁 ' : '') +
+          `${m.id}: ${m.pricing?.prompt || 'N/A'}/${
+            m.pricing?.completion || 'N/A'
+          }`,
         value: m.id,
       }));
     return options;
@@ -176,7 +202,7 @@ const filterModels = (
         .filter((option) => option.score > threshold)
         .sort((a, b) => b.score - a.score)
         .map((x) => {
-          return { ...x, label: x.label + '    ' + x.score.toString() };
+          return { ...x, label: x.label };
         });
 
       filteredOptions.value = sortedOptions;
@@ -185,103 +211,4 @@ const filterModels = (
     }
   });
 };
-
-function _min(d0: number, d1: number, d2: number, bx: number, ay: number) {
-  return d0 < d1 || d2 < d1
-    ? d0 > d2
-      ? d2 + 1
-      : d0 + 1
-    : bx === ay
-      ? d1
-      : d1 + 1;
-}
-
-function levenshteinDistance(a: string, b: string) {
-  if (a === b) {
-    return 0;
-  }
-
-  if (a.length > b.length) {
-    var tmp = a;
-    a = b;
-    b = tmp;
-  }
-
-  var la = a.length;
-  var lb = b.length;
-
-  while (la > 0 && a.charCodeAt(la - 1) === b.charCodeAt(lb - 1)) {
-    la--;
-    lb--;
-  }
-
-  var offset = 0;
-
-  while (offset < la && a.charCodeAt(offset) === b.charCodeAt(offset)) {
-    offset++;
-  }
-
-  la -= offset;
-  lb -= offset;
-
-  if (la === 0 || lb < 3) {
-    return lb;
-  }
-
-  var x = 0;
-  var y;
-  var d0;
-  var d1;
-  var d2;
-  var d3;
-  var dd = 0;
-  var dy;
-  var ay;
-  var bx0;
-  var bx1;
-  var bx2;
-  var bx3;
-
-  var vector = [];
-
-  for (y = 0; y < la; y++) {
-    vector.push(y + 1);
-    vector.push(a.charCodeAt(offset + y));
-  }
-
-  var len = vector.length - 1;
-
-  for (; x < lb - 3; ) {
-    bx0 = b.charCodeAt(offset + (d0 = x));
-    bx1 = b.charCodeAt(offset + (d1 = x + 1));
-    bx2 = b.charCodeAt(offset + (d2 = x + 2));
-    bx3 = b.charCodeAt(offset + (d3 = x + 3));
-    dd = x += 4;
-    for (y = 0; y < len; y += 2) {
-      dy = vector[y]!;
-      ay = vector[y + 1]!;
-      d0 = _min(dy, d0, d1, bx0, ay);
-      d1 = _min(d0, d1, d2, bx1, ay);
-      d2 = _min(d1, d2, d3, bx2, ay);
-      dd = _min(d2, d3, dd, bx3, ay);
-      vector[y] = dd;
-      d3 = d2;
-      d2 = d1;
-      d1 = d0;
-      d0 = dy;
-    }
-  }
-
-  for (; x < lb; ) {
-    bx0 = b.charCodeAt(offset + (d0 = x));
-    dd = ++x;
-    for (y = 0; y < len; y += 2) {
-      dy = vector[y]!;
-      vector[y] = dd = _min(dy, d0, dd, bx0, vector[y + 1]!);
-      d0 = dy;
-    }
-  }
-
-  return dd;
-}
 </script>
