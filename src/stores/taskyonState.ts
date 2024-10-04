@@ -34,6 +34,48 @@ interface TaskStateType {
   markdownEnabled: boolean;
 }
 
+async function updateLlmModels(
+  llmSettings: storedSettings['llmSettings'],
+  keys: Record<string, string>,
+) {
+  console.log('downloading models...');
+  const api = getApiConfig(llmSettings);
+  if (api) {
+    // and also get a "fresh" list of models from the server...
+    let baseurl: string;
+    let key: string;
+    const taskyonApi = llmSettings.llmApis['taskyon'];
+    if (taskyonApi && api.name === 'openrouter.ai') {
+      baseurl = taskyonApi.baseURL + '/models_openrouter';
+      key = keys.taskyon || '';
+    } else {
+      baseurl = api.baseURL + api.routes.models;
+      key = keys[api?.name] || '';
+    }
+    try {
+      let headers = {};
+      const pubKey = isTaskyonKey(keys.taskyon || '', false);
+      if (pubKey?.model && pubKey.model.length > 0) {
+        return pubKey.model.map((m) => {
+          console.log('only models from our key are available:', pubKey.model);
+          return { id: m, description: 'Model defined in ty public key.' };
+        });
+      } else {
+        if (taskyonApi && api.name == 'taskyon') {
+          headers = llmSettings.llmApis.taskyon?.defaultHeaders || {};
+        }
+        const res = await availableModels(baseurl, key, headers);
+        return res;
+      }
+    } catch {
+      console.log("couldn't download models from", baseurl);
+      return [];
+    }
+  } else {
+    return [];
+  }
+}
+
 export const useTaskyonStore = defineStore(storeName, () => {
   console.log('loading taskyon store!');
 
@@ -297,54 +339,9 @@ export const useTaskyonStore = defineStore(storeName, () => {
   }
 
   const llmModelsInternal = ref<Model[]>([]);
-  function updateLlmModels() {
-    console.log('downloading models...');
-    const api = getApiConfig(stateRefs.llmSettings);
-    if (api) {
-      // and also get a "fresh" list of models from the server...
-      let baseurl: string;
-      let key: string;
-      const taskyonApi = stateRefs.llmSettings.llmApis['taskyon'];
-      if (taskyonApi && api.name === 'openrouter.ai') {
-        baseurl = taskyonApi.baseURL + '/models_openrouter';
-        key = stateRefs.keys.taskyon || '';
-      } else {
-        baseurl = api.baseURL + api.routes.models;
-        key = stateRefs.keys[api?.name] || '';
-      }
-      try {
-        let headers = {};
-        const pubKey = isTaskyonKey(stateRefs.keys.taskyon || '', false);
-        if (pubKey?.model && pubKey.model.length > 0) {
-          llmModelsInternal.value = pubKey.model.map((m) => {
-            console.log(
-              'only models from our key are available:',
-              pubKey.model,
-            );
-            return { id: m, description: 'Model defined in ty public key.' };
-          });
-        } else {
-          if (taskyonApi && api.name == 'taskyon') {
-            headers =
-              stateRefs.llmSettings.llmApis.taskyon?.defaultHeaders || {};
-          }
-          void availableModels(baseurl, key, headers).then((res) => {
-            llmModelsInternal.value = res;
-          });
-        }
-      } catch {
-        console.log("couldn't download models from", baseurl);
-      }
-      // try to set our recommended models if ther isn't any default or anything!
-      if (!api.selectedModel) {
-        stateRefs.llmSettings.llmApis['taskyon']!.selectedModel =
-          api.models?.free;
-      }
-    } else {
-      llmModelsInternal.value = [];
-    }
-  }
-
+  updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then(
+    (m) => (llmModelsInternal.value = m),
+  );
   // make sure we update our model list whenever anything changes for our
   // endpoints...
   watch(
@@ -353,7 +350,17 @@ export const useTaskyonStore = defineStore(storeName, () => {
       stateRefs.keys,
       stateRefs.llmSettings.llmApis,
     ],
-    updateLlmModels,
+    () => {
+      const api = getApiConfig(stateRefs.llmSettings);
+      // try to set our recommended models if ther isn't any default or anything!
+      if (api && !api.selectedModel) {
+        stateRefs.llmSettings.llmApis['taskyon']!.selectedModel =
+          api.models?.free;
+      }
+      updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then(
+        (m) => (llmModelsInternal.value = m),
+      );
+    },
     {
       immediate: true,
     },
