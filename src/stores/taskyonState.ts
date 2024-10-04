@@ -18,8 +18,8 @@ import defaultSettings from 'src/assets/taskyon_settings.json';
 import { availableModels } from 'src/modules/taskyon/chat';
 import { llmSettings, storedSettings } from 'src/modules/taskyon/types';
 import { setupIframeApi } from 'src/modules/taskyon/iframeApi';
-import { isTaskyonKey } from 'src/modules/crypto';
 import { Tool } from 'src/modules/taskyon/tools';
+import { isTaskyonKey } from 'src/modules/crypto';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -42,33 +42,20 @@ async function updateLlmModels(
   const api = getApiConfig(llmSettings);
   if (api) {
     // and also get a "fresh" list of models from the server...
-    let baseurl: string;
-    let key: string;
+    let baseURL = api.baseURL + api.routes.models;
+    let key = keys[api?.name] || '';
     const taskyonApi = llmSettings.llmApis['taskyon'];
+    // we are doing this, because openrouter currently
+    // blocks access from browser origins through CORS.
     if (taskyonApi && api.name === 'openrouter.ai') {
-      baseurl = taskyonApi.baseURL + '/models_openrouter';
-      key = keys.taskyon || '';
-    } else {
-      baseurl = api.baseURL + api.routes.models;
-      key = keys[api?.name] || '';
+      baseURL = taskyonApi.baseURL + '/models_openrouter';
+      key = keys.taskyon || keys[api?.name] || '';
     }
     try {
-      let headers = {};
-      const pubKey = isTaskyonKey(keys.taskyon || '', false);
-      if (pubKey?.model && pubKey.model.length > 0) {
-        return pubKey.model.map((m) => {
-          console.log('only models from our key are available:', pubKey.model);
-          return { id: m, description: 'Model defined in ty public key.' };
-        });
-      } else {
-        if (taskyonApi && api.name == 'taskyon') {
-          headers = llmSettings.llmApis.taskyon?.defaultHeaders || {};
-        }
-        const res = await availableModels(baseurl, key, headers);
-        return res;
-      }
+      const res = await availableModels(baseURL, key, api.defaultHeaders ?? {});
+      return res;
     } catch {
-      console.log("couldn't download models from", baseurl);
+      console.log("couldn't download models from", baseURL);
       return [];
     }
   } else {
@@ -338,6 +325,10 @@ export const useTaskyonStore = defineStore(storeName, () => {
     stateRefs.modelHistory.push(model);
   }
 
+  const tyPublicKey = computed(() => {
+    return isTaskyonKey(stateRefs.keys.taskyon || '', false);
+  });
+
   const llmModelsInternal = ref<Model[]>([]);
   updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then(
     (m) => (llmModelsInternal.value = m),
@@ -476,6 +467,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     getErrors,
     modelLookUp,
     llmModels: computed(() => llmModelsInternal.value),
+    tyPublicKey,
   };
 }); // this state stores all information which
 // should be stored e.g. in browser LocalStorage

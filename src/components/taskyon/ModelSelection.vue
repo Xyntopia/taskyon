@@ -21,7 +21,20 @@
           (val: string, update: updateCallBack) =>
             filterModels(val, update, modelOptions)
         "
-      />
+      >
+        <template #prepend>
+          <q-icon
+            v-if="state.tyPublicKey"
+            :name="mdiKeyLink"
+            @click.stop.prevent
+            ><q-tooltip
+              >Only models allowed from taskyon key: "{{
+                state.tyPublicKey.name
+              }}"</q-tooltip
+            ></q-icon
+          >
+        </template>
+      </q-select>
       <div v-if="modelList" style="font-size: 0.5em">
         <q-btn :icon-right="matList" flat to="pricing">
           <q-tooltip>List of models</q-tooltip>
@@ -43,6 +56,7 @@ import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { matSmartToy, matList } from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
+import { mdiKeyLink } from '@quasar/extras/mdi-v6';
 
 defineProps({
   botName: {
@@ -67,6 +81,20 @@ const emit = defineEmits(['updateBotName']);
 
 const state = useTaskyonStore();
 
+const tyPublicKeyModels = computed(() => {
+  if (selectedApi.value === 'taskyon') {
+    // if we have a taskyon key defined only display the models allowed for that key...
+    if (state.tyPublicKey?.model && state.tyPublicKey.model.length > 0) {
+      const models = state.tyPublicKey.model;
+      return models.map((m) => {
+        console.log('only models from our key are available:', models);
+        return { id: m, description: 'Model defined in ty public key.' };
+      });
+    }
+  }
+  return [];
+});
+
 const modelOptions = computed(() => {
   // openai has no pricing information attached, so we sort it in different ways...
   console.log('calculate model options!');
@@ -79,7 +107,10 @@ const modelOptions = computed(() => {
       }));
     return options;
   } else {
-    const options = state.llmModels
+    const llmModels: typeof state.llmModels = tyPublicKeyModels.value.length
+      ? tyPublicKeyModels.value
+      : state.llmModels;
+    const options = llmModels
       .map((m) => {
         const p = parseFloat(m.pricing?.prompt || '');
         const c = parseFloat(m.pricing?.completion || '');
