@@ -19,7 +19,7 @@ On the surface, Taskyon is a simple chat interface, but beneath it lies a sophis
 
 Built on the principles of [_local-first_](https://dl.acm.org/doi/10.1145/3359591.3359737) 🏠, Taskyon ensures that most data processing happens on the user's local device, prioritizing data security and user autonomy. Whether used for personalized AI interactions or as a robust task management tool, Taskyon offers flexibility and control while maintaining a familiar chat interface.
 
-Checkout Taskyon's documentation for a more information: [https://taskyon.space/md/docs/index](https://taskyon.space/md/docs/index)
+Checkout Taskyon's documentation for a more information: [https://taskyon.space/docs/index](https://taskyon.space/docs/index)
 
 ## Philosophy: Personalized AI Interaction & Local First
 
@@ -84,7 +84,7 @@ Taskyon's commitment to security is evident in its Local First approach, which i
 ## Support
 
 - Join our taskyon channel!: https://matrix.to/#/!UNCbKcBpdEjFduzzMv:matrix.org?via=matrix.org
-- [Documentation](https://taskyon.space/md/docs/index)
+- [Documentation](https://taskyon.space/docs/index)
 
 ## Roadmap
 
@@ -98,7 +98,7 @@ Taskyon's commitment to security is evident in its Local First approach, which i
 
 Here is an introduction on how to get started with Taskyon development:
 
-- [Development](https://taskyon.space/md/docs/development)
+- [Development](https://taskyon.space/docs/development)
 
 ## License
 
