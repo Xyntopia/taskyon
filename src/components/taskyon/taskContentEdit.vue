@@ -25,9 +25,9 @@
         @update:model-value="attachFileToChat"
       >
         <q-btn dense class="fit" flat>
-          <q-icon class="gt-xs" :name="matUploadFile" />
+          <q-icon class="gt-xs" :name="matImage" />
           <q-icon :name="matAttachment" />
-          <q-tooltip>Attach file to message</q-tooltip>
+          <q-tooltip>Attach file or image to message</q-tooltip>
         </q-btn>
       </FileDropzone>
     </template>
@@ -37,8 +37,8 @@
 <script setup lang="ts">
 import {
   matAttachment,
+  matImage,
   matSend,
-  matUploadFile,
 } from '@quasar/extras/material-icons';
 import FileDropzone from '../FileDropzone.vue';
 

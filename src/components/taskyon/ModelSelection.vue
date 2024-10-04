@@ -40,7 +40,7 @@
         outline
         dense
         :on-icon="matVisibility"
-        :off-icon="matVisibilityOff"
+        :off-icon="matVisibility"
       >
         <q-tooltip :delay="200">
           Only Show Models which support vision.
@@ -69,7 +69,6 @@ import {
   matSmartToy,
   matList,
   matVisibility,
-  matVisibilityOff,
 } from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
 import { mdiKeyLink } from '@quasar/extras/mdi-v6';
@@ -185,7 +184,7 @@ const filterModels = (
 ) => {
   update(() => {
     const keyword = val.toLowerCase().trim();
-    const threshold = 0.5; // Set a threshold for what we show as an option. between 0% & 100% matching
+    const threshold = 0.9; // Set a threshold for what we show as an option. between 0% & 100% matching
 
     if (keyword) {
       const scoredOptions = optionsRef.map((option) => {
