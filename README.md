@@ -98,7 +98,7 @@ Taskyon's commitment to security is evident in its Local First approach, which i
 
 Here is an introduction on how to get started with Taskyon development:
 
-- [Development](https://taskyon.space/docs/development)
+- [Development](https://taskyon.space/docs/DEVELOPMENT)
 
 ## License
 
