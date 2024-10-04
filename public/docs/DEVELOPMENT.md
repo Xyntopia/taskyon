@@ -132,6 +132,13 @@ Taskyon can be build as a desktop application using [tauri](https://tauri.app/).
 framework and requires the following steps:
 
 1. Build taskyon normally (explained in [Installation](#install-the-project))
+2. install rust using rustup (using the flake.nix everything should already be set up correctly)
+3. run `tauri dev` in order to start a dev server.
+4. run `quasar build && tauri build` to build the app.
+
+### Issues
+
+- There is still a problem right now [building Appimages](https://github.com/tauri-apps/tauri/issues/8535#issuecomment-2384561950)
 
 ## Docker
 
