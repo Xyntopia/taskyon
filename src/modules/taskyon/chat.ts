@@ -60,16 +60,6 @@ export const getAssistants = asnycasyncTimeLruCache<
   return assistantsDict;
 });
 
-export type OpenAIChatMessage = {
-  // The role of the message author (system, user, assistant, or function).
-  role: 'system' | 'user' | 'assistant' | 'function';
-  // The content of the message, can be null for some messages.
-  content: string | null;
-  // The name of the message author (optional) it has to be the name of the function, if
-  // the role is "function".
-  name: string;
-};
-
 //import { getEncoding } from 'js-tiktoken';
 async function loadTikTokenEncoder() {
   const { getEncoding } = await import(
@@ -198,6 +188,7 @@ function accumulateChatCompletion(
         index: 0,
         message: {
           content: null,
+          refusal: null,
           role: 'assistant', // or other roles as per your logic
         },
         finish_reason: 'stop',
@@ -279,7 +270,6 @@ export async function callLLM(
     api.name,
   );
   let chatCompletion: OpenAI.ChatCompletion | undefined = undefined;
-  const openai = getOpenai(apiKey, api.baseURL, headers);
 
   if (!api.selectedModel) {
     throw new TaskProcessingError(
@@ -287,47 +277,61 @@ export async function callLLM(
     );
   }
 
-  const payload: OpenAI.ChatCompletionCreateParams = {
+  const payload = {
     model: api.selectedModel,
     messages: chatMessages,
     user: 'taskyon',
     temperature: 0.0,
     stream: stream && api.streamSupport,
     n: 1,
+    ...(functions.length > 0 && { tools: functions, tool_choice: 'auto' }),
   };
 
-  if (functions.length > 0) {
-    payload.tool_choice = 'auto';
-    payload.tools = functions;
-  }
+  // Use AbortController to handle stream cancellation
+  const controller = new AbortController();
 
-  if (payload.stream) {
-    try {
-      const completion = await openai.chat.completions.create(payload);
+  try {
+    const response = await fetch(`${api.baseURL}/api/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
 
+    if (stream && response.body) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
       const chunks = [];
-      for await (const chunk of completion) {
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
         chunks.push(chunk);
-        if (chunk) {
-          contentCallBack(chunk);
-        }
-        // TODO: also cancel the completion request itself by giving it an abort signal which can be released
-        //       by a callback from our executionContext...
+
+        // Call the callback function to process the chunk
+        contentCallBack(chunk);
+
+        // If the cancelStream callback signals to cancel, break the loop and abort the request
         if (cancelStream()) {
-          break; // --> and take everything that we have already accumulated so far
+          controller.abort();
+          break;
         }
       }
+
       chatCompletion = accumulateChatCompletion(chunks);
-    } catch (error) {
-      if (error instanceof Error) {
-        const err = new Error(`Error during streaming: ${error.message}`);
-        err.cause = error;
-        throw err;
-      }
+    } else {
+      // Non-streaming case: Just return the full response
+      const completion = await response.json();
+      chatCompletion = completion;
     }
-  } else {
-    const completion = await openai.chat.completions.create(payload);
-    chatCompletion = completion;
+  } catch (error) {
+    if (error instanceof Error) {
+      const err = new Error(`Error during fetch call: ${error.message}`);
+      err.cause = error;
+      throw err;
+    }
   }
 
   console.log('AI responded:', chatCompletion);
