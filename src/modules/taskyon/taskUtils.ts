@@ -1,5 +1,5 @@
 import type { TaskNode, TaskGetter } from './types';
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import { dump } from 'js-yaml';
 import { FileMappingDocType } from './rxdb';
 

@@ -8,10 +8,7 @@ import type {
 } from './types';
 import type { TyTaskManager } from './taskManager';
 import OpenAI from 'openai';
-import { openFile } from '../OPFS';
 import { lruCache, sleep, asnycasyncTimeLruCache } from '../utils';
-import type { FileMappingDocType } from './rxdb';
-import { findAllFilesInTasks } from './taskUtils';
 import { TaskProcessingError, apiConfig } from './types';
 
 const getOpenai = lruCache<OpenAI>(5)((
@@ -34,30 +31,6 @@ const getOpenai = lruCache<OpenAI>(5)((
     });
     return api;
   }
-});
-
-export const getAssistants = asnycasyncTimeLruCache<
-  Record<string, OpenAI.Beta.Assistant>
->(
-  1,
-  60 * 60 * 1000, //1h
-)(async (openAIApiKey: string) => {
-  console.log('get list of openai assistants');
-  const response = await getOpenai(openAIApiKey).beta.assistants.list({
-    order: 'desc',
-    limit: 20,
-  });
-
-  const assistantsArray = response.data;
-  const assistantsDict = assistantsArray.reduce(
-    (dict, assistant) => {
-      dict[assistant.id] = assistant;
-      return dict;
-    },
-    {} as Record<string, OpenAI.Beta.Assistant>,
-  );
-
-  return assistantsDict;
 });
 
 //import { getEncoding } from 'js-tiktoken';
@@ -291,7 +264,7 @@ export async function callLLM(
   const controller = new AbortController();
 
   try {
-    const response = await fetch(`${api.baseURL}/api/v1/chat/completions`, {
+    const response = await fetch(`${api.baseURL}/chat/completions`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
@@ -305,6 +278,7 @@ export async function callLLM(
       let bufferedData = ''; // Buffer to hold partial JSON chunks
 
       while (true) {
+        console.log('waiting for chunk');
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -489,140 +463,6 @@ function convertTasksToOpenAIThread(
   });
 
   return messageList;
-}
-
-export async function getOpenAIAssistantResponse(
-  task: TaskNode,
-  openAIApiKey: string,
-  openAIAssistantId: string,
-  taskManager: TyTaskManager,
-) {
-  if (task.content) {
-    const openai = getOpenai(openAIApiKey);
-    console.log('send task to assistant!', task);
-
-    // get all messages from a chat
-    const taskList: TaskNode[] = [];
-    const taskIdChain = await taskManager.taskChain(task.id);
-    for (const t of taskIdChain) {
-      const T = await taskManager.getTask(t);
-      if (T) taskList.push();
-    }
-
-    // Find all fileIDs in the task list
-    const fileIDs = findAllFilesInTasks(taskList);
-
-    // Get all corresponding filemapping entries from our database
-    const currentTaskListfileMappings = (
-      await Promise.all(
-        fileIDs.map(async (fuuid) => taskManager.getFileMappingByUuid(fuuid)),
-      )
-    ).filter((fm) => fm !== null) as FileMappingDocType[];
-
-    // upload files to openai with that information one-by-one
-    const openAIFileMappings: Record<string, string> = {};
-    for (const fm of currentTaskListfileMappings) {
-      if (fm?.opfs) {
-        const file = await openFile(fm.opfs);
-        if (file) {
-          // TODO: only upload file, if it doesn't have a openAI ID yet.
-          const fileIDopenAI = await uploadFileToOpenAI(file, openAIApiKey);
-          if (fileIDopenAI) {
-            fm.openAIFileId = fileIDopenAI;
-            openAIFileMappings[fm.uuid] = fileIDopenAI;
-          }
-        }
-      }
-    }
-
-    // Update file mapping database
-    await taskManager.bulkUpsertFiles(currentTaskListfileMappings);
-
-    // Finally, Convert task list to OpenAI thread messages
-    const openAIConversationThread = convertTasksToOpenAIThread(
-      taskList,
-      /*openAIFileMappings*/
-    );
-
-    // then upload the taskThread and execute it.
-    const thread = await openai.beta.threads.create({
-      messages: openAIConversationThread,
-    });
-    const threadId = thread.id;
-
-    //after we have done that, we tell openai to process the run with the new message
-    let run = await openai.beta.threads.runs.create(threadId, {
-      assistant_id: openAIAssistantId,
-      //instructions:
-      //  e.g. "'Please address the user as Jane Doe. The user has a premium account.'"",
-    });
-
-    // check if message has completed already...
-    // TODO: write an extra task for this..   we should check if message has completed.
-    // And if so, retrieve the result..
-    run = await openai.beta.threads.runs.retrieve(threadId, run.id);
-
-    const newMessages: OpenAI.Beta.Threads.Messages.ThreadMessage[] = [];
-
-    let status;
-    do {
-      // Wait for a specified time before checking the status again
-      await sleep(5000); // sleeps for 5 seconds
-
-      // Retrieve the current status of run
-      run = await openai.beta.threads.runs.retrieve(threadId, run.id);
-      status = run.status;
-
-      // Log the current status
-      console.log('Current status:', status);
-
-      // Retrieve the steps of the run
-      const runStep = await openai.beta.threads.runs.steps.list(
-        threadId,
-        run.id,
-      );
-      for (const step of runStep.data) {
-        if (step.type === 'message_creation' && step.status === 'completed') {
-          // Retrieve the message using the message ID from step_details
-          OpenAI.Beta.Threads.Messages.ThreadMessagesPage;
-          const messageId = (
-            step.step_details as OpenAI.Beta.Threads.Runs.Steps.MessageCreationStepDetails
-          ).message_creation.message_id;
-          const message = await openai.beta.threads.messages.retrieve(
-            threadId,
-            messageId,
-          );
-
-          // Add the retrieved message to the newMessages list
-          newMessages.push(message);
-        }
-      }
-    } while (status === 'queued' || status === 'in_progress');
-
-    // Handle other statuses accordingly
-    if (status === 'completed') {
-      // Process the completed run
-      console.log('Run completed:', run);
-    } else if (
-      status === 'requires_action' ||
-      status === 'failed' ||
-      status === 'cancelled' ||
-      status === 'expired'
-    ) {
-      // Handle other terminal statuses
-      console.log('Run ended with status:', status);
-    }
-
-    // Sort the newMessages array by the created_at timestamp
-    newMessages.sort((a, b) => {
-      return a.created_at - b.created_at;
-    });
-
-    // now we need to check which messages are "new"
-    // for now we simply assume, the last one...
-    //const lastMessage = messages.data[0]
-    return newMessages;
-  }
 }
 
 export const availableModels = asnycasyncTimeLruCache<Model[]>(

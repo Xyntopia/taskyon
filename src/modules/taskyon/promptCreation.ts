@@ -7,7 +7,7 @@ import {
   UseToolBase,
 } from './types';
 import { zodToYamlString } from '../zodUtils';
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import { dump } from 'js-yaml';
 import { mapFunctionNames } from './chat';
 import type { TyTaskManager } from './taskManager';
