@@ -6,33 +6,32 @@
         class="col"
         dense
         color="secondary"
+        options-dense
         label="Select LLM Model for answering/solving the task."
         :icon="matSmartToy"
         :options="filteredOptions"
         emit-value
         :model-value="botName"
         hide-selected
-        fill-input
         use-input
+        fill-input
         input-debounce="0"
         v-bind="$attrs"
+        :display-value="botName"
         @update:model-value="onModelSelect"
         @filter="
           (val: string, update: updateCallBack) =>
             filterModels(val, update, modelOptions)
         "
+        @keydown.enter="selectFirstOption"
       >
         <template #prepend>
-          <q-icon
-            v-if="state.tyPublicKey"
-            :name="mdiKeyLink"
-            @click.stop.prevent
-            ><q-tooltip
-              >Only models allowed from taskyon key: "{{
-                state.tyPublicKey.name
-              }}"</q-tooltip
-            ></q-icon
-          >
+          <q-icon v-if="state.tyPublicKey" :name="mdiKeyLink">
+            <q-tooltip
+              >Only models allowed from taskyon key:
+              {{ state.tyPublicKey.name }}</q-tooltip
+            >
+          </q-icon>
         </template>
       </q-select>
       <ToggleButton
@@ -153,6 +152,7 @@ const modelOptions = computed(() => {
 });
 
 function onModelSelect(value: string) {
+  console.log('selecting a new model...', value);
   emit('updateBotName', {
     newName: value,
     newService: selectedApi.value,
@@ -188,13 +188,9 @@ const filterModels = (
 
     if (keyword) {
       const scoredOptions = optionsRef.map((option) => {
-        /*const distance =
-          levenshteinDistance(keyword, option.label) /
-          max(keyword, option.label);*/
         const distance = levenshteinDistance(keyword, option.label);
         const matches = max(keyword, option.label) - distance;
         return { ...option, score: matches / keyword.length };
-        //return { ...option, score: distance };
       });
 
       const sortedOptions = scoredOptions
@@ -210,4 +206,11 @@ const filterModels = (
     }
   });
 };
+
+// New function to handle selecting the first option on Enter key press
+function selectFirstOption() {
+  if (filteredOptions.value.length > 0) {
+    onModelSelect(filteredOptions.value[0]?.value ?? '');
+  }
+}
 </script>
