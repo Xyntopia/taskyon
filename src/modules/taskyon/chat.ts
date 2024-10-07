@@ -301,17 +301,45 @@ export async function callLLM(
     if (stream && response.body) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      const chunks = [];
+      const chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = [];
+      let bufferedData = ''; // Buffer to hold partial JSON chunks
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
+        // Decode the binary chunk into a string
         const chunk = decoder.decode(value, { stream: true });
-        chunks.push(chunk);
+        bufferedData += chunk;
 
-        // Call the callback function to process the chunk
-        contentCallBack(chunk);
+        // Process the buffered data and split at newlines (for each "data: ..." chunk)
+        const lines = bufferedData.split('\n');
+
+        for (let i = 0; i < lines.length - 1; i++) {
+          const line = lines[i]!.trim();
+
+          // Only process lines starting with "data: "
+          if (line.startsWith('data: ')) {
+            const jsonString = line.replace(/^data: /, '').trim();
+
+            if (jsonString && jsonString !== '[DONE]') {
+              try {
+                // Parse the current line into a JSON object
+                const jsonChunk: OpenAI.Chat.Completions.ChatCompletionChunk =
+                  JSON.parse(jsonString);
+                chunks.push(jsonChunk);
+
+                // Call the callback function to process the chunk
+                contentCallBack(jsonChunk);
+              } catch (err) {
+                console.error('Failed to parse chunk:', jsonString, err);
+              }
+            }
+          }
+        }
+
+        // Keep the last partial chunk in the buffer for the next iteration
+        bufferedData = lines[lines.length - 1]!;
 
         // If the cancelStream callback signals to cancel, break the loop and abort the request
         if (cancelStream()) {
@@ -320,6 +348,7 @@ export async function callLLM(
         }
       }
 
+      // After finishing, accumulate the full chat completion
       chatCompletion = accumulateChatCompletion(chunks);
     } else {
       // Non-streaming case: Just return the full response
