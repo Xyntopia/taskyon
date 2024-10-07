@@ -7,31 +7,9 @@ import type {
   Model,
 } from './types';
 import type { TyTaskManager } from './taskManager';
-import OpenAI from 'openai';
-import { lruCache, sleep, asnycasyncTimeLruCache } from '../utils';
+import type OpenAI from 'openai';
+import { sleep, asnycasyncTimeLruCache } from '../utils';
 import { TaskProcessingError, apiConfig } from './types';
-
-const getOpenai = lruCache<OpenAI>(5)((
-  apiKey: string,
-  baseURL?: string,
-  headers?: Record<string, string>,
-) => {
-  if (baseURL) {
-    const openai = new OpenAI({
-      baseURL: baseURL,
-      apiKey: apiKey,
-      defaultHeaders: headers,
-      dangerouslyAllowBrowser: true,
-    });
-    return openai;
-  } else {
-    const api = new OpenAI({
-      apiKey: apiKey,
-      dangerouslyAllowBrowser: true,
-    });
-    return api;
-  }
-});
 
 //import { getEncoding } from 'js-tiktoken';
 async function loadTikTokenEncoder() {
@@ -422,47 +400,6 @@ export function enrichWithDelayedUsageInfos(
       }
     }
   }
-}
-
-async function uploadFileToOpenAI(
-  file: File,
-  openaiKey: string,
-): Promise<string | undefined> {
-  try {
-    const response = await getOpenai(openaiKey).files.create({
-      file: file,
-      purpose: 'assistants',
-    });
-    return response.id;
-  } catch (error) {
-    const err = new Error('Error uploading file to OpenAI:');
-    err.cause = error;
-    throw err;
-    // Handle the error as per your application's error handling policy
-  }
-}
-
-// TODO: merge this with our taskyon "internal" agents...
-function convertTasksToOpenAIThread(
-  taskList: TaskNode[],
-  /*fileMappings: Record<string, string>*/
-): OpenAI.Beta.ThreadCreateParams.Message[] {
-  const messageList = taskList.map((task) => {
-    let content = '';
-    if ('message' in task.content) {
-      content = task.content.message;
-    }
-    return {
-      role: 'user' as const,
-      content,
-      // TODO: attach file ids to chatmessage
-      /*file_ids: (task.content?.uploadedFiles || [])
-          .map((file) => fileMappings[file])
-          .filter((id) => id !== undefined),*/
-    };
-  });
-
-  return messageList;
 }
 
 export const availableModels = asnycasyncTimeLruCache<Model[]>(
