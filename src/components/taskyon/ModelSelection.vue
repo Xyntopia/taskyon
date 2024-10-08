@@ -3,6 +3,7 @@
     <!--LLM Model selection-->
     <div class="col row items-center" style="min-width: 200px">
       <q-select
+        ref="selectModelInput"
         class="col"
         dense
         color="secondary"
@@ -20,9 +21,10 @@
         :display-value="botName"
         @update:model-value="onModelSelect"
         @filter="
-          (val: string, update: updateCallBack) =>
-            filterModels(val, update, modelOptions)
+          (val: string, update: updateCallBack, abort: () => void) =>
+            filterModels(val, update, abort, modelOptions)
         "
+        @filter-abort="abortFilterFn"
         @keydown.enter="selectFirstOption"
       >
         <template #prepend>
@@ -97,6 +99,8 @@ const showVisionModels = ref(false);
 const emit = defineEmits(['updateBotName']);
 
 const state = useTaskyonStore();
+
+const selectModelInput = ref();
 
 const tyPublicKeyModels = computed(() => {
   if (selectedApi.value === 'taskyon') {
@@ -180,15 +184,17 @@ function max(a: string, b: string) {
 const filterModels = (
   val: string,
   update: updateCallBack,
+  abort: () => void,
   optionsRef: { label: string; value: string }[],
 ) => {
   update(() => {
     const keyword = val.toLowerCase().trim();
-    const threshold = 0.9; // Set a threshold for what we show as an option. between 0% & 100% matching
+    const threshold = 0.7; // Set a threshold for what we show as an option. between 0% & 100% matching
 
     if (keyword) {
       const scoredOptions = optionsRef.map((option) => {
         const distance = levenshteinDistance(keyword, option.label);
+        // number of characters of our search query which match
         const matches = max(keyword, option.label) - distance;
         return { ...option, score: matches / keyword.length };
       });
@@ -198,7 +204,8 @@ const filterModels = (
         .sort((a, b) => b.score - a.score)
         .map((x) => {
           return { ...x, label: x.label };
-        });
+        })
+        .slice(0, 10);
 
       filteredOptions.value = sortedOptions;
     } else {
@@ -207,10 +214,13 @@ const filterModels = (
   });
 };
 
-// New function to handle selecting the first option on Enter key press
+const abortFilterFn = () => {
+  console.log('delayed filter aborted');
+};
+
 function selectFirstOption() {
-  if (filteredOptions.value.length > 0) {
-    onModelSelect(filteredOptions.value[0]?.value ?? '');
-  }
+  const firstOption = filteredOptions.value[0]?.value ?? '';
+  onModelSelect(firstOption);
+  selectModelInput.value.updateInputValue(firstOption);
 }
 </script>
