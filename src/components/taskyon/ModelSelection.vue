@@ -189,14 +189,23 @@ const filterModels = (
 ) => {
   update(() => {
     const keyword = val.toLowerCase().trim();
-    const threshold = 0.7; // Set a threshold for what we show as an option. between 0% & 100% matching
+    // 1.1 is the maximum achievable score for us..
+    const threshold = 0.7 * 1.1; // Set a threshold for what we show as an option. between 0% & 100% matching
 
     if (keyword) {
       const scoredOptions = optionsRef.map((option) => {
-        const distance = levenshteinDistance(keyword, option.label);
+        const optionValue = option.value;
+        const distance = levenshteinDistance(keyword, optionValue);
         // number of characters of our search query which match
-        const matches = max(keyword, option.label) - distance;
-        return { ...option, score: matches / keyword.length };
+        const matches = max(keyword, optionValue) - distance;
+        return {
+          ...option,
+          // we calculate the score as a mix of matches of the keyword and the entire string
+          score:
+            matches / keyword.length +
+            ((0.1 * keyword.length) / optionValue.length) *
+              (matches / optionValue.length),
+        };
       });
 
       const sortedOptions = scoredOptions
