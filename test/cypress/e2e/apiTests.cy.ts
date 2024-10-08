@@ -36,7 +36,7 @@ describe('taskyon API', () => {
     cy.get('[aria-label="toggle task settings"]').click();
     cy.get('[aria-label="ai service settings"]').click();
 
-    cy.contains('manually configure which AI').click();
+    cy.contains('Add API keys').click();
     cy.contains('openai API key').type(Cypress.env().openai_api_key);
     cy.contains('openrouter.ai API key').type(Cypress.env().openrouter_api_key);
 
@@ -44,16 +44,19 @@ describe('taskyon API', () => {
 
     cy.contains('Provider').click();
     cy.get('.q-menu').contains('openai').click();
-    cy.wait(2000)
+    cy.wait(100)
       .contains('Select LLM Model for answering/solving the task.')
       .click();
 
+    // as of 20241007 this is the cheapest model which works with vision...
+    const visionModelID = 'google/gemini-flash-1.5-8b';
+
     cy.contains('Provider').click();
     cy.get('.q-menu').contains('openrouter.ai').click();
-    cy.wait(2000)
+    cy.wait(100)
       .contains('Select LLM Model for answering/solving the task.')
-      .type('meta-llama/llama-3.1-8b-instruct');
-    cy.get('.q-menu').contains('meta-llama/llama-3.1-8b-instruct').click();
+      .type(visionModelID + '{enter}');
+    cy.get('.q-menu').contains(visionModelID).click();
     //cy.contains('your message').type('hello world!{enter}');
     //cy.get('.user-message i.q-icon.text-warning')
 
@@ -65,10 +68,24 @@ describe('taskyon API', () => {
       .invoke('val')
       .then((val) => {
         cy.log(JSON.stringify(val));
-        expect(val).to.eq('meta-llama/llama-3.1-8b-instruct'); // Check if the text is a number
+        expect(val).to.eq(visionModelID); // Check if the text is a number
       });
     //.should('have.string', 'meta-llama/llama-3-70b-instruct');
     //.should('meta-llama/llama-3-70b-instruct');
+
+    cy.get('.create-new-task .dropzone > input').selectFile(
+      './public/taskyon_social_preview.png',
+      { force: true },
+    );
+
+    cy.contains('your message').type('Whats in the picture?{enter}');
+
+    cy.get('.assistant > .message-container')
+      .last()
+      .invoke('text')
+      .then((text) => text.toLowerCase())
+      .should('contain', 'taskyon.space')
+      .and('contain', 'logo');
 
     // Check if the task costs element is present and contains the expected text
     /*cy.get('.task-costs')
