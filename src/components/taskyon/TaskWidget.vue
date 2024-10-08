@@ -13,6 +13,12 @@
             ><q-tooltip class="bg-warning">Error!</q-tooltip>
           </q-icon>
         </div>
+        <div
+          v-else-if="'uploadedFiles' in task.content"
+          class="col-auto self-center"
+        >
+          <q-icon :name="mdiFileDocument" size="sm" color="info"></q-icon>
+        </div>
         <div v-else-if="task.role === 'system'" class="col-auto self-center">
           <q-icon :name="mdiDesktopTower" color="info" size="sm"></q-icon>
         </div>
@@ -83,10 +89,11 @@
         </div>
         <div v-else-if="'uploadedFiles' in task.content" class="col">
           <FileBrowser
+            v-if="getFile"
             :file-mappings="fileMappings"
             :expert-mode="state.appConfiguration.expertMode"
             preview
-            :get-file="tyManager?.getFile"
+            :get-file="getFile"
           />
         </div>
         <!--task costs-->
@@ -252,7 +259,12 @@ import { computed, ref } from 'vue';
 import { FileMappingDocType } from 'src/modules/taskyon/rxdb';
 import { dump } from 'js-yaml';
 import TaskButtons from './TaskButtons.vue';
-import { mdiDesktopTower, mdiHeadCog, mdiTools } from '@quasar/extras/mdi-v6';
+import {
+  mdiDesktopTower,
+  mdiFileDocument,
+  mdiHeadCog,
+  mdiTools,
+} from '@quasar/extras/mdi-v6';
 import {
   matCalculate,
   matMonetizationOn,
@@ -261,7 +273,6 @@ import {
 } from '@quasar/extras/material-icons';
 import { openrouterPricing } from 'src/modules/utils';
 import FileBrowser from './FileBrowser.vue';
-import type { TyTaskManager } from 'src/modules/taskyon/taskManager';
 
 const props = defineProps<{
   task: TaskNode;
@@ -271,8 +282,10 @@ const props = defineProps<{
 
 const state = useTaskyonStore();
 const fileMappings = ref<FileMappingDocType[]>([]);
-const tyManager = ref<TyTaskManager>();
-state.getTaskManager().then((tm) => (tyManager.value = tm));
+async function getFile(uuid: string) {
+  console.log('load image', uuid);
+  return (await state.getTaskManager()).getFile(uuid);
+}
 
 if ('uploadedFiles' in props.task.content) {
   console.log('get uploaded files');
