@@ -82,22 +82,12 @@
           </div>
         </div>
         <div v-else-if="'uploadedFiles' in task.content" class="col">
-          <q-list>
-            <q-item v-for="file in fileMappings" :key="file?.uuid">
-              <q-item-section side>
-                <q-icon :name="mdiFileDocument" size="sm"></q-icon>
-              </q-item-section>
-              <q-item-section class="ellipsis">{{
-                file?.name || file?.opfs
-              }}</q-item-section>
-              <q-tooltip v-if="state.appConfiguration.expertMode" :delay="500">
-                <p class="text-bold">uploaded file:</p>
-                <p style="white-space: pre-wrap">
-                  {{ dump(file) }}
-                </p></q-tooltip
-              >
-            </q-item>
-          </q-list>
+          <FileBrowser
+            :file-mappings="fileMappings"
+            :expert-mode="state.appConfiguration.expertMode"
+            preview
+            :get-file="tyManager?.getFile"
+          />
         </div>
         <!--task costs-->
         <div
@@ -262,12 +252,7 @@ import { computed, ref } from 'vue';
 import { FileMappingDocType } from 'src/modules/taskyon/rxdb';
 import { dump } from 'js-yaml';
 import TaskButtons from './TaskButtons.vue';
-import {
-  mdiDesktopTower,
-  mdiFileDocument,
-  mdiHeadCog,
-  mdiTools,
-} from '@quasar/extras/mdi-v6';
+import { mdiDesktopTower, mdiHeadCog, mdiTools } from '@quasar/extras/mdi-v6';
 import {
   matCalculate,
   matMonetizationOn,
@@ -275,6 +260,8 @@ import {
   matWarning,
 } from '@quasar/extras/material-icons';
 import { openrouterPricing } from 'src/modules/utils';
+import FileBrowser from './FileBrowser.vue';
+import type { TyTaskManager } from 'src/modules/taskyon/taskManager';
 
 const props = defineProps<{
   task: TaskNode;
@@ -283,7 +270,9 @@ const props = defineProps<{
 }>();
 
 const state = useTaskyonStore();
-const fileMappings = ref<(FileMappingDocType | null)[]>([]);
+const fileMappings = ref<FileMappingDocType[]>([]);
+const tyManager = ref<TyTaskManager>();
+state.getTaskManager().then((tm) => (tyManager.value = tm));
 
 if ('uploadedFiles' in props.task.content) {
   console.log('get uploaded files');
@@ -292,7 +281,11 @@ if ('uploadedFiles' in props.task.content) {
     const fm = await Promise.all(
       fileUuids.map((uuid) => tm.getFileMappingByUuid(uuid)),
     );
-    fileMappings.value = fm;
+    fileMappings.value = fm.filter((x) => x != null);
+    /*fileMappings.value = fm.map((x) => {
+      const newfm = { ...x, xinfo: { uuid: x?.uuid } };
+      return newfm;
+    });*/
   })(props.task.content.uploadedFiles);
 }
 
