@@ -93,6 +93,7 @@
             :file-mappings="fileMappings"
             :expert-mode="state.appConfiguration.expertMode"
             preview
+            :preview-size="50"
             :get-file="getFile"
           />
         </div>
