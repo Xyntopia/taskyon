@@ -41,6 +41,7 @@ including additional providers to make even more use of the pricing competition 
               <q-icon :name="matFilterList" />
             </template>
           </q-input>
+          <q-btn label="Download Model file as JSON" outline @click="downloadModels"></q-btn>
         </template>
         <template #top-right>
           <q-toggle
@@ -107,7 +108,7 @@ including additional providers to make even more use of the pricing competition 
 
 <script setup lang="ts">
 import { useTaskyonStore } from 'src/stores/taskyonState';
-import { QTableProps } from 'quasar';
+import { QTableProps, exportFile } from 'quasar';
 import { openrouterPricing } from 'src/modules/utils';
 import InfoDialog from 'components/InfoDialog.vue';
 import { ref, computed } from 'vue';
@@ -139,6 +140,16 @@ function floatSorter(a: string, b: string) {
   console.log(comparison);
   return comparison;
 }
+
+const downloadModels = () => {
+  console.log('download models');
+  // Use Quasar's exportFile function for download
+  exportFile(
+    'models.json',
+    JSON.stringify(state.llmModels, null, 2),
+    'application/json',
+  );
+};
 
 const columns: QTableProps['columns'] = [
   {
