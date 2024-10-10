@@ -2,6 +2,7 @@
 
 <img align="left" src="/public/taskyon_fancy_logo.png" onerror="this.onerror=null; this.src='/taskyon_fancy_logo.png';" alt="Taskyon Fancy Logo" width="200" style="padding-right: 50px;"/>
 
+- 🌐🔗 Seamless Web Integration
 - 👥🛠️ Personalized AI Assistant 🤖
 - 🏡🌟 Local First
 - 🌳✅ Task Trees
@@ -15,19 +16,19 @@ You can access a deployed version of Taskyon here: [https://taskyon.space](https
 
 ## Overview
 
-On the surface, Taskyon is a simple chat interface, but beneath it lies a sophisticated system for managing tasks asynchronously in a tree-like structure. 🌳 This allows for parallel processing and efficient handling of both conversations and tasks. By leveraging various LLM providers, Taskyon can execute a wide range of tasks, from basic user messages to complex function calls.
+Taskyon is more than just a chat interface; it's a powerful system for managing tasks asynchronously in a tree-like structure. 🌳 This design allows for parallel processing and efficient handling of both conversations and tasks. By leveraging various LLM providers, Taskyon can execute a wide range of tasks, from basic user messages to complex function calls.
 
-Built on the principles of [_local-first_](https://dl.acm.org/doi/10.1145/3359591.3359737) 🏠, Taskyon ensures that most data processing happens on the user's local device, prioritizing data security and user autonomy. Whether used for personalized AI interactions or as a robust task management tool, Taskyon offers flexibility and control while maintaining a familiar chat interface.
+Built on the principles of [_local-first_](https://dl.acm.org/doi/10.1145/3359591.3359737) 🏠, Taskyon ensures that most data processing happens on the user's local device, prioritizing data security and user autonomy. Whether used for personalized AI interactions, robust task management, or seamless webpage integration, Taskyon offers flexibility and control while maintaining a familiar chat interface.
 
-Checkout Taskyon's documentation for a more information: [https://taskyon.space/docs/index](https://taskyon.space/docs/index)
+Explore Taskyon's documentation for more information: [https://taskyon.space/docs/index](https://taskyon.space/docs/index)
 
 ## Philosophy: Personalized AI Interaction & Local First
 
-🤖 Individualized AI Bots: Taskyon is built on the principle that every user should have a personalized AI bot. This approach ensures that the AI adapts organically to each user's specific interactions and needs, evolving through direct, human-centric communication rather than pre-defined programming or static instructions.
+🤖 **Individualized AI Bots**: Taskyon is built on the principle that every user should have a personalized AI bot. This ensures that the AI adapts organically to each user's specific interactions and needs, evolving through direct, human-centric communication.
 
-👥🛠️ User-Driven Evolution: Taskyon blurs the lines between user and developer. Users, through their interactions, play a pivotal role in shaping their AI's learning and capabilities, turning their expertise and feedback into the driving force behind the bot's development. Users themselves often have more task-specific insights than developers and it is important to leverage this.
+👥🛠️ **User-Driven Evolution**: Taskyon blurs the lines between user and developer. Users, through their interactions, play a pivotal role in shaping their AI's learning and capabilities, turning their expertise and feedback into the driving force behind the bot's development. Users themselves often have more task-specific insights than developers and it is important to leverage this.
 
-Local First Principle: Taskyon embraces the Local First approach, prioritizing user autonomy and data security. This principle ensures that most of the data processing and AI interactions occur on the user's local device, rather than relying on cloud-based services. Key benefits include:
+**Local First Principle**: Taskyon embraces the Local First approach, prioritizing user autonomy and data security. This principle ensures that most of the data processing and AI interactions occur on the user's local device, rather than relying on cloud-based services. Key benefits include:
 
 - 🔐 _Enhanced Safety:_ By processing data locally, Taskyon minimizes the risks associated with data breaches, ensuring that sensitive information remains within the user's control.
 - 👑 _Data Sovereignty:_ Users have complete ownership and control over their data, with no dependency on external cloud services.
@@ -36,28 +37,28 @@ Local First Principle: Taskyon embraces the Local First approach, prioritizing u
 
 ## Features
 
-- **Local First Architecture**: Taskyon's design incorporates the Local First principle, ensuring enhanced data privacy and security while maintaining high performance and user control.
-- **Service Integration:** Utilizes various LLM providers for executing tasks within the conversation threads.
-- **OpenAI API compatibility:** Taskyon can interface with any openai API compatible endpoint. Including locally deployed (e.g. with docker).
-- **Task-Based Conversations:** Each message within a conversation is treated as a task with the role "user", forming a branch in the task tree.
-- **Function Tasks:** Execute and manage function tasks with adjustable parameters directly within the interface.
-- **Frontend Capabilities:** Python and JavaScript code execution within a secure sandbox, access to a local browser-based vector store leveraging HNSWlib, and tool generation on-the-fly with JavaScript or Python.
-- **Contextual Task Management:** Attach contexts such as files or other tasks to any given task for detailed execution.
-- **Format Translation:** Translates the internal task tree into compatible formats for various services, bypassing the need for specific assistant APIs (e.g. OpenAI Assistants).
-- **Task Interfaces:** Each task can have a dedicated interface, allowing for parameter adjustments and direct execution.
-- **Webpage Integration:** Taskyon can be integrated into webpages by webpage owners with just a few lines of code, enabling users to interact with the webpage using an AI. This interaction is secure due to Taskyon's local-first approach.
-- **Enhanced Markdown Support:** Utilize the full power of markdown, including mermaid graphics, SVG drawings, embedded HTML widgets, and MathJax.
-- **Vision Models:** Interface with vision models to extend Taskyon's capabilities beyond text.
+- **Local First Architecture**: Ensures enhanced data privacy and security while maintaining high performance and user control.
+- **Seamless Web Integration**: Enhance your app or webpage with agent capabilities using just a code snippet. No backend required!
+- **Service Integration**: Utilizes various LLM providers for executing tasks within conversation threads.
+- **OpenAI API Compatibility**: Interface with any OpenAI API compatible endpoint, including locally deployed instances.
+- **Task-Based Conversations**: Each message within a conversation is treated as a task, forming a branch in the task tree.
+- **Function Tasks**: Execute and manage function tasks with adjustable parameters directly within the interface.
+- **Frontend Capabilities**: Execute Python and JavaScript code within a secure sandbox, access a local browser-based vector store, and generate tools on-the-fly.
+- **Contextual Task Management**: Attach contexts such as files or other tasks for detailed execution.
+- **Format Translation**: Translates the internal task tree into compatible formats for various services.
+- **Task Interfaces**: Each task can have a dedicated interface for parameter adjustments and direct execution.
+- **Enhanced Markdown Support**: Utilize the full power of markdown, including mermaid graphics, SVG drawings, embedded HTML widgets, and MathJax.
+- **Vision Models**: Interface with vision models to extend Taskyon's capabilities beyond text.
 
 ## Installation
 
-Taskyon can be accessed directly at [https://taskyon.space](https://taskyon.space). Or for a local setup:
+Taskyon can be accessed directly at [https://taskyon.space](https://taskyon.space). For a local setup:
 
 1. Clone the repository. 📥
 2. Run `yarn install` to install dependencies. 🧶
 3. Use `quasar build` for a production build or `quasar dev` for a development server. 🏗️
 
-You can also deploy taskyon using a docker container. An upcoming desktop app will be available soon.
+You can also deploy Taskyon using a Docker container. An upcoming desktop app will be available soon.
 
 ## Usage
 
@@ -79,11 +80,11 @@ Taskyon's commitment to security is evident in its Local First approach, which i
 
 - _Sandboxed Environments:_ Each operation in Taskyon is conducted within a secure, isolated environment, safeguarding against potential vulnerabilities.
 - _Desktop Application:_ Offers an additional layer of security and control by running locally, ideal for users seeking an elevated level of data protection.
-- _Local data storage:_ Ensures that sensitive data is not exposed beyond the local browser environment, maintaining a secure boundary.
+- _Local Data Storage:_ Ensures that sensitive data is not exposed beyond the local browser environment, maintaining a secure boundary.
 
 ## Support
 
-- Join our taskyon channel!: https://matrix.to/#/!UNCbKcBpdEjFduzzMv:matrix.org?via=matrix.org
+- Join our Taskyon channel: [Matrix Channel](https://matrix.to/#/!UNCbKcBpdEjFduzzMv:matrix.org?via=matrix.org)
 - [Documentation](https://taskyon.space/docs/index)
 
 ## Roadmap
