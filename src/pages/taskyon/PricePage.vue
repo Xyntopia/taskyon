@@ -7,8 +7,9 @@
 ##  Infos and pricing for all available Models.
 
 List of all of our currently available models in ${state.llmSettings.selectedApi} and their prices.
-Most of these models are integrated through openrouter right now. We are working on
-including additional providers to make even more use of the pricing competition in the current market.
+The selected AI provider has to provide price information through an API in order to show them
+on this list. *Dynamic* means that the backend changes the prices based on the input (E.g. by automatically 
+selecting different models).
 `"
         />
         <api-select v-model="state.llmSettings.selectedApi" />
@@ -41,7 +42,11 @@ including additional providers to make even more use of the pricing competition 
               <q-icon :name="matFilterList" />
             </template>
           </q-input>
-          <q-btn label="Download Model file as JSON" outline @click="downloadModels"></q-btn>
+          <q-btn
+            label="Download Model file as JSON"
+            outline
+            @click="downloadModels"
+          ></q-btn>
         </template>
         <template #top-right>
           <q-toggle
@@ -56,7 +61,12 @@ including additional providers to make even more use of the pricing competition 
             <div class="row items-center">
               {{ props.value }}
               <info-dialog>
-                <ty-markdown :src="props.row.description" />
+                <ty-markdown
+                  :src="
+                    props.row.description ??
+                    `No information provided by Backend: **${state.llmSettings.selectedApi}**`
+                  "
+                />
               </info-dialog>
             </div>
           </q-td>
@@ -124,9 +134,12 @@ const pricingPerPage = ref(true);
 type rowType = (typeof state.llmModels)[0];
 
 const filteredTableData = computed(() => {
-  return state.llmModels.filter((model) =>
-    model.name?.toLowerCase().includes((filter.value || '').toLowerCase()),
-  );
+  return state.llmModels.filter((model) => {
+    if (model.name || model.id) {
+      return true;
+    }
+    return false;
+  });
 });
 
 function floatSorter(a: string, b: string) {
@@ -156,7 +169,8 @@ const columns: QTableProps['columns'] = [
     name: 'name',
     label: 'Name',
     align: 'left',
-    field: (row: rowType) => row.name,
+    // we are always filtering for one of those two values, so this is definitly available
+    field: (row: rowType) => row.name ?? row.id,
     sortable: true,
   },
   /*{
@@ -194,7 +208,7 @@ const columns: QTableProps['columns'] = [
     name: 'context_length',
     label: 'Context Length',
     align: 'center',
-    field: (row: rowType) => row.context_length,
+    field: (row: rowType) => row.context_length || 'N/A',
     sortable: true,
   },
   /*{
@@ -213,16 +227,22 @@ const columns: QTableProps['columns'] = [
   },*/
 ];
 
-function calculatePricePerPage(value: string) {
-  const price = parseFloat(value);
-  if (isNaN(price) || price < 0) {
-    console.log('nan price');
-    return 'dynamic';
-  } else if (price === 0) {
-    return 'free';
+function calculatePricePerPage(value: string | undefined) {
+  if (value) {
+    const price = parseFloat(value);
+    if (price < 0) {
+      console.log('nan price');
+      return 'dynamic';
+    } else if (isNaN(price)) {
+      return 'N/A';
+    } else if (price === 0) {
+      return 'free';
+    } else {
+      const ppt = 0.01 / (price * 500);
+      return ppt.toFixed(1);
+    }
   } else {
-    const ppt = 0.01 / (price * 500);
-    return ppt.toFixed(1);
+    return 'N/A';
   }
 }
 </script>
