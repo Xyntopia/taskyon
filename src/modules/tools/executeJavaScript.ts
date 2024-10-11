@@ -38,11 +38,14 @@ export function executeInDynamicWorker(javascriptCode: string) {
 
 // Tool to Execute JavaScript Code
 export const executeJavaScript: Tool = {
-  function: async ({ javascriptCode, useWorker = false }) => {
+  function: async ({ code, useWorker = false }) => {
+    if (!(typeof code === 'string'))
+      throw Error('Can not read provided code', code);
+    if (code.length == 0) throw Error('Provided code is empty!');
     console.log('Executing JavaScript code...');
     if (useWorker) {
       // Execute using a dynamically created Web Worker
-      return executeInDynamicWorker(javascriptCode);
+      return executeInDynamicWorker(code);
     } else {
       // Execute in the main thread
       try {
@@ -59,7 +62,7 @@ export const executeJavaScript: Tool = {
 
           try {
             // Execute the JavaScript code
-            const result = eval(javascriptCode) as unknown;
+            const result = eval(code) as unknown;
             return {
               result: result ? result : undefined,
               'console.log': logMessages,

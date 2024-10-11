@@ -122,7 +122,6 @@ export async function handleFunctionExecution(
   const tool = getTool(tools, func.name);
   if ('function' in tool && tool.function) {
     console.log('using tool!', tool);
-    // TODO: remove taskManager from here and declare the functions which need it in the correct context!   E.g. get file content!!
     funcR = await tool.function(func.arguments);
     funcR = bigIntToString(funcR);
     return {
