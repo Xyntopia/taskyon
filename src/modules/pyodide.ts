@@ -1,7 +1,7 @@
 //import { loadPyodide, PyodideInterface } from 'pyodide';
 import type { PyodideInterface } from 'pyodide';
 
-function loadScript(src: string): Promise<void> {
+/*function loadScript(src: string): Promise<void> {
   // Specify 'void' if the promise doesn't return a value
   return new Promise<void>((resolve, reject) => {
     // Again, specify 'void' here
@@ -23,7 +23,7 @@ export async function execute(python_script: string) {
   });
 
   return await executeScript(pyodide, python_script);
-}
+}*/
 
 export async function executeScript(
   pyodide: PyodideInterface,

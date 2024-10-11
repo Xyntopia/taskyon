@@ -11,6 +11,7 @@ import { PythonScriptResult, executeScript } from './pyodide';
 let pyodideEnv: PyodideInterface | undefined = undefined;
 
 async function getPyodide() {
+  console.log('load Pyodide');
   if (pyodideEnv) {
     return pyodideEnv;
   }
@@ -18,7 +19,7 @@ async function getPyodide() {
     indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
   });
   //void pyodideEnv.loadPackage(['numpy', 'pytz']);
-  await pyodideEnv.loadPackage('micropip');
+  await pyodideEnv.loadPackage(['micropip']);
   const micropip = pyodideEnv.pyimport('micropip') as PyProxy & {
     install: (txt: string) => Promise<void>;
   };

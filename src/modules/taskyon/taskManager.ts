@@ -11,7 +11,7 @@ import { openFile } from '../OPFS';
 import { Lock, deepMerge, AsyncQueue, sleep } from '../utils';
 import type { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { loadOrCreateHNSWIndex } from './hnswIndex';
-import { extractKeywords, useNlpWorker } from './webWorkerApi';
+import { usePyodideWebworker, useNlpWorker } from './webWorkerApi';
 import { Tool } from './tools';
 import { taskUtils } from './taskUtils';
 import { MangoQuery } from 'rxdb';
@@ -134,6 +134,8 @@ async function taskContentHash(task: TaskNode) {
   ]);
   return hashId;
 }
+
+const { extractKeywords } = usePyodideWebworker();
 
 // add a task to the db. Adding some default information such as timestamps etc...
 // whats important here is that the TaskNode can only have one type of content
