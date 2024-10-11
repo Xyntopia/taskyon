@@ -2,7 +2,7 @@ import type { Tool } from '../taskyon/tools';
 import type { PythonScriptResult } from '../pyodide';
 import { usePyodideWebworker } from '../taskyon/webWorkerApi';
 
-const { asyncRunPython } = usePyodideWebworker();
+const { asyncRunPython } = usePyodideWebworker('execute python script tool');
 
 export const executePythonScript: Tool = {
   function: async ({ code }: { code: string }): Promise<PythonScriptResult> => {

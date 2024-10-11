@@ -135,7 +135,7 @@ async function taskContentHash(task: TaskNode) {
   return hashId;
 }
 
-const { extractKeywords } = usePyodideWebworker();
+const { extractKeywords } = usePyodideWebworker('task manager keywords');
 
 // add a task to the db. Adding some default information such as timestamps etc...
 // whats important here is that the TaskNode can only have one type of content

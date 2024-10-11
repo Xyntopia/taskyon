@@ -44,12 +44,21 @@ self.onmessage = async ({
   if (data.params) {
     //execute as a function with params!
     const tmp = await executeScript(pyodide, data.python, false);
-    const func = tmp.result as (...args: unknown[]) => { toJs: () => unknown };
-    const funcres = func(...data.params).toJs();
-    result = {
-      stdout: tmp.stdout || '',
-      result: funcres,
-    };
+    if (tmp) {
+      const func = tmp.result as (...args: unknown[]) => {
+        toJs: () => unknown;
+      };
+      const funcres = func(...data.params).toJs();
+      result = {
+        stdout: tmp.stdout || '',
+        result: funcres,
+      };
+    } else {
+      result = {
+        stdout: '',
+        result: undefined,
+      };
+    }
   } else {
     result = await executeScript(pyodide, data.python);
   }

@@ -61,10 +61,12 @@ export const useNlpWorker = () => {
   };
 };
 
-export function usePyodideWebworker() {
+export function usePyodideWebworker(name: string) {
   const callbacks: Record<number, (value: PythonScriptResult) => void> = {};
 
   const getWebWorker = lruCache<Worker>(10)(() => {
+    console.log(`create pyodide webworker ${name}`);
+
     const pyodideWorker = new Worker(
       /* webpackChunkName: "pyodide-worker" */
       /* webpackMode: "lazy" */
@@ -89,7 +91,6 @@ export function usePyodideWebworker() {
 
     return pyodideWorker;
   });
-  console.log('create pyodide webworker');
 
   const asyncRunPython = (() => {
     let id = 0; // identify a Promise
