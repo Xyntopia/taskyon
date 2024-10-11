@@ -13,7 +13,7 @@ export const executePythonScript: Tool = {
   longDescription: `Executes Python scripts for data processing, calculations, or library interactions, 
 ideal for data analysis, machine learning tasks, or custom algorithm execution.
 It's important to structure the Python code such that the desired result
-is the outcome of the last expression in the script. Outcomes should be of the types String, Number, Array, Map, Set.`,
+is the outcome of the last expression in the script. Outcomes should be of the types String, Number, List, Dict, Set.`,
   name: 'executePythonScript',
   parameters: {
     type: 'object',

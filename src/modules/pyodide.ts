@@ -74,27 +74,32 @@ export type PythonScriptResult = Awaited<ReturnType<typeof executeScript>>;
 function convertRes2Js(result: unknown) {
   let convres;
   // Check if result is a Pyodide proxy object
-  if (result && typeof result === 'object') {
-    // Check if the object is a list, array, map (dictionary), or set
-    if (
-      'length' in result ||
-      result.constructor.name === 'PyProxyMap' ||
-      result.constructor.name === 'PyProxySet' ||
-      result.constructor.name === 'PyProxyArray'
-    ) {
-      // Try to convert the Python object to a JavaScript object
-      try {
-        convres = (result as { toJs: () => unknown }).toJs();
-      } catch (error) {
-        console.error('Error converting Python object to JavaScript', error);
+  if (result) {
+    if (typeof result === 'object') {
+      // Check if the object is a list, array, map (dictionary), or set
+      if (
+        'length' in result ||
+        result.constructor.name === 'PyProxyMap' ||
+        result.constructor.name === 'PyProxySet' ||
+        result.constructor.name === 'PyProxyArray'
+      ) {
+        // Try to convert the Python object to a JavaScript object
+        try {
+          convres = (result as { toJs: () => unknown }).toJs();
+        } catch (error) {
+          console.error('Error converting Python object to JavaScript', error);
+        }
+      } else if ('toString' in result) {
+        // Fallback to using toString() for other types of objects
+        try {
+          convres = result.toString();
+        } catch (error) {
+          console.error('Error converting Python object to string', error);
+        }
       }
-    } else if ('toString' in result) {
-      // Fallback to using toString() for other types of objects
-      try {
-        convres = result.toString();
-      } catch (error) {
-        console.error('Error converting Python object to string', error);
-      }
+    } else {
+      // if we have a "non-object" it could be strings, numbers etc...
+      convres = result;
     }
   }
   return convres;
