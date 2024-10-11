@@ -1,4 +1,10 @@
-import type { PythonScriptResult } from './pyodide';
+/** We are starting the various webworkers used in taskyon here in this file...
+ *
+ * e.g. python, a worker to do NLP tasks etc..
+ *
+ */
+
+import type { PythonScriptResult } from '../pyodide';
 import type { nlpWorkerResult } from './nlp.worker';
 import { lruCache } from '../utils';
 
@@ -9,7 +15,7 @@ export const useNlpWorker = () => {
       /* webpackMode: "lazy" */
       /* webpackFetchPriority: "low" */
       /* webpackIgnore: "true" */
-      new URL('./nlp.worker.ts', import.meta.url)
+      new URL('./nlp.worker.ts', import.meta.url),
     );
 
     nlpWorker.onmessage = ({
@@ -52,7 +58,7 @@ export const useNlpWorker = () => {
 };
 
 const pyodideWorker = new Worker(
-  new URL('./pyodide.worker.ts', import.meta.url)
+  new URL('./pyodide.worker.ts', import.meta.url),
 );
 
 const callbacks: Record<number, (value: PythonScriptResult) => void> = {};

@@ -5,9 +5,11 @@ import {
   TaskWorkerController,
   taskWorker as runTaskWorker,
 } from './taskWorker';
-import { executePythonScript, Tool } from './tools';
+import type { Tool } from './tools';
 import { loadFile } from 'src/modules/loadFiles';
+// TODO: make webpack automatically add all tool files from /tools/*
 import { executeJavaScript } from '../tools/executeJavaScript';
+import { executePythonScript } from '../tools/executePython';
 import { llmSettings } from './types';
 
 export async function initTaskyon(

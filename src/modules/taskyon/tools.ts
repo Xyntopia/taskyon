@@ -1,8 +1,6 @@
 import { useVectorStore } from 'src/modules/localVectorStore';
-import type { PythonScriptResult } from './pyodide';
 import { dump } from 'js-yaml';
 import { bigIntToString } from '../utils';
-import { asyncRunPython } from 'src/modules/taskyon/webWorkerApi';
 import {
   TaskResult,
   TaskyonMessages,
@@ -175,29 +173,6 @@ for retrieving documents or data segments with high relevance to natural languag
       },
     },
     required: ['searchTerm'],
-  },
-};
-
-export const executePythonScript: Tool = {
-  function: async ({ code }: { code: string }): Promise<PythonScriptResult> => {
-    console.log('execute python code...');
-    return await asyncRunPython(code);
-  },
-  description: 'Executes a Python script and returns the result.',
-  longDescription: `Executes Python scripts for data processing, calculations, or library interactions, 
-ideal for data analysis, machine learning tasks, or custom algorithm execution.
-It's important to structure the Python code such that the desired result
-is the outcome of the last expression in the script. Outcomes should be of the types String, Number, Array, Map, Set.`,
-  name: 'executePythonScript',
-  parameters: {
-    type: 'object',
-    properties: {
-      code: {
-        type: 'string',
-        description: 'The Python script code to be executed.',
-      },
-    },
-    required: ['code'],
   },
 };
 

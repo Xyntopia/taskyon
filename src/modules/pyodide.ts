@@ -14,12 +14,12 @@ function loadScript(src: string): Promise<void> {
 }
 
 export async function execute(python_script: string) {
-  await loadScript('https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js');
+  await loadScript('https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js');
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
   const pyodide: PyodideInterface = await window.loadPyodide({
-    indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
+    indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.2/full/',
   });
 
   return await executeScript(pyodide, python_script);
