@@ -1,25 +1,50 @@
 import type { Tool, WorkerMessage } from '../taskyon/tools';
 
 // Function to execute JavaScript in a dynamically created Web Worker
-export function executeInDynamicWorker(javascriptCode: string) {
+export function executeInDynamicWorker(
+  javascriptCode: string,
+  workerName: string = 'js-worker',
+) {
   return new Promise((resolve, reject) => {
     const workerCode = `
-      onmessage = function(e) {
-        try {
-          const result = eval(e.data);
-          postMessage({ success: true, result });
-        } catch (error) {
-          postMessage({ success: false, error: error.toString() });
-        }
+onmessage = function(e) {
+  const scopedExecution = (code) => {
+    const logMessages = [];
+    const console = {
+      log: (...args) => {
+        logMessages.push(args.join(' '));
+      },
+    };
+
+    try {
+      const result = eval(code);
+      return {
+        result: result ? result : undefined,
+        'console.log': logMessages,
       };
+    } catch (e) {
+      throw e;
+    }
+  };
+
+  try {
+    const result = scopedExecution(e.data);
+    postMessage({ success: true, result });
+  } catch (error) {
+    postMessage({ success: false, error: error.toString() });
+  }
+};
+
+//# sourceURL=js-worker.js
     `;
 
     const blob = new Blob([workerCode], { type: 'application/javascript' });
     const workerUrl = URL.createObjectURL(blob);
-    const worker = new Worker(workerUrl);
+    const worker = new Worker(workerUrl, { name: workerName }); // Specify the worker name here
 
     worker.onmessage = function (e: MessageEvent<WorkerMessage>) {
       URL.revokeObjectURL(workerUrl); // Clean up the object URL
+      worker.terminate(); // Terminate the worker after receiving the message
       if (e.data.success) {
         resolve(e.data.result);
       } else {
@@ -29,6 +54,7 @@ export function executeInDynamicWorker(javascriptCode: string) {
 
     worker.onerror = function (error) {
       URL.revokeObjectURL(workerUrl); // Clean up the object URL
+      worker.terminate(); // Terminate the worker on error
       reject(new Error(`Worker error: ${error.message}`));
     };
 
@@ -38,12 +64,12 @@ export function executeInDynamicWorker(javascriptCode: string) {
 
 // Tool to Execute JavaScript Code
 export const executeJavaScript: Tool = {
-  function: async ({ code, useWorker = false }) => {
+  function: async ({ code, useWebWorker = false }) => {
     if (!(typeof code === 'string'))
       throw Error('Can not read provided code', code);
     if (code.length == 0) throw Error('Provided code is empty!');
     console.log('Executing JavaScript code...');
-    if (useWorker) {
+    if (useWebWorker) {
       // Execute using a dynamically created Web Worker
       return executeInDynamicWorker(code);
     } else {
