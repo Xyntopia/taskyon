@@ -64,7 +64,7 @@ onmessage = function(e) {
 
 // Tool to Execute JavaScript Code
 export const executeJavaScript: Tool = {
-  function: async ({ code, useWebWorker = false }) => {
+  function: async ({ code, useWebWorker = true }) => {
     if (!(typeof code === 'string'))
       throw Error('Can not read provided code', code);
     if (code.length == 0) throw Error('Provided code is empty!');
@@ -111,7 +111,7 @@ export const executeJavaScript: Tool = {
   },
   description: 'Runs JavaScript code',
   longDescription: `Runs JavaScript code either in the main thread or using a Web Worker, useful
-for tasks requiring DOM manipulation, data processing, or dynamic web content generation.`,
+for tasks requiring DOM manipulation, data processing, or dynamic web content generation and more...`,
   name: 'executeJavaScript',
   parameters: {
     type: 'object',
@@ -124,7 +124,7 @@ for tasks requiring DOM manipulation, data processing, or dynamic web content ge
         type: 'boolean',
         description:
           'Whether to execute the code in a Web Worker or main thread.',
-        default: false,
+        default: true,
       },
     },
     required: ['code'],
