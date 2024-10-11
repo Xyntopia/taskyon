@@ -5,7 +5,8 @@ import {
   TaskWorkerController,
   taskWorker as runTaskWorker,
 } from './taskWorker';
-import { executePythonScript, getFileContent, Tool } from './tools';
+import { executePythonScript, Tool } from './tools';
+import { loadFile } from 'src/modules/loadFiles';
 import { executeJavaScript } from '../tools/executeJavaScript';
 import { llmSettings } from './types';
 
@@ -24,7 +25,6 @@ export async function initTaskyon(
     // TODO: add local context(task) search
     // localVectorStoreSearch,
     executeJavaScript,
-    getFileContent,
     ...AdditionalTools,
   ];
 
@@ -46,6 +46,28 @@ export async function initTaskyon(
     llmSettings.vectorizationModel,
   );
   console.log('finished taskManager initialization');
+
+  // add tools which have access to the taskManagerInstance itself
+
+  ToolList.push({
+    function: async ({ filename }: { filename: string }) => {
+      const file = await taskManagerInstance.getFileByName(filename);
+      const fileContent = await loadFile(file);
+      return fileContent;
+    },
+    description: 'Get the contents of an uploaded file',
+    name: 'getFileContent',
+    parameters: {
+      type: 'object',
+      properties: {
+        filename: {
+          type: 'string',
+        },
+      },
+      required: ['filename'],
+    },
+  });
+  void taskManagerInstance.updateToolDefinitions();
 
   // keys could porentially be reactive here, so in theory, when they change in the GUI,
   // taskyon should automatically pick up on this...

@@ -283,10 +283,19 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
     });
     if (fileMaps.length) {
       // TODO: what do we do if we have multiple files with the same name?
+      // TODO: try to load files form other sources as well :)
       const fileName = fileMaps[0]?.opfs;
       if (fileName) {
         const file = await openFile(fileName);
         if (file) {
+          if (file.type.length == 0) {
+            // we do this, because for some files, opfs doesn't recognize the file type
+            // for some reason...
+            const newfile = new File([file], file.name, {
+              type: fileMaps[0]?.fileType,
+            });
+            return newfile;
+          }
           return file;
         }
       }
@@ -730,7 +739,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     return [];
   }
 
-  async function searchToolDefinitions(): Promise<
+  async function updateToolDefinitions(): Promise<
     Record<string, ToolBase | Tool>
   > {
     // TODO: make sure, its clear that we return non-partial tool types here...
@@ -817,7 +826,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     deleteTask,
     searchTasks,
     setTask,
-    searchToolDefinitions,
+    updateToolDefinitions,
     getLeafTasks,
     subscribeToTaskChanges,
     unsubscribeFromTaskChanges,

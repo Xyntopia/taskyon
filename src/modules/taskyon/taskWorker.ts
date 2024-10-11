@@ -197,7 +197,7 @@ export async function processChatTask(
           task.debugging.estimatedTokens = await estimateChatTokens(
             task,
             openAIConversationThread,
-            await taskManager.searchToolDefinitions(),
+            await taskManager.updateToolDefinitions(),
           );
         }
       }
@@ -390,7 +390,7 @@ async function generateFollowUpTasksFromResult(
       // check if we have any functioncalls from the llm inference
       const functionCall = extractOpenAIFunctions(
         choice,
-        await taskManager.searchToolDefinitions(),
+        await taskManager.updateToolDefinitions(),
       );
       if (functionCall[0]) {
         // TODO: enable multiple parallel function calls
@@ -603,7 +603,7 @@ async function getTaskResult(
     // in the case we don't have a result yet, wPe need to calculate it :)
     task = await processFunctionTask(
       task,
-      await taskManager.searchToolDefinitions(),
+      await taskManager.updateToolDefinitions(),
       taskWorkerController,
       taskManager,
     );

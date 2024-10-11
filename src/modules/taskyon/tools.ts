@@ -15,8 +15,6 @@ import {
   TaskProcessingError,
 } from './types';
 import { z } from 'zod';
-import type { TyTaskManager } from './taskManager';
-import { loadFile } from '../loadFiles';
 import { YamlRepresentation, convertToYamlWComments } from '../zodUtils';
 import { executeCodeInIframe } from './iframeWorker';
 
@@ -119,14 +117,13 @@ function getTool(tools: Record<string, ToolBase | Tool>, name: string) {
 export async function handleFunctionExecution(
   func: FunctionCall,
   tools: Record<string, ToolBase | Tool>,
-  taskManager: TyTaskManager,
 ): Promise<TaskResult> {
   let funcR: unknown;
   const tool = getTool(tools, func.name);
   if ('function' in tool && tool.function) {
     console.log('using tool!', tool);
     // TODO: remove taskManager from here and declare the functions which need it in the correct context!   E.g. get file content!!
-    funcR = await tool.function(func.arguments, taskManager);
+    funcR = await tool.function(func.arguments);
     funcR = bigIntToString(funcR);
     return {
       toolResult: { result: dump(funcR) },
@@ -154,29 +151,6 @@ export async function handleFunctionExecution(
     };
   }
 }
-
-export const getFileContent: Tool = {
-  // TODO: get rid of taskManager argument here and instead use a closure within the right context!! (taskyon.state)
-  function: async (
-    { filename }: { filename: string },
-    taskManager: TyTaskManager,
-  ) => {
-    const file = await taskManager.getFileByName(filename);
-    const fileContent = await loadFile(file);
-    return fileContent;
-  },
-  description: 'Get the contents of an uploaded file',
-  name: 'getFileContent',
-  parameters: {
-    type: 'object',
-    properties: {
-      filename: {
-        type: 'string',
-      },
-    },
-    required: ['filename'],
-  },
-};
 
 /*export const taskyonConfiguration: Tool = {
 

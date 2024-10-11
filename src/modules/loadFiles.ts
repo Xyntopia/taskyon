@@ -4,6 +4,7 @@
 import * as pdfjsLibRaw from 'pdfjs-dist/webpack';
 import * as mammoth from 'mammoth';
 import type pdfjsLibModule from 'pdfjs-dist';
+
 const pdfjsLib = pdfjsLibRaw as typeof pdfjsLibModule;
 
 async function read_pdf(file: File) {
@@ -40,6 +41,11 @@ async function read_docx(file: File) {
   return result.value;
 }
 
+/*async function detect_file_type(file: File) {
+  import { WASMagic } from 'wasmagic';
+  const magic = await WASMagic.create();
+}*/
+
 export async function loadFile(file: File) {
   console.log('load file: ' + file.type);
   switch (file.type) {
@@ -48,9 +54,12 @@ export async function loadFile(file: File) {
     case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
       return await read_docx(file);
     default:
+      /*const txt = file.text();
+      return txt;*/
       if (file.type.startsWith('text')) {
         return file.text();
       }
-      throw new Error(`unknown file type: ${file.type} from ${file.name}`);
   }
+  console.error("we don't know this file type!", file);
+  throw new Error(`unknown file type: ${file.type} from ${file.name}`);
 }

@@ -399,7 +399,7 @@ const fileAttachments = ref<File[]>([]); // holds all attached files as a "taskl
 async function getAllTools() {
   const foundTools = await (
     await state.getTaskManager()
-  ).searchToolDefinitions();
+  ).updateToolDefinitions();
   return foundTools;
 }
 
