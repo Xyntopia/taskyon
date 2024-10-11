@@ -1,6 +1,5 @@
 import {
   callLLM,
-  getOpenAIAssistantResponse,
   enrichWithDelayedUsageInfos,
   estimateChatTokens,
   generateHeaders,
@@ -55,155 +54,139 @@ export async function processChatTask(
   taskWorkerController: TaskWorkerController,
 ) {
   // TODO: refactor this function!
-  // TODO: can we interrupt non-streaming tasks? possibly using an AbortController.
-  //TODO: merge this function with the assistants function
-  if (llmSettings.useOpenAIAssistants && llmSettings.selectedApi == 'openai') {
-    const messages = await getOpenAIAssistantResponse(
+  const api = getApiConfigCopy(llmSettings, task.configuration?.chatApi);
+  if (!api) {
+    throw new Error(
+      `api doesn\'t exist! ${llmSettings.selectedApi || 'no api selected!'}`,
+    );
+  }
+  const selectedModel = task.configuration?.model;
+  if (selectedModel) {
+    api.selectedModel = selectedModel;
+    console.log('execute chat task!', task);
+    //TODO: also do this, if we start the task "autonomously" in which we basically
+    //      allow it to create new tasks...
+    //TODO: we can create more things here like giving it context form other tasks, lookup
+    //      main objective, previous tasks etc....
+    const { openAIConversationThread, toolDefs } = await generateCompleteChat(
       task,
-      apiKey,
-      llmSettings.openAIAssistantId,
+      llmSettings,
       taskManager,
     );
-    if (messages) {
+    let tools: OpenAI.ChatCompletionTool[] = [];
+    if (llmSettings.enableOpenAiTools) {
+      tools = generateOpenAIToolDeclarations(task, toolDefs);
+    }
+
+    if (openAIConversationThread.length > 0) {
+      const chatCompletion = await callLLM(
+        openAIConversationThread,
+        tools,
+        api,
+        llmSettings.siteUrl,
+        apiKey,
+        // if the task runs in the "foreground", stream it :)
+        task.id == llmSettings.selectedTaskId ? true : false,
+        // this function receives chunks if we stream and senfs them into
+        // our original task in the debugging property to be displayed
+        // "live" (this only works if our tasks structure in task manager is
+        // reactive)
+        (chunk) => {
+          if (chunk?.choices[0]?.delta?.tool_calls) {
+            chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
+              task.debugging.toolStreamArgsContent =
+                task.debugging.toolStreamArgsContent || {};
+              if (t.function?.name) {
+                task.debugging.toolStreamArgsContent[t.function.name] =
+                  (task.debugging.toolStreamArgsContent[t.function.name] ||
+                    '') + (t.function?.arguments || '');
+              }
+            });
+          }
+          if (chunk?.choices[0]?.delta?.content) {
+            task.debugging.streamContent =
+              (task.debugging.streamContent || '') +
+              chunk.choices[0].delta.content;
+          }
+        },
+        () => {
+          return taskWorkerController.isInterrupted();
+        }, // define a function to check whether we should cancel the stream ...
+      );
+
       task.result = {
-        assistantResponse: messages,
+        chatResponse: chatCompletion,
       };
+
+      // get llm inference stats
+      // TODO: we should replace this with an inference task which has the LLM as a parent...
+      if (chatCompletion && llmSettings.selectedApi === 'openrouter.ai') {
+        void sleep(5000).then(() => {
+          void getOpenRouterGenerationInfo(
+            chatCompletion.id,
+            generateHeaders(
+              apiKey,
+              llmSettings.siteUrl,
+              llmSettings.selectedApi || '',
+            ),
+          ).then((generationInfo) => {
+            enrichWithDelayedUsageInfos(task, taskManager, generationInfo);
+          });
+        });
+      } else if (
+        chatCompletion &&
+        llmSettings.selectedApi === 'taskyon' &&
+        !chatCompletion.model.endsWith(':free') &&
+        apiKey &&
+        !isTaskyonKey(apiKey, false)
+      ) {
+        // our backend tries to get the finished costs
+        // after ~4000ms, so we wait for 6000 here...
+        void sleep(6000).then(() => {
+          const headers = {
+            ...llmSettings.llmApis['taskyon']?.defaultHeaders,
+            ...generateHeaders(apiKey, llmSettings.siteUrl, api.name),
+          };
+          const baseUrl = new URL(api.baseURL).origin;
+          console.log('get generation info from ', baseUrl);
+          const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${chatCompletion.id}`;
+          void fetch(url, { headers })
+            .then((response) => {
+              if (!response.ok) {
+                throw new Error(
+                  `Could not find generation information for task ${task.id}`,
+                );
+              }
+              return response.json() as Promise<
+                { reference_data: OpenRouterGenerationInfo }[]
+              >;
+            })
+            .then((data) => {
+              console.log('taskyon generation info:', data);
+              if (data.length) {
+                enrichWithDelayedUsageInfos(
+                  task,
+                  taskManager,
+                  data[0]?.reference_data,
+                );
+              }
+            });
+        });
+      } else if (chatCompletion?.usage) {
+        // openai sends back the exact number of prompt tokens :)
+        task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
+        task.debugging.resultTokens = chatCompletion.usage.completion_tokens;
+        task.debugging.taskTokens = chatCompletion.usage.total_tokens;
+      } else {
+        task.debugging.estimatedTokens = await estimateChatTokens(
+          task,
+          openAIConversationThread,
+          await taskManager.updateToolDefinitions(),
+        );
+      }
     }
   } else {
-    const api = getApiConfigCopy(llmSettings, task.configuration?.chatApi);
-    if (!api) {
-      throw new Error(
-        `api doesn\'t exist! ${llmSettings.selectedApi || 'no api selected!'}`,
-      );
-    }
-    const selectedModel = task.configuration?.model;
-    if (selectedModel) {
-      api.selectedModel = selectedModel;
-      console.log('execute chat task!', task);
-      //TODO: also do this, if we start the task "autonomously" in which we basically
-      //      allow it to create new tasks...
-      //TODO: we can create more things here like giving it context form other tasks, lookup
-      //      main objective, previous tasks etc....
-      const { openAIConversationThread, toolDefs } = await generateCompleteChat(
-        task,
-        llmSettings,
-        taskManager,
-      );
-      let tools: OpenAI.ChatCompletionTool[] = [];
-      if (llmSettings.enableOpenAiTools) {
-        tools = generateOpenAIToolDeclarations(task, toolDefs);
-      }
-
-      if (openAIConversationThread.length > 0) {
-        const chatCompletion = await callLLM(
-          openAIConversationThread,
-          tools,
-          api,
-          llmSettings.siteUrl,
-          apiKey,
-          // if the task runs in the "foreground", stream it :)
-          task.id == llmSettings.selectedTaskId ? true : false,
-          // this function receives chunks if we stream and senfs them into
-          // our original task in the debugging property to be displayed
-          // "live" (this only works if our tasks structure in task manager is
-          // reactive)
-          (chunk) => {
-            if (chunk?.choices[0]?.delta?.tool_calls) {
-              chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
-                task.debugging.toolStreamArgsContent =
-                  task.debugging.toolStreamArgsContent || {};
-                if (t.function?.name) {
-                  task.debugging.toolStreamArgsContent[t.function.name] =
-                    (task.debugging.toolStreamArgsContent[t.function.name] ||
-                      '') + (t.function?.arguments || '');
-                }
-              });
-            }
-            if (chunk?.choices[0]?.delta?.content) {
-              task.debugging.streamContent =
-                (task.debugging.streamContent || '') +
-                chunk.choices[0].delta.content;
-            }
-          },
-          () => {
-            return taskWorkerController.isInterrupted();
-          }, // define a function to check whether we should cancel the stream ...
-        );
-
-        task.result = {
-          chatResponse: chatCompletion,
-        };
-
-        // get llm inference stats
-        // TODO: we should replace this with an inference task which has the LLM as a parent...
-        if (chatCompletion && llmSettings.selectedApi === 'openrouter.ai') {
-          void sleep(5000).then(() => {
-            void getOpenRouterGenerationInfo(
-              chatCompletion.id,
-              generateHeaders(
-                apiKey,
-                llmSettings.siteUrl,
-                llmSettings.selectedApi || '',
-              ),
-            ).then((generationInfo) => {
-              enrichWithDelayedUsageInfos(task, taskManager, generationInfo);
-            });
-          });
-        } else if (
-          chatCompletion &&
-          llmSettings.selectedApi === 'taskyon' &&
-          !chatCompletion.model.endsWith(':free') &&
-          apiKey &&
-          !isTaskyonKey(apiKey, false)
-        ) {
-          // our backend tries to get the finished costs
-          // after ~4000ms, so we wait for 6000 here...
-          void sleep(6000).then(() => {
-            const headers = {
-              ...llmSettings.llmApis['taskyon']?.defaultHeaders,
-              ...generateHeaders(apiKey, llmSettings.siteUrl, api.name),
-            };
-            const baseUrl = new URL(api.baseURL).origin;
-            console.log('get generation info from ', baseUrl);
-            const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${chatCompletion.id}`;
-            void fetch(url, { headers })
-              .then((response) => {
-                if (!response.ok) {
-                  throw new Error(
-                    `Could not find generation information for task ${task.id}`,
-                  );
-                }
-                return response.json() as Promise<
-                  { reference_data: OpenRouterGenerationInfo }[]
-                >;
-              })
-              .then((data) => {
-                console.log('taskyon generation info:', data);
-                if (data.length) {
-                  enrichWithDelayedUsageInfos(
-                    task,
-                    taskManager,
-                    data[0]?.reference_data,
-                  );
-                }
-              });
-          });
-        } else if (chatCompletion?.usage) {
-          // openai sends back the exact number of prompt tokens :)
-          task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
-          task.debugging.resultTokens = chatCompletion.usage.completion_tokens;
-          task.debugging.taskTokens = chatCompletion.usage.total_tokens;
-        } else {
-          task.debugging.estimatedTokens = await estimateChatTokens(
-            task,
-            openAIConversationThread,
-            await taskManager.updateToolDefinitions(),
-          );
-        }
-      }
-    } else {
-      throw new Error('Task has no inference model selected!');
-    }
+    throw new Error('Task has no inference model selected!');
   }
 
   return task;
@@ -213,13 +196,12 @@ async function processFunctionTask(
   task: TaskNode,
   tools: Record<string, ToolBase | Tool>,
   taskWorkerController: TaskWorkerController,
-  taskManager: TyTaskManager,
 ) {
   if ('functionCall' in task.content) {
     const func = task.content.functionCall;
     console.log(`Calling function ${func.name}`);
     if (tools[func.name] && !taskWorkerController.isInterrupted()) {
-      const result = await handleFunctionExecution(func, tools, taskManager);
+      const result = await handleFunctionExecution(func, tools);
       task.result = result;
     } else {
       const toolnames = JSON.stringify(task.allowedTools);
@@ -451,8 +433,9 @@ async function generateFollowUpTasksFromResult(
           yesnoToBoolean(structResponse['should we retry?']);
 
         if (
-          'toolCommand' in structResponse &&
-          structResponse.toolCommand?.name &&
+          structResponse.toolCommand &&
+          typeof structResponse.toolCommand == 'object' &&
+          'name' in structResponse.toolCommand &&
           retry
         ) {
           const newTaskid = await addFollowUpTask(false, {
@@ -605,7 +588,6 @@ async function getTaskResult(
       task,
       await taskManager.updateToolDefinitions(),
       taskWorkerController,
-      taskManager,
     );
   } else {
     throw new TaskProcessingError(
