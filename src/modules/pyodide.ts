@@ -48,7 +48,7 @@ export async function executeScript(
     // otherwise is corresponds to one of these types here:
     //  https://pyodide.org/en/stable/usage/type-conversions.htmls
     let result: unknown = await pyodide.runPythonAsync(python_script);
-
+    console.log('got result python:', result);
     if (convert2Js) {
       result = convertRes2Js(result);
     }

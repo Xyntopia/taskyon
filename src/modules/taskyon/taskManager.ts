@@ -337,7 +337,8 @@ function tyMechanisms() {
   async function waitForTaskUnlock(taskId: string) {
     const lock = taskLocks.get(taskId);
     if (lock) {
-      console.log('wait for unlock!');
+      // TODO: why is this called so often??
+      //console.log('wait for unlock!');
       await lock.waitForUnlock();
     }
   }

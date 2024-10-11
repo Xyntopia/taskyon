@@ -256,7 +256,6 @@ export async function callLLM(
       let bufferedData = ''; // Buffer to hold partial JSON chunks
 
       while (true) {
-        console.log('waiting for chunk');
         const { done, value } = await reader.read();
         if (done) break;
 
