@@ -18,6 +18,7 @@ import { z } from 'zod';
 import type { TyTaskManager } from './taskManager';
 import { loadFile } from '../loadFiles';
 import { YamlRepresentation, convertToYamlWComments } from '../zodUtils';
+import { executeCodeInIframe } from './iframeWorker';
 
 const arbitraryFunctionSchema = z.custom<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -124,19 +125,26 @@ export async function handleFunctionExecution(
   const tool = getTool(tools, func.name);
   if ('function' in tool && tool.function) {
     console.log('using tool!', tool);
+    // TODO: remove taskManager from here and declare the functions which need it in the correct context!   E.g. get file content!!
     funcR = await tool.function(func.arguments, taskManager);
     funcR = bigIntToString(funcR);
     return {
       toolResult: { result: dump(funcR) },
     };
   } else if (tool.code) {
-    console.log('compiling function code', tool);
-    console.error(
-      'compiling js code into a function is only available in the development version of taskyon!',
-    );
-    throw new TaskProcessingError(
-      `The tool: ${func.name} could not be executed, as the feature to compile code for functions is in development right now.`,
-    );
+    console.log('compile & execute function code in iframe', tool);
+    try {
+      // Execute code in iframe with parameters (func.arguments)
+      funcR = await executeCodeInIframe(tool.code, func.arguments);
+      funcR = bigIntToString(funcR); // Optionally convert bigInt
+      return {
+        toolResult: { result: dump(funcR) },
+      };
+    } catch (error) {
+      throw new TaskProcessingError(
+        `Error executing iframe code for tool: ${func.name}. Error: ${error instanceof Error ? error.message : 'unknown'}`,
+      );
+    }
   } else {
     // we do the zod object parsing/validation here, because we might have a proxy object from upstream
     // and want to make sure its serializable for a postMessage function.
@@ -148,6 +156,7 @@ export async function handleFunctionExecution(
 }
 
 export const getFileContent: Tool = {
+  // TODO: get rid of taskManager argument here and instead use a closure within the right context!! (taskyon.state)
   function: async (
     { filename }: { filename: string },
     taskManager: TyTaskManager,
@@ -225,7 +234,7 @@ is the outcome of the last expression in the script. Outcomes should be of the t
 // TODO: we need to give crateExampleTool the full list of tools with their *code*
 // definitions. Basically it becomes a task-search tool.
 // TODO:  this is a problem, if we use webpack/ts. Because we won't be able to get the original
-//        source code of our tools. Therefore we need to parse our "actual" tools which we can find 
+//        source code of our tools. Therefore we need to parse our "actual" tools which we can find
 //        in the task databse with *function* label.
 export function createToolExampleTool(tools: Record<string, Tool>): Tool {
   // used to get the code from our tools :)
