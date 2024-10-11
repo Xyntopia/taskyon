@@ -245,9 +245,14 @@ export const yesnoToBoolean = (value: yesno): boolean => {
 export const UseToolBase = z.object({
   'use tool': yesno,
   'which tool': answer,
-  toolCommand: FunctionCall.nullish()
+  toolCommand: z
+    .union([
+      FunctionCall, // Accepts valid FunctionCall
+      z.null(), // Accepts null
+      z.object({}), // Accepts an empty object {}
+      yesno, // Accepts yes/no object
+    ])
     .optional()
-    //.or(yesno)
     .describe(
       'If we should use a tool in the following step, provide the tool command. Otherwise do not!!',
     ),
