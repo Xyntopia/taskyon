@@ -239,7 +239,6 @@ async function parseChatResponse2TaskDraft(
   try {
     // Parse the extracted or original YAML content
     parsedYaml = load(yamlContent);
-    parsedYaml = keysToLowerCase(parsedYaml);
     parsedYaml = normalizeFalsyValues(parsedYaml);
   } catch (err) {
     throw new TaskProcessingError('Error converting the response to yaml', {
@@ -447,11 +446,13 @@ async function generateFollowUpTasksFromResult(
         // this way we can put all the parsing logic & interpretation and all of this here. While
         // our tasks only have to process the actual data they are receiving
 
+        const lowerStructResponse = keysToLowerCase(structResponse);
         const retry =
-          yesnoToBoolean(structResponse['use tool']) ||
-          yesnoToBoolean(structResponse['try again']);
+          yesnoToBoolean(lowerStructResponse['use tool']) ||
+          yesnoToBoolean(lowerStructResponse['try again']);
 
         if (retry) {
+          console.log('trying to get tool call from structured response');
           const newTaskid = await addFollowUpTask(false, {
             role: 'assistant',
             content: { structuredResponse: choice.message.content },
@@ -460,7 +461,11 @@ async function generateFollowUpTasksFromResult(
           // this doesn't say anything about whether the parameters are
           // chosen correctly for this function yet. It only says that
           // they are valid parameters for any function...
-          const res = FunctionCall.safeParse(structResponse.command);
+          let res = FunctionCall.safeParse(structResponse.command);
+          if (res.error) {
+            // try one more time using all lower case
+            res = FunctionCall.safeParse(lowerStructResponse.command);
+          }
           if (res.success) {
             const command = res.data;
             void addFollowUpTask(true, {

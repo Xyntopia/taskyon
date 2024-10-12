@@ -648,18 +648,18 @@ export function bigIntToString(obj: unknown): unknown {
   return obj;
 }
 
-export function keysToLowerCase(obj: unknown): unknown {
+export function keysToLowerCase<T>(obj: T): T {
   if (Array.isArray(obj)) {
-    return obj.map(keysToLowerCase);
+    return obj.map(keysToLowerCase) as unknown as T;
   } else if (obj instanceof Map) {
     const newMap = new Map();
     obj.forEach((value, key) => {
       const lowerKey = typeof key === 'string' ? key.toLowerCase() : key;
       newMap.set(lowerKey, keysToLowerCase(value));
     });
-    return newMap;
+    return newMap as unknown as T;
   } else if (obj instanceof Set) {
-    return new Set([...obj].map(keysToLowerCase));
+    return new Set([...obj].map(keysToLowerCase)) as unknown as T;
   } else if (obj !== null && typeof obj === 'object') {
     return Object.entries(obj).reduce(
       (acc, [key, value]) => {
@@ -668,7 +668,7 @@ export function keysToLowerCase(obj: unknown): unknown {
         return acc;
       },
       {} as Record<string, unknown>,
-    );
+    ) as unknown as T;
   }
   return obj;
 }
