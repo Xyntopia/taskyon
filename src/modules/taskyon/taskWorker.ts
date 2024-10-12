@@ -447,11 +447,12 @@ async function generateFollowUpTasksFromResult(
         // our tasks only have to process the actual data they are receiving
 
         const lowerStructResponse = keysToLowerCase(structResponse);
-        const retry =
-          yesnoToBoolean(lowerStructResponse['use tool']) ||
-          yesnoToBoolean(lowerStructResponse['try again']);
+        const useTool =
+          yesnoToBoolean(lowerStructResponse['use tool']) &&
+          (!('try again' in lowerStructResponse) ||
+            yesnoToBoolean(lowerStructResponse['try again']));
 
-        if (retry) {
+        if (useTool) {
           console.log('trying to get tool call from structured response');
           const newTaskid = await addFollowUpTask(false, {
             role: 'assistant',
