@@ -64,6 +64,7 @@ const taskNodeSchemaLiteral = {
     parentID: {
       type: ['string', 'null'],
     },
+    //TODO: get rid of this...
     childrenIDs: {
       type: 'array',
       items: {

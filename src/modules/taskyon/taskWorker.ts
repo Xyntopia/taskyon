@@ -13,7 +13,6 @@ import {
   FunctionCall,
   partialTaskDraft,
   TaskNode,
-  StructuredResponse,
   OpenRouterGenerationInfo,
   llmSettings,
   ToolBase,
@@ -25,7 +24,13 @@ import type { OpenAI } from 'openai';
 import { TyTaskManager } from './taskManager';
 import { Tool, handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
-import { deepCopy, deepMerge, sleep } from '../utils';
+import {
+  deepCopy,
+  deepMerge,
+  keysToLowerCase,
+  normalizeFalsyValues,
+  sleep,
+} from '../utils';
 import { isTaskyonKey } from '../crypto';
 
 function extractOpenAIFunctions(
@@ -217,7 +222,7 @@ async function processFunctionTask(
 
 async function parseChatResponse2TaskDraft(
   message: string,
-): Promise<StructuredResponse> {
+): Promise<Record<string, unknown>> {
   // parse the response and create a new task filled with the correct parameters
   let yamlContent = message.trim();
   // Use exec() to find a match
@@ -227,16 +232,22 @@ async function parseChatResponse2TaskDraft(
     yamlContent = yamlMatch[1]; // Use the captured group
   }
 
+  // TODO: if we haven't found anything,  search for anything that looks like yaml!!
+
   let parsedYaml: unknown = undefined;
   try {
     // Parse the extracted or original YAML content
     parsedYaml = load(yamlContent);
+    parsedYaml = keysToLowerCase(parsedYaml);
+    parsedYaml = normalizeFalsyValues(parsedYaml);
   } catch (err) {
     throw new TaskProcessingError('Error converting the response to yaml', {
       yamlString: yamlContent,
       error: err instanceof Error ? err.message : JSON.stringify(err),
     });
   }
+  /* TODO: this is currently too difficult for LLMs, so we are doing this manually
+  which is a lot more robust. We try to keep structured responses as simple as possible
   const structuredResponseResult =
     await StructuredResponse.safeParseAsync(parsedYaml);
 
@@ -247,8 +258,16 @@ async function parseChatResponse2TaskDraft(
       'ZOD parse error: Unknown response object type:',
       structuredResponseResult.error.format(),
     );
-  }
-  return structuredResponseResult.data;
+  }*/
+  if (
+    parsedYaml !== null &&
+    typeof parsedYaml === 'object' &&
+    !Array.isArray(parsedYaml)
+  )
+    return parsedYaml as Record<string, unknown>;
+  throw new TaskProcessingError(
+    'Parse Error:  the structured response must have keys and values!',
+  );
 }
 
 /**
@@ -412,7 +431,7 @@ async function generateFollowUpTasksFromResult(
         // depending on what role and tasktype the finishedTask has, we
         // expect different results from our structuredResponse
         // TODO: we need to do some plausibilitychecks here:
-        //       - e.g. if use tool=true, but no toolCommand present
+        //       - e.g. if use tool=true, but no command present
         // actually, it would be better to do this in the structreReponse processing ? :)
         const structResponse = await parseChatResponse2TaskDraft(
           choice.message.content || '',
@@ -428,25 +447,27 @@ async function generateFollowUpTasksFromResult(
         // our tasks only have to process the actual data ther're receiving
 
         const retry =
-          !yesnoToBoolean(structResponse.stop) ||
+          !yesnoToBoolean(structResponse['stop']) ||
           yesnoToBoolean(structResponse['try again']) ||
           yesnoToBoolean(structResponse['should we retry?']);
 
-        if (
-          structResponse.toolCommand &&
-          typeof structResponse.toolCommand == 'object' &&
-          'name' in structResponse.toolCommand &&
-          retry
-        ) {
-          const newTaskid = await addFollowUpTask(false, {
-            role: 'assistant',
-            content: { structuredResponse: choice.message.content },
-          });
-          void addFollowUpTask(true, {
-            parentID: newTaskid,
-            role: 'assistant',
-            content: { functionCall: structResponse.toolCommand },
-          });
+        if (retry) {
+          // this doesn't say anything about whether the parameters are
+          // chosen correctly for this function yet. It only says that
+          // they are valid parameters for any function...
+          const res = FunctionCall.safeParse(structResponse.command);
+          if (res.success) {
+            const newTaskid = await addFollowUpTask(false, {
+              role: 'assistant',
+              content: { structuredResponse: choice.message.content },
+            });
+            const command = res.data;
+            void addFollowUpTask(true, {
+              parentID: newTaskid,
+              role: 'assistant',
+              content: { functionCall: command },
+            });
+          }
         } else {
           // in the case that we don't call a tool, provide a "normal" answer :)
           // this time we declare it as "Open" and set execution to "true"

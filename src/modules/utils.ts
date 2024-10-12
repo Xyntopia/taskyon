@@ -647,3 +647,89 @@ export function bigIntToString(obj: unknown): unknown {
 
   return obj;
 }
+
+export function keysToLowerCase(obj: unknown): unknown {
+  if (Array.isArray(obj)) {
+    return obj.map(keysToLowerCase);
+  } else if (obj instanceof Map) {
+    const newMap = new Map();
+    obj.forEach((value, key) => {
+      const lowerKey = typeof key === 'string' ? key.toLowerCase() : key;
+      newMap.set(lowerKey, keysToLowerCase(value));
+    });
+    return newMap;
+  } else if (obj instanceof Set) {
+    return new Set([...obj].map(keysToLowerCase));
+  } else if (obj !== null && typeof obj === 'object') {
+    return Object.entries(obj).reduce(
+      (acc, [key, value]) => {
+        const lowerKey = key.toLowerCase();
+        acc[lowerKey] = keysToLowerCase(value);
+        return acc;
+      },
+      {} as Record<string, unknown>,
+    );
+  }
+  return obj;
+}
+
+// this function "normalizes" boolean-like input this makes our llm structured
+// response parsing more robust.
+export function normalizeFalsyValues(input: unknown): unknown {
+  // Define the set of "falsy" values
+  const falsyValues: Set<unknown> = new Set([
+    'no',
+    'n',
+    'false',
+    false,
+    '0',
+    0,
+    '{}',
+    {},
+    'null',
+    null,
+    'undefined',
+    undefined,
+  ]);
+
+  const normalizer = false;
+  // Helper function to normalize falsy values
+  const normalize = (value: unknown): unknown => {
+    if (typeof value === 'string') {
+      const lowerCaseValue = value.toLowerCase();
+      if (falsyValues.has(lowerCaseValue)) {
+        return normalizer; // Normalize falsy values to "undefined"
+      }
+    } else if (typeof value === 'boolean') {
+      return value ? value : normalizer; // Convert boolean false to "undefined"
+    } else if (falsyValues.has(value)) {
+      return normalizer; // Convert null, undefined, or falsy values
+    }
+    return value; // Return unchanged if no conversion needed
+  };
+
+  // Recursive function to traverse and normalize the input
+  const traverse = (obj: unknown): unknown => {
+    if (Array.isArray(obj)) {
+      return obj.map(traverse); // Traverse arrays
+    } else if (obj instanceof Map) {
+      const result = new Map<unknown, unknown>();
+      obj.forEach((v, k) => result.set(k, traverse(v)));
+      return result;
+    } else if (obj instanceof Set) {
+      const result = new Set<unknown>();
+      obj.forEach((v) => result.add(traverse(v)));
+      return result;
+    } else if (typeof obj === 'object' && obj !== null) {
+      const result: { [key: string]: unknown } = {};
+      Object.entries(obj).forEach(([key, value]) => {
+        result[key] = traverse(value); // Traverse nested objects
+      });
+      return result;
+    } else {
+      return normalize(obj); // Normalize primitive values
+    }
+  };
+
+  return traverse(input);
+}

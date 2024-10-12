@@ -232,26 +232,32 @@ export const RemoteFunctionResponse = RemoteFunctionBase.extend({
 export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>;
 
 const answer = z.string().nullish();
-const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish();
+const yesno = z.enum(['yes', 'no', 'n/a']).or(z.boolean()).nullish();
 type yesno = z.infer<typeof yesno>;
 
 // Convert yesno value to boolean
-export const yesnoToBoolean = (value: yesno): boolean => {
+export const yesnoToBoolean = (value: yesno | unknown): boolean => {
   if (value === 'yes') return true;
   if (value === 'no') return false;
   return !!value; // Handles boolean, null, undefined
 };
 
+// this one here is important. It should be as simple as possible
+// this type is used to parse & describe tool commands
+// an LLM should be able to generaate this content...
 export const UseToolBase = z.object({
   'use tool': yesno,
   'which tool': answer,
-  toolCommand: z
-    .union([
+  command: FunctionCall.nullable()
+    // right now, we don't know a good way to simultanously
+    // parse robustly and describe precisely
+    // we simply "normalize" all "no, {}, null" etc.. into undefined
+    /*z.union([
       FunctionCall, // Accepts valid FunctionCall
       z.null(), // Accepts null
       z.object({}), // Accepts an empty object {}
       yesno, // Accepts yes/no object
-    ])
+    ])*/
     .optional()
     .describe(
       'If we should use a tool in the following step, provide the tool command. Otherwise do not!!',
@@ -274,10 +280,10 @@ const SystemResponseEvaluation = z
 const ToolResultBase = z
   .object({
     'describe your thoughts': answer,
-    'was the tool call successfull?': answer,
+    'was the tool call successfull?': answer.or(yesno),
     'was there an error?': yesno,
     'should we retry?': yesno,
-    'should we use another tool?': answer,
+    'should we use another tool?': answer.or(yesno),
   })
   .describe(
     'Structured answer schema for processing the result of a function call.',

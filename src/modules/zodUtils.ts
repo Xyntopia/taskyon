@@ -165,6 +165,7 @@ appear in keys starting with '#'
 export function zodToYAMLObject(
   schema: z.ZodTypeAny,
   optionalSymbol = '',
+  short = false,
 ): YamlRepresentation {
   // Base case for primitive types
   if (schema instanceof z.ZodString) {
@@ -183,6 +184,7 @@ export function zodToYAMLObject(
 
   // Modified ZodObject case to handle optionals
   if (schema instanceof z.ZodObject) {
+    if (short) return 'object';
     const shape: Record<string, z.ZodTypeAny> = schema.shape as Record<
       string,
       z.ZodTypeAny
@@ -203,30 +205,38 @@ export function zodToYAMLObject(
 
   // Handle arrays
   if (schema instanceof z.ZodArray) {
-    return {
-      type: 'array',
-      items: zodToYAMLObject(schema.element),
-    };
+    return short
+      ? 'array'
+      : {
+          type: 'array',
+          items: zodToYAMLObject(schema.element),
+        };
   }
 
   // records
   if (schema instanceof z.ZodRecord) {
     const values = zodToYAMLObject(schema.element);
-    return {
-      key1: values,
-      key2: values,
-      '...': '...',
-    };
+    return short
+      ? 'record'
+      : {
+          key1: values,
+          key2: values,
+          '...': '...',
+        };
   }
 
   // TODO: what do we do with arrays & objects in this example?
   // Handle union types
+  // if we have an object, right now we are returning undefined. So we can not handle that yet..
   if (schema instanceof z.ZodUnion) {
+    if (short) return 'union';
     const options = (schema.options as z.ZodTypeAny[])
       .map((option) => {
-        const val = zodToYAMLObject(option);
+        const val = zodToYAMLObject(option, '', true);
         if (typeof val === 'object') {
-          return undefined;
+          throw Error(
+            'We can currently not convert a union with an object, this is currently too difficult for our AI to understand...',
+          );
         }
         return val;
       })
