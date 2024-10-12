@@ -77,7 +77,7 @@ flowchart TD
     MessageContent_U -- with llm tool support & tool action--> ToolCallContent
     MessageContent_U --> MessageContent_A
     MessageContent_s_A --> MessageContent_A
-    MessageContent_s_A --if toolCommand--> ToolCallContent
+    MessageContent_s_A --if command--> ToolCallContent
     ToolCallContent --> ToolResultContent_F
     UploadedFilesContent --> MessageContent_U
     UploadedFilesContent -.-> MessageContent_A
