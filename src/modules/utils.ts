@@ -679,6 +679,9 @@ export function normalizeFalsyValues(input: unknown): unknown {
   // Define the set of "falsy" values
   const falsyValues: Set<unknown> = new Set([
     'no',
+    'n/a',
+    'na',
+    'nan',
     'n',
     'false',
     false,
@@ -732,4 +735,10 @@ export function normalizeFalsyValues(input: unknown): unknown {
   };
 
   return traverse(input);
+}
+
+export function pickProperties(obj: object, keys: string[]) {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([key]) => keys.includes(key)),
+  );
 }

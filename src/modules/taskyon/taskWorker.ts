@@ -29,6 +29,7 @@ import {
   deepMerge,
   keysToLowerCase,
   normalizeFalsyValues,
+  pickProperties,
   sleep,
 } from '../utils';
 import { isTaskyonKey } from '../crypto';
@@ -444,28 +445,37 @@ async function generateFollowUpTasksFromResult(
         // In fact we always decide right here, what we do *after* the structured response and simply add the
         // structured response as a normal "message" task to the chain...
         // this way we can put all the parsing logic & interpretation and all of this here. While
-        // our tasks only have to process the actual data ther're receiving
+        // our tasks only have to process the actual data they are receiving
 
         const retry =
-          !yesnoToBoolean(structResponse['stop']) ||
-          yesnoToBoolean(structResponse['try again']) ||
-          yesnoToBoolean(structResponse['should we retry?']);
+          yesnoToBoolean(structResponse['use tool']) ||
+          yesnoToBoolean(structResponse['try again']);
 
         if (retry) {
+          const newTaskid = await addFollowUpTask(false, {
+            role: 'assistant',
+            content: { structuredResponse: choice.message.content },
+          });
+
           // this doesn't say anything about whether the parameters are
           // chosen correctly for this function yet. It only says that
           // they are valid parameters for any function...
           const res = FunctionCall.safeParse(structResponse.command);
           if (res.success) {
-            const newTaskid = await addFollowUpTask(false, {
-              role: 'assistant',
-              content: { structuredResponse: choice.message.content },
-            });
             const command = res.data;
             void addFollowUpTask(true, {
               parentID: newTaskid,
               role: 'assistant',
               content: { functionCall: command },
+            });
+          } else {
+            void addFollowUpTask(true, {
+              parentID: newTaskid,
+              role: 'system',
+              content: {
+                message: `The response (${pickProperties(structResponse, ['use tool', 'try again'])})
+ suggest we should use a tool, but we could not parse the ${structResponse.command}`,
+              },
             });
           }
         } else {

@@ -232,7 +232,7 @@ export const RemoteFunctionResponse = RemoteFunctionBase.extend({
 export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>;
 
 const answer = z.string().nullish();
-const yesno = z.enum(['yes', 'no', 'n/a']).or(z.boolean()).nullish();
+const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish();
 type yesno = z.infer<typeof yesno>;
 
 // Convert yesno value to boolean
@@ -269,9 +269,10 @@ const SystemResponseEvaluation = z
     'describe your thoughts': answer,
     'was there an error?': yesno,
     'do you think we can solve the error?': yesno,
-    'Should we use one of the mentioned tools to answer the task?': yesno,
+    'Would it help to use one of the mentioned tools to solve the issue?':
+      yesno,
+    'Should we try to correct the error': yesno,
     'try again': yesno,
-    stop: yesno,
   })
   .describe(
     'This is used as a short prompt for tasks in order to determine whether we should use a more detailed task prompt',
@@ -280,10 +281,11 @@ const SystemResponseEvaluation = z
 const ToolResultBase = z
   .object({
     'describe your thoughts': answer,
-    'was the tool call successfull?': answer.or(yesno),
     'was there an error?': yesno,
-    'should we retry?': yesno,
-    'should we use another tool?': answer.or(yesno),
+    'was the tool call successfull?': answer.or(yesno),
+    'should we use a different tool?': answer.or(yesno),
+    'should we use different parameters': yesno,
+    'try again': yesno,
   })
   .describe(
     'Structured answer schema for processing the result of a function call.',
