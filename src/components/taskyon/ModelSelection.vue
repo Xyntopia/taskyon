@@ -28,7 +28,12 @@
         @keydown.enter="selectFirstOption"
       >
         <template #prepend>
-          <q-icon v-if="state.tyPublicKey" :name="mdiKeyLink">
+          <q-icon
+            v-if="
+              state.llmSettings.selectedApi === 'taskyon' && state.tyPublicKey
+            "
+            :name="mdiKeyLink"
+          >
             <q-tooltip
               >Only models allowed from taskyon key:
               {{ state.tyPublicKey.name }}</q-tooltip
