@@ -7,164 +7,209 @@ $primary-light: color-mix(in srgb, $primary 20%, white)
 $primary-light-dark: color-mix(in srgb, $primary 25%, white)
 $primary-dark: color-mix(in srgb, $primary 90%, black)
 
-.body--light
-  background-color: $primary-light
-  //text-color: white
+@media screen
+  .body--light
+    background-color: $primary-light
+    //text-color: white
 
-  .q-header
-    background-color: color-mix(in srgb, $primary-light 90%, transparent)
-    color: $primary
+    .q-header
+      background-color: color-mix(in srgb, $primary-light 90%, transparent)
+      color: $primary
 
-  .q-card
-    background-color: white
-    color: black
+    .q-card
+      background-color: white
+      color: black
 
-  .q-drawer
-    background: linear-gradient(to bottom, $primary-light, $primary-light 10%, $primary-light-dark 90%)
+    .q-drawer
+      background: linear-gradient(to bottom, $primary-light, $primary-light 10%, $primary-light-dark 90%)
 
-  main.q-page
-    //background: radial-gradient(circle, $primary-light-dark 0%, $primary-light-dark 20%, $primary-light 75%)
-    // Define the gradient
-    background: linear-gradient(to bottom, $primary-light, $primary-light 10%, $primary-light-dark 90%)
-    //linear-gradient(to right, $primary-light 5%, black 40%, black 60%)
-    //background: linear-gradient(to right, $primary-light 5%, black 40%, black 60%)
-    //background-blend-mode: overlay
-    background-attachment: fixed
-    //background-attachment: fixed
-    background-repeat: no-repeat
-    //background-size: cover // Ensure the background covers the entire element
+    main.q-page
+      //background: radial-gradient(circle, $primary-light-dark 0%, $primary-light-dark 20%, $primary-light 75%)
+      // Define the gradient
+      background: linear-gradient(to bottom, $primary-light, $primary-light 10%, $primary-light-dark 90%)
+      //linear-gradient(to right, $primary-light 5%, black 40%, black 60%)
+      //background: linear-gradient(to right, $primary-light 5%, black 40%, black 60%)
+      //background-blend-mode: overlay
+      background-attachment: fixed
+      //background-attachment: fixed
+      background-repeat: no-repeat
+      //background-size: cover // Ensure the background covers the entire element
 
-  //filter: drop-shadow(0 0 5px white) drop-shadow(0 0 20px white)
+    //filter: drop-shadow(0 0 5px white) drop-shadow(0 0 20px white)
 
-.body--light
-  .welcome-message-text
-    filter: drop-shadow(0 0 5px white) drop-shadow(0 0 20px white)
+  .body--light
+    .welcome-message-text
+      filter: drop-shadow(0 0 5px white) drop-shadow(0 0 20px white)
 
-  .welcome
-    button
-      filter: drop-shadow(0 0 2px white) drop-shadow(0 0 5px white)
+    .welcome
+      button
+        filter: drop-shadow(0 0 2px white) drop-shadow(0 0 5px white)
 
-  .welcome > .q-icon
-    svg
-      filter: drop-shadow(0 0 5px white)
-    //background: radial-gradient(circle, $primary-light-dark 0%, $primary-light-dark 20%, $primary-light 70%)
-
-.body--dark
-  background-color: $primary-dark
-  text-color: white
-
-  .q-header
-    background-color: color-mix(in srgb, $primary-dark 90%, transparent)
-
-  .q-drawer
-    background-color: $primary-dark
-
-  $secondary-dark: color-mix(in srgb, $secondary 15%, black)
-  main.q-page:has(.welcome)
-    background: radial-gradient(circle, $secondary-dark 0%, $secondary-dark 20%, black 80%)
-    //background-attachment: fixed
-    //background-repeat: no-repeat
-    //background-size: cover // Ensure the background covers the entire element
-
-  .q-card
-    background-color: $primary-dark
-    color: white
-  .q-tab-panel
-    background-color: $primary-dark
-    color: white
-
-  .q-page-container
-    background-color: $primary-dark
-
-  .q-page
-    background-color: black
-    //border: 1px solid $primary-dark // Adjust border color as needed
-    border-radius: 10px // Adjust border radius as needed
-
-  .welcome .q-card
-    background-color: inherit
-    color: white
-    //box-shadow: 0px 0px 10px $secondary
-    box-shadow: none
-    border-radius: 15px
-
-    .text-h6
-      filter: drop-shadow(0 0 5px $secondary) drop-shadow(0 0 20px $secondary)
-
-    svg
-      filter: drop-shadow(0 0 5px $secondary) drop-shadow(0 0 20px $secondary)
-
-    .q-panel-parent
-      background-color: inherit
-
+    .welcome > .q-icon
       svg
-        filter: drop-shadow(0 0 5px $secondary)
+        filter: drop-shadow(0 0 5px white)
+      //background: radial-gradient(circle, $primary-light-dark 0%, $primary-light-dark 20%, $primary-light 70%)
 
-  .welcome > .q-icon
-    svg
-      filter: drop-shadow(0 0 10px $secondary)
-
-  .welcome-message-text
-    color: $secondary
-
-.create-new-task
-  //:class="['rounded-borders', 'q-pa-xs', 'shadow-5']"
-  // Round the top left and right borders
-  border-top-left-radius: 5px
-  border-top-right-radius: 5px
-
-  // Add a subtle glow around the edges
-  //box-shadow: 0 0 10px rgba(215, 23, 23, 0.2)
-
-  // Optional: Define the border and background color
-  //border: 1px solid #ccc
-  //background-color: #fff
-
-.body--dark
-  .taskyon-control-button
-    background-color: color-mix(in srgb, $secondary 80%, transparent)
-    color: white
-
-.body--light
-  .taskyon-control-button
-    background-color: color-mix(in srgb, $primary 80%, transparent)
-    color: white
-
-.body--light
-  .button-group
-    display: inline-block
-    border: 1px solid $primary /* add white outline */
-    border-radius: 5px /* optional, to match the rounded-borders class */
-
-.body--dark
-  .button-group
-    display: inline-block
-    border: 1px solid white /* add white outline */
-    border-radius: 5px /* optional, to match the rounded-borders class */
-
-.body--light
-  .create-new-task
-    background-color: white
-
-.body--dark
-  .create-new-task
+  .body--dark
     background-color: $primary-dark
     text-color: white
 
+    .q-header
+      background-color: color-mix(in srgb, $primary-dark 90%, transparent)
+
+    .q-drawer
+      background-color: $primary-dark
+
+    $secondary-dark: color-mix(in srgb, $secondary 15%, black)
+    main.q-page:has(.welcome)
+      background: radial-gradient(circle, $secondary-dark 0%, $secondary-dark 20%, black 80%)
+      //background-attachment: fixed
+      //background-repeat: no-repeat
+      //background-size: cover // Ensure the background covers the entire element
+
+    .q-card
+      background-color: $primary-dark
+      color: white
+    .q-tab-panel
+      background-color: $primary-dark
+      color: white
+
+    .q-page-container
+      background-color: $primary-dark
+
+    .q-page
+      background-color: black
+      //border: 1px solid $primary-dark // Adjust border color as needed
+      border-radius: 10px // Adjust border radius as needed
+
+    .welcome .q-card
+      background-color: inherit
+      color: white
+      //box-shadow: 0px 0px 10px $secondary
+      box-shadow: none
+      border-radius: 15px
+
+      .text-h6
+        filter: drop-shadow(0 0 5px $secondary) drop-shadow(0 0 20px $secondary)
+
+      svg
+        filter: drop-shadow(0 0 5px $secondary) drop-shadow(0 0 20px $secondary)
+
+      .q-panel-parent
+        background-color: inherit
+
+        svg
+          filter: drop-shadow(0 0 5px $secondary)
+
+    .welcome > .q-icon
+      svg
+        filter: drop-shadow(0 0 10px $secondary)
+
+    .welcome-message-text
+      color: $secondary
+
+  .create-new-task
+    //:class="['rounded-borders', 'q-pa-xs', 'shadow-5']"
+    // Round the top left and right borders
+    border-top-left-radius: 5px
+    border-top-right-radius: 5px
+
+    // Add a subtle glow around the edges
+    //box-shadow: 0 0 10px rgba(215, 23, 23, 0.2)
+
+    // Optional: Define the border and background color
+    //border: 1px solid #ccc
+    //background-color: #fff
+
+  .body--dark
+    .taskyon-control-button
+      background-color: color-mix(in srgb, $secondary 80%, transparent)
+      color: white
+
+  .body--light
+    .taskyon-control-button
+      background-color: color-mix(in srgb, $primary 80%, transparent)
+      color: white
+
+  .body--light
+    .button-group
+      display: inline-block
+      border: 1px solid $primary /* add white outline */
+      border-radius: 5px /* optional, to match the rounded-borders class */
+
+  .body--dark
+    .button-group
+      display: inline-block
+      border: 1px solid white /* add white outline */
+      border-radius: 5px /* optional, to match the rounded-borders class */
+
+  .body--light
+    .create-new-task
+      background-color: white
+
+  .body--dark
+    .create-new-task
+      background-color: $primary-dark
+      text-color: white
+
+  .task-container
+    display: flex
+    flex-direction: column
+    max-width: 800px
+    margin: 0 auto // Centers the container
+
+    // Default style for all tasks
+    > div
+      width: fit-content // Makes the width of the task as small as its content
+      max-width: 99% // Prevents the task from growing beyond the container width
+      box-sizing: border-box // Ensures padding and borders are included in width calculation
+      align-self: flex-start // Aligns to the left by default
+
+    // Specific style for tasks with the 'user' role
+    .user
+      align-self: flex-end // Aligns to the right
+
+  .user-message
+    position: relative
+  .user-message::after
+    content: ''
+    position: absolute
+    top: 0
+    right: 0
+    bottom: 0
+    width: 5px /* Width of the fading effect */
+    background: linear-gradient(to top, rgba(255, 255, 255, 0), $secondary)
+
+  .message-container
+    .message-buttons
+      background: color-mix(in srgb, $secondary 25%, transparent)
+
+  .raw-markdown
+    white-space: pre-wrap // This will display newlines and wrap text
+
 @media print
   /* Hide everything initially */
-  body
+  .body
+    visibility: hidden
+    //background-color: blue // Set the background color to white for printing
+
+  /* Ensure .body--light and .body--dark don't affect print background */
+  .body--light, .body--dark
+    background-color: white
+
+  .q-drawer
     visibility: hidden
 
-  /* Only display the q-page and its children */
-  .q-page
-    visibility: visible
+  .q-header
+    visibility: hidden
 
   /* Override the page container padding for print */
   .q-page-container
     padding: 0 !important
+    background-color: white
 
   .q-page
+    background-color: white
     position: absolute
     left: 0
     top: 0
@@ -173,38 +218,3 @@ $primary-dark: color-mix(in srgb, $primary 90%, black)
     padding: 0
     box-shadow: none /* Remove shadows, if any */
     min-height: 0 !important /* Override min-height if necessary */
-
-.task-container
-  display: flex
-  flex-direction: column
-  max-width: 800px
-  margin: 0 auto // Centers the container
-
-  // Default style for all tasks
-  > div
-    width: fit-content // Makes the width of the task as small as its content
-    max-width: 99% // Prevents the task from growing beyond the container width
-    box-sizing: border-box // Ensures padding and borders are included in width calculation
-    align-self: flex-start // Aligns to the left by default
-
-  // Specific style for tasks with the 'user' role
-  .user
-    align-self: flex-end // Aligns to the right
-
-.user-message
-  position: relative
-.user-message::after
-  content: ''
-  position: absolute
-  top: 0
-  right: 0
-  bottom: 0
-  width: 5px /* Width of the fading effect */
-  background: linear-gradient(to top, rgba(255, 255, 255, 0), $secondary)
-
-.message-container
-  .message-buttons
-    background: color-mix(in srgb, $secondary 25%, transparent)
-
-.raw-markdown
-  white-space: pre-wrap // This will display newlines and wrap text
