@@ -121,7 +121,7 @@ function accumulateChatCompletion(
   chunks: OpenAI.ChatCompletionChunk[],
 ): OpenAI.ChatCompletion {
   if (!chunks[0]) {
-    throw new Error('No chunks provided');
+    throw new Error('The message is empty!!');
   }
 
   // Assuming the id, created, and model fields are consistent across chunks,
@@ -202,7 +202,7 @@ function accumulateChatCompletion(
   return response;
 }
 
-// calls openRouter OR OpenAI  chatmodels
+// calls OpenAI API compatible  chatmodels
 export async function callLLM(
   chatMessages: OpenAI.ChatCompletionMessageParam[],
   functions: OpenAI.ChatCompletionTool[],
@@ -214,6 +214,8 @@ export async function callLLM(
     chunk?: OpenAI.Chat.Completions.ChatCompletionChunk,
   ) => void,
   cancelStream: () => boolean, // a function which we can call and which indicates that we should cancel the stream
+  timeoutMs: number = 10000, // Timeout in milliseconds for waiting for first streamed response
+  maxRetries: number = 3, // Maximum number of retry attempts
 ): Promise<OpenAI.ChatCompletion | undefined> {
   const headers: Record<string, string> = generateHeaders(
     apiKey,
@@ -238,79 +240,105 @@ export async function callLLM(
     ...(functions.length > 0 && { tools: functions, tool_choice: 'auto' }),
   };
 
-  // Use AbortController to handle stream cancellation
-  const controller = new AbortController();
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log(`Attempt ${attempt} of ${maxRetries}`);
 
-  try {
-    const response = await fetch(`${api.baseURL}/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
+    // Use AbortController to handle stream cancellation and timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (stream && response.body) {
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      const chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = [];
-      let bufferedData = ''; // Buffer to hold partial JSON chunks
+    try {
+      const response = await fetch(`${api.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      clearTimeout(timeoutId); // Clear timeout if fetch completes in time
 
-        // Decode the binary chunk into a string
-        const chunk = decoder.decode(value, { stream: true });
-        bufferedData += chunk;
+      if (stream && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        const chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = [];
+        let bufferedData = ''; // Buffer to hold partial JSON chunks
+        let receivedFirstChunk = false;
 
-        // Process the buffered data and split at newlines (for each "data: ..." chunk)
-        const lines = bufferedData.split('\n');
+        const firstChunkTimeout = setTimeout(() => {
+          if (!receivedFirstChunk) {
+            console.warn('First streamed response timed out');
+            controller.abort();
+          }
+        }, timeoutMs);
 
-        for (let i = 0; i < lines.length - 1; i++) {
-          const line = lines[i]!.trim();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-          // Only process lines starting with "data: "
-          if (line.startsWith('data: ')) {
-            const jsonString = line.replace(/^data: /, '').trim();
+          clearTimeout(firstChunkTimeout); // Clear first-chunk timeout on receiving data
+          receivedFirstChunk = true;
 
-            if (jsonString && jsonString !== '[DONE]') {
-              try {
-                // Parse the current line into a JSON object
-                const jsonChunk: OpenAI.Chat.Completions.ChatCompletionChunk =
-                  JSON.parse(jsonString);
-                chunks.push(jsonChunk);
+          // Decode the binary chunk into a string
+          const chunk = decoder.decode(value, { stream: true });
+          bufferedData += chunk;
 
-                // Call the callback function to process the chunk
-                contentCallBack(jsonChunk);
-              } catch (err) {
-                console.error('Failed to parse chunk:', jsonString, err);
+          // Process the buffered data and split at newlines (for each "data: ..." chunk)
+          const lines = bufferedData.split('\n');
+
+          for (let i = 0; i < lines.length - 1; i++) {
+            const line = lines[i]!.trim();
+
+            // Only process lines starting with "data: "
+            if (line.startsWith('data: ')) {
+              const jsonString = line.replace(/^data: /, '').trim();
+
+              if (jsonString && jsonString !== '[DONE]') {
+                try {
+                  // Parse the current line into a JSON object
+                  const jsonChunk: OpenAI.Chat.Completions.ChatCompletionChunk =
+                    JSON.parse(jsonString);
+                  chunks.push(jsonChunk);
+
+                  // Call the callback function to process the chunk
+                  contentCallBack(jsonChunk);
+                } catch (err) {
+                  console.error('Failed to parse chunk:', jsonString, err);
+                }
               }
             }
           }
+
+          // Keep the last partial chunk in the buffer for the next iteration
+          bufferedData = lines[lines.length - 1]!;
+
+          // If the cancelStream callback signals to cancel, break the loop and abort the request
+          if (cancelStream()) {
+            controller.abort();
+            break;
+          }
         }
 
-        // Keep the last partial chunk in the buffer for the next iteration
-        bufferedData = lines[lines.length - 1]!;
-
-        // If the cancelStream callback signals to cancel, break the loop and abort the request
-        if (cancelStream()) {
-          controller.abort();
-          break;
-        }
+        // After finishing, accumulate the full chat completion
+        chatCompletion = accumulateChatCompletion(chunks);
+        break; // Successfully received data, break out of retry loop
+      } else {
+        // Non-streaming case: Just return the full response
+        const completion = await response.json();
+        chatCompletion = completion;
+        break; // Non-streaming case, exit retry loop
       }
+    } catch (error) {
+      console.error(`Attempt ${attempt} failed:`, error);
 
-      // After finishing, accumulate the full chat completion
-      chatCompletion = accumulateChatCompletion(chunks);
-    } else {
-      // Non-streaming case: Just return the full response
-      const completion = await response.json();
-      chatCompletion = completion;
-    }
-  } catch (error) {
-    if (error instanceof Error) {
-      const err = new Error(`Error during fetch call: ${error.message}`);
-      err.cause = error;
-      throw err;
+      if (attempt === maxRetries) {
+        throw new Error('Timeout exceeded while waiting for the AI response.');
+      } else if (error instanceof Error) {
+        const err = new Error(`Error during fetch call: ${error.message}`);
+        err.cause = error;
+        throw err;
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
