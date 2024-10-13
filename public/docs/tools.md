@@ -44,6 +44,15 @@ Let's say we want to create a tool that takes a string input and returns the str
 
 This tool definition specifies the tool's name, description, input parameters, and the code to be executed.
 
+### Debugging Tools
+
+You can debug your tool right in the browser! For this you need to open the development tools
+(ctrl-shift-I) in chrome & firefox and most other browsers.
+
+When you click on "Sources", Taskyon will create a _.js_ file with the name of the tool. You will
+fin the javscript file in the folder: `about:srcdoc -> (no domain) -> <TOOLNAME>.js`
+You can add breakpoints and follow the execution of the tool in the browser.
+
 ## Tool Definition
 
 Tools in Taskyon are defined using a JSON object. This object specifies the tool's properties, including its name, description, parameters, and the code to be executed.
@@ -78,11 +87,11 @@ This tool definition specifies two input parameters, `num1` and `num2`, and retu
 
 ### Secure Execution Environment
 
-To maintain security, Taskyon executes user-defined tools in a sandboxed iframe. This environment restricts the tool's access to the system, allowing only the execution of scripts without any additional permissions. This ensures that tools cannot access or modify Taskyon's internal data or settings.
+To maintain security, Taskyon executes user-defined tools in a sandboxed iframe. This environment restricts the tool's access to the system, allowing only the execution of scripts without any additional permissions. This ensures that tools cannot access or modify Taskyon's internal data or settings or access user data.
 
-In the case of a webpage integration the tools are defined in the context of the parent of the Taskyon iframe. This means
-that taskyon inherently doesn't have access to anything on the parent webpage. Interaction with Taskyon happens
-through the postmessage API provided by taskyons iframe. Every interaction with taskyon is explicitly granted from your webpage.
+In the case of a webpage integration, the tools are defined in the context of the parent of the Taskyon iframe. This means
+that taskyon inherently doesn't have access to anything on the webpage that embeds it. Interaction with Taskyon happens
+through tools/functions provided to taskyon. Tools can potentially send data from the webpage through a the result returned by a function. Every interaction with taskyon therefore is explicitly granted from your webpage by defining a function.
 This ensures 100% control over which data is shared with taskyon and you are
 always in control which data is shared to taskyon.
 
