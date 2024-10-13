@@ -745,7 +745,6 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   async function updateToolDefinitions(): Promise<
     Record<string, ToolBase | Tool>
   > {
-    // TODO: make sure, its clear that we return non-partial tool types here...
     if (taskyonDB) {
       const tasks = await searchTasks({
         selector: {
@@ -781,20 +780,6 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       );
     }
     return {};
-  }
-
-  // TODO: evaluate js code from an actual function :). Put it into a secure iframe?
-  function addToolCode(toolCode: string) {
-    console.log('add tool code:', toolCode);
-
-    const myString =
-      "function myFunction(a) { console.log('Hello, World!', a); }";
-
-    // TODO: consider getting a security audit for these types of things...  But we can already execute html code etc..  sow I don't
-    //       think there is anything wrong here anyways. We are also in the browser sandbox
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const myFunction = new Function(myString);
-    myFunction('Hello, World!');
   }
 
   async function getJsonTaskBackup() {
@@ -839,7 +824,6 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     countTasks,
     syncVectorIndexWithTasks,
     vectorSearchTasks,
-    addToolCode,
     countVecs,
     addtoVectorDB,
   };
