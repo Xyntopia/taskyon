@@ -1,7 +1,8 @@
-import { OnInterruptFunc } from './types';
+import { sleep } from '../utils';
+import type { OnInterruptFunc } from './types';
 
 // Create and initialize iframe
-function createSandboxedIframe(): HTMLIFrameElement {
+function createSandboxedIframe(): Promise<HTMLIFrameElement> {
   console.log('create taskyon iframe worker');
   const iframe = document.createElement('iframe');
   iframe.style.display = 'none'; // Hide the iframe
@@ -29,7 +30,11 @@ window.addEventListener('message', async (event) => {
 
   // Write the sandboxed script into the iframe
   iframe.srcdoc = iframeContent;
-  return iframe;
+
+  // Return a promise that resolves when the iframe has loaded
+  return new Promise((resolve) => {
+    iframe.onload = () => resolve(iframe);
+  });
 }
 
 // Singleton iframe instance and an interrupt flag
@@ -51,7 +56,7 @@ function interruptExecution() {
 }
 
 // Function to execute code in the iframe with parameters
-export function executeCodeInIframe(
+export async function executeCodeInIframe(
   code: string,
   params: Record<string, unknown>,
   sourceURL: string = 'sandboxed-code.js', // Default source URL for debugging
@@ -59,8 +64,10 @@ export function executeCodeInIframe(
 ) {
   // Lazy initialize iframe
   if (!iframe || interrupted) {
-    iframe = createSandboxedIframe();
+    iframe = await createSandboxedIframe();
     interrupted = false;
+    // Add a delay to ensure iframe is fully ready
+    await sleep(1000); // Wait for 5 seconds
   }
 
   return new Promise((resolve, reject) => {
