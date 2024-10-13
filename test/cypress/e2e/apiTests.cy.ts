@@ -1,6 +1,8 @@
 // Use `cy.dataCy` custom command for more robust tests
 // See https://docs.cypress.io/guides/references/best-practices.html#Selecting-Elements
 
+import { checkLastMessage } from '../support/groups';
+
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
 // This test will pass when run against a clean Quasar project
@@ -42,23 +44,11 @@ describe('taskyon API', () => {
 
     cy.visit('/');
 
-    cy.contains('Provider').click();
-    cy.get('.q-menu').contains('openai').click();
-    cy.wait(100)
-      .contains('Select LLM Model for answering/solving the task.')
-      .click();
-
     // as of 20241007 this is the cheapest model which works with vision...
     const visionModelID = 'google/gemini-flash-1.5-8b';
 
-    cy.contains('Provider').click();
-    cy.get('.q-menu').contains('openrouter.ai').click();
-    cy.wait(100)
-      .contains('Select LLM Model for answering/solving the task.')
-      .type(visionModelID + '{enter}');
-    cy.get('.q-menu').contains(visionModelID).click();
-    //cy.contains('your message').type('hello world!{enter}');
-    //cy.get('.user-message i.q-icon.text-warning')
+    cy.selectllmmodel('openai', '');
+    cy.selectllmmodel('openrouter.ai', visionModelID);
 
     cy.wait(1000).reload();
 
@@ -80,12 +70,7 @@ describe('taskyon API', () => {
 
     cy.contains('your message').type('Whats in the picture?{enter}');
 
-    cy.get('.assistant > .message-container')
-      .last()
-      .invoke('text')
-      .then((text) => text.toLowerCase())
-      .should('contain', 'taskyon.space')
-      .and('contain', 'logo');
+    checkLastMessage('taskyon.space').and('contain', 'logo');
 
     // Check if the task costs element is present and contains the expected text
     /*cy.get('.task-costs')

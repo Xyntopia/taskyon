@@ -125,7 +125,7 @@ describe('iframe integration', () => {
         'make sure, when creating a new chat & message, the function tag is gone...'
       );
 
-      cy.get('[aria-label="start new chat"]').click();
+      startNewChat()
       cy.contains('your message').type('hello world!{enter}');
 
       cy.get('.message-container')
