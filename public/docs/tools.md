@@ -1,29 +1,31 @@
 # Taskyon Tools Documentation
 
-Taskyon offers a flexible and powerful system for integrating and managing tools, allowing users to extend its capabilities according to their needs. This document provides a comprehensive guide on how to use, define, and manage tools within Taskyon.
+## Overview
 
-## Overview of Taskyon Tools
+Taskyon offers a flexible and powerful system for integrating and managing tools, allowing users to extend its capabilities. This guide provides comprehensive information on using, defining, and managing tools within Taskyon.
 
-Taskyon tools are modular components that can perform specific tasks or functions. They are designed to be easily integrated into the Taskyon environment, providing users with the ability to customize and extend the system's functionality. Tools in Taskyon can be categorized into three main types:
+## Tool Categories
 
-1. **Internal Tools**: These tools have access to Taskyon's internal settings and can interact directly with the system.
-2. **Iframe Parent**: If taskyon is embedded in a webpage, the parent webpage can define functions which can then be defined as a tool for taskyon (see [example](/docs/examples/simpleExampleTutorial)).
-3. **Sandboxed Tools**: Tools created by users or external sources are executed in a secure iframe sandbox to ensure system security and integrity.
-4. **Out-of-the-Box Tools**: Taskyon provides a set of pre-defined tools that are ready to use.
+Taskyon tools are modular components that perform specific tasks or functions, categorized as follows:
 
-## Adding New Tools
+1. **Internal Tools**: Access Taskyon's internal settings and interact directly with the system.
+2. **Iframe Parent Tools**: Functions defined by the parent webpage when Taskyon is embedded (see [example](/docs/examples/simpleExampleTutorial)).
+3. **Sandboxed Tools**: User-created or external tools executed in a secure iframe sandbox.
+4. **Out-of-the-Box Tools**: Pre-defined tools ready for immediate use.
 
-Taskyon allows users to add arbitrary new tools to the system. This flexibility enables users to tailor Taskyon to their specific needs by integrating custom functionalities. Tools can be defined and managed through the [Tools Manager](/tools), where users can create, edit, and delete tools.
+## Tool Management
 
-### Creating Tools with the help of LLMs
+### Adding New Tools
 
-Taskyon can also define tools using Large Language Models (LLMs). By providing a JSON object as a message and adding a "function" tag, Taskyon can automatically generate tools based on the specified parameters and code. This feature allows for dynamic tool creation and adaptation, leveraging the power of LLMs to enhance Taskyon's capabilities. A good starting point for this is the [Tools Manager](/tools).
+Users can add custom tools through the [Tools Manager](/tools), where they can create, edit, and delete tools.
 
-TODO: enhance this section with examples.
+### AI-Assisted Tool Creation
 
-### Example: Creating a New Tool
+Taskyon can define tools using Large Language Models (LLMs) by providing a JSON object with a "function" tag. This feature enables dynamic tool creation and adaptation.
 
-Let's say we want to create a tool that takes a string input and returns the string in uppercase. We can define this tool using the following JSON object:
+### Tool Definition
+
+Tools are defined using a JSON object specifying properties such as name, description, parameters, and code. Here's an example of a simple tool that converts a string to uppercase:
 
 ```json
 {
@@ -38,30 +40,11 @@ Let's say we want to create a tool that takes a string input and returns the str
     },
     "required": ["input"]
   },
-  "code": "(input) => {return input.toUpperCase();}"
+  "code": "({input}) => input.toUpperCase()"
 }
 ```
 
-This tool definition specifies the tool's name, description, input parameters, and the code to be executed.
-
-### Debugging Tools
-
-You can debug your tool right in the browser! For this you need to open the development tools
-(ctrl-shift-I) in chrome & firefox and most other browsers.
-
-When you click on "Sources", Taskyon will create a _.js_ file with the name of the tool. You will
-fin the javscript file in the folder: `about:srcdoc -> (no domain) -> <TOOLNAME>.js`
-You can add breakpoints and follow the execution of the tool in the browser.
-
-## Tool Definition
-
-Tools in Taskyon are defined using a JSON object. This object specifies the tool's properties, including its name, description, parameters, and the code to be executed.
-
-TODO: full definition
-
-### Example: Tool Definition with Multiple Parameters
-
-Let's say we want to create a tool that takes two numbers as input and returns their sum. We can define this tool using the following JSON object:
+For a more complex example with multiple parameters, consider this tool that adds two numbers:
 
 ```json
 {
@@ -79,32 +62,41 @@ Let's say we want to create a tool that takes two numbers as input and returns t
     },
     "required": ["num1", "num2"]
   },
-  "code": "(num1, num2)=>{return num1 + num2;}"
+  "code": "({num1, num2})=>{return num1 + num2;}"
 }
 ```
 
-This tool definition specifies two input parameters, `num1` and `num2`, and returns their sum.
+## Security and Execution Environment
 
-### Secure Execution Environment
+### Sandboxed Execution
 
-To maintain security, Taskyon executes user-defined tools in a sandboxed iframe. This environment restricts the tool's access to the system, allowing only the execution of scripts without any additional permissions. This ensures that tools cannot access or modify Taskyon's internal data or settings or access user data.
+User-defined tools are executed in a sandboxed iframe to maintain security. This environment restricts the tool's access to user data and prevents XSS attacks.
 
-In the case of a webpage integration, the tools are defined in the context of the parent of the Taskyon iframe. This means
-that taskyon inherently doesn't have access to anything on the webpage that embeds it. Interaction with Taskyon happens
-through tools/functions provided to taskyon. Tools can potentially send data from the webpage through a the result returned by a function. Every interaction with taskyon therefore is explicitly granted from your webpage by defining a function.
-This ensures 100% control over which data is shared with taskyon and you are
-always in control which data is shared to taskyon.
+### Webpage Integration
+
+When integrated into a webpage, tools are defined in the context of the parent iframe. This ensures that Taskyon doesn't have direct access to webpage data, and all interactions are explicitly granted through defined functions. This gives the user of Taskyon
+integration 100% control over which data is shared.
+
+## Debugging Tools
+
+To debug your tool in the browser:
+
+1. Open the development tools (Ctrl+Shift+I in most browsers).
+2. Click on "Sources".
+3. Find the JavaScript file with your tool's name in the folder: `about:srcdoc -> (no domain) -> <TOOLNAME>.js`.
+4. Add breakpoints and follow the execution in the browser.
 
 ## Built-in Tools
 
-Taskyon comes with several built-in tools that provide essential functionalities out-of-the-box. These tools are ready to use and can be easily integrated into your workflows. Examples of built-in tools include:
+Taskyon provides several out-of-the-box tools, including:
 
-- **File Content Retrieval**: A tool to get the contents of an uploaded file.
-- **Python Script Execution**: A tool to execute Python scripts and return the results.
-- **JS Script Execution**: A tool to execute javascript code and return the results.
-- **modifyPrompts**: Taskyon can modify its own prompts here. This makes it easy to quickly evaluate
-  different prompts in order to customize Taskyon for your purposes.
+- File Content Retrieval
+- Python Script Execution
+- JS Script Execution
+- modifyPrompts (for customizing Taskyon's prompts)
 
 ## Conclusion
 
-Taskyon's tool system is designed to be flexible, secure, and user-friendly, allowing for extensive customization and integration. Whether you are using built-in tools, creating your own, or leveraging LLMs for dynamic tool generation, Taskyon provides a robust framework for managing and executing tasks efficiently. For more information and to start creating your own tools, visit the [Tools Manager](tools).
+Taskyon's tool system offers a robust framework for managing and executing tasks efficiently. Its flexibility allows for extensive customization and integration, whether using built-in tools, creating custom ones, or leveraging LLMs for dynamic tool generation.
+
+For more information and to start creating your own tools, visit the [Tools Manager](/tools).
