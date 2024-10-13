@@ -7,14 +7,12 @@
   >
     <div v-if="currentTask" class="q-gutter-xs q-px-xs task-container">
       <q-card
-        v-for="task in selectedThread"
+        v-for="task in filteredTasks"
         :key="task.id"
         :flat="$q.dark.isActive"
-        :class="task.role"
+        :class="[task.role, Object.keys(task.content)[0]]"
       >
-        <div v-if="task.label?.includes('hide')">...</div>
         <Task
-          v-else-if="!('structuredResponse' in task.content)"
           :id="task.id"
           :task="task"
           :is-working="!taskWorkerWaiting && task.id === currentTask.id"
@@ -56,12 +54,22 @@ import type { TaskNode } from '/home/tom/git/taskyon/frontend/src/modules/taskyo
 import Task from 'components/taskyon/TaskWidget.vue';
 import tyMarkdown from 'components/tyMarkdown.vue';
 import { useQuasar } from 'quasar';
+import { computed } from 'vue';
 const $q = useQuasar();
 
-defineProps<{
+const props = defineProps<{
   selectedThread: TaskNode[];
   currentTask?: TaskNode;
   taskWorkerWaiting: boolean;
   taskWorkerMessage?: string;
 }>();
+
+// TODO: render tasks based on levels :)
+const filteredTasks = computed(() =>
+  props.selectedThread.filter((t) => {
+    const hide = t.label ? t.label.includes('hide') : false; // TODO: hide tasks based on level as well :)
+    const structured = 'structuredResponse' in t.content;
+    return hide || !structured;
+  }),
+);
 </script>
