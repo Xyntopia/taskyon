@@ -52,7 +52,8 @@ describe('taskyon API', () => {
 
     cy.wait(1000).reload();
 
-    cy.contains('Select LLM Model for answering/solving the task.')
+    cy.log('checking if the correct llm was selected')
+      .contains('Select LLM Model for answering/solving the task.')
       //  .parent()
       .get('.q-field__input.q-placeholder.col')
       .invoke('val')

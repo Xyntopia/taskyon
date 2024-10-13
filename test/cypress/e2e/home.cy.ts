@@ -1,6 +1,8 @@
 // Use `cy.dataCy` custom command for more robust tests
 // See https://docs.cypress.io/guides/references/best-practices.html#Selecting-Elements
 
+import { getLastMessage } from '../support/groups';
+
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
 // This test will pass when run against a clean Quasar project
@@ -81,10 +83,8 @@ describe('test taskyon defaults', () => {
     //cy.get('li').first().click();
     //cy.contains('Clicks on todos: 1').should('exist');
 
-    cy.get(
-      '.user > .message-container > :nth-child(1) > .items-end > .col > .q-markdown > p',
-    ).should('have.text', 'hello world!');
-    cy.get('.assistant > .message-container').should('not.be.empty');
+    getLastMessage('.user.message').should('have.text', 'hello world!');
+    getLastMessage('.assistant.message').should('not.be.empty');
 
     // Check if the task costs element is present and contains the expected text
     /*cy.get('.task-costs')
