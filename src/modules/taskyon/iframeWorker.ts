@@ -1,3 +1,5 @@
+import { OnInterruptFunc } from './types';
+
 // Create and initialize iframe
 function createSandboxedIframe(): HTMLIFrameElement {
   console.log('create taskyon iframe worker');
@@ -30,11 +32,22 @@ window.addEventListener('message', async (event) => {
   return iframe;
 }
 
-// Singleton iframe instance
+// Singleton iframe instance and an interrupt flag
 let iframe: HTMLIFrameElement | null = null;
+let interrupted = false;
 
 function dereferenceReactive(reactiveObject: unknown) {
   return JSON.parse(JSON.stringify(reactiveObject));
+}
+
+// Function to interrupt the execution
+function interruptExecution() {
+  if (iframe) {
+    interrupted = true;
+    // Remove the iframe to terminate the script execution
+    document.body.removeChild(iframe);
+    iframe = null;
+  }
 }
 
 // Function to execute code in the iframe with parameters
@@ -42,10 +55,12 @@ export function executeCodeInIframe(
   code: string,
   params: Record<string, unknown>,
   sourceURL: string = 'sandboxed-code.js', // Default source URL for debugging
-): Promise<unknown> {
+  onInterrupt: OnInterruptFunc,
+) {
   // Lazy initialize iframe
-  if (!iframe) {
+  if (!iframe || interrupted) {
     iframe = createSandboxedIframe();
+    interrupted = false;
   }
 
   return new Promise((resolve, reject) => {
@@ -67,5 +82,11 @@ export function executeCodeInIframe(
     // Send the code, parameters, and source URL to the iframe for execution
     const sendobj = dereferenceReactive({ code, params, sourceURL });
     iframe!.contentWindow?.postMessage(sendobj, '*');
+
+    // Register the interrupt callback
+    onInterrupt((reason) => {
+      interruptExecution(); // Interrupt the execution
+      reject(new Error(reason || 'Execution interrupted'));
+    });
   });
 }

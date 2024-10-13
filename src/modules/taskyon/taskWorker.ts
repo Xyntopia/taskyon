@@ -18,6 +18,7 @@ import {
   ToolBase,
   TaskProcessingError,
   yesnoToBoolean,
+  OnInterruptFunc,
 } from './types';
 import { addTask2Tree, processTasksQueue } from './taskManager';
 import type { OpenAI } from 'openai';
@@ -207,7 +208,11 @@ async function processFunctionTask(
     const func = task.content.functionCall;
     console.log(`Calling function ${func.name}`);
     if (tools[func.name] && !taskWorkerController.isInterrupted()) {
-      const result = await handleFunctionExecution(func, tools);
+      const result = await handleFunctionExecution(
+        func,
+        tools,
+        taskWorkerController.onInterrupt,
+      );
       task.result = result;
     } else {
       const toolnames = JSON.stringify(task.allowedTools);
@@ -560,9 +565,9 @@ export function useTaskWorkerController() {
     }
   }
 
-  function onInterrupt(callback: (reason: string | null) => void): void {
+  const onInterrupt: OnInterruptFunc = (callback) => {
     interruptCallbacks.push(callback);
-  }
+  };
 
   return {
     interrupt,

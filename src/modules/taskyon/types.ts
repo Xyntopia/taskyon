@@ -15,6 +15,10 @@ export class TaskProcessingError extends Error {
   }
 }
 
+export type OnInterruptFunc = (
+  callback: (reason: string | null) => void,
+) => void;
+
 // TODO: the goal should be to slowly replace this state by the "result of the task"
 //       E.g. when a task had an error, this would be represented in the task result as an "error"
 const TaskState = z.enum([

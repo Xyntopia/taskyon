@@ -11,6 +11,7 @@ import {
   ParamType,
   ToolBase,
   TaskProcessingError,
+  OnInterruptFunc,
 } from './types';
 import { z } from 'zod';
 import { YamlRepresentation, convertToYamlWComments } from '../zodUtils';
@@ -115,6 +116,7 @@ function getTool(tools: Record<string, ToolBase | Tool>, name: string) {
 export async function handleFunctionExecution(
   func: FunctionCall,
   tools: Record<string, ToolBase | Tool>,
+  onInterrupt: OnInterruptFunc,
 ): Promise<TaskResult> {
   let funcR: unknown;
   const tool = getTool(tools, func.name);
@@ -133,6 +135,7 @@ export async function handleFunctionExecution(
         tool.code,
         func.arguments,
         func.name + '.js',
+        onInterrupt,
       );
       funcR = bigIntToString(funcR); // Optionally convert bigInt
       return {
@@ -146,6 +149,7 @@ export async function handleFunctionExecution(
   } else {
     // we do the zod object parsing/validation here, because we might have a proxy object from upstream
     // and want to make sure its serializable for a postMessage function.
+    // TODO: use our "onInterrupt" here somehow ;)
     const funcR = await handleRemoteFunction(func.name, func.arguments);
     return {
       toolResult: { result: dump(funcR) },
