@@ -129,7 +129,11 @@ export async function handleFunctionExecution(
     console.log('compile & execute function code in iframe', tool);
     try {
       // Execute code in iframe with parameters (func.arguments)
-      funcR = await executeCodeInIframe(tool.code, func.arguments);
+      funcR = await executeCodeInIframe(
+        tool.code,
+        func.arguments,
+        func.name + '.js',
+      );
       funcR = bigIntToString(funcR); // Optionally convert bigInt
       return {
         toolResult: { result: dump(funcR) },

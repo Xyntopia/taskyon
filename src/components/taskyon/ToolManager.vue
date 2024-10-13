@@ -117,7 +117,7 @@ function newToolStructure() {
     },
     "required": ["parameter1"]
   },
-  "code": "(parameter1, parameter2 = 'default parameter :)') => {return parameter1 + ' ' + parameter2;}"
+  "code": "({parameter1, parameter2 = 'default parameter :)'}) => {return parameter1 + ' ' + parameter2;}"
 }`;
   state.llmSettings.taskDraft.content = {
     ...state.llmSettings.taskDraft.content,

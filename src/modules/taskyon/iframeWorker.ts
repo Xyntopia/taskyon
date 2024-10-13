@@ -8,21 +8,22 @@ function createSandboxedIframe(): HTMLIFrameElement {
 
   // Set iframe content to include a message handler for receiving code and params
   const iframeContent = `
-      <script>
-        window.addEventListener('message', async (event) => {
-          const { code, params } = event.data;
-          try {
-            // Dynamically create a function with parameters and execute it
-            const func = new Function(...Object.keys(params), code);
-            const result = await func(...Object.values(params));
-            // Post the result back to the parent window
-            window.parent.postMessage({ result }, '*');
-          } catch (error) {
-            window.parent.postMessage({ error: error.message }, '*');
-          }
-        });
-      </script>
-    `;
+<script>
+window.addEventListener('message', async (event) => {
+    const { code, params, sourceURL } = event.data;
+    try {
+    const func = new Function("params", "return (" + code + ")(params)\\n//# sourceURL=" + sourceURL);
+    const result = await func(params);
+    
+    // Post the result back to the parent window
+    window.parent.postMessage({ result }, '*');
+    } catch (error) {
+    window.parent.postMessage({ error: error.message }, '*');
+    }
+});
+//# sourceURL=iframeWorker.js
+<\/script>
+`;
 
   // Write the sandboxed script into the iframe
   iframe.srcdoc = iframeContent;
@@ -40,6 +41,7 @@ function dereferenceReactive(reactiveObject: unknown) {
 export function executeCodeInIframe(
   code: string,
   params: Record<string, unknown>,
+  sourceURL: string = 'sandboxed-code.js', // Default source URL for debugging
 ): Promise<unknown> {
   // Lazy initialize iframe
   if (!iframe) {
@@ -62,8 +64,8 @@ export function executeCodeInIframe(
     // Listen for messages from the iframe
     window.addEventListener('message', handleMessage);
 
-    // Send the code and parameters to the iframe for execution
-    const sendobj = dereferenceReactive({ code, params });
+    // Send the code, parameters, and source URL to the iframe for execution
+    const sendobj = dereferenceReactive({ code, params, sourceURL });
     iframe!.contentWindow?.postMessage(sendobj, '*');
   });
 }
