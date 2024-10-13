@@ -14,16 +14,20 @@ function createSandboxedIframe(): Promise<HTMLIFrameElement> {
 <script>
 window.addEventListener('message', async (event) => {
     const { code, params, sourceURL } = event.data;
-    try {
-    const func = new Function("params", "return (" + code + ")(params)\\n//# sourceURL=" + sourceURL);
-    const result = await func(params);
-    
-    // Post the result back to the parent window
-    window.parent.postMessage({ result }, '*');
-    } catch (error) {
-    window.parent.postMessage({ error: error.message }, '*');
+    if (code) {
+      try {
+        const func = new Function("params", "return (" + code + ")(params)\\n//# sourceURL=" + sourceURL);
+        const result = await func(params);
+        
+        // Post the result back to the parent window
+        window.parent.postMessage({ result }, '*');
+      } catch (error) {
+        window.parent.postMessage({ error: error.message }, '*');
+      }
     }
 });
+// Notify parent that the iframe is ready
+window.parent.postMessage({ ready: true }, '*');
 //# sourceURL=iframeWorker.js
 <\/script>
 `;
@@ -31,9 +35,16 @@ window.addEventListener('message', async (event) => {
   // Write the sandboxed script into the iframe
   iframe.srcdoc = iframeContent;
 
-  // Return a promise that resolves when the iframe has loaded
+  // Return a promise that resolves when the iframe has notified that it is ready
   return new Promise((resolve) => {
-    iframe.onload = () => resolve(iframe);
+    function handleReady(event: MessageEvent) {
+      if (event.data.ready && event.source === iframe.contentWindow) {
+        // Remove the listener now that the iframe is ready
+        window.removeEventListener('message', handleReady);
+        resolve(iframe);
+      }
+    }
+    window.addEventListener('message', handleReady);
   });
 }
 
@@ -46,9 +57,13 @@ function dereferenceReactive(reactiveObject: unknown) {
 }
 
 // Function to interrupt the execution
-function interruptExecution() {
+function interruptExecution(handleMessage: (event: MessageEvent) => void) {
   if (iframe) {
     interrupted = true;
+
+    // Remove the function return listener if it exists
+    window.removeEventListener('message', handleMessage);
+
     // Remove the iframe to terminate the script execution
     document.body.removeChild(iframe);
     iframe = null;
@@ -66,8 +81,8 @@ export async function executeCodeInIframe(
   if (!iframe || interrupted) {
     iframe = await createSandboxedIframe();
     interrupted = false;
-    // Add a delay to ensure iframe is fully ready
-    await sleep(1000); // Wait for 5 seconds
+    // Add a delay to ensure iframe is fully ready. Its ok, because we normally do this only once here...
+    await sleep(100);
   }
 
   return new Promise((resolve, reject) => {
@@ -92,7 +107,7 @@ export async function executeCodeInIframe(
 
     // Register the interrupt callback
     onInterrupt((reason) => {
-      interruptExecution(); // Interrupt the execution
+      interruptExecution(handleMessage); // Interrupt the execution
       reject(new Error(reason || 'Execution interrupted'));
     });
   });
