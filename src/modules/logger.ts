@@ -7,10 +7,12 @@ export interface logMsg {
 }
 
 // Log target function type
-export type logTarget = (msg: logMsg) => void;
+type logTarget = (msg: logMsg) => void;
+
+export type logFunc = (msg: string, data?: unknown) => void;
 
 // Logger configuration interface
-export interface LoggerConfig {
+interface LoggerConfig {
   targets: Record<string, logTarget[]>;
   timestamp: () => number;
 }
@@ -33,42 +35,28 @@ export function createLogger<T extends string>(
     config.targets[level]?.forEach((t) => t(message));
   };
 
-  // Dynamically generate logging functions based on the defined levels (keys of targets)
-  return Object.keys(config.targets).reduce(
+  const logger = Object.keys(config.targets).reduce(
     (loggers, level) => {
       loggers[level as T] = log(level as T);
       return loggers;
     },
-    {} as { [K in T]: (msg: string, data?: unknown) => void },
+    {} as { [K in T]: logFunc },
   );
+
+  // Dynamically generate logging functions based on the defined levels (keys of targets)
+  return {
+    ...logger,
+    _: {
+      // we can call this to extend/overwrite our logger wth more targets / log levels
+      extend: <U extends string>(
+        xconfig: LoggerConfig & { targets: Record<U, logTarget[]> },
+      ) => {
+        const newLogger = createLogger(xconfig);
+        return {
+          ...logger,
+          ...newLogger,
+        } as { [K in U | T]: logFunc };
+      },
+    },
+  };
 }
-
-// Target function that logs to the console
-const consoleLog = (msg: logMsg) => {
-  console.log(msg.msg, msg.data);
-};
-
-// Target function that logs to the console
-const consoleError = (msg: logMsg) => {
-  console.error(msg.msg, msg.data);
-};
-
-// Target function that simulates sending logs to a client
-const sendToClient = (msg: logMsg) => {
-  console.log(`Sending to client: ${msg.msg}`, msg.data);
-};
-
-// Example usage with tree-like structure for log routing
-const logger = createLogger({
-  targets: {
-    info: [consoleLog],
-    error: [consoleError],
-    clienterr: [consoleError, sendToClient],
-  }, // Define hierarchical structure of log targets
-  timestamp: () => Date.now(), // Timestamp generator
-});
-
-// Log some messages
-logger.info('This is an info message'); // Goes to console
-logger.error('This is an error message', { errorCode: 123 }); // Goes to console and client
-logger.clienterr('This is a global error message'); // Goes to client only
