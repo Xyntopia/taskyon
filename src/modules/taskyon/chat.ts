@@ -202,7 +202,7 @@ function accumulateChatCompletion(
   return response;
 }
 
-// calls OpenAI API compatible  chatmodels
+// calls OpenAI API compatible chatmodels
 export async function callLLM(
   chatMessages: OpenAI.ChatCompletionMessageParam[],
   functions: OpenAI.ChatCompletionTool[],
@@ -256,6 +256,15 @@ export async function callLLM(
       });
 
       clearTimeout(timeoutId); // Clear timeout if fetch completes in time
+
+      // Check for non-OK status codes and throw error
+      if (!response.ok) {
+        const errorData = JSON.stringify(await response.json());
+        throw new Error(
+          `Fetching answer from AI Api failed at attempt ${attempt}/${maxRetries}
+  with status ${response.status}: ${response.statusText}, ${errorData}`,
+        );
+      }
 
       if (stream && response.body) {
         const reader = response.body.getReader();
@@ -329,14 +338,10 @@ export async function callLLM(
       }
     } catch (error) {
       console.error(`Attempt ${attempt} failed:`, error);
-
       if (attempt === maxRetries) {
         throw new Error('Timeout exceeded while waiting for the AI response.');
-      } else if (error instanceof Error) {
-        const err = new Error(`Error during fetch call: ${error.message}`);
-        err.cause = error;
-        throw err;
       }
+      throw error;
     } finally {
       clearTimeout(timeoutId);
     }
