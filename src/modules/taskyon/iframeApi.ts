@@ -2,6 +2,7 @@ import { addTask2Tree, TyTaskManager } from './taskManager';
 import { TaskyonMessages, ToolBase, partialTaskDraft } from './types';
 import type { llmSettings } from './types';
 import { deepMergeReactive } from '../utils';
+import { tylog } from '../logger';
 
 /*function stringifyIfNotString(obj: unknown): string | undefined {
     if (typeof obj === 'undefined') return undefined;
@@ -11,7 +12,7 @@ import { deepMergeReactive } from '../utils';
 export function setupIframeApi(
   llmSettings: llmSettings,
   keys: Record<string, string>,
-  taskManager: TyTaskManager
+  taskManager: TyTaskManager,
 ) {
   console.log('Turn on iframe API.');
   // Listen for messages from the parent page
@@ -52,14 +53,16 @@ export function setupIframeApi(
                 deepMergeReactive(
                   llmSettings,
                   newConfig.llmSettings,
-                  'overwrite'
+                  'overwrite',
                 );
               }
               llmSettings.taskDraft.allowedTools =
                 llmSettings.taskTemplate?.allowedTools;
               // and also set a possible signature as the api key!
-              if (llmSettings.selectedApi) {
-                const newKey = newConfig.signatureOrKey || 'anonymous';
+              if (llmSettings.selectedApi && newConfig.signatureOrKey) {
+                // we only set the API key, if it was provided by the
+                // parent app.
+                const newKey = newConfig.signatureOrKey;
                 keys[llmSettings.selectedApi] = newKey;
               }
             } else if (msg.success && msg.data.type === 'functionDescription') {
@@ -69,7 +72,7 @@ export function setupIframeApi(
               const newFunc: ToolBase = rest;
               console.log(
                 `functionDescription was sent by ${event.origin}`,
-                newFunc
+                newFunc,
               );
               const newTask: partialTaskDraft = {
                 role: 'system',
@@ -84,11 +87,14 @@ export function setupIframeApi(
                 undefined,
                 taskManager,
                 false,
-                duplicateTaskName
+                duplicateTaskName,
               ).catch((err) => console.warn(err));
             } else {
               // TODO: also add this as error, so that it gets thrown back to the parent
-              console.log('could not convert message to task:', msg, event);
+              tylog.clienterr('could not convert message to task:', {
+                msg,
+                event,
+              });
             }
           } catch (err) {
             // TODO: return this to the parent, in order to indicate any errors..
@@ -99,7 +105,7 @@ export function setupIframeApi(
         }
       }
     },
-    false
+    false,
   );
 
   const readyMessage: TaskyonMessages = { type: 'taskyonReady' };
