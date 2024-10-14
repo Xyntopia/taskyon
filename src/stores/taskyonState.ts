@@ -20,6 +20,7 @@ import { llmSettings, storedSettings } from 'src/modules/taskyon/types';
 import { setupIframeApi } from 'src/modules/taskyon/iframeApi';
 import { Tool } from 'src/modules/taskyon/tools';
 import { isTaskyonKey } from 'src/modules/crypto';
+import { tylog } from 'src/modules/logger';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -75,6 +76,8 @@ export const useTaskyonStore = defineStore(storeName, () => {
   function getErrors() {
     return errors;
   }
+
+  const logger = tylog;
 
   const defaultStorableSettings = storedSettings.parse(defaultSettings);
   // llmSettings & appConfiguration define the state of our app!
@@ -468,6 +471,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     modelLookUp,
     llmModels: computed(() => llmModelsInternal.value),
     tyPublicKey,
+    logger,
   };
 }); // this state stores all information which
 // should be stored e.g. in browser LocalStorage

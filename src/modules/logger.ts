@@ -1,5 +1,5 @@
 // Interface for log messages
-export interface logMsg {
+interface logMsg {
   timestamp: number;
   msg: string;
   level: string;
@@ -9,7 +9,7 @@ export interface logMsg {
 // Log target function type
 type logTarget = (msg: logMsg) => void;
 
-export type logFunc = (msg: string, data?: unknown) => void;
+type logFunc = (msg: string, data?: unknown) => void;
 
 // Logger configuration interface
 interface LoggerConfig {
@@ -60,3 +60,28 @@ export function createLogger<T extends string>(
     },
   };
 }
+
+// Target function that logs to the console
+const consoleLog = (msg: logMsg) => {
+  console.log(msg.msg, msg.data);
+};
+
+// Target function that logs to the console
+const consoleError = (msg: logMsg) => {
+  console.error(msg.msg, msg.data);
+};
+
+// Target function that simulates sending logs to a client
+const sendToClient = (msg: logMsg) => {
+  console.log(`Sending to client: ${msg.msg}`, msg.data);
+};
+
+// Example usage with tree-like structure for log routing
+export const tylog = createLogger({
+  targets: {
+    info: [consoleLog],
+    error: [consoleError],
+    clienterr: [consoleError, sendToClient],
+  }, // Define hierarchical structure of log targets
+  timestamp: () => Date.now(), // Timestamp generator
+});
