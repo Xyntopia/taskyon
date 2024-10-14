@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// the reason we are disabling no-explicit-any for this entire file is so that we can use the deepPartial function...
 import { dump } from 'js-yaml';
 import { z } from 'zod';
 
@@ -358,4 +360,108 @@ export function zodToDescriptionObject(schema: z.ZodTypeAny): {
 
   traverseSchema(schema);
   return descriptions;
+}
+
+// our own little custom implementation of deepPartial for ZoD
+export function deepPartial(schema: z.ZodTypeAny): z.ZodTypeAny {
+  if (schema instanceof z.ZodObject) {
+    const shape: Record<string, z.ZodTypeAny> = schema.shape as Record<
+      string,
+      z.ZodTypeAny
+    >;
+
+    const partialShape: Record<string, z.ZodTypeAny> = {};
+    for (const key in shape) {
+      const fieldSchema = shape[key]!;
+      partialShape[key] = deepPartial(fieldSchema);
+    }
+
+    return z.object(partialShape).partial();
+  } else if (schema instanceof z.ZodArray) {
+    return z.array(deepPartial(schema.element));
+  } else if (schema instanceof z.ZodRecord) {
+    return z.record(deepPartial(schema.element));
+  } else if (schema instanceof z.ZodUnion) {
+    const partialUnionTypes = schema.options.map(deepPartial);
+
+    if (partialUnionTypes.length === 1) {
+      return partialUnionTypes[0]; // Single type, no need for a union
+    } else {
+      return z.union(
+        partialUnionTypes as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]],
+      );
+    }
+  } else if (
+    schema instanceof z.ZodOptional ||
+    schema instanceof z.ZodNullable
+  ) {
+    // Unwrap and apply deepPartial to the underlying schema
+    return schema.constructor(deepPartial(schema.unwrap()));
+  } else {
+    // Return the schema unchanged for non-object types (string, number, etc.)
+    return schema;
+  }
+}
+
+type ZodDeepPartial<T extends z.ZodTypeAny> =
+  T extends z.ZodObject<z.ZodRawShape>
+    ? z.ZodObject<
+        {
+          [k in keyof T['shape']]: z.ZodOptional<ZodDeepPartial<T['shape'][k]>>;
+        },
+        T['_def']['unknownKeys'],
+        T['_def']['catchall']
+      >
+    : T extends z.ZodArray<infer Type, infer Card>
+      ? z.ZodArray<ZodDeepPartial<Type>, Card>
+      : T extends z.ZodOptional<infer Type>
+        ? z.ZodOptional<ZodDeepPartial<Type>>
+        : T extends z.ZodNullable<infer Type>
+          ? z.ZodNullable<ZodDeepPartial<Type>>
+          : T extends z.ZodTuple<infer Items>
+            ? {
+                [k in keyof Items]: Items[k] extends z.ZodTypeAny
+                  ? ZodDeepPartial<Items[k]>
+                  : never;
+              } extends infer PI
+              ? PI extends z.ZodTupleItems
+                ? z.ZodTuple<PI>
+                : never
+              : never
+            : T;
+
+export function deepPartialify<T extends z.ZodTypeAny>(
+  schema: T,
+): ZodDeepPartial<T> {
+  return _deepPartialify(schema);
+}
+
+function _deepPartialify(schema: z.ZodTypeAny): any {
+  if (schema instanceof z.ZodObject) {
+    const newShape: any = {};
+
+    for (const key in schema.shape) {
+      const fieldSchema = schema.shape[key];
+      newShape[key] = z.ZodOptional.create(_deepPartialify(fieldSchema));
+    }
+    return new z.ZodObject({
+      ...schema._def,
+      shape: () => newShape,
+    }) as any;
+  } else if (schema instanceof z.ZodArray) {
+    return new z.ZodArray({
+      ...schema._def,
+      type: _deepPartialify(schema.element),
+    });
+  } else if (schema instanceof z.ZodOptional) {
+    return z.ZodOptional.create(_deepPartialify(schema.unwrap()));
+  } else if (schema instanceof z.ZodNullable) {
+    return z.ZodNullable.create(_deepPartialify(schema.unwrap()));
+  } else if (schema instanceof z.ZodTuple) {
+    return z.ZodTuple.create(
+      schema.items.map((item: any) => _deepPartialify(item)),
+    );
+  } else {
+    return schema;
+  }
 }
