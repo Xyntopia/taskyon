@@ -6,55 +6,31 @@ export interface logMsg {
   data?: unknown;
 }
 
+// Log target function type
+export type logTarget = (msg: logMsg) => void;
+
 // Logger configuration interface
 export interface LoggerConfig {
   targets: Record<string, logTarget[]>;
   timestamp: () => number;
 }
 
-// Log target function type
-export type logTarget = (msg: logMsg) => void;
-
 // Logger function, automatically inferring log levels from targets
 export function createLogger<T extends string>(
   config: LoggerConfig & { targets: Record<T, logTarget[]> },
 ) {
-  // Function to resolve target routes from a tree-like structure
-  function resolveTargets(
-    level: string,
-    targets: Record<string, logTarget[]>,
-  ): logTarget[] {
-    let result: logTarget[] = [];
-
-    // Traverse the tree from the most specific to the general levels
-    let currentLevel = level;
-    while (currentLevel) {
-      if (targets[currentLevel]) {
-        result = result.concat(targets[currentLevel]);
-      }
-      // Move to parent level by splitting based on dot notation (e.g., "global.error" -> "global")
-      currentLevel = currentLevel.includes('.')
-        ? currentLevel.split('.').slice(0, -1).join('.')
-        : '';
-    }
-
-    return result;
-  }
+  // define hierarchies, by adding self-referring "strings" to our definition
+  //  use a structure which iherently  can not be misused with cyclc dependenices though
 
   // Function to log messages based on level
-  const log = (level: T) => (msg: string, data?: unknown) => {
-    const logMessage: logMsg = {
+  const log = (level: string) => (msg: string, data?: unknown) => {
+    const message = {
       timestamp: config.timestamp(),
       msg,
       level,
       data,
     };
-
-    // Get the associated targets from the hierarchical structure
-    const targetFns = resolveTargets(level, config.targets);
-
-    // Dispatch the message to all determined targets
-    targetFns.forEach((targetFn) => targetFn(logMessage));
+    config.targets[level]?.forEach((t) => t(message));
   };
 
   // Dynamically generate logging functions based on the defined levels (keys of targets)
