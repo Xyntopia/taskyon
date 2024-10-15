@@ -62,6 +62,11 @@ export const taskyonRoutes = {
       meta: { title: 'Tool Manager', description: 'Create & Manage AI Tools' },
     },
     {
+      path: 'integration',
+      component: () => import('components/taskyon/ToolManager.vue'),
+      meta: { title: 'Integration', description: 'Integrate Tasyon' },
+    },
+    {
       path: 'prompts',
       component: () => import('pages/taskyon/PromptManager.vue'),
       meta: {
