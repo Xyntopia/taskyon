@@ -1,5 +1,6 @@
 import type OpenAI from 'openai';
 import { z } from 'zod';
+import { deepPartialify, deepStrictify } from '../zodUtils';
 
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type RequireSome<T, K extends keyof T> = Omit<T, K> &
@@ -699,11 +700,15 @@ usage of an API key. This way you can give your users access to taskyon with you
 });
 export type storedSettings = z.infer<typeof storedSettings>;
 
-export const partialTyConfiguration = storedSettings
-  .deepPartial()
-  .describe(
-    'This can be used to update the configuration through iframe, json or URL',
-  );
+export const partialTyConfiguration = deepStrictify(
+  deepPartialify(
+    storedSettings
+      .partial()
+      .describe(
+        'This can be used to update the configuration through iframe, json or URL',
+      ),
+  ),
+);
 export type partialTyConfiguration = z.infer<typeof partialTyConfiguration>;
 
 export const TaskMessage = z

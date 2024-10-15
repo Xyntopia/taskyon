@@ -428,7 +428,11 @@ type ZodDeepPartial<T extends z.ZodTypeAny> =
                 ? z.ZodTuple<PI>
                 : never
               : never
-            : T;
+            : T extends z.ZodDefault<infer Type>
+              ? z.ZodDefault<ZodDeepPartial<Type>>
+              : T extends z.ZodRecord<infer KeySchema, infer ValueSchema>
+                ? z.ZodRecord<KeySchema, ZodDeepPartial<ValueSchema>>
+                : T;
 
 export function deepPartialify<T extends z.ZodTypeAny>(
   schema: T,
@@ -457,10 +461,91 @@ function _deepPartialify(schema: z.ZodTypeAny): any {
     return z.ZodOptional.create(_deepPartialify(schema.unwrap()));
   } else if (schema instanceof z.ZodNullable) {
     return z.ZodNullable.create(_deepPartialify(schema.unwrap()));
+  } else if (schema instanceof z.ZodDefault) {
+    // TODO: right now, we're simply leaving default values out of the equation ;). Because
+    // for some reason it adds "undefined" default values. maybe add that in the future at some point...
+    /*return z.ZodDefault.create(
+      _deepPartialify(schema._def.innerType),
+      schema._def.defaultValue(),
+    );*/
+    return _deepPartialify(schema._def.innerType)
   } else if (schema instanceof z.ZodTuple) {
     return z.ZodTuple.create(
       schema.items.map((item: any) => _deepPartialify(item)),
     );
+  } else if (schema instanceof z.ZodRecord) {
+    return new z.ZodRecord({
+      ...schema._def,
+      valueType: _deepPartialify(schema._def.valueType), // Recursively partialify value type of the record
+    });
+  } else {
+    return schema;
+  }
+}
+
+type ZodDeepStrict<T extends z.ZodTypeAny> =
+  T extends z.ZodObject<infer Shape>
+    ? z.ZodObject<
+        {
+          [K in keyof Shape]: ZodDeepStrict<Shape[K]>;
+        },
+        T['_def']['unknownKeys'],
+        T['_def']['catchall']
+      >
+    : T extends z.ZodArray<infer Type, infer Card>
+      ? z.ZodArray<ZodDeepStrict<Type>, Card>
+      : T extends z.ZodRecord<infer KeySchema, infer ValueSchema>
+        ? z.ZodRecord<KeySchema, ZodDeepStrict<ValueSchema>>
+        : T extends z.ZodOptional<infer Type>
+          ? z.ZodOptional<ZodDeepStrict<Type>>
+          : T extends z.ZodNullable<infer Type>
+            ? z.ZodNullable<ZodDeepStrict<Type>>
+            : T extends z.ZodUnion<infer Options>
+              ? z.ZodUnion<{ [K in keyof Options]: ZodDeepStrict<Options[K]> }>
+              : T;
+
+export function deepStrictify<T extends z.ZodTypeAny>(
+  schema: T,
+): ZodDeepStrict<T> {
+  return _deepStrict(schema) as ZodDeepStrict<T>;
+}
+
+export function _deepStrict(schema: z.ZodTypeAny): any {
+  if (schema instanceof z.ZodObject) {
+    const newShape: any = {};
+
+    for (const key in schema.shape) {
+      const fieldSchema = schema.shape[key];
+      newShape[key] = _deepStrict(fieldSchema);
+    }
+    return new z.ZodObject({
+      ...schema._def,
+      shape: () => newShape,
+      unknownKeys: 'strict',
+    }) as any;
+  } else if (schema instanceof z.ZodArray) {
+    return new z.ZodArray({
+      ...schema._def,
+      type: _deepStrict(schema.element),
+    });
+  } else if (schema instanceof z.ZodOptional) {
+    return z.ZodOptional.create(_deepStrict(schema.unwrap()));
+  } else if (schema instanceof z.ZodNullable) {
+    return z.ZodNullable.create(_deepStrict(schema.unwrap()));
+  } else if (schema instanceof z.ZodDefault) {
+    return z.ZodDefault.create(
+      _deepStrict(schema._def.innerType),
+      schema._def.defaultValue(),
+    );
+  } else if (schema instanceof z.ZodTuple) {
+    return z.ZodTuple.create(
+      schema.items.map((item: any) => _deepStrict(item)),
+    );
+  } else if (schema instanceof z.ZodRecord) {
+    return new z.ZodRecord({
+      ...schema._def,
+      valueType: _deepStrict(schema._def.valueType), // Recursively partialify value type of the record
+    });
   } else {
     return schema;
   }
