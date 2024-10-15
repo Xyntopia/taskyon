@@ -113,12 +113,12 @@
           <q-space></q-space>
           <div v-if="currentModel" class="gt-xs">
             {{
-              `approx. new token count: ${estimatedTokens}/${state.modelLookUp[currentModel]?.context_length}`
+              `t/c: ${estimatedTokens}/${state.modelLookUp[currentModel]?.context_length}`
             }}
             <q-tooltip :delay="1000" class="q-gutter-sm">
               <div>
-                [token number of prompt] / [max number of tokens which AI can
-                understand]
+                [approximate number of tokens in prompt] / [max number of tokens
+                which AI can understand]
               </div>
               <div>Tokens are roughly similar to syllables.</div>
             </q-tooltip>
@@ -493,16 +493,45 @@ async function setTaskType(tasktype: string | undefined | null) {
 
 const estimatedTokens = ref<number>(0);
 watchDebounced(
-  () => state.llmSettings.taskDraft.content,
-  () => {
-    void (async () => {
-      // Tokenize the message
-      estimatedTokens.value = await countStringTokens(
-        JSON.stringify(state.llmSettings.taskDraft.content) || '',
+  [
+    () => state.llmSettings.taskDraft.content,
+    () => state.llmSettings.selectedTaskId,
+  ],
+  async () => {
+    if (state.llmSettings.selectedTaskId) {
+      const tm = await state.getTaskManager();
+      // we only need the last 2 or 3 tasks in order to check for
+      const chain = await tm.getTaskIdChain(
+        state.llmSettings.selectedTaskId,
+        3,
       );
-    })();
+
+      let accumulatedTokens = 0;
+      let accumulatedEstimated = 0;
+      // Assume the highest token count is the last relevant one
+      for (const taskId of chain) {
+        const task = await tm.getTask(taskId);
+        const taskTokens = task?.debugging.taskTokens ?? 0;
+        const taskTokensEstimated =
+          (task?.debugging.estimatedTokens?.promptTokens ?? 0) +
+          (task?.debugging.estimatedTokens?.resultTokens ?? 0);
+        if (taskTokens > accumulatedTokens) {
+          accumulatedTokens = taskTokens;
+        }
+        if (taskTokensEstimated > accumulatedEstimated) {
+          accumulatedEstimated = taskTokensEstimated;
+        }
+      }
+
+      // Tokenize the message
+      estimatedTokens.value =
+        (accumulatedTokens || accumulatedEstimated) +
+        (await countStringTokens(
+          JSON.stringify(state.llmSettings.taskDraft.content) || '',
+        ));
+    }
   },
-  { debounce: 500, maxWait: 1000 },
+  { debounce: 500, maxWait: 1000, immediate: true },
 );
 
 async function toggleSelectedTools() {

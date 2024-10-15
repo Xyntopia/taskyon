@@ -26,14 +26,17 @@ export const taskUtils = (
   getFile: (uuid: string) => Promise<File | undefined>,
 ) => {
   /* get a chain of taskss with the last task being the last element in the list */
-  async function getTaskIdChain(taskId: string) {
+  async function getTaskIdChain(taskId: string, maxFollow: number = 0) {
     const conversationList: string[] = [];
 
     // Start with the selected task
     let currentTaskID: string | undefined = taskId;
 
     // Trace back the parentIDs to the original task in the chain
-    while (currentTaskID) {
+    while (
+      currentTaskID &&
+      (maxFollow >= conversationList.length || maxFollow == 0)
+    ) {
       // Get the current task
       const currentTask: TaskNode | undefined = await getTask(currentTaskID);
       if (currentTask) {
@@ -147,7 +150,7 @@ export const taskUtils = (
   }
 
   return {
-    taskChain: getTaskIdChain,
+    getTaskIdChain,
     buildChatThread,
     getTaskChain,
   };
