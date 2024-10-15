@@ -3,11 +3,15 @@
     <div class="column q-gutter-sm items-center">
       <TyMarkdown
         class="q-pb-md"
-        src="
-## Welcome to Taskyon!
-        
-You will need an API key for an OpenAI-compatible AI service. There are many options available for this. It is even possible to run your own inference service on a server.
-"
+        :src="
+          $q.platform.within.iframe
+            ? `## Welcome to Taskyon!
+
+Please ensure that your application provides a valid API key. For more information, see our [integration guide](http://localhost:9000/docs/taskyon_integration#configuration). Alternatively, for development purposes, you can manually enter a key using the button below.`
+            : `## Welcome to Taskyon!
+
+To get started, you'll need an API key for an OpenAI-compatible AI service. You can choose from a variety of options, including third-party services or even hosting your own inference server.`
+        "
       />
       <div class="row justify-center">
         <q-btn
