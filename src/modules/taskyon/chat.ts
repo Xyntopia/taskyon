@@ -339,9 +339,11 @@ export async function callLLM(
     } catch (error) {
       console.error(`Attempt ${attempt} failed:`, error);
       if (attempt === maxRetries) {
-        throw new Error('Timeout exceeded while waiting for the AI response.');
+        throw new TaskProcessingError(
+          `Max retries (${maxRetries}) exceeded while waiting for the AI response.`,
+          { error },
+        );
       }
-      throw error;
     } finally {
       clearTimeout(timeoutId);
     }
