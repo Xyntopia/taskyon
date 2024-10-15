@@ -14,8 +14,11 @@
           name="instructions"
         />
         <q-route-tab
+          v-if="
+            state.appConfiguration.expertMode || selectedTab == 'agent config'
+          "
           to="/settings/agent config"
-          label="Agent Configuration"
+          label="AI Configuration"
           name="agent config"
         />
         <q-route-tab
