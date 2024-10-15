@@ -219,7 +219,7 @@ const filterModels = (
         .map((x) => {
           return { ...x, label: x.label };
         })
-        .slice(0, 10);
+        .slice(0, 20);
 
       filteredOptions.value = sortedOptions;
     } else {
