@@ -1,7 +1,7 @@
 // Use `cy.dataCy` custom command for more robust tests
 // See https://docs.cypress.io/guides/references/best-practices.html#Selecting-Elements
 
-import { checkLastMessage } from '../support/groups';
+import { checkLastMessage, selectllmmodel } from '../support/groups';
 
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
@@ -42,18 +42,20 @@ describe('taskyon API', () => {
     cy.contains('openai API key').type(Cypress.env().openai_api_key);
     cy.contains('openrouter.ai API key').type(Cypress.env().openrouter_api_key);
 
+    cy.screenshot('ai_services', { overwrite: true });
+
     cy.visit('/');
 
     // as of 20241007 this is the cheapest model which works with vision...
     const visionModelID = 'google/gemini-flash-1.5-8b';
 
-    cy.selectllmmodel('openai', '');
-    cy.selectllmmodel('openrouter.ai', visionModelID);
+    selectllmmodel('openai', '');
+    selectllmmodel('openrouter.ai', visionModelID);
 
     cy.wait(1000).reload();
 
-    cy.log('checking if the correct llm was selected')
-      .contains('Select LLM Model for answering/solving the task.')
+    cy.log('checking if the correct llm was selected');
+    cy.contains('Select LLM Model for answering/solving the task.')
       //  .parent()
       .get('.q-field__input.q-placeholder.col')
       .invoke('val')
@@ -72,6 +74,8 @@ describe('taskyon API', () => {
     cy.contains('your message').type('Whats in the picture?{enter}');
 
     checkLastMessage('taskyon.space').and('contain', 'logo');
+
+    cy.screenshot('Vision models', { overwrite: true });
 
     // Check if the task costs element is present and contains the expected text
     /*cy.get('.task-costs')

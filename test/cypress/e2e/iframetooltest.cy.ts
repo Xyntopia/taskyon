@@ -11,53 +11,74 @@ describe('iframe integration', () => {
         command: 'Network.clearBrowserCache',
       }),
     );
-    /*cy.visit('./public/docs/examples/simpleExample.html');
+    cy.visit('/');
 
     // Clear local storage
     cy.clearLocalStorage();
 
     // Clear cookies
-    cy.clearCookies();*/
+    cy.clearCookies();
+
     // Optionally, you can clear indexedDB if your app uses it
     // somehow we're getting a lot of errors here...
-    /*cy.window().then((win) => {
-      void win.indexedDB.databases().then((databases) => {
+    cy.window().then(async (win) => {
+      const databases = await win.indexedDB.databases();
+      databases.forEach((db) => {
+        win.indexedDB.deleteDatabase(db.name!);
+      });
+    });
+
+    cy.reload();
+  });
+
+  const getIframeBody = () => {
+    // get the iframe > document > body
+    // and retry until the body element is not empty
+    return (
+      cy
+        .get('iframe')
+        .its('0.contentDocument.body')
+        .should('not.be.empty')
+        // wraps "body" DOM element to allow
+        // chaining more Cypress commands, like ".find(...)"
+        // https://on.cypress.io/wrap
+        .then(cy.wrap)
+    );
+  };
+
+  const getIframeWindow = () => {
+    return cy.get('iframe').its('0.contentWindow').should('exist');
+  };
+
+  const clearIframeStorage = () => {
+    // Clear iframe localStorage and cookies
+    getIframeWindow().then((iframeWin) => {
+      iframeWin.localStorage.clear();
+      iframeWin.sessionStorage.clear();
+
+      // Clear IndexedDB of the iframe
+      iframeWin.indexedDB.databases().then((databases: { name?: string }[]) => {
         databases.forEach((db) => {
-          win.indexedDB.deleteDatabase(db.name!);
+          iframeWin.indexedDB.deleteDatabase(db.name!);
         });
       });
-    });*/
-  });
+    });
+  };
 
   it(
     'Should be able to create a tool and use it through the iframe',
     { baseUrl: null },
     () => {
-      const getIframeBody = () => {
-        // get the iframe > document > body
-        // and retry until the body element is not empty
-        return (
-          cy
-            .get('iframe')
-            .its('0.contentDocument.body')
-            .should('not.be.empty')
-            // wraps "body" DOM element to allow
-            // chaining more Cypress commands, like ".find(...)"
-            // https://on.cypress.io/wrap
-            .then(cy.wrap)
-        );
-      };
+      cy.visit('./public/docs/examples/simpleExampleLocal.html'); //.wait(10000);
 
-      cy.clearAllLocalStorage();
-      cy.clearAllCookies();
-      cy.clearAllSessionStorage();
+      clearIframeStorage();
 
-      cy.visit('./public/docs/examples/simpleExample.html'); //.wait(10000);
+      cy.reload();
 
       getIframeBody().should('exist');
       //getIframeBody().find('#q-app').should('exist');
       //getIframeBody().get('.q-btn').should('exist');
-      //getIframeBody().contains('Use free Taskyon (low quality)').click();
+      getIframeBody().contains('Use free Taskyon').click();
       getIframeBody()
         .find('button[aria-label="Open Sidebar"]')
         .should('exist')
@@ -85,6 +106,8 @@ describe('iframe integration', () => {
       getIframeBody()
         .contains(/^result:[\|\s]*cypresstest function/)
         .should('exist');
+
+      cy.screenshot('iframe_integration', { overwrite: true });
 
       // TODO: make sure we are in minimal mode and all the other stuff required for embedded taskyon
 

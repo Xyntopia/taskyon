@@ -83,7 +83,10 @@ describe('test taskyon defaults', () => {
     //cy.get('li').first().click();
     //cy.contains('Clicks on todos: 1').should('exist');
 
-    getLastMessage('.user.message').should('have.text', 'hello world!');
+    getLastMessage('.user.message')
+      .invoke('text')
+      .then((text) => text.trim())
+      .should('equal', 'hello world!');
     getLastMessage('.assistant.message').should('not.be.empty');
 
     // Check if the task costs element is present and contains the expected text

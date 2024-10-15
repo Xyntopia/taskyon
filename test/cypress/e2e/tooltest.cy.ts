@@ -74,7 +74,9 @@ describe('Tool Tests', () => {
 
     //cy.selectllmmodel('taskyon', 'meta-llama/llama-3.1-8b-instruct');
 
-    writeMessage('can you add two strings for me: "stringone" & "stringtwo"?{enter}');
+    writeMessage(
+      'can you add two strings for me: "stringone" & "stringtwo" using the provided tool and report the exact result with your final message?{enter}',
+    );
 
     cy.get('.message-container')
       .eq(0)
@@ -107,6 +109,8 @@ describe('Tool Tests', () => {
 
     checkLastMessage('2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47');
 
+    cy.screenshot('python_tool', { overwrite: true });
+
     startNewChat();
     // select js
     // unselect all tools
@@ -116,6 +120,8 @@ describe('Tool Tests', () => {
     writeMessage(
       'please calculate the sqrt of 111e3 using js to 5 decimals?{enter}',
     );
+
+    cy.screenshot('js_tool', { overwrite: true });
 
     checkLastMessage('333.1666');
   });
