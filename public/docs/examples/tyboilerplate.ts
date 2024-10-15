@@ -1,5 +1,5 @@
 // we can compile this file to js using:
-// swc --config-file ./swcrc exampleToolDefinition.ts -o exampleToolDefinition.js
+// swc --config-file ./swcrc tyboilerplate.ts -o tyboilerplate.js
 
 export type Tool = Record<string, unknown> & {
   function: (...args: unknown[]) => unknown;
