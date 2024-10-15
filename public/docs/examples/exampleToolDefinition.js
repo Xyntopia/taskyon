@@ -1,6 +1,5 @@
 // we can compile this file to js using:
 // swc --config-file ./swcrc exampleToolDefinition.ts -o exampleToolDefinition.js
-// TODO: move configuration & tools into the html file itself!  only use taskyon as a simple, very small library...
 (function(global, factory) {
     if (typeof module === "object" && typeof module.exports === "object") factory(exports);
     else if (typeof define === "function" && define.amd) define([
@@ -18,58 +17,7 @@
             return initializeTaskyon;
         }
     });
-    const configuration = {
-        llmSettings: {
-            selectedApi: 'taskyon',
-            enableOpenAiTools: false,
-            llmApis: {
-                taskyon: {
-                    selectedModel: 'meta-llama/llama-3.1-8b-instruct'
-                }
-            },
-            taskTemplate: {
-                allowedTools: [
-                    'myExampleStringAdderAlone'
-                ]
-            }
-        }
-    };
-    const tools = [
-        {
-            id: 'simpleExampleTask.V1',
-            name: 'myExampleStringAdderAlone',
-            description: 'provide a short description which an AI can understand',
-            longDescription: 'provide a long description if the AI/Human needs more details',
-            parameters: {
-                type: 'object',
-                properties: {
-                    parameter1: {
-                        type: 'string',
-                        description: 'This is an example parameter!'
-                    },
-                    parameter2: {
-                        type: 'string',
-                        description: 'This is another example parameter, but not required!'
-                    }
-                },
-                required: [
-                    'parameter1'
-                ]
-            },
-            function: (data)=>{
-                console.log('Received function call with data:', data);
-                const result = `${data.parameter1}${data.parameter2}`;
-                const outputDiv = document.getElementById('output');
-                if (outputDiv) {
-                    // Display function call information
-                    const output = `Function called with parameters: ${JSON.stringify(data)}<br>Returned: ${JSON.stringify(result)}`;
-                    outputDiv.innerHTML = output;
-                }
-                return result;
-            }
-        }
-    ];
-    async function initializeTaskyon(tools, configuration) {
+    async function initializeTaskyon(tools1, configuration1) {
         const taskyon = document.getElementById('taskyon');
         if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
             const iframeTarget = new URL(taskyon.src).origin;
@@ -88,10 +36,10 @@
                 });
             }
             // Send function definition to the taskyon so that the taskyon is aware of it.
-            function sendConfigurationToTaskyon(configuration) {
+            function sendConfigurationToTaskyon(configuration1) {
                 const message = {
                     type: 'configurationMessage',
-                    conf: configuration
+                    conf: configuration1
                 };
                 taskyon.contentWindow?.postMessage(message, iframeTarget);
             }
@@ -106,7 +54,7 @@
                 };
                 taskyon.contentWindow?.postMessage(fdMessage, iframeTarget);
             }
-            function setUpToolsListener(tools) {
+            function setUpToolsListener(tools1) {
                 window.addEventListener('message', function(event) {
                     // Check the origin to ensure security
                     if (event.origin !== iframeTarget) {
@@ -115,7 +63,7 @@
                     }
                     console.log('received message:', event);
                     // Handle function call
-                    const tool = tools[0];
+                    const tool = tools1[0];
                     if (tool && event.data) {
                         if (event.data.type === 'functionCall') {
                             //if the message comes from taskyon, we can be sure that its the correct type.
@@ -134,12 +82,12 @@
             }
             await waitForTaskyonReady();
             console.log('send our configuration!');
-            sendConfigurationToTaskyon(configuration);
-            tools.forEach((t)=>{
+            sendConfigurationToTaskyon(configuration1);
+            tools1.forEach((t)=>{
                 console.log('sending our functions!');
                 sendFunctionToTaskyon(t);
                 console.log('set up function listener!');
-                setUpToolsListener(tools);
+                setUpToolsListener(tools1);
             });
         }
     }

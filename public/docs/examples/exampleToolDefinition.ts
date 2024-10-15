@@ -1,64 +1,10 @@
 // we can compile this file to js using:
 // swc --config-file ./swcrc exampleToolDefinition.ts -o exampleToolDefinition.js
 
-// TODO: move configuration & tools into the html file itself!  only use taskyon as a simple, very small library...
-const configuration = {
-  llmSettings: {
-    selectedApi: 'taskyon',
-    enableOpenAiTools: false,
-    llmApis: {
-      taskyon: {
-        selectedModel: 'meta-llama/llama-3.1-8b-instruct',
-      },
-    },
-    taskTemplate: {
-      allowedTools: ['myExampleStringAdderAlone'],
-    },
-    //signatureOrKey: '2o8zbackwughbck73tqbc3r',
-  },
-};
-
 export type Tool = Record<string, unknown> & {
   function: (...args: unknown[]) => unknown;
   name: string;
 };
-
-const tools: Tool[] = [
-  {
-    id: 'simpleExampleTask.V1',
-    name: 'myExampleStringAdderAlone',
-    description: 'provide a short description which an AI can understand',
-    longDescription:
-      'provide a long description if the AI/Human needs more details',
-    parameters: {
-      type: 'object',
-      properties: {
-        parameter1: {
-          type: 'string',
-          description: 'This is an example parameter!',
-        },
-        parameter2: {
-          type: 'string',
-          description: 'This is another example parameter, but not required!',
-        },
-      },
-      required: ['parameter1'],
-    },
-    function: ((data: { parameter1: string; parameter2: string }) => {
-      console.log('Received function call with data:', data);
-      const result = `${data.parameter1}${data.parameter2}`;
-      const outputDiv = document.getElementById('output');
-      if (outputDiv) {
-        // Display function call information
-        const output = `Function called with parameters: ${JSON.stringify(
-          data,
-        )}<br>Returned: ${JSON.stringify(result)}`;
-        outputDiv.innerHTML = output;
-      }
-      return result;
-    }) as unknown as (...args: unknown[]) => unknown,
-  },
-];
 
 export async function initializeTaskyon(
   tools: Tool[],
