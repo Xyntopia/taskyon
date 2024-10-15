@@ -12,8 +12,6 @@
     "secondaryColor": "#F78F3B"
   },
   "llmSettings": {
-    "openAIAssistantId": "",
-    "useOpenAIAssistants": false,
     "enableOpenAiTools": false,
     "selectedApi": null,
     "taskDraft": {
