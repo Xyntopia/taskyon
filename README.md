@@ -79,7 +79,7 @@ Additionally, Taskyon provides real-time monitoring of token usage and exact ser
 Taskyon's commitment to security is evident in its Local First approach, which inherently enhances data protection. By keeping data and processing within the user's local environment, Taskyon significantly reduces the risk of external breaches and unauthorized access. Key features include:
 
 - _Sandboxed Environments:_ Each operation in Taskyon is conducted within a secure, isolated environment, safeguarding against potential vulnerabilities.
-- _Desktop Application:_ Offers an additional layer of security and control by running locally, ideal for users seeking an elevated level of data protection.
+- _Taskyon Container:_ Offers an additional layer of security and control by running locally, ideal for users seeking an elevated level of data protection.
 - _Local Data Storage:_ Ensures that sensitive data is not exposed beyond the local browser environment, maintaining a secure boundary.
 
 ## Support
@@ -91,7 +91,7 @@ Taskyon's commitment to security is evident in its Local First approach, which i
 
 - _P2P Task Synchronization:_ Facilitate team collaboration with peer-to-peer task synchronization.
 - _Autonomous Agents:_ Incorporate agents that independently work on task trees, enhancing automation and efficiency.
-- _Desktop App and Container:_ Develop a desktop application and container for easy deployment and enhanced security.
+- _Desktop App:_ A desktop application is almost ready for installation on desktop computers.
 
 ## Contributing
 
