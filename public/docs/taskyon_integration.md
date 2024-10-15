@@ -1,60 +1,103 @@
-# Taskyon Integration
+# Taskyon Integration Guide
 
-Taskyon is a powerful AI assistant that can be easily integrated into your webpage or application using an iframe. This guide will provide you with a brief overview of how to get started with Taskyon integration.
+## Introduction
 
-Taskyons is built to make integration into other applicatios as easy as possible. This is done by making use of
-an [iframe](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/iframe). This is important as this will put taskyon into a separate sandbox from your web application and thus taskyon dosn't have access to any of your/your users data.
-This also ensures that taskyon can not manipulate teh structure of your webpage.
+Taskyon is a versatile AI assistant designed for seamless integration into your webpage or application. This guide will walk you through the process of incorporating Taskyon into your project, explaining key concepts and providing step-by-step instructions.
+
+## What is Taskyon?
+
+Taskyon is an AI-powered assistant that can enhance your web applications with intelligent interactions. It's designed to be easily integrated, secure, and customizable to fit your specific needs.
+
+## Integration Overview
+
+Taskyon utilizes an iframe-based integration method, which offers several advantages:
+
+1. **Security**: The iframe creates a separate sandbox for Taskyon, preventing it from accessing your users' data or manipulating your webpage structure.
+2. **Ease of Implementation**: Using an iframe simplifies the integration process, requiring minimal changes to your existing codebase.
+3. **Flexibility**: Taskyon can be easily added to various types of web applications and platforms.
+
+### API Key Management and Local-First Approach
+
+Taskyon employs a unique local-first model that eliminates the need for a backend on your side. This approach offers several advantages:
+
+1. **Simplified Integration**: Reduces complexity in your infrastructure.
+2. **Cost-Effectiveness**: Minimizes server-side expenses.
+3. **Enhanced Data Protection**: Improves compliance with privacy regulations.
+
+However, this model requires a thoughtful approach to API key management. Typically, API keys are kept secure on a server. With Taskyon's local-first model, you'll need to securely share an API key with your users' client-side applications. This is managed in a way that doesn't require users to log in to Taskyon separately from your services, maintaining a seamless user experience.
+
+We provide solutions to handle this securely, which we'll explore in the following sections.
 
 ## Prerequisites
 
-- Basic knowledge of HTML and JavaScript.
-- Some way how to edit/inject html code into your webpage.
+Before you begin the integration process, ensure you have:
 
-## Integration Steps
+- Basic knowledge of HTML and JavaScript
+- Access to edit or inject HTML code into your webpage
 
-In order for taskyon to work it needs to have access to an "AI Server" which runs Large Language Models and Multimodal Models. This server needs to have an OpenAI-compatible API in roder for taskyon to communicate with it.
+## Integration Process
+
+### Step 1: Choose an AI Server
+
+Taskyon requires access to an AI server that runs Large Language Models and Multimodal Models. This server must have an OpenAI-compatible API for communication. You have three main options:
 
 Normally, this involves API keys which give you access to this service. As Taskyons _local first_ model doesn't require a backend on your side (which makes it easy to integrate, cheaper and improves data protection compliance) you somehow have to share this API key with your users. As you probably don't want them to login to taskyon in addition to your own services.
 
-### Create a reate-limited API key with Taskyon
+1. **Use Taskyon's API Keys With Configuration Enforcement**
 
-We provide a service to do this on our [webpage](https://taskyon.space/account). Which provides you with a rate-limited API keys to our taskyon API, where you can restrict which configuration (e.g. which AI model) your users are allowed to use. The rate limiting helps you to cap the monthly costs at a specific value and makes it possible to use these keys publicly on your webpage.
+   - Visit [https://taskyon.space/account](https://taskyon.space/account) to obtain a rate-limited API key.
+   - This option allows you to cap monthly costs and use the keys publicly on your webpage.
+   - You can restrict which AI models and configurations your users can access.
 
-In the near future, Taskyon will also have user-individualized API keys in order for you to bill your users based on usage.
+2. **Provide Your Own OpenAI-Compatible Backend**
 
-### Provide your own OpenAPI based backend
+   - Set up your own backend with an LLM model that's compatible with the OpenAI API.
+   - You can restrict access to your backend using an API gateway like Kong.
 
-You can use your own backend with an LLM model. As long as it is OpenAI API compatible it should work! You could restrict access to the backend to only your users by combining it with an API gateway such as Kong.
+3. **Client-Side Inference** (Currently Limited)
+   - While Taskyon supports client-side inference, this option is currently not practical for most end-user devices due to computational limitations.
 
-### Client-side inference
+### Step 2: Configure Taskyon
 
-While Taskyon is capable of doing client-side inference, this is currently not feasible for most end user
-devices such as cell phones or small laptops with limited battery power.
+Taskyon is highly customizable through a JSON configuration file. Key configuration aspects include:
 
-## Configuration
+- **API Key**: Configure the API key which taskyon should use.
+- **Model Selection**: Choose which AI models your users can access.
+- **Custom Functions**: Define specific functions that Taskyon can call within your application.
+- ... and many more settings.
 
-Taskyon can be configured through a JSON configuration file. This allows you to customize various aspects of Taskyon, including:
+For detailed configuration options, visit the [integration page](/integration).
 
-- **Public API Key**: You can obtain a public API key with rate limiting options from [https://taskyon.space/settings/account](https://taskyon.space/settings/account).
+### Step 3: Integrate Taskyon into your app.
 
-- **Additional Configuration**: You can configure more settings on the [integration](/integration) page.
+Add the Taskyon iframe to your HTML:
 
-## Simple Example
+```html
+<iframe src="https://taskyon.space" id="taskyon-iframe"></iframe>
+```
 
-- [**Integrate with Your App**](/docs/examples/simpleExampleTutorial): Discover how to integrate Taskyon into your webpage or application using our iframe-based integration.
+And connect taskyon to your app using minimal provided boilerplate code.
 
-<!--
-## More Examples
+Check the example below for how to do this.
 
-- Integration with a mapping application
-- TODO: integration into wordpress
-- split screen
-- integraion into shopify
-- ...
--->
+<!--TODO: provide a link to where you can download that bilerplate code from taskyon itself..  prefilled with the correct cofiguration...-->
 
-## Taskyon integration Sequence Diagram
+### Examples and Use Cases
+
+To help you get started, we provide a simple example of Taskyon integration:
+
+- [Simple Example Tutorial](/docs/examples/simpleExampleTutorial): Learn how to integrate Taskyon into a basic webpage.
+
+In the future, we plan to add more complex examples, such as:
+
+- Integration with mapping applications
+- WordPress integration
+- Split-screen implementations
+- Shopify integration
+
+## How does this work?
+
+To better understand the flow of communication between your app and Taskyon, refer to this sequence diagram:
 
 ```mermaid
 sequenceDiagram
@@ -76,21 +119,12 @@ sequenceDiagram
     Taskyon->>User: Display result
 ```
 
-### Explanation
-
-1. **User Interaction**: The user opens your app in a browser.
-2. **App Initialization**: The browser loads the HTML and JavaScript files of your app.
-3. **Taskyon Iframe Loading**: Your app loads the Taskyon iframe.
-4. **Taskyon Ready**: Taskyon iframe sends a `taskyonReady` message to your app.
-5. **Configuration Message**: Your app sends a `configurationMessage` to Taskyon iframe. This is also
-   the step where you specify an API key in orde to communicate with an AI Server.
-6. **Function Description**: Your app sends a `functionDescription` to Taskyon iframe.
-7. **User Interaction with Taskyon**: The user interacts with Taskyon through the iframe.
-8. **Function Call**: Taskyon sends a `functionCall` message to your app.
-9. **Function Execution**: Your app executes the corresponding function.
-10. **Function Response**: Your app sends a `functionResponse` back to Taskyon.
-11. **Display Result**: Taskyon displays the result to the user.
+This diagram illustrates the step-by-step process of how your app, the Taskyon iframe, and the user interact during the integration.
 
 ## Conclusion
 
-By following these steps, you can easily integrate Taskyon into your webpage or application and allow users to interact with it. Happy webpage building!
+Integrating Taskyon into your webpage or application can significantly enhance its capabilities by providing an intelligent AI assistant. By following this guide, you can seamlessly incorporate Taskyon, ensuring a secure and efficient integration that respects user privacy and enhances functionality.
+
+Remember to regularly check the [Taskyon documentation](https://taskyon.space/docs) for updates, new features, and additional integration options. If you encounter any issues or have questions, don't hesitate to reach out to our support team.
+
+Happy webpage building!
