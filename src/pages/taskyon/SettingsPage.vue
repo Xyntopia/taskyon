@@ -9,11 +9,6 @@
         />
         <q-route-tab to="/settings/sync" label="Reset & Backup" name="sync" />
         <q-route-tab
-          to="/settings/instructions"
-          label="AI/LLM Instructions"
-          name="instructions"
-        />
-        <q-route-tab
           v-if="
             state.appConfiguration.expertMode || selectedTab == 'agent config'
           "
@@ -26,7 +21,7 @@
             state.appConfiguration.expertMode || selectedTab == 'app config'
           "
           to="/settings/app config"
-          label="Expert App Configuration"
+          label="App Configuration"
           name="app config"
         />
       </q-tabs>
@@ -42,13 +37,6 @@
         </q-tab-panel>
         <q-tab-panel name="sync" :class="tabPanelClass">
           <SyncTaskyon style="max-width: 600px" />
-        </q-tab-panel>
-        <q-tab-panel name="instructions" :class="tabPanelClass">
-          <div>Set custom instructions for the AI Model</div>
-          <ObjectTreeView
-            :model-value="state.llmSettings.taskChatTemplates"
-            class="fit"
-          />
         </q-tab-panel>
         <q-tab-panel name="agent config" :class="tabPanelClass">
           <div>All of the Agent configuration</div>

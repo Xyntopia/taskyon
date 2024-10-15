@@ -98,6 +98,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     lockBottomScroll: true,
     modelHistory: [] as string[],
     newToolDraftCode: '' as string,
+    configurationDraft: '' as string,
     draftParameters: {} as Record<string, FunctionArguments>,
     taskState: {} as Record<string, TaskStateType>,
     darkTheme: 'auto' as boolean | 'auto',
