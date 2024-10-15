@@ -5,11 +5,17 @@
 const configuration = {
   llmSettings: {
     selectedApi: 'taskyon',
+    enableOpenAiTools: false,
+    llmApis: {
+      taskyon: {
+        selectedModel: 'meta-llama/llama-3.1-8b-instruct',
+      },
+    },
     taskTemplate: {
       allowedTools: ['myExampleStringAdderAlone'],
     },
+    //signatureOrKey: '2o8zbackwughbck73tqbc3r',
   },
-  signatureOrKey: '2o8zbackwughbck73tqbc3r',
 };
 
 export type Tool = Record<string, unknown> & {

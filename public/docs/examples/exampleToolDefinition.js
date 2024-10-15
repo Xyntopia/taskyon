@@ -1,5 +1,6 @@
 // we can compile this file to js using:
 // swc --config-file ./swcrc exampleToolDefinition.ts -o exampleToolDefinition.js
+// TODO: move configuration & tools into the html file itself!  only use taskyon as a simple, very small library...
 (function(global, factory) {
     if (typeof module === "object" && typeof module.exports === "object") factory(exports);
     else if (typeof define === "function" && define.amd) define([
@@ -11,16 +12,27 @@
     Object.defineProperty(exports, "__esModule", {
         value: true
     });
+    Object.defineProperty(exports, "initializeTaskyon", {
+        enumerable: true,
+        get: function() {
+            return initializeTaskyon;
+        }
+    });
     const configuration = {
         llmSettings: {
             selectedApi: 'taskyon',
+            enableOpenAiTools: false,
+            llmApis: {
+                taskyon: {
+                    selectedModel: 'meta-llama/llama-3.1-8b-instruct'
+                }
+            },
             taskTemplate: {
                 allowedTools: [
                     'myExampleStringAdderAlone'
                 ]
             }
-        },
-        signatureOrKey: '2o8zbackwughbck73tqbc3r'
+        }
     };
     const tools = [
         {
@@ -46,11 +58,11 @@
             },
             function: (data)=>{
                 console.log('Received function call with data:', data);
-                const result = "".concat(data.parameter1).concat(data.parameter2);
+                const result = `${data.parameter1}${data.parameter2}`;
                 const outputDiv = document.getElementById('output');
                 if (outputDiv) {
                     // Display function call information
-                    const output = "Function called with parameters: ".concat(JSON.stringify(data), "<br>Returned: ").concat(JSON.stringify(result));
+                    const output = `Function called with parameters: ${JSON.stringify(data)}<br>Returned: ${JSON.stringify(result)}`;
                     outputDiv.innerHTML = output;
                 }
                 return result;
@@ -77,16 +89,14 @@
             }
             // Send function definition to the taskyon so that the taskyon is aware of it.
             function sendConfigurationToTaskyon(configuration) {
-                var _taskyon_contentWindow;
                 const message = {
                     type: 'configurationMessage',
                     conf: configuration
                 };
-                (_taskyon_contentWindow = taskyon.contentWindow) === null || _taskyon_contentWindow === void 0 ? void 0 : _taskyon_contentWindow.postMessage(message, iframeTarget);
+                taskyon.contentWindow?.postMessage(message, iframeTarget);
             }
             // Send function definition to the taskyon so that the taskyon is aware of it.
             function sendFunctionToTaskyon(toolDescription) {
-                var _taskyon_contentWindow;
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const { function: _toolfunc, ...fdescr } = toolDescription;
                 const fdMessage = {
@@ -94,7 +104,7 @@
                     duplicateTaskName: false,
                     ...fdescr
                 };
-                (_taskyon_contentWindow = taskyon.contentWindow) === null || _taskyon_contentWindow === void 0 ? void 0 : _taskyon_contentWindow.postMessage(fdMessage, iframeTarget);
+                taskyon.contentWindow?.postMessage(fdMessage, iframeTarget);
             }
             function setUpToolsListener(tools) {
                 window.addEventListener('message', function(event) {
@@ -108,7 +118,6 @@
                     const tool = tools[0];
                     if (tool && event.data) {
                         if (event.data.type === 'functionCall') {
-                            var _taskyon_contentWindow;
                             //if the message comes from taskyon, we can be sure that its the correct type.
                             const data = event.data;
                             const result = tool.function(data.arguments);
@@ -118,7 +127,7 @@
                                 functionName: tool.name,
                                 response: result
                             };
-                            (_taskyon_contentWindow = taskyon.contentWindow) === null || _taskyon_contentWindow === void 0 ? void 0 : _taskyon_contentWindow.postMessage(response, iframeTarget);
+                            taskyon.contentWindow?.postMessage(response, iframeTarget);
                         }
                     }
                 });
