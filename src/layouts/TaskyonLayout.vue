@@ -14,7 +14,7 @@
           aria-label="Open Sidebar"
           @click="drawerOpen = !drawerOpen"
         />
-        <div v-if="state" class="q-ml-lg button-group">
+        <div v-if="state" :class="['q-ml-lg', minMode ? '' : 'button-group']">
           <q-btn
             v-if="!minMode"
             flat
@@ -169,7 +169,7 @@
           target="_blank"
           exact
         >
-          <div class="q-px-sm">taskyon.space</div>
+          <q-tooltip :delay="500">Powered by taskyon.space</q-tooltip>
         </q-btn>
       </component>
     </q-header>

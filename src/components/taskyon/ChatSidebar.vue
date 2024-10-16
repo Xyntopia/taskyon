@@ -98,12 +98,12 @@
         </div>
       </div>
     </div>
-    <q-separator spaced />
+    <q-separator v-if="!state.minimalGui" spaced />
     <!-- Settings Area -->
-    <q-item class="fit column items-center">
+    <q-item v-if="!state.minimalGui" class="fit column items-center">
       <SimpleSettings class="col-auto" vertical reduced></SimpleSettings>
     </q-item>
-    <q-item>
+    <q-item v-if="!state.minimalGui">
       <q-btn
         v-if="state.appConfiguration.expertMode"
         dense
