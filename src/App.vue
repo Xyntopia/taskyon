@@ -11,6 +11,16 @@ import { useMeta } from 'quasar';
 
 const route = useRoute();
 
+if (process.env.DEV) {
+  // Dynamically inject script src="http://localhost:8098" in DEV mode
+  onMounted(() => {
+    const devScript = document.createElement('script');
+    devScript.async = true;
+    devScript.src = 'http://localhost:8098'; // Adjust the URL if needed
+    document.head.appendChild(devScript);
+  });
+}
+
 watch(
   () => route.fullPath,
   () => {

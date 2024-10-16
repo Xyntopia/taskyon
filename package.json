@@ -108,6 +108,7 @@
     "@types/wicg-file-system-access": "^2023.10.3",
     "@typescript-eslint/eslint-plugin": "^6.6.0",
     "@typescript-eslint/parser": "^6.6.0",
+    "@vue/devtools": "^7.4.4",
     "@vue/test-utils": "^2.3.0",
     "browserify-zlib": "^0.2.0",
     "cypress": "13.6.3",
