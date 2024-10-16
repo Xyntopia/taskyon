@@ -181,7 +181,6 @@ import { matEdit } from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
 import InfoDialog from '../InfoDialog.vue';
 import { freeKey } from 'src/assets/taskyon_free_key.json';
-import { isTaskyonKey } from 'src/modules/crypto';
 
 const state = useTaskyonStore();
 
@@ -190,9 +189,5 @@ const expertModeOn = defineModel<boolean>('expertModeOn', { default: false });
 function initFreeMode() {
   state.llmSettings.selectedApi = 'taskyon';
   state.keys['taskyon'] = freeKey;
-  const pubKey = isTaskyonKey(freeKey, false);
-  if (pubKey?.model) {
-    state.llmSettings.llmApis['taskyon']!.selectedModel = pubKey.model[0];
-  }
 }
 </script>
