@@ -9,6 +9,13 @@
     }
   },
   "module": {
-    "type": "umd"
+    "type": "umd",
+    "globals": {
+      "tyboilerplate": "tyboilerplate"
+    },
+    "strict": false,
+    "strictMode": true,
+    "lazy": false,
+    "noInterop": false
   }
 }

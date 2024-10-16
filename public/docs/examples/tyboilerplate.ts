@@ -103,4 +103,5 @@ export async function initializeTaskyon(
   }
 }
 
-void initializeTaskyon(tools, configuration);
+// doing this here, because for some reason, swc doesn't do this for us ;)
+window.initializeTaskyon = initializeTaskyon;

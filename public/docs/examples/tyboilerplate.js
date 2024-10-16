@@ -1,11 +1,11 @@
 // we can compile this file to js using:
-// swc --config-file ./swcrc exampleToolDefinition.ts -o exampleToolDefinition.js
+// swc --config-file ./swcrc tyboilerplate.ts -o tyboilerplate.js
 (function(global, factory) {
     if (typeof module === "object" && typeof module.exports === "object") factory(exports);
     else if (typeof define === "function" && define.amd) define([
         "exports"
     ], factory);
-    else if (global = typeof globalThis !== "undefined" ? globalThis : global || self) factory(global.exampleToolDefinition = {});
+    else if (global = typeof globalThis !== "undefined" ? globalThis : global || self) factory(global.tyboilerplate = {});
 })(this, function(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", {
@@ -17,7 +17,7 @@
             return initializeTaskyon;
         }
     });
-    async function initializeTaskyon(tools1, configuration1) {
+    async function initializeTaskyon(tools, configuration) {
         const taskyon = document.getElementById('taskyon');
         if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
             const iframeTarget = new URL(taskyon.src).origin;
@@ -36,10 +36,10 @@
                 });
             }
             // Send function definition to the taskyon so that the taskyon is aware of it.
-            function sendConfigurationToTaskyon(configuration1) {
+            function sendConfigurationToTaskyon(configuration) {
                 const message = {
                     type: 'configurationMessage',
-                    conf: configuration1
+                    conf: configuration
                 };
                 taskyon.contentWindow?.postMessage(message, iframeTarget);
             }
@@ -54,7 +54,7 @@
                 };
                 taskyon.contentWindow?.postMessage(fdMessage, iframeTarget);
             }
-            function setUpToolsListener(tools1) {
+            function setUpToolsListener(tools) {
                 window.addEventListener('message', function(event) {
                     // Check the origin to ensure security
                     if (event.origin !== iframeTarget) {
@@ -63,7 +63,7 @@
                     }
                     console.log('received message:', event);
                     // Handle function call
-                    const tool = tools1[0];
+                    const tool = tools[0];
                     if (tool && event.data) {
                         if (event.data.type === 'functionCall') {
                             //if the message comes from taskyon, we can be sure that its the correct type.
@@ -82,15 +82,15 @@
             }
             await waitForTaskyonReady();
             console.log('send our configuration!');
-            sendConfigurationToTaskyon(configuration1);
-            tools1.forEach((t)=>{
+            sendConfigurationToTaskyon(configuration);
+            tools.forEach((t)=>{
                 console.log('sending our functions!');
                 sendFunctionToTaskyon(t);
                 console.log('set up function listener!');
-                setUpToolsListener(tools1);
+                setUpToolsListener(tools);
             });
         }
     }
-    void initializeTaskyon(tools, configuration);
+    window.initializeTaskyon = initializeTaskyon;
 });
 
