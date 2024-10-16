@@ -84,21 +84,23 @@ describe('iframe integration', () => {
         .should('exist')
         .click();
 
+      /* TODO test "development" mode for iframe.. :)
       getIframeBody()
         .find('[aria-label="Expert mode"] > .q-toggle__inner')
         .click();
       getIframeBody()
         .find('[aria-label="Show task costs"] > .q-toggle__inner')
         .click();
+      */
 
       //getIframeBody().find('button[aria-label="Open Sidebar"]').click();
       getIframeBody().click();
 
-      getIframeBody()
-        .contains('your message')
-        .type(
-          'Can you add the two strings: "cypress" and "test function"  for me using the provided tool?  {enter}',
-        );
+      getIframeBody().contains('your message').type(
+        'Can you add the two strings: “cypress” and “test function” for me using \
+the provided tool? make sure, you display the exact string how it is displayed (with/without whitespace etc…)\
+{enter}',
+      );
 
       cy.get('#output').contains('cypresstest function');
 
