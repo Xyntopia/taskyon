@@ -6,7 +6,7 @@
     <div
       ref="taskThreadContainer"
       class="col column items-center"
-      :style="`padding-bottom: ${bottomPadding+5}px;`"
+      :style="`padding-bottom: ${bottomPadding + 5}px;`"
     >
       <q-scroll-observer axis="vertical" :debounce="500" @scroll="onScroll" />
       <!-- "Task" Display -->
@@ -34,6 +34,7 @@
           name="svguse:/taskyon_mono_opt.svg#taskyon"
           :color="$q.dark.isActive ? 'secondary' : 'primary'"
         ></q-icon>
+        <component :is="ResetButton" v-if="ResetButton"></component>
         <GetStarted />
       </div>
     </div>
@@ -102,6 +103,21 @@ import {
 } from '@quasar/extras/material-icons';
 import { sleep } from 'src/modules/utils';
 import ConversationWidget from 'components/taskyon/ConversationWidget.vue';
+import { defineAsyncComponent } from 'vue';
+
+let ResetButton = process.env.DEV
+  ? defineAsyncComponent(
+      () =>
+        import(
+          /* webpackPrefetch: true */
+          /* webpackChunkName: "codemirror" */
+          /* webpackMode: "lazy" */
+          /* webpackFetchPriority: "low" */
+          'src/components/taskyon/TyResetButton.vue'
+        ),
+    )
+  : undefined;
+
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
 
 const bottomPadding = ref(100);
