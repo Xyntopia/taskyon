@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Taskyon Chat Integration</title>
+    <title>Taskyon Map Integration</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
       body,
       html {
@@ -11,19 +12,38 @@
         margin: 0;
         font-family: Arial, sans-serif;
       }
-      #chat-container {
-        height: 100%;
-        width: 55%;
-        float: right;
+      #map-container {
+        height: 50%; /* Top half for map */
+        position: relative; /* To position button and input */
       }
-      #output-container {
+      #map {
         height: 100%;
-        width: 35%;
-        float: left;
+        width: 100%;
+      }
+      #controls {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 1000; /* Ensure controls are above the map */
+        background-color: white;
+        padding: 10px;
+        border-radius: 5px;
+      }
+      #chat-container {
+        height: 50%; /* Bottom half for chat */
+        width: 100%;
       }
     </style>
   </head>
   <body>
+    <div id="map-container">
+      <div id="controls">
+        <input type="text" id="place-input" placeholder="Enter a place name" />
+        <button id="zoom-button">Zoom to Place</button>
+      </div>
+      <div id="map"></div>
+    </div>
+
     <div id="chat-container">
       <iframe
         id="taskyon"
@@ -33,13 +53,40 @@
         height="100%"
       ></iframe>
     </div>
-    <div id="output-container">
-      <h2>Function Call Output</h2>
-      <div id="output"></div>
-    </div>
 
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
-      // Configuration
+      // Initialize the map
+      const map = L.map('map').setView([51.505, -0.09], 13); // Default location (London)
+
+      // Add OpenStreetMap tiles
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap',
+      }).addTo(map);
+
+      // Function to zoom to a place
+      async function zoomToPlace(placeName) {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(placeName)}`,
+        );
+        const data = await response.json();
+
+        if (data && data.length > 0) {
+          const { lat, lon } = data[0];
+          map.setView([lat, lon], 13); // Adjust zoom level as needed
+        } else {
+          alert('Place not found!');
+        }
+      }
+
+      // Event listener for the button
+      document.getElementById('zoom-button').addEventListener('click', () => {
+        const placeName = document.getElementById('place-input').value;
+        zoomToPlace(placeName);
+      });
+
+      // Configuration and Tool Definitions remain unchanged
       const configuration = {
         llmSettings: {
           selectedApi: 'taskyon',
@@ -50,46 +97,27 @@
             },
           },
           taskTemplate: {
-            allowedTools: ['myExampleStringAdderAlone'],
+            allowedTools: ['zoomToPlace'],
           },
         },
       };
 
-      // Tool Definitions
       const tools = [
         {
-          id: 'simpleExampleTask.V1',
-          name: 'myExampleStringAdderAlone',
-          description: 'provide a short description which an AI can understand',
-          longDescription:
-            'provide a long description if the AI/Human needs more details',
+          id: 'mapControl.V1',
+          name: 'zoomToPlace',
+          description: 'Zooms to a specified place on the map',
           parameters: {
             type: 'object',
             properties: {
-              parameter1: {
+              placeName: {
                 type: 'string',
-                description: 'This is an example parameter!',
-              },
-              parameter2: {
-                type: 'string',
-                description:
-                  'This is another example parameter, but not required!',
+                description: 'The name of the place to zoom to.',
               },
             },
-            required: ['parameter1'],
+            required: ['placeName'],
           },
-          function: (data) => {
-            console.log('Received function call with data:', data);
-            const result = `${data.parameter1}${data.parameter2}`;
-            const outputDiv = document.getElementById('output');
-            if (outputDiv) {
-              const output = `Function called with parameters: ${JSON.stringify(
-                data,
-              )}<br>Returned: ${JSON.stringify(result)}`;
-              outputDiv.innerHTML = output;
-            }
-            return result;
-          },
+          function: zoomToPlace, // Assign the zoom function here
         },
       ];
     </script>
