@@ -367,11 +367,14 @@ import { deepMerge } from 'src/modules/utils';
 import { getApiConfig } from 'src/modules/taskyon/taskWorker';
 
 const CodeEditor = defineAsyncComponent(
-  /* webpackPrefetch: true */
-  /* webpackChunkName: "codemirror" */
-  /* webpackMode: "lazy" */
-  /* webpackFetchPriority: "low" */
-  () => import('../CodeEditor.vue'),
+  () =>
+    import(
+      /* webpackPrefetch: true */
+      /* webpackChunkName: "codemirror" */
+      /* webpackMode: "lazy" */
+      /* webpackFetchPriority: "low" */
+      '../CodeEditor.vue'
+    ),
 );
 
 const props = defineProps<{
