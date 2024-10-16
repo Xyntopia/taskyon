@@ -238,7 +238,7 @@ const renderMermaid = (md: MarkdownIt) => {
 
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
-    if (token.info.trim() === 'mermaid') {
+    if (token && token.info.trim() === 'mermaid') {
       const mid = uid();
       const img_id = `d${mid}`;
       const mm_code = token.content.trim();
