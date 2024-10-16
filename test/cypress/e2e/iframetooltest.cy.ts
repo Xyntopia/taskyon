@@ -98,14 +98,15 @@ describe('iframe integration', () => {
 
       getIframeBody().contains('your message').type(
         'Can you add the two strings: “cypress” and “test function” for me using \
-the provided tool? make sure, you display the exact string how it is displayed (with/without whitespace etc…)\
+the myExampleStringAdderAlone tool? make sure, you display the exact string how it is displayed (with/without whitespace etc…)\
 {enter}',
       );
 
       cy.get('#output').contains('cypresstest function');
 
-      getIframeBody().contains('myExampleStringAdderAlone').click();
+      getIframeBody().wait(5000).contains('myExampleStringAdderAlone').click();
       getIframeBody()
+        .wait(10000)
         .contains(/^result:[\|\s]*cypresstest function/)
         .should('exist');
 
