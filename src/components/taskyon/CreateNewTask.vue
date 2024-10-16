@@ -59,7 +59,7 @@
         </div>
       </div>
       <!--Task Creation State-->
-      <div class="q-px-sm q-pt-xs text-caption">
+      <div v-if="!hideTaskInfo" class="q-px-sm q-pt-xs text-caption">
         <div class="row items-center">
           <div class="row">
             <info-dialog
@@ -381,6 +381,7 @@ const props = defineProps<{
   codingMode?: boolean;
   forceTaskProps?: llmSettings['taskTemplate'];
   sendAllowed?: boolean;
+  hideTaskInfo?: boolean;
 }>();
 
 function updateContent(value: string | null | undefined) {

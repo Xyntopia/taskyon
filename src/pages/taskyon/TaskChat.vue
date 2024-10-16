@@ -49,6 +49,7 @@
           "
           :force-task-props="state.llmSettings.taskTemplate"
           class="q-pa-xs"
+          :hide-task-info=state.minimalGui 
         >
         </CreateNewTask>
       </div>
