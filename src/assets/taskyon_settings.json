@@ -24,11 +24,11 @@
       "taskyon": {
         "name": "taskyon",
         "baseURL": "https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/api",
-        "defaultModel": "meta-llama/llama-3-70b-instruct",
+        "defaultModel": "meta-llama/llama-3.2-90b-vision-instruct",
         "models": {
-          "free": "meta-llama/llama-3.1-8b-instruct",
-          "chat": "meta-llama/llama-3.1-70b-instruct",
-          "instruction": "meta-llama/llama-3.1-70b-instruct"
+          "free": "meta-llama/llama-3.2-11b-vision-instruct",
+          "chat": "meta-llama/llama-3.2-90b-vision-instruct",
+          "instruction": "meta-llama/llama-3.2-90b-vision-instruct"
         },
         "streamSupport": true,
         "defaultHeaders": {
@@ -52,7 +52,7 @@
       "openrouter.ai": {
         "name": "openrouter.ai",
         "baseURL": "https://openrouter.ai/api/v1",
-        "defaultModel": "meta-llama/llama-3.1-70b-instruct",
+        "defaultModel": "meta-llama/llama-3.2-90b-vision-instruct",
         "streamSupport": true,
         "routes": {
           "chatCompletion": "/chat/completions",
