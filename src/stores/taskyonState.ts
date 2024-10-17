@@ -394,7 +394,12 @@ export const useTaskyonStore = defineStore(storeName, () => {
   // set up iframe API
   void getTaskManager().then((tm) => {
     if ($q.platform.within.iframe) {
-      void setupIframeApi(stateRefs.llmSettings, stateRefs.keys, tm);
+      void setupIframeApi(
+        stateRefs.appConfiguration,
+        stateRefs.llmSettings,
+        stateRefs.keys,
+        tm,
+      );
     }
   });
 
@@ -431,7 +436,9 @@ export const useTaskyonStore = defineStore(storeName, () => {
     async function updateTaskThread(taskId: string | undefined) {
       console.log('update task thread...');
       if (taskId) {
-        const threadIDChain = await (await getTaskManager()).getTaskIdChain(taskId);
+        const threadIDChain = await (
+          await getTaskManager()
+        ).getTaskIdChain(taskId);
         const TM = await getTaskManager();
         console.log('loading iniial thread chain');
         const thread = (await Promise.all(

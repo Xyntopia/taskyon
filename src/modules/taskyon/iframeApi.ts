@@ -10,6 +10,7 @@ import { tylog } from '../logger';
   }*/
 
 export function setupIframeApi(
+  appConfiguration: Record<string, unknown>,
   llmSettings: llmSettings,
   keys: Record<string, string>,
   taskManager: TyTaskManager,
@@ -53,6 +54,12 @@ export function setupIframeApi(
                 deepMergeReactive(
                   llmSettings,
                   newConfig.llmSettings,
+                  'overwrite',
+                );
+
+                deepMergeReactive(
+                  appConfiguration,
+                  newConfig.appConfiguration,
                   'overwrite',
                 );
               }
