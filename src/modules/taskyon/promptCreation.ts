@@ -86,6 +86,8 @@ export function generateOpenAIToolDeclarations(
 type tyChatCompletionmessageParam =
   OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
+// TODO: move most of the functionality of this function into
+//       taskUtils. We need to put this directly into our chat creation method.
 export function addPrompts(
   task: Pick<
     TaskNode,
@@ -242,6 +244,7 @@ export async function generateCompleteChat(
   let openAIConversationThread = await taskManager.buildChatThread(
     task.id,
     llmSettings.tryUsingVisionModels,
+    toolDefs,
   );
   openAIConversationThread = addPrompts(
     task,

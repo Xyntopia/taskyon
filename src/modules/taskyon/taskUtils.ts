@@ -1,7 +1,8 @@
-import type { TaskNode, TaskGetter } from './types';
+import type { TaskNode, TaskGetter, ToolBase } from './types';
 import type OpenAI from 'openai';
 import { dump } from 'js-yaml';
 import { FileMappingDocType } from './rxdb';
+import { summarizeTools } from './tools';
 
 async function fileToBase64(file: File): Promise<string> {
   return new Promise<string>((resolve, reject) => {
@@ -20,6 +21,7 @@ async function fileToBase64(file: File): Promise<string> {
     };
   });
 }
+
 export const taskUtils = (
   getTask: TaskGetter,
   getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
@@ -57,35 +59,64 @@ export const taskUtils = (
     return taskList;
   }
 
-  async function buildChatThread(taskId: string, useVisionModels: boolean) {
+  async function buildChatThread(
+    taskId: string,
+    useVisionModels: boolean,
+    toolCollection: Record<string, ToolBase>,
+    removeDuplicateDescriptions = false,
+  ) {
     const openAIMessageThread = [] as OpenAI.ChatCompletionMessageParam[];
     const taskIdChain = await getTaskIdChain(taskId);
+    const functionCallDescriptions = new Set<string>();
 
-    // instructions & prompts are added at a later stage...
     if (taskIdChain) {
       for (const mId of taskIdChain) {
         const t = await getTask(mId);
         if (t) {
           if ('functionCall' in t.content) {
-            // TODO: its probably a good idea to make this shorter...
-            // TODO:  not sure, if this is a good idea with OpenAI Functions...
+            // the purpose of this is to inform the AI about what function was called and
+            // the arguments in it.
+            // TODO: its probably a good idea to make this shorter in cas we have very long argumets...
+            // TODO: not sure, if this is a good idea with OpenAI Functions, bcause openai seems to already have
+            //       an idea about the functions which were provided with their descriptions, anyways So we should probably leave this out here...
+
+            const functionCallName = t.content.functionCall.name;
+
+            // Add function call description
+            const functionCallDescription = summarizeTools(
+              [functionCallName],
+              toolCollection,
+            );
+            const descriptionMessage: OpenAI.ChatCompletionMessageParam = {
+              role: 'system',
+              content: functionCallDescription,
+            };
+            openAIMessageThread.push(descriptionMessage);
+
             const functionContent = dump({
               arguments: t.content.functionCall.arguments,
               //...t.result?.toolResult,
             });
-            const message: OpenAI.ChatCompletionMessageParam = {
+            const functionMessage: OpenAI.ChatCompletionMessageParam = {
               role: 'function',
-              name: t.content.functionCall.name,
+              name: functionCallName,
               content: functionContent,
             };
-            openAIMessageThread.push(message);
+            openAIMessageThread.push(functionMessage);
+
+            // Optionally track function call descriptions
+            if (removeDuplicateDescriptions) {
+              functionCallDescriptions.add(functionCallDescription);
+            }
           } else if ('toolResult' in t.content) {
             // we can still slightly change the content of this message to make clear
             // TODO: instead of using a manual "result of the tool" use the description in the type!
+            // maybe refer to the actual tool call here?
             const message: OpenAI.ChatCompletionMessageParam = {
-              role: 'system',
+              role: 'assistant',
               content: dump({
-                'The tool returned the result:': t.content.toolResult,
+                'The tool that you called returned the following result:':
+                  t.content.toolResult,
               }),
             };
             openAIMessageThread.push(message);
@@ -146,6 +177,27 @@ export const taskUtils = (
         }
       }
     }
+
+    // Optionally remove duplicate descriptions except the last one
+    if (removeDuplicateDescriptions) {
+      const reversedThread = [...openAIMessageThread].reverse();
+      const seenDescriptions = new Set<string>();
+      const deduplicatedThread = reversedThread.filter((message) => {
+        if (
+          message.role === 'system' &&
+          typeof message.content === 'string' &&
+          functionCallDescriptions.has(message.content)
+        ) {
+          if (seenDescriptions.has(message.content)) {
+            return false; // Skip duplicates
+          }
+          seenDescriptions.add(message.content);
+        }
+        return true;
+      });
+      return deduplicatedThread.reverse(); // Reverse back to original order
+    }
+
     return openAIMessageThread;
   }
 
