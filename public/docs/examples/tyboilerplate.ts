@@ -47,7 +47,7 @@ export async function initializeTaskyon(
       taskyon.contentWindow?.postMessage(message, iframeTarget);
     }
 
-    // Send function definition to the taskyon so that the taskyon is aware of it.
+    // Send function definition to the taskyon so that taskyon is aware of it.
     function sendFunctionToTaskyon(toolDescription: Record<string, unknown>) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { function: _toolfunc, ...fdescr } = toolDescription;
@@ -62,7 +62,9 @@ export async function initializeTaskyon(
     function setUpToolsListener(tools: Tool[]) {
       window.addEventListener(
         'message',
-        function (event: MessageEvent<{ type: string; arguments: unknown }>) {
+        async function (
+          event: MessageEvent<{ type: string; arguments: unknown }>,
+        ) {
           // Check the origin to ensure security
           if (event.origin !== iframeTarget) {
             console.log('Received message from unauthorized origin');
@@ -76,7 +78,8 @@ export async function initializeTaskyon(
             if (event.data.type === 'functionCall') {
               //if the message comes from taskyon, we can be sure that its the correct type.
               const data = event.data;
-              const result = tool.function(data.arguments);
+              // with this we make sure, that we can also handle async functions :)
+              const result = await tool.function(data.arguments);
 
               // Send response to iframe
               const response = {

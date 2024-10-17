@@ -43,7 +43,7 @@
                 };
                 taskyon.contentWindow?.postMessage(message, iframeTarget);
             }
-            // Send function definition to the taskyon so that the taskyon is aware of it.
+            // Send function definition to the taskyon so that taskyon is aware of it.
             function sendFunctionToTaskyon(toolDescription) {
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const { function: _toolfunc, ...fdescr } = toolDescription;
@@ -55,7 +55,7 @@
                 taskyon.contentWindow?.postMessage(fdMessage, iframeTarget);
             }
             function setUpToolsListener(tools) {
-                window.addEventListener('message', function(event) {
+                window.addEventListener('message', async function(event) {
                     // Check the origin to ensure security
                     if (event.origin !== iframeTarget) {
                         console.log('Received message from unauthorized origin');
@@ -68,7 +68,8 @@
                         if (event.data.type === 'functionCall') {
                             //if the message comes from taskyon, we can be sure that its the correct type.
                             const data = event.data;
-                            const result = tool.function(data.arguments);
+                            // with this we make sure, that we can also handle async functions :)
+                            const result = await tool.function(data.arguments);
                             // Send response to iframe
                             const response = {
                                 type: 'functionResponse',
@@ -91,6 +92,7 @@
             });
         }
     }
+    // doing this here, because for some reason, swc doesn't do this for us ;)
     window.initializeTaskyon = initializeTaskyon;
 });
 
