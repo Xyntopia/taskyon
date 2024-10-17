@@ -177,10 +177,10 @@
     <q-drawer
       v-if="state"
       v-model="drawerOpen"
-      show-if-above
+      :show-if-above="!minMode"
       persistent
       :width="250"
-      :breakpoint="800"
+      :breakpoint="minMode ? 5000 : 800"
       class="print-hide"
     >
       <ChatSidebar />
