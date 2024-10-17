@@ -4,10 +4,6 @@
 
 Taskyon is a versatile AI assistant designed for seamless integration into your webpage or application. This guide will walk you through the process of incorporating Taskyon into your project, explaining key concepts and providing step-by-step instructions.
 
-## What is Taskyon?
-
-Taskyon is an AI-powered assistant that can enhance your web applications with intelligent interactions. It's designed to be easily integrated, secure, and customizable to fit your specific needs.
-
 ## Integration Overview
 
 Taskyon utilizes an iframe-based integration method, which offers several advantages:
@@ -27,6 +23,23 @@ Taskyon employs a unique local-first model that eliminates the need for a backen
 However, this model requires a thoughtful approach to API key management. Typically, API keys are kept secure on a server. With Taskyon's local-first model, you'll need to securely share an API key with your users' client-side applications. This is managed in a way that doesn't require users to log in to Taskyon separately from your services, maintaining a seamless user experience.
 
 We provide solutions to handle this securely, which we'll explore in the following sections.
+
+### Useful Hints
+
+- You can make use ofthe "appConfiguration" settings for debugging purpose.
+  When taskyon is loaded i an iframe, it displays in a "minimal" mode tailored
+  for webpage integration. By setting `guiMode: 'default'` you can prevent this.
+  You can also automatically turn on "expert mode" in order to be able to debug prompts.
+
+```javascript
+const configuration = {
+   llmSettings: {...},
+   appConfiguration: {
+      expertMode: true,
+      guiMode: 'default',
+   },
+};
+```
 
 ## Prerequisites
 

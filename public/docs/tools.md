@@ -19,6 +19,10 @@ Taskyon tools are modular components that perform specific tasks or functions, c
 
 Users can add custom tools through the [Tools Manager](/tools), where they can create, edit, and delete tools.
 
+#### Best Practice
+
+- Tools should try to always return a value. This give taskyon the feedback whether a tool was succesful or not.
+
 ### AI-Assisted Tool Creation
 
 Taskyon can define tools using Large Language Models (LLMs) by providing a JSON object with a "function" tag. This feature enables dynamic tool creation and adaptation.
