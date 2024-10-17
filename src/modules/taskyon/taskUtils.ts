@@ -63,7 +63,7 @@ export const taskUtils = (
     taskId: string,
     useVisionModels: boolean,
     toolCollection: Record<string, ToolBase>,
-    removeDuplicateDescriptions = false,
+    removeDuplicateDescriptions = true,
   ) {
     const openAIMessageThread = [] as OpenAI.ChatCompletionMessageParam[];
     const taskIdChain = await getTaskIdChain(taskId);
@@ -87,11 +87,11 @@ export const taskUtils = (
               [functionCallName],
               toolCollection,
             );
-            const descriptionMessage: OpenAI.ChatCompletionMessageParam = {
+            /*const descriptionMessage: OpenAI.ChatCompletionMessageParam = {
               role: 'system',
-              content: functionCallDescription,
+              content: 'You have access to and used the following function: ${functionCallDescription}`,
             };
-            openAIMessageThread.push(descriptionMessage);
+            openAIMessageThread.push(descriptionMessage);*/
 
             const functionContent = dump({
               arguments: t.content.functionCall.arguments,
@@ -100,7 +100,7 @@ export const taskUtils = (
             const functionMessage: OpenAI.ChatCompletionMessageParam = {
               role: 'function',
               name: functionCallName,
-              content: functionContent,
+              content: `You have accessed and used the following tool: ${functionCallDescription}. The parameters used were: ${functionContent}`,
             };
             openAIMessageThread.push(functionMessage);
 

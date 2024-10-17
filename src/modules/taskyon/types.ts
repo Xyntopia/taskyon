@@ -298,6 +298,8 @@ const ToolResultBase = z
 
 const ToolSelection = z
   .object({
+    'Do we really need to use a tool in order to answer the question from the user?':
+      yesno,
     'describe your thoughts': answer,
   })
   .describe('Structured answer schema for a task including the use of tools');
