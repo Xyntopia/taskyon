@@ -165,7 +165,7 @@ export function addPrompts(
       },
       {
         role: 'user',
-        content: `The following tools are available:\n\n${variables.tools}`,
+        content: `If you think it is necessary, you can choose one of the following tools to complete the task:\n\n${variables.tools}`,
       },
       {
         role: 'user',

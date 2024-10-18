@@ -103,8 +103,6 @@ export interface OpenRouterGenerationInfo {
   usage: number;
 }
 
-
-
 // in order to prevent a circular reference in zod, we need to define our JSONSchemaForFunctionParameter
 // separately
 // https://zod.dev/?id=recursive-types
@@ -268,8 +266,7 @@ const ToolResultBase = z
 
 const ToolSelection = z
   .object({
-    'Do we really need to use a tool in order to answer the question from the user?':
-      yesno,
+    'Do we have to use a tool?': yesno,
     'describe your thoughts': answer,
   })
   .describe('Structured answer schema for a task including the use of tools');
