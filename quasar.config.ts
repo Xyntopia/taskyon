@@ -14,8 +14,9 @@ import fs from 'fs';
 // also needs:
 //    yarn add --dev node-polyfill-webpack-plugin browserify-zlib
 import nodePolyfillWebpackPlugin from 'node-polyfill-webpack-plugin';
-import { TaskyonMessages, ToolBase } from './src/modules/taskyon/types';
-import { zodSchemasToOpenApi } from 'src/modules/zodUtils';
+import { ToolBase } from './src/modules/taskyon/types';
+import { zodSchemasToOpenApi } from 'src/modules/yamlUtils';
+import { TaskyonMessages } from 'src/modules/taskyon/iframeApiTypes';
 
 const APPNAME = 'taskyon';
 const DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid';

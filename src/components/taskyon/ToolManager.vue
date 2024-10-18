@@ -76,7 +76,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { partialTyConfiguration, ToolBase } from 'src/modules/taskyon/types';
+import { ToolBase } from 'src/modules/taskyon/types';
 import CodeEditor from '../CodeEditor.vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import CreateNewTask from './CreateNewTask.vue';
@@ -85,6 +85,7 @@ import { taskTemplateTypes } from 'src/modules/taskyon/types';
 import UnderConstructionHint from '../UnderConstructionHint.vue';
 import { mdiToolbox, mdiTools } from '@quasar/extras/mdi-v6';
 import { matTune } from '@quasar/extras/material-icons';
+import { partialTyConfiguration } from 'src/modules/taskyon/iframeApiTypes';
 
 const functionTemplate = taskTemplateTypes.toolDescription.parse(undefined);
 

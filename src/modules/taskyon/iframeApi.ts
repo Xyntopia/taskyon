@@ -1,8 +1,9 @@
 import { addTask2Tree, TyTaskManager } from './taskManager';
-import { TaskyonMessages, ToolBase, partialTaskDraft } from './types';
+import { ToolBase, partialTaskDraft } from './types';
 import type { llmSettings } from './types';
 import { deepMergeReactive } from '../utils';
 import { tylog } from '../logger';
+import { TaskyonMessages } from './iframeApiTypes';
 
 /*function stringifyIfNotString(obj: unknown): string | undefined {
     if (typeof obj === 'undefined') return undefined;

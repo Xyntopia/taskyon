@@ -3,16 +3,18 @@ import { dump } from 'js-yaml';
 import { bigIntToString } from '../utils';
 import {
   TaskResult,
-  TaskyonMessages,
   FunctionArguments,
-  RemoteFunctionCall,
-  RemoteFunctionResponse,
   FunctionCall,
   ParamType,
   ToolBase,
   TaskProcessingError,
   OnInterruptFunc,
 } from './types';
+import {
+  RemoteFunctionCall,
+  TaskyonMessages,
+  RemoteFunctionResponse,
+} from './iframeApiTypes';
 import { z } from 'zod';
 import { YamlRepresentation, convertToYamlWComments } from '../zodUtils';
 import { executeCodeInIframe } from './iframeWorker';
