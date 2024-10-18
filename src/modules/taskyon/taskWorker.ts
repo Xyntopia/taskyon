@@ -126,10 +126,25 @@ export async function processChatTask(
         chatResponse: chatCompletion,
       };
 
-      // get llm inference stats
-      // TODO: we should replace this with an inference task which has the LLM as a parent...
+      // get preliminary token usage before we get the actual costs
+      // in th next step...
+      if (chatCompletion?.usage) {
+        // openai sends back the exact number of prompt tokens :)
+        task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
+        task.debugging.resultTokens = chatCompletion.usage.completion_tokens;
+        task.debugging.taskTokens = chatCompletion.usage.total_tokens;
+      } else {
+        task.debugging.estimatedTokens = await estimateChatTokens(
+          task,
+          openAIConversationThread,
+          await taskManager.updateToolDefinitions(),
+        );
+      }
+
+      // TODO: replace this below with a taskNode in lower hierachy which does this :)
       if (chatCompletion && llmSettings.selectedApi === 'openrouter.ai') {
-        void sleep(5000).then(() =>
+        console.log('getting openrouter generation info');
+        void sleep(10000).then(() =>
           getOpenRouterGenerationInfo(
             chatCompletion.id,
             generateHeaders(
@@ -148,9 +163,10 @@ export async function processChatTask(
         apiKey &&
         !isTaskyonKey(apiKey, false)
       ) {
+        console.log('getting taskyon generation info');
         // our backend tries to get the finished costs
         // after ~4000ms, so we wait for 6000 here...
-        void (await sleep(6000).then(() =>
+        void sleep(6000).then(() =>
           getTaskyonCosts(
             llmSettings,
             apiKey,
@@ -161,17 +177,6 @@ export async function processChatTask(
             console.log('taskyon generation info:', generationInfo);
             enrichWithUsageInfos(task, taskManager, generationInfo);
           }),
-        ));
-      } else if (chatCompletion?.usage) {
-        // openai sends back the exact number of prompt tokens :)
-        task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
-        task.debugging.resultTokens = chatCompletion.usage.completion_tokens;
-        task.debugging.taskTokens = chatCompletion.usage.total_tokens;
-      } else {
-        task.debugging.estimatedTokens = await estimateChatTokens(
-          task,
-          openAIConversationThread,
-          await taskManager.updateToolDefinitions(),
         );
       }
     }

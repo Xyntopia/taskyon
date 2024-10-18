@@ -125,11 +125,9 @@ function accumulateChatCompletion(
     throw new Error('The message is empty!!');
   }
 
-  // Assuming the id, created, and model fields are consistent across chunks,
-  // we use the first chunk to initialize these values.
   const firstChunk = chunks[0];
 
-  // Initialize the response
+  // Initialize the response with default values from the first chunk
   const response: OpenAI.ChatCompletion = {
     id: firstChunk.id,
     object: 'chat.completion',
@@ -141,7 +139,7 @@ function accumulateChatCompletion(
         message: {
           content: null,
           refusal: null,
-          role: 'assistant', // or other roles as per your logic
+          role: 'assistant',
         },
         finish_reason: 'stop',
         logprobs: null,
@@ -149,27 +147,39 @@ function accumulateChatCompletion(
     ],
   };
 
-  // we need to accumulate tools separatly as we need an object to do this..
   const toolCalls: Record<string, OpenAI.ChatCompletionMessageToolCall> = {};
 
-  // Accumulate the content from the first choice of each chunk
-  // TODO: in the future we can easily accumulate from each choice with a  loop
-  const choice = chunks.reduce(
-    (previous, chunk) => {
+  // Step 1: Gather all top-level properties across chunks
+  for (const chunk of chunks) {
+    Object.assign(response, chunk); // This will overwrite all top-level properties
+  }
+
+  // Accumulate the content for the choices
+  const accumulatedChoice = chunks.reduce(
+    (acc, chunk) => {
       const choiceIdx = 0;
-      if (chunk.choices[choiceIdx]?.delta?.content) {
-        if (previous.message.content) {
-          previous.message.content += chunk.choices[choiceIdx].delta.content;
-        } else {
-          previous.message.content = chunk.choices[choiceIdx].delta.content;
-        }
+      const currentChoice = chunk.choices[choiceIdx];
+
+      // Accumulate the content
+      if (currentChoice?.delta?.content) {
+        acc.message.content =
+          (acc.message.content || '') + currentChoice.delta.content;
       }
-      previous.message.role =
-        (chunk.choices[choiceIdx]?.delta
-          ?.role as OpenAI.ChatCompletionMessage['role']) ||
-        previous.message.role;
-      previous.finish_reason =
-        chunk.choices[choiceIdx]?.finish_reason || previous.finish_reason;
+
+      // Update role if present
+      acc.message.role =
+        (currentChoice?.delta?.role as OpenAI.ChatCompletionMessage['role']) ||
+        acc.message.role;
+
+      // Store last non-null finish_reason and logprobs
+      if (currentChoice?.finish_reason != null) {
+        acc.finish_reason = currentChoice.finish_reason;
+      }
+      if (currentChoice?.logprobs != null) {
+        acc.logprobs = currentChoice.logprobs;
+      }
+
+      // Accumulate tool calls
       for (const tc of chunk.choices[choiceIdx]?.delta?.tool_calls || []) {
         // initialize toolCalls if it doesn't exist
         const tcnew = toolCalls[tc.index] || {
@@ -185,20 +195,23 @@ function accumulateChatCompletion(
         tcnew.function.arguments += tc.function?.arguments || '';
         toolCalls[tc.index] = tcnew;
       }
-      return previous;
+      return acc;
     },
     {
       index: 0,
       message: {
         content: null,
-        role: 'assistant', // or other roles as per your logic
+        role: 'assistant',
       },
       finish_reason: 'stop',
     } as OpenAI.ChatCompletion['choices'][0],
   );
 
-  choice.message.tool_calls = Object.values(toolCalls).map((t) => t);
-  response.choices = [choice];
+  // Add accumulated tool calls
+  accumulatedChoice.message.tool_calls = Object.values(toolCalls);
+
+  // Assign the accumulated choice to response
+  response.choices = [accumulatedChoice];
 
   return response;
 }
@@ -379,9 +392,7 @@ export async function getTaskyonCosts(
   if (!response.ok) {
     // TODO: replace this with an error message in the UsageInfos
     //       so that the user can manually try to get the cost info...
-    throw new Error(
-      `Could not find generation information for task ${taskid}`,
-    );
+    throw new Error(`Could not find generation information for task ${taskid}`);
   }
   const data = await (response.json() as Promise<
     { reference_data: OpenRouterGenerationInfo }[]
