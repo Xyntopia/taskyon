@@ -1,9 +1,10 @@
 import {
   callLLM,
-  enrichWithDelayedUsageInfos,
+  enrichWithUsageInfos,
   estimateChatTokens,
   generateHeaders,
   getOpenRouterGenerationInfo,
+  getTaskyonCosts,
 } from './chat';
 import {
   generateCompleteChat,
@@ -13,7 +14,6 @@ import {
   FunctionCall,
   partialTaskDraft,
   TaskNode,
-  OpenRouterGenerationInfo,
   llmSettings,
   ToolBase,
   TaskProcessingError,
@@ -129,18 +129,18 @@ export async function processChatTask(
       // get llm inference stats
       // TODO: we should replace this with an inference task which has the LLM as a parent...
       if (chatCompletion && llmSettings.selectedApi === 'openrouter.ai') {
-        void sleep(5000).then(() => {
-          void getOpenRouterGenerationInfo(
+        void sleep(5000).then(() =>
+          getOpenRouterGenerationInfo(
             chatCompletion.id,
             generateHeaders(
               apiKey,
               llmSettings.siteUrl,
               llmSettings.selectedApi || '',
             ),
-          ).then((generationInfo) => {
-            void enrichWithDelayedUsageInfos(task, taskManager, generationInfo);
-          });
-        });
+          ).then((generationInfo) =>
+            enrichWithUsageInfos(task, taskManager, generationInfo),
+          ),
+        );
       } else if (
         chatCompletion &&
         llmSettings.selectedApi === 'taskyon' &&
@@ -150,14 +150,18 @@ export async function processChatTask(
       ) {
         // our backend tries to get the finished costs
         // after ~4000ms, so we wait for 6000 here...
-        void getTaskyonCosts(
-          llmSettings,
-          apiKey,
-          api,
-          chatCompletion,
-          task,
-          taskManager,
-        );
+        void (await sleep(6000).then(() =>
+          getTaskyonCosts(
+            llmSettings,
+            apiKey,
+            api,
+            chatCompletion,
+            task.id,
+          ).then((generationInfo) => {
+            console.log('taskyon generation info:', generationInfo);
+            enrichWithUsageInfos(task, taskManager, generationInfo);
+          }),
+        ));
       } else if (chatCompletion?.usage) {
         // openai sends back the exact number of prompt tokens :)
         task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
@@ -176,40 +180,6 @@ export async function processChatTask(
   }
 
   return task;
-}
-
-async function getTaskyonCosts(
-  llmSettings: llmSettings,
-  apiKey: string,
-  api: llmSettings['llmApis'][0],
-  chatCompletion: OpenAI.Chat.Completions.ChatCompletion,
-  task: TaskNode,
-  taskManager: TyTaskManager,
-) {
-  await sleep(6000);
-  const headers = {
-    ...llmSettings.llmApis['taskyon']?.defaultHeaders,
-    ...generateHeaders(apiKey, llmSettings.siteUrl, api.name),
-  };
-  const baseUrl = new URL(api.baseURL).origin;
-  console.log('get generation info from ', baseUrl);
-  const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${chatCompletion.id}`;
-  const response = await fetch(url, { headers });
-  if (!response.ok) {
-    // TODO: replace this with an error message in the UsageInfos
-    //       so that the user can manually try to get the cost info...
-    throw new Error(
-      `Could not find generation information for task ${task.id}`,
-    );
-  }
-  const data = await (response.json() as Promise<
-    { reference_data: OpenRouterGenerationInfo }[]
-  >);
-
-  console.log('taskyon generation info:', data);
-  if (data.length) {
-    enrichWithDelayedUsageInfos(task, taskManager, data[0]?.reference_data);
-  }
 }
 
 async function processFunctionTask(

@@ -5,6 +5,7 @@ import type {
   OpenAIMessage,
   OpenRouterGenerationInfo,
   Model,
+  llmSettings,
 } from './types';
 import type { TyTaskManager } from './taskManager';
 import type OpenAI from 'openai';
@@ -360,6 +361,35 @@ export function mapFunctionNames(
   return toolNames?.map((t) => tools[t] as ToolBase).filter((t) => t);
 }
 
+export async function getTaskyonCosts(
+  llmSettings: llmSettings,
+  apiKey: string,
+  api: llmSettings['llmApis'][0],
+  chatCompletion: OpenAI.Chat.Completions.ChatCompletion,
+  taskid: string,
+) {
+  const headers = {
+    ...llmSettings.llmApis['taskyon']?.defaultHeaders,
+    ...generateHeaders(apiKey, llmSettings.siteUrl, api.name),
+  };
+  const baseUrl = new URL(api.baseURL).origin;
+  console.log('get generation info from ', baseUrl);
+  const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${chatCompletion.id}`;
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    // TODO: replace this with an error message in the UsageInfos
+    //       so that the user can manually try to get the cost info...
+    throw new Error(
+      `Could not find generation information for task ${taskid}`,
+    );
+  }
+  const data = await (response.json() as Promise<
+    { reference_data: OpenRouterGenerationInfo }[]
+  >);
+
+  return data[0]?.reference_data;
+}
+
 export async function getOpenRouterGenerationInfo(
   generationId: string,
   headers: Record<string, string>,
@@ -397,7 +427,7 @@ export async function getOpenRouterGenerationInfo(
   );
 }
 
-export async function enrichWithDelayedUsageInfos(
+export async function enrichWithUsageInfos(
   task: TaskNode,
   taskManager: TyTaskManager,
   generationInfo?: OpenRouterGenerationInfo,
