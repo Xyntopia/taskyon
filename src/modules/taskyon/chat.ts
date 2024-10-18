@@ -397,7 +397,7 @@ export async function getOpenRouterGenerationInfo(
   );
 }
 
-export function enrichWithDelayedUsageInfos(
+export async function enrichWithDelayedUsageInfos(
   task: TaskNode,
   taskManager: TyTaskManager,
   generationInfo?: OpenRouterGenerationInfo,
@@ -418,19 +418,18 @@ export function enrichWithDelayedUsageInfos(
           generationInfo.native_tokens_prompt +
           generationInfo.native_tokens_completion,
       };
-      void taskManager.updateTask({ id: task.id, debugging }, true);
+      await taskManager.updateTask({ id: task.id, debugging }, true);
       for (const childID of task.childrenIDs) {
-        void taskManager.getTask(childID).then((child) => {
-          if (child && !child?.debugging.promptTokens) {
-            void taskManager.updateTask(
-              {
-                id: child.id,
-                debugging: { promptTokens: task.debugging.resultTokens },
-              },
-              true,
-            );
-          }
-        });
+        const child = await taskManager.getTask(childID);
+        if (child && !child?.debugging.promptTokens) {
+          await taskManager.updateTask(
+            {
+              id: child.id,
+              debugging: { promptTokens: task.debugging.resultTokens },
+            },
+            true,
+          );
+        }
       }
     }
   }
