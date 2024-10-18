@@ -92,8 +92,9 @@ export async function processChatTask(
         api,
         llmSettings.siteUrl,
         apiKey,
-        // if the task runs in the "foreground", stream it :)
-        task.id == llmSettings.selectedTaskId ? true : false,
+        // TODO: if the task runs in the "foreground", stream it :)
+        // task.id == llmSettings.selectedTaskId ? true : false, // this doesn't work, for some reason it doesn't always detect if we're running something in the forground...
+        true, // for now, we always want to stream our task...
         // this function receives chunks if we stream and senfs them into
         // our original task in the debugging property to be displayed
         // "live" (this only works if our tasks structure in task manager is
