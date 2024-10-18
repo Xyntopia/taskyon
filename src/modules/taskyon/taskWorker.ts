@@ -360,7 +360,7 @@ async function generateFollowUpTasksFromResult(
 ) {
   console.log('generate follow up task');
   const childCosts = {
-    promptTokens: finishedTask.debugging.resultTokens,
+    promptTokens: finishedTask.debugging.taskTokens,
     taskTokens: finishedTask.debugging.taskTokens,
     taskCosts: finishedTask.debugging.taskCosts,
   };
@@ -599,7 +599,7 @@ export function useTaskWorkerController() {
 }
 export type TaskWorkerController = ReturnType<typeof useTaskWorkerController>;
 
-async function getTaskResult(
+async function processTask(
   task: TaskNode,
   taskManager: TyTaskManager,
   taskId: string,
@@ -686,7 +686,7 @@ export async function taskWorker(
       console.log('processing task:', taskId);
       task = await taskManager.getTask(taskId);
       if (task && !taskWorkerController.isInterrupted()) {
-        task = await getTaskResult(
+        task = await processTask(
           task,
           taskManager,
           taskId,
