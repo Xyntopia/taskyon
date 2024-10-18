@@ -22,6 +22,63 @@ Users can add custom tools through the [Tools Manager](/tools), where they can c
 #### Best Practice
 
 - Tools should try to always return a value. This give taskyon the feedback whether a tool was succesful or not.
+  for example in the function below instead of simply zooming in to the location, we return a string
+  based on the success of the function.
+
+```javascript
+async function zoomToPlace(placeName) {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(placeName)}`,
+    );
+    const data = await response.json();
+
+    if (data && data.length > 0) {
+      const { lat, lon } = data[0];
+      map.setView([lat, lon], 13); // Adjust zoom level as needed
+      return {
+        success: true,
+        message: `Zoomed to ${placeName} at (${lat}, ${lon})`,
+      };
+    } else {
+      return { success: false, message: `Place ${placeName} not found!` };
+    }
+  } catch (error) {
+    return { success: false, message: `Error fetching data: ${error.message}` };
+  }
+}
+```
+
+- Be sure that the function description tells the AI That it can use this function. Consider this function definition here for example:
+
+```javascript
+const tools = [
+  {
+    id: 'mapControl.V1',
+    name: 'zoomToPlace',
+    description: 'Function to zoom in on a map',
+    parameters: {
+      type: 'object',
+      properties: {
+        placeName: {
+          type: 'string',
+          description: 'The name of the place to zoom to.',
+        },
+      },
+      required: ['placeName'],
+    },
+    function: (params) => zoomToPlace(params.placeName, true), // Assign the zoom function here
+  },
+];
+```
+
+Better would be a description like this:
+
+```javascript
+description: 'This function can be used by the AI to zoom a map displayed on the webpage to a specified place. It returns feedback based on the success of the operation.',
+```
+
+Here we address the AI directly and also describe the context of this function in order to make the AI aware of it.
 
 ### AI-Assisted Tool Creation
 

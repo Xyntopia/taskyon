@@ -66,22 +66,28 @@
       }).addTo(map);
 
       // Function to zoom to a place
-      async function zoomToPlace(placeName, isAiCall = false) {
-        if (isAiCall) {
-          document.getElementById('place-input').value = placeName;
-        }
+      async function zoomToPlace(placeName) {
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(placeName)}`,
+          );
+          const data = await response.json();
 
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(placeName)}`,
-        );
-        const data = await response.json();
-
-        if (data && data.length > 0) {
-          const { lat, lon } = data[0];
-          map.setView([lat, lon], 13); // Adjust zoom level as needed
-          return `Zoomed to ${placeName} at (${lat}, ${lon})`;
-        } else {
-          return `Place ${placeName} not found!`;
+          if (data && data.length > 0) {
+            const { lat, lon } = data[0];
+            map.setView([lat, lon], 13); // Adjust zoom level as needed
+            return {
+              success: true,
+              message: `Zoomed to ${placeName} at (${lat}, ${lon})`,
+            };
+          } else {
+            return { success: false, message: `Place ${placeName} not found!` };
+          }
+        } catch (error) {
+          return {
+            success: false,
+            message: `Error fetching data: ${error.message}`,
+          };
         }
       }
 
@@ -118,7 +124,7 @@
           id: 'mapControl.V1',
           name: 'zoomToPlace',
           description:
-            'This function can zoom to places on a map on the same webpage.',
+            'This function can be used by the AI to zoom a map displayed on the webpage to a specified place. It returns feedback based on the success of the operation.',
           parameters: {
             type: 'object',
             properties: {
@@ -129,7 +135,7 @@
             },
             required: ['placeName'],
           },
-          function: (params) => zoomToPlace(params.placeName, true), // Assign the zoom function here
+          function: (params) => zoomToPlace(params.placeName),
         },
       ];
     </script>
