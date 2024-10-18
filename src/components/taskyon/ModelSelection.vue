@@ -107,18 +107,22 @@ const state = useTaskyonStore();
 
 const selectModelInput = ref();
 
-const tyPublicKeyModels = computed(() => {
+const llmModelsSelection = computed(() => {
   if (selectedApi.value === 'taskyon') {
     // if we have a taskyon key defined only display the models allowed for that key...
     if (state.tyPublicKey?.model && state.tyPublicKey.model.length > 0) {
-      const models = state.tyPublicKey.model;
-      return models.map((m) => {
-        console.log('only models from our key are available:', models);
-        return { id: m, description: 'Model defined in ty public key.' };
-      });
+      if (state.tyPublicKey.model.includes('*')) {
+        return state.llmModels;
+      } else {
+        const models = state.tyPublicKey.model;
+        return models.map((m) => {
+          console.log('only models from our key are available:', models);
+          return { id: m, description: 'Model defined in ty public key.' };
+        });
+      }
     }
   }
-  return [];
+  return state.llmModels;
 });
 
 const modelOptions = computed(() => {
@@ -133,9 +137,7 @@ const modelOptions = computed(() => {
       }));
     return options;
   } else {
-    let llmModels: typeof state.llmModels = tyPublicKeyModels.value.length
-      ? tyPublicKeyModels.value
-      : state.llmModels;
+    let llmModels: typeof state.llmModels = llmModelsSelection.value;
     if (showVisionModels.value) {
       llmModels = llmModels.filter(
         (m) => m.architecture?.modality === 'text+image->text',
