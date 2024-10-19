@@ -71,109 +71,15 @@ export const taskUtils = (
 
     if (taskIdChain) {
       for (const mId of taskIdChain) {
-        const t = await getTask(mId);
-        if (t) {
-          if ('functionCall' in t.content) {
-            // the purpose of this is to inform the AI about what function was called and
-            // the arguments in it.
-            // TODO: its probably a good idea to make this shorter in cas we have very long argumets...
-            // TODO: not sure, if this is a good idea with OpenAI Functions, bcause openai seems to already have
-            //       an idea about the functions which were provided with their descriptions, anyways So we should probably leave this out here...
-
-            const functionCallName = t.content.functionCall.name;
-
-            // Add function call description
-            const functionCallDescription = summarizeTools(
-              [functionCallName],
-              toolCollection,
-            );
-            /*const descriptionMessage: OpenAI.ChatCompletionMessageParam = {
-              role: 'system',
-              content: 'You have access to and used the following function: ${functionCallDescription}`,
-            };
-            openAIMessageThread.push(descriptionMessage);*/
-
-            const functionContent = dump({
-              arguments: t.content.functionCall.arguments,
-              //...t.result?.toolResult,
-            });
-            const functionMessage: OpenAI.ChatCompletionMessageParam = {
-              role: 'function',
-              name: functionCallName,
-              content: `You have accessed and used the following tool: ${functionCallDescription}. The parameters used were: ${functionContent}`,
-            };
-            openAIMessageThread.push(functionMessage);
-
-            // Optionally track function call descriptions
-            if (removeDuplicateDescriptions) {
-              functionCallDescriptions.add(functionCallDescription);
-            }
-          } else if ('toolResult' in t.content) {
-            // we can still slightly change the content of this message to make clear
-            // TODO: instead of using a manual "result of the tool" use the description in the type!
-            // maybe refer to the actual tool call here?
-            const message: OpenAI.ChatCompletionMessageParam = {
-              role: 'assistant',
-              content: dump({
-                'The tool that you called returned the following result:':
-                  t.content.toolResult,
-              }),
-            };
-            openAIMessageThread.push(message);
-          } else if ('message' in t.content && t.role != 'function') {
-            const message: OpenAI.ChatCompletionMessageParam = {
-              role: t.role,
-              content: t.content.message,
-            };
-            openAIMessageThread.push(message);
-          } else if ('uploadedFiles' in t.content && t.role != 'function') {
-            const fileMappings = await Promise.all(
-              t.content.uploadedFiles.map((uuid) => getFileMapping(uuid)),
-            );
-            const fileNames = fileMappings
-              .map((fm) => '- ' + (fm?.name || fm?.opfs || 'unknown'))
-              .join('\n');
-            const message: OpenAI.ChatCompletionMessageParam = {
-              role: 'system',
-              content: `user uploaded files:\n${fileNames}`,
-            };
-            openAIMessageThread.push(message);
-
-            if (useVisionModels) {
-              // build data strings for all of our images in order o send them to vision...
-              const imageContent: OpenAI.ChatCompletionUserMessageParam['content'] =
-                [];
-              for (const fm of fileMappings) {
-                if (fm) {
-                  const name = fm?.name || fm?.opfs || 'unknown';
-                  if (name.endsWith('png') || name.endsWith('jpg')) {
-                    const file: File | undefined = await getFile(fm.uuid);
-                    if (file) {
-                      const base64Image = await fileToBase64(file);
-                      const msgContent: OpenAI.Chat.Completions.ChatCompletionContentPartImage =
-                        {
-                          type: 'image_url',
-                          //TODO: enable "real" image urls from another webpage ....
-                          image_url: {
-                            url: `data:image/jpeg;base64,${base64Image}`,
-                            detail: 'auto',
-                          },
-                        };
-                      imageContent.push(msgContent);
-                    }
-                  }
-                }
-              }
-
-              const imageMessage: OpenAI.ChatCompletionMessageParam = {
-                role: 'user',
-                content: imageContent,
-                // TODO: we need to experiment with sending additional text here?
-                //{"type": "text", "text": "What’s in this image?"},
-              };
-              openAIMessageThread.push(imageMessage);
-            }
-          }
+        const task = await getTask(mId);
+        if (task) {
+          await convertTaskNodeToOpenAIMessage(
+            task,
+            toolCollection,
+            getFileMapping,
+            useVisionModels,
+            getFile,
+          );
         }
       }
     }
@@ -207,6 +113,112 @@ export const taskUtils = (
     getTaskChain,
   };
 };
+
+// sometimes a single task can get converted to multiple messages
+async function convertTaskNodeToOpenAIMessage(
+  task: TaskNode,
+  toolCollection: Record<string, ToolBase>,
+  getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
+  useVisionModels: boolean,
+  getFile: (uuid: string) => Promise<File | undefined>,
+): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[]> {
+  if ('functionCall' in task.content) {
+    // the purpose of this is to inform the AI about what function was called and
+    // the arguments in it.
+    // TODO: its probably a good idea to make this shorter in cas we have very long argumets...
+    // TODO: not sure, if this is a good idea with OpenAI Functions, bcause openai seems to already have
+    //       an idea about the functions which were provided with their descriptions, anyways So we should probably leave this out here...
+    const functionCallName = task.content.functionCall.name;
+
+    // Add function call description
+    const functionCallDescription = summarizeTools(
+      [functionCallName],
+      toolCollection,
+    );
+    const descriptionMessage: OpenAI.ChatCompletionMessageParam = {
+      role: 'system',
+      content: `You have access to and used the following function: ${functionCallDescription}`,
+    };
+
+    // and the result of the function
+    const functionContent = dump({
+      arguments: task.content.functionCall.arguments,
+      //...t.result?.toolResult,
+    });
+    const functionMessage: OpenAI.ChatCompletionMessageParam = {
+      role: 'function',
+      name: functionCallName,
+      content: `You just used the following tool: ${functionCallName}. The parameters used were: ${functionContent}`,
+    };
+    return [descriptionMessage, functionMessage];
+  } else if ('toolResult' in task.content) {
+    // we can still slightly change the content of this message to make clear
+    // TODO: instead of using a manual "result of the tool" use the description in the type!
+    // maybe refer to the actual tool call here?
+    const message: OpenAI.ChatCompletionMessageParam = {
+      role: 'assistant',
+      content: dump({
+        'The tool that you called returned the following result:':
+          task.content.toolResult,
+      }),
+    };
+    return [message];
+  } else if ('message' in task.content && task.role != 'function') {
+    const message: OpenAI.ChatCompletionMessageParam = {
+      role: task.role,
+      content: task.content.message,
+    };
+    return [message];
+  } else if ('uploadedFiles' in task.content && task.role != 'function') {
+    const fileMappings = await Promise.all(
+      task.content.uploadedFiles.map((uuid) => getFileMapping(uuid)),
+    );
+    const fileNames = fileMappings
+      .map((fm) => '- ' + (fm?.name || fm?.opfs || 'unknown'))
+      .join('\n');
+    const message: OpenAI.ChatCompletionMessageParam = {
+      role: 'system',
+      content: `user uploaded files:\n${fileNames}`,
+    };
+
+    if (useVisionModels) {
+      // build data strings for all of our images in order o send them to vision...
+      const imageContent: OpenAI.ChatCompletionUserMessageParam['content'] = [];
+      for (const fm of fileMappings) {
+        if (fm) {
+          const name = fm?.name || fm?.opfs || 'unknown';
+          if (name.endsWith('png') || name.endsWith('jpg')) {
+            const file: File | undefined = await getFile(fm.uuid);
+            if (file) {
+              const base64Image = await fileToBase64(file);
+              const msgContent: OpenAI.Chat.Completions.ChatCompletionContentPartImage =
+                {
+                  type: 'image_url',
+                  //TODO: enable "real" image urls from another webpage ....
+                  image_url: {
+                    url: `data:image/jpeg;base64,${base64Image}`,
+                    detail: 'auto',
+                  },
+                };
+              imageContent.push(msgContent);
+            }
+          }
+        }
+      }
+
+      const imageMessage: OpenAI.ChatCompletionMessageParam = {
+        role: 'user',
+        content: imageContent,
+        // TODO: we need to experiment with sending additional text here?
+        //{"type": "text", "text": "What’s in this image?"},
+      };
+
+      return [message, imageMessage];
+    }
+    return [message];
+  }
+  throw Error(`Not able to convert taskNode: ${JSON.stringify(task)}`);
+}
 
 export function findAllFilesInTasks(taskList: TaskNode[]): string[] {
   const fileSet = new Set<string>();
