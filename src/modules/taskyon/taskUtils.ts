@@ -2,7 +2,6 @@ import type { TaskNode, TaskGetter, ToolBase } from './types';
 import type OpenAI from 'openai';
 import { dump } from 'js-yaml';
 import { FileMappingDocType } from './rxdb';
-import { summarizeTools } from './tools';
 
 async function fileToBase64(file: File): Promise<string> {
   return new Promise<string>((resolve, reject) => {
@@ -59,6 +58,8 @@ export const taskUtils = (
     return taskList;
   }
 
+  // TODO: combine this function with follow-up tasks & prompCreation...
+  //      there are too many places, where we do this stuff ;)
   async function buildChatThread(
     taskId: string,
     useVisionModels: boolean,
@@ -70,21 +71,25 @@ export const taskUtils = (
     const functionCallDescriptions = new Set<string>();
 
     if (taskIdChain) {
+      // we are using the reverse, because we want to build the chain starting
+      // from the lsat message, so that we have to add e.g. function descriptions etc...
+      // only once..
       for (const mId of taskIdChain) {
         const task = await getTask(mId);
         if (task) {
-          await convertTaskNodeToOpenAIMessage(
+          const messages = await convertTaskNodeToOpenAIMessage(
             task,
-            toolCollection,
-            getFileMapping,
             useVisionModels,
+            getFileMapping,
             getFile,
           );
+
+          openAIMessageThread.push(...messages);
         }
       }
     }
 
-    // Optionally remove duplicate descriptions except the last one
+    // Optionally remove duplicate messages except the last one
     if (removeDuplicateDescriptions) {
       const reversedThread = [...openAIMessageThread].reverse();
       const seenDescriptions = new Set<string>();
@@ -117,9 +122,8 @@ export const taskUtils = (
 // sometimes a single task can get converted to multiple messages
 async function convertTaskNodeToOpenAIMessage(
   task: TaskNode,
-  toolCollection: Record<string, ToolBase>,
-  getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
   useVisionModels: boolean,
+  getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
   getFile: (uuid: string) => Promise<File | undefined>,
 ): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[]> {
   if ('functionCall' in task.content) {
@@ -129,16 +133,6 @@ async function convertTaskNodeToOpenAIMessage(
     // TODO: not sure, if this is a good idea with OpenAI Functions, bcause openai seems to already have
     //       an idea about the functions which were provided with their descriptions, anyways So we should probably leave this out here...
     const functionCallName = task.content.functionCall.name;
-
-    // Add function call description
-    const functionCallDescription = summarizeTools(
-      [functionCallName],
-      toolCollection,
-    );
-    const descriptionMessage: OpenAI.ChatCompletionMessageParam = {
-      role: 'system',
-      content: `You have access to and used the following function: ${functionCallDescription}`,
-    };
 
     // and the result of the function
     const functionContent = dump({
@@ -150,7 +144,7 @@ async function convertTaskNodeToOpenAIMessage(
       name: functionCallName,
       content: `You just used the following tool: ${functionCallName}. The parameters used were: ${functionContent}`,
     };
-    return [descriptionMessage, functionMessage];
+    return [functionMessage];
   } else if ('toolResult' in task.content) {
     // we can still slightly change the content of this message to make clear
     // TODO: instead of using a manual "result of the tool" use the description in the type!
@@ -182,29 +176,9 @@ async function convertTaskNodeToOpenAIMessage(
     };
 
     if (useVisionModels) {
-      // build data strings for all of our images in order o send them to vision...
-      const imageContent: OpenAI.ChatCompletionUserMessageParam['content'] = [];
-      for (const fm of fileMappings) {
-        if (fm) {
-          const name = fm?.name || fm?.opfs || 'unknown';
-          if (name.endsWith('png') || name.endsWith('jpg')) {
-            const file: File | undefined = await getFile(fm.uuid);
-            if (file) {
-              const base64Image = await fileToBase64(file);
-              const msgContent: OpenAI.Chat.Completions.ChatCompletionContentPartImage =
-                {
-                  type: 'image_url',
-                  //TODO: enable "real" image urls from another webpage ....
-                  image_url: {
-                    url: `data:image/jpeg;base64,${base64Image}`,
-                    detail: 'auto',
-                  },
-                };
-              imageContent.push(msgContent);
-            }
-          }
-        }
-      }
+      // build data strings for all of our images in order to send them to vision...
+      const imageContent: OpenAI.ChatCompletionUserMessageParam['content'] =
+        await convertFilesToOpenAIImageContent(fileMappings, getFile);
 
       const imageMessage: OpenAI.ChatCompletionMessageParam = {
         role: 'user',
@@ -212,12 +186,40 @@ async function convertTaskNodeToOpenAIMessage(
         // TODO: we need to experiment with sending additional text here?
         //{"type": "text", "text": "What’s in this image?"},
       };
-
       return [message, imageMessage];
     }
     return [message];
   }
   throw Error(`Not able to convert taskNode: ${JSON.stringify(task)}`);
+}
+
+async function convertFilesToOpenAIImageContent(
+  fileMappings: (FileMappingDocType | null)[],
+  getFile: (uuid: string) => Promise<File | undefined>,
+) {
+  const imageContent: OpenAI.ChatCompletionUserMessageParam['content'] = [];
+  for (const fm of fileMappings) {
+    if (fm) {
+      const name = fm?.name || fm?.opfs || 'unknown';
+      if (name.endsWith('png') || name.endsWith('jpg')) {
+        const file: File | undefined = await getFile(fm.uuid);
+        if (file) {
+          const base64Image = await fileToBase64(file);
+          const msgContent: OpenAI.Chat.Completions.ChatCompletionContentPartImage =
+            {
+              type: 'image_url',
+              //TODO: enable "real" image urls from another webpage ....
+              image_url: {
+                url: `data:image/jpeg;base64,${base64Image}`,
+                detail: 'auto',
+              },
+            };
+          imageContent.push(msgContent);
+        }
+      }
+    }
+  }
+  return imageContent;
 }
 
 export function findAllFilesInTasks(taskList: TaskNode[]): string[] {
