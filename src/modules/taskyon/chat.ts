@@ -223,7 +223,7 @@ export async function callLLM(
   api: apiConfig,
   siteUrl: string,
   apiKey: string,
-  stream: false | true | null | undefined = false,
+  stream: boolean | undefined = false,
   contentCallBack: (
     chunk?: OpenAI.Chat.Completions.ChatCompletionChunk,
   ) => void,
@@ -244,12 +244,15 @@ export async function callLLM(
     );
   }
 
-  const payload = {
+  type CreateBodyType = OpenAI.ChatCompletionCreateParams;
+
+  const payload: CreateBodyType = {
     model: api.selectedModel,
     messages: chatMessages,
     user: 'taskyon',
     temperature: 0.0,
     stream: stream && api.streamSupport,
+    stream_options: { include_usage: true },
     n: 1,
     ...(functions.length > 0 && { tools: functions, tool_choice: 'auto' }),
   };
