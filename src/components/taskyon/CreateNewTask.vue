@@ -322,7 +322,7 @@
 
 <script setup lang="ts">
 import { computed, ref, toRaw, toRefs } from 'vue';
-import { countStringTokens } from 'src/modules/taskyon/chat';
+import { estimateChatTokens } from 'src/modules/taskyon/chat';
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools';
 import {
   FunctionArguments,
@@ -365,6 +365,8 @@ import {
 } from '@quasar/extras/mdi-v6';
 import { deepMerge } from 'src/modules/utils';
 import { getApiConfig } from 'src/modules/taskyon/taskWorker';
+import { addPrompts } from 'src/modules/taskyon/promptCreation';
+import type { ChatCompletionMessageParam } from 'openai/resources/index.mjs';
 
 const CodeEditor = defineAsyncComponent(
   () =>
@@ -495,49 +497,6 @@ async function setTaskType(tasktype: string | undefined | null) {
   }
 }
 
-const estimatedTokens = ref<number>(0);
-watchDebounced(
-  [
-    () => state.llmSettings.taskDraft.content,
-    () => state.llmSettings.selectedTaskId,
-  ],
-  async () => {
-    if (state.llmSettings.selectedTaskId) {
-      const tm = await state.getTaskManager();
-      // we only need the last 2 or 3 tasks in order to check for
-      const chain = await tm.getTaskIdChain(
-        state.llmSettings.selectedTaskId,
-        3,
-      );
-
-      let accumulatedTokens = 0;
-      let accumulatedEstimated = 0;
-      // Assume the highest token count is the last relevant one
-      for (const taskId of chain) {
-        const task = await tm.getTask(taskId);
-        const taskTokens = task?.debugging.taskTokens ?? 0;
-        const taskTokensEstimated =
-          (task?.debugging.estimatedTokens?.promptTokens ?? 0) +
-          (task?.debugging.estimatedTokens?.resultTokens ?? 0);
-        if (taskTokens > accumulatedTokens) {
-          accumulatedTokens = taskTokens;
-        }
-        if (taskTokensEstimated > accumulatedEstimated) {
-          accumulatedEstimated = taskTokensEstimated;
-        }
-      }
-
-      // Tokenize the message
-      estimatedTokens.value =
-        (accumulatedTokens || accumulatedEstimated) +
-        (await countStringTokens(
-          JSON.stringify(state.llmSettings.taskDraft.content) || '',
-        ));
-    }
-  },
-  { debounce: 500, maxWait: 1000, immediate: true },
-);
-
 async function toggleSelectedTools() {
   if (state.llmSettings.taskDraft.allowedTools) {
     if (state.llmSettings.taskDraft.allowedTools.length > 0) {
@@ -580,6 +539,66 @@ const currentnewTask = computed(() => {
   }
   return task as TaskNode; // we can do this, because we defined the "role"
 });
+
+// TODO:   our token estimation needs to become much better ^^
+const estimatedTokens = ref<number>(0);
+watchDebounced(
+  [
+    () => state.llmSettings.taskDraft.content,
+    () => state.llmSettings.selectedTaskId,
+  ],
+  async () => {
+    let accumulatedTokens = 0;
+    let accumulatedEstimated = 0;
+    let messages: ChatCompletionMessageParam[] = [];
+    if (state.llmSettings.selectedTaskId) {
+      const tm = await state.getTaskManager();
+      // we only need the last 2 or 3 tasks in order to check for
+      const chain = await tm.getTaskIdChain(
+        state.llmSettings.selectedTaskId,
+        3,
+      );
+
+      // Assume the highest token count is the last relevant one
+      for (const taskId of chain) {
+        const task = await tm.getTask(taskId);
+        const taskTokens = task?.debugging.taskTokens ?? 0;
+        const taskTokensEstimated =
+          (task?.debugging.estimatedTokens?.promptTokens ?? 0) +
+          (task?.debugging.estimatedTokens?.resultTokens ?? 0);
+        if (taskTokens > accumulatedTokens) {
+          accumulatedTokens = taskTokens;
+        }
+        if (taskTokensEstimated > accumulatedEstimated) {
+          accumulatedEstimated = taskTokensEstimated;
+        }
+      }
+    } else {
+      messages = addPrompts(
+        currentnewTask.value,
+        toolCollection.value,
+        state.llmSettings,
+        [],
+      );
+    }
+
+    const estimated = await estimateChatTokens(
+      currentnewTask.value,
+      messages,
+      toolCollection.value,
+    );
+
+    const newTokens = Object.values(estimated || {}).reduce(
+      (pn, cn) => pn + cn,
+      0,
+    );
+
+    // Tokenize the message
+    estimatedTokens.value =
+      (accumulatedTokens || accumulatedEstimated) + newTokens;
+  },
+  { debounce: 1000, maxWait: 1500, immediate: true },
+);
 
 async function addFiles2Taskyon(newFiles: File[]) {
   console.log('add files to our chat!');
