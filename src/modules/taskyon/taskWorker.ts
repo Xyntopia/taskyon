@@ -29,6 +29,7 @@ import {
   deepCopy,
   deepMerge,
   keysToLowerCase,
+  makeSerializable,
   normalizeFalsyValues,
   pickProperties,
   sleep,
@@ -706,7 +707,12 @@ export async function taskWorker(
       if (error instanceof TaskProcessingError) {
         errorTask.content = {
           //message: `An error occured: ${error.message}:\n\n${dump(error.details, { skipInvalid: true })}`,
-          message: `An error occured:\n\n\`\`\`\n${error.message}${error.details ? ':\n\n' + JSON.stringify(error.details) : ''}\n\`\`\``,
+          message: `An error occured:\n\n\`\`\`\n${error.message}${
+            error.details
+              ? ':\n\n' +
+                JSON.stringify(makeSerializable(error.details, 5, true))
+              : ''
+          }\n\`\`\``,
         };
         if (task) {
           task.debugging = {

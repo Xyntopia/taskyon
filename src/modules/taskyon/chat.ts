@@ -273,11 +273,12 @@ export async function callLLM(
 
       // Check for non-OK status codes and throw error
       if (!response.ok) {
-        const errorData = JSON.stringify(await response.json());
-        throw new Error(
-          `Fetching answer from AI Api failed at attempt ${attempt}/${maxRetries}
-  with status ${response.status}: ${response.statusText}, ${errorData}`,
-        );
+        const errorData = await response.json();
+        throw {
+          message: `Fetching answer from AI Api failed at attempt ${attempt}/${maxRetries}
+  with status ${response.status}: ${response.statusText}`,
+          details: { errorData },
+        };
       }
 
       if (stream && response.body) {

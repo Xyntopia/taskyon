@@ -742,3 +742,55 @@ export function pickProperties(obj: object, keys: string[]) {
     Object.entries(obj).filter(([key]) => keys.includes(key)),
   );
 }
+
+export function makeSerializable(value: unknown, depth = 5): unknown {
+  if (depth <= 0) {
+    return '[Max Depth Reached]'; // Return a placeholder when the max depth is reached
+  }
+
+  if (value instanceof Error) {
+    // Handle Error objects
+    return Object.fromEntries(
+      Object.getOwnPropertyNames(value).map((key) => [
+        key,
+        makeSerializable(
+          (value as unknown as Record<string, unknown>)[key],
+          depth - 1,
+        ),
+      ]),
+    );
+  }
+
+  if (value instanceof Map) {
+    // Convert Map to an object
+    return Object.fromEntries(
+      Array.from(value.entries()).map(([k, v]) => [
+        k,
+        makeSerializable(v, depth - 1),
+      ]),
+    );
+  }
+
+  if (value instanceof Set) {
+    // Convert Set to an array
+    return Array.from(value).map((v) => makeSerializable(v, depth - 1));
+  }
+
+  if (Array.isArray(value)) {
+    // Recursively handle arrays
+    return value.map((v) => makeSerializable(v, depth - 1));
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    // Recursively handle plain objects
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [
+        k,
+        makeSerializable(v, depth - 1),
+      ]),
+    );
+  }
+
+  // Return primitives and other serializable values as-is
+  return value;
+}
