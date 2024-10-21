@@ -1,8 +1,8 @@
 <template>
   <q-btn
     v-bind="$attrs"
-    :class="model ? 'bg-secondary text-primary' : ''"
-    :icon="model ? onIcon : offIcon"
+    :class="(reverse ? !model : model) ? 'bg-secondary text-primary' : ''"
+    :icon="(reverse ? !model : model) ? onIcon : offIcon"
     @click="model = !model"
   >
     <slot></slot>
@@ -19,5 +19,6 @@ const model = defineModel<boolean>({
 defineProps<{
   onIcon?: QBtnProps['icon'];
   offIcon?: QBtnProps['icon'];
+  reverse?: boolean;
 }>();
 </script>

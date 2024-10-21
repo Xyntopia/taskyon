@@ -204,7 +204,6 @@
           dense
           :on-icon="mdiAutoFix"
           :off-icon="mdiAlphabeticalVariant"
-          size="md"
         >
           <div class="q-pl-sm gt-xs">Fancy AI</div>
           <q-tooltip :delay="200">
@@ -224,20 +223,23 @@
             {{ llmSettings.shape.tryUsingVisionModels.description }}
           </q-tooltip>
         </ToggleButton>
-        <!--
-        <q-toggle
+        <ToggleButton
           v-if="expertMode"
-          :icon="matHandyman"
-          left-label
-          color="secondary"
-          dense
-          size="xl"
           v-model="state.llmSettings.enableOpenAiTools"
-          ><q-tooltip
-            >Enable OpenAI Functions (use built-in function selection mode for
-            OpenAI)</q-tooltip
-          ></q-toggle
-        >-->
+          on-icon="svguse:/taskyon_mono_opt.svg#taskyon"
+          :off-icon="matSmartToy"
+          dense
+          outline
+          reverse
+        >
+          <q-icon :name="mdiFunctionVariant"></q-icon>
+          <q-tooltip :dely="200">
+            If turned on, use taskyon function selection mode for models which
+            support this. Otherwise use the built-in support for models which
+            support this. Taskyon mode is usually recommended as it is model
+            agnostic.</q-tooltip
+          ></ToggleButton
+        >
       </div>
     </div>
     <q-slide-transition>
@@ -362,6 +364,7 @@ import {
   mdiAlphabeticalVariant,
   mdiAutoFix,
   mdiTools,
+  mdiFunctionVariant,
 } from '@quasar/extras/mdi-v6';
 import { deepMerge } from 'src/modules/utils';
 import { getApiConfig } from 'src/modules/taskyon/taskWorker';
