@@ -335,6 +335,8 @@ x    ToolResultContent_F --> MessageContent_s_A
  */
 // TODO: split up this function into a "parse" and "addTask part"
 //       this would give us better error information. and better code ;).
+// TODO: don't implicitly add tasks here..  we should rather return the
+//       created tasks and explicitly add them to the queue...
 async function generateFollowUpTasksFromResult(
   finishedTask: TaskNode,
   llmSettings: llmSettings,
@@ -371,6 +373,74 @@ async function generateFollowUpTasksFromResult(
     llmSettings.selectedTaskId = newTaskId;
     return newTaskId;
   };
+
+  async function generateFromStructuredResponse(
+    choice: OpenAI.Chat.Completions.ChatCompletion.Choice,
+  ) {
+    const structResponse = await parseChatResponse2TaskDraft(
+      choice.message.content || '',
+    );
+    // depending on what role and tasktype the finishedTask has, we
+    // expect different results from our structuredResponse
+    // TODO: we need to do some plausibilitychecks here:
+    //       - e.g. if use tool=true, but no command present
+    // actually, it would be better to do this in the structreReponse processing ? :)
+
+    // we immediatly generate a follow up response here based on the structResponse. This avoids
+    // having to process it in another loop as we know the result already anyways.
+    // the "structuredMessage" type is mainly there so that the LLM can see what it said :).
+    // e.g. in case there is an error...
+    // In fact we always decide right here, what we do *after* the structured response and simply add the
+    // structured response as a normal "message" task to the chain...
+    // this way we can put all the parsing logic & interpretation and all of this here. While
+    // our tasks only have to process the actual data they are receiving
+    const lowerStructResponse = keysToLowerCase(structResponse);
+    const useTool =
+      yesnoToBoolean(lowerStructResponse['use tool']) &&
+      (!('try again' in lowerStructResponse) ||
+        yesnoToBoolean(lowerStructResponse['try again']));
+
+    if (useTool) {
+      console.log('trying to get tool call from structured response');
+      const newTaskid = await addFollowUpTask(false, {
+        role: 'assistant',
+        content: { structuredResponse: choice.message.content || '' },
+      });
+
+      // this doesn't say anything about whether the parameters are
+      // chosen correctly for this function yet. It only says that
+      // they are valid parameters for any function...
+      let res = FunctionCall.safeParse(structResponse.command);
+      if (res.error) {
+        // try one more time using all lower case
+        res = FunctionCall.safeParse(lowerStructResponse.command);
+      }
+      if (res.success) {
+        const command = res.data;
+        void addFollowUpTask(true, {
+          parentID: newTaskid,
+          role: 'assistant',
+          content: { functionCall: command },
+        });
+      } else {
+        void addFollowUpTask(true, {
+          parentID: newTaskid,
+          role: 'system',
+          content: {
+            message: `The response (${pickProperties(structResponse, ['use tool', 'try again'])})
+ suggest we should use a tool, but we could not parse the ${structResponse.command}`,
+          },
+        });
+      }
+    } else {
+      // in the case that we don't call a tool, provide a "normal" answer :)
+      // this time we declare it as "Open" and set execution to "true"
+      void addFollowUpTask(true, {
+        role: 'assistant',
+        content: { structuredResponse: choice.message.content || '' },
+      });
+    }
+  }
 
   // TODO: what do we do in case of an empty user message, but only a file?
   //       right now, we assume, that user message always comes after uploaded file message :)
@@ -428,70 +498,7 @@ async function generateFollowUpTasksFromResult(
         'toolResult' in finishedTask.content ||
         finishedTask.role === 'system' // this happens e.g. in the case of an error...
       ) {
-        // depending on what role and tasktype the finishedTask has, we
-        // expect different results from our structuredResponse
-        // TODO: we need to do some plausibilitychecks here:
-        //       - e.g. if use tool=true, but no command present
-        // actually, it would be better to do this in the structreReponse processing ? :)
-        const structResponse = await parseChatResponse2TaskDraft(
-          choice.message.content || '',
-        );
-        // we immediatly generate a follow up response here based on the structResponse. This avoids
-        // having to process it in another loop as we know the result already anyways.
-        // the "structuredMessage" type is mainly there so that the LLM can see what it said :).
-        // e.g. in case there is an error...
-
-        // In fact we always decide right here, what we do *after* the structured response and simply add the
-        // structured response as a normal "message" task to the chain...
-        // this way we can put all the parsing logic & interpretation and all of this here. While
-        // our tasks only have to process the actual data they are receiving
-
-        const lowerStructResponse = keysToLowerCase(structResponse);
-        const useTool =
-          yesnoToBoolean(lowerStructResponse['use tool']) &&
-          (!('try again' in lowerStructResponse) ||
-            yesnoToBoolean(lowerStructResponse['try again']));
-
-        if (useTool) {
-          console.log('trying to get tool call from structured response');
-          const newTaskid = await addFollowUpTask(false, {
-            role: 'assistant',
-            content: { structuredResponse: choice.message.content },
-          });
-
-          // this doesn't say anything about whether the parameters are
-          // chosen correctly for this function yet. It only says that
-          // they are valid parameters for any function...
-          let res = FunctionCall.safeParse(structResponse.command);
-          if (res.error) {
-            // try one more time using all lower case
-            res = FunctionCall.safeParse(lowerStructResponse.command);
-          }
-          if (res.success) {
-            const command = res.data;
-            void addFollowUpTask(true, {
-              parentID: newTaskid,
-              role: 'assistant',
-              content: { functionCall: command },
-            });
-          } else {
-            void addFollowUpTask(true, {
-              parentID: newTaskid,
-              role: 'system',
-              content: {
-                message: `The response (${pickProperties(structResponse, ['use tool', 'try again'])})
- suggest we should use a tool, but we could not parse the ${structResponse.command}`,
-              },
-            });
-          }
-        } else {
-          // in the case that we don't call a tool, provide a "normal" answer :)
-          // this time we declare it as "Open" and set execution to "true"
-          void addFollowUpTask(true, {
-            role: 'assistant',
-            content: { structuredResponse: choice.message.content },
-          });
-        }
+        await generateFromStructuredResponse(choice);
         return;
       } else {
         // if 'message' in finishedTask.content && finishedTask.role === 'assistant'
@@ -715,8 +722,7 @@ export async function taskWorker(
           //message: `An error occured: ${error.message}:\n\n${dump(error.details, { skipInvalid: true })}`,
           message: `An error occured:\n\n\`\`\`\n${error.message}${
             error.details
-              ? ':\n\n' +
-                JSON.stringify(makeSerializable(error.details, 5))
+              ? ':\n\n' + JSON.stringify(makeSerializable(error.details, 7))
               : ''
           }\n\`\`\``,
         };
