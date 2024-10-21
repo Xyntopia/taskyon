@@ -716,7 +716,7 @@ export async function taskWorker(
           message: `An error occured:\n\n\`\`\`\n${error.message}${
             error.details
               ? ':\n\n' +
-                JSON.stringify(makeSerializable(error.details, 5, true))
+                JSON.stringify(makeSerializable(error.details, 5))
               : ''
           }\n\`\`\``,
         };
