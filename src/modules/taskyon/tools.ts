@@ -357,14 +357,25 @@ REQUIRED: ${[...requiredProperties].join(', ')}`;
 export function summarizeTools(
   toolIDs: string[],
   tools: Record<string, ToolBase>,
+  short = false,
 ) {
-  const toolStr = toolIDs
-    .map((t) => {
-      const tool = getTool(tools, t);
-      const toolStr = convertToToolCommandString(tool);
-      return toolStr;
-    })
-    .join('\n---\n');
+  if (short) {
+    const toolStr = toolIDs
+      .map((t) => {
+        const tool = getTool(tools, t);
+        return `- ${tool.name}: ${tool.description}`;
+      })
+      .join('\n');
+    return toolStr;
+  } else {
+    const toolStr = toolIDs
+      .map((t) => {
+        const tool = getTool(tools, t);
+        const toolStr = convertToToolCommandString(tool);
+        return toolStr;
+      })
+      .join('\n---\n');
 
-  return `-----\n${toolStr}\n-----`;
+    return `-----\n${toolStr}\n-----`;
+  }
 }

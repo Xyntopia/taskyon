@@ -88,6 +88,8 @@ type tyChatCompletionmessageParam =
 
 // TODO: move most of the functionality of this function into
 //       taskUtils. We need to put this directly into our chat creation method.
+// enhance the chat by inserting prompts before certain message which
+// make them better to understand for the AI...
 export function addPrompts(
   task: Pick<
     TaskNode,
@@ -98,7 +100,7 @@ export function addPrompts(
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
 ): tyChatCompletionmessageParam[] {
   // Check if task has tools and OpenAI tools are not enabled
-  console.log('Creating chat prompts');
+  //console.log('Creating chat prompts');
 
   const useToolChat =
     task.allowedTools?.length && !llmSettings.enableOpenAiTools;
@@ -115,6 +117,31 @@ export function addPrompts(
     tools: summarizeTools(task.allowedTools || [], toolCollection),
     toolList: toolList || 'N/A',
   };
+
+  //console.log('checking if any tools were used during the chat...');
+  // this is used, if we should choose a tool:
+  const toolInstruction = `If you think it is necessary, you can choose one of the following tools to complete the task:\n\n${variables.tools}`;
+
+  const calledFunctions = modifiedOpenAIConversationThread.reduce(
+    (p, c) =>
+      typeof c.content === 'string'
+        ? c.role === 'function'
+          ? p.add(c.name)
+          : c.role === 'tool'
+            ? p.add(c.tool_call_id)
+            : p
+        : p,
+    new Set<string>(),
+  );
+
+  // this one is used, if we don't need to choose one, but it is necessary for the AI to know that a result in
+  // that it has access to was calculated by a tool.
+  const functionCallDescription = summarizeTools(
+    [...calledFunctions],
+    toolCollection,
+    true,
+  );
+  const toolAwareness = `You have access to and used the following tools: \n\n ${functionCallDescription}`;
 
   function getTemplates() {
     const filledTemplates = substituteTemplateVariables(
@@ -165,7 +192,7 @@ export function addPrompts(
       },
       {
         role: 'user',
-        content: `If you think it is necessary, you can choose one of the following tools to complete the task:\n\n${variables.tools}`,
+        content: toolInstruction,
       },
       {
         role: 'user',
@@ -195,7 +222,7 @@ export function addPrompts(
       },
       {
         role: 'system',
-        content: `The following tools are available:\n\n${variables.tools}`,
+        content: toolInstruction,
       },
       {
         role: 'user',
@@ -219,10 +246,18 @@ export function addPrompts(
 
   if (llmSettings.useBasePrompt && !structuredResponseExpected) {
     const filledTemplates = getTemplates();
-    prependMessages.push({
+    prependMessages.unshift({
       role: 'system',
       content: filledTemplates.basePrompt,
     });
+
+    // if any tools appeared during the conversation...
+    if (calledFunctions.size > 0) {
+      prependMessages.push({
+        role: 'system',
+        content: toolAwareness,
+      });
+    }
   }
 
   task.debugging.taskPrompt = [...prependMessages, ...appendMessages];
