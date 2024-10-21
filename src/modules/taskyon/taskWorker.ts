@@ -45,7 +45,13 @@ function extractOpenAIFunctions(
     // if our response contained a call to a function...
     // TODO: update this to the new tools API from Openai
     console.log('A function call was returned...');
-    const functionCall = FunctionCall.parse(toolCall.function);
+    // we convert the object into our own FunctionCall and afterwards parse it, to make
+    // sure it really worked...
+    const functionCallObj: FunctionCall = {
+      name: toolCall.function.name,
+      arguments: JSON.parse(toolCall.function.arguments),
+    };
+    const functionCall = FunctionCall.parse(functionCallObj);
     if (tools[functionCall.name]) {
       functionCalls.push(functionCall);
     }

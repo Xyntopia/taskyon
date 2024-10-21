@@ -64,6 +64,7 @@ export const taskUtils = (
     taskId: string,
     useVisionModels: boolean,
     toolCollection: Record<string, ToolBase>,
+    useOpenAITools: boolean,
     removeDuplicateDescriptions = true,
   ) {
     const openAIMessageThread = [] as OpenAI.ChatCompletionMessageParam[];
@@ -82,6 +83,7 @@ export const taskUtils = (
             useVisionModels,
             getFileMapping,
             getFile,
+            useOpenAITools,
           );
           if (messages) openAIMessageThread.push(...messages);
         }
@@ -125,13 +127,16 @@ async function convertTaskNodeToOpenAIMessage(
   useVisionModels: boolean,
   getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
   getFile: (uuid: string) => Promise<File | undefined>,
+  getTask: TaskGetter,
+  useOpenAITools: boolean,
 ): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[] | undefined> {
   if ('functionCall' in task.content) {
     // the purpose of this is to inform the AI about what function was called and
     // the arguments in it.
     // TODO: its probably a good idea to make this shorter in cas we have very long argumets...
     // TODO: not sure, if this is a good idea with OpenAI Functions, bcause openai seems to already have
-    //       an idea about the functions which were provided with their descriptions, anyways So we should probably leave this out here...
+    //       an idea about the functions which were provided with their descriptions,
+    //       anyways So we should probably leave this out here...
     const functionCallName = task.content.functionCall.name;
 
     // and the result of the function
@@ -139,24 +144,43 @@ async function convertTaskNodeToOpenAIMessage(
       arguments: task.content.functionCall.arguments,
       //...t.result?.toolResult,
     });
-    const functionMessage: OpenAI.ChatCompletionMessageParam = {
-      role: 'function',
-      name: functionCallName,
-      content: `You just used the following tool: ${functionCallName}. The parameters used were: ${functionContent}`,
-    };
+    const msg = `I just used the following tool: ${functionCallName}. The parameters used were: ${functionContent}`;
+    const functionMessage: OpenAI.ChatCompletionMessageParam = useOpenAITools
+      ? {
+          role: 'tool',
+          tool_call_id: functionCallName,
+          content: msg,
+        }
+      : { role: 'assistant', content: msg };
     return [functionMessage];
   } else if ('toolResult' in task.content) {
     // we can still slightly change the content of this message to make clear
     // TODO: instead of using a manual "result of the tool" use the description in the type!
     // maybe refer to the actual tool call here?
-    const message: OpenAI.ChatCompletionMessageParam = {
-      role: 'assistant',
-      content: dump({
-        'The tool that you called returned the following result:':
-          task.content.toolResult,
-      }),
-    };
-    return [message];
+    if (task.parentID && useOpenAITools) {
+      const parentTask = await getTask(task.parentID);
+      if (parentTask?.content && 'functionCall' in parentTask.content) {
+        const toolName = parentTask?.content.functionCall.name;
+        const message: OpenAI.ChatCompletionMessageParam = {
+          role: 'tool',
+          tool_call_id: toolName,
+          content: dump({
+            'The tool that you called returned the following result:':
+              task.content.toolResult,
+          }),
+        };
+        return [message];
+      }
+    } else
+      return [
+        {
+          role: 'assistant',
+          content: dump({
+            'The tool that you called returned the following result:':
+              task.content.toolResult,
+          }),
+        },
+      ];
   } else if ('message' in task.content && task.role != 'function') {
     const message: OpenAI.ChatCompletionMessageParam = {
       role: task.role,

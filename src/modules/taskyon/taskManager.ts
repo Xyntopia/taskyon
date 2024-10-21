@@ -209,7 +209,12 @@ export async function addTask2Tree(
   // but only if a taskname doesn't exist yet.
   if (!newTask.name && task.content && !task.label?.includes('discard')) {
     const toolDefs = await taskManager.updateToolDefinitions();
-    const chat = taskManager.buildChatThread(newTask.id, false, toolDefs);
+    const chat = taskManager.buildChatThread(
+      newTask.id,
+      false,
+      toolDefs,
+      false,
+    );
     const chatString = (await chat).reduce((p, n) => {
       if (typeof n.content === 'string') {
         return p + '\n\n' + n.content;

@@ -51,7 +51,7 @@ const OpenAIMessage = z.object({
     )
     .optional(),
   name: z.string().optional(),
-  role: z.enum(['system', 'user', 'assistant', 'function']),
+  role: z.enum(['system', 'user', 'assistant', 'function', 'tool']),
 });
 export type OpenAIMessage = z.infer<typeof OpenAIMessage>;
 
