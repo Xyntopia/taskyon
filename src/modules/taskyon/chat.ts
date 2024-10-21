@@ -182,6 +182,7 @@ function accumulateChatCompletion(
       // Accumulate tool calls
       for (const tc of chunk.choices[choiceIdx]?.delta?.tool_calls || []) {
         // initialize toolCalls if it doesn't exist
+        // TODO: prepare openai tool cools
         const tcnew = toolCalls[tc.index] || {
           id: '',
           type: 'function',
@@ -329,7 +330,10 @@ export async function callLLM(
                   // Call the callback function to process the chunk
                   contentCallBack(jsonChunk);
                 } catch (err) {
-                  console.error('Failed to parse chunk:', jsonString, err);
+                  throw {
+                    message: `Failed to parse chunk; ${jsonString}`,
+                    details: { err },
+                  };
                 }
               }
             }
