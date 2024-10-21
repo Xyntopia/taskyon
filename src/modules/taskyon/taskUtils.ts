@@ -83,8 +83,7 @@ export const taskUtils = (
             getFileMapping,
             getFile,
           );
-
-          openAIMessageThread.push(...messages);
+          if (messages) openAIMessageThread.push(...messages);
         }
       }
     }
@@ -120,12 +119,13 @@ export const taskUtils = (
 };
 
 // sometimes a single task can get converted to multiple messages
+// and sometime we don't need it at all in the chat :)
 async function convertTaskNodeToOpenAIMessage(
   task: TaskNode,
   useVisionModels: boolean,
   getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
   getFile: (uuid: string) => Promise<File | undefined>,
-): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[]> {
+): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[] | undefined> {
   if ('functionCall' in task.content) {
     // the purpose of this is to inform the AI about what function was called and
     // the arguments in it.
@@ -190,7 +190,8 @@ async function convertTaskNodeToOpenAIMessage(
     }
     return [message];
   }
-  throw Error(`Not able to convert taskNode: ${JSON.stringify(task)}`);
+  // TODO: we would also like to convert structured messages, and simply don't send them to
+  //       the chat, if they're configured as "lower-hierarchy"
 }
 
 async function convertFilesToOpenAIImageContent(
