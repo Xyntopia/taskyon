@@ -12,6 +12,18 @@ export const mdRoutes: RouteRecordRaw[] = [
     }),
   },
   {
+    path: 'docs/',
+    component: () => import('pages/MarkdownPage.vue'),
+    props: (route) => {
+      console.log('open', route);
+      return {
+        folder: 'docs', // we use our public folder here for all markdown files :)
+        filePath: 'index.md',
+      };
+    },
+    meta: { description: 'Taskyon Documentation' },
+  },
+  {
     path: '/docs/:filePath([^.]*)*',
     component: () => import('pages/MarkdownPage.vue'),
     props: (route) => {
