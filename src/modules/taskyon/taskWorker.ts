@@ -295,38 +295,9 @@ async function parseChatResponse2TaskDraft(
  * Tasks can have different *roles* which indicates who produced the content for a task: 
  * [User, Assistant (-> the AI), System (e.g. producing an error message), Function (produced by the function itself)]
  
-here is a chart of the relations:
+here is a chart of the relations & possible transitions between tasks:
 
-```mermaid
-flowchart TD
-    subgraph ContentTypes
-        MessageContent_A[MessageContent_A]
-        MessageContent_U[MessageContent_U]
-        MessageContent_S[MessageContent_S]
-        MessageContent_s_A[MessageContent_s_A]
-        ToolCallContent[ToolCallContent_F]
-        ToolResultContent_F[ToolResultContent_S]
-        UploadedFilesContent[UploadedFilesContent_A/U]
-    end
-
-    subgraph Events
-        TERMINATION{{TERMINATION}}
-        ERROR{{ERROR}}
-    end
-
-    MessageContent_A --> TERMINATION
-    MessageContent_U -- if tools enabled--> MessageContent_s_A
-    MessageContent_U -- with llm tool support--> ToolCallContent
-    MessageContent_U -- with llm tool support--> MessageContent_A
-x    MessageContent_U --> MessageContent_A
-    MessageContent_s_A --> MessageContent_A
-    MessageContent_s_A --> ToolCallContent
-x    ToolCallContent --> ToolResultContent_F
-    UploadedFilesContent --> MessageContent_A
-    UploadedFilesContent --if tools enabled--> MessageContent_s_A
-x    ToolResultContent_F --> MessageContent_s_A
-    MessageContent_S --> MessageContent_s_A
-    ERROR --> MessageContent_S
+- [Transition Map](/docs/conversations/taskyon_description)
 
 ```
 
@@ -337,9 +308,11 @@ x    ToolResultContent_F --> MessageContent_s_A
 //       this would give us better error information. and better code ;).
 // TODO: don't implicitly add tasks here..  we should rather return the
 //       created tasks and explicitly add them to the queue...
+// TODO: make this function a lot mor eexplicit in that it represents our task transition map
 async function generateFollowUpTasksFromResult(
   finishedTask: TaskNode,
   taskManager: TyTaskManager,
+  llmTools: boolean = false,
 ) {
   console.log('generate follow up task');
   const childCosts = {
@@ -362,6 +335,8 @@ async function generateFollowUpTasksFromResult(
     return newTask;
   };
 
+  // we use this to decide whether we should call a function or to continue
+  // this is usually not needed if we use llmTools (like built-in tools from openai API)
   async function generateFollowupFromStructuredResponse(
     choice: OpenAI.Chat.Completions.ChatCompletion.Choice,
   ) {
@@ -452,7 +427,7 @@ async function generateFollowUpTasksFromResult(
         }),
       ];
     }
-
+    // did we get any response from an LLM?
     const choice = finishedTask.result?.chatResponse?.choices[0];
     if (choice) {
       // check if we have any functioncalls from the llm inference
@@ -469,7 +444,6 @@ async function generateFollowUpTasksFromResult(
           }),
         ];
       }
-
       if (!choice.message.content) {
         throw new TaskProcessingError(
           'The response content from the AI was empty!',
@@ -478,24 +452,15 @@ async function generateFollowUpTasksFromResult(
           },
         );
       }
-      // simply return the answer as a normal chat message
+      // This happens, if we
       if (
-        'message' in finishedTask.content &&
-        finishedTask.role === 'user' &&
-        !useTyTools
-      ) {
-        return [
-          await generateFollowUpTask(false, {
-            role: 'assistant',
-            content: { message: choice.message.content },
-          }),
-        ];
-      } else if (
-        ('message' in finishedTask.content &&
-          finishedTask.role === 'user' &&
-          useTyTools) ||
-        'toolResult' in finishedTask.content ||
-        finishedTask.role === 'system' // this happens e.g. in the case of an error...
+        (!llmTools &&
+          (('message' in finishedTask.content &&
+            finishedTask.role === 'user' &&
+            useTyTools) || // this happens, if we use tools, but no LLM-builtin tools
+            'toolResult' in finishedTask.content)) || // toolResult, but no LLM-builtin tools
+        (finishedTask.role === 'system' &&
+          !('toolResult' in finishedTask.content)) // this happens e.g. in the case of an error...
       ) {
         return await generateFollowupFromStructuredResponse(choice);
       } else {
@@ -687,6 +652,7 @@ export async function taskWorker(
         const newTasks = await generateFollowUpTasksFromResult(
           task,
           taskManager,
+          llmSettings.enableOpenAiTools,
         );
         const addTasks =
           (finishedTask: TaskNode) => async (t: (typeof newTasks)[0]) => {

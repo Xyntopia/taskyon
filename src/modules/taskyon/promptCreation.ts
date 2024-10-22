@@ -122,27 +122,6 @@ export function addPrompts(
   // this is used, if we should choose a tool:
   const toolInstruction = `If you think it is necessary, you can choose one of the following tools to complete the task:\n\n${variables.tools}`;
 
-  const calledFunctions = modifiedOpenAIConversationThread.reduce(
-    (p, c) =>
-      typeof c.content === 'string'
-        ? c.role === 'function'
-          ? p.add(c.name)
-          : c.role === 'tool'
-            ? p.add(c.tool_call_id)
-            : p
-        : p,
-    new Set<string>(),
-  );
-
-  // this one is used, if we don't need to choose one, but it is necessary for the AI to know that a result in
-  // that it has access to was calculated by a tool.
-  const functionCallDescription = summarizeTools(
-    [...calledFunctions],
-    toolCollection,
-    true,
-  );
-  const toolAwareness = `You have access to and used the following tools: \n\n ${functionCallDescription}`;
-
   function getTemplates() {
     const filledTemplates = substituteTemplateVariables(
       llmSettings.taskChatTemplates,
@@ -201,7 +180,7 @@ export function addPrompts(
     );
     structuredResponseExpected = true;
     // TODO: to something with file tasks and
-  } else if ('toolResult' in task.content) {
+  } else if ('toolResult' in task.content && !llmSettings.enableOpenAiTools) {
     const requiredSchema = useToolChat
       ? StructuredResponseTypes.ToolResultBase.merge(UseToolBase)
       : StructuredResponseTypes.ToolResultBase;
@@ -251,12 +230,26 @@ export function addPrompts(
       content: filledTemplates.basePrompt,
     });
 
-    // if any tools appeared during the conversation...
-    if (calledFunctions.size > 0) {
-      prependMessages.push({
-        role: 'system',
-        content: toolAwareness,
-      });
+    if (!llmSettings.enableOpenAiTools) {
+      const calledFunctions = getAllFunctionsInOpenAiConversation(
+        modifiedOpenAIConversationThread,
+      );
+      // if any tools appeared during the conversation...
+      if (calledFunctions.size > 0) {
+        // this one is used, if we don't need to choose one, but it is necessary for the AI to know that a result in
+        // that it has access to was calculated by a tool.
+        const functionCallDescription = summarizeTools(
+          [...calledFunctions],
+          toolCollection,
+          true,
+        );
+        const toolAwareness = `You have access to and used the following tools: \n\n ${functionCallDescription}`;
+
+        prependMessages.push({
+          role: 'system',
+          content: toolAwareness,
+        });
+      }
     }
   }
 
@@ -268,6 +261,22 @@ export function addPrompts(
     ...modifiedOpenAIConversationThread,
     ...appendMessages,
   ];
+}
+
+function getAllFunctionsInOpenAiConversation(
+  modifiedOpenAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+) {
+  return modifiedOpenAIConversationThread.reduce(
+    (p, c) =>
+      typeof c.content === 'string'
+        ? c.role === 'function'
+          ? p.add(c.name)
+          : c.role === 'tool'
+            ? p.add(c.tool_call_id)
+            : p
+        : p,
+    new Set<string>(),
+  );
 }
 
 export async function generateCompleteChat(
