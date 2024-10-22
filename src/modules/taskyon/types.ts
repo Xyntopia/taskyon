@@ -589,6 +589,9 @@ export const llmSettings = z.object({
           'This prompt is used to explain to the AI what to do with a specific task.',
         ),
       evaluate: z.string().default('This prompt is used to evaluate errors'),
+      tools: z
+        .string()
+        .default('This prompt is used to give the AI a list of tools.'),
     })
     .describe(
       'These are the definitions of the prompts which are used in chats for different purposes.',

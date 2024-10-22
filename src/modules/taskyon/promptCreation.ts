@@ -118,10 +118,6 @@ export function addPrompts(
     toolList: toolList || 'N/A',
   };
 
-  //console.log('checking if any tools were used during the chat...');
-  // this is used, if we should choose a tool:
-  const toolInstruction = `If you think it is necessary, you can choose one of the following tools to complete the task:\n\n${variables.tools}`;
-
   function getTemplates() {
     const filledTemplates = substituteTemplateVariables(
       llmSettings.taskChatTemplates,
@@ -171,7 +167,7 @@ export function addPrompts(
       },
       {
         role: 'user',
-        content: toolInstruction,
+        content: filledTemplates.tools,
       },
       {
         role: 'user',
@@ -201,7 +197,7 @@ export function addPrompts(
       },
       {
         role: 'system',
-        content: toolInstruction,
+        content: filledTemplates.tools,
       },
       {
         role: 'user',
