@@ -75,7 +75,7 @@ describe('Tool Tests', () => {
     //cy.selectllmmodel('taskyon', 'meta-llama/llama-3.1-8b-instruct');
 
     writeMessage(
-      'can you add two strings for me: "stringone" & "stringtwo" using the provided tool and report the exact result with your final message?{enter}',
+      'I need you to add two strings for me: “stringone” & “stringtwo”. We do this in order to test the provided tool. You have to use the tool. Report the result with your final message!{enter}',
     );
 
     cy.get('.message-container')
