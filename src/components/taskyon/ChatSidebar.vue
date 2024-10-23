@@ -117,7 +117,7 @@
         dense
         flat
         :icon="mdiRobotConfusedOutline"
-        label="Prompts"
+        label="Customize"
         to="/prompts"
       ></q-btn>
       <q-btn
