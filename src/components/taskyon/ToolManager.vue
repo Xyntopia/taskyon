@@ -36,7 +36,7 @@
                 :key="f.name"
                 :label="f.name"
               >
-                <ObjectTreeView :model-value="f"></ObjectTreeView>
+                <ObjectTreeView read-only :model-value="f"></ObjectTreeView>
               </q-expansion-item>
             </q-list>
           </q-expansion-item>

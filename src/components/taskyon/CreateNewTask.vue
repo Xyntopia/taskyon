@@ -49,10 +49,10 @@
           class="row"
         >
           <ObjectTreeView
-            class="col"
-            :model-value="
+            v-model="
               state.llmSettings.taskDraft.content.functionCall.arguments
             "
+            class="col"
             input-field-behavior="auto"
             :separate-labels="false"
           />

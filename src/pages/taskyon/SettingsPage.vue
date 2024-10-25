@@ -40,12 +40,12 @@
         </q-tab-panel>
         <q-tab-panel name="agent config" :class="tabPanelClass">
           <div>All of the Agent configuration</div>
-          <ObjectTreeView :model-value="state.llmSettings" class="fit" />
+          <ObjectTreeView v-model="state.llmSettings" class="fit" />
           <!--{{ state.llmSettings }}-->
         </q-tab-panel>
         <q-tab-panel name="app config" :class="tabPanelClass">
           <div>All of the app configurations</div>
-          <ObjectTreeView :model-value="state.appConfiguration" class="fit" />
+          <ObjectTreeView v-model="state.appConfiguration" class="fit" />
         </q-tab-panel>
       </q-tab-panels>
     </q-card>

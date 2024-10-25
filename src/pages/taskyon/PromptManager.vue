@@ -6,7 +6,7 @@
         <q-toggle v-model="edit" label="Manually edit prompts" />
         <ObjectTreeView
           v-if="edit"
-          :model-value="state.llmSettings.taskChatTemplates"
+          v-model="state.llmSettings.taskChatTemplates"
         />
         <q-card v-else flat>
           <q-card-section>
