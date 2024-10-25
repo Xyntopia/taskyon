@@ -1,5 +1,6 @@
 //import { loadPyodide, PyodideInterface } from 'pyodide';
 import type { PyodideInterface } from 'pyodide';
+import { Lock } from './utils';
 
 /*function loadScript(src: string): Promise<void> {
   // Specify 'void' if the promise doesn't return a value
@@ -25,6 +26,8 @@ export async function execute(python_script: string) {
   return await executeScript(pyodide, python_script);
 }*/
 
+const stdOutLock = new Lock();
+
 export async function executeScript(
   pyodide: PyodideInterface,
   python_script: string,
@@ -33,13 +36,15 @@ export async function executeScript(
   try {
     let stdout_content = '';
 
-    const stdoutHandler = {
+    // wait for pyodide to unlock and then acquire the lock
+    // the lock will automatically get destroyed once the funciton runs out of scope & is destroyed...
+    const unlock = await stdOutLock.lock();
+    pyodide.setStdout({
       batched: (str: string) => {
+        console.log(str);
         stdout_content += str + '\n';
       },
-    };
-
-    pyodide.setStdout(stdoutHandler);
+    });
 
     await pyodide.loadPackagesFromImports(python_script);
 
@@ -48,14 +53,15 @@ export async function executeScript(
     // otherwise is corresponds to one of these types here:
     //  https://pyodide.org/en/stable/usage/type-conversions.htmls
     let result: unknown = await pyodide.runPythonAsync(python_script);
-    console.log('got result python:', result);
     if (convert2Js) {
       result = convertRes2Js(result);
     }
 
     // Reset stdout handler to default behavior if necessary
     pyodide.setStdout({ batched: (str: string) => console.log(str) });
+    console.log('got result python:', { result, stdout: stdout_content });
 
+    void unlock();
     return { result, stdout: stdout_content };
   } catch (error) {
     if (error instanceof Error) {
