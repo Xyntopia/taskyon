@@ -5,59 +5,28 @@
  */
 
 import type { PythonScriptResult } from '../pyodide';
-import type { nlpWorkerResult } from './nlp.worker';
+import type { NlpWorkerInterface } from './nlp.worker';
 import { lruCache } from '../utils';
+import { wrap } from 'comlink';
 
 export const useNlpWorker = () => {
-  const getWebWorker = lruCache<Worker>(10)(() => {
-    const nlpWorker = new Worker(
+  // Wrap the NLP worker with Comlink
+  const nlpWorker = wrap<NlpWorkerInterface>(
+    new Worker(
       /* webpackChunkName: "nlpworker" */
       /* webpackMode: "lazy" */
       /* webpackFetchPriority: "low" */
-      /* webpackIgnore: "true" */
       new URL('./nlp.worker.ts', import.meta.url),
-    );
-
-    nlpWorker.onmessage = ({
-      data,
-    }: {
-      data: nlpWorkerResult & { id: number };
-    }) => {
-      const { id, ...res } = data;
-      const onSuccess = nlpCallbacks[id];
-      if (!onSuccess) {
-        console.error('could not find callback id for nlp worker!');
-        return;
-      }
-      delete nlpCallbacks[id];
-      onSuccess(res.vector);
-    };
-
-    return nlpWorker;
-  });
-
-  const nlpCallbacks: Record<number, (vector: number[] | undefined) => void> =
-    {};
-
-  const vectorizeText = (() => {
-    let id = 0; // identify a Promise
-    return (text: string | undefined, modelName: string) => {
-      // the id could be generated more carefully
-      id = (id + 1) % Number.MAX_SAFE_INTEGER;
-      return new Promise<number[] | undefined>((onSuccess) => {
-        nlpCallbacks[id] = onSuccess;
-        console.log('calling nlp webworker');
-        getWebWorker().postMessage({
-          text,
-          modelName,
-          id,
-        });
-      });
-    };
-  })();
+    ),
+  );
 
   return {
-    vectorizeText,
+    async vectorizeText(text: string, modelName: string) {
+      return await nlpWorker.vectorizeText(text, modelName);
+    },
+    async loadModel(modelName: string) {
+      await nlpWorker.load(modelName);
+    },
   };
 };
 

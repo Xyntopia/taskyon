@@ -1,30 +1,23 @@
+import { expose } from 'comlink';
 import { loadModel, loadTokenizer } from './mlModels';
 import { getVector } from './nlp';
 
-export type nlpWorkerResult = { vector: number[] | undefined; id: number };
-
-self.onmessage = async ({
-  data,
-}: {
-  data: {
-    text: string;
-    modelName: string;
-    id: number;
-  };
-}) => {
-  const message: nlpWorkerResult = { vector: undefined, id: data.id };
-  if (data.text) {
-    try {
-      const vector = await getVector(data.text, data.modelName);
-      message.vector = vector;
-    } catch (error) {
-      // Handle any errors here
-      console.error(error);
-    }
-    self.postMessage(message);
-  } else {
-    await loadModel(data.modelName);
-    await loadTokenizer(data.modelName);
-    self.postMessage(message);
-  }
+export type NlpWorkerInterface = {
+  load: (modelName: string) => Promise<void>;
+  vectorizeText: (
+    text: string,
+    modelName: string,
+  ) => Promise<number[] | undefined>;
 };
+
+const nlpWorker: NlpWorkerInterface = {
+  async load(modelName) {
+    await loadModel(modelName);
+    await loadTokenizer(modelName);
+  },
+  async vectorizeText(text, modelName) {
+    return await getVector(text, modelName);
+  },
+};
+
+expose(nlpWorker);
