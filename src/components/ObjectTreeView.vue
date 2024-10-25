@@ -134,10 +134,6 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
-  modelValue: {
-    type: Object as PropType<Record<string, unknown> | undefined>,
-    required: true,
-  },
   inputFieldBehavior: {
     type: String,
     default: 'auto' as 'auto' | 'textarea' | 'autogrow',
@@ -160,12 +156,14 @@ const props = defineProps({
   },
 });
 
-const { modelValue, descriptions } = toRefs(props);
-const treeObject = modelValue;
+const modelValue = defineModel<Record<string, unknown> | undefined>({
+  required: true,
+});
+const { descriptions } = toRefs(props);
 
 const updateValue = (keyPath: string[], value: unknown) => {
-  if (treeObject.value) {
-    let currentPart: Record<string, unknown> = treeObject.value;
+  if (modelValue.value) {
+    let currentPart: Record<string, unknown> = modelValue.value;
 
     // Iterate over the keyPath to find the correct property to update
     for (let i = 0; i < keyPath.length - 1; i++) {
@@ -256,8 +254,8 @@ const transformToTreeNodes = (
 };
 
 const nodeTree = computed(() => {
-  if (treeObject.value) {
-    return transformToTreeNodes(treeObject.value);
+  if (modelValue.value) {
+    return transformToTreeNodes(modelValue.value);
   } else {
     return [];
   }
