@@ -6,7 +6,9 @@ export function generateTaskyonMeta(
 ) {
   const fallbackTitle = route.path.split('/').filter(Boolean).pop() ?? 'Main';
   const title = (route.meta.title as string) ?? fallbackTitle;
-  const description = route.meta.description ?? 'Taskyon AI Chat';
+  const description =
+    route.meta.description ??
+    'Taskyon: Infuse your webpages with intelligent AI for personalized interactions and local-first privacy, adapting to your unique needs. ?';
   const imageUrl = 'https://taskyon.space/taskyon_social_preview.png'; // Update with the actual image URL
 
   const meta: MetaOptions = {
@@ -39,6 +41,15 @@ export function generateTaskyonMeta(
       itempropImage: {
         itemprop: 'image',
         content: imageUrl,
+      },
+
+      author: {
+        name: 'author',
+        content: 'Xyntopia LLC', // Replace with the actual author name
+      },
+      publishDate: {
+        name: 'publish_date',
+        content: process.env.PUBLISH_DATE, // This will be set by Webpack
       },
 
       // Open Graph / Facebook meta tags

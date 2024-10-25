@@ -180,6 +180,7 @@ export default configure((ctx) => {
       env: {
         APPNAME: APPNAME,
         DESCRIPTION: DESCRIPTION,
+        PUBLISH_DATE: JSON.stringify(new Date().toISOString()),
       },
       //devtool: 'source-map', // TODO: turn this off for actua production...
       vueLoaderOptions: {
