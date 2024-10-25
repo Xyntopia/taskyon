@@ -60,6 +60,7 @@
           filled
           dense
           autogrow
+          :type="typeof prop.node.value === 'number' ? 'text' : 'text'"
           :debounce="debounce"
           :model-value="prop.node.value"
           @update:model-value="
@@ -124,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs, PropType } from 'vue';
+import { computed, PropType } from 'vue';
 import { QTreeNode } from 'quasar';
 import JsonInput from 'components/JsonInput.vue'; // Adjust the path as necessary
 import InfoDialog from 'components/InfoDialog.vue';
@@ -159,19 +160,23 @@ const props = defineProps({
 const modelValue = defineModel<Record<string, unknown> | undefined>({
   required: true,
 });
-const { descriptions } = toRefs(props);
 
 const updateValue = (keyPath: string[], value: unknown) => {
   if (modelValue.value) {
-    let currentPart: Record<string, unknown> = modelValue.value;
+    // Create a new object to ensure reactivity
+    const newValue = { ...modelValue.value };
+    let currentPart: Record<string, unknown> = newValue;
 
     // Iterate over the keyPath to find the correct property to update
     for (let i = 0; i < keyPath.length - 1; i++) {
       currentPart = currentPart[keyPath[i]!] as Record<string, unknown>;
     }
 
-    // Update the value at the final key, with a type assertion
+    // Update the value at the final key
     currentPart[keyPath[keyPath.length - 1]!] = value;
+
+    // Emit the entire new object and emit vue events etc...
+    modelValue.value = newValue;
   }
 };
 
