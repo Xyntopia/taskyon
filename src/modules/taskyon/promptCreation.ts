@@ -9,7 +9,7 @@ import {
 import { zodToYamlString } from '../yamlUtils';
 import type OpenAI from 'openai';
 import { dump } from 'js-yaml';
-import { mapFunctionNames } from './chat';
+import { mapFunctionNames } from './tools';
 import type { TyTaskManager } from './taskManager';
 
 /**

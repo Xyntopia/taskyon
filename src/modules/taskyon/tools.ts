@@ -266,3 +266,10 @@ export function summarizeTools(
     return `-----\n${toolStr}\n-----`;
   }
 }
+
+export function mapFunctionNames(
+  toolNames: string[],
+  tools: Record<string, ToolBase>,
+): ToolBase[] {
+  return toolNames?.map((t) => tools[t] as ToolBase).filter((t) => t);
+}

@@ -1,5 +1,6 @@
 import { loadPyodide, PyProxy, type PyodideInterface } from 'pyodide';
 import { PythonScriptResult, executeScript } from './pyodide';
+import { expose } from 'comlink';
 
 //declare const self: ServiceWorkerGlobalScope
 
@@ -27,49 +28,31 @@ async function getPyodide() {
   return pyodideEnv;
 }
 
-self.onmessage = async ({
-  data,
-}: {
-  data: {
-    python: string;
-    id: string;
-    params?: unknown[];
-  };
-}) => {
-  // make sure loading is done
-  console.log('execute python script');
-  const pyodide = await getPyodide();
+const pythonWorker = {
+  async runPythonScript(script: string, params?: unknown[]) {
+    console.log('execute python script');
+    const pyodide = await getPyodide();
+    let result: PythonScriptResult;
 
-  let result: PythonScriptResult;
-  if (data.params) {
-    //execute as a function with params!
-    const tmp = await executeScript(pyodide, data.python, false);
-    if (tmp) {
-      const func = tmp.result as (...args: unknown[]) => {
-        toJs: () => unknown;
-      };
-      const funcres = func(...data.params).toJs();
-      result = {
-        stdout: tmp.stdout || '',
-        result: funcres,
-      };
+    if (params) {
+      const tmp = await executeScript(pyodide, script, false);
+      if (tmp) {
+        const func = tmp.result as (...args: unknown[]) => {
+          toJs: () => unknown;
+        };
+        const funcRes = func(...params).toJs();
+        result = { stdout: tmp.stdout || '', result: funcRes };
+      } else {
+        result = { stdout: '', result: undefined };
+      }
     } else {
-      result = {
-        stdout: '',
-        result: undefined,
-      };
+      result = await executeScript(pyodide, script);
     }
-  } else {
-    result = await executeScript(pyodide, data.python);
-  }
 
-  /*
-  // Don't bother yet with this line, suppose our API is built in such a way:
-  const { id, python, ...context } = event.data;
-  // The worker copies the context in its own "memory" (an object mapping name to values)
-  for (const key of Object.keys(context)) {
-    self[key] = context[key];
-  }*/
-  // Now is the easy part, the one that is similar to working in the main thread:
-  self.postMessage({ result, id: data.id });
+    return result;
+  },
 };
+
+export type pythonWorker = typeof pythonWorker;
+
+expose(pythonWorker);

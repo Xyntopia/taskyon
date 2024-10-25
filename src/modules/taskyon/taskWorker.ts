@@ -1,11 +1,11 @@
 import {
   callLLM,
   enrichWithUsageInfos,
-  estimateChatTokens,
   generateHeaders,
   getOpenRouterGenerationInfo,
   getTaskyonCosts,
 } from './chat';
+import { useNlpWorker } from './webWorkerApi';
 import {
   generateCompleteChat,
   generateOpenAIToolDeclarations,
@@ -35,6 +35,9 @@ import {
   sleep,
 } from '../utils';
 import { isTaskyonKey } from '../crypto';
+
+// get worker function for our chat :)
+const { estimateChatTokens } = useNlpWorker();
 
 function extractOpenAIFunctions(
   choice: OpenAI.ChatCompletion['choices'][0],
