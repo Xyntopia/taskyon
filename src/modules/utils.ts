@@ -347,6 +347,16 @@ export class Lock {
   //      in a function...
   private _promise: Promise<void> | null = null;
 
+  /**
+   * Acquires the lock if available. Returns a `release` function to be called
+   * when done. Waits if the lock is already held.
+   *
+   * @returns {Promise<() => void>} A function to release the lock.
+   * @example
+   * const release = await lock.lock();
+   * try { ...critical section... } finally { release(); }
+   *
+   */
   async lock(): Promise<() => void> {
     let outerResolve: () => void;
     if (!this._promise) {
@@ -370,6 +380,13 @@ export class Lock {
     }
   }
 
+  /**
+   * Waits until the lock is released without acquiring it.
+   *
+   * @returns {Promise<void>} Resolves when the lock is free.
+   * @example
+   * await lock.waitForUnlock();
+   */
   async waitForUnlock(): Promise<void> {
     if (this._promise) {
       await this._promise;
