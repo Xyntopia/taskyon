@@ -10,31 +10,36 @@ import { expose } from 'comlink';
 // importScripts('https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js');
 
 let pyodideEnv: PyodideInterface | undefined = undefined;
+let pyodideInitPromise: Promise<PyodideInterface> | null = null;
 
 async function getPyodide() {
+  if (pyodideEnv) return pyodideEnv;
+  if (pyodideInitPromise) return pyodideInitPromise; // Return ongoing initialization promise
+
   console.log('load Pyodide');
-  if (pyodideEnv) {
-    return pyodideEnv;
-  }
-  pyodideEnv = await loadPyodide({
+  pyodideInitPromise = loadPyodide({
     indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
+  }).then(async (pyodide) => {
+    await pyodide.loadPackage(['micropip']);
+    const micropip = pyodide.pyimport('micropip') as PyProxy & {
+      install: (txt: string) => Promise<void>;
+    };
+    await micropip.install('yake');
+    pyodideEnv = pyodide;
+    pyodideInitPromise = null; // Clear the promise after successful load
+    return pyodide;
   });
-  //void pyodideEnv.loadPackage(['numpy', 'pytz']);
-  await pyodideEnv.loadPackage(['micropip']);
-  const micropip = pyodideEnv.pyimport('micropip') as PyProxy & {
-    install: (txt: string) => Promise<void>;
-  };
-  await micropip.install('yake');
-  return pyodideEnv;
+
+  return pyodideInitPromise;
 }
 
 const pythonWorker = {
   async runPythonScript(script: string, params?: unknown[]) {
-    console.log('execute python script');
     const pyodide = await getPyodide();
     let result: PythonScriptResult;
 
     if (params) {
+      console.log('execute python script with params');
       const tmp = await executeScript(pyodide, script, false);
       if (tmp) {
         const func = tmp.result as (...args: unknown[]) => {
@@ -46,6 +51,7 @@ const pythonWorker = {
         result = { stdout: '', result: undefined };
       }
     } else {
+      console.log('execute python script without params');
       result = await executeScript(pyodide, script);
     }
 
