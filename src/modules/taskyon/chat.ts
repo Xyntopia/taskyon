@@ -7,7 +7,7 @@ import type {
 } from './types';
 import type { TyTaskManager } from './taskManager';
 import type OpenAI from 'openai';
-import { sleep, asnycasyncTimeLruCache } from '../utils';
+import { sleep, asyncTimeLruCache } from '../utils';
 import { TaskProcessingError, apiConfig } from './types';
 
 export function generateHeaders(
@@ -393,12 +393,7 @@ export async function enrichWithUsageInfos(
   }
 }
 
-export const availableModels = asnycasyncTimeLruCache<Model[]>(
-  10, // max 10 entries
-  60 * 60 * 1000, //1h
-  true, // use localStorage for persistence
-  'modelCache', // save it here..
-)(async (
+const availableModelsTmp = async (
   modelsUrl: string,
   apiKey: string,
   headers: Record<string, string>,
@@ -435,4 +430,11 @@ export const availableModels = asnycasyncTimeLruCache<Model[]>(
     console.error('Error fetching models:', error);
     throw error; // re-throwing the error to be handled by the calling code
   }
-});
+};
+
+export const availableModels = asyncTimeLruCache(
+  10, // max 10 entries
+  60 * 60 * 1000, //1h
+  true, // use localStorage for persistence
+  'modelCache', // save it here..
+)(availableModelsTmp);
