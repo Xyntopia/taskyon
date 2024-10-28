@@ -65,6 +65,7 @@ function processMarkdown(markdown: string) /*: Promise<partialTaskDraft[]>*/ {
 }
 
 async function addTasks() {
+  console.log('adding new tasks!!')
   let parentId: string | undefined = undefined;
   let markdown: string | undefined = undefined;
   if (props.markdown) {

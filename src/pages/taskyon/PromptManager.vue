@@ -85,7 +85,7 @@ const handleReady = (payload) => {
 */
 
 async function getAllTools() {
-  return (await state.getTaskManager()).updateToolDefinitions();
+  return (await state.getTaskManager()).updateToolDefinitions(true);
 }
 
 const currentPromptYaml = computed(() => {

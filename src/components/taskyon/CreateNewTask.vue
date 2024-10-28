@@ -324,7 +324,6 @@
 
 <script setup lang="ts">
 import { computed, ref, toRaw, toRefs } from 'vue';
-import { estimateChatTokens } from 'src/modules/taskyon/chat';
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools';
 import {
   FunctionArguments,
@@ -366,10 +365,11 @@ import {
   mdiTools,
   mdiFunctionVariant,
 } from '@quasar/extras/mdi-v6';
-import { deepMerge } from 'src/modules/utils';
+import { deepCopy, deepMerge } from 'src/modules/utils';
 import { getApiConfig } from 'src/modules/taskyon/taskWorker';
 import { addPrompts } from 'src/modules/taskyon/promptCreation';
 import type { ChatCompletionMessageParam } from 'openai/resources/index.mjs';
+import { useNlpWorker } from 'src/modules/taskyon/webWorkerApi';
 
 const CodeEditor = defineAsyncComponent(
   () =>
@@ -408,7 +408,7 @@ const fileAttachments = ref<File[]>([]); // holds all attached files as a "taskl
 async function getAllTools() {
   const foundTools = await (
     await state.getTaskManager()
-  ).updateToolDefinitions();
+  ).updateToolDefinitions(true);
   return foundTools;
 }
 
@@ -543,6 +543,8 @@ const currentnewTask = computed(() => {
   return task as TaskNode; // we can do this, because we defined the "role"
 });
 
+const { estimateChatTokens } = useNlpWorker();
+
 // TODO:   our token estimation needs to become much better ^^
 const estimatedTokens = ref<number>(0);
 watchDebounced(
@@ -585,10 +587,11 @@ watchDebounced(
       );
     }
 
+    // we need to deepCopy both ref values, so that we can send them to the thread!!
     const estimated = await estimateChatTokens(
-      currentnewTask.value,
+      deepCopy(currentnewTask.value),
       messages,
-      toolCollection.value,
+      deepCopy(toolCollection.value),
     );
 
     const newTokens = Object.values(estimated || {}).reduce(

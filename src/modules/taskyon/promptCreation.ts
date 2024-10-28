@@ -280,7 +280,7 @@ export async function generateCompleteChat(
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
 ) {
-  const toolDefs = await taskManager.updateToolDefinitions();
+  const toolDefs = await taskManager.updateToolDefinitions(true);
   let openAIConversationThread = await taskManager.buildChatThread(
     task.id,
     llmSettings.tryUsingVisionModels,

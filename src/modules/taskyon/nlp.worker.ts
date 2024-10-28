@@ -1,5 +1,4 @@
 import { expose } from 'comlink';
-import { loadModel, loadTokenizer } from './mlModels';
 import { getVector } from './nlp';
 import type OpenAI from 'openai';
 import type { OpenAIMessage, ToolBase, TaskNode } from './types';
@@ -62,11 +61,6 @@ export async function countToolTokens(functionList: ToolBase[]) {
 }
 
 const nlpWorker = {
-  // TODO: do we need this here?
-  async load(modelName: string) {
-    await loadModel(modelName);
-    await loadTokenizer(modelName);
-  },
   // TODO: make sure, we don't reload models & tokenizers all the time!!
   async vectorizeText(text: string, modelName: string) {
     return await getVector(text, modelName);

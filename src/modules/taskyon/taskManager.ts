@@ -208,7 +208,7 @@ export async function addTask2Tree(
   // extract keywordsfrom entire chat and use it to name the task...
   // but only if a taskname doesn't exist yet.
   if (!newTask.name && task.content && !task.label?.includes('discard')) {
-    const toolDefs = await taskManager.updateToolDefinitions();
+    const toolDefs = await taskManager.updateToolDefinitions(true);
     const chat = taskManager.buildChatThread(
       newTask.id,
       false,
@@ -748,8 +748,10 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     return [];
   }
 
-  async function updateToolDefinitions(): Promise<
-    Record<string, ToolBase | Tool>
+  async function updateToolDefinitions<T extends boolean>(
+    removeFunction: T = false as T,
+  ): Promise<
+    T extends true ? Record<string, ToolBase> : Record<string, ToolBase | Tool>
   > {
     if (taskyonDB) {
       const tasks = await searchTasks({
@@ -767,8 +769,8 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       ): task is TaskNode & { content: { message: string } } {
         return 'message' in task.content;
       }
+
       const toolDefs = tasks.filter(hasMessage);
-      //const toolDefs = tasks.filter((task) => 'message' in task);
       const parsedToolDefs = toolDefs.flatMap((task) => {
         try {
           const toolDef = ToolBase.parse(JSON.parse(task.content.message));
@@ -777,15 +779,28 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
           return [];
         }
       });
+
+      // Merge parsed tool definitions with default tools
       return parsedToolDefs.concat(Object.values(defaultTools)).reduce(
         (pv, cv) => {
-          pv[cv.name] = cv;
+          if (removeFunction && 'function' in cv) {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { function: unused, ...toolBaseOnly } = cv as Tool;
+            pv[toolBaseOnly.name] = toolBaseOnly;
+          } else {
+            pv[cv.name] = cv;
+          }
           return pv;
         },
-        {} as Record<string, ToolBase>,
+        {} as T extends true
+          ? Record<string, ToolBase>
+          : Record<string, ToolBase | Tool>,
       );
     }
-    return {};
+
+    return {} as T extends true
+      ? Record<string, ToolBase>
+      : Record<string, ToolBase | Tool>;
   }
 
   async function getJsonTaskBackup() {

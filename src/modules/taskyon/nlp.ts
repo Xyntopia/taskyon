@@ -4,7 +4,7 @@ import { Tensor, cat, mean, cos_sim, magnitude } from '@xenova/transformers';
 
 export async function getVector(
   txt: string,
-  modelName: string
+  modelName: string,
 ): Promise<number[] | undefined> {
   const { meanPooledVector } = await vectorize(txt, modelName);
   return meanPooledVector.tolist()[0] as number[];
@@ -36,7 +36,7 @@ function mergeVectors(chunkVectors: Tensor[], overlap: number) {
     const previousChunk = chunkVectors[i - 1];
     const overlapPrevious = previousChunk.slice(
       [0, 1],
-      [chunkLength - overlap, Infinity]
+      [chunkLength - overlap, Infinity],
     );
     const overlapCurrent = currentChunk.slice([0, 1], [0, overlap]);
     const overlapTensor = cat([overlapPrevious, overlapCurrent], 0);
@@ -47,7 +47,7 @@ function mergeVectors(chunkVectors: Tensor[], overlap: number) {
     // Add the remaining part of the current chunk if it's not the last chunk
     if (i < chunkVectors.length - 1) {
       mergedVectors.push(
-        currentChunk.slice([0, 1], [overlap, chunkLength - overlap])
+        currentChunk.slice([0, 1], [overlap, chunkLength - overlap]),
       );
     } else {
       mergedVectors.push(currentChunk.slice([0, 1], [overlap, Infinity]));
@@ -63,7 +63,7 @@ export async function vectorize(
   txt: string,
   modelName: string,
   chunkSize = 512,
-  overlap = 50
+  overlap = 50,
 ) {
   console.log('Calculating vectors for long text');
   const tokenizer = await loadTokenizer(modelName);
@@ -111,7 +111,7 @@ export async function vectorize(
   }
 
   // Merge the chunk vectors
-  let finalVector: Tensor;
+  let finalVector: Tensor | undefined;
   if (chunkVectors.length > 1) {
     finalVector = mergeVectors(chunkVectors, overlap);
   } else {
@@ -141,7 +141,7 @@ export function tokenVecsToWordVecs(tokens: string[], vectors: Tensor) {
   let currentWordStartIndex = 0;
 
   for (let i = 1; i < tokens.length; i++) {
-    const token = tokens[i];
+    const token = tokens[i]!;
 
     // Check if the token is a continuation of the previous one
     if (token.startsWith('##')) {
@@ -191,7 +191,7 @@ export const useCachedModels = () => {
 export async function extractKeywords(
   txt: string,
   modelName: string,
-  numKeywords = 5 // Default number of keywords to extract
+  numKeywords = 5, // Default number of keywords to extract
 ) {
   console.log('extract keywords!');
   //console.log('language detected:', lang);
@@ -205,11 +205,11 @@ export async function extractKeywords(
   // Tokenize the text to get individual words
   const tokenizer = await loadTokenizer(modelName);
   const tokens = tokenizer.model.convert_ids_to_tokens(
-    token_ids.flatten().tolist()
+    token_ids.flatten().tolist(),
   );
   const { words, wordVectors } = tokenVecsToWordVecs(
     tokens,
-    individualVectors.squeeze(0)
+    individualVectors.squeeze(0),
   );
 
   // remove all stop words from text
@@ -223,7 +223,7 @@ export async function extractKeywords(
   filteredWordVecs.sort((a, b) => (b[1] as number) - (a[1] as number));
   const meanVecList = mean(cat(wordVectors, 0), 0).tolist();
   const cosineSimilarities = wordVectors.map((vector) =>
-    cos_sim(meanVecList[0], vector.tolist())
+    cos_sim(meanVecList[0], vector.tolist()),
   );
 
   // Pair words with their cosine similarities

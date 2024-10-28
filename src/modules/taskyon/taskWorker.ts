@@ -143,13 +143,15 @@ export async function processChatTask(
         task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
         task.debugging.resultTokens = chatCompletion.usage.completion_tokens;
         task.debugging.taskTokens = chatCompletion.usage.total_tokens;
-      } else {
-        task.debugging.estimatedTokens = await estimateChatTokens(
-          task,
-          openAIConversationThread,
-          await taskManager.updateToolDefinitions(),
-        );
       }
+      const allTools = await taskManager.updateToolDefinitions(true);
+      task.debugging.estimatedTokens = await estimateChatTokens(
+        // we are doing a deepCopy here in order to make sure we loose the^ reactivity...
+        // TODO:  once our tasks are immutable and non-reactive, we can remove this..
+        deepCopy(task),
+        openAIConversationThread,
+        allTools,
+      );
 
       // TODO: replace this below with a taskNode in lower hierachy which does this :)
       if (chatCompletion && llmSettings.selectedApi === 'openrouter.ai') {
@@ -436,7 +438,7 @@ async function generateFollowUpTasksFromResult(
       // check if we have any functioncalls from the llm inference
       const functionCall = extractOpenAIFunctions(
         choice,
-        await taskManager.updateToolDefinitions(),
+        await taskManager.updateToolDefinitions(true),
       );
       if (functionCall[0]) {
         // TODO: enable multiple parallel function calls
@@ -596,7 +598,7 @@ async function processTask(
     // in the case we don't have a result yet, wPe need to calculate it :)
     task = await processFunctionTask(
       task,
-      await taskManager.updateToolDefinitions(),
+      await taskManager.updateToolDefinitions(false),
       taskWorkerController,
     );
   } else {
