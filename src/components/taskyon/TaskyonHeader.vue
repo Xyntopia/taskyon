@@ -189,7 +189,7 @@ defineProps<{
   minMode: boolean | undefined;
   btnSize: 'xs' | 'md';
 }>();
-const drawerOpen = defineModel<boolean>('drawerOpen', { required: true });
+const drawerOpen = defineModel<boolean>('drawerOpen', { required: false });
 
 const TableOfChatContent = defineAsyncComponent(
   () =>

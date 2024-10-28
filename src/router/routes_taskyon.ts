@@ -3,7 +3,7 @@ import { mdRoutes } from './routes_default';
 import { defineAsyncComponent } from 'vue';
 import LoadCircle from 'components/LoadingCircle.vue';
 
-export const taskyonRoutes = {
+export const taskyonRoutes = [{
   path: '/',
   component: () => import('layouts/TaskyonLayout.vue'),
   children: [
@@ -57,16 +57,6 @@ export const taskyonRoutes = {
       },
     },
     {
-      path: 'tools',
-      component: () => import('components/taskyon/ToolManager.vue'),
-      meta: { title: 'Tool Manager', description: 'Create & Manage AI Tools' },
-    },
-    {
-      path: 'integration',
-      component: () => import('components/taskyon/ToolManager.vue'),
-      meta: { title: 'Integration', description: 'Integrate Tasyon' },
-    },
-    {
       path: 'prompts',
       component: () => import('pages/taskyon/PromptManager.vue'),
       meta: {
@@ -81,10 +71,21 @@ export const taskyonRoutes = {
     },
     ...mdRoutes,
   ],
-};
+},
+{
+  path: '/tools',
+  component: () => import('src/layouts/ToolManager.vue'),
+  meta: { title: 'Tool Manager', description: 'Create & Manage AI Tools' },
+},
+{
+  path: '/integration',
+  component: () => import('src/layouts/ToolManager.vue'),
+  meta: { title: 'Integration', description: 'Integrate Tasyon' },
+},];
+
 
 const routes: RouteRecordRaw[] = [
-  taskyonRoutes,
+  ...taskyonRoutes,
 
   // Always leave this as last one,
   // but you can also remove it
