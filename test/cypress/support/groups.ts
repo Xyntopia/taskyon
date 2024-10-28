@@ -7,7 +7,9 @@ export function selectllmmodel(provider: string, modelId: string = '') {
     cy.wait(100)
       .contains('Select LLM Model for answering/solving the task.')
       .click()
-      .type(modelId + '{enter}');
+      .type(modelId)
+      .wait(200)
+      .type('{enter}{esc}');
   //cy.get('.q-menu').contains(modelId).click();
 }
 
@@ -15,7 +17,9 @@ export function getLastMessage(
   selector: string = '.assistant.message',
   timeout: number = 100000,
 ) {
-  return cy.get(`${selector} > .message-container .q-markdown`, { timeout }).last();
+  return cy
+    .get(`${selector} > .message-container .q-markdown`, { timeout })
+    .last();
 }
 
 export function checkLastMessage(

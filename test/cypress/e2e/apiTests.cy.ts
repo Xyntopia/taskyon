@@ -33,7 +33,7 @@ describe('taskyon API', () => {
     cy.get('[aria-label="Expert mode"] > .q-toggle__inner').click();
     cy.get('[aria-label="Show task costs"] > .q-toggle__inner').click();
 
-    cy.reload();
+    cy.reload().wait(1000);
 
     cy.get('[aria-label="toggle task settings"]').click();
     cy.get('[aria-label="ai service settings"]').click();
