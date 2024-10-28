@@ -34,49 +34,38 @@ async function loadTransformers() {
 const modelStore = {
   models: {} as Record<string, PreTrainedModel>,
   tokenizers: {} as Record<string, PreTrainedTokenizer>,
-  loading: {} as Record<string, boolean>,
+  loading: {} as Record<string, Promise<void>>,
 };
 
-async function waitForModelToLoad(modelName: string) {
-  while (modelStore.loading[modelName] === false) {
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-}
-
 export async function loadModel(modelName: string) {
-  if (modelStore.loading[modelName] === true) {
-    // Model is already being loaded, wait for it to finish
-    await waitForModelToLoad(modelName);
-  } else {
-    modelStore.loading[modelName] = true;
-    try {
+  // Check if loading already in progress
+  if (!modelStore.loading[modelName]) {
+    modelStore.loading[modelName] = (async () => {
       console.log(`load model: ${modelName}`);
       const tf = await loadTransformers();
-      modelStore.models[modelName] = await tf.AutoModel.from_pretrained(
-        modelName
-      );
-    } finally {
-      modelStore.loading[modelName] = false;
-    }
+      modelStore.models[modelName] =
+        await tf.AutoModel.from_pretrained(modelName);
+    })().catch((error) => {
+      console.error(`Failed to load model ${modelName}:`, error);
+      throw error; // Ensure loading promise rejects on failure
+    });
   }
+  await modelStore.loading[modelName];
   return modelStore.models[modelName];
 }
 
 export async function loadTokenizer(modelName: string) {
-  if (modelStore.loading[modelName] === true) {
-    // Tokenizer is already being loaded, wait for it to finish
-    await waitForModelToLoad(modelName);
-  } else {
-    modelStore.loading[modelName] = true;
-    try {
+  if (!modelStore.loading[modelName]) {
+    modelStore.loading[modelName] = (async () => {
       console.log(`load tokenizer: ${modelName}`);
       const tf = await loadTransformers();
-      modelStore.tokenizers[modelName] = await tf.AutoTokenizer.from_pretrained(
-        modelName
-      );
-    } finally {
-      modelStore.loading[modelName] = false;
-    }
+      modelStore.tokenizers[modelName] =
+        await tf.AutoTokenizer.from_pretrained(modelName);
+    })().catch((error) => {
+      console.error(`Failed to load tokenizer ${modelName}:`, error);
+      throw error;
+    });
   }
+  await modelStore.loading[modelName];
   return modelStore.tokenizers[modelName];
 }
