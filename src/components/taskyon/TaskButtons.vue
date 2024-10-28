@@ -39,7 +39,6 @@
       <q-tooltip :delay="0"> Start a new thread with this message! </q-tooltip>
     </q-btn>
     <q-btn
-      v-if="task.childrenIDs.length > 0"
       class="col-auto"
       size="sm"
       dense
