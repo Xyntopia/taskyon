@@ -5,6 +5,7 @@
       :class="minMode ? 'q-gutter-xs row q-px-sm' : 'q-gutter-xs'"
     >
       <q-btn
+        v-if="drawerOpen !== undefined"
         flat
         round
         dense

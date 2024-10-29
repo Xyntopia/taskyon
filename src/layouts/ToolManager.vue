@@ -1,6 +1,6 @@
 <template>
   <q-layout view="lHh LpR lfr">
-    <TaskyonHeader :min-mode="false" btn-size="md" />
+    <TaskyonHeader :min-mode="false" btn-size="md" :drawer-open="undefined" />
 
     <q-page-container>
       <UnderConstructionHint />
