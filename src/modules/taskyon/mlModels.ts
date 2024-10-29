@@ -32,40 +32,25 @@ async function loadTransformers() {
 }
 
 const modelStore = {
-  models: {} as Record<string, PreTrainedModel>,
-  tokenizers: {} as Record<string, PreTrainedTokenizer>,
-  loading: {} as Record<string, Promise<void>>,
+  models: {} as Record<string, Promise<PreTrainedModel>>,
+  tokenizers: {} as Record<string, Promise<PreTrainedTokenizer>>,
 };
 
 export async function loadModel(modelName: string) {
+  console.log(`load model: ${modelName}`);
   // Check if loading already in progress
-  if (!modelStore.loading[modelName]) {
-    modelStore.loading[modelName] = (async () => {
-      console.log(`load model: ${modelName}`);
-      const tf = await loadTransformers();
-      modelStore.models[modelName] =
-        await tf.AutoModel.from_pretrained(modelName);
-    })().catch((error) => {
-      console.error(`Failed to load model ${modelName}:`, error);
-      throw error; // Ensure loading promise rejects on failure
-    });
+  if (!modelStore.models[modelName]) {
+    const tf = await loadTransformers();
+    modelStore.models[modelName] = tf.AutoModel.from_pretrained(modelName);
   }
-  await modelStore.loading[modelName];
-  return modelStore.models[modelName];
+  return await modelStore.models[modelName];
 }
 
 export async function loadTokenizer(modelName: string) {
-  if (!modelStore.loading[modelName]) {
-    modelStore.loading[modelName] = (async () => {
-      console.log(`load tokenizer: ${modelName}`);
-      const tf = await loadTransformers();
-      modelStore.tokenizers[modelName] =
-        await tf.AutoTokenizer.from_pretrained(modelName);
-    })().catch((error) => {
-      console.error(`Failed to load tokenizer ${modelName}:`, error);
-      throw error;
-    });
+  if (!modelStore.tokenizers[modelName]) {
+    const tf = await loadTransformers();
+    modelStore.tokenizers[modelName] =
+      tf.AutoTokenizer.from_pretrained(modelName);
   }
-  await modelStore.loading[modelName];
-  return modelStore.tokenizers[modelName];
+  return await modelStore.tokenizers[modelName];
 }
