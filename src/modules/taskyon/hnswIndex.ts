@@ -47,6 +47,8 @@ async function loadIndex(
 
 const indexLoadLock = new Lock();
 
+// if we want to re-create an index, we sinply load it with loadIfExists=false
+// and this will overwrite the existing one...
 export async function loadOrCreateHNSWIndex(
   vecdbName: string,
   MAX_ELEMENTS: number,

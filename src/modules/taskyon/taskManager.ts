@@ -417,6 +417,10 @@ function useTaskVectors() {
   }
   void initVectorStore();
 
+  async function resetVectorStore() {
+    await initVectorStore(false);
+  }
+
   async function getVectorIndex() {
     if (vectorIndex) {
       return vectorIndex;
@@ -429,6 +433,7 @@ function useTaskVectors() {
   return {
     getVectorIndex,
     initVectorStore,
+    resetVectorStore,
   };
 }
 
@@ -454,7 +459,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
   const { vectorizeText } = useNlpWorker();
-  const { getVectorIndex, initVectorStore } = useTaskVectors();
+  const { getVectorIndex, resetVectorStore } = useTaskVectors();
 
   const {
     lockTask,
@@ -543,6 +548,9 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   // they only have chilren properties and no parent properties...
   // if we only have parent properties, we can update
   // maybe also give an option to delete previous trees...
+  // we should only really try to update tasks for very specific use
+  // cases, such as the debug data..   otherwise things will simply get a lot
+  // more difficult
   async function updateTask(
     updateData: Partial<TaskNode> & { id: string },
     save: boolean,
@@ -577,7 +585,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
 
     if (resetVectorIndex) {
       console.log('delete vector store');
-      await initVectorStore(false);
+      await resetVectorStore();
       console.log('delete vector mappings');
       await taskyonDB.vectormappings.remove();
       await taskyonDB.addCollections({
@@ -723,6 +731,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       await taskyonDB.remove();
     }
     tasks.clear();
+    await resetVectorStore();
     notifySubscribers(undefined, 0);
   }
 
@@ -740,6 +749,14 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
         await taskDoc.remove();
       }
     }
+
+    const vecmapping = await vecMappingFromTask(taskId);
+    await vecmapping?.remove();
+    const vecid = Number(vecmapping?.vecid);
+    if (vecid) {
+      void (await getVectorIndex())?.markDelete(vecid);
+    }
+
     console.log('done deleting task:', taskId);
     notifySubscribers(tasks.get(taskId), await countTasks());
     unlock();
