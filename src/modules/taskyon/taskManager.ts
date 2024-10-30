@@ -640,6 +640,9 @@ export function useTyTaskManager(
   //       or do this really slowly...
   // this function slowly loads the entire db into memory cache in the background trying to speed up
   // future access to tasks...
+  // it would probably be a better idea to to this with a caching function, considering
+  // that our tasks are supposd to be immutable anyways...
+  // probably also a good idea to return an immutable with immutable.js :)
   async function initializeTasksFromDB() {
     // TODO: wondering if we should maybe get rid of this?  its pretty inefficient to do this
     //       on every reload of our app :P
