@@ -25,12 +25,23 @@
             parseInt(route.query.k?.toString() || '10')
           "
           class="fit"
+          outlined
           :is-searching="isSearching"
-          @search="onSearchChange"
+          :show-filter-button="false"
+          color="secondary"
+          @search="
+            (searchTerm, k) => onSearchChange(searchTerm, k, labelString)
+          "
         />
         <div class="text-caption">
           # of indexed tasks/tasks: {{ indexCount }}/{{ taskCount }}
         </div>
+        <q-input
+          v-model="labelString"
+          class="q-pl-md"
+          dense
+          label="filter for labels"
+        />
       </template>
       <template #body-cell-task="props">
         <td>
@@ -82,6 +93,7 @@ const taskCount = ref<number | string>('N/A');
 const indexCount = ref<number | string>('N/A');
 const visibleColumns = ref(['score']);
 const isSearching = ref(false);
+const labelString = ref('');
 
 void state.getTaskManager().then((tm) => {
   void tm.countTasks().then((n) => (taskCount.value = n || 'N/A'));
@@ -99,27 +111,51 @@ async function onUpdateSearchIndex() {
   taskCount.value = (await taskManager.countTasks()) || 'N/A';
 }
 
-async function searchTasks(searchTerm: string, k: number) {
+const createMangoQuery = (labelString: string) => {
+  const labels = labelString.split('\n');
+  return {
+    selector: {
+      label: {
+        $elemMatch: {
+          $eq: labels[0],
+        },
+      },
+    },
+  };
+};
+
+async function searchTasks(
+  searchTerm: string,
+  k: number,
+  labelString: string | undefined,
+) {
   const taskManager = await state.getTaskManager();
   //searchResults.value = await vectorStore.query(searchTerm, k)
   if (taskManager) {
     console.log('search for', searchTerm);
     isSearching.value = true;
-    const { tasks, distances } = await taskManager.vectorSearchTasks(
-      searchTerm,
-      k,
-    );
+    const result = labelString
+      ? await taskManager.filteredVectorSearch(
+          searchTerm,
+          createMangoQuery(labelString),
+          k,
+        )
+      : await taskManager.vectorSearchTasks(searchTerm, k);
     // Add score to each task
-    searchResults.value = tasks.map((task, index) => ({
-      ...task,
-      distance: distances[index], // Calculate score based on distance
+    searchResults.value = result.map((r) => ({
+      ...r.task,
+      distance: r.distance, // Calculate score based on distance
     }));
     taskCount.value = (await taskManager.countTasks()) || 'N/A';
     isSearching.value = false;
   }
 }
 
-async function onSearchChange(searchTerm: string | Event, k: number) {
+async function onSearchChange(
+  searchTerm: string | Event,
+  k: number,
+  labels: string,
+) {
   if (searchTerm instanceof Event) {
     // for some reason, in chrome, a second event with the original input-event gets fired...
     return;
@@ -127,9 +163,9 @@ async function onSearchChange(searchTerm: string | Event, k: number) {
     searchResults.value = [];
   } else {
     // Update the URL with the search parameter
-    router.push({ query: { q: searchTerm, k } }); // Perform your search here
+    router.push({ query: { q: searchTerm, k, l: labels } }); // Perform your search here
     console.log(`Searching for ${searchTerm}`);
-    await searchTasks(searchTerm, k);
+    await searchTasks(searchTerm, k, labels);
     console.log('finished search!');
     console.log(searchResults.value);
   }
@@ -141,6 +177,7 @@ onMounted(() => {
     searchTasks(
       route.query.q.toString(),
       parseInt(route.query.k?.toString() || '10'),
+      labelString.value,
     );
   } else {
     searchResults.value = [];
@@ -152,6 +189,7 @@ watch(route, (newRoute) => {
     searchTasks(
       newRoute.query.q.toString(),
       parseInt(newRoute.query.k?.toString() || '10'),
+      newRoute.query.l?.toString(),
     );
   } else {
     searchResults.value = [];

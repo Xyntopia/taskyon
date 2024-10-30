@@ -6,15 +6,14 @@
       >
         <q-input
           class="col"
-          outlined
           :loading="isSearching"
           type="search"
           autofocus
-          :dense="false"
           clearable
           debounce="1000"
           :label="searchHint"
           :model-value="searchString"
+          v-bind="$attrs"
           @update:model-value="onQChange"
         >
           <template #append>
@@ -24,14 +23,12 @@
         <q-select
           v-model="numberOfSearchResults"
           class="col-auto"
-          flat
           dense
           debounce="300"
-          color="secondary"
-          outlined
           type="number"
           style="max-width: 100px"
           :options="[5, 10, 25, 50, 100]"
+          v-bind="$attrs"
           @update:model-value="requestSearch"
         >
           <q-tooltip>Number of search results.</q-tooltip>

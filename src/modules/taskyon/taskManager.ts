@@ -152,6 +152,11 @@ export async function addTask2Tree(
   if (!duplicateTaskName && task.name) {
     // check if task already exists and throw an error, if it does, because
     // we are not supposed to create it in that case ;)
+    // this is specifically used in the case of repeated task
+    // declarations which come for example from a webapge which integrates the tasks
+    // TODO: instead of givien the webpage the option to "disallow" duplicate
+    //       tasks, make sure, the tasks don't get saved in the db
+    //       as the get declared every single time anyways, we don't need to store them!
     const tasks = await taskManager.searchTasks({
       selector: { name: task.name },
     });
@@ -642,14 +647,18 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     }
   }
 
-  async function vectorSearchTasks(searchTerm: string, k = 5) {
+  async function vectorSearchTasks(
+    searchTerm: string,
+    k = 5,
+    filterfunction?: (label: number) => boolean,
+  ) {
     console.log('search for', searchTerm);
-    const result = { tasks: [] as TaskNode[], distances: [] as number[] };
+    const result: { task: TaskNode; distance: number }[] = [];
     const vectorIndex = await getVectorIndex();
     if (vectorIndex && vectorizerModel) {
       const queryVec = await vectorizeText(searchTerm, vectorizerModel);
       if (queryVec && taskyonDB) {
-        const res = vectorIndex.searchKnn(queryVec, k, undefined);
+        const res = vectorIndex.searchKnn(queryVec, k, filterfunction);
         const neighborIndices = res.neighbors.map((r) => String(r));
 
         // Fetch the vector mappings in bulk for all neighbor indices
@@ -664,8 +673,10 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
           if (uuid) {
             const foundTask = tasks.get(uuid);
             if (foundTask) {
-              result.tasks.push(foundTask);
-              result.distances.push(res.distances[searchResultIndex] || 0.0);
+              result.push({
+                task: foundTask,
+                distance: res.distances[searchResultIndex] || 0.0,
+              });
             }
           }
         });
@@ -737,13 +748,38 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     if (taskyonDB) {
       const taskList = await taskyonDB.tasknodes.find(query).exec();
 
-      const llmtasks = taskList.map((toolDoc) => {
-        const task = transformDocToTaskNode(toolDoc);
+      const llmtasks = taskList.map((taskDoc) => {
+        const task = transformDocToTaskNode(taskDoc);
         // update our function cache :)
         tasks.set(task.id, task);
         return task;
       });
       return llmtasks;
+    }
+    return [];
+  }
+
+  async function filteredVectorSearch(
+    searchTerm: string,
+    query: MangoQuery,
+    k = 10,
+  ): Promise<{ task: TaskNode; distance: number }[]> {
+    if (taskyonDB) {
+      const taskList = await taskyonDB.tasknodes.find(query).exec();
+      const taskIDs = taskList.map((taskDoc) => taskDoc.id);
+      const prefilterVectorsIds = await taskyonDB.vectormappings
+        .find({
+          selector: {
+            uuid: { $in: taskIDs },
+          },
+        })
+        .exec();
+      const vecIDs = prefilterVectorsIds.map((vm) => vm.vecid);
+      const filterfunction = (label: number) =>
+        vecIDs.includes(label.toString());
+
+      const result = vectorSearchTasks(searchTerm, k, filterfunction);
+      return result;
     }
     return [];
   }
@@ -847,6 +883,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     vectorSearchTasks,
     countVecs,
     addtoVectorDB,
+    filteredVectorSearch,
   };
 
   const fm = useFileManager(taskyonDB?.filemappings);
