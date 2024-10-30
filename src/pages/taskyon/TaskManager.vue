@@ -95,20 +95,30 @@ const visibleColumns = ref(['score']);
 const isSearching = ref(false);
 const labelString = ref('');
 
-void state.getTaskManager().then((tm) => {
-  void tm.countTasks().then((n) => (taskCount.value = n || 'N/A'));
-  void tm.countVecs().then((n) => (indexCount.value = n || 'N/A'));
-});
+const updateCounts = () => {
+  void state.getTaskManager().then((tm) => {
+    void tm
+      .countTasks()
+      .then((n) => (taskCount.value = n != undefined ? n : 'N/A'));
+    void tm
+      .countVecs()
+      .then((n) => (indexCount.value = n != undefined ? n : 'N/A'));
+  });
+};
+
+updateCounts();
 
 async function onUpdateSearchIndex() {
   const taskManager = await state.getTaskManager();
   if (taskManager) {
-    await taskManager.syncVectorIndexWithTasks(true, (done, total) => {
+    await taskManager.syncVectorIndexWithTasks(false, (done, total) => {
       syncProgress.value = done / total;
       syncProgressString.value = `${done}/${total}`;
+      indexCount.value = done;
     });
+    syncProgressString.value = '*done*';
   }
-  taskCount.value = (await taskManager.countTasks()) || 'N/A';
+  updateCounts();
 }
 
 const createMangoQuery = (labelString: string) => {

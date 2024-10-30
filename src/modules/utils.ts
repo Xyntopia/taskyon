@@ -755,3 +755,21 @@ export function makeSerializable(value: unknown, depth = 5): unknown {
   // Return primitives and other serializable values as-is
   return value;
 }
+// Helper functions for encoding/decoding
+export function encodeVector(vector: Float32Array): string {
+  // Convert Float32Array to ArrayBuffer
+  const buffer = vector.buffer;
+  // Convert ArrayBuffer to Base64
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+  return base64;
+}
+export function decodeVector(base64String: string): Float32Array {
+  // Convert Base64 to ArrayBuffer
+  const binaryString = atob(base64String);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  // Convert ArrayBuffer back to Float32Array
+  return new Float32Array(bytes.buffer);
+}

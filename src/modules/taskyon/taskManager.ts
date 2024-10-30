@@ -454,10 +454,6 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
   const { vectorizeText } = useNlpWorker();
-  // this stores tasks which have already been vectorized so that they
-  // don't get vectorized twice in an efficient way.
-  const alreadyVectorized = new Set<string>();
-
   const { getVectorIndex, initVectorStore } = useTaskVectors();
 
   const {
@@ -612,25 +608,60 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     console.log('Sync complete.');
   }
 
-  async function addtoVectorDB(task: TaskNode, override = false) {
-    const vectorIndex = await getVectorIndex();
-    if (vectorIndex && taskyonDB && vectorizerModel) {
-      const vec = await vectorizeText(
+  const vecMappingFromTask = (taskId: string) =>
+    taskyonDB?.vectormappings
+      .findOne({
+        selector: { uuid: taskId },
+      })
+      .exec();
+
+  const vecAlreadyExists = async (taskId: string) => {
+    const vecid = Number((await vecMappingFromTask(taskId))?.vecid);
+    if (vecid) {
+      try {
+        // this works. If we mark a label as deleted in our vector index
+        // this will throw an error, meaning the vector doesn't exist...
+        const vec = (await getVectorIndex())?.getPoint(vecid);
+        return vec;
+      } catch (error) {
+        return undefined;
+      }
+    }
+    return undefined;
+  };
+
+  async function addtoVectorDB(
+    task: TaskNode,
+    //override = false,
+    //storeInDB: false,
+  ) {
+    const existingVector = await vecAlreadyExists(task.id);
+    let vec: Float32Array | undefined = undefined;
+    let label: number | undefined;
+    if (existingVector && vectorizerModel) {
+      // as we consider tasks as "immutable" we don't update their vectors either
+      //vec = decodeVector(existingVector.vector);
+      console.log('vector already exists!');
+    } else if (vectorizerModel) {
+      console.log('create vector...');
+      const numvec = await vectorizeText(
         JSON.stringify(task.content),
         vectorizerModel,
       );
-      console.log('got a vector result.');
-      //const vec = await getVector(JSON.stringify(task), vectorizerModel);
-      if (vec && (!alreadyVectorized.has(task.id) || override)) {
-        const newLabel = vectorIndex.addItems([vec], false)[0];
-        void taskyonDB.vectormappings.upsert({
+      if (numvec) {
+        console.log('got a vector result.');
+        const vectorIndex = await getVectorIndex();
+        vectorIndex?.markDeleteItems;
+        vec = new Float32Array(numvec);
+        label = vectorIndex?.addItems([vec], true)[0];
+        void taskyonDB?.vectormappings.upsert({
           uuid: task.id,
-          vecid: String(newLabel),
+          vecid: String(label),
+          //vector: storeInDB ? encodeVector(vec) : undefined, # not saving vectors for now...
         });
-        alreadyVectorized.add(task.id);
       }
-      console.log('finished adding vector!');
     }
+    console.log('finished adding vector!');
   }
 
   async function saveTask(taskId: string): Promise<void> {
@@ -642,8 +673,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     if (task && taskyonDB) {
       const newDBTask = transformTaskNodeToDocType(task);
       await taskyonDB.tasknodes.upsert(newDBTask);
-      // only add it to vector db if not marked as "discard"
-      if (task.label?.includes('discard')) void addtoVectorDB(task);
+      void addtoVectorDB(task);
     }
   }
 
@@ -686,6 +716,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   }
 
   async function deleteAllTasks() {
+    // also delete vectordb!
     // TODO: manually re-initiailized taskyondb after remove...
     if (taskyonDB) {
       console.log('delete the entire database!');
@@ -696,6 +727,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   }
 
   async function deleteTask(taskId: string): Promise<void> {
+    // also delete from vectordb!
     const unlock = await lockTask(taskId);
     console.log('deleting task:', taskId);
     // Delete from local record
@@ -882,7 +914,6 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     syncVectorIndexWithTasks,
     vectorSearchTasks,
     countVecs,
-    addtoVectorDB,
     filteredVectorSearch,
   };
 
