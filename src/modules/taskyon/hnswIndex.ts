@@ -1,5 +1,6 @@
 import type { HnswlibModule } from 'hnswlib-wasm';
 import { Lock, sleep } from '../utils';
+import type { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 
 const numDimensions = 384;
 let lib: HnswlibModule | undefined = undefined;
@@ -49,7 +50,7 @@ const indexLoadLock = new Lock();
 
 // if we want to re-create an index, we sinply load it with loadIfExists=false
 // and this will overwrite the existing one...
-export async function loadOrCreateHNSWIndex(
+async function loadOrCreateHNSWIndex(
   vecdbName: string,
   MAX_ELEMENTS: number,
   loadIfExists = true,
@@ -76,6 +77,38 @@ export async function loadOrCreateHNSWIndex(
   }
   done(); //release the lock to our store
   return newIndex;
+}
+
+export function useVectorStore(indexName: string) {
+  let vectorIndex: HierarchicalNSW | undefined;
+
+  async function initVectorStore(loadIfExists = true) {
+    const maxElements = 10000;
+    vectorIndex = await loadOrCreateHNSWIndex(
+      indexName,
+      maxElements,
+      loadIfExists,
+    );
+  }
+  void initVectorStore();
+
+  async function resetVectorStore() {
+    await initVectorStore(false);
+  }
+
+  async function getVectorIndex() {
+    if (vectorIndex) {
+      return vectorIndex;
+    }
+    // Wait for the vectorIndex to be initialized
+    await initVectorStore();
+    return vectorIndex;
+  }
+
+  return {
+    getVectorIndex,
+    resetVectorStore,
+  };
 }
 
 /*we are using this below to test the library...

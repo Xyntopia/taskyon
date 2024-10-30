@@ -9,8 +9,7 @@ import {
 } from './rxdb';
 import { openFile } from '../OPFS';
 import { Lock, deepMerge, AsyncQueue, sleep } from '../utils';
-import type { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
-import { loadOrCreateHNSWIndex } from './hnswIndex';
+import { useVectorStore } from './hnswIndex';
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi';
 import { Tool } from './tools';
 import { taskUtils } from './taskUtils';
@@ -403,40 +402,6 @@ function tyMechanisms() {
   };
 }
 
-function useTaskVectors() {
-  let vectorIndex: HierarchicalNSW | undefined;
-  const vectorIndexName = 'taskyondbv';
-
-  async function initVectorStore(loadIfExists = true) {
-    const maxElements = 10000;
-    vectorIndex = await loadOrCreateHNSWIndex(
-      vectorIndexName,
-      maxElements,
-      loadIfExists,
-    );
-  }
-  void initVectorStore();
-
-  async function resetVectorStore() {
-    await initVectorStore(false);
-  }
-
-  async function getVectorIndex() {
-    if (vectorIndex) {
-      return vectorIndex;
-    }
-    // Wait for the vectorIndex to be initialized
-    await initVectorStore();
-    return vectorIndex;
-  }
-
-  return {
-    getVectorIndex,
-    initVectorStore,
-    resetVectorStore,
-  };
-}
-
 // TODO:  break down  the individual parts of TaskManager this way into smaller parts:
 //        - on top of that build a function which encapsulates all the "high-level  function such as getting files etc..."
 //        - the vector store part
@@ -459,7 +424,7 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
   const { vectorizeText } = useNlpWorker();
-  const { getVectorIndex, resetVectorStore } = useTaskVectors();
+  const { getVectorIndex, resetVectorStore } = useVectorStore('taskyondbv');
 
   const {
     lockTask,
@@ -623,6 +588,15 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
       })
       .exec();
 
+  async function deleteTaskFromVectorStore(taskId: string) {
+    const vecmapping = await vecMappingFromTask(taskId);
+    await vecmapping?.remove();
+    const vecid = Number(vecmapping?.vecid);
+    if (vecid) {
+      void (await getVectorIndex())?.markDelete(vecid);
+    }
+  }
+
   const vecAlreadyExists = async (taskId: string) => {
     const vecid = Number((await vecMappingFromTask(taskId))?.vecid);
     if (vecid) {
@@ -739,28 +713,25 @@ export function useTyTaskManager<T extends TaskyonDatabase | undefined>(
     // also delete from vectordb!
     const unlock = await lockTask(taskId);
     console.log('deleting task:', taskId);
-    // Delete from local record
-    tasks.delete(taskId);
 
-    // Delete from the database
+    // Delete from local record/memorydb
+    tasks.delete(taskId);
+    await deleteTaskFromDB(taskId);
+    await deleteTaskFromVectorStore(taskId);
+    console.log('done deleting task:', taskId);
+
+    notifySubscribers(tasks.get(taskId), await countTasks());
+    unlock();
+  }
+
+  const deleteTaskFromDB = async (taskId: string) => {
     if (taskyonDB) {
       const taskDoc = await taskyonDB.tasknodes.findOne(taskId).exec();
       if (taskDoc) {
         await taskDoc.remove();
       }
     }
-
-    const vecmapping = await vecMappingFromTask(taskId);
-    await vecmapping?.remove();
-    const vecid = Number(vecmapping?.vecid);
-    if (vecid) {
-      void (await getVectorIndex())?.markDelete(vecid);
-    }
-
-    console.log('done deleting task:', taskId);
-    notifySubscribers(tasks.get(taskId), await countTasks());
-    unlock();
-  }
+  };
 
   // TODO:  we need to rewrite this, so that we only use parents and not children!
   function getLeafTasks() {
