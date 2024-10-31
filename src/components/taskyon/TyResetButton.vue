@@ -1,6 +1,6 @@
 <template>
   <q-btn flat label="Reset History" @click="onResetTaskyon">
-    <q-tooltip :delay="1000">Reset chat history & settings.</q-tooltip>
+    <q-tooltip :delay="1000">Reset chat history & settings. (Only appears in local development mode)</q-tooltip>
   </q-btn>
 </template>
 
