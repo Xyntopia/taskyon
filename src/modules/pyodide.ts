@@ -65,9 +65,10 @@ export async function executeScript(
 
     // Reset stdout handler to default behavior if necessary
     pyodide.setStdout({ batched: (str: string) => console.log(str) });
+    void unlock();
+
     console.log('got result python:', { result, stdout: stdout_content });
 
-    void unlock();
     return { result, stdout: stdout_content };
   } catch (error) {
     if (error instanceof Error) {

@@ -295,10 +295,16 @@ export class Lock {
    * Acquires the lock if available. Returns a `release` function to be called
    * when done. Waits if the lock is already held.
    *
+   * !!!!IMPORTANT!!!!  it is very important that when a lock is acquired all functions
+   * until the lock is released are either synchronous or awaited. Otherwise
+   * it is possible that the unlock happens before some of the code is finished...
+   *
    * @returns {Promise<() => void>} A function to release the lock.
    * @example
    * const release = await lock.lock();
    * try { ...critical section... } finally { release(); }
+   *
+   *
    *
    */
   async lock(): Promise<() => void> {

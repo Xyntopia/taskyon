@@ -339,11 +339,22 @@ function tyMechanisms() {
 
   // Lock a task and returns a function closure which can be used to unlock it again...
   async function lockTask(taskId: string) {
-    const newLock = new Lock();
-    taskLocks.set(taskId, newLock);
-    return newLock.lock();
+    let lock = taskLocks.get(taskId);
+    if (!lock) {
+      lock = new Lock();
+      taskLocks.set(taskId, lock);
+    }
+    console.log('getting lock for task:', taskId);
+    const unlock = await lock.lock();
+    console.log('acquired lock for', taskId);
+    return () => {
+      console.log('unlock!', taskId);
+      unlock();
+    };
   }
 
+  // this function simply waits for a task to be unlocked, but doesn't
+  // acquire a lock itself...
   async function waitForTaskUnlock(taskId: string) {
     const lock = taskLocks.get(taskId);
     if (lock) {
@@ -404,6 +415,7 @@ function tyMechanisms() {
 
 function useTaskVectors(
   tasks: Map<string, TaskNode>,
+  lockTask: (taskId: string) => Promise<() => void>,
   vectorizerModel?: string,
   taskyonDB?: TaskyonDatabase,
 ) {
@@ -483,15 +495,12 @@ function useTaskVectors(
     //override = false,
     //storeInDB: false,
   ) {
+    const unlock = await lockTask(task.id);
     const existingVector = await vecAlreadyExists(task.id);
-    let vec: Float32Array | undefined = undefined;
-    let label: number | undefined;
-    if (existingVector && vectorizerModel) {
-      // as we consider tasks as "immutable" we don't update their vectors either
-      //vec = decodeVector(existingVector.vector);
-      console.log('vector already exists!');
+    if (existingVector) {
+      console.log('vector already exists!', task.id);
     } else if (vectorizerModel) {
-      console.log('create vector...');
+      console.log('create vector...', task.id);
       const numvec = await vectorizeText(
         JSON.stringify(task.content),
         vectorizerModel,
@@ -499,17 +508,18 @@ function useTaskVectors(
       if (numvec) {
         console.log('got a vector result.');
         const vectorIndex = await getVectorIndex();
-        vectorIndex?.markDeleteItems;
-        vec = new Float32Array(numvec);
-        label = vectorIndex?.addItems([vec], true)[0];
-        void taskyonDB?.vectormappings.upsert({
+        const vec = new Float32Array(numvec);
+        const label = vectorIndex?.addItems([vec], true)[0];
+        // it is important that we await all functions here becase
+        // we are in a task lock-situation and can not afford for them to be unlocked at some point :)
+        await taskyonDB?.vectormappings.upsert({
           uuid: task.id,
           vecid: String(label),
           //vector: storeInDB ? encodeVector(vec) : undefined, # not saving vectors for now...
         });
       }
     }
-    console.log('finished adding vector!');
+    unlock();
   }
 
   async function filteredVectorSearch(
@@ -608,21 +618,21 @@ export function useTyTaskManager(
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
 
   const {
-    syncVectorIndexWithTasks,
-    deleteTaskFromVectorStore,
-    addtoVectorDB,
-    filteredVectorSearch,
-    vectorSearchTasks,
-    resetVectorStore,
-  } = useTaskVectors(tasks, vectorizerModel, taskyonDB);
-
-  const {
     lockTask,
     waitForTaskUnlock,
     subscribeToTaskChanges,
     unsubscribeFromTaskChanges,
     notifySubscribers,
   } = tyMechanisms();
+
+  const {
+    syncVectorIndexWithTasks,
+    deleteTaskFromVectorStore,
+    addtoVectorDB,
+    filteredVectorSearch,
+    vectorSearchTasks,
+    resetVectorStore,
+  } = useTaskVectors(tasks, lockTask, vectorizerModel, taskyonDB);
 
   async function countVecs() {
     if (taskyonDB) {
@@ -735,7 +745,7 @@ export function useTyTaskManager(
     //       because we want to make sure, that tasks in the db are immutable.
     //       so we can never update a task with an already existing id...
     const task = tasks.get(taskId);
-    console.log('save task: ', task);
+    console.log('save task: ', taskId);
     if (task && taskyonDB) {
       const newDBTask = transformTaskNodeToDocType(task);
       await taskyonDB.tasknodes.upsert(newDBTask);
