@@ -45,9 +45,10 @@
       </template>
       <template #body-cell-task="props">
         <td>
-          <div class="row items-stretch">
-            <div class="col-auto">
+          <div class="row">
+            <div class="column col-auto q-pt-sm q-pr-sm q-gutter-sm">
               <q-btn
+                class="col-auto"
                 outline
                 :icon="mdiForum"
                 dense
@@ -55,6 +56,19 @@
                 @click="setConversation(props.row.id)"
                 ><q-tooltip>View entire conversation</q-tooltip></q-btn
               >
+              <q-btn
+                class="col-auto"
+                outline
+                :icon="mdiApproximatelyEqual"
+                dense
+                to="chat"
+                @click="searchForSimilarTasks(props.row.id)"
+                ><q-tooltip>Search for similar tasks!</q-tooltip></q-btn
+              >
+              <div class="auto">
+                {{ `${(1 / (props.row.distance + 0.01)).toFixed(2)}` }}
+                <q-tooltip>Search Similarity in %</q-tooltip>
+              </div>
             </div>
             <Task :task="props.row" class="col q-pa-xs" />
           </div>
@@ -72,7 +86,7 @@ import Task from 'components/taskyon/TaskWidget.vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { findLeafTasks } from 'src/modules/taskyon/taskManager';
 import { matSync } from '@quasar/extras/material-icons';
-import { mdiForum } from '@quasar/extras/mdi-v6';
+import { mdiApproximatelyEqual, mdiForum } from '@quasar/extras/mdi-v6';
 import { useRoute, useRouter } from 'vue-router';
 import { onMounted } from 'vue';
 import { watch } from 'vue';
@@ -91,7 +105,7 @@ const syncProgressString = ref('0/0');
 const syncProgress = ref(0.0);
 const taskCount = ref<number | string>('N/A');
 const indexCount = ref<number | string>('N/A');
-const visibleColumns = ref(['score']);
+const visibleColumns = ref(['task']);
 const isSearching = ref(false);
 const labelString = ref('');
 
@@ -230,17 +244,18 @@ const columns = [
     field: (task: TaskNode) => task.id,
   },
   {
-    name: 'distance',
-    sortable: true,
-    label: 'distance',
-    field: (row: (typeof searchResults.value)[0]) => row.distance,
-  },
-  {
     name: 'task',
-    sortable: true,
+    //sortable: true,
     required: true,
     label: 'task',
-    field: (task: TaskNode) => task.id,
+    //field: (task: TaskNode) => JSON.stringify(task.content),
+  },
+  {
+    name: 'distance',
+    //sortable: true,
+    label: 'score',
+    field: (row: (typeof searchResults.value)[0]) => row.distance,
+    format: (val: number) => `${(1 / (val + 0.01)).toFixed(2)}`,
   },
 ];
 </script>
