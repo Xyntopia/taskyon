@@ -8,7 +8,7 @@ import {
   collections,
 } from './rxdb';
 import { openFile } from '../OPFS';
-import { Lock, deepMerge, AsyncQueue, sleep } from '../utils';
+import { deepMerge, AsyncQueue, sleep, lockMap } from '../utils';
 import { useVectorStore } from './hnswIndex';
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi';
 import { Tool } from './tools';
@@ -328,39 +328,6 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
   };
 }
 
-function lockMap() {
-  const locks = new Map<string, Lock>();
-
-  // Lock a task and returns a function closure which can be used to unlock it again...
-  async function lockItem(taskId: string) {
-    let lock = locks.get(taskId);
-    if (!lock) {
-      lock = new Lock();
-      locks.set(taskId, lock);
-    }
-    console.log('getting lock for task:', taskId);
-    const unlock = await lock.lock();
-    console.log('acquired lock for', taskId);
-    return () => {
-      console.log('unlock!', taskId);
-      unlock();
-    };
-  }
-
-  // this function simply waits for a task to be unlocked, but doesn't
-  // acquire a lock itself...
-  async function waitForItemUnlock(taskId: string) {
-    const lock = locks.get(taskId);
-    if (lock) {
-      // TODO: why is this called so often??
-      //console.log('wait for unlock!');
-      await lock.waitForUnlock();
-    }
-  }
-
-  return { lockItem, waitForItemUnlock };
-}
-
 function tyMechanisms() {
   let subscribers: Array<
     (task?: TaskNode, taskNum?: number) => void | Promise<void>
@@ -420,7 +387,7 @@ function useTaskVectors(
   vectorizerModel?: string,
   taskyonDB?: TaskyonDatabase,
 ) {
-  const { lockItem } = lockMap();
+  const { lockItem } = lockMap('vector');
   const { vectorizeText } = useNlpWorker();
   const { getVectorIndex, resetVectorStore } = useVectorStore('taskyondbv');
 
@@ -620,7 +587,7 @@ export function useTyTaskManager(
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
 
   const { lockItem: lockTask, waitForItemUnlock: waitForTaskUnlock } =
-    lockMap();
+    lockMap('task');
 
   const {
     subscribeToTaskChanges,

@@ -345,6 +345,39 @@ export class Lock {
   }
 }
 
+export function lockMap(name: string = 'item') {
+  const locks = new Map<string, Lock>();
+
+  // Lock a task and returns a function closure which can be used to unlock it again...
+  async function lockItem(id: string) {
+    let lock = locks.get(id);
+    if (!lock) {
+      lock = new Lock();
+      locks.set(id, lock);
+    }
+    console.log(`getting lock for ${name}:`, id);
+    const unlock = await lock.lock();
+    console.log(`acquired lock for ${name}`, id);
+    return () => {
+      console.log(`unlock ${name}!`, id);
+      unlock();
+    };
+  }
+
+  // this function simply waits for a task to be unlocked, but doesn't
+  // acquire a lock itself...
+  async function waitForItemUnlock(id: string) {
+    const lock = locks.get(id);
+    if (lock) {
+      // TODO: why is this called so often??
+      //console.log('wait for unlock!');
+      await lock.waitForUnlock();
+    }
+  }
+
+  return { lockItem, waitForItemUnlock };
+}
+
 /**
  * Checks if the given item is an object (excluding null and arrays).
  *
