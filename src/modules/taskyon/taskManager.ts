@@ -328,21 +328,15 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
   };
 }
 
-function tyMechanisms() {
-  // we need these locks in order to sync our databases..
-  const taskLocks = new Map<string, Lock>();
-  let subscribers: Array<
-    (task?: TaskNode, taskNum?: number) => void | Promise<void>
-  > = [];
-  let taskCountSubscribers: Array<(task?: TaskNode, taskNum?: number) => void> =
-    [];
+function lockMap() {
+  const locks = new Map<string, Lock>();
 
   // Lock a task and returns a function closure which can be used to unlock it again...
-  async function lockTask(taskId: string) {
-    let lock = taskLocks.get(taskId);
+  async function lockItem(taskId: string) {
+    let lock = locks.get(taskId);
     if (!lock) {
       lock = new Lock();
-      taskLocks.set(taskId, lock);
+      locks.set(taskId, lock);
     }
     console.log('getting lock for task:', taskId);
     const unlock = await lock.lock();
@@ -355,14 +349,24 @@ function tyMechanisms() {
 
   // this function simply waits for a task to be unlocked, but doesn't
   // acquire a lock itself...
-  async function waitForTaskUnlock(taskId: string) {
-    const lock = taskLocks.get(taskId);
+  async function waitForItemUnlock(taskId: string) {
+    const lock = locks.get(taskId);
     if (lock) {
       // TODO: why is this called so often??
       //console.log('wait for unlock!');
       await lock.waitForUnlock();
     }
   }
+
+  return { lockItem, waitForItemUnlock };
+}
+
+function tyMechanisms() {
+  let subscribers: Array<
+    (task?: TaskNode, taskNum?: number) => void | Promise<void>
+  > = [];
+  let taskCountSubscribers: Array<(task?: TaskNode, taskNum?: number) => void> =
+    [];
 
   function subscribeToTaskChanges(
     callback: (task?: TaskNode, taskNum?: number) => void | Promise<void>,
@@ -405,8 +409,6 @@ function tyMechanisms() {
 
   // this class holds utilitiy funcions to manage taskyons infrastructure
   return {
-    lockTask,
-    waitForTaskUnlock,
     subscribeToTaskChanges,
     unsubscribeFromTaskChanges,
     notifySubscribers,
@@ -415,10 +417,10 @@ function tyMechanisms() {
 
 function useTaskVectors(
   tasks: Map<string, TaskNode>,
-  lockTask: (taskId: string) => Promise<() => void>,
   vectorizerModel?: string,
   taskyonDB?: TaskyonDatabase,
 ) {
+  const { lockItem } = lockMap();
   const { vectorizeText } = useNlpWorker();
   const { getVectorIndex, resetVectorStore } = useVectorStore('taskyondbv');
 
@@ -495,7 +497,7 @@ function useTaskVectors(
     //override = false,
     //storeInDB: false,
   ) {
-    const unlock = await lockTask(task.id);
+    const unlock = await lockItem(task.id);
     const existingVector = await vecAlreadyExists(task.id);
     if (existingVector) {
       console.log('vector already exists!', task.id);
@@ -617,9 +619,10 @@ export function useTyTaskManager(
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
 
+  const { lockItem: lockTask, waitForItemUnlock: waitForTaskUnlock } =
+    lockMap();
+
   const {
-    lockTask,
-    waitForTaskUnlock,
     subscribeToTaskChanges,
     unsubscribeFromTaskChanges,
     notifySubscribers,
@@ -632,7 +635,7 @@ export function useTyTaskManager(
     filteredVectorSearch,
     vectorSearchTasks,
     resetVectorStore,
-  } = useTaskVectors(tasks, lockTask, vectorizerModel, taskyonDB);
+  } = useTaskVectors(tasks, vectorizerModel, taskyonDB);
 
   async function countVecs() {
     if (taskyonDB) {
