@@ -74,7 +74,7 @@ selecting different models).
         <template #header-cell-prompt_price="props">
           <q-th :props="props">
             <div>prompt</div>
-            {{ pricingPerPage ? 'pages/0.01$' : 'μ$ / token' }}
+            {{ pricingPerPage ? 'pages/0.01$' : '$ / token' }}
           </q-th>
         </template>
         <template #body-cell-prompt_price="props">
@@ -94,7 +94,7 @@ selecting different models).
         <template #header-cell-completion_price="props">
           <q-th :props="props">
             <div>completion</div>
-            {{ pricingPerPage ? 'pages/0.01$' : 'μ$ / token' }}
+            {{ pricingPerPage ? 'pages/0.01$' : '$ / token' }}
           </q-th>
         </template>
         <template #body-cell-completion_price="props">
@@ -111,6 +111,22 @@ selecting different models).
             </q-tooltip>
           </q-td>
         </template>
+        <template #header-cell-request_price="props">
+          <q-th :props="props">
+            <div>request</div>
+            {{ '$ / request' }}
+          </q-th>
+        </template>
+        <template #body-cell-request_price="props">
+          <q-td :props="props">
+            <div>
+              {{ humanReadablePrice(props.value, 0) }}
+            </div>
+            <q-tooltip :delay="500">
+              exact price: {{ props.value }}$/request or {{ 1/props.value }} requests per $
+            </q-tooltip>
+          </q-td>
+        </template>
       </q-table>
     </q-card>
   </q-page>
@@ -119,7 +135,7 @@ selecting different models).
 <script setup lang="ts">
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { QTableProps, exportFile } from 'quasar';
-import { openrouterPricing } from 'src/modules/utils';
+import { humanReadablePrice, openrouterPricing } from 'src/modules/utils';
 import InfoDialog from 'components/InfoDialog.vue';
 import { ref, computed } from 'vue';
 import { matFilterList } from '@quasar/extras/material-icons';
@@ -150,7 +166,6 @@ function floatSorter(a: string, b: string) {
   const validB = isNaN(numB) ? -1 : numB;
 
   const comparison = validA - validB;
-  console.log(comparison);
   return comparison;
 }
 
@@ -197,6 +212,14 @@ const columns: QTableProps['columns'] = [
     sort: floatSorter,
   },
   {
+    name: 'request_price',
+    label: 'Request Price',
+    align: 'center',
+    field: (row: rowType) => row.pricing?.request,
+    sortable: true,
+    sort: floatSorter,
+  },
+  {
     name: 'modality',
     label: 'Modality',
     align: 'center',
@@ -231,7 +254,6 @@ function calculatePricePerPage(value: string | undefined) {
   if (value) {
     const price = parseFloat(value);
     if (price < 0) {
-      console.log('nan price');
       return 'dynamic';
     } else if (isNaN(price)) {
       return 'N/A';
