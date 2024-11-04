@@ -41,42 +41,6 @@ export async function findRootTask(
   return currentTaskID; // Return null if the loop exits without finding a root task
 }
 
-/**
- * Finds the leaf tasks of a given task tree node using a depth-first search (DFS) iterative approach.
- *
- * @param {string} taskId - The ID of the task.
- * @param {Function} getTask - Function to retrieve a task by its ID.
- * @returns {Promise<string[]>} - An array of IDs of the leaf tasks.
- *
- * TODO: we need to change this to become independent from "childrenIDs"
- *       an easy algoithm would be:  build a map of all tasks and check whether they have a parent or not.
- */
-export async function findLeafTasks(
-  taskId: string,
-  getTask: TyTaskManager['getTask'],
-): Promise<string[]> {
-  const stack: string[] = [taskId];
-  const leafTasks: string[] = [];
-
-  while (stack.length > 0) {
-    const currentTaskId = stack.pop() || ''; // Pop the last task from the stack
-    const currentTask = await getTask(currentTaskId);
-
-    if (!currentTask) continue; // Skip if the task doesn't exist
-
-    // Check if the current task is a leaf task
-    if (!currentTask.childrenIDs || currentTask.childrenIDs.length === 0) {
-      leafTasks.push(currentTaskId);
-    } else {
-      // Push all children of the current task onto the stack
-      // To maintain the order of processing, you might want to reverse the children array
-      stack.push(...currentTask.childrenIDs.reverse());
-    }
-  }
-
-  return leafTasks;
-}
-
 function base64Uuid() {
   // Generate a UUID
   const hexUuid = uuidv1();
@@ -616,6 +580,10 @@ export function useTyTaskManager(
     } else return undefined;
   }
 
+  // because our tasks only have parent IDs defined, we keep a cache of
+  // child IDs in order to be able to do faster tree traversals...
+  const parentToChildrenMap = new Map<string, Set<string>>();
+
   // TODO: get rid of this...  its too slow and we want to oad tasks directly from the db...
   //       or do this really slowly...
   // this function slowly loads the entire db into memory cache in the background trying to speed up
@@ -672,10 +640,41 @@ export function useTyTaskManager(
     await withTaskCountCheck(task.id, async () => {
       tasks.set(task.id, task);
       if (save) {
-        await saveTask(task.id); // Save to database if required
+        await saveTaskToDb(task); // Save to database if required
+      }
+      // Update parent-child cache
+      if (task.parentID) {
+        const children = await searchChildTasks(task.parentID);
+        children.add(task.id);
+        parentToChildrenMap.set(task.parentID, children);
       }
     });
     unlock();
+  }
+
+  // find all children tasks in our parent-linked task tree
+  async function searchChildTasks(parentId: string): Promise<Set<string>> {
+    // Check if children are already cached in the map
+    let children = parentToChildrenMap.get(parentId);
+
+    if (!children && taskyonDB) {
+      // Fallback to database query if not in the cache
+      const dbChildren = (
+        await taskyonDB.tasknodes
+          .find({
+            selector: {
+              parentID: parentId,
+            },
+          })
+          .exec()
+      ).map((t) => t.id);
+      children = new Set(dbChildren);
+
+      // Cache the result for future lookups
+      parentToChildrenMap.set(parentId, children);
+      return children;
+    }
+    return new Set();
   }
 
   // TODO: in order to make our database and all task objects pure,
@@ -698,10 +697,16 @@ export function useTyTaskManager(
       const task = await unblockedGetTask(updateData.id);
       if (task) {
         // Update the task with new data
-        //Object.assign(task, updateData);
+        // Object.assign(task, updateData);
+        // TODO: her we are doing the deepmerge, so that the task stays reactive, but we don't need that
+        // anymore in the future, as we are only goingto update tasks through a publish/subscribe mechanism
+        // and get rid of inherently reactive tasks...
         Object.assign(task, deepMerge(task, updateData));
+        // because we're updating a task we should not have to update the
+        // parentToChildrenMap once, we have immutable tasks though, we are adding
+        // a task with a new ID and should probably replace the childrens ID
         if (save) {
-          await saveTask(task.id); // Save to database if required
+          await saveTaskToDb(task); // Save to database if required
         }
       }
       unlock();
@@ -710,12 +715,11 @@ export function useTyTaskManager(
     // TODO: return the root or leave of the new tree ;).
   }
 
-  async function saveTask(taskId: string): Promise<void> {
+  async function saveTaskToDb(task: TaskNode): Promise<void> {
     // TODO: throw an error, if we save an already existing task!
     //       because we want to make sure, that tasks in the db are immutable.
     //       so we can never update a task with an already existing id...
-    const task = tasks.get(taskId);
-    console.log('save task: ', taskId);
+    console.log('save task: ', task);
     if (task && taskyonDB) {
       const newDBTask = transformTaskNodeToDocType(task);
       await taskyonDB.tasknodes.upsert(newDBTask);
@@ -731,6 +735,7 @@ export function useTyTaskManager(
       await taskyonDB.remove();
     }
     tasks.clear();
+    parentToChildrenMap.clear();
     await resetVectorStore();
     notifySubscribers(undefined, 0);
   }
@@ -741,6 +746,11 @@ export function useTyTaskManager(
     console.log('deleting task:', taskId);
 
     // Delete from local record/memorydb
+    const task = tasks.get(taskId);
+    if (task && task.parentID) {
+      const children = await searchChildTasks(task.parentID);
+      if (children) children.delete(taskId);
+    }
     tasks.delete(taskId);
     await deleteTaskFromDB(taskId);
     await deleteTaskFromVectorStore(taskId);
@@ -758,20 +768,6 @@ export function useTyTaskManager(
       }
     }
   };
-
-  // TODO:  we need to rewrite this, so that we only use parents and not children!
-  function getLeafTasks() {
-    console.log('get leaf tasks...');
-    const orphanTasks = [];
-    for (const task of tasks.values()) {
-      if (task.childrenIDs && task.childrenIDs.length == 0) {
-        orphanTasks.push(task);
-      }
-    }
-    return orphanTasks
-      .sort((a, b) => (a.created_at || 0) - (b.created_at || 0))
-      .map((t) => t.id);
-  }
 
   async function withTaskCountCheck(
     taskId: string,
@@ -860,6 +856,42 @@ export function useTyTaskManager(
       : Record<string, ToolBase | Tool>;
   }
 
+  /**
+   * Finds the leaf tasks of a given task tree node using a depth-first search (DFS) iterative approach.
+   *
+   * @param {string} taskId - The ID of the task.
+   * @param {Function} getTask - Function to retrieve a task by its ID.
+   * @returns {Promise<string[]>} - An array of IDs of the leaf tasks.
+   *
+   * TODO: we need to change this to become independent from "childrenIDs"
+   *       an easy algoithm would be:  build a map of all tasks and check whether they have a parent or not.
+   */
+  async function findLeafTasks(
+    taskId: string,
+    getTask: TyTaskManager['getTask'],
+  ): Promise<string[]> {
+    const stack: string[] = [taskId];
+    const leafTasks: string[] = [];
+
+    while (stack.length > 0) {
+      const currentTaskId = stack.pop() || '';
+      const currentTask = await getTask(currentTaskId);
+      if (!currentTask) continue;
+
+      const children = await searchChildTasks(currentTaskId);
+
+      // If no children are found, it's a leaf
+      if (children.size === 0) {
+        leafTasks.push(currentTaskId);
+      } else {
+        // Push all children onto the stack for further traversal
+        stack.push(...Array.from(children));
+      }
+    }
+
+    return leafTasks;
+  }
+
   async function getJsonTaskBackup() {
     // TODO: give this a callback so that we can save it in "chunks"
     if (taskyonDB) {
@@ -893,7 +925,6 @@ export function useTyTaskManager(
     searchTasks,
     setTask,
     updateToolDefinitions,
-    getLeafTasks,
     subscribeToTaskChanges,
     unsubscribeFromTaskChanges,
     getJsonTaskBackup,
@@ -904,6 +935,7 @@ export function useTyTaskManager(
     vectorSearchTasks,
     countVecs,
     filteredVectorSearch,
+    findLeafTasks,
   };
 
   const fm = useFileManager(taskyonDB?.filemappings);
