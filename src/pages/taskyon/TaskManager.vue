@@ -84,7 +84,6 @@ import Search from 'components/SearchInput.vue';
 import { TaskNode } from 'src/modules/taskyon/types';
 import Task from 'components/taskyon/TaskWidget.vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
-import { findLeafTasks } from 'src/modules/taskyon/taskManager';
 import { matSync } from '@quasar/extras/material-icons';
 import { mdiApproximatelyEqual, mdiForum } from '@quasar/extras/mdi-v6';
 import { useRoute, useRouter } from 'vue-router';
@@ -231,7 +230,7 @@ const initialPagination = {
 
 async function setConversation(taskId: string) {
   const taskManager = await state.getTaskManager();
-  const leafTasks = await findLeafTasks(taskId, (taskID) =>
+  const leafTasks = await taskManager.findLeafTasks(taskId, (taskID) =>
     taskManager.getTask(taskID),
   );
   state.llmSettings.selectedTaskId = leafTasks[0];
