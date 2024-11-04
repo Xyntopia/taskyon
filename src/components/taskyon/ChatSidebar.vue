@@ -13,18 +13,18 @@
         <q-list dense>
           <q-item
             v-for="conversationId in conversationIDs"
-            :key="conversationId.id"
+            :key="conversationId"
             v-ripple
             to="/"
             clickable
-            @click="state.llmSettings.selectedTaskId = conversationId.id"
+            @click="state.llmSettings.selectedTaskId = conversationId"
           >
             <!--q-item-section avatar>
               <q-icon name="matChatBubble" size="xs" />
             </!q-item-section-->
             <q-item-section
               v-for="(selected, idx) in [
-                state.llmSettings.selectedTaskId == conversationId.id,
+                state.llmSettings.selectedTaskId == conversationId,
               ]"
               :key="idx"
               lines
@@ -37,12 +37,7 @@
                   : [$q.dark.isActive ? 'text-white' : 'text-primary']
               "
             >
-              {{
-                selected
-                  ? '> ' + activeTask?.name
-                  : conversationId.name ||
-                    'Thread' + conversationId.id.substring(0, 3)
-              }}
+              {{ (selected ? '> ' : '') + nameMap.get(conversationId) }}
               <q-tooltip> Select Conversation </q-tooltip>
             </q-item-section>
             <q-item-section side>
@@ -133,10 +128,6 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import {
-  deleteTaskThread,
-  TyTaskManager,
-} from 'src/modules/taskyon/taskManager';
 import SimpleSettings from './SimpleSettings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { TaskNode, TaskListType } from 'src/modules/taskyon/types';
@@ -158,20 +149,17 @@ import {
 
 const state = useTaskyonStore();
 
-type taskEntry = { id: string; name: string | undefined };
-
-const conversationIDs = ref<taskEntry[]>([]);
-
-async function getLeafTaskNames(tm: TyTaskManager) {
-  const leafTaskIds = tm.getLeafTasks().reverse().slice(0, 10);
-  let taskList: taskEntry[] = [];
-  for (const id of leafTaskIds) {
-    taskList.push({ id, name: (await tm.getTask(id))?.name });
-  }
-  return taskList;
-}
-
+const conversationIDs = ref<string[]>([]);
 const activeTask = ref<TaskNode | undefined>();
+const nameMap = ref<Map<string, string>>(new Map());
+
+async function updateNames(conversationIDs: string[]) {
+  const tm = await state.getTaskManager();
+  for (const id in conversationIDs) {
+    const name = (await tm.getTask(id))?.name;
+    nameMap.value.set(id, name || 'Thread' + id.substring(0, 3));
+  }
+}
 
 watch(
   () => state.llmSettings.selectedTaskId,
@@ -179,28 +167,21 @@ watch(
     const tm = await state.getTaskManager();
     if (newTaskId) {
       activeTask.value = await tm.getTask(newTaskId);
+      conversationIDs.value = state.chatHistory.slice(0, 10);
+      void updateNames(conversationIDs.value);
     }
   },
 );
-
-void state.getTaskManager().then(async (tm) => {
-  tm.subscribeToTaskChanges(() => {
-    console.log('update threads!!');
-    void getLeafTaskNames(tm).then((res) => {
-      conversationIDs.value = res;
-    });
-  }, true);
-  conversationIDs.value = await getLeafTaskNames(tm);
-});
 
 async function onDeleteThread(conversationId: string) {
   console.log('deleting thread!!', conversationId);
   const tm = await state.getTaskManager();
   state.llmSettings.selectedTaskId = undefined;
-  await deleteTaskThread(conversationId, tm);
-  conversationIDs.value = await getLeafTaskNames(tm);
+  tm.deleteTaskThread(conversationId);
 }
 
+// TODO: move these functions here into taskmanagerin order to import/export
+//       tasklists...
 async function onDownloadChat(conversationId: string) {
   console.log('deleting thread!!', conversationId);
   const tm = await state.getTaskManager();
@@ -218,6 +199,8 @@ async function onDownloadChat(conversationId: string) {
   }
 }
 
+// TODO: move these functions here into taskmanagerin order to import/export
+//       tasklists...
 async function loadConversation(files: File[]) {
   if (files) {
     console.log('adding files to our conversations!');

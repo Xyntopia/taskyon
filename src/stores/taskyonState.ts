@@ -97,6 +97,9 @@ export const useTaskyonStore = defineStore(storeName, () => {
     // variable to track if the user is at the bottom of a task chat
     lockBottomScroll: true,
     modelHistory: [] as string[],
+    // we save our last used leaf tasknodes here so
+    // that we can show them on the left side...
+    chatHistory: [] as string[],
     newToolDraftCode: '' as string,
     configurationDraft: '' as string,
     draftParameters: {} as Record<string, FunctionArguments>,
@@ -192,9 +195,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
           console.warn(
             `Config version (${
               config.version || 'undefined'
-            }) is not compatible with current version (${
-              initialState.version
-            }). Skipping dynamic config merge.`,
+            }) is not compatible with current version (${initialState.version}). Skipping dynamic config merge.`,
           );
         }
         stateRefs.initialLoad = false;
@@ -305,6 +306,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     ];
   }
 
+  // TODO: don't add this taslist to tyManager, but subscribe to changes from tyManager in order to update it!!
   // last thing we do after having loaded all settings is to actually start taskyon! :)
   const TaskList = reactive(new Map<string, TaskNode>());
   // callin ExecutionContext.interrupt();  cancels processing of current task
@@ -321,6 +323,38 @@ export const useTaskyonStore = defineStore(storeName, () => {
   async function getTaskManager() {
     return await taskManager;
   }
+
+  getTaskManager().then((tm) =>
+    tm.subscribeToTaskChanges(async (task, msg) => {
+      console.log('update task history!!', task.id, msg);
+
+      if (msg === 'new' || msg === 'update') {
+        // Step 1: Remove any entries with the same parentID (keeping only leaf IDs)
+        stateRefs.chatHistory = stateRefs.chatHistory.filter(
+          (t) => t !== task.parentID,
+        );
+
+        // Step 2: Remove task.id if it exists, then unshift to front (avoids duplication)
+        stateRefs.chatHistory = [
+          task.id,
+          ...stateRefs.chatHistory.filter((t) => t !== task.id),
+        ];
+
+        // Step 3: Enforce a maximum size of 50
+        if (stateRefs.chatHistory.length > 50) {
+          stateRefs.chatHistory.length = 50; // Trims excess elements from the end
+        }
+      } else if (msg === 'delete') {
+        // Filter out the deleted task ID
+        stateRefs.chatHistory = stateRefs.chatHistory.filter(
+          (t) => t !== task.id,
+        );
+      } else if (msg === 'deleteAll') {
+        // Clear history
+        stateRefs.chatHistory = [];
+      }
+    }),
+  );
 
   function addModelToHistory(model: string) {
     if (stateRefs.modelHistory.length >= 5) {
@@ -418,9 +452,11 @@ export const useTaskyonStore = defineStore(storeName, () => {
     },
   );
 
+  // TODO: adapt this to non-reactive tasks in tymanager
   function useReactiveTasks() {
     const selectedThread = ref<TaskNode[]>([]);
     const taskWorkerWaiting = ref(true);
+    // TODO: have a current, reactive task here and update it using tymanager subscriptions...
     const currentTask = ref<TaskNode>();
 
     async function updateCurrentTask(taskId: string | undefined) {

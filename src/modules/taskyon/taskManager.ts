@@ -8,7 +8,7 @@ import {
   collections,
 } from './rxdb';
 import { openFile } from '../OPFS';
-import { deepMerge, AsyncQueue, sleep, lockMap } from '../utils';
+import { deepMerge, AsyncQueue, lockMap } from '../utils';
 import { useVectorStore } from './hnswIndex';
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi';
 import { Tool } from './tools';
@@ -164,6 +164,7 @@ export async function addTask2Tree(
   // TODO:  this needs an overhaul..  we want to save tasks only once
   //        and have them immutable...
   if (execute) {
+    // we need processTasksQueue as an argument here!!!
     processTasksQueue.push(newTask.id);
     newTask.state = 'Queued';
     await taskManager.setTask(newTask, false);
@@ -292,49 +293,28 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
   };
 }
 
-function tyMechanisms() {
-  let subscribers: Array<
-    (task?: TaskNode, taskNum?: number) => void | Promise<void>
-  > = [];
-  let taskCountSubscribers: Array<(task?: TaskNode, taskNum?: number) => void> =
-    [];
+type TaskEvent = 'new' | 'update' | 'delete' | 'deleteAll';
 
-  function subscribeToTaskChanges(
-    callback: (task?: TaskNode, taskNum?: number) => void | Promise<void>,
-    subscribeToTaskCountOnly = false,
-  ): void {
-    if (subscribeToTaskCountOnly) {
-      taskCountSubscribers.push(callback);
-    } else {
-      subscribers.push(callback);
-    }
+type TaskCallBack = (task: TaskNode, msg: TaskEvent) => Promise<void>;
+
+function tyMechanisms() {
+  let subscribers: TaskCallBack[] = [];
+
+  // because our tass are supposed to be "immutable" (not yet as of 2024.11.04), we only really need
+  // to subscribe to the task itself. Every time we "change" something in the
+  // tasks, we can assume that the task number changed as well...
+  function subscribeToTaskChanges(callback: TaskCallBack): void {
+    subscribers.push(callback);
   }
 
   // You may also need a method to unsubscribe if required
-  function unsubscribeFromTaskChanges(
-    callback: (task?: TaskNode, taskNum?: number) => void | Promise<void>,
-  ): void {
+  function unsubscribeFromTaskChanges(callback: TaskCallBack): void {
     subscribers = subscribers.filter((sub) => sub !== callback);
-    taskCountSubscribers = taskCountSubscribers.filter(
-      (sub) => sub !== callback,
-    );
   }
 
-  function notifySubscribers(
-    task: TaskNode | undefined,
-    taskNum: number | undefined = undefined,
-  ): void {
-    /*if (!task && !taskNum) {
-      subscribers.forEach((callback) => void callback(undefined, undefined));
-    }*/
-
+  function notifySubscribers(task: TaskNode | undefined, msg: TaskEvent): void {
     if (task) {
-      subscribers.forEach((callback) => void callback(task, taskNum));
-    }
-
-    // Notify subscribers interested in task count changes
-    if (taskNum) {
-      taskCountSubscribers.forEach((callback) => callback(undefined, taskNum));
+      subscribers.forEach((callback) => void callback(task, msg));
     }
   }
 
@@ -584,36 +564,6 @@ export function useTyTaskManager(
   // child IDs in order to be able to do faster tree traversals...
   const parentToChildrenMap = new Map<string, Set<string>>();
 
-  // TODO: get rid of this...  its too slow and we want to oad tasks directly from the db...
-  //       or do this really slowly...
-  // this function slowly loads the entire db into memory cache in the background trying to speed up
-  // future access to tasks...
-  // it would probably be a better idea to to this with a caching function, considering
-  // that our tasks are supposd to be immutable anyways...
-  // probably also a good idea to return an immutable with immutable.js :)
-  async function initializeTasksFromDB() {
-    // TODO: wondering if we should maybe get rid of this?  its pretty inefficient to do this
-    //       on every reload of our app :P
-    console.log('Initialize our in-memory task store.');
-    if (taskyonDB) {
-      const tasksFromDb = await taskyonDB.tasknodes.find().exec();
-      tasksFromDb.forEach(async (taskDoc) => {
-        try {
-          // make sure we load the task into cache by calling it...
-          getTask(taskDoc.id);
-        } catch (error) {
-          console.error('Error transforming task doc:', error);
-          // skip this task and continue with the next one
-        }
-        await sleep(100);
-      });
-      console.log('all tasks loaded from DB!');
-
-      notifySubscribers(undefined, await countTasks());
-    }
-  }
-  void initializeTasksFromDB();
-
   async function unblockedGetTask(
     taskId: string,
   ): Promise<TaskNode | undefined> {
@@ -637,18 +587,17 @@ export function useTyTaskManager(
 
   async function setTask(task: TaskNode, save: boolean): Promise<void> {
     const unlock = await lockTask(task.id);
-    await withTaskCountCheck(task.id, async () => {
-      tasks.set(task.id, task);
-      if (save) {
-        await saveTaskToDb(task); // Save to database if required
-      }
-      // Update parent-child cache
-      if (task.parentID) {
-        const children = await searchChildTasks(task.parentID);
-        children.add(task.id);
-        parentToChildrenMap.set(task.parentID, children);
-      }
-    });
+    tasks.set(task.id, task);
+    if (save) {
+      await saveTaskToDb(task); // Save to database if required
+    }
+    // Update parent-child cache
+    if (task.parentID) {
+      const children = await searchChildTasks(task.parentID);
+      children.add(task.id);
+      parentToChildrenMap.set(task.parentID, children);
+    }
+    notifySubscribers(task, 'new');
     unlock();
   }
 
@@ -692,26 +641,24 @@ export function useTyTaskManager(
     updateData: Partial<TaskNode> & { id: string },
     save: boolean,
   ): Promise<void> {
-    await withTaskCountCheck(updateData.id, async () => {
-      const unlock = await lockTask(updateData.id);
-      const task = await unblockedGetTask(updateData.id);
-      if (task) {
-        // Update the task with new data
-        // Object.assign(task, updateData);
-        // TODO: her we are doing the deepmerge, so that the task stays reactive, but we don't need that
-        // anymore in the future, as we are only goingto update tasks through a publish/subscribe mechanism
-        // and get rid of inherently reactive tasks...
-        Object.assign(task, deepMerge(task, updateData));
-        // because we're updating a task we should not have to update the
-        // parentToChildrenMap once, we have immutable tasks though, we are adding
-        // a task with a new ID and should probably replace the childrens ID
-        if (save) {
-          await saveTaskToDb(task); // Save to database if required
-        }
+    const unlock = await lockTask(updateData.id);
+    const task = await unblockedGetTask(updateData.id);
+    if (task) {
+      // Update the task with new data
+      // Object.assign(task, updateData);
+      // TODO: her we are doing the deepmerge, so that the task stays reactive, but we don't need that
+      // anymore in the future, as we are only goingto update tasks through a publish/subscribe mechanism
+      // and get rid of inherently reactive tasks...
+      Object.assign(task, deepMerge(task, updateData));
+      // because we're updating a task we should not have to update the
+      // parentToChildrenMap once, we have immutable tasks though, we are adding
+      // a task with a new ID and should probably replace the childrens ID
+      if (save) {
+        await saveTaskToDb(task); // Save to database if required
       }
-      unlock();
-      notifySubscribers(tasks.get(updateData.id));
-    });
+    }
+    unlock();
+    if (task) notifySubscribers(task, 'update');
     // TODO: return the root or leave of the new tree ;).
   }
 
@@ -737,7 +684,7 @@ export function useTyTaskManager(
     tasks.clear();
     parentToChildrenMap.clear();
     await resetVectorStore();
-    notifySubscribers(undefined, 0);
+    notifySubscribers(undefined, 'deleteAll');
   }
 
   async function deleteTask(taskId: string): Promise<void> {
@@ -755,8 +702,7 @@ export function useTyTaskManager(
     await deleteTaskFromDB(taskId);
     await deleteTaskFromVectorStore(taskId);
     console.log('done deleting task:', taskId);
-
-    notifySubscribers(tasks.get(taskId), await countTasks());
+    if (task) notifySubscribers(task, 'delete');
     unlock();
   }
 
@@ -769,19 +715,35 @@ export function useTyTaskManager(
     }
   };
 
-  async function withTaskCountCheck(
-    taskId: string,
-    operation: () => void | Promise<void>,
-  ) {
-    const prevTaskCount = tasks.size;
+  // deletes tasks from the supplied leaf up to the first branch
+  // "split", eliminating a branch
+  // which is defined by the leaf and preceding, exclusive tasks to this branch
+  async function deleteTaskThread(leafId: string) {
+    let currentTaskId = leafId;
 
-    void (await Promise.resolve(operation()));
+    while (currentTaskId) {
+      const currentTask = await getTask(currentTaskId);
+      if (!currentTask) break; // Break if a task doesn't exist
 
-    const taskCountChanged = tasks.size !== prevTaskCount;
-    notifySubscribers(
-      tasks.get(taskId),
-      taskCountChanged ? await countTasks() : undefined,
-    );
+      // Check if the parent task has more than one child
+      if (currentTask.parentID) {
+        const childrenIDs = await searchChildTasks(currentTask.parentID);
+        if (childrenIDs.size > 1) {
+          // in this case we need to update the parent with the fewer children
+          break; // Stop deletion if the parent task has more than one child. We only want to delete this branch...
+        }
+      }
+
+      // Delete the current task
+      deleteTask(currentTaskId);
+
+      if (currentTask.parentID) {
+        // Move to the parent task
+        currentTaskId = currentTask.parentID;
+      } else {
+        break;
+      }
+    }
   }
 
   // we can search tasks here using a mongo-db query object
@@ -905,6 +867,9 @@ export function useTyTaskManager(
     }
   }
 
+  // import tasks from json! :)
+  // TODO: remove this function and replace this with a list of tasnode json functions!!
+  //       we want to get rid of our rxdb dependency here... we could even backup tass as markdown!  that might be even better :)
   async function addTaskBackup(jsonObjString: string) {
     // TODO: add some zod validation here!
     if (taskyonDB) {
@@ -915,7 +880,8 @@ export function useTyTaskManager(
       const dbobject = await taskyonDB.importJSON(jsonObj);
       return dbobject;
     }
-    notifySubscribers(undefined, await countTasks());
+    // when loading json, notify for each individual new task...
+    notifySubscribers(undefined, 'new');
   }
 
   const defaultMode = {
@@ -930,12 +896,14 @@ export function useTyTaskManager(
     getJsonTaskBackup,
     addTaskBackup,
     deleteAllTasks,
+    deleteTaskThread,
     countTasks,
     syncVectorIndexWithTasks,
     vectorSearchTasks,
     countVecs,
     filteredVectorSearch,
     findLeafTasks,
+    searchChildTasks,
   };
 
   const fm = useFileManager(taskyonDB?.filemappings);
@@ -947,39 +915,3 @@ export function useTyTaskManager(
   };
 }
 export type TyTaskManager = ReturnType<typeof useTyTaskManager>;
-
-// deletes tasks up to the first branch "split", eliminating a branch
-// which is defined by the leaf and preceding, exclusive tasks
-export async function deleteTaskThread(
-  leafId: string,
-  taskManager: TyTaskManager,
-) {
-  let currentTaskId = leafId;
-  while (currentTaskId) {
-    const currentTask = await taskManager.getTask(currentTaskId);
-    if (!currentTask) break; // Break if a task doesn't exist
-
-    // Check if the parent task has more than one child
-    if (currentTask.parentID) {
-      const parentTask = await taskManager.getTask(currentTask.parentID);
-      if (parentTask && parentTask.childrenIDs.length > 1) {
-        // in this case we need to update the parent with the fewer children
-        const childrenIDs = parentTask.childrenIDs.filter(
-          (id) => id != currentTask.id,
-        );
-        await taskManager.updateTask({ id: parentTask.id, childrenIDs }, true);
-        break; // Stop deletion if the parent task has more than one child. We only want to delete this branch...
-      }
-    }
-
-    // Delete the current task
-    await taskManager.deleteTask(currentTaskId);
-
-    if (currentTask.parentID) {
-      // Move to the parent task
-      currentTaskId = currentTask.parentID;
-    } else {
-      break;
-    }
-  }
-}
