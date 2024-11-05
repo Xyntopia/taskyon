@@ -1,15 +1,22 @@
 // list of re-usable command groups
 
-export function selectllmmodel(provider: string, modelId: string = '') {
-  cy.contains('Provider').click();
-  cy.get('.q-menu').contains(provider).click();
-  if (modelId)
+export function selectllmmodel(
+  provider: string | undefined,
+  modelId: string = '',
+) {
+  if (provider) {
+    cy.contains('Provider').click();
+    cy.get('.q-menu').contains(provider).click();
+  }
+  if (modelId) {
     cy.wait(100)
       .contains('Select LLM Model for answering/solving the task.')
       .click()
       .type(modelId)
-      .wait(200)
-      .type('{enter}{esc}');
+      .wait(200);
+    cy.get('.q-menu').contains(modelId).click();
+  }
+  //.type('{enter}{esc}');
   //cy.get('.q-menu').contains(modelId).click();
 }
 

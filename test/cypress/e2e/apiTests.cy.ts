@@ -49,7 +49,7 @@ describe('taskyon API', () => {
     // as of 20241007 this is the cheapest model which works with vision...
     const visionModelID = 'google/gemini-flash-1.5-8b';
 
-    selectllmmodel('openai', '');
+    selectllmmodel('openai');
     selectllmmodel('openrouter.ai', visionModelID);
 
     cy.wait(1000).reload();
