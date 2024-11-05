@@ -40,7 +40,7 @@
               {{
                 selected
                   ? `> ${state.currentTask?.name}`
-                  : nameMap['conversationId'] ||
+                  : nameMap[conversationId] ||
                     `chat.${conversationId.slice(0, 3)}`
               }}
               <q-tooltip> Select Conversation </q-tooltip>
@@ -132,7 +132,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, reactive, watch } from 'vue';
 import SimpleSettings from './SimpleSettings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { TaskListType } from 'src/modules/taskyon/types';
@@ -155,14 +155,14 @@ import {
 const state = useTaskyonStore();
 
 const conversationIDs = ref<string[]>([]);
-const nameMap = ref<Record<string, string>>({});
+const nameMap = reactive<Record<string, string>>({});
 
 async function updateName(id: string) {
-  if (!(id in nameMap.value)) {
+  if (!(id in nameMap)) {
     const tm = await state.getTaskManager();
     const name = (await tm.getTask(id))?.name;
     if (name) {
-      nameMap.value.id = name;
+      nameMap[id] = name;
     }
   }
 }
