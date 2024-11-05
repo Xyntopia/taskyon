@@ -8,7 +8,7 @@
       update search index {{ syncProgressString }}</q-btn
     >
     <q-btn :icon="mdiDatabaseRemove" @click="onResetSearchIndex">
-      reset search index
+      clear search index
     </q-btn>
     <q-table
       style="font-size: 0.8em"
@@ -73,8 +73,13 @@
                 <q-tooltip>Search Similarity in %</q-tooltip>
               </div>
             </div>
-            {{ rows.row.taskId }}
-            <!--<Task :task="rows.row" class="col q-pa-xs" />-->
+            <div class="col q-pa-xs">
+              <div class="text-caption text-right">id: {{ rows.row.taskId }}</div>
+              <Task
+                v-if="taskDataMap[rows.row.taskId]"
+                :task="taskDataMap[rows.row.taskId]!"
+              />
+            </div>
           </div>
         </td>
       </template>
@@ -86,7 +91,7 @@
 import { ref, watch, computed } from 'vue';
 import Search from 'components/SearchInput.vue';
 import { TaskNode } from 'src/modules/taskyon/types';
-//import Task from 'components/taskyon/TaskWidget.vue';
+import Task from 'components/taskyon/TaskWidget.vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import {
   mdiApproximatelyEqual,
@@ -127,6 +132,7 @@ const router = useRouter();
 
 const state = useTaskyonStore();
 const searchResults = ref<{ taskId: string; distance: number }[]>([]);
+const taskDataMap = ref<Record<string, TaskNode>>({});
 const syncProgressString = ref('0/0');
 const syncProgress = ref(0.0);
 const taskCount = ref<number | string>('N/A');
@@ -183,6 +189,18 @@ const createMangoQuery = (labelString: string) => {
   };
 };
 
+async function fetchAndDisplayTasks() {
+  console.log('get task data from IDs');
+  for (const task of searchResults.value) {
+    if (!taskDataMap.value[task.taskId]) {
+      const taskData = await state
+        .getTaskManager()
+        .then((tm) => tm.getTask(task.taskId));
+      if (taskData) taskDataMap.value[task.taskId] = taskData;
+    }
+  }
+}
+
 async function searchTasks(params: searchParams & { k: string }) {
   console.log('searching tasks:', params);
   const taskManager = await state.getTaskManager();
@@ -214,6 +232,8 @@ async function searchTasks(params: searchParams & { k: string }) {
     searchResults.value = result;
     taskCount.value = (await taskManager.countTasks()) || 'N/A';
     isSearching.value = false;
+
+    void fetchAndDisplayTasks();
   }
 }
 

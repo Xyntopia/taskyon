@@ -379,15 +379,18 @@ function useTaskVectors(
   }
 
   const vecAlreadyExists = async (taskId: string) => {
-    const vecid = Number((await vecMappingFromTask(taskId))?.vecid);
-    if (vecid) {
-      try {
-        // this works. If we mark a label as deleted in our vector index
-        // this will throw an error, meaning the vector doesn't exist...
-        const vec = (await getVectorIndex())?.getPoint(vecid);
-        return vec;
-      } catch (error) {
-        return undefined;
+    const res = await vecMappingFromTask(taskId);
+    if (res?.vecid) {
+      const vecid = Number(res.vecid);
+      if (!isNaN(vecid)) {
+        try {
+          // this works. If we mark a label as deleted in our vector index
+          // this will throw an error, meaning the vector doesn't exist...
+          const vec = (await getVectorIndex())?.getPoint(vecid);
+          return vec;
+        } catch (error) {
+          return undefined;
+        }
       }
     }
     return undefined;
