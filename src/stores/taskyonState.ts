@@ -312,7 +312,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
   // callin ExecutionContext.interrupt();  cancels processing of current task
   const taskWorkerController = useTaskWorkerController();
   console.log('initialize taskyon');
-  const taskManager = initTaskyon(
+  const initPromise = initTaskyon(
     stateRefs.llmSettings,
     stateRefs.keys,
     taskWorkerController,
@@ -320,9 +320,23 @@ export const useTaskyonStore = defineStore(storeName, () => {
     TaskList,
     defineTyGuiTools(),
   );
-  async function getTaskManager() {
-    return await taskManager;
-  }
+
+  type TaskyonInstance = Awaited<ReturnType<typeof initTaskyon>>;
+
+  // Access taskManagerInstance and addTask2Tree without redundant awaits
+  const getTaskManager = async (): Promise<
+    TaskyonInstance['taskManagerInstance']
+  > => {
+    const { taskManagerInstance } = await initPromise;
+    return taskManagerInstance;
+  };
+
+  const addTask2Tree = async (
+    ...args: Parameters<TaskyonInstance['addTask2Tree']>
+  ): ReturnType<TaskyonInstance['addTask2Tree']> => {
+    const { addTask2Tree } = await initPromise;
+    return await addTask2Tree(...args);
+  };
 
   const add2ChatHistory = async (task: TaskNode, msg: string) => {
     console.log('update task history!!', task.id, msg);
@@ -440,16 +454,14 @@ export const useTaskyonStore = defineStore(storeName, () => {
   }
 
   // set up iframe API
-  void getTaskManager().then((tm) => {
-    if ($q.platform.within.iframe) {
-      void setupIframeApi(
-        stateRefs.appConfiguration,
-        stateRefs.llmSettings,
-        stateRefs.keys,
-        tm,
-      );
-    }
-  });
+  if ($q.platform.within.iframe) {
+    void setupIframeApi(
+      addTask2Tree,
+      stateRefs.appConfiguration,
+      stateRefs.llmSettings,
+      stateRefs.keys,
+    );
+  }
 
   watch(
     [
@@ -530,6 +542,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     llmModels: computed(() => llmModelsInternal.value),
     tyPublicKey,
     logger,
+    addTask2Tree,
   };
 }); // this state stores all information which
 // should be stored e.g. in browser LocalStorage

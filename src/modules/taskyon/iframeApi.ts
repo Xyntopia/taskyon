@@ -1,4 +1,4 @@
-import { addTask2Tree, TyTaskManager } from './taskManager';
+import { initAddTask2Tree } from './taskManager';
 import { ToolBase, partialTaskDraft } from './types';
 import type { llmSettings } from './types';
 import { deepMergeReactive } from '../utils';
@@ -11,10 +11,10 @@ import { TaskyonMessages } from './iframeApiTypes';
   }*/
 
 export function setupIframeApi(
+  addTask2Tree: ReturnType<typeof initAddTask2Tree>,
   appConfiguration: Record<string, unknown>,
   llmSettings: llmSettings,
   keys: Record<string, string>,
-  taskManager: TyTaskManager,
 ) {
   console.log('Turn on iframe API.');
   // Listen for messages from the parent page
@@ -42,7 +42,7 @@ export function setupIframeApi(
                 ...msg.data.task,
                 content: msg.data.task.content,
               };
-              void addTask2Tree(newTask, undefined, taskManager, false, false);
+              void addTask2Tree(newTask, undefined, false, false);
             } else if (
               msg.success &&
               msg.data.type === 'configurationMessage'
@@ -93,7 +93,6 @@ export function setupIframeApi(
               void addTask2Tree(
                 newTask,
                 undefined,
-                taskManager,
                 false,
                 duplicateTaskName,
               ).catch((err) => console.warn(err));

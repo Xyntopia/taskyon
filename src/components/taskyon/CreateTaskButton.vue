@@ -5,7 +5,6 @@
 <script setup lang="ts">
 import { load } from 'js-yaml';
 import { partialTaskDraft } from 'src/modules/taskyon/types';
-import { addTask2Tree } from 'src/modules/taskyon/taskManager';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 
 const state = useTaskyonStore();
@@ -76,10 +75,9 @@ async function addTasks() {
   if (markdown) {
     const taskList = processMarkdown(markdown);
     for (const task of taskList) {
-      parentId = await addTask2Tree(
+      parentId = await state.addTask2Tree(
         task,
         parentId, //parent
-        await state.getTaskManager(),
         false, // should we execute the task? // only the last one obviously ;)
       );
       state.llmSettings.selectedTaskId = parentId;

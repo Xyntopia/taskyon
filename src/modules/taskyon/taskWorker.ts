@@ -20,12 +20,12 @@ import {
   yesnoToBoolean,
   OnInterruptFunc,
 } from './types';
-import { addTask2Tree, processTasksQueue } from './taskManager';
 import type { OpenAI } from 'openai';
-import { TyTaskManager } from './taskManager';
+import { initAddTask2Tree, TyTaskManager } from './taskManager';
 import { Tool, handleFunctionExecution } from './tools';
 import { load } from 'js-yaml';
 import {
+  type AsyncQueue,
   deepCopy,
   deepMerge,
   keysToLowerCase,
@@ -611,13 +611,17 @@ async function processTask(
   return task;
 }
 
-export async function taskWorker(
+export async function runTaskWorker(
+  processTasksQueue: AsyncQueue<string>,
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
   apiKeys: Record<string, string>,
   taskWorkerController: TaskWorkerController,
 ) {
   console.log('entering task worker loop...');
+
+  const addTask2Tree = initAddTask2Tree(processTasksQueue, taskManager);
+
   while (true) {
     console.log('waiting for next task!');
     let task: TaskNode | undefined = undefined;
@@ -664,7 +668,6 @@ export async function taskWorker(
             const newTaskId = await addTask2Tree(
               t,
               t.parentID || finishedTask.id,
-              taskManager,
               // interrupt execution if interrupted flag is shown!
               // this makes sure that results are still saved, even if we stop any
               // further execution
@@ -742,7 +745,6 @@ export async function taskWorker(
       const newTaskId = await addTask2Tree(
         errorTask,
         task?.id,
-        taskManager,
         // interrupt execution if interrupted flag is shown!
         // this makes sure that results are still saved, even if we stop any
         // further execution

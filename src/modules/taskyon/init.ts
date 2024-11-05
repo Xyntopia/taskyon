@@ -1,16 +1,14 @@
-import { useTyTaskManager } from './taskManager';
+import { initAddTask2Tree, useTyTaskManager } from './taskManager';
 import type { TaskNode } from './types';
 import { createTaskyonDatabase, TaskyonDatabase } from './rxdb';
-import {
-  TaskWorkerController,
-  taskWorker as runTaskWorker,
-} from './taskWorker';
+import { TaskWorkerController, runTaskWorker } from './taskWorker';
 import type { Tool } from './tools';
 import { loadFile } from 'src/modules/loadFiles';
 // TODO: make webpack automatically add all tool files from /tools/*
 import { executeJavaScript } from '../tools/executeJavaScript';
 import { executePythonScript } from '../tools/executePython';
 import { llmSettings } from './types';
+import { AsyncQueue } from '../utils';
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -74,12 +72,19 @@ export async function initTaskyon(
   // keys could porentially be reactive here, so in theory, when they change in the GUI,
   // taskyon should automatically pick up on this...
   console.log('starting taskyon worker');
+  const processTasksQueue = new AsyncQueue<string>();
   void runTaskWorker(
+    processTasksQueue,
     llmSettings,
     taskManagerInstance,
     apiKeys,
     taskWorkerController,
   );
 
-  return taskManagerInstance;
+  const addTask2Tree = initAddTask2Tree(processTasksQueue, taskManagerInstance);
+
+  return {
+    taskManagerInstance,
+    addTask2Tree,
+  };
 }

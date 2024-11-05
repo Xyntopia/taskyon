@@ -8,7 +8,7 @@ import {
   collections,
 } from './rxdb';
 import { openFile } from '../OPFS';
-import { deepMerge, AsyncQueue, lockMap } from '../utils';
+import { type AsyncQueue, deepMerge, lockMap } from '../utils';
 import { useVectorStore } from './hnswIndex';
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi';
 import { Tool } from './tools';
@@ -70,8 +70,6 @@ function base64Uuid() {
   return bigint;
 }*/
 
-export const processTasksQueue = new AsyncQueue<string>();
-
 // use this to create hashes for every task
 async function hashObject(obj: unknown) {
   const jsonString = JSON.stringify(obj);
@@ -105,101 +103,102 @@ const { extractKeywords } = usePyodideWebworker('task manager keywords');
 // so when calling the function, we need to pre-select which type of task
 // we want to have.
 // TODO: move this into tyManager and rename ot to "addPartialTask2Tree"
-export async function addTask2Tree(
-  task: RequireSome<Partial<TaskNode>, 'role' | 'content'>,
-  parentID: string | undefined,
-  taskManager: TyTaskManager,
-  execute = true,
-  duplicateTaskName = true,
-): Promise<TaskNode['id']> {
-  if (!duplicateTaskName && task.name) {
-    // check if task already exists and throw an error, if it does, because
-    // we are not supposed to create it in that case ;)
-    // this is specifically used in the case of repeated task
-    // declarations which come for example from a webapge which integrates the tasks
-    // TODO: instead of givien the webpage the option to "disallow" duplicate
-    //       tasks, make sure, the tasks don't get saved in the db
-    //       as the get declared every single time anyways, we don't need to store them!
-    const tasks = await taskManager.searchTasks({
-      selector: { name: task.name },
-    });
-    if (tasks.length > 0) {
-      throw `The task ${task.name} already exists!`;
-    }
-  }
-
-  const uuid = base64Uuid();
-
-  const parent = parentID ? await taskManager.getTask(parentID) : undefined;
-
-  const newTask: TaskNode = {
-    ...task,
-    role: task.role,
-    parentID,
-    content: task.content,
-    state: task.state || 'Open',
-    childrenIDs: [],
-    debugging: task.debugging || {},
-    id: uuid,
-    created_at: Date.now(),
-    configuration: task.configuration,
-    allowedTools: task.allowedTools || parent?.allowedTools,
-  };
-
-  // TODO: register this in a list in taskyon so that figure out how
-  // to make use of this...
-  void taskContentHash(newTask);
-
-  console.log('create new Task:', newTask.id);
-
-  // TODO: get rid of this section..   we don't want task children, because
-  //       they prevent us from creating immutable task trees
-  if (parent) {
-    parent.childrenIDs.push(newTask.id);
-    await taskManager.updateTask(parent, true);
-  }
-
-  // Push the new function task to processTasksQueue
-  // we are not saving yet, as it is going to be processed :)
-  // TODO:  this needs an overhaul..  we want to save tasks only once
-  //        and have them immutable...
-  if (execute) {
-    // we need processTasksQueue as an argument here!!!
-    processTasksQueue.push(newTask.id);
-    newTask.state = 'Queued';
-    await taskManager.setTask(newTask, false);
-  } else {
-    // in the case of a task which is not processed, we can save it :)
-    newTask.state = 'Completed';
-    await taskManager.setTask(newTask, true);
-  }
-
-  // extract keywordsfrom entire chat and use it to name the task...
-  // but only if a taskname doesn't exist yet.
-  if (!newTask.name && task.content && !task.label?.includes('discard')) {
-    const toolDefs = await taskManager.updateToolDefinitions(true);
-    const chat = taskManager.buildChatThread(
-      newTask.id,
-      false,
-      toolDefs,
-      false,
-    );
-    const chatString = (await chat).reduce((p, n) => {
-      if (typeof n.content === 'string') {
-        return p + '\n\n' + n.content;
+export const initAddTask2Tree =
+  (processTasksQueue: AsyncQueue<string>, taskManager: TyTaskManager) =>
+  async (
+    task: RequireSome<Partial<TaskNode>, 'role' | 'content'>,
+    parentID: string | undefined,
+    execute = true,
+    duplicateTaskName = true,
+  ): Promise<TaskNode['id']> => {
+    if (!duplicateTaskName && task.name) {
+      // check if task already exists and throw an error, if it does, because
+      // we are not supposed to create it in that case ;)
+      // this is specifically used in the case of repeated task
+      // declarations which come for example from a webapge which integrates the tasks
+      // TODO: instead of givien the webpage the option to "disallow" duplicate
+      //       tasks, make sure, the tasks don't get saved in the db
+      //       as the get declared every single time anyways, we don't need to store them!
+      const tasks = await taskManager.searchTasks({
+        selector: { name: task.name },
+      });
+      if (tasks.length > 0) {
+        throw `The task ${task.name} already exists!`;
       }
-      return p;
-    }, '');
-    void extractKeywords(chatString, 5).then((kws) => {
-      console.log('update task with kw: ', kws);
-      void taskManager.updateTask({ id: newTask.id, name: kws[0] }, true);
-    });
-  } else if (newTask.name) {
-    console.log('task already has a name:', newTask.name);
-  }
+    }
 
-  return newTask.id;
-}
+    const uuid = base64Uuid();
+
+    const parent = parentID ? await taskManager.getTask(parentID) : undefined;
+
+    const newTask: TaskNode = {
+      ...task,
+      role: task.role,
+      parentID,
+      content: task.content,
+      state: task.state || 'Open',
+      childrenIDs: [],
+      debugging: task.debugging || {},
+      id: uuid,
+      created_at: Date.now(),
+      configuration: task.configuration,
+      allowedTools: task.allowedTools || parent?.allowedTools,
+    };
+
+    // TODO: register this in a list in taskyon so that figure out how
+    // to make use of this...
+    void taskContentHash(newTask);
+
+    console.log('create new Task:', newTask.id);
+
+    // TODO: get rid of this section..   we don't want task children, because
+    //       they prevent us from creating immutable task trees
+    if (parent) {
+      parent.childrenIDs.push(newTask.id);
+      await taskManager.updateTask(parent, true);
+    }
+
+    // Push the new function task to processTasksQueue
+    // we are not saving yet, as it is going to be processed :)
+    // TODO:  this needs an overhaul..  we want to save tasks only once
+    //        and have them immutable...
+    if (execute) {
+      // we need processTasksQueue as an argument here!!!
+      processTasksQueue.push(newTask.id);
+      newTask.state = 'Queued';
+      await taskManager.setTask(newTask, false);
+    } else {
+      // in the case of a task which is not processed, we can save it :)
+      newTask.state = 'Completed';
+      await taskManager.setTask(newTask, true);
+    }
+
+    // extract keywordsfrom entire chat and use it to name the task...
+    // but only if a taskname doesn't exist yet.
+    if (!newTask.name && task.content && !task.label?.includes('discard')) {
+      const toolDefs = await taskManager.updateToolDefinitions(true);
+      const chat = taskManager.buildChatThread(
+        newTask.id,
+        false,
+        toolDefs,
+        false,
+      );
+      const chatString = (await chat).reduce((p, n) => {
+        if (typeof n.content === 'string') {
+          return p + '\n\n' + n.content;
+        }
+        return p;
+      }, '');
+      void extractKeywords(chatString, 5).then((kws) => {
+        console.log('update task with kw: ', kws);
+        void taskManager.updateTask({ id: newTask.id, name: kws[0] }, true);
+      });
+    } else if (newTask.name) {
+      console.log('task already has a name:', newTask.name);
+    }
+
+    return newTask.id;
+  };
 
 function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
   // TODO: make sure, we add the correct file type here!

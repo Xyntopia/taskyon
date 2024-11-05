@@ -49,9 +49,7 @@
           class="row"
         >
           <ObjectTreeView
-            v-model="
-              state.llmSettings.taskDraft.content.functionCall.arguments
-            "
+            v-model="state.llmSettings.taskDraft.content.functionCall.arguments"
             class="col"
             input-field-behavior="auto"
             :separate-labels="false"
@@ -335,7 +333,6 @@ import { useTaskyonStore } from 'stores/taskyonState';
 import { TaskNode } from 'src/modules/taskyon/types';
 import ModelSelection from 'components/taskyon/ModelSelection.vue';
 import { writeFilesToOpfs } from 'src/modules/OPFS';
-import { addTask2Tree } from 'src/modules/taskyon/taskManager';
 import ObjectTreeView from '../ObjectTreeView.vue';
 import taskSettingsButton from './taskSettingsButton.vue';
 import taskContentEdit from './taskContentEdit.vue';
@@ -633,7 +630,7 @@ async function createFileTask(files: File[]) {
   const fileUuids = await addFiles2Taskyon(files);
 
   if (fileUuids.length) {
-    const task: Parameters<typeof addTask2Tree>[0] = {
+    const task: Parameters<typeof state.addTask2Tree>[0] = {
       role: 'system',
       configuration: currentModel.value
         ? {
@@ -658,10 +655,9 @@ async function addNewTask(execute = true) {
   let fileTaskId = undefined;
   if (fileTaskObj) {
     console.log('add files to chat:', fileTaskObj);
-    fileTaskId = await addTask2Tree(
+    fileTaskId = await state.addTask2Tree(
       fileTaskObj,
       state.llmSettings.selectedTaskId, // parent
-      await state.getTaskManager(),
       false, // we do not want to execute the file object, we want to use the users prompt...
     );
     state.llmSettings.selectedTaskId = fileTaskId;
@@ -672,10 +668,9 @@ async function addNewTask(execute = true) {
   //          otherwise, it won't get executed but simply saved into the tree
   console.log('adding new task, execute?', execute);
   const newTask = { ...currentnewTask.value };
-  const newTaskId = await addTask2Tree(
+  const newTaskId = await state.addTask2Tree(
     newTask,
     fileTaskId || state.llmSettings.selectedTaskId, //parent
-    await state.getTaskManager(),
     execute, // execute right away...
   );
   state.llmSettings.selectedTaskId = newTaskId;
