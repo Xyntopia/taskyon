@@ -186,6 +186,7 @@ async function onDeleteThread(conversationId: string) {
   const tm = await state.getTaskManager();
   state.llmSettings.selectedTaskId = undefined;
   tm.deleteTaskThread(conversationId);
+  state.chatHistory = state.chatHistory.filter((id) => id != conversationId);
 }
 
 // TODO: move these functions here into taskmanagerin order to import/export
