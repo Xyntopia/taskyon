@@ -377,7 +377,8 @@ export async function enrichWithUsageInfos(
           generationInfo.native_tokens_completion,
       };
       await taskManager.updateTask({ id: task.id, debugging }, true);
-      for (const childID of task.childrenIDs) {
+      const childrenIDs = await taskManager.searchChildTasks(task.id);
+      for (const childID of childrenIDs) {
         const child = await taskManager.getTask(childID);
         if (child && !child?.debugging.promptTokens) {
           await taskManager.updateTask(

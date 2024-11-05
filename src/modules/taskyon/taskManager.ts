@@ -137,7 +137,6 @@ export const initAddTask2Tree =
       parentID,
       content: task.content,
       state: task.state || 'Open',
-      childrenIDs: [],
       debugging: task.debugging || {},
       id: uuid,
       created_at: Date.now(),
@@ -150,13 +149,6 @@ export const initAddTask2Tree =
     void taskContentHash(newTask);
 
     console.log('create new Task:', newTask.id);
-
-    // TODO: get rid of this section..   we don't want task children, because
-    //       they prevent us from creating immutable task trees
-    if (parent) {
-      parent.childrenIDs.push(newTask.id);
-      await taskManager.updateTask(parent, true);
-    }
 
     // Push the new function task to processTasksQueue
     // we are not saving yet, as it is going to be processed :)

@@ -318,8 +318,6 @@ of how content can be structured. `,
     .optional()
     .describe('Holds the configuration for the LLM'),
   parentID: z.string().optional(),
-  // TODO: get rid of this parameter in order to make our tasktree
-  childrenIDs: z.array(z.string()),
   // provide debugging information about the task execution
   // all debugging information should be purely optional...
   debugging: z.object({
