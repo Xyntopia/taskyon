@@ -324,37 +324,51 @@ export const useTaskyonStore = defineStore(storeName, () => {
     return await taskManager;
   }
 
-  getTaskManager().then((tm) =>
-    tm.subscribeToTaskChanges(async (task, msg) => {
-      console.log('update task history!!', task.id, msg);
+  const add2ChatHistory = async (task: TaskNode, msg: string) => {
+    console.log('update task history!!', task.id, msg);
 
-      if (msg === 'new' || msg === 'update') {
-        // Step 1: Remove any entries with the same parentID (keeping only leaf IDs)
-        stateRefs.chatHistory = stateRefs.chatHistory.filter(
-          (t) => t !== task.parentID,
-        );
+    if (msg === 'new' || msg === 'update') {
+      // Step 1: Remove any entries with the same parentID (keeping only leaf IDs)
+      stateRefs.chatHistory = stateRefs.chatHistory.filter(
+        (t) => t !== task.parentID,
+      );
 
-        // Step 2: Remove task.id if it exists, then unshift to front (avoids duplication)
-        stateRefs.chatHistory = [
-          task.id,
-          ...stateRefs.chatHistory.filter((t) => t !== task.id),
-        ];
+      // Step 2: Remove task.id if it exists, then unshift to front (avoids duplication)
+      stateRefs.chatHistory = [
+        task.id,
+        ...stateRefs.chatHistory.filter((t) => t !== task.id),
+      ];
 
-        // Step 3: Enforce a maximum size of 50
-        if (stateRefs.chatHistory.length > 50) {
-          stateRefs.chatHistory.length = 50; // Trims excess elements from the end
-        }
-      } else if (msg === 'delete') {
-        // Filter out the deleted task ID
-        stateRefs.chatHistory = stateRefs.chatHistory.filter(
-          (t) => t !== task.id,
-        );
-      } else if (msg === 'deleteAll') {
-        // Clear history
-        stateRefs.chatHistory = [];
+      // Step 3: Enforce a maximum size of 50
+      if (stateRefs.chatHistory.length > 50) {
+        stateRefs.chatHistory.length = 50; // Trims excess elements from the end
       }
-    }),
-  );
+    } else if (msg === 'delete') {
+      // Filter out the deleted task ID
+      stateRefs.chatHistory = stateRefs.chatHistory.filter(
+        (t) => t !== task.id,
+      );
+    } else if (msg === 'deleteAll') {
+      // Clear history
+      stateRefs.chatHistory = [];
+    }
+  };
+
+  // update chatHistory on-the-fly
+  getTaskManager().then((tm) => {
+    // fill chatHistory with some initial values...
+    /*tm.searchTasks({
+      selector: {
+        created_at: { $exists: true }, // Ensures 'created_at' field is present
+      },
+      sort: [{ created_at: 'desc' }],
+      limit: 20,
+    }).then((r) => {
+      r.forEach((t) => add2ChatHistory(t, 'new'));
+    });*/
+
+    tm.subscribeToTaskChanges(add2ChatHistory);
+  });
 
   function addModelToHistory(model: string) {
     if (stateRefs.modelHistory.length >= 5) {

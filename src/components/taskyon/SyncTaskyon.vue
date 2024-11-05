@@ -298,6 +298,7 @@ const showResetDialog = ref(false);
 async function onDeleteTaskyonData() {
   const tm = await state.getTaskManager();
   await tm.deleteAllTasks();
+  state.chatHistory = [];
   // TODO: this is a superdirty version..  it would be much better to manually reinit the taskyondb in the deleteAllTasks function
   location.reload(); // reload browser window to reinitialize the db...
 }

@@ -37,19 +37,24 @@
                   : [$q.dark.isActive ? 'text-white' : 'text-primary']
               "
             >
-              {{ (selected ? '> ' : '') + nameMap.get(conversationId) }}
+              {{
+                selected
+                  ? `> ${state.currentTask?.name}`
+                  : nameMap['conversationId'] ||
+                    `chat.${conversationId.slice(0, 3)}`
+              }}
               <q-tooltip> Select Conversation </q-tooltip>
             </q-item-section>
             <q-item-section side>
               <div>
                 <q-btn
-                  v-if="state.llmSettings.selectedTaskId == conversationId.id"
+                  v-if="state.llmSettings.selectedTaskId == conversationId"
                   flat
                   dense
                   :icon="matDownloadForOffline"
                   size="sm"
                   to="/"
-                  @click="onDownloadChat(conversationId.id)"
+                  @click="onDownloadChat(conversationId)"
                   ><q-tooltip>Download Chat</q-tooltip>
                 </q-btn>
                 <q-btn
@@ -57,7 +62,7 @@
                   :icon="matDelete"
                   size="sm"
                   flat
-                  @click="onDeleteThread(conversationId.id)"
+                  @click="onDeleteThread(conversationId)"
                 >
                   <q-tooltip anchor="center right" self="center left">
                     Delete Conversation
@@ -130,7 +135,7 @@
 import { ref, watch } from 'vue';
 import SimpleSettings from './SimpleSettings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { TaskNode, TaskListType } from 'src/modules/taskyon/types';
+import { TaskListType } from 'src/modules/taskyon/types';
 import { exportFile } from 'quasar';
 import { dump, load } from 'js-yaml';
 import FileDropzone from 'components/FileDropzone.vue';
@@ -150,26 +155,29 @@ import {
 const state = useTaskyonStore();
 
 const conversationIDs = ref<string[]>([]);
-const activeTask = ref<TaskNode | undefined>();
-const nameMap = ref<Map<string, string>>(new Map());
+const nameMap = ref<Record<string, string>>({});
 
-async function updateNames(conversationIDs: string[]) {
-  const tm = await state.getTaskManager();
-  for (const id in conversationIDs) {
+async function updateName(id: string) {
+  if (!(id in nameMap.value)) {
+    const tm = await state.getTaskManager();
     const name = (await tm.getTask(id))?.name;
-    nameMap.value.set(id, name || 'Thread' + id.substring(0, 3));
+    if (name) {
+      nameMap.value.id = name;
+    }
   }
 }
 
 watch(
-  () => state.llmSettings.selectedTaskId,
-  async (newTaskId) => {
-    const tm = await state.getTaskManager();
+  [() => state.llmSettings.selectedTaskId, () => state.chatHistory],
+  async ([newTaskId, newChatHistory]) => {
+    console.log('updating sidebar chat list');
     if (newTaskId) {
-      activeTask.value = await tm.getTask(newTaskId);
-      conversationIDs.value = state.chatHistory.slice(0, 10);
-      void updateNames(conversationIDs.value);
+      conversationIDs.value = newChatHistory.slice(0, 10);
+      conversationIDs.value.forEach((id) => updateName(id));
     }
+  },
+  {
+    immediate: true,
   },
 );
 
