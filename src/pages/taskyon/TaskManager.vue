@@ -1,13 +1,15 @@
 <template>
   <q-page class="q-gutter-xs q-pa-xs">
-    {{ props }}
     <q-btn
       :percentage="syncProgress"
-      :icon="matSync"
+      :icon="mdiRefresh"
       @click="onUpdateSearchIndex"
     >
       update search index {{ syncProgressString }}</q-btn
     >
+    <q-btn :icon="mdiDatabaseRemove" @click="onResetSearchIndex">
+      reset search index
+    </q-btn>
     <q-table
       style="font-size: 0.8em"
       wrap-cells
@@ -86,8 +88,12 @@ import Search from 'components/SearchInput.vue';
 import { TaskNode } from 'src/modules/taskyon/types';
 //import Task from 'components/taskyon/TaskWidget.vue';
 import { useTaskyonStore } from 'src/stores/taskyonState';
-import { matSync } from '@quasar/extras/material-icons';
-import { mdiApproximatelyEqual, mdiForum } from '@quasar/extras/mdi-v6';
+import {
+  mdiApproximatelyEqual,
+  mdiDatabaseRemove,
+  mdiForum,
+  mdiRefresh,
+} from '@quasar/extras/mdi-v6';
 import { useRouter } from 'vue-router';
 import { onMounted } from 'vue';
 import { QTableProps } from 'quasar';
@@ -143,12 +149,23 @@ updateCounts();
 async function onUpdateSearchIndex() {
   const taskManager = await state.getTaskManager();
   if (taskManager) {
-    await taskManager.syncVectorIndexWithTasks(false, (done, total) => {
+    await taskManager.syncVectorIndexWithTasks((done, total) => {
       syncProgress.value = done / total;
       syncProgressString.value = `${done}/${total}`;
       indexCount.value = done;
     });
     syncProgressString.value = '*done*';
+  }
+  updateCounts();
+}
+
+async function onResetSearchIndex() {
+  const taskManager = await state.getTaskManager();
+  if (taskManager) {
+    await taskManager.resetTaskVectors();
+    syncProgressString.value = '*done*';
+    syncProgress.value = 0.0;
+    indexCount.value = 0;
   }
   updateCounts();
 }
@@ -208,10 +225,10 @@ async function onSearchChange(params: searchParams) {
     searchResults.value = [];
   } else {
     // Update the URL with the search parameter
-    const newQuery = { ...props.query, ...params };
+    const newQuery = { ...defaultParams, ...props.query, ...params };
     router.push({ query: newQuery }); // Perform your search here
-    console.log(`Searching for ${params}`);
-    //await searchTasks(q, k, l);
+    console.log('Searching for: ', params);
+    await searchTasks(newQuery);
     console.log('finished search!');
     console.log(searchResults.value);
   }

@@ -47,7 +47,7 @@ function addCopyButtons(md: MarkdownIt) {
     });
 
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
-    console.log('render code fence blocks...');
+    // console.log('render code fence blocks...');
     // Original rendered HTML of the code block
     const originalRenderedHtml = defaultFenceRenderer(
       tokens,

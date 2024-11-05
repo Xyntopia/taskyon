@@ -327,7 +327,6 @@ function useTaskVectors(
   const { getVectorIndex, resetVectorStore } = useVectorStore('taskyondbv');
 
   async function syncVectorIndexWithTasks(
-    resetVectorIndex = false,
     progressCallback: (done: number, total: number) => void,
   ) {
     console.log('sync vector index');
@@ -335,16 +334,6 @@ function useTaskVectors(
     if (!vectorIndex || !taskyonDB) {
       console.warn('Vector index or database is not initialized.');
       return;
-    }
-
-    if (resetVectorIndex) {
-      console.log('delete vector store');
-      await resetVectorStore();
-      console.log('delete vector mappings');
-      await taskyonDB.vectormappings.remove();
-      await taskyonDB.addCollections({
-        vectormappings: collections.vectormappings,
-      });
     }
 
     let counter = 0;
@@ -362,6 +351,16 @@ function useTaskVectors(
 
     console.log('Sync complete.');
   }
+
+  const resetTaskVectors = async () => {
+    console.log('delete vector store');
+    await resetVectorStore();
+    console.log('delete vector mappings');
+    await taskyonDB?.vectormappings.remove();
+    await taskyonDB?.addCollections({
+      vectormappings: collections.vectormappings,
+    });
+  };
 
   const vecMappingFromTask = (taskId: string) =>
     taskyonDB?.vectormappings
@@ -513,7 +512,7 @@ function useTaskVectors(
     deleteTaskFromVectorStore,
     addtoVectorDB,
     filteredVectorSearch,
-    resetVectorStore,
+    resetTaskVectors,
     searchSimilarTasks,
   };
 }
@@ -554,8 +553,8 @@ export function useTyTaskManager(
     deleteTaskFromVectorStore,
     addtoVectorDB,
     filteredVectorSearch,
-    resetVectorStore,
-    searchSimilarTasks
+    resetTaskVectors,
+    searchSimilarTasks,
   } = useTaskVectors(tasks, vectorizerModel, taskyonDB);
 
   async function countVecs() {
@@ -687,13 +686,13 @@ export function useTyTaskManager(
   async function deleteAllTasks() {
     // also delete vectordb!
     // TODO: manually re-initiailized taskyondb after remove...
+    await resetTaskVectors();
     if (taskyonDB) {
       console.log('delete the entire database!');
       await taskyonDB.remove();
     }
     tasks.clear();
     parentToChildrenMap.clear();
-    await resetVectorStore();
     notifySubscribers(undefined, 'deleteAll');
   }
 
@@ -909,6 +908,7 @@ export function useTyTaskManager(
     deleteTaskThread,
     countTasks,
     syncVectorIndexWithTasks,
+    resetTaskVectors,
     countVecs,
     filteredVectorSearch,
     findLeafTasks,
