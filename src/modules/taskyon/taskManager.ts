@@ -394,6 +394,8 @@ function useTaskVectors(
     return undefined;
   };
 
+  const task2Str = (t: TaskNode) => JSON.stringify(t.content);
+
   async function addtoVectorDB(
     task: TaskNode,
     //override = false,
@@ -405,10 +407,7 @@ function useTaskVectors(
       console.log('vector already exists!', task.id);
     } else if (vectorizerModel) {
       console.log('create vector...', task.id);
-      const numvec = await vectorizeText(
-        JSON.stringify(task.content),
-        vectorizerModel,
-      );
+      const numvec = await vectorizeText(task2Str(task), vectorizerModel);
       if (numvec) {
         console.log('got a vector result.');
         const vectorIndex = await getVectorIndex();
@@ -426,27 +425,41 @@ function useTaskVectors(
     unlock();
   }
 
+  /**
+   * So here we use q ManogQuery "query", which we can use to pre-filter our vector search.
+   *
+   *
+   *
+   * @param searchTerm
+   * @param query
+   * @param k
+   * @returns
+   */
   async function filteredVectorSearch(
     searchTerm: string,
-    query: MangoQuery,
+    query?: MangoQuery, // used to pre-filter our vector search
     k = 10,
-  ): Promise<{ task: TaskNode; distance: number }[]> {
+  ): Promise<{ taskId: string; distance: number }[]> {
     if (taskyonDB) {
-      const taskList = await taskyonDB.tasknodes.find(query).exec();
-      const taskIDs = taskList.map((taskDoc) => taskDoc.id);
-      const prefilterVectorsIds = await taskyonDB.vectormappings
-        .find({
-          selector: {
-            uuid: { $in: taskIDs },
-          },
-        })
-        .exec();
-      const vecIDs = prefilterVectorsIds.map((vm) => vm.vecid);
-      const filterfunction = (label: number) =>
-        vecIDs.includes(label.toString());
-
-      const result = vectorSearchTasks(searchTerm, k, filterfunction);
-      return result;
+      if (query) {
+        const taskList = await taskyonDB.tasknodes.find(query).exec();
+        const taskIDs = taskList.map((taskDoc) => taskDoc.id);
+        const prefilterVectorsIds = await taskyonDB.vectormappings
+          .find({
+            selector: {
+              uuid: { $in: taskIDs },
+            },
+          })
+          .exec();
+        const vecIDs = prefilterVectorsIds.map((vm) => vm.vecid);
+        const result = vectorSearchTasks(searchTerm, k, (label: number) =>
+          vecIDs.includes(label.toString()),
+        );
+        return result;
+      } else {
+        const result = vectorSearchTasks(searchTerm, k);
+        return result;
+      }
     }
     return [];
   }
@@ -457,7 +470,7 @@ function useTaskVectors(
     filterfunction?: (label: number) => boolean,
   ) {
     console.log('search for', searchTerm);
-    const result: { task: TaskNode; distance: number }[] = [];
+    const result: { taskId: string; distance: number }[] = [];
     const vectorIndex = await getVectorIndex();
     if (vectorIndex && vectorizerModel) {
       const queryVec = await vectorizeText(searchTerm, vectorizerModel);
@@ -475,13 +488,10 @@ function useTaskVectors(
         res.neighbors.forEach((neighborIndex, searchResultIndex) => {
           const uuid = vectorMappingDocs.get(String(neighborIndex))?.uuid;
           if (uuid) {
-            const foundTask = tasks.get(uuid);
-            if (foundTask) {
-              result.push({
-                task: foundTask,
-                distance: res.distances[searchResultIndex] || 0.0,
-              });
-            }
+            result.push({
+              taskId: uuid,
+              distance: res.distances[searchResultIndex] || 0.0,
+            });
           }
         });
       }
@@ -489,13 +499,22 @@ function useTaskVectors(
     return result;
   }
 
+  async function searchSimilarTasks(
+    task: TaskNode,
+    query?: MangoQuery, // used to pre-filter our vector search
+    k = 10,
+  ) {
+    const searchStr = task2Str(task);
+    return filteredVectorSearch(searchStr, query, k);
+  }
+
   return {
     syncVectorIndexWithTasks,
     deleteTaskFromVectorStore,
     addtoVectorDB,
     filteredVectorSearch,
-    vectorSearchTasks,
     resetVectorStore,
+    searchSimilarTasks,
   };
 }
 
@@ -535,8 +554,8 @@ export function useTyTaskManager(
     deleteTaskFromVectorStore,
     addtoVectorDB,
     filteredVectorSearch,
-    vectorSearchTasks,
     resetVectorStore,
+    searchSimilarTasks
   } = useTaskVectors(tasks, vectorizerModel, taskyonDB);
 
   async function countVecs() {
@@ -890,11 +909,11 @@ export function useTyTaskManager(
     deleteTaskThread,
     countTasks,
     syncVectorIndexWithTasks,
-    vectorSearchTasks,
     countVecs,
     filteredVectorSearch,
     findLeafTasks,
     searchChildTasks,
+    searchSimilarTasks,
   };
 
   const fm = useFileManager(taskyonDB?.filemappings);
