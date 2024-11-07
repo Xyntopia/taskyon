@@ -17,10 +17,12 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           delay: 200,
         }),
         meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
-        /*component: defineAsyncComponent({
-        loader: () => import('pages/TaskChat.vue'),
-        loadingComponent: () => import('components/Loading.vue'),
-      }),*/
+        props: (route) => {
+          console.log('open', route);
+          return {
+            query: route.query,
+          };
+        },
       },
       {
         // TODO: rename this and all references to search?
@@ -35,11 +37,36 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         },
       },
       {
-        path: 'chat',
-        component: defineAsyncComponent(
-          () => import('pages/taskyon/TaskChat.vue'),
-        ),
+        path: 'chat/',
+        component: defineAsyncComponent({
+          loader: () => import('pages/taskyon/TaskChat.vue'),
+          loadingComponent: LoadCircle,
+          delay: 200,
+        }),
+        props: (route) => {
+          console.log('open', route);
+          return {
+            query: route.query,
+          };
+        },
         meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
+      },
+      {
+        path: '/chat/:filePath([^.]*)*',
+        component: defineAsyncComponent({
+          loader: () => import('pages/taskyon/TaskChat.vue'),
+          loadingComponent: LoadCircle,
+          delay: 200,
+        }),
+        props: (route) => {
+          console.log('open', route);
+          return {
+            folder: '', // we use our public folder here for all markdown files :)
+            filePath: (route.params.filePath as string[]).join('/') + '.md',
+            query: route.query,
+          };
+        },
+        meta: { title: 'Saved', description: 'Taskyon AI Chat Companion' },
       },
       {
         path: 'settings/:tab?',

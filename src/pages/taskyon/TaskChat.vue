@@ -49,7 +49,7 @@
           "
           :force-task-props="state.llmSettings.taskTemplate"
           class="q-pa-xs"
-          :hide-task-info=state.minimalGui 
+          :hide-task-info="state.minimalGui"
         >
         </CreateNewTask>
       </div>
@@ -93,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, UnwrapRef, computed } from 'vue';
+import { ref, onMounted, UnwrapRef, computed } from 'vue';
 import { useQuasar, scroll } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue';
@@ -105,6 +105,13 @@ import {
 import { sleep } from 'src/modules/utils';
 import ConversationWidget from 'components/taskyon/ConversationWidget.vue';
 import { defineAsyncComponent } from 'vue';
+import { fetchMarkdown } from 'src/modules/taskyon/taskUtils';
+
+const props = defineProps<{
+  query?: Record<string, string>;
+  folder?: string;
+  filePath?: string;
+}>();
 
 let ResetButton = process.env.DEV
   ? defineAsyncComponent(
@@ -128,6 +135,7 @@ const taskThreadContainer = ref<HTMLElement | undefined>();
 $q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store...
 
 const stoppingTasks = ref(false);
+
 async function stopTasks() {
   console.log('stopping!');
   stoppingTasks.value = true;
@@ -144,10 +152,9 @@ async function stopTasks() {
 }
 
 const taskWorkerMessage = computed(() => {
-  if (state.taskWorkerWaiting) {
-    return state.taskWorkerController.getInterruptReason();
-  }
-  return '';
+  return state.taskWorkerWaiting
+    ? state.taskWorkerController.getInterruptReason()
+    : '';
 });
 
 function onScroll(
@@ -201,4 +208,26 @@ function scrollToThreadEnd() {
 function handleResize(size: { height: number }) {
   bottomPadding.value = size.height;
 }
+
+async function onAddTasks(url?: string, filePath?: string, folder?: string) {
+  const markdownUrl = url ? new URL(url) : undefined;
+  const markdownContent = filePath
+    ? await fetchMarkdown(folder || '', filePath)
+    : undefined;
+  const parentId = await state.addMdTasks(
+    markdownContent,
+    undefined,
+    markdownUrl,
+  );
+
+  state.llmSettings.selectedTaskId = parentId;
+  state.lockBottomScroll = true;
+}
+
+// Fetch markdown based on props
+onMounted(async () => {
+  if (props.query?.url || props.filePath) {
+    onAddTasks(props.query?.url, props.filePath, props.folder);
+  }
+});
 </script>

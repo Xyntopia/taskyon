@@ -21,6 +21,7 @@ import { setupIframeApi } from 'src/modules/taskyon/iframeApi';
 import { Tool } from 'src/modules/taskyon/tools';
 import { isTaskyonKey } from 'src/modules/crypto';
 import { tylog } from 'src/modules/logger';
+import { getMarkdown, processMarkdown } from 'src/modules/taskyon/taskUtils';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -338,6 +339,29 @@ export const useTaskyonStore = defineStore(storeName, () => {
     return await addTask2Tree(...args);
   };
 
+  async function addMdTasks(
+    markdown?: string,
+    parentId?: string | undefined,
+    markdownUrl?: URL,
+  ) {
+    console.log('adding new tasks!!');
+    if (!markdown && markdownUrl) {
+      markdown = await getMarkdown(markdownUrl);
+    }
+    if (markdown) {
+      const taskList = processMarkdown(markdown);
+      for (const task of taskList) {
+        parentId = await addTask2Tree(
+          task,
+          parentId, //parent
+          false, // should we execute the task? // only the last one obviously ;)
+        );
+      }
+      return parentId
+    }
+    // TODO: optionally execute the last task...
+  }
+
   const add2ChatHistory = async (task: TaskNode, msg: string) => {
     console.log('update task history!!', task.id, msg);
 
@@ -543,6 +567,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     tyPublicKey,
     logger,
     addTask2Tree,
+    addMdTasks,
   };
 }); // this state stores all information which
 // should be stored e.g. in browser LocalStorage

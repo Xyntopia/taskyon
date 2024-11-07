@@ -74,7 +74,9 @@
               </div>
             </div>
             <div class="col q-pa-xs">
-              <div class="text-caption text-right">id: {{ rows.row.taskId }}</div>
+              <div class="text-caption text-right">
+                id: {{ rows.row.taskId }}
+              </div>
               <Task
                 v-if="taskDataMap[rows.row.taskId]"
                 :task="taskDataMap[rows.row.taskId]!"

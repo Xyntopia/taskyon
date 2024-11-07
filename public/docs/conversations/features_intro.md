@@ -1,7 +1,7 @@
 <!--taskyon
 name: Showcase Taskyons features
 role: "user"
-label: ["discard"]
+label: ["discard", "docs"]
 
 -->
 
@@ -11,7 +11,8 @@ Can you showcase some of Taskyons features?
 
 <!--taskyon
 role: assistant
-label: ["discard"]
+label: ["discard", "docs"]
+name: Showcase Taskyons features
 -->
 
 I'd be happy to showcase some of my features.

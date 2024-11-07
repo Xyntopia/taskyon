@@ -292,6 +292,7 @@ const TaskContent = z.union([
   StructuredContent,
   MessageContent,
   ToolCallContent,
+  // TODO: replace with a "context" function which can also be a link to a URL for example or maybe a search string for other tasks...
   UploadedFilesContent,
   ToolResultContent,
 ]);
