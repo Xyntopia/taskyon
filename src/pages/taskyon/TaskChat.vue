@@ -60,34 +60,7 @@
       :offset="[10, bottomPadding + 5]"
       class="print-hide"
     >
-      <div class="column q-gutter-xs">
-        <div class="col-auto">
-          <q-btn
-            v-if="!state.lockBottomScroll"
-            fab-mini
-            class="taskyon-control-button"
-            :icon="matKeyboardDoubleArrowDown"
-            size="md"
-            @click="scrollToThreadEnd"
-          >
-            <q-tooltip> Scroll To Bottom </q-tooltip>
-          </q-btn>
-        </div>
-        <div class="col-auto">
-          <q-btn
-            v-if="state.currentTask && !state.taskWorkerWaiting"
-            fab-mini
-            class="taskyon-control-button"
-            :icon="matStop"
-            size="md"
-            :color="stoppingTasks ? 'secondary' : 'primary'"
-            :loading="stoppingTasks"
-            @click="stopTasks"
-          >
-            <q-tooltip> Stop processing current task. </q-tooltip>
-          </q-btn>
-        </div>
-      </div>
+      <TaskControlButtons @scroll-to-thread-end="scrollToThreadEnd" />
     </q-page-sticky>
   </q-page>
 </template>
@@ -98,14 +71,10 @@ import { useQuasar, scroll } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue';
 import GetStarted from 'components/taskyon/GetStarted.vue';
-import {
-  matKeyboardDoubleArrowDown,
-  matStop,
-} from '@quasar/extras/material-icons';
-import { sleep } from 'src/modules/utils';
 import ConversationWidget from 'components/taskyon/ConversationWidget.vue';
 import { defineAsyncComponent } from 'vue';
 import { fetchMarkdown } from 'src/modules/taskyon/taskUtils';
+import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue';
 
 const props = defineProps<{
   query?: Record<string, string>;
@@ -133,23 +102,6 @@ const $q = useQuasar();
 const state = useTaskyonStore();
 const taskThreadContainer = ref<HTMLElement | undefined>();
 $q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store...
-
-const stoppingTasks = ref(false);
-
-async function stopTasks() {
-  console.log('stopping!');
-  stoppingTasks.value = true;
-  state.taskWorkerController.interrupt(state.currentTask?.id);
-
-  await sleep(1000);
-  // Poll every 500ms to check if the task is stopped
-  while (!state.taskWorkerController.isWaiting()) {
-    console.log('waiting for task to stop...');
-    await sleep(100);
-  }
-  state.taskWorkerWaiting = true;
-  stoppingTasks.value = false;
-}
 
 const taskWorkerMessage = computed(() => {
   return state.taskWorkerWaiting
