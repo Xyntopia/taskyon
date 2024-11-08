@@ -66,8 +66,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, UnwrapRef, computed } from 'vue';
+import { ref, onMounted, UnwrapRef, computed, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
+import { useRouter, useRoute } from 'vue-router';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue';
 import GetStarted from 'components/taskyon/GetStarted.vue';
@@ -77,7 +78,10 @@ import { fetchMarkdown } from 'src/modules/taskyon/taskUtils';
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue';
 
 const props = defineProps<{
-  query?: Record<string, string>;
+  query?: {
+    t?: string;
+    url?: string;
+  };
   folder?: string;
   filePath?: string;
 }>();
@@ -96,9 +100,10 @@ let ResetButton = process.env.DEV
   : undefined;
 
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
-
 const bottomPadding = ref(100);
 const $q = useQuasar();
+const router = useRouter();
+const route = useRoute();
 const state = useTaskyonStore();
 const taskThreadContainer = ref<HTMLElement | undefined>();
 $q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store...
@@ -182,4 +187,25 @@ onMounted(async () => {
     onAddTasks(props.query?.url, props.filePath, props.folder);
   }
 });
+
+// Set initial selectedTaskId based on query
+onMounted(() => {
+  if (props.query?.t) {
+    state.llmSettings.selectedTaskId = props.query.t;
+  }
+  /* else {
+    state.llmSettings.selectedTaskId = undefined;
+  }*/
+});
+
+// Watch selectedTaskId and update URL query parameter
+watch(
+  () => state.llmSettings.selectedTaskId,
+  (newTaskId) => {
+    console.log('set new task', newTaskId);
+    router.push({
+      query: { ...route.query, t: newTaskId || undefined },
+    });
+  },
+);
 </script>
