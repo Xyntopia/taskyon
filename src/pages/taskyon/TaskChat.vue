@@ -17,7 +17,6 @@
           state.keys[state.llmSettings.selectedApi]
         "
         :selected-thread="state.selectedThread"
-        :state="state"
         :current-task="state.currentTask"
         :task-worker-waiting="state.taskWorkerWaiting"
         :task-worker-message="taskWorkerMessage || ''"
@@ -66,25 +65,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, UnwrapRef, computed, watch } from 'vue';
+import { ref, UnwrapRef, computed, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
-import { useRouter, useRoute } from 'vue-router';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue';
 import GetStarted from 'components/taskyon/GetStarted.vue';
 import ConversationWidget from 'components/taskyon/ConversationWidget.vue';
 import { defineAsyncComponent } from 'vue';
-import { fetchMarkdown } from 'src/modules/taskyon/taskUtils';
+import { fetchMarkdown, getMarkdown } from 'src/modules/taskyon/taskUtils';
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue';
-
-const props = defineProps<{
-  query?: {
-    t?: string;
-    url?: string;
-  };
-  folder?: string;
-  filePath?: string;
-}>();
+import { useRouter, useRoute } from 'vue-router';
 
 let ResetButton = process.env.DEV
   ? defineAsyncComponent(
@@ -107,6 +97,33 @@ const route = useRoute();
 const state = useTaskyonStore();
 const taskThreadContainer = ref<HTMLElement | undefined>();
 $q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store...
+const folder = '';
+
+async function updateChatThread() {
+  if (typeof route.query.url === 'string') {
+    const markdownUrl = route.query.url ? new URL(route.query.url) : undefined;
+    if (markdownUrl) {
+      const markdownContent = await getMarkdown(markdownUrl);
+      const parentId = await state.addMdTasks(markdownContent, undefined);
+      state.llmSettings.selectedTaskId = parentId;
+      state.lockBottomScroll = true;
+    }
+  } else if (route.params.filePath) {
+    const urlPath = (route.params.filePath as string[]).join('/');
+    const filePath = urlPath.endsWith('.md') ? urlPath : `${urlPath}.md`;
+    const markdownContent = filePath
+      ? await fetchMarkdown(folder || '', filePath)
+      : undefined;
+    const parentId = await state.addMdTasks(markdownContent, undefined);
+
+    state.llmSettings.selectedTaskId = parentId;
+    state.lockBottomScroll = true;
+  } else if (typeof route.query.t === 'string') {
+    state.llmSettings.selectedTaskId = route.query.t;
+    state.lockBottomScroll = true;
+  }
+}
+updateChatThread();
 
 const taskWorkerMessage = computed(() => {
   return state.taskWorkerWaiting
@@ -166,38 +183,6 @@ function handleResize(size: { height: number }) {
   bottomPadding.value = size.height;
 }
 
-async function onAddTasks(url?: string, filePath?: string, folder?: string) {
-  const markdownUrl = url ? new URL(url) : undefined;
-  const markdownContent = filePath
-    ? await fetchMarkdown(folder || '', filePath)
-    : undefined;
-  const parentId = await state.addMdTasks(
-    markdownContent,
-    undefined,
-    markdownUrl,
-  );
-
-  state.llmSettings.selectedTaskId = parentId;
-  state.lockBottomScroll = true;
-}
-
-// Fetch markdown based on props
-onMounted(async () => {
-  if (props.query?.url || props.filePath) {
-    onAddTasks(props.query?.url, props.filePath, props.folder);
-  }
-});
-
-// Set initial selectedTaskId based on query
-onMounted(() => {
-  if (props.query?.t) {
-    state.llmSettings.selectedTaskId = props.query.t;
-  }
-  /* else {
-    state.llmSettings.selectedTaskId = undefined;
-  }*/
-});
-
 // Watch selectedTaskId and update URL query parameter
 watch(
   () => state.llmSettings.selectedTaskId,
@@ -206,6 +191,13 @@ watch(
     router.push({
       query: { ...route.query, t: newTaskId || undefined },
     });
+  },
+);
+
+watch(
+  () => route.fullPath,
+  () => {
+    updateChatThread();
   },
 );
 </script>

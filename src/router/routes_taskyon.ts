@@ -17,12 +17,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           delay: 200,
         }),
         meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
-        props: (route) => {
-          console.log('open', route);
-          return {
-            query: route.query,
-          };
-        },
       },
       {
         // TODO: rename this and all references to search?
@@ -43,12 +37,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           loadingComponent: LoadCircle,
           delay: 200,
         }),
-        props: (route) => {
-          console.log('open', route);
-          return {
-            query: route.query,
-          };
-        },
         meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
       },
       {
@@ -59,16 +47,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           loadingComponent: LoadCircle,
           delay: 200,
         }),
-        props: (route) => {
-          const filePath = (route.params.filePath as string[]).join('/');
-          console.log('open', route, filePath);
-          return {
-            folder: '', // we use our public folder here for all markdown files :)
-            filePath: filePath.endsWith('.md') ? filePath : `${filePath}.md`,
-            query: route.query,
-          };
-        },
-        meta: { title: 'Saved', description: 'Taskyon AI Chat Companion' },
+        meta: { title: 'Chat', description: 'Taskyon AI Chat Companion' },
       },
       {
         path: 'settings/:tab?',

@@ -21,7 +21,7 @@ import { setupIframeApi } from 'src/modules/taskyon/iframeApi';
 import { Tool } from 'src/modules/taskyon/tools';
 import { isTaskyonKey } from 'src/modules/crypto';
 import { tylog } from 'src/modules/logger';
-import { getMarkdown, processMarkdown } from 'src/modules/taskyon/taskUtils';
+import { processMarkdown } from 'src/modules/taskyon/taskUtils';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -332,6 +332,8 @@ export const useTaskyonStore = defineStore(storeName, () => {
     return taskManagerInstance;
   };
 
+  // we are doing this here, so that we can use our addTask2Tree immediatly without
+  // multiple awaits..
   const addTask2Tree = async (
     ...args: Parameters<TaskyonInstance['addTask2Tree']>
   ): ReturnType<TaskyonInstance['addTask2Tree']> => {
@@ -339,15 +341,8 @@ export const useTaskyonStore = defineStore(storeName, () => {
     return await addTask2Tree(...args);
   };
 
-  async function addMdTasks(
-    markdown?: string,
-    parentId?: string | undefined,
-    markdownUrl?: URL,
-  ) {
-    console.log('adding new tasks!!');
-    if (!markdown && markdownUrl) {
-      markdown = await getMarkdown(markdownUrl);
-    }
+  async function addMdTasks(markdown?: string, parentId?: string | undefined) {
+    console.log('adding new Markdown tasks!!');
     if (markdown) {
       const taskList = processMarkdown(markdown);
       for (const task of taskList) {
@@ -357,7 +352,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
           false, // should we execute the task? // only the last one obviously ;)
         );
       }
-      return parentId
+      return parentId;
     }
     // TODO: optionally execute the last task...
   }
