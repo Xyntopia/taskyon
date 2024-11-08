@@ -52,6 +52,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
       },
       {
+        // TODO:  change this, so that we can use "arbitrary" files for this!!!
         path: '/chat/:filePath([^.]*)*',
         component: defineAsyncComponent({
           loader: () => import('pages/taskyon/TaskChat.vue'),
@@ -59,10 +60,11 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           delay: 200,
         }),
         props: (route) => {
-          console.log('open', route);
+          const filePath = (route.params.filePath as string[]).join('/');
+          console.log('open', route, filePath);
           return {
             folder: '', // we use our public folder here for all markdown files :)
-            filePath: (route.params.filePath as string[]).join('/') + '.md',
+            filePath: filePath.endsWith('.md') ? filePath : `${filePath}.md`,
             query: route.query,
           };
         },
