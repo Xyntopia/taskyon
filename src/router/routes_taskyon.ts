@@ -63,14 +63,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         },
       },
       {
-        path: 'diagnostics',
-        component: () => import('pages/taskyon/DiagnosticsPage.vue'),
-        meta: {
-          title: 'Diagnostics',
-          description: 'Error & Diagnostics display',
-        },
-      },
-      {
         path: 'prompts',
         component: () => import('pages/taskyon/PromptManager.vue'),
         meta: {
@@ -85,6 +77,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       },
       ...mdRoutes,
     ],
+  },
+  {
+    path: '/diagnostics',
+    component: () => import('pages/taskyon/DiagnosticsPage.vue'),
+    meta: {
+      title: 'Diagnostics',
+      description: 'Error & Diagnostics display',
+    },
   },
   {
     path: '/tools',

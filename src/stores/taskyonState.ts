@@ -22,6 +22,7 @@ import { Tool } from 'src/modules/taskyon/tools';
 import { isTaskyonKey } from 'src/modules/crypto';
 import { tylog } from 'src/modules/logger';
 import { processMarkdown } from 'src/modules/taskyon/taskUtils';
+import { unref } from 'vue';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -126,27 +127,28 @@ export const useTaskyonStore = defineStore(storeName, () => {
 
   // overwrite with saved configuration:
   console.log(`load saved ${storeName} state!`);
-  const storedStateString = LocalStorage.getItem(storeName) as string;
-  const storedStateObj = JSON.parse(storedStateString) as
+  const getStoredStateString = () => LocalStorage.getItem(storeName) as string;
+  const initialStoredStateString = getStoredStateString();
+  const initialStoredStateObj = JSON.parse(initialStoredStateString) as
     | Partial<typeof initialState>
     | undefined;
   let stateRefs: typeof initialState;
   if (
-    storedStateObj &&
-    storedStateObj.version &&
-    storedStateObj.version === initialState.version
+    initialStoredStateObj &&
+    initialStoredStateObj.version &&
+    initialStoredStateObj.version === initialState.version
   ) {
     console.log(`load saved ${storeName} state!`);
     const storedInitialState = deepMerge(
       initialState,
-      storedStateObj,
+      initialStoredStateObj,
       'overwrite',
     );
     stateRefs = reactive(storedInitialState);
   } else {
     console.warn(
       `Stored settings version (${
-        storedStateObj?.version || 'undefined'
+        initialStoredStateObj?.version || 'undefined'
       }) is not compatible with current version (${
         initialState.version
       }). Using default settings.`,
@@ -455,7 +457,8 @@ export const useTaskyonStore = defineStore(storeName, () => {
   // we do this funny next line, because our store is currently "reactive" which means
   // all scalars like strings, numbers etc..  ar actually non-reactive (vue reactive only converts
   // nested objects into reactive as well). So by doing "toRefs" we ensure that all values are reactive
-  // even after destructuring. The next issue is that typescript isn't able to recognize the type anymore when
+  // even after destructuring, which we do when returning values from this store.
+  // The next issue is that typescript isn't able to recognize the type anymore when
   // we do the toRefs operation, so we simply reassign the same type "stateRefs" to it again which seems to work...
   const allRefs = toRefs(stateRefs) as unknown as typeof stateRefs;
 
@@ -548,6 +551,8 @@ export const useTaskyonStore = defineStore(storeName, () => {
   // hydration mechanism to automatically save & load the store from localStorage
   return {
     ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
+    getStoredStateString,
+    getStateValues: () => unref(allRefs),
     ...useReactiveTasks(),
     $reset,
     getOpenRouterPKCEKey,

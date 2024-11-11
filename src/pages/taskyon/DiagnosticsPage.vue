@@ -1,45 +1,102 @@
 <template>
-  <q-page class="q-pa-md q-gutter-md">
-    <div v-for="(e, idx) of state.getErrors()" :key="idx">
-      <p class="text-bold">{{ idx }}:</p>
-      <pre>{{ e }}</pre>
-    </div>
-    <q-expansion-item label="state" style="white-space: pre-wrap">
-      {{ JSON.stringify(completeChat, null, 2) }}
-    </q-expansion-item>
-    <q-expansion-item label="state">
-      <object-tree-view :model-value="appConfiguration" />
-    </q-expansion-item>
-    <q-expansion-item label="router">{{ $router }}</q-expansion-item>
-    <q-expansion-item label="route">{{ $route }}</q-expansion-item>
-  </q-page>
+  <q-layout view="lHh LpR lfr">
+    <q-page-container>
+      <q-page class="q-pa-md q-gutter-md">
+        <q-btn
+          outline
+          label="Generate Diagnostics Report"
+          @click="generateReport"
+        ></q-btn>
+        <q-btn
+          v-if="diagnostics"
+          outline
+          label="download report"
+          @click="downloadReport"
+        ></q-btn>
+        <pre>{{ diagnostics }}</pre>
+        <div v-for="(e, idx) of state.getErrors()" :key="idx">
+          <p class="text-bold">{{ idx }}:</p>
+          <pre>{{ e }}</pre>
+        </div>
+      </q-page>
+    </q-page-container>
+  </q-layout>
 </template>
 
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
-import ObjectTreeView from 'components/ObjectTreeView.vue';
-import { storeToRefs } from 'pinia';
 import { generateCompleteChat } from 'src/modules/taskyon/promptCreation';
 import { ref } from 'vue';
+import { exportFile } from 'quasar';
+import { dump } from 'js-yaml';
+
 const state = useTaskyonStore();
 
-const completeChat = ref<Record<string, unknown>>({});
+const diagnostics = ref<string>({});
 
 async function completionMessage() {
   const tm = await state.getTaskManager();
+  const tyChat: Record<string, unknown> = {
+    chatID: state.llmSettings.selectedTaskId,
+  };
   if (state.llmSettings.selectedTaskId) {
+    tyChat.taskIdChain = await tm.getTaskIdChain(
+      state.llmSettings.selectedTaskId,
+    );
     const task = await (
       await state.getTaskManager()
     ).getTask(state.llmSettings.selectedTaskId);
     if (task) {
       const res = await generateCompleteChat(task, state.llmSettings, tm);
-      completeChat.value = res;
+      tyChat.thread = res;
     }
   }
+  return tyChat;
+}
+
+async function generateReport() {
+  console.log('generating diagnostics report');
+  const diagnosticsobj = {
+    browserInfo: {
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      language: navigator.language,
+      appName: navigator.appName,
+      appVersion: navigator.appVersion,
+      vendor: navigator.vendor,
+    },
+    windowInfo: {
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      screenWidth: window.screen.width,
+      screenHeight: window.screen.height,
+      colorDepth: window.screen.colorDepth,
+    },
+    appInfo: {
+      appConfiguration: state.appConfiguration,
+    },
+    errors: state.getErrors(),
+    taskyonStoreDiagnostics: {
+      SavedState: state.getStoredStateString(),
+      CurrentState: state.getStateValues(),
+    },
+    CurrentChat: await completionMessage(),
+  };
+
+  console.log('diagnostics:', diagnosticsobj);
+
+  diagnostics.value = dump(diagnosticsobj, { skipInvalid: true });
+}
+
+async function downloadReport() {
+  const fileName = 'taskyon_diagnostics_report.yaml';
+  const fileContent = JSON.stringify(diagnostics.value);
+  const mimeType = 'application/json';
+
+  exportFile(fileName, fileContent, mimeType);
 }
 
 void completionMessage();
 
-const { appConfiguration } = storeToRefs(state);
 //const stateView = {...state}
 </script>
