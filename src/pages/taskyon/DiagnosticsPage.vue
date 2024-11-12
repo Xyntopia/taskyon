@@ -48,7 +48,7 @@ import {
 
 const state = useTaskyonStore();
 const diagnostics = ref<string>('');
-const detailed = ref(true)
+const detailed = ref(true);
 
 async function completionMessage() {
   const tm = await state.getTaskManager();
@@ -128,6 +128,7 @@ async function getData() {
         appName: navigator.appName,
         appVersion: navigator.appVersion,
         vendor: navigator.vendor,
+        'crypto.subtle': crypto.subtle ? 'available' : 'not available',
       },
       windowInfo: {
         innerWidth: window.innerWidth,

@@ -146,7 +146,11 @@ export const initAddTask2Tree =
 
     // TODO: register this in a list in taskyon so that figure out how
     // to make use of this...
-    void taskContentHash(newTask);
+    if (typeof crypto === 'undefined' || !crypto.subtle) {
+      console.warn('crypto.subtle is not available in this environment');
+    } else {
+      void taskContentHash(newTask);
+    }
 
     console.log('create new Task:', newTask.id);
 
