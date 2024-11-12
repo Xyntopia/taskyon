@@ -55,7 +55,7 @@ export function usePyodideWebworker(name: string) {
   };
 
   // TODO: somehow initialize functions like this on webworker-side
-  //       that way we don't have to re-initialize them all the time... 
+  //       that way we don't have to re-initialize them all the time...
   async function extractKeywords(text: string, num: number) {
     const pythonScript = `
 import micropip

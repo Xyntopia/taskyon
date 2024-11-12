@@ -7,7 +7,7 @@
         <q-btn
           outline
           label="Generate Diagnostics Report"
-          @click="generateReport"
+          @click="generateReport()"
         ></q-btn>
         <q-btn
           v-if="diagnostics"
@@ -40,10 +40,13 @@ import { exportFile } from 'quasar';
 import { dump } from 'js-yaml';
 import { copyToClipboard } from 'src/modules/utils';
 import { matContentCopy } from '@quasar/extras/material-icons';
+import {
+  testEstimateChatTokens,
+  testVectorizeText,
+} from 'src/modules/taskyon/tests';
 
 const state = useTaskyonStore();
-
-const diagnostics = ref<string>({});
+const diagnostics = ref<string>('');
 
 async function completionMessage() {
   const tm = await state.getTaskManager();
@@ -65,38 +68,84 @@ async function completionMessage() {
   return tyChat;
 }
 
-async function generateReport() {
+async function runTest(
+  name: string,
+  testFunc: () => Promise<unknown> | unknown,
+  details = false,
+) {
+  let result: Record<string, unknown> = {};
+  console.log('run test:', name);
+  try {
+    let res = await testFunc();
+    if (details) {
+      result[name] = {
+        status: 'OK',
+        result: res,
+      };
+    } else {
+      result[name] = 'OK';
+    }
+  } catch (error) {
+    result[name] = {
+      status: 'ERROR',
+      message: 'an error occured during this test...',
+      error,
+    };
+  }
+  return dump(result, { skipInvalid: true });
+}
+
+async function generateReport(details = false) {
   console.log('generating diagnostics report');
-  const diagnosticsobj = {
-    browserInfo: {
-      userAgent: navigator.userAgent,
-      platform: navigator.platform,
-      language: navigator.language,
-      appName: navigator.appName,
-      appVersion: navigator.appVersion,
-      vendor: navigator.vendor,
-    },
-    windowInfo: {
-      innerWidth: window.innerWidth,
-      innerHeight: window.innerHeight,
-      screenWidth: window.screen.width,
-      screenHeight: window.screen.height,
-      colorDepth: window.screen.colorDepth,
-    },
-    appInfo: {
-      appConfiguration: state.appConfiguration,
-    },
-    errors: state.getErrors(),
-    taskyonStoreDiagnostics: {
-      SavedState: state.getStoredStateString(),
-      CurrentState: state.getStateValues(),
-    },
-    CurrentChat: await completionMessage(),
-  };
 
-  console.log('diagnostics:', diagnosticsobj);
+  diagnostics.value = `report_date: ${new Date().toISOString()}\n`;
 
-  diagnostics.value = dump(diagnosticsobj, { skipInvalid: true });
+  diagnostics.value += await runTest(
+    'test_token_counter',
+    testEstimateChatTokens,
+    details,
+  );
+  diagnostics.value += await runTest(
+    'test_vectorization',
+    testVectorizeText,
+    details,
+  );
+
+  diagnostics.value += await runTest('taskyon_data', getData, details);
+
+  console.log('diagnostics:', diagnostics.value);
+}
+
+async function getData() {
+  return dump(
+    {
+      browserInfo: {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language,
+        appName: navigator.appName,
+        appVersion: navigator.appVersion,
+        vendor: navigator.vendor,
+      },
+      windowInfo: {
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        screenWidth: window.screen.width,
+        screenHeight: window.screen.height,
+        colorDepth: window.screen.colorDepth,
+      },
+      appInfo: {
+        appConfiguration: state.appConfiguration,
+      },
+      errors: state.getErrors(),
+      taskyonStoreDiagnostics: {
+        SavedState: state.getStoredStateString(),
+        CurrentState: state.getStateValues(),
+      },
+      CurrentChat: await completionMessage(),
+    },
+    { skipInvalid: true },
+  );
 }
 
 async function downloadReport() {
