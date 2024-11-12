@@ -1,6 +1,17 @@
 //import equal from 'fast-deep-equal/es6';
 import { deepEqual } from 'fast-equals';
 
+export function copyToClipboard(text: string) {
+  navigator.clipboard
+    .writeText(text)
+    .then(() => {
+      console.log('Copied to clipboard');
+    })
+    .catch((err) => {
+      console.error('Error in copying text: ', err);
+    });
+}
+
 export type DeepPartial<T> =
   T extends Record<string, unknown>
     ? {

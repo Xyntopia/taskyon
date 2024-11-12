@@ -35,7 +35,7 @@
           class="scroll-area-btn"
           flat
           :icon="matContentCopy"
-          @click="copyToClipboard(task.result?.toolResult)"
+          @click="copyToClipboard(dump(task.result?.toolResult))"
         />
       </div>
     </div>
@@ -50,16 +50,13 @@ import { matContentCopy, matHtml } from '@quasar/extras/material-icons';
 import { dump } from 'js-yaml';
 import type { TaskNode } from 'src/modules/taskyon/types';
 import { computed, ref } from 'vue';
+import { copyToClipboard } from 'src/modules/utils';
 
 const props = defineProps<{
   task: TaskNode;
 }>();
 
 const useIframe = ref(false);
-
-function copyToClipboard(data: unknown) {
-  void navigator.clipboard.writeText(dump(data));
-}
 
 const isHtmlResult = computed(() => {
   const toolResult = props.task.result?.toolResult;
