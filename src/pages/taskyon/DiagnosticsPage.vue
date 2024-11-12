@@ -7,7 +7,7 @@
         <q-btn
           outline
           label="Generate Diagnostics Report"
-          @click="generateReport()"
+          @click="generateReport(detailed)"
         ></q-btn>
         <q-btn
           v-if="diagnostics"
@@ -15,6 +15,7 @@
           label="download report"
           @click="downloadReport"
         ></q-btn>
+        <q-toggle v-model="detailed" label="detailed"></q-toggle>
         <q-card flat bordered>
           <q-btn
             flat
@@ -47,6 +48,7 @@ import {
 
 const state = useTaskyonStore();
 const diagnostics = ref<string>('');
+const detailed = ref(true)
 
 async function completionMessage() {
   const tm = await state.getTaskManager();

@@ -4,6 +4,8 @@ Taskyon is an innovative AI-powered platform that enables seamless interaction b
 
 You can checkout the [Readme](/docs/README) for a brief overview of Taskyon.
 
+For troubleshooting go to the [diagnostics page](/diagnostics).
+
 ## Getting Started
 
 New to Taskyon? Here's a step-by-step guide to help you get started:
