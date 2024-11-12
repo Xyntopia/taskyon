@@ -101,7 +101,7 @@ const taskNodeSchemaLiteral = {
   required: ['id', 'role', 'state'],
 } as const;
 
-export const createMangoQuery = (labelString: string) => {
+export const createTaskNodeMangoQuery = (labelString: string) => {
   const labels = labelString.split('\n');
   return {
     selector: {

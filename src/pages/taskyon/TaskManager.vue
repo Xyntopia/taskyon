@@ -104,7 +104,7 @@ import {
 import { useRouter } from 'vue-router';
 import { onMounted } from 'vue';
 import { QTableProps } from 'quasar';
-import { createMangoQuery as createTaskNodeMangoQuery } from 'src/modules/taskyon/rxdb';
+import { createTaskNodeMangoQuery } from 'src/modules/taskyon/rxdb';
 //import { useRoute, useRouter } from 'vue-router';
 
 // TODO:  do some search caching ;) so that we can move faster back & forth between

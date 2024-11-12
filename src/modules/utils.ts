@@ -1,6 +1,23 @@
 //import equal from 'fast-deep-equal/es6';
 import { deepEqual } from 'fast-equals';
 
+type LowercaseKeys<T> = {
+  [K in keyof T as K extends string ? Lowercase<K> : never]: T[K];
+} & { [key: string]: unknown };
+
+export function toLowerCaseKeys<T extends Record<string, unknown>>(
+  obj: T,
+): LowercaseKeys<T> {
+  return Object.fromEntries(
+    Object.entries(obj).map(([k, v]) => [
+      k.toLowerCase(),
+      typeof v === 'object' && v !== null
+        ? toLowerCaseKeys(v as Record<string, unknown>)
+        : v,
+    ]),
+  ) as LowercaseKeys<T>;
+}
+
 export function copyToClipboard(text: string) {
   navigator.clipboard
     .writeText(text)

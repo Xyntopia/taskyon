@@ -6,6 +6,7 @@ import {
   transformTaskNodeToDocType,
   transformDocToTaskNode,
   collections,
+  createTaskNodeMangoQuery,
 } from './rxdb';
 import { openFile } from '../OPFS';
 import { type AsyncQueue, deepMerge, lockMap } from '../utils';
@@ -785,15 +786,7 @@ export function useTyTaskManager(
     T extends true ? Record<string, ToolBase> : Record<string, ToolBase | Tool>
   > {
     if (taskyonDB) {
-      const tasks = await searchTasks({
-        selector: {
-          label: {
-            $elemMatch: {
-              $eq: 'function',
-            },
-          },
-        },
-      });
+      const tasks = await searchTasks(createTaskNodeMangoQuery('function'));
 
       function hasMessage(
         task: TaskNode,
