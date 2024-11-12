@@ -2,6 +2,8 @@
   <q-layout view="lHh LpR lfr">
     <q-page-container>
       <q-page class="q-pa-md q-gutter-md">
+        <div class="text-h5">Taskyon Diagnostics</div>
+        <q-btn flat label="Return to App" to="/"></q-btn>
         <q-btn
           outline
           label="Generate Diagnostics Report"
@@ -13,7 +15,14 @@
           label="download report"
           @click="downloadReport"
         ></q-btn>
-        <pre>{{ diagnostics }}</pre>
+        <q-card flat bordered>
+          <q-btn
+            flat
+            :icon="matContentCopy"
+            @click="copyToClipboard(diagnostics)"
+          ></q-btn>
+          <pre>{{ diagnostics }}</pre>
+        </q-card>
         <div v-for="(e, idx) of state.getErrors()" :key="idx">
           <p class="text-bold">{{ idx }}:</p>
           <pre>{{ e }}</pre>
@@ -29,6 +38,8 @@ import { generateCompleteChat } from 'src/modules/taskyon/promptCreation';
 import { ref } from 'vue';
 import { exportFile } from 'quasar';
 import { dump } from 'js-yaml';
+import { copyToClipboard } from 'src/modules/utils';
+import { matContentCopy } from '@quasar/extras/material-icons';
 
 const state = useTaskyonStore();
 
