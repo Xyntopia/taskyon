@@ -43,7 +43,7 @@ export async function findRootTask(
   return currentTaskID; // Return null if the loop exits without finding a root task
 }
 
-function base64Uuid() {
+function urlSafeBase64Uuid() {
   // Generate a UUID
   const hexUuid = uuidv1();
 
@@ -53,7 +53,12 @@ function base64Uuid() {
   // Convert the Buffer to a base64 string
   let base64Uuid = bufferUuid.toString('base64');
 
-  base64Uuid = base64Uuid.replace(/==$/, '');
+  // make UUID url safe :)
+  base64Uuid = base64Uuid
+    .replace(/==$/, '') // remove padding
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '.');
 
   return base64Uuid;
 }
@@ -129,7 +134,7 @@ export const initAddTask2Tree =
       }
     }
 
-    const uuid = base64Uuid();
+    const uuid = urlSafeBase64Uuid();
 
     const parent = parentID ? await taskManager.getTask(parentID) : undefined;
 
@@ -202,7 +207,7 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
   // TODO: make sure, we add the correct file type here!
   async function addFile(fileMapping: Partial<FileMappingDocType>) {
     const uuidFileMapping: FileMappingDocType = {
-      uuid: base64Uuid(),
+      uuid: urlSafeBase64Uuid(),
       ...fileMapping,
     };
 

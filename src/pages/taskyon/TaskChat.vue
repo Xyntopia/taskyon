@@ -100,6 +100,7 @@ $q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store..
 const folder = '';
 
 async function updateChatThread() {
+  console.log('update chat thread');
   if (typeof route.query.url === 'string') {
     const markdownUrl = route.query.url ? new URL(route.query.url) : undefined;
     if (markdownUrl) {
@@ -123,7 +124,6 @@ async function updateChatThread() {
     state.lockBottomScroll = true;
   }
 }
-updateChatThread();
 
 const taskWorkerMessage = computed(() => {
   return state.taskWorkerWaiting
@@ -192,6 +192,7 @@ watch(
       query: { ...route.query, t: newTaskId || undefined },
     });
   },
+  { immediate: true },
 );
 
 watch(
@@ -199,5 +200,6 @@ watch(
   () => {
     updateChatThread();
   },
+  { immediate: true },
 );
 </script>

@@ -20,10 +20,9 @@
           <q-item
             v-for="conversationId in conversationIDs"
             :key="conversationId"
-            clickable
-            :to="`/?t=${conversationId}`"
+            :to="{ query: { t: conversationId } }"
           >
-            <!--q-item-section avatar>
+            <!--                          clickable   q-item-section avatar>
               <q-icon name="matChatBubble" size="xs" />
             </!q-item-section-->
             <q-item-section

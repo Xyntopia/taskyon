@@ -515,15 +515,16 @@ export const useTaskyonStore = defineStore(storeName, () => {
       taskWorkerWaiting.value = taskWorkerController.isWaiting();
     }
     void updateCurrentTask(stateRefs.llmSettings.selectedTaskId);
-    watch(() => stateRefs.llmSettings.selectedTaskId, updateCurrentTask);
+    watch(
+      () => stateRefs.llmSettings.selectedTaskId,
+      (p, n) => updateCurrentTask(n),
+    );
 
     async function updateTaskThread(taskId: string | undefined) {
-      console.log('update task thread...');
+      console.log('update task thread...', taskId);
       if (taskId) {
-        const threadIDChain = await (
-          await getTaskManager()
-        ).getTaskIdChain(taskId);
         const TM = await getTaskManager();
+        const threadIDChain = await TM.getTaskIdChain(taskId);
         console.log('loading iniial thread chain');
         const thread = (await Promise.all(
           threadIDChain.map(async (tId) => {
