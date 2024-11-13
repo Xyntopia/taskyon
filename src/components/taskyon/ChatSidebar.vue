@@ -20,7 +20,8 @@
           <q-item
             v-for="conversationId in conversationIDs"
             :key="conversationId"
-            :to="{ query: { t: conversationId } }"
+            clickable
+            @click="$router.push({ query: { t: conversationId } })"
           >
             <!--                          clickable   q-item-section avatar>
               <q-icon name="matChatBubble" size="xs" />
@@ -40,18 +41,16 @@
                   : [$q.dark.isActive ? 'text-white' : 'text-primary']
               "
             >
-              <div dense unelevated size="md" no-wrap no-caps>
-                {{
-                  selected
-                    ? `> ${state.currentTask?.name}`
-                    : nameMap[conversationId] ||
-                      `chat.${conversationId.slice(0, 3)}`
-                }}
-              </div>
+              {{
+                selected
+                  ? `> ${state.currentTask?.name}`
+                  : nameMap[conversationId] ||
+                    `chat.${conversationId.slice(0, 3)}`
+              }}
               <q-tooltip> Select Conversation </q-tooltip>
             </q-item-section>
             <q-item-section side>
-              <TaskChainMenu :conversation-id="conversationId" />
+              <TaskChainMenu :conversation-id="conversationId" @click.stop />
             </q-item-section>
           </q-item>
         </q-list>

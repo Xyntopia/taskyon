@@ -1,6 +1,12 @@
 <template>
-  <q-btn flat unelevated dense :icon="matMoreHoriz">
-    <q-menu class="column q-gutter-sm q-pa-xs">
+  <q-btn
+    flat
+    unelevated
+    round
+    dense
+    :icon="matMoreHoriz"
+  >
+    <q-menu class="column q-gutter-sm q-pa-xs" auto-close>
       <q-btn
         flat
         dense
