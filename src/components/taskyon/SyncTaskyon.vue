@@ -185,7 +185,7 @@ import FileDropzone from 'components/FileDropzone.vue';
 import { exportFile, extend } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
 import yaml from 'js-yaml';
-import { onSyncGdrive, onUpdateAppConfiguration } from 'src/modules/gdrive';
+import { useGdrive } from 'src/modules/gdrive';
 import { deepMergeReactive } from 'src/modules/utils';
 import {
   matSync,
@@ -198,6 +198,8 @@ import {
 import { mdiGoogleDrive } from '@quasar/extras/mdi-v6';
 
 const state = useTaskyonStore();
+
+const { onSyncGdrive, onUpdateAppConfiguration } = useGdrive();
 
 // Function to load JSON settings
 // Common function to handle file reading and state updating
