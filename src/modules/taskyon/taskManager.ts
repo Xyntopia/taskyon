@@ -1,4 +1,4 @@
-import { TaskNode, RequireSome, ToolBase } from './types';
+import { TaskNode, RequireSome, ToolBase, TaskListType } from './types';
 import { v1 as uuidv1 } from 'uuid';
 import {
   TaskyonDatabase,
@@ -15,6 +15,7 @@ import { usePyodideWebworker, useNlpWorker } from './webWorkerApi';
 import { Tool } from './tools';
 import { taskUtils } from './taskUtils';
 import { MangoQuery } from 'rxdb';
+import { dump, load } from 'js-yaml';
 
 /**
  * Finds the root task of a given task.
@@ -893,6 +894,46 @@ export function useTyTaskManager(
     notifySubscribers(undefined, 'new');
   }
 
+  async function loadConversation(files: File[]): Promise<string | undefined> {
+    if (files) {
+      console.log('adding tasknodes & conversations from files!');
+
+      let last_task_id: string | undefined = undefined;
+      for (let i = 0; i < files.length; i++) {
+        console.log(files[i]);
+        const fileStr = await files[i]?.text();
+        const taskListRaw = fileStr ? load(fileStr) : [];
+        const result = await TaskListType.safeParseAsync(taskListRaw);
+        if (result.success) {
+          const taskList = result.data;
+          taskList.forEach((t) => {
+            void setTask(t, true);
+            last_task_id = t.id;
+          });
+        }
+      }
+      return last_task_id;
+    }
+  }
+
+  const fm = useFileManager(taskyonDB?.filemappings);
+
+  const { getTaskIdChain, buildChatThread, getTaskChain } = taskUtils(
+    getTask,
+    fm.getFileMappingByUuid,
+    fm.getFile,
+  );
+
+  // converts an antire taskchain (thread) into yaml for download
+  async function chatToYaml(conversationId: string) {
+    const taskList = await getTaskChain(conversationId);
+
+    if (taskList.length) {
+      const fileContent = dump(taskList);
+      return fileContent;
+    }
+  }
+
   const defaultMode = {
     getTask,
     updateTask,
@@ -914,14 +955,16 @@ export function useTyTaskManager(
     findLeafTasks,
     searchChildTasks,
     searchSimilarTasks,
+    loadConversation,
   };
-
-  const fm = useFileManager(taskyonDB?.filemappings);
 
   return {
     ...defaultMode,
     ...fm,
-    ...taskUtils(getTask, fm.getFileMappingByUuid, fm.getFile),
+    getTaskIdChain,
+    buildChatThread,
+    getTaskChain,
+    chatToYaml,
   };
 }
 export type TyTaskManager = ReturnType<typeof useTyTaskManager>;

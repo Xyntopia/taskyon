@@ -64,19 +64,6 @@
         >
       </q-btn>
       <q-btn
-        v-if="$route.path == '/'"
-        flat
-        dense
-        round
-        :size="btnSize"
-        :icon="matToc"
-      >
-        <q-menu>
-          <table-of-chat-content></table-of-chat-content>
-        </q-menu>
-        <q-tooltip> Table of Contents </q-tooltip>
-      </q-btn>
-      <q-btn
         v-if="!minMode"
         flat
         class="gt-xs"
@@ -174,14 +161,12 @@
 <script setup lang="ts">
 import DarkModeButton from 'components/DarkModeButton.vue';
 import { ref } from 'vue';
-import { defineAsyncComponent } from 'vue';
 import type { useTaskyonStore } from 'stores/taskyonState';
 import {
   matHelpOutline,
   matMenu,
   matSearch,
   matSettings,
-  matToc,
   matWarning,
 } from '@quasar/extras/material-icons';
 import { mdiForum, mdiForumPlus, mdiGithub } from '@quasar/extras/mdi-v6';
@@ -191,16 +176,6 @@ defineProps<{
   btnSize: 'xs' | 'md';
 }>();
 const drawerOpen = defineModel<boolean>('drawerOpen', { required: false });
-
-const TableOfChatContent = defineAsyncComponent(
-  () =>
-    import(
-      /* webpackChunkName: "TableOfChatContent" */
-      /* webpackMode: "lazy" */
-      /* webpackFetchPriority: "low" */
-      'components/taskyon/TableOfChatContent.vue'
-    ),
-);
 
 //const state = useTaskyonStore();
 let state = ref<undefined | ReturnType<typeof useTaskyonStore>>();
