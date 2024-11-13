@@ -515,10 +515,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
       taskWorkerWaiting.value = taskWorkerController.isWaiting();
     }
     void updateCurrentTask(stateRefs.llmSettings.selectedTaskId);
-    watch(
-      () => stateRefs.llmSettings.selectedTaskId,
-      (p, n) => updateCurrentTask(n),
-    );
+    watch(() => stateRefs.llmSettings.selectedTaskId, updateCurrentTask);
 
     async function updateTaskThread(taskId: string | undefined) {
       console.log('update task thread...', taskId);
