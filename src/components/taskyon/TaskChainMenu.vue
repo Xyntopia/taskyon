@@ -1,31 +1,22 @@
 <template>
-  <q-btn
-    flat
-    unelevated
-    round
-    dense
-    :icon="matMoreHoriz"
-  >
+  <q-btn flat unelevated round dense :icon="matMoreHoriz">
     <q-menu class="column q-gutter-sm q-pa-xs" auto-close>
-      <q-btn
-        flat
-        dense
-        label="Cownload Chat"
-        :icon="matDownloadForOffline"
-        size="sm"
-        to="/"
-        @click="onDownloadChat(conversationId)"
-      >
-      </q-btn>
-      <q-btn
-        dense
-        :icon="matDelete"
-        size="sm"
-        flat
-        label="Delete Conversation"
-        @click="onDeleteThread(conversationId)"
-      >
-      </q-btn>
+      <q-list dense>
+        <q-item clickable @click="onDownloadChat(conversationId)">
+          <q-item-section> Download Chat </q-item-section>
+          <q-item-section side>
+            <q-icon :name="matDownloadForOffline"></q-icon>
+          </q-item-section>
+        </q-item>
+        <q-item clickable @click="onDeleteThread(conversationId)">
+          <q-item-section>
+            <q-item-label> Delete Conversation </q-item-label>
+          </q-item-section>
+          <q-item-section side>
+            <q-icon :name="matDelete"></q-icon>
+          </q-item-section>
+        </q-item>
+      </q-list>
     </q-menu>
   </q-btn>
 </template>

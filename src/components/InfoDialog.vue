@@ -2,7 +2,7 @@
   <div>
     <q-btn
       flat
-      rounded
+      round
       dense
       :icon="matHelpOutline"
       v-bind="$attrs"
