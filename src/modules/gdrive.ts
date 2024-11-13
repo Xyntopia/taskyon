@@ -1,8 +1,7 @@
 import { ref, computed, watch } from 'vue';
 import axios from 'axios';
 import { googleSdkLoaded } from 'vue3-google-login';
-import { useTaskyonStore } from 'stores/taskyonState';
-import { deepMergeReactive, sleep } from 'src/modules/utils';
+import { sleep } from 'src/modules/utils';
 import { asyncLruCache } from 'src/modules/utils';
 import { LocalStorage } from 'quasar';
 
@@ -14,8 +13,6 @@ type gDriveFile = {
 };
 
 export const useGdrive = () => {
-  const state = useTaskyonStore();
-
   const maxTokenAgeMinutes = 55;
   const tyGdAccessStorageName = 'tygd';
   const savedToken = String(LocalStorage.getItem(tyGdAccessStorageName));
@@ -76,6 +73,11 @@ export const useGdrive = () => {
         setTokenReceivedTime(); // Update the token received time
       };
 
+      // 'prompt' options for tokenClient.requestAccessToken:
+      // 'none' - silent token refresh, fails if user is logged out.
+      // 'consent' - forces consent screen, useful for new permissions.
+      // 'select_account' - shows account picker if user has multiple Google accounts.
+      // '' (default) - lets Google decide based on user session.
       tokenClient.requestAccessToken({ prompt: '' });
 
       // Wait for the token to be refreshed
@@ -87,19 +89,19 @@ export const useGdrive = () => {
     return gdriveAccessToken.value; // Return the valid access token
   }
 
-  async function onSyncGdrive() {
+  async function saveObjToGdrive(
+    obj: Record<string, unknown>,
+    directory: string,
+    filename: string,
+  ) {
     const validAccessToken = await getValidAccessToken();
     if (validAccessToken) {
-      console.log('sync settings to gdrive');
-      const jsonString = JSON.stringify({
-        llmSettings: state.llmSettings,
-        appConfiguration: state.appConfiguration,
-      });
+      const jsonString = JSON.stringify(obj);
       const fileBlob = new Blob([jsonString], { type: 'application/json' });
       await uploadFileToDrive(
         fileBlob,
-        state.appConfiguration.gdriveDir,
-        state.appConfiguration.gdriveConfigurationFile,
+        directory,
+        filename,
         'application/json',
         validAccessToken,
       );
@@ -108,47 +110,34 @@ export const useGdrive = () => {
     }
   }
 
-  // TODO: split up this function, this file here should be app agnostic.. and the deppmergereactive  etc..
-  // we should do this in the component itself...
-  async function onUpdateAppConfiguration() {
+  async function loadObjFromGdrive(directory: string, fileName: string) {
     const validAccessToken = await getValidAccessToken();
     if (validAccessToken) {
-      console.log('update app setting from gdrive');
-
       const fileId = await findFileOrDirectoryId({
         accessToken: validAccessToken,
-        fileName: state.appConfiguration.gdriveConfigurationFile,
-        directory: state.appConfiguration.gdriveDir,
+        fileName,
+        directory,
       });
 
       if (fileId) {
         const file = await downloadFileFromDrive(fileId, validAccessToken);
         const jsonstring = await file?.text();
-        const loadedConfig = JSON.parse(jsonstring || '') as Record<
+        const loadedObj = JSON.parse(jsonstring || '') as Record<
           string,
           unknown
         >;
-        deepMergeReactive(
-          state.appConfiguration,
-          (loadedConfig.appConfiguration || {}) as Record<string, unknown>,
-          'overwrite',
-        );
-        deepMergeReactive(
-          state.llmSettings,
-          (loadedConfig.llmSettings || {}) as Record<string, unknown>,
-          'overwrite',
-        );
+        return loadedObj;
       } else {
-        console.error('File not found in GDrive.');
+        throw new Error('File not found in GDrive.');
       }
     } else {
-      console.error('Failed to obtain a valid access token.');
+      throw new Error('Failed to obtain a valid access token.');
     }
   }
 
   return {
-    onSyncGdrive,
-    onUpdateAppConfiguration,
+    saveObjToGdrive,
+    loadObjFromGdrive,
   };
 };
 

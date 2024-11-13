@@ -199,7 +199,37 @@ import { mdiGoogleDrive } from '@quasar/extras/mdi-v6';
 
 const state = useTaskyonStore();
 
-const { onSyncGdrive, onUpdateAppConfiguration } = useGdrive();
+const { saveObjToGdrive, loadObjFromGdrive } = useGdrive();
+
+async function onUpdateAppConfiguration() {
+  const loadedConfig = await loadObjFromGdrive(
+    state.appConfiguration.gdriveDir,
+    state.appConfiguration.gdriveConfigurationFile,
+  );
+  if (loadedConfig) {
+    deepMergeReactive(
+      state.appConfiguration,
+      (loadedConfig.appConfiguration || {}) as Record<string, unknown>,
+      'overwrite',
+    );
+    deepMergeReactive(
+      state.llmSettings,
+      (loadedConfig.llmSettings || {}) as Record<string, unknown>,
+      'overwrite',
+    );
+  }
+}
+
+async function onSyncGdrive() {
+  saveObjToGdrive(
+    {
+      llmSettings: state.llmSettings,
+      appConfiguration: state.appConfiguration,
+    },
+    state.appConfiguration.gdriveDir,
+    state.appConfiguration.gdriveConfigurationFile,
+  );
+}
 
 // Function to load JSON settings
 // Common function to handle file reading and state updating
