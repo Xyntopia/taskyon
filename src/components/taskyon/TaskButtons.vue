@@ -3,14 +3,14 @@
     <q-btn
       v-if="'message' in task.content"
       class="col-auto"
-      :icon="matContentCopy"
+      :icon="symOutlinedMarkdownCopy"
       dense
       flat
       size="sm"
-      aria-label="copy raw text"
+      aria-label="copy markdown text"
       @click="copyToClipboard(task.content.message || '')"
     >
-      <q-tooltip :delay="0">Copy raw text.</q-tooltip>
+      <q-tooltip :delay="0">Copy markdown text.</q-tooltip>
     </q-btn>
     <q-btn
       v-if="'message' in task.content"
@@ -80,17 +80,13 @@
 </template>
 
 <script setup lang="ts">
-import {
-  matCode,
-  matContentCopy,
-  matEdit,
-  matRawOn,
-} from '@quasar/extras/material-icons';
+import { matCode, matEdit, matRawOn } from '@quasar/extras/material-icons';
 import {
   mdiForumPlus,
   mdiLanguageMarkdown,
   mdiMessagePlus,
 } from '@quasar/extras/mdi-v6';
+import { symOutlinedMarkdownCopy } from '@quasar/extras/material-symbols-outlined';
 import type { TaskNode } from 'src/modules/taskyon/types';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { copyToClipboard } from 'src/modules/utils';
