@@ -343,18 +343,18 @@ export const useTaskyonStore = defineStore(storeName, () => {
     return await addTask2Tree(...args);
   };
 
-  async function addMdTasks(markdown?: string, parentId?: string | undefined) {
+  async function addMdTasks(markdown?: string, newTaskId?: string | undefined) {
     console.log('adding new Markdown tasks!!');
     if (markdown) {
       const taskList = processMarkdown(markdown);
       for (const task of taskList) {
-        parentId = await addTask2Tree(
+        newTaskId = await addTask2Tree(
           task,
-          parentId, //parent
+          newTaskId, //parent
           false, // should we execute the task? // only the last one obviously ;)
         );
       }
-      return parentId;
+      return newTaskId;
     }
     // TODO: optionally execute the last task...
   }

@@ -105,8 +105,8 @@ async function updateChatThread() {
     const markdownUrl = route.query.url ? new URL(route.query.url) : undefined;
     if (markdownUrl) {
       const markdownContent = await getMarkdown(markdownUrl);
-      const parentId = await state.addMdTasks(markdownContent, undefined);
-      state.llmSettings.selectedTaskId = parentId;
+      const newTaskId = await state.addMdTasks(markdownContent, undefined);
+      state.llmSettings.selectedTaskId = newTaskId;
       state.lockBottomScroll = true;
     }
   } else if (route.params.filePath) {
@@ -115,9 +115,9 @@ async function updateChatThread() {
     const markdownContent = filePath
       ? await fetchMarkdown(folder || '', filePath)
       : undefined;
-    const parentId = await state.addMdTasks(markdownContent, undefined);
+    const newTaskId = await state.addMdTasks(markdownContent, undefined);
 
-    state.llmSettings.selectedTaskId = parentId;
+    state.llmSettings.selectedTaskId = newTaskId;
     state.lockBottomScroll = true;
   } else if (typeof route.query.t === 'string') {
     state.llmSettings.selectedTaskId = route.query.t;

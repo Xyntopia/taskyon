@@ -13,8 +13,8 @@ const props = defineProps<{
 }>();
 
 const onAddTasks = async () => {
-  const parentId = await state.addMdTasks(props.markdown);
-  state.llmSettings.selectedTaskId = parentId;
+  const newTaskId = await state.addMdTasks(props.markdown);
+  state.llmSettings.selectedTaskId = newTaskId;
   state.lockBottomScroll = props.scrollToBottom;
 };
 </script>
