@@ -10,6 +10,11 @@
           @click="generateReport(detailed)"
         ></q-btn>
         <q-btn
+          outline
+          label="Only run first test"
+          @click="generateReport(detailed, true)"
+        ></q-btn>
+        <q-btn
           v-if="diagnostics"
           outline
           label="download report"
@@ -45,6 +50,7 @@ import {
   testEstimateChatTokens,
   testVectorizeText,
 } from 'src/modules/taskyon/tests';
+import { getTextFile } from 'src/modules/taskyon/taskUtils';
 
 const state = useTaskyonStore();
 const diagnostics = ref<string>('');
@@ -88,6 +94,7 @@ async function runTest(
       result[name] = 'OK';
     }
   } catch (error) {
+    console.log(error);
     result[name] = {
       status: 'ERROR',
       message: 'an error occured during this test...',
@@ -97,10 +104,36 @@ async function runTest(
   return dump(result, { skipInvalid: true });
 }
 
-async function generateReport(details = false) {
+async function generateReport(details = false, onlyFirst = false) {
   console.log('generating diagnostics report');
 
   diagnostics.value = `report_date: ${new Date().toISOString()}\n`;
+
+  diagnostics.value += await runTest(
+    'markdown_generation',
+    async () => {
+      const tm = await state.getTaskManager();
+      // first load the chat as mardown
+      const yamlContent = await getTextFile('/tests/test_conversation.yaml');
+      const lastLoadedTaskId = await tm.loadYamlConversation(yamlContent);
+      //const newTaskId = await state.addMdTasks(markdownContent, undefined);
+      // and delete this conversation again :)
+      if (lastLoadedTaskId) {
+        const markdown = await tm.chatToMarkdown(lastLoadedTaskId);
+        tm.deleteTaskThread(lastLoadedTaskId);
+        return {
+          markdown,
+        };
+      }
+      throw { message: 'could not found the task we just loaded!!' };
+    },
+    details,
+  );
+
+  if (onlyFirst) {
+    console.log('diagnostics:', diagnostics.value);
+    return;
+  }
 
   diagnostics.value += await runTest(
     'test_token_counter',

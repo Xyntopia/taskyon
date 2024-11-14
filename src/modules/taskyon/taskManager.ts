@@ -9,7 +9,7 @@ import {
   createTaskNodeMangoQuery,
 } from './rxdb';
 import { openFile } from '../OPFS';
-import { type AsyncQueue, deepMerge, lockMap } from '../utils';
+import { type AsyncQueue, deepCopy, deepMerge, lockMap } from '../utils';
 import { useVectorStore } from './hnswIndex';
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi';
 import { Tool } from './tools';
@@ -899,26 +899,32 @@ export function useTyTaskManager(
     notifySubscribers(undefined, 'new');
   }
 
-  async function loadConversation(files: File[]): Promise<string | undefined> {
-    if (files) {
-      console.log('adding tasknodes & conversations from files!');
+  async function loadYamlConversation(
+    input: File | string,
+  ): Promise<string | undefined> {
+    console.log('adding tasknodes & conversations from yaml input!');
 
-      let last_task_id: string | undefined = undefined;
-      for (let i = 0; i < files.length; i++) {
-        console.log(files[i]);
-        const fileStr = await files[i]?.text();
-        const taskListRaw = fileStr ? load(fileStr) : [];
-        const result = await TaskListType.safeParseAsync(taskListRaw);
-        if (result.success) {
-          const taskList = result.data;
-          taskList.forEach((t) => {
-            void setTask(t, true);
-            last_task_id = t.id;
-          });
-        }
-      }
-      return last_task_id;
+    let last_task_id: string | undefined = undefined;
+
+    let taskListRaw: unknown;
+    if (typeof input === 'string') {
+      taskListRaw = load(input);
+    } else {
+      const fileStr = await input.text();
+      taskListRaw = load(fileStr);
     }
+
+    const result = await TaskListType.safeParseAsync(taskListRaw);
+
+    if (result.success) {
+      const taskList = result.data;
+      taskList.forEach((t) => {
+        void setTask(t, true);
+        last_task_id = t.id;
+      });
+    }
+
+    return last_task_id;
   }
 
   const fm = useFileManager(taskyonDB?.filemappings);
@@ -937,6 +943,37 @@ export function useTyTaskManager(
       const fileContent = dump(taskList);
       return fileContent;
     }
+  }
+
+  // converts an antire taskchain (thread) into yaml for download
+  async function chatToMarkdown(conversationId: string, fullMeta = false) {
+    console.log('convert Chat to markdown!');
+    const taskList = await getTaskChain(conversationId);
+
+    //convert into a list of markdown strings
+    const messageStrings = taskList.map((t) => {
+      const message =
+        t?.content && 'message' in t?.content ? '\n\n' + t.content.message : '';
+
+      // we are doing this in order to protect the "original" tasks, e.g. if they
+      // are reactive... :)
+      const partialTask = deepCopy(t) as Record<string, unknown>;
+      if (!fullMeta && partialTask) {
+        // delete everything which we don't require in order
+        // to create new tasks...
+        delete partialTask.debugging;
+        delete partialTask.result;
+        delete partialTask.id;
+        delete partialTask.state;
+        delete partialTask.created_at;
+        delete partialTask.parentID;
+        if (message) delete partialTask.content;
+      }
+      const yamlMeta = `<!--taskyon\n${dump(partialTask, { skipInvalid: true })}\n-->`;
+      return yamlMeta + message;
+    });
+
+    return messageStrings.join('\n\n---\n\n');
   }
 
   const defaultMode = {
@@ -960,7 +997,7 @@ export function useTyTaskManager(
     findLeafTasks,
     searchChildTasks,
     searchSimilarTasks,
-    loadConversation,
+    loadYamlConversation,
   };
 
   return {
@@ -970,6 +1007,7 @@ export function useTyTaskManager(
     buildChatThread,
     getTaskChain,
     chatToYaml,
+    chatToMarkdown,
   };
 }
 export type TyTaskManager = ReturnType<typeof useTyTaskManager>;

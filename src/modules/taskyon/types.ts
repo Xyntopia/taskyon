@@ -321,29 +321,30 @@ of how content can be structured. `,
   parentID: z.string().optional(),
   // provide debugging information about the task execution
   // all debugging information should be purely optional...
-  debugging: z.object({
-    threadMessage: z.any().optional(), // Replace with the correct Zod schema if available
-    promptTokens: z.number().optional(),
-    resultTokens: z.number().optional(),
-    taskTokens: z.number().optional(),
-    estimatedTokens: z
-      .object({
-        resultTokens: z.number().optional(),
-        taskCosts: z.number().optional(),
-        functionTokens: z.number().optional(),
-        promptTokens: z.number().optional(),
-        singlePromptTokens: z.number().optional(),
-      })
-      .optional(),
-    toolStreamArgsContent: z.record(z.string()).optional(),
-    streamContent: z.string().optional(),
-    taskCosts: z.number().optional(),
-    aiResponse: z.any().optional(), // Replace with the correct Zod schema if available
-    error: z.unknown().optional(),
-    // the taskprompt is the full chat which leads to the result. This is important that we have this
-    // for to debugging reasons...
-    taskPrompt: z.union([z.array(OpenAIMessage), z.any()]).optional(), // Replace 'z.any()' with the correct Zod type
-  }),
+  debugging: z
+    .object({
+      threadMessage: z.any().optional(), // Replace with the correct Zod schema if available
+      promptTokens: z.number().optional(),
+      resultTokens: z.number().optional(),
+      taskTokens: z.number().optional(),
+      estimatedTokens: z
+        .object({
+          resultTokens: z.number().optional(),
+          taskCosts: z.number().optional(),
+          functionTokens: z.number().optional(),
+          promptTokens: z.number().optional(),
+          singlePromptTokens: z.number().optional(),
+        })
+        .optional(),
+      toolStreamArgsContent: z.record(z.string()).optional(),
+      streamContent: z.string().optional(),
+      taskCosts: z.number().optional(),
+      aiResponse: z.any().optional(), // Replace with the correct Zod schema if available
+      error: z.unknown().optional(),
+      // the taskprompt is the full chat which leads to the result. This is important that we have this
+      // for to debugging reasons...
+      taskPrompt: z.union([z.array(OpenAIMessage), z.any()]).optional(), // Replace 'z.any()' with the correct Zod type
+    }).partial(),
   result: TaskResult.optional(),
   id: z.string(), // can we make the id an SHA-1 value like in git? in that case we should simply remove this value...
   allowedTools: z.array(z.string()).optional(),
