@@ -68,7 +68,7 @@ const props = defineProps<{
 const filteredTasks = computed(() =>
   props.selectedThread.filter((t) => {
     const hide = t.label ? t.label.includes('hide') : false; // TODO: hide tasks based on level as well :)
-    const structured = 'structuredResponse' in t.content;
+    const structured = t.content && 'structuredResponse' in t.content;
     return hide || !structured;
   }),
 );

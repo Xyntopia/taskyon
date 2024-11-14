@@ -244,11 +244,11 @@ export function findAllFilesInTasks(taskList: TaskNode[]): string[] {
   return Array.from(fileSet);
 }
 
-export async function getMarkdown(url: URL) {
+export async function getTextFile(url: URL | string) {
   // Fetch the markdown file from the URL
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Failed to fetch markdown file: ${response.statusText}`);
+    throw new Error(`Failed to fetch text file: ${response.statusText}`);
   }
   const mdString = await response.text();
   return mdString;
@@ -262,7 +262,7 @@ export const fetchMarkdown = async (folder: string, filePath: string) => {
       throw new Error(`Failed to load ${fileURL}`);
     }
     const text = await response.text();
-    return text
+    return text;
   } catch (error) {
     console.error(error);
   }

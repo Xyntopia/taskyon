@@ -58,7 +58,7 @@
           <FileDropzone
             accept="*"
             disable-dropzone-border
-            @update:model-value="loadConversation"
+            @update:model-value="loadYamlConversation"
           >
             <q-btn dense class="fit" flat>
               <q-icon :name="matFileUpload" />
@@ -170,9 +170,12 @@ watch(
   },
 );
 
-async function loadConversation(files: File[]) {
+async function loadYamlConversation(files: File[]) {
   const tm = await state.getTaskManager();
-  const last_loaded_id = await tm.loadConversation(files);
+  let last_loaded_id = undefined;
+  for (const file of files) {
+    last_loaded_id = await tm.loadYamlConversation(file);
+  }
   state.llmSettings.selectedTaskId = last_loaded_id;
 }
 </script>

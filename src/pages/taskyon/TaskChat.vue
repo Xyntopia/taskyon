@@ -72,7 +72,7 @@ import CreateNewTask from 'components/taskyon/CreateNewTask.vue';
 import GetStarted from 'components/taskyon/GetStarted.vue';
 import ConversationWidget from 'components/taskyon/ConversationWidget.vue';
 import { defineAsyncComponent } from 'vue';
-import { fetchMarkdown, getMarkdown } from 'src/modules/taskyon/taskUtils';
+import { fetchMarkdown, getTextFile } from 'src/modules/taskyon/taskUtils';
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue';
 import { useRouter, useRoute } from 'vue-router';
 
@@ -104,7 +104,7 @@ async function updateChatThread() {
   if (typeof route.query.url === 'string') {
     const markdownUrl = route.query.url ? new URL(route.query.url) : undefined;
     if (markdownUrl) {
-      const markdownContent = await getMarkdown(markdownUrl);
+      const markdownContent = await getTextFile(markdownUrl);
       const newTaskId = await state.addMdTasks(markdownContent, undefined);
       state.llmSettings.selectedTaskId = newTaskId;
       state.lockBottomScroll = true;
