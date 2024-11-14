@@ -48,6 +48,19 @@
         </q-btn>
       </div>
       <q-space />
+      <div
+        v-if="
+          state?.selectedThread && !minMode && state.llmSettings.selectedTaskId
+        "
+      >
+        <share-dialog-btn
+          flat
+          round
+          dense
+          :size="btnSize"
+          :conversation-id="state.llmSettings.selectedTaskId"
+        />
+      </div>
       <q-btn
         v-if="state && state.getErrors().length > 0"
         flat
@@ -160,7 +173,7 @@
 
 <script setup lang="ts">
 import DarkModeButton from 'components/DarkModeButton.vue';
-import { ref } from 'vue';
+import { defineAsyncComponent, ref } from 'vue';
 import type { useTaskyonStore } from 'stores/taskyonState';
 import {
   matHelpOutline,
@@ -176,6 +189,16 @@ defineProps<{
   btnSize: 'xs' | 'md';
 }>();
 const drawerOpen = defineModel<boolean>('drawerOpen', { required: false });
+
+const ShareDialogBtn = defineAsyncComponent(
+  () =>
+    import(
+      /* webpackChunkName: "ShareDialogButton" */
+      /* webpackMode: "lazy" */
+      /* webpackFetchPriority: "low" */
+      '../taskyon/TaskChainPublishDialog.vue'
+    ),
+);
 
 //const state = useTaskyonStore();
 let state = ref<undefined | ReturnType<typeof useTaskyonStore>>();
