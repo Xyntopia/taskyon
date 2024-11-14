@@ -89,20 +89,18 @@ export const useGdrive = () => {
     return gdriveAccessToken.value; // Return the valid access token
   }
 
-  async function saveObjToGdrive(
-    obj: Record<string, unknown>,
+  async function saveFileToGdrive(
+    file: Blob,
     directory: string,
     filename: string,
   ) {
     const validAccessToken = await getValidAccessToken();
     if (validAccessToken) {
-      const jsonString = JSON.stringify(obj);
-      const fileBlob = new Blob([jsonString], { type: 'application/json' });
       await uploadFileToDrive(
-        fileBlob,
+        file,
         directory,
         filename,
-        'application/json',
+        file.type,
         validAccessToken,
       );
     } else {
@@ -110,7 +108,18 @@ export const useGdrive = () => {
     }
   }
 
-  async function loadObjFromGdrive(directory: string, fileName: string) {
+  async function saveObjToGdrive(
+    obj: Record<string, unknown>,
+    directory: string,
+    filename: string,
+  ) {
+    const jsonString = JSON.stringify(obj);
+    const fileBlob = new Blob([jsonString], { type: 'application/json' });
+
+    saveFileToGdrive(fileBlob, directory, filename);
+  }
+
+  async function loadFileFromGdrive(directory: string, fileName: string) {
     const validAccessToken = await getValidAccessToken();
     if (validAccessToken) {
       const fileId = await findFileOrDirectoryId({
@@ -121,12 +130,7 @@ export const useGdrive = () => {
 
       if (fileId) {
         const file = await downloadFileFromDrive(fileId, validAccessToken);
-        const jsonstring = await file?.text();
-        const loadedObj = JSON.parse(jsonstring || '') as Record<
-          string,
-          unknown
-        >;
-        return loadedObj;
+        return file;
       } else {
         throw new Error('File not found in GDrive.');
       }
@@ -135,9 +139,28 @@ export const useGdrive = () => {
     }
   }
 
+  async function loadObjFromGdrive(directory: string, fileName: string) {
+    try {
+      // Use loadFileFromGdrive to retrieve the file as a Blob
+      const fileBlob = await loadFileFromGdrive(directory, fileName);
+      if (!fileBlob) {
+        throw new Error(`Failed to load Blob for file "${fileName}".`);
+      }
+
+      // Convert Blob to JSON object
+      const textContent = await fileBlob.text();
+      const obj = JSON.parse(textContent) as Record<string, unknown>;
+      return obj; // Return the parsed object
+    } catch (error) {
+      console.error('Error loading object from Google Drive:', error);
+      return null;
+    }
+  }
+
   return {
     saveObjToGdrive,
     loadObjFromGdrive,
+    saveFileToGdrive,
   };
 };
 
