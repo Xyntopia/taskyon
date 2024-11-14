@@ -1,3 +1,9 @@
+/**
+ * This file contains a few functions to deal with gdrive synchronization
+ *
+ * check out this URL for documentation:  https://developers.google.com/drive/api/reference/rest/v3?authuser=1
+ */
+
 import { ref, computed, watch } from 'vue';
 import axios from 'axios';
 import { googleSdkLoaded } from 'vue3-google-login';
@@ -59,15 +65,13 @@ export const useGdrive = () => {
   async function getValidAccessToken() {
     if (!gdriveAccessToken.value || isTokenExpired.value) {
       if (!tokenClient) {
-        console.error('Token client is not initialized.');
-        return null; // Return null to indicate failure
+        throw new Error('Token client is not initialized.');
       }
 
       // Request a new token
       tokenClient.callback = (response) => {
         if (response.error) {
-          console.error('Error refreshing token:', response.error);
-          return;
+          throw new Error('Error refreshing token:', response.error);
         }
         gdriveAccessToken.value = response.access_token; // Update the access token
         setTokenReceivedTime(); // Update the token received time
@@ -93,18 +97,23 @@ export const useGdrive = () => {
     file: Blob,
     directory: string,
     filename: string,
+    share = false,
   ) {
     const validAccessToken = await getValidAccessToken();
     if (validAccessToken) {
-      await uploadFileToDrive(
+      const gdriveFile = await uploadFileToDrive(
         file,
         directory,
         filename,
         file.type,
         validAccessToken,
       );
+      if (gdriveFile && share) {
+        const response = await makeFilePublic(gdriveFile.id, validAccessToken);
+        console.log('made file public:', response);
+      }
     } else {
-      console.error('Failed to obtain a valid access token.');
+      throw new Error('Failed to obtain a valid access token.');
     }
   }
 
@@ -140,21 +149,16 @@ export const useGdrive = () => {
   }
 
   async function loadObjFromGdrive(directory: string, fileName: string) {
-    try {
-      // Use loadFileFromGdrive to retrieve the file as a Blob
-      const fileBlob = await loadFileFromGdrive(directory, fileName);
-      if (!fileBlob) {
-        throw new Error(`Failed to load Blob for file "${fileName}".`);
-      }
-
-      // Convert Blob to JSON object
-      const textContent = await fileBlob.text();
-      const obj = JSON.parse(textContent) as Record<string, unknown>;
-      return obj; // Return the parsed object
-    } catch (error) {
-      console.error('Error loading object from Google Drive:', error);
-      return null;
+    // Use loadFileFromGdrive to retrieve the file as a Blob
+    const fileBlob = await loadFileFromGdrive(directory, fileName);
+    if (!fileBlob) {
+      throw new Error(`Failed to load Blob for file "${fileName}".`);
     }
+
+    // Convert Blob to JSON object
+    const textContent = await fileBlob.text();
+    const obj = JSON.parse(textContent) as Record<string, unknown>;
+    return obj; // Return the parsed object
   }
 
   return {
@@ -176,8 +180,7 @@ async function uploadFileToDrive(
   // Check if the directory exists, if not, create it
   const directoryId = await ensureDirectoryExists(directory, accessToken);
   if (!directoryId) {
-    console.error('Error in creating or finding directory.');
-    return;
+    throw new Error('Error in creating or finding directory.');
   }
 
   // Check if the file already exists
@@ -217,14 +220,9 @@ async function updateFile(
     'Content-Type': 'multipart/related',
   };
 
-  try {
-    const response = await axios.patch<gDriveFile>(url, formData, { headers });
-    console.log('File updated, response:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error('Error updating file:', error);
-    return undefined;
-  }
+  const response = await axios.patch<gDriveFile>(url, formData, { headers });
+  console.log('File updated, response:', response.data);
+  return response.data;
 }
 
 async function pushFile(
@@ -261,13 +259,9 @@ async function pushFile(
   };
 
   let uploadedfileData: gDriveFile | undefined = undefined;
-  try {
-    const response = await axios.post<gDriveFile>(url, formData, { headers });
-    uploadedfileData = response.data;
-    console.log('File uploaded, response:', response);
-  } catch (error) {
-    console.error('Error uploading file:', error);
-  }
+  const response = await axios.post<gDriveFile>(url, formData, { headers });
+  uploadedfileData = response.data;
+  console.log('File uploaded, response:', response);
 
   return uploadedfileData;
 }
@@ -277,23 +271,18 @@ async function ensureDirectoryExists(
   accessToken: string,
 ): Promise<string | null> {
   console.log('ensure dir exists');
-  try {
-    // Search for the directory
-    let directoryId = await findFileOrDirectoryId({
-      accessToken,
-      directory: directoryPath,
-    });
+  // Search for the directory
+  let directoryId = await findFileOrDirectoryId({
+    accessToken,
+    directory: directoryPath,
+  });
 
-    // If directory is not found, create it
-    if (!directoryId) {
-      directoryId = await createDirectory(directoryPath, accessToken);
-    }
-
-    return directoryId;
-  } catch (error) {
-    console.error('Error ensuring directory exists:', error);
-    return null;
+  // If directory is not found, create it
+  if (!directoryId) {
+    directoryId = await createDirectory(directoryPath, accessToken);
   }
+
+  return directoryId;
 }
 
 async function gdrivefindFileOrDirectoryId({
@@ -322,36 +311,59 @@ async function gdrivefindFileOrDirectoryId({
       accessToken,
     });
     if (!directoryId) {
-      console.error('Directory not found');
-      return null;
+      throw new Error('Directory not found');
     }
     url = `https://www.googleapis.com/drive/v3/files?q=name='${fileName}' and parents in '${directoryId}' and trashed=false`;
   } else {
     // Neither file nor directory is given
-    console.error('No file or directory specified');
-    return null;
+    throw new Error('No file or directory specified');
   }
 
   const headers = {
     Authorization: `Bearer ${accessToken}`,
   };
 
-  try {
-    const response = await axios.get<{ files: gDriveFile[] }>(url, {
-      headers,
-    });
-    if (response.data.files[0] && response.data.files.length > 0) {
-      return response.data.files[0].id; // Assuming the first found item is the one we want
-    } else {
-      return null;
-    }
-  } catch (error) {
-    console.error('Error finding file or directory:', error);
+  const response = await axios.get<{ files: gDriveFile[] }>(url, {
+    headers,
+  });
+  if (response.data.files[0] && response.data.files.length > 0) {
+    return response.data.files[0].id; // Assuming the first found item is the one we want
+  } else {
     return null;
   }
 }
 
 const findFileOrDirectoryId = asyncLruCache(10)(gdrivefindFileOrDirectoryId);
+
+/**
+ * Check out this link here for all options:  https://developers.google.com/drive/api/reference/rest/v3/permissions?authuser=2
+ *
+ * @param fileId
+ * @param accessToken
+ * @returns
+ */
+async function makeFilePublic(fileId: string, accessToken: string) {
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}/permissions`;
+  const permission = {
+    role: 'reader',
+    /*
+    user
+    group
+    domain
+    anyone
+    */
+    type: 'anyone',
+  };
+
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
+
+  const response = await axios.post(url, permission, { headers });
+  console.log('File made public.');
+  return response.data;
+}
 
 async function createDirectory(directoryPath: string, accessToken: string) {
   console.log('create directory using pushFile method');
@@ -375,12 +387,7 @@ async function downloadFileFromDrive(fileId: string, accessToken: string) {
   const headers = {
     Authorization: `Bearer ${accessToken}`,
   };
-  try {
-    const response = await axios.get(url, { headers, responseType: 'blob' });
-    console.log('File downloaded successfully.');
-    return response.data as File; // The file data
-  } catch (error) {
-    console.error('Error downloading file:', error);
-    return null;
-  }
+  const response = await axios.get(url, { headers, responseType: 'blob' });
+  console.log('File downloaded successfully.');
+  return response.data as File; // The file data
 }

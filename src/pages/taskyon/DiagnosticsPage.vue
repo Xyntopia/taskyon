@@ -128,6 +128,7 @@ async function generateReport(details = false, onlyFirst = false) {
         markdownFile,
         state.appConfiguration.gdriveDir,
         markdownFile.name,
+        true, //share
       );
 
       //throw { message: 'could not found the task we just loaded!!' };
