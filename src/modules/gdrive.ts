@@ -16,6 +16,7 @@ type gDriveFile = {
   id: string; //"1G4SJ8bBP13mNRWp9CIzeYNKsjc_q8BHP",
   name: string; //"taskyon/templates.json",
   mimeType: string; //"application/json"
+  webViewLink?: string; // optionally a pulic link of the file
 };
 
 export const useGdrive = () => {
@@ -108,10 +109,16 @@ export const useGdrive = () => {
         file.type,
         validAccessToken,
       );
-      if (gdriveFile && share) {
+      if (gdriveFile && share && !gdriveFile.webViewLink) {
         const response = await makeFilePublic(gdriveFile.id, validAccessToken);
         console.log('made file public:', response);
+        const publicGdriveFile = await getFileMetaData(
+          gdriveFile.id,
+          validAccessToken,
+        );
+        return publicGdriveFile;
       }
+      return gdriveFile;
     } else {
       throw new Error('Failed to obtain a valid access token.');
     }
@@ -168,6 +175,18 @@ export const useGdrive = () => {
   };
 };
 
+// using this mainly to get the sharable link for a file...
+async function getFileMetaData(fileId: string, accessToken: string) {
+  // Retrieve the file's metadata to get the webViewLink
+  const fileMetadataResponse = await axios.get<gDriveFile>(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=webViewLink`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  const fileMetadata = fileMetadataResponse.data;
+  console.log('File metadata:', fileMetadata);
+  return fileMetadata;
+}
+
 async function uploadFileToDrive(
   file: Blob,
   directory: string,
@@ -199,13 +218,15 @@ async function uploadFileToDrive(
   }
 }
 
+const fieldsParam = 'fields=webViewLink,id,name,mimeType';
+
 async function updateFile(
   fileId: string,
   file: Blob,
   mimeType: string,
   accessToken: string,
 ) {
-  const url = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`;
+  const url = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?${fieldsParam}&uploadType=multipart`;
   const metadata = { mimeType: mimeType };
 
   const formData = new FormData();
@@ -232,8 +253,7 @@ async function pushFile(
   file: Blob | undefined,
   accessToken: string,
 ) {
-  const url =
-    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+  const url = `https://www.googleapis.com/upload/drive/v3/files?${fieldsParam}&uploadType=multipart`;
   // Now, modify the metadata to include the parent directory
   const metadata: Record<string, unknown> = {
     name: fileName,

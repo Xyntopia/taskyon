@@ -124,12 +124,14 @@ async function generateReport(details = false, onlyFirst = false) {
         { type: 'text/markdown' }, // MIME type
       );
 
-      saveFileToGdrive(
+      const gdriveFile = await saveFileToGdrive(
         markdownFile,
         state.appConfiguration.gdriveDir,
         markdownFile.name,
         true, //share
       );
+
+      return gdriveFile
 
       //throw { message: 'could not found the task we just loaded!!' };
     },
