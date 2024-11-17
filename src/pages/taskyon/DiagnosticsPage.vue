@@ -7,7 +7,7 @@
         <q-btn
           outline
           label="Generate Diagnostics Report"
-          @click="generateReport(detailed)"
+          @click="generateReport(detailed, false)"
         ></q-btn>
         <q-btn
           outline
@@ -55,7 +55,7 @@ import { useGdrive } from 'src/modules/gdrive';
 
 const state = useTaskyonStore();
 const diagnostics = ref<string>('');
-const detailed = ref(true);
+const detailed = ref(false);
 
 async function completionMessage() {
   const tm = await state.getTaskManager();
@@ -93,6 +93,7 @@ async function runTest(
       };
     } else {
       result[name] = 'OK';
+      detailed;
     }
   } catch (error) {
     console.log(error);
