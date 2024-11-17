@@ -124,6 +124,28 @@ export const useGdrive = () => {
     }
   }
 
+  async function publishMarkdown(
+    markdownContent: string,
+    directory: string,
+    filename: string,
+    share = false,
+  ) {
+    const markdownFile = new File(
+      [markdownContent], // Content as an array (required by File constructor)
+      filename, // Filename
+      { type: 'text/markdown; charset=UTF-8' }, // MIME type
+    );
+
+    const gdriveFile = await saveFileToGdrive(
+      markdownFile,
+      directory,
+      markdownFile.name,
+      share, //share
+    );
+
+    return gdriveFile;
+  }
+
   async function saveObjToGdrive(
     obj: Record<string, unknown>,
     directory: string,
@@ -172,6 +194,7 @@ export const useGdrive = () => {
     saveObjToGdrive,
     loadObjFromGdrive,
     saveFileToGdrive,
+    publishMarkdown,
   };
 };
 

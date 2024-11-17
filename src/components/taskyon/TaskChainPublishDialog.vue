@@ -24,7 +24,13 @@
               outline
               :icon="symOutlinedDriveExport"
               label="Share publicly using gdrive"
+              @click="onExportPublicGdrive(conversationId)"
             />
+            <q-slide-transition>
+              <div v-show="gdriveLink">
+                {{ gdriveLink ?? '' }} <q-btn :icon="matContentCopy" @click="copyToClipboard(gdriveLink || '')"/>
+              </div>
+            </q-slide-transition>
             <q-btn
               class="lt-sm"
               outline
@@ -57,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { matShare, matLink, matCopyAll } from '@quasar/extras/material-icons';
+import { matShare, matLink, matCopyAll, matContentCopy } from '@quasar/extras/material-icons';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { copyToClipboard, exportFile } from 'quasar';
 import { ref } from 'vue';
@@ -66,6 +72,7 @@ import {
   symOutlinedFileSave,
   symOutlinedMarkdown,
 } from '@quasar/extras/material-symbols-outlined';
+import { useGdrive } from 'src/modules/gdrive';
 const showDialog = ref(true);
 
 const state = useTaskyonStore();
@@ -73,6 +80,28 @@ const state = useTaskyonStore();
 defineProps<{
   conversationId: string;
 }>();
+
+const gdriveLink = ref<string>();
+
+async function onExportPublicGdrive(conversationId: string) {
+  const tm = await state.getTaskManager();
+  const task = await tm.getTask(conversationId);
+  if (task) {
+    const taskThreadMd = await tm.chatToMarkdown(task.id);
+    if (taskThreadMd) {
+      const { publishMarkdown } = useGdrive();
+
+      const gdriveFile = await publishMarkdown(
+        taskThreadMd,
+        state.appConfiguration.gdriveDir,
+        `tyn-${task.name || ''}.md`,
+        true,
+      );
+
+      gdriveLink.value = gdriveFile.webViewLink;
+    }
+  }
+}
 
 async function onExportChatMD(conversationId: string, clipBoard = false) {
   const tm = await state.getTaskManager();

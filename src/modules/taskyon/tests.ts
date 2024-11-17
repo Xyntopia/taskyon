@@ -2,6 +2,7 @@ import type { TaskNode, ToolBase } from './types';
 import type OpenAI from 'openai';
 import { useNlpWorker } from './webWorkerApi';
 import { useTaskyonStore } from 'src/stores/taskyonState';
+import { getTextFile } from './taskUtils';
 
 const state = useTaskyonStore();
 
@@ -69,4 +70,21 @@ export async function testEstimateChatTokens() {
   );
   console.log('Estimate Chat Tokens Result:', tokens);
   return tokens;
+}
+
+export async function markdownGeneration() {
+  const tm = await state.getTaskManager();
+  // first load the chat as mardown
+  const yamlContent = await getTextFile('/tests/test_conversation.yaml');
+  const lastLoadedTaskId = await tm.loadYamlConversation(yamlContent);
+  //const newTaskId = await state.addMdTasks(markdownContent, undefined);
+  // and delete this conversation again :)
+  if (lastLoadedTaskId) {
+    const markdown = await tm.chatToMarkdown(lastLoadedTaskId);
+    tm.deleteTaskThread(lastLoadedTaskId);
+    return {
+      markdown,
+    };
+  }
+  throw { message: 'could not found the task we just loaded!!' };
 }
