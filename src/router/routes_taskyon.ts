@@ -1,5 +1,5 @@
 import { RouteRecordRaw } from 'vue-router';
-import { mdRoutes } from './routes_default';
+import { authRoutes, mdRoutes } from './routes_default';
 import { defineAsyncComponent } from 'vue';
 import LoadCircle from 'components/LoadingCircle.vue';
 
@@ -75,6 +75,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         component: () => import('pages/DocumentationIndex.vue'),
         meta: { title: 'Documentation', description: 'Taskyon Documentation' },
       },
+      // mdRoutes should have our normal taskyon layout thats why we put them in here :)
       ...mdRoutes,
     ],
   },
@@ -100,6 +101,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
 
 const routes: RouteRecordRaw[] = [
   ...taskyonRoutes,
+  ...authRoutes,
 
   // Always leave this as last one,
   // but you can also remove it
