@@ -180,7 +180,7 @@ import SecretInput from '../SecretInput.vue';
 import { matEdit } from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
 import InfoDialog from '../InfoDialog.vue';
-import { freeKey } from 'src/assets/taskyon_free_key.json';
+import tykeyobj from 'src/assets/taskyon_free_key.json';
 
 const state = useTaskyonStore();
 
@@ -188,6 +188,6 @@ const expertModeOn = defineModel<boolean>('expertModeOn', { default: false });
 
 function initFreeMode() {
   state.llmSettings.selectedApi = 'taskyon';
-  state.keys['taskyon'] = freeKey;
+  state.keys['taskyon'] = tykeyobj.freeKey;
 }
 </script>
