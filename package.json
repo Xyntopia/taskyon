@@ -58,6 +58,7 @@
     "codemirror": "^6.0.1",
     "comlink": "^4.4.1",
     "core-js": "^3.6.5",
+    "datastore-level": "^11.0.1",
     "dexie": "^3.2.4",
     "fast-equals": "^5.0.1",
     "helia": "^5.1.0",

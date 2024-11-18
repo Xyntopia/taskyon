@@ -5757,6 +5757,19 @@ abort-error@^1.0.0:
   resolved "https://registry.yarnpkg.com/abort-error/-/abort-error-1.0.0.tgz#2e5ed4871268c3579fee7c37fd6dd7122dbdc279"
   integrity sha512-PMKqKW8CHeXFYW9GdeavZbOt2qE3/UTv5FKk8PGK583pRmvdGq/d8M9UpLBzAL95Ss3Fe3LvGjLhWeWo9d0QAg==
 
+abstract-level@^1.0.2, abstract-level@^1.0.4:
+  version "1.0.4"
+  resolved "https://registry.yarnpkg.com/abstract-level/-/abstract-level-1.0.4.tgz#3ad8d684c51cc9cbc9cf9612a7100b716c414b57"
+  integrity sha512-eUP/6pbXBkMbXFdx4IH2fVgvB7M0JvR7/lIL33zcs0IBcwjdzSSl31TOJsaCzmKSSDF9h8QYSOJux4Nd4YJqFg==
+  dependencies:
+    buffer "^6.0.3"
+    catering "^2.1.0"
+    is-buffer "^2.0.5"
+    level-supports "^4.0.0"
+    level-transcoder "^1.0.1"
+    module-error "^1.0.1"
+    queue-microtask "^1.2.3"
+
 accepts@~1.3.4, accepts@~1.3.5, accepts@~1.3.8:
   version "1.3.8"
   resolved "https://registry.yarnpkg.com/accepts/-/accepts-1.3.8.tgz#0bf0be125b67014adcb0b0921e62db7bffe16b2e"
@@ -6632,6 +6645,16 @@ brorand@^1.0.1, brorand@^1.1.0:
   resolved "https://registry.yarnpkg.com/brorand/-/brorand-1.1.0.tgz#12c25efe40a45e3c323eb8675a0a0ce57b22371f"
   integrity sha512-cKV8tMCEpQs4hK/ik71d6LrPOnpkpGBR0wzxqr68g2m/LB2GxVYQroAjMJZRVM1Y4BCjCKc3vAamxSzOY2RP+w==
 
+browser-level@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/browser-level/-/browser-level-1.0.1.tgz#36e8c3183d0fe1c405239792faaab5f315871011"
+  integrity sha512-XECYKJ+Dbzw0lbydyQuJzwNXtOpbMSq737qxJN11sIRTErOMShvDpbzTlgju7orJKvx4epULolZAuJGLzCmWRQ==
+  dependencies:
+    abstract-level "^1.0.2"
+    catering "^2.1.1"
+    module-error "^1.0.2"
+    run-parallel-limit "^1.1.0"
+
 browser-readablestream-to-it@^2.0.7:
   version "2.0.7"
   resolved "https://registry.yarnpkg.com/browser-readablestream-to-it/-/browser-readablestream-to-it-2.0.7.tgz#ddcc4b34a4b08ef415f89eb215297acea3e05fd0"
@@ -6971,6 +6994,11 @@ caseless@~0.12.0:
   resolved "https://registry.yarnpkg.com/caseless/-/caseless-0.12.0.tgz#1b681c21ff84033c826543090689420d187151dc"
   integrity sha512-4tYFyifaFfGacoiObjJegolkwSU4xQNGbVgUiNYVUxbQ2x2lUsFvY4hVgVzGiIe6WLOPqycWXA40l+PWsxthUw==
 
+catering@^2.1.0, catering@^2.1.1:
+  version "2.1.1"
+  resolved "https://registry.yarnpkg.com/catering/-/catering-2.1.1.tgz#66acba06ed5ee28d5286133982a927de9a04b510"
+  integrity sha512-K7Qy8O9p76sL3/3m7/zLKbRkyOlSZAgzEaLhyj2mXS8PsCud2Eo4hAb8aLtZqHh0QGqLcb9dlJSu6lHRVENm1w==
+
 caw@^2.0.0, caw@^2.0.1:
   version "2.0.1"
   resolved "https://registry.yarnpkg.com/caw/-/caw-2.0.1.tgz#6c3ca071fc194720883c2dc5da9b074bfc7e9e95"
@@ -7142,6 +7170,17 @@ cipher-base@^1.0.0, cipher-base@^1.0.1, cipher-base@^1.0.3:
   dependencies:
     inherits "^2.0.1"
     safe-buffer "^5.0.1"
+
+classic-level@^1.2.0:
+  version "1.4.1"
+  resolved "https://registry.yarnpkg.com/classic-level/-/classic-level-1.4.1.tgz#169ecf9f9c6200ad42a98c8576af449c1badbaee"
+  integrity sha512-qGx/KJl3bvtOHrGau2WklEZuXhS3zme+jf+fsu6Ej7W7IP/C49v7KNlWIsT1jZu0YnfzSIYDGcEWpCa1wKGWXQ==
+  dependencies:
+    abstract-level "^1.0.2"
+    catering "^2.1.0"
+    module-error "^1.0.1"
+    napi-macros "^2.2.2"
+    node-gyp-build "^4.3.0"
 
 clean-css@^5.2.2, clean-css@~5.3.2:
   version "5.3.3"
@@ -8315,6 +8354,20 @@ datastore-core@^10.0.0:
     it-pushable "^3.2.3"
     it-sort "^3.0.6"
     it-take "^3.0.6"
+
+datastore-level@^11.0.1:
+  version "11.0.1"
+  resolved "https://registry.yarnpkg.com/datastore-level/-/datastore-level-11.0.1.tgz#44d4b6961a7600802fad60c9817c46f65721c2ba"
+  integrity sha512-mOcQTgSJL1bp6tM1F2WzpytIPX96i3SlshaFqEBhlAP6yLMjLgw8cVhHaWpR+wJ+tsLGjAKcKOSwecfgGvEoww==
+  dependencies:
+    datastore-core "^10.0.0"
+    interface-datastore "^8.0.0"
+    interface-store "^6.0.0"
+    it-filter "^3.1.1"
+    it-map "^3.1.1"
+    it-sort "^3.0.6"
+    it-take "^3.0.6"
+    level "^8.0.1"
 
 dayjs@1.11.13, dayjs@^1.10.4, dayjs@^1.11.7:
   version "1.11.13"
@@ -11720,6 +11773,11 @@ is-binary-path@~2.1.0:
   dependencies:
     binary-extensions "^2.0.0"
 
+is-buffer@^2.0.5:
+  version "2.0.5"
+  resolved "https://registry.yarnpkg.com/is-buffer/-/is-buffer-2.0.5.tgz#ebc252e400d22ff8d77fa09888821a24a658c191"
+  integrity sha512-i2R6zNFDwgEHJyQUtJEk0XFi1i0dPFn/oqjK3/vPCcDeJvW5NQ83V8QbicfF1SupOaB0h8ntgBC2YiE7dfyctQ==
+
 is-callable@^1.1.3:
   version "1.2.7"
   resolved "https://registry.yarnpkg.com/is-callable/-/is-callable-1.2.7.tgz#3bc2a85ea742d9e36205dcacdd72ca1fdc51b055"
@@ -12795,6 +12853,28 @@ leac@^0.6.0:
   version "0.6.0"
   resolved "https://registry.yarnpkg.com/leac/-/leac-0.6.0.tgz#dcf136e382e666bd2475f44a1096061b70dc0912"
   integrity sha512-y+SqErxb8h7nE/fiEX07jsbuhrpO9lL8eca7/Y1nuWV2moNlXhyd59iDGcRf6moVyDMbmTNzL40SUyrFU/yDpg==
+
+level-supports@^4.0.0:
+  version "4.0.1"
+  resolved "https://registry.yarnpkg.com/level-supports/-/level-supports-4.0.1.tgz#431546f9d81f10ff0fea0e74533a0e875c08c66a"
+  integrity sha512-PbXpve8rKeNcZ9C1mUicC9auIYFyGpkV9/i6g76tLgANwWhtG2v7I4xNBUlkn3lE2/dZF3Pi0ygYGtLc4RXXdA==
+
+level-transcoder@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/level-transcoder/-/level-transcoder-1.0.1.tgz#f8cef5990c4f1283d4c86d949e73631b0bc8ba9c"
+  integrity sha512-t7bFwFtsQeD8cl8NIoQ2iwxA0CL/9IFw7/9gAjOonH0PWTTiRfY7Hq+Ejbsxh86tXobDQ6IOiddjNYIfOBs06w==
+  dependencies:
+    buffer "^6.0.3"
+    module-error "^1.0.1"
+
+level@^8.0.1:
+  version "8.0.1"
+  resolved "https://registry.yarnpkg.com/level/-/level-8.0.1.tgz#737161db1bc317193aca4e7b6f436e7e1df64379"
+  integrity sha512-oPBGkheysuw7DmzFQYyFe8NAia5jFLAgEnkgWnK3OXAuJr8qFT+xBQIwokAZPME2bhPFzS8hlYcL16m8UZrtwQ==
+  dependencies:
+    abstract-level "^1.0.4"
+    browser-level "^1.0.1"
+    classic-level "^1.2.0"
 
 levn@^0.4.1:
   version "0.4.1"
@@ -13926,6 +14006,11 @@ module-definition@^6.0.0:
     ast-module-types "^6.0.0"
     node-source-walk "^7.0.0"
 
+module-error@^1.0.1, module-error@^1.0.2:
+  version "1.0.2"
+  resolved "https://registry.yarnpkg.com/module-error/-/module-error-1.0.2.tgz#8d1a48897ca883f47a45816d4fb3e3c6ba404d86"
+  integrity sha512-0yuvsqSCv8LbaOKhnsQ/T5JhyFlCYLPXK3U2sgV10zoKQwzs/MyfuQUOZQ1V/6OCOJsK/TRgNVrPuPDqtdMFtA==
+
 module-lookup-amd@^9.0.1:
   version "9.0.2"
   resolved "https://registry.yarnpkg.com/module-lookup-amd/-/module-lookup-amd-9.0.2.tgz#e132b11356a3690ed46ab0164dde2c1ddcd3a8a5"
@@ -14062,6 +14147,11 @@ napi-build-utils@^1.0.1:
   resolved "https://registry.yarnpkg.com/napi-build-utils/-/napi-build-utils-1.0.2.tgz#b1fddc0b2c46e380a0b7a76f984dd47c41a13806"
   integrity sha512-ONmRUqK7zj7DWX0D9ADe03wbwOBZxNAfF20PlGfCWQcD3+/MakShIHrMqx9YwPTfxDdF1zLeL+RGZiR9kGMLdg==
 
+napi-macros@^2.2.2:
+  version "2.2.2"
+  resolved "https://registry.yarnpkg.com/napi-macros/-/napi-macros-2.2.2.tgz#817fef20c3e0e40a963fbf7b37d1600bd0201044"
+  integrity sha512-hmEVtAGYzVQpCKdbQea4skABsdXW4RUh5t5mJ2zzqowJS2OyXZTU1KhDVFhx+NlWZ4ap9mqR9TcDO3LTTttd+g==
+
 nats@2.17.0:
   version "2.17.0"
   resolved "https://registry.yarnpkg.com/nats/-/nats-2.17.0.tgz#1f6ffa5d89bb8ea4549e205f42601dbf66c4561e"
@@ -14181,6 +14271,11 @@ node-forge@^1:
   version "1.3.1"
   resolved "https://registry.yarnpkg.com/node-forge/-/node-forge-1.3.1.tgz#be8da2af243b2417d5f646a770663a92b7e9ded3"
   integrity sha512-dPEtOeMvF9VMcYV/1Wb8CPoVAXtp6MKMlcbAt4ddqmGqUJ6fQZFXkNZNkNlfevtNkGtaSoXf/vNNNSvgrdXwtA==
+
+node-gyp-build@^4.3.0:
+  version "4.8.3"
+  resolved "https://registry.yarnpkg.com/node-gyp-build/-/node-gyp-build-4.8.3.tgz#9187216d24dbee29e44eb20d2ebf62a296bbea1a"
+  integrity sha512-EMS95CMJzdoSKoIiXo8pxKoL8DYxwIZXYlLmgPb8KUv794abpnLK6ynsCAWNliOjREKruYKdzbh76HHYUHX7nw==
 
 node-loader@^2.0.0:
   version "2.0.0"
@@ -16453,6 +16548,13 @@ run-async@^3.0.0:
   version "3.0.0"
   resolved "https://registry.yarnpkg.com/run-async/-/run-async-3.0.0.tgz#42a432f6d76c689522058984384df28be379daad"
   integrity sha512-540WwVDOMxA6dN6We19EcT9sc3hkXPw5mzRNGM3FkdN/vtE9NFvj5lFAPNwUDmJjXidm3v7TC1cTE7t17Ulm1Q==
+
+run-parallel-limit@^1.1.0:
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/run-parallel-limit/-/run-parallel-limit-1.1.0.tgz#be80e936f5768623a38a963262d6bef8ff11e7ba"
+  integrity sha512-jJA7irRNM91jaKc3Hcl1npHsFLOXOoTkPCUL1JEa1R82O2miplXXRaGdjW/KM/98YQWDhJLiSs793CnXfblJUw==
+  dependencies:
+    queue-microtask "^1.2.2"
 
 run-parallel@^1.1.9:
   version "1.2.0"
