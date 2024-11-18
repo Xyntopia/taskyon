@@ -12,8 +12,11 @@
     <q-dialog v-model="showDialog">
       <q-card>
         <q-card-section>
-          <div class="text-h5">Select Method for Sharing This Chat</div>
-          <div class="column q-gutter-xs q-pt-md">
+          <div class="text-h5 row items-center">
+            <q-icon class="q-pr-md" :name="matShare" />
+            <div>Select Method for Sharing This Chat</div>
+          </div>
+          <div class="column q-gutter-sm q-pt-md">
             <q-btn
               v-if="false"
               outline
@@ -22,13 +25,28 @@
             />
             <q-btn
               outline
+              :icon="symOutlinedPublic"
+              label="Share with public link"
+              @click="onExportIpfs(conversationId)"
+            />
+            <q-btn
+              outline
               :icon="symOutlinedDriveExport"
-              label="Share publicly using gdrive"
+              label="Markdown & public gdrive link"
               @click="onExportPublicGdrive(conversationId)"
             />
             <q-slide-transition>
               <div v-show="gdriveLink">
-                {{ gdriveLink ?? '' }} <q-btn :icon="matContentCopy" @click="copyToClipboard(gdriveLink || '')"/>
+                <q-input dense rounded standout :model-value="gdriveLink">
+                  <template #append>
+                    <q-btn
+                      flat
+                      dense
+                      :icon="matContentCopy"
+                      @click="copyToClipboard(gdriveLink || '')"
+                    />
+                  </template>
+                </q-input>
               </div>
             </q-slide-transition>
             <q-btn
@@ -63,7 +81,12 @@
 </template>
 
 <script setup lang="ts">
-import { matShare, matLink, matCopyAll, matContentCopy } from '@quasar/extras/material-icons';
+import {
+  matShare,
+  matLink,
+  matCopyAll,
+  matContentCopy,
+} from '@quasar/extras/material-icons';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { copyToClipboard, exportFile } from 'quasar';
 import { ref } from 'vue';
@@ -71,8 +94,10 @@ import {
   symOutlinedDriveExport,
   symOutlinedFileSave,
   symOutlinedMarkdown,
+  symOutlinedPublic,
 } from '@quasar/extras/material-symbols-outlined';
 import { useGdrive } from 'src/modules/gdrive';
+
 const showDialog = ref(true);
 
 const state = useTaskyonStore();
@@ -82,6 +107,19 @@ defineProps<{
 }>();
 
 const gdriveLink = ref<string>();
+
+function getDirectDownloadLink(originalLink: string) {
+  const url = new URL(originalLink);
+  const pathParts = url.pathname.split('/');
+  const fileId = pathParts[pathParts.length - 2];
+
+  if (!fileId) {
+    throw new Error('Invalid Google Drive link');
+  }
+
+  const directLink = `https://drive.google.com/uc?id=${fileId}&export=download`;
+  return directLink;
+}
 
 async function onExportPublicGdrive(conversationId: string) {
   const tm = await state.getTaskManager();
@@ -98,9 +136,15 @@ async function onExportPublicGdrive(conversationId: string) {
         true,
       );
 
-      gdriveLink.value = gdriveFile.webViewLink;
+      if (gdriveFile.webViewLink) {
+        gdriveLink.value = getDirectDownloadLink(gdriveFile.webViewLink);
+      }
     }
   }
+}
+
+async function onExportIpfs(conversationId: string) {
+  console.log('export to ipfs', conversationId);
 }
 
 async function onExportChatMD(conversationId: string, clipBoard = false) {
