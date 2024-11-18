@@ -2410,6 +2410,18 @@
     multiformats "^13.1.0"
     uint8arrays "^5.0.2"
 
+"@helia/strings@^4.0.0":
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/@helia/strings/-/strings-4.0.0.tgz#04109031ab4bdb477182b2a1c91ad82607ee9441"
+  integrity sha512-QmgdP502YO2K4pCh7y0QJUr0xQba5V6sO4hLJ6hL4UzCIZfVTKNM9nR0uyCtpWJnlJEj8aF07aG4O4tRfOAHKg==
+  dependencies:
+    "@helia/interface" "^5.0.0"
+    "@libp2p/interface" "^2.0.0"
+    interface-blockstore "^5.2.10"
+    multiformats "^13.1.0"
+    progress-events "^1.0.0"
+    uint8arrays "^5.0.2"
+
 "@helia/utils@^1.0.1":
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/@helia/utils/-/utils-1.0.1.tgz#2c27c79ac9df76f44b470773a1358b304696b7eb"

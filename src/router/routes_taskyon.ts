@@ -97,6 +97,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     component: () => import('src/layouts/ToolManager.vue'),
     meta: { title: 'Integration', description: 'Integrate Tasyon' },
   },
+  {
+    path: '/ipfsmonitor',
+    component: () => import('pages/taskyon/IpfsStatusPage.vue'),
+    meta: {
+      title: 'IPFS status',
+      description: 'Interplanetary file system status monitor',
+    },
+  },
 ];
 
 const routes: RouteRecordRaw[] = [

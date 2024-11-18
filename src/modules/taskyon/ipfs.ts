@@ -1,10 +1,25 @@
 import { createHelia } from 'helia';
 import { strings } from '@helia/strings';
 
-const helia = await createHelia();
-const s = strings(helia);
+const getHeliaInstance = (() => {
+  let heliaPromise: ReturnType<typeof createHelia>;
 
-const myImmutableAddress = await s.add('hello world');
+  return async () => {
+    if (!heliaPromise) {
+      heliaPromise = createHelia();
+    }
+    return heliaPromise;
+  };
+})();   
 
-console.log(await s.get(myImmutableAddress));
+export async function exportToIpfs(txt: string) {
+  const node = await getHeliaInstance();
+  const s = strings(node);
+
+  const myImmutableAddress = await s.add(txt);
+
+  console.log(await s.get(myImmutableAddress));
+
+  return myImmutableAddress;
+}
 // hello world
