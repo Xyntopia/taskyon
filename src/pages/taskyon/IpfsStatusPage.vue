@@ -1,16 +1,16 @@
 <template>
   <q-layout view="lHh LpR lfr">
     <q-page-container>
-      <q-page class="q-pa-md">
+      <q-page class="q-pa-md q-gutter-sm">
         <div class="text-h5">IPFS Node Status</div>
-        <q-btn label="return to chat" to="/" />
+        <q-btn outline label="return to chat" to="/" />
         <q-btn outline label="start" @click="ipfsnode?.start()" />
         <q-btn outline label="stop" @click="ipfsnode?.stop()" />
         <div>
           Teststring:
-          <a :href="'https://ipfs.io/ipfs/' + testcid" target="_blank"
-            >{{ testcid }}</a
-          >
+          <a :href="'https://ipfs.io/ipfs/' + testcid" target="_blank">{{
+            testcid
+          }}</a>
         </div>
         <object-tree-view v-model:model-value="status" dense read-only />
 

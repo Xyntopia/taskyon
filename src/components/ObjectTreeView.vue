@@ -77,7 +77,7 @@
     </template>
     <template #header-boolean="prop">
       <q-toggle
-        :readonly="readOnly"
+        :disable="readOnly"
         style="min-width: 200px"
         :label="prop.node.label"
         left-label
