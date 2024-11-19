@@ -1,36 +1,158 @@
 /**
- * checout these forum posts:  
- * 
+ * checout these forum posts:
+ *
  * https://discuss.ipfs.tech/t/using-kubo-as-middleman-for-browser-helia-nodes/17138/2
  * https://discuss.ipfs.tech/t/ipfs-in-browser-use-case/17079
  * https://discuss.ipfs.tech/t/how-to-retrieve-content-uploaded-via-helia-using-the-ipfs-gateway/16582/5
- * 
+ *
  * TODO: persist our peer ID in localstorge or something like that. If we use memroy storage, the
- * peer ID will get regenerated on every reload of the page. 
+ * peer ID will get regenerated on every reload of the page.
  */
 
 import { createHelia } from 'helia';
 import { strings } from '@helia/strings';
+import { unixfs } from '@helia/unixfs';
+import { LevelDatastore } from 'datastore-level';
+import { MemoryBlockstore } from 'blockstore-core';
 
-const getHeliaInstance = (() => {
-  let heliaPromise: ReturnType<typeof createHelia>;
+export type IpfsNode = Awaited<ReturnType<typeof createHelia>>;
+
+export const getIpfsNode = (() => {
+  let heliaInstance: IpfsNode;
 
   return async () => {
-    if (!heliaPromise) {
-      heliaPromise = createHelia();
+    if (!heliaInstance) {
+      const datastore = new LevelDatastore('helia-example');
+      const blockstore = new MemoryBlockstore();
+
+      heliaInstance = await createHelia({
+        datastore,
+        blockstore,
+      });
+
+      // set server mode for helia :)
+      await heliaInstance.libp2p.services.dht.setMode('server');
+
+      console.log('Created Helia instance');
     }
-    return heliaPromise;
+    return heliaInstance;
   };
 })();
 
-export async function exportToIpfs(txt: string) {
-  const node = await getHeliaInstance();
+const getConnectedPeers = async (node: IpfsNode) => {
+  const peers = node.libp2p.getPeers();
+  /*for (const peer of peers) {
+      const peerEl = document.createElement('li');
+      peerEl.innerText = peer.toString();
+      connectedPeersList.appendChild(peerEl);
+    }*/
+  return { peer_num: peers.length };
+};
+
+function getMultiaddrs(node: IpfsNode) {
+  if (!node) return { multiaddrList: undefined };
+
+  // multiaddrList.innerHTML = "";
+  // console.log(helia.libp2p.getMultiaddrs().map((ma) => ma.toString()).join(', '))
+  const multiaddrList = node.libp2p.getMultiaddrs();
+  // if (multiaddrs.length === 0) {
+  //   return
+  // }
+  const actualMultiaddrStrings = multiaddrList.map((ma) => ma.toString());
+
+  return { multiaddr: actualMultiaddrStrings };
+}
+
+export async function exportToIpfs(node: IpfsNode, txt: string) {
   const s = strings(node);
 
   const myImmutableAddress = await s.add(txt);
 
-  console.log(await s.get(myImmutableAddress));
+  console.log(
+    'exported string to IPFS using CID:',
+    myImmutableAddress.toString(),
+  );
+  //console.log(await s.get(myImmutableAddress));
 
   return myImmutableAddress;
 }
+
+const addFile = async (
+  node: IpfsNode,
+  fileContent: Uint8Array,
+  path: string,
+) => {
+  console.log('Adding a test file to Helia...');
+
+  const fs = unixfs(node);
+  const fileToAdd = { path: path, content: fileContent };
+
+  const cid = await fs.addFile(fileToAdd);
+  console.log(`Preview: https://ipfs.io/ipfs/${cid.toString()}`);
+  return cid;
+};
 // hello world
+
+export const addTestFile = (node: IpfsNode) => {
+  const encoder = new TextEncoder();
+  const fileContent = encoder.encode(
+    `Test file content - ${new Date().toISOString()}`,
+  );
+
+  return addFile(node, fileContent, 'testfile.txt');
+};
+
+export const fetchNodeStatus = async (node: IpfsNode) => {
+  try {
+    const metrics = node.metrics;
+    const connectedPeers = await getConnectedPeers(node);
+
+    const dhtMode = await node.libp2p.services.dht.getMode();
+    const statusText = `${node.libp2p.status} - ${
+      dhtMode === 'client' ? 'DHT Client' : 'DHT Server'
+    }`;
+
+    const info = {
+      peerId: node.libp2p.peerId.toString(),
+      'node started': node ? true : false,
+      ...connectedPeers,
+      metrics: metrics ?? {},
+      dhtMode: statusText,
+      ...getMultiaddrs(node),
+    };
+    return info;
+  } catch (error) {
+    console.error('Error fetching node status:', error);
+    if (error instanceof Error) {
+      return { error: error.message };
+    }
+  }
+};
+
+type Tail<T extends unknown[]> = T extends [unknown, ...infer Rest]
+  ? Rest
+  : never;
+
+export async function useIpfs() {
+  // Example usage:
+  const originalFunctions = {
+    getConnectedPeers,
+    getMultiaddrs,
+    exportToIpfs,
+    addTestFile,
+    fetchNodeStatus,
+  };
+  type Fs = typeof originalFunctions;
+  const ipfsnode = await getIpfsNode();
+  const bound = Object.fromEntries(
+    Object.entries(originalFunctions).map(([key, fn]) => [
+      key,
+      //(...args: Tail<Parameters<Fs[keyof Fs]>>) => fn(ipfsnode, ...args),
+      (...args: Tail<Parameters<Fs[keyof Fs]>>) =>
+        (fn as (...args: unknown[]) => unknown)(ipfsnode, ...args),
+    ]),
+  ) as {
+    [K in keyof Fs]: (...args: Tail<Parameters<Fs[K]>>) => ReturnType<Fs[K]>;
+  };
+  return { node: ipfsnode, ...bound };
+}
