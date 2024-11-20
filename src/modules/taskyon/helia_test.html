@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Helia Node Status</title>
+    <script src="https://cdn.jsdelivr.net/npm/helia@5.1.0/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@helia/unixfs@4.0.0/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/libp2p@2.2.1/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-yamux@7.0.1/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-noise@16.0.0/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@libp2p/websockets@9.0.11/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@libp2p/bootstrap@11.0.10/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/blockstore-core@5.0.2/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/datastore-core@10.0.2/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/datastore-level@^11.0.1/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@libp2p/kad-dht@14.1.0/dist/index.min.js"></script>
+  </head>
+  <body>
+    <h1>Helia Node Status</h1>
+    <button id="startHelia">Start Helia</button>
+    <button id="fetchStatus">Fetch Node Status</button>
+    <button id="addTestString">Add Test String</button>
+    <pre id="status"></pre>
+
+    <script>
+      let helia; // Helia instance
+      let heliaStrings; // Helia strings utility
+
+      // Create and start Helia
+      async function startHelia() {
+        const { createHelia } = Helia;
+        const { MemoryBlockstore } = BlockstoreCore;
+        const { LevelDatastore } = DatastoreLevel;
+        const { unixfs } = HeliaUnixfs;
+
+        // Initialize datastore and blockstore
+        const blockstore = new MemoryBlockstore();
+        const datastore = new LevelDatastore('helia-datastore');
+
+        helia = await createHelia({ datastore, blockstore });
+        heliaStrings = unixfs(helia);
+
+        document.getElementById('status').textContent =
+          'Helia started successfully!';
+      }
+
+      // Fetch Helia node status
+      async function fetchNodeStatus() {
+        if (!helia) {
+          alert('Please start Helia first!');
+          return;
+        }
+
+        const status = {
+          peerId: helia.libp2p.peerId.toString(),
+          addresses: helia.libp2p
+            .getMultiaddrs()
+            .map((addr) => addr.toString()),
+        };
+
+        document.getElementById('status').textContent = JSON.stringify(
+          status,
+          null,
+          2,
+        );
+      }
+
+      // Add a test string
+      async function addTestString() {
+        if (!heliaStrings) {
+          alert('Please start Helia first!');
+          return;
+        }
+
+        const content = 'Hello from Helia!';
+        const cid = await heliaStrings.add(content);
+
+        document.getElementById('status').textContent =
+          `Added string with CID: ${cid.toString()}`;
+      }
+
+      // Attach event listeners
+      document
+        .getElementById('startHelia')
+        .addEventListener('click', startHelia);
+      document
+        .getElementById('fetchStatus')
+        .addEventListener('click', fetchNodeStatus);
+      document
+        .getElementById('addTestString')
+        .addEventListener('click', addTestString);
+    </script>
+  </body>
+</html>
