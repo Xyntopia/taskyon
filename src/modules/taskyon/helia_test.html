@@ -4,6 +4,7 @@
     <title>Helia Node Status</title>
     <script src="https://cdn.jsdelivr.net/npm/helia@5.1.0/dist/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@helia/unixfs@4.0.0/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@helia/strings@4.0.0/dist/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/libp2p@2.2.1/dist/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-yamux@7.0.1/dist/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-noise@16.0.0/dist/index.min.js"></script>
@@ -19,11 +20,21 @@
     <button id="startHelia">Start Helia</button>
     <button id="fetchStatus">Fetch Node Status</button>
     <button id="addTestString">Add Test String</button>
+    <div>
+      FileID:
+      <pre id="fileId"></pre>
+    </div>
     <pre id="status"></pre>
 
     <script>
-      let helia; // Helia instance
+      // check at these two addresses:
+      // - https://check.ipfs.network/?cid=bafkreifhfkgqicrwdtsfdtpebwxy3fxc2gtp5dfj2unqxgvyrzldwcpfxy
+      // - https://pl-diagnose.on.fleek.co/#/diagnose/access-content?backend=https%3A%2F%2Fpl-diagnose.onrender.com
+
+      let node; // Helia instance
       let heliaStrings; // Helia strings utility
+      let info;
+      let statusInterval; // Interval ID for periodic fetching
 
       // Create and start Helia
       async function startHelia() {
@@ -36,29 +47,48 @@
         const blockstore = new MemoryBlockstore();
         const datastore = new LevelDatastore('helia-datastore');
 
-        helia = await createHelia({ datastore, blockstore });
-        heliaStrings = unixfs(helia);
+        node = await createHelia({ datastore, blockstore });
+        heliaStrings = unixfs(node);
 
         document.getElementById('status').textContent =
           'Helia started successfully!';
+
+        // Start automatic status fetching
+        if (!statusInterval) {
+          statusInterval = setInterval(fetchNodeStatus, 2000);
+        }
       }
 
       // Fetch Helia node status
       async function fetchNodeStatus() {
-        if (!helia) {
+        if (!node) {
           alert('Please start Helia first!');
           return;
         }
 
-        const status = {
-          peerId: helia.libp2p.peerId.toString(),
-          addresses: helia.libp2p
-            .getMultiaddrs()
-            .map((addr) => addr.toString()),
-        };
+        try {
+          const dhtMode = await node.libp2p.services.dht?.getMode();
+          const statusText = `${node.libp2p.status} - ${
+            dhtMode === 'client' ? 'DHT Client' : 'DHT Server'
+          }`;
+
+          info = {
+            peerId: node.libp2p.peerId.toString(),
+            'node started': node ? true : false,
+            connectedPeers: node.libp2p.getPeers().length,
+            metrics: node.metrics,
+            dhtMode: statusText,
+            addresses: node.libp2p
+              .getMultiaddrs()
+              .map((addr) => addr.toString()),
+          };
+        } catch (error) {
+          console.error('Error fetching node status:', error);
+          info = { error: error.message };
+        }
 
         document.getElementById('status').textContent = JSON.stringify(
-          status,
+          info,
           null,
           2,
         );
@@ -66,15 +96,15 @@
 
       // Add a test string
       async function addTestString() {
-        if (!heliaStrings) {
+        if (!HeliaStrings) {
           alert('Please start Helia first!');
           return;
         }
 
         const content = 'Hello from Helia!';
-        const cid = await heliaStrings.add(content);
+        const cid = await HeliaStrings.strings(node).add(content);
 
-        document.getElementById('status').textContent =
+        document.getElementById('fileId').textContent =
           `Added string with CID: ${cid.toString()}`;
       }
 
