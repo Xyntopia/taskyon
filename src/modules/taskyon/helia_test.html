@@ -32,7 +32,6 @@
       // - https://pl-diagnose.on.fleek.co/#/diagnose/access-content?backend=https%3A%2F%2Fpl-diagnose.onrender.com
 
       let node; // Helia instance
-      let heliaStrings; // Helia strings utility
       let info;
       let statusInterval; // Interval ID for periodic fetching
 
@@ -48,7 +47,9 @@
         const datastore = new LevelDatastore('helia-datastore');
 
         node = await createHelia({ datastore, blockstore });
-        heliaStrings = unixfs(node);
+
+        // TODO:  not sure if this is needed
+        // await node.libp2p.services.dht.setMode('server');
 
         document.getElementById('status').textContent =
           'Helia started successfully!';
@@ -103,6 +104,8 @@
 
         const content = 'Hello from Helia!';
         const cid = await HeliaStrings.strings(node).add(content);
+        // do we need this?
+        node.routing.provide(cid);
 
         document.getElementById('fileId').textContent =
           `Added string with CID: ${cid.toString()}`;

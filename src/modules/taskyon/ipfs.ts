@@ -15,25 +15,43 @@ import { unixfs } from '@helia/unixfs';
 import { LevelDatastore } from 'datastore-level';
 import { MemoryBlockstore } from 'blockstore-core';
 
-export type IpfsNode = Awaited<ReturnType<typeof createHelia>>;
+//const agentVersion = 'Taskyon - helia';
+
+// search for "libp2pDefaults" frontend/node_modules/helia/src/utils/libp2p-defaults.ts
+// in the helia library to get an idea about helia standard configuration...
+
+async function createHeliaInstance() {
+  const datastore = new LevelDatastore('helia-example');
+  const blockstore = new MemoryBlockstore();
+
+  // libp2p is the networking layer that underpins Helia
+  // here is an overview of its configuration options:  https://github.com/libp2p/js-libp2p/blob/main/doc/CONFIGURATION.md
+
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  //const libp2p = await createLibp2p({ ...libp2pDefaults, datastore });
+
+  const heliaInstance = await createHelia({
+    datastore,
+    blockstore,
+    //libp2p,
+  });
+
+  // set server mode for helia :)
+  // await heliaInstance.libp2p.services.dht.setMode('server');
+
+  console.log('Created Helia instance');
+  return heliaInstance;
+}
+
+export type IpfsNode = Awaited<ReturnType<typeof createHeliaInstance>>;
 
 export const getIpfsNode = (() => {
   let heliaInstance: IpfsNode;
 
   return async () => {
     if (!heliaInstance) {
-      const datastore = new LevelDatastore('helia-example');
-      const blockstore = new MemoryBlockstore();
-
-      heliaInstance = await createHelia({
-        datastore,
-        blockstore,
-      });
-
-      // set server mode for helia :)
-      await heliaInstance.libp2p.services.dht.setMode('server');
-
-      console.log('Created Helia instance');
+      heliaInstance = await createHeliaInstance();
     }
     return heliaInstance;
   };
@@ -67,6 +85,7 @@ export async function exportToIpfs(node: IpfsNode, txt: string) {
   const s = strings(node);
 
   const myImmutableAddress = await s.add(txt);
+  node.routing.provide(myImmutableAddress);
 
   console.log(
     'exported string to IPFS using CID:',
@@ -107,7 +126,8 @@ export const fetchNodeStatus = async (node: IpfsNode) => {
     const metrics = node.metrics;
     const connectedPeers = await getConnectedPeers(node);
 
-    const dhtMode = await node.libp2p.services.dht.getMode();
+    const dhtMode = await node.libp2p.services.dht?.getMode();
+
     const statusText = `${node.libp2p.status} - ${
       dhtMode === 'client' ? 'DHT Client' : 'DHT Server'
     }`;

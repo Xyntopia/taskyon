@@ -13,7 +13,6 @@
           }}</a>
         </div>
         <object-tree-view v-model:model-value="status" dense read-only />
-
         <div class="text-h5 q-mt-md">Logs</div>
         <div class="logs q-mt-sm">
           <q-item v-for="log in logs" :key="log.id" class="q-pa-xs">
