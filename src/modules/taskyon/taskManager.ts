@@ -407,6 +407,7 @@ function useTaskVectors(
     return undefined;
   };
 
+  // TODO: make sure, we also stringify tool calls etc...
   const task2Str = (t: TaskNode) => JSON.stringify(t.content);
 
   async function addtoVectorDB(
