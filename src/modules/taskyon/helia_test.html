@@ -46,6 +46,8 @@
         const blockstore = new MemoryBlockstore();
         const datastore = new LevelDatastore('helia-datastore');
 
+        // if we want to customize libp2p,check out this link:
+        // https://github.com/libp2p/js-libp2p/blob/main/doc/CONFIGURATION.md#basic-setup
         node = await createHelia({ datastore, blockstore });
 
         // TODO:  not sure if this is needed
