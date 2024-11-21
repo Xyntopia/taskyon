@@ -1,4 +1,4 @@
-import { store } from 'quasar/wrappers';
+import { defineStore } from '#quasar/wrappers';
 import { createPinia } from 'pinia';
 import { LocalStorage } from 'quasar';
 
@@ -11,7 +11,7 @@ import { LocalStorage } from 'quasar';
  * with the Store instance.
  */
 
-export default store((/* { ssrContext } */) => {
+export default defineStore((/* { ssrContext } */) => {
   const pinia = createPinia();
 
   // You can add Pinia plugins here

@@ -4,7 +4,7 @@
 // https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-import { configure } from 'quasar/wrappers';
+import { defineConfig } from '#quasar/wrappers';
 import path from 'path';
 import fs from 'fs';
 // this is in order to support the not-updated version of danfojs (and other libraries which need
@@ -89,7 +89,7 @@ function createOpenAPIDocs() {
   });
 }
 
-export default configure((ctx) => {
+export default defineConfig((ctx) => {
   if (ctx.prod) {
     createOpenAPIDocs();
     copyFiles(filesToCopy);
@@ -171,6 +171,15 @@ export default configure((ctx) => {
 
     // Full list of options: https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-build
     build: {
+      typescript: {
+        strict: true, // (recommended) enables strict settings for TypeScript
+        vueShim: true, // required when using ESLint with type-checked rules, will generate a shim file for `*.vue` files
+        extendTsConfig(tsConfig) {
+          // You can use this hook to extend tsConfig dynamically
+          // For basic use cases, you can still update the usual tsconfig.json file to override some settings
+        },
+      },
+
       //publicPath:  '/', TODO: check if we ca us this to deploy a "test" version of our app on gitlab pages..
       vueRouterMode: 'history', // available values: 'hash', 'history'
 
