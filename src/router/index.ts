@@ -5,9 +5,7 @@ import {
   createWebHashHistory,
   createWebHistory,
 } from 'vue-router';
-import TaskyonRoutes from './routes_taskyon';
-
-const routes = TaskyonRoutes;
+import { routes, tyServerRoutes } from './routes_taskyon';
 
 /*
  * If not building with SSR mode, you can
@@ -21,11 +19,14 @@ const routes = TaskyonRoutes;
 export default defineRouter(function (/* { store, ssrContext } */) {
   const createHistory = process.env.SERVER
     ? createMemoryHistory
-    : (process.env.VUE_ROUTER_MODE === 'history' ? createWebHistory : createWebHashHistory);
+    : process.env.VUE_ROUTER_MODE === 'history'
+      ? createWebHistory
+      : createWebHashHistory;
 
+  console.log('creating router... in mode:', process.env.MODE);
   const Router = createRouter({
     scrollBehavior: () => ({ left: 0, top: 0 }),
-    routes,
+    routes: process.env.MODE === 'ssr' ? tyServerRoutes : routes,
 
     // Leave this as is and make changes in quasar.conf.js instead!
     // quasar.conf.js -> build -> vueRouterMode

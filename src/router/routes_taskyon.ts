@@ -1,4 +1,4 @@
-import { RouteRecordRaw } from 'vue-router';
+import { type RouteRecordRaw } from 'vue-router';
 import { authRoutes, mdRoutes } from './routes_default';
 import { defineAsyncComponent } from 'vue';
 import LoadCircle from 'components/LoadingCircle.vue';
@@ -107,7 +107,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
   },
 ];
 
-const routes: RouteRecordRaw[] = [
+export const routes: RouteRecordRaw[] = [
   ...taskyonRoutes,
   ...authRoutes,
 
@@ -120,4 +120,28 @@ const routes: RouteRecordRaw[] = [
   },
 ];
 
-export default routes;
+export const tyServerRoutes: RouteRecordRaw[] = [
+  {
+    path: '/',
+    component: () => import('layouts/ServerControlLayout.vue'),
+    children: [
+      {
+        path: '',
+        //component: defineAsyncComponent(() => import('pages/TaskChat.vue')),
+        component: defineAsyncComponent({
+          loader: () => import('pages/taskyon/ServerControl.vue'),
+          loadingComponent: LoadCircle,
+          delay: 200,
+        }),
+        meta: { title: 'Main', description: 'Taskyon AI Server Control' },
+      },
+    ],
+  },
+  // Always leave this as last one,
+  // but you can also remove it
+  {
+    path: '/:catchAll(.*)*',
+    component: () => import('src/pages/Error404Page.vue'),
+    meta: { title: 'ERROR', description: 'Page does not exist' },
+  },
+];
