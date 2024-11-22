@@ -1,4 +1,4 @@
-import { defineBoot } from '#quasar/wrappers';
+import { defineBoot } from '#q-app/wrappers';
 import { setCssVar } from 'quasar';
 
 export default defineBoot(() => {

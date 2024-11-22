@@ -4,7 +4,7 @@
 // https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-import { defineConfig } from '#quasar/wrappers';
+import { defineConfig } from '#q-app/wrappers';
 import path from 'path';
 import fs from 'fs';
 // this is in order to support the not-updated version of danfojs (and other libraries which need
@@ -131,7 +131,7 @@ export default defineConfig((ctx) => {
 
     // app boot file (/src/boot)
     // --> boot files are part of "main.js"
-    // https://v2.quasar.dev/quasar-cli/boot-files
+    // https://v2.quasar.dev/quasar-cli-webpack/boot-files
     boot: [
       // make sure brand colors are loaded "on-time" :)
       { server: false, path: 'brand-colors' },
@@ -141,16 +141,18 @@ export default defineConfig((ctx) => {
       //'htmlDataStore'
     ],
 
-    // https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-css
-    css: ['app.sass'],
+    // https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js#Property%3A-css
+    css: [
+      'app.sass'
+    ],
 
     // https://github.com/quasarframework/quasar/tree/dev/extras
     extras: [
       // we don't use webfont icons anymore.. svg icons look better and support treeshaking
       // and make the app faster this way...
       // 'ionicons-v4',
-      // 'mdi-v5',
-      // 'fontawesome-v5',
+      // 'mdi-v7',
+      // 'fontawesome-v6',
       // 'eva-icons',
       // 'themify',
       // 'line-awesome',
@@ -160,16 +162,7 @@ export default defineConfig((ctx) => {
       //'mdi-v5',
     ],
 
-    // specify variables for index.template.html
-    htmlVariables: {
-      // eslint-disable-next-line
-      title: APPNAME,
-      description: {
-        prop: DESCRIPTION,
-      },
-    },
-
-    // Full list of options: https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-build
+    // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js#Property%3A-build
     build: {
       typescript: {
         strict: true, // (recommended) enables strict settings for TypeScript
@@ -414,21 +407,9 @@ export default defineConfig((ctx) => {
     // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js#Property%3A-devServer
     devServer: {
       server: {
-        type: 'http',
+        type: 'http'
       },
-      open: false, // opens browser window automatically
-      setupMiddlewares(middlewares, devServer) {
-        if (!devServer) {
-          throw new Error('webpack-dev-server is not defined');
-        }
-
-        devServer.middleware?.waitUntilValid(() => {
-          copyFiles(filesToCopy);
-          createOpenAPIDocs();
-        });
-
-        return middlewares;
-      },
+      open: false // opens browser window automatically
     },
 
     // https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js#Property%3A-framework
@@ -480,7 +461,7 @@ export default defineConfig((ctx) => {
     // https://v2.quasar.dev/quasar-cli-webpack/developing-ssr/configuring-ssr
     ssr: {
       prodPort: 3000, // The default port that the production server should use
-      // (gets superseded if process.env.PORT is specified at runtime)
+                      // (gets superseded if process.env.PORT is specified at runtime)
 
       middlewares: [
         'render', // keep this as last one
@@ -543,11 +524,13 @@ export default defineConfig((ctx) => {
 
       packager: {
         // https://github.com/electron-userland/electron-packager/blob/master/docs/api.md#options
+
         // OS X / Mac App Store
         // appBundleId: '',
         // appCategoryType: '',
         // osxSign: '',
         // protocol: 'myapp://path',
+
         // Windows only
         // win32metadata: { ... }
       },
@@ -555,16 +538,18 @@ export default defineConfig((ctx) => {
       builder: {
         // https://www.electron.build/configuration/configuration
 
-        appId: 'xyntopia',
-      },
-
-      // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/developing-browser-extensions/configuring-bex
-      bex: {
-        // extendBexScriptsConf (esbuildConf) {},
-        // extendBexManifestJson (json) {},
-
-        contentScripts: ['my-content-script'],
-      },
+        appId: 'taskyon'
+      }
     },
-  };
+
+    // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/developing-browser-extensions/configuring-bex
+    bex: {
+      // extendBexScriptsConf (esbuildConf) {},
+      // extendBexManifestJson (json) {},
+
+      contentScripts: [
+        'my-content-script'
+      ]
+    }
+  }
 });

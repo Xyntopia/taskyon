@@ -1,21 +1,3 @@
 {
-  "extends": "./.quasar/tsconfig.json",
-  "compilerOptions": {
-    "baseUrl": ".",
-    "jsx": "preserve",
-    "module": "es2022",
-    "target": "es2022",
-    "noUncheckedIndexedAccess": true,
-    "types": ["webpack-env"]
-  },
-  "exclude": [
-    ".direnv",
-    "./src-tauri",
-    "./dist",
-    "./.quasar",
-    "./node_modules",
-    "./src-capacitor",
-    "./src-cordova",
-    "./quasar.config.*.temporary.compiled*"
-  ]
+  "extends": "./.quasar/tsconfig.json"
 }

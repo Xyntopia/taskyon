@@ -1,42 +1,17 @@
 {
   "name": "taskyon",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Modular Frontend for Xyntopia Applications and Company Page",
+  "productName": "Taskyon App",
   "author": "thomas meschede / yeus <thomas.meschede@web.de>",
   "scripts": {
-    "build": "quasar build",
-    "build-2specs": "APPMODE=2specs quasar build",
-    "build:ssg": "quasar ssg generate",
-    "build:tauri": "tauri build",
-    "dev": "quasar dev",
-    "dev:ssg": "quasar ssg dev",
-    "dev:tauri": "tauri dev",
-    "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .gitignore",
     "lint": "eslint --ext .js,.ts,.vue ./",
-    "lint:fix": "eslint --ext .js,.ts,.vue --fix ./",
-    "pwabuild": "quasar build -m pwa",
-    "pwadev": "quasar dev -m pwa",
-    "serve:ssg": "quasar ssg serve dist/ssg",
-    "tauri:cmd": "tauri",
-    "tauricon": "tauricon",
-    "test": "echo \"No test specified\" && exit 0",
-    "test:component": "cross-env NODE_ENV=test cypress open --component",
-    "test:component:ci": "cross-env NODE_ENV=test cypress run --component",
-    "test:e2e": "cross-env NODE_ENV=test start-test \"quasar dev\" http-get://127.0.0.1:8080 \"cypress open --e2e\"",
-    "test:e2e:ci": "cross-env NODE_ENV=test start-test \"quasar dev\" http-get://127.0.0.1:8080 \"cypress run --e2e\""
+    "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .gitignore",
+    "dev": "quasar dev",
+    "build": "quasar build",
+    "postinstall": "quasar prepare"
   },
-  "browserslist": [
-    "last 10 Chrome versions",
-    "last 10 Firefox versions",
-    "last 4 Edge versions",
-    "last 7 Safari versions",
-    "last 8 Android versions",
-    "last 8 ChromeAndroid versions",
-    "last 8 FirefoxAndroid versions",
-    "last 10 iOS versions",
-    "last 5 Opera versions"
-  ],
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.2",
     "@codemirror/lang-json": "^6.0.1",
@@ -45,7 +20,7 @@
     "@helia/strings": "^4.0.0",
     "@helia/unixfs": "^4.0.0",
     "@mozilla/readability": "^0.5.0",
-    "@quasar/extras": "^1.16.13",
+    "@quasar/extras": "^1.16.14",
     "@quasar/quasar-ui-qmarkdown": "^2.0.0-beta.10",
     "@resvg/resvg-wasm": "^2.6.2",
     "@sqlite.org/sqlite-wasm": "^3.44.0-build1",
@@ -86,7 +61,7 @@
     "stopword": "^2.0.8",
     "update-browserslist-db": "^1.1.1",
     "uuid": "^9.0.0",
-    "vue": "^3.5.13",
+    "vue": "^3.4.18",
     "vue-codemirror": "^6.1.1",
     "vue-i18n": "^9.2.2",
     "vue-json-pretty": "^2.2.4",
@@ -111,8 +86,8 @@
     "@types/stopword": "^2.0.3",
     "@types/webpack-env": "^1.18.5",
     "@types/wicg-file-system-access": "^2023.10.3",
-    "@typescript-eslint/eslint-plugin": "^6.6.0",
-    "@typescript-eslint/parser": "^6.6.0",
+    "@typescript-eslint/eslint-plugin": "^7.16.0",
+    "@typescript-eslint/parser": "^7.16.0",
     "@vue/devtools": "^7.4.4",
     "@vue/test-utils": "^2.3.0",
     "browserify-zlib": "^0.2.0",
@@ -135,10 +110,20 @@
     "ts-loader": "^9.4.2",
     "typescript": "^5.2.2"
   },
+  "browserslist": [
+    "last 10 Chrome versions",
+    "last 10 Firefox versions",
+    "last 4 Edge versions",
+    "last 7 Safari versions",
+    "last 8 Android versions",
+    "last 8 ChromeAndroid versions",
+    "last 8 FirefoxAndroid versions",
+    "last 10 iOS versions",
+    "last 5 Opera versions"
+  ],
   "engines": {
     "node": "^24 || ^22 || ^20 || ^18",
     "npm": ">= 6.13.4",
     "yarn": ">= 1.21.1"
-  },
-  "productName": "Taskyon"
+  }
 }

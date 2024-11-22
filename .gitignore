@@ -31,13 +31,6 @@ yarn-error.log*
 
 # local .env files
 .env.local*
-.DS_Store
-.thumbs.db
-node_modules
-
-# BEX related directories and files
-/src-bex/www
-/src-bex/js/core
 
 #.quasar.env.json
 
