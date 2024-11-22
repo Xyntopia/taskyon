@@ -125,8 +125,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, PropType } from 'vue';
-import { QTreeNode } from 'quasar';
+import { computed, type PropType } from 'vue';
+import { type QTreeNode } from 'quasar';
 import JsonInput from 'components/JsonInput.vue'; // Adjust the path as necessary
 import InfoDialog from 'components/InfoDialog.vue';
 

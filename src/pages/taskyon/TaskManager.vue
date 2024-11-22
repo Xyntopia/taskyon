@@ -103,7 +103,7 @@ import {
 } from '@quasar/extras/mdi-v6';
 import { useRouter } from 'vue-router';
 import { onMounted } from 'vue';
-import { QTableProps } from 'quasar';
+import { type QTableProps } from 'quasar';
 import { createTaskNodeMangoQuery } from 'src/modules/taskyon/rxdb';
 //import { useRoute, useRouter } from 'vue-router';
 

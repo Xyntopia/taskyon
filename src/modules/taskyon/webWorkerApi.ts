@@ -6,7 +6,7 @@
 
 import type { NlpWorkerInterface } from './nlp.worker';
 import { wrap } from 'comlink';
-import { pythonWorker } from '../pyodide.worker';
+import { type pythonWorker } from '../pyodide.worker';
 
 let nlpWorker: NlpWorkerInterface | null = null;
 
