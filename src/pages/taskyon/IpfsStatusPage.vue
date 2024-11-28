@@ -4,7 +4,7 @@
       <q-page class="q-pa-md q-gutter-sm">
         <div class="text-h5">IPFS Node Status</div>
         <q-btn outline label="return to chat" to="/" />
-        <q-btn outline label="start" @click="ipfsnode?.start()" />
+        <q-btn outline label="start" @click="startHelia()" />
         <q-btn outline label="stop" @click="ipfsnode?.stop()" />
         <div>
           Teststring:
@@ -27,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onUnmounted } from 'vue';
 import ObjectTreeView from 'src/components/ObjectTreeView.vue';
 import { type IpfsNode, useIpfs } from 'src/modules/taskyon/ipfs';
 
@@ -39,7 +39,7 @@ const testcid = ref<string>();
 
 let ipfsnode: IpfsNode | undefined = undefined;
 
-onMounted(async () => {
+const startHelia = async () => {
   try {
     console.log('Creating Helia node...');
 
@@ -73,7 +73,7 @@ onMounted(async () => {
     console.error('Error initializing Helia node:', error);
     console.log('Error initializing Helia node');
   }
-});
+};
 
 onUnmounted(() => {
   clearInterval(interval);
