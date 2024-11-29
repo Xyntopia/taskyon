@@ -24,6 +24,7 @@
               label="Create Public Link"
             />
             <q-btn
+              v-if="false"
               outline
               :icon="symOutlinedPublic"
               label="Share with public link"
@@ -98,7 +99,7 @@ import {
 } from '@quasar/extras/material-symbols-outlined';
 import { useGdrive } from 'src/modules/gdrive';
 
-const showDialog = ref(true);
+const showDialog = ref(false);
 
 const state = useTaskyonStore();
 
