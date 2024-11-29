@@ -105,6 +105,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       description: 'Interplanetary file system status monitor',
     },
   },
+  {
+    path: '/p2pmonitor',
+    component: () => import('pages/taskyon/Libp2pStatusPage.vue'),
+    meta: {
+      title: 'p2p connection status',
+      description: 'libp2p connection status monitor',
+    },
+  },
 ];
 
 export const routes: RouteRecordRaw[] = [
