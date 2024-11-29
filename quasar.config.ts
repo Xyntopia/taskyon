@@ -464,6 +464,7 @@ export default defineConfig((ctx) => {
                       // (gets superseded if process.env.PORT is specified at runtime)
 
       middlewares: [
+        'taskHttpApi',
         'render', // keep this as last one
       ],
 
