@@ -1,40 +1,81 @@
 <template>
   <q-list dense>
     <q-item-label header>User ID Management</q-item-label>
-    <q-item>
+    <q-item class="items-center">
       <q-item-section avatar>
         <q-icon :name="mdiAccountKey" size="md" />
         User ID
       </q-item-section>
-      <q-item-section>
-        <q-btn
-          v-if="!state.llmSettings.userId"
-          label="Generate"
-          outline
-          @click="onGenerateUserId"
-        ></q-btn>
-        <q-input
-          v-else
-          dense
-          outlined
-          disable
-          v-model="state.llmSettings.userId"
-        >
-          <template #before>
-            <div>
+      <q-item-section side>
+        <q-dialog v-model="showSeedPhrase" auto-close>
+          <q-card>
+            <q-card-section>
+              This is the seed phrase for your cryptographic user ID. Store it
+              securely and never share it with anyone. You can use it to recover
+              your ID if needed, but losing or exposing it could compromise your
+              access and security.
+            </q-card-section>
+            <q-card-section class="row">
+              <div class="rounded-borders text-bold col text-info">
+                {{ seedPhrase }}
+              </div>
               <q-btn
+                class="col-auto"
                 flat
                 dense
                 :icon="matContentCopy"
-                @click="copyToClipboard(state.llmSettings.userId)"
+                @click="copyToClipboard(seedPhrase)"
               ></q-btn>
-              <q-btn dense label="New" flat @click="onGenerateUserId"></q-btn>
-            </div>
-          </template>
-        </q-input>
+            </q-card-section>
+            <q-card-section>
+              <q-btn
+                flat
+                label="Accept"
+                @click="onAcceptSeedPhrase(seedPhrase)"
+              ></q-btn>
+            </q-card-section>
+          </q-card>
+        </q-dialog>
+        <q-btn
+          class="col-auto"
+          v-if="state.llmSettings.userId"
+          flat
+          dense
+          :icon="matContentCopy"
+          @click="copyToClipboard(state.llmSettings.userId)"
+        ></q-btn>
       </q-item-section>
-      <q-item-section side
-        ><InfoDialog
+      <q-item-section v-if="state.llmSettings.userId" class="ellipsis text-bold">
+        {{ state.llmSettings.userId.slice(0, 5) }} ...
+        {{ state.llmSettings.userId.slice(-10) }}
+      </q-item-section>
+      <q-item-section side>
+        <div class="row">
+          <q-btn
+            class="col-auto"
+            v-if="!state.llmSettings.userId"
+            label="Generate"
+            outline
+            @click="onGenerateSeedPhrase"
+          ></q-btn>
+          <q-btn
+            class="col-auto"
+            dense
+            label="New"
+            flat
+            @click="onGenerateSeedPhrase"
+          ></q-btn>
+          <q-btn
+            class="col-auto"
+            :icon="matDeleteForever"
+            dense
+            flat
+            @click="state.llmSettings.userId = undefined"
+          ></q-btn>
+        </div>
+      </q-item-section>
+      <q-item-section side>
+        <InfoDialog
           info-text="Generate a decentralized, cryptographic user ID which can be used to interact with other taskyon users in a secure way."
       /></q-item-section>
     </q-item>
@@ -236,13 +277,24 @@ import {
 } from '@quasar/extras/material-icons';
 import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6';
 import InfoDialog from '../InfoDialog.vue';
+import { generateSeedPhrase, mnemonicToSeed } from 'src/modules/crypto';
+import { uint8ArrayToBase64Url } from 'src/modules/encoding';
 
 const state = useTaskyonStore();
 const { saveObjToGdrive, loadObjFromGdrive } = useGdrive();
 
-function onGenerateUserId() {
+const showSeedPhrase = ref(false);
+const seedPhrase = ref('');
+
+function onGenerateSeedPhrase() {
   console.log('generate user id...');
-  state.llmSettings.userId = 'helo pupu';
+  seedPhrase.value = generateSeedPhrase();
+  showSeedPhrase.value = true;
+}
+
+function onAcceptSeedPhrase(seedPhrase: string) {
+  const seed = mnemonicToSeed(seedPhrase);
+  state.llmSettings.userId = uint8ArrayToBase64Url(seed);
 }
 
 async function onUpdateAppConfiguration() {
