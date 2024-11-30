@@ -1,11 +1,11 @@
 import {
   createRxDatabase,
-  RxDatabase,
-  RxCollection,
-  RxJsonSchema,
-  RxDocument,
+  type RxDatabase,
+  type RxCollection,
+  type RxJsonSchema,
+  type RxDocument,
   toTypedRxJsonSchema,
-  ExtractDocumentTypeFromTypedRxJsonSchema,
+  type ExtractDocumentTypeFromTypedRxJsonSchema,
   addRxPlugin,
 } from 'rxdb';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
