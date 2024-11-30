@@ -8,7 +8,7 @@ import { loadFile } from 'src/modules/loadFiles';
 import { executeJavaScript } from '../tools/executeJavaScript';
 import { executePythonScript } from '../tools/executePython';
 import { llmSettings } from './types';
-import { AsyncQueue } from '../utils';
+import { AsyncQueue, toLowerCaseKeys } from '../utils';
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -49,24 +49,55 @@ export async function initTaskyon(
 
   // add tools which have access to the taskManagerInstance itself
 
-  ToolList.push({
-    function: async ({ filename }: { filename: string }) => {
-      const file = await taskManagerInstance.getFileByName(filename);
-      const fileContent = await loadFile(file);
-      return fileContent;
-    },
-    description: 'Get the contents of an uploaded file',
-    name: 'getFileContent',
-    parameters: {
-      type: 'object',
-      properties: {
-        filename: {
-          type: 'string',
-        },
+  ToolList.push(
+    {
+      function: async ({ filename }: { filename: string }) => {
+        const file = await taskManagerInstance.getFileByName(filename);
+        const fileContent = await loadFile(file);
+        return fileContent;
       },
-      required: ['filename'],
+      description: 'Get the contents of an uploaded file',
+      name: 'getFileContent',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: {
+            type: 'string',
+          },
+        },
+        required: ['filename'],
+      },
     },
-  });
+    {
+      name: 'searchTools',
+      description: `You can use this tool to do the following:
+- Get a list of all tool names.
+- Get the definition of a single tool including source code, if available. (not case sensitive)`,
+      longDescription: `You can use this tool to do the following:
+- Get a list of all tool names.
+- Get the definition of a single tool including source code, if available. (not case sensitive)`,
+      parameters: {
+        type: 'object',
+        properties: {
+          toolName: {
+            type: 'string',
+            default: undefined,
+            description: `- If toolname is provided: return tool definition for tool with the same name.
+- If undefined or we can not find the toolname: return a list of all tools`,
+          },
+        },
+        required: [],
+      },
+      function: async ({ toolName }: { toolName?: string }) => {
+        const allTools = toLowerCaseKeys(
+          await taskManagerInstance.updateToolDefinitions(),
+        );
+        if (toolName && allTools[toolName.toLowerCase()])
+          return allTools[toolName.toLowerCase()];
+        else return allTools;
+      },
+    },
+  );
   void taskManagerInstance.updateToolDefinitions();
 
   // keys could porentially be reactive here, so in theory, when they change in the GUI,

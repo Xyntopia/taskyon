@@ -16,6 +16,7 @@
 
 <script setup lang="ts">
 import TyMarkdown from 'components/tyMarkdown.vue';
+import { fetchMarkdown } from 'src/modules/taskyon/taskUtils';
 import { ref, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 
@@ -28,28 +29,18 @@ const props = defineProps<{
 
 const markdownContent = ref('');
 
-const fetchMarkdown = async (folder: string, filePath: string) => {
-  try {
-    const fileURL = folder ? `/${folder}/${filePath}` : `/${filePath}`;
-    const response = await fetch(fileURL);
-    if (!response.ok) {
-      throw new Error(`Failed to load ${fileURL}`);
-    }
-    const text = await response.text();
-    markdownContent.value = text;
-  } catch (error) {
-    console.error(error);
+const loadMarkdown = async () => {
+  const folder = props.folder;
+  const filePath = props.filePath;
+  console.log('download markdown file...', folder, filePath);
+  const txt = await fetchMarkdown(folder, filePath);
+  if (txt) {
+    markdownContent.value = txt;
+  } else {
     if (process.env.PROD) {
       void router.replace('/404');
     }
   }
-};
-
-const loadMarkdown = () => {
-  const folder = props.folder;
-  const filePath = props.filePath;
-  console.log('download markdown file...', folder, filePath);
-  void fetchMarkdown(folder, filePath);
 };
 
 onMounted(() => {

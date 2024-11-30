@@ -34,7 +34,7 @@ import {
   pickProperties,
   sleep,
 } from '../utils';
-import { isTaskyonKey } from '../crypto';
+import { isTaskyonKey } from './tyCrypto';
 
 // get worker function for our chat :)
 const { estimateChatTokens } = useNlpWorker();

@@ -1,5 +1,5 @@
-import { RouteRecordRaw } from 'vue-router';
-import { mdRoutes } from './routes_default';
+import { type RouteRecordRaw } from 'vue-router';
+import { authRoutes, mdRoutes } from './routes_default';
 import { defineAsyncComponent } from 'vue';
 import LoadCircle from 'components/LoadingCircle.vue';
 
@@ -17,10 +17,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           delay: 200,
         }),
         meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
-        /*component: defineAsyncComponent({
-        loader: () => import('pages/TaskChat.vue'),
-        loadingComponent: () => import('components/Loading.vue'),
-      }),*/
       },
       {
         // TODO: rename this and all references to search?
@@ -35,11 +31,23 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         },
       },
       {
-        path: 'chat',
-        component: defineAsyncComponent(
-          () => import('pages/taskyon/TaskChat.vue'),
-        ),
+        path: 'chat/',
+        component: defineAsyncComponent({
+          loader: () => import('pages/taskyon/TaskChat.vue'),
+          loadingComponent: LoadCircle,
+          delay: 200,
+        }),
         meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
+      },
+      {
+        // TODO:  change this, so that we can use "arbitrary" files for this!!!
+        path: '/chat/:filePath([^.]*)*',
+        component: defineAsyncComponent({
+          loader: () => import('pages/taskyon/TaskChat.vue'),
+          loadingComponent: LoadCircle,
+          delay: 200,
+        }),
+        meta: { title: 'Chat', description: 'Taskyon AI Chat Companion' },
       },
       {
         path: 'settings/:tab?',
@@ -55,14 +63,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         },
       },
       {
-        path: 'diagnostics',
-        component: () => import('pages/taskyon/DiagnosticsPage.vue'),
-        meta: {
-          title: 'Diagnostics',
-          description: 'Error & Diagnostics display',
-        },
-      },
-      {
         path: 'prompts',
         component: () => import('pages/taskyon/PromptManager.vue'),
         meta: {
@@ -75,8 +75,17 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         component: () => import('pages/DocumentationIndex.vue'),
         meta: { title: 'Documentation', description: 'Taskyon Documentation' },
       },
+      // mdRoutes should have our normal taskyon layout thats why we put them in here :)
       ...mdRoutes,
     ],
+  },
+  {
+    path: '/diagnostics',
+    component: () => import('pages/taskyon/DiagnosticsPage.vue'),
+    meta: {
+      title: 'Diagnostics',
+      description: 'Error & Diagnostics display',
+    },
   },
   {
     path: '/tools',
@@ -88,10 +97,27 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     component: () => import('src/layouts/ToolManager.vue'),
     meta: { title: 'Integration', description: 'Integrate Tasyon' },
   },
+  {
+    path: '/ipfsmonitor',
+    component: () => import('pages/taskyon/IpfsStatusPage.vue'),
+    meta: {
+      title: 'IPFS status',
+      description: 'Interplanetary file system status monitor',
+    },
+  },
+  {
+    path: '/p2pmonitor',
+    component: () => import('pages/taskyon/Libp2pStatusPage.vue'),
+    meta: {
+      title: 'p2p connection status',
+      description: 'libp2p connection status monitor',
+    },
+  },
 ];
 
-const routes: RouteRecordRaw[] = [
+export const routes: RouteRecordRaw[] = [
   ...taskyonRoutes,
+  ...authRoutes,
 
   // Always leave this as last one,
   // but you can also remove it
@@ -102,4 +128,28 @@ const routes: RouteRecordRaw[] = [
   },
 ];
 
-export default routes;
+export const tyServerRoutes: RouteRecordRaw[] = [
+  {
+    path: '/',
+    component: () => import('layouts/ServerControlLayout.vue'),
+    children: [
+      {
+        path: '',
+        //component: defineAsyncComponent(() => import('pages/TaskChat.vue')),
+        component: defineAsyncComponent({
+          loader: () => import('pages/taskyon/ServerControl.vue'),
+          loadingComponent: LoadCircle,
+          delay: 200,
+        }),
+        meta: { title: 'Main', description: 'Taskyon AI Server Control' },
+      },
+    ],
+  },
+  // Always leave this as last one,
+  // but you can also remove it
+  {
+    path: '/:catchAll(.*)*',
+    component: () => import('src/pages/Error404Page.vue'),
+    meta: { title: 'ERROR', description: 'Page does not exist' },
+  },
+];

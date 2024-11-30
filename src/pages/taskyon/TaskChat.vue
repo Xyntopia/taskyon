@@ -17,7 +17,6 @@
           state.keys[state.llmSettings.selectedApi]
         "
         :selected-thread="state.selectedThread"
-        :state="state"
         :current-task="state.currentTask"
         :task-worker-waiting="state.taskWorkerWaiting"
         :task-worker-message="taskWorkerMessage || ''"
@@ -49,7 +48,7 @@
           "
           :force-task-props="state.llmSettings.taskTemplate"
           class="q-pa-xs"
-          :hide-task-info=state.minimalGui 
+          :hide-task-info="state.minimalGui"
         >
         </CreateNewTask>
       </div>
@@ -60,51 +59,22 @@
       :offset="[10, bottomPadding + 5]"
       class="print-hide"
     >
-      <div class="column q-gutter-xs">
-        <div class="col-auto">
-          <q-btn
-            v-if="!state.lockBottomScroll"
-            fab-mini
-            class="taskyon-control-button"
-            :icon="matKeyboardDoubleArrowDown"
-            size="md"
-            @click="scrollToThreadEnd"
-          >
-            <q-tooltip> Scroll To Bottom </q-tooltip>
-          </q-btn>
-        </div>
-        <div class="col-auto">
-          <q-btn
-            v-if="state.currentTask && !state.taskWorkerWaiting"
-            fab-mini
-            class="taskyon-control-button"
-            :icon="matStop"
-            size="md"
-            :color="stoppingTasks ? 'secondary' : 'primary'"
-            :loading="stoppingTasks"
-            @click="stopTasks"
-          >
-            <q-tooltip> Stop processing current task. </q-tooltip>
-          </q-btn>
-        </div>
-      </div>
+      <TaskControlButtons @scroll-to-thread-end="scrollToThreadEnd" />
     </q-page-sticky>
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { ref, UnwrapRef, computed } from 'vue';
+import { ref, UnwrapRef, computed, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue';
 import GetStarted from 'components/taskyon/GetStarted.vue';
-import {
-  matKeyboardDoubleArrowDown,
-  matStop,
-} from '@quasar/extras/material-icons';
-import { sleep } from 'src/modules/utils';
 import ConversationWidget from 'components/taskyon/ConversationWidget.vue';
 import { defineAsyncComponent } from 'vue';
+import { fetchMarkdown, getTextFile } from 'src/modules/taskyon/taskUtils';
+import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue';
+import { useRouter, useRoute } from 'vue-router';
 
 let ResetButton = process.env.DEV
   ? defineAsyncComponent(
@@ -120,34 +90,45 @@ let ResetButton = process.env.DEV
   : undefined;
 
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll;
-
 const bottomPadding = ref(100);
 const $q = useQuasar();
+const router = useRouter();
+const route = useRoute();
 const state = useTaskyonStore();
 const taskThreadContainer = ref<HTMLElement | undefined>();
 $q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store...
+const folder = '';
 
-const stoppingTasks = ref(false);
-async function stopTasks() {
-  console.log('stopping!');
-  stoppingTasks.value = true;
-  state.taskWorkerController.interrupt(state.currentTask?.id);
+async function updateChatThread() {
+  console.log('update chat thread');
+  if (typeof route.query.url === 'string') {
+    const markdownUrl = route.query.url ? new URL(route.query.url) : undefined;
+    if (markdownUrl) {
+      const markdownContent = await getTextFile(markdownUrl);
+      const newTaskId = await state.addMdTasks(markdownContent, undefined);
+      state.llmSettings.selectedTaskId = newTaskId;
+      state.lockBottomScroll = true;
+    }
+  } else if (route.params.filePath) {
+    const urlPath = (route.params.filePath as string[]).join('/');
+    const filePath = urlPath.endsWith('.md') ? urlPath : `${urlPath}.md`;
+    const markdownContent = filePath
+      ? await fetchMarkdown(folder || '', filePath)
+      : undefined;
+    const newTaskId = await state.addMdTasks(markdownContent, undefined);
 
-  await sleep(1000);
-  // Poll every 500ms to check if the task is stopped
-  while (!state.taskWorkerController.isWaiting()) {
-    console.log('waiting for task to stop...');
-    await sleep(100);
+    state.llmSettings.selectedTaskId = newTaskId;
+    state.lockBottomScroll = true;
+  } else if (typeof route.query.t === 'string') {
+    state.llmSettings.selectedTaskId = route.query.t;
+    state.lockBottomScroll = true;
   }
-  state.taskWorkerWaiting = true;
-  stoppingTasks.value = false;
 }
 
 const taskWorkerMessage = computed(() => {
-  if (state.taskWorkerWaiting) {
-    return state.taskWorkerController.getInterruptReason();
-  }
-  return '';
+  return state.taskWorkerWaiting
+    ? state.taskWorkerController.getInterruptReason()
+    : '';
 });
 
 function onScroll(
@@ -201,4 +182,24 @@ function scrollToThreadEnd() {
 function handleResize(size: { height: number }) {
   bottomPadding.value = size.height;
 }
+
+// Watch selectedTaskId and update URL query parameter
+watch(
+  () => state.llmSettings.selectedTaskId,
+  (newTaskId) => {
+    console.log('set new task', newTaskId);
+    router.push({
+      query: { ...route.query, t: newTaskId || undefined },
+    });
+  },
+  { immediate: true },
+);
+
+watch(
+  () => route.fullPath,
+  () => {
+    updateChatThread();
+  },
+  { immediate: true },
+);
 </script>

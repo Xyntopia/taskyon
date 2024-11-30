@@ -1,0 +1,504 @@
+- role: user
+  content:
+    message: >-
+      Hi, can you write a test-conversation for me, which I can use for testing
+      the taskyon app?
+  configuration: &ref_0
+    model: meta-llama/llama-3.2-90b-vision-instruct
+    chatApi: taskyon
+  name: taskyon app
+  debugging:
+    taskPrompt:
+      - role: system
+        content: >-
+          You are a helpful assistant called *Taskyon*. In your markdown-based
+          responses, you can use the following features:
+
+
+          - **Mermaid charts**: Include diagrams, mindmaps, Gantt diagrams,
+          quadrants, and XY charts using the 'mermaid' keyword in fenced code
+          blocks. For example:
+
+          ```mermaid
+
+          ...
+
+          ```
+
+          - **SVG graphics**: Use HTML to embed SVG graphics.
+
+          - **HTML widgets**: Create interactive elements within the markdown
+          using HTML.
+
+          - **MathJax**: Write mathematical formulas using $$ ... $$ for block
+          formulas and $ ... $ for inline formulas. **Note:** Only `$` and `$$`
+          syntax is supported.
+    streamContent: >-
+      **Test Conversation for Taskyon App**
+
+      =====================================
+
+
+      ### Test Case 1: Basic Conversation
+
+
+      *   User: Hi, how are you?
+
+      *   Taskyon: I'm doing well, thank you for asking. How can I assist you
+      today?
+
+      *   User: I'm good, thanks. What can you do?
+
+      *   Taskyon: I can help with a wide range of tasks, from answering
+      questions to generating text and more. What's on your mind?
+
+
+      ### Test Case 2: MathJax Support
+
+
+      *   User: Can you render a mathematical formula using MathJax?
+
+      *   Taskyon: $$\frac{-b \pm \sqrt{b^2-4ac}}{2a}$$
+
+      *   User: How about an inline formula? $a^2 + b^2 = c^2$
+
+      *   Taskyon: $a^2 + b^2 = c^2$ is a well-known equation.
+
+
+      ### Test Case 3: Mermaid Chart
+
+
+      *   User: Can you create a simple flowchart using Mermaid?
+
+      *   Taskyon:
+          ```mermaid
+          graph LR
+              A[Start] --> B{Decision}
+              B -->|Yes| C[Action 1]
+              B -->|No| D[Action 2]
+              C --> E[End]
+              D --> E
+          ```
+      *   User: How about a sequence diagram?
+
+      *   Taskyon:
+          ```mermaid
+          sequenceDiagram
+              participant Alice
+              participant Bob
+              Alice->>Bob: Hello Bob, how are you?
+              Bob->>Alice: I am good thanks!
+          ```
+
+      ### Test Case 4: SVG Graphics
+
+
+      *   User: Can you embed an SVG graphic?
+
+      *   Taskyon:
+          ```html
+          <svg width="100" height="100">
+              <circle cx="50" cy="50" r="40" stroke="green" stroke-width="4" fill="yellow" />
+          </svg>
+          ```
+      *   User: How about a more complex graphic?
+
+      *   Taskyon:
+          ```html
+          <svg width="200" height="200">
+              <rect x="10" y="10" width="50" height="50" fill="blue" />
+              <rect x="70" y="10" width="50" height="50" fill="red" />
+              <rect x="130" y="10" width="50" height="50" fill="green" />
+          </svg>
+          ```
+
+      ### Test Case 5: HTML Widgets
+
+
+      *   User: Can you create a simple HTML button?
+
+      *   Taskyon:
+          ```html
+          <button onclick="alert('Button clicked!')">Click me</button>
+          ```
+      *   User: How about a text input field?
+
+      *   Taskyon:
+          ```html
+          <input type="text" placeholder="Enter your name" />
+          ```
+
+      ### Test Case 6: Conversation Flow
+
+
+      *   User: Can you help me with a task?
+
+      *   Taskyon: What task do you need help with?
+
+      *   User: I need help with writing a story.
+
+      *   Taskyon: What kind of story are you trying to write?
+
+      *   User: A science fiction story.
+
+      *   Taskyon: That sounds interesting. What's the plot of your story?
+
+
+      These test cases cover various features of the Taskyon app, including
+      basic conversation, MathJax support, Mermaid charts, SVG graphics, HTML
+      widgets, and conversation flow.
+    promptTokens: 189
+    resultTokens: 737
+    taskTokens: 926
+    estimatedTokens:
+      singlePromptTokens: 26
+      promptTokens: 177
+      functionTokens: 0
+      resultTokens: 953
+  state: Completed
+  id: EBStwKKsEe+IJ82q0JtcVg
+  created_at: 1731604535964
+  result:
+    chatResponse:
+      id: gen-1731604537-Y7gHm4BETYiAfRAyxKSQ
+      object: chat.completion.chunk
+      created: 1731604537
+      model: meta-llama/llama-3.2-90b-vision-instruct
+      choices:
+        - index: 0
+          message:
+            content: >-
+              **Test Conversation for Taskyon App**
+
+              =====================================
+
+
+              ### Test Case 1: Basic Conversation
+
+
+              *   User: Hi, how are you?
+
+              *   Taskyon: I'm doing well, thank you for asking. How can I
+              assist you today?
+
+              *   User: I'm good, thanks. What can you do?
+
+              *   Taskyon: I can help with a wide range of tasks, from answering
+              questions to generating text and more. What's on your mind?
+
+
+              ### Test Case 2: MathJax Support
+
+
+              *   User: Can you render a mathematical formula using MathJax?
+
+              *   Taskyon: $$\frac{-b \pm \sqrt{b^2-4ac}}{2a}$$
+
+              *   User: How about an inline formula? $a^2 + b^2 = c^2$
+
+              *   Taskyon: $a^2 + b^2 = c^2$ is a well-known equation.
+
+
+              ### Test Case 3: Mermaid Chart
+
+
+              *   User: Can you create a simple flowchart using Mermaid?
+
+              *   Taskyon:
+                  ```mermaid
+                  graph LR
+                      A[Start] --> B{Decision}
+                      B -->|Yes| C[Action 1]
+                      B -->|No| D[Action 2]
+                      C --> E[End]
+                      D --> E
+                  ```
+              *   User: How about a sequence diagram?
+
+              *   Taskyon:
+                  ```mermaid
+                  sequenceDiagram
+                      participant Alice
+                      participant Bob
+                      Alice->>Bob: Hello Bob, how are you?
+                      Bob->>Alice: I am good thanks!
+                  ```
+
+              ### Test Case 4: SVG Graphics
+
+
+              *   User: Can you embed an SVG graphic?
+
+              *   Taskyon:
+                  ```html
+                  <svg width="100" height="100">
+                      <circle cx="50" cy="50" r="40" stroke="green" stroke-width="4" fill="yellow" />
+                  </svg>
+                  ```
+              *   User: How about a more complex graphic?
+
+              *   Taskyon:
+                  ```html
+                  <svg width="200" height="200">
+                      <rect x="10" y="10" width="50" height="50" fill="blue" />
+                      <rect x="70" y="10" width="50" height="50" fill="red" />
+                      <rect x="130" y="10" width="50" height="50" fill="green" />
+                  </svg>
+                  ```
+
+              ### Test Case 5: HTML Widgets
+
+
+              *   User: Can you create a simple HTML button?
+
+              *   Taskyon:
+                  ```html
+                  <button onclick="alert('Button clicked!')">Click me</button>
+                  ```
+              *   User: How about a text input field?
+
+              *   Taskyon:
+                  ```html
+                  <input type="text" placeholder="Enter your name" />
+                  ```
+
+              ### Test Case 6: Conversation Flow
+
+
+              *   User: Can you help me with a task?
+
+              *   Taskyon: What task do you need help with?
+
+              *   User: I need help with writing a story.
+
+              *   Taskyon: What kind of story are you trying to write?
+
+              *   User: A science fiction story.
+
+              *   Taskyon: That sounds interesting. What's the plot of your
+              story?
+
+
+              These test cases cover various features of the Taskyon app,
+              including basic conversation, MathJax support, Mermaid charts, SVG
+              graphics, HTML widgets, and conversation flow.
+            role: assistant
+            tool_calls: []
+          finish_reason: stop
+      provider: Fireworks
+      usage:
+        prompt_tokens: 189
+        completion_tokens: 737
+        total_tokens: 926
+- configuration: *ref_0
+  role: assistant
+  content:
+    message: >-
+      **Test Conversation for Taskyon App**
+
+      =====================================
+
+
+      ### Test Case 1: Basic Conversation
+
+
+      *   User: Hi, how are you?
+
+      *   Taskyon: I'm doing well, thank you for asking. How can I assist you
+      today?
+
+      *   User: I'm good, thanks. What can you do?
+
+      *   Taskyon: I can help with a wide range of tasks, from answering
+      questions to generating text and more. What's on your mind?
+
+
+      ### Test Case 2: MathJax Support
+
+
+      *   User: Can you render a mathematical formula using MathJax?
+
+      *   Taskyon: $$\frac{-b \pm \sqrt{b^2-4ac}}{2a}$$
+
+      *   User: How about an inline formula? $a^2 + b^2 = c^2$
+
+      *   Taskyon: $a^2 + b^2 = c^2$ is a well-known equation.
+
+
+      ### Test Case 3: Mermaid Chart
+
+
+      *   User: Can you create a simple flowchart using Mermaid?
+
+      *   Taskyon:
+          ```mermaid
+          graph LR
+              A[Start] --> B{Decision}
+              B -->|Yes| C[Action 1]
+              B -->|No| D[Action 2]
+              C --> E[End]
+              D --> E
+          ```
+      *   User: How about a sequence diagram?
+
+      *   Taskyon:
+          ```mermaid
+          sequenceDiagram
+              participant Alice
+              participant Bob
+              Alice->>Bob: Hello Bob, how are you?
+              Bob->>Alice: I am good thanks!
+          ```
+
+      ### Test Case 4: SVG Graphics
+
+
+      *   User: Can you embed an SVG graphic?
+
+      *   Taskyon:
+          ```html
+          <svg width="100" height="100">
+              <circle cx="50" cy="50" r="40" stroke="green" stroke-width="4" fill="yellow" />
+          </svg>
+          ```
+      *   User: How about a more complex graphic?
+
+      *   Taskyon:
+          ```html
+          <svg width="200" height="200">
+              <rect x="10" y="10" width="50" height="50" fill="blue" />
+              <rect x="70" y="10" width="50" height="50" fill="red" />
+              <rect x="130" y="10" width="50" height="50" fill="green" />
+          </svg>
+          ```
+
+      ### Test Case 5: HTML Widgets
+
+
+      *   User: Can you create a simple HTML button?
+
+      *   Taskyon:
+          ```html
+          <button onclick="alert('Button clicked!')">Click me</button>
+          ```
+      *   User: How about a text input field?
+
+      *   Taskyon:
+          ```html
+          <input type="text" placeholder="Enter your name" />
+          ```
+
+      ### Test Case 6: Conversation Flow
+
+
+      *   User: Can you help me with a task?
+
+      *   Taskyon: What task do you need help with?
+
+      *   User: I need help with writing a story.
+
+      *   Taskyon: What kind of story are you trying to write?
+
+      *   User: A science fiction story.
+
+      *   Taskyon: That sounds interesting. What's the plot of your story?
+
+
+      These test cases cover various features of the Taskyon app, including
+      basic conversation, MathJax support, Mermaid charts, SVG graphics, HTML
+      widgets, and conversation flow.
+  debugging:
+    promptTokens: 926
+    taskTokens: 926
+  state: Completed
+  parentID: EBStwKKsEe+IJ82q0JtcVg
+  id: GpxL4KKsEe+IJ82q0JtcVg
+  created_at: 1731604553631
+  name: User
+- role: user
+  content:
+    message: hey, that was cool! :)
+  configuration: &ref_1
+    model: meta-llama/llama-3.2-90b-vision-instruct
+    chatApi: taskyon
+  name: User
+  debugging:
+    taskPrompt:
+      - role: system
+        content: >-
+          You are a helpful assistant called *Taskyon*. In your markdown-based
+          responses, you can use the following features:
+
+
+          - **Mermaid charts**: Include diagrams, mindmaps, Gantt diagrams,
+          quadrants, and XY charts using the 'mermaid' keyword in fenced code
+          blocks. For example:
+
+          ```mermaid
+
+          ...
+
+          ```
+
+          - **SVG graphics**: Use HTML to embed SVG graphics.
+
+          - **HTML widgets**: Create interactive elements within the markdown
+          using HTML.
+
+          - **MathJax**: Write mathematical formulas using $$ ... $$ for block
+          formulas and $ ... $ for inline formulas. **Note:** Only `$` and `$$`
+          syntax is supported.
+    streamContent: >-
+      I'm glad you enjoyed the test conversation for Taskyon. If you want to
+      simulate more conversations or try out different scenarios, feel free to
+      ask, and I can help you create more test cases.
+    promptTokens: 942
+    resultTokens: 41
+    taskTokens: 983
+    estimatedTokens:
+      singlePromptTokens: 9
+      promptTokens: 1137
+      functionTokens: 0
+      resultTokens: 40
+    taskCosts: 0.0008847
+  parentID: GpxL4KKsEe+IJ82q0JtcVg
+  state: Completed
+  id: IErOMKKtEe+IJ82q0JtcVg
+  created_at: 1731604992660
+  result:
+    chatResponse:
+      id: 228be3ff-7a2f-45a2-92a9-467c8f5e067f
+      object: chat.completion.chunk
+      created: 1731604994
+      model: meta-llama/llama-3.2-90b-vision-instruct
+      choices:
+        - index: 0
+          message:
+            content: >-
+              I'm glad you enjoyed the test conversation for Taskyon. If you
+              want to simulate more conversations or try out different
+              scenarios, feel free to ask, and I can help you create more test
+              cases.
+            role: assistant
+            tool_calls: []
+          finish_reason: stop
+      provider: Fireworks
+      usage:
+        prompt_tokens: 942
+        completion_tokens: 41
+        total_tokens: 983
+- configuration: *ref_1
+  role: assistant
+  content:
+    message: >-
+      I'm glad you enjoyed the test conversation for Taskyon. If you want to
+      simulate more conversations or try out different scenarios, feel free to
+      ask, and I can help you create more test cases.
+  debugging:
+    promptTokens: 983
+    taskTokens: 983
+  state: Completed
+  parentID: IErOMKKtEe+IJ82q0JtcVg
+  id: InC7cKKtEe+IJ82q0JtcVg
+  created_at: 1731604996264
+  name: User

@@ -7,7 +7,7 @@
           label="AI Service Provider"
           name="aiserviceprovider"
         />
-        <q-route-tab to="/settings/sync" label="Reset & Backup" name="sync" />
+        <q-route-tab to="/settings/sync" label="Profile & Backup" name="sync" />
         <q-route-tab
           v-if="
             state.appConfiguration.expertMode || selectedTab == 'agent config'

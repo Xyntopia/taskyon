@@ -74,7 +74,9 @@
               </div>
             </div>
             <div class="col q-pa-xs">
-              <div class="text-caption text-right">id: {{ rows.row.taskId }}</div>
+              <div class="text-caption text-right">
+                id: {{ rows.row.taskId }}
+              </div>
               <Task
                 v-if="taskDataMap[rows.row.taskId]"
                 :task="taskDataMap[rows.row.taskId]!"
@@ -101,7 +103,8 @@ import {
 } from '@quasar/extras/mdi-v6';
 import { useRouter } from 'vue-router';
 import { onMounted } from 'vue';
-import { QTableProps } from 'quasar';
+import { type QTableProps } from 'quasar';
+import { createTaskNodeMangoQuery } from 'src/modules/taskyon/rxdb';
 //import { useRoute, useRouter } from 'vue-router';
 
 // TODO:  do some search caching ;) so that we can move faster back & forth between
@@ -176,19 +179,6 @@ async function onResetSearchIndex() {
   updateCounts();
 }
 
-const createMangoQuery = (labelString: string) => {
-  const labels = labelString.split('\n');
-  return {
-    selector: {
-      label: {
-        $elemMatch: {
-          $eq: labels[0],
-        },
-      },
-    },
-  };
-};
-
 async function fetchAndDisplayTasks() {
   console.log('get task data from IDs');
   for (const task of searchResults.value) {
@@ -215,7 +205,7 @@ async function searchTasks(params: searchParams & { k: string }) {
     if (params.q) {
       result = await taskManager.filteredVectorSearch(
         params.q,
-        params.l ? createMangoQuery(params.l) : undefined,
+        params.l ? createTaskNodeMangoQuery(params.l) : undefined,
         parseInt(params.k),
       );
     } else if (params.t) {
@@ -223,7 +213,7 @@ async function searchTasks(params: searchParams & { k: string }) {
       if (task) {
         result = await taskManager.searchSimilarTasks(
           task,
-          params.l ? createMangoQuery(params.l) : undefined,
+          params.l ? createTaskNodeMangoQuery(params.l) : undefined,
           parseInt(params.k),
         );
       }

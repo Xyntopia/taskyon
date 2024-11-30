@@ -9,17 +9,21 @@
         <q-icon name="svguse:/taskyon_mono_opt.svg#taskyon" size="sm" />
         <div>Conversations</div>
       </div>
+      <div class="col-auto">
+        <q-expansion-item dense :icon="matToc" label="Chat Content">
+          <table-of-chat-content />
+        </q-expansion-item>
+      </div>
+      <q-separator v-if="!state.minimalGui" spaced />
       <div class="column items-stretch">
         <q-list dense>
           <q-item
             v-for="conversationId in conversationIDs"
             :key="conversationId"
-            v-ripple
-            to="/"
             clickable
-            @click="state.llmSettings.selectedTaskId = conversationId"
+            @click="$router.push({ query: { t: conversationId } })"
           >
-            <!--q-item-section avatar>
+            <!--                          clickable   q-item-section avatar>
               <q-icon name="matChatBubble" size="xs" />
             </!q-item-section-->
             <q-item-section
@@ -46,29 +50,7 @@
               <q-tooltip> Select Conversation </q-tooltip>
             </q-item-section>
             <q-item-section side>
-              <div>
-                <q-btn
-                  v-if="state.llmSettings.selectedTaskId == conversationId"
-                  flat
-                  dense
-                  :icon="matDownloadForOffline"
-                  size="sm"
-                  to="/"
-                  @click="onDownloadChat(conversationId)"
-                  ><q-tooltip>Download Chat</q-tooltip>
-                </q-btn>
-                <q-btn
-                  dense
-                  :icon="matDelete"
-                  size="sm"
-                  flat
-                  @click="onDeleteThread(conversationId)"
-                >
-                  <q-tooltip anchor="center right" self="center left">
-                    Delete Conversation
-                  </q-tooltip>
-                </q-btn>
-              </div>
+              <TaskChainMenu :conversation-id="conversationId" @click.stop />
             </q-item-section>
           </q-item>
         </q-list>
@@ -76,7 +58,7 @@
           <FileDropzone
             accept="*"
             disable-dropzone-border
-            @update:model-value="loadConversation"
+            @update:model-value="loadYamlConversation"
           >
             <q-btn dense class="fit" flat>
               <q-icon :name="matFileUpload" />
@@ -132,25 +114,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue';
+import { ref, reactive, watch, defineAsyncComponent } from 'vue';
 import SimpleSettings from './SimpleSettings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
-import { TaskListType } from 'src/modules/taskyon/types';
-import { exportFile } from 'quasar';
-import { dump, load } from 'js-yaml';
 import FileDropzone from 'components/FileDropzone.vue';
 import {
-  matDownloadForOffline,
-  matDelete,
   matSearch,
   matManageAccounts,
   matFileUpload,
+  matToc,
 } from '@quasar/extras/material-icons';
 import {
   mdiTools,
   mdiRobotConfusedOutline,
   mdiForumPlus,
 } from '@quasar/extras/mdi-v6';
+import TaskChainMenu from './TaskChainMenu.vue';
+
+const TableOfChatContent = defineAsyncComponent(
+  () =>
+    import(
+      /* webpackChunkName: "TableOfChatContent" */
+      /* webpackMode: "lazy" */
+      /* webpackFetchPriority: "low" */
+      'components/taskyon/TableOfChatContent.vue'
+    ),
+);
 
 const state = useTaskyonStore();
 
@@ -181,55 +170,12 @@ watch(
   },
 );
 
-async function onDeleteThread(conversationId: string) {
-  console.log('deleting thread!!', conversationId);
+async function loadYamlConversation(files: File[]) {
   const tm = await state.getTaskManager();
-  state.llmSettings.selectedTaskId = undefined;
-  tm.deleteTaskThread(conversationId);
-  state.chatHistory = state.chatHistory.filter((id) => id != conversationId);
-}
-
-// TODO: move these functions here into taskmanagerin order to import/export
-//       tasklists...
-async function onDownloadChat(conversationId: string) {
-  console.log('deleting thread!!', conversationId);
-  const tm = await state.getTaskManager();
-  const taskList = await tm.getTaskChain(conversationId);
-
-  if (taskList.length) {
-    const lastTask = taskList[taskList.length - 1];
-
-    const fileName = `tyconv-${lastTask?.name || ''}.yaml`;
-    const fileContent = dump(taskList);
-    const mimeType = 'text/yaml';
-
-    // Use Quasar's exportFile function for download
-    exportFile(fileName, fileContent, mimeType);
+  let last_loaded_id = undefined;
+  for (const file of files) {
+    last_loaded_id = await tm.loadYamlConversation(file);
   }
-}
-
-// TODO: move these functions here into taskmanagerin order to import/export
-//       tasklists...
-async function loadConversation(files: File[]) {
-  if (files) {
-    console.log('adding files to our conversations!');
-
-    const tm = await state.getTaskManager();
-    let last_task_id: string | undefined = undefined;
-    for (let i = 0; i < files.length; i++) {
-      console.log(files[i]);
-      const fileStr = await files[i]?.text();
-      const taskListRaw = fileStr ? load(fileStr) : [];
-      const result = await TaskListType.safeParseAsync(taskListRaw);
-      if (result.success) {
-        const taskList = result.data;
-        taskList.forEach((t) => {
-          void tm.setTask(t, true);
-          last_task_id = t.id;
-        });
-      }
-    }
-    state.llmSettings.selectedTaskId = last_task_id;
-  }
+  state.llmSettings.selectedTaskId = last_loaded_id;
 }
 </script>

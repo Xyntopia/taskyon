@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Helia Node Status</title>
+    <script src="https://cdn.jsdelivr.net/npm/helia@5.1.0/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@helia/unixfs@4.0.0/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@helia/strings@4.0.0/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/libp2p@2.2.1/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-yamux@7.0.1/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-noise@16.0.0/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@libp2p/websockets@9.0.11/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@libp2p/bootstrap@11.0.10/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/blockstore-core@5.0.2/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/datastore-core@10.0.2/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/datastore-level@^11.0.1/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@libp2p/kad-dht@14.1.0/dist/index.min.js"></script>
+  </head>
+  <body>
+    <h1>Helia Node Status</h1>
+    <button id="startHelia">Start Helia</button>
+    <button id="fetchStatus">Fetch Node Status</button>
+    <button id="addTestString">Add Test String</button>
+    <div>
+      FileID:
+      <pre id="fileId"></pre>
+    </div>
+    <pre id="status"></pre>
+
+    <script>
+      // check at these two addresses:
+      // - https://check.ipfs.network/?cid=bafkreifhfkgqicrwdtsfdtpebwxy3fxc2gtp5dfj2unqxgvyrzldwcpfxy
+      // - https://pl-diagnose.on.fleek.co/#/diagnose/access-content?backend=https%3A%2F%2Fpl-diagnose.onrender.com
+
+      let node; // Helia instance
+      let info;
+      let statusInterval; // Interval ID for periodic fetching
+
+      // Create and start Helia
+      async function startHelia() {
+        const { createHelia } = Helia;
+        const { MemoryBlockstore } = BlockstoreCore;
+        const { LevelDatastore } = DatastoreLevel;
+        const { unixfs } = HeliaUnixfs;
+
+        // Initialize datastore and blockstore
+        const blockstore = new MemoryBlockstore();
+        const datastore = new LevelDatastore('helia-datastore');
+
+        // if we want to customize libp2p,check out this link:
+        // https://github.com/libp2p/js-libp2p/blob/main/doc/CONFIGURATION.md#basic-setup
+        node = await createHelia({ datastore, blockstore });
+
+        // TODO:  not sure if this is needed
+        // await node.libp2p.services.dht.setMode('server');
+
+        document.getElementById('status').textContent =
+          'Helia started successfully!';
+
+        // Start automatic status fetching
+        if (!statusInterval) {
+          statusInterval = setInterval(fetchNodeStatus, 2000);
+        }
+      }
+
+      // Fetch Helia node status
+      async function fetchNodeStatus() {
+        if (!node) {
+          alert('Please start Helia first!');
+          return;
+        }
+
+        try {
+          const dhtMode = await node.libp2p.services.dht?.getMode();
+          const statusText = `${node.libp2p.status} - ${
+            dhtMode === 'client' ? 'DHT Client' : 'DHT Server'
+          }`;
+
+          info = {
+            peerId: node.libp2p.peerId.toString(),
+            'node started': node ? true : false,
+            connectedPeers: node.libp2p.getPeers().length,
+            metrics: node.metrics,
+            dhtMode: statusText,
+            addresses: node.libp2p
+              .getMultiaddrs()
+              .map((addr) => addr.toString()),
+          };
+        } catch (error) {
+          console.error('Error fetching node status:', error);
+          info = { error: error.message };
+        }
+
+        document.getElementById('status').textContent = JSON.stringify(
+          info,
+          null,
+          2,
+        );
+      }
+
+      // Add a test string
+      async function addTestString() {
+        if (!HeliaStrings) {
+          alert('Please start Helia first!');
+          return;
+        }
+
+        const content = 'Hello from Helia!';
+        const cid = await HeliaStrings.strings(node).add(content);
+        // do we need this?
+        node.routing.provide(cid);
+
+        document.getElementById('fileId').textContent =
+          `Added string with CID: ${cid.toString()}`;
+      }
+
+      // Attach event listeners
+      document
+        .getElementById('startHelia')
+        .addEventListener('click', startHelia);
+      document
+        .getElementById('fetchStatus')
+        .addEventListener('click', fetchNodeStatus);
+      document
+        .getElementById('addTestString')
+        .addEventListener('click', addTestString);
+    </script>
+  </body>
+</html>

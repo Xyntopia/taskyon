@@ -18,9 +18,12 @@ import defaultSettings from 'src/assets/taskyon_settings.json';
 import { availableModels } from 'src/modules/taskyon/chat';
 import { llmSettings, storedSettings } from 'src/modules/taskyon/types';
 import { setupIframeApi } from 'src/modules/taskyon/iframeApi';
-import { Tool } from 'src/modules/taskyon/tools';
-import { isTaskyonKey } from 'src/modules/crypto';
+import type { Tool } from 'src/modules/taskyon/tools';
+import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto';
 import { tylog } from 'src/modules/logger';
+import { processMarkdown } from 'src/modules/taskyon/taskUtils';
+import { unref } from 'vue';
+import { generateRandomNewKey } from 'src/modules/crypto';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -125,32 +128,39 @@ export const useTaskyonStore = defineStore(storeName, () => {
 
   // overwrite with saved configuration:
   console.log(`load saved ${storeName} state!`);
-  const storedStateString = LocalStorage.getItem(storeName) as string;
-  const storedStateObj = JSON.parse(storedStateString) as
+  const getStoredStateString = () => LocalStorage.getItem(storeName) as string;
+  const initialStoredStateString = getStoredStateString();
+  const initialStoredStateObj = JSON.parse(initialStoredStateString) as
     | Partial<typeof initialState>
     | undefined;
   let stateRefs: typeof initialState;
   if (
-    storedStateObj &&
-    storedStateObj.version &&
-    storedStateObj.version === initialState.version
+    initialStoredStateObj &&
+    initialStoredStateObj.version &&
+    initialStoredStateObj.version === initialState.version
   ) {
     console.log(`load saved ${storeName} state!`);
     const storedInitialState = deepMerge(
       initialState,
-      storedStateObj,
+      initialStoredStateObj,
       'overwrite',
     );
     stateRefs = reactive(storedInitialState);
   } else {
     console.warn(
       `Stored settings version (${
-        storedStateObj?.version || 'undefined'
+        initialStoredStateObj?.version || 'undefined'
       }) is not compatible with current version (${
         initialState.version
       }). Using default settings.`,
     );
     stateRefs = reactive(initialState);
+  }
+
+  if (stateRefs.initialLoad) {
+    generateRandomNewKey().then(
+      (r) => (stateRefs.llmSettings.userId = r.publicKey),
+    );
   }
 
   // this file could potentially be replaced in kubernetes or docker using a configmap!
@@ -178,6 +188,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
           // we only want to load the initial configuration the first time we are loading the page...
           console.log('merge dynamic app config', jsonconfig.data);
 
+          // if this is *not* an initial load, we only add "new" values that can be found in the configuration.
           const mergeStrategy = stateRefs.initialLoad
             ? 'overwrite'
             : 'additive';
@@ -331,12 +342,30 @@ export const useTaskyonStore = defineStore(storeName, () => {
     return taskManagerInstance;
   };
 
+  // we are doing this here, so that we can use our addTask2Tree immediatly without
+  // multiple awaits..
   const addTask2Tree = async (
     ...args: Parameters<TaskyonInstance['addTask2Tree']>
   ): ReturnType<TaskyonInstance['addTask2Tree']> => {
     const { addTask2Tree } = await initPromise;
     return await addTask2Tree(...args);
   };
+
+  async function addMdTasks(markdown?: string, newTaskId?: string | undefined) {
+    console.log('adding new Markdown tasks!!');
+    if (markdown) {
+      const taskList = processMarkdown(markdown);
+      for (const task of taskList) {
+        newTaskId = await addTask2Tree(
+          task,
+          newTaskId, //parent
+          false, // should we execute the task? // only the last one obviously ;)
+        );
+      }
+      return newTaskId;
+    }
+    // TODO: optionally execute the last task...
+  }
 
   const add2ChatHistory = async (task: TaskNode, msg: string) => {
     console.log('update task history!!', task.id, msg);
@@ -436,7 +465,8 @@ export const useTaskyonStore = defineStore(storeName, () => {
   // we do this funny next line, because our store is currently "reactive" which means
   // all scalars like strings, numbers etc..  ar actually non-reactive (vue reactive only converts
   // nested objects into reactive as well). So by doing "toRefs" we ensure that all values are reactive
-  // even after destructuring. The next issue is that typescript isn't able to recognize the type anymore when
+  // even after destructuring, which we do when returning values from this store.
+  // The next issue is that typescript isn't able to recognize the type anymore when
   // we do the toRefs operation, so we simply reassign the same type "stateRefs" to it again which seems to work...
   const allRefs = toRefs(stateRefs) as unknown as typeof stateRefs;
 
@@ -496,12 +526,10 @@ export const useTaskyonStore = defineStore(storeName, () => {
     watch(() => stateRefs.llmSettings.selectedTaskId, updateCurrentTask);
 
     async function updateTaskThread(taskId: string | undefined) {
-      console.log('update task thread...');
+      console.log('update task thread...', taskId);
       if (taskId) {
-        const threadIDChain = await (
-          await getTaskManager()
-        ).getTaskIdChain(taskId);
         const TM = await getTaskManager();
+        const threadIDChain = await TM.getTaskIdChain(taskId);
         console.log('loading iniial thread chain');
         const thread = (await Promise.all(
           threadIDChain.map(async (tId) => {
@@ -529,6 +557,8 @@ export const useTaskyonStore = defineStore(storeName, () => {
   // hydration mechanism to automatically save & load the store from localStorage
   return {
     ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
+    getStoredStateString,
+    getStateValues: () => unref(allRefs),
     ...useReactiveTasks(),
     $reset,
     getOpenRouterPKCEKey,
@@ -543,6 +573,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
     tyPublicKey,
     logger,
     addTask2Tree,
+    addMdTasks,
   };
 }); // this state stores all information which
 // should be stored e.g. in browser LocalStorage

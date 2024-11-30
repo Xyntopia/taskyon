@@ -12,7 +12,7 @@ export const mdRoutes: RouteRecordRaw[] = [
     }),
   },
   {
-    path: 'docs/',
+    path: '/docs/',
     component: () => import('pages/MarkdownPage.vue'),
     props: (route) => {
       console.log('open', route);
@@ -34,5 +34,16 @@ export const mdRoutes: RouteRecordRaw[] = [
       };
     },
     meta: { description: 'Taskyon Documentation' },
+  },
+];
+
+export const authRoutes: RouteRecordRaw[] = [
+  {
+    // we are making sure to only load urls without any extensions here...
+    path: '/authreturngit', // we can declare new routes for different service and extract the access tokens from the return parameters
+    component: () => import('pages/auth/AuthReturnPage.vue'),
+    props: (route) => ({
+      accessToken: route.query, // whatever we find in the URL here :)
+    }),
   },
 ];

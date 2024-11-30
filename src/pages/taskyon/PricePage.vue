@@ -134,7 +134,7 @@ selecting different models).
 
 <script setup lang="ts">
 import { useTaskyonStore } from 'src/stores/taskyonState';
-import { QTableProps, exportFile } from 'quasar';
+import { type QTableProps, exportFile } from 'quasar';
 import { humanReadablePrice, openrouterPricing } from 'src/modules/utils';
 import InfoDialog from 'components/InfoDialog.vue';
 import { ref, computed } from 'vue';

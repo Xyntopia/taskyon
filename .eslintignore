@@ -1,8 +1,6 @@
 /dist
-/src-bex/www
 /src-capacitor
 /src-cordova
-/src-ssr
 /.quasar
 /node_modules
 .eslintrc.cjs

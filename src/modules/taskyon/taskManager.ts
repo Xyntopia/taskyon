@@ -1,4 +1,4 @@
-import { TaskNode, RequireSome, ToolBase } from './types';
+import { TaskNode, RequireSome, ToolBase, TaskListType } from './types';
 import { v1 as uuidv1 } from 'uuid';
 import {
   TaskyonDatabase,
@@ -6,14 +6,16 @@ import {
   transformTaskNodeToDocType,
   transformDocToTaskNode,
   collections,
+  createTaskNodeMangoQuery,
 } from './rxdb';
 import { openFile } from '../OPFS';
-import { type AsyncQueue, deepMerge, lockMap } from '../utils';
+import { type AsyncQueue, deepCopy, deepMerge, lockMap } from '../utils';
 import { useVectorStore } from './hnswIndex';
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi';
 import { Tool } from './tools';
 import { taskUtils } from './taskUtils';
 import { MangoQuery } from 'rxdb';
+import { dump, load } from 'js-yaml';
 
 /**
  * Finds the root task of a given task.
@@ -41,7 +43,7 @@ export async function findRootTask(
   return currentTaskID; // Return null if the loop exits without finding a root task
 }
 
-function base64Uuid() {
+function urlSafeBase64Uuid() {
   // Generate a UUID
   const hexUuid = uuidv1();
 
@@ -51,7 +53,12 @@ function base64Uuid() {
   // Convert the Buffer to a base64 string
   let base64Uuid = bufferUuid.toString('base64');
 
-  base64Uuid = base64Uuid.replace(/==$/, '');
+  // make UUID url safe :)
+  base64Uuid = base64Uuid
+    .replace(/==$/, '') // remove padding
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '.');
 
   return base64Uuid;
 }
@@ -127,7 +134,7 @@ export const initAddTask2Tree =
       }
     }
 
-    const uuid = base64Uuid();
+    const uuid = urlSafeBase64Uuid();
 
     const parent = parentID ? await taskManager.getTask(parentID) : undefined;
 
@@ -146,7 +153,11 @@ export const initAddTask2Tree =
 
     // TODO: register this in a list in taskyon so that figure out how
     // to make use of this...
-    void taskContentHash(newTask);
+    if (typeof crypto === 'undefined' || !crypto.subtle) {
+      console.warn('crypto.subtle is not available in this environment');
+    } else {
+      void taskContentHash(newTask);
+    }
 
     console.log('create new Task:', newTask.id);
 
@@ -196,7 +207,7 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
   // TODO: make sure, we add the correct file type here!
   async function addFile(fileMapping: Partial<FileMappingDocType>) {
     const uuidFileMapping: FileMappingDocType = {
-      uuid: base64Uuid(),
+      uuid: urlSafeBase64Uuid(),
       ...fileMapping,
     };
 
@@ -396,6 +407,7 @@ function useTaskVectors(
     return undefined;
   };
 
+  // TODO: make sure, we also stringify tool calls etc...
   const task2Str = (t: TaskNode) => JSON.stringify(t.content);
 
   async function addtoVectorDB(
@@ -781,15 +793,7 @@ export function useTyTaskManager(
     T extends true ? Record<string, ToolBase> : Record<string, ToolBase | Tool>
   > {
     if (taskyonDB) {
-      const tasks = await searchTasks({
-        selector: {
-          label: {
-            $elemMatch: {
-              $eq: 'function',
-            },
-          },
-        },
-      });
+      const tasks = await searchTasks(createTaskNodeMangoQuery('function'));
 
       function hasMessage(
         task: TaskNode,
@@ -896,6 +900,83 @@ export function useTyTaskManager(
     notifySubscribers(undefined, 'new');
   }
 
+  async function loadYamlConversation(
+    input: File | string,
+  ): Promise<string | undefined> {
+    console.log('adding tasknodes & conversations from yaml input!');
+
+    let last_task_id: string | undefined = undefined;
+
+    let taskListRaw: unknown;
+    if (typeof input === 'string') {
+      taskListRaw = load(input);
+    } else {
+      const fileStr = await input.text();
+      taskListRaw = load(fileStr);
+    }
+
+    const result = await TaskListType.safeParseAsync(taskListRaw);
+
+    if (result.success) {
+      const taskList = result.data;
+      taskList.forEach((t) => {
+        void setTask(t, true);
+        last_task_id = t.id;
+      });
+    }
+
+    return last_task_id;
+  }
+
+  const fm = useFileManager(taskyonDB?.filemappings);
+
+  const { getTaskIdChain, buildChatThread, getTaskChain } = taskUtils(
+    getTask,
+    fm.getFileMappingByUuid,
+    fm.getFile,
+  );
+
+  // converts an antire taskchain (thread) into yaml for download
+  async function chatToYaml(conversationId: string) {
+    const taskList = await getTaskChain(conversationId);
+
+    if (taskList.length) {
+      const fileContent = dump(taskList);
+      return fileContent;
+    }
+  }
+
+  // converts an antire taskchain (thread) into yaml for download
+  async function chatToMarkdown(conversationId: string, fullMeta = false) {
+    console.log('convert Chat to markdown!');
+    const taskList = await getTaskChain(conversationId);
+
+    //convert into a list of markdown strings
+    const messageStrings = taskList.map((t) => {
+      const message =
+        t?.content && 'message' in t?.content ? '\n\n' + t.content.message : '';
+
+      // we are doing this in order to protect the "original" tasks, e.g. if they
+      // are reactive... :)
+      const partialTask = deepCopy(t) as Record<string, unknown>;
+      if (!fullMeta && partialTask) {
+        // delete everything which we don't require in order
+        // to create new tasks...
+        delete partialTask.debugging;
+        delete partialTask.result;
+        delete partialTask.id;
+        delete partialTask.state;
+        delete partialTask.created_at;
+        delete partialTask.parentID;
+        if (message) delete partialTask.content;
+      }
+      const yamlMeta = `<!--taskyon\n${dump(partialTask, { skipInvalid: true })}\n-->`;
+      return yamlMeta + message;
+    });
+
+    return messageStrings.join('\n\n---\n\n');
+  }
+
   const defaultMode = {
     getTask,
     updateTask,
@@ -917,14 +998,17 @@ export function useTyTaskManager(
     findLeafTasks,
     searchChildTasks,
     searchSimilarTasks,
+    loadYamlConversation,
   };
-
-  const fm = useFileManager(taskyonDB?.filemappings);
 
   return {
     ...defaultMode,
     ...fm,
-    ...taskUtils(getTask, fm.getFileMappingByUuid, fm.getFile),
+    getTaskIdChain,
+    buildChatThread,
+    getTaskChain,
+    chatToYaml,
+    chatToMarkdown,
   };
 }
 export type TyTaskManager = ReturnType<typeof useTyTaskManager>;

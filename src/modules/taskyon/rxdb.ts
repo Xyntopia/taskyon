@@ -1,11 +1,11 @@
 import {
   createRxDatabase,
-  RxDatabase,
-  RxCollection,
-  RxJsonSchema,
-  RxDocument,
+  type RxDatabase,
+  type RxCollection,
+  type RxJsonSchema,
+  type RxDocument,
   toTypedRxJsonSchema,
-  ExtractDocumentTypeFromTypedRxJsonSchema,
+  type ExtractDocumentTypeFromTypedRxJsonSchema,
   addRxPlugin,
 } from 'rxdb';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
@@ -100,6 +100,19 @@ const taskNodeSchemaLiteral = {
   },
   required: ['id', 'role', 'state'],
 } as const;
+
+export const createTaskNodeMangoQuery = (labelString: string) => {
+  const labels = labelString.split('\n');
+  return {
+    selector: {
+      label: {
+        $elemMatch: {
+          $eq: labels[0],
+        },
+      },
+    },
+  };
+};
 
 const taskNodeSchemaTyped = toTypedRxJsonSchema(taskNodeSchemaLiteral);
 export type TaskNodeDocType = ExtractDocumentTypeFromTypedRxJsonSchema<

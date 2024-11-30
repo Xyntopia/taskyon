@@ -1,5 +1,88 @@
 <template>
   <q-list dense>
+    <q-item-label header>User ID Management</q-item-label>
+    <q-item class="items-center">
+      <q-item-section avatar>
+        <q-icon :name="mdiAccountKey" size="md" />
+        User ID
+      </q-item-section>
+      <q-item-section side>
+        <q-dialog v-model="showSeedPhrase" auto-close>
+          <q-card>
+            <q-card-section>
+              This is the seed phrase for your cryptographic user ID. Store it
+              securely and never share it with anyone. You can use it to recover
+              your ID if needed, but losing or exposing it could compromise your
+              access and security.
+            </q-card-section>
+            <q-card-section class="row">
+              <div class="rounded-borders text-bold col text-info">
+                {{ seedPhrase }}
+              </div>
+              <q-btn
+                class="col-auto"
+                flat
+                dense
+                :icon="matContentCopy"
+                @click="copyToClipboard(seedPhrase)"
+              ></q-btn>
+            </q-card-section>
+            <q-card-section>
+              <q-btn
+                flat
+                label="Accept"
+                @click="onAcceptSeedPhrase(seedPhrase)"
+              ></q-btn>
+            </q-card-section>
+          </q-card>
+        </q-dialog>
+        <q-btn
+          class="col-auto"
+          v-if="state.llmSettings.userId"
+          flat
+          dense
+          :icon="matContentCopy"
+          @click="copyToClipboard(state.llmSettings.userId)"
+        ></q-btn>
+      </q-item-section>
+      <q-item-section
+        v-if="state.llmSettings.userId"
+        class="ellipsis text-bold"
+      >
+        {{ state.llmSettings.userId.slice(0, 5) }} ...
+        {{ state.llmSettings.userId.slice(-10) }}
+      </q-item-section>
+      <q-item-section side>
+        <div class="row">
+          <q-btn
+            class="col-auto"
+            v-if="!state.llmSettings.userId"
+            label="Generate"
+            outline
+            @click="onGenerateSeedPhrase"
+          ></q-btn>
+          <q-btn
+            class="col-auto"
+            dense
+            label="New"
+            flat
+            @click="onGenerateSeedPhrase"
+          ></q-btn>
+          <q-btn
+            class="col-auto"
+            :icon="matDeleteForever"
+            dense
+            flat
+            @click="state.llmSettings.userId = undefined"
+          ></q-btn>
+        </div>
+      </q-item-section>
+      <q-item-section side>
+        <InfoDialog
+          info-text="Generate a decentralized, cryptographic user ID which can be used to interact with other taskyon users in a secure way."
+      /></q-item-section>
+    </q-item>
+    <q-separator spaced />
     <q-item-label header>Task Backup and Synchronization</q-item-label>
     <q-item class="q-pa-md q-gutter-sm">
       <q-item-section>
@@ -73,7 +156,6 @@
         </q-dialog>
       </q-item-section>
     </q-item>
-    <q-separator spaced />
     <q-item-label header>Taskyon Configuration Backup</q-item-label>
     <q-item>
       <q-item-section avatar>
@@ -182,10 +264,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import FileDropzone from 'components/FileDropzone.vue';
-import { exportFile, extend } from 'quasar';
+import { copyToClipboard, exportFile, extend } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
 import yaml from 'js-yaml';
-import { onSyncGdrive, onUpdateAppConfiguration } from 'src/modules/gdrive';
+import { useGdrive } from 'src/modules/gdrive';
 import { deepMergeReactive } from 'src/modules/utils';
 import {
   matSync,
@@ -194,10 +276,59 @@ import {
   matDeleteForever,
   matUpload,
   matWarning,
+  matContentCopy,
 } from '@quasar/extras/material-icons';
-import { mdiGoogleDrive } from '@quasar/extras/mdi-v6';
+import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6';
+import InfoDialog from '../InfoDialog.vue';
+import { base64UrlEd25519Keys, generateRandomNewKey } from 'src/modules/crypto';
 
 const state = useTaskyonStore();
+const { saveObjToGdrive, loadObjFromGdrive } = useGdrive();
+
+const showSeedPhrase = ref(false);
+const seedPhrase = ref('');
+
+async function onGenerateSeedPhrase() {
+  console.log('generate user id...');
+  showSeedPhrase.value = true;
+  const { mnemonic } = await generateRandomNewKey();
+  seedPhrase.value = mnemonic;
+}
+
+async function onAcceptSeedPhrase(seedPhrase: string) {
+  const { /*privateKey,*/ publicKey } = await base64UrlEd25519Keys(seedPhrase);
+  state.llmSettings.userId = publicKey;
+}
+
+async function onUpdateAppConfiguration() {
+  const loadedConfig = await loadObjFromGdrive(
+    state.appConfiguration.gdriveDir,
+    state.appConfiguration.gdriveConfigurationFile,
+  );
+  if (loadedConfig) {
+    deepMergeReactive(
+      state.appConfiguration,
+      (loadedConfig.appConfiguration || {}) as Record<string, unknown>,
+      'overwrite',
+    );
+    deepMergeReactive(
+      state.llmSettings,
+      (loadedConfig.llmSettings || {}) as Record<string, unknown>,
+      'overwrite',
+    );
+  }
+}
+
+async function onSyncGdrive() {
+  saveObjToGdrive(
+    {
+      llmSettings: state.llmSettings,
+      appConfiguration: state.appConfiguration,
+    },
+    state.appConfiguration.gdriveDir,
+    state.appConfiguration.gdriveConfigurationFile,
+  );
+}
 
 // Function to load JSON settings
 // Common function to handle file reading and state updating

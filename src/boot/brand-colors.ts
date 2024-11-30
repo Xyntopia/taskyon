@@ -1,7 +1,7 @@
-import { boot } from 'quasar/wrappers';
+import { defineBoot } from '#q-app/wrappers';
 import { setCssVar } from 'quasar';
 
-export default boot(() => {
+export default defineBoot(() => {
   console.log('set colors! :)');
   const primary = '#2A3548';
   const secondary = '#F78F3B';

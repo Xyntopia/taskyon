@@ -12,6 +12,7 @@
     "secondaryColor": "#F78F3B"
   },
   "llmSettings": {
+    "userId": null,
     "enableOpenAiTools": false,
     "selectedApi": null,
     "taskDraft": {
