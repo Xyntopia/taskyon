@@ -18,11 +18,12 @@ import defaultSettings from 'src/assets/taskyon_settings.json';
 import { availableModels } from 'src/modules/taskyon/chat';
 import { llmSettings, storedSettings } from 'src/modules/taskyon/types';
 import { setupIframeApi } from 'src/modules/taskyon/iframeApi';
-import { Tool } from 'src/modules/taskyon/tools';
+import type { Tool } from 'src/modules/taskyon/tools';
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto';
 import { tylog } from 'src/modules/logger';
 import { processMarkdown } from 'src/modules/taskyon/taskUtils';
 import { unref } from 'vue';
+import { generateRandomNewKey } from 'src/modules/crypto';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -156,6 +157,12 @@ export const useTaskyonStore = defineStore(storeName, () => {
     stateRefs = reactive(initialState);
   }
 
+  if (stateRefs.initialLoad) {
+    generateRandomNewKey().then(
+      (r) => (stateRefs.llmSettings.userId = r.publicKey),
+    );
+  }
+
   // this file could potentially be replaced in kubernetes or docker using a configmap!
   // that way we can configure our webapp even if its already compiled...
   // this is done asynchrounously, because we want to be able to dynamically
@@ -181,6 +188,7 @@ export const useTaskyonStore = defineStore(storeName, () => {
           // we only want to load the initial configuration the first time we are loading the page...
           console.log('merge dynamic app config', jsonconfig.data);
 
+          // if this is *not* an initial load, we only add "new" values that can be found in the configuration.
           const mergeStrategy = stateRefs.initialLoad
             ? 'overwrite'
             : 'additive';

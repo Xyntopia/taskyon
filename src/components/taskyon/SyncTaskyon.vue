@@ -45,7 +45,10 @@
           @click="copyToClipboard(state.llmSettings.userId)"
         ></q-btn>
       </q-item-section>
-      <q-item-section v-if="state.llmSettings.userId" class="ellipsis text-bold">
+      <q-item-section
+        v-if="state.llmSettings.userId"
+        class="ellipsis text-bold"
+      >
         {{ state.llmSettings.userId.slice(0, 5) }} ...
         {{ state.llmSettings.userId.slice(-10) }}
       </q-item-section>
@@ -277,8 +280,7 @@ import {
 } from '@quasar/extras/material-icons';
 import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6';
 import InfoDialog from '../InfoDialog.vue';
-import { generateSeedPhrase, mnemonicToSeed } from 'src/modules/crypto';
-import { uint8ArrayToBase64Url } from 'src/modules/encoding';
+import { base64UrlEd25519Keys, generateRandomNewKey } from 'src/modules/crypto';
 
 const state = useTaskyonStore();
 const { saveObjToGdrive, loadObjFromGdrive } = useGdrive();
@@ -286,15 +288,16 @@ const { saveObjToGdrive, loadObjFromGdrive } = useGdrive();
 const showSeedPhrase = ref(false);
 const seedPhrase = ref('');
 
-function onGenerateSeedPhrase() {
+async function onGenerateSeedPhrase() {
   console.log('generate user id...');
-  seedPhrase.value = generateSeedPhrase();
   showSeedPhrase.value = true;
+  const { mnemonic } = await generateRandomNewKey();
+  seedPhrase.value = mnemonic;
 }
 
-function onAcceptSeedPhrase(seedPhrase: string) {
-  const seed = mnemonicToSeed(seedPhrase);
-  state.llmSettings.userId = uint8ArrayToBase64Url(seed);
+async function onAcceptSeedPhrase(seedPhrase: string) {
+  const { /*privateKey,*/ publicKey } = await base64UrlEd25519Keys(seedPhrase);
+  state.llmSettings.userId = publicKey;
 }
 
 async function onUpdateAppConfiguration() {
