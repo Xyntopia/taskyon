@@ -19,7 +19,7 @@ import { availableModels } from 'src/modules/taskyon/chat';
 import { llmSettings, storedSettings } from 'src/modules/taskyon/types';
 import { setupIframeApi } from 'src/modules/taskyon/iframeApi';
 import { Tool } from 'src/modules/taskyon/tools';
-import { isTaskyonKey } from 'src/modules/crypto';
+import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto';
 import { tylog } from 'src/modules/logger';
 import { processMarkdown } from 'src/modules/taskyon/taskUtils';
 import { unref } from 'vue';

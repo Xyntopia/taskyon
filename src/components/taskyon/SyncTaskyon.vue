@@ -1,5 +1,44 @@
 <template>
   <q-list dense>
+    <q-item-label header>User ID Management</q-item-label>
+    <q-item>
+      <q-item-section avatar>
+        <q-icon :name="mdiAccountKey" size="md" />
+        User ID
+      </q-item-section>
+      <q-item-section>
+        <q-btn
+          v-if="!state.llmSettings.userId"
+          label="Generate"
+          outline
+          @click="onGenerateUserId"
+        ></q-btn>
+        <q-input
+          v-else
+          dense
+          outlined
+          disable
+          v-model="state.llmSettings.userId"
+        >
+          <template #before>
+            <div>
+              <q-btn
+                flat
+                dense
+                :icon="matContentCopy"
+                @click="copyToClipboard(state.llmSettings.userId)"
+              ></q-btn>
+              <q-btn dense label="New" flat @click="onGenerateUserId"></q-btn>
+            </div>
+          </template>
+        </q-input>
+      </q-item-section>
+      <q-item-section side
+        ><InfoDialog
+          info-text="Generate a decentralized, cryptographic user ID which can be used to interact with other taskyon users in a secure way."
+      /></q-item-section>
+    </q-item>
+    <q-separator spaced />
     <q-item-label header>Task Backup and Synchronization</q-item-label>
     <q-item class="q-pa-md q-gutter-sm">
       <q-item-section>
@@ -73,7 +112,6 @@
         </q-dialog>
       </q-item-section>
     </q-item>
-    <q-separator spaced />
     <q-item-label header>Taskyon Configuration Backup</q-item-label>
     <q-item>
       <q-item-section avatar>
@@ -182,7 +220,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import FileDropzone from 'components/FileDropzone.vue';
-import { exportFile, extend } from 'quasar';
+import { copyToClipboard, exportFile, extend } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
 import yaml from 'js-yaml';
 import { useGdrive } from 'src/modules/gdrive';
@@ -194,12 +232,18 @@ import {
   matDeleteForever,
   matUpload,
   matWarning,
+  matContentCopy,
 } from '@quasar/extras/material-icons';
-import { mdiGoogleDrive } from '@quasar/extras/mdi-v6';
+import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6';
+import InfoDialog from '../InfoDialog.vue';
 
 const state = useTaskyonStore();
-
 const { saveObjToGdrive, loadObjFromGdrive } = useGdrive();
+
+function onGenerateUserId() {
+  console.log('generate user id...');
+  state.llmSettings.userId = 'helo pupu';
+}
 
 async function onUpdateAppConfiguration() {
   const loadedConfig = await loadObjFromGdrive(

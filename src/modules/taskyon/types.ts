@@ -344,7 +344,8 @@ of how content can be structured. `,
       // the taskprompt is the full chat which leads to the result. This is important that we have this
       // for to debugging reasons...
       taskPrompt: z.union([z.array(OpenAIMessage), z.any()]).optional(), // Replace 'z.any()' with the correct Zod type
-    }).partial(),
+    })
+    .partial(),
   result: TaskResult.optional(),
   id: z.string(), // can we make the id an SHA-1 value like in git? in that case we should simply remove this value...
   allowedTools: z.array(z.string()).optional(),
@@ -499,13 +500,18 @@ const apiConfig = z
 export type apiConfig = z.infer<typeof apiConfig>;
 
 export const llmSettings = z.object({
-  // this refers to the task chain that we have currently selected. We select one task and then
-  // put the chain together by following the parentIds.
+  userId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      'a cryptographic user id whic is used to identify the user in different chats',
+    ),
   selectedTaskId: z
     .string()
     .optional()
     .describe(
-      'The currently selected conversation defined by the ID of its last node.',
+      'The currently selected conversation defined by the ID of its last node. The task chain is defined through each tasknodes parent IDs',
     ),
   enableOpenAiTools: z
     .boolean()
