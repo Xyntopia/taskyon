@@ -1,7 +1,9 @@
 <template>
   <q-list dense>
-    <q-item-label header>User ID Management</q-item-label>
-    <q-item class="items-center">
+    <q-item-label v-if="state.appConfiguration.expertMode" header
+      >User ID Management</q-item-label
+    >
+    <q-item v-if="state.appConfiguration.expertMode" class="items-center">
       <q-item-section avatar>
         <q-icon :name="mdiAccountKey" size="md" />
         User ID
@@ -83,7 +85,7 @@
  other taskyon users in a secure way. When loading taskyon for the first time, this ID is automatically generated!"
       /></q-item-section>
     </q-item>
-    <q-separator spaced />
+    <q-separator v-if="state.appConfiguration.expertMode" spaced />
     <q-item-label header>Task Backup and Synchronization</q-item-label>
     <q-item class="q-pa-md q-gutter-sm">
       <q-item-section>

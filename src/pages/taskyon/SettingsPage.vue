@@ -7,7 +7,11 @@
           label="AI Service Provider"
           name="aiserviceprovider"
         />
-        <q-route-tab to="/settings/sync" label="Profile & Backup" name="sync" />
+        <q-route-tab
+          to="/settings/profile"
+          label="Profile & Backup"
+          name="profile"
+        />
         <q-route-tab
           v-if="
             state.appConfiguration.expertMode || selectedTab == 'agent config'
@@ -35,7 +39,7 @@
             style="max-width: 600px"
           />
         </q-tab-panel>
-        <q-tab-panel name="sync" :class="tabPanelClass">
+        <q-tab-panel name="profile" :class="tabPanelClass">
           <SyncTaskyon style="max-width: 600px" />
         </q-tab-panel>
         <q-tab-panel name="agent config" :class="tabPanelClass">
