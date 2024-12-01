@@ -138,7 +138,10 @@ framework and requires the following steps:
 
 ### Issues
 
-- There is still a problem right now [building Appimages](https://github.com/tauri-apps/tauri/issues/8535#issuecomment-2384561950)
+- There is still a problem right now [building Appimages](https://github.com/tauri-apps/tauri/issues/8535#issuecomment-2384561950
+- when using webpack, sometimes, javascript with node runs out of memory with an error similar to this:
+  `FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory`. You can try to get rid of it by increasing the memory allocated to nodejs: `export NODE_OPTIONS="--max-old-space-size=8192"`. You can get the current limit by running:
+  `node -e 'console.log(v8.getHeapStatistics().heap_size_limit/(1024*1024))'` in the commandline.
 
 ## Docker
 
