@@ -1,6 +1,6 @@
 /**
  * More info about this file:
- * https://v2.quasar.dev/quasar-cli-webpack/developing-ssr/ssr-webserver
+ * https://v2.quasar.dev/quasar-cli-vite/developing-ssr/ssr-webserver
  *
  * Runs in Node context.
  */
@@ -110,7 +110,7 @@ const pngRE = /\.png$/;
  */
 export const renderPreloadTag = defineSsrRenderPreloadTag((file/* , { ssrContext } */) => {
   if (jsRE.test(file) === true) {
-    return `<script src="${file}" defer crossorigin></script>`;
+    return `<link rel="modulepreload" href="${file}" crossorigin>`;
   }
 
   if (cssRE.test(file) === true) {
