@@ -1,0 +1,841 @@
+openapi: 3.0.0
+info:
+  title: Taskyon API
+  version: 1.0.0
+transport:
+  - postMessage:
+      schemes:
+        - postMessage
+paths:
+  /functionCall:
+    post:
+      summary: Handle functionCall message
+      requestBody:
+        content:
+          window.postMessage:
+            schema:
+              $ref: '#/components/schemas/functionCall'
+  /functionResponse:
+    post:
+      summary: Handle functionResponse message
+      requestBody:
+        content:
+          window.postMessage:
+            schema:
+              $ref: '#/components/schemas/functionResponse'
+  /task:
+    post:
+      summary: Handle task message
+      requestBody:
+        content:
+          window.postMessage:
+            schema:
+              $ref: '#/components/schemas/task'
+  /functionDescription:
+    post:
+      summary: Handle functionDescription message
+      requestBody:
+        content:
+          window.postMessage:
+            schema:
+              $ref: '#/components/schemas/functionDescription'
+  /taskyonReady:
+    post:
+      summary: Handle taskyonReady message
+      requestBody:
+        content:
+          window.postMessage:
+            schema:
+              $ref: '#/components/schemas/taskyonReady'
+  /configurationMessage:
+    post:
+      summary: Handle configurationMessage message
+      requestBody:
+        content:
+          window.postMessage:
+            schema:
+              $ref: '#/components/schemas/configurationMessage'
+components:
+  schemas:
+    ToolBase:
+      type: object
+      properties:
+        description:
+          type: string
+        longDescription:
+          type: string
+        name:
+          type: object
+        parameters:
+          type: object
+          properties:
+            $schema:
+              type: string
+            type:
+              type: string
+              enum:
+                - object
+            properties:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  type:
+                    type: string
+                  description:
+                    type: string
+                  default:
+                    type: object
+                  items:
+                    type: object
+                required:
+                  - type
+            required:
+              type: array
+              items:
+                type: string
+          required:
+            - type
+            - properties
+        code:
+          type: string
+      required:
+        - description
+        - name
+        - parameters
+    functionCall:
+      type: object
+      properties:
+        functionName:
+          type: string
+        type:
+          type: string
+          enum:
+            - functionCall
+        arguments:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+              - type: object
+                additionalProperties:
+                  type: object
+              - type: array
+                items:
+                  type: object
+              - type: 'null'
+      required:
+        - functionName
+        - type
+    functionResponse:
+      type: object
+      properties:
+        functionName:
+          type: string
+        type:
+          type: string
+          enum:
+            - functionResponse
+        response:
+          type: object
+      required:
+        - functionName
+        - type
+    task:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - task
+        task:
+          type: object
+          properties:
+            role:
+              type: string
+              enum:
+                - system
+                - user
+                - assistant
+                - function
+            content:
+              type: object
+            parentID:
+              type: string
+            name:
+              type: string
+            configuration:
+              type: object
+              properties:
+                model:
+                  type: string
+                chatApi:
+                  type: string
+              required:
+                - model
+                - chatApi
+            state:
+              type: string
+              enum:
+                - Open
+                - Queued
+                - In Progress
+                - Completed
+                - Cancelled
+                - Error
+            allowedTools:
+              type: array
+              items:
+                type: string
+            debugging:
+              type: object
+              properties:
+                threadMessage:
+                  type: object
+                promptTokens:
+                  type: number
+                resultTokens:
+                  type: number
+                taskTokens:
+                  type: number
+                estimatedTokens:
+                  type: object
+                  properties:
+                    resultTokens:
+                      type: number
+                    taskCosts:
+                      type: number
+                    functionTokens:
+                      type: number
+                    promptTokens:
+                      type: number
+                    singlePromptTokens:
+                      type: number
+                toolStreamArgsContent:
+                  type: object
+                  additionalProperties:
+                    type: string
+                streamContent:
+                  type: string
+                taskCosts:
+                  type: number
+                aiResponse:
+                  type: object
+                error:
+                  type: object
+                taskPrompt:
+                  oneOf:
+                    - type: array
+                      items:
+                        type: object
+                        properties:
+                          content:
+                            type: string
+                            nullable: true
+                          function_call:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              arguments:
+                                type: string
+                            required:
+                              - name
+                              - arguments
+                          tool_calls:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                arguments:
+                                  type: string
+                              required:
+                                - name
+                                - arguments
+                          name:
+                            type: string
+                          role:
+                            type: string
+                            enum:
+                              - system
+                              - user
+                              - assistant
+                              - function
+                              - tool
+                        required:
+                          - content
+                          - role
+                    - type: object
+            label:
+              type: array
+              items:
+                type: string
+          required:
+            - role
+            - content
+        execute:
+          type: object
+        duplicateTaskName:
+          type: object
+      required:
+        - type
+        - task
+        - execute
+        - duplicateTaskName
+    functionDescription:
+      type: object
+      properties:
+        description:
+          type: string
+        longDescription:
+          type: string
+        name:
+          type: object
+        parameters:
+          type: object
+          properties:
+            $schema:
+              type: string
+            type:
+              type: string
+              enum:
+                - object
+            properties:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  type:
+                    type: string
+                  description:
+                    type: string
+                  default:
+                    type: object
+                  items:
+                    type: object
+                required:
+                  - type
+            required:
+              type: array
+              items:
+                type: string
+          required:
+            - type
+            - properties
+        code:
+          type: string
+        type:
+          type: string
+          enum:
+            - functionDescription
+        id:
+          type: string
+        duplicateTaskName:
+          type: boolean
+      required:
+        - description
+        - name
+        - parameters
+        - type
+        - id
+        - duplicateTaskName
+    taskyonReady:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - taskyonReady
+      required:
+        - type
+    configurationMessage:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - configurationMessage
+        conf:
+          type: object
+          properties:
+            version:
+              type: string
+              enum:
+                - 9
+            appConfiguration:
+              type: object
+              properties:
+                appConfigurationUrl:
+                  type: string
+                gdriveConfigurationFile:
+                  type: string
+                expertMode:
+                  type: boolean
+                showCosts:
+                  type: boolean
+                gdriveDir:
+                  type: string
+                useEnterToSend:
+                  type: boolean
+                guiMode:
+                  type: string
+                  enum:
+                    - auto
+                    - iframe
+                    - default
+                primaryColor:
+                  type: object
+                secondaryColor:
+                  type: object
+            llmSettings:
+              type: object
+              properties:
+                userId:
+                  type: string
+                  nullable: true
+                selectedTaskId:
+                  type: string
+                enableOpenAiTools:
+                  type: boolean
+                selectedApi:
+                  type: string
+                  nullable: true
+                llmApis:
+                  type: object
+                  additionalProperties:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      baseURL:
+                        type: string
+                      defaultModel:
+                        type: string
+                      selectedModel:
+                        type: string
+                      models:
+                        type: object
+                        properties:
+                          instruction:
+                            type: string
+                          chat:
+                            type: string
+                          free:
+                            type: string
+                      streamSupport:
+                        type: boolean
+                      defaultHeaders:
+                        type: object
+                        additionalProperties:
+                          type: string
+                      routes:
+                        type: object
+                        properties:
+                          chatCompletion:
+                            type: string
+                          models:
+                            type: string
+                siteUrl:
+                  type: string
+                summaryModel:
+                  type: string
+                vectorizationModel:
+                  type: string
+                maxAutonomousTasks:
+                  type: number
+                taskTemplate:
+                  type: object
+                  properties:
+                    role:
+                      type: string
+                      enum:
+                        - system
+                        - user
+                        - assistant
+                        - function
+                    content:
+                      oneOf:
+                        - type: object
+                          properties:
+                            structuredResponse:
+                              type: string
+                          required:
+                            - structuredResponse
+                        - type: object
+                          properties:
+                            message:
+                              type: string
+                          required:
+                            - message
+                        - type: object
+                          properties:
+                            functionCall:
+                              type: object
+                              properties:
+                                name:
+                                  type: object
+                                arguments:
+                                  type: object
+                                  additionalProperties:
+                                    oneOf:
+                                      - type: string
+                                      - type: number
+                                      - type: boolean
+                                      - type: object
+                                        additionalProperties:
+                                          type: object
+                                      - type: array
+                                        items:
+                                          type: object
+                                      - type: 'null'
+                              required:
+                                - name
+                                - arguments
+                          required:
+                            - functionCall
+                        - type: object
+                          properties:
+                            uploadedFiles:
+                              type: array
+                              items:
+                                type: string
+                          required:
+                            - uploadedFiles
+                        - type: object
+                          properties:
+                            toolResult:
+                              type: object
+                              properties:
+                                result:
+                                  oneOf:
+                                    - type: string
+                                    - type: object
+                                      additionalProperties:
+                                        type: object
+                                error:
+                                  type: object
+                                stdout:
+                                  type: string
+                          required:
+                            - toolResult
+                    parentID:
+                      type: string
+                    name:
+                      type: string
+                    configuration:
+                      type: object
+                      properties:
+                        model:
+                          type: string
+                        chatApi:
+                          type: string
+                    state:
+                      type: string
+                      enum:
+                        - Open
+                        - Queued
+                        - In Progress
+                        - Completed
+                        - Cancelled
+                        - Error
+                    allowedTools:
+                      type: array
+                      items:
+                        type: string
+                    debugging:
+                      type: object
+                      properties:
+                        threadMessage:
+                          type: object
+                        promptTokens:
+                          type: number
+                        resultTokens:
+                          type: number
+                        taskTokens:
+                          type: number
+                        estimatedTokens:
+                          type: object
+                          properties:
+                            resultTokens:
+                              type: number
+                            taskCosts:
+                              type: number
+                            functionTokens:
+                              type: number
+                            promptTokens:
+                              type: number
+                            singlePromptTokens:
+                              type: number
+                        toolStreamArgsContent:
+                          type: object
+                          additionalProperties:
+                            type: string
+                        streamContent:
+                          type: string
+                        taskCosts:
+                          type: number
+                        aiResponse:
+                          type: object
+                        error:
+                          type: object
+                        taskPrompt:
+                          oneOf:
+                            - type: array
+                              items:
+                                type: object
+                                properties:
+                                  content:
+                                    type: string
+                                    nullable: true
+                                  function_call:
+                                    type: object
+                                    properties:
+                                      name:
+                                        type: string
+                                      arguments:
+                                        type: string
+                                    required:
+                                      - name
+                                      - arguments
+                                  tool_calls:
+                                    type: array
+                                    items:
+                                      type: object
+                                      properties:
+                                        name:
+                                          type: string
+                                        arguments:
+                                          type: string
+                                      required:
+                                        - name
+                                        - arguments
+                                  name:
+                                    type: string
+                                  role:
+                                    type: string
+                                    enum:
+                                      - system
+                                      - user
+                                      - assistant
+                                      - function
+                                      - tool
+                                required:
+                                  - content
+                                  - role
+                            - type: object
+                    label:
+                      type: array
+                      items:
+                        type: string
+                taskDraft:
+                  type: object
+                  properties:
+                    role:
+                      type: string
+                      enum:
+                        - system
+                        - user
+                        - assistant
+                        - function
+                    content:
+                      oneOf:
+                        - type: object
+                          properties:
+                            structuredResponse:
+                              type: string
+                          required:
+                            - structuredResponse
+                        - type: object
+                          properties:
+                            message:
+                              type: string
+                          required:
+                            - message
+                        - type: object
+                          properties:
+                            functionCall:
+                              type: object
+                              properties:
+                                name:
+                                  type: object
+                                arguments:
+                                  type: object
+                                  additionalProperties:
+                                    oneOf:
+                                      - type: string
+                                      - type: number
+                                      - type: boolean
+                                      - type: object
+                                        additionalProperties:
+                                          type: object
+                                      - type: array
+                                        items:
+                                          type: object
+                                      - type: 'null'
+                              required:
+                                - name
+                                - arguments
+                          required:
+                            - functionCall
+                        - type: object
+                          properties:
+                            uploadedFiles:
+                              type: array
+                              items:
+                                type: string
+                          required:
+                            - uploadedFiles
+                        - type: object
+                          properties:
+                            toolResult:
+                              type: object
+                              properties:
+                                result:
+                                  oneOf:
+                                    - type: string
+                                    - type: object
+                                      additionalProperties:
+                                        type: object
+                                error:
+                                  type: object
+                                stdout:
+                                  type: string
+                          required:
+                            - toolResult
+                    parentID:
+                      type: string
+                    name:
+                      type: string
+                    configuration:
+                      type: object
+                      properties:
+                        model:
+                          type: string
+                        chatApi:
+                          type: string
+                    state:
+                      type: string
+                      enum:
+                        - Open
+                        - Queued
+                        - In Progress
+                        - Completed
+                        - Cancelled
+                        - Error
+                    allowedTools:
+                      type: array
+                      items:
+                        type: string
+                    debugging:
+                      type: object
+                      properties:
+                        threadMessage:
+                          type: object
+                        promptTokens:
+                          type: number
+                        resultTokens:
+                          type: number
+                        taskTokens:
+                          type: number
+                        estimatedTokens:
+                          type: object
+                          properties:
+                            resultTokens:
+                              type: number
+                            taskCosts:
+                              type: number
+                            functionTokens:
+                              type: number
+                            promptTokens:
+                              type: number
+                            singlePromptTokens:
+                              type: number
+                        toolStreamArgsContent:
+                          type: object
+                          additionalProperties:
+                            type: string
+                        streamContent:
+                          type: string
+                        taskCosts:
+                          type: number
+                        aiResponse:
+                          type: object
+                        error:
+                          type: object
+                        taskPrompt:
+                          oneOf:
+                            - type: array
+                              items:
+                                type: object
+                                properties:
+                                  content:
+                                    type: string
+                                    nullable: true
+                                  function_call:
+                                    type: object
+                                    properties:
+                                      name:
+                                        type: string
+                                      arguments:
+                                        type: string
+                                    required:
+                                      - name
+                                      - arguments
+                                  tool_calls:
+                                    type: array
+                                    items:
+                                      type: object
+                                      properties:
+                                        name:
+                                          type: string
+                                        arguments:
+                                          type: string
+                                      required:
+                                        - name
+                                        - arguments
+                                  name:
+                                    type: string
+                                  role:
+                                    type: string
+                                    enum:
+                                      - system
+                                      - user
+                                      - assistant
+                                      - function
+                                      - tool
+                                required:
+                                  - content
+                                  - role
+                            - type: object
+                    label:
+                      type: array
+                      items:
+                        type: string
+                useBasePrompt:
+                  type: boolean
+                tryUsingVisionModels:
+                  type: boolean
+                taskChatTemplates:
+                  type: object
+                  properties:
+                    basePrompt:
+                      type: string
+                    instruction:
+                      type: string
+                    toolResult:
+                      type: string
+                    task:
+                      type: string
+                    evaluate:
+                      type: string
+                    tools:
+                      type: string
+            signatureOrKey:
+              type: string
+      required:
+        - type
+        - conf

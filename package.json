@@ -1,0 +1,45 @@
+{
+  "name": "taskyon",
+  "version": "0.0.1",
+  "description": "a chat app",
+  "productName": "Taskyon",
+  "author": "yeus <Thomas.Meschede@web.de>",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "lint": "eslint --ext .js,.ts,.vue ./",
+    "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .gitignore",
+    "test": "echo \"No test specified\" && exit 0",
+    "dev": "quasar dev",
+    "build": "quasar build",
+    "postinstall": "quasar prepare"
+  },
+  "dependencies": {
+    "vue-i18n": "^9.2.2",
+    "pinia": "^2.0.11",
+    "@quasar/extras": "^1.16.4",
+    "quasar": "^2.16.0",
+    "vue": "^3.4.18",
+    "vue-router": "^4.0.12"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.16.0",
+    "@typescript-eslint/parser": "^7.16.0",
+    "vite-plugin-checker": "^0.8.0",
+    "vue-tsc": "^2.0.29",
+    "eslint": "^8.57.0",
+    "eslint-plugin-vue": "^9.0.0",
+    "eslint-config-prettier": "^9.0.0",
+    "prettier": "^3.0.3",
+    "@types/node": "^20.5.9",
+    "@intlify/unplugin-vue-i18n": "^2.0.0",
+    "@quasar/app-vite": "^2.0.0-rc.1",
+    "autoprefixer": "^10.4.2",
+    "typescript": "~5.5.3"
+  },
+  "engines": {
+    "node": "^24 || ^22 || ^20 || ^18",
+    "npm": ">= 6.13.4",
+    "yarn": ">= 1.21.1"
+  }
+}
