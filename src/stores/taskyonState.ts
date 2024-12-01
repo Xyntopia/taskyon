@@ -371,16 +371,23 @@ export const useTaskyonStore = defineStore(storeName, () => {
     console.log('update task history!!', task.id, msg);
 
     if (msg === 'new' || msg === 'update') {
-      // Step 1: Remove any entries with the same parentID (keeping only leaf IDs)
-      stateRefs.chatHistory = stateRefs.chatHistory.filter(
-        (t) => t !== task.parentID,
-      );
+      const tm = await getTaskManager();
+      // we need to make sure, that our task is not already
+      // the "parent" of another task in that case we only want the leaf task which is already present...
+      for (const taskId of stateRefs.chatHistory) {
+        if ((await tm.getTask(taskId))?.parentID === task.id) return;
+      }
 
       // Step 2: Remove task.id if it exists, then unshift to front (avoids duplication)
       stateRefs.chatHistory = [
         task.id,
         ...stateRefs.chatHistory.filter((t) => t !== task.id),
       ];
+
+      // Step 1: Remove any entries which are a parent of the current task (keeping only leaf IDs)
+      stateRefs.chatHistory = stateRefs.chatHistory.filter(
+        (t) => t !== task.parentID,
+      );
 
       // Step 3: Enforce a maximum size of 50
       if (stateRefs.chatHistory.length > 50) {
