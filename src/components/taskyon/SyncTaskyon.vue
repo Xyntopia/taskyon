@@ -79,7 +79,8 @@
       </q-item-section>
       <q-item-section side>
         <InfoDialog
-          info-text="Generate a decentralized, cryptographic user ID which can be used to interact with other taskyon users in a secure way."
+          info-text="Generate a decentralized, cryptographic user ID which can be used to interact with \
+ other taskyon users in a secure way. When loading taskyon for the first time, this ID is automatically generated!"
       /></q-item-section>
     </q-item>
     <q-separator spaced />

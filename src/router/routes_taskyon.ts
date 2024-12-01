@@ -77,6 +77,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       },
       // mdRoutes should have our normal taskyon layout thats why we put them in here :)
       ...mdRoutes,
+      ...authRoutes,
     ],
   },
   {
@@ -117,7 +118,15 @@ export const taskyonRoutes: RouteRecordRaw[] = [
 
 export const routes: RouteRecordRaw[] = [
   ...taskyonRoutes,
-  ...authRoutes,
+
+  {
+    // we are making sure to only load urls without any extensions here...
+    path: '/authreturngit', // we can declare new routes for different service and extract the access tokens from the return parameters
+    component: () => import('pages/auth/AuthReturnPage.vue'),
+    props: (route) => ({
+      accessToken: route.query, // whatever we find in the URL here :)
+    }),
+  },
 
   // Always leave this as last one,
   // but you can also remove it

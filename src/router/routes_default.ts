@@ -1,4 +1,4 @@
-import { RouteRecordRaw } from 'vue-router';
+import type { RouteRecordRaw } from 'vue-router';
 
 // our MarkdownPage accepts the properties below
 export const mdRoutes: RouteRecordRaw[] = [
@@ -34,16 +34,5 @@ export const mdRoutes: RouteRecordRaw[] = [
       };
     },
     meta: { description: 'Taskyon Documentation' },
-  },
-];
-
-export const authRoutes: RouteRecordRaw[] = [
-  {
-    // we are making sure to only load urls without any extensions here...
-    path: '/authreturngit', // we can declare new routes for different service and extract the access tokens from the return parameters
-    component: () => import('pages/auth/AuthReturnPage.vue'),
-    props: (route) => ({
-      accessToken: route.query, // whatever we find in the URL here :)
-    }),
   },
 ];
