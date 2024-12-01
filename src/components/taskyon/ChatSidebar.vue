@@ -131,16 +131,6 @@ import {
 } from '@quasar/extras/mdi-v6';
 import TaskChainMenu from './TaskChainMenu.vue';
 
-const TableOfChatContent = defineAsyncComponent(
-  () =>
-    import(
-      /* webpackChunkName: "TableOfChatContent" */
-      /* webpackMode: "lazy" */
-      /* webpackFetchPriority: "low" */
-      'components/taskyon/TableOfChatContent.vue'
-    ),
-);
-
 const state = useTaskyonStore();
 
 const conversationIDs = ref<string[]>([]);
@@ -178,4 +168,14 @@ async function loadYamlConversation(files: File[]) {
   }
   state.llmSettings.selectedTaskId = last_loaded_id;
 }
+
+const TableOfChatContent = defineAsyncComponent(
+  () =>
+    import(
+      /* webpackChunkName: "TableOfChatContent" */
+      /* webpackMode: "lazy" */
+      /* webpackFetchPriority: "low" */
+      'components/taskyon/TableOfChatContent.vue'
+    ),
+);
 </script>
