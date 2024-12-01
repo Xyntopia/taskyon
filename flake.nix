@@ -69,6 +69,9 @@
           # node
           yarn
           nodejs_21
+
+          # other
+          kdiff3
         ];
       in {
         devShells.default = pkgs.mkShell rec {
