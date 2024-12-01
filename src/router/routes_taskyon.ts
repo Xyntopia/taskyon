@@ -1,5 +1,5 @@
 import { type RouteRecordRaw } from 'vue-router';
-import { authRoutes, mdRoutes } from './routes_default';
+import { mdRoutes } from './routes_default';
 import { defineAsyncComponent } from 'vue';
 import LoadCircle from 'components/LoadingCircle.vue';
 
@@ -77,7 +77,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       },
       // mdRoutes should have our normal taskyon layout thats why we put them in here :)
       ...mdRoutes,
-      ...authRoutes,
     ],
   },
   {
