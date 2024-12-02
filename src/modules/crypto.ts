@@ -4,8 +4,8 @@ import {
   mnemonicToSeedSync,
 } from '@scure/bip39';
 import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english';
-import { sign, getPublicKeyAsync } from '@noble/ed25519';
-import { uint8ArrayToBase64Url } from './encoding';
+import { signAsync, getPublicKeyAsync, verifyAsync } from '@noble/ed25519';
+import { base64UrlToUint8Array, uint8ArrayToBase64Url } from './encoding';
 
 // Generate a new seed phrase (mnemonic)
 export function generateSeedPhrase(): string {
@@ -39,12 +39,18 @@ export async function generateEd25519Keys(seed: Uint8Array) {
   return { publicKey, privateKey };
 }
 
-// Example: Sign data with the private key
-export async function signData(
-  privateKey: Uint8Array,
+export async function signData(data: Uint8Array, privateKey: string) {
+  const p = base64UrlToUint8Array(privateKey);
+  return uint8ArrayToBase64Url(await signAsync(data, p));
+}
+
+export async function verifySignature(
+  signature: string,
   data: Uint8Array,
-): Promise<Uint8Array> {
-  return sign(data, privateKey);
+  publicKey: string,
+): Promise<boolean> {
+  const s = base64UrlToUint8Array(signature);
+  return await verifyAsync(s, data, base64UrlToUint8Array(publicKey));
 }
 
 export async function generateRandomNewKey() {
@@ -83,4 +89,63 @@ export function parseJwt(
     const jwtObject = JSON.parse(jsonPayload) as Record<string, unknown>;
     return jwtObject;
   }
+}
+
+// Encrypt data with a symmetric key
+export async function encryptData(
+  data: Uint8Array,
+  key: CryptoKey,
+): Promise<Uint8Array> {
+  const iv = crypto.getRandomValues(new Uint8Array(12)); // 96-bit IV for AES-GCM
+  const encryptedData = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    data,
+  );
+  return new Uint8Array([...iv, ...new Uint8Array(encryptedData)]);
+}
+
+// Decrypt data with a symmetric key
+export async function decryptData(
+  encrypted: Uint8Array,
+  key: CryptoKey,
+): Promise<Uint8Array> {
+  const iv = encrypted.slice(0, 12); // Extract the IV (first 12 bytes)
+  const ciphertext = encrypted.slice(12); // The rest is the ciphertext
+  const decryptedData = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    ciphertext,
+  );
+  return new Uint8Array(decryptedData);
+}
+
+// Generate a symmetric key for AES-GCM
+export async function generateSymmetricKey(): Promise<CryptoKey> {
+  return await crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt'],
+  );
+}
+
+// Encrypt an object and serialize it as a string
+export async function encryptObject(
+  obj: Record<string, unknown>,
+  key: CryptoKey,
+): Promise<string> {
+  const serializedData = new TextEncoder().encode(JSON.stringify(obj));
+  const encryptedData = await encryptData(serializedData, key);
+  return uint8ArrayToBase64Url(encryptedData);
+}
+
+// Decrypt an encrypted string back into an object
+export async function decryptObject(
+  encryptedString: string,
+  key: CryptoKey,
+): Promise<Record<string, unknown>> {
+  const encryptedData = base64UrlToUint8Array(encryptedString);
+  const decryptedData = await decryptData(encryptedData, key);
+  const jsonString = new TextDecoder().decode(decryptedData);
+  return JSON.parse(jsonString) as Record<string, unknown>;
 }
