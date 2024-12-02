@@ -1,99 +1,79 @@
-import { z } from 'zod';
 import { signData, verifySignature } from './crypto';
+import type { Request } from 'express';
 
-const addOperation = z.object({
-  name: z.literal('add'),
-  data: z.string(),
-});
+// Utility to serialize data for signing
+function serializeForSigning(url: string, body?: unknown): Uint8Array {
+  const serialized = body
+    ? JSON.stringify({ url, body })
+    : JSON.stringify({ url });
+  return new TextEncoder().encode(serialized);
+}
 
-const deleteOperation = z.object({
-  name: z.literal('delete'),
-  id: z.string(),
-});
-
-const SignedRequest = z.object({
-  operation: z.union([addOperation, deleteOperation]),
-  publicKey: z.string(),
-  signature: z.string(),
-});
-
-export type SignedRequest = z.infer<typeof SignedRequest>;
-
-// Sign a full operation object
-export async function signOperation(
-  operation: SignedRequest['operation'],
+// Sign a request (URL + optional body)
+export async function signRequest(
   privateKey: string,
+  url: string,
+  body?: unknown,
 ): Promise<string> {
-  const serializedOperation = new TextEncoder().encode(
-    JSON.stringify(operation),
-  );
-  return await signData(serializedOperation, privateKey);
+  const serializedData = serializeForSigning(url, body);
+  return await signData(serializedData, privateKey);
 }
 
-// Verify the signature of an operation
-export async function verifyRequest(req: SignedRequest): Promise<boolean> {
-  const serializedOperation = new TextEncoder().encode(
-    JSON.stringify(req.operation),
-  );
-  return await verifySignature(
-    req.signature,
-    serializedOperation,
-    req.publicKey,
-  );
+// Verify a request signature (URL + optional body)
+export async function verifyRequest(
+  signature: string,
+  publicKey: string,
+  url: string,
+  body?: unknown,
+): Promise<boolean> {
+  const serializedData = serializeForSigning(url, body);
+  return await verifySignature(signature, serializedData, publicKey);
 }
 
-// Create a signed request
-export async function createSignedRequest(
-  operation: SignedRequest['operation'],
+// Create a signed fetch request
+export async function createSignedFetchRequest(
+  url: string,
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  body: unknown | undefined,
+  jwtToken: string,
   publicKey: string,
   privateKey: string,
-): Promise<SignedRequest> {
-  // Sign the operation
-  const signature = await signOperation(operation, privateKey);
+): Promise<Response> {
+  // Sign the URL and body
+  const signature = await signRequest(privateKey, url, body);
 
-  // Return the signed request
-  return {
-    operation,
-    publicKey,
-    signature,
+  // Prepare the headers
+  const headers = {
+    Authorization: `Bearer ${jwtToken}`,
+    'content-type': 'application/json',
+    'x-public-key': publicKey,
+    'x-signature': signature,
   };
+
+  const init: Record<string, unknown> = {
+    method,
+    headers,
+  };
+  if (body) init.body = body;
+
+  // Make the fetch request
+  return await fetch(url, init);
 }
 
-// Validate a signed request
-export async function validateSignedRequest(
-  signedRequest: SignedRequest,
-  encryptionKey: CryptoKey,
-): Promise<{
-  isValid: boolean;
-  operation?: {
-    name: 'add' | 'delete';
-    data?: Record<string, unknown>;
-    id?: string;
-  };
-}> {
-  const { operation } = signedRequest;
+// Verify an Express.js Request
+export async function verifyExpressRequest(req: Request): Promise<boolean> {
+  const { method, body, headers } = req;
+  const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
-  // Verify the signature
-  const isSignatureValid = await verifyRequest(signedRequest);
+  const signature = headers['x-signature'] as string;
+  const publicKey = headers['x-public-key'] as string;
 
-  if (!isSignatureValid) {
-    return { isValid: false };
+  if (!signature || !publicKey) {
+    console.error('Missing signature or public key in headers');
+    return false;
   }
 
-  // Decrypt the data if it's an 'add' operation
-  let decryptedData: Record<string, unknown> | undefined = undefined;
-  if (operation.name === 'add' && operation.data) {
-    decryptedData = await decryptObject(operation.data, encryptionKey);
-  }
-
-  // Return the validated operation
-  const validatedOperation =
-    operation.name === 'add'
-      ? { name: 'add', data: decryptedData }
-      : { name: 'delete', id: operation.id };
-
-  return {
-    isValid: true,
-    operation: validatedOperation,
-  };
+  // Verify the URL and body using the provided signature and public key
+  const serializedBody = method === 'GET' ? undefined : body;
+  return await verifyRequest(url, serializedBody, signature, publicKey);
 }
