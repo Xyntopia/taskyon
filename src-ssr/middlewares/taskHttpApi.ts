@@ -22,5 +22,6 @@ export default defineSsrMiddleware(
   async ({ app /*, resolveUrlPath, publicPath, render */ }) => {
     // something to do with the server "app"
     app.post('/validate', validateRequest);
+    app.get('/validate', validateRequest);
   },
 );
