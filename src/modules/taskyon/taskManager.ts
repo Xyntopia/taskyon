@@ -1,8 +1,8 @@
-import { TaskNode, RequireSome, ToolBase, TaskListType } from './types';
+import { TaskNode, type RequireSome, ToolBase, TaskListType } from './types';
 import { v1 as uuidv1 } from 'uuid';
 import {
-  TaskyonDatabase,
-  FileMappingDocType,
+  type TaskyonDatabase,
+  type FileMappingDocType,
   transformTaskNodeToDocType,
   transformDocToTaskNode,
   collections,
@@ -12,9 +12,9 @@ import { openFile } from '../OPFS';
 import { type AsyncQueue, deepCopy, deepMerge, lockMap } from '../utils';
 import { useVectorStore } from './hnswIndex';
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi';
-import { Tool } from './tools';
+import { type Tool } from './tools';
 import { taskUtils } from './taskUtils';
-import { MangoQuery } from 'rxdb';
+import { type MangoQuery } from 'rxdb';
 import { dump, load } from 'js-yaml';
 
 /**

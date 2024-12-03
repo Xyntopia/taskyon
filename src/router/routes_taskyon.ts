@@ -117,7 +117,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
 
 export const routes: RouteRecordRaw[] = [
   ...taskyonRoutes,
-
   {
     // we are making sure to only load urls without any extensions here...
     path: '/authreturngit', // we can declare new routes for different service and extract the access tokens from the return parameters
@@ -151,6 +150,7 @@ export const tyServerRoutes: RouteRecordRaw[] = [
         }),
         meta: { title: 'Main', description: 'Taskyon AI Server Control' },
       },
+      ...mdRoutes,
     ],
   },
   // Always leave this as last one,
