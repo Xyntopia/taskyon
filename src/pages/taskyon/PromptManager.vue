@@ -44,9 +44,9 @@
         <div class="col">
           <q-scroll-area class="fit">
             <conversation-widget
-              :selected-thread="state.selectedThread"
-              :current-task="state.currentTask"
-              :task-worker-waiting="state.taskWorkerWaiting"
+              :selected-thread="tystate.selectedThread"
+              :current-task="tystate.currentTask"
+              :task-worker-waiting="tystate.taskWorkerWaiting"
             />
           </q-scroll-area>
         </div>
@@ -71,8 +71,10 @@ import ConversationWidget from 'components/taskyon/ConversationWidget.vue';
 import { mdiMagicStaff } from '@quasar/extras/mdi-v6';
 import CreateTaskButton from 'components/taskyon/CreateTaskButton.vue';
 import { dump } from 'js-yaml';
+import { useAppStateStore } from 'src/stores/appState';
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 
 const edit = ref(false);
 
@@ -85,7 +87,7 @@ const handleReady = (payload) => {
 */
 
 async function getAllTools() {
-  return (await state.getTaskManager()).updateToolDefinitions(true);
+  return (await tystate.getTaskManager()).updateToolDefinitions(true);
 }
 
 const currentPromptYaml = computed(() => {

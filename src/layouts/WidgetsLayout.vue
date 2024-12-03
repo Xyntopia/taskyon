@@ -21,7 +21,7 @@
       </q-btn>
       <q-space />
       <q-btn
-        v-if="state.getErrors().length > 0"
+        v-if="tystate.getErrors().length > 0"
         flat
         dense
         round
@@ -85,8 +85,10 @@ import {
   matReviews,
   matWarning,
 } from '@quasar/extras/material-icons';
+import { useAppStateStore } from 'src/stores/appState';
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 const btnsize = 'xs';
 const drawerOpen = ref(false);
 </script>

@@ -14,6 +14,7 @@ import { deepMerge, deepMergeReactive, sleep } from 'src/modules/utils';
 import { unref } from 'vue';
 import defaultSettings from 'src/assets/taskyon_settings.json';
 import { generateRandomNewKey } from 'src/modules/crypto';
+import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto';
 
 interface TaskStateType {
   markdownEnabled: boolean;
@@ -220,5 +221,8 @@ export const useAppStateStore = defineStore('pureAppState', () => {
     getStoredStateString,
     $reset,
     minimalGui,
+    tyPublicKey: computed(() => {
+      return isTaskyonKey(stateRefs.keys.taskyon || '', false);
+    }),
   };
 });

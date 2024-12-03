@@ -18,7 +18,6 @@ import { initTaskyon } from 'src/modules/taskyon/init';
 import { availableModels } from 'src/modules/taskyon/chat';
 import { setupIframeApi } from 'src/modules/taskyon/iframeApi';
 import type { Tool } from 'src/modules/taskyon/tools';
-import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto';
 import { tylog } from 'src/modules/logger';
 import { processMarkdown } from 'src/modules/taskyon/taskUtils';
 import { useAppStateStore } from './appState';
@@ -278,10 +277,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     stateRefs.modelHistory.push(model);
   }
 
-  const tyPublicKey = computed(() => {
-    return isTaskyonKey(stateRefs.keys.taskyon || '', false);
-  });
-
   const llmModelsInternal = ref<Model[]>([]);
   updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then(
     (m) => (llmModelsInternal.value = m),
@@ -399,7 +394,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     getErrors,
     modelLookUp,
     llmModels: computed(() => llmModelsInternal.value),
-    tyPublicKey,
     logger,
     addTask2Tree,
     addMdTasks,

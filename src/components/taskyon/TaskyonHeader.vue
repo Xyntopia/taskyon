@@ -50,7 +50,9 @@
       <q-space />
       <div
         v-if="
-          state?.selectedThread && !minMode && state.llmSettings.selectedTaskId
+          tystate?.selectedThread &&
+          !minMode &&
+          state.llmSettings.selectedTaskId
         "
       >
         <share-dialog-btn
@@ -62,7 +64,7 @@
         />
       </div>
       <q-btn
-        v-if="state && state.getErrors().length > 0"
+        v-if="state && tystate.getErrors().length > 0"
         flat
         dense
         round
@@ -173,8 +175,8 @@
 
 <script setup lang="ts">
 import DarkModeButton from 'components/DarkModeButton.vue';
-import { defineAsyncComponent, ref } from 'vue';
-import type { useTaskyonStore } from 'stores/taskyonState';
+import { defineAsyncComponent } from 'vue';
+import { useTaskyonStore } from 'stores/taskyonState';
 import {
   matHelpOutline,
   matMenu,
@@ -183,12 +185,18 @@ import {
   matWarning,
 } from '@quasar/extras/material-icons';
 import { mdiForum, mdiForumPlus, mdiGithub } from '@quasar/extras/mdi-v6';
+import { useAppStateStore } from 'src/stores/appState';
+
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 
 defineProps<{
-  minMode: boolean | undefined;
+  minMode?: boolean;
   btnSize: 'xs' | 'md';
 }>();
-const drawerOpen = defineModel<boolean>('drawerOpen', { required: false });
+const drawerOpen = defineModel<boolean | undefined>('drawerOpen', {
+  required: false,
+});
 
 const ShareDialogBtn = defineAsyncComponent(
   () =>
@@ -199,11 +207,4 @@ const ShareDialogBtn = defineAsyncComponent(
       '../taskyon/TaskChainPublishDialog.vue'
     ),
 );
-
-//const state = useTaskyonStore();
-let state = ref<undefined | ReturnType<typeof useTaskyonStore>>();
-
-void import('stores/taskyonState').then(({ useTaskyonStore }) => {
-  state.value = useTaskyonStore();
-});
 </script>

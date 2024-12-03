@@ -14,7 +14,7 @@
     </div>
     <div class="col-auto">
       <q-btn
-        v-if="state.currentTask && !state.taskWorkerWaiting"
+        v-if="tystate.currentTask && !tystate.taskWorkerWaiting"
         fab-mini
         class="taskyon-control-button"
         :icon="matStop"
@@ -37,8 +37,10 @@ import {
   matStop,
 } from '@quasar/extras/material-icons';
 import { sleep } from 'src/modules/utils';
+import { useAppStateStore } from 'src/stores/appState';
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 
 const stoppingTasks = ref(false);
 
@@ -49,15 +51,15 @@ defineEmits<{
 async function stopTasks() {
   console.log('stopping!');
   stoppingTasks.value = true;
-  state.taskWorkerController.interrupt(state.currentTask?.id);
+  tystate.taskWorkerController.interrupt(tystate.currentTask?.id);
 
   await sleep(1000);
   // Poll every 500ms to check if the task is stopped
-  while (!state.taskWorkerController.isWaiting()) {
+  while (!tystate.taskWorkerController.isWaiting()) {
     console.log('waiting for task to stop...');
     await sleep(100);
   }
-  state.taskWorkerWaiting = true;
+  tystate.taskWorkerWaiting = true;
   stoppingTasks.value = false;
 }
 </script>

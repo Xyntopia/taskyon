@@ -88,7 +88,6 @@ import {
   matCopyAll,
   matContentCopy,
 } from '@quasar/extras/material-icons';
-import { useTaskyonStore } from 'stores/taskyonState';
 import { copyToClipboard, exportFile } from 'quasar';
 import { ref } from 'vue';
 import {
@@ -98,10 +97,11 @@ import {
   symOutlinedPublic,
 } from '@quasar/extras/material-symbols-outlined';
 import { useGdrive } from 'src/modules/gdrive';
+import { useAppStateStore } from 'src/stores/appState';
 
 const showDialog = ref(false);
 
-const state = useTaskyonStore();
+const state = useAppStateStore();
 
 defineProps<{
   conversationId: string;

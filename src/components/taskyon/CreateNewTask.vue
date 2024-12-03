@@ -62,10 +62,10 @@
           <div class="row">
             <info-dialog
               v-if="
-                currentModel && state.modelLookUp[currentModel]?.description
+                currentModel && tystate.modelLookUp[currentModel]?.description
               "
               size="xs"
-              :info-text="state.modelLookUp[currentModel]?.description"
+              :info-text="tystate.modelLookUp[currentModel]?.description || ''"
             />
             <q-btn flat dense size="sm" no-caps>
               <div class="ellipsis">
@@ -111,7 +111,7 @@
           <q-space></q-space>
           <div v-if="currentModel" class="gt-xs">
             {{
-              `t/c: ${estimatedTokens}/${state.modelLookUp[currentModel]?.context_length}`
+              `t/c: ${estimatedTokens}/${tystate.modelLookUp[currentModel]?.context_length}`
             }}
             <q-tooltip :delay="1000" class="q-gutter-sm">
               <div>
@@ -367,6 +367,7 @@ import { getApiConfig } from 'src/modules/taskyon/taskWorker';
 import { addPrompts } from 'src/modules/taskyon/promptCreation';
 import type { ChatCompletionMessageParam } from 'openai/resources/index.mjs';
 import { useNlpWorker } from 'src/modules/taskyon/webWorkerApi';
+import { useAppStateStore } from 'src/stores/appState';
 
 const CodeEditor = defineAsyncComponent(
   () =>
@@ -392,7 +393,8 @@ function updateContent(value: string | null | undefined) {
   };
 }
 
-const state = useTaskyonStore();
+const state = useAppStateStore();
+const tystate = useTaskyonStore();
 const { expandedTaskCreation } = toRefs(state);
 const { expertMode } = toRefs(state.appConfiguration);
 const { selectedApi } = toRefs(state.llmSettings);
@@ -404,7 +406,7 @@ const fileAttachments = ref<File[]>([]); // holds all attached files as a "taskl
 
 async function getAllTools() {
   const foundTools = await (
-    await state.getTaskManager()
+    await tystate.getTaskManager()
   ).updateToolDefinitions(true);
   return foundTools;
 }
@@ -455,7 +457,7 @@ const handleBotNameUpdate = ({
   if (api) {
     api.selectedModel = newName;
   }
-  state.addModelToHistory(newName);
+  tystate.addModelToHistory(newName);
 };
 
 const selectedTaskType = computed(() => {
@@ -554,7 +556,7 @@ watchDebounced(
     let accumulatedEstimated = 0;
     let messages: ChatCompletionMessageParam[] = [];
     if (state.llmSettings.selectedTaskId) {
-      const tm = await state.getTaskManager();
+      const tm = await tystate.getTaskManager();
       // we only need the last 2 or 3 tasks in order to check for
       const chain = await tm.getTaskIdChain(
         state.llmSettings.selectedTaskId,
@@ -610,7 +612,7 @@ async function addFiles2Taskyon(newFiles: File[]) {
 
   // Collect UUIDs from added files
   const uuids = [];
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   for (const [fileIdx, file] of newFiles.entries()) {
     const uuid = await tm.addFile({
       opfs: opfsMapping[fileIdx],
@@ -630,7 +632,7 @@ async function createFileTask(files: File[]) {
   const fileUuids = await addFiles2Taskyon(files);
 
   if (fileUuids.length) {
-    const task: Parameters<typeof state.addTask2Tree>[0] = {
+    const task: Parameters<typeof tystate.addTask2Tree>[0] = {
       role: 'system',
       configuration: currentModel.value
         ? {
@@ -650,12 +652,12 @@ async function createFileTask(files: File[]) {
 async function addNewTask(execute = true) {
   // make sure we reset our execution context interrupt We do this right before adding another
   // task, because we want to make sure that
-  state.taskWorkerController.reset();
+  tystate.taskWorkerController.reset();
   const fileTaskObj = await createFileTask(fileAttachments.value);
   let fileTaskId = undefined;
   if (fileTaskObj) {
     console.log('add files to chat:', fileTaskObj);
-    fileTaskId = await state.addTask2Tree(
+    fileTaskId = await tystate.addTask2Tree(
       fileTaskObj,
       state.llmSettings.selectedTaskId, // parent
       false, // we do not want to execute the file object, we want to use the users prompt...
@@ -668,7 +670,7 @@ async function addNewTask(execute = true) {
   //          otherwise, it won't get executed but simply saved into the tree
   console.log('adding new task, execute?', execute);
   const newTask = { ...currentnewTask.value };
-  const newTaskId = await state.addTask2Tree(
+  const newTaskId = await tystate.addTask2Tree(
     newTask,
     fileTaskId || state.llmSettings.selectedTaskId, //parent
     execute, // execute right away...

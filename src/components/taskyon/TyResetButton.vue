@@ -7,13 +7,13 @@
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState';
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
 
 async function onResetTaskyon() {
   console.log('reset taskyon!');
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   await tm.deleteAllTasks();
-  state.$reset();
+  tystate.$reset();
   // TODO: this is a superdirty version..  it would be much better to manually reinit the taskyondb in the deleteAllTasks function
   location.reload(); // reload browser window to reinitialize the db...
   //location.reload(); // reload browser window to reinitialize the db...

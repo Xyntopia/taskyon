@@ -1,7 +1,6 @@
 <template>
   <q-layout view="lHh LpR lfr">
     <TaskyonHeader :min-mode="false" btn-size="md" :drawer-open="undefined" />
-
     <q-page-container>
       <UnderConstructionHint />
       <div class="row">
@@ -93,10 +92,12 @@ import { mdiToolbox, mdiTools } from '@quasar/extras/mdi-v6';
 import { matTune } from '@quasar/extras/material-icons';
 import { partialTyConfiguration } from 'src/modules/taskyon/iframeApiTypes';
 import TaskyonHeader from '../components/taskyon/TaskyonHeader.vue';
+import { useAppStateStore } from 'src/stores/appState';
 
 const functionTemplate = taskTemplateTypes.toolDescription.parse(undefined);
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 
 const selectedTab = ref('tools');
 
@@ -109,7 +110,7 @@ const handleReady = (payload) => {
 */
 
 async function getAllTools() {
-  return (await state.getTaskManager()).updateToolDefinitions();
+  return (await tystate.getTaskManager()).updateToolDefinitions();
 }
 
 const toolCollection = ref<Awaited<ReturnType<typeof getAllTools>>>({});

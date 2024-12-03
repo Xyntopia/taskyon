@@ -88,10 +88,10 @@ import {
 } from '@quasar/extras/mdi-v6';
 import { symOutlinedMarkdownCopy } from '@quasar/extras/material-symbols-outlined';
 import type { TaskNode } from 'src/modules/taskyon/types';
-import { useTaskyonStore } from 'src/stores/taskyonState';
 import { copyToClipboard } from 'src/modules/utils';
+import { useAppStateStore } from 'src/stores/appState';
 
-const state = useTaskyonStore();
+const state = useAppStateStore();
 
 defineProps<{
   task: TaskNode;

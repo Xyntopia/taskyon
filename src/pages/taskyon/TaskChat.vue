@@ -12,13 +12,13 @@
       <!-- "Task" Display -->
       <ConversationWidget
         v-if="
-          state.selectedThread.length > 0 &&
+          tystate.selectedThread.length > 0 &&
           state.llmSettings.selectedApi &&
           state.keys[state.llmSettings.selectedApi]
         "
-        :selected-thread="state.selectedThread"
-        :current-task="state.currentTask"
-        :task-worker-waiting="state.taskWorkerWaiting"
+        :selected-thread="tystate.selectedThread"
+        :current-task="tystate.currentTask"
+        :task-worker-waiting="tystate.taskWorkerWaiting"
         :task-worker-message="taskWorkerMessage || ''"
       />
       <!-- Welcome Message -->
@@ -65,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, UnwrapRef, computed, watch } from 'vue';
+import { ref, type UnwrapRef, computed, watch } from 'vue';
 import { useQuasar, scroll } from 'quasar';
 import { useTaskyonStore } from 'stores/taskyonState';
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue';
@@ -75,6 +75,7 @@ import { defineAsyncComponent } from 'vue';
 import { fetchMarkdown, getTextFile } from 'src/modules/taskyon/taskUtils';
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue';
 import { useRouter, useRoute } from 'vue-router';
+import { useAppStateStore } from 'src/stores/appState';
 
 let ResetButton = process.env.DEV
   ? defineAsyncComponent(
@@ -94,7 +95,8 @@ const bottomPadding = ref(100);
 const $q = useQuasar();
 const router = useRouter();
 const route = useRoute();
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 const taskThreadContainer = ref<HTMLElement | undefined>();
 $q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store...
 const folder = '';
@@ -105,7 +107,7 @@ async function updateChatThread() {
     const markdownUrl = route.query.url ? new URL(route.query.url) : undefined;
     if (markdownUrl) {
       const markdownContent = await getTextFile(markdownUrl);
-      const newTaskId = await state.addMdTasks(markdownContent, undefined);
+      const newTaskId = await tystate.addMdTasks(markdownContent, undefined);
       state.llmSettings.selectedTaskId = newTaskId;
       state.lockBottomScroll = true;
     }
@@ -115,7 +117,7 @@ async function updateChatThread() {
     const markdownContent = filePath
       ? await fetchMarkdown(folder || '', filePath)
       : undefined;
-    const newTaskId = await state.addMdTasks(markdownContent, undefined);
+    const newTaskId = await tystate.addMdTasks(markdownContent, undefined);
 
     state.llmSettings.selectedTaskId = newTaskId;
     state.lockBottomScroll = true;
@@ -126,8 +128,8 @@ async function updateChatThread() {
 }
 
 const taskWorkerMessage = computed(() => {
-  return state.taskWorkerWaiting
-    ? state.taskWorkerController.getInterruptReason()
+  return tystate.taskWorkerWaiting
+    ? tystate.taskWorkerController.getInterruptReason()
     : '';
 });
 

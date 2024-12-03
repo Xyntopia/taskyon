@@ -12,6 +12,6 @@
 </template>
 
 <script setup lang="ts">
-import { useTaskyonStore } from 'src/stores/taskyonState';
-const state = useTaskyonStore();
+import { useAppStateStore } from 'src/stores/appState';
+const state = useAppStateStore();
 </script>

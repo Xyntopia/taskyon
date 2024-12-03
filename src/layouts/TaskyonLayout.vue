@@ -45,8 +45,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { defineAsyncComponent } from 'vue';
-import type { useTaskyonStore } from 'stores/taskyonState';
 import TaskyonHeader from '../components/taskyon/TaskyonHeader.vue';
+import { useAppStateStore } from 'src/stores/appState';
 
 const drawerOpen = ref(false);
 
@@ -60,15 +60,10 @@ const ChatSidebar = defineAsyncComponent(
     ),
 );
 
-//const state = useTaskyonStore();
-let state = ref<undefined | ReturnType<typeof useTaskyonStore>>();
-
-void import('stores/taskyonState').then(({ useTaskyonStore }) => {
-  state.value = useTaskyonStore();
-});
+const state = useAppStateStore();
 
 const minMode = computed(() => {
-  return state.value?.minimalGui;
+  return state.minimalGui;
 });
 const btnSize = computed(() => {
   return minMode.value ? 'xs' : 'md';

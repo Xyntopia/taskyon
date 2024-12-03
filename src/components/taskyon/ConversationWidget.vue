@@ -59,7 +59,7 @@ const $q = useQuasar();
 
 const props = defineProps<{
   selectedThread: TaskNode[];
-  currentTask?: TaskNode;
+  currentTask?: TaskNode | undefined;
   taskWorkerWaiting: boolean;
   taskWorkerMessage?: string;
 }>();
