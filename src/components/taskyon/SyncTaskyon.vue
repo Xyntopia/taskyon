@@ -284,8 +284,10 @@ import {
 import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6';
 import InfoDialog from '../InfoDialog.vue';
 import { base64UrlEd25519Keys, generateRandomNewKey } from 'src/modules/crypto';
+import { useAppStateStore } from 'src/stores/appState';
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 const { saveObjToGdrive, loadObjFromGdrive } = useGdrive();
 
 const showSeedPhrase = ref(false);
@@ -403,7 +405,7 @@ const downloadSettings = (format: string) => {
 };
 
 async function onDownloadTaskyonData() {
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   const jsonBackup = await tm.getJsonTaskBackup();
   const fileContent = JSON.stringify(jsonBackup);
   console.log('downloading tasks in json format');
@@ -418,7 +420,7 @@ async function onUploadTaskyonData(newFiles: File[]) {
 
   try {
     const fileContent = await file.text();
-    const tm = await state.getTaskManager();
+    const tm = await tystate.getTaskManager();
     await tm.addTaskBackup(fileContent);
     location.reload(); // reload browser window to update app state...
   } catch (error) {
@@ -430,7 +432,7 @@ const showDeleteDialog = ref(false);
 const showResetDialog = ref(false);
 
 async function onDeleteTaskyonData() {
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   await tm.deleteAllTasks();
   state.chatHistory = [];
   // TODO: this is a superdirty version..  it would be much better to manually reinit the taskyondb in the deleteAllTasks function

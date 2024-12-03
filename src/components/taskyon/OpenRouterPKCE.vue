@@ -32,8 +32,10 @@ import { useTaskyonStore } from 'src/stores/taskyonState';
 import { useRoute } from 'vue-router';
 import InfoDialog from 'components/InfoDialog.vue';
 import { matKey } from '@quasar/extras/material-icons';
+import { useAppStateStore } from 'src/stores/appState';
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 const route = useRoute();
 
 const callbackUrl = window.location.origin; // This will get the base URL of your application
@@ -41,7 +43,7 @@ const callbackUrl = window.location.origin; // This will get the base URL of you
 const authURL = computed(() => {
   console.log('get current URL');
   return `https://openrouter.ai/auth?callback_url=${encodeURIComponent(
-    callbackUrl
+    callbackUrl,
   )}`;
 });
 
@@ -54,7 +56,7 @@ async function checkForApiKey() {
   const code = route.query['code'] as string | undefined;
   if (code) {
     console.log('found code in URL:', code);
-    await state.getOpenRouterPKCEKey(code);
+    await tystate.getOpenRouterPKCEKey(code);
   }
 }
 

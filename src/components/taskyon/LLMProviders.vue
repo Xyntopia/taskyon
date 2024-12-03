@@ -172,7 +172,6 @@ insert into the settings below."
 </template>
 
 <script setup lang="ts">
-import { useTaskyonStore } from 'stores/taskyonState';
 import OpenRouterPKCE from './OpenRouterPKCE.vue';
 import JsonInput from '../JsonInput.vue';
 import TyMarkdown from '../tyMarkdown.vue';
@@ -181,8 +180,9 @@ import { matEdit } from '@quasar/extras/material-icons';
 import ApiSelect from './ApiSelect.vue';
 import InfoDialog from '../InfoDialog.vue';
 import tykeyobj from 'src/assets/taskyon_free_key.json';
+import { useAppStateStore } from 'src/stores/appState';
 
-const state = useTaskyonStore();
+const state = useAppStateStore();
 
 const expertModeOn = defineModel<boolean>('expertModeOn', { default: false });
 

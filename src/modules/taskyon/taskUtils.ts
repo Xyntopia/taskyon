@@ -1,7 +1,7 @@
 import type { TaskNode, TaskGetter, ToolBase } from './types';
 import type OpenAI from 'openai';
 import { dump } from 'js-yaml';
-import { FileMappingDocType } from './rxdb';
+import { type FileMappingDocType } from './rxdb';
 import { load } from 'js-yaml';
 import { partialTaskDraft } from 'src/modules/taskyon/types';
 
@@ -269,9 +269,7 @@ export const fetchMarkdown = async (folder: string, filePath: string) => {
 };
 
 // Fetch, split, and parse the markdown file
-export function processMarkdown(
-  markdown: string,
-) /*: Promise<partialTaskDraft[]>*/ {
+export function processMarkdown(markdown: string) {
   console.log('add new tasks', markdown);
   // Split the markdown content by the separator
   const messages = markdown.split(/^---/gm).map((message) => message.trim());

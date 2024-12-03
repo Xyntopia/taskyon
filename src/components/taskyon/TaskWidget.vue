@@ -257,7 +257,7 @@ import {
 } from 'src/modules/taskyon/types';
 import tyMarkdown from '../tyMarkdown.vue';
 import { computed, ref } from 'vue';
-import { FileMappingDocType } from 'src/modules/taskyon/rxdb';
+import { type FileMappingDocType } from 'src/modules/taskyon/rxdb';
 import { dump } from 'js-yaml';
 import TaskButtons from './TaskButtons.vue';
 import {
@@ -274,6 +274,7 @@ import {
 } from '@quasar/extras/material-icons';
 import { openrouterPricing } from 'src/modules/utils';
 import FileBrowser from './FileBrowser.vue';
+import { useAppStateStore } from 'src/stores/appState';
 
 const props = defineProps<{
   task: TaskNode;
@@ -281,17 +282,18 @@ const props = defineProps<{
   short?: boolean;
 }>();
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 const fileMappings = ref<FileMappingDocType[]>([]);
 async function getFile(uuid: string) {
   console.log('load image', uuid);
-  return (await state.getTaskManager()).getFile(uuid);
+  return (await tystate.getTaskManager()).getFile(uuid);
 }
 
 if ('uploadedFiles' in props.task.content) {
   console.log('get uploaded files');
   void (async (fileUuids: string[]) => {
-    const tm = await state.getTaskManager();
+    const tm = await tystate.getTaskManager();
     const fm = await Promise.all(
       fileUuids.map((uuid) => tm.getFileMappingByUuid(uuid)),
     );
@@ -322,7 +324,7 @@ const taskFunction = computed(() => {
 async function taskDraftFromTask(taskId: string) {
   // we are copying the current task with json stringify
   const jsonTask = JSON.stringify(
-    await (await state.getTaskManager()).getTask(taskId),
+    await (await tystate.getTaskManager()).getTask(taskId),
   );
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const task = TaskNode.partial().parse(JSON.parse(jsonTask));
@@ -377,7 +379,7 @@ function toggleMarkdown(id: string) {
 
 async function updateLabels(labels: string[]) {
   console.log(labels);
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   await tm.updateTask(
     {
       id: props.task.id,

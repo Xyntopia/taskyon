@@ -1,41 +1,32 @@
 import { defineStore } from 'pinia';
-import { watch, computed, reactive, toRefs, ref } from 'vue';
-import type {
-  FunctionArguments,
-  Model,
-  TaskNode,
+import { watch, computed, reactive, ref } from 'vue';
+import {
+  type Model,
+  type TaskNode,
+  llmSettings,
+  type storedSettings,
 } from 'src/modules/taskyon/types';
 import axios from 'axios'; // TODO: replace with fetch
-import { LocalStorage, Notify, setCssVar } from 'quasar'; // load dynamically! :)
-import { deepMerge, deepMergeReactive, sleep } from 'src/modules/utils';
+import { Notify, setCssVar } from 'quasar'; // load dynamically! :)
+import { sleep } from 'src/modules/utils';
 import { useQuasar } from 'quasar';
 import {
   useTaskWorkerController,
   getApiConfig,
 } from 'src/modules/taskyon/taskWorker';
 import { initTaskyon } from 'src/modules/taskyon/init';
-import defaultSettings from 'src/assets/taskyon_settings.json';
 import { availableModels } from 'src/modules/taskyon/chat';
-import { llmSettings, storedSettings } from 'src/modules/taskyon/types';
 import { setupIframeApi } from 'src/modules/taskyon/iframeApi';
 import type { Tool } from 'src/modules/taskyon/tools';
-import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto';
 import { tylog } from 'src/modules/logger';
 import { processMarkdown } from 'src/modules/taskyon/taskUtils';
-import { unref } from 'vue';
-import { generateRandomNewKey } from 'src/modules/crypto';
+import { useAppStateStore } from './appState';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
     const baseUrl = window.location.href.split('?')[0];
     window.history.pushState({}, document.title, baseUrl);
   }
-}
-
-const storeName = 'taskyonState';
-
-interface TaskStateType {
-  markdownEnabled: boolean;
 }
 
 async function updateLlmModels(
@@ -67,7 +58,7 @@ async function updateLlmModels(
   }
 }
 
-export const useTaskyonStore = defineStore(storeName, () => {
+export const useTaskyonStore = defineStore('taskyonControl', () => {
   console.log('loading taskyon store!');
 
   const $q = useQuasar();
@@ -82,139 +73,9 @@ export const useTaskyonStore = defineStore(storeName, () => {
 
   const logger = tylog;
 
-  const defaultStorableSettings = storedSettings.parse(defaultSettings);
-  // llmSettings & appConfiguration define the state of our app!
-  // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
-  const initialState = {
-    ...defaultStorableSettings,
-    keys: {} as Record<string, string>,
-    // app State which should be part of the configuration
-    // the things below should only represent transitional states
-    // which have no relevance in the actual configuration of the app.
-    initialLoad: true, // if the app was loaded for the first time and needs to be initialized
-    modelDetails: false,
-    expandedTaskCreation: false,
-    selectChatBotExpand: true,
-    allowedToolsExpand: true,
-    drawerRight: false,
-    // variable to track if the user is at the bottom of a task chat
-    lockBottomScroll: true,
-    modelHistory: [] as string[],
-    // we save our last used leaf tasknodes here so
-    // that we can show them on the left side...
-    chatHistory: [] as string[],
-    newToolDraftCode: '' as string,
-    configurationDraft: '' as string,
-    draftParameters: {} as Record<string, FunctionArguments>,
-    taskState: {} as Record<string, TaskStateType>,
-    darkTheme: 'auto' as boolean | 'auto',
-    // this store everything relevant to iframes
-    iframe: {
-      accessGranted: false,
-      accessWhiteList: [] as string[],
-      parentUrl: '',
-    },
-    // can be used to exchange certain keys and make taskyon
-    // aware of different URLs etc...
-    developerMode: false,
-    useDevVersion: false,
-    messageDebug: {} as Record<
-      string,
-      'RAW' | 'MESSAGECONTENT' | 'RAWTASK' | 'ERROR' | undefined
-    >, // whether message with ID should be open or not...
-  };
-  // this should be done intentionally by the user when visiting the first time!
-  // initialState.keys['taskyon'] = 'anonymous';
-
-  // overwrite with saved configuration:
-  console.log(`load saved ${storeName} state!`);
-  const getStoredStateString = () => LocalStorage.getItem(storeName) as string;
-  const initialStoredStateString = getStoredStateString();
-  const initialStoredStateObj = JSON.parse(initialStoredStateString) as
-    | Partial<typeof initialState>
-    | undefined;
-  let stateRefs: typeof initialState;
-  if (
-    initialStoredStateObj &&
-    initialStoredStateObj.version &&
-    initialStoredStateObj.version === initialState.version
-  ) {
-    console.log(`load saved ${storeName} state!`);
-    const storedInitialState = deepMerge(
-      initialState,
-      initialStoredStateObj,
-      'overwrite',
-    );
-    stateRefs = reactive(storedInitialState);
-  } else {
-    console.warn(
-      `Stored settings version (${
-        initialStoredStateObj?.version || 'undefined'
-      }) is not compatible with current version (${
-        initialState.version
-      }). Using default settings.`,
-    );
-    stateRefs = reactive(initialState);
-  }
-
-  if (stateRefs.initialLoad) {
-    generateRandomNewKey().then(
-      (r) => (stateRefs.llmSettings.userId = r.publicKey),
-    );
-  }
-
-  // this file could potentially be replaced in kubernetes or docker using a configmap!
-  // that way we can configure our webapp even if its already compiled...
-  // this is done asynchrounously, because we want to be able to dynamically
-  // change our config without having to recompile taskyon.
-  void axios
-    .get<
-      | {
-          version?: number;
-          llmSettings: typeof initialState.llmSettings;
-          appConfiguration: typeof initialState.appConfiguration;
-        }
-      | undefined
-    >(stateRefs.appConfiguration.appConfigurationUrl)
-    .then((jsonconfig) => {
-      const config = jsonconfig.data;
-      // TODO: we need to do much better parsing here...  possibly with zod to make sure
-      //       we get back correct configuration versions etc..
-      if (config) {
-        const isVersionCompatible =
-          config.version && config.version === initialState.version;
-
-        if (isVersionCompatible) {
-          // we only want to load the initial configuration the first time we are loading the page...
-          console.log('merge dynamic app config', jsonconfig.data);
-
-          // if this is *not* an initial load, we only add "new" values that can be found in the configuration.
-          const mergeStrategy = stateRefs.initialLoad
-            ? 'overwrite'
-            : 'additive';
-          deepMergeReactive(
-            stateRefs.appConfiguration,
-            config.appConfiguration,
-            mergeStrategy,
-          );
-          deepMergeReactive(
-            stateRefs.llmSettings,
-            config.llmSettings,
-            mergeStrategy,
-          );
-        } else {
-          console.warn(
-            `Config version (${
-              config.version || 'undefined'
-            }) is not compatible with current version (${initialState.version}). Skipping dynamic config merge.`,
-          );
-        }
-        stateRefs.initialLoad = false;
-      }
-    })
-    .catch((error) => {
-      console.error('Failed to load dynamic app config:', error);
-    });
+  // load our store with all the settings
+  // we use this here to confgure out taskyon logic
+  const stateRefs = useAppStateStore();
 
   watch(
     () => stateRefs.llmSettings.selectedApi,
@@ -252,22 +113,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
       loadingKey = false;
     }
   }
-
-  const minimalGui = computed(() => {
-    let mode = false;
-    switch (stateRefs.appConfiguration.guiMode) {
-      case 'default':
-        mode = false;
-        break;
-      case 'iframe':
-        mode = true;
-        break;
-      case 'auto':
-        mode = $q.platform.within.iframe;
-        break;
-    }
-    return mode;
-  });
 
   function defineTyGuiTools(): Tool[] {
     return [
@@ -356,8 +201,13 @@ export const useTaskyonStore = defineStore(storeName, () => {
     if (markdown) {
       const taskList = processMarkdown(markdown);
       for (const task of taskList) {
+        task.state = task.state ?? 'Completed'; // Ensure state is set
+        task.debugging = task.debugging ?? {}; // Ensure state is set
         newTaskId = await addTask2Tree(
-          task,
+          task as typeof task & {
+            state: TaskNode['state'];
+            debugging: TaskNode['debugging'];
+          },
           newTaskId, //parent
           false, // should we execute the task? // only the last one obviously ;)
         );
@@ -427,10 +277,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
     stateRefs.modelHistory.push(model);
   }
 
-  const tyPublicKey = computed(() => {
-    return isTaskyonKey(stateRefs.keys.taskyon || '', false);
-  });
-
   const llmModelsInternal = ref<Model[]>([]);
   updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then(
     (m) => (llmModelsInternal.value = m),
@@ -468,27 +314,6 @@ export const useTaskyonStore = defineStore(storeName, () => {
       {} as Record<string, Model>,
     ),
   );
-
-  // we do this funny next line, because our store is currently "reactive" which means
-  // all scalars like strings, numbers etc..  ar actually non-reactive (vue reactive only converts
-  // nested objects into reactive as well). So by doing "toRefs" we ensure that all values are reactive
-  // even after destructuring, which we do when returning values from this store.
-  // The next issue is that typescript isn't able to recognize the type anymore when
-  // we do the toRefs operation, so we simply reassign the same type "stateRefs" to it again which seems to work...
-  const allRefs = toRefs(stateRefs) as unknown as typeof stateRefs;
-
-  function $reset() {
-    // this function doesn't 100% work.  each of the following
-    // sould theoretically be enough to do the reset. But somehow they are not.
-    // I assume it is some synchronization issue with localstorage.
-    // But this is why we are trying several methods of deletion..
-    console.log('Resetting Taskyon!!');
-    stateRefs.appConfiguration = defaultStorableSettings.appConfiguration;
-    stateRefs.llmSettings = defaultStorableSettings.llmSettings;
-    LocalStorage.clear();
-    stateRefs.version = 0 as typeof stateRefs.version; // set the version to 0, hoping, that this will trigger a reset on page reload..
-    void sleep(1000).then(() => (window.location.href = '/'));
-  }
 
   // set up iframe API
   if ($q.platform.within.iframe) {
@@ -559,25 +384,16 @@ export const useTaskyonStore = defineStore(storeName, () => {
     };
   }
 
-  // it is *SUPERIMPORTANT*  that we ONLY return computed refs & functions in the store EXCEPT
-  // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
-  // hydration mechanism to automatically save & load the store from localStorage
   return {
-    ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
-    getStoredStateString,
-    getStateValues: () => unref(allRefs),
     ...useReactiveTasks(),
-    $reset,
     getOpenRouterPKCEKey,
     addModelToHistory,
-    minimalGui,
     taskWorkerController,
     getTaskManager,
     logError,
     getErrors,
     modelLookUp,
     llmModels: computed(() => llmModelsInternal.value),
-    tyPublicKey,
     logger,
     addTask2Tree,
     addMdTasks,

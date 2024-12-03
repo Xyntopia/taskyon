@@ -3,7 +3,7 @@
   <q-list dense>
     <q-item
       v-for="t in conversationThread"
-      :key="t"
+      :key="t.id"
       v-ripple
       clickable
       @click="scrollToElement(`#${t.id}`)"
@@ -19,9 +19,11 @@
 import { ref, watch } from 'vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { scroll } from 'quasar';
+import { useAppStateStore } from 'src/stores/appState';
 const { getScrollTarget, setVerticalScrollPosition } = scroll;
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 
 function scrollToElement(id: string) {
   //const el = document.getElementById(id) // .parentNode.parentNode.parentNode
@@ -41,7 +43,7 @@ type taskEntry = { id: string; name: string | undefined };
 const conversationThread = ref<taskEntry[]>([]);
 
 async function updateToc(newTaskId: string) {
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   const tasks = await tm.getTaskChain(newTaskId);
   const toc = tasks
     .filter((t) => t?.name)
