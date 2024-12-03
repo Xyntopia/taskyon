@@ -65,8 +65,9 @@ import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue';
 import { useRoute } from 'vue-router';
 import ExpertEnable from 'components/taskyon/ExpertEnable.vue';
 
-const route = useRoute();
 const state = useTaskyonStore();
+
+const route = useRoute();
 
 const tabPanelClass = 'column items-center';
 

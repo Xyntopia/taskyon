@@ -183,19 +183,32 @@ export function timeLruCache<ReturnType>(
   };
 }
 
+// Dynamically assign the storage methods
+const storage =
+  process.env.MODE === 'ssr'
+    ? (() => {
+        // on node we simply only save stuff in memory ;)
+        const nodeStorage = new Map<string, string>();
+        return {
+          setItem: nodeStorage.set.bind(nodeStorage),
+          getItem: (key: string) => nodeStorage.get(key) || null,
+        };
+      })()
+    : localStorage;
+
 // The cache for storing function call results.
 function saveToLocalStorage<ReturnType>(
   key: string,
   cache: Map<string, CacheEntry<ReturnType>>,
 ) {
   const serializedCache = JSON.stringify(Array.from(cache.entries()));
-  localStorage.setItem(key, serializedCache);
+  storage.setItem(key, serializedCache);
 }
 
 function loadFromLocalStorage<ReturnType>(
   key: string,
 ): Map<string, CacheEntry<ReturnType>> {
-  const serializedCache = localStorage.getItem(key);
+  const serializedCache = storage.getItem(key);
   if (serializedCache) {
     const parsedCache = JSON.parse(serializedCache) as [
       string,
