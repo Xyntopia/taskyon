@@ -20,13 +20,15 @@ interface TaskStateType {
   markdownEnabled: boolean;
 }
 
+// TODO: make sure, we save/load our store state from inside the below store function!
+//       and get rid of automatically saving it in our stores/index.ts
 const storeName = 'taskyonState';
 
 // this is where we save all of our app settings.
 // its important to keep this simple and don't incude 3rd party libraries and othe things
 // because we want to this to also work on tyServer and in a "minimal gui" setting.
 // So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
-export const useAppStateStore = defineStore('pureAppState', () => {
+export const useAppStateStore = defineStore('taskyonState', () => {
   const defaultStorableSettings = storedSettings.parse(defaultSettings);
   // llmSettings & appConfiguration define the state of our app!
   // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
