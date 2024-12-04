@@ -100,15 +100,16 @@ import {
   mdiForum,
   mdiRefresh,
 } from '@quasar/extras/mdi-v6';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { onMounted } from 'vue';
 import { type QTableProps } from 'quasar';
 import { createTaskNodeMangoQuery } from 'src/modules/taskyon/rxdb';
 import { useAppStateStore } from 'src/stores/appState';
-//import { useRoute, useRouter } from 'vue-router';
 
 // TODO:  do some search caching ;) so that we can move faster back & forth between
 //        pages in the browser...
+
+const route = useRoute();
 
 const defaultParams = {
   k: '10',
@@ -254,8 +255,8 @@ onMounted(() => {
   }
 });
 
-watch(props.query, (newQuery) => {
-  searchTasks({ ...defaultParams, ...newQuery });
+watch(route, (newRoute) => {
+  searchTasks({ ...defaultParams, ...newRoute.query });
 });
 
 //const numberOfSearchResults = ref(5)
