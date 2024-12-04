@@ -639,6 +639,12 @@ export function useTyTaskManager(
   //       will always stay there...
   async function searchOneChild(parentId: string): Promise<Set<string>> {
     // Check if children are already cached in the map
+    // if we get an empty set (meaning we have a leaf task)
+    // we assume, thats actually OK.  because the db query returned this. it
+    // will be updated on time in the parentToChildrenMap if we add a new task.
+    // the only problem here is, that this is asynchronous..  so in the future we might run into problems
+    // where we need to lock the parentToChildMap if multiple processes want to access it.
+    // but eventually the parentToChildrenMap will be updated with the additional children..
     let children = parentToChildrenMap.get(parentId);
 
     if (!children && taskyonDB) {
@@ -730,6 +736,7 @@ export function useTyTaskManager(
     // Delete from local record/memorydb
     const task = tasksCache.get(taskId);
     if (task && task.parentID) {
+      // deleting the task from our children map...
       const children = await searchOneChild(task.parentID);
       if (children) children.delete(taskId);
     }
