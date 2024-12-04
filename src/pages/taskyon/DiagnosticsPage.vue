@@ -30,7 +30,7 @@
           ></q-btn>
           <pre>{{ diagnostics }}</pre>
         </q-card>
-        <div v-for="(e, idx) of tystate.getErrors()" :key="idx">
+        <div v-for="(e, idx) of state.getErrors()" :key="idx">
           <p class="text-bold">{{ idx }}:</p>
           <pre>{{ e }}</pre>
         </div>
@@ -207,7 +207,7 @@ async function getData() {
       appInfo: {
         appConfiguration: state.appConfiguration,
       },
-      errors: tystate.getErrors(),
+      errors: state.getErrors(),
       taskyonStoreDiagnostics: {
         SavedState: state.getStoredStateString(),
         CurrentState: state.getStateValues(),

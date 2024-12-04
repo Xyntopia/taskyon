@@ -48,13 +48,7 @@
         </q-btn>
       </div>
       <q-space />
-      <div
-        v-if="
-          tystate?.selectedThread &&
-          !minMode &&
-          state.llmSettings.selectedTaskId
-        "
-      >
+      <div v-if="!minMode && state.llmSettings.selectedTaskId">
         <share-dialog-btn
           flat
           round
@@ -64,7 +58,7 @@
         />
       </div>
       <q-btn
-        v-if="state && tystate.getErrors().length > 0"
+        v-if="state && state.getErrors().length > 0"
         flat
         dense
         round
@@ -176,7 +170,6 @@
 <script setup lang="ts">
 import DarkModeButton from 'components/DarkModeButton.vue';
 import { defineAsyncComponent } from 'vue';
-import { useTaskyonStore } from 'stores/taskyonState';
 import {
   matHelpOutline,
   matMenu,
@@ -187,7 +180,6 @@ import {
 import { mdiForum, mdiForumPlus, mdiGithub } from '@quasar/extras/mdi-v6';
 import { useAppStateStore } from 'src/stores/appState';
 
-const tystate = useTaskyonStore();
 const state = useAppStateStore();
 
 defineProps<{

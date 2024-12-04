@@ -21,7 +21,7 @@
       </q-btn>
       <q-space />
       <q-btn
-        v-if="tystate.getErrors().length > 0"
+        v-if="state.getErrors().length > 0"
         flat
         dense
         round
@@ -78,7 +78,6 @@ route.query; //has all the parameters :)
 
 import DarkModeButton from 'components/DarkModeButton.vue';
 import { ref } from 'vue';
-import { useTaskyonStore } from 'stores/taskyonState';
 import {
   matLaunch,
   matMenu,
@@ -87,7 +86,6 @@ import {
 } from '@quasar/extras/material-icons';
 import { useAppStateStore } from 'src/stores/appState';
 
-const tystate = useTaskyonStore();
 const state = useAppStateStore();
 const btnsize = 'xs';
 const drawerOpen = ref(false);

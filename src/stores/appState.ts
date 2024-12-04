@@ -24,6 +24,20 @@ interface TaskStateType {
 //       and get rid of automatically saving it in our stores/index.ts
 const storeName = 'taskyonState';
 
+function useErrors() {
+  const errors = reactive<string[]>([]);
+  function logError(message: string) {
+    errors.push(message);
+  }
+  function getErrors() {
+    return errors;
+  }
+  return {
+    logError,
+    getErrors,
+  };
+}
+
 // this is where we save all of our app settings.
 // its important to keep this simple and don't incude 3rd party libraries and othe things
 // because we want to this to also work on tyServer and in a "minimal gui" setting.
@@ -114,13 +128,10 @@ export const useAppStateStore = defineStore(storeName, () => {
   }
 
   // store the state on every change!! :)
-  watch(
-    stateRefs,
-    (newState) => {
-      console.log('saved store!!')
-      LocalStorage.set(storeName, JSON.stringify(newState));
-    },
-  );
+  watch(stateRefs, (newState) => {
+    console.log('saved store!!');
+    LocalStorage.set(storeName, JSON.stringify(newState));
+  });
 
   if (stateRefs.initialLoad) {
     generateRandomNewKey().then(
@@ -233,5 +244,6 @@ export const useAppStateStore = defineStore(storeName, () => {
     tyPublicKey: computed(() => {
       return isTaskyonKey(stateRefs.keys.taskyon || '', false);
     }),
+    ...useErrors(),
   };
 });

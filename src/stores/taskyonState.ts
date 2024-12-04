@@ -76,14 +76,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   const $q = useQuasar();
 
-  const errors: string[] = [];
-  function logError(message: string) {
-    errors.push(message);
-  }
-  function getErrors() {
-    return errors;
-  }
-
   const logger = tylog;
 
   // load our store with all the settings
@@ -185,7 +177,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     stateRefs.llmSettings,
     stateRefs.keys,
     taskWorkerController,
-    logError,
+    stateRefs.logError,
     TaskList,
     defineTyGuiTools(),
   );
@@ -434,8 +426,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     addModelToHistory,
     taskWorkerController,
     getTaskManager,
-    logError,
-    getErrors,
     modelLookUp,
     llmModels: computed(() => llmModelsInternal.value),
     logger,
