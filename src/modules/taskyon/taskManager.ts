@@ -335,7 +335,8 @@ function tyMechanisms() {
 }
 
 function useTaskVectors(
-  tasks: Map<string, TaskNode>,
+  getAllTaskIds: () => Promise<string[]>,
+  getTask: (taskId: string) => Promise<TaskNode | undefined>,
   vectorizerModel?: string,
   taskyonDB?: TaskyonDatabase,
 ) {
@@ -355,18 +356,18 @@ function useTaskVectors(
 
     let counter = 0;
     //taskyonDB.vectormappings.exportJSON()
-    // TODO: remove "tasks" from this composable and replace with list of tasks from database...
-    //       probably with a function which gets a list of all tasks...
-    for (const task of tasks.values()) {
-      progressCallback(counter, tasks.size);
+    const taskIDs = await getAllTaskIds();
+    for (const taskId of taskIDs) {
+      const task = await getTask(taskId);
+      progressCallback(counter, taskIDs.length);
       // addtovectorDB checks if a task already exists...
-      await addtoVectorDB(task);
+      if (task) await addtoVectorDB(task);
       counter += 1;
     }
 
     //await sleep(10);
     //await vectorIndex.writeIndex(vectorIndexName);
-    progressCallback(tasks.size, tasks.size);
+    progressCallback(taskIDs.length, taskIDs.length);
 
     console.log('Sync complete.');
   }
@@ -565,6 +566,11 @@ export function useTyTaskManager(
   const { lockItem: lockTask, waitForItemUnlock: waitForTaskUnlock } =
     lockMap('task');
 
+  // TODO: replace this next expression with something less memory intensive which
+  //       simply selects all tasks
+  const getAllTaskIds = async () =>
+    taskyonDB ? (await taskyonDB.tasknodes.find().exec()).map((x) => x.id) : [];
+
   const {
     subscribeToTaskChanges,
     unsubscribeFromTaskChanges,
@@ -578,7 +584,7 @@ export function useTyTaskManager(
     filteredVectorSearch,
     resetTaskVectors,
     searchSimilarTasks,
-  } = useTaskVectors(tasksCache, vectorizerModel, taskyonDB);
+  } = useTaskVectors(getAllTaskIds, getTask, vectorizerModel, taskyonDB);
 
   async function countVecs() {
     if (taskyonDB) {
