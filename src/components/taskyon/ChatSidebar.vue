@@ -21,7 +21,9 @@
             v-for="conversationId in conversationIDs"
             :key="conversationId"
             clickable
-            @click="$router.push({ query: { t: conversationId } })"
+            @click="
+              $router.push({ path: 'chat', query: { t: conversationId } })
+            "
           >
             <!--                          clickable   q-item-section avatar>
               <q-icon name="matChatBubble" size="xs" />

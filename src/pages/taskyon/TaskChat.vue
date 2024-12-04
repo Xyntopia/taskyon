@@ -198,7 +198,7 @@ watch(
 );
 
 watch(
-  () => route,
+  () => route.query,
   () => {
     updateChatThread();
   },
