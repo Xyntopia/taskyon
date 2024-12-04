@@ -2,7 +2,7 @@
 // this makes it easy to integrate it with SSR for example...
 
 import { defineStore } from 'pinia';
-import { computed, reactive, toRefs } from 'vue';
+import { computed, reactive, toRefs, type Reactive, watch } from 'vue';
 import {
   type FunctionArguments,
   type tyPublicKeyDraft,
@@ -28,7 +28,7 @@ const storeName = 'taskyonState';
 // its important to keep this simple and don't incude 3rd party libraries and othe things
 // because we want to this to also work on tyServer and in a "minimal gui" setting.
 // So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
-export const useAppStateStore = defineStore('taskyonState', () => {
+export const useAppStateStore = defineStore(storeName, () => {
   const defaultStorableSettings = storedSettings.parse(defaultSettings);
   // llmSettings & appConfiguration define the state of our app!
   // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
@@ -81,8 +81,6 @@ export const useAppStateStore = defineStore('taskyonState', () => {
     } as tyPublicKeyDraft,
     tyPublicKeys: [] as string[],
   };
-  // this should be done intentionally by the user when visiting the first time!
-  // initialState.keys['taskyon'] = 'anonymous';
 
   // overwrite with saved configuration:
   console.log('load saved app state!');
@@ -91,7 +89,7 @@ export const useAppStateStore = defineStore('taskyonState', () => {
   const initialStoredStateObj = JSON.parse(initialStoredStateString) as
     | Partial<typeof initialState>
     | undefined;
-  let stateRefs: typeof initialState;
+  let stateRefs: Reactive<typeof initialState>;
   if (
     initialStoredStateObj &&
     initialStoredStateObj.version &&
@@ -114,6 +112,15 @@ export const useAppStateStore = defineStore('taskyonState', () => {
     );
     stateRefs = reactive(initialState);
   }
+
+  // store the state on every change!! :)
+  watch(
+    stateRefs,
+    (newState) => {
+      console.log('saved store!!')
+      LocalStorage.set(storeName, JSON.stringify(newState));
+    },
+  );
 
   if (stateRefs.initialLoad) {
     generateRandomNewKey().then(

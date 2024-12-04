@@ -1,7 +1,6 @@
-import { defineStore } from '#q-app/wrappers'
-import { createPinia } from 'pinia'
+import { defineStore } from '#q-app/wrappers';
+import { createPinia } from 'pinia';
 import type { Router } from 'vue-router';
-import { LocalStorage } from 'quasar';
 
 /*
  * When adding new properties to stores, you should also
@@ -24,12 +23,12 @@ declare module 'pinia' {
  */
 
 export default defineStore((/* { ssrContext } */) => {
-  const pinia = createPinia()
+  const pinia = createPinia();
 
   // You can add Pinia plugins here
   // pinia.use(SomePiniaPlugin)
   //pinia.use(piniaPluginPersistedstate)
-  pinia.use(({ store }) => {
+  /*pinia.use(({ store }) => {
     //console.log(`load ${store.$id} state!`);
 
     //const storedState = LocalStorage.getItem(store.$id) as string;
@@ -40,7 +39,7 @@ export default defineStore((/* { ssrContext } */) => {
     store.$subscribe(() => {
       LocalStorage.set(store.$id, JSON.stringify(store.$state));
     });
-  });
+  });*/
 
-  return pinia
-})
+  return pinia;
+});
