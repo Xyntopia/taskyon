@@ -1,4 +1,4 @@
 {
   "extends": "./.quasar/tsconfig.json",
-  "compilerOptions": { "noErrorTruncation": true }
+  "compilerOptions.bkup": { "noErrorTruncation": true }
 }

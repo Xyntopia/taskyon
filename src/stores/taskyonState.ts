@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { watch, computed, reactive, ref } from 'vue';
+import { watch, computed, reactive, ref, type ComputedRef } from 'vue';
 import {
   type Model,
   type TaskNode,
@@ -28,6 +28,18 @@ function removeCodeFromUrl() {
     const baseUrl = window.location.href.split('?')[0];
     window.history.pushState({}, document.title, baseUrl);
   }
+}
+
+function asyncComputed<T>(
+  getter: () => Promise<T>,
+  initialValue: T,
+): ComputedRef<T> {
+  const state = ref<T>(initialValue);
+  const evaluate = async () => {
+    state.value = await getter();
+  };
+  watch(getter, evaluate, { immediate: true });
+  return computed(() => state.value); // Wrap in computed for write protection
 }
 
 async function updateLlmModels(
@@ -218,7 +230,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // TODO: optionally execute the last task...
   }
 
-  const add2ChatHistory = async (task: TaskNode, msg: TaskEvent) => {
+  const add2ChatHistory = async (
+    task: TaskNode,
+    msg: TaskEvent | 'existing',
+  ) => {
     console.log('update task history!!', task.id, msg);
 
     if (msg === 'new' || msg === 'update') {
@@ -227,22 +242,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       // the "parent" of another task in that case we only want the leaf task which is already present...
       for (const taskId of stateRefs.chatHistory) {
         if ((await tm.getTask(taskId))?.parentID === task.id) return;
-      }
-
-      // Step 2: Remove task.id if it exists, then unshift to front (avoids duplication)
-      stateRefs.chatHistory = [
-        task.id,
-        ...stateRefs.chatHistory.filter((t) => t !== task.id),
-      ];
-
-      // Step 1: Remove any entries which are a parent of the current task (keeping only leaf IDs)
-      stateRefs.chatHistory = stateRefs.chatHistory.filter(
-        (t) => t !== task.parentID,
-      );
-
-      // Step 3: Enforce a maximum size of 50
-      if (stateRefs.chatHistory.length > 50) {
-        stateRefs.chatHistory.length = 50; // Trims excess elements from the end
       }
     } else if (msg === 'delete') {
       // Filter out the deleted task ID
@@ -253,9 +252,26 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       // Clear history
       stateRefs.chatHistory = [];
     }
+
+    // Remove task.id if it exists, then unshift to front (avoids duplication)
+    // we do this every time something gets added to the history
+    stateRefs.chatHistory = [
+      task.id,
+      ...stateRefs.chatHistory.filter((t) => t !== task.id),
+    ];
+
+    // Remove any entries which are a parent of the current task (keeping only leaf IDs)
+    stateRefs.chatHistory = stateRefs.chatHistory.filter(
+      (t) => t !== task.parentID,
+    );
+
+    // Enforce a maximum size of 50
+    if (stateRefs.chatHistory.length > 50) {
+      stateRefs.chatHistory.length = 50; // Trims excess elements from the end
+    }
   };
 
-  // update chatHistory on-the-fly
+  // update chatHistory on-the-fly whenever our taskmanager adds new tasks...
   getTaskManager().then((tm) => {
     // fill chatHistory with some initial values...
     /*tm.searchTasks({
@@ -270,6 +286,19 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
     tm.subscribeToTaskChanges(add2ChatHistory);
   });
+
+  // also update chat history if we switch between tasks...
+  watch(
+    () => stateRefs.llmSettings.selectedTaskId,
+    async (selectedTask) => {
+      const tm = await getTaskManager();
+      if (selectedTask) {
+        const taskNode = await tm.getTask(selectedTask);
+        if (taskNode) add2ChatHistory(taskNode, 'existing');
+      }
+    },
+    { immediate: true },
+  );
 
   function addModelToHistory(model: string) {
     if (stateRefs.modelHistory.length >= 5) {
@@ -343,40 +372,40 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // TODO: adapt this to non-reactive tasks in tymanager
   function useReactiveTasks() {
-    const selectedThread = ref<TaskNode[]>([]);
+    // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
     const taskWorkerWaiting = ref(true);
-    // TODO: have a current, reactive task here and update it using tymanager subscriptions...
-    const currentTask = ref<TaskNode>();
+    // this needs to be a watch, because we're updating this variable from other sources as well...
+    // TODO: make this a readonly property...
+    watch(
+      () => stateRefs.llmSettings.selectedTaskId,
+      async () => {
+        // TODO: I don't remember why we need this delay here....
+        await sleep(100); // Simulating a delay
+        taskWorkerWaiting.value = taskWorkerController.isWaiting();
+      },
+    );
 
-    async function updateCurrentTask(taskId: string | undefined) {
-      if (taskId) {
-        currentTask.value = await (await getTaskManager()).getTask(taskId);
+    const currentTask = asyncComputed(async () => {
+      if (stateRefs.llmSettings.selectedTaskId) {
+        const TM = await getTaskManager();
+        return await TM.getTask(stateRefs.llmSettings.selectedTaskId);
       }
-      await sleep(100);
-      taskWorkerWaiting.value = taskWorkerController.isWaiting();
-    }
-    void updateCurrentTask(stateRefs.llmSettings.selectedTaskId);
-    watch(() => stateRefs.llmSettings.selectedTaskId, updateCurrentTask);
+      return undefined;
+    }, undefined);
 
-    async function updateTaskThread(taskId: string | undefined) {
+    const selectedThread = asyncComputed(async () => {
+      const taskId = stateRefs.llmSettings.selectedTaskId;
       console.log('update task thread...', taskId);
       if (taskId) {
         const TM = await getTaskManager();
         const threadIDChain = await TM.getTaskIdChain(taskId);
-        console.log('loading iniial thread chain');
-        const thread = (await Promise.all(
-          threadIDChain.map(async (tId) => {
-            return await TM.getTask(tId);
-          }),
-        )) as TaskNode[];
-        selectedThread.value = thread;
-      } else {
-        selectedThread.value = [];
+        const thread = await Promise.all(
+          threadIDChain.map((tId) => TM.getTask(tId)),
+        );
+        return thread;
       }
-    }
-
-    void updateTaskThread(stateRefs.llmSettings.selectedTaskId);
-    watch(() => stateRefs.llmSettings.selectedTaskId, updateTaskThread);
+      return [];
+    }, [] as TaskNode[]);
 
     return {
       selectedThread,
