@@ -270,9 +270,15 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
           if (file.type.length == 0) {
             // we do this, because for some files, opfs doesn't recognize the file type
             // for some reason...
-            const newfile = new File([file], file.name, {
-              type: fileMaps[0]?.fileType,
-            });
+            const newfile = new File(
+              [file],
+              file.name,
+              fileMaps[0]?.fileType
+                ? {
+                    type: fileMaps[0]?.fileType,
+                  }
+                : {},
+            );
             return newfile;
           }
           return file;
@@ -295,7 +301,7 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
   };
 }
 
-type TaskEvent = 'new' | 'update' | 'delete' | 'deleteAll';
+export type TaskEvent = 'new' | 'update' | 'delete' | 'deleteAll';
 
 type TaskCallBack = (task: TaskNode, msg: TaskEvent) => Promise<void>;
 
@@ -349,6 +355,8 @@ function useTaskVectors(
 
     let counter = 0;
     //taskyonDB.vectormappings.exportJSON()
+    // TODO: remove "tasks" from this composable and replace with list of tasks from database...
+    //       probably with a function which gets a list of all tasks...
     for (const task of tasks.values()) {
       progressCallback(counter, tasks.size);
       // addtovectorDB checks if a task already exists...
@@ -545,7 +553,7 @@ function useTaskVectors(
   less flexible...
 */
 export function useTyTaskManager(
-  tasks: Map<string, TaskNode>,
+  tasksCache: Map<string, TaskNode>,
   defaultTools: Tool[],
   taskyonDB?: TaskyonDatabase,
   vectorizerModel?: string,
@@ -570,7 +578,7 @@ export function useTyTaskManager(
     filteredVectorSearch,
     resetTaskVectors,
     searchSimilarTasks,
-  } = useTaskVectors(tasks, vectorizerModel, taskyonDB);
+  } = useTaskVectors(tasksCache, vectorizerModel, taskyonDB);
 
   async function countVecs() {
     if (taskyonDB) {
@@ -592,13 +600,13 @@ export function useTyTaskManager(
     taskId: string,
   ): Promise<TaskNode | undefined> {
     // Check if the task exists in the local record
-    let task = tasks.get(taskId);
+    let task = tasksCache.get(taskId);
     if (!task && taskyonDB) {
       // If not, load from the database
       const taskFromDb = await taskyonDB.tasknodes.findOne(taskId).exec();
       if (taskFromDb) {
         task = transformDocToTaskNode(taskFromDb);
-        tasks.set(taskId, task); // Update local record
+        tasksCache.set(taskId, task); // Update local record
       }
     }
     return task;
@@ -611,13 +619,13 @@ export function useTyTaskManager(
 
   async function setTask(task: TaskNode, save: boolean): Promise<void> {
     const unlock = await lockTask(task.id);
-    tasks.set(task.id, task);
+    tasksCache.set(task.id, task);
     if (save) {
       await saveTaskToDb(task); // Save to database if required
     }
     // Update parent-child cache
     if (task.parentID) {
-      const children = await searchChildTasks(task.parentID);
+      const children = await searchOneChild(task.parentID);
       children.add(task.id);
       parentToChildrenMap.set(task.parentID, children);
     }
@@ -626,7 +634,10 @@ export function useTyTaskManager(
   }
 
   // find all children tasks in our parent-linked task tree
-  async function searchChildTasks(parentId: string): Promise<Set<string>> {
+  // TODO: right now, we can only find the "first" child...
+  //       this needs to become better ;). Especially, if we cache this. The first child we have in the cache
+  //       will always stay there...
+  async function searchOneChild(parentId: string): Promise<Set<string>> {
     // Check if children are already cached in the map
     let children = parentToChildrenMap.get(parentId);
 
@@ -647,7 +658,7 @@ export function useTyTaskManager(
       parentToChildrenMap.set(parentId, children);
       return children;
     }
-    return new Set();
+    return children ?? new Set();
   }
 
   // TODO: in order to make our database and all task objects pure,
@@ -706,7 +717,7 @@ export function useTyTaskManager(
       console.log('delete the entire database!');
       await taskyonDB.remove();
     }
-    tasks.clear();
+    tasksCache.clear();
     parentToChildrenMap.clear();
     notifySubscribers(undefined, 'deleteAll');
   }
@@ -717,12 +728,12 @@ export function useTyTaskManager(
     console.log('deleting task:', taskId);
 
     // Delete from local record/memorydb
-    const task = tasks.get(taskId);
+    const task = tasksCache.get(taskId);
     if (task && task.parentID) {
-      const children = await searchChildTasks(task.parentID);
+      const children = await searchOneChild(task.parentID);
       if (children) children.delete(taskId);
     }
-    tasks.delete(taskId);
+    tasksCache.delete(taskId);
     await deleteTaskFromDB(taskId);
     await deleteTaskFromVectorStore(taskId);
     console.log('done deleting task:', taskId);
@@ -751,7 +762,7 @@ export function useTyTaskManager(
 
       // Check if the parent task has more than one child
       if (currentTask.parentID) {
-        const childrenIDs = await searchChildTasks(currentTask.parentID);
+        const childrenIDs = await searchOneChild(currentTask.parentID);
         if (childrenIDs.size > 1) {
           // in this case we need to update the parent with the fewer children
           break; // Stop deletion if the parent task has more than one child. We only want to delete this branch...
@@ -779,7 +790,7 @@ export function useTyTaskManager(
       const llmtasks = taskList.map((taskDoc) => {
         const task = transformDocToTaskNode(taskDoc);
         // update our function cache :)
-        tasks.set(task.id, task);
+        tasksCache.set(task.id, task);
         return task;
       });
       return llmtasks;
@@ -844,7 +855,7 @@ export function useTyTaskManager(
    * TODO: we need to change this to become independent from "childrenIDs"
    *       an easy algoithm would be:  build a map of all tasks and check whether they have a parent or not.
    */
-  async function findLeafTasks(
+  async function findOneLeafTask(
     taskId: string,
     getTask: TyTaskManager['getTask'],
   ): Promise<string[]> {
@@ -856,7 +867,7 @@ export function useTyTaskManager(
       const currentTask = await getTask(currentTaskId);
       if (!currentTask) continue;
 
-      const children = await searchChildTasks(currentTaskId);
+      const children = await searchOneChild(currentTaskId);
 
       // If no children are found, it's a leaf
       if (children.size === 0) {
@@ -995,8 +1006,8 @@ export function useTyTaskManager(
     resetTaskVectors,
     countVecs,
     filteredVectorSearch,
-    findLeafTasks,
-    searchChildTasks,
+    findOneLeafTask,
+    searchOneChild,
     searchSimilarTasks,
     loadYamlConversation,
   };

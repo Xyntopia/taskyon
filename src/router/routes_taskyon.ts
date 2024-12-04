@@ -27,7 +27,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         meta: { title: 'Task Manager', description: 'Manage Tasks & Chats' },
         props: (route) => {
           console.log('open', route);
-          return { query: route.query };
+          if (route.query) return { query: route.query };
         },
       },
       {

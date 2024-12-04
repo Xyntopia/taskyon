@@ -21,6 +21,7 @@ import type { Tool } from 'src/modules/taskyon/tools';
 import { tylog } from 'src/modules/logger';
 import { processMarkdown } from 'src/modules/taskyon/taskUtils';
 import { useAppStateStore } from './appState';
+import type { TaskEvent } from 'src/modules/taskyon/taskManager';
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -217,7 +218,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // TODO: optionally execute the last task...
   }
 
-  const add2ChatHistory = async (task: TaskNode, msg: string) => {
+  const add2ChatHistory = async (task: TaskNode, msg: TaskEvent) => {
     console.log('update task history!!', task.id, msg);
 
     if (msg === 'new' || msg === 'update') {
@@ -384,8 +385,22 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     };
   }
 
+  const { selectedThread, taskWorkerWaiting, currentTask } = useReactiveTasks();
+
+  // also make sure, that we update the history with the currently selected chat when initializing...
+  if (currentTask.value) void add2ChatHistory(currentTask.value, 'update');
+  // and watch if our selectedTaskid changes and use that as a chat...
+  /*watch(
+    () => currentTask.value,
+    (p, n) => {
+      if (n) add2ChatHistory(n, 'update');
+    },
+  );*/
+
   return {
-    ...useReactiveTasks(),
+    selectedThread,
+    taskWorkerWaiting,
+    currentTask,
     getOpenRouterPKCEKey,
     addModelToHistory,
     taskWorkerController,

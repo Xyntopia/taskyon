@@ -198,7 +198,7 @@ watch(
 );
 
 watch(
-  () => route.fullPath,
+  () => route,
   () => {
     updateChatThread();
   },

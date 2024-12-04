@@ -54,7 +54,6 @@
                 outline
                 :icon="mdiForum"
                 dense
-                to="chat"
                 @click="setConversation(rows.row.taskId)"
                 ><q-tooltip>View entire conversation</q-tooltip></q-btn
               >
@@ -63,7 +62,6 @@
                 outline
                 :icon="mdiApproximatelyEqual"
                 dense
-                to="chat"
                 @click="onSearchChange({ t: rows.row.taskId })"
                 ><q-tooltip>Search for similar tasks!</q-tooltip></q-btn
               >
@@ -104,7 +102,6 @@ import { useRouter, useRoute } from 'vue-router';
 import { onMounted } from 'vue';
 import { type QTableProps } from 'quasar';
 import { createTaskNodeMangoQuery } from 'src/modules/taskyon/rxdb';
-import { useAppStateStore } from 'src/stores/appState';
 
 // TODO:  do some search caching ;) so that we can move faster back & forth between
 //        pages in the browser...
@@ -135,7 +132,6 @@ const query = computed(() => ({
 const router = useRouter();
 
 const tystate = useTaskyonStore();
-const state = useAppStateStore();
 const searchResults = ref<{ taskId: string; distance: number }[]>([]);
 const taskDataMap = ref<Record<string, TaskNode>>({});
 const syncProgressString = ref('0/0');
@@ -270,10 +266,11 @@ const initialPagination = {
 
 async function setConversation(taskId: string) {
   const taskManager = await tystate.getTaskManager();
-  const leafTasks = await taskManager.findLeafTasks(taskId, (taskID) =>
+  const leafTasks = await taskManager.findOneLeafTask(taskId, (taskID) =>
     taskManager.getTask(taskID),
   );
-  state.llmSettings.selectedTaskId = leafTasks[0];
+  console.log('set conversation to', leafTasks[0]);
+  router.push({ path: 'chat', query: { t: leafTasks[0] } });
 }
 
 const columns: QTableProps['columns'] = [
