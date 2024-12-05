@@ -1,12 +1,12 @@
 # Stage 1: Build the Quasar application
-FROM node:18-alpine as builder
+FROM node:22.10.0 as builder
 
 # Install dependencies for native modules
-RUN apk add --no-cache \
-    python3 \
-    make \
-    g++ \
-    zlib-dev
+#RUN apt-cache install --no-cache \
+#    python3 \
+#    make \
+#    g++ \
+#    zlib-dev
 
 # Set working directory
 WORKDIR /app
