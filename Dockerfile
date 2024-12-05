@@ -12,7 +12,7 @@ FROM node:22.10.0 as builder
 WORKDIR /app
 
 # Copy package.json and yarn.lock first to leverage Docker's cache
-COPY package.json yarn.lock ./
+COPY package.json yarn.lock quasar.config.ts index.html /app/
 
 # Install dependencies with cache and ignore optional dependencies
 RUN --mount=type=cache,target=/root/.yarn YARN_CACHE_FOLDER=/root/.yarn yarn install --frozen-lockfile --ignore-optional
