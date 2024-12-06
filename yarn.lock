@@ -1171,7 +1171,7 @@
     js-yaml "4.1.0"
     nyc "15.1.0"
 
-"@cypress/request@^3.0.0":
+"@cypress/request@^3.0.6":
   version "3.0.6"
   resolved "https://registry.yarnpkg.com/@cypress/request/-/request-3.0.6.tgz#f5580add6acee0e183b4d4e07eff4f31327ae12b"
   integrity sha512-fi0eVdCOtKu5Ed6+E8mYxUF6ZTFJDZvHogCBelM0xVXmrDEkyM22gRArQzq1YcHPm1V47Vf/iAD+WgVdUlJCGg==
@@ -6821,7 +6821,7 @@ buffer-xor@^1.0.3:
   resolved "https://registry.yarnpkg.com/buffer-xor/-/buffer-xor-1.0.3.tgz#26e61ed1422fb70dd42e6e36729ed51d855fe8d9"
   integrity sha512-571s0T7nZWK6vB67HI5dyUF7wXiNcfaPPPTl6zYCNApANjIvYJTg7hlud/+cJpdAhS7dVzqMLmfhfHR3rAcOjQ==
 
-buffer@^5.2.0, buffer@^5.2.1, buffer@^5.5.0, buffer@^5.6.0:
+buffer@^5.2.0, buffer@^5.2.1, buffer@^5.5.0, buffer@^5.7.1:
   version "5.7.1"
   resolved "https://registry.yarnpkg.com/buffer/-/buffer-5.7.1.tgz#ba62e7c13133053582197160851a8f648e99eed0"
   integrity sha512-EHcyIPBQ4BSGlvjB16k5KgAJ27CIsHY/2JBmCRReo48y9rQ3MaUzWX3KVlBa4U7MyX02HdVj0K7C3WaB3ju7FQ==
@@ -8000,22 +8000,23 @@ custom-idle-queue@3.0.1:
   dependencies:
     "@babel/runtime" "7.9.6"
 
-cypress@13.6.3:
-  version "13.6.3"
-  resolved "https://registry.yarnpkg.com/cypress/-/cypress-13.6.3.tgz#54f03ca07ee56b2bc18211e7bd32abd2533982ba"
-  integrity sha512-d/pZvgwjAyZsoyJ3FOsJT5lDsqnxQ/clMqnNc++rkHjbkkiF2h9s0JsZSyyH4QXhVFW3zPFg82jD25roFLOdZA==
+cypress@^13.6.6:
+  version "13.16.1"
+  resolved "https://registry.yarnpkg.com/cypress/-/cypress-13.16.1.tgz#82e776f6ad2037ccce6b6feabed768615c476258"
+  integrity sha512-17FtCaz0cx7ssWYKXzGB0Vub8xHwpVPr+iPt2fHhLMDhVAPVrplD+rTQsZUsfb19LVBn5iwkEUFjQ1yVVJXsLA==
   dependencies:
-    "@cypress/request" "^3.0.0"
+    "@cypress/request" "^3.0.6"
     "@cypress/xvfb" "^1.2.4"
     "@types/sinonjs__fake-timers" "8.1.1"
     "@types/sizzle" "^2.3.2"
     arch "^2.2.0"
     blob-util "^2.0.2"
     bluebird "^3.7.2"
-    buffer "^5.6.0"
+    buffer "^5.7.1"
     cachedir "^2.3.0"
     chalk "^4.1.0"
     check-more-types "^2.24.0"
+    ci-info "^4.0.0"
     cli-cursor "^3.1.0"
     cli-table3 "~0.6.1"
     commander "^6.2.1"
@@ -8030,7 +8031,6 @@ cypress@13.6.3:
     figures "^3.2.0"
     fs-extra "^9.1.0"
     getos "^3.2.1"
-    is-ci "^3.0.0"
     is-installed-globally "~0.4.0"
     lazy-ass "^1.6.0"
     listr2 "^3.8.3"
@@ -8044,7 +8044,8 @@ cypress@13.6.3:
     request-progress "^3.0.0"
     semver "^7.5.3"
     supports-color "^8.1.1"
-    tmp "~0.2.1"
+    tmp "~0.2.3"
+    tree-kill "1.2.2"
     untildify "^4.0.0"
     yauzl "^2.10.0"
 
@@ -11814,7 +11815,7 @@ is-ci@^2.0.0:
   dependencies:
     ci-info "^2.0.0"
 
-is-ci@^3.0.0, is-ci@^3.0.1:
+is-ci@^3.0.1:
   version "3.0.1"
   resolved "https://registry.yarnpkg.com/is-ci/-/is-ci-3.0.1.tgz#db6ecbed1bd659c43dac0f45661e7674103d1867"
   integrity sha512-ZYvCgrefwqoQ6yTyYUbQu64HsITZ3NfKX1lzaEYdkTDcfKzzCI/wthRRYKkdjHKFVgNiXKAKm65Zo1pk2as/QQ==
@@ -18185,7 +18186,7 @@ tmp@^0.0.33:
   dependencies:
     os-tmpdir "~1.0.2"
 
-tmp@~0.2.1:
+tmp@~0.2.3:
   version "0.2.3"
   resolved "https://registry.yarnpkg.com/tmp/-/tmp-0.2.3.tgz#eb783cc22bc1e8bebd0671476d46ea4eb32a79ae"
   integrity sha512-nZD7m9iCPC5g0pYmcaxogYKggSfLsdxl8of3Q/oIbqCqLLIO9IAF0GWjX1z9NZRHPiXv8Wex4yDCaZsgEw0Y8w==
@@ -18263,6 +18264,11 @@ tree-dump@^1.0.1:
   version "1.0.2"
   resolved "https://registry.yarnpkg.com/tree-dump/-/tree-dump-1.0.2.tgz#c460d5921caeb197bde71d0e9a7b479848c5b8ac"
   integrity sha512-dpev9ABuLWdEubk+cIaI9cHwRNNDjkBBLXTwI4UCUFdQ5xXKqNXoK4FEciw/vxf+NQ7Cb7sGUyeUtORvHIdRXQ==
+
+tree-kill@1.2.2:
+  version "1.2.2"
+  resolved "https://registry.yarnpkg.com/tree-kill/-/tree-kill-1.2.2.tgz#4ca09a9092c88b73a7cdc5e8a01b507b0790a0cc"
+  integrity sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==
 
 trim-newlines@^1.0.0:
   version "1.0.0"
@@ -18722,7 +18728,6 @@ url-parse-lax@^3.0.0:
   integrity sha512-NjFKA0DidqPa5ciFcSrXnAltTtzz84ogy+NebPvfEgAck0+TNg4UJ4IN+fB7zRZfbgUf0syOo9MDxFkDSMuFaQ==
   dependencies:
     prepend-http "^2.0.0"
-
 url-to-options@^1.0.1:
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/url-to-options/-/url-to-options-1.0.1.tgz#1505a03a289a48cbd7a434efbaeec5055f5633a9"

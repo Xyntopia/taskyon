@@ -9,7 +9,6 @@
     "build": "quasar build",
     "dev": "quasar dev",
     "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .gitignore",
-    "postinstall": "quasar prepare",
     "lint": "eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}'"
   },
   "browserslist": [
@@ -108,7 +107,7 @@
     "@vue/test-utils": "^2.3.0",
     "autoprefixer": "^10.4.2",
     "browserify-zlib": "^0.2.0",
-    "cypress": "13.6.3",
+    "cypress": "^13.6.6",
     "dependency-cruiser": "^16.4.2",
     "dotenv": "^10.0.0",
     "eslint": "^9.14.0",
