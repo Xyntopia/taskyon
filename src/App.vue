@@ -27,6 +27,9 @@ watch(
     const meta = generateTaskyonMeta(route);
     useMeta(meta);
   },
+  {
+    immediate: true,
+  },
 );
 
 defineOptions({
