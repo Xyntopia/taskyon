@@ -86,10 +86,10 @@ async function runTest(
   testFunc: () => Promise<unknown> | unknown,
   details = false,
 ) {
-  let result: Record<string, unknown> = {};
+  const result: Record<string, unknown> = {};
   console.log('run test:', name);
   try {
-    let res = await testFunc();
+    const res = await testFunc();
     if (details) {
       result[name] = {
         status: 'OK',
@@ -97,7 +97,6 @@ async function runTest(
       };
     } else {
       result[name] = 'OK';
-      detailed;
     }
   } catch (error) {
     console.log(error);

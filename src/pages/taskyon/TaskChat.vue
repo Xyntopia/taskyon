@@ -77,7 +77,7 @@ import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue'
 import { useRouter, useRoute } from 'vue-router';
 import { useAppStateStore } from 'src/stores/appState';
 
-let ResetButton = process.env.DEV
+const ResetButton = process.env.DEV
   ? defineAsyncComponent(
       () =>
         import(

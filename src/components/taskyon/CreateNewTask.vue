@@ -510,7 +510,10 @@ async function toggleSelectedTools() {
 }
 
 const currentnewTask = computed(() => {
-  let task = deepMerge(state.llmSettings.taskDraft, props.forceTaskProps || {});
+  const task = deepMerge(
+    state.llmSettings.taskDraft,
+    props.forceTaskProps || {},
+  );
   if (currentModel.value) {
     task.configuration = {
       model: currentModel.value,
@@ -600,7 +603,7 @@ watchDebounced(
 
     // Tokenize the message
     estimatedTokens.value =
-      (accumulatedTokens || accumulatedEstimated) + newTokens;
+      (accumulatedTokens || accumulatedEstimated) + (newTokens ?? 0);
   },
   { debounce: 1000, maxWait: 1500, immediate: true },
 );

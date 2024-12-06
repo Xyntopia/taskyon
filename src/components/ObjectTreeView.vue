@@ -222,11 +222,12 @@ const transformToTreeNodes = (
           path: newPath,
           header: 'none',
         };
-        value.length < 100 &&
-        !value.includes('\n') &&
-        !(props.inputFieldBehavior === 'textarea')
-          ? (node['body'] = 'string')
-          : (node['body'] = 'text');
+        node['body'] =
+          value.length < 100 &&
+          !value.includes('\n') &&
+          !(props.inputFieldBehavior === 'textarea')
+            ? 'string'
+            : 'text';
         return node;
       } else if (typeof value === 'boolean') {
         return {

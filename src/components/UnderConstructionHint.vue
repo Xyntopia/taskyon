@@ -6,6 +6,6 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { matEngineering, matScience } from '@quasar/extras/material-icons';
 </script>

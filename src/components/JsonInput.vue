@@ -47,7 +47,7 @@ const onSave = () => {
   try {
     const parsed = JSON.parse(jsonString.value) as unknown;
     emit('update:modelValue', parsed);
-  } catch (e) {
+  } catch {
     q.notify({
       color: 'negative',
       position: 'top',

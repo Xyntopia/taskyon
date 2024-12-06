@@ -408,7 +408,7 @@ function useTaskVectors(
           // this will throw an error, meaning the vector doesn't exist...
           const vec = (await getVectorIndex())?.getPoint(vecid);
           return vec;
-        } catch (error) {
+        } catch {
           return undefined;
         }
       }
@@ -830,7 +830,7 @@ export function useTyTaskManager(
         try {
           const toolDef = ToolBase.parse(JSON.parse(task.content.message));
           return [toolDef];
-        } catch (e) {
+        } catch {
           return [];
         }
       });
@@ -978,7 +978,8 @@ export function useTyTaskManager(
     //convert into a list of markdown strings
     const messageStrings = taskList.map((t) => {
       const message =
-        t?.content && 'message' in t?.content ? '\n\n' + t.content.message : '';
+        t?.content &&
+        ('message' in t.content ? '\n\n' + t.content.message : '');
 
       // we are doing this in order to protect the "original" tasks, e.g. if they
       // are reactive... :)

@@ -86,16 +86,12 @@ export const executeJavaScript: Tool = {
             },
           };
 
-          try {
-            // Execute the JavaScript code
-            const result = eval(code) as unknown;
-            return {
-              result: result ? result : undefined,
-              'console.log': logMessages,
-            };
-          } catch (e) {
-            throw e;
-          }
+          // Execute the JavaScript code
+          const result = eval(code) as unknown;
+          return {
+            result: result ? result : undefined,
+            'console.log': logMessages,
+          };
         };
 
         // Execute the scoped function and capture the result

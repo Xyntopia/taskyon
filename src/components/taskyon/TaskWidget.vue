@@ -313,7 +313,7 @@ const taskFunction = computed(() => {
     try {
       const res = ToolBase.safeParse(JSON.parse(props.task.content.message));
       return res.success ? res.data : undefined;
-    } catch (err) {
+    } catch {
       return undefined;
     }
   } else {
@@ -326,7 +326,6 @@ async function taskDraftFromTask(taskId: string) {
   const jsonTask = JSON.stringify(
     await (await tystate.getTaskManager()).getTask(taskId),
   );
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const task = TaskNode.partial().parse(JSON.parse(jsonTask));
   task.debugging = {};
   task.state = 'Open';
