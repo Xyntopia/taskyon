@@ -5,7 +5,7 @@ services:
       context: .
       dockerfile: ./Dockerfile
     ports:
-      - '8080:80'
+      - '9000:9000'
     restart: always
 
   taskyon-debug:
@@ -15,7 +15,7 @@ services:
       dockerfile: ./Dockerfile
       target: prepare
     ports:
-      - '8080:80'
+      - '9000:9000'
     restart: always
     #volumes:
     #  - ~/.cache/yarn:/app/.yarn-cache

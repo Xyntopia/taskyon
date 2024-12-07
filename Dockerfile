@@ -45,7 +45,7 @@ COPY --from=builder /app/dist/spa /usr/share/nginx/html
 # Create custom Nginx configuration
 RUN cat > /etc/nginx/conf.d/default.conf <<EOF
 server {
-    listen 8080 http2;
+    listen 9000 http2;
     server_name _; # all hostnames
 
     root /usr/share/nginx/html;
@@ -73,7 +73,7 @@ server {
 }
 EOF
 
-EXPOSE 8080
+EXPOSE 9000
 
 # Start Nginx server
 CMD ["nginx", "-g", "daemon off;"]
