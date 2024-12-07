@@ -37,16 +37,19 @@ RUN ls -la && yarn quasar prepare
 RUN yarn quasar build
 
 # Stage 2: Serve the built site with a web server
-FROM nginx:alpine
+#FROM nginx:alpine
+FROM nginx
 
 # Copy the built files from the previous stage
 COPY --from=builder /app/dist/spa /usr/share/nginx/html
 
 # Create custom Nginx configuration
-RUN cat > /etc/nginx/conf.d/default.conf <<EOF
+RUN cat > /etc/nginx/conf.d/default.conf <<'EOF'
 server {
-    listen 9000 http2;
+    #listen ${NGINX_PORT};
+    listen 9000;
     server_name _; # all hostnames
+    #server_name localhost; # all hostnames
 
     root /usr/share/nginx/html;
 
@@ -64,16 +67,21 @@ server {
 
     location = /robots.txt  { access_log off; log_not_found off; }
 
-    access_log off;
-    error_log  /var/log/nginx/error.log error;
+    access_log /dev/stdout combined;
+    error_log /dev/stderr error;
+
+    #access_log off;
+    #error_log  /var/log/nginx/error.log error;
 
     location ~ /\.(?!well-known).* {
         deny all;
     }
+
 }
 EOF
 
 EXPOSE 9000
-
-# Start Nginx server
+STOPSIGNAL SIGTERM
+# Start Nginx serve#r
+#CMD ["nginx-debug", "-g", "daemon off;"]
 CMD ["nginx", "-g", "daemon off;"]
