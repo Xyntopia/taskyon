@@ -31,3 +31,17 @@ yarn-error.log*
 
 # local .env files
 .env.local*
+
+#.quasar.env.json
+
+.direnv/
+.envrc
+
+# this file automatically gets copied from quasar.conf.js
+public/taskyon_settings.json
+# this file is generated
+public/docs/openapi-docs.yml
+
+
+# this file holds secrets
+cypress.env.json

@@ -1,6 +1,6 @@
-# Taskyon (taskyon)
+# Quasar App (quasar-project)
 
-a chat app
+A Quasar Project
 
 ## Install the dependencies
 ```bash
@@ -29,7 +29,6 @@ yarn format
 # or
 npm run format
 ```
-
 
 
 ### Build the app for production
