@@ -71,6 +71,13 @@ export default defineConfig((ctx) => {
       // distDir
 
       // extendViteConf (viteConf) {},
+      extendViteConf(viteConf) {
+        viteConf.worker = viteConf.worker || {}
+        // we have to do the next thing, to ensure, we don't get this error:
+        // [vite:worker-import-meta-url] Invalid value "iife" for option "worker.format" - UMD and IIFE output formats are not supported for code-splitting builds.
+        // check https://github.com/vitejs/vite/issues/18585 for more infos
+        viteConf.worker.format = 'es' // Ensure workers use ES module format
+      },
       // viteVuePluginOptions: {},
 
       vitePlugins: [
