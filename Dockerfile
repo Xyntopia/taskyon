@@ -4,16 +4,17 @@ FROM node:22.10.0 as prepare
 # Set up Yarn cache directory
 ENV YARN_CACHE_FOLDER=/app/.yarn-cache
 
+# it looks like after removing quasar postinstall we don't need this anymore??
 # we don't need to bust the cache here, because it  gets thrown away due to our staged build anyways...
 # Install dependencies for native modules
-RUN apt-get update && apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    # for some reason, the following is needed to run yarn install...
-    libcairo2-dev libjpeg-dev libgif-dev \
-    libpangocairo-1.0-0 libpango1.0-dev \
-    libvips-dev libjpeg-dev libpng-dev
+#RUN apt-get update && apt-get install -y \
+#    python3 \
+#    make \
+#    g++
+# for some reason, the following is needed to run yarn install...
+# libcairo2-dev libjpeg-dev libgif-dev \
+# libpangocairo-1.0-0 libpango1.0-dev \
+# libvips-dev libjpeg-dev libpng-dev
 
 # Set working directory
 WORKDIR /app
@@ -41,8 +42,38 @@ FROM nginx:alpine
 # Copy the built files from the previous stage
 COPY --from=builder /app/dist/spa /usr/share/nginx/html
 
-# Expose port 80
-EXPOSE 80
+# Create custom Nginx configuration
+RUN cat > /etc/nginx/conf.d/default.conf <<EOF
+server {
+    listen 8080 http2;
+    server_name _; # all hostnames
+
+    root /usr/share/nginx/html;
+
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-XSS-Protection "1; mode=block";
+    add_header X-Content-Type-Options "nosniff";
+
+    index index.html;
+
+    charset utf-8;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location = /robots.txt  { access_log off; log_not_found off; }
+
+    access_log off;
+    error_log  /var/log/nginx/error.log error;
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+}
+EOF
+
+EXPOSE 8080
 
 # Start Nginx server
 CMD ["nginx", "-g", "daemon off;"]
