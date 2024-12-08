@@ -102,12 +102,11 @@ export default defineConfig((ctx) => {
           {
             vueTsc: true,
             eslint: {
-              lintCommand: 'eslint "./**/*.{js,ts,mjs,cjs,vue}"',
-            },
-          },
-          { server: false },
-        ],
-      ],
+            lintCommand: 'eslint -c ./eslint.config.js "./src*/**/*.{ts,js,mjs,cjs,vue}"',
+            useFlatConfig: true
+          }
+        }, { server: false }]
+      ]
     },
 
     // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-js#devServer
@@ -249,7 +248,15 @@ export default defineConfig((ctx) => {
       // extendBexScriptsConf (esbuildConf) {},
       // extendBexManifestJson (json) {},
 
-      extraScripts: [],
-    },
+      /**
+       * The list of extra scripts (js/ts) not in your bex manifest that you want to
+       * compile and use in your browser extension. Maybe dynamic use them?
+       *
+       * Each entry in the list should be a relative filename to /src-bex/
+       *
+       * @example [ 'my-script.ts', 'sub-folder/my-other-script.js' ]
+       */
+      extraScripts: []
+    }
   }
 })
