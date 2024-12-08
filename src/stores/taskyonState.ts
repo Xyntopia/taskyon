@@ -240,17 +240,20 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       stateRefs.chatHistory = stateRefs.chatHistory.filter(
         (t) => t !== task.id,
       );
+      return;
     } else if (msg === 'deleteAll') {
       // Clear history
       stateRefs.chatHistory = [];
+      return;
     }
 
     // Remove task.id if it exists, then unshift to front (avoids duplication)
     // we do this every time something gets added to the history
-    stateRefs.chatHistory = [
+    // we are not doin this anymore, because it gets too confusing for poeple ;)
+    /*stateRefs.chatHistory = [
       task.id,
       ...stateRefs.chatHistory.filter((t) => t !== task.id),
-    ];
+    ];*/
 
     // Remove any entries which are a parent of the current task (keeping only leaf IDs)
     stateRefs.chatHistory = stateRefs.chatHistory.filter(
@@ -261,6 +264,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     if (stateRefs.chatHistory.length > 50) {
       stateRefs.chatHistory.length = 50; // Trims excess elements from the end
     }
+
+    // and sort all tasks according to their timestamp :)
+    // TODO: we can't do this right now, because the task timestamp is optional
+    //       and we want to make sure to really include all tasks in the chathistory...
   };
 
   // update chatHistory on-the-fly whenever our taskmanager adds new tasks...
@@ -410,13 +417,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // also make sure, that we update the history with the currently selected chat when initializing...
   if (currentTask.value) void add2ChatHistory(currentTask.value, 'update');
-  // and watch if our selectedTaskid changes and use that as a chat...
-  /*watch(
-    () => currentTask.value,
-    (p, n) => {
-      if (n) add2ChatHistory(n, 'update');
-    },
-  );*/
 
   return {
     selectedThread,
