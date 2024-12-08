@@ -128,6 +128,39 @@
             <q-item
               v-ripple
               clickable
+              exact
+              @click="showAboutDialog = true"
+              active-class="text-secondary"
+            >
+              <q-item-section avatar>
+                <q-icon :name="mdiInformationVariant" />
+              </q-item-section>
+              <q-item-section> About </q-item-section>
+              <q-dialog auto-close v-model="showAboutDialog">
+                <q-card>
+                  <q-card-section class="text-h5">About Taskyon</q-card-section>
+                  <q-card-section>
+                    Taskyon is a local-first AI platform for personalized task
+                    management and seamless web integration. It ensures data
+                    security with local processing while offering powerful tools
+                    like task trees, function execution, and sandboxing. Learn
+                    more at taskyon.space.
+                  </q-card-section>
+                  <q-card-section class="text-info" style="font-size: 0.75em">
+                    <div
+                      v-for="[name, value] of Object.entries(environmentInfo())"
+                      :key="name"
+                    >
+                      {{ name }}: {{ value }}
+                    </div>
+                  </q-card-section>
+                </q-card>
+              </q-dialog>
+            </q-item>
+            <q-separator />
+            <q-item
+              v-ripple
+              clickable
               to="/pricing"
               exact
               active-class="text-secondary"
@@ -177,10 +210,18 @@ import {
   matSettings,
   matWarning,
 } from '@quasar/extras/material-icons';
-import { mdiForum, mdiForumPlus, mdiGithub } from '@quasar/extras/mdi-v6';
+import {
+  mdiForum,
+  mdiForumPlus,
+  mdiGithub,
+  mdiInformationVariant,
+} from '@quasar/extras/mdi-v6';
 import { useAppStateStore } from 'src/stores/appState';
+import { ref } from 'vue';
 
+const publishDate = process.env.PUBLISH_DATE as unknown as string;
 const state = useAppStateStore();
+const showAboutDialog = ref(false);
 
 defineProps<{
   minMode?: boolean;
@@ -199,4 +240,65 @@ const ShareDialogBtn = defineAsyncComponent(
       '../taskyon/TaskChainPublishDialog.vue'
     ),
 );
+
+const environmentInfo = () => ({
+  publishDate,
+  isBrowser:
+    typeof window !== 'undefined' && typeof window.document !== 'undefined',
+  isNode:
+    typeof process !== 'undefined' &&
+    process.versions != null &&
+    process.versions.node != null,
+  os: (() => {
+    if (typeof process !== 'undefined' && process.platform) {
+      return process.platform; // e.g., 'win32', 'darwin', 'linux'
+    }
+    if (typeof navigator !== 'undefined' && navigator.userAgent) {
+      return navigator.userAgent;
+    }
+    return 'Unknown';
+  })(),
+  isMobile:
+    typeof navigator !== 'undefined' &&
+    /Mobi|Android/i.test(navigator.userAgent),
+  nodeVersion:
+    typeof process !== 'undefined' && process.versions?.node
+      ? process.versions.node
+      : null,
+  browserUserAgent:
+    typeof navigator !== 'undefined' ? navigator.userAgent : null,
+  browserAppVersion:
+    typeof navigator !== 'undefined' ? navigator.appVersion : null,
+  browserPlatform: typeof navigator !== 'undefined' ? navigator.platform : null,
+  hasWebAssembly: typeof WebAssembly !== 'undefined',
+  supportsServiceWorker:
+    typeof navigator !== 'undefined' && 'serviceWorker' in navigator,
+  supportsES6: (() => {
+    try {
+      new Function('(a = 0) => a');
+      return true;
+    } catch {
+      return false;
+    }
+  })(),
+  timezone:
+    typeof Intl !== 'undefined' &&
+    Intl.DateTimeFormat().resolvedOptions().timeZone,
+  language: typeof navigator !== 'undefined' ? navigator.language : null,
+  memoryUsage: (() => {
+    if (typeof performance !== 'undefined' && performance.memory) {
+      return JSON.stringify(performance.memory);
+    }
+    if (typeof process !== 'undefined' && process.memoryUsage) {
+      return process.memoryUsage();
+    }
+    return null;
+  })(),
+  screenResolution:
+    typeof screen !== 'undefined' ? `${screen.width}x${screen.height}` : null,
+  supportsBigInt: typeof BigInt !== 'undefined',
+  supportsFetch: typeof fetch !== 'undefined',
+});
+
+console.log(environmentInfo);
 </script>
