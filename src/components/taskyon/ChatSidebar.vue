@@ -22,7 +22,7 @@
             :key="conversationId"
             clickable
             @click="
-              $router.push({ query: { t: conversationId } })
+              $router.push({ path: '/chat', query: { t: conversationId } })
             "
           >
             <!--                          clickable   q-item-section avatar>

@@ -190,9 +190,12 @@ watch(
   () => state.llmSettings.selectedTaskId,
   (newTaskId) => {
     console.log('set new task', newTaskId);
-    router.push({
-      query: { ...route.query, t: newTaskId || undefined },
-    });
+    if (!route.params.filePath) {
+      // we are only doing this if there is no filepath, because filepaths have priority ;)
+      router.push({
+        query: { ...route.query, t: newTaskId || undefined },
+      });
+    }
   },
   { immediate: true },
 );
