@@ -74,7 +74,6 @@
 //TODO: change colors based on the route...
 import { useRoute } from 'vue-router';
 const route = useRoute();
-route.query; //has all the parameters :)
 
 import DarkModeButton from 'components/DarkModeButton.vue';
 import { ref } from 'vue';

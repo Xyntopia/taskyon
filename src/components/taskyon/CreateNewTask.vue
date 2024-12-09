@@ -6,9 +6,7 @@
       <div>
         <taskContentEdit
           v-if="
-            !selectedTaskType &&
-            !codingMode &&
-            'message' in state.llmSettings.taskDraft.content
+            !selectedTaskType && !codingMode && 'message' in state.llmSettings.taskDraft.content
           "
           class="text-body1"
           :model-value="state.llmSettings.taskDraft.content.message"
@@ -19,19 +17,14 @@
         />
         <div
           v-else-if="
-            !selectedTaskType &&
-            codingMode &&
-            'message' in state.llmSettings.taskDraft.content
+            !selectedTaskType && codingMode && 'message' in state.llmSettings.taskDraft.content
           "
         >
           <CodeEditor
             :model-value="state.llmSettings.taskDraft.content.message"
             @update:model-value="updateContent"
           />
-          <taskSettingsButton
-            v-model="expandedTaskCreation"
-            aria-label="task settings"
-          />
+          <taskSettingsButton v-model="expandedTaskCreation" aria-label="task settings" />
           <q-btn
             :disable="!sendAllowed"
             :color="sendAllowed ? 'positive' : 'negative'"
@@ -42,10 +35,7 @@
           >
         </div>
         <div
-          v-else-if="
-            selectedTaskType &&
-            'functionCall' in state.llmSettings.taskDraft.content
-          "
+          v-else-if="selectedTaskType && 'functionCall' in state.llmSettings.taskDraft.content"
           class="row"
         >
           <ObjectTreeView
@@ -61,9 +51,7 @@
         <div class="row items-center">
           <div class="row">
             <info-dialog
-              v-if="
-                currentModel && tystate.modelLookUp[currentModel]?.description
-              "
+              v-if="currentModel && tystate.modelLookUp[currentModel]?.description"
               size="xs"
               :info-text="tystate.modelLookUp[currentModel]?.description || ''"
             />
@@ -86,10 +74,7 @@
                     clickable
                     @click="handleBotNameUpdate({ newName: m })"
                   >
-                    <q-item-section
-                      >{{ state.modelHistory.length - idx }}:
-                      {{ m }}</q-item-section
-                    >
+                    <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
                   </q-item>
                   <q-item
                     v-close-popup
@@ -110,13 +95,11 @@
           </div>
           <q-space></q-space>
           <div v-if="currentModel" class="gt-xs">
-            {{
-              `t/c: ${estimatedTokens}/${tystate.modelLookUp[currentModel]?.context_length}`
-            }}
+            {{ `t/c: ${estimatedTokens}/${tystate.modelLookUp[currentModel]?.context_length}` }}
             <q-tooltip :delay="1000" class="q-gutter-sm">
               <div>
-                [approximate number of tokens in prompt] / [max number of tokens
-                which AI can understand]
+                [approximate number of tokens in prompt] / [max number of tokens which AI can
+                understand]
               </div>
               <div>Tokens are roughly similar to syllables.</div>
             </q-tooltip>
@@ -133,11 +116,7 @@
               <q-icon size="xs" :name="matTune" class="q-pl-sm"></q-icon>
               <q-icon
                 size="xs"
-                :name="
-                  expandedTaskCreation
-                    ? matKeyboardArrowUp
-                    : matKeyboardArrowDown
-                "
+                :name="expandedTaskCreation ? matKeyboardArrowUp : matKeyboardArrowDown"
               ></q-icon>
               <q-tooltip>Chat Settings</q-tooltip>
             </q-btn>
@@ -150,9 +129,7 @@
             :key="file.name"
             removable
             :icon="matUploadFile"
-            @remove="
-              fileAttachments = fileAttachments.filter((f) => f !== file)
-            "
+            @remove="fileAttachments = fileAttachments.filter((f) => f !== file)"
           >
             <div class="ellipsis" style="max-width: 100px">
               {{ `${file.name}` }}
@@ -162,22 +139,9 @@
         </div>
       </div>
       <!--Task type selection and execution-->
-      <div
-        v-if="selectedTaskType || expandedTaskCreation"
-        class="row items-center"
-      >
-        <q-btn
-          v-if="selectedTaskType"
-          class="q-ma-md"
-          label="Execute Task"
-          @click="addNewTask()"
-        />
-        <q-btn
-          v-if="selectedTaskType"
-          flat
-          dense
-          :icon="matChat"
-          @click="setTaskType(undefined)"
+      <div v-if="selectedTaskType || expandedTaskCreation" class="row items-center">
+        <q-btn v-if="selectedTaskType" class="q-ma-md" label="Execute Task" @click="addNewTask()" />
+        <q-btn v-if="selectedTaskType" flat dense :icon="matChat" @click="setTaskType(undefined)"
           ><q-tooltip>Select Simple Chat</q-tooltip>
         </q-btn>
 
@@ -232,10 +196,9 @@
         >
           <q-icon :name="mdiFunctionVariant"></q-icon>
           <q-tooltip :dely="200">
-            If turned on, use taskyon function selection mode for models which
-            support this. Otherwise use the built-in support for models which
-            support this. Taskyon mode is usually recommended as it is model
-            agnostic.</q-tooltip
+            If turned on, use taskyon function selection mode for models which support this.
+            Otherwise use the built-in support for models which support this. Taskyon mode is
+            usually recommended as it is model agnostic.</q-tooltip
           ></ToggleButton
         >
       </div>
@@ -321,26 +284,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRaw, toRefs } from 'vue';
-import { getDefaultParametersForTool } from 'src/modules/taskyon/tools';
-import {
-  FunctionArguments,
-  llmSettings,
-  ToolBase,
-} from 'src/modules/taskyon/types';
-import '@quasar/quasar-ui-qmarkdown/dist/index.css';
-import { useTaskyonStore } from 'stores/taskyonState';
-import { TaskNode } from 'src/modules/taskyon/types';
-import ModelSelection from 'components/taskyon/ModelSelection.vue';
-import { writeFilesToOpfs } from 'src/modules/OPFS';
-import ObjectTreeView from '../ObjectTreeView.vue';
-import taskSettingsButton from './taskSettingsButton.vue';
-import taskContentEdit from './taskContentEdit.vue';
+import { computed, ref, toRaw, toRefs } from 'vue'
+import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
+import { FunctionArguments, llmSettings, ToolBase } from 'src/modules/taskyon/types'
+import '@quasar/quasar-ui-qmarkdown/dist/index.css'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { TaskNode } from 'src/modules/taskyon/types'
+import ModelSelection from 'components/taskyon/ModelSelection.vue'
+import { writeFilesToOpfs } from 'src/modules/OPFS'
+import ObjectTreeView from '../ObjectTreeView.vue'
+import taskSettingsButton from './taskSettingsButton.vue'
+import taskContentEdit from './taskContentEdit.vue'
 //import CodeEditor from './CodeEditor.vue';
-import { defineAsyncComponent } from 'vue';
-import { watchDebounced } from '@vueuse/core';
-import InfoDialog from '../InfoDialog.vue';
-import ToggleButton from '../ToggleButton.vue';
+import { defineAsyncComponent } from 'vue'
+import { watchDebounced } from '@vueuse/core'
+import InfoDialog from '../InfoDialog.vue'
+import ToggleButton from '../ToggleButton.vue'
 import {
   matSave,
   matUploadFile,
@@ -355,19 +314,19 @@ import {
   matTune,
   matVisibility,
   matVisibilityOff,
-} from '@quasar/extras/material-icons';
+} from '@quasar/extras/material-icons'
 import {
   mdiAlphabeticalVariant,
   mdiAutoFix,
   mdiTools,
   mdiFunctionVariant,
-} from '@quasar/extras/mdi-v6';
-import { deepCopy, deepMerge } from 'src/modules/utils';
-import { getApiConfig } from 'src/modules/taskyon/taskWorker';
-import { addPrompts } from 'src/modules/taskyon/promptCreation';
-import type { ChatCompletionMessageParam } from 'openai/resources/index.mjs';
-import { useNlpWorker } from 'src/modules/taskyon/webWorkerApi';
-import { useAppStateStore } from 'src/stores/appState';
+} from '@quasar/extras/mdi-v6'
+import { deepCopy, deepMerge } from 'src/modules/utils'
+import { getApiConfig } from 'src/modules/taskyon/taskWorker'
+import { addPrompts } from 'src/modules/taskyon/promptCreation'
+import type { ChatCompletionMessageParam } from 'openai/resources/index.mjs'
+import { useNlpWorker } from 'src/modules/taskyon/webWorkerApi'
+import { useAppStateStore } from 'src/stores/appState'
 
 const CodeEditor = defineAsyncComponent(
   () =>
@@ -378,215 +337,187 @@ const CodeEditor = defineAsyncComponent(
       /* webpackFetchPriority: "low" */
       '../CodeEditor.vue'
     ),
-);
+)
 
 const props = defineProps<{
-  codingMode?: boolean;
-  forceTaskProps?: llmSettings['taskTemplate'];
-  sendAllowed?: boolean;
-  hideTaskInfo?: boolean;
-}>();
+  codingMode?: boolean
+  forceTaskProps?: llmSettings['taskTemplate']
+  sendAllowed?: boolean
+  hideTaskInfo?: boolean
+}>()
 
 function updateContent(value: string | null | undefined) {
   state.llmSettings.taskDraft.content = {
     message: value || '',
-  };
+  }
 }
 
-const state = useAppStateStore();
-const tystate = useTaskyonStore();
-const { expandedTaskCreation } = toRefs(state);
-const { expertMode } = toRefs(state.appConfiguration);
-const { selectedApi } = toRefs(state.llmSettings);
-const fileAttachments = ref<File[]>([]); // holds all attached files as a "tasklist"
+const state = useAppStateStore()
+const tystate = useTaskyonStore()
+const { expandedTaskCreation } = toRefs(state)
+const { expertMode } = toRefs(state.appConfiguration)
+const { selectedApi } = toRefs(state.llmSettings)
+const fileAttachments = ref<File[]>([]) // holds all attached files as a "tasklist"
 
 // we initialize our taskDraft with the state of this window!
 
 //const funcArgs = computed(() => );
 
 async function getAllTools() {
-  const foundTools = await (
-    await tystate.getTaskManager()
-  ).updateToolDefinitions(true);
-  return foundTools;
+  const foundTools = await (await tystate.getTaskManager()).updateToolDefinitions(true)
+  return foundTools
 }
 
-const toolCollection = ref<Record<string, ToolBase>>({});
-void getAllTools().then((tools) => (toolCollection.value = tools));
+const toolCollection = ref<Record<string, ToolBase>>({})
+void getAllTools().then((tools) => (toolCollection.value = tools))
 
 // Computed property to determine the currently selected bot name
 // TODO: we can move this into taskyonstate?
 const currentModel = computed(() => {
-  const api = getApiConfig(state.llmSettings);
+  const api = getApiConfig(state.llmSettings)
   if (api) {
     const modelName =
-      api.selectedModel ||
-      api.defaultModel ||
-      api.models?.free ||
-      'No model selected!';
-    return modelName;
+      api.selectedModel || api.defaultModel || api.models?.free || 'No model selected!'
+    return modelName
   }
-  return 'No model selected!';
-});
+  return 'No model selected!'
+})
 
-const currentChatApi = ref<string>(toRaw(state.llmSettings.selectedApi) || '');
+const currentChatApi = ref<string>(toRaw(state.llmSettings.selectedApi) || '')
 
 const allowedTools = computed({
   get() {
-    return state.llmSettings.taskDraft.allowedTools || [];
+    return state.llmSettings.taskDraft.allowedTools || []
   },
   set(newValue) {
-    state.llmSettings.taskDraft.allowedTools = newValue;
+    state.llmSettings.taskDraft.allowedTools = newValue
   },
-});
+})
 
 // Method to handle the updateBotName event
-const handleBotNameUpdate = ({
-  newName,
-  newService,
-}: {
-  newName: string;
-  newService?: string;
-}) => {
-  console.log('getting an api & bot update :)', newName, newService);
+const handleBotNameUpdate = ({ newName, newService }: { newName: string; newService?: string }) => {
+  console.log('getting an api & bot update :)', newName, newService)
   if (newService) {
-    currentChatApi.value = newService;
-    state.llmSettings.selectedApi = newService;
+    currentChatApi.value = newService
+    state.llmSettings.selectedApi = newService
   }
-  const api = getApiConfig(state.llmSettings);
+  const api = getApiConfig(state.llmSettings)
   if (api) {
-    api.selectedModel = newName;
+    api.selectedModel = newName
   }
-  tystate.addModelToHistory(newName);
-};
+  tystate.addModelToHistory(newName)
+}
 
 const selectedTaskType = computed(() => {
-  const task = state.llmSettings.taskDraft;
+  const task = state.llmSettings.taskDraft
   if (task.content && 'functionCall' in task.content) {
-    return task.content.functionCall.name;
+    return task.content.functionCall.name
   }
-  return undefined;
-});
+  return undefined
+})
 
 async function setTaskType(tasktype: string | undefined | null) {
-  console.log('change tasktype to:', tasktype);
+  console.log('change tasktype to:', tasktype)
   if (tasktype) {
-    state.llmSettings.taskDraft.role = 'function';
-    const toolName = tasktype;
-    const tool = (await getAllTools())[tasktype];
+    state.llmSettings.taskDraft.role = 'function'
+    const toolName = tasktype
+    const tool = (await getAllTools())[tasktype]
     if (!tool) {
-      console.log(`Tool ${toolName} not found.`);
-      return null;
+      console.log(`Tool ${toolName} not found.`)
+      return null
     }
-    const defaultParams = getDefaultParametersForTool(tool);
-    const savedParams = state.draftParameters[tasktype];
+    const defaultParams = getDefaultParametersForTool(tool)
+    const savedParams = state.draftParameters[tasktype]
     const funcArguments: FunctionArguments = {
       ...(defaultParams || {}),
       ...(savedParams || {}),
-    };
+    }
     state.llmSettings.taskDraft.content = {
       ...state.llmSettings.taskDraft.content,
       functionCall: {
         name: tasktype,
         arguments: funcArguments,
       },
-    };
+    }
   } else {
-    state.llmSettings.taskDraft.role = 'user';
+    state.llmSettings.taskDraft.role = 'user'
     state.llmSettings.taskDraft.content = {
       message: '',
-    };
+    }
   }
 }
 
 async function toggleSelectedTools() {
   if (state.llmSettings.taskDraft.allowedTools) {
     if (state.llmSettings.taskDraft.allowedTools.length > 0) {
-      state.llmSettings.taskDraft.allowedTools = [];
-      return;
+      state.llmSettings.taskDraft.allowedTools = []
+      return
     }
   }
-  state.llmSettings.taskDraft.allowedTools = Object.keys(await getAllTools());
+  state.llmSettings.taskDraft.allowedTools = Object.keys(await getAllTools())
 }
 
 const currentnewTask = computed(() => {
-  const task = deepMerge(
-    state.llmSettings.taskDraft,
-    props.forceTaskProps || {},
-  );
+  const task = deepMerge(state.llmSettings.taskDraft, props.forceTaskProps || {})
   if (currentModel.value) {
     task.configuration = {
       model: currentModel.value,
       chatApi: currentChatApi.value,
-    };
-    task.name = undefined;
-    task.debugging = {};
-    if (
-      selectedTaskType.value &&
-      'functionCall' in state.llmSettings.taskDraft.content
-    ) {
+    }
+    task.name = undefined
+    task.debugging = {}
+    if (selectedTaskType.value && 'functionCall' in state.llmSettings.taskDraft.content) {
       // here we have a function task ;)
-      task.role = 'function';
+      task.role = 'function'
       // we do this to make suere we *only* have a functionCall and not a message
       // or other things as well...
       task.content = {
         functionCall: state.llmSettings.taskDraft.content.functionCall,
-      };
+      }
     } else if (
       state.llmSettings.taskDraft.content &&
       'message' in state.llmSettings.taskDraft.content
     ) {
-      task.role = 'user';
+      task.role = 'user'
       task.content = {
         message: state.llmSettings.taskDraft.content.message.trim(),
-      };
+      }
     }
   }
-  return task as TaskNode; // we can do this, because we defined the "role"
-});
+  return task as TaskNode // we can do this, because we defined the "role"
+})
 
-const { estimateChatTokens } = useNlpWorker();
+const { estimateChatTokens } = useNlpWorker()
 
 // TODO:   our token estimation needs to become much better ^^
-const estimatedTokens = ref<number>(0);
+const estimatedTokens = ref<number>(0)
 watchDebounced(
-  [
-    () => state.llmSettings.taskDraft.content,
-    () => state.llmSettings.selectedTaskId,
-  ],
+  [() => state.llmSettings.taskDraft.content, () => state.llmSettings.selectedTaskId],
   async () => {
-    let accumulatedTokens = 0;
-    let accumulatedEstimated = 0;
-    let messages: ChatCompletionMessageParam[] = [];
+    let accumulatedTokens = 0
+    let accumulatedEstimated = 0
+    let messages: ChatCompletionMessageParam[] = []
     if (state.llmSettings.selectedTaskId) {
-      const tm = await tystate.getTaskManager();
+      const tm = await tystate.getTaskManager()
       // we only need the last 2 or 3 tasks in order to check for
-      const chain = await tm.getTaskIdChain(
-        state.llmSettings.selectedTaskId,
-        3,
-      );
+      const chain = await tm.getTaskIdChain(state.llmSettings.selectedTaskId, 3)
 
       // Assume the highest token count is the last relevant one
       for (const taskId of chain) {
-        const task = await tm.getTask(taskId);
-        const taskTokens = task?.debugging.taskTokens ?? 0;
+        const task = await tm.getTask(taskId)
+        const taskTokens = task?.debugging.taskTokens ?? 0
         const taskTokensEstimated =
           (task?.debugging.estimatedTokens?.promptTokens ?? 0) +
-          (task?.debugging.estimatedTokens?.resultTokens ?? 0);
+          (task?.debugging.estimatedTokens?.resultTokens ?? 0)
         if (taskTokens > accumulatedTokens) {
-          accumulatedTokens = taskTokens;
+          accumulatedTokens = taskTokens
         }
         if (taskTokensEstimated > accumulatedEstimated) {
-          accumulatedEstimated = taskTokensEstimated;
+          accumulatedEstimated = taskTokensEstimated
         }
       }
     } else {
-      messages = addPrompts(
-        currentnewTask.value,
-        toolCollection.value,
-        state.llmSettings,
-        [],
-      );
+      messages = addPrompts(currentnewTask.value, toolCollection.value, state.llmSettings, [])
     }
 
     // we need to deepCopy both ref values, so that we can send them to the thread!!
@@ -594,45 +525,41 @@ watchDebounced(
       deepCopy(currentnewTask.value),
       messages,
       deepCopy(toolCollection.value),
-    );
+    )
 
-    const newTokens = Object.values(estimated || {}).reduce(
-      (pn, cn) => pn + cn,
-      0,
-    );
+    const newTokens = Object.values(estimated || {}).reduce((pn, cn) => (pn ?? 0) + (cn ?? 0), 0)
 
     // Tokenize the message
-    estimatedTokens.value =
-      (accumulatedTokens || accumulatedEstimated) + (newTokens ?? 0);
+    estimatedTokens.value = (accumulatedTokens || accumulatedEstimated) + (newTokens ?? 0)
   },
   { debounce: 1000, maxWait: 1500, immediate: true },
-);
+)
 
 async function addFiles2Taskyon(newFiles: File[]) {
-  console.log('add files to our chat!');
+  console.log('add files to our chat!')
   //first, upload file into our OPFS file system:
-  const opfsMapping = await writeFilesToOpfs(newFiles);
+  const opfsMapping = await writeFilesToOpfs(newFiles)
 
   // Collect UUIDs from added files
-  const uuids = [];
-  const tm = await tystate.getTaskManager();
+  const uuids = []
+  const tm = await tystate.getTaskManager()
   for (const [fileIdx, file] of newFiles.entries()) {
     const uuid = await tm.addFile({
-      opfs: opfsMapping[fileIdx],
+      ...(opfsMapping[fileIdx] ? { opfs: opfsMapping[fileIdx] } : {}),
       name: file.name,
       fileType: file.type,
-    });
+    })
     if (uuid) {
-      uuids.push(uuid);
+      uuids.push(uuid)
     }
   }
-  return uuids;
+  return uuids
 }
 
 // all our files are added to a "file task"
 async function createFileTask(files: File[]) {
   // first add files to our DB & save them, then get uuids for each file.
-  const fileUuids = await addFiles2Taskyon(files);
+  const fileUuids = await addFiles2Taskyon(files)
 
   if (fileUuids.length) {
     const task: Parameters<typeof tystate.addTask2Tree>[0] = {
@@ -646,49 +573,49 @@ async function createFileTask(files: File[]) {
       content: {
         uploadedFiles: fileUuids,
       },
-    };
-    return task;
+    }
+    return task
   }
-  return undefined;
+  return undefined
 }
 
 async function addNewTask(execute = true) {
   // make sure we reset our execution context interrupt We do this right before adding another
   // task, because we want to make sure that
-  tystate.taskWorkerController.reset();
-  const fileTaskObj = await createFileTask(fileAttachments.value);
-  let fileTaskId = undefined;
+  tystate.taskWorkerController.reset()
+  const fileTaskObj = await createFileTask(fileAttachments.value)
+  let fileTaskId = undefined
   if (fileTaskObj) {
-    console.log('add files to chat:', fileTaskObj);
+    console.log('add files to chat:', fileTaskObj)
     fileTaskId = await tystate.addTask2Tree(
       fileTaskObj,
       state.llmSettings.selectedTaskId, // parent
       false, // we do not want to execute the file object, we want to use the users prompt...
-    );
-    state.llmSettings.selectedTaskId = fileTaskId;
-    fileAttachments.value = [];
+    )
+    state.llmSettings.selectedTaskId = fileTaskId
+    fileAttachments.value = []
   }
 
   // execute: if true, we immediatly queue the task for execution in the taskManager
   //          otherwise, it won't get executed but simply saved into the tree
-  console.log('adding new task, execute?', execute);
-  const newTask = { ...currentnewTask.value };
+  console.log('adding new task, execute?', execute)
+  const newTask = { ...currentnewTask.value }
   const newTaskId = await tystate.addTask2Tree(
     newTask,
     fileTaskId || state.llmSettings.selectedTaskId, //parent
     execute, // execute right away...
-  );
-  state.llmSettings.selectedTaskId = newTaskId;
+  )
+  state.llmSettings.selectedTaskId = newTaskId
 
   // and empty out the contents for the next chat message :)
   if (currentnewTask.value.role === 'user') {
-    state.llmSettings.taskDraft.content = { message: '' };
-    await setTaskType(undefined);
+    state.llmSettings.taskDraft.content = { message: '' }
+    await setTaskType(undefined)
   }
 }
 
 function attachFileToDraft(newFiles: File[]) {
-  console.log('attach file to chat');
-  fileAttachments.value.push(...newFiles);
+  console.log('attach file to chat')
+  fileAttachments.value.push(...newFiles)
 }
 </script>

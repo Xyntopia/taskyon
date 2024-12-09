@@ -12,22 +12,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useQuasar } from 'quasar';
-import { javascript } from '@codemirror/lang-javascript';
-import { oneDark } from '@codemirror/theme-one-dark';
-import { basicSetup } from 'codemirror';
-import { Codemirror } from 'vue-codemirror';
+import { computed } from 'vue'
+import { useQuasar } from 'quasar'
+import { javascript } from '@codemirror/lang-javascript'
+import { oneDark } from '@codemirror/theme-one-dark'
+import { basicSetup } from 'codemirror'
+import { Codemirror } from 'vue-codemirror'
 
-const content = defineModel<string | undefined>({
+const content = defineModel<string>({
   required: true,
-});
+  default: '', // Default to an empty string
+})
 
-const $q = useQuasar();
+const $q = useQuasar()
 const extensions = computed(() => {
-  return $q.dark.isActive
-    ? [basicSetup, javascript(), oneDark]
-    : [basicSetup, javascript()];
+  return $q.dark.isActive ? [basicSetup, javascript(), oneDark] : [basicSetup, javascript()]
   //return [];
-});
+})
 </script>

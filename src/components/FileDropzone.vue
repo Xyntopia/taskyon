@@ -112,7 +112,7 @@ const handlePaste = (e: ClipboardEvent) => {
   if (items) {
     const files: File[] = [];
     for (let i = 0; i < items.length; i++) {
-      const item = items[i];
+      const item = items[i]!;
       if (item.kind === 'file') {
         const file = item.getAsFile();
         if (file) {

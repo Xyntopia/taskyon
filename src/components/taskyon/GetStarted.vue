@@ -1,10 +1,7 @@
 <template>
   <div class="welcome-message column items-center">
     <div
-      v-if="
-        state.llmSettings.selectedApi &&
-        state.keys[state.llmSettings.selectedApi]
-      "
+      v-if="state.llmSettings.selectedApi && state.keys[state.llmSettings.selectedApi]"
       class="text-h6 col-auto"
     >
       <p class="text-center welcome-message-text">
@@ -36,12 +33,15 @@
 </template>
 
 <script setup lang="ts">
-import LLMProviders from './LLMProviders.vue';
-import CreateTaskButton from './CreateTaskButton.vue';
-import { computed } from 'vue';
-import { useAppStateStore } from 'src/stores/appState';
+import LLMProviders from './LLMProviders.vue'
+import CreateTaskButton from './CreateTaskButton.vue'
+import { computed } from 'vue'
+import { useAppStateStore } from 'src/stores/appState'
+import { useQuasar } from 'quasar'
 
-const state = useAppStateStore();
+const state = useAppStateStore()
+
+const $q = useQuasar()
 
 const starters = computed(() => {
   return [
@@ -86,6 +86,6 @@ You can select them in the "Chat Settings" section in the message input window.
     //'how about testing out javascript? e.g. create some widgets on the fly...',
     //'What are AI tools?',
     //'How do I integrate Taskyon into my webpage?',
-  ];
-});
+  ]
+})
 </script>
