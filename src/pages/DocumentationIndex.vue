@@ -18,6 +18,7 @@
 </template>
 
 <script setup lang="ts">
+// this only works in webpack..
 // src/toc.ts
 function generateTOC() {
   // Create a require context for all .md files in the directory
