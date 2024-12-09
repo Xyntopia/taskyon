@@ -8,7 +8,7 @@
 import { ref, onMounted } from 'vue';
 
 // Prop to accept the HTML + JavaScript string
-const content = ref<string>('<h1>Hello World</h1>' + '<script>alert("Hello World")</script>');
+const content = ref<string>('<h1>Hello World</h1><script>alert("Hello World")</script>');
 
 const sandbox = ref<HTMLIFrameElement | null>(null);
 

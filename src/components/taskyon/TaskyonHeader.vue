@@ -244,8 +244,16 @@ const environmentInfo = () => ({
   timezone: typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone,
   language: typeof navigator !== 'undefined' ? navigator.language : null,
   memoryUsage: (() => {
-    if (typeof performance !== 'undefined' && (performance as any).memory) {
-      return JSON.stringify((performance as any).memory)
+    interface PerformanceMemory {
+      usedJSHeapSize: number
+      totalJSHeapSize: number
+      jsHeapSizeLimit: number
+    }
+    if (
+      typeof performance !== 'undefined' &&
+      (performance as { memory?: PerformanceMemory }).memory
+    ) {
+      return JSON.stringify((performance as unknown as { memory: PerformanceMemory }).memory)
     }
     if (typeof process !== 'undefined' && process.memoryUsage) {
       return process.memoryUsage()

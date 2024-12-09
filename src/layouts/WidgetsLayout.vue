@@ -60,8 +60,6 @@
 
 <script setup lang="ts">
 //TODO: change colors based on the route...
-import { useRoute } from 'vue-router'
-const route = useRoute()
 const $q = useQuasar()
 
 import DarkModeButton from 'components/DarkModeButton.vue'
