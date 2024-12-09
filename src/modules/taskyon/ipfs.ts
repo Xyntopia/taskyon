@@ -28,7 +28,6 @@ async function createHeliaInstance() {
   // here is an overview of its configuration options:  https://github.com/libp2p/js-libp2p/blob/main/doc/CONFIGURATION.md
     
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   //const libp2p = await createLibp2p({ ...libp2pDefaults, datastore });
 
   const heliaInstance = await createHelia({

@@ -8,7 +8,7 @@ import type {
 import type { TyTaskManager } from './taskManager';
 import type OpenAI from 'openai';
 import { sleep, asyncTimeLruCache } from '../utils';
-import { TaskProcessingError, apiConfig } from './types';
+import { TaskProcessingError, type apiConfig } from './types';
 
 export function generateHeaders(
   apiSecret: string,
@@ -377,7 +377,7 @@ export async function enrichWithUsageInfos(
           generationInfo.native_tokens_completion,
       };
       await taskManager.updateTask({ id: task.id, debugging }, true);
-      const childrenIDs = await taskManager.searchChildTasks(task.id);
+      const childrenIDs = await taskManager.searchOneChild(task.id);
       for (const childID of childrenIDs) {
         const child = await taskManager.getTask(childID);
         if (child && !child?.debugging.promptTokens) {

@@ -29,8 +29,10 @@ import {
 } from '@quasar/extras/material-icons';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { exportFile } from 'quasar';
+import { useAppStateStore } from 'src/stores/appState';
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 
 defineProps<{
   conversationId: string;
@@ -38,7 +40,7 @@ defineProps<{
 
 async function onDeleteThread(conversationId: string) {
   console.log('deleting thread!!', conversationId);
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   state.llmSettings.selectedTaskId = undefined;
   tm.deleteTaskThread(conversationId);
   state.chatHistory = state.chatHistory.filter((id) => id != conversationId);
@@ -46,7 +48,7 @@ async function onDeleteThread(conversationId: string) {
 
 async function onDownloadChat(conversationId: string) {
   console.log('download thread!!', conversationId);
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   const task = await tm.getTask(conversationId);
   if (task) {
     const taskThreadYaml = await tm.chatToYaml(task.id);

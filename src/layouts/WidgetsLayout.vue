@@ -78,15 +78,15 @@ route.query; //has all the parameters :)
 
 import DarkModeButton from 'components/DarkModeButton.vue';
 import { ref } from 'vue';
-import { useTaskyonStore } from 'stores/taskyonState';
 import {
   matLaunch,
   matMenu,
   matReviews,
   matWarning,
 } from '@quasar/extras/material-icons';
+import { useAppStateStore } from 'src/stores/appState';
 
-const state = useTaskyonStore();
+const state = useAppStateStore();
 const btnsize = 'xs';
 const drawerOpen = ref(false);
 </script>

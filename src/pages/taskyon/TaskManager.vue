@@ -41,8 +41,7 @@
           dense
           label="filter for labels"
           @update:model-value="
-            (label) =>
-              onSearchChange({ l: label != null ? String(label) : undefined })
+            (label) => onSearchChange(label != null ? { l: String(label) } : {})
           "
         />
       </template>
@@ -55,7 +54,6 @@
                 outline
                 :icon="mdiForum"
                 dense
-                to="chat"
                 @click="setConversation(rows.row.taskId)"
                 ><q-tooltip>View entire conversation</q-tooltip></q-btn
               >
@@ -64,7 +62,6 @@
                 outline
                 :icon="mdiApproximatelyEqual"
                 dense
-                to="chat"
                 @click="onSearchChange({ t: rows.row.taskId })"
                 ><q-tooltip>Search for similar tasks!</q-tooltip></q-btn
               >
@@ -101,14 +98,15 @@ import {
   mdiForum,
   mdiRefresh,
 } from '@quasar/extras/mdi-v6';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { onMounted } from 'vue';
 import { type QTableProps } from 'quasar';
 import { createTaskNodeMangoQuery } from 'src/modules/taskyon/rxdb';
-//import { useRoute, useRouter } from 'vue-router';
 
 // TODO:  do some search caching ;) so that we can move faster back & forth between
 //        pages in the browser...
+
+const route = useRoute();
 
 const defaultParams = {
   k: '10',
@@ -133,7 +131,7 @@ const query = computed(() => ({
 // Inside your <script setup> section
 const router = useRouter();
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
 const searchResults = ref<{ taskId: string; distance: number }[]>([]);
 const taskDataMap = ref<Record<string, TaskNode>>({});
 const syncProgressString = ref('0/0');
@@ -143,7 +141,7 @@ const indexCount = ref<number | string>('N/A');
 const isSearching = ref(false);
 
 const updateCounts = () => {
-  void state.getTaskManager().then((tm) => {
+  void tystate.getTaskManager().then((tm) => {
     void tm
       .countTasks()
       .then((n) => (taskCount.value = n != undefined ? n : 'N/A'));
@@ -156,7 +154,7 @@ const updateCounts = () => {
 updateCounts();
 
 async function onUpdateSearchIndex() {
-  const taskManager = await state.getTaskManager();
+  const taskManager = await tystate.getTaskManager();
   if (taskManager) {
     await taskManager.syncVectorIndexWithTasks((done, total) => {
       syncProgress.value = done / total;
@@ -169,7 +167,7 @@ async function onUpdateSearchIndex() {
 }
 
 async function onResetSearchIndex() {
-  const taskManager = await state.getTaskManager();
+  const taskManager = await tystate.getTaskManager();
   if (taskManager) {
     await taskManager.resetTaskVectors();
     syncProgressString.value = '*done*';
@@ -183,7 +181,7 @@ async function fetchAndDisplayTasks() {
   console.log('get task data from IDs');
   for (const task of searchResults.value) {
     if (!taskDataMap.value[task.taskId]) {
-      const taskData = await state
+      const taskData = await tystate
         .getTaskManager()
         .then((tm) => tm.getTask(task.taskId));
       if (taskData) taskDataMap.value[task.taskId] = taskData;
@@ -193,7 +191,7 @@ async function fetchAndDisplayTasks() {
 
 async function searchTasks(params: searchParams & { k: string }) {
   console.log('searching tasks:', params);
-  const taskManager = await state.getTaskManager();
+  const taskManager = await tystate.getTaskManager();
   //searchResults.value = await vectorStore.query(searchTerm, k)
   if (taskManager) {
     console.log('search for', params.q);
@@ -253,8 +251,8 @@ onMounted(() => {
   }
 });
 
-watch(props.query, (newQuery) => {
-  searchTasks({ ...defaultParams, ...newQuery });
+watch(route, (newRoute) => {
+  searchTasks({ ...defaultParams, ...newRoute.query });
 });
 
 //const numberOfSearchResults = ref(5)
@@ -267,11 +265,12 @@ const initialPagination = {
 };
 
 async function setConversation(taskId: string) {
-  const taskManager = await state.getTaskManager();
-  const leafTasks = await taskManager.findLeafTasks(taskId, (taskID) =>
+  const taskManager = await tystate.getTaskManager();
+  const leafTasks = await taskManager.findOneLeafTask(taskId, (taskID) =>
     taskManager.getTask(taskID),
   );
-  state.llmSettings.selectedTaskId = leafTasks[0];
+  console.log('set conversation to', leafTasks[0]);
+  router.push({ path: 'chat', query: { t: leafTasks[0] } });
 }
 
 const columns: QTableProps['columns'] = [

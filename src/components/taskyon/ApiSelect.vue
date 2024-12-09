@@ -31,16 +31,16 @@
 </template>
 
 <script setup lang="ts">
-import { useTaskyonStore } from 'stores/taskyonState';
 import {
   matElectricalServices,
   matSettings,
 } from '@quasar/extras/material-icons';
+import { useAppStateStore } from 'src/stores/appState';
 
 const model = defineModel<string | null>();
 
 defineProps<{
   moreSettings?: boolean;
 }>();
-const state = useTaskyonStore();
+const state = useAppStateStore();
 </script>

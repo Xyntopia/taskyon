@@ -29,7 +29,7 @@ window.addEventListener('message', async (event) => {
 // Notify parent that the iframe is ready
 window.parent.postMessage({ ready: true }, '*');
 //# sourceURL=iframeWorker.js
-<\/script>
+</script>
 `;
 
   // Write the sandboxed script into the iframe

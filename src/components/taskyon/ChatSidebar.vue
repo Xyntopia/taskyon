@@ -21,7 +21,7 @@
             v-for="conversationId in conversationIDs"
             :key="conversationId"
             clickable
-            @click="$router.push({ query: { t: conversationId } })"
+            :to="{ path: '/chat', query: { t: conversationId } }"
           >
             <!--                          clickable   q-item-section avatar>
               <q-icon name="matChatBubble" size="xs" />
@@ -43,7 +43,7 @@
             >
               {{
                 selected
-                  ? `> ${state.currentTask?.name}`
+                  ? `> ${tystate.currentTask?.name}`
                   : nameMap[conversationId] ||
                     `chat.${conversationId.slice(0, 3)}`
               }}
@@ -130,15 +130,17 @@ import {
   mdiForumPlus,
 } from '@quasar/extras/mdi-v6';
 import TaskChainMenu from './TaskChainMenu.vue';
+import { useAppStateStore } from 'src/stores/appState';
 
-const state = useTaskyonStore();
+const state = useAppStateStore();
+const tystate = useTaskyonStore();
 
 const conversationIDs = ref<string[]>([]);
 const nameMap = reactive<Record<string, string>>({});
 
 async function updateName(id: string) {
   if (!(id in nameMap)) {
-    const tm = await state.getTaskManager();
+    const tm = await tystate.getTaskManager();
     const name = (await tm.getTask(id))?.name;
     if (name) {
       nameMap[id] = name;
@@ -161,7 +163,7 @@ watch(
 );
 
 async function loadYamlConversation(files: File[]) {
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   let last_loaded_id = undefined;
   for (const file of files) {
     last_loaded_id = await tm.loadYamlConversation(file);

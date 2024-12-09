@@ -123,7 +123,8 @@ selecting different models).
               {{ humanReadablePrice(props.value, 0) }}
             </div>
             <q-tooltip :delay="500">
-              exact price: {{ props.value }}$/request or {{ 1/props.value }} requests per $
+              exact price: {{ props.value }}$/request or
+              {{ 1 / props.value }} requests per $
             </q-tooltip>
           </q-td>
         </template>
@@ -141,16 +142,18 @@ import { ref, computed } from 'vue';
 import { matFilterList } from '@quasar/extras/material-icons';
 import tyMarkdown from 'components/tyMarkdown.vue';
 import ApiSelect from 'components/taskyon/ApiSelect.vue';
+import { useAppStateStore } from 'src/stores/appState';
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 const filter = ref<string | null>('');
 const pricingPerPage = ref(true);
 //const { llmModels: tableData } = storeToRefs(state);
 
-type rowType = (typeof state.llmModels)[0];
+type rowType = (typeof tystate.llmModels)[0];
 
 const filteredTableData = computed(() => {
-  return state.llmModels.filter((model) => {
+  return tystate.llmModels.filter((model) => {
     if (model.name || model.id) {
       return true;
     }
@@ -174,7 +177,7 @@ const downloadModels = () => {
   // Use Quasar's exportFile function for download
   exportFile(
     'models.json',
-    JSON.stringify(state.llmModels, null, 2),
+    JSON.stringify(tystate.llmModels, null, 2),
     'application/json',
   );
 };

@@ -24,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-import { useTaskyonStore } from 'stores/taskyonState';
+import { useAppStateStore } from 'src/stores/appState';
 
 defineProps({
   reduced: {
@@ -37,5 +37,5 @@ defineProps({
   },
 });
 
-const state = useTaskyonStore();
+const state = useAppStateStore();
 </script>

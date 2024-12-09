@@ -74,7 +74,7 @@ export async function processChatTask(
   const api = getApiConfigCopy(llmSettings, task.configuration?.chatApi);
   if (!api) {
     throw new Error(
-      `api doesn\'t exist! ${llmSettings.selectedApi || 'no api selected!'}`,
+      `api doesn't exist! ${llmSettings.selectedApi || 'no api selected!'}`,
     );
   }
   const selectedModel = task.configuration?.model;

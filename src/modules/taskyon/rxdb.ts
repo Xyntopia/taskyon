@@ -114,6 +114,7 @@ export const createTaskNodeMangoQuery = (labelString: string) => {
   };
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const taskNodeSchemaTyped = toTypedRxJsonSchema(taskNodeSchemaLiteral);
 export type TaskNodeDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
   typeof taskNodeSchemaTyped
@@ -154,6 +155,7 @@ const fileMappingSchemaLiteral = {
   required: ['uuid'],
 } as const;
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const fileMappingSchemaTyped = toTypedRxJsonSchema(fileMappingSchemaLiteral);
 export type FileMappingDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
   typeof fileMappingSchemaTyped
@@ -179,6 +181,7 @@ const vectorMappingSchemaLiteral = {
   indexes: ['uuid'],
 } as const;
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const vectorMappingSchemaTyped = toTypedRxJsonSchema(
   vectorMappingSchemaLiteral,
 );

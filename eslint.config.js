@@ -42,7 +42,9 @@ export default [
     // https://typescript-eslint.io/users/configs#recommended-configurations
     extends: [
       // By default, only the recommended rules are enabled.
-      'recommended'
+      //'disableTypeChecked',
+      'recommended',
+      //'recommendedTypeChecked'
       // You can also manually enable the stylistic rules.
       // "stylistic",
 
@@ -53,6 +55,11 @@ export default [
 
   {
     languageOptions: {
+      /*parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },*/
+
       ecmaVersion: 'latest',
       sourceType: 'module',
 
@@ -71,10 +78,10 @@ export default [
     // add your custom rules here
     rules: {
       'prefer-promise-reject-errors': 'off',
-      '@typescript-eslint/consistent-type-imports': [
+      /*'@typescript-eslint/consistent-type-imports': [
         'error',
-        { prefer: 'type-imports' }
-      ],
+        { prefer: 'type-imports' },
+      ],*/
 
       // allow debugger during development only
       'no-debugger': process.env.NODE_ENV === 'production' ? 'error' : 'off'

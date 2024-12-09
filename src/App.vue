@@ -2,7 +2,7 @@
   <router-view />
 </template>
 
-<script setup lang="js">
+<script setup lang="ts">
 // we are using lang=js here in order to integrate g analytics
 import { onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
@@ -26,6 +26,9 @@ watch(
   () => {
     const meta = generateTaskyonMeta(route);
     useMeta(meta);
+  },
+  {
+    immediate: true,
   },
 );
 

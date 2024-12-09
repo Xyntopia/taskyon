@@ -80,6 +80,7 @@ import ApiSelect from './ApiSelect.vue';
 import { mdiKeyLink } from '@quasar/extras/mdi-v6';
 import { levenshteinDistance } from 'src/modules/string_utils';
 import ToggleButton from '../ToggleButton.vue';
+import { useAppStateStore } from 'src/stores/appState';
 
 defineProps({
   botName: {
@@ -103,7 +104,8 @@ const showVisionModels = ref(false);
 
 const emit = defineEmits(['updateBotName']);
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 
 const selectModelInput = ref();
 
@@ -112,7 +114,7 @@ const llmModelsSelection = computed(() => {
     // if we have a taskyon key defined only display the models allowed for that key...
     if (state.tyPublicKey?.model && state.tyPublicKey.model.length > 0) {
       if (state.tyPublicKey.model.includes('*')) {
-        return state.llmModels;
+        return tystate.llmModels;
       } else {
         const models = state.tyPublicKey.model;
         return models.map((m) => {
@@ -122,14 +124,14 @@ const llmModelsSelection = computed(() => {
       }
     }
   }
-  return state.llmModels;
+  return tystate.llmModels;
 });
 
 const modelOptions = computed(() => {
   // openai has no pricing information attached, so we sort it in different ways...
   console.log('calculate model options!');
   if (selectedApi.value === 'openai') {
-    const options = [...state.llmModels]
+    const options = [...tystate.llmModels]
       .sort((m1, m2) => m1.id.localeCompare(m2.id))
       .map((m) => ({
         label: `${m.id}`,
@@ -137,7 +139,7 @@ const modelOptions = computed(() => {
       }));
     return options;
   } else {
-    let llmModels: typeof state.llmModels = llmModelsSelection.value;
+    let llmModels: typeof tystate.llmModels = llmModelsSelection.value;
     if (showVisionModels.value) {
       llmModels = llmModels.filter(
         (m) => m.architecture?.modality === 'text+image->text',

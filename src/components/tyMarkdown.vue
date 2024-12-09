@@ -260,7 +260,7 @@ const plugins = computed(() => {
 onMounted(() => {
   // if we are using the plugin, initialize mermaid as well :)
   mermaid.initialize(mermaidSettings);
-  let parentElement = document.getElementById('unique-id');
+  const parentElement = document.getElementById('unique-id');
   if (parentElement) {
     //let mermaidElements = parentElement.querySelectorAll('.mermaid');
     /*mermaidElements.forEach(element => {

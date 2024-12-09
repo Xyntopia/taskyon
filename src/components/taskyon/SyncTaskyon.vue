@@ -9,13 +9,13 @@
         User ID
       </q-item-section>
       <q-item-section side>
-        <q-dialog v-model="showSeedPhrase" auto-close>
+        <q-dialog v-model="showSeedPhrase" no-backdrop-dismiss>
           <q-card>
-            <q-card-section>
-              This is the seed phrase for your cryptographic user ID. Store it
-              securely and never share it with anyone. You can use it to recover
-              your ID if needed, but losing or exposing it could compromise your
-              access and security.
+            <q-card-section class="text-warning">
+              This is the seed phrase for your new cryptographic user ID. Store
+              it securely and never share it with anyone. You can use it to
+              recover your ID if needed, but losing or exposing it could
+              compromise your access and security for taskyon.
             </q-card-section>
             <q-card-section class="row">
               <div class="rounded-borders text-bold col text-info">
@@ -26,14 +26,39 @@
                 flat
                 dense
                 :icon="matContentCopy"
-                @click="copyToClipboard(seedPhrase)"
+                @click="
+                  () => {
+                    console.log('copied seed phrase to clipboard...');
+                    copyToClipboard(seedPhrase);
+                    pressedSeedPhraseCopyButton = true;
+                  }
+                "
               ></q-btn>
             </q-card-section>
-            <q-card-section>
+            <q-card-section class="row justify-around">
+              <q-btn
+                :disable="!pressedSeedPhraseCopyButton"
+                flat
+                :color="pressedSeedPhraseCopyButton ? 'positive' : undefined"
+                label="Accept"
+                @click="
+                  () => {
+                    onAcceptSeedPhrase(seedPhrase);
+                    showSeedPhrase = false;
+                  }
+                "
+                ><q-tooltip
+                  v-if="!pressedSeedPhraseCopyButton"
+                  class="bg-warning"
+                >
+                  Press the copy button next to the seedphrase first in order to
+                  be able to accept!
+                </q-tooltip>
+              </q-btn>
               <q-btn
                 flat
-                label="Accept"
-                @click="onAcceptSeedPhrase(seedPhrase)"
+                label="Cancel"
+                @click="showSeedPhrase = false"
               ></q-btn>
             </q-card-section>
           </q-card>
@@ -45,7 +70,9 @@
           dense
           :icon="matContentCopy"
           @click="copyToClipboard(state.llmSettings.userId)"
-        ></q-btn>
+        >
+          <q-tooltip> Copy User ID to Clipboard </q-tooltip>
+        </q-btn>
       </q-item-section>
       <q-item-section
         v-if="state.llmSettings.userId"
@@ -58,31 +85,29 @@
         <div class="row">
           <q-btn
             class="col-auto"
-            v-if="!state.llmSettings.userId"
-            label="Generate"
-            outline
-            @click="onGenerateSeedPhrase"
-          ></q-btn>
-          <q-btn
-            class="col-auto"
             dense
-            label="New"
+            :label="state.llmSettings.userId ? 'Regenerate' : 'New'"
             flat
             @click="onGenerateSeedPhrase"
-          ></q-btn>
+          >
+            <q-tooltip> Generate a new User ID & Seedphrease. </q-tooltip>
+          </q-btn>
           <q-btn
             class="col-auto"
             :icon="matDeleteForever"
             dense
             flat
             @click="state.llmSettings.userId = undefined"
-          ></q-btn>
+          >
+            <q-tooltip> Delete User ID. </q-tooltip>
+          </q-btn>
         </div>
       </q-item-section>
       <q-item-section side>
         <InfoDialog
           info-text="Generate a decentralized, cryptographic user ID which can be used to interact with \
- other taskyon users in a secure way. When loading taskyon for the first time, this ID is automatically generated!"
+other taskyon users in a secure way. You can protect messages by encrypting them \
+and verify the authenticity of messages sent by other users."
       /></q-item-section>
     </q-item>
     <q-separator v-if="state.appConfiguration.expertMode" spaced />
@@ -284,15 +309,19 @@ import {
 import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6';
 import InfoDialog from '../InfoDialog.vue';
 import { base64UrlEd25519Keys, generateRandomNewKey } from 'src/modules/crypto';
+import { useAppStateStore } from 'src/stores/appState';
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 const { saveObjToGdrive, loadObjFromGdrive } = useGdrive();
 
 const showSeedPhrase = ref(false);
+const pressedSeedPhraseCopyButton = ref(false);
 const seedPhrase = ref('');
 
 async function onGenerateSeedPhrase() {
   console.log('generate user id...');
+  pressedSeedPhraseCopyButton.value = false;
   showSeedPhrase.value = true;
   const { mnemonic } = await generateRandomNewKey();
   seedPhrase.value = mnemonic;
@@ -403,7 +432,7 @@ const downloadSettings = (format: string) => {
 };
 
 async function onDownloadTaskyonData() {
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   const jsonBackup = await tm.getJsonTaskBackup();
   const fileContent = JSON.stringify(jsonBackup);
   console.log('downloading tasks in json format');
@@ -418,7 +447,7 @@ async function onUploadTaskyonData(newFiles: File[]) {
 
   try {
     const fileContent = await file.text();
-    const tm = await state.getTaskManager();
+    const tm = await tystate.getTaskManager();
     await tm.addTaskBackup(fileContent);
     location.reload(); // reload browser window to update app state...
   } catch (error) {
@@ -430,7 +459,7 @@ const showDeleteDialog = ref(false);
 const showResetDialog = ref(false);
 
 async function onDeleteTaskyonData() {
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   await tm.deleteAllTasks();
   state.chatHistory = [];
   // TODO: this is a superdirty version..  it would be much better to manually reinit the taskyondb in the deleteAllTasks function

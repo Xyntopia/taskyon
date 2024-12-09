@@ -52,3 +52,7 @@ public/docs/openapi-docs.yml
 
 # this file holds secrets
 cypress.env.json
+
+# files that we don't want to copy, because they would invalidate our docker cache
+Dockerfile
+docker-compose.yml

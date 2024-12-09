@@ -14,7 +14,7 @@ export default defineConfig({
     //baseUrl: 'https://taskyon.space',
     supportFile: 'test/cypress/support/e2e.ts',
     specPattern: 'test/cypress/e2e/**/*.cy.{js,jsx,ts,tsx}',
-    experimentalStudio: true,
+    //experimentalStudio: true,
   },
   component: {
     // setupNodeEvents(on, config) {},

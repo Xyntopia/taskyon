@@ -106,5 +106,11 @@ export async function initializeTaskyon(
   }
 }
 
+declare global {
+  interface Window {
+    initializeTaskyon: typeof initializeTaskyon;
+  }
+}
+
 // doing this here, because for some reason, swc doesn't do this for us ;)
 window.initializeTaskyon = initializeTaskyon;

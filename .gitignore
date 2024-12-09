@@ -32,8 +32,6 @@ yarn-error.log*
 # local .env files
 .env.local*
 
-#.quasar.env.json
-
 .direnv/
 .envrc
 
@@ -42,6 +40,8 @@ public/taskyon_settings.json
 # this file is generated
 public/docs/openapi-docs.yml
 
+# holds test results...
+test/cypress/screenshots
 
 # this file holds secrets
 cypress.env.json

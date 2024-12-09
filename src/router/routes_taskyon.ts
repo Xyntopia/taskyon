@@ -33,7 +33,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         meta: { title: 'Task Manager', description: 'Manage Tasks & Chats' },
         props: (route) => {
           console.log('open', route);
-          return { query: route.query };
+          if (route.query) return { query: route.query };
         },
       },
       {
@@ -119,7 +119,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
 
 export const routes: RouteRecordRaw[] = [
   ...taskyonRoutes,
-
   {
     // we are making sure to only load urls without any extensions here...
     path: '/authreturngit', // we can declare new routes for different service and extract the access tokens from the return parameters

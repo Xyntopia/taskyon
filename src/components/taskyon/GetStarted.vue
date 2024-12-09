@@ -36,12 +36,12 @@
 </template>
 
 <script setup lang="ts">
-import { useTaskyonStore } from 'stores/taskyonState';
 import LLMProviders from './LLMProviders.vue';
 import CreateTaskButton from './CreateTaskButton.vue';
 import { computed } from 'vue';
+import { useAppStateStore } from 'src/stores/appState';
 
-const state = useTaskyonStore();
+const state = useAppStateStore();
 
 const starters = computed(() => {
   return [

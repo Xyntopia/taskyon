@@ -3,8 +3,10 @@ import type OpenAI from 'openai';
 import { useNlpWorker } from './webWorkerApi';
 import { useTaskyonStore } from 'src/stores/taskyonState';
 import { getTextFile } from './taskUtils';
+import { useAppStateStore } from 'src/stores/appState';
 
-const state = useTaskyonStore();
+const tystate = useTaskyonStore();
+const state = useAppStateStore();
 
 const mockTask: TaskNode = {
   allowedTools: ['tool1', 'tool2'],
@@ -73,7 +75,7 @@ export async function testEstimateChatTokens() {
 }
 
 export async function markdownGeneration() {
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   // first load the chat as mardown
   const yamlContent = await getTextFile('/tests/test_conversation.yaml');
   const lastLoadedTaskId = await tm.loadYamlConversation(yamlContent);
