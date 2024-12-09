@@ -10,7 +10,7 @@ import {
 } from 'rxdb'
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie'
 import { RxDBJsonDumpPlugin } from 'rxdb/plugins/json-dump'
-import { removeKeys, RemoveUndefined, removeUndefinedProperties, TaskNode } from './types'
+import { removeKeys, removeUndefinedProperties, TaskNode } from './types'
 // TOOD: remove at some point in the future...
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode'
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema'

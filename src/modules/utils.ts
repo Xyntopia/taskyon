@@ -1,72 +1,68 @@
 //import equal from 'fast-deep-equal/es6';
-import { deepEqual } from 'fast-equals';
+import { deepEqual } from 'fast-equals'
 
 type LowercaseKeys<T> = {
-  [K in keyof T as K extends string ? Lowercase<K> : never]: T[K];
-} & { [key: string]: unknown };
+  [K in keyof T as K extends string ? Lowercase<K> : never]: T[K]
+} & { [key: string]: unknown }
 
-export function toLowerCaseKeys<T extends Record<string, unknown>>(
-  obj: T,
-): LowercaseKeys<T> {
+export function toLowerCaseKeys<T extends Record<string, unknown>>(obj: T): LowercaseKeys<T> {
   return Object.fromEntries(
     Object.entries(obj).map(([k, v]) => [
       k.toLowerCase(),
-      typeof v === 'object' && v !== null
-        ? toLowerCaseKeys(v as Record<string, unknown>)
-        : v,
+      typeof v === 'object' && v !== null ? toLowerCaseKeys(v as Record<string, unknown>) : v,
     ]),
-  ) as LowercaseKeys<T>;
+  ) as LowercaseKeys<T>
 }
 
 export function copyToClipboard(text: string) {
   navigator.clipboard
     .writeText(text)
     .then(() => {
-      console.log('Copied to clipboard');
+      console.log('Copied to clipboard')
     })
     .catch((err) => {
-      console.error('Error in copying text: ', err);
-    });
+      console.error('Error in copying text: ', err)
+    })
 }
 
 export type DeepPartial<T> =
   T extends Record<string, unknown>
     ? {
-        [P in keyof T]?: DeepPartial<T[P]>;
+        [P in keyof T]?: DeepPartial<T[P]>
       }
-    : T;
+    : T
 
 export function openrouterPricing(price: number | string, digits = 1) {
   if (typeof price === 'string') {
-    price = parseFloat(price);
+    price = parseFloat(price)
   }
-  return price >= 0 ? humanReadablePrice(price, digits) : 'dynamic';
+  return price >= 0 ? humanReadablePrice(price, digits) : 'dynamic'
   //return price >= 0 ? price.toPrecision(5) : 'dynamic';
   //return humanReadablePrice(price);
 }
 
 export function humanReadablePrice(price: number | string, digits: number) {
   if (typeof price === 'string') {
-    price = parseFloat(price);
+    price = parseFloat(price)
   }
-  const precision = price > 1e6 ? (price > 1e3 ? 1 : 3) : 5;
+  const precision = price > 1e6 ? (price > 1e3 ? 1 : 3) : 5
   if (price < 0.001) {
-    price = parseFloat((price * 1e6).toPrecision(precision));
-    return `${price.toFixed(digits)} μ$`;
+    price = parseFloat((price * 1e6).toPrecision(precision))
+    return `${price.toFixed(digits)} μ$`
   } else if (price < 1.0) {
-    price = parseFloat((price * 1e2).toPrecision(precision));
-    return `${price.toFixed(digits)} ¢`;
+    price = parseFloat((price * 1e2).toPrecision(precision))
+    return `${price.toFixed(digits)} ¢`
   }
   //return `${Math.round(price * 1e6)} μ$`;
-  price = parseFloat(price.toPrecision(precision));
-  return `${price.toFixed(digits)} $`;
+  price = parseFloat(price.toPrecision(precision))
+  return `${price.toFixed(digits)} $`
 }
 
 /**
  * Type describing a generic function.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyFunction<ReturnType> = (...args: any[]) => ReturnType;
+type AnyFunction<ReturnType> = (...args: any[]) => ReturnType
 
 /**
  * Creates a higher-order function for caching the results of another function, using a Least Recently Used (LRU) policy.
@@ -92,7 +88,7 @@ type AnyFunction<ReturnType> = (...args: any[]) => ReturnType;
 
 // Async sleep function
 export function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export function lruCache<ReturnType>(
@@ -100,41 +96,41 @@ export function lruCache<ReturnType>(
   ignoreIndices: number[] = [],
 ): (fn: AnyFunction<ReturnType>) => AnyFunction<ReturnType> {
   // The cache for storing function call results.
-  const cache = new Map<string, ReturnType>();
+  const cache = new Map<string, ReturnType>()
 
   return (fn: AnyFunction<ReturnType>): AnyFunction<ReturnType> => {
     return function (...args: unknown[]): ReturnType {
       // Generate a cache key, ignoring specified arguments.
-      const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index));
-      const key = JSON.stringify(keyArgs);
+      const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index))
+      const key = JSON.stringify(keyArgs)
 
       // Check for a cache hit.
       if (cache.has(key)) {
-        console.log('Cache hit:', key);
-        return cache.get(key) as ReturnType;
+        console.log('Cache hit:', key)
+        return cache.get(key) as ReturnType
       }
 
       // Call the original function and cache the result.
-      const result: ReturnType = fn(...args);
-      cache.set(key, result);
+      const result: ReturnType = fn(...args)
+      cache.set(key, result)
 
       // Check the cache size and evict the least recently used item if necessary.
       if (cache.size > size) {
-        const oldestKey = Array.from(cache.keys())[0];
-        cache.delete(oldestKey);
-        console.log('Evicted:', oldestKey);
+        const oldestKey = Array.from(cache.keys())[0]!
+        cache.delete(oldestKey)
+        console.log('Evicted:', oldestKey)
       }
 
       // Return the result.
-      return result;
-    };
-  };
+      return result
+    }
+  }
 }
 
 type CacheEntry<ReturnType> = {
-  value: ReturnType;
-  timestamp: number;
-};
+  value: ReturnType
+  timestamp: number
+}
 
 export function timeLruCache<ReturnType>(
   size: number,
@@ -142,45 +138,45 @@ export function timeLruCache<ReturnType>(
   ignoreIndices: number[] = [],
 ): (fn: AnyFunction<ReturnType>) => AnyFunction<ReturnType> {
   // The cache for storing function call results.
-  const cache = new Map<string, CacheEntry<ReturnType>>();
+  const cache = new Map<string, CacheEntry<ReturnType>>()
 
   return (fn: AnyFunction<ReturnType>): AnyFunction<ReturnType> => {
     return function (...args: unknown[]): ReturnType {
       // Generate a cache key, ignoring specified arguments.
-      const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index));
-      const key = JSON.stringify(keyArgs);
+      const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index))
+      const key = JSON.stringify(keyArgs)
 
-      const now = Date.now();
+      const now = Date.now()
 
       // Check for a cache hit.
       if (cache.has(key)) {
-        const entry = cache.get(key) as CacheEntry<ReturnType>;
-        const age = now - entry.timestamp;
+        const entry = cache.get(key) as CacheEntry<ReturnType>
+        const age = now - entry.timestamp
 
         if (age <= maxAge) {
-          console.log('Cache hit:', key);
-          return entry.value;
+          console.log('Cache hit:', key)
+          return entry.value
         } else {
-          console.log('Cache expired:', key);
-          cache.delete(key); // Remove the expired entry.
+          console.log('Cache expired:', key)
+          cache.delete(key) // Remove the expired entry.
         }
       }
 
       // Call the original function and cache the result.
-      const result: ReturnType = fn(...args);
-      cache.set(key, { value: result, timestamp: now });
+      const result: ReturnType = fn(...args)
+      cache.set(key, { value: result, timestamp: now })
 
       // Check the cache size and evict the least recently used item if necessary.
       if (cache.size > size) {
-        const oldestKey = Array.from(cache.keys())[0];
-        cache.delete(oldestKey);
-        console.log('Evicted:', oldestKey);
+        const oldestKey = Array.from(cache.keys())[0]!
+        cache.delete(oldestKey)
+        console.log('Evicted:', oldestKey)
       }
 
       // Return the result.
-      return result;
-    };
-  };
+      return result
+    }
+  }
 }
 
 // Dynamically assign the storage methods
@@ -188,35 +184,27 @@ const storage =
   process.env.MODE === 'ssr'
     ? (() => {
         // on node we simply only save stuff in memory ;)
-        const nodeStorage = new Map<string, string>();
+        const nodeStorage = new Map<string, string>()
         return {
           setItem: nodeStorage.set.bind(nodeStorage),
           getItem: (key: string) => nodeStorage.get(key) || null,
-        };
+        }
       })()
-    : localStorage;
+    : localStorage
 
 // The cache for storing function call results.
-function saveToLocalStorage<ReturnType>(
-  key: string,
-  cache: Map<string, CacheEntry<ReturnType>>,
-) {
-  const serializedCache = JSON.stringify(Array.from(cache.entries()));
-  storage.setItem(key, serializedCache);
+function saveToLocalStorage<ReturnType>(key: string, cache: Map<string, CacheEntry<ReturnType>>) {
+  const serializedCache = JSON.stringify(Array.from(cache.entries()))
+  storage.setItem(key, serializedCache)
 }
 
-function loadFromLocalStorage<ReturnType>(
-  key: string,
-): Map<string, CacheEntry<ReturnType>> {
-  const serializedCache = storage.getItem(key);
+function loadFromLocalStorage<ReturnType>(key: string): Map<string, CacheEntry<ReturnType>> {
+  const serializedCache = storage.getItem(key)
   if (serializedCache) {
-    const parsedCache = JSON.parse(serializedCache) as [
-      string,
-      CacheEntry<ReturnType>,
-    ][];
-    return new Map(parsedCache);
+    const parsedCache = JSON.parse(serializedCache) as [string, CacheEntry<ReturnType>][]
+    return new Map(parsedCache)
   }
-  return new Map();
+  return new Map()
 }
 
 export function asyncTimeLruCache(
@@ -227,103 +215,87 @@ export function asyncTimeLruCache(
   lazyUpdate = false,
   ignoreIndices: number[] = [],
 ) {
-  return <
-    F extends (
-      ...args: Parameters<F>
-    ) => ReturnType<F> | Promise<ReturnType<F>>,
-  >(
-    fn: F,
-  ) => {
+  return <F extends (...args: Parameters<F>) => ReturnType<F> | Promise<ReturnType<F>>>(fn: F) => {
     const cache = useLocalStorage
       ? loadFromLocalStorage<ReturnType<F>>(storageKey)
-      : new Map<string, CacheEntry<ReturnType<F>>>();
+      : new Map<string, CacheEntry<ReturnType<F>>>()
 
     const updateCache = (key: string, result: ReturnType<F>, now: number) => {
-      cache.set(key, { value: result, timestamp: now });
+      cache.set(key, { value: result, timestamp: now })
       // Check the cache size and evict the least recently used item if necessary.
       if (cache.size > size) {
-        const oldestKey = Array.from(cache.keys())[0]!;
-        cache.delete(oldestKey);
-        console.log('Evicted:', oldestKey);
+        const oldestKey = Array.from(cache.keys())[0]!
+        cache.delete(oldestKey)
+        console.log('Evicted:', oldestKey)
       }
       if (useLocalStorage) {
-        saveToLocalStorage(storageKey, cache);
+        saveToLocalStorage(storageKey, cache)
       }
-    };
+    }
 
-    return async (
-      ...args: Parameters<F> & unknown[]
-    ): Promise<ReturnType<F>> => {
+    return async (...args: Parameters<F> & unknown[]): Promise<ReturnType<F>> => {
       // Generate a cache key, ignoring specified arguments.
-      const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index));
-      const key = JSON.stringify(keyArgs);
+      const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index))
+      const key = JSON.stringify(keyArgs)
 
-      const now = Date.now();
+      const now = Date.now()
 
       // Check for a cache hit.
-      const entry = cache.get(key);
+      const entry = cache.get(key)
       if (entry) {
-        const age = now - entry.timestamp;
+        const age = now - entry.timestamp
 
         if (age <= maxAge) {
-          console.log('Cache hit:', key);
-          return entry.value;
+          console.log('Cache hit:', key)
+          return entry.value
         } else {
-          console.log('Cache expired:', key);
+          console.log('Cache expired:', key)
           if (lazyUpdate) {
             // Start updating the cache in the background
             Promise.resolve(fn(...args))
               .then((result: ReturnType<F>) => updateCache(key, result, now))
-              .catch(console.error);
+              .catch(console.error)
             // Return the stale value
-            return entry.value;
+            return entry.value
           }
         }
       }
 
       // Call the original function and cache the result if lazyUpdate is false or cache miss occurs.
-      const result = await fn(...args);
-      updateCache(key, result, now);
+      const result = await fn(...args)
+      updateCache(key, result, now)
 
       // Return the result.
-      return result;
-    };
-  };
+      return result
+    }
+  }
 }
 
 export function asyncLruCache(size: number, ignoreIndices: number[] = []) {
-  return <
-    F extends (
-      ...args: Parameters<F>
-    ) => ReturnType<F> | Promise<ReturnType<F>>,
-  >(
-    fn: F,
-  ) => {
-    const cache = new Map<string, ReturnType<F>>();
+  return <F extends (...args: Parameters<F>) => ReturnType<F> | Promise<ReturnType<F>>>(fn: F) => {
+    const cache = new Map<string, ReturnType<F>>()
 
-    return async (
-      ...args: Parameters<F> & unknown[]
-    ): Promise<ReturnType<F>> => {
-      const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index));
-      const key = JSON.stringify(keyArgs);
+    return async (...args: Parameters<F> & unknown[]): Promise<ReturnType<F>> => {
+      const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index))
+      const key = JSON.stringify(keyArgs)
 
       if (cache.has(key)) {
-        console.log('Cache hit:', key);
-        return cache.get(key)!;
+        console.log('Cache hit:', key)
+        return cache.get(key)!
       }
 
-      const result = await fn(...args);
-      cache.set(key, result);
+      const result = await fn(...args)
+      cache.set(key, result)
 
       if (cache.size > size) {
-        const oldestKey = Array.from(cache.keys())[0]!;
-        cache.delete(oldestKey);
-        console.log('Evicted:', oldestKey);
+        const oldestKey = Array.from(cache.keys())[0]!
+        cache.delete(oldestKey)
+        console.log('Evicted:', oldestKey)
       }
 
-      return result;
-    };
-  };
+      return result
+    }
+  }
 }
 
 export class Lock {
@@ -331,7 +303,7 @@ export class Lock {
   //      should be a callable object and automatically resolve
   //      when it is destroyed for example when running out of scope
   //      in a function...
-  private _promise: Promise<void> | null = null;
+  private _promise: Promise<void> | null = null
 
   /**
    * Acquires the lock if available. Returns a `release` function to be called
@@ -350,25 +322,25 @@ export class Lock {
    *
    */
   async lock(): Promise<() => void> {
-    let outerResolve: () => void;
+    let outerResolve: () => void
     if (!this._promise) {
       this._promise = new Promise<void>((resolve) => {
         outerResolve = () => {
-          console.log('unlock!');
-          resolve();
-        };
-      });
+          console.log('unlock!')
+          resolve()
+        }
+      })
 
       return () => {
         if (outerResolve) {
-          outerResolve();
-          this._promise = null;
+          outerResolve()
+          this._promise = null
         }
-      };
+      }
     } else {
-      console.log('waiting for unlock to relock');
-      await this._promise; // Wait for the lock to be released
-      return this.lock(); // Re-attempt to acquire the lock
+      console.log('waiting for unlock to relock')
+      await this._promise // Wait for the lock to be released
+      return this.lock() // Re-attempt to acquire the lock
     }
   }
 
@@ -381,42 +353,42 @@ export class Lock {
    */
   async waitForUnlock(): Promise<void> {
     if (this._promise) {
-      await this._promise;
+      await this._promise
     }
   }
 }
 
 export function lockMap(name: string = 'item') {
-  const locks = new Map<string, Lock>();
+  const locks = new Map<string, Lock>()
 
   // Lock a task and returns a function closure which can be used to unlock it again...
   async function lockItem(id: string) {
-    let lock = locks.get(id);
+    let lock = locks.get(id)
     if (!lock) {
-      lock = new Lock();
-      locks.set(id, lock);
+      lock = new Lock()
+      locks.set(id, lock)
     }
-    console.log(`getting lock for ${name}:`, id);
-    const unlock = await lock.lock();
-    console.log(`acquired lock for ${name}`, id);
+    console.log(`getting lock for ${name}:`, id)
+    const unlock = await lock.lock()
+    console.log(`acquired lock for ${name}`, id)
     return () => {
-      console.log(`unlock ${name}!`, id);
-      unlock();
-    };
+      console.log(`unlock ${name}!`, id)
+      unlock()
+    }
   }
 
   // this function simply waits for a task to be unlocked, but doesn't
   // acquire a lock itself...
   async function waitForItemUnlock(id: string) {
-    const lock = locks.get(id);
+    const lock = locks.get(id)
     if (lock) {
       // TODO: why is this called so often??
       //console.log('wait for unlock!');
-      await lock.waitForUnlock();
+      await lock.waitForUnlock()
     }
   }
 
-  return { lockItem, waitForItemUnlock };
+  return { lockItem, waitForItemUnlock }
 }
 
 /**
@@ -426,7 +398,7 @@ export function lockMap(name: string = 'item') {
  * @returns True if the item is an object, false otherwise.
  */
 function isObject(item: unknown): item is Record<string, unknown> {
-  return item !== null && typeof item === 'object' && !Array.isArray(item);
+  return item !== null && typeof item === 'object' && !Array.isArray(item)
 }
 
 /**
@@ -438,11 +410,10 @@ function isObject(item: unknown): item is Record<string, unknown> {
  * @returns A new array with unique elements from both input arrays.
  */
 function unionArrays(arr1: unknown[], arr2: unknown[]) {
-  const combined = arr1.concat(arr2);
+  const combined = arr1.concat(arr2)
   return combined.filter(
-    (item, index) =>
-      combined.findIndex((obj) => deepEqual(obj, item)) === index,
-  );
+    (item, index) => combined.findIndex((obj) => deepEqual(obj, item)) === index,
+  )
 }
 
 /**
@@ -461,31 +432,28 @@ export function deepMerge<A, B>(
   obj2: B,
   arrayMergeStrategy: 'overwrite' | 'union' = 'overwrite',
 ): A & B {
-  const output: Record<string, unknown> = Object.assign({}, obj1); // Start with a shallow copy of obj1
+  const output: Record<string, unknown> = Object.assign({}, obj1) // Start with a shallow copy of obj1
   if (isObject(obj1) && isObject(obj2)) {
     Object.keys(obj2).forEach((key) => {
-      const obj2Value = obj2[key];
-      const obj1Value = obj1[key];
+      const obj2Value = obj2[key]
+      const obj1Value = obj1[key]
       if (Array.isArray(obj1Value) && Array.isArray(obj2Value)) {
-        output[key] =
-          arrayMergeStrategy === 'union'
-            ? unionArrays(obj1Value, obj2Value)
-            : obj2Value;
+        output[key] = arrayMergeStrategy === 'union' ? unionArrays(obj1Value, obj2Value) : obj2Value
       } else if (isObject(obj2Value)) {
         if (isObject(obj1Value)) {
           // Recursively call deepMerge only if both obj1[key] and obj2[key] are objects
-          output[key] = deepMerge(obj1Value, obj2Value, arrayMergeStrategy);
+          output[key] = deepMerge(obj1Value, obj2Value, arrayMergeStrategy)
         } else {
           // If obj1[key] is not an object, simply assign obj2[key]
-          output[key] = obj2Value;
+          output[key] = obj2Value
         }
       } else {
         // For non-object properties, overwrite with the value from obj2
-        output[key] = obj2Value;
+        output[key] = obj2Value
       }
-    });
+    })
   }
-  return output as A & B;
+  return output as A & B
 }
 
 /**
@@ -505,32 +473,28 @@ export function deepMergeReactive<A, B>(
   mergeStrategy: 'overwrite' | 'additive',
 ): A & B {
   if (!isObject(obj1) || !isObject(obj2)) {
-    throw new Error('Both arguments must be objects.');
+    throw new Error('Both arguments must be objects.')
   }
 
-  const obj1AsRecord = obj1 as unknown as Record<string, unknown>;
+  const obj1AsRecord = obj1 as unknown as Record<string, unknown>
 
   for (const [key, obj2Value] of Object.entries(obj2)) {
-    const obj1Value = obj1AsRecord[key];
+    const obj1Value = obj1AsRecord[key]
     if (!(key in obj1AsRecord)) {
-      obj1AsRecord[key] = obj2Value;
+      obj1AsRecord[key] = obj2Value
     } else if (isObject(obj2Value) && isObject(obj1Value)) {
-      deepMergeReactive(obj1Value, obj2Value, mergeStrategy);
+      deepMergeReactive(obj1Value, obj2Value, mergeStrategy)
     } else if (Array.isArray(obj2Value) && Array.isArray(obj1Value)) {
-      obj1AsRecord[key] = mergeArraysReactive(
-        obj1Value,
-        obj2Value,
-        mergeStrategy,
-      );
+      obj1AsRecord[key] = mergeArraysReactive(obj1Value, obj2Value, mergeStrategy)
     } else if (mergeStrategy === 'overwrite') {
       // if the key exists, and one of the objects isn't an array or object
       // In 'overwrite' mode, assign non-object values directly
       // as we iterate through obj2, we know this value always exists...
-      obj1AsRecord[key] = obj2Value;
+      obj1AsRecord[key] = obj2Value
     }
   }
 
-  return obj1AsRecord as A & B;
+  return obj1AsRecord as A & B
 }
 
 /**
@@ -548,49 +512,45 @@ function mergeArraysReactive(
   mergeStrategy: 'overwrite' | 'additive',
 ): unknown[] {
   for (let i = 0; i < arr1.length || i < arr2.length; i++) {
-    const element1 = arr1[i];
-    const element2 = arr2[i];
+    const element1 = arr1[i]
+    const element2 = arr2[i]
 
     if (isObject(element1) && isObject(element2)) {
-      arr1[i] = deepMergeReactive(element1, element2, mergeStrategy);
+      arr1[i] = deepMergeReactive(element1, element2, mergeStrategy)
     } else if (Array.isArray(element1) && Array.isArray(element2)) {
-      arr1[i] = mergeArraysReactive(
-        element1 as unknown[],
-        element2 as unknown[],
-        mergeStrategy,
-      );
+      arr1[i] = mergeArraysReactive(element1 as unknown[], element2 as unknown[], mergeStrategy)
     } else if (element1 === undefined && element2 !== undefined) {
-      arr1.push(element2);
+      arr1.push(element2)
     } else if (element2 !== undefined && mergeStrategy === 'overwrite') {
-      arr1[i] = element2;
+      arr1[i] = element2
     }
   }
 
-  return arr1;
+  return arr1
 }
 
 export function deepCopy<T>(item: T): T {
   if (item === null || typeof item !== 'object') {
     // Primitive value (including null and undefined): return as is
-    return item;
+    return item
   }
 
   if (Array.isArray(item)) {
     // Array: create a new array and recursively copy each element
-    return item.map((element) => deepCopy(element) as unknown) as unknown as T;
+    return item.map((element) => deepCopy(element) as unknown) as unknown as T
   }
 
   if (isObject(item)) {
     // Object (excluding arrays): create a new object and recursively copy each property
-    const copy = {} as Record<string, unknown>;
+    const copy = {} as Record<string, unknown>
     Object.keys(item).forEach((key) => {
-      copy[key] = deepCopy(item[key]);
-    });
-    return copy as T;
+      copy[key] = deepCopy(item[key])
+    })
+    return copy as T
   }
 
   // If item is of a type not handled above, return it as is
-  return item;
+  return item
 }
 
 export function base64UrlEncode(str: string): string {
@@ -598,121 +558,121 @@ export function base64UrlEncode(str: string): string {
     .toString('base64') // Convert to base64
     .replace(/\+/g, '-') // Convert '+' to '-'
     .replace(/\//g, '_') // Convert '/' to '_'
-    .replace(/=/g, ''); // Remove padding '='
+    .replace(/=/g, '') // Remove padding '='
 }
 
 export function base64UrlDecode(str: string): string {
   // Add removed '=' padding back
-  str = str.padEnd(str.length + ((4 - (str.length % 4)) % 4), '=');
+  str = str.padEnd(str.length + ((4 - (str.length % 4)) % 4), '=')
 
   // Convert URL-safe characters back to original
-  str = str.replace(/-/g, '+').replace(/_/g, '/');
+  str = str.replace(/-/g, '+').replace(/_/g, '/')
 
-  return Buffer.from(str, 'base64').toString();
+  return Buffer.from(str, 'base64').toString()
 }
 
 export class AsyncQueue<T> {
-  private queue: T[] = [];
-  private resolveWaitingPop?: (value: T) => void;
+  private queue: T[] = []
+  private resolveWaitingPop?: ((value: T) => void) | undefined
 
   push(item: T) {
-    this.queue.push(item);
+    this.queue.push(item)
     if (this.resolveWaitingPop) {
       // Since TypeScript now expects queue.shift() to always return a T,
       // we need to assure it's not called on an empty array.
       // The logic ensures it's never empty at this point, but TypeScript doesn't know that.
-      const shiftedItem = this.queue.shift();
+      const shiftedItem = this.queue.shift()
       if (shiftedItem !== undefined) {
-        this.resolveWaitingPop(shiftedItem);
+        this.resolveWaitingPop(shiftedItem)
       }
-      this.resolveWaitingPop = undefined;
+      this.resolveWaitingPop = undefined
     }
   }
 
   count() {
-    return this.queue.length;
+    return this.queue.length
   }
 
   async pop(): Promise<T> {
-    const shiftedItem = this.queue.shift();
+    const shiftedItem = this.queue.shift()
     if (shiftedItem !== undefined) {
-      return shiftedItem;
+      return shiftedItem
     } else {
       return new Promise<T>((resolve) => {
-        this.resolveWaitingPop = resolve;
-      });
+        this.resolveWaitingPop = resolve
+      })
     }
   }
 
   clear() {
-    const oldQueue = this.queue;
-    this.queue = [];
-    return oldQueue;
+    const oldQueue = this.queue
+    this.queue = []
+    return oldQueue
   }
 }
 
 export function bigIntToString(obj: unknown): unknown {
   if (obj === null) {
-    return obj;
+    return obj
   }
 
   if (typeof obj === 'bigint') {
-    return obj.toString();
+    return obj.toString()
   }
 
   if (obj instanceof Map) {
-    const result: { [key: string]: unknown } = {};
+    const result: { [key: string]: unknown } = {}
     obj.forEach((value, key) => {
-      result[key] = bigIntToString(value);
-    });
-    return result;
+      result[key] = bigIntToString(value)
+    })
+    return result
   }
 
   if (obj instanceof Set) {
-    return Array.from(obj).map((item) => bigIntToString(item));
+    return Array.from(obj).map((item) => bigIntToString(item))
   }
 
   if (Array.isArray(obj)) {
-    return obj.map((item) => bigIntToString(item));
+    return obj.map((item) => bigIntToString(item))
   }
 
   // this need to be called at the end, becaise Set and Map are also object
   if (typeof obj === 'object') {
-    const result: { [key: string]: unknown } = {};
+    const result: { [key: string]: unknown } = {}
     for (const key in obj) {
       if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        result[key] = bigIntToString((obj as Record<string, unknown>)[key]);
+        result[key] = bigIntToString((obj as Record<string, unknown>)[key])
       }
     }
-    return result;
+    return result
   }
 
-  return obj;
+  return obj
 }
 
 export function keysToLowerCase<T>(obj: T): T {
   if (Array.isArray(obj)) {
-    return obj.map(keysToLowerCase) as unknown as T;
+    return obj.map(keysToLowerCase) as unknown as T
   } else if (obj instanceof Map) {
-    const newMap = new Map();
+    const newMap = new Map()
     obj.forEach((value, key) => {
-      const lowerKey = typeof key === 'string' ? key.toLowerCase() : key;
-      newMap.set(lowerKey, keysToLowerCase(value));
-    });
-    return newMap as unknown as T;
+      const lowerKey = typeof key === 'string' ? key.toLowerCase() : key
+      newMap.set(lowerKey, keysToLowerCase(value))
+    })
+    return newMap as unknown as T
   } else if (obj instanceof Set) {
-    return new Set([...obj].map(keysToLowerCase)) as unknown as T;
+    return new Set([...obj].map(keysToLowerCase)) as unknown as T
   } else if (obj !== null && typeof obj === 'object') {
     return Object.entries(obj).reduce(
       (acc, [key, value]) => {
-        const lowerKey = key.toLowerCase();
-        acc[lowerKey] = keysToLowerCase(value);
-        return acc;
+        const lowerKey = key.toLowerCase()
+        acc[lowerKey] = keysToLowerCase(value)
+        return acc
       },
       {} as Record<string, unknown>,
-    ) as unknown as T;
+    ) as unknown as T
   }
-  return obj;
+  return obj
 }
 
 // this function "normalizes" boolean-like input this makes our llm structured
@@ -735,59 +695,57 @@ export function normalizeFalsyValues(input: unknown): unknown {
     null,
     'undefined',
     undefined,
-  ]);
+  ])
 
-  const normalizer = false;
+  const normalizer = false
   // Helper function to normalize falsy values
   const normalize = (value: unknown): unknown => {
     if (typeof value === 'string') {
-      const lowerCaseValue = value.toLowerCase();
+      const lowerCaseValue = value.toLowerCase()
       if (falsyValues.has(lowerCaseValue)) {
-        return normalizer; // Normalize falsy values to "undefined"
+        return normalizer // Normalize falsy values to "undefined"
       }
     } else if (typeof value === 'boolean') {
-      return value ? value : normalizer; // Convert boolean false to "undefined"
+      return value ? value : normalizer // Convert boolean false to "undefined"
     } else if (falsyValues.has(value)) {
-      return normalizer; // Convert null, undefined, or falsy values
+      return normalizer // Convert null, undefined, or falsy values
     }
-    return value; // Return unchanged if no conversion needed
-  };
+    return value // Return unchanged if no conversion needed
+  }
 
   // Recursive function to traverse and normalize the input
   const traverse = (obj: unknown): unknown => {
     if (Array.isArray(obj)) {
-      return obj.map(traverse); // Traverse arrays
+      return obj.map(traverse) // Traverse arrays
     } else if (obj instanceof Map) {
-      const result = new Map<unknown, unknown>();
-      obj.forEach((v, k) => result.set(k, traverse(v)));
-      return result;
+      const result = new Map<unknown, unknown>()
+      obj.forEach((v, k) => result.set(k, traverse(v)))
+      return result
     } else if (obj instanceof Set) {
-      const result = new Set<unknown>();
-      obj.forEach((v) => result.add(traverse(v)));
-      return result;
+      const result = new Set<unknown>()
+      obj.forEach((v) => result.add(traverse(v)))
+      return result
     } else if (typeof obj === 'object' && obj !== null) {
-      const result: { [key: string]: unknown } = {};
+      const result: { [key: string]: unknown } = {}
       Object.entries(obj).forEach(([key, value]) => {
-        result[key] = traverse(value); // Traverse nested objects
-      });
-      return result;
+        result[key] = traverse(value) // Traverse nested objects
+      })
+      return result
     } else {
-      return normalize(obj); // Normalize primitive values
+      return normalize(obj) // Normalize primitive values
     }
-  };
+  }
 
-  return traverse(input);
+  return traverse(input)
 }
 
 export function pickProperties(obj: object, keys: string[]) {
-  return Object.fromEntries(
-    Object.entries(obj).filter(([key]) => keys.includes(key)),
-  );
+  return Object.fromEntries(Object.entries(obj).filter(([key]) => keys.includes(key)))
 }
 
 export function makeSerializable(value: unknown, depth = 5): unknown {
   if (depth <= 0) {
-    return '[Max Depth Reached]'; // Return a placeholder when the max depth is reached
+    return '[Max Depth Reached]' // Return a placeholder when the max depth is reached
   }
 
   if (value instanceof Error) {
@@ -795,32 +753,26 @@ export function makeSerializable(value: unknown, depth = 5): unknown {
     return Object.fromEntries(
       Object.getOwnPropertyNames(value).map((key) => [
         key,
-        makeSerializable(
-          (value as unknown as Record<string, unknown>)[key],
-          depth - 1,
-        ),
+        makeSerializable((value as unknown as Record<string, unknown>)[key], depth - 1),
       ]),
-    );
+    )
   }
 
   if (value instanceof Map) {
     // Convert Map to an object
     return Object.fromEntries(
-      Array.from(value.entries()).map(([k, v]) => [
-        k,
-        makeSerializable(v, depth - 1),
-      ]),
-    );
+      Array.from(value.entries()).map(([k, v]) => [k, makeSerializable(v, depth - 1)]),
+    )
   }
 
   if (value instanceof Set) {
     // Convert Set to an array
-    return Array.from(value).map((v) => makeSerializable(v, depth - 1));
+    return Array.from(value).map((v) => makeSerializable(v, depth - 1))
   }
 
   if (Array.isArray(value)) {
     // Recursively handle arrays
-    return value.map((v) => makeSerializable(v, depth - 1));
+    return value.map((v) => makeSerializable(v, depth - 1))
   }
 
   if (typeof value === 'object' && value !== null) {
@@ -830,27 +782,27 @@ export function makeSerializable(value: unknown, depth = 5): unknown {
         k,
         makeSerializable(v, depth - 1),
       ]),
-    );
+    )
   }
 
   // Return primitives and other serializable values as-is
-  return value;
+  return value
 }
 // Helper functions for encoding/decoding
 export function encodeVector(vector: Float32Array): string {
   // Convert Float32Array to ArrayBuffer
-  const buffer = vector.buffer;
+  const buffer = vector.buffer
   // Convert ArrayBuffer to Base64
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-  return base64;
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)))
+  return base64
 }
 export function decodeVector(base64String: string): Float32Array {
   // Convert Base64 to ArrayBuffer
-  const binaryString = atob(base64String);
-  const bytes = new Uint8Array(binaryString.length);
+  const binaryString = atob(base64String)
+  const bytes = new Uint8Array(binaryString.length)
   for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+    bytes[i] = binaryString.charCodeAt(i)
   }
   // Convert ArrayBuffer back to Float32Array
-  return new Float32Array(bytes.buffer);
+  return new Float32Array(bytes.buffer)
 }

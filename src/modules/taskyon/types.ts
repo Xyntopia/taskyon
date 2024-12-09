@@ -113,17 +113,17 @@ export interface OpenRouterGenerationInfo {
 // separately
 // https://zod.dev/?id=recursive-types
 export interface JSONSchemaForFunctionParameter {
-  $schema?: string
+  $schema?: string | undefined
   type: 'object'
   properties: {
     [key: string]: {
       type: string
-      description?: string
-      default?: unknown
-      items?: JSONSchemaForFunctionParameter | JSONSchemaForFunctionParameter[]
+      description?: string | undefined
+      default?: unknown | undefined
+      items?: JSONSchemaForFunctionParameter | JSONSchemaForFunctionParameter[] | undefined
     }
   }
-  required?: string[]
+  required?: string[] | undefined
 }
 
 export const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionParameter> = z.object({
