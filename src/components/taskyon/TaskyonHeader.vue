@@ -67,10 +67,7 @@
         :icon="matWarning"
         to="/diagnostics"
       >
-        <q-tooltip
-          >There was problem with taskyon!, click here to find out
-          more..</q-tooltip
-        >
+        <q-tooltip>There was problem with taskyon!, click here to find out more..</q-tooltip>
       </q-btn>
       <q-btn
         v-if="!minMode"
@@ -85,13 +82,7 @@
         <q-tooltip> Open Taskyon Documentation </q-tooltip>
       </q-btn>
       <q-separator v-if="!minMode" class="desktop-only" vertical></q-separator>
-      <q-btn
-        v-if="!minMode"
-        round
-        flat
-        dense
-        icon="svguse:/taskyon_mono_opt.svg#taskyon"
-      >
+      <q-btn v-if="!minMode" round flat dense icon="svguse:/taskyon_mono_opt.svg#taskyon">
         <q-menu>
           <q-list dense>
             <q-item :size="btnSize" to="/settings">
@@ -113,13 +104,7 @@
               <q-item-section>Visit our Taskyon repository</q-item-section>
             </q-item>
             <q-separator />
-            <q-item
-              v-ripple
-              clickable
-              to="/docs/index"
-              exact
-              active-class="text-secondary"
-            >
+            <q-item v-ripple clickable to="/docs/index" exact active-class="text-secondary">
               <q-item-section avatar>
                 <q-icon :name="matHelpOutline" />
               </q-item-section>
@@ -140,17 +125,13 @@
                 <q-card>
                   <q-card-section class="text-h5">About Taskyon</q-card-section>
                   <q-card-section>
-                    Taskyon is a local-first AI platform for personalized task
-                    management and seamless web integration. It ensures data
-                    security with local processing while offering powerful tools
-                    like task trees, function execution, and sandboxing. Learn
-                    more at taskyon.space.
+                    Taskyon is a local-first AI platform for personalized task management and
+                    seamless web integration. It ensures data security with local processing while
+                    offering powerful tools like task trees, function execution, and sandboxing.
+                    Learn more at taskyon.space.
                   </q-card-section>
                   <q-card-section class="text-info" style="font-size: 0.75em">
-                    <div
-                      v-for="[name, value] of Object.entries(environmentInfo())"
-                      :key="name"
-                    >
+                    <div v-for="[name, value] of Object.entries(environmentInfo())" :key="name">
                       {{ name }}: {{ value }}
                     </div>
                   </q-card-section>
@@ -158,13 +139,7 @@
               </q-dialog>
             </q-item>
             <q-separator />
-            <q-item
-              v-ripple
-              clickable
-              to="/pricing"
-              exact
-              active-class="text-secondary"
-            >
+            <q-item v-ripple clickable to="/pricing" exact active-class="text-secondary">
               <q-item-section> AI chat price list </q-item-section>
             </q-item>
             <q-separator />
@@ -201,35 +176,30 @@
 </template>
 
 <script setup lang="ts">
-import DarkModeButton from 'components/DarkModeButton.vue';
-import { defineAsyncComponent } from 'vue';
+import DarkModeButton from 'components/DarkModeButton.vue'
+import { defineAsyncComponent } from 'vue'
 import {
   matHelpOutline,
   matMenu,
   matSearch,
   matSettings,
   matWarning,
-} from '@quasar/extras/material-icons';
-import {
-  mdiForum,
-  mdiForumPlus,
-  mdiGithub,
-  mdiInformationVariant,
-} from '@quasar/extras/mdi-v6';
-import { useAppStateStore } from 'src/stores/appState';
-import { ref } from 'vue';
+} from '@quasar/extras/material-icons'
+import { mdiForum, mdiForumPlus, mdiGithub, mdiInformationVariant } from '@quasar/extras/mdi-v6'
+import { useAppStateStore } from 'src/stores/appState'
+import { ref } from 'vue'
 
-const publishDate = process.env.PUBLISH_DATE as unknown as string;
-const state = useAppStateStore();
-const showAboutDialog = ref(false);
+const publishDate = process.env.PUBLISH_DATE as unknown as string
+const state = useAppStateStore()
+const showAboutDialog = ref(false)
 
 defineProps<{
-  minMode?: boolean;
-  btnSize: 'xs' | 'md';
-}>();
+  minMode?: boolean
+  btnSize: 'xs' | 'md'
+}>()
 const drawerOpen = defineModel<boolean | undefined>('drawerOpen', {
   required: false,
-});
+})
 
 const ShareDialogBtn = defineAsyncComponent(
   () =>
@@ -239,66 +209,53 @@ const ShareDialogBtn = defineAsyncComponent(
       /* webpackFetchPriority: "low" */
       '../taskyon/TaskChainPublishDialog.vue'
     ),
-);
+)
 
 const environmentInfo = () => ({
   publishDate,
-  isBrowser:
-    typeof window !== 'undefined' && typeof window.document !== 'undefined',
+  isBrowser: typeof window !== 'undefined' && typeof window.document !== 'undefined',
   isNode:
-    typeof process !== 'undefined' &&
-    process.versions != null &&
-    process.versions.node != null,
+    typeof process !== 'undefined' && process.versions != null && process.versions.node != null,
   os: (() => {
     if (typeof process !== 'undefined' && process.platform) {
-      return process.platform; // e.g., 'win32', 'darwin', 'linux'
+      return process.platform // e.g., 'win32', 'darwin', 'linux'
     }
     if (typeof navigator !== 'undefined' && navigator.userAgent) {
-      return navigator.userAgent;
+      return navigator.userAgent
     }
-    return 'Unknown';
+    return 'Unknown'
   })(),
-  isMobile:
-    typeof navigator !== 'undefined' &&
-    /Mobi|Android/i.test(navigator.userAgent),
+  isMobile: typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent),
   nodeVersion:
-    typeof process !== 'undefined' && process.versions?.node
-      ? process.versions.node
-      : null,
-  browserUserAgent:
-    typeof navigator !== 'undefined' ? navigator.userAgent : null,
-  browserAppVersion:
-    typeof navigator !== 'undefined' ? navigator.appVersion : null,
+    typeof process !== 'undefined' && process.versions?.node ? process.versions.node : null,
+  browserUserAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+  browserAppVersion: typeof navigator !== 'undefined' ? navigator.appVersion : null,
   browserPlatform: typeof navigator !== 'undefined' ? navigator.platform : null,
   hasWebAssembly: typeof WebAssembly !== 'undefined',
-  supportsServiceWorker:
-    typeof navigator !== 'undefined' && 'serviceWorker' in navigator,
+  supportsServiceWorker: typeof navigator !== 'undefined' && 'serviceWorker' in navigator,
   supportsES6: (() => {
     try {
-      new Function('(a = 0) => a');
-      return true;
+      new Function('(a = 0) => a')
+      return true
     } catch {
-      return false;
+      return false
     }
   })(),
-  timezone:
-    typeof Intl !== 'undefined' &&
-    Intl.DateTimeFormat().resolvedOptions().timeZone,
+  timezone: typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone,
   language: typeof navigator !== 'undefined' ? navigator.language : null,
   memoryUsage: (() => {
-    if (typeof performance !== 'undefined' && performance.memory) {
-      return JSON.stringify(performance.memory);
+    if (typeof performance !== 'undefined' && (performance as any).memory) {
+      return JSON.stringify((performance as any).memory)
     }
     if (typeof process !== 'undefined' && process.memoryUsage) {
-      return process.memoryUsage();
+      return process.memoryUsage()
     }
-    return null;
+    return null
   })(),
-  screenResolution:
-    typeof screen !== 'undefined' ? `${screen.width}x${screen.height}` : null,
+  screenResolution: typeof screen !== 'undefined' ? `${screen.width}x${screen.height}` : null,
   supportsBigInt: typeof BigInt !== 'undefined',
   supportsFetch: typeof fetch !== 'undefined',
-});
+})
 
-console.log(environmentInfo);
+console.log(environmentInfo)
 </script>

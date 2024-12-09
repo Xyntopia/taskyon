@@ -1,18 +1,18 @@
-import axios from 'axios';
-import type { Tool } from '../taskyon/tools';
+import axios from 'axios'
+import type { Tool } from '../taskyon/tools'
 
 type SeleniumState = {
   value: {
-    ready: boolean;
+    ready: boolean
     nodes: Array<{
       slots: Array<{
         session?: {
-          sessionId: string;
-        };
-      }>;
-    }>;
-  };
-};
+          sessionId: string
+        }
+      }>
+    }>
+  }
+}
 
 async function checkState(): Promise<string | null> {
   const response = await axios.get<SeleniumState>(`${seleniumHubUrl}/status`, {
@@ -20,35 +20,35 @@ async function checkState(): Promise<string | null> {
       'Content-Type': 'application/json;charset=UTF-8',
       Accept: 'application/json',
     },
-  });
+  })
 
-  const { nodes } = response.data.value;
+  const { nodes } = response.data.value
   if (nodes.length > 0) {
     for (const node of nodes) {
       for (const slot of node.slots) {
         if (slot.session) {
-          return slot.session.sessionId; // return existing sessionId
+          return slot.session.sessionId // return existing sessionId
         }
       }
     }
   }
 
-  return null; // no existing session found
+  return null // no existing session found
 }
 
 //const seleniumHubUrl = 'http://localhost:4444/wd/hub';
-const seleniumHubUrl = 'http://localhost:4444';
+const seleniumHubUrl = 'http://localhost:4444'
 
 async function createSession() {
-  const existingSessionId = await checkState();
+  const existingSessionId = await checkState()
   if (existingSessionId) {
-    return existingSessionId; // use existing sessionId
+    return existingSessionId // use existing sessionId
   }
 
   const response = await axios.post<{
     value: {
-      sessionId: string;
-    };
+      sessionId: string
+    }
   }>(
     `${seleniumHubUrl}/session`,
     {
@@ -69,9 +69,9 @@ async function createSession() {
         'Content-Type': 'application/json;charset=UTF-8',
         Accept: 'application/json',
       },
-    }
-  );
-  return response.data.value.sessionId;
+    },
+  )
+  return response.data.value.sessionId
 }
 
 export async function closeSession(sessionId: string) {
@@ -80,7 +80,7 @@ export async function closeSession(sessionId: string) {
       'Content-Type': 'application/json;charset=UTF-8',
       Accept: 'application/json',
     },
-  });
+  })
 }
 
 async function loadURL(url: string, sessionId: string) {
@@ -88,14 +88,14 @@ async function loadURL(url: string, sessionId: string) {
     `${seleniumHubUrl}/session/${sessionId}/url`,
     //'/status',
     //`${seleniumHubUrl}/session/${sessionId}/url`,
-    { url: url }
+    { url: url },
     /*{
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
         Accept: 'application/json',
       },
     }*/
-  );
+  )
 }
 
 async function fetchPageContent(sessionId: string) {
@@ -106,28 +106,25 @@ async function fetchPageContent(sessionId: string) {
         'Content-Type': 'application/json;charset=UTF-8',
         Accept: 'application/json',
       },
-    }
-  );
-  return pageSourceResponse.data.value;
+    },
+  )
+  return pageSourceResponse.data.value
 }
 
 export const seleniumBrowser: Tool = {
   function: (async ({ url }: { url: string }) => {
-    console.log(`Browsing to ${url}...`);
+    console.log(`Browsing to ${url}...`)
 
-    const sessionId = await createSession();
-    console.log('got session with id:', sessionId);
+    const sessionId = await createSession()
+    console.log('got session with id:', sessionId)
 
-    try {
-      await loadURL(url, sessionId);
-      const pageContent = await fetchPageContent(sessionId);
-      return {
-        format: 'html',
-        content: pageContent,
-      };
-    } catch (error) {
-      throw error;
-    } /*finally {
+    await loadURL(url, sessionId)
+    const pageContent = await fetchPageContent(sessionId)
+    return {
+      format: 'html',
+      content: pageContent,
+    }
+    /*finally {
       // we do not want to close sessions for increased speed :)
       await closeSession(sessionId);
     }*/
@@ -152,4 +149,4 @@ docker run -p 4444:4444 -p 7900:7900 --shm-size="2g" -e SE_OPTS="--allow-cors tr
     },
     required: ['url'],
   },
-};
+}

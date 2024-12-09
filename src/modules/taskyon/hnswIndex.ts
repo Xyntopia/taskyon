@@ -1,13 +1,13 @@
-import type { HnswlibModule } from 'hnswlib-wasm';
-import { Lock, sleep } from '../utils';
-import type { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
+import type { HnswlibModule } from 'hnswlib-wasm'
+import { Lock, sleep } from '../utils'
+import type { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm'
 
-const numDimensions = 384;
-let lib: HnswlibModule | undefined = undefined;
+const numDimensions = 384
+let lib: HnswlibModule | undefined = undefined
 
 async function getHnswLib(): Promise<HnswlibModule> {
   if (lib) {
-    return lib;
+    return lib
   } else {
     const { loadHnswlib } = await import(
       /* webpackChunkName: "hnswlib" */
@@ -15,100 +15,91 @@ async function getHnswLib(): Promise<HnswlibModule> {
       /* webpackExports: ["loadHnswlib"] */
       /* webpackFetchPriority: "low" */
       'hnswlib-wasm'
-    );
-    lib = await loadHnswlib();
+    )
+    lib = await loadHnswlib()
     //TODO: we might need to run this off!
-    lib.EmscriptenFileSystemManager.setDebugLogs(true);
-    return lib;
+    lib.EmscriptenFileSystemManager.setDebugLogs(true)
+    return lib
   }
 }
 
-async function loadIndex(
-  numDimensions: number,
-  indexName: string,
-  maxElements: number,
-) {
-  const hnswLib = await getHnswLib();
+async function loadIndex(numDimensions: number, indexName: string, maxElements: number) {
+  const hnswLib = await getHnswLib()
   //check this for explanations:  https://github.com/nmslib/hnswlib/blob/master/ALGO_PARAMS.md
-  const index = new hnswLib.HierarchicalNSW('cosine', numDimensions, indexName);
+  const index = new hnswLib.HierarchicalNSW('cosine', numDimensions, indexName)
   // Initialize the index with the dimensions (1536), m, efConstruction. See the section below on parameters for more details. These cannot be changed after the index is created.
   // m: max number of outgoing connections in graph, memory consumption, roughly: (M * 8-10)*numDataPoints,
   // also low m is better if we have low intrinsic dimension of dataset and  low recall is OK.
-  const m = 30;
+  const m = 30
   // bigger efConstruction: higher quality index, longer construction
-  const efConstruction = 200;
-  const randomSeed = 111;
+  const efConstruction = 200
+  const randomSeed = 111
 
-  index.initIndex(maxElements, m, efConstruction, randomSeed, true);
+  index.initIndex(maxElements, m, efConstruction, randomSeed, true)
 
   // Set efSearch parameters. This can be changed after the index is created.
-  index.setEfSearch(200); // higher ef: slower, more accurate (between k & size of dataset)
-  return index;
+  index.setEfSearch(200) // higher ef: slower, more accurate (between k & size of dataset)
+  return index
 }
 
-const indexLoadLock = new Lock();
+const indexLoadLock = new Lock()
 
 // if we want to re-create an index, we sinply load it with loadIfExists=false
 // and this will overwrite the existing one...
-async function loadOrCreateHNSWIndex(
+export async function loadOrCreateHNSWIndex(
   vecdbName: string,
   MAX_ELEMENTS: number,
   loadIfExists = true,
 ) {
-  console.log('initialize index', vecdbName);
+  console.log('initialize index', vecdbName)
   // we need the lock, because somehow the wasm module has problems loading multiple webstores simultanously
-  const done = await indexLoadLock.lock();
+  const done = await indexLoadLock.lock()
   // we need to wait before loading the next store :P 500ms seems to be a pretty safe bet. 100ms didn't work
   // there is some obscure background magic with probably resource sharing etc..  going on here.
-  await sleep(1000);
-  const newIndex = await loadIndex(numDimensions, vecdbName, MAX_ELEMENTS);
+  await sleep(1000)
+  const newIndex = await loadIndex(numDimensions, vecdbName, MAX_ELEMENTS)
   if (loadIfExists) {
-    const hnswLib = await getHnswLib();
-    const exists =
-      hnswLib.EmscriptenFileSystemManager.checkFileExists(vecdbName);
+    const hnswLib = await getHnswLib()
+    const exists = hnswLib.EmscriptenFileSystemManager.checkFileExists(vecdbName)
     if (exists) {
       try {
-        await newIndex.readIndex(vecdbName, MAX_ELEMENTS, true);
-        console.log('successfully loaded ', vecdbName);
+        await newIndex.readIndex(vecdbName, MAX_ELEMENTS, true)
+        console.log('successfully loaded ', vecdbName)
       } catch (err) {
-        console.error(`index ${vecdbName} could not be reloaded`, err);
+        console.error(`index ${vecdbName} could not be reloaded`, err)
       }
     }
   }
-  done(); //release the lock to our store
-  return newIndex;
+  done() //release the lock to our store
+  return newIndex
 }
 
 export function useVectorStore(indexName: string) {
-  let vectorIndex: HierarchicalNSW | undefined;
+  let vectorIndex: HierarchicalNSW | undefined
 
   async function initVectorStore(loadIfExists = true) {
-    const maxElements = 10000;
-    vectorIndex = await loadOrCreateHNSWIndex(
-      indexName,
-      maxElements,
-      loadIfExists,
-    );
+    const maxElements = 10000
+    vectorIndex = await loadOrCreateHNSWIndex(indexName, maxElements, loadIfExists)
   }
-  void initVectorStore();
+  void initVectorStore()
 
   async function resetVectorStore() {
-    await initVectorStore(false);
+    await initVectorStore(false)
   }
 
   async function getVectorIndex() {
     if (vectorIndex) {
-      return vectorIndex;
+      return vectorIndex
     }
     // Wait for the vectorIndex to be initialized
-    await initVectorStore();
-    return vectorIndex;
+    await initVectorStore()
+    return vectorIndex
   }
 
   return {
     getVectorIndex,
     resetVectorStore,
-  };
+  }
 }
 
 /*we are using this below to test the library...

@@ -65,7 +65,7 @@ class DocumentDatabase extends Dexie {
 interface idbDocument {
   id?: number;
   document: Document;
-  vector?: number[];
+  vector?: number[] | undefined;
   filehash?: string;
 }
 

@@ -1,4 +1,4 @@
-import { watch, ref, UnwrapRef, Ref } from 'vue';
+import { watch, ref, UnwrapRef, Ref } from 'vue'
 
 // localStorage.ts
 
@@ -10,8 +10,8 @@ import { watch, ref, UnwrapRef, Ref } from 'vue';
  * @returns {T | null} - The state, parsed from JSON, or null if no state was found.
  */
 function loadState<T>(key: string): T | null {
-  const raw = localStorage.getItem(key);
-  return raw ? (JSON.parse(raw) as T) : null;
+  const raw = localStorage.getItem(key)
+  return raw ? (JSON.parse(raw) as T) : null
 }
 
 /**
@@ -22,7 +22,7 @@ function loadState<T>(key: string): T | null {
  * @param {T} state - The state to store.
  */
 function saveState<T>(key: string, state: T): void {
-  localStorage.setItem(key, JSON.stringify(state));
+  localStorage.setItem(key, JSON.stringify(state))
 }
 
 /**
@@ -33,30 +33,27 @@ function saveState<T>(key: string, state: T): void {
  * @param {T} initialState - The initial state, to be used if no state is currently stored in localStorage.
  * @returns {Ref<UnwrapRef<T>>} - A reactive reference to the state.
  */
-export function syncStateWLocalStorage<T>(
-  key: string,
-  initialState: T
-): Ref<UnwrapRef<T>> {
+export function syncStateWLocalStorage<T>(key: string, initialState: T) {
   console.log('loading state!')
-  const savedState = loadState<T>(key);
-  const state = ref(initialState);
+  const savedState = loadState<T>(key)
+  const state = ref(initialState)
   if (savedState != null) {
     const newState = {
       ...initialState,
       ...savedState,
-    };
-    state.value = newState as UnwrapRef<T>;
+    }
+    state.value = newState as UnwrapRef<T>
   }
 
   watch(
     () => state,
     (newValue) => {
-      saveState(key, newValue.value);
+      saveState(key, newValue.value)
     },
     {
       deep: true,
-    }
-  );
+    },
+  )
 
-  return state;
+  return state
 }
