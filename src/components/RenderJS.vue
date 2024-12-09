@@ -5,19 +5,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted } from 'vue'
 
 // Prop to accept the HTML + JavaScript string
-const content = ref<string>('<h1>Hello World</h1><script>alert("Hello World")</script>');
+//const content = ref<string>('<h1>Hello World</h1><script>alert("Hello World");<script>')
+const content = ref<string>('Some html & javscript code...')
 
-const sandbox = ref<HTMLIFrameElement | null>(null);
+const sandbox = ref<HTMLIFrameElement | null>(null)
 
 onMounted(() => {
   // Ensure iframe is sandboxed, but allow scripts
   if (sandbox.value) {
-    sandbox.value.setAttribute('sandbox', 'allow-scripts');
+    sandbox.value.setAttribute('sandbox', 'allow-scripts')
   }
-});
+})
 </script>
 
 <style scoped>
@@ -28,4 +29,3 @@ iframe {
   border: none;
 }
 </style>
-

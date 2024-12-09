@@ -1,6 +1,6 @@
 <template>
   <q-page class="q-pa-xs">
-    <div v-if="$route.query.debug !== undefined">
+    <div v-if="route.query.debug !== undefined">
       <div>Folder: {{ folder }}</div>
       <div>Path: {{ filePath }}</div>
     </div>

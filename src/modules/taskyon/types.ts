@@ -19,13 +19,17 @@ export const removeKeys = <T extends object, K extends keyof T>(obj: T, keys: K[
 }
 
 export function removeUndefinedProperties<T extends object>(obj: T): RemoveUndefined<T, keyof T> {
-  return Object.entries(obj).reduce((acc, [key, value]) => {
-    if (value !== undefined) {
-      ;(acc as any)[key] = value
-    }
-    return acc
-  }, {} as any)
+  return Object.entries(obj).reduce(
+    (acc, [key, value]) => {
+      if (value !== undefined) {
+        ;(acc as Record<string, unknown>)[key] = value
+      }
+      return acc
+    },
+    {} as Record<keyof T, unknown>,
+  ) as RemoveUndefined<T, keyof T>
 }
+
 export class TaskProcessingError extends Error {
   details: Record<string, unknown> | undefined
 
