@@ -247,6 +247,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       return;
     }
 
+    // Check if the task already exists in the history
+    if (!stateRefs.chatHistory.includes(task.id)) {
+      // Add the task to the front of the list if it doesn't exist
+      stateRefs.chatHistory.unshift(task.id);
+    }
+
     // Remove task.id if it exists, then unshift to front (avoids duplication)
     // we do this every time something gets added to the history
     // we are not doin this anymore, because it gets too confusing for poeple ;)
