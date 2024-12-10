@@ -26,8 +26,8 @@ function mergeVectors(chunkVectors: Tensor[], overlap: number) {
   console.log('merge vectors');
   const mergedVectors: Tensor[] = [];
 
-  const chunkLength = chunkVectors[0].dims[1];
-  const firstChunk = chunkVectors[0].slice([0, 1], [0, chunkLength - overlap]);
+  const chunkLength = chunkVectors[0]!.dims[1]!;
+  const firstChunk = chunkVectors[0]!.slice([0, 1], [0, chunkLength - overlap]);
   mergedVectors.push(firstChunk);
 
   for (let i = 1; i < chunkVectors.length; i++) {
@@ -67,7 +67,6 @@ export async function vectorize(
 ) {
   console.log('Calculating vectors for long text');
   const tokenizer = await loadTokenizer(modelName);
-
   const model = await loadModel(modelName);
   const maxChunkSize =
     (

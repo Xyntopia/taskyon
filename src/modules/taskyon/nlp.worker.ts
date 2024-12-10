@@ -3,6 +3,7 @@ import { getVector } from './nlp';
 import type OpenAI from 'openai';
 import type { OpenAIMessage, ToolBase, TaskNode } from './types';
 import { mapFunctionNames } from './tools';
+import { loadModel, loadTokenizer } from './mlModels';
 
 //import { getEncoding } from 'js-tiktoken';
 async function loadTikTokenEncoder() {
@@ -65,6 +66,17 @@ const nlpWorker = {
   async vectorizeText(text: string, modelName: string) {
     return await getVector(text, modelName);
   },
+
+  async loadVecTokenizer(modelName: string) {
+    await loadTokenizer(modelName);
+    console.log('tokenizer loaded:', modelName);
+  },
+
+  async loadVecModel(modelName: string) {
+    await loadModel(modelName);
+    console.log('model loaded:', modelName);
+  },
+
   async estimateChatTokens(
     task: TaskNode,
     chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
