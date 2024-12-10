@@ -10,7 +10,7 @@ services:
     restart: always
 
   taskyon-debug:
-    image: xyntopia/taskyon-space.dev
+    image: xyntopia/taskyon:debug
     build:
       context: .
       dockerfile: ./Dockerfile

@@ -1,5 +1,5 @@
 # Stage 1: Build the Quasar application
-FROM node:22.10.0 as prepare
+FROM node:22.10.0 as base
 
 # Set up Yarn cache directory
 ENV YARN_CACHE_FOLDER=/app/.yarn-cache
@@ -92,7 +92,3 @@ RUN cp /etc/nginx/conf.d/template.conf /etc/nginx/conf.d/default.conf
 EXPOSE 9000
 STOPSIGNAL SIGTERM
 CMD ["nginx", "-g", "daemon off;"]
-
-# Stage 2: Serve the built site with a web server
-#FROM nginx:alpine
-FROM nginx
