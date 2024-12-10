@@ -29,22 +29,19 @@ RUN --mount=type=cache,target=$YARN_CACHE_FOLDER yarn install
 # Copy the rest of the project files
 COPY . .
 
-FROM prepare as builder
+# Quasar production build stage
+FROM base as production-builder
+RUN ls -la && yarn quasar prepare && yarn quasar build
 
-RUN ls -la && yarn quasar prepare
+# Quasar debug build stage
+FROM base as debug-builder
+RUN ls -la && yarn quasar prepare && yarn quasar build --debug
 
-# Build the static site
-RUN yarn quasar build
-
-# Stage 2: Serve the built site with a web server
-#FROM nginx:alpine
-FROM nginx
-
-# Copy the built files from the previous stage
-COPY --from=builder /app/dist/spa /usr/share/nginx/html
+# Define a common Nginx stage
+FROM nginx as base-nginx
 
 # Create custom Nginx configuration
-RUN cat > /etc/nginx/conf.d/default.conf <<'EOF'
+RUN cat > /etc/nginx/conf.d/template.conf <<'EOF'
 server {
     #listen ${NGINX_PORT};
     listen 9000;
@@ -80,8 +77,22 @@ server {
 }
 EOF
 
+# Production serving stage
+FROM base-nginx as production
+COPY --from=production-builder /app/dist/spa /usr/share/nginx/html
+RUN cp /etc/nginx/conf.d/template.conf /etc/nginx/conf.d/default.conf
 EXPOSE 9000
 STOPSIGNAL SIGTERM
-# Start Nginx serve#r
-#CMD ["nginx-debug", "-g", "daemon off;"]
+CMD ["nginx-debug", "-g", "daemon off;"]
+
+# Debug serving stage
+FROM base-nginx as debug
+COPY --from=debug-builder /app/dist/spa /usr/share/nginx/html
+RUN cp /etc/nginx/conf.d/template.conf /etc/nginx/conf.d/default.conf
+EXPOSE 9000
+STOPSIGNAL SIGTERM
 CMD ["nginx", "-g", "daemon off;"]
+
+# Stage 2: Serve the built site with a web server
+#FROM nginx:alpine
+FROM nginx
