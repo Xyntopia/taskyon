@@ -33,7 +33,7 @@
           name="svguse:/taskyon_mono_opt.svg#taskyon"
           :color="$q.dark.isActive ? 'secondary' : 'primary'"
         ></q-icon>
-        <component :is="ResetButton" v-if="ResetButton"></component>
+        <component :is="ResetButton" v-if="ResetButton" mode="all"></component>
         <GetStarted />
       </div>
     </div>

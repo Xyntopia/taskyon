@@ -21,6 +21,8 @@
           label="download report"
           @click="downloadReport"
         ></q-btn>
+        <TyResetButton outline mode="all" />
+        <TyResetButton outline mode="settings" />
         <q-toggle v-model="detailed" label="detailed"></q-toggle>
         <q-card flat bordered>
           <q-btn
@@ -56,6 +58,7 @@ import {
 } from 'src/modules/taskyon/tests';
 import { useGdrive } from 'src/modules/gdrive';
 import { useAppStateStore } from 'src/stores/appState';
+import TyResetButton from 'src/components/taskyon/TyResetButton.vue';
 
 const tystate = useTaskyonStore();
 const state = useAppStateStore();

@@ -148,13 +148,12 @@
                   </q-card-section>
                   <q-card-actions>
                     <q-btn flat color="secondary" to="/diagnostics">
-                      <div class="q-pr-md">
-                        Open Diagnostics
-                      </div>
+                      <div class="q-pr-md">Open Diagnostics</div>
                       <q-icon :name="mdiWrench"></q-icon>
                       <q-icon :name="mdiHospital" size="md"></q-icon>
-                  </q-btn>
-                </q-card-actions>
+                    </q-btn>
+                    <q-btn flat label="Reset Settings" to="/settings/profile" />
+                  </q-card-actions>
                   <q-card-section class="text-info" style="font-size: 0.75em">
                     <div
                       v-for="[name, value] of Object.entries(environmentInfo())"

@@ -138,50 +138,14 @@ and verify the authenticity of messages sent by other users."
         </FileDropzone>
       </q-item-section>
       <q-item-section>
-        <q-btn
+        <TyResetButton
           :icon="matDeleteForever"
           label="Delete Taskyon Chat Data"
           color="red"
           outline
-          @click="showDeleteDialog = true"
+          mode="tasks"
         >
-        </q-btn>
-        <q-dialog v-model="showDeleteDialog">
-          <q-card>
-            <q-card-section>
-              <div class="text-h6 text-red text-center">
-                <q-icon :name="matWarning" size="md" />
-                Warning: Delete Taskyon Chat Data
-              </div>
-            </q-card-section>
-            <q-card-section class="q-pt-none">
-              <p>
-                <strong>Warning:</strong> This operation will permanently delete
-                all Taskyon chat data. This action cannot be undone.
-              </p>
-              <p>
-                Before proceeding, please make sure you have a backup of your
-                data. You can download your data in JSON or YAML format using
-                the buttons above.
-              </p>
-              <!--<p>
-          If you're sure you want to delete all Taskyon chat data, enter "DELETE" in the field below to confirm:
-        </p>
-        <q-input v-model="deleteConfirmation" label="Confirmation" />-->
-            </q-card-section>
-            <q-card-actions align="right">
-              <q-btn v-close-popup flat label="Cancel" />
-              <q-btn
-                v-close-popup
-                flat
-                label="Delete"
-                color="negative"
-                :icon="matDeleteForever"
-                @click="onDeleteTaskyonData"
-              />
-            </q-card-actions>
-          </q-card>
-        </q-dialog>
+        </TyResetButton>
       </q-item-section>
     </q-item>
     <q-item-label header>Taskyon Configuration Backup</q-item-label>
@@ -240,51 +204,15 @@ and verify the authenticity of messages sent by other users."
     </q-item>
     <q-item>
       <q-item-section>
-        <q-btn
+        <TyResetButton
           :icon="matWarning"
           label="Reset Taskyon Settings"
           outline
           class="q-ma-md"
           text-color="red"
-          @click="showResetDialog = true"
+          mode="settings"
         />
       </q-item-section>
-      <q-dialog v-model="showResetDialog">
-        <q-card>
-          <q-card-section>
-            <div class="text-h6 text-red text-center">
-              <q-icon :name="matWarning" size="md" />
-              Warning: Reset all Taskyon Settings
-            </div>
-          </q-card-section>
-          <q-card-section class="q-pt-none">
-            <p>
-              <strong>Warning:</strong> This operation will reset all taskyon
-              settings. It will *not* delete any of your chats.
-            </p>
-            <p>
-              Before proceeding, please make sure you have a backup of the
-              settings. You can download your data in JSON or YAML format using
-              the buttons above.
-            </p>
-            <!--<p>
-          If you're sure you want to delete all Taskyon chat data, enter "DELETE" in the field below to confirm:
-        </p>
-        <q-input v-model="deleteConfirmation" label="Confirmation" />-->
-          </q-card-section>
-          <q-card-actions align="right">
-            <q-btn v-close-popup flat label="Cancel" />
-            <q-btn
-              v-close-popup
-              flat
-              label="Reset"
-              color="negative"
-              :icon="matDeleteForever"
-              @click="onResetTaskyon"
-            />
-          </q-card-actions>
-        </q-card>
-      </q-dialog>
     </q-item>
   </q-list>
 </template>
@@ -310,6 +238,7 @@ import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6';
 import InfoDialog from '../InfoDialog.vue';
 import { base64UrlEd25519Keys, generateRandomNewKey } from 'src/modules/crypto';
 import { useAppStateStore } from 'src/stores/appState';
+import TyResetButton from './TyResetButton.vue';
 
 const tystate = useTaskyonStore();
 const state = useAppStateStore();
@@ -453,22 +382,5 @@ async function onUploadTaskyonData(newFiles: File[]) {
   } catch (error) {
     console.error('Error processing file', error);
   }
-}
-
-const showDeleteDialog = ref(false);
-const showResetDialog = ref(false);
-
-async function onDeleteTaskyonData() {
-  const tm = await tystate.getTaskManager();
-  await tm.deleteAllTasks();
-  state.chatHistory = [];
-  // TODO: this is a superdirty version..  it would be much better to manually reinit the taskyondb in the deleteAllTasks function
-  location.reload(); // reload browser window to reinitialize the db...
-}
-
-function onResetTaskyon() {
-  console.log('reset taskyon!');
-  state.$reset();
-  //location.reload(); // reload browser window to reinitialize the db...
 }
 </script>
