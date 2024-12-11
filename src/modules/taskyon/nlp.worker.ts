@@ -1,9 +1,8 @@
 import { expose } from 'comlink';
-import { getVector } from './nlp';
+import { getVector, loadModel, loadTokenizer } from './nlp';
 import type OpenAI from 'openai';
 import type { OpenAIMessage, ToolBase, TaskNode } from './types';
 import { mapFunctionNames } from './tools';
-import { loadModel, loadTokenizer } from './mlModels';
 
 //import { getEncoding } from 'js-tiktoken';
 async function loadTikTokenEncoder() {

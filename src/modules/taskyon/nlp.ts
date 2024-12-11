@@ -1,6 +1,74 @@
-import { loadTokenizer, loadModel } from './mlModels';
-import { Tensor, cat, mean, cos_sim, magnitude } from '@xenova/transformers';
+import {
+  type Tensor,
+  cat,
+  mean,
+  cos_sim,
+  magnitude,
+  env,
+  type PreTrainedModel,
+  type PreTrainedTokenizer,
+  AutoModel,
+  AutoTokenizer,
+} from '@huggingface/transformers';
+
+env.allowLocalModels = false;
+env.allowRemoteModels = true;
+//env.
+//env.localModelPath = '/path/to/local/models/';
+//env.cacheDir = '/path/to/cache/directory/';
+
 //import * as sw from 'stopword'; // Assuming this is the stopword library you are referring to
+
+// Include pako library
+// this piece of code loads a compressed vocabulary for vectorization tasks...
+/*import pako from 'pako';
+
+fetch('compressed_array.b64')
+    .then(response => response.text())
+    .then(data => {
+        let binaryData = atob(data);
+        let compressedData = new Uint8Array(binaryData.split("").map(char => char.charCodeAt(0)));
+        let decompressedData = pako.inflate(compressedData);
+        let myArray = new Float32Array(decompressedData.buffer);
+    });
+*/
+
+/*async function loadTransformers() {
+  const { AutoModel, AutoTokenizer } = await import(
+    /* webpackChunkName: "transformers" */
+/* webpackMode: "lazy" */
+/* webpackExports: ["getEncoding"] */
+/* webpackFetchPriority: "low" *
+    '@huggingface/transformers'
+  );
+  return {
+    AutoModel,
+    AutoTokenizer,
+  };
+}*/
+
+const modelStore = {
+  models: {} as Record<string, Promise<PreTrainedModel>>,
+  tokenizers: {} as Record<string, Promise<PreTrainedTokenizer>>,
+};
+
+export async function loadModel(modelName: string) {
+  console.log(`load model: ${modelName}`);
+  // Check if loading already in progress
+  if (!modelStore.models[modelName]) {
+    //const tf = await loadTransformers();
+    modelStore.models[modelName] = AutoModel.from_pretrained(modelName);
+  }
+  return await modelStore.models[modelName];
+}
+
+export async function loadTokenizer(modelName: string) {
+  if (!modelStore.tokenizers[modelName]) {
+    //const tf = await loadTransformers();
+    modelStore.tokenizers[modelName] = AutoTokenizer.from_pretrained(modelName);
+  }
+  return await modelStore.tokenizers[modelName];
+}
 
 export async function getVector(
   txt: string,
@@ -31,9 +99,9 @@ function mergeVectors(chunkVectors: Tensor[], overlap: number) {
   mergedVectors.push(firstChunk);
 
   for (let i = 1; i < chunkVectors.length; i++) {
-    const currentChunk = chunkVectors[i];
+    const currentChunk = chunkVectors[i]!;
     // For overlapping regions, calculate the mean with the previous chunk
-    const previousChunk = chunkVectors[i - 1];
+    const previousChunk = chunkVectors[i - 1]!;
     const overlapPrevious = previousChunk.slice(
       [0, 1],
       [chunkLength - overlap, Infinity],
@@ -106,7 +174,7 @@ export async function vectorize(
       token_type_ids: tokenTypeChunks[i],
     };
     const res = (await model(chunkInputs)) as Record<string, Tensor>;
-    chunkVectors.push(res.last_hidden_state);
+    if (res.last_hidden_state) chunkVectors.push(res.last_hidden_state);
   }
 
   // Merge the chunk vectors
@@ -116,6 +184,8 @@ export async function vectorize(
   } else {
     finalVector = chunkVectors[0];
   }
+
+  if (!finalVector) throw new Error('no hidden states were found!!');
 
   const meanPooledVector = mean(finalVector, 1);
 
@@ -232,7 +302,7 @@ export async function extractKeywords(
   }));
 
   // Sort words by their similarity to the mean vector
-  wordSimilarities.sort((a, b) => b.similarity - a.similarity);
+  wordSimilarities.sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0));
 
   // Filter out stopwords and select top N keywords
   const keywords = wordSimilarities

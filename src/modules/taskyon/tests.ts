@@ -69,6 +69,25 @@ const mockTools: Record<string, ToolBase> = {
   },
 };
 
+export async function testTransformersPipeline() {
+  const { pipeline } = await import('@huggingface/transformers');
+  const extractor = await pipeline(
+    'feature-extraction',
+    'Xenova/all-MiniLM-L6-v2',
+  );
+  const output = await extractor('This is a simple test.', {
+    pooling: 'mean',
+    quantize: true,
+    precision: 'binary',
+  });
+  /* Tensor {
+  //   type: 'int8',
+  //   data: Int8Array[49, 108, 24, ...],
+  //   dims: [1, 48]
+  }*/
+  return output;
+}
+
 export async function testVectorizerInitialization() {
   const nlpWorker = useNlpWorker();
   const modelName = state.llmSettings.vectorizationModel; // Mock model name

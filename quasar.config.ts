@@ -201,6 +201,14 @@ export default defineConfig((ctx) => {
           /*isServer, isClient*/
         },
       ) {
+        // Add an alias for @huggingface/transformers
+        // TODO: we are doing this, because of this here, currently:
+        // https://github.com/huggingface/transformers.js/issues/911#issuecomment-2329440874
+        cfg.resolve.alias['@huggingface/transformers'] = path.resolve(
+          __dirname,
+          'node_modules/@huggingface/transformers',
+        );
+
         // use new webpack5 loaders for asset importing
         cfg.module.rules.push({
           test: /\.md/,

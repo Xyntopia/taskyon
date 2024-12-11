@@ -50,6 +50,7 @@ import { matContentCopy } from '@quasar/extras/material-icons';
 import {
   markdownGeneration,
   testEstimateChatTokens,
+  testTransformersPipeline,
   testVectorizerInitialization,
   testVectorizeText,
 } from 'src/modules/taskyon/tests';
@@ -113,6 +114,12 @@ async function generateReport(details = false, onlyFirst = false) {
   console.log('generating diagnostics report');
 
   diagnostics.value = `report_date: ${new Date().toISOString()}\n`;
+
+  diagnostics.value += await runTest(
+    'testTransformersPipeline',
+    testTransformersPipeline,
+    details,
+  );
 
   diagnostics.value += await runTest(
     'load_vecorization_initialization',
