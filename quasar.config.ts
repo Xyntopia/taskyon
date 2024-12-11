@@ -170,7 +170,7 @@ export default defineConfig((ctx) => {
       middlewares: [
         'logger',
         'taskHttpApi',
-        'gdrive_proxy',
+        'gdriveProxy',
         'render', // keep this as last one
       ],
 
