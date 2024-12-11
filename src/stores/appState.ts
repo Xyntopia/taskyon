@@ -27,6 +27,14 @@ interface TaskStateType {
   markdownEnabled: boolean;
 }
 
+function clearBrowserStorage() {
+  LocalStorage.clear();
+  sessionStorage.clear();
+  clearBrowserCaches();
+  clearServiceWorkers();
+  clearCookies();
+}
+
 // TODO: make sure, we save/load our store state from inside the below store function!
 //       and get rid of automatically saving it in our stores/index.ts
 const storeName = 'taskyonState';
@@ -124,6 +132,7 @@ export const useAppStateStore = defineStore(storeName, () => {
     );
     stateRefs = reactive(storedInitialState);
   } else {
+    // TODO: pop up a dialog where we inform the user about this!!
     console.warn(
       `Stored settings version (${
         initialStoredStateObj?.version || 'undefined'
@@ -131,6 +140,7 @@ export const useAppStateStore = defineStore(storeName, () => {
         initialState.version
       }). Using default settings.`,
     );
+    clearBrowserStorage();
     stateRefs = reactive(initialState);
   }
 
@@ -209,12 +219,8 @@ export const useAppStateStore = defineStore(storeName, () => {
     console.log('Resetting Taskyon!!');
     stateRefs.appConfiguration = defaultStorableSettings.appConfiguration;
     stateRefs.llmSettings = defaultStorableSettings.llmSettings;
-    LocalStorage.clear();
-    sessionStorage.clear();
     stateRefs.version = 0 as typeof stateRefs.version; // set the version to 0, hoping, that this will trigger a reset on page reload..
-    clearBrowserCaches();
-    clearServiceWorkers();
-    clearCookies();
+    clearBrowserStorage();
     console.log('done, resetting! reloading page now...');
     void sleep(1000).then(() => (window.location.href = '/'));
   }
