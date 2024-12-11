@@ -35,16 +35,6 @@ export const useGdrive = () => {
   const clientId =
     '14927198496-jaadcashh91s9gue7uicf3datk79tohc.apps.googleusercontent.com';
   const scope = 'https://www.googleapis.com/auth/drive.file';
-  let tokenClient:
-    | {
-        requestAccessToken: (
-          overridableClientConfig?: Record<string, unknown> | undefined,
-        ) => void;
-        callback:
-          | ((response: { access_token: string; error: unknown }) => void)
-          | undefined;
-      }
-    | undefined = undefined;
 
   const isTokenExpired = computed(() => {
     const currentTime = Math.floor(Date.now() / 1000); // Current Unix timestamp in seconds
@@ -56,18 +46,36 @@ export const useGdrive = () => {
     tokenReceivedTime.value = Math.floor(Date.now() / 1000); // Set to current Unix timestamp
   }
 
-  googleSdkLoaded((google) => {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: scope,
-    }) as typeof tokenClient;
-  });
+  type TokenClient = {
+    requestAccessToken: (
+      overridableClientConfig?: Record<string, unknown>,
+    ) => void;
+  };
 
+  function initializeTokenClient(): Promise<TokenClient> {
+    return new Promise((resolve) => {
+      googleSdkLoaded((google) => {
+        const tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: scope,
+        });
+        console.log('initialized gdrive token client');
+        resolve(tokenClient);
+      });
+    });
+  }
+
+  // TODO: save the access token for a longer time! :)
+  //       maybe just cache it?
   async function getValidAccessToken() {
     if (!gdriveAccessToken.value || isTokenExpired.value) {
-      if (!tokenClient) {
-        throw new Error('Token client is not initialized.');
-      }
+      const tokenClient =
+        (await initializeTokenClient()) as unknown as TokenClient & {
+          callback: (response: {
+            error: unknown;
+            access_token: string;
+          }) => void;
+        };
 
       // Request a new token
       tokenClient.callback = (response) => {
