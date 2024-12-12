@@ -34,6 +34,7 @@
               outline
               :icon="symOutlinedDriveExport"
               label="Share through Gdrive"
+              :loading="loadingGdrive"
               @click="onExportPublicGdrive(conversationId)"
             />
             <q-slide-transition v-if="gdriveLink">
@@ -56,7 +57,7 @@
                       style="max-width: 15rem"
                     >
                       {{ link }}
-                      <q-tooltip>{{link}}</q-tooltip>
+                      <q-tooltip>{{ link }}</q-tooltip>
                     </div>
                     <div class="col-auto">
                       <q-btn
@@ -130,11 +131,12 @@ defineProps<{
 }>();
 
 const gdriveLink = ref<string>();
+const loadingGdrive = ref(false);
 
 const taskyonShareLink = computed(() => {
   if (gdriveLink.value) {
     const fileId = getFileId(gdriveLink.value);
-    return `https://share.taskyon.space/proxy/gdrive/${fileId}`;
+    return `${window.origin}/chat?gd=${fileId}`;
   } else {
     throw new Error('Could not creae ');
   }
@@ -143,22 +145,27 @@ const taskyonShareLink = computed(() => {
 async function onExportPublicGdrive(conversationId: string) {
   const tm = await tystate.getTaskManager();
   const task = await tm.getTask(conversationId);
-  if (task) {
-    const taskThreadMd = await tm.chatToMarkdown(task.id);
-    if (taskThreadMd) {
-      const { publishMarkdown } = useGdrive();
+  try {
+    if (task) {
+      loadingGdrive.value = true;
+      const taskThreadMd = await tm.chatToMarkdown(task.id);
+      if (taskThreadMd) {
+        const { publishMarkdown } = useGdrive();
 
-      const gdriveFile = await publishMarkdown(
-        taskThreadMd,
-        state.appConfiguration.gdriveDir,
-        `tyn-${task.name || ''}.md`,
-        true,
-      );
+        const gdriveFile = await publishMarkdown(
+          taskThreadMd,
+          state.appConfiguration.gdriveDir,
+          `tyn-${task.name || ''}.md`,
+          true,
+        );
 
-      if (gdriveFile.webViewLink) {
-        gdriveLink.value = gdriveFile.webViewLink;
+        if (gdriveFile.webViewLink) {
+          gdriveLink.value = gdriveFile.webViewLink;
+        }
       }
     }
+  } finally {
+    loadingGdrive.value = false;
   }
 }
 

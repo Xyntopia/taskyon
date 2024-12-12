@@ -103,7 +103,15 @@ const folder = '';
 
 async function updateChatThread() {
   console.log('update chat thread');
-  if (typeof route.query.url === 'string') {
+  if (typeof route.query.gd === 'string') {
+    const gdFileId = route.query.gd;
+    const markdownUrl = `https://share.taskyon.space/proxy/gdrive/${gdFileId}`;
+    const markdownContent = await getTextFile(markdownUrl);
+    const newTaskId = await tystate.addMdTasks(markdownContent, undefined);
+
+    state.llmSettings.selectedTaskId = newTaskId;
+    state.lockBottomScroll = true;
+  } else if (typeof route.query.url === 'string') {
     const markdownUrl = route.query.url ? new URL(route.query.url) : undefined;
     if (markdownUrl) {
       const markdownContent = await getTextFile(markdownUrl);
@@ -190,7 +198,7 @@ watch(
   () => state.llmSettings.selectedTaskId,
   (newTaskId) => {
     console.log('set new task', newTaskId);
-    if (!route.params.filePath) {
+    if (!route.params.filePath && !route.params.gd) {
       // we are only doing this if there is no filepath, because filepaths have priority ;)
       router.push({
         query: { ...route.query, t: newTaskId || undefined },
