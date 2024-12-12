@@ -43,9 +43,9 @@
                   v-for="[link, label] in [
                     [
                       taskyonShareLink,
-                      'Share chat through taskyon (store in gdrive)',
+                      'Copy taskyon.space link (stored in gdrive)',
                     ],
-                    [gdriveLink, 'Share markdownthrough gdrive'],
+                    [gdriveLink, 'Copy markdown link'],
                   ] as Array<[string, string]>"
                   :key="link"
                 >
@@ -56,6 +56,7 @@
                       style="max-width: 15rem"
                     >
                       {{ link }}
+                      <q-tooltip>{{link}}</q-tooltip>
                     </div>
                     <div class="col-auto">
                       <q-btn
