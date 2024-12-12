@@ -36,6 +36,13 @@ RUN ls -la && yarn quasar prepare
 # Build the static site
 RUN yarn quasar build
 
+FROM prepare as server-builder
+
+RUN ls -la && yarn quasar prepare
+
+# Build the static site
+RUN yarn quasar build -m ssr --debug
+
 # Stage 2: Serve the built site with a web server
 #FROM nginx:alpine
 FROM nginx
@@ -85,3 +92,17 @@ STOPSIGNAL SIGTERM
 # Start Nginx serve#r
 #CMD ["nginx-debug", "-g", "daemon off;"]
 CMD ["nginx", "-g", "daemon off;"]
+
+
+# Stage 3: Serve the SSR application
+FROM node:22.10.0 as ssr-server
+
+# Copy the built files from the server-builder stage
+COPY --from=server-builder /app/dist/ssr /app
+
+# Install dependencies
+WORKDIR /app
+RUN yarn install
+
+# Start the SSR server
+CMD ["yarn", "start"]
