@@ -33,21 +33,40 @@
             <q-btn
               outline
               :icon="symOutlinedDriveExport"
-              label="Markdown & public gdrive link"
+              label="Share through Gdrive"
               @click="onExportPublicGdrive(conversationId)"
             />
-            <q-slide-transition>
+            <q-slide-transition v-if="gdriveLink">
               <div v-show="gdriveLink">
-                <q-input dense rounded standout :model-value="gdriveLink">
-                  <template #append>
-                    <q-btn
-                      flat
-                      dense
-                      :icon="matContentCopy"
-                      @click="copyToClipboard(gdriveLink || '')"
-                    />
-                  </template>
-                </q-input>
+                <div
+                  s
+                  v-for="[link, label] in [
+                    [
+                      taskyonShareLink,
+                      'Share chat through taskyon (store in gdrive)',
+                    ],
+                    [gdriveLink, 'Share markdownthrough gdrive'],
+                  ] as Array<[string, string]>"
+                  :key="link"
+                >
+                  <div class="text-caption">{{ label }}</div>
+                  <div class="row q-gutter-sm q-py-sm items-center">
+                    <div
+                      class="col-auto ellipsis text-weight-medium"
+                      style="max-width: 15rem"
+                    >
+                      {{ link }}
+                    </div>
+                    <div class="col-auto">
+                      <q-btn
+                        flat
+                        dense
+                        :icon="matContentCopy"
+                        @click="copyToClipboard(link || '')"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             </q-slide-transition>
             <q-btn
@@ -89,19 +108,21 @@ import {
   matContentCopy,
 } from '@quasar/extras/material-icons';
 import { copyToClipboard, exportFile } from 'quasar';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import {
   symOutlinedDriveExport,
   symOutlinedFileSave,
   symOutlinedMarkdown,
   symOutlinedPublic,
 } from '@quasar/extras/material-symbols-outlined';
-import { useGdrive } from 'src/modules/gdrive';
+import { getFileId, useGdrive } from 'src/modules/gdrive';
 import { useAppStateStore } from 'src/stores/appState';
+import { useTaskyonStore } from 'src/stores/taskyonState';
 
 const showDialog = ref(false);
 
 const state = useAppStateStore();
+const tystate = useTaskyonStore();
 
 defineProps<{
   conversationId: string;
@@ -109,21 +130,17 @@ defineProps<{
 
 const gdriveLink = ref<string>();
 
-function getDirectDownloadLink(originalLink: string) {
-  const url = new URL(originalLink);
-  const pathParts = url.pathname.split('/');
-  const fileId = pathParts[pathParts.length - 2];
-
-  if (!fileId) {
-    throw new Error('Invalid Google Drive link');
+const taskyonShareLink = computed(() => {
+  if (gdriveLink.value) {
+    const fileId = getFileId(gdriveLink.value);
+    return `https://share.taskyon.space/proxy/gdrive/${fileId}`;
+  } else {
+    throw new Error('Could not creae ');
   }
-
-  const directLink = `https://drive.google.com/uc?id=${fileId}&export=download`;
-  return directLink;
-}
+});
 
 async function onExportPublicGdrive(conversationId: string) {
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   const task = await tm.getTask(conversationId);
   if (task) {
     const taskThreadMd = await tm.chatToMarkdown(task.id);
@@ -138,7 +155,7 @@ async function onExportPublicGdrive(conversationId: string) {
       );
 
       if (gdriveFile.webViewLink) {
-        gdriveLink.value = getDirectDownloadLink(gdriveFile.webViewLink);
+        gdriveLink.value = gdriveFile.webViewLink;
       }
     }
   }
@@ -149,7 +166,7 @@ async function onExportIpfs(conversationId: string) {
 }
 
 async function onExportChatMD(conversationId: string, clipBoard = false) {
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   const task = await tm.getTask(conversationId);
   if (task) {
     const taskThreadMd = await tm.chatToMarkdown(task.id);
@@ -168,7 +185,7 @@ async function onExportChatMD(conversationId: string, clipBoard = false) {
 }
 
 async function onExportChatYaml(conversationId: string) {
-  const tm = await state.getTaskManager();
+  const tm = await tystate.getTaskManager();
   const task = await tm.getTask(conversationId);
   if (task) {
     const taskThreadYaml = await tm.chatToYaml(task.id);

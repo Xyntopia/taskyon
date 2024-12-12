@@ -117,7 +117,8 @@ export const useGdrive = () => {
         file.type,
         validAccessToken,
       );
-      if (gdriveFile && share && !gdriveFile.webViewLink) {
+      console.log('trying to make file public!');
+      if (gdriveFile && share) {
         const response = await makeFilePublic(gdriveFile.id, validAccessToken);
         console.log('made file public:', response);
         const publicGdriveFile = await getFileMetaData(
@@ -441,4 +442,23 @@ async function downloadFileFromDrive(fileId: string, accessToken: string) {
   const response = await axios.get(url, { headers, responseType: 'blob' });
   console.log('File downloaded successfully.');
   return response.data as File; // The file data
+}
+
+export function getFileId(originalLink: string) {
+  const url = new URL(originalLink);
+  const pathParts = url.pathname.split('/');
+  const fileId = pathParts[pathParts.length - 2];
+  if (!fileId) {
+    throw new Error('Invalid Google Drive link');
+  }
+  return fileId;
+}
+
+export function gdriveDirectDownloadLink(gdriveLink: string) {
+  if (gdriveLink) {
+    const fileId = getFileId(gdriveLink);
+    return `https://drive.google.com/uc?id=${fileId}&export=download`;
+  } else {
+    throw Error('not able to create direct gdrive download link.');
+  }
 }
