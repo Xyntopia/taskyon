@@ -95,14 +95,15 @@ CMD ["nginx", "-g", "daemon off;"]
 
 
 # Stage 3: Serve the SSR application
-FROM node:22.10.0 as ssr-server
+FROM node:22.10.0-alpine as ssr-server
+#FROM node:22.10.0 as ssr-server
 
 # Copy the built files from the server-builder stage
 COPY --from=server-builder /app/dist/ssr /app
 
 # Install dependencies
 WORKDIR /app
-RUN yarn install
+RUN yarn install --frozen-lockfile --ignore-optional
 
 EXPOSE 3000
 STOPSIGNAL SIGTERM
