@@ -33,8 +33,25 @@
           name="svguse:/taskyon_mono_opt.svg#taskyon"
           :color="$q.dark.isActive ? 'secondary' : 'primary'"
         ></q-icon>
-        <component :is="ResetButton" v-if="ResetButton" mode="all"></component>
-        <GetStarted />
+        <component
+          :is="ResetButton"
+          v-if="ResetButton"
+          color="secondary"
+          flat
+          mode="all"
+        ></component>
+        <div class="welcome-message column items-center">
+          <GetStarted
+            v-if="
+              state.llmSettings.selectedApi &&
+              state.keys[state.llmSettings.selectedApi]
+            "
+          />
+          <LLMProviders
+            v-else
+            :expert-mode-on="state.appConfiguration.expertMode"
+          />
+        </div>
       </div>
     </div>
     <!--Create new task area-->
@@ -76,6 +93,7 @@ import { fetchMarkdown, getTextFile } from 'src/modules/taskyon/taskUtils';
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAppStateStore } from 'src/stores/appState';
+import LLMProviders from 'components/taskyon/LLMProviders.vue';
 
 const ResetButton = process.env.DEV
   ? defineAsyncComponent(
