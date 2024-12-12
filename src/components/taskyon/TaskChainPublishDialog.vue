@@ -136,6 +136,8 @@ const state = useAppStateStore();
 const tystate = useTaskyonStore();
 const canShare = navigator.canShare ? navigator.canShare() : false;
 
+const baseURL = process.env.DEV ? window.origin : 'https://taskyon.space';
+
 const props = defineProps<{
   conversationId: string;
 }>();
@@ -151,7 +153,7 @@ watch(
 const taskyonShareLink = computed(() => {
   if (gdriveLink.value) {
     const fileId = getFileId(gdriveLink.value);
-    return `${window.origin}/chat?gd=${fileId}`;
+    return `${baseURL}/chat?gd=${fileId}`;
   } else {
     throw new Error('Could not create a taskyon share link!');
   }
