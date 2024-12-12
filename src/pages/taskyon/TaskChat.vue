@@ -22,7 +22,14 @@
         ></q-icon>
         <div class="col text-subtitle2 text-center">
           You've been invited to read this chat! Scroll down and start reading
-          or click the button below to get started with Taskyon.
+          or
+          <q-btn
+            label="Start using Taskyon"
+            dense
+            no-caps
+            outline
+            @click="scrollToThreadEnd"
+          />
         </div>
       </div>
       <!-- "Task" Display -->
