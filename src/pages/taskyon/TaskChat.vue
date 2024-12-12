@@ -125,7 +125,7 @@ async function updateChatThread() {
     const gdFileId = route.query.gd;
     const markdownUrl = `https://share.taskyon.space/proxy/gdrive/${gdFileId}`;
     const markdownContent = await getTextFile(markdownUrl);
-    const newTaskId = await tystate.addMdTasks(markdownContent, undefined);
+    const newTaskId = await tystate.addMdTasks(markdownContent);
 
     state.llmSettings.selectedTaskId = newTaskId;
     state.lockBottomScroll = true;
@@ -133,7 +133,7 @@ async function updateChatThread() {
     const markdownUrl = route.query.url ? new URL(route.query.url) : undefined;
     if (markdownUrl) {
       const markdownContent = await getTextFile(markdownUrl);
-      const newTaskId = await tystate.addMdTasks(markdownContent, undefined);
+      const newTaskId = await tystate.addMdTasks(markdownContent);
       state.llmSettings.selectedTaskId = newTaskId;
       state.lockBottomScroll = true;
     }
@@ -143,7 +143,7 @@ async function updateChatThread() {
     const markdownContent = filePath
       ? await fetchMarkdown(folder || '', filePath)
       : undefined;
-    const newTaskId = await tystate.addMdTasks(markdownContent, undefined);
+    const newTaskId = await tystate.addMdTasks(markdownContent);
 
     state.llmSettings.selectedTaskId = newTaskId;
     state.lockBottomScroll = true;
