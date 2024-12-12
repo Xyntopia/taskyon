@@ -9,9 +9,25 @@
       :style="`padding-bottom: ${bottomPadding + 5}px;`"
     >
       <q-scroll-observer axis="vertical" :debounce="500" @scroll="onScroll" />
+      <div
+        class="row items-center q-pa-sm"
+        style="max-width: 600px"
+        v-if="tystate.selectedThread.length > 0 && showIntroduction"
+      >
+        <q-icon
+          class="col-auto q-pa-xl"
+          size="2rem"
+          name="svguse:/taskyon_mono_opt.svg#taskyon"
+          :color="$q.dark.isActive ? 'secondary' : 'primary'"
+        ></q-icon>
+        <div class="col text-subtitle2 text-center">
+          You've been invited to read this chat! Scroll down and start reading
+          or click the button below to get started with Taskyon.
+        </div>
+      </div>
       <!-- "Task" Display -->
       <ConversationWidget
-        v-if="tystate.selectedThread.length > 0 && !showIntroduction"
+        v-if="tystate.selectedThread.length > 0"
         :selected-thread="tystate.selectedThread"
         :current-task="tystate.currentTask"
         :task-worker-waiting="tystate.taskWorkerWaiting"
@@ -19,7 +35,7 @@
       />
       <!-- Welcome Message -->
       <div
-        v-else
+        v-if="tystate.selectedThread.length == 0 || showIntroduction"
         class="col column justify-center items-center q-pa-sm welcome"
         style="max-width: 600px"
       >
