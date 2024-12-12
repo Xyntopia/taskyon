@@ -77,6 +77,18 @@ export default defineConfig((ctx) => {
         // [vite:worker-import-meta-url] Invalid value "iife" for option "worker.format" - UMD and IIFE output formats are not supported for code-splitting builds.
         // check https://github.com/vitejs/vite/issues/18585 for more infos
         viteConf.worker.format = 'es' // Ensure workers use ES module format
+
+        // we are doing the following, because we always get this error here whe building our app:
+        // x Build failed in 4.18s
+        // [vite:build-import-analysis] [plugin vite:build-import-analysis] public/docs/DEVELOPMENT.md (29:182): Failed to parse source for import analysis because the content contains invalid JS syntax. You may need to install appropriate plugins to handle the .md file format, or if it's an asset, add "**/*.md" to `assetsInclude` in your configuration.
+        // file: /home/tom/git/taskyon/frontend/public/docs/DEVELOPMENT.md:29:182
+        viteConf.assetsInclude = viteConf.assetsInclude || []
+        // Treat Markdown files as static assets
+        if (Array.isArray(viteConf.assetsInclude)) {
+          viteConf.assetsInclude.push('**/*.md')
+        } else {
+          viteConf.assetsInclude = [viteConf.assetsInclude, '**/*.md']
+        }
       },
       // viteVuePluginOptions: {},
 
