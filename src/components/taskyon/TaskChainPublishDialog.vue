@@ -110,7 +110,7 @@ import {
   matContentCopy,
 } from '@quasar/extras/material-icons';
 import { copyToClipboard, exportFile } from 'quasar';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import {
   symOutlinedDriveExport,
   symOutlinedFileSave,
@@ -126,12 +126,17 @@ const showDialog = ref(false);
 const state = useAppStateStore();
 const tystate = useTaskyonStore();
 
-defineProps<{
+const props = defineProps<{
   conversationId: string;
 }>();
 
 const gdriveLink = ref<string>();
 const loadingGdrive = ref(false);
+
+watch(
+  () => props.conversationId,
+  () => (gdriveLink.value = undefined),
+);
 
 const taskyonShareLink = computed(() => {
   if (gdriveLink.value) {
