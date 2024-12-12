@@ -8786,10 +8786,10 @@ depd@~1.1.2:
   resolved "https://registry.yarnpkg.com/depd/-/depd-1.1.2.tgz#9bcd52e14c097763e749b274c4346ed2e560b5a9"
   integrity sha512-7emPTl6Dpo6JRXOXjLRxck+FlLRX5847cLKEn00PLAgc3g2hTZZgr+e4c2v6QpSmLeFP3n5yUo7ft6avBK/5jQ==
 
-dependency-cruiser@^16.4.2:
-  version "16.7.0"
-  resolved "https://registry.yarnpkg.com/dependency-cruiser/-/dependency-cruiser-16.7.0.tgz#efe594d94eae6358c6e5f7dbfb4ef034d2812415"
-  integrity sha512-522LLjHINl9r0RIZ8/6s6TqIHTuEJG3XDU2WPSm9dG0rvLUYVyQwE9ID31tDFs4OOyEhdOPaqAaAG1jRv/Zwbg==
+dependency-cruiser@^16.8.0:
+  version "16.8.0"
+  resolved "https://registry.yarnpkg.com/dependency-cruiser/-/dependency-cruiser-16.8.0.tgz#75c21b568cd797773f23b1a1ac5d9036898a3adf"
+  integrity sha512-VyBzIrLHfG7rT36URln+CTy8VSjrLB7YDlMx5vtBSHRHCOXgLUCcP4n5ZoD+s166T0i5LN33q1CvBkEOGsDTSg==
   dependencies:
     acorn "^8.14.0"
     acorn-jsx "^5.3.2"
@@ -8812,7 +8812,7 @@ dependency-cruiser@^16.4.2:
     semver "^7.6.3"
     teamcity-service-messages "^0.1.14"
     tsconfig-paths-webpack-plugin "^4.2.0"
-    watskeburt "^4.1.1"
+    watskeburt "^4.2.2"
 
 dependency-tree@^11.0.0:
   version "11.0.1"
@@ -19126,7 +19126,7 @@ watchpack@^2.4.0, watchpack@^2.4.1:
     glob-to-regexp "^0.4.1"
     graceful-fs "^4.1.2"
 
-watskeburt@^4.1.1:
+watskeburt@^4.2.2:
   version "4.2.2"
   resolved "https://registry.yarnpkg.com/watskeburt/-/watskeburt-4.2.2.tgz#e24f0afc40b7ecf511bf24c285b91dee2df4f4a5"
   integrity sha512-AOCg1UYxWpiHW1tUwqpJau8vzarZYTtzl2uu99UptBmbzx6kOzCGMfRLF6KIRX4PYekmryn89MzxlRNkL66YyA==
