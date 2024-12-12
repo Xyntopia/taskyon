@@ -31,16 +31,25 @@
               @click="onExportIpfs(conversationId)"
             />
             <q-btn
+              v-if="!gdriveLink"
               outline
               :icon="symOutlinedDriveExport"
               label="Share through Gdrive"
               :loading="loadingGdrive"
               @click="onExportPublicGdrive(conversationId)"
             />
+            <div v-else class="text-caption">Gdrive Store & Share:</div>
             <q-slide-transition v-if="gdriveLink">
-              <div v-show="gdriveLink">
+              <div v-show="gdriveLink" class="column items-center">
+                <q-btn
+                  v-if="canShare"
+                  class="q-mb-md"
+                  outline
+                  :icon="matShare"
+                  label="Share via Social Apps"
+                  @click="shareViaSocialApps"
+                />
                 <div
-                  s
                   v-for="[link, label] in [
                     [
                       taskyonShareLink,
@@ -50,7 +59,7 @@
                   ] as Array<[string, string]>"
                   :key="link"
                 >
-                  <div class="text-caption">{{ label }}</div>
+                  <div class="text-caption">OR {{ label }}</div>
                   <div class="row q-gutter-sm q-py-sm items-center">
                     <div
                       class="col-auto ellipsis text-weight-medium"
@@ -125,6 +134,7 @@ const showDialog = ref(false);
 
 const state = useAppStateStore();
 const tystate = useTaskyonStore();
+const canShare = navigator.canShare ? navigator.canShare() : false;
 
 const props = defineProps<{
   conversationId: string;
@@ -143,7 +153,7 @@ const taskyonShareLink = computed(() => {
     const fileId = getFileId(gdriveLink.value);
     return `${window.origin}/chat?gd=${fileId}`;
   } else {
-    throw new Error('Could not creae ');
+    throw new Error('Could not create a taskyon share link!');
   }
 });
 
@@ -160,7 +170,7 @@ async function onExportPublicGdrive(conversationId: string) {
         const gdriveFile = await publishMarkdown(
           taskThreadMd,
           state.appConfiguration.gdriveDir,
-          `tyn-${task.name || ''}.md`,
+          `ty-${task.name || ''}.${task.id}.md`,
           true,
         );
 
@@ -209,6 +219,20 @@ async function onExportChatYaml(conversationId: string) {
       // Use Quasar's exportFile function for download
       exportFile(fileName, taskThreadYaml, mimeType);
     }
+  }
+}
+
+function shareViaSocialApps() {
+  if (navigator.share && gdriveLink.value) {
+    navigator
+      .share({
+        title: 'Share Taskyon Chat',
+        text: 'Check out this chat!',
+        url: taskyonShareLink.value,
+      })
+      .catch((error) => console.error('Error sharing:', error));
+  } else {
+    alert('Sharing not supported on this device.');
   }
 }
 </script>
