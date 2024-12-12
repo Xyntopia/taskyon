@@ -11,11 +11,7 @@
       <q-scroll-observer axis="vertical" :debounce="500" @scroll="onScroll" />
       <!-- "Task" Display -->
       <ConversationWidget
-        v-if="
-          tystate.selectedThread.length > 0 &&
-          state.llmSettings.selectedApi &&
-          state.keys[state.llmSettings.selectedApi]
-        "
+        v-if="tystate.selectedThread.length > 0 && !showIntroduction"
         :selected-thread="tystate.selectedThread"
         :current-task="tystate.currentTask"
         :task-worker-waiting="tystate.taskWorkerWaiting"
@@ -41,16 +37,11 @@
           mode="all"
         ></component>
         <div class="welcome-message column items-center">
-          <GetStarted
-            v-if="
-              state.llmSettings.selectedApi &&
-              state.keys[state.llmSettings.selectedApi]
-            "
-          />
           <LLMProviders
-            v-else
+            v-if="showIntroduction"
             :expert-mode-on="state.appConfiguration.expertMode"
           />
+          <GetStarted v-else />
         </div>
       </div>
     </div>
@@ -59,10 +50,7 @@
       <q-resize-observer @resize="handleResize" />
       <div class="col" style="max-width: 48rem">
         <CreateNewTask
-          v-if="
-            state.llmSettings.selectedApi &&
-            state.keys[state.llmSettings.selectedApi]
-          "
+          v-if="!showIntroduction"
           :force-task-props="state.llmSettings.taskTemplate"
           class="q-pa-xs"
           :hide-task-info="state.minimalGui"
@@ -118,6 +106,13 @@ const state = useAppStateStore();
 const taskThreadContainer = ref<HTMLElement | undefined>();
 $q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store...
 const folder = '';
+
+const showIntroduction = computed(
+  () =>
+    !(
+      state.llmSettings.selectedApi && state.keys[state.llmSettings.selectedApi]
+    ),
+);
 
 async function updateChatThread() {
   console.log('update chat thread');
