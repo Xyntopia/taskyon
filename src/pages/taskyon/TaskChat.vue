@@ -22,9 +22,8 @@
         ></q-icon>
         <div class="col text-subtitle2 text-center">
           You've been invited to read this chat! Scroll down and start reading
-          or
           <q-btn
-            label="Start using Taskyon"
+            label="Or start using Taskyon"
             dense
             no-caps
             outline
@@ -140,22 +139,23 @@ const showIntroduction = computed(
 async function updateChatThread() {
   console.log('update chat thread');
   if (typeof route.query.gd === 'string') {
+    state.lockBottomScroll = false;
     const gdFileId = route.query.gd;
     const markdownUrl = `https://share.taskyon.space/proxy/gdrive/${gdFileId}`;
     const markdownContent = await getTextFile(markdownUrl);
     const newTaskId = await tystate.addMdTasks(markdownContent);
 
     state.llmSettings.selectedTaskId = newTaskId;
-    state.lockBottomScroll = true;
   } else if (typeof route.query.url === 'string') {
     const markdownUrl = route.query.url ? new URL(route.query.url) : undefined;
     if (markdownUrl) {
+      state.lockBottomScroll = false;
       const markdownContent = await getTextFile(markdownUrl);
       const newTaskId = await tystate.addMdTasks(markdownContent);
       state.llmSettings.selectedTaskId = newTaskId;
-      state.lockBottomScroll = true;
     }
   } else if (route.params.filePath) {
+    state.lockBottomScroll = false;
     const urlPath = (route.params.filePath as string[]).join('/');
     const filePath = urlPath.endsWith('.md') ? urlPath : `${urlPath}.md`;
     const markdownContent = filePath
@@ -164,7 +164,6 @@ async function updateChatThread() {
     const newTaskId = await tystate.addMdTasks(markdownContent);
 
     state.llmSettings.selectedTaskId = newTaskId;
-    state.lockBottomScroll = true;
   } else if (typeof route.query.t === 'string') {
     state.llmSettings.selectedTaskId = route.query.t;
     state.lockBottomScroll = true;
@@ -222,6 +221,7 @@ function scrollToThreadEnd() {
   const offset = document.body.scrollHeight - window.innerHeight;
   const duration = 300;
   state.lockBottomScroll = true;
+  console.log('scroll to end of chat!');
   setVerticalScrollPosition(window, offset, duration);
 }
 
