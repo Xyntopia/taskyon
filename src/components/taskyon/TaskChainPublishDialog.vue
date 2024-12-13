@@ -7,7 +7,12 @@
   >
     <q-tooltip>Copy entire chat as markdown</q-tooltip>
   </q-btn>
-  <q-btn v-bind="$attrs" :icon="matShare" @click="showDialog = true">
+  <q-btn
+    v-bind="$attrs"
+    :icon="matShare"
+    @click="showDialog = true"
+    aria-label="share content"
+  >
     <q-tooltip>Share Content</q-tooltip>
     <q-dialog v-model="showDialog">
       <q-card>
