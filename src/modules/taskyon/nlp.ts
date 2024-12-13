@@ -70,10 +70,7 @@ export async function loadTokenizer(modelName: string) {
   return await modelStore.tokenizers[modelName];
 }
 
-export async function getVector(
-  txt: string,
-  modelName: string,
-): Promise<number[] | undefined> {
+export async function getVector(txt: string, modelName: string): Promise<number[] | undefined> {
   const { meanPooledVector } = await vectorize(txt, modelName);
   return meanPooledVector.tolist()[0] as number[];
 }
@@ -102,10 +99,7 @@ function mergeVectors(chunkVectors: Tensor[], overlap: number) {
     const currentChunk = chunkVectors[i]!;
     // For overlapping regions, calculate the mean with the previous chunk
     const previousChunk = chunkVectors[i - 1]!;
-    const overlapPrevious = previousChunk.slice(
-      [0, 1],
-      [chunkLength - overlap, Infinity],
-    );
+    const overlapPrevious = previousChunk.slice([0, 1], [chunkLength - overlap, Infinity]);
     const overlapCurrent = currentChunk.slice([0, 1], [0, overlap]);
     const overlapTensor = cat([overlapPrevious, overlapCurrent], 0);
     const overlapMean = mean(overlapTensor, 0).unsqueeze(0); //overlapPrevious.cat([overlapCurrent], 1);
@@ -114,9 +108,7 @@ function mergeVectors(chunkVectors: Tensor[], overlap: number) {
 
     // Add the remaining part of the current chunk if it's not the last chunk
     if (i < chunkVectors.length - 1) {
-      mergedVectors.push(
-        currentChunk.slice([0, 1], [overlap, chunkLength - overlap]),
-      );
+      mergedVectors.push(currentChunk.slice([0, 1], [overlap, chunkLength - overlap]));
     } else {
       mergedVectors.push(currentChunk.slice([0, 1], [overlap, Infinity]));
     }
@@ -127,12 +119,7 @@ function mergeVectors(chunkVectors: Tensor[], overlap: number) {
   return finalMergedVecs;
 }
 
-export async function vectorize(
-  txt: string,
-  modelName: string,
-  chunkSize = 512,
-  overlap = 50,
-) {
+export async function vectorize(txt: string, modelName: string, chunkSize = 512, overlap = 50) {
   console.log('Calculating vectors for long text');
   const tokenizer = await loadTokenizer(modelName);
   const model = await loadModel(modelName);
@@ -174,7 +161,8 @@ export async function vectorize(
       token_type_ids: tokenTypeChunks[i],
     };
     const res = (await model(chunkInputs)) as Record<string, Tensor>;
-    if (res.last_hidden_state) chunkVectors.push(res.last_hidden_state);
+    if (!res.last_hidden_state) throw new Error('no last_hidden_state detected!');
+    chunkVectors.push(res.last_hidden_state);
   }
 
   // Merge the chunk vectors
@@ -273,13 +261,8 @@ export async function extractKeywords(
 
   // Tokenize the text to get individual words
   const tokenizer = await loadTokenizer(modelName);
-  const tokens = tokenizer.model.convert_ids_to_tokens(
-    token_ids.flatten().tolist(),
-  );
-  const { words, wordVectors } = tokenVecsToWordVecs(
-    tokens,
-    individualVectors.squeeze(0),
-  );
+  const tokens = tokenizer.model.convert_ids_to_tokens(token_ids.flatten().tolist());
+  const { words, wordVectors } = tokenVecsToWordVecs(tokens, individualVectors.squeeze(0));
 
   // remove all stop words from text
 
@@ -291,9 +274,7 @@ export async function extractKeywords(
   });
   filteredWordVecs.sort((a, b) => (b[1] as number) - (a[1] as number));
   const meanVecList = mean(cat(wordVectors, 0), 0).tolist();
-  const cosineSimilarities = wordVectors.map((vector) =>
-    cos_sim(meanVecList[0], vector.tolist()),
-  );
+  const cosineSimilarities = wordVectors.map((vector) => cos_sim(meanVecList[0], vector.tolist()));
 
   // Pair words with their cosine similarities
   const wordSimilarities = words.map((word, index) => ({

@@ -19,15 +19,14 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import { basicSetup } from 'codemirror';
 import { Codemirror } from 'vue-codemirror';
 
-const content = defineModel<string | undefined>({
+const content = defineModel<string>({
   required: true,
+  default: '', // Default to an empty string
 });
 
 const $q = useQuasar();
 const extensions = computed(() => {
-  return $q.dark.isActive
-    ? [basicSetup, javascript(), oneDark]
-    : [basicSetup, javascript()];
+  return $q.dark.isActive ? [basicSetup, javascript(), oneDark] : [basicSetup, javascript()];
   //return [];
 });
 </script>

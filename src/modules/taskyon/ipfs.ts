@@ -26,7 +26,6 @@ async function createHeliaInstance() {
 
   // libp2p is the networking layer that underpins Helia
   // here is an overview of its configuration options:  https://github.com/libp2p/js-libp2p/blob/main/doc/CONFIGURATION.md
-    
 
   //const libp2p = await createLibp2p({ ...libp2pDefaults, datastore });
 
@@ -86,20 +85,13 @@ export async function exportToIpfs(node: IpfsNode, txt: string) {
   const myImmutableAddress = await s.add(txt);
   node.routing.provide(myImmutableAddress);
 
-  console.log(
-    'exported string to IPFS using CID:',
-    myImmutableAddress.toString(),
-  );
+  console.log('exported string to IPFS using CID:', myImmutableAddress.toString());
   //console.log(await s.get(myImmutableAddress));
 
   return myImmutableAddress;
 }
 
-const addFile = async (
-  node: IpfsNode,
-  fileContent: Uint8Array,
-  path: string,
-) => {
+const addFile = async (node: IpfsNode, fileContent: Uint8Array, path: string) => {
   console.log('Adding a test file to Helia...');
 
   const fs = unixfs(node);
@@ -113,32 +105,41 @@ const addFile = async (
 
 export const addTestFile = (node: IpfsNode) => {
   const encoder = new TextEncoder();
-  const fileContent = encoder.encode(
-    `Test file content - ${new Date().toISOString()}`,
-  );
+  const fileContent = encoder.encode(`Test file content - ${new Date().toISOString()}`);
 
   return addFile(node, fileContent, 'testfile.txt');
 };
 
-export const fetchNodeStatus = async (node: IpfsNode) => {
+export const fetchNodeStatus = async (
+  node: IpfsNode & {
+    libp2p: {
+      services: {
+        dht?: { getMode: () => Promise<string> };
+      };
+      status: string;
+    };
+  },
+) => {
   try {
     const metrics = node.metrics;
     const connectedPeers = await getConnectedPeers(node);
 
-    const dhtMode = await node.libp2p.services.dht?.getMode();
-
-    const statusText = `${node.libp2p.status} - ${
-      dhtMode === 'client' ? 'DHT Client' : 'DHT Server'
-    }`;
-
-    const info = {
+    const info: Record<string, unknown> = {
       peerId: node.libp2p.peerId.toString(),
       'node started': node ? true : false,
       ...connectedPeers,
       metrics: metrics ?? {},
-      dhtMode: statusText,
       ...getMultiaddrs(node),
     };
+
+    if (node.libp2p.services.dht?.getMode) {
+      const dhtMode = await node.libp2p.services.dht.getMode();
+      const statusText = `${node.libp2p.status} - ${
+        dhtMode === 'client' ? 'DHT Client' : 'DHT Server'
+      }`;
+      info.dhtMode = statusText;
+    }
+
     return info;
   } catch (error) {
     console.error('Error fetching node status:', error);
@@ -148,9 +149,7 @@ export const fetchNodeStatus = async (node: IpfsNode) => {
   }
 };
 
-type Tail<T extends unknown[]> = T extends [unknown, ...infer Rest]
-  ? Rest
-  : never;
+type Tail<T extends unknown[]> = T extends [unknown, ...infer Rest] ? Rest : never;
 
 export async function useIpfs() {
   // Example usage:

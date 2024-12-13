@@ -3,9 +3,7 @@
   <q-list dense class="q-pa-xs">
     <!-- Conversation Area -->
     <div>
-      <div
-        class="q-pa-xs text-caption row justify-center items-center q-gutter-md"
-      >
+      <div class="q-pa-xs text-caption row justify-center items-center q-gutter-md">
         <q-icon name="svguse:/taskyon_mono_opt.svg#taskyon" size="sm" />
         <div>Conversations</div>
       </div>
@@ -27,25 +25,19 @@
               <q-icon name="matChatBubble" size="xs" />
             </!q-item-section-->
             <q-item-section
-              v-for="(selected, idx) in [
-                state.llmSettings.selectedTaskId == conversationId,
-              ]"
+              v-for="(selected, idx) in [state.llmSettings.selectedTaskId == conversationId]"
               :key="idx"
               lines
               :class="
                 selected
-                  ? [
-                      'text-weight-bolder',
-                      $q.dark.isActive ? 'text-secondary' : 'text-primary',
-                    ]
+                  ? ['text-weight-bolder', $q.dark.isActive ? 'text-secondary' : 'text-primary']
                   : [$q.dark.isActive ? 'text-white' : 'text-primary']
               "
             >
               {{
                 selected
                   ? `> ${tystate.currentTask?.name}`
-                  : nameMap[conversationId] ||
-                    `chat.${conversationId.slice(0, 3)}`
+                  : nameMap[conversationId] || `chat.${conversationId.slice(0, 3)}`
               }}
               <q-tooltip> Select Conversation </q-tooltip>
             </q-item-section>
@@ -118,20 +110,13 @@ import { ref, reactive, watch, defineAsyncComponent } from 'vue';
 import SimpleSettings from './SimpleSettings.vue';
 import { useTaskyonStore } from 'stores/taskyonState';
 import FileDropzone from 'components/FileDropzone.vue';
-import {
-  matSearch,
-  matManageAccounts,
-  matFileUpload,
-  matToc,
-} from '@quasar/extras/material-icons';
-import {
-  mdiTools,
-  mdiRobotConfusedOutline,
-  mdiForumPlus,
-} from '@quasar/extras/mdi-v6';
+import { matSearch, matManageAccounts, matFileUpload, matToc } from '@quasar/extras/material-icons';
+import { mdiTools, mdiRobotConfusedOutline, mdiForumPlus } from '@quasar/extras/mdi-v6';
 import TaskChainMenu from './TaskChainMenu.vue';
 import { useAppStateStore } from 'src/stores/appState';
+import { useQuasar } from 'quasar';
 
+const $q = useQuasar();
 const state = useAppStateStore();
 const tystate = useTaskyonStore();
 

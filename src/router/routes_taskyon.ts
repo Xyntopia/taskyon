@@ -3,6 +3,14 @@ import { mdRoutes } from './routes_default';
 import { defineAsyncComponent } from 'vue';
 import LoadCircle from 'components/LoadingCircle.vue';
 
+export const universalTyRoutes: RouteRecordRaw[] = [
+  {
+    path: 'settings/:tab?',
+    component: () => import('pages/taskyon/SettingsPage.vue'),
+    meta: { title: 'Settings', description: 'Taskyon AI Chat Companion' },
+  },
+];
+
 export const taskyonRoutes: RouteRecordRaw[] = [
   {
     path: '/',
@@ -21,9 +29,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       {
         // TODO: rename this and all references to search?
         path: 'taskmanager',
-        component: defineAsyncComponent(
-          () => import('pages/taskyon/TaskManager.vue'),
-        ),
+        component: () => import('pages/taskyon/TaskManager.vue'),
         meta: { title: 'Task Manager', description: 'Manage Tasks & Chats' },
         props: (route) => {
           console.log('open', route);
@@ -50,11 +56,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         meta: { title: 'Chat', description: 'Taskyon AI Chat Companion' },
       },
       {
-        path: 'settings/:tab?',
-        component: () => import('pages/taskyon/SettingsPage.vue'),
-        meta: { title: 'Settings', description: 'Taskyon AI Chat Companion' },
-      },
-      {
         path: 'pricing',
         component: () => import('pages/taskyon/PricePage.vue'),
         meta: {
@@ -77,6 +78,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       },
       // mdRoutes should have our normal taskyon layout thats why we put them in here :)
       ...mdRoutes,
+      ...universalTyRoutes,
     ],
   },
   {
@@ -150,7 +152,7 @@ export const tyServerRoutes: RouteRecordRaw[] = [
         }),
         meta: { title: 'Main', description: 'Taskyon AI Server Control' },
       },
-      ...mdRoutes,
+      ...universalTyRoutes,
     ],
   },
   // Always leave this as last one,

@@ -10,7 +10,7 @@ import {
 } from 'rxdb';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { RxDBJsonDumpPlugin } from 'rxdb/plugins/json-dump';
-import { TaskNode } from './types';
+import { removeKeys, removeUndefinedProperties, TaskNode } from './types';
 // TOOD: remove at some point in the future...
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
@@ -49,14 +49,7 @@ const taskNodeSchemaLiteral = {
     },
     state: {
       type: 'string',
-      enum: [
-        'Open',
-        'Queued',
-        'In Progress',
-        'Completed',
-        'Error',
-        'Cancelled',
-      ],
+      enum: ['Open', 'Queued', 'In Progress', 'Completed', 'Error', 'Cancelled'],
     },
     configuration: {
       type: 'string', // Storing configuration as a JSON string
@@ -116,11 +109,8 @@ export const createTaskNodeMangoQuery = (labelString: string) => {
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const taskNodeSchemaTyped = toTypedRxJsonSchema(taskNodeSchemaLiteral);
-export type TaskNodeDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
-  typeof taskNodeSchemaTyped
->;
-export const taskNodeSchema: RxJsonSchema<TaskNodeDocType> =
-  taskNodeSchemaLiteral;
+export type TaskNodeDocType = ExtractDocumentTypeFromTypedRxJsonSchema<typeof taskNodeSchemaTyped>;
+export const taskNodeSchema: RxJsonSchema<TaskNodeDocType> = taskNodeSchemaLiteral;
 
 // Assert TaskNode to be TaskNodeDocType
 //const testTaskNode: TaskNodeDocType = {} as TaskNode;
@@ -160,8 +150,7 @@ const fileMappingSchemaTyped = toTypedRxJsonSchema(fileMappingSchemaLiteral);
 export type FileMappingDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
   typeof fileMappingSchemaTyped
 >;
-export const fileMappingSchema: RxJsonSchema<FileMappingDocType> =
-  fileMappingSchemaLiteral;
+export const fileMappingSchema: RxJsonSchema<FileMappingDocType> = fileMappingSchemaLiteral;
 
 /* this is used to map our db objects to the labels in the 
 vector index we can also save our calculated vectors in this in order to
@@ -182,14 +171,11 @@ const vectorMappingSchemaLiteral = {
 } as const;
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const vectorMappingSchemaTyped = toTypedRxJsonSchema(
-  vectorMappingSchemaLiteral,
-);
+const vectorMappingSchemaTyped = toTypedRxJsonSchema(vectorMappingSchemaLiteral);
 type vectorMappingDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
   typeof vectorMappingSchemaTyped
 >;
-const vectorMappingSchema: RxJsonSchema<vectorMappingDocType> =
-  vectorMappingSchemaLiteral;
+const vectorMappingSchema: RxJsonSchema<vectorMappingDocType> = vectorMappingSchemaLiteral;
 
 // Define the collection types
 type TaskNodeCollection = RxCollection<TaskNodeDocType>;
@@ -245,61 +231,61 @@ export const collections = {
 
 export async function createTaskyonDatabase(): Promise<TaskyonDatabase> {
   const newStorage = getRxStorageDexie();
-  const db: TaskyonDatabase =
-    await createRxDatabase<TaskyonDatabaseCollections>({
-      name: 'taskyondb_v15',
-      storage: newStorage,
-    });
+  const db: TaskyonDatabase = await createRxDatabase<TaskyonDatabaseCollections>({
+    name: 'taskyondb_v15',
+    storage: newStorage,
+  });
 
   await db.addCollections(collections);
 
   //here we do te migration from or old storage
-  import('rxdb-old/plugins/storage-dexie').then(
-    ({ getRxStorageDexie: getRxStorageDexieOld }) => {
-      migrateStorage({
-        database: db as unknown as RxDatabase,
-        /**
-         * Name of the old database,
-         * using the storage migration requires that the
-         * new database has a different name.
-         */
-        oldDatabaseName: 'taskyondb',
-        oldStorage: getRxStorageDexieOld(), // RxStorage of the old database
-        batchSize: 500, // batch size
-        parallel: false, // <- true if it should migrate all collections in parallel. False (default) if should migrate in serial
-        afterMigrateBatch: (/*input: AfterMigrateBatchHandlerInput*/) => {
-          console.log('storage migration: batch processed');
-        },
-      });
-    },
-  );
+  import('rxdb-old/plugins/storage-dexie').then(({ getRxStorageDexie: getRxStorageDexieOld }) => {
+    migrateStorage({
+      database: db as unknown as RxDatabase,
+      /**
+       * Name of the old database,
+       * using the storage migration requires that the
+       * new database has a different name.
+       */
+      oldDatabaseName: 'taskyondb',
+      oldStorage: getRxStorageDexieOld(), // RxStorage of the old database
+      batchSize: 500, // batch size
+      parallel: false, // <- true if it should migrate all collections in parallel. False (default) if should migrate in serial
+      afterMigrateBatch: (/*input: AfterMigrateBatchHandlerInput*/) => {
+        console.log('storage migration: batch processed');
+      },
+    });
+  });
 
   return db;
 }
 
-export function transformTaskNodeToDocType(
-  taskNode: TaskNode,
-): TaskNodeDocType {
+export function transformTaskNodeToDocType(taskNode: TaskNode): TaskNodeDocType {
   // Mapping and transforming fields from TaskNode to TaskNodeDocType of taskyonDB/RxDB
   // TODO: maybe we can do the same thing here using zod parse? This would also add some more validation
   //       capabilities before saving anything in the db..
   const nonReactiveTaskNode = JSON.parse(JSON.stringify(taskNode)) as TaskNode;
-  return {
-    ...nonReactiveTaskNode,
-    content: JSON.stringify(taskNode.content),
-    configuration: taskNode.configuration
-      ? JSON.stringify(taskNode.configuration)
-      : undefined,
-    debugging: taskNode.debugging
-      ? JSON.stringify(taskNode.debugging)
-      : undefined,
-    result: taskNode.result ? JSON.stringify(taskNode.result) : undefined,
+  const reducedTaskNode = removeUndefinedProperties(
+    removeKeys(nonReactiveTaskNode, ['content', 'result', 'configuration', 'debugging']),
+  );
+  const convertedTask = {
+    ...reducedTaskNode,
+    // Mapping and transforming fields from TaskNode to TaskNodeDocType
+    content: JSON.stringify(nonReactiveTaskNode.content),
+    // Optional properties only included if they are defined
+    ...(taskNode.configuration !== undefined && {
+      configuration: JSON.stringify(taskNode.configuration),
+    }),
+    ...(taskNode.debugging !== undefined && {
+      debugging: JSON.stringify(taskNode.debugging),
+    }),
+    ...(taskNode.result !== undefined && { result: JSON.stringify(taskNode.result) }),
   };
+
+  return convertedTask;
 }
 
-export function transformDocToTaskNode(
-  doc: RxDocument<TaskNodeDocType>,
-): TaskNode {
+export function transformDocToTaskNode(doc: RxDocument<TaskNodeDocType>): TaskNode {
   // Convert the database document to a JSON string in order to make a copy of it.
   const jsonString = JSON.stringify(doc.toJSON());
   const parsedDoc = JSON.parse(jsonString) as RxDocument<TaskNodeDocType>;

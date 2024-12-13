@@ -69,7 +69,7 @@ async function createSession() {
         'Content-Type': 'application/json;charset=UTF-8',
         Accept: 'application/json',
       },
-    }
+    },
   );
   return response.data.value.sessionId;
 }
@@ -88,7 +88,7 @@ async function loadURL(url: string, sessionId: string) {
     `${seleniumHubUrl}/session/${sessionId}/url`,
     //'/status',
     //`${seleniumHubUrl}/session/${sessionId}/url`,
-    { url: url }
+    { url: url },
     /*{
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
@@ -106,7 +106,7 @@ async function fetchPageContent(sessionId: string) {
         'Content-Type': 'application/json;charset=UTF-8',
         Accept: 'application/json',
       },
-    }
+    },
   );
   return pageSourceResponse.data.value;
 }
@@ -118,16 +118,13 @@ export const seleniumBrowser: Tool = {
     const sessionId = await createSession();
     console.log('got session with id:', sessionId);
 
-    try {
-      await loadURL(url, sessionId);
-      const pageContent = await fetchPageContent(sessionId);
-      return {
-        format: 'html',
-        content: pageContent,
-      };
-    } catch (error) {
-      throw error;
-    } /*finally {
+    await loadURL(url, sessionId);
+    const pageContent = await fetchPageContent(sessionId);
+    return {
+      format: 'html',
+      content: pageContent,
+    };
+    /*finally {
       // we do not want to close sessions for increased speed :)
       await closeSession(sessionId);
     }*/

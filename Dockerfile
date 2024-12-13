@@ -1,5 +1,5 @@
 # Stage 1: Build the Quasar application
-FROM node:22.10.0 as base
+FROM node:22.10.0 as prepare
 
 # Set up Yarn cache directory
 ENV YARN_CACHE_FOLDER=/app/.yarn-cache
@@ -29,13 +29,20 @@ RUN --mount=type=cache,target=$YARN_CACHE_FOLDER yarn install
 # Copy the rest of the project files
 COPY . .
 
-# Quasar production build stage
-FROM base as production-builder
+FROM prepare as production-builder
+
 RUN ls -la && yarn quasar prepare && yarn quasar build
 
-# Quasar debug build stage
-FROM base as debug-builder
+
+FROM prepare as debug-builder
+
+RUN ls -la && yarn quasar prepare
+
 RUN ls -la && yarn quasar prepare && yarn quasar build --debug
+
+FROM prepare as server-builder
+
+RUN ls -la && yarn quasar prepare && yarn quasar build -m ssr #--debug
 
 # Define a common Nginx stage
 FROM nginx as base-nginx
@@ -73,7 +80,6 @@ server {
     location ~ /\.(?!well-known).* {
         deny all;
     }
-
 }
 EOF
 
@@ -92,3 +98,20 @@ RUN cp /etc/nginx/conf.d/template.conf /etc/nginx/conf.d/default.conf
 EXPOSE 9000
 STOPSIGNAL SIGTERM
 CMD ["nginx", "-g", "daemon off;"]
+
+
+# Stage 3: Serve the SSR application
+FROM node:22.10.0-alpine as ssr-server
+#FROM node:22.10.0 as ssr-server
+
+# Copy the built files from the server-builder stage
+COPY --from=server-builder /app/dist/ssr /app
+
+# Install dependencies
+WORKDIR /app
+RUN yarn install --frozen-lockfile --ignore-optional
+
+EXPOSE 3000
+STOPSIGNAL SIGTERM
+# Start the SSR server
+CMD ["yarn", "start"]

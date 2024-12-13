@@ -6,9 +6,7 @@
       <div>
         <taskContentEdit
           v-if="
-            !selectedTaskType &&
-            !codingMode &&
-            'message' in state.llmSettings.taskDraft.content
+            !selectedTaskType && !codingMode && 'message' in state.llmSettings.taskDraft.content
           "
           class="text-body1"
           :model-value="state.llmSettings.taskDraft.content.message"
@@ -19,19 +17,14 @@
         />
         <div
           v-else-if="
-            !selectedTaskType &&
-            codingMode &&
-            'message' in state.llmSettings.taskDraft.content
+            !selectedTaskType && codingMode && 'message' in state.llmSettings.taskDraft.content
           "
         >
           <CodeEditor
             :model-value="state.llmSettings.taskDraft.content.message"
             @update:model-value="updateContent"
           />
-          <taskSettingsButton
-            v-model="expandedTaskCreation"
-            aria-label="task settings"
-          />
+          <taskSettingsButton v-model="expandedTaskCreation" aria-label="task settings" />
           <q-btn
             :disable="!sendAllowed"
             :color="sendAllowed ? 'positive' : 'negative'"
@@ -42,10 +35,7 @@
           >
         </div>
         <div
-          v-else-if="
-            selectedTaskType &&
-            'functionCall' in state.llmSettings.taskDraft.content
-          "
+          v-else-if="selectedTaskType && 'functionCall' in state.llmSettings.taskDraft.content"
           class="row"
         >
           <ObjectTreeView
@@ -61,9 +51,7 @@
         <div class="row items-center">
           <div class="row">
             <info-dialog
-              v-if="
-                currentModel && tystate.modelLookUp[currentModel]?.description
-              "
+              v-if="currentModel && tystate.modelLookUp[currentModel]?.description"
               size="xs"
               :info-text="tystate.modelLookUp[currentModel]?.description || ''"
             />
@@ -86,10 +74,7 @@
                     clickable
                     @click="handleBotNameUpdate({ newName: m })"
                   >
-                    <q-item-section
-                      >{{ state.modelHistory.length - idx }}:
-                      {{ m }}</q-item-section
-                    >
+                    <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
                   </q-item>
                   <q-item
                     v-close-popup
@@ -110,13 +95,11 @@
           </div>
           <q-space></q-space>
           <div v-if="currentModel" class="gt-xs">
-            {{
-              `t/c: ${estimatedTokens}/${tystate.modelLookUp[currentModel]?.context_length}`
-            }}
+            {{ `t/c: ${estimatedTokens}/${tystate.modelLookUp[currentModel]?.context_length}` }}
             <q-tooltip :delay="1000" class="q-gutter-sm">
               <div>
-                [approximate number of tokens in prompt] / [max number of tokens
-                which AI can understand]
+                [approximate number of tokens in prompt] / [max number of tokens which AI can
+                understand]
               </div>
               <div>Tokens are roughly similar to syllables.</div>
             </q-tooltip>
@@ -133,11 +116,7 @@
               <q-icon size="xs" :name="matTune" class="q-pl-sm"></q-icon>
               <q-icon
                 size="xs"
-                :name="
-                  expandedTaskCreation
-                    ? matKeyboardArrowUp
-                    : matKeyboardArrowDown
-                "
+                :name="expandedTaskCreation ? matKeyboardArrowUp : matKeyboardArrowDown"
               ></q-icon>
               <q-tooltip>Chat Settings</q-tooltip>
             </q-btn>
@@ -150,9 +129,7 @@
             :key="file.name"
             removable
             :icon="matUploadFile"
-            @remove="
-              fileAttachments = fileAttachments.filter((f) => f !== file)
-            "
+            @remove="fileAttachments = fileAttachments.filter((f) => f !== file)"
           >
             <div class="ellipsis" style="max-width: 100px">
               {{ `${file.name}` }}
@@ -162,22 +139,9 @@
         </div>
       </div>
       <!--Task type selection and execution-->
-      <div
-        v-if="selectedTaskType || expandedTaskCreation"
-        class="row items-center"
-      >
-        <q-btn
-          v-if="selectedTaskType"
-          class="q-ma-md"
-          label="Execute Task"
-          @click="addNewTask()"
-        />
-        <q-btn
-          v-if="selectedTaskType"
-          flat
-          dense
-          :icon="matChat"
-          @click="setTaskType(undefined)"
+      <div v-if="selectedTaskType || expandedTaskCreation" class="row items-center">
+        <q-btn v-if="selectedTaskType" class="q-ma-md" label="Execute Task" @click="addNewTask()" />
+        <q-btn v-if="selectedTaskType" flat dense :icon="matChat" @click="setTaskType(undefined)"
           ><q-tooltip>Select Simple Chat</q-tooltip>
         </q-btn>
 
@@ -232,10 +196,9 @@
         >
           <q-icon :name="mdiFunctionVariant"></q-icon>
           <q-tooltip :dely="200">
-            If turned on, use taskyon function selection mode for models which
-            support this. Otherwise use the built-in support for models which
-            support this. Taskyon mode is usually recommended as it is model
-            agnostic.</q-tooltip
+            If turned on, use taskyon function selection mode for models which support this.
+            Otherwise use the built-in support for models which support this. Taskyon mode is
+            usually recommended as it is model agnostic.</q-tooltip
           ></ToggleButton
         >
       </div>
@@ -323,11 +286,7 @@
 <script setup lang="ts">
 import { computed, ref, toRaw, toRefs } from 'vue';
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools';
-import {
-  FunctionArguments,
-  llmSettings,
-  ToolBase,
-} from 'src/modules/taskyon/types';
+import { FunctionArguments, llmSettings, ToolBase } from 'src/modules/taskyon/types';
 import '@quasar/quasar-ui-qmarkdown/dist/index.css';
 import { useTaskyonStore } from 'stores/taskyonState';
 import { TaskNode } from 'src/modules/taskyon/types';
@@ -405,9 +364,7 @@ const fileAttachments = ref<File[]>([]); // holds all attached files as a "taskl
 //const funcArgs = computed(() => );
 
 async function getAllTools() {
-  const foundTools = await (
-    await tystate.getTaskManager()
-  ).updateToolDefinitions(true);
+  const foundTools = await (await tystate.getTaskManager()).updateToolDefinitions(true);
   return foundTools;
 }
 
@@ -420,10 +377,7 @@ const currentModel = computed(() => {
   const api = getApiConfig(state.llmSettings);
   if (api) {
     const modelName =
-      api.selectedModel ||
-      api.defaultModel ||
-      api.models?.free ||
-      'No model selected!';
+      api.selectedModel || api.defaultModel || api.models?.free || 'No model selected!';
     return modelName;
   }
   return 'No model selected!';
@@ -441,13 +395,7 @@ const allowedTools = computed({
 });
 
 // Method to handle the updateBotName event
-const handleBotNameUpdate = ({
-  newName,
-  newService,
-}: {
-  newName: string;
-  newService?: string;
-}) => {
+const handleBotNameUpdate = ({ newName, newService }: { newName: string; newService?: string }) => {
   console.log('getting an api & bot update :)', newName, newService);
   if (newService) {
     currentChatApi.value = newService;
@@ -510,10 +458,7 @@ async function toggleSelectedTools() {
 }
 
 const currentnewTask = computed(() => {
-  const task = deepMerge(
-    state.llmSettings.taskDraft,
-    props.forceTaskProps || {},
-  );
+  const task = deepMerge(state.llmSettings.taskDraft, props.forceTaskProps || {});
   if (currentModel.value) {
     task.configuration = {
       model: currentModel.value,
@@ -521,10 +466,7 @@ const currentnewTask = computed(() => {
     };
     task.name = undefined;
     task.debugging = {};
-    if (
-      selectedTaskType.value &&
-      'functionCall' in state.llmSettings.taskDraft.content
-    ) {
+    if (selectedTaskType.value && 'functionCall' in state.llmSettings.taskDraft.content) {
       // here we have a function task ;)
       task.role = 'function';
       // we do this to make suere we *only* have a functionCall and not a message
@@ -550,10 +492,7 @@ const { estimateChatTokens } = useNlpWorker();
 // TODO:   our token estimation needs to become much better ^^
 const estimatedTokens = ref<number>(0);
 watchDebounced(
-  [
-    () => state.llmSettings.taskDraft.content,
-    () => state.llmSettings.selectedTaskId,
-  ],
+  [() => state.llmSettings.taskDraft.content, () => state.llmSettings.selectedTaskId],
   async () => {
     let accumulatedTokens = 0;
     let accumulatedEstimated = 0;
@@ -561,10 +500,7 @@ watchDebounced(
     if (state.llmSettings.selectedTaskId) {
       const tm = await tystate.getTaskManager();
       // we only need the last 2 or 3 tasks in order to check for
-      const chain = await tm.getTaskIdChain(
-        state.llmSettings.selectedTaskId,
-        3,
-      );
+      const chain = await tm.getTaskIdChain(state.llmSettings.selectedTaskId, 3);
 
       // Assume the highest token count is the last relevant one
       for (const taskId of chain) {
@@ -581,12 +517,7 @@ watchDebounced(
         }
       }
     } else {
-      messages = addPrompts(
-        currentnewTask.value,
-        toolCollection.value,
-        state.llmSettings,
-        [],
-      );
+      messages = addPrompts(currentnewTask.value, toolCollection.value, state.llmSettings, []);
     }
 
     // we need to deepCopy both ref values, so that we can send them to the thread!!
@@ -596,14 +527,10 @@ watchDebounced(
       deepCopy(toolCollection.value),
     );
 
-    const newTokens = Object.values(estimated || {}).reduce(
-      (pn, cn) => pn + cn,
-      0,
-    );
+    const newTokens = Object.values(estimated || {}).reduce((pn, cn) => (pn ?? 0) + (cn ?? 0), 0);
 
     // Tokenize the message
-    estimatedTokens.value =
-      (accumulatedTokens || accumulatedEstimated) + (newTokens ?? 0);
+    estimatedTokens.value = (accumulatedTokens || accumulatedEstimated) + (newTokens ?? 0);
   },
   { debounce: 1000, maxWait: 1500, immediate: true },
 );
@@ -618,7 +545,7 @@ async function addFiles2Taskyon(newFiles: File[]) {
   const tm = await tystate.getTaskManager();
   for (const [fileIdx, file] of newFiles.entries()) {
     const uuid = await tm.addFile({
-      opfs: opfsMapping[fileIdx],
+      ...(opfsMapping[fileIdx] ? { opfs: opfsMapping[fileIdx] } : {}),
       name: file.name,
       fileType: file.type,
     });

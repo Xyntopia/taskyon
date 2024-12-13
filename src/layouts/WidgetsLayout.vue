@@ -2,13 +2,7 @@
   <q-layout view="hHh Lpr fFf">
     <q-header class="row items-center">
       <!-- Be sure to play with the Layout demo on docs -->
-      <q-btn
-        flat
-        dense
-        :icon="matMenu"
-        :size="btnsize"
-        @click="drawerOpen = !drawerOpen"
-      />
+      <q-btn flat dense :icon="matMenu" :size="btnsize" @click="drawerOpen = !drawerOpen" />
       <q-separator vertical :dark="!$q.dark.isActive"></q-separator>
       <q-btn
         flat
@@ -29,15 +23,9 @@
         :icon="matWarning"
         to="diagnostics"
       >
-        <q-tooltip
-          >There was problem with taskyon!, click here to find out
-          more..</q-tooltip
-        >
+        <q-tooltip>There was problem with taskyon!, click here to find out more..</q-tooltip>
       </q-btn>
-      <dark-mode-button
-        :size="btnsize"
-        @theme-changed="(newMode) => (state.darkTheme = newMode)"
-      />
+      <dark-mode-button :size="btnsize" @theme-changed="(newMode) => (state.darkTheme = newMode)" />
 
       <q-btn
         flat
@@ -72,19 +60,13 @@
 
 <script setup lang="ts">
 //TODO: change colors based on the route...
-import { useRoute } from 'vue-router';
-const route = useRoute();
-route.query; //has all the parameters :)
+const $q = useQuasar();
 
 import DarkModeButton from 'components/DarkModeButton.vue';
 import { ref } from 'vue';
-import {
-  matLaunch,
-  matMenu,
-  matReviews,
-  matWarning,
-} from '@quasar/extras/material-icons';
+import { matLaunch, matMenu, matReviews, matWarning } from '@quasar/extras/material-icons';
 import { useAppStateStore } from 'src/stores/appState';
+import { useQuasar } from 'quasar';
 
 const state = useAppStateStore();
 const btnsize = 'xs';

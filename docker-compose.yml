@@ -20,3 +20,17 @@ services:
     restart: no
     #volumes:
     #  - ~/.cache/yarn:/app/.yarn-cache
+
+  taskyon-server:
+    image: xyntopia/taskyon-server
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: ssr-server
+    ports:
+      - '3000:3000'
+    restart: always
+    #volumes:
+    #  - ~/.cache/yarn:/app/.yarn-cache
+    env_file:
+      - .env.local # we can declare GOOGLE_API_KEY this way..

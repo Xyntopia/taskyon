@@ -8,7 +8,8 @@
 import { ref, onMounted } from 'vue';
 
 // Prop to accept the HTML + JavaScript string
-const content = ref<string>('<h1>Hello World</h1>' + '<script>alert("Hello World");<\/script>');
+//const content = ref<string>('<h1>Hello World</h1><script>alert("Hello World");<script>')
+const content = ref<string>('Some html & javscript code...');
 
 const sandbox = ref<HTMLIFrameElement | null>(null);
 
@@ -28,4 +29,3 @@ iframe {
   border: none;
 }
 </style>
-

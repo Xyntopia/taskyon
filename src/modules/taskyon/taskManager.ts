@@ -1,4 +1,10 @@
-import { TaskNode, type RequireSome, ToolBase, TaskListType } from './types';
+import {
+  TaskNode,
+  ToolBase,
+  TaskListType,
+  type PartialTaskNode,
+  type RequireDefined,
+} from './types';
 import { v1 as uuidv1 } from 'uuid';
 import {
   type TaskyonDatabase,
@@ -23,10 +29,7 @@ import { dump, load } from 'js-yaml';
  * @param {string} taskId - The ID of the task.
  * @returns {string} - The ID of the root task, or null if not found.
  */
-export async function findRootTask(
-  taskId: string,
-  getTask: TyTaskManager['getTask'],
-) {
+export async function findRootTask(taskId: string, getTask: TyTaskManager['getTask']) {
   let currentTaskID = taskId;
 
   while (currentTaskID) {
@@ -85,21 +88,14 @@ async function hashObject(obj: unknown) {
 
   const hash = await crypto.subtle.digest('SHA-256', dataBytes);
   const hashArray = Array.from(new Uint8Array(hash)); // convert buffer to byte array
-  const hashHex = hashArray
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join(''); // convert bytes to hex string
+  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join(''); // convert bytes to hex string
   return hashHex;
 }
 
 async function taskContentHash(task: TaskNode) {
   console.log('generating new hash ID for task');
   // generate this hash ID to check of there are any duplicate tasks or anything like that...
-  const hashId = await hashObject([
-    task.content,
-    task.role,
-    task.allowedTools,
-    task.label,
-  ]);
+  const hashId = await hashObject([task.content, task.role, task.allowedTools, task.label]);
   return hashId;
 }
 
@@ -113,7 +109,7 @@ const { extractKeywords } = usePyodideWebworker('task manager keywords');
 export const initAddTask2Tree =
   (processTasksQueue: AsyncQueue<string>, taskManager: TyTaskManager) =>
   async (
-    task: RequireSome<Partial<TaskNode>, 'role' | 'content'>,
+    task: RequireDefined<PartialTaskNode, 'role' | 'content'>,
     parentID: string | undefined,
     execute = true,
     duplicateTaskName = true,
@@ -180,12 +176,7 @@ export const initAddTask2Tree =
     // but only if a taskname doesn't exist yet.
     if (!newTask.name && task.content && !task.label?.includes('discard')) {
       const toolDefs = await taskManager.updateToolDefinitions(true);
-      const chat = taskManager.buildChatThread(
-        newTask.id,
-        false,
-        toolDefs,
-        false,
-      );
+      const chat = taskManager.buildChatThread(newTask.id, false, toolDefs, false);
       const chatString = (await chat).reduce((p, n) => {
         if (typeof n.content === 'string') {
           return p + '\n\n' + n.content;
@@ -219,9 +210,7 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
     await fileMappingDb?.bulkUpsert(filemappings);
   }
 
-  async function getFileMappingByUuid(
-    uuid: string,
-  ): Promise<FileMappingDocType | null> {
+  async function getFileMappingByUuid(uuid: string): Promise<FileMappingDocType | null> {
     // Find the document with the matching UUID
     const fileMappingDoc = await fileMappingDb?.findOne(uuid).exec();
 
@@ -344,9 +333,7 @@ function useTaskVectors(
   const { vectorizeText } = useNlpWorker();
   const { getVectorIndex, resetVectorStore } = useVectorStore('taskyondbv');
 
-  async function syncVectorIndexWithTasks(
-    progressCallback: (done: number, total: number) => void,
-  ) {
+  async function syncVectorIndexWithTasks(progressCallback: (done: number, total: number) => void) {
     console.log('sync vector index');
     const vectorIndex = await getVectorIndex();
     if (!vectorIndex || !taskyonDB) {
@@ -502,9 +489,7 @@ function useTaskVectors(
         const neighborIndices = res.neighbors.map((r) => String(r));
 
         // Fetch the vector mappings in bulk for all neighbor indices
-        const vectorMappingDocs = await taskyonDB.vectormappings
-          .findByIds(neighborIndices)
-          .exec();
+        const vectorMappingDocs = await taskyonDB.vectormappings.findByIds(neighborIndices).exec();
 
         // Use the neighbor indices to get the correct vector mapping documents
         // and then use the uuid from those documents to fetch the tasks
@@ -563,19 +548,14 @@ export function useTyTaskManager(
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
 
-  const { lockItem: lockTask, waitForItemUnlock: waitForTaskUnlock } =
-    lockMap('task');
+  const { lockItem: lockTask, waitForItemUnlock: waitForTaskUnlock } = lockMap('task');
 
   // TODO: replace this next expression with something less memory intensive which
   //       simply selects all tasks
   const getAllTaskIds = async () =>
     taskyonDB ? (await taskyonDB.tasknodes.find().exec()).map((x) => x.id) : [];
 
-  const {
-    subscribeToTaskChanges,
-    unsubscribeFromTaskChanges,
-    notifySubscribers,
-  } = tyMechanisms();
+  const { subscribeToTaskChanges, unsubscribeFromTaskChanges, notifySubscribers } = tyMechanisms();
 
   const {
     syncVectorIndexWithTasks,
@@ -602,9 +582,7 @@ export function useTyTaskManager(
   // child IDs in order to be able to do faster tree traversals...
   const parentToChildrenMap = new Map<string, Set<string>>();
 
-  async function unblockedGetTask(
-    taskId: string,
-  ): Promise<TaskNode | undefined> {
+  async function unblockedGetTask(taskId: string): Promise<TaskNode | undefined> {
     // Check if the task exists in the local record
     let task = tasksCache.get(taskId);
     if (!task && taskyonDB) {
@@ -813,15 +791,11 @@ export function useTyTaskManager(
 
   async function updateToolDefinitions<T extends boolean>(
     removeFunction: T = false as T,
-  ): Promise<
-    T extends true ? Record<string, ToolBase> : Record<string, ToolBase | Tool>
-  > {
+  ): Promise<T extends true ? Record<string, ToolBase> : Record<string, ToolBase | Tool>> {
     if (taskyonDB) {
       const tasks = await searchTasks(createTaskNodeMangoQuery('function'));
 
-      function hasMessage(
-        task: TaskNode,
-      ): task is TaskNode & { content: { message: string } } {
+      function hasMessage(task: TaskNode): task is TaskNode & { content: { message: string } } {
         return 'message' in task.content;
       }
 
@@ -847,15 +821,11 @@ export function useTyTaskManager(
           }
           return pv;
         },
-        {} as T extends true
-          ? Record<string, ToolBase>
-          : Record<string, ToolBase | Tool>,
+        {} as T extends true ? Record<string, ToolBase> : Record<string, ToolBase | Tool>,
       );
     }
 
-    return {} as T extends true
-      ? Record<string, ToolBase>
-      : Record<string, ToolBase | Tool>;
+    return {} as T extends true ? Record<string, ToolBase> : Record<string, ToolBase | Tool>;
   }
 
   /**
@@ -924,9 +894,7 @@ export function useTyTaskManager(
     notifySubscribers(undefined, 'new');
   }
 
-  async function loadYamlConversation(
-    input: File | string,
-  ): Promise<string | undefined> {
+  async function loadYamlConversation(input: File | string): Promise<string | undefined> {
     console.log('adding tasknodes & conversations from yaml input!');
 
     let last_task_id: string | undefined = undefined;
@@ -977,9 +945,7 @@ export function useTyTaskManager(
 
     //convert into a list of markdown strings
     const messageStrings = taskList.map((t) => {
-      const message =
-        t?.content &&
-        ('message' in t.content ? '\n\n' + t.content.message : '');
+      const message = t?.content && ('message' in t.content ? '\n\n' + t.content.message : '');
 
       // we are doing this in order to protect the "original" tasks, e.g. if they
       // are reactive... :)

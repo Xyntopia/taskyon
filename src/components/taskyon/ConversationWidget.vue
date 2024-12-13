@@ -50,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import type { TaskNode } from '/home/tom/git/taskyon/frontend/src/modules/taskyon/types';
+import type { TaskNode } from 'src/modules/taskyon/types';
 import Task from 'components/taskyon/TaskWidget.vue';
 import tyMarkdown from 'components/tyMarkdown.vue';
 import { useQuasar } from 'quasar';

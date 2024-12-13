@@ -1,5 +1,5 @@
-import type { Request, Response } from 'express';
-import type { RenderError } from '#q-app';
+import { type Request, type Response } from 'express';
+import { type RenderError } from '#q-app';
 import { defineSsrMiddleware } from '#q-app/wrappers';
 
 // This middleware should execute as last one

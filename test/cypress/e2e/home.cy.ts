@@ -1,7 +1,7 @@
 // Use `cy.dataCy` custom command for more robust tests
 // See https://docs.cypress.io/guides/references/best-practices.html#Selecting-Elements
 
-import { getLastMessage, selectllmmodel } from '../support/groups';
+import { getLastAssistantMessage, selectllmmodel } from '../support/groups';
 
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
@@ -86,11 +86,11 @@ describe('test taskyon defaults', () => {
     //cy.get('li').first().click();
     //cy.contains('Clicks on todos: 1').should('exist');
 
-    getLastMessage('.user.message')
+    getLastAssistantMessage('.user.message')
       .invoke('text')
       .then((text) => text.trim())
       .should('equal', msg);
-    getLastMessage('.assistant.message').should('not.be.empty');
+    getLastAssistantMessage('.assistant.message').should('not.be.empty');
 
     // Check if the task costs element is present and contains the expected text
     /*cy.get('.task-costs')

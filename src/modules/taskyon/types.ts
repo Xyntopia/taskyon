@@ -2,8 +2,33 @@ import type OpenAI from 'openai';
 import { z } from 'zod';
 
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
-export type RequireSome<T, K extends keyof T> = Omit<T, K> &
-  Required<Pick<T, K>>;
+export type RequireSome<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>;
+
+export type RequireDefined<T, K extends keyof T> = Omit<T, K> & {
+  [P in K]-?: Exclude<T[P], undefined>;
+};
+
+export type RemoveUndefined<T, K extends keyof T> = Omit<T, K> & {
+  [P in K]: Exclude<T[P], undefined>;
+};
+
+export const removeKeys = <T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> => {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([key]) => !keys.includes(key as K)),
+  ) as Omit<T, K>;
+};
+
+export function removeUndefinedProperties<T extends object>(obj: T): RemoveUndefined<T, keyof T> {
+  return Object.entries(obj).reduce(
+    (acc, [key, value]) => {
+      if (value !== undefined) {
+        (acc as Record<string, unknown>)[key] = value;
+      }
+      return acc;
+    },
+    {} as Record<keyof T, unknown>,
+  ) as RemoveUndefined<T, keyof T>;
+}
 
 export class TaskProcessingError extends Error {
   details: Record<string, unknown> | undefined;
@@ -15,20 +40,11 @@ export class TaskProcessingError extends Error {
   }
 }
 
-export type OnInterruptFunc = (
-  callback: (reason: string | null) => void,
-) => void;
+export type OnInterruptFunc = (callback: (reason: string | null) => void) => void;
 
 // TODO: the goal should be to slowly replace this state by the "result of the task"
 //       E.g. when a task had an error, this would be represented in the task result as an "error"
-const TaskState = z.enum([
-  'Open',
-  'Queued',
-  'In Progress',
-  'Completed',
-  'Cancelled',
-  'Error',
-])
+const TaskState = z.enum(['Open', 'Queued', 'In Progress', 'Completed', 'Cancelled', 'Error'])
   .describe(`The task state indicates on what is happening with the task: for example
 it shows whether a task flow is seen as "completed" or whether its waiting
 to be further processed... E.g. there could be a task with no results, which stil counts as "completed"`);
@@ -63,13 +79,7 @@ export type ChatCompletionResponse = {
   choices: {
     index: number;
     message: OpenAIMessage;
-    finish_reason:
-      | 'stop'
-      | 'length'
-      | 'tool_calls'
-      | 'content_filter'
-      | 'function_call'
-      | null;
+    finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | null;
   }[];
   usage?: {
     prompt_tokens: number;
@@ -107,40 +117,36 @@ export interface OpenRouterGenerationInfo {
 // separately
 // https://zod.dev/?id=recursive-types
 export interface JSONSchemaForFunctionParameter {
-  $schema?: string;
+  $schema?: string | undefined;
   type: 'object';
   properties: {
     [key: string]: {
       type: string;
-      description?: string;
-      default?: unknown;
-      items?: JSONSchemaForFunctionParameter | JSONSchemaForFunctionParameter[];
+      description?: string | undefined;
+      default?: unknown | undefined;
+      items?: JSONSchemaForFunctionParameter | JSONSchemaForFunctionParameter[] | undefined;
     };
   };
-  required?: string[];
+  required?: string[] | undefined;
 }
 
-export const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionParameter> =
-  z.object({
-    $schema: z.string().optional(),
-    type: z.literal('object'),
-    properties: z.record(
-      z.object({
-        type: z.string(),
-        description: z.string().optional(),
-        default: z.unknown().optional(),
-        items: z
-          .lazy(() =>
-            z.union([
-              JSONSchemaForFunctionParameter,
-              z.array(JSONSchemaForFunctionParameter),
-            ]),
-          )
-          .optional(),
-      }),
-    ),
-    required: z.array(z.string()).optional(),
-  });
+export const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionParameter> = z.object({
+  $schema: z.union([z.string(), z.undefined()]).optional(),
+  type: z.literal('object'),
+  properties: z.record(
+    z.object({
+      type: z.string(),
+      description: z.string().optional(),
+      default: z.unknown().optional(),
+      items: z
+        .lazy(() =>
+          z.union([JSONSchemaForFunctionParameter, z.array(JSONSchemaForFunctionParameter)]),
+        )
+        .optional(),
+    }),
+  ),
+  required: z.array(z.string()).optional(),
+});
 
 export const FunctionName = z
   .string()
@@ -192,9 +198,7 @@ export const ParamType = z.union([
   z.null(),
 ]);
 export type ParamType = z.infer<typeof ParamType>;
-export const FunctionArguments = z
-  .record(ParamType)
-  .describe('arguments of the function');
+export const FunctionArguments = z.record(ParamType).describe('arguments of the function');
 export type FunctionArguments = z.infer<typeof FunctionArguments>;
 
 /* here we are essentiall declaring the taskyon API */
@@ -242,8 +246,7 @@ const SystemResponseEvaluation = z
     'describe your thoughts': answer,
     'was there an error?': yesno,
     'do you think we can solve the error?': yesno,
-    'Would it help to use one of the mentioned tools to solve the issue?':
-      yesno,
+    'Would it help to use one of the mentioned tools to solve the issue?': yesno,
     'Should we try to correct the error': yesno,
     'try again': yesno,
   })
@@ -260,9 +263,7 @@ const ToolResultBase = z
     'should we use different parameters': yesno,
     'try again': yesno,
   })
-  .describe(
-    'Structured answer schema for processing the result of a function call.',
-  );
+  .describe('Structured answer schema for processing the result of a function call.');
 
 const ToolSelection = z
   .object({
@@ -353,6 +354,8 @@ of how content can be structured. `,
   created_at: z.number().optional(),
 });
 export type TaskNode = z.infer<typeof TaskNode>;
+export const partialTaskNode = TaskNode.partial();
+export type PartialTaskNode = z.infer<typeof partialTaskNode>;
 
 export const TaskListType = z.array(TaskNode);
 export type TaskListType = z.infer<typeof TaskListType>;
@@ -468,13 +471,8 @@ const apiConfig = z
   .object({
     name: z.string().describe('The name of the API.'),
     baseURL: z.string().describe('Base URL of the api.'),
-    defaultModel: z
-      .string()
-      .describe('the default model which should be used for this API.'),
-    selectedModel: z
-      .string()
-      .optional()
-      .describe('which model is currently selected.'),
+    defaultModel: z.string().describe('the default model which should be used for this API.'),
+    selectedModel: z.string().optional().describe('which model is currently selected.'),
     models: z
       .object({
         instruction: z.string(),
@@ -488,9 +486,7 @@ const apiConfig = z
     defaultHeaders: z
       .record(z.string(), z.string())
       .optional()
-      .describe(
-        'If the API needs some special headers for communication (e.g. an API key.)',
-      ),
+      .describe('If the API needs some special headers for communication (e.g. an API key.)'),
     routes: z.object({
       chatCompletion: z.string().describe('Endpoint for chatcompletion.'),
       models: z.string().describe('Endpoint for list of models.'),
@@ -504,9 +500,7 @@ export const llmSettings = z.object({
     .string()
     .nullable()
     .optional()
-    .describe(
-      'a cryptographic user id whic is used to identify the user in different chats',
-    ),
+    .describe('a cryptographic user id whic is used to identify the user in different chats'),
   selectedTaskId: z
     .string()
     .optional()
@@ -522,10 +516,7 @@ export const llmSettings = z.object({
     .nullable()
     .default('taskyon')
     .describe('which of the defined APIs are we currently using?'),
-  llmApis: z
-    .record(apiConfig)
-    .default({})
-    .describe('A list of OpenAI compatible API definitions.'),
+  llmApis: z.record(apiConfig).default({}).describe('A list of OpenAI compatible API definitions.'),
   siteUrl: z
     .string()
     .default('https://taskyon.space')
@@ -559,9 +550,7 @@ export const llmSettings = z.object({
         message: '',
       },
     })
-    .describe(
-      'The task which is currently drafted (This could for example be a simple message).',
-    ),
+    .describe('The task which is currently drafted (This could for example be a simple message).'),
   useBasePrompt: z.boolean().default(true).describe(`
   <p>Toggle the base prompt on/off.</p>
   
@@ -581,9 +570,7 @@ export const llmSettings = z.object({
         .default(
           'The base prompt. This should be used e.g. to set the behaviour of the AI. used as a "system" prompt.',
         ),
-      instruction: z
-        .string()
-        .default('This prompt is used to make the AI follow instructions'),
+      instruction: z.string().default('This prompt is used to make the AI follow instructions'),
       toolResult: z
         .string()
         .default(
@@ -591,13 +578,9 @@ export const llmSettings = z.object({
         ),
       task: z
         .string()
-        .default(
-          'This prompt is used to explain to the AI what to do with a specific task.',
-        ),
+        .default('This prompt is used to explain to the AI what to do with a specific task.'),
       evaluate: z.string().default('This prompt is used to evaluate errors'),
-      tools: z
-        .string()
-        .default('This prompt is used to give the AI a list of tools.'),
+      tools: z.string().default('This prompt is used to give the AI a list of tools.'),
     })
     .describe(
       'These are the definitions of the prompts which are used in chats for different purposes.',
@@ -629,34 +612,23 @@ const appConfiguration = z.object({
     .boolean()
     .default(false)
     .describe('Turns on additional settings and configurations.'),
-  showCosts: z
-    .boolean()
-    .default(false)
-    .describe('Shows the costs of API calls.'),
+  showCosts: z.boolean().default(false).describe('Shows the costs of API calls.'),
   gdriveDir: z
     .string()
     .default('taskyon')
-    .describe(
-      'The default directory in gdrive, where taskyon saves its configuration.',
-    ), // not sure, if we need this here?
+    .describe('The default directory in gdrive, where taskyon saves its configuration.'), // not sure, if we need this here?
   useEnterToSend: z
     .boolean()
     .default(true)
-    .describe(
-      'Determines, if enter will automatically send a message or rather shift-enter',
-    ),
+    .describe('Determines, if enter will automatically send a message or rather shift-enter'),
   guiMode: z
     .enum(['auto', 'iframe', 'default'])
     .default('auto')
     .describe('Sets whether we want to have a minimalist chat or the full app'),
   primaryColor: HexColor.describe('The primary color of taskyons color scheme.')
     .optional()
-    .describe(
-      'Primary color for custom taskyon theming. This should be a dark color',
-    ),
-  secondaryColor: HexColor.describe(
-    'The secondary color of taskyons color scheme.',
-  )
+    .describe('Primary color for custom taskyon theming. This should be a dark color'),
+  secondaryColor: HexColor.describe('The secondary color of taskyons color scheme.')
     .optional()
     .describe(
       'Secondary color for custom taskyon theming. This color should be a bright color and contrast the primary color.',
@@ -683,11 +655,7 @@ export const tyPublicKeyDraft = z.object({
   maxc: z.number().describe('Maximum allowed credits in this key').optional(),
   cpi: z.number().describe('Credit refill per inteval'),
   rti: z.number().describe('Refill time interval in minutes'),
-  model: z
-    .string()
-    .array()
-    .describe('List of models which are allowed with this key.')
-    .optional(),
+  model: z.string().array().describe('List of models which are allowed with this key.').optional(),
 });
 
 export type tyPublicKeyDraft = z.infer<typeof tyPublicKeyDraft>;

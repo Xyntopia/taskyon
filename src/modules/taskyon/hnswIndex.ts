@@ -23,11 +23,7 @@ async function getHnswLib(): Promise<HnswlibModule> {
   }
 }
 
-async function loadIndex(
-  numDimensions: number,
-  indexName: string,
-  maxElements: number,
-) {
+async function loadIndex(numDimensions: number, indexName: string, maxElements: number) {
   const hnswLib = await getHnswLib();
   //check this for explanations:  https://github.com/nmslib/hnswlib/blob/master/ALGO_PARAMS.md
   const index = new hnswLib.HierarchicalNSW('cosine', numDimensions, indexName);
@@ -50,7 +46,7 @@ const indexLoadLock = new Lock();
 
 // if we want to re-create an index, we sinply load it with loadIfExists=false
 // and this will overwrite the existing one...
-async function loadOrCreateHNSWIndex(
+export async function loadOrCreateHNSWIndex(
   vecdbName: string,
   MAX_ELEMENTS: number,
   loadIfExists = true,
@@ -64,8 +60,7 @@ async function loadOrCreateHNSWIndex(
   const newIndex = await loadIndex(numDimensions, vecdbName, MAX_ELEMENTS);
   if (loadIfExists) {
     const hnswLib = await getHnswLib();
-    const exists =
-      hnswLib.EmscriptenFileSystemManager.checkFileExists(vecdbName);
+    const exists = hnswLib.EmscriptenFileSystemManager.checkFileExists(vecdbName);
     if (exists) {
       try {
         await newIndex.readIndex(vecdbName, MAX_ELEMENTS, true);
@@ -84,11 +79,7 @@ export function useVectorStore(indexName: string) {
 
   async function initVectorStore(loadIfExists = true) {
     const maxElements = 10000;
-    vectorIndex = await loadOrCreateHNSWIndex(
-      indexName,
-      maxElements,
-      loadIfExists,
-    );
+    vectorIndex = await loadOrCreateHNSWIndex(indexName, maxElements, loadIfExists);
   }
   void initVectorStore();
 

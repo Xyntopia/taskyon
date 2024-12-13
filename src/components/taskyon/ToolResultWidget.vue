@@ -28,7 +28,7 @@
           :srcdoc="
             typeof task.result?.toolResult?.result === 'string'
               ? task.result.toolResult.result
-              : undefined
+              : ''
           "
         ></iframe>
         <q-btn

@@ -11,10 +11,7 @@ import axios from 'axios'; // TODO: replace with fetch
 import { Notify, setCssVar } from 'quasar'; // load dynamically! :)
 import { sleep } from 'src/modules/utils';
 import { useQuasar } from 'quasar';
-import {
-  useTaskWorkerController,
-  getApiConfig,
-} from 'src/modules/taskyon/taskWorker';
+import { useTaskWorkerController, getApiConfig } from 'src/modules/taskyon/taskWorker';
 import { initTaskyon } from 'src/modules/taskyon/init';
 import { availableModels } from 'src/modules/taskyon/chat';
 import { setupIframeApi } from 'src/modules/taskyon/iframeApi';
@@ -31,10 +28,7 @@ function removeCodeFromUrl() {
   }
 }
 
-function asyncComputed<T>(
-  getter: () => Promise<T>,
-  initialValue: T,
-): ComputedRef<T> {
+function asyncComputed<T>(getter: () => Promise<T>, initialValue: T): ComputedRef<T> {
   const state = ref<T>(initialValue);
   const evaluate = async () => {
     state.value = await getter();
@@ -123,25 +117,16 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   function defineTyGuiTools(): Tool[] {
     return [
       {
-        function: async ({
-          newPrompts,
-        }: {
-          newPrompts: { [key: string]: string };
-        }) => {
+        function: async ({ newPrompts }: { newPrompts: { [key: string]: string } }) => {
           console.log('Modifying prompts in llmSettings...');
           const newPromptsMerged = {
             ...stateRefs.llmSettings.taskChatTemplates,
             ...newPrompts,
           };
-          const result = llmSettings.shape.taskChatTemplates
-            .strict()
-            .safeParse(newPromptsMerged);
+          const result = llmSettings.shape.taskChatTemplates.strict().safeParse(newPromptsMerged);
           if (result.success) {
             stateRefs.llmSettings.taskChatTemplates = result.data;
-            console.log(
-              'Prompts modified:',
-              stateRefs.llmSettings.taskChatTemplates,
-            );
+            console.log('Prompts modified:', stateRefs.llmSettings.taskChatTemplates);
           } else {
             return `It was not possible to add prompts for ${Object.keys(newPrompts)} to
   ${Object.keys(stateRefs.llmSettings.taskChatTemplates)}. Did you use the wrong 
@@ -186,9 +171,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   type TaskyonInstance = Awaited<ReturnType<typeof initTaskyon>>;
 
   // Access taskManagerInstance and addTask2Tree without redundant awaits
-  const getTaskManager = async (): Promise<
-    TaskyonInstance['taskManagerInstance']
-  > => {
+  const getTaskManager = async (): Promise<TaskyonInstance['taskManagerInstance']> => {
     const { taskManagerInstance } = await initTaskyonPromise;
     return taskManagerInstance;
   };
@@ -230,10 +213,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // TODO: optionally execute the last task...
   }
 
-  const add2ChatHistory = async (
-    task: TaskNode,
-    msg: TaskEvent | 'existing',
-  ) => {
+  const add2ChatHistory = async (task: TaskNode, msg: TaskEvent | 'existing') => {
     console.log('update task history!!', task.id, msg);
 
     if (msg === 'new' || msg === 'update') {
@@ -245,9 +225,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       }
     } else if (msg === 'delete') {
       // Filter out the deleted task ID
-      stateRefs.chatHistory = stateRefs.chatHistory.filter(
-        (t) => t !== task.id,
-      );
+      stateRefs.chatHistory = stateRefs.chatHistory.filter((t) => t !== task.id);
       return;
     } else if (msg === 'deleteAll') {
       // Clear history
@@ -270,9 +248,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     ];*/
 
     // Remove any entries which are a parent of the current task (keeping only leaf IDs)
-    stateRefs.chatHistory = stateRefs.chatHistory.filter(
-      (t) => t !== task.parentID,
-    );
+    stateRefs.chatHistory = stateRefs.chatHistory.filter((t) => t !== task.parentID);
 
     // Enforce a maximum size of 50
     if (stateRefs.chatHistory.length > 50) {
@@ -321,23 +297,16 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   }
 
   const llmModelsInternal = ref<Model[]>([]);
-  updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then(
-    (m) => (llmModelsInternal.value = m),
-  );
+  updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then((m) => (llmModelsInternal.value = m));
   // make sure we update our model list whenever anything changes for our
   // endpoints...
   watch(
-    [
-      () => stateRefs.llmSettings.selectedApi,
-      stateRefs.keys,
-      stateRefs.llmSettings.llmApis,
-    ],
+    [() => stateRefs.llmSettings.selectedApi, stateRefs.keys, stateRefs.llmSettings.llmApis],
     () => {
       const api = getApiConfig(stateRefs.llmSettings);
       // try to set our recommended models if ther isn't any default or anything!
       if (api && !api.selectedModel) {
-        stateRefs.llmSettings.llmApis['taskyon']!.selectedModel =
-          api.models?.free;
+        stateRefs.llmSettings.llmApis['taskyon']!.selectedModel = api.models?.free;
       }
       updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then(
         (m) => (llmModelsInternal.value = m),
@@ -412,9 +381,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       if (taskId) {
         const TM = await getTaskManager();
         const threadIDChain = await TM.getTaskIdChain(taskId);
-        const thread = await Promise.all(
-          threadIDChain.map((tId) => TM.getTask(tId)),
-        );
+        const thread = (await Promise.all(threadIDChain.map((tId) => TM.getTask(tId)))).filter(
+          (t) => t,
+        ) as TaskNode[];
         return thread;
       }
       return [];

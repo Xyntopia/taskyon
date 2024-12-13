@@ -1,4 +1,4 @@
-import { Readability } from '@mozilla/readability';
+//import { Readability } from '@mozilla/readability';
 
 /*function extractText(html: string) {
   const parser = new DOMParser();
@@ -56,10 +56,7 @@ export function cleanWebpageEnhanced(htmlString: string): string {
 
     childrenArray.forEach((child: Element) => {
       // Remove non-essential elements and empty divs/sections
-      if (
-        !tagsToKeep.includes(child.tagName.toLowerCase()) ||
-        isEmptyElement(child)
-      ) {
+      if (!tagsToKeep.includes(child.tagName.toLowerCase()) || isEmptyElement(child)) {
         child.remove();
       } else {
         // Recursively clean this child element
@@ -89,7 +86,7 @@ export function deepCleanWebpage(htmlString: string): string {
   // Function to strip all attributes from an element
   function stripAttributes(element: Element): void {
     while (element.attributes.length > 0) {
-      element.removeAttribute(element.attributes[0].name);
+      element.removeAttribute(element.attributes[0]!.name);
     }
   }
 

@@ -5,15 +5,11 @@ type LowercaseKeys<T> = {
   [K in keyof T as K extends string ? Lowercase<K> : never]: T[K];
 } & { [key: string]: unknown };
 
-export function toLowerCaseKeys<T extends Record<string, unknown>>(
-  obj: T,
-): LowercaseKeys<T> {
+export function toLowerCaseKeys<T extends Record<string, unknown>>(obj: T): LowercaseKeys<T> {
   return Object.fromEntries(
     Object.entries(obj).map(([k, v]) => [
       k.toLowerCase(),
-      typeof v === 'object' && v !== null
-        ? toLowerCaseKeys(v as Record<string, unknown>)
-        : v,
+      typeof v === 'object' && v !== null ? toLowerCaseKeys(v as Record<string, unknown>) : v,
     ]),
   ) as LowercaseKeys<T>;
 }
@@ -120,7 +116,7 @@ export function lruCache<ReturnType>(
 
       // Check the cache size and evict the least recently used item if necessary.
       if (cache.size > size) {
-        const oldestKey = Array.from(cache.keys())[0];
+        const oldestKey = Array.from(cache.keys())[0]!;
         cache.delete(oldestKey);
         console.log('Evicted:', oldestKey);
       }
@@ -172,7 +168,7 @@ export function timeLruCache<ReturnType>(
 
       // Check the cache size and evict the least recently used item if necessary.
       if (cache.size > size) {
-        const oldestKey = Array.from(cache.keys())[0];
+        const oldestKey = Array.from(cache.keys())[0]!;
         cache.delete(oldestKey);
         console.log('Evicted:', oldestKey);
       }
@@ -183,24 +179,29 @@ export function timeLruCache<ReturnType>(
   };
 }
 
+// Dynamically assign the storage methods
+const storage =
+  process.env.MODE === 'ssr'
+    ? (() => {
+        // on node we simply only save stuff in memory ;)
+        const nodeStorage = new Map<string, string>();
+        return {
+          setItem: nodeStorage.set.bind(nodeStorage),
+          getItem: (key: string) => nodeStorage.get(key) || null,
+        };
+      })()
+    : localStorage;
+
 // The cache for storing function call results.
-function saveToLocalStorage<ReturnType>(
-  key: string,
-  cache: Map<string, CacheEntry<ReturnType>>,
-) {
+function saveToLocalStorage<ReturnType>(key: string, cache: Map<string, CacheEntry<ReturnType>>) {
   const serializedCache = JSON.stringify(Array.from(cache.entries()));
-  localStorage.setItem(key, serializedCache);
+  storage.setItem(key, serializedCache);
 }
 
-function loadFromLocalStorage<ReturnType>(
-  key: string,
-): Map<string, CacheEntry<ReturnType>> {
-  const serializedCache = localStorage.getItem(key);
+function loadFromLocalStorage<ReturnType>(key: string): Map<string, CacheEntry<ReturnType>> {
+  const serializedCache = storage.getItem(key);
   if (serializedCache) {
-    const parsedCache = JSON.parse(serializedCache) as [
-      string,
-      CacheEntry<ReturnType>,
-    ][];
+    const parsedCache = JSON.parse(serializedCache) as [string, CacheEntry<ReturnType>][];
     return new Map(parsedCache);
   }
   return new Map();
@@ -214,13 +215,7 @@ export function asyncTimeLruCache(
   lazyUpdate = false,
   ignoreIndices: number[] = [],
 ) {
-  return <
-    F extends (
-      ...args: Parameters<F>
-    ) => ReturnType<F> | Promise<ReturnType<F>>,
-  >(
-    fn: F,
-  ) => {
+  return <F extends (...args: Parameters<F>) => ReturnType<F> | Promise<ReturnType<F>>>(fn: F) => {
     const cache = useLocalStorage
       ? loadFromLocalStorage<ReturnType<F>>(storageKey)
       : new Map<string, CacheEntry<ReturnType<F>>>();
@@ -238,9 +233,7 @@ export function asyncTimeLruCache(
       }
     };
 
-    return async (
-      ...args: Parameters<F> & unknown[]
-    ): Promise<ReturnType<F>> => {
+    return async (...args: Parameters<F> & unknown[]): Promise<ReturnType<F>> => {
       // Generate a cache key, ignoring specified arguments.
       const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index));
       const key = JSON.stringify(keyArgs);
@@ -279,18 +272,10 @@ export function asyncTimeLruCache(
 }
 
 export function asyncLruCache(size: number, ignoreIndices: number[] = []) {
-  return <
-    F extends (
-      ...args: Parameters<F>
-    ) => ReturnType<F> | Promise<ReturnType<F>>,
-  >(
-    fn: F,
-  ) => {
+  return <F extends (...args: Parameters<F>) => ReturnType<F> | Promise<ReturnType<F>>>(fn: F) => {
     const cache = new Map<string, ReturnType<F>>();
 
-    return async (
-      ...args: Parameters<F> & unknown[]
-    ): Promise<ReturnType<F>> => {
+    return async (...args: Parameters<F> & unknown[]): Promise<ReturnType<F>> => {
       const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index));
       const key = JSON.stringify(keyArgs);
 
@@ -427,8 +412,7 @@ function isObject(item: unknown): item is Record<string, unknown> {
 function unionArrays(arr1: unknown[], arr2: unknown[]) {
   const combined = arr1.concat(arr2);
   return combined.filter(
-    (item, index) =>
-      combined.findIndex((obj) => deepEqual(obj, item)) === index,
+    (item, index) => combined.findIndex((obj) => deepEqual(obj, item)) === index,
   );
 }
 
@@ -455,9 +439,7 @@ export function deepMerge<A, B>(
       const obj1Value = obj1[key];
       if (Array.isArray(obj1Value) && Array.isArray(obj2Value)) {
         output[key] =
-          arrayMergeStrategy === 'union'
-            ? unionArrays(obj1Value, obj2Value)
-            : obj2Value;
+          arrayMergeStrategy === 'union' ? unionArrays(obj1Value, obj2Value) : obj2Value;
       } else if (isObject(obj2Value)) {
         if (isObject(obj1Value)) {
           // Recursively call deepMerge only if both obj1[key] and obj2[key] are objects
@@ -504,11 +486,7 @@ export function deepMergeReactive<A, B>(
     } else if (isObject(obj2Value) && isObject(obj1Value)) {
       deepMergeReactive(obj1Value, obj2Value, mergeStrategy);
     } else if (Array.isArray(obj2Value) && Array.isArray(obj1Value)) {
-      obj1AsRecord[key] = mergeArraysReactive(
-        obj1Value,
-        obj2Value,
-        mergeStrategy,
-      );
+      obj1AsRecord[key] = mergeArraysReactive(obj1Value, obj2Value, mergeStrategy);
     } else if (mergeStrategy === 'overwrite') {
       // if the key exists, and one of the objects isn't an array or object
       // In 'overwrite' mode, assign non-object values directly
@@ -541,11 +519,7 @@ function mergeArraysReactive(
     if (isObject(element1) && isObject(element2)) {
       arr1[i] = deepMergeReactive(element1, element2, mergeStrategy);
     } else if (Array.isArray(element1) && Array.isArray(element2)) {
-      arr1[i] = mergeArraysReactive(
-        element1 as unknown[],
-        element2 as unknown[],
-        mergeStrategy,
-      );
+      arr1[i] = mergeArraysReactive(element1 as unknown[], element2 as unknown[], mergeStrategy);
     } else if (element1 === undefined && element2 !== undefined) {
       arr1.push(element2);
     } else if (element2 !== undefined && mergeStrategy === 'overwrite') {
@@ -600,7 +574,7 @@ export function base64UrlDecode(str: string): string {
 
 export class AsyncQueue<T> {
   private queue: T[] = [];
-  private resolveWaitingPop?: (value: T) => void;
+  private resolveWaitingPop?: ((value: T) => void) | undefined;
 
   push(item: T) {
     this.queue.push(item);
@@ -767,9 +741,7 @@ export function normalizeFalsyValues(input: unknown): unknown {
 }
 
 export function pickProperties(obj: object, keys: string[]) {
-  return Object.fromEntries(
-    Object.entries(obj).filter(([key]) => keys.includes(key)),
-  );
+  return Object.fromEntries(Object.entries(obj).filter(([key]) => keys.includes(key)));
 }
 
 export function makeSerializable(value: unknown, depth = 5): unknown {
@@ -782,10 +754,7 @@ export function makeSerializable(value: unknown, depth = 5): unknown {
     return Object.fromEntries(
       Object.getOwnPropertyNames(value).map((key) => [
         key,
-        makeSerializable(
-          (value as unknown as Record<string, unknown>)[key],
-          depth - 1,
-        ),
+        makeSerializable((value as unknown as Record<string, unknown>)[key], depth - 1),
       ]),
     );
   }
@@ -793,10 +762,7 @@ export function makeSerializable(value: unknown, depth = 5): unknown {
   if (value instanceof Map) {
     // Convert Map to an object
     return Object.fromEntries(
-      Array.from(value.entries()).map(([k, v]) => [
-        k,
-        makeSerializable(v, depth - 1),
-      ]),
+      Array.from(value.entries()).map(([k, v]) => [k, makeSerializable(v, depth - 1)]),
     );
   }
 
