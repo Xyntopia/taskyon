@@ -15,14 +15,24 @@ git clone https://github.com/Xyntopia/taskyon.git
 # install dependencies & development dependencies
 yarn install
 
-# start development server
-quasar dev
+# prepare typescript
+yarn quasar prepare
 
-# build static webpage
-quasar build
+# start development server
+yarn quasar dev
+
+# build static production webpage
+yarn quasar build
 ```
 
 That's it! You can immediately start developing with Quasar/Vue3 and explore Taskyon's chat interface and task management features.
+
+### Note about quasar cli
+
+Quasar will automatically get installed through yarn
+and you can use the quasar cli tool through yarn as well by prefixing it with yarn: `yarn quasar ...`.
+If you want to use quasar directly (e.g `quasar dev` without yarn) you will have to follow the instructions
+to install quasar from here: https://quasar.dev/start/quasar-cli
 
 ## Configuration and Local vs Production Setup
 

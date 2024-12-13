@@ -63,7 +63,9 @@ export default defineConfig((ctx) => {
 
       // publicPath: '/',
       analyze: true,
-      // env: {},
+      env: {
+        PUBLISH_DATE: JSON.stringify(new Date().toISOString()),
+      },
       // rawDefine: {}
       ignorePublicFolder: true,
       // minify: false,

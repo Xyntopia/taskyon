@@ -7,7 +7,12 @@
   >
     <q-tooltip>Copy entire chat as markdown</q-tooltip>
   </q-btn>
-  <q-btn v-bind="$attrs" :icon="matShare" @click="showDialog = true">
+  <q-btn
+    v-bind="$attrs"
+    :icon="matShare"
+    @click="showDialog = true"
+    aria-label="share content"
+  >
     <q-tooltip>Share Content</q-tooltip>
     <q-dialog v-model="showDialog">
       <q-card>
@@ -17,7 +22,12 @@
             <div>Select Method for Sharing This Chat</div>
           </div>
           <div class="column q-gutter-sm q-pt-md">
-            <q-btn v-if="false" outline :icon="matLink" label="Create Public Link" />
+            <q-btn
+              v-if="false"
+              outline
+              :icon="matLink"
+              label="Create Public Link"
+            />
             <q-btn
               v-if="false"
               outline
@@ -26,23 +36,53 @@
               @click="onExportIpfs(conversationId)"
             />
             <q-btn
+              v-if="!gdriveLink"
               outline
               :icon="symOutlinedDriveExport"
-              label="Markdown & public gdrive link"
+              label="Share through Gdrive"
+              :loading="loadingGdrive"
               @click="onExportPublicGdrive(conversationId)"
             />
-            <q-slide-transition>
-              <div v-show="gdriveLink">
-                <q-input dense rounded standout :model-value="gdriveLink">
-                  <template #append>
-                    <q-btn
-                      flat
-                      dense
-                      :icon="matContentCopy"
-                      @click="copyToClipboard(gdriveLink || '')"
-                    />
-                  </template>
-                </q-input>
+            <div v-else class="text-caption">Gdrive Store & Share:</div>
+            <q-slide-transition v-if="gdriveLink">
+              <div v-show="gdriveLink" class="column items-center">
+                <q-btn
+                  v-if="canShare"
+                  class="q-mb-md"
+                  outline
+                  :icon="matShare"
+                  label="Share via Social Apps"
+                  @click="shareViaSocialApps"
+                />
+                <div
+                  v-for="[link, label] in [
+                    [
+                      taskyonShareLink,
+                      'Copy taskyon.space link (stored in gdrive)',
+                    ],
+                    [gdriveLink, 'Copy markdown link'],
+                  ] as Array<[string, string]>"
+                  :key="link"
+                >
+                  <div class="text-caption">OR {{ label }}</div>
+                  <div class="row q-gutter-sm q-py-sm items-center">
+                    <div
+                      class="col-auto ellipsis text-weight-medium"
+                      style="max-width: 15rem"
+                    >
+                      {{ link }}
+                      <q-tooltip>{{ link }}</q-tooltip>
+                    </div>
+                    <div class="col-auto">
+                      <q-btn
+                        flat
+                        dense
+                        :icon="matContentCopy"
+                        @click="copyToClipboard(link || '')"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             </q-slide-transition>
             <q-btn
@@ -77,100 +117,129 @@
 </template>
 
 <script setup lang="ts">
-import { matShare, matLink, matCopyAll, matContentCopy } from '@quasar/extras/material-icons'
-import { copyToClipboard, exportFile } from 'quasar'
-import { ref } from 'vue'
+import {
+  matShare,
+  matLink,
+  matCopyAll,
+  matContentCopy,
+} from '@quasar/extras/material-icons';
+import { copyToClipboard, exportFile } from 'quasar';
+import { ref, computed, watch } from 'vue';
 import {
   symOutlinedDriveExport,
   symOutlinedFileSave,
   symOutlinedMarkdown,
   symOutlinedPublic,
-} from '@quasar/extras/material-symbols-outlined'
-import { useGdrive } from 'src/modules/gdrive'
-import { useAppStateStore } from 'src/stores/appState'
-import { useTaskyonStore } from 'src/stores/taskyonState'
+} from '@quasar/extras/material-symbols-outlined';
+import { getFileId, useGdrive } from 'src/modules/gdrive';
+import { useAppStateStore } from 'src/stores/appState';
+import { useTaskyonStore } from 'src/stores/taskyonState';
 
-const showDialog = ref(false)
+const showDialog = ref(false);
 
-const state = useAppStateStore()
-const tystate = useTaskyonStore()
+const state = useAppStateStore();
+const tystate = useTaskyonStore();
+const canShare = navigator.canShare ? navigator.canShare() : false;
 
-defineProps<{
-  conversationId: string
-}>()
+const baseURL = process.env.DEV ? window.origin : 'https://taskyon.space';
 
-const gdriveLink = ref<string>()
+const props = defineProps<{
+  conversationId: string;
+}>();
 
-function getDirectDownloadLink(originalLink: string) {
-  const url = new URL(originalLink)
-  const pathParts = url.pathname.split('/')
-  const fileId = pathParts[pathParts.length - 2]
+const gdriveLink = ref<string>();
+const loadingGdrive = ref(false);
 
-  if (!fileId) {
-    throw new Error('Invalid Google Drive link')
+watch(
+  () => props.conversationId,
+  () => (gdriveLink.value = undefined),
+);
+
+const taskyonShareLink = computed(() => {
+  if (gdriveLink.value) {
+    const fileId = getFileId(gdriveLink.value);
+    return `${baseURL}/chat?gd=${fileId}`;
+  } else {
+    throw new Error('Could not create a taskyon share link!');
   }
-
-  const directLink = `https://drive.google.com/uc?id=${fileId}&export=download`
-  return directLink
-}
+});
 
 async function onExportPublicGdrive(conversationId: string) {
-  const tm = await tystate.getTaskManager()
-  const task = await tm.getTask(conversationId)
-  if (task) {
-    const taskThreadMd = await tm.chatToMarkdown(task.id)
-    if (taskThreadMd) {
-      const { publishMarkdown } = useGdrive()
+  const tm = await tystate.getTaskManager();
+  const task = await tm.getTask(conversationId);
+  try {
+    if (task) {
+      loadingGdrive.value = true;
+      const taskThreadMd = await tm.chatToMarkdown(task.id);
+      if (taskThreadMd) {
+        const { publishMarkdown } = useGdrive();
 
-      const gdriveFile = await publishMarkdown(
-        taskThreadMd,
-        state.appConfiguration.gdriveDir,
-        `tyn-${task.name || ''}.md`,
-        true,
-      )
+        const gdriveFile = await publishMarkdown(
+          taskThreadMd,
+          state.appConfiguration.gdriveDir,
+          `ty-${task.name || ''}.${task.id}.md`,
+          true,
+        );
 
-      if (gdriveFile.webViewLink) {
-        gdriveLink.value = getDirectDownloadLink(gdriveFile.webViewLink)
+        if (gdriveFile.webViewLink) {
+          gdriveLink.value = gdriveFile.webViewLink;
+        }
       }
     }
+  } finally {
+    loadingGdrive.value = false;
   }
 }
 
 async function onExportIpfs(conversationId: string) {
-  console.log('export to ipfs', conversationId)
+  console.log('export to ipfs', conversationId);
 }
 
 async function onExportChatMD(conversationId: string, clipBoard = false) {
-  const tm = await tystate.getTaskManager()
-  const task = await tm.getTask(conversationId)
+  const tm = await tystate.getTaskManager();
+  const task = await tm.getTask(conversationId);
   if (task) {
-    const taskThreadMd = await tm.chatToMarkdown(task.id)
+    const taskThreadMd = await tm.chatToMarkdown(task.id);
     if (taskThreadMd) {
-      const fileName = `tyn-${task.name || ''}.md`
-      const mimeType = 'text/markdown; charset=UTF-8'
+      const fileName = `tyn-${task.name || ''}.md`;
+      const mimeType = 'text/markdown; charset=UTF-8';
 
       if (clipBoard) {
-        copyToClipboard(taskThreadMd)
+        copyToClipboard(taskThreadMd);
       } else {
         // Use Quasar's exportFile function for download
-        exportFile(fileName, taskThreadMd, mimeType)
+        exportFile(fileName, taskThreadMd, mimeType);
       }
     }
   }
 }
 
 async function onExportChatYaml(conversationId: string) {
-  const tm = await tystate.getTaskManager()
-  const task = await tm.getTask(conversationId)
+  const tm = await tystate.getTaskManager();
+  const task = await tm.getTask(conversationId);
   if (task) {
-    const taskThreadYaml = await tm.chatToYaml(task.id)
+    const taskThreadYaml = await tm.chatToYaml(task.id);
     if (taskThreadYaml) {
-      const fileName = `tyn-${task.name || ''}.yaml`
-      const mimeType = 'text/yaml'
+      const fileName = `tyn-${task.name || ''}.yaml`;
+      const mimeType = 'text/yaml';
 
       // Use Quasar's exportFile function for download
-      exportFile(fileName, taskThreadYaml, mimeType)
+      exportFile(fileName, taskThreadYaml, mimeType);
     }
+  }
+}
+
+function shareViaSocialApps() {
+  if (navigator.share && gdriveLink.value) {
+    navigator
+      .share({
+        title: 'Share Taskyon Chat',
+        text: 'Check out this chat!',
+        url: taskyonShareLink.value,
+      })
+      .catch((error) => console.error('Error sharing:', error));
+  } else {
+    alert('Sharing not supported on this device.');
   }
 }
 </script>

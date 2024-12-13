@@ -806,3 +806,30 @@ export function decodeVector(base64String: string): Float32Array {
   // Convert ArrayBuffer back to Float32Array
   return new Float32Array(bytes.buffer)
 }
+
+export function clearBrowserCaches() {
+  if ('caches' in window) {
+    caches.keys().then((keys) => {
+      keys.forEach((key) => {
+        caches.delete(key);
+      });
+    });
+  }
+}
+
+export function clearServiceWorkers() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      registrations.forEach((registration) => {
+        registration.unregister();
+      });
+    });
+  }
+}
+
+export function clearCookies() {
+  document.cookie.split(';').forEach((cookie) => {
+    const name = cookie.split('=')[0]!.trim();
+    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+  });
+}

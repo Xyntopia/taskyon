@@ -9,13 +9,31 @@
       :style="`padding-bottom: ${bottomPadding + 5}px;`"
     >
       <q-scroll-observer axis="vertical" :debounce="500" @scroll="onScroll" />
+      <div
+        class="row items-center q-pa-sm"
+        style="max-width: 600px"
+        v-if="tystate.selectedThread.length > 0 && showIntroduction"
+      >
+        <q-icon
+          class="col-auto q-pa-xl"
+          size="2rem"
+          name="svguse:/taskyon_mono_opt.svg#taskyon"
+          :color="$q.dark.isActive ? 'secondary' : 'primary'"
+        ></q-icon>
+        <div class="col text-subtitle2 text-center">
+          You've been invited to read this chat! Scroll down and start reading
+          <q-btn
+            label="Or start using Taskyon"
+            dense
+            no-caps
+            outline
+            @click="scrollToThreadEnd"
+          />
+        </div>
+      </div>
       <!-- "Task" Display -->
       <ConversationWidget
-        v-if="
-          tystate.selectedThread.length > 0 &&
-          state.llmSettings.selectedApi &&
-          state.keys[state.llmSettings.selectedApi]
-        "
+        v-if="tystate.selectedThread.length > 0"
         :selected-thread="tystate.selectedThread"
         :current-task="tystate.currentTask"
         :task-worker-waiting="tystate.taskWorkerWaiting"
@@ -23,7 +41,7 @@
       />
       <!-- Welcome Message -->
       <div
-        v-else
+        v-if="tystate.selectedThread.length == 0 || showIntroduction"
         class="col column justify-center items-center q-pa-sm welcome"
         style="max-width: 600px"
       >
@@ -33,8 +51,20 @@
           name="svguse:/taskyon_mono_opt.svg#taskyon"
           :color="$q.dark.isActive ? 'secondary' : 'primary'"
         ></q-icon>
-        <component :is="ResetButton" v-if="ResetButton"></component>
-        <GetStarted />
+        <component
+          :is="ResetButton"
+          v-if="ResetButton"
+          color="secondary"
+          flat
+          mode="all"
+        ></component>
+        <div class="welcome-message column items-center">
+          <LLMProviders
+            v-if="showIntroduction"
+            :expert-mode-on="state.appConfiguration.expertMode"
+          />
+          <GetStarted v-else />
+        </div>
       </div>
     </div>
     <!--Create new task area-->
@@ -42,10 +72,7 @@
       <q-resize-observer @resize="handleResize" />
       <div class="col" style="max-width: 48rem">
         <CreateNewTask
-          v-if="
-            state.llmSettings.selectedApi &&
-            state.keys[state.llmSettings.selectedApi]
-          "
+          v-if="!showIntroduction"
           :force-task-props="state.llmSettings.taskTemplate"
           class="q-pa-xs"
           :hide-task-info="state.minimalGui"
@@ -76,6 +103,7 @@ import { fetchMarkdown, getTextFile } from 'src/modules/taskyon/taskUtils';
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAppStateStore } from 'src/stores/appState';
+import LLMProviders from 'components/taskyon/LLMProviders.vue';
 
 const ResetButton = process.env.DEV
   ? defineAsyncComponent(
@@ -101,26 +129,41 @@ const taskThreadContainer = ref<HTMLElement | undefined>();
 $q.dark.set(state.darkTheme); // TODO: this needs to go into our taskyon store...
 const folder = '';
 
+const showIntroduction = computed(
+  () =>
+    !(
+      state.llmSettings.selectedApi && state.keys[state.llmSettings.selectedApi]
+    ),
+);
+
 async function updateChatThread() {
   console.log('update chat thread');
-  if (typeof route.query.url === 'string') {
+  if (typeof route.query.gd === 'string') {
+    state.lockBottomScroll = false;
+    const gdFileId = route.query.gd;
+    const markdownUrl = `https://share.taskyon.space/proxy/gdrive/${gdFileId}`;
+    const markdownContent = await getTextFile(markdownUrl);
+    const newTaskId = await tystate.addMdTasks(markdownContent);
+
+    state.llmSettings.selectedTaskId = newTaskId;
+  } else if (typeof route.query.url === 'string') {
     const markdownUrl = route.query.url ? new URL(route.query.url) : undefined;
     if (markdownUrl) {
+      state.lockBottomScroll = false;
       const markdownContent = await getTextFile(markdownUrl);
-      const newTaskId = await tystate.addMdTasks(markdownContent, undefined);
+      const newTaskId = await tystate.addMdTasks(markdownContent);
       state.llmSettings.selectedTaskId = newTaskId;
-      state.lockBottomScroll = true;
     }
   } else if (route.params.filePath) {
+    state.lockBottomScroll = false;
     const urlPath = (route.params.filePath as string[]).join('/');
     const filePath = urlPath.endsWith('.md') ? urlPath : `${urlPath}.md`;
     const markdownContent = filePath
       ? await fetchMarkdown(folder || '', filePath)
       : undefined;
-    const newTaskId = await tystate.addMdTasks(markdownContent, undefined);
+    const newTaskId = await tystate.addMdTasks(markdownContent);
 
     state.llmSettings.selectedTaskId = newTaskId;
-    state.lockBottomScroll = true;
   } else if (typeof route.query.t === 'string') {
     state.llmSettings.selectedTaskId = route.query.t;
     state.lockBottomScroll = true;
@@ -178,6 +221,7 @@ function scrollToThreadEnd() {
   const offset = document.body.scrollHeight - window.innerHeight;
   const duration = 300;
   state.lockBottomScroll = true;
+  console.log('scroll to end of chat!');
   setVerticalScrollPosition(window, offset, duration);
 }
 
@@ -190,7 +234,7 @@ watch(
   () => state.llmSettings.selectedTaskId,
   (newTaskId) => {
     console.log('set new task', newTaskId);
-    if (!route.params.filePath) {
+    if (!route.params.filePath && !route.query.gd) {
       // we are only doing this if there is no filepath, because filepaths have priority ;)
       router.push({
         query: { ...route.query, t: newTaskId || undefined },

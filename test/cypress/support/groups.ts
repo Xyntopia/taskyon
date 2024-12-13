@@ -20,7 +20,7 @@ export function selectllmmodel(
   //cy.get('.q-menu').contains(modelId).click();
 }
 
-export function getLastMessage(
+export function getLastAssistantMessage(
   selector: string = '.assistant.message',
   timeout: number = 100000,
 ) {
@@ -34,7 +34,7 @@ export function checkLastMessage(
   timeout: number = 100000,
   selector: string = '.assistant.message',
 ) {
-  return getLastMessage(selector, timeout)
+  return getLastAssistantMessage(selector, timeout)
     .invoke('text')
     .then((text) => text.toLowerCase())
     .should('contain', teststr);

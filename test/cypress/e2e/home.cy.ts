@@ -1,7 +1,7 @@
 // Use `cy.dataCy` custom command for more robust tests
 // See https://docs.cypress.io/guides/references/best-practices.html#Selecting-Elements
 
-import { getLastMessage, selectllmmodel } from '../support/groups';
+import { getLastAssistantMessage, selectllmmodel } from '../support/groups'
 
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
@@ -28,27 +28,27 @@ describe('test taskyon defaults', () => {
         headers: {
           'Content-Type': 'image/png',
         },
-      });
-    }).as('stubImages');
+      })
+    }).as('stubImages')
 
     cy.wrap(
       Cypress.automation('remote:debugger:protocol', {
         command: 'Network.clearBrowserCache',
       }),
-    );
+    )
 
-    cy.intercept('**').as('requests');
+    cy.intercept('**').as('requests')
     //cy.visit('/');
     //cy.intercept('**').as('requests');
-    cy.visit('/');
+    cy.visit('/')
     //cy.get('@requests.all')meta-llama/llama-3-70b-instructmeta-llama/llama-3-70b-instruct.should('have.length', 10);
     //cy.get('*/src_layouts_TaskyonLayout_vue.js')
 
     // Clear local storage
-    cy.clearLocalStorage();
+    cy.clearLocalStorage()
 
     // Clear cookies
-    cy.clearCookies();
+    cy.clearCookies()
 
     // Optionally, you can clear indexedDB if your app uses it
     // somehow we're getting a lot of errors here...
@@ -59,38 +59,38 @@ describe('test taskyon defaults', () => {
         });
       });
     });*/
-  });
+  })
   it('should be able to send a free message and  get a response', () => {
-    cy.title().should('include', 'Taskyon');
+    cy.title().should('include', 'Taskyon')
 
-    cy.log('starting tests!');
+    cy.log('starting tests!')
 
-    cy.get('.q-btn').contains('Use free Taskyon').click();
+    cy.get('.q-btn').contains('Use free Taskyon').click()
 
-    cy.get('[aria-label="toggle task settings"]').click();
-    const modelID = 'google/gemini-pro-1.5';
-    selectllmmodel(undefined, modelID);
+    cy.get('[aria-label="toggle task settings"]').click()
+    const modelID = 'google/gemini-pro-1.5'
+    selectllmmodel(undefined, modelID)
 
     // enable task cost display & expert mode...
-    cy.get('[aria-label="Expert mode"] > .q-toggle__inner').click();
-    cy.get('[aria-label="Show task costs"] > .q-toggle__inner').click();
+    cy.get('[aria-label="Expert mode"] > .q-toggle__inner').click()
+    cy.get('[aria-label="Show task costs"] > .q-toggle__inner').click()
 
-    cy.wait(2000).reload();
+    cy.wait(2000).reload()
     // TODO: check if expert mode is still there...
 
-    cy.contains('Vision').click();
-    cy.contains('Fancy AI').click();
+    cy.contains('Vision').click()
+    cy.contains('Fancy AI').click()
 
-    const msg = 'hello world you silly munchkin!!';
-    cy.contains('your message').type(msg + '{enter}');
+    const msg = 'hello world you silly munchkin!!'
+    cy.contains('your message').type(msg + '{enter}')
     //cy.get('li').first().click();
     //cy.contains('Clicks on todos: 1').should('exist');
 
-    getLastMessage('.user.message')
+    getLastAssistantMessage('.user.message')
       .invoke('text')
       .then((text) => text.trim())
-      .should('equal', msg);
-    getLastMessage('.assistant.message').should('not.be.empty');
+      .should('equal', msg)
+    getLastAssistantMessage('.assistant.message').should('not.be.empty')
 
     // Check if the task costs element is present and contains the expected text
     /*cy.get('.task-costs')
@@ -113,16 +113,16 @@ describe('test taskyon defaults', () => {
       .invoke('text')
       .invoke('trim')
       .then((text) => {
-        const number = parseInt(text);
-        expect(number).to.match(/^\d+$/); // Check if the text is a number
-        expect(number).to.be.greaterThan(5); // Check if the number is greater than 50
-      });
+        const number = parseInt(text)
+        expect(number).to.match(/^\d+$/) // Check if the text is a number
+        expect(number).to.be.greaterThan(5) // Check if the number is greater than 50
+      })
 
     //.and('match', /^\d+/); // Check if it contains a number
 
     //cy.wa
-  });
-});
+  })
+})
 
 // ** The following code is an example to show you how to write some tests for your home page **
 //

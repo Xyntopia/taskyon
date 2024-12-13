@@ -10,7 +10,14 @@ import {
 } from 'src/modules/taskyon/types';
 import axios from 'axios';
 import { LocalStorage, useQuasar } from 'quasar'; // TODO: load dynamically! :)
-import { deepMerge, deepMergeReactive, sleep } from 'src/modules/utils';
+import {
+  clearBrowserCaches,
+  clearCookies,
+  clearServiceWorkers,
+  deepMerge,
+  deepMergeReactive,
+  sleep,
+} from 'src/modules/utils';
 import { unref } from 'vue';
 import defaultSettings from 'src/assets/taskyon_settings.json';
 import { generateRandomNewKey } from 'src/modules/crypto';
@@ -18,6 +25,14 @@ import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto';
 
 interface TaskStateType {
   markdownEnabled: boolean;
+}
+
+function clearBrowserStorage() {
+  LocalStorage.clear();
+  sessionStorage.clear();
+  clearBrowserCaches();
+  clearServiceWorkers();
+  clearCookies();
 }
 
 // TODO: make sure, we save/load our store state from inside the below store function!
@@ -117,6 +132,7 @@ export const useAppStateStore = defineStore(storeName, () => {
     );
     stateRefs = reactive(storedInitialState);
   } else {
+    // TODO: pop up a dialog where we inform the user about this!!
     console.warn(
       `Stored settings version (${
         initialStoredStateObj?.version || 'undefined'
@@ -124,6 +140,7 @@ export const useAppStateStore = defineStore(storeName, () => {
         initialState.version
       }). Using default settings.`,
     );
+    clearBrowserStorage();
     stateRefs = reactive(initialState);
   }
 
@@ -198,11 +215,13 @@ export const useAppStateStore = defineStore(storeName, () => {
     // sould theoretically be enough to do the reset. But somehow they are not.
     // I assume it is some synchronization issue with localstorage.
     // But this is why we are trying several methods of deletion..
+    // TODO:  also add indexeddb valus to this.. (selectivly)
     console.log('Resetting Taskyon!!');
     stateRefs.appConfiguration = defaultStorableSettings.appConfiguration;
     stateRefs.llmSettings = defaultStorableSettings.llmSettings;
-    LocalStorage.clear();
     stateRefs.version = 0 as typeof stateRefs.version; // set the version to 0, hoping, that this will trigger a reset on page reload..
+    clearBrowserStorage();
+    console.log('done, resetting! reloading page now...');
     void sleep(1000).then(() => (window.location.href = '/'));
   }
 

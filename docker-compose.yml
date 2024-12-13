@@ -4,19 +4,20 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
+      target: production
     ports:
       - '9000:9000'
     restart: always
 
   taskyon-debug:
-    image: xyntopia/taskyon-space.dev
+    image: xyntopia/taskyon:debug
     build:
       context: .
       dockerfile: ./Dockerfile
-      target: prepare
+      target: debug
     ports:
       - '9000:9000'
-    restart: always
+    restart: no
     #volumes:
     #  - ~/.cache/yarn:/app/.yarn-cache
 

@@ -4,6 +4,7 @@ import {
   type Model,
   type TaskNode,
   llmSettings,
+  partialTaskDraft,
   type storedSettings,
 } from 'src/modules/taskyon/types'
 import axios from 'axios' // TODO: replace with fetch
@@ -158,7 +159,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // callin ExecutionContext.interrupt();  cancels processing of current task
   const taskWorkerController = useTaskWorkerController()
   console.log('initialize taskyon')
-  const initPromise = initTaskyon(
+  const initTaskyonPromise = initTaskyon(
     stateRefs.llmSettings,
     stateRefs.keys,
     taskWorkerController,
@@ -171,7 +172,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // Access taskManagerInstance and addTask2Tree without redundant awaits
   const getTaskManager = async (): Promise<TaskyonInstance['taskManagerInstance']> => {
-    const { taskManagerInstance } = await initPromise
+    const { taskManagerInstance } = await initTaskyonPromise
     return taskManagerInstance
   }
 
@@ -180,28 +181,35 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const addTask2Tree = async (
     ...args: Parameters<TaskyonInstance['addTask2Tree']>
   ): ReturnType<TaskyonInstance['addTask2Tree']> => {
-    const { addTask2Tree } = await initPromise
+    const { addTask2Tree } = await initTaskyonPromise
     return await addTask2Tree(...args)
   }
 
-  async function addMdTasks(markdown?: string, newTaskId?: string | undefined) {
+  async function addTasks(taskList: partialTaskDraft[]) {
+    let lastTaskId: string | undefined = undefined
+    for (const task of taskList) {
+      task.state = task.state ?? 'Completed' // Ensure state is set
+      task.debugging = task.debugging ?? {} // Ensure state is set
+      lastTaskId = await addTask2Tree(
+        task as typeof task & {
+          state: TaskNode['state']
+          debugging: TaskNode['debugging']
+        },
+        lastTaskId, //parent
+        false,
+      )
+    }
+    return lastTaskId
+  }
+
+  async function addMdTasks(markdown?: string) {
     console.log('adding new Markdown tasks!!')
     if (markdown) {
       const taskList = processMarkdown(markdown)
-      for (const task of taskList) {
-        task.state = task.state ?? 'Completed' // Ensure state is set
-        task.debugging = task.debugging ?? {} // Ensure state is set
-        newTaskId = await addTask2Tree(
-          task as typeof task & {
-            state: TaskNode['state']
-            debugging: TaskNode['debugging']
-          },
-          newTaskId, //parent
-          false, // should we execute the task? // only the last one obviously ;)
-        )
-      }
-      return newTaskId
+      const lastTaskId = await addTasks(taskList)
+      return lastTaskId
     }
+    return undefined
     // TODO: optionally execute the last task...
   }
 
@@ -223,6 +231,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       // Clear history
       stateRefs.chatHistory = []
       return
+    }
+
+    // Check if the task already exists in the history
+    if (!stateRefs.chatHistory.includes(task.id)) {
+      // Add the task to the front of the list if it doesn't exist
+      stateRefs.chatHistory.unshift(task.id)
     }
 
     // Remove task.id if it exists, then unshift to front (avoids duplication)

@@ -1,45 +1,35 @@
 <template>
-  <div class="welcome-message column items-center">
-    <div
-      v-if="state.llmSettings.selectedApi && state.keys[state.llmSettings.selectedApi]"
-      class="text-h6 col-auto"
-    >
-      <p class="text-center welcome-message-text">
-        Welcome! Just type a message below to start using Taskyon!
-      </p>
-      <div class="row q-gutter-xs justify-about">
-        <div v-for="(s, idx) in starters" :key="idx" class="col">
-          <CreateTaskButton
-            v-if="s.md"
-            :markdown="s.md"
-            :label="s.label"
-            outline
-            no-caps
-            :color="$q.dark.isActive ? 'secondary' : 'primary'"
-          />
-          <q-btn
-            v-else-if="s.url"
-            :to="s.url.toString()"
-            :label="s.label"
-            outline
-            no-caps
-            :color="$q.dark.isActive ? 'secondary' : 'primary'"
-          />
-        </div>
+  <div class="text-h6 col-auto">
+    <p class="text-center welcome-message-text">
+      Welcome! Just type a message below to start using Taskyon!
+    </p>
+    <div class="row q-gutter-xs justify-about">
+      <div v-for="(s, idx) in starters" :key="idx" class="col">
+        <CreateTaskButton
+          v-if="s.md"
+          :markdown="s.md"
+          :label="s.label"
+          outline
+          no-caps
+          :color="$q.dark.isActive ? 'secondary' : 'primary'"
+        />
+        <q-btn
+          v-else-if="s.url"
+          :to="s.url.toString()"
+          :label="s.label"
+          outline
+          no-caps
+          :color="$q.dark.isActive ? 'secondary' : 'primary'"
+        />
       </div>
     </div>
-    <LLMProviders v-else :expert-mode-on="state.appConfiguration.expertMode" />
   </div>
 </template>
 
 <script setup lang="ts">
-import LLMProviders from './LLMProviders.vue'
 import CreateTaskButton from './CreateTaskButton.vue'
 import { computed } from 'vue'
-import { useAppStateStore } from 'src/stores/appState'
 import { useQuasar } from 'quasar'
-
-const state = useAppStateStore()
 
 const $q = useQuasar()
 

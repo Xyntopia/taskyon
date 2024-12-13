@@ -1,5 +1,5 @@
 {
-  "version": 9,
+  "version": 10,
   "appConfiguration": {
     "appConfigurationUrl": "/taskyon_settings.json",
     "gdriveConfigurationFile": "taskyon_settings.json",
@@ -63,7 +63,7 @@
     },
     "siteUrl": "https://taskyon.space",
     "summaryModel": "Xenova/distilbart-cnn-6-6",
-    "vectorizationModel": "Xenova/all-MiniLM-L6-v2",
+    "vectorizationModel": "xyntopia/all-MiniLM-L6-v2",
     "maxAutonomousTasks": 5,
     "useBasePrompt": true,
     "tryUsingVisionModels": true,
