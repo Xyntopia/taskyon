@@ -146,7 +146,7 @@ export const useAppStateStore = defineStore(storeName, () => {
 
   // store the state on every change!! :)
   watch(stateRefs, (newState) => {
-    console.log('saved store!!');
+    //console.log('saved store!!');
     LocalStorage.set(storeName, JSON.stringify(newState));
   });
 
