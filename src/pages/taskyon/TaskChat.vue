@@ -201,7 +201,7 @@ function scrollToThreadEnd() {
   const offset = document.body.scrollHeight - window.innerHeight
   const duration = 300
   state.lockBottomScroll = true
-  console.log('scroll to end of chat!')
+  //console.log('scroll to end of chat!');
   setVerticalScrollPosition(window, offset, duration)
 }
 

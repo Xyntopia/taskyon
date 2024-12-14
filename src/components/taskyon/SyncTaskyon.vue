@@ -4,7 +4,7 @@
     <q-item v-if="state.appConfiguration.expertMode" class="items-center">
       <q-item-section avatar>
         <q-icon :name="mdiAccountKey" size="md" />
-        User ID
+        User ID (beta)
       </q-item-section>
       <q-item-section side>
         <q-dialog v-model="showSeedPhrase" no-backdrop-dismiss>
@@ -79,6 +79,7 @@
             <q-tooltip> Generate a new User ID & Seedphrease. </q-tooltip>
           </q-btn>
           <q-btn
+            v-if="state.llmSettings.userId"
             class="col-auto"
             :icon="matDeleteForever"
             dense

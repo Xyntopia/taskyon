@@ -57,9 +57,8 @@ import { useRoute } from 'vue-router'
 import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
 import { useAppStateStore } from 'src/stores/appState'
 
-const state = useAppStateStore()
-
 const route = useRoute()
+const state = useAppStateStore()
 
 const tabPanelClass = 'column items-center'
 
