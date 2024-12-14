@@ -16,6 +16,7 @@ import {
   TaskProcessingError,
   yesnoToBoolean,
   OnInterruptFunc,
+  type apiConfig,
 } from './types'
 import type { OpenAI } from 'openai'
 import { initAddTask2Tree, TyTaskManager } from './taskManager'
@@ -67,7 +68,6 @@ export async function processChatTask(
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController,
 ) {
-  // TODO: refactor this function!
   const api = getApiConfigCopy(llmSettings, task.configuration?.chatApi)
   if (!api) {
     throw new Error(`api doesn't exist! ${llmSettings.selectedApi || 'no api selected!'}`)
@@ -131,55 +131,74 @@ export async function processChatTask(
 
       // get preliminary token usage before we get the actual costs
       // in th next step...
-      if (chatCompletion?.usage) {
-        // openai sends back the exact number of prompt tokens :)
-        task.debugging.promptTokens = chatCompletion.usage.prompt_tokens
-        task.debugging.resultTokens = chatCompletion.usage.completion_tokens
-        task.debugging.taskTokens = chatCompletion.usage.total_tokens
-      }
-      const allTools = await taskManager.updateToolDefinitions(true)
-      task.debugging.estimatedTokens = await estimateChatTokens(
-        // we are doing a deepCopy here in order to make sure we loose the^ reactivity...
-        // TODO:  once our tasks are immutable and non-reactive, we can remove this..
-        deepCopy(task),
+      await addTaskCostInformation(
+        task,
+        taskManager,
         openAIConversationThread,
-        allTools,
+        llmSettings,
+        apiKey,
+        api,
       )
-
-      // TODO: replace this below with a taskNode in lower hierachy which does this :)
-      if (chatCompletion && llmSettings.selectedApi === 'openrouter.ai') {
-        console.log('getting openrouter generation info')
-        void sleep(10000).then(() =>
-          getOpenRouterGenerationInfo(
-            chatCompletion.id,
-            generateHeaders(apiKey, llmSettings.siteUrl, llmSettings.selectedApi || ''),
-          ).then((generationInfo) => enrichWithUsageInfos(task, taskManager, generationInfo)),
-        )
-      } else if (
-        chatCompletion &&
-        llmSettings.selectedApi === 'taskyon' &&
-        !chatCompletion.model.endsWith(':free') &&
-        apiKey &&
-        !isTaskyonKey(apiKey, false)
-      ) {
-        console.log('getting taskyon generation info')
-        // our backend tries to get the finished costs
-        // after ~4000ms, so we wait for 6000 here...
-        void sleep(6000).then(() =>
-          getTaskyonCosts(llmSettings, apiKey, api, chatCompletion, task.id).then(
-            (generationInfo) => {
-              console.log('taskyon generation info:', generationInfo)
-              enrichWithUsageInfos(task, taskManager, generationInfo)
-            },
-          ),
-        )
-      }
     }
   } else {
     throw new Error('Task has no inference model selected!')
   }
 
   return task
+}
+
+async function addTaskCostInformation(
+  task: TaskNode,
+  taskManager: TyTaskManager,
+  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  llmSettings: llmSettings,
+  apiKey: string,
+  api: apiConfig,
+) {
+  if (task.result && task.result.chatResponse) {
+    const chatResponse = task.result.chatResponse
+    // openai sends back the exact number of prompt tokens :)
+    if (chatResponse.usage) {
+      task.debugging.promptTokens = chatResponse.usage.prompt_tokens
+      task.debugging.resultTokens = chatResponse.usage.completion_tokens
+      task.debugging.taskTokens = chatResponse.usage.total_tokens
+    }
+    const allTools = await taskManager.updateToolDefinitions(true)
+    task.debugging.estimatedTokens = await estimateChatTokens(
+      // we are doing a deepCopy here in order to make sure we loose the^ reactivity...
+      // TODO:  once our tasks are immutable and non-reactive, we can remove this..
+      deepCopy(task),
+      openAIConversationThread,
+      allTools,
+    )
+
+    // TODO: replace this below with a taskNode in lower hierachy which does this :)
+    if (chatResponse && llmSettings.selectedApi === 'openrouter.ai') {
+      console.log('getting openrouter generation info')
+      void sleep(10000).then(() =>
+        getOpenRouterGenerationInfo(
+          chatResponse.id,
+          generateHeaders(apiKey, llmSettings.siteUrl, llmSettings.selectedApi || ''),
+        ).then((generationInfo) => enrichWithUsageInfos(task, taskManager, generationInfo)),
+      )
+    } else if (
+      chatResponse &&
+      llmSettings.selectedApi === 'taskyon' &&
+      !chatResponse.model.endsWith(':free') &&
+      apiKey &&
+      !isTaskyonKey(apiKey, false)
+    ) {
+      console.log('getting taskyon generation info')
+      // our backend tries to get the finished costs
+      // after ~4000ms, so we wait for 6000 here...
+      void sleep(6000).then(() =>
+        getTaskyonCosts(llmSettings, apiKey, api, chatResponse, task.id).then((generationInfo) => {
+          console.log('taskyon generation info:', generationInfo)
+          enrichWithUsageInfos(task, taskManager, generationInfo)
+        }),
+      )
+    }
+  }
 }
 
 async function processFunctionTask(
