@@ -36,11 +36,11 @@ const $q = useQuasar()
 const starters = computed(() => {
   return [
     {
-      url: 'chat/docs/conversations/features_intro',
+      url: '/chat/docs/conversations/features_intro',
       label: 'Showcase Taskyons features',
     },
     {
-      url: 'chat/docs/examples/simpleExampleTutorial',
+      url: '/chat/docs/examples/simpleExampleTutorial',
       label: 'How do I integrate taskyon into my own webpage?',
     },
     {

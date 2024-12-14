@@ -1,5 +1,5 @@
 <template>
-  <q-btn flat unelevated round dense :icon="matMoreHoriz">
+  <q-btn flat unelevated round dense :icon="matMoreHoriz" @click.prevent.stop>
     <q-menu class="column q-gutter-sm q-pa-xs" auto-close>
       <q-list dense>
         <q-item clickable @click="onDownloadChat(conversationId)">

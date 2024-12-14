@@ -42,7 +42,7 @@
               <q-tooltip> Select Conversation </q-tooltip>
             </q-item-section>
             <q-item-section side>
-              <TaskChainMenu :conversation-id="conversationId" @click.stop />
+              <TaskChainMenu :conversation-id="conversationId" />
             </q-item-section>
           </q-item>
         </q-list>
