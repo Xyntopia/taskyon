@@ -60,15 +60,15 @@
 
 <script setup lang="ts">
 //TODO: change colors based on the route...
-const $q = useQuasar();
+const $q = useQuasar()
 
-import DarkModeButton from 'components/DarkModeButton.vue';
-import { ref } from 'vue';
-import { matLaunch, matMenu, matReviews, matWarning } from '@quasar/extras/material-icons';
-import { useAppStateStore } from 'src/stores/appState';
-import { useQuasar } from 'quasar';
+import DarkModeButton from 'components/DarkModeButton.vue'
+import { ref } from 'vue'
+import { matLaunch, matMenu, matReviews, matWarning } from '@quasar/extras/material-icons'
+import { useAppStateStore } from 'src/stores/appState'
+import { useQuasar } from 'quasar'
 
-const state = useAppStateStore();
-const btnsize = 'xs';
-const drawerOpen = ref(false);
+const state = useAppStateStore()
+const btnsize = 'xs'
+const drawerOpen = ref(false)
 </script>

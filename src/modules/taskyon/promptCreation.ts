@@ -1,16 +1,10 @@
-import { summarizeTools } from './tools';
-import {
-  ToolBase,
-  TaskNode,
-  llmSettings,
-  StructuredResponseTypes,
-  UseToolBase,
-} from './types';
-import { zodToYamlString } from '../yamlUtils';
-import type OpenAI from 'openai';
-import { dump } from 'js-yaml';
-import { mapFunctionNames } from './tools';
-import type { TyTaskManager } from './taskManager';
+import { summarizeTools } from './tools'
+import { ToolBase, TaskNode, llmSettings, StructuredResponseTypes, UseToolBase } from './types'
+import { zodToYamlString } from '../yamlUtils'
+import type OpenAI from 'openai'
+import { dump } from 'js-yaml'
+import { mapFunctionNames } from './tools'
+import type { TyTaskManager } from './taskManager'
 
 /**
  * This function renders templates, substituting the necessary variables
@@ -21,44 +15,40 @@ function substituteTemplateVariables<T extends Record<string, string>>(
   variables: Record<string, string>,
 ): { [K in keyof T]: string } {
   // TODO: can we do this as a javascript tag function? https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals
-  const messages: Record<keyof T, string> = {} as Record<keyof T, string>;
+  const messages: Record<keyof T, string> = {} as Record<keyof T, string>
 
   // Iterate over each template
   for (const [templateKey, templateValue] of Object.entries(templates)) {
-    let content = templateValue;
+    let content = templateValue
 
     // Replace placeholders in the template with values from variables
     for (const [variableKey, variableValue] of Object.entries(variables)) {
-      content = content.replace(
-        new RegExp(`{${variableKey}}`, 'g'),
-        variableValue,
-      );
+      content = content.replace(new RegExp(`{${variableKey}}`, 'g'), variableValue)
     }
 
-    messages[templateKey as keyof T] = content;
+    messages[templateKey as keyof T] = content
   }
 
-  return messages;
+  return messages
 }
 
 export function generateOpenAIToolDeclarations(
   task: TaskNode,
   toolCollection: Record<string, ToolBase>,
 ): OpenAI.ChatCompletionTool[] {
-  const tools: ToolBase[] =
-    mapFunctionNames(task.allowedTools || [], toolCollection) || [];
+  const tools: ToolBase[] = mapFunctionNames(task.allowedTools || [], toolCollection) || []
   const openAITools: OpenAI.ChatCompletionTool[] = tools.map((t) => {
     const functionDef: OpenAI.FunctionDefinition = {
       name: t.name,
       parameters: t.parameters as unknown as Record<string, unknown>,
       description: t.description,
-    };
+    }
     return {
       function: functionDef,
       type: 'function',
-    };
-  });
-  return openAITools;
+    }
+  })
+  return openAITools
 }
 
 /**
@@ -83,18 +73,14 @@ export function generateOpenAIToolDeclarations(
  * @returns
  */
 
-type tyChatCompletionmessageParam =
-  OpenAI.Chat.Completions.ChatCompletionMessageParam;
+type tyChatCompletionmessageParam = OpenAI.Chat.Completions.ChatCompletionMessageParam
 
 // TODO: move most of the functionality of this function into
 //       taskUtils. We need to put this directly into our chat creation method.
 // enhance the chat by inserting prompts before certain message which
 // make them better to understand for the AI...
 export function addPrompts(
-  task: Pick<
-    TaskNode,
-    'role' | 'content' | 'allowedTools' | 'result' | 'debugging'
-  >,
+  task: Pick<TaskNode, 'role' | 'content' | 'allowedTools' | 'result' | 'debugging'>,
   toolCollection: Record<string, ToolBase>,
   llmSettings: llmSettings,
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
@@ -102,64 +88,56 @@ export function addPrompts(
   // Check if task has tools and OpenAI tools are not enabled
   //console.log('Creating chat prompts');
 
-  const useToolChat =
-    task.allowedTools?.length && !llmSettings.enableOpenAiTools;
+  const useToolChat = task.allowedTools?.length && !llmSettings.enableOpenAiTools
 
-  const modifiedOpenAIConversationThread = structuredClone(
-    openAIConversationThread,
-  );
-  const prependMessages: tyChatCompletionmessageParam[] = [];
-  const appendMessages: tyChatCompletionmessageParam[] = [];
+  const modifiedOpenAIConversationThread = structuredClone(openAIConversationThread)
+  const prependMessages: tyChatCompletionmessageParam[] = []
+  const appendMessages: tyChatCompletionmessageParam[] = []
 
-  const toolList = task.allowedTools?.map((t) => `- ${t}`).join('\n');
+  const toolList = task.allowedTools?.map((t) => `- ${t}`).join('\n')
   const variables: Record<string, string> = {
     format: 'yaml',
     tools: summarizeTools(task.allowedTools || [], toolCollection),
     toolList: toolList || 'N/A',
-  };
-
-  function getTemplates() {
-    const filledTemplates = substituteTemplateVariables(
-      llmSettings.taskChatTemplates,
-      variables,
-    );
-    return filledTemplates;
   }
 
-  let structuredResponseExpected = false;
+  function getTemplates() {
+    const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, variables)
+    return filledTemplates
+  }
+
+  let structuredResponseExpected = false
   if ('message' in task.content && task.role === 'system') {
     // this is most likely an error message or similar
     // and we need a structured response in order to decide how to
     // continue...
     const requiredSchema = useToolChat
       ? StructuredResponseTypes.SystemResponseEvaluation.merge(UseToolBase)
-      : StructuredResponseTypes.SystemResponseEvaluation;
-    const yamlRepr = zodToYamlString(requiredSchema);
-    variables.message = task.content.message;
-    variables.schema = yamlRepr;
+      : StructuredResponseTypes.SystemResponseEvaluation
+    const yamlRepr = zodToYamlString(requiredSchema)
+    variables.message = task.content.message
+    variables.schema = yamlRepr
     // Remove the last message from openAIConversationThread
     // because it will be replaced by our task message
     // where we have wrapped the original message...
-    modifiedOpenAIConversationThread.pop();
+    modifiedOpenAIConversationThread.pop()
 
-    const filledTemplates = getTemplates();
+    const filledTemplates = getTemplates()
     appendMessages.push({
       role: 'user',
       content: filledTemplates.evaluate,
-    });
-    structuredResponseExpected = true;
+    })
+    structuredResponseExpected = true
   } else if ('message' in task.content && task.role === 'user' && useToolChat) {
-    const yamlRepr = zodToYamlString(
-      StructuredResponseTypes.ToolSelection.merge(UseToolBase),
-    );
-    variables.taskContent = task.content.message;
-    variables.schema = yamlRepr;
+    const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolSelection.merge(UseToolBase))
+    variables.taskContent = task.content.message
+    variables.schema = yamlRepr
     // Remove the last message from openAIConversationThread
     // because it will be replaced by our task message
     // where we have wrapped the original message...
-    modifiedOpenAIConversationThread.pop();
+    modifiedOpenAIConversationThread.pop()
 
-    const filledTemplates = getTemplates();
+    const filledTemplates = getTemplates()
     appendMessages.push(
       {
         role: 'user',
@@ -173,23 +151,23 @@ export function addPrompts(
         role: 'user',
         content: filledTemplates.task,
       },
-    );
-    structuredResponseExpected = true;
+    )
+    structuredResponseExpected = true
     // TODO: to something with file tasks and
   } else if ('toolResult' in task.content && !llmSettings.enableOpenAiTools) {
     const requiredSchema = useToolChat
       ? StructuredResponseTypes.ToolResultBase.merge(UseToolBase)
-      : StructuredResponseTypes.ToolResultBase;
-    const yamlRepr = zodToYamlString(requiredSchema);
-    variables.toolResult = dump(task.content.toolResult);
-    variables.resultSchema = yamlRepr;
+      : StructuredResponseTypes.ToolResultBase
+    const yamlRepr = zodToYamlString(requiredSchema)
+    variables.toolResult = dump(task.content.toolResult)
+    variables.resultSchema = yamlRepr
 
     // Remove the last message from openAIConversationThread
     // because it will be replaced by our task message
     // where we have wrapped the original message...
-    modifiedOpenAIConversationThread.pop();
+    modifiedOpenAIConversationThread.pop()
 
-    const filledTemplates = getTemplates();
+    const filledTemplates = getTemplates()
     appendMessages.push(
       {
         role: 'system',
@@ -203,8 +181,8 @@ export function addPrompts(
         role: 'user',
         content: filledTemplates.toolResult,
       },
-    );
-    structuredResponseExpected = true;
+    )
+    structuredResponseExpected = true
     //appendMessages.push()
   } else if ('message' in task.content && task.role === 'assistant') {
     // this here gets called, if we have a structured message which was generated
@@ -214,49 +192,38 @@ export function addPrompts(
     // "null" content otherwise.
     appendMessages.push({
       role: 'user',
-      content:
-        'Can you please make a final comment on your previous evaluation?',
-    });
+      content: 'Can you please make a final comment on your previous evaluation?',
+    })
   }
 
   if (llmSettings.useBasePrompt && !structuredResponseExpected) {
-    const filledTemplates = getTemplates();
+    const filledTemplates = getTemplates()
     prependMessages.unshift({
       role: 'system',
       content: filledTemplates.basePrompt,
-    });
+    })
 
     if (!llmSettings.enableOpenAiTools) {
-      const calledFunctions = getAllFunctionsInOpenAiConversation(
-        modifiedOpenAIConversationThread,
-      );
+      const calledFunctions = getAllFunctionsInOpenAiConversation(modifiedOpenAIConversationThread)
       // if any tools appeared during the conversation...
       if (calledFunctions.size > 0) {
         // this one is used, if we don't need to choose one, but it is necessary for the AI to know that a result in
         // that it has access to was calculated by a tool.
-        const functionCallDescription = summarizeTools(
-          [...calledFunctions],
-          toolCollection,
-          true,
-        );
-        const toolAwareness = `You have access to and used the following tools: \n\n ${functionCallDescription}`;
+        const functionCallDescription = summarizeTools([...calledFunctions], toolCollection, true)
+        const toolAwareness = `You have access to and used the following tools: \n\n ${functionCallDescription}`
 
         prependMessages.push({
           role: 'system',
           content: toolAwareness,
-        });
+        })
       }
     }
   }
 
-  task.debugging.taskPrompt = [...prependMessages, ...appendMessages];
+  task.debugging.taskPrompt = [...prependMessages, ...appendMessages]
 
   // build our complete thread :)
-  return [
-    ...prependMessages,
-    ...modifiedOpenAIConversationThread,
-    ...appendMessages,
-  ];
+  return [...prependMessages, ...modifiedOpenAIConversationThread, ...appendMessages]
 }
 
 function getAllFunctionsInOpenAiConversation(
@@ -272,7 +239,7 @@ function getAllFunctionsInOpenAiConversation(
             : p
         : p,
     new Set<string>(),
-  );
+  )
 }
 
 export async function generateCompleteChat(
@@ -280,18 +247,13 @@ export async function generateCompleteChat(
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
 ) {
-  const toolDefs = await taskManager.updateToolDefinitions(true);
+  const toolDefs = await taskManager.updateToolDefinitions(true)
   let openAIConversationThread = await taskManager.buildChatThread(
     task.id,
     llmSettings.tryUsingVisionModels,
     toolDefs,
     llmSettings.enableOpenAiTools,
-  );
-  openAIConversationThread = addPrompts(
-    task,
-    toolDefs,
-    llmSettings,
-    openAIConversationThread,
-  );
-  return { openAIConversationThread, toolDefs };
+  )
+  openAIConversationThread = addPrompts(task, toolDefs, llmSettings, openAIConversationThread)
+  return { openAIConversationThread, toolDefs }
 }

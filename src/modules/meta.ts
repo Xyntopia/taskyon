@@ -1,15 +1,13 @@
-import type { MetaOptions } from 'quasar/dist/types/meta.js';
-import type { RouteLocationNormalizedLoadedGeneric } from 'vue-router';
+import type { MetaOptions } from 'quasar/dist/types/meta.js'
+import type { RouteLocationNormalizedLoadedGeneric } from 'vue-router'
 
-export function generateTaskyonMeta(
-  route: RouteLocationNormalizedLoadedGeneric,
-) {
-  const fallbackTitle = route.path.split('/').filter(Boolean).pop() ?? 'Main';
-  const title = (route.meta.title as string) ?? fallbackTitle;
+export function generateTaskyonMeta(route: RouteLocationNormalizedLoadedGeneric) {
+  const fallbackTitle = route.path.split('/').filter(Boolean).pop() ?? 'Main'
+  const title = (route.meta.title as string) ?? fallbackTitle
   const description =
     route.meta.description ??
-    'Taskyon: Infuse your webpages with intelligent AI for personalized interactions and local-first privacy, adapting to your unique needs. ?';
-  const imageUrl = 'https://taskyon.space/taskyon_social_preview.png'; // Update with the actual image URL
+    'Taskyon: Infuse your webpages with intelligent AI for personalized interactions and local-first privacy, adapting to your unique needs. ?'
+  const imageUrl = 'https://taskyon.space/taskyon_social_preview.png' // Update with the actual image URL
 
   const meta: MetaOptions = {
     // sets document title
@@ -129,6 +127,6 @@ export function generateTaskyonMeta(
     noscript: {
       default: 'You need to enable Javascript for this webpage to work!!',
     },
-  };
-  return meta;
+  }
+  return meta
 }

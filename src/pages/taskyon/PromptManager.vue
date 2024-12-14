@@ -4,15 +4,11 @@
     <div class="row q-gutter-xs q-pa-xs">
       <div class="col fit">
         <q-toggle v-model="edit" label="Manually edit prompts" />
-        <ObjectTreeView
-          v-if="edit"
-          v-model="state.llmSettings.taskChatTemplates"
-        />
+        <ObjectTreeView v-if="edit" v-model="state.llmSettings.taskChatTemplates" />
         <q-card v-else flat>
           <q-card-section>
             <div>
-              This is what the current base-prompt would look like (used in
-              every conversation):
+              This is what the current base-prompt would look like (used in every conversation):
             </div>
             <q-card
               v-for="(prompt, index) in structuredResponsePrompt"
@@ -59,24 +55,24 @@
 </template>
 
 <script setup lang="ts">
-import tyMarkdown from 'components/tyMarkdown.vue';
-import { ref, computed } from 'vue';
-import { useTaskyonStore } from 'src/stores/taskyonState';
-import CreateNewTask from 'components/taskyon/CreateNewTask.vue';
-import ObjectTreeView from 'components/ObjectTreeView.vue';
-import { TaskNode } from 'src/modules/taskyon/types';
-import UnderConstructionHint from 'components/UnderConstructionHint.vue';
-import { addPrompts } from 'src/modules/taskyon/promptCreation';
-import ConversationWidget from 'components/taskyon/ConversationWidget.vue';
-import { mdiMagicStaff } from '@quasar/extras/mdi-v6';
-import CreateTaskButton from 'components/taskyon/CreateTaskButton.vue';
-import { dump } from 'js-yaml';
-import { useAppStateStore } from 'src/stores/appState';
+import tyMarkdown from 'components/tyMarkdown.vue'
+import { ref, computed } from 'vue'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
+import ObjectTreeView from 'components/ObjectTreeView.vue'
+import { TaskNode } from 'src/modules/taskyon/types'
+import UnderConstructionHint from 'components/UnderConstructionHint.vue'
+import { addPrompts } from 'src/modules/taskyon/promptCreation'
+import ConversationWidget from 'components/taskyon/ConversationWidget.vue'
+import { mdiMagicStaff } from '@quasar/extras/mdi-v6'
+import CreateTaskButton from 'components/taskyon/CreateTaskButton.vue'
+import { dump } from 'js-yaml'
+import { useAppStateStore } from 'src/stores/appState'
 
-const tystate = useTaskyonStore();
-const state = useAppStateStore();
+const tystate = useTaskyonStore()
+const state = useAppStateStore()
 
-const edit = ref(false);
+const edit = ref(false)
 
 /*//this is only needed if we need direct access to the codemirror element
 //  add this to the <codemirror ...       @ready="handleReady" />
@@ -87,7 +83,7 @@ const handleReady = (payload) => {
 */
 
 async function getAllTools() {
-  return (await tystate.getTaskManager()).updateToolDefinitions(true);
+  return (await tystate.getTaskManager()).updateToolDefinitions(true)
 }
 
 const currentPromptYaml = computed(() => {
@@ -142,34 +138,31 @@ label: ["discard"]
 -->  
 
 How would you like to change the prompt?
-`;
-});
+`
+})
 
-const toolCollection = ref<Awaited<ReturnType<typeof getAllTools>>>({});
+const toolCollection = ref<Awaited<ReturnType<typeof getAllTools>>>({})
 void getAllTools().then((tools) => {
-  console.log('tools:', tools);
-  toolCollection.value = tools;
-});
+  console.log('tools:', tools)
+  toolCollection.value = tools
+})
 
 const structuredResponsePrompt = computed(() => {
   if (state.llmSettings.taskDraft.content) {
-    const task: Pick<
-      TaskNode,
-      'role' | 'content' | 'allowedTools' | 'result' | 'debugging'
-    > = {
+    const task: Pick<TaskNode, 'role' | 'content' | 'allowedTools' | 'result' | 'debugging'> = {
       content: state.llmSettings.taskDraft.content,
       allowedTools: state.llmSettings.taskDraft.allowedTools,
       role: 'user',
       debugging: {},
-    };
-    task.role = 'user';
+    }
+    task.role = 'user'
 
-    console.log('create structured example', toolCollection.value);
+    console.log('create structured example', toolCollection.value)
     if (Object.keys(toolCollection.value).length !== 0) {
-      const rp = addPrompts(task, toolCollection.value, state.llmSettings, []);
-      return rp;
+      const rp = addPrompts(task, toolCollection.value, state.llmSettings, [])
+      return rp
     }
   }
-  return [];
-});
+  return []
+})
 </script>

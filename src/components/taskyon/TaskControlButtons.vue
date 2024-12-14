@@ -30,36 +30,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useTaskyonStore } from 'stores/taskyonState';
-import {
-  matKeyboardDoubleArrowDown,
-  matStop,
-} from '@quasar/extras/material-icons';
-import { sleep } from 'src/modules/utils';
-import { useAppStateStore } from 'src/stores/appState';
+import { ref } from 'vue'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { matKeyboardDoubleArrowDown, matStop } from '@quasar/extras/material-icons'
+import { sleep } from 'src/modules/utils'
+import { useAppStateStore } from 'src/stores/appState'
 
-const tystate = useTaskyonStore();
-const state = useAppStateStore();
+const tystate = useTaskyonStore()
+const state = useAppStateStore()
 
-const stoppingTasks = ref(false);
+const stoppingTasks = ref(false)
 
 defineEmits<{
-  scrollToThreadEnd: [];
-}>();
+  scrollToThreadEnd: []
+}>()
 
 async function stopTasks() {
-  console.log('stopping!');
-  stoppingTasks.value = true;
-  tystate.taskWorkerController.interrupt(tystate.currentTask?.id);
+  console.log('stopping!')
+  stoppingTasks.value = true
+  tystate.taskWorkerController.interrupt(tystate.currentTask?.id)
 
-  await sleep(1000);
+  await sleep(1000)
   // Poll every 500ms to check if the task is stopped
   while (!tystate.taskWorkerController.isWaiting()) {
-    console.log('waiting for task to stop...');
-    await sleep(100);
+    console.log('waiting for task to stop...')
+    await sleep(100)
   }
-  tystate.taskWorkerWaiting = true;
-  stoppingTasks.value = false;
+  tystate.taskWorkerWaiting = true
+  stoppingTasks.value = false
 }
 </script>

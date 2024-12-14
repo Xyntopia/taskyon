@@ -106,29 +106,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, defineAsyncComponent } from 'vue';
-import SimpleSettings from './SimpleSettings.vue';
-import { useTaskyonStore } from 'stores/taskyonState';
-import FileDropzone from 'components/FileDropzone.vue';
-import { matSearch, matManageAccounts, matFileUpload, matToc } from '@quasar/extras/material-icons';
-import { mdiTools, mdiRobotConfusedOutline, mdiForumPlus } from '@quasar/extras/mdi-v6';
-import TaskChainMenu from './TaskChainMenu.vue';
-import { useAppStateStore } from 'src/stores/appState';
-import { useQuasar } from 'quasar';
+import { ref, reactive, watch, defineAsyncComponent } from 'vue'
+import SimpleSettings from './SimpleSettings.vue'
+import { useTaskyonStore } from 'stores/taskyonState'
+import FileDropzone from 'components/FileDropzone.vue'
+import { matSearch, matManageAccounts, matFileUpload, matToc } from '@quasar/extras/material-icons'
+import { mdiTools, mdiRobotConfusedOutline, mdiForumPlus } from '@quasar/extras/mdi-v6'
+import TaskChainMenu from './TaskChainMenu.vue'
+import { useAppStateStore } from 'src/stores/appState'
+import { useQuasar } from 'quasar'
 
-const $q = useQuasar();
-const state = useAppStateStore();
-const tystate = useTaskyonStore();
+const $q = useQuasar()
+const state = useAppStateStore()
+const tystate = useTaskyonStore()
 
-const conversationIDs = ref<string[]>([]);
-const nameMap = reactive<Record<string, string>>({});
+const conversationIDs = ref<string[]>([])
+const nameMap = reactive<Record<string, string>>({})
 
 async function updateName(id: string) {
   if (!(id in nameMap)) {
-    const tm = await tystate.getTaskManager();
-    const name = (await tm.getTask(id))?.name;
+    const tm = await tystate.getTaskManager()
+    const name = (await tm.getTask(id))?.name
     if (name) {
-      nameMap[id] = name;
+      nameMap[id] = name
     }
   }
 }
@@ -136,24 +136,24 @@ async function updateName(id: string) {
 watch(
   [() => state.llmSettings.selectedTaskId, () => state.chatHistory],
   async ([newTaskId, newChatHistory]) => {
-    console.log('updating sidebar chat list');
+    console.log('updating sidebar chat list')
     if (newTaskId) {
-      conversationIDs.value = newChatHistory.slice(0, 10);
-      conversationIDs.value.forEach((id) => updateName(id));
+      conversationIDs.value = newChatHistory.slice(0, 10)
+      conversationIDs.value.forEach((id) => updateName(id))
     }
   },
   {
     immediate: true,
   },
-);
+)
 
 async function loadYamlConversation(files: File[]) {
-  const tm = await tystate.getTaskManager();
-  let last_loaded_id = undefined;
+  const tm = await tystate.getTaskManager()
+  let last_loaded_id = undefined
   for (const file of files) {
-    last_loaded_id = await tm.loadYamlConversation(file);
+    last_loaded_id = await tm.loadYamlConversation(file)
   }
-  state.llmSettings.selectedTaskId = last_loaded_id;
+  state.llmSettings.selectedTaskId = last_loaded_id
 }
 
 const TableOfChatContent = defineAsyncComponent(
@@ -164,5 +164,5 @@ const TableOfChatContent = defineAsyncComponent(
       /* webpackFetchPriority: "low" */
       'components/taskyon/TableOfChatContent.vue'
     ),
-);
+)
 </script>

@@ -7,23 +7,15 @@
           label="AI Service Provider"
           name="aiserviceprovider"
         />
+        <q-route-tab to="/settings/profile" label="Profile & Backup" name="profile" />
         <q-route-tab
-          to="/settings/profile"
-          label="Profile & Backup"
-          name="profile"
-        />
-        <q-route-tab
-          v-if="
-            state.appConfiguration.expertMode || selectedTab == 'agent config'
-          "
+          v-if="state.appConfiguration.expertMode || selectedTab == 'agent config'"
           to="/settings/agent config"
           label="AI Configuration"
           name="agent config"
         />
         <q-route-tab
-          v-if="
-            state.appConfiguration.expertMode || selectedTab == 'app config'
-          "
+          v-if="state.appConfiguration.expertMode || selectedTab == 'app config'"
           to="/settings/app config"
           label="App Configuration"
           name="app config"
@@ -57,20 +49,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import LLMProviders from 'components/taskyon/LLMProviders.vue';
-import ObjectTreeView from 'components/ObjectTreeView.vue';
-import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue';
-import { useRoute } from 'vue-router';
-import ExpertEnable from 'components/taskyon/ExpertEnable.vue';
-import { useAppStateStore } from 'src/stores/appState';
+import { computed } from 'vue'
+import LLMProviders from 'components/taskyon/LLMProviders.vue'
+import ObjectTreeView from 'components/ObjectTreeView.vue'
+import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'
+import { useRoute } from 'vue-router'
+import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
+import { useAppStateStore } from 'src/stores/appState'
 
-const route = useRoute();
-const state = useAppStateStore();
+const route = useRoute()
+const state = useAppStateStore()
 
-const tabPanelClass = 'column items-center';
+const tabPanelClass = 'column items-center'
 
 const selectedTab = computed(() => {
-  return (route.params.tab as string) || 'aiserviceprovider';
-});
+  return (route.params.tab as string) || 'aiserviceprovider'
+})
 </script>

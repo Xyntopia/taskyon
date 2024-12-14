@@ -1,14 +1,14 @@
-import { initWasm, Resvg } from '@resvg/resvg-wasm';
+import { initWasm, Resvg } from '@resvg/resvg-wasm'
 
-const wasmPath = new URL('@resvg/resvg-wasm/index_bg.wasm', import.meta.url);
+const wasmPath = new URL('@resvg/resvg-wasm/index_bg.wasm', import.meta.url)
 
-let resvgInitialized = false;
+let resvgInitialized = false
 
 async function initResvg() {
   if (!resvgInitialized) {
-    const res = await fetch(wasmPath);
-    await initWasm(res);
-    resvgInitialized = true;
+    const res = await fetch(wasmPath)
+    await initWasm(res)
+    resvgInitialized = true
   }
 }
 
@@ -33,13 +33,13 @@ example options:
 */
 
 export async function svgToPng(svgString: string) {
-  await initResvg();
+  await initResvg()
 
-  const font = await fetch('./fonts/Roboto-Regular.ttf');
-  if (!font.ok) return;
+  const font = await fetch('./fonts/Roboto-Regular.ttf')
+  if (!font.ok) return
 
-  const fontData = await font.arrayBuffer();
-  const buffer = new Uint8Array(fontData);
+  const fontData = await font.arrayBuffer()
+  const buffer = new Uint8Array(fontData)
 
   /*const fontBuffer = await loadFont(
     '/fonts/KFOmCnqEu92Fr1Mu4mxM.f1e2a767.woff'
@@ -53,7 +53,7 @@ export async function svgToPng(svgString: string) {
     font: {
       fontBuffers: [buffer], // New in 2.5.0, loading custom fonts
     },
-  };
+  }
 
   /*const options: Record<string, unknown> = {
     //fitTo: { mode: 'width', value: 1200 },
@@ -71,8 +71,8 @@ export async function svgToPng(svgString: string) {
     };
   }*/
 
-  const resvg = new Resvg(svgString, options);
-  const pngData = resvg.render();
-  const pngBuffer = pngData.asPng();
-  return pngBuffer;
+  const resvg = new Resvg(svgString, options)
+  const pngData = resvg.render()
+  const pngBuffer = pngData.asPng()
+  return pngBuffer
 }

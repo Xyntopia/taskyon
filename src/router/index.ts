@@ -1,11 +1,11 @@
-import { defineRouter } from '#q-app/wrappers';
+import { defineRouter } from '#q-app/wrappers'
 import {
   createMemoryHistory,
   createRouter,
   createWebHashHistory,
   createWebHistory,
-} from 'vue-router';
-import { routes, tyServerRoutes } from './routes_taskyon';
+} from 'vue-router'
+import { routes, tyServerRoutes } from './routes_taskyon'
 
 /*
  * If not building with SSR mode, you can
@@ -21,9 +21,9 @@ export default defineRouter(function (/* { store, ssrContext } */) {
     ? createMemoryHistory
     : process.env.VUE_ROUTER_MODE === 'history'
       ? createWebHistory
-      : createWebHashHistory;
+      : createWebHashHistory
 
-  console.log('creating router... in mode:', process.env.MODE);
+  console.log('creating router... in mode:', process.env.MODE)
   const Router = createRouter({
     scrollBehavior: () => ({ left: 0, top: 0 }),
     routes: process.env.MODE === 'ssr' ? tyServerRoutes : routes,
@@ -32,7 +32,7 @@ export default defineRouter(function (/* { store, ssrContext } */) {
     // quasar.conf.js -> build -> vueRouterMode
     // quasar.conf.js -> build -> publicPath
     history: createHistory(process.env.VUE_ROUTER_BASE),
-  });
+  })
 
-  return Router;
-});
+  return Router
+})

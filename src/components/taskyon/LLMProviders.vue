@@ -164,24 +164,24 @@ insert into the settings below."
 </template>
 
 <script setup lang="ts">
-import OpenRouterPKCE from './OpenRouterPKCE.vue';
-import JsonInput from '../JsonInput.vue';
-import TyMarkdown from '../tyMarkdown.vue';
-import SecretInput from '../SecretInput.vue';
-import { matEdit } from '@quasar/extras/material-icons';
-import ApiSelect from './ApiSelect.vue';
-import InfoDialog from '../InfoDialog.vue';
-import tykeyobj from 'src/assets/taskyon_free_key.json';
-import { useAppStateStore } from 'src/stores/appState';
-import { useQuasar } from 'quasar';
+import OpenRouterPKCE from './OpenRouterPKCE.vue'
+import JsonInput from '../JsonInput.vue'
+import TyMarkdown from '../tyMarkdown.vue'
+import SecretInput from '../SecretInput.vue'
+import { matEdit } from '@quasar/extras/material-icons'
+import ApiSelect from './ApiSelect.vue'
+import InfoDialog from '../InfoDialog.vue'
+import tykeyobj from 'src/assets/taskyon_free_key.json'
+import { useAppStateStore } from 'src/stores/appState'
+import { useQuasar } from 'quasar'
 
-const state = useAppStateStore();
-const $q = useQuasar();
+const state = useAppStateStore()
+const $q = useQuasar()
 
-const expertModeOn = defineModel<boolean>('expertModeOn', { default: false });
+const expertModeOn = defineModel<boolean>('expertModeOn', { default: false })
 
 function initFreeMode() {
-  state.llmSettings.selectedApi = 'taskyon';
-  state.keys['taskyon'] = tykeyobj.freeKey;
+  state.llmSettings.selectedApi = 'taskyon'
+  state.keys['taskyon'] = tykeyobj.freeKey
 }
 </script>

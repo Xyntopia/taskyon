@@ -12,6 +12,6 @@
 
 <script setup lang="ts">
 async function sendMessage() {
-  console.log('send message to server....');
+  console.log('send message to server....')
 }
 </script>

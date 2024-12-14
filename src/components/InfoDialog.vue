@@ -1,13 +1,6 @@
 <template>
   <div>
-    <q-btn
-      flat
-      round
-      dense
-      :icon="matHelpOutline"
-      v-bind="$attrs"
-      @click="showInfo = true"
-    >
+    <q-btn flat round dense :icon="matHelpOutline" v-bind="$attrs" @click="showInfo = true">
       <q-dialog v-model="showInfo">
         <q-card>
           <q-card-section>
@@ -21,15 +14,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
-const showInfo = ref(false);
-import { matHelpOutline } from '@quasar/extras/material-icons';
+import { ref } from 'vue'
+import { QMarkdown } from '@quasar/quasar-ui-qmarkdown'
+const showInfo = ref(false)
+import { matHelpOutline } from '@quasar/extras/material-icons'
 defineProps({
   infoText: {
     type: String,
     required: false,
     default: undefined,
   },
-});
+})
 </script>

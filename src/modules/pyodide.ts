@@ -1,6 +1,6 @@
 //import { loadPyodide, PyodideInterface } from 'pyodide';
-import type { PyodideInterface } from 'pyodide';
-import { Lock } from './utils';
+import type { PyodideInterface } from 'pyodide'
+import { Lock } from './utils'
 
 /*function loadScript(src: string): Promise<void> {
   // Specify 'void' if the promise doesn't return a value
@@ -26,7 +26,7 @@ export async function execute(python_script: string) {
   return await executeScript(pyodide, python_script);
 }*/
 
-const stdOutLock = new Lock();
+const stdOutLock = new Lock()
 
 export async function executeScript(
   pyodide: PyodideInterface,
@@ -34,7 +34,7 @@ export async function executeScript(
   convert2Js = true,
 ) {
   try {
-    let stdout_content = '';
+    let stdout_content = ''
 
     // wait for pyodide to unlock and then acquire the lock
     // the lock will automatically get destroyed once the funciton runs out of scope & is destroyed...
@@ -44,48 +44,48 @@ export async function executeScript(
     // TODO:   the only way how we can handle this might be by declaring different stdout contexts
     //         within each python script.... Because it would be great to be able to run
     //         multiple pyhton functions in parallel...
-    const unlock = await stdOutLock.lock();
+    const unlock = await stdOutLock.lock()
     pyodide.setStdout({
       batched: (str: string) => {
-        console.log(str);
-        stdout_content += str + '\n';
+        console.log(str)
+        stdout_content += str + '\n'
       },
-    });
+    })
 
-    await pyodide.loadPackagesFromImports(python_script);
+    await pyodide.loadPackagesFromImports(python_script)
 
     // result is the direct result of the execution of the python script
     // if it is a python object, it would be a Pyodide object
     // otherwise is corresponds to one of these types here:
     //  https://pyodide.org/en/stable/usage/type-conversions.htmls
-    let result: unknown = await pyodide.runPythonAsync(python_script);
+    let result: unknown = await pyodide.runPythonAsync(python_script)
     if (convert2Js) {
-      result = convertRes2Js(result);
+      result = convertRes2Js(result)
     }
 
     // Reset stdout handler to default behavior if necessary
-    pyodide.setStdout({ batched: (str: string) => console.log(str) });
-    void unlock();
+    pyodide.setStdout({ batched: (str: string) => console.log(str) })
+    void unlock()
 
-    console.log('got result python:', { result, stdout: stdout_content });
+    console.log('got result python:', { result, stdout: stdout_content })
 
-    return { result, stdout: stdout_content };
+    return { result, stdout: stdout_content }
   } catch (error) {
     if (error instanceof Error) {
       if (error.name === 'PythonError') {
-        console.error('Python error', error.message);
-        return { pythonError: error.message };
+        console.error('Python error', error.message)
+        return { pythonError: error.message }
       }
-      console.error('Python environment error:', error);
-      return { pyodideEnvironmentError: error.message };
+      console.error('Python environment error:', error)
+      return { pyodideEnvironmentError: error.message }
     }
   }
 }
 
-export type PythonScriptResult = Awaited<ReturnType<typeof executeScript>>;
+export type PythonScriptResult = Awaited<ReturnType<typeof executeScript>>
 
 function convertRes2Js(result: unknown) {
-  let convres;
+  let convres
   // Check if result is a Pyodide proxy object
   if (result) {
     if (typeof result === 'object') {
@@ -98,24 +98,24 @@ function convertRes2Js(result: unknown) {
       ) {
         // Try to convert the Python object to a JavaScript object
         try {
-          convres = (result as { toJs: () => unknown }).toJs();
+          convres = (result as { toJs: () => unknown }).toJs()
         } catch (error) {
-          console.error('Error converting Python object to JavaScript', error);
+          console.error('Error converting Python object to JavaScript', error)
         }
       } else if ('toString' in result) {
         // Fallback to using toString() for other types of objects
         try {
-          convres = result.toString();
+          convres = result.toString()
         } catch (error) {
-          console.error('Error converting Python object to string', error);
+          console.error('Error converting Python object to string', error)
         }
       }
     } else {
       // if we have a "non-object" it could be strings, numbers etc...
-      convres = result;
+      convres = result
     }
   }
-  return convres;
+  return convres
 }
 
 // you can download the releases from here:

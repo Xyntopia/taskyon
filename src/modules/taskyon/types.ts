@@ -1,54 +1,54 @@
-import type OpenAI from 'openai';
-import { z } from 'zod';
+import type OpenAI from 'openai'
+import { z } from 'zod'
 
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
-export type RequireSome<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>;
+export type RequireSome<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
 
 export type RequireDefined<T, K extends keyof T> = Omit<T, K> & {
-  [P in K]-?: Exclude<T[P], undefined>;
-};
+  [P in K]-?: Exclude<T[P], undefined>
+}
 
 export type RemoveUndefined<T, K extends keyof T> = Omit<T, K> & {
-  [P in K]: Exclude<T[P], undefined>;
-};
+  [P in K]: Exclude<T[P], undefined>
+}
 
 export const removeKeys = <T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> => {
   return Object.fromEntries(
     Object.entries(obj).filter(([key]) => !keys.includes(key as K)),
-  ) as Omit<T, K>;
-};
+  ) as Omit<T, K>
+}
 
 export function removeUndefinedProperties<T extends object>(obj: T): RemoveUndefined<T, keyof T> {
   return Object.entries(obj).reduce(
     (acc, [key, value]) => {
       if (value !== undefined) {
-        (acc as Record<string, unknown>)[key] = value;
+        ;(acc as Record<string, unknown>)[key] = value
       }
-      return acc;
+      return acc
     },
     {} as Record<keyof T, unknown>,
-  ) as RemoveUndefined<T, keyof T>;
+  ) as RemoveUndefined<T, keyof T>
 }
 
 export class TaskProcessingError extends Error {
-  details: Record<string, unknown> | undefined;
+  details: Record<string, unknown> | undefined
 
   constructor(message: string, details?: Record<string, unknown>) {
-    super(message);
-    this.name = 'TaskFollowUpError';
-    this.details = details;
+    super(message)
+    this.name = 'TaskFollowUpError'
+    this.details = details
   }
 }
 
-export type OnInterruptFunc = (callback: (reason: string | null) => void) => void;
+export type OnInterruptFunc = (callback: (reason: string | null) => void) => void
 
 // TODO: the goal should be to slowly replace this state by the "result of the task"
 //       E.g. when a task had an error, this would be represented in the task result as an "error"
 const TaskState = z.enum(['Open', 'Queued', 'In Progress', 'Completed', 'Cancelled', 'Error'])
   .describe(`The task state indicates on what is happening with the task: for example
 it shows whether a task flow is seen as "completed" or whether its waiting
-to be further processed... E.g. there could be a task with no results, which stil counts as "completed"`);
-export type TaskState = z.infer<typeof TaskState>;
+to be further processed... E.g. there could be a task with no results, which stil counts as "completed"`)
+export type TaskState = z.infer<typeof TaskState>
 
 const OpenAIMessage = z.object({
   content: z.string().nullable(),
@@ -68,66 +68,66 @@ const OpenAIMessage = z.object({
     .optional(),
   name: z.string().optional(),
   role: z.enum(['system', 'user', 'assistant', 'function', 'tool']),
-});
-export type OpenAIMessage = z.infer<typeof OpenAIMessage>;
+})
+export type OpenAIMessage = z.infer<typeof OpenAIMessage>
 
 export type ChatCompletionResponse = {
-  id: string;
-  object: string; // "chat.completion"
-  created: number; // Unix timestamp in seconds
-  model: string;
+  id: string
+  object: string // "chat.completion"
+  created: number // Unix timestamp in seconds
+  model: string
   choices: {
-    index: number;
-    message: OpenAIMessage;
-    finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | null;
-  }[];
+    index: number
+    message: OpenAIMessage
+    finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | null
+  }[]
   usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-    origin?: string;
-    inference_costs?: number;
-  };
-};
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+    origin?: string
+    inference_costs?: number
+  }
+}
 
 export interface OpenRouterGenerationInfo {
-  id: string;
-  total_cost: number;
-  created_at: string; // ISO 8601 date string
-  model: string;
-  app_id: number;
-  streamed: boolean;
-  cancelled: boolean;
-  provider_name: string;
-  latency: number;
-  moderation_latency: null | number; // can be null
-  generation_time: number;
-  finish_reason: string;
-  tokens_prompt: number;
-  tokens_completion: number;
-  native_tokens_prompt: number;
-  native_tokens_completion: number;
-  num_media_prompt: null | number; // can be null
-  num_media_completion: null | number; // can be null
-  origin: string;
-  usage: number;
+  id: string
+  total_cost: number
+  created_at: string // ISO 8601 date string
+  model: string
+  app_id: number
+  streamed: boolean
+  cancelled: boolean
+  provider_name: string
+  latency: number
+  moderation_latency: null | number // can be null
+  generation_time: number
+  finish_reason: string
+  tokens_prompt: number
+  tokens_completion: number
+  native_tokens_prompt: number
+  native_tokens_completion: number
+  num_media_prompt: null | number // can be null
+  num_media_completion: null | number // can be null
+  origin: string
+  usage: number
 }
 
 // in order to prevent a circular reference in zod, we need to define our JSONSchemaForFunctionParameter
 // separately
 // https://zod.dev/?id=recursive-types
 export interface JSONSchemaForFunctionParameter {
-  $schema?: string | undefined;
-  type: 'object';
+  $schema?: string | undefined
+  type: 'object'
   properties: {
     [key: string]: {
-      type: string;
-      description?: string | undefined;
-      default?: unknown | undefined;
-      items?: JSONSchemaForFunctionParameter | JSONSchemaForFunctionParameter[] | undefined;
-    };
-  };
-  required?: string[] | undefined;
+      type: string
+      description?: string | undefined
+      default?: unknown | undefined
+      items?: JSONSchemaForFunctionParameter | JSONSchemaForFunctionParameter[] | undefined
+    }
+  }
+  required?: string[] | undefined
 }
 
 export const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionParameter> = z.object({
@@ -146,7 +146,7 @@ export const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionPara
     }),
   ),
   required: z.array(z.string()).optional(),
-});
+})
 
 export const FunctionName = z
   .string()
@@ -156,8 +156,8 @@ export const FunctionName = z
       message: `The function/tool name ${val} contains illegal characters. It has to fulfill '^[a-zA-Z0-9_-]+$'`,
     }),
   )
-  .describe('name of function');
-export type FunctionName = z.infer<typeof FunctionName>;
+  .describe('name of function')
+export type FunctionName = z.infer<typeof FunctionName>
 
 export const ToolBase = z.object({
   description: z.string(),
@@ -170,24 +170,24 @@ export const ToolBase = z.object({
     .describe(
       "If a function description doesn't include any code taskyon will call a postMessage to the parent window with the function name.",
     ),
-});
-export type ToolBase = z.infer<typeof ToolBase>; // this reflects json schema:  https://json-schema.org/specification-links
+})
+export type ToolBase = z.infer<typeof ToolBase> // this reflects json schema:  https://json-schema.org/specification-links
 
 const ToolResult = z.object({
   result: z.union([z.string(), z.record(z.unknown())]).optional(),
   error: z.unknown().optional(), // 'unknown' type in Zod is handled with 'z.unknown()'
   stdout: z.string().optional(),
-});
-export type ToolResult = z.infer<typeof ToolResult>;
+})
+export type ToolResult = z.infer<typeof ToolResult>
 
 // TODO: get rid of OpenAI dependency...
-const chatResponse: z.ZodType<OpenAI.ChatCompletion> = z.any();
+const chatResponse: z.ZodType<OpenAI.ChatCompletion> = z.any()
 
 export const TaskResult = z.object({
   chatResponse: chatResponse.optional(),
   toolResult: ToolResult.optional(), // Replace 'z.any()' with the specific type if available
-});
-export type TaskResult = z.infer<typeof TaskResult>;
+})
+export type TaskResult = z.infer<typeof TaskResult>
 
 export const ParamType = z.union([
   z.string(),
@@ -196,28 +196,28 @@ export const ParamType = z.union([
   z.record(z.unknown()),
   z.array(z.unknown()),
   z.null(),
-]);
-export type ParamType = z.infer<typeof ParamType>;
-export const FunctionArguments = z.record(ParamType).describe('arguments of the function');
-export type FunctionArguments = z.infer<typeof FunctionArguments>;
+])
+export type ParamType = z.infer<typeof ParamType>
+export const FunctionArguments = z.record(ParamType).describe('arguments of the function')
+export type FunctionArguments = z.infer<typeof FunctionArguments>
 
 /* here we are essentiall declaring the taskyon API */
 export const FunctionCall = z.object({
   name: FunctionName,
   arguments: FunctionArguments,
-});
-export type FunctionCall = z.infer<typeof FunctionCall>;
+})
+export type FunctionCall = z.infer<typeof FunctionCall>
 
-const answer = z.string().nullish();
-const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish();
-type yesno = z.infer<typeof yesno>;
+const answer = z.string().nullish()
+const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish()
+type yesno = z.infer<typeof yesno>
 
 // Convert yesno value to boolean
 export const yesnoToBoolean = (value: yesno | unknown): boolean => {
-  if (value === 'yes') return true;
-  if (value === 'no') return false;
-  return !!value; // Handles boolean, null, undefined
-};
+  if (value === 'yes') return true
+  if (value === 'no') return false
+  return !!value // Handles boolean, null, undefined
+}
 
 // this one here is important. It should be as simple as possible
 // this type is used to parse & describe tool commands
@@ -239,7 +239,7 @@ export const UseToolBase = z.object({
     .describe(
       'If we should use a tool in the following step, provide the tool command. Otherwise do not!!',
     ),
-});
+})
 
 const SystemResponseEvaluation = z
   .object({
@@ -252,7 +252,7 @@ const SystemResponseEvaluation = z
   })
   .describe(
     'This is used as a short prompt for tasks in order to determine whether we should use a more detailed task prompt',
-  );
+  )
 
 const ToolResultBase = z
   .object({
@@ -263,32 +263,32 @@ const ToolResultBase = z
     'should we use different parameters': yesno,
     'try again': yesno,
   })
-  .describe('Structured answer schema for processing the result of a function call.');
+  .describe('Structured answer schema for processing the result of a function call.')
 
 const ToolSelection = z
   .object({
     'Do we have to use a tool?': yesno,
     'describe your thoughts': answer,
   })
-  .describe('Structured answer schema for a task including the use of tools');
+  .describe('Structured answer schema for a task including the use of tools')
 
 export const StructuredResponseTypes = {
   ToolResultBase,
   ToolSelection,
   SystemResponseEvaluation,
-};
+}
 export const StructuredResponse = ToolResultBase.partial()
   .merge(ToolSelection.partial())
   .merge(SystemResponseEvaluation.partial())
-  .merge(UseToolBase.partial());
-export type StructuredResponse = z.infer<typeof StructuredResponse>;
+  .merge(UseToolBase.partial())
+export type StructuredResponse = z.infer<typeof StructuredResponse>
 
-const MessageContent = z.object({ message: z.string() });
-const StructuredContent = z.object({ structuredResponse: z.string() });
-const ToolCallContent = z.object({ functionCall: FunctionCall });
-const UploadedFilesContent = z.object({ uploadedFiles: z.array(z.string()) });
+const MessageContent = z.object({ message: z.string() })
+const StructuredContent = z.object({ structuredResponse: z.string() })
+const ToolCallContent = z.object({ functionCall: FunctionCall })
+const UploadedFilesContent = z.object({ uploadedFiles: z.array(z.string()) })
 // TODO: restructure ToolResultContent to be a "normal message"
-const ToolResultContent = z.object({ toolResult: ToolResult });
+const ToolResultContent = z.object({ toolResult: ToolResult })
 const TaskContent = z.union([
   StructuredContent,
   MessageContent,
@@ -296,7 +296,7 @@ const TaskContent = z.union([
   // TODO: replace with a "context" function which can also be a link to a URL for example or maybe a search string for other tasks...
   UploadedFilesContent,
   ToolResultContent,
-]);
+])
 
 // TODO: add an "extended" task and put all information in there which we don't really "need"
 //       to save in the database. E.g. how many follow-up tasks are allowed, how many
@@ -352,15 +352,15 @@ of how content can be structured. `,
   allowedTools: z.array(z.string()).optional(),
   authorId: z.string().optional(),
   created_at: z.number().optional(),
-});
-export type TaskNode = z.infer<typeof TaskNode>;
-export const partialTaskNode = TaskNode.partial();
-export type PartialTaskNode = z.infer<typeof partialTaskNode>;
+})
+export type TaskNode = z.infer<typeof TaskNode>
+export const partialTaskNode = TaskNode.partial()
+export type PartialTaskNode = z.infer<typeof partialTaskNode>
 
-export const TaskListType = z.array(TaskNode);
-export type TaskListType = z.infer<typeof TaskListType>;
+export const TaskListType = z.array(TaskNode)
+export type TaskListType = z.infer<typeof TaskListType>
 
-export type TaskGetter = (input: string) => Promise<TaskNode | undefined>;
+export type TaskGetter = (input: string) => Promise<TaskNode | undefined>
 
 export const partialTaskDraft = TaskNode.pick({
   role: true,
@@ -377,8 +377,8 @@ export const partialTaskDraft = TaskNode.pick({
   .required({ role: true, content: true })
   .describe(
     'This is just a subset of the task properties which can be used to define new tasks in various places.',
-  );
-export type partialTaskDraft = z.infer<typeof partialTaskDraft>;
+  )
+export type partialTaskDraft = z.infer<typeof partialTaskDraft>
 
 export const taskTemplateTypes = {
   toolDescription: partialTaskDraft
@@ -405,7 +405,7 @@ export const taskTemplateTypes = {
     },
     label: ['file']
   })*/
-};
+}
 
 /*
 TODO: for longer, autonomous agent processes & when errors happen, we might need this
@@ -421,50 +421,50 @@ type yamlTaskSchema = z.infer<typeof yamlTaskSchema>;
 */
 
 interface Permission {
-  id: string;
-  object: string;
-  created: number;
-  allow_create_engine: boolean;
-  allow_sampling: boolean;
-  allow_logprobs: boolean;
-  allow_search_indices: boolean;
-  allow_view: boolean;
-  allow_fine_tuning: boolean;
-  organization: string;
-  group: null | string;
-  is_blocking: boolean;
+  id: string
+  object: string
+  created: number
+  allow_create_engine: boolean
+  allow_sampling: boolean
+  allow_logprobs: boolean
+  allow_search_indices: boolean
+  allow_view: boolean
+  allow_fine_tuning: boolean
+  organization: string
+  group: null | string
+  is_blocking: boolean
 }
 
 export interface Model {
-  id: string;
-  name?: string;
-  description?: string;
-  context_length?: number;
-  object?: string;
-  created?: number;
-  owned_by?: string;
-  permission?: Permission[];
-  root?: string;
-  parent?: null | string;
+  id: string
+  name?: string
+  description?: string
+  context_length?: number
+  object?: string
+  created?: number
+  owned_by?: string
+  permission?: Permission[]
+  root?: string
+  parent?: null | string
   pricing?: {
-    prompt: string;
-    completion: string;
-    discount?: number;
-    image?: string;
-    request?: string;
-  };
+    prompt: string
+    completion: string
+    discount?: number
+    image?: string
+    request?: string
+  }
   top_provider?: {
-    max_completion_tokens: number | null;
-  };
+    max_completion_tokens: number | null
+  }
   architecture?: {
-    modality?: string;
-    tokenizer?: string;
-    instruct_type?: string | null;
-  };
+    modality?: string
+    tokenizer?: string
+    instruct_type?: string | null
+  }
   per_request_limits?: {
-    prompt_tokens: string;
-    completion_tokens: string;
-  } | null;
+    prompt_tokens: string
+    completion_tokens: string
+  } | null
 }
 
 const apiConfig = z
@@ -492,8 +492,8 @@ const apiConfig = z
       models: z.string().describe('Endpoint for list of models.'),
     }),
   })
-  .describe('Definition of an OpenAI Compatible API.');
-export type apiConfig = z.infer<typeof apiConfig>;
+  .describe('Definition of an OpenAI Compatible API.')
+export type apiConfig = z.infer<typeof apiConfig>
 
 export const llmSettings = z.object({
   userId: z
@@ -585,19 +585,19 @@ export const llmSettings = z.object({
     .describe(
       'These are the definitions of the prompts which are used in chats for different purposes.',
     ),
-});
-export type llmSettings = z.infer<typeof llmSettings>;
+})
+export type llmSettings = z.infer<typeof llmSettings>
 
-const hexColorRegex = /^#([A-Fa-f0-9]{6})$/;
+const hexColorRegex = /^#([A-Fa-f0-9]{6})$/
 const HexColor = z.string().superRefine((value, ctx) => {
   if (!hexColorRegex.test(value)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: 'Invalid hexadecimal color',
-    });
+    })
   }
-});
-type HexColor = z.infer<typeof HexColor>;
+})
+type HexColor = z.infer<typeof HexColor>
 
 const appConfiguration = z.object({
   appConfigurationUrl: z
@@ -633,8 +633,8 @@ const appConfiguration = z.object({
     .describe(
       'Secondary color for custom taskyon theming. This color should be a bright color and contrast the primary color.',
     ),
-});
-export type appConfiguration = z.infer<typeof appConfiguration>;
+})
+export type appConfiguration = z.infer<typeof appConfiguration>
 
 export const storedSettings = z.object({
   version: z
@@ -647,8 +647,8 @@ export const storedSettings = z.object({
   signatureOrKey: z.string().optional()
     .describe(`By specifying a signature it is possible to circumvent
 usage of an API key. This way you can give your users access to taskyon with your own restrictions.`),
-});
-export type storedSettings = z.infer<typeof storedSettings>;
+})
+export type storedSettings = z.infer<typeof storedSettings>
 
 export const tyPublicKeyDraft = z.object({
   name: z.string().describe('Name of the key.').optional(),
@@ -656,13 +656,13 @@ export const tyPublicKeyDraft = z.object({
   cpi: z.number().describe('Credit refill per inteval'),
   rti: z.number().describe('Refill time interval in minutes'),
   model: z.string().array().describe('List of models which are allowed with this key.').optional(),
-});
+})
 
-export type tyPublicKeyDraft = z.infer<typeof tyPublicKeyDraft>;
+export type tyPublicKeyDraft = z.infer<typeof tyPublicKeyDraft>
 
 export const tyPublicApiKeyObject = tyPublicKeyDraft.extend({
   iat: z.number().describe('Time at which the key was issued.'),
   auid: z.string().describe('anonymous User ID for billing purposes.'),
   v: z.number().describe('Key version'),
   iss: z.string().describe('The Issuer of the API key.'),
-});
+})

@@ -27,40 +27,38 @@ By clicking on this button you can connect taskyon to openrouter.ai service.
 </template>
 
 <script lang="ts" setup>
-import { onMounted, computed } from 'vue';
-import { useTaskyonStore } from 'src/stores/taskyonState';
-import { useRoute } from 'vue-router';
-import InfoDialog from 'components/InfoDialog.vue';
-import { matKey } from '@quasar/extras/material-icons';
-import { useAppStateStore } from 'src/stores/appState';
+import { onMounted, computed } from 'vue'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import { useRoute } from 'vue-router'
+import InfoDialog from 'components/InfoDialog.vue'
+import { matKey } from '@quasar/extras/material-icons'
+import { useAppStateStore } from 'src/stores/appState'
 
-const tystate = useTaskyonStore();
-const state = useAppStateStore();
-const route = useRoute();
+const tystate = useTaskyonStore()
+const state = useAppStateStore()
+const route = useRoute()
 
-const callbackUrl = window.location.origin; // This will get the base URL of your application
+const callbackUrl = window.location.origin // This will get the base URL of your application
 
 const authURL = computed(() => {
-  console.log('get current URL');
-  return `https://openrouter.ai/auth?callback_url=${encodeURIComponent(
-    callbackUrl,
-  )}`;
-});
+  console.log('get current URL')
+  return `https://openrouter.ai/auth?callback_url=${encodeURIComponent(callbackUrl)}`
+})
 
 function onGetOpenRouterKey() {
-  delete state.keys['openrouter.ai'];
-  window.location.href = authURL.value;
+  delete state.keys['openrouter.ai']
+  window.location.href = authURL.value
 }
 
 async function checkForApiKey() {
-  const code = route.query['code'] as string | undefined;
+  const code = route.query['code'] as string | undefined
   if (code) {
-    console.log('found code in URL:', code);
-    await tystate.getOpenRouterPKCEKey(code);
+    console.log('found code in URL:', code)
+    await tystate.getOpenRouterPKCEKey(code)
   }
 }
 
 onMounted(() => {
-  void checkForApiKey();
-});
+  void checkForApiKey()
+})
 </script>

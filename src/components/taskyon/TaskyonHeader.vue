@@ -184,15 +184,15 @@
 </template>
 
 <script setup lang="ts">
-import DarkModeButton from 'components/DarkModeButton.vue';
-import { defineAsyncComponent } from 'vue';
+import DarkModeButton from 'components/DarkModeButton.vue'
+import { defineAsyncComponent } from 'vue'
 import {
   matHelpOutline,
   matMenu,
   matSearch,
   matSettings,
   matWarning,
-} from '@quasar/extras/material-icons';
+} from '@quasar/extras/material-icons'
 import {
   mdiForum,
   mdiForumPlus,
@@ -200,21 +200,21 @@ import {
   mdiHospital,
   mdiInformationVariant,
   mdiWrench,
-} from '@quasar/extras/mdi-v6';
-import { useAppStateStore } from 'src/stores/appState';
-import { ref } from 'vue';
+} from '@quasar/extras/mdi-v6'
+import { useAppStateStore } from 'src/stores/appState'
+import { ref } from 'vue'
 
-const publishDate = process.env.PUBLISH_DATE as unknown as string;
-const state = useAppStateStore();
-const showAboutDialog = ref(false);
+const publishDate = process.env.PUBLISH_DATE as unknown as string
+const state = useAppStateStore()
+const showAboutDialog = ref(false)
 
 defineProps<{
-  minMode?: boolean;
-  btnSize: 'xs' | 'md';
-}>();
+  minMode?: boolean
+  btnSize: 'xs' | 'md'
+}>()
 const drawerOpen = defineModel<boolean | undefined>('drawerOpen', {
   required: false,
-});
+})
 
 const ShareDialogBtn = defineAsyncComponent(
   () =>
@@ -224,7 +224,7 @@ const ShareDialogBtn = defineAsyncComponent(
       /* webpackFetchPriority: "low" */
       '../taskyon/TaskChainPublishDialog.vue'
     ),
-);
+)
 
 const environmentInfo = () => ({
   publishDate,
@@ -233,12 +233,12 @@ const environmentInfo = () => ({
     typeof process !== 'undefined' && process.versions != null && process.versions.node != null,
   os: (() => {
     if (typeof process !== 'undefined' && process.platform) {
-      return process.platform; // e.g., 'win32', 'darwin', 'linux'
+      return process.platform // e.g., 'win32', 'darwin', 'linux'
     }
     if (typeof navigator !== 'undefined' && navigator.userAgent) {
-      return navigator.userAgent;
+      return navigator.userAgent
     }
-    return 'Unknown';
+    return 'Unknown'
   })(),
   isMobile: typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent),
   nodeVersion:
@@ -250,35 +250,35 @@ const environmentInfo = () => ({
   supportsServiceWorker: typeof navigator !== 'undefined' && 'serviceWorker' in navigator,
   supportsES6: (() => {
     try {
-      new Function('(a = 0) => a');
-      return true;
+      new Function('(a = 0) => a')
+      return true
     } catch {
-      return false;
+      return false
     }
   })(),
   timezone: typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone,
   language: typeof navigator !== 'undefined' ? navigator.language : null,
   memoryUsage: (() => {
     interface PerformanceMemory {
-      usedJSHeapSize: number;
-      totalJSHeapSize: number;
-      jsHeapSizeLimit: number;
+      usedJSHeapSize: number
+      totalJSHeapSize: number
+      jsHeapSizeLimit: number
     }
     if (
       typeof performance !== 'undefined' &&
       (performance as { memory?: PerformanceMemory }).memory
     ) {
-      return JSON.stringify((performance as unknown as { memory: PerformanceMemory }).memory);
+      return JSON.stringify((performance as unknown as { memory: PerformanceMemory }).memory)
     }
     if (typeof process !== 'undefined' && process.memoryUsage) {
-      return process.memoryUsage();
+      return process.memoryUsage()
     }
-    return null;
+    return null
   })(),
   screenResolution: typeof screen !== 'undefined' ? `${screen.width}x${screen.height}` : null,
   supportsBigInt: typeof BigInt !== 'undefined',
   supportsFetch: typeof fetch !== 'undefined',
-});
+})
 
-console.log(environmentInfo);
+console.log(environmentInfo)
 </script>

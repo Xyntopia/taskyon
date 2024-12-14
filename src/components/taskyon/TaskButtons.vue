@@ -15,11 +15,7 @@
     <q-btn
       v-if="'message' in task.content"
       class="col-auto"
-      :icon="
-        state.taskState[task.id]?.markdownEnabled != false
-          ? mdiLanguageMarkdown
-          : matRawOn
-      "
+      :icon="state.taskState[task.id]?.markdownEnabled != false ? mdiLanguageMarkdown : matRawOn"
       dense
       flat
       size="sm"
@@ -59,11 +55,7 @@
     >
       <q-tooltip :delay="0">Edit Task/Message</q-tooltip>
     </q-btn>
-    <q-separator
-      v-if="state.appConfiguration.expertMode"
-      vertical
-      class="q-mx-sm"
-    />
+    <q-separator v-if="state.appConfiguration.expertMode" vertical class="q-mx-sm" />
     <q-btn
       v-if="state.appConfiguration.expertMode"
       class="col-auto"
@@ -80,24 +72,20 @@
 </template>
 
 <script setup lang="ts">
-import { matCode, matEdit, matRawOn } from '@quasar/extras/material-icons';
-import {
-  mdiForumPlus,
-  mdiLanguageMarkdown,
-  mdiMessagePlus,
-} from '@quasar/extras/mdi-v6';
-import { symOutlinedMarkdownCopy } from '@quasar/extras/material-symbols-outlined';
-import type { TaskNode } from 'src/modules/taskyon/types';
-import { copyToClipboard } from 'src/modules/utils';
-import { useAppStateStore } from 'src/stores/appState';
+import { matCode, matEdit, matRawOn } from '@quasar/extras/material-icons'
+import { mdiForumPlus, mdiLanguageMarkdown, mdiMessagePlus } from '@quasar/extras/mdi-v6'
+import { symOutlinedMarkdownCopy } from '@quasar/extras/material-symbols-outlined'
+import type { TaskNode } from 'src/modules/taskyon/types'
+import { copyToClipboard } from 'src/modules/utils'
+import { useAppStateStore } from 'src/stores/appState'
 
-const state = useAppStateStore();
+const state = useAppStateStore()
 
 defineProps<{
-  task: TaskNode;
-  toggleMarkdown: (id: string) => void;
-  createNewConversation: (taskId: string) => Promise<void>;
-  editTask: (taskId: string) => Promise<void>;
-  toggleMessageDebug: (id: string) => void;
-}>();
+  task: TaskNode
+  toggleMarkdown: (id: string) => void
+  createNewConversation: (taskId: string) => Promise<void>
+  editTask: (taskId: string) => Promise<void>
+  toggleMessageDebug: (id: string) => void
+}>()
 </script>

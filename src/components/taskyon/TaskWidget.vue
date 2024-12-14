@@ -13,10 +13,7 @@
             ><q-tooltip class="bg-warning">Error!</q-tooltip>
           </q-icon>
         </div>
-        <div
-          v-else-if="'uploadedFiles' in task.content"
-          class="col-auto self-center"
-        >
+        <div v-else-if="'uploadedFiles' in task.content" class="col-auto self-center">
           <q-icon :name="mdiFileDocument" size="sm" color="info"></q-icon>
         </div>
         <div v-else-if="task.role === 'system'" class="col-auto self-center">
@@ -45,11 +42,7 @@
           </q-expansion-item>
         </div>
         <div v-if="'toolResult' in task.content" class="col q-pb-md">
-          <q-expansion-item
-            dense
-            :icon="mdiHeadCog"
-            label="Analyze the Result:"
-          >
+          <q-expansion-item dense :icon="mdiHeadCog" label="Analyze the Result:">
             <q-expansion-item dense label="Result:">
               <p style="white-space: pre-wrap">
                 {{ dump(task.content) }}
@@ -165,11 +158,7 @@
         <q-tabs v-model="state.messageDebug[task.id]" dense no-caps>
           <q-tab name="ERROR" label="Error" />
           <q-tab name="RAW" label="raw task data" />
-          <q-tab
-            v-if="task.debugging.taskPrompt"
-            name="TASKPROMPT"
-            label="task prompt"
-          />
+          <q-tab v-if="task.debugging.taskPrompt" name="TASKPROMPT" label="task prompt" />
           <q-tab name="MESSAGECONTENT" label="raw result" />
         </q-tabs>
         <q-tab-panels
@@ -185,12 +174,7 @@
               :value="JSON.stringify(task.debugging.error, null, 2)"
               readonly
               wrap="soft"
-              style="
-                width: 100%;
-                height: 200px;
-                background-color: inherit;
-                color: inherit;
-              "
+              style="width: 100%; height: 200px; background-color: inherit; color: inherit"
             >
             </textarea>
           </q-tab-panel>
@@ -199,28 +183,16 @@
               :value="JSON.stringify(task, null, 2)"
               readonly
               wrap="soft"
-              style="
-                width: 100%;
-                height: 200px;
-                background-color: inherit;
-                color: inherit;
-              "
+              style="width: 100%; height: 200px; background-color: inherit; color: inherit"
             >
             </textarea>
           </q-tab-panel>
           <q-tab-panel name="MESSAGECONTENT">
             <textarea
-              :value="
-                task.result?.chatResponse?.choices[0]?.message.content || 'N/A'
-              "
+              :value="task.result?.chatResponse?.choices[0]?.message.content || 'N/A'"
               readonly
               wrap="soft"
-              style="
-                width: 100%;
-                height: 200px;
-                background-color: inherit;
-                color: inherit;
-              "
+              style="width: 100%; height: 200px; background-color: inherit; color: inherit"
             >
             </textarea>
           </q-tab-panel>
@@ -231,12 +203,7 @@
               :value="typeof tp.content === 'string' ? tp.content : ''"
               readonly
               wrap="soft"
-              style="
-                width: 100%;
-                height: 200px;
-                background-color: inherit;
-                color: inherit;
-              "
+              style="width: 100%; height: 200px; background-color: inherit; color: inherit"
             >
             </textarea>
           </q-tab-panel>
@@ -247,120 +214,104 @@
 </template>
 
 <script setup lang="ts">
-import ToolResultWidget from 'components/taskyon/ToolResultWidget.vue';
-import { useTaskyonStore } from 'stores/taskyonState';
-import TokenUsage from 'components/taskyon/TokenUsage.vue';
-import {
-  TaskNode,
-  partialTaskDraft,
-  ToolBase,
-} from 'src/modules/taskyon/types';
-import tyMarkdown from '../tyMarkdown.vue';
-import { computed, ref } from 'vue';
-import { type FileMappingDocType } from 'src/modules/taskyon/rxdb';
-import { dump } from 'js-yaml';
-import TaskButtons from './TaskButtons.vue';
-import {
-  mdiDesktopTower,
-  mdiFileDocument,
-  mdiHeadCog,
-  mdiTools,
-} from '@quasar/extras/mdi-v6';
+import ToolResultWidget from 'components/taskyon/ToolResultWidget.vue'
+import { useTaskyonStore } from 'stores/taskyonState'
+import TokenUsage from 'components/taskyon/TokenUsage.vue'
+import { TaskNode, partialTaskDraft, ToolBase } from 'src/modules/taskyon/types'
+import tyMarkdown from '../tyMarkdown.vue'
+import { computed, ref } from 'vue'
+import { type FileMappingDocType } from 'src/modules/taskyon/rxdb'
+import { dump } from 'js-yaml'
+import TaskButtons from './TaskButtons.vue'
+import { mdiDesktopTower, mdiFileDocument, mdiHeadCog, mdiTools } from '@quasar/extras/mdi-v6'
 import {
   matCalculate,
   matMonetizationOn,
   matNewLabel,
   matWarning,
-} from '@quasar/extras/material-icons';
-import { openrouterPricing } from 'src/modules/utils';
-import FileBrowser from './FileBrowser.vue';
-import { useAppStateStore } from 'src/stores/appState';
+} from '@quasar/extras/material-icons'
+import { openrouterPricing } from 'src/modules/utils'
+import FileBrowser from './FileBrowser.vue'
+import { useAppStateStore } from 'src/stores/appState'
 
 const props = defineProps<{
-  task: TaskNode;
-  isWorking?: boolean;
-  short?: boolean;
-}>();
+  task: TaskNode
+  isWorking?: boolean
+  short?: boolean
+}>()
 
-const tystate = useTaskyonStore();
-const state = useAppStateStore();
-const fileMappings = ref<FileMappingDocType[]>([]);
+const tystate = useTaskyonStore()
+const state = useAppStateStore()
+const fileMappings = ref<FileMappingDocType[]>([])
 async function getFile(uuid: string) {
-  console.log('load image', uuid);
-  return (await tystate.getTaskManager()).getFile(uuid);
+  console.log('load image', uuid)
+  return (await tystate.getTaskManager()).getFile(uuid)
 }
 
 if ('uploadedFiles' in props.task.content) {
-  console.log('get uploaded files');
+  console.log('get uploaded files')
   void (async (fileUuids: string[]) => {
-    const tm = await tystate.getTaskManager();
-    const fm = await Promise.all(
-      fileUuids.map((uuid) => tm.getFileMappingByUuid(uuid)),
-    );
-    fileMappings.value = fm.filter((x) => x != null);
+    const tm = await tystate.getTaskManager()
+    const fm = await Promise.all(fileUuids.map((uuid) => tm.getFileMappingByUuid(uuid)))
+    fileMappings.value = fm.filter((x) => x != null)
     /*fileMappings.value = fm.map((x) => {
       const newfm = { ...x, xinfo: { uuid: x?.uuid } };
       return newfm;
     });*/
-  })(props.task.content.uploadedFiles);
+  })(props.task.content.uploadedFiles)
 }
 
 const taskFunction = computed(() => {
-  if (
-    props.task.label?.includes('function') &&
-    'message' in props.task.content
-  ) {
+  if (props.task.label?.includes('function') && 'message' in props.task.content) {
     try {
-      const res = ToolBase.safeParse(JSON.parse(props.task.content.message));
-      return res.success ? res.data : undefined;
+      const res = ToolBase.safeParse(JSON.parse(props.task.content.message))
+      return res.success ? res.data : undefined
     } catch {
-      return undefined;
+      return undefined
     }
   } else {
-    return undefined;
+    return undefined
   }
-});
+})
 
 async function taskDraftFromTask(taskId: string) {
   // we are copying the current task with json stringify
-  const jsonTask = JSON.stringify(
-    await (await tystate.getTaskManager()).getTask(taskId),
-  );
-  const task = TaskNode.partial().parse(JSON.parse(jsonTask));
-  task.debugging = {};
-  task.state = 'Open';
-  state.llmSettings.taskDraft = partialTaskDraft.parse(task);
-  return task;
+  const jsonTask = JSON.stringify(await (await tystate.getTaskManager()).getTask(taskId))
+  const task = TaskNode.partial().parse(JSON.parse(jsonTask))
+  task.debugging = {}
+  task.state = 'Open'
+  state.llmSettings.taskDraft = partialTaskDraft.parse(task)
+  return task
 }
 
 const humanReadableTaskCosts = computed(() => {
   if (props.task.debugging.taskCosts) {
-    return openrouterPricing(props.task.debugging.taskCosts);
+    return openrouterPricing(props.task.debugging.taskCosts)
   } else {
-    return '';
+    return ''
   }
-});
+})
 
 async function editTask(taskId: string) {
-  const task = await taskDraftFromTask(taskId);
-  state.llmSettings.selectedTaskId = task.parentID;
+  const task = await taskDraftFromTask(taskId)
+  state.llmSettings.selectedTaskId = task.parentID
 }
 
 async function createNewConversation(taskId: string) {
-  await taskDraftFromTask(taskId);
+  await taskDraftFromTask(taskId)
 
   // we simply need to tell our task manager that we don't have any task selected
   // the next message which will be send, will be an orphan in this case.
-  state.llmSettings.selectedTaskId = undefined;
+  state.llmSettings.selectedTaskId = undefined
 }
 
 function toggleMessageDebug(id: string) {
   if (state.messageDebug[id] === undefined) {
     // If the message ID doesn't exist, default to true since we're opening it.
-    state.messageDebug[id] = 'RAW';
+    state.messageDebug[id] = 'RAW'
   } else {
     // If it does exist, toggle the boolean.
-    state.messageDebug[id] = undefined;
+    state.messageDebug[id] = undefined
   }
 }
 
@@ -369,23 +320,23 @@ function toggleMarkdown(id: string) {
     // If the message ID doesn't exist, default to true since we're opening it.
     state.taskState[id] = {
       markdownEnabled: true,
-    };
+    }
   }
   // If it does exist, toggle the boolean.
-  state.taskState[id]!.markdownEnabled = !state.taskState[id]!.markdownEnabled;
-  console.log(`markdown for ${id}`, state.taskState[id]!.markdownEnabled);
+  state.taskState[id]!.markdownEnabled = !state.taskState[id]!.markdownEnabled
+  console.log(`markdown for ${id}`, state.taskState[id]!.markdownEnabled)
 }
 
 async function updateLabels(labels: string[]) {
-  console.log(labels);
-  const tm = await tystate.getTaskManager();
+  console.log(labels)
+  const tm = await tystate.getTaskManager()
   await tm.updateTask(
     {
       id: props.task.id,
       label: labels,
     },
     true,
-  );
+  )
 }
 </script>
 

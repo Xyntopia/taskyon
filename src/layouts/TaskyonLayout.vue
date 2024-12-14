@@ -1,10 +1,6 @@
 <template>
   <q-layout view="lHh LpR lfr">
-    <TaskyonHeader
-      v-model:drawer-open="drawerOpen"
-      :min-mode="minMode"
-      :btn-size="btnSize"
-    />
+    <TaskyonHeader v-model:drawer-open="drawerOpen" :min-mode="minMode" :btn-size="btnSize" />
 
     <q-drawer
       v-if="state"
@@ -43,12 +39,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { defineAsyncComponent } from 'vue';
-import TaskyonHeader from '../components/taskyon/TaskyonHeader.vue';
-import { useAppStateStore } from 'src/stores/appState';
+import { ref, computed } from 'vue'
+import { defineAsyncComponent } from 'vue'
+import TaskyonHeader from '../components/taskyon/TaskyonHeader.vue'
+import { useAppStateStore } from 'src/stores/appState'
 
-const drawerOpen = ref(false);
+const drawerOpen = ref(false)
 
 const ChatSidebar = defineAsyncComponent(
   () =>
@@ -58,14 +54,14 @@ const ChatSidebar = defineAsyncComponent(
       /* webpackFetchPriority: "low" */
       'components/taskyon/ChatSidebar.vue'
     ),
-);
+)
 
-const state = useAppStateStore();
+const state = useAppStateStore()
 
 const minMode = computed(() => {
-  return state.minimalGui;
-});
+  return state.minimalGui
+})
 const btnSize = computed(() => {
-  return minMode.value ? 'xs' : 'md';
-});
+  return minMode.value ? 'xs' : 'md'
+})
 </script>

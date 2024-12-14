@@ -7,5 +7,5 @@
 </template>
 
 <script setup lang="ts">
-import { matEngineering, matScience } from '@quasar/extras/material-icons';
+import { matEngineering, matScience } from '@quasar/extras/material-icons'
 </script>

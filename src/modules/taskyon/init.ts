@@ -1,14 +1,14 @@
-import { initAddTask2Tree, useTyTaskManager } from './taskManager';
-import type { TaskNode } from './types';
-import { createTaskyonDatabase, TaskyonDatabase } from './rxdb';
-import { TaskWorkerController, runTaskWorker } from './taskWorker';
-import type { Tool } from './tools';
-import { loadFile } from 'src/modules/loadFiles';
+import { initAddTask2Tree, useTyTaskManager } from './taskManager'
+import type { TaskNode } from './types'
+import { createTaskyonDatabase, TaskyonDatabase } from './rxdb'
+import { TaskWorkerController, runTaskWorker } from './taskWorker'
+import type { Tool } from './tools'
+import { loadFile } from 'src/modules/loadFiles'
 // TODO: make webpack automatically add all tool files from /tools/*
-import { executeJavaScript } from '../tools/executeJavaScript';
-import { executePythonScript } from '../tools/executePython';
-import { llmSettings } from './types';
-import { AsyncQueue, toLowerCaseKeys } from '../utils';
+import { executeJavaScript } from '../tools/executeJavaScript'
+import { executePythonScript } from '../tools/executePython'
+import { llmSettings } from './types'
+import { AsyncQueue, toLowerCaseKeys } from '../utils'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -26,35 +26,33 @@ export async function initTaskyon(
     // localVectorStoreSearch,
     executeJavaScript,
     ...AdditionalTools,
-  ];
+  ]
 
-  console.log('initializing taskyondb');
-  let taskyonDBInstance: TaskyonDatabase | undefined = undefined;
+  console.log('initializing taskyondb')
+  let taskyonDBInstance: TaskyonDatabase | undefined = undefined
   try {
-    taskyonDBInstance = await createTaskyonDatabase();
+    taskyonDBInstance = await createTaskyonDatabase()
   } catch (err) {
-    console.log('could not initialize taskyonDB', err);
-    logError(
-      `could not initialize taskyonDB:\n ${JSON.stringify(err, null, 2)}`,
-    );
+    console.log('could not initialize taskyonDB', err)
+    logError(`could not initialize taskyonDB:\n ${JSON.stringify(err, null, 2)}`)
   }
-  console.log('initializing task manager');
+  console.log('initializing task manager')
   const taskManagerInstance = useTyTaskManager(
     TaskList,
     ToolList,
     taskyonDBInstance,
     llmSettings.vectorizationModel,
-  );
-  console.log('finished taskManager initialization');
+  )
+  console.log('finished taskManager initialization')
 
   // add tools which have access to the taskManagerInstance itself
 
   ToolList.push(
     {
       function: async ({ filename }: { filename: string }) => {
-        const file = await taskManagerInstance.getFileByName(filename);
-        const fileContent = await loadFile(file);
-        return fileContent;
+        const file = await taskManagerInstance.getFileByName(filename)
+        const fileContent = await loadFile(file)
+        return fileContent
       },
       description: 'Get the contents of an uploaded file',
       name: 'getFileContent',
@@ -89,33 +87,30 @@ export async function initTaskyon(
         required: [],
       },
       function: async ({ toolName }: { toolName?: string }) => {
-        const allTools = toLowerCaseKeys(
-          await taskManagerInstance.updateToolDefinitions(),
-        );
-        if (toolName && allTools[toolName.toLowerCase()])
-          return allTools[toolName.toLowerCase()];
-        else return allTools;
+        const allTools = toLowerCaseKeys(await taskManagerInstance.updateToolDefinitions())
+        if (toolName && allTools[toolName.toLowerCase()]) return allTools[toolName.toLowerCase()]
+        else return allTools
       },
     },
-  );
-  void taskManagerInstance.updateToolDefinitions();
+  )
+  void taskManagerInstance.updateToolDefinitions()
 
   // keys could porentially be reactive here, so in theory, when they change in the GUI,
   // taskyon should automatically pick up on this...
-  console.log('starting taskyon worker');
-  const processTasksQueue = new AsyncQueue<string>();
+  console.log('starting taskyon worker')
+  const processTasksQueue = new AsyncQueue<string>()
   void runTaskWorker(
     processTasksQueue,
     llmSettings,
     taskManagerInstance,
     apiKeys,
     taskWorkerController,
-  );
+  )
 
-  const addTask2Tree = initAddTask2Tree(processTasksQueue, taskManagerInstance);
+  const addTask2Tree = initAddTask2Tree(processTasksQueue, taskManagerInstance)
 
   return {
     taskManagerInstance,
     addTask2Tree,
-  };
+  }
 }

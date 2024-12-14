@@ -1,9 +1,7 @@
 <template>
   <div class="column">
     <div class="col-auto">
-      <div
-        class="row items-center q-px-none q-gutter-md rounded-borders componentSearchBar"
-      >
+      <div class="row items-center q-px-none q-gutter-md rounded-borders componentSearchBar">
         <q-input
           class="col"
           :loading="isSearching"
@@ -53,25 +51,22 @@
 </template>
 
 <script setup lang="ts">
-import { matFilterAlt, matSearch } from '@quasar/extras/material-icons';
+import { matFilterAlt, matSearch } from '@quasar/extras/material-icons'
 
-const numberOfSearchResults = defineModel<number | undefined>(
-  'numberOfSearchResults',
-  {
-    required: false,
-    default: 50,
-  },
-);
+const numberOfSearchResults = defineModel<number | undefined>('numberOfSearchResults', {
+  required: false,
+  default: 50,
+})
 
 const showFilter = defineModel<boolean>('showFilter', {
   required: false,
   default: false,
-});
+})
 
 const searchString = defineModel<string>('searchString', {
   required: false,
   default: '',
-});
+})
 
 defineProps({
   isSearching: {
@@ -94,20 +89,20 @@ defineProps({
     type: Boolean,
     default: false,
   },
-});
+})
 
-const emit = defineEmits(['search']);
+const emit = defineEmits(['search'])
 
 function onQChange(value: string | null | number) {
-  searchString.value = (value as string) || '';
-  emit('search', value, numberOfSearchResults.value);
+  searchString.value = (value as string) || ''
+  emit('search', value, numberOfSearchResults.value)
 }
 
 const requestSearch = () => {
-  emit('search', searchString.value, numberOfSearchResults.value);
-};
+  emit('search', searchString.value, numberOfSearchResults.value)
+}
 
 const toggleFilter = () => {
-  showFilter.value = !showFilter.value;
-};
+  showFilter.value = !showFilter.value
+}
 </script>

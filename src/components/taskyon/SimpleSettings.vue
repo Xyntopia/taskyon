@@ -24,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-import { useAppStateStore } from 'src/stores/appState';
+import { useAppStateStore } from 'src/stores/appState'
 
 defineProps({
   reduced: {
@@ -35,7 +35,7 @@ defineProps({
     type: Boolean,
     required: false,
   },
-});
+})
 
-const state = useAppStateStore();
+const state = useAppStateStore()
 </script>

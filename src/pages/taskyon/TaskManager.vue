@@ -1,15 +1,9 @@
 <template>
   <q-page class="q-gutter-xs q-pa-xs">
-    <q-btn
-      :percentage="syncProgress"
-      :icon="mdiRefresh"
-      @click="onUpdateSearchIndex"
-    >
+    <q-btn :percentage="syncProgress" :icon="mdiRefresh" @click="onUpdateSearchIndex">
       update search index {{ syncProgressString }}</q-btn
     >
-    <q-btn :icon="mdiDatabaseRemove" @click="onResetSearchIndex">
-      clear search index
-    </q-btn>
+    <q-btn :icon="mdiDatabaseRemove" @click="onResetSearchIndex"> clear search index </q-btn>
     <q-table
       style="font-size: 0.8em"
       wrap-cells
@@ -32,17 +26,13 @@
           color="secondary"
           @search="(q, k) => onSearchChange({ q, k })"
         />
-        <div class="text-caption">
-          # of indexed tasks/tasks: {{ indexCount }}/{{ taskCount }}
-        </div>
+        <div class="text-caption"># of indexed tasks/tasks: {{ indexCount }}/{{ taskCount }}</div>
         <q-input
           :model-value="query.l"
           class="q-pl-md"
           dense
           label="filter for labels"
-          @update:model-value="
-            (label) => onSearchChange(label != null ? { l: String(label) } : {})
-          "
+          @update:model-value="(label) => onSearchChange(label != null ? { l: String(label) } : {})"
         />
       </template>
       <template #body-cell-task="rows">
@@ -71,13 +61,8 @@
               </div>
             </div>
             <div class="col q-pa-xs">
-              <div class="text-caption text-right">
-                id: {{ rows.row.taskId }}
-              </div>
-              <Task
-                v-if="taskDataMap[rows.row.taskId]"
-                :task="taskDataMap[rows.row.taskId]!"
-              />
+              <div class="text-caption text-right">id: {{ rows.row.taskId }}</div>
+              <Task v-if="taskDataMap[rows.row.taskId]" :task="taskDataMap[rows.row.taskId]!" />
             </div>
           </div>
         </td>
@@ -87,173 +72,167 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
-import Search from 'components/SearchInput.vue';
-import { TaskNode } from 'src/modules/taskyon/types';
-import Task from 'components/taskyon/TaskWidget.vue';
-import { useTaskyonStore } from 'src/stores/taskyonState';
+import { ref, watch, computed } from 'vue'
+import Search from 'components/SearchInput.vue'
+import { TaskNode } from 'src/modules/taskyon/types'
+import Task from 'components/taskyon/TaskWidget.vue'
+import { useTaskyonStore } from 'src/stores/taskyonState'
 import {
   mdiApproximatelyEqual,
   mdiDatabaseRemove,
   mdiForum,
   mdiRefresh,
-} from '@quasar/extras/mdi-v6';
-import { useRouter, useRoute } from 'vue-router';
-import { onMounted } from 'vue';
-import { type QTableProps } from 'quasar';
-import { createTaskNodeMangoQuery } from 'src/modules/taskyon/rxdb';
+} from '@quasar/extras/mdi-v6'
+import { useRouter, useRoute } from 'vue-router'
+import { onMounted } from 'vue'
+import { type QTableProps } from 'quasar'
+import { createTaskNodeMangoQuery } from 'src/modules/taskyon/rxdb'
 
 // TODO:  do some search caching ;) so that we can move faster back & forth between
 //        pages in the browser...
 
-const route = useRoute();
+const route = useRoute()
 
 const defaultParams = {
   k: '10',
-};
+}
 
 interface searchParams {
-  l?: string; // label,
-  q?: string; // searchTerm,
-  k?: string; // number of search results...
-  t?: string; // search for similar tasks...
+  l?: string // label,
+  q?: string // searchTerm,
+  k?: string // number of search results...
+  t?: string // search for similar tasks...
 }
 
 const props = defineProps<{
-  query: searchParams;
-}>();
+  query: searchParams
+}>()
 
 const query = computed(() => ({
   ...defaultParams,
   ...props.query,
-}));
+}))
 
 // Inside your <script setup> section
-const router = useRouter();
+const router = useRouter()
 
-const tystate = useTaskyonStore();
-const searchResults = ref<{ taskId: string; distance: number }[]>([]);
-const taskDataMap = ref<Record<string, TaskNode>>({});
-const syncProgressString = ref('0/0');
-const syncProgress = ref(0.0);
-const taskCount = ref<number | string>('N/A');
-const indexCount = ref<number | string>('N/A');
-const isSearching = ref(false);
+const tystate = useTaskyonStore()
+const searchResults = ref<{ taskId: string; distance: number }[]>([])
+const taskDataMap = ref<Record<string, TaskNode>>({})
+const syncProgressString = ref('0/0')
+const syncProgress = ref(0.0)
+const taskCount = ref<number | string>('N/A')
+const indexCount = ref<number | string>('N/A')
+const isSearching = ref(false)
 
 const updateCounts = () => {
   void tystate.getTaskManager().then((tm) => {
-    void tm
-      .countTasks()
-      .then((n) => (taskCount.value = n != undefined ? n : 'N/A'));
-    void tm
-      .countVecs()
-      .then((n) => (indexCount.value = n != undefined ? n : 'N/A'));
-  });
-};
+    void tm.countTasks().then((n) => (taskCount.value = n != undefined ? n : 'N/A'))
+    void tm.countVecs().then((n) => (indexCount.value = n != undefined ? n : 'N/A'))
+  })
+}
 
-updateCounts();
+updateCounts()
 
 async function onUpdateSearchIndex() {
-  const taskManager = await tystate.getTaskManager();
+  const taskManager = await tystate.getTaskManager()
   if (taskManager) {
     await taskManager.syncVectorIndexWithTasks((done, total) => {
-      syncProgress.value = done / total;
-      syncProgressString.value = `${done}/${total}`;
-      indexCount.value = done;
-    });
-    syncProgressString.value = '*done*';
+      syncProgress.value = done / total
+      syncProgressString.value = `${done}/${total}`
+      indexCount.value = done
+    })
+    syncProgressString.value = '*done*'
   }
-  updateCounts();
+  updateCounts()
 }
 
 async function onResetSearchIndex() {
-  const taskManager = await tystate.getTaskManager();
+  const taskManager = await tystate.getTaskManager()
   if (taskManager) {
-    await taskManager.resetTaskVectors();
-    syncProgressString.value = '*done*';
-    syncProgress.value = 0.0;
-    indexCount.value = 0;
+    await taskManager.resetTaskVectors()
+    syncProgressString.value = '*done*'
+    syncProgress.value = 0.0
+    indexCount.value = 0
   }
-  updateCounts();
+  updateCounts()
 }
 
 async function fetchAndDisplayTasks() {
-  console.log('get task data from IDs');
+  console.log('get task data from IDs')
   for (const task of searchResults.value) {
     if (!taskDataMap.value[task.taskId]) {
-      const taskData = await tystate
-        .getTaskManager()
-        .then((tm) => tm.getTask(task.taskId));
-      if (taskData) taskDataMap.value[task.taskId] = taskData;
+      const taskData = await tystate.getTaskManager().then((tm) => tm.getTask(task.taskId))
+      if (taskData) taskDataMap.value[task.taskId] = taskData
     }
   }
 }
 
 async function searchTasks(params: searchParams & { k: string }) {
-  console.log('searching tasks:', params);
-  const taskManager = await tystate.getTaskManager();
+  console.log('searching tasks:', params)
+  const taskManager = await tystate.getTaskManager()
   //searchResults.value = await vectorStore.query(searchTerm, k)
   if (taskManager) {
-    console.log('search for', params.q);
-    isSearching.value = true;
+    console.log('search for', params.q)
+    isSearching.value = true
     let result: {
-      taskId: string;
-      distance: number;
-    }[] = [];
+      taskId: string
+      distance: number
+    }[] = []
     if (params.q) {
       result = await taskManager.filteredVectorSearch(
         params.q,
         params.l ? createTaskNodeMangoQuery(params.l) : undefined,
         parseInt(params.k),
-      );
+      )
     } else if (params.t) {
-      const task = await taskManager.getTask(params.t);
+      const task = await taskManager.getTask(params.t)
       if (task) {
         result = await taskManager.searchSimilarTasks(
           task,
           params.l ? createTaskNodeMangoQuery(params.l) : undefined,
           parseInt(params.k),
-        );
+        )
       }
     }
     // Add score to each task
-    searchResults.value = result;
-    taskCount.value = (await taskManager.countTasks()) || 'N/A';
-    isSearching.value = false;
+    searchResults.value = result
+    taskCount.value = (await taskManager.countTasks()) || 'N/A'
+    isSearching.value = false
 
-    void fetchAndDisplayTasks();
+    void fetchAndDisplayTasks()
   }
 }
 
 async function onSearchChange(params: searchParams) {
   if (params instanceof Event) {
     // for some reason, in chrome, a second event with the original input-event gets fired...
-    return;
+    return
   } else if (!params) {
-    searchResults.value = [];
+    searchResults.value = []
   } else {
     // Update the URL with the search parameter
-    const newQuery = { ...defaultParams, ...props.query, ...params };
-    router.push({ query: newQuery }); // Perform your search here
-    console.log('Searching for: ', params);
-    await searchTasks(newQuery);
-    console.log('finished search!');
-    console.log(searchResults.value);
+    const newQuery = { ...defaultParams, ...props.query, ...params }
+    router.push({ query: newQuery }) // Perform your search here
+    console.log('Searching for: ', params)
+    await searchTasks(newQuery)
+    console.log('finished search!')
+    console.log(searchResults.value)
   }
 }
 
 onMounted(() => {
   if (props.query) {
-    console.log('doing initial search!');
-    searchTasks({ ...defaultParams, ...props.query });
+    console.log('doing initial search!')
+    searchTasks({ ...defaultParams, ...props.query })
   } else {
-    searchResults.value = [];
+    searchResults.value = []
   }
-});
+})
 
 watch(route, (newRoute) => {
-  searchTasks({ ...defaultParams, ...newRoute.query });
-});
+  searchTasks({ ...defaultParams, ...newRoute.query })
+})
 
 //const numberOfSearchResults = ref(5)
 const initialPagination = {
@@ -262,15 +241,15 @@ const initialPagination = {
   //page: 2,
   rowsPerPage: 50,
   // rowsNumber: xx if getting data from a server
-};
+}
 
 async function setConversation(taskId: string) {
-  const taskManager = await tystate.getTaskManager();
+  const taskManager = await tystate.getTaskManager()
   const leafTasks = await taskManager.findOneLeafTask(taskId, (taskID) =>
     taskManager.getTask(taskID),
-  );
-  console.log('set conversation to', leafTasks[0]);
-  router.push({ path: 'chat', query: { t: leafTasks[0] } });
+  )
+  console.log('set conversation to', leafTasks[0])
+  router.push({ path: 'chat', query: { t: leafTasks[0] } })
 }
 
 const columns: QTableProps['columns'] = [
@@ -293,5 +272,5 @@ const columns: QTableProps['columns'] = [
     field: (row: (typeof searchResults.value)[0]) => row.distance,
     format: (val: number) => `${(1 / (val + 0.01)).toFixed(2)}`,
   },
-];
+]
 </script>
