@@ -179,17 +179,19 @@ export function timeLruCache<ReturnType>(
   }
 }
 
+// Helper function for in-memory storage
+const createMemoryStorage = () => {
+  const memoryStorage = new Map<string, string>()
+  return {
+    setItem: memoryStorage.set.bind(memoryStorage),
+    getItem: (key: string) => memoryStorage.get(key) || null,
+  }
+}
+
 // Dynamically assign the storage methods
 const storage =
-  process.env.MODE === 'ssr'
-    ? (() => {
-        // on node we simply only save stuff in memory ;)
-        const nodeStorage = new Map<string, string>()
-        return {
-          setItem: nodeStorage.set.bind(nodeStorage),
-          getItem: (key: string) => nodeStorage.get(key) || null,
-        }
-      })()
+  process.env.MODE === 'ssr' || typeof localStorage === 'undefined'
+    ? createMemoryStorage()
     : localStorage
 
 // The cache for storing function call results.
