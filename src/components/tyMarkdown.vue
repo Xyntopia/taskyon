@@ -1,61 +1,49 @@
 <template>
-  <q-markdown
-    :id="id"
-    :plugins="plugins"
-    :src="src"
-    v-bind="$attrs"
-    @click="handleMarkdownClick"
-  />
+  <q-markdown :id="id" :plugins="plugins" :src="src" v-bind="$attrs" @click="handleMarkdownClick" />
 </template>
 
 <script setup lang="ts">
-import { QMarkdown } from '@quasar/quasar-ui-qmarkdown';
+import { QMarkdown } from '@quasar/quasar-ui-qmarkdown'
 //import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
 //import katex from  '@mdit/plugin-katex-slim'
-import mathjax3 from 'markdown-it-mathjax3';
-import mermaid from 'mermaid';
-import type { MermaidConfig } from 'mermaid';
-import '@quasar/quasar-ui-qmarkdown/dist/index.css';
-import type MarkdownIt from 'markdown-it/lib';
+import mathjax3 from 'markdown-it-mathjax3'
+import mermaid from 'mermaid'
+import type { MermaidConfig } from 'mermaid'
+import '@quasar/quasar-ui-qmarkdown/dist/index.css'
+import type MarkdownIt from 'markdown-it/lib'
 // !!!!!!!!!!! it is superimportant, that our "prismjs" imports come AFTER the QMarkdown import !!!!!
 // otherwise this will result in errors for some reason...
-import 'prismjs/components/prism-python';
-import 'prismjs/components/prism-rust';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/components/prism-typescript';
-import { uid, useQuasar } from 'quasar';
-import { computed, onMounted, getCurrentInstance } from 'vue';
-import Renderer from 'markdown-it/lib/renderer';
-import { svgToPng } from 'src/modules/svgUtils';
-const $q = useQuasar();
+import 'prismjs/components/prism-python'
+import 'prismjs/components/prism-rust'
+import 'prismjs/components/prism-javascript'
+import 'prismjs/components/prism-typescript'
+import { uid, useQuasar } from 'quasar'
+import { computed, onMounted, getCurrentInstance } from 'vue'
+import Renderer from 'markdown-it/lib/renderer'
+import { svgToPng } from 'src/modules/svgUtils'
+const $q = useQuasar()
 
 // https://mdit-plugins.github.io/mathjax.html#usage
 //const mathjaxInstance = createMathjaxInstance();
 
-const id = getCurrentInstance()?.uid || '';
+const id = getCurrentInstance()?.uid || ''
 
 const props = defineProps<{
-  src?: string;
-  noMermaid?: boolean;
-}>();
+  src?: string
+  noMermaid?: boolean
+}>()
 
 function addCopyButtons(md: MarkdownIt) {
   const defaultFenceRenderer =
     md.renderer.rules.fence ||
     ((tokens, idx, options, env, self) => {
-      return self.renderToken(tokens, idx, options);
-    });
+      return self.renderToken(tokens, idx, options)
+    })
 
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     // console.log('render code fence blocks...');
     // Original rendered HTML of the code block
-    const originalRenderedHtml = defaultFenceRenderer(
-      tokens,
-      idx,
-      options,
-      env,
-      self,
-    );
+    const originalRenderedHtml = defaultFenceRenderer(tokens, idx, options, env, self)
 
     // Custom HTML for the button
     const customHtml = `
@@ -77,90 +65,88 @@ function addCopyButtons(md: MarkdownIt) {
             </span>
           </button>
         </div>
-      `;
+      `
 
     //const customHtml = originalRenderedHtml;
 
     //const customHtml = tokens[idx].content;
 
-    return customHtml;
-  };
+    return customHtml
+  }
 }
 
 function copyToClipboard(code: string) {
   navigator.clipboard
     .writeText(code)
     .then(() => {
-      console.log('Copied to clipboard');
+      console.log('Copied to clipboard')
     })
     .catch((err) => {
-      console.error('Error in copying text: ', err);
-    });
+      console.error('Error in copying text: ', err)
+    })
 }
 
 async function copyPngToClipboard(pngBuffer: Uint8Array) {
-  const blob = new Blob([pngBuffer], { type: 'image/png' });
+  const blob = new Blob([pngBuffer], { type: 'image/png' })
   //const url = URL.createObjectURL(blob);
 
   if (typeof ClipboardItem !== 'undefined') {
     try {
-      const clipboardItem = new ClipboardItem({ 'image/png': blob });
-      await navigator.clipboard.write([clipboardItem]);
-      console.log('Image copied to clipboard successfully!');
+      const clipboardItem = new ClipboardItem({ 'image/png': blob })
+      await navigator.clipboard.write([clipboardItem])
+      console.log('Image copied to clipboard successfully!')
       //URL.revokeObjectURL(url); // revoke the URL to free up memory
     } catch (err) {
-      console.error('Failed to copy image to clipboard:', err);
+      console.error('Failed to copy image to clipboard:', err)
     }
   } else {
-    console.warn(
-      'ClipboardItem is not supported in this browser. Using fallback method.',
-    );
+    console.warn('ClipboardItem is not supported in this browser. Using fallback method.')
 
     alert(
       'Your browser is too old to support image copying with "ClipboardItem", please upgrade your browser!',
-    );
+    )
   }
 }
 
 function handleMarkdownClick(event: MouseEvent) {
-  const target = (event.target as HTMLElement).closest('.copy-button');
+  const target = (event.target as HTMLElement).closest('.copy-button')
   if (target) {
     // Find the closest .code-block-with-overlay and then find the <code> element inside it
-    const codeBlockContainer = target.closest('.code-block-with-overlay');
+    const codeBlockContainer = target.closest('.code-block-with-overlay')
     if (codeBlockContainer) {
-      const imgElement = codeBlockContainer.querySelector('.mermaid img');
+      const imgElement = codeBlockContainer.querySelector('.mermaid img')
       if (imgElement && imgElement instanceof HTMLImageElement) {
-        const svgUrl = imgElement.src;
+        const svgUrl = imgElement.src
         fetch(svgUrl)
           .then((response) => response.text())
           .then((svgString) => {
             void svgToPng(svgString).then((res) => {
               if (res) {
-                void copyPngToClipboard(res);
+                void copyPngToClipboard(res)
                 $q.notify({
                   message: 'Copied image to clipboard as png!',
                   type: 'info',
                   position: 'right',
                   timeout: 500,
                   html: false,
-                });
+                })
               }
-            });
+            })
           })
-          .catch((err) => console.error('Error fetching SVG: ', err));
+          .catch((err) => console.error('Error fetching SVG: ', err))
       }
-      const codeElement = codeBlockContainer.querySelector('code');
+      const codeElement = codeBlockContainer.querySelector('code')
       if (codeElement) {
-        const codeText = codeElement.textContent || ''; // Get the text content of the <code> element
-        copyToClipboard(codeText);
+        const codeText = codeElement.textContent || '' // Get the text content of the <code> element
+        copyToClipboard(codeText)
         $q.notify({
           message: 'Copied text to clipboard!',
           type: 'info',
           position: 'right',
           timeout: 500,
           html: false,
-        });
-        return;
+        })
+        return
       }
     }
   }
@@ -174,7 +160,7 @@ const mermaidSettings: MermaidConfig = {
     htmlLabels: false,
     useMaxWidth: true,
   },
-};
+}
 
 const renderMermaid = (md: MarkdownIt) => {
   /*
@@ -186,38 +172,30 @@ const renderMermaid = (md: MarkdownIt) => {
       .replace(/>/g, '&gt;');*/
 
   // if we are using the plugin, initialize mermaid as well :)
-  mermaid.initialize(mermaidSettings);
+  mermaid.initialize(mermaidSettings)
 
   // Example of using the render function
-  const drawDiagram = async function (
-    code: string,
-    selector: string,
-    img_id: string,
-  ) {
-    const graphDefinition = code;
-    const velement = document.createElement('div');
-    const fragment = document.createDocumentFragment();
-    fragment.appendChild(velement);
-    document.body.appendChild(velement);
-    let innerHTML: string;
+  const drawDiagram = async function (code: string, selector: string, img_id: string) {
+    const graphDefinition = code
+    const velement = document.createElement('div')
+    const fragment = document.createDocumentFragment()
+    fragment.appendChild(velement)
+    document.body.appendChild(velement)
+    let innerHTML: string
     try {
-      const { svg } = await mermaid.render(
-        `mg${selector}`,
-        graphDefinition,
-        velement,
-      );
-      const svgBlob = new Blob([svg], { type: 'image/svg+xml' });
-      const svgUrl = URL.createObjectURL(svgBlob);
-      innerHTML = `<img src="${svgUrl}" alt="Mermaid diagram" />`;
+      const { svg } = await mermaid.render(`mg${selector}`, graphDefinition, velement)
+      const svgBlob = new Blob([svg], { type: 'image/svg+xml' })
+      const svgUrl = URL.createObjectURL(svgBlob)
+      innerHTML = `<img src="${svgUrl}" alt="Mermaid diagram" />`
     } catch (err) {
-      console.log('error rendering mermaid!!', err);
-      innerHTML = `${code}\n<div>${JSON.stringify(err)}</div>`;
+      console.log('error rendering mermaid!!', err)
+      innerHTML = `${code}\n<div>${JSON.stringify(err)}</div>`
     } finally {
-      velement.remove();
+      velement.remove()
     }
 
-    const element = document.querySelector(`#${img_id}`);
-    if (element) element.innerHTML = innerHTML;
+    const element = document.querySelector(`#${img_id}`)
+    if (element) element.innerHTML = innerHTML
 
     // Create a save as button
     // TODO: right now, the "svg"  includes the iframe with the svg...
@@ -229,38 +207,38 @@ const renderMermaid = (md: MarkdownIt) => {
         copyButton.addEventListener('click', () => {
           void navigator.clipboard.writeText(svg);
         });*/
-  };
+  }
 
-  let defaultRenderer: Renderer.RenderRule;
+  let defaultRenderer: Renderer.RenderRule
   if (md.renderer.rules.fence) {
-    defaultRenderer = md.renderer.rules.fence.bind(md.renderer.rules);
+    defaultRenderer = md.renderer.rules.fence.bind(md.renderer.rules)
   }
 
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
-    const token = tokens[idx];
+    const token = tokens[idx]
     if (token && token.info.trim() === 'mermaid') {
-      const mid = uid();
-      const img_id = `d${mid}`;
-      const mm_code = token.content.trim();
-      void drawDiagram(mm_code, mid, img_id);
+      const mid = uid()
+      const img_id = `d${mid}`
+      const mm_code = token.content.trim()
+      void drawDiagram(mm_code, mid, img_id)
 
-      return `<div id="${img_id}" class="mermaid">${mm_code}</div>`;
+      return `<div id="${img_id}" class="mermaid">${mm_code}</div>`
     }
-    return defaultRenderer(tokens, idx, options, env, self);
-  };
-};
+    return defaultRenderer(tokens, idx, options, env, self)
+  }
+}
 
 const plugins = computed(() => {
   if (props.noMermaid) {
-    return [addCopyButtons, mathjax3];
+    return [addCopyButtons, mathjax3]
   }
-  return [renderMermaid, addCopyButtons, mathjax3];
-});
+  return [renderMermaid, addCopyButtons, mathjax3]
+})
 
 onMounted(() => {
   // if we are using the plugin, initialize mermaid as well :)
-  mermaid.initialize(mermaidSettings);
-  const parentElement = document.getElementById('unique-id');
+  mermaid.initialize(mermaidSettings)
+  const parentElement = document.getElementById('unique-id')
   if (parentElement) {
     //let mermaidElements = parentElement.querySelectorAll('.mermaid');
     /*mermaidElements.forEach(element => {
@@ -273,7 +251,7 @@ onMounted(() => {
       //suppressErrors: true,
     });*/
   }
-});
+})
 </script>
 
 <style lang="sass">

@@ -59,11 +59,11 @@
 </template>
 
 <script setup lang="ts">
-import { matAddAPhoto, matUploadFile } from '@quasar/extras/material-icons';
-import { onBeforeUnmount } from 'vue';
-import { onMounted, ref, Ref } from 'vue';
+import { matAddAPhoto, matUploadFile } from '@quasar/extras/material-icons'
+import { onBeforeUnmount } from 'vue'
+import { onMounted, ref, Ref } from 'vue'
 
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue'])
 
 const props = defineProps({
   accept: {
@@ -90,75 +90,75 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
-});
+})
 
 //name: 'DropZone',
-const fileInput: Ref<null | HTMLInputElement> = ref(null);
+const fileInput: Ref<null | HTMLInputElement> = ref(null)
 
 const handleDrop = (e: DragEvent) => {
-  e.preventDefault();
+  e.preventDefault()
   if (e.dataTransfer) {
-    handleFiles(e.dataTransfer.files);
+    handleFiles(e.dataTransfer.files)
   }
-};
+}
 
 const handleDragOver = (e: DragEvent) => {
-  e.preventDefault();
-};
+  e.preventDefault()
+}
 
 const handlePaste = (e: ClipboardEvent) => {
-  console.log('paste event occured!! :)');
-  const items = e.clipboardData?.items;
+  console.log('paste event occured!! :)')
+  const items = e.clipboardData?.items
   if (items) {
-    const files: File[] = [];
+    const files: File[] = []
     for (let i = 0; i < items.length; i++) {
-      const item = items[i]!;
+      const item = items[i]!
       if (item.kind === 'file') {
-        const file = item.getAsFile();
+        const file = item.getAsFile()
         if (file) {
-          files.push(file);
+          files.push(file)
         }
       }
     }
     if (files.length > 0) {
-      handleFiles(files);
+      handleFiles(files)
     }
   }
-};
+}
 
 const handleFileInput = (e: Event) => {
-  const files = (e.target as HTMLInputElement).files;
+  const files = (e.target as HTMLInputElement).files
   if (files) {
-    handleFiles(files);
+    handleFiles(files)
   }
-};
+}
 
 const handleFiles = (files: FileList | File[]) => {
-  const fileList = Array.from(files);
-  emit('update:modelValue', fileList);
-};
+  const fileList = Array.from(files)
+  emit('update:modelValue', fileList)
+}
 
 const openFileInput = (/*event: Event*/) => {
   if (fileInput.value) {
-    fileInput.value.click();
+    fileInput.value.click()
   }
-};
+}
 
 onMounted(() => {
   if (props.enablePaste) {
-    document.addEventListener('paste', handlePaste);
+    document.addEventListener('paste', handlePaste)
   }
   if (props.enableWholeWindowDrop) {
-    window.addEventListener('dragover', handleDragOver);
-    window.addEventListener('drop', handleDrop);
+    window.addEventListener('dragover', handleDragOver)
+    window.addEventListener('drop', handleDrop)
   }
-});
+})
 
 onBeforeUnmount(() => {
-  document.removeEventListener('paste', handlePaste);
-  window.removeEventListener('dragover', handleDragOver);
-  window.removeEventListener('drop', handleDrop);
-});
+  document.removeEventListener('paste', handlePaste)
+  window.removeEventListener('dragover', handleDragOver)
+  window.removeEventListener('drop', handleDrop)
+})
 
 /*
 TODO: add native file directory function in case we're using tauri

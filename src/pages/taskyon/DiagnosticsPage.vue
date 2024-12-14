@@ -9,27 +9,14 @@
           label="Generate Diagnostics Report"
           @click="generateReport(detailed, false)"
         ></q-btn>
-        <q-btn
-          outline
-          label="Only run first test"
-          @click="generateReport(detailed, true)"
-        ></q-btn>
+        <q-btn outline label="Only run first test" @click="generateReport(detailed, true)"></q-btn>
         <q-btn outline label="IPFS status" to="ipfsmonitor"></q-btn>
-        <q-btn
-          v-if="diagnostics"
-          outline
-          label="download report"
-          @click="downloadReport"
-        ></q-btn>
+        <q-btn v-if="diagnostics" outline label="download report" @click="downloadReport"></q-btn>
         <TyResetButton outline mode="all" />
         <TyResetButton outline mode="settings" />
         <q-toggle v-model="detailed" label="detailed"></q-toggle>
         <q-card flat bordered>
-          <q-btn
-            flat
-            :icon="matContentCopy"
-            @click="copyToClipboard(diagnostics)"
-          ></q-btn>
+          <q-btn flat :icon="matContentCopy" @click="copyToClipboard(diagnostics)"></q-btn>
           <pre>{{ diagnostics }}</pre>
         </q-card>
         <div v-for="(e, idx) of state.getErrors()" :key="idx">
@@ -42,93 +29,81 @@
 </template>
 
 <script setup lang="ts">
-import { useTaskyonStore } from 'stores/taskyonState';
-import { generateCompleteChat } from 'src/modules/taskyon/promptCreation';
-import { ref } from 'vue';
-import { exportFile } from 'quasar';
-import { dump } from 'js-yaml';
-import { copyToClipboard } from 'src/modules/utils';
-import { matContentCopy } from '@quasar/extras/material-icons';
+import { useTaskyonStore } from 'stores/taskyonState'
+import { generateCompleteChat } from 'src/modules/taskyon/promptCreation'
+import { ref } from 'vue'
+import { exportFile } from 'quasar'
+import { dump } from 'js-yaml'
+import { copyToClipboard } from 'src/modules/utils'
+import { matContentCopy } from '@quasar/extras/material-icons'
 import {
   markdownGeneration,
   testEstimateChatTokens,
   testTransformersPipeline,
   testVectorizerInitialization,
   testVectorizeText,
-} from 'src/modules/taskyon/tests';
-import { useGdrive } from 'src/modules/gdrive';
-import { useAppStateStore } from 'src/stores/appState';
-import TyResetButton from 'src/components/taskyon/TyResetButton.vue';
+} from 'src/modules/taskyon/tests'
+import { useGdrive } from 'src/modules/gdrive'
+import { useAppStateStore } from 'src/stores/appState'
+import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
 
-const tystate = useTaskyonStore();
-const state = useAppStateStore();
-const diagnostics = ref<string>('');
-const detailed = ref(false);
+const tystate = useTaskyonStore()
+const state = useAppStateStore()
+const diagnostics = ref<string>('')
+const detailed = ref(false)
 
 async function completionMessage() {
-  const tm = await tystate.getTaskManager();
+  const tm = await tystate.getTaskManager()
   const tyChat: Record<string, unknown> = {
     chatID: state.llmSettings.selectedTaskId,
-  };
+  }
   if (state.llmSettings.selectedTaskId) {
-    tyChat.taskIdChain = await tm.getTaskIdChain(
-      state.llmSettings.selectedTaskId,
-    );
-    const task = await (
-      await tystate.getTaskManager()
-    ).getTask(state.llmSettings.selectedTaskId);
+    tyChat.taskIdChain = await tm.getTaskIdChain(state.llmSettings.selectedTaskId)
+    const task = await (await tystate.getTaskManager()).getTask(state.llmSettings.selectedTaskId)
     if (task) {
-      const res = await generateCompleteChat(task, state.llmSettings, tm);
-      tyChat.thread = res;
+      const res = await generateCompleteChat(task, state.llmSettings, tm)
+      tyChat.thread = res
     }
   }
-  return tyChat;
+  return tyChat
 }
 
-async function runTest(
-  name: string,
-  testFunc: () => Promise<unknown> | unknown,
-  details = false,
-) {
-  const result: Record<string, unknown> = {};
-  console.log('run test:', name);
+async function runTest(name: string, testFunc: () => Promise<unknown> | unknown, details = false) {
+  const result: Record<string, unknown> = {}
+  console.log('run test:', name)
   try {
-    const res = await testFunc();
+    const res = await testFunc()
     if (details) {
       result[name] = {
         status: 'OK',
         result: res,
-      };
+      }
     } else {
-      result[name] = 'OK';
+      result[name] = 'OK'
     }
   } catch (error) {
-    console.log(error);
+    console.log(error)
     result[name] = {
       status: 'ERROR',
       message: 'an error occured during this test...',
       error,
-    };
+    }
   }
-  return dump(result, { skipInvalid: true });
+  return dump(result, { skipInvalid: true })
 }
 
 async function generateReport(details = false, onlyFirst = false) {
-  console.log('generating diagnostics report');
+  console.log('generating diagnostics report')
 
-  diagnostics.value = `report_date: ${new Date().toISOString()}\n`;
+  diagnostics.value = `report_date: ${new Date().toISOString()}\n`
 
-  diagnostics.value += await runTest(
-    'testTransformersPipeline',
-    testTransformersPipeline,
-    details,
-  );
+  diagnostics.value += await runTest('testTransformersPipeline', testTransformersPipeline, details)
 
   diagnostics.value += await runTest(
     'load_vecorization_initialization',
     testVectorizerInitialization,
     details,
-  );
+  )
 
   /*diagnostics.value += await runTest(
     'ipfs_helia_upload',
@@ -137,53 +112,41 @@ async function generateReport(details = false, onlyFirst = false) {
   );*/
 
   if (onlyFirst) {
-    console.log('diagnostics:', diagnostics.value);
-    return;
+    console.log('diagnostics:', diagnostics.value)
+    return
   }
 
   diagnostics.value += await runTest(
     'gdrive_upload',
     async () => {
-      const { publishMarkdown } = useGdrive();
+      const { publishMarkdown } = useGdrive()
 
       const markdownContent =
         '# Sample Markdown\n\nThis is a sample markdown file generated by Taskyon to test Gdrive functionality.\n\n' +
-        new Date().toISOString();
+        new Date().toISOString()
 
       const gdriveFile = await publishMarkdown(
         markdownContent,
         state.appConfiguration.gdriveDir,
         'taskyon_test.md',
         true,
-      );
+      )
 
-      return gdriveFile;
+      return gdriveFile
 
       //throw { message: 'could not found the task we just loaded!!' };
     },
     details,
-  );
+  )
 
-  diagnostics.value += await runTest(
-    'markdown_generation',
-    markdownGeneration,
-    details,
-  );
+  diagnostics.value += await runTest('markdown_generation', markdownGeneration, details)
 
-  diagnostics.value += await runTest(
-    'test_token_counter',
-    testEstimateChatTokens,
-    details,
-  );
-  diagnostics.value += await runTest(
-    'test_vectorization',
-    testVectorizeText,
-    details,
-  );
+  diagnostics.value += await runTest('test_token_counter', testEstimateChatTokens, details)
+  diagnostics.value += await runTest('test_vectorization', testVectorizeText, details)
 
-  diagnostics.value += await runTest('taskyon_data', getData, details);
+  diagnostics.value += await runTest('taskyon_data', getData, details)
 
-  console.log('diagnostics:', diagnostics.value);
+  console.log('diagnostics:', diagnostics.value)
 }
 
 async function getData() {
@@ -216,18 +179,18 @@ async function getData() {
       CurrentChat: await completionMessage(),
     },
     { skipInvalid: true },
-  );
+  )
 }
 
 async function downloadReport() {
-  const fileName = 'taskyon_diagnostics_report.yaml';
-  const fileContent = JSON.stringify(diagnostics.value);
-  const mimeType = 'application/json';
+  const fileName = 'taskyon_diagnostics_report.yaml'
+  const fileContent = JSON.stringify(diagnostics.value)
+  const mimeType = 'application/json'
 
-  exportFile(fileName, fileContent, mimeType);
+  exportFile(fileName, fileContent, mimeType)
 }
 
-void completionMessage();
+void completionMessage()
 
 //const stateView = {...state}
 </script>

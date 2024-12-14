@@ -1,15 +1,10 @@
-import {
-  FunctionArguments,
-  ToolBase,
-  partialTaskDraft,
-  storedSettings,
-} from './types';
-import { deepPartialify, deepStrictify } from '../zodUtils';
-import { z } from 'zod';
+import { FunctionArguments, ToolBase, partialTaskDraft, storedSettings } from './types'
+import { deepPartialify, deepStrictify } from '../zodUtils'
+import { z } from 'zod'
 
 const RemoteFunctionBase = z.object({
   functionName: z.string().describe('the name of the function'),
-});
+})
 
 export const RemoteFunctionCall = RemoteFunctionBase.extend({
   type: z
@@ -20,8 +15,8 @@ export const RemoteFunctionCall = RemoteFunctionBase.extend({
   ),
 }).describe(
   'This type is used for sending messages with function calls between windows. E.g. from iframe to parent',
-);
-export type RemoteFunctionCall = z.infer<typeof RemoteFunctionCall>;
+)
+export type RemoteFunctionCall = z.infer<typeof RemoteFunctionCall>
 
 export const RemoteFunctionResponse = RemoteFunctionBase.extend({
   type: z
@@ -30,35 +25,26 @@ export const RemoteFunctionResponse = RemoteFunctionBase.extend({
   response: z
     .unknown()
     .optional()
-    .describe(
-      'response of a FunctionCall, e.g. through postMessage with iframes.',
-    ),
+    .describe('response of a FunctionCall, e.g. through postMessage with iframes.'),
 }).describe(
   'This type is used for sending messages with the result of a remote function call between windows. E.g. from parent to taskyon iframe',
-);
-export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>;
+)
+export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>
 
 export const partialTyConfiguration = deepStrictify(
   deepPartialify(
     storedSettings
       .partial()
-      .describe(
-        'This can be used to update the configuration through iframe, json or URL',
-      ),
+      .describe('This can be used to update the configuration through iframe, json or URL'),
   ),
-);
-export type partialTyConfiguration = z.infer<typeof partialTyConfiguration>;
+)
+export type partialTyConfiguration = z.infer<typeof partialTyConfiguration>
 
 const TaskMessage = z
   .object({
-    type: z
-      .literal('task')
-      .describe('Field to indicate what kind of a message we have here.'),
+    type: z.literal('task').describe('Field to indicate what kind of a message we have here.'),
     task: partialTaskDraft,
-    execute: z
-      .boolean()
-      .default(false)
-      .describe('should the task be queued for execution?'),
+    execute: z.boolean().default(false).describe('should the task be queued for execution?'),
     duplicateTaskName: z
       .boolean()
       .default(true)
@@ -69,7 +55,7 @@ const TaskMessage = z
   })
   .describe(
     'With this message type we can send tasks to taskyon from outside, e.g. a parent to a taskyon iframe',
-  );
+  )
 
 const FunctionDescriptionMessage = ToolBase.extend({
   type: z
@@ -90,14 +76,14 @@ const FunctionDescriptionMessage = ToolBase.extend({
     .describe(
       'we use this here in order to prevent duplicate creation of our function declaration task',
     ),
-});
+})
 
 const tyConfigurationMessage = z.object({
   type: z
     .literal('configurationMessage')
     .describe('Field to indicate that this is a function description message.'),
   conf: partialTyConfiguration,
-});
+})
 
 export const TaskyonMessages = z.discriminatedUnion('type', [
   RemoteFunctionCall,
@@ -108,5 +94,5 @@ export const TaskyonMessages = z.discriminatedUnion('type', [
     .object({ type: z.literal('taskyonReady') })
     .describe('simple message which signals, that our API is ready!'),
   tyConfigurationMessage,
-]);
-export type TaskyonMessages = z.infer<typeof TaskyonMessages>;
+])
+export type TaskyonMessages = z.infer<typeof TaskyonMessages>

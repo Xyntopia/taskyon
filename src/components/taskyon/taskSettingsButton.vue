@@ -7,7 +7,7 @@
     v-bind="$attrs"
     @click="
       () => {
-        expandedTaskCreation = !expandedTaskCreation;
+        expandedTaskCreation = !expandedTaskCreation
       }
     "
     ><q-tooltip> Toggle Task Settings </q-tooltip>
@@ -15,10 +15,10 @@
 </template>
 
 <script setup lang="ts">
-import { matTune } from '@quasar/extras/material-icons';
+import { matTune } from '@quasar/extras/material-icons'
 
 const expandedTaskCreation = defineModel<boolean>({
   required: true,
-});
+})
 </script>
 sw

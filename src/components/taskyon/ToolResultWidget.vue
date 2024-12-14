@@ -11,13 +11,7 @@
     <div>
       <div class="text-bold">
         result (yaml):
-        <q-btn
-          class="q-ml-md"
-          :icon="matHtml"
-          dense
-          flat
-          @click="useIframe = !useIframe"
-        />
+        <q-btn class="q-ml-md" :icon="matHtml" dense flat @click="useIframe = !useIframe" />
       </div>
       <div caption class="relative-position">
         <div v-if="!isHtmlResult && !useIframe" class="scroll-area">
@@ -26,9 +20,7 @@
         <iframe
           v-else
           :srcdoc="
-            typeof task.result?.toolResult?.result === 'string'
-              ? task.result.toolResult.result
-              : ''
+            typeof task.result?.toolResult?.result === 'string' ? task.result.toolResult.result : ''
           "
         ></iframe>
         <q-btn
@@ -46,28 +38,28 @@
 </template>
 
 <script setup lang="ts">
-import { matContentCopy, matHtml } from '@quasar/extras/material-icons';
-import { dump } from 'js-yaml';
-import type { TaskNode } from 'src/modules/taskyon/types';
-import { computed, ref } from 'vue';
-import { copyToClipboard } from 'src/modules/utils';
+import { matContentCopy, matHtml } from '@quasar/extras/material-icons'
+import { dump } from 'js-yaml'
+import type { TaskNode } from 'src/modules/taskyon/types'
+import { computed, ref } from 'vue'
+import { copyToClipboard } from 'src/modules/utils'
 
 const props = defineProps<{
-  task: TaskNode;
-}>();
+  task: TaskNode
+}>()
 
-const useIframe = ref(false);
+const useIframe = ref(false)
 
 const isHtmlResult = computed(() => {
-  const toolResult = props.task.result?.toolResult;
+  const toolResult = props.task.result?.toolResult
   // Simple check for HTML - you might need a more accurate way to determine this
-  let isHtml = false;
+  let isHtml = false
   if (typeof toolResult?.result === 'string') {
     //#const isHtml= toolResult.trim().startsWith('<');
-    isHtml = toolResult.result.trim().startsWith('<');
+    isHtml = toolResult.result.trim().startsWith('<')
   }
-  return isHtml;
-});
+  return isHtml
+})
 </script>
 
 <style lang="sass" scoped>

@@ -4,12 +4,9 @@ import {
   generateHeaders,
   getOpenRouterGenerationInfo,
   getTaskyonCosts,
-} from './chat';
-import { useNlpWorker } from './webWorkerApi';
-import {
-  generateCompleteChat,
-  generateOpenAIToolDeclarations,
-} from './promptCreation';
+} from './chat'
+import { useNlpWorker } from './webWorkerApi'
+import { generateCompleteChat, generateOpenAIToolDeclarations } from './promptCreation'
 import {
   FunctionCall,
   partialTaskDraft,
@@ -19,11 +16,11 @@ import {
   TaskProcessingError,
   yesnoToBoolean,
   OnInterruptFunc,
-} from './types';
-import type { OpenAI } from 'openai';
-import { initAddTask2Tree, TyTaskManager } from './taskManager';
-import { Tool, handleFunctionExecution } from './tools';
-import { load } from 'js-yaml';
+} from './types'
+import type { OpenAI } from 'openai'
+import { initAddTask2Tree, TyTaskManager } from './taskManager'
+import { Tool, handleFunctionExecution } from './tools'
+import { load } from 'js-yaml'
 import {
   type AsyncQueue,
   deepCopy,
@@ -33,33 +30,33 @@ import {
   normalizeFalsyValues,
   pickProperties,
   sleep,
-} from '../utils';
-import { isTaskyonKey } from './tyCrypto';
+} from '../utils'
+import { isTaskyonKey } from './tyCrypto'
 
 // get worker function for our chat :)
-const { estimateChatTokens } = useNlpWorker();
+const { estimateChatTokens } = useNlpWorker()
 
 function extractOpenAIFunctions(
   choice: OpenAI.ChatCompletion['choices'][0],
   tools: Record<string, ToolBase>,
 ) {
-  const functionCalls: FunctionCall[] = [];
+  const functionCalls: FunctionCall[] = []
   for (const toolCall of choice.message.tool_calls || []) {
     // if our response contained a call to a function...
     // TODO: update this to the new tools API from Openai
-    console.log('A function call was returned...');
+    console.log('A function call was returned...')
     // we convert the object into our own FunctionCall and afterwards parse it, to make
     // sure it really worked...
     const functionCallObj: FunctionCall = {
       name: toolCall.function.name,
       arguments: JSON.parse(toolCall.function.arguments),
-    };
-    const functionCall = FunctionCall.parse(functionCallObj);
+    }
+    const functionCall = FunctionCall.parse(functionCallObj)
     if (tools[functionCall.name]) {
-      functionCalls.push(functionCall);
+      functionCalls.push(functionCall)
     }
   }
-  return functionCalls;
+  return functionCalls
 }
 
 // this function processes all tasks which go to any sort of an LLM
@@ -71,16 +68,14 @@ export async function processChatTask(
   taskWorkerController: TaskWorkerController,
 ) {
   // TODO: refactor this function!
-  const api = getApiConfigCopy(llmSettings, task.configuration?.chatApi);
+  const api = getApiConfigCopy(llmSettings, task.configuration?.chatApi)
   if (!api) {
-    throw new Error(
-      `api doesn't exist! ${llmSettings.selectedApi || 'no api selected!'}`,
-    );
+    throw new Error(`api doesn't exist! ${llmSettings.selectedApi || 'no api selected!'}`)
   }
-  const selectedModel = task.configuration?.model;
+  const selectedModel = task.configuration?.model
   if (selectedModel) {
-    api.selectedModel = selectedModel;
-    console.log('execute chat task!', task);
+    api.selectedModel = selectedModel
+    console.log('execute chat task!', task)
     //TODO: also do this, if we start the task "autonomously" in which we basically
     //      allow it to create new tasks...
     //TODO: we can create more things here like giving it context form other tasks, lookup
@@ -89,10 +84,10 @@ export async function processChatTask(
       task,
       llmSettings,
       taskManager,
-    );
-    let tools: OpenAI.ChatCompletionTool[] = [];
+    )
+    let tools: OpenAI.ChatCompletionTool[] = []
     if (llmSettings.enableOpenAiTools) {
-      tools = generateOpenAIToolDeclarations(task, toolDefs);
+      tools = generateOpenAIToolDeclarations(task, toolDefs)
     }
 
     if (openAIConversationThread.length > 0) {
@@ -112,62 +107,54 @@ export async function processChatTask(
         (chunk) => {
           if (chunk?.choices[0]?.delta?.tool_calls) {
             chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
-              task.debugging.toolStreamArgsContent =
-                task.debugging.toolStreamArgsContent || {};
+              task.debugging.toolStreamArgsContent = task.debugging.toolStreamArgsContent || {}
               if (t.function?.name) {
                 task.debugging.toolStreamArgsContent[t.function.name] =
-                  (task.debugging.toolStreamArgsContent[t.function.name] ||
-                    '') + (t.function?.arguments || '');
+                  (task.debugging.toolStreamArgsContent[t.function.name] || '') +
+                  (t.function?.arguments || '')
               }
-            });
+            })
           }
           if (chunk?.choices[0]?.delta?.content) {
             task.debugging.streamContent =
-              (task.debugging.streamContent || '') +
-              chunk.choices[0].delta.content;
+              (task.debugging.streamContent || '') + chunk.choices[0].delta.content
           }
         },
         () => {
-          return taskWorkerController.isInterrupted();
+          return taskWorkerController.isInterrupted()
         }, // define a function to check whether we should cancel the stream ...
-      );
+      )
 
       task.result = {
         chatResponse: chatCompletion,
-      };
+      }
 
       // get preliminary token usage before we get the actual costs
       // in th next step...
       if (chatCompletion?.usage) {
         // openai sends back the exact number of prompt tokens :)
-        task.debugging.promptTokens = chatCompletion.usage.prompt_tokens;
-        task.debugging.resultTokens = chatCompletion.usage.completion_tokens;
-        task.debugging.taskTokens = chatCompletion.usage.total_tokens;
+        task.debugging.promptTokens = chatCompletion.usage.prompt_tokens
+        task.debugging.resultTokens = chatCompletion.usage.completion_tokens
+        task.debugging.taskTokens = chatCompletion.usage.total_tokens
       }
-      const allTools = await taskManager.updateToolDefinitions(true);
+      const allTools = await taskManager.updateToolDefinitions(true)
       task.debugging.estimatedTokens = await estimateChatTokens(
         // we are doing a deepCopy here in order to make sure we loose the^ reactivity...
         // TODO:  once our tasks are immutable and non-reactive, we can remove this..
         deepCopy(task),
         openAIConversationThread,
         allTools,
-      );
+      )
 
       // TODO: replace this below with a taskNode in lower hierachy which does this :)
       if (chatCompletion && llmSettings.selectedApi === 'openrouter.ai') {
-        console.log('getting openrouter generation info');
+        console.log('getting openrouter generation info')
         void sleep(10000).then(() =>
           getOpenRouterGenerationInfo(
             chatCompletion.id,
-            generateHeaders(
-              apiKey,
-              llmSettings.siteUrl,
-              llmSettings.selectedApi || '',
-            ),
-          ).then((generationInfo) =>
-            enrichWithUsageInfos(task, taskManager, generationInfo),
-          ),
-        );
+            generateHeaders(apiKey, llmSettings.siteUrl, llmSettings.selectedApi || ''),
+          ).then((generationInfo) => enrichWithUsageInfos(task, taskManager, generationInfo)),
+        )
       } else if (
         chatCompletion &&
         llmSettings.selectedApi === 'taskyon' &&
@@ -175,28 +162,24 @@ export async function processChatTask(
         apiKey &&
         !isTaskyonKey(apiKey, false)
       ) {
-        console.log('getting taskyon generation info');
+        console.log('getting taskyon generation info')
         // our backend tries to get the finished costs
         // after ~4000ms, so we wait for 6000 here...
         void sleep(6000).then(() =>
-          getTaskyonCosts(
-            llmSettings,
-            apiKey,
-            api,
-            chatCompletion,
-            task.id,
-          ).then((generationInfo) => {
-            console.log('taskyon generation info:', generationInfo);
-            enrichWithUsageInfos(task, taskManager, generationInfo);
-          }),
-        );
+          getTaskyonCosts(llmSettings, apiKey, api, chatCompletion, task.id).then(
+            (generationInfo) => {
+              console.log('taskyon generation info:', generationInfo)
+              enrichWithUsageInfos(task, taskManager, generationInfo)
+            },
+          ),
+        )
       }
     }
   } else {
-    throw new Error('Task has no inference model selected!');
+    throw new Error('Task has no inference model selected!')
   }
 
-  return task;
+  return task
 }
 
 async function processFunctionTask(
@@ -205,51 +188,45 @@ async function processFunctionTask(
   taskWorkerController: TaskWorkerController,
 ) {
   if ('functionCall' in task.content) {
-    const func = task.content.functionCall;
-    console.log(`Calling function ${func.name}`);
+    const func = task.content.functionCall
+    console.log(`Calling function ${func.name}`)
     if (tools[func.name] && !taskWorkerController.isInterrupted()) {
-      const result = await handleFunctionExecution(
-        func,
-        tools,
-        taskWorkerController.onInterrupt,
-      );
-      task.result = result;
+      const result = await handleFunctionExecution(func, tools, taskWorkerController.onInterrupt)
+      task.result = result
     } else {
-      const toolnames = JSON.stringify(task.allowedTools);
+      const toolnames = JSON.stringify(task.allowedTools)
       throw new TaskProcessingError(
         !taskWorkerController.isInterrupted()
           ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
           : 'The function execution was cancelled by taskyon',
-      );
+      )
     }
   }
-  return task;
+  return task
 }
 
-async function parseChatResponse2TaskDraft(
-  message: string,
-): Promise<Record<string, unknown>> {
+async function parseChatResponse2TaskDraft(message: string): Promise<Record<string, unknown>> {
   // parse the response and create a new task filled with the correct parameters
-  let yamlContent = message.trim();
+  let yamlContent = message.trim()
   // Use exec() to find a match
-  const yamlBlockRegex = /```(?:yaml|YAML|[^\n]*)\n?([\s\S]*?)\n?```/;
-  const yamlMatch = yamlBlockRegex.exec(yamlContent);
+  const yamlBlockRegex = /```(?:yaml|YAML|[^\n]*)\n?([\s\S]*?)\n?```/
+  const yamlMatch = yamlBlockRegex.exec(yamlContent)
   if (yamlMatch && yamlMatch[1]) {
-    yamlContent = yamlMatch[1]; // Use the captured group
+    yamlContent = yamlMatch[1] // Use the captured group
   }
 
   // TODO: if we haven't found anything,  search for anything that looks like yaml!!
 
-  let parsedYaml: unknown = undefined;
+  let parsedYaml: unknown = undefined
   try {
     // Parse the extracted or original YAML content
-    parsedYaml = load(yamlContent);
-    parsedYaml = normalizeFalsyValues(parsedYaml);
+    parsedYaml = load(yamlContent)
+    parsedYaml = normalizeFalsyValues(parsedYaml)
   } catch (err) {
     throw new TaskProcessingError('Error converting the response to yaml', {
       yamlString: yamlContent,
       error: err instanceof Error ? err.message : JSON.stringify(err),
-    });
+    })
   }
   /* TODO: this is currently too difficult for LLMs, so we are doing this manually
   which is a lot more robust. We try to keep structured responses as simple as possible
@@ -264,15 +241,9 @@ async function parseChatResponse2TaskDraft(
       structuredResponseResult.error.format(),
     );
   }*/
-  if (
-    parsedYaml !== null &&
-    typeof parsedYaml === 'object' &&
-    !Array.isArray(parsedYaml)
-  )
-    return parsedYaml as Record<string, unknown>;
-  throw new TaskProcessingError(
-    'Parse Error:  the structured response must have keys and values!',
-  );
+  if (parsedYaml !== null && typeof parsedYaml === 'object' && !Array.isArray(parsedYaml))
+    return parsedYaml as Record<string, unknown>
+  throw new TaskProcessingError('Parse Error:  the structured response must have keys and values!')
 }
 
 /**
@@ -319,35 +290,30 @@ async function generateFollowUpTasksFromResult(
   taskManager: TyTaskManager,
   llmTools: boolean = false,
 ) {
-  console.log('generate follow up task');
+  console.log('generate follow up task')
   const childCosts = {
     promptTokens: finishedTask.debugging.taskTokens,
     taskTokens: finishedTask.debugging.taskTokens,
     taskCosts: finishedTask.debugging.taskCosts,
-  };
-  const useTyTools = finishedTask.allowedTools?.length ? true : false;
+  }
+  const useTyTools = finishedTask.allowedTools?.length ? true : false
   // use helper function to make code more concise ;)
-  const generateFollowUpTask = async (
-    execute: boolean,
-    partialTask: partialTaskDraft,
-  ) => {
-    partialTask.debugging = { ...partialTask.debugging, ...childCosts };
+  const generateFollowUpTask = async (execute: boolean, partialTask: partialTaskDraft) => {
+    partialTask.debugging = { ...partialTask.debugging, ...childCosts }
     const taskTemplate: Partial<TaskNode> = {
       configuration: finishedTask.configuration,
-    };
-    const newTask = deepMerge(taskTemplate, partialTask);
-    newTask.state = execute ? 'Open' : 'Completed';
-    return newTask;
-  };
+    }
+    const newTask = deepMerge(taskTemplate, partialTask)
+    newTask.state = execute ? 'Open' : 'Completed'
+    return newTask
+  }
 
   // we use this to decide whether we should call a function or to continue
   // this is usually not needed if we use llmTools (like built-in tools from openai API)
   async function generateFollowupFromStructuredResponse(
     choice: OpenAI.Chat.Completions.ChatCompletion.Choice,
   ) {
-    const structResponse = await parseChatResponse2TaskDraft(
-      choice.message.content || '',
-    );
+    const structResponse = await parseChatResponse2TaskDraft(choice.message.content || '')
     // depending on what role and tasktype the finishedTask has, we
     // expect different results from our structuredResponse
     // TODO: we need to do some plausibilitychecks here:
@@ -362,29 +328,28 @@ async function generateFollowUpTasksFromResult(
     // structured response as a normal "message" task to the chain...
     // this way we can put all the parsing logic & interpretation and all of this here. While
     // our tasks only have to process the actual data they are receiving
-    const lowerStructResponse = keysToLowerCase(structResponse);
+    const lowerStructResponse = keysToLowerCase(structResponse)
     const useTool =
       yesnoToBoolean(lowerStructResponse['use tool']) &&
-      (!('try again' in lowerStructResponse) ||
-        yesnoToBoolean(lowerStructResponse['try again']));
+      (!('try again' in lowerStructResponse) || yesnoToBoolean(lowerStructResponse['try again']))
 
     if (useTool) {
-      console.log('trying to get tool call from structured response');
+      console.log('trying to get tool call from structured response')
       const newTask = await generateFollowUpTask(false, {
         role: 'assistant',
         content: { structuredResponse: choice.message.content || '' },
-      });
+      })
 
       // this doesn't say anything about whether the parameters are
       // chosen correctly for this function yet. It only says that
       // they are valid parameters for any function...
-      let res = FunctionCall.safeParse(structResponse.command);
+      let res = FunctionCall.safeParse(structResponse.command)
       if (res.error) {
         // try one more time using all lower case
-        res = FunctionCall.safeParse(lowerStructResponse.command);
+        res = FunctionCall.safeParse(lowerStructResponse.command)
       }
       if (res.success) {
-        const command = res.data;
+        const command = res.data
         return [
           newTask,
           await generateFollowUpTask(true, {
@@ -392,7 +357,7 @@ async function generateFollowUpTasksFromResult(
             role: 'assistant',
             content: { functionCall: command },
           }),
-        ];
+        ]
       } else {
         return [
           newTask,
@@ -404,7 +369,7 @@ async function generateFollowUpTasksFromResult(
  suggest we should use a tool, but we could not parse the ${structResponse.command}`,
             },
           }),
-        ];
+        ]
       }
     } else {
       // in the case that we don't call a tool, provide a "normal" answer :)
@@ -414,32 +379,29 @@ async function generateFollowUpTasksFromResult(
           role: 'assistant',
           content: { structuredResponse: choice.message.content || '' },
         }),
-      ];
+      ]
     }
   }
 
   // TODO: what do we do in case of an empty user message, but only a file?
   //       right now, we assume, that user message always comes after uploaded file message :)
   if (finishedTask.result) {
-    if (
-      'functionCall' in finishedTask.content &&
-      finishedTask.result.toolResult
-    ) {
+    if ('functionCall' in finishedTask.content && finishedTask.result.toolResult) {
       return [
         await generateFollowUpTask(true, {
           role: 'system',
           content: { toolResult: finishedTask.result.toolResult },
         }),
-      ];
+      ]
     }
     // did we get any response from an LLM?
-    const choice = finishedTask.result?.chatResponse?.choices[0];
+    const choice = finishedTask.result?.chatResponse?.choices[0]
     if (choice) {
       // check if we have any functioncalls from the llm inference
       const functionCall = extractOpenAIFunctions(
         choice,
         await taskManager.updateToolDefinitions(true),
-      );
+      )
       if (functionCall[0]) {
         // TODO: enable multiple parallel function calls
         return [
@@ -447,42 +409,36 @@ async function generateFollowUpTasksFromResult(
             role: 'function',
             content: { functionCall: functionCall[0] },
           }),
-        ];
+        ]
       }
       if (!choice.message.content) {
-        throw new TaskProcessingError(
-          'The response content from the AI was empty!',
-          {
-            choice,
-          },
-        );
+        throw new TaskProcessingError('The response content from the AI was empty!', {
+          choice,
+        })
       }
       // This happens, if we
       if (
         (!llmTools &&
-          (('message' in finishedTask.content &&
-            finishedTask.role === 'user' &&
-            useTyTools) || // this happens, if we use tools, but no LLM-builtin tools
+          (('message' in finishedTask.content && finishedTask.role === 'user' && useTyTools) || // this happens, if we use tools, but no LLM-builtin tools
             'toolResult' in finishedTask.content)) || // toolResult, but no LLM-builtin tools
-        (finishedTask.role === 'system' &&
-          !('toolResult' in finishedTask.content)) // this happens e.g. in the case of an error...
+        (finishedTask.role === 'system' && !('toolResult' in finishedTask.content)) // this happens e.g. in the case of an error...
       ) {
-        return await generateFollowupFromStructuredResponse(choice);
+        return await generateFollowupFromStructuredResponse(choice)
       } else {
         // if 'message' in finishedTask.content && finishedTask.role === 'assistant'
         // this is the final response, so we simply add it to the chain without executing it
         const newTask = await generateFollowUpTask(false, {
           role: 'assistant',
           content: { message: choice.message.content },
-        });
-        console.log('No more follow up tasks!');
-        return [newTask];
+        })
+        console.log('No more follow up tasks!')
+        return [newTask]
       }
     }
   }
 
   // no follow up tasks from this task :)
-  return [];
+  return []
 }
 
 export function useTaskWorkerController() {
@@ -496,48 +452,48 @@ export function useTaskWorkerController() {
   - we can gracefully exist streamed tasks 
   - and more..
   */
-  let interrupted = true;
-  let interruptReason: string | null = null;
-  let interruptCallbacks: ((reason: string | null) => void)[] = [];
-  let waiting = false;
-  let errorCount = 0;
+  let interrupted = true
+  let interruptReason: string | null = null
+  let interruptCallbacks: ((reason: string | null) => void)[] = []
+  let waiting = false
+  let errorCount = 0
 
   function interrupt(reason: string | null = null): void {
-    console.log('interrupting: ', reason);
-    interrupted = true;
-    interruptReason = reason;
-    interruptCallbacks.forEach((callback) => callback(reason));
+    console.log('interrupting: ', reason)
+    interrupted = true
+    interruptReason = reason
+    interruptCallbacks.forEach((callback) => callback(reason))
   }
 
   function isWaiting() {
-    return waiting;
+    return waiting
   }
 
   function setWaiting(value: boolean) {
-    console.log('task worker is waiting!');
-    waiting = value;
+    console.log('task worker is waiting!')
+    waiting = value
   }
 
   function isInterrupted(): boolean {
-    return interrupted;
+    return interrupted
   }
 
   function getInterruptReason(): string | null {
-    return interruptReason;
+    return interruptReason
   }
 
   function reset(full = true): void {
-    interrupted = false;
-    interruptReason = null;
-    errorCount = 0;
+    interrupted = false
+    interruptReason = null
+    errorCount = 0
     if (full) {
-      interruptCallbacks = [];
+      interruptCallbacks = []
     }
   }
 
   const onInterrupt: OnInterruptFunc = (callback) => {
-    interruptCallbacks.push(callback);
-  };
+    interruptCallbacks.push(callback)
+  }
 
   return {
     interrupt,
@@ -548,14 +504,14 @@ export function useTaskWorkerController() {
     isWaiting,
     setWaiting,
     increaseErrorCount: () => {
-      errorCount++;
+      errorCount++
     },
     getErrorCount: () => {
-      return errorCount;
+      return errorCount
     },
-  };
+  }
 }
-export type TaskWorkerController = ReturnType<typeof useTaskWorkerController>;
+export type TaskWorkerController = ReturnType<typeof useTaskWorkerController>
 
 async function processTask(
   task: TaskNode,
@@ -573,7 +529,7 @@ async function processTask(
       state: 'In Progress',
     },
     false,
-  );
+  )
 
   if (
     'message' in task.content ||
@@ -582,16 +538,16 @@ async function processTask(
   ) {
     // TODO: get rid of "taskManager" in processChatTask
     if (llmSettings.selectedApi) {
-      const apiKey = apiKeys[llmSettings.selectedApi];
+      const apiKey = apiKeys[llmSettings.selectedApi]
       task = await processChatTask(
         task,
         llmSettings,
         apiKey || '',
         taskManager,
         taskWorkerController,
-      );
+      )
     } else {
-      throw new TaskProcessingError("we don't have any APIs selected!");
+      throw new TaskProcessingError("we don't have any APIs selected!")
     }
   } else if ('functionCall' in task.content) {
     // calculate function result
@@ -600,15 +556,13 @@ async function processTask(
       task,
       await taskManager.updateToolDefinitions(false),
       taskWorkerController,
-    );
+    )
   } else {
-    throw new TaskProcessingError(
-      "We don't know how to process this task to get a result.",
-    );
+    throw new TaskProcessingError("We don't know how to process this task to get a result.")
   }
 
-  task.state = 'Completed';
-  return task;
+  task.state = 'Completed'
+  return task
 }
 
 export async function runTaskWorker(
@@ -618,35 +572,35 @@ export async function runTaskWorker(
   apiKeys: Record<string, string>,
   taskWorkerController: TaskWorkerController,
 ) {
-  console.log('entering task worker loop...');
+  console.log('entering task worker loop...')
 
-  const addTask2Tree = initAddTask2Tree(processTasksQueue, taskManager);
+  const addTask2Tree = initAddTask2Tree(processTasksQueue, taskManager)
 
   while (true) {
-    console.log('waiting for next task!');
-    let task: TaskNode | undefined = undefined;
+    console.log('waiting for next task!')
+    let task: TaskNode | undefined = undefined
     try {
       if (taskWorkerController.isInterrupted()) {
         // in case of errors, especially if its an interrupt event we simply want to cancel everything :P
         // empty our task queue :)
-        console.log('clear out task queue due to interruption');
-        processTasksQueue.clear();
+        console.log('clear out task queue due to interruption')
+        processTasksQueue.clear()
       }
 
       if (processTasksQueue.count() === 0) {
-        taskWorkerController.setWaiting(true);
+        taskWorkerController.setWaiting(true)
       }
-      const taskId = await processTasksQueue.pop();
-      taskWorkerController.setWaiting(false);
+      const taskId = await processTasksQueue.pop()
+      taskWorkerController.setWaiting(false)
       if (taskWorkerController.isInterrupted()) {
         // don't process tasks anymore..  all we can do now is to wait until the user manually presses the
         // "reset" button ;)
-        continue;
+        continue
       }
 
       // make sure we know from outside that the worker is active...
-      console.log('processing task:', taskId);
-      task = await taskManager.getTask(taskId);
+      console.log('processing task:', taskId)
+      task = await taskManager.getTask(taskId)
       if (task && !taskWorkerController.isInterrupted()) {
         task = await processTask(
           task,
@@ -655,48 +609,41 @@ export async function runTaskWorker(
           llmSettings,
           apiKeys,
           taskWorkerController,
-        );
+        )
         // create a new task form the result. E.g. in the case of a simple chat, this will
         // create a task with the Answer of the LLM which then gets displayed in the chatwindow...
         const newTasks = await generateFollowUpTasksFromResult(
           task,
           taskManager,
           llmSettings.enableOpenAiTools,
-        );
-        const addTasks =
-          (finishedTask: TaskNode) => async (t: (typeof newTasks)[0]) => {
-            const newTaskId = await addTask2Tree(
-              t,
-              t.parentID || finishedTask.id,
-              // interrupt execution if interrupted flag is shown!
-              // this makes sure that results are still saved, even if we stop any
-              // further execution
-              taskWorkerController.isInterrupted()
-                ? false
-                : t.state == 'Open'
-                  ? true
-                  : false,
-            );
-            llmSettings.selectedTaskId = newTaskId;
-          };
-        newTasks.forEach(addTasks(task));
+        )
+        const addTasks = (finishedTask: TaskNode) => async (t: (typeof newTasks)[0]) => {
+          const newTaskId = await addTask2Tree(
+            t,
+            t.parentID || finishedTask.id,
+            // interrupt execution if interrupted flag is shown!
+            // this makes sure that results are still saved, even if we stop any
+            // further execution
+            taskWorkerController.isInterrupted() ? false : t.state == 'Open' ? true : false,
+          )
+          llmSettings.selectedTaskId = newTaskId
+        }
+        newTasks.forEach(addTasks(task))
 
         // and finally save the task
-        void taskManager.setTask(task, true);
+        void taskManager.setTask(task, true)
       }
     } catch (error) {
-      console.error('Could not complete task iteration:', error);
-      taskWorkerController.increaseErrorCount();
-      if (
-        taskWorkerController.getErrorCount() >= llmSettings.maxAutonomousTasks
-      ) {
+      console.error('Could not complete task iteration:', error)
+      taskWorkerController.increaseErrorCount()
+      if (taskWorkerController.getErrorCount() >= llmSettings.maxAutonomousTasks) {
         taskWorkerController.interrupt(
           `Too many errors occured, interrupting execution after ${taskWorkerController.getErrorCount()} errors!`,
-        );
+        )
       }
 
       if (task) {
-        task.state = 'Error';
+        task.state = 'Error'
       }
 
       const errorTask: partialTaskDraft = {
@@ -705,16 +652,14 @@ export async function runTaskWorker(
         content: {
           message: `An error occured:\n\n\`\`\`\n${JSON.stringify(error)}\n\`\`\``,
         },
-      };
+      }
       if (error instanceof TaskProcessingError) {
         errorTask.content = {
           //message: `An error occured: ${error.message}:\n\n${dump(error.details, { skipInvalid: true })}`,
           message: `An error occured:\n\n\`\`\`\n${error.message}${
-            error.details
-              ? ':\n\n' + JSON.stringify(makeSerializable(error.details, 7))
-              : ''
+            error.details ? ':\n\n' + JSON.stringify(makeSerializable(error.details, 7)) : ''
           }\n\`\`\``,
-        };
+        }
         if (task) {
           task.debugging = {
             ...task.debugging,
@@ -723,12 +668,12 @@ export async function runTaskWorker(
               name: error.name,
               details: error.details,
             },
-          };
+          }
         }
       } else if (error instanceof Error) {
         errorTask.content = {
           message: `An error occured:\n\n\`\`\`\n${error.message}\n\n${JSON.stringify(error)}\n\`\`\``,
-        };
+        }
         if (task) {
           task.debugging = {
             ...task.debugging,
@@ -738,7 +683,7 @@ export async function runTaskWorker(
               location: 'task processing',
               cause: error.cause,
             },
-          };
+          }
         }
       }
 
@@ -749,8 +694,8 @@ export async function runTaskWorker(
         // this makes sure that results are still saved, even if we stop any
         // further execution
         taskWorkerController.isInterrupted() ? false : true,
-      );
-      llmSettings.selectedTaskId = newTaskId;
+      )
+      llmSettings.selectedTaskId = newTaskId
 
       // TODO: run this taskWorker in a separate worker js/browser thread!
       // TODO: clean up task, create a new task with the error and  & decide if we want to try this task again!
@@ -774,14 +719,14 @@ export async function runTaskWorker(
 }
 export function getApiConfig(llmSettings: llmSettings) {
   if (llmSettings.selectedApi) {
-    return llmSettings.llmApis[llmSettings.selectedApi];
+    return llmSettings.llmApis[llmSettings.selectedApi]
   }
 }
 
 function getApiConfigCopy(llmSettings: llmSettings, apiName?: string) {
-  const searchName = apiName || llmSettings.selectedApi;
+  const searchName = apiName || llmSettings.selectedApi
   if (searchName) {
-    const api = llmSettings.llmApis[searchName];
-    return deepCopy(api);
+    const api = llmSettings.llmApis[searchName]
+    return deepCopy(api)
   }
 }

@@ -1,25 +1,16 @@
-import type {
-  TaskNode,
-  OpenRouterGenerationInfo,
-  Model,
-  llmSettings,
-} from './types';
-import type { TyTaskManager } from './taskManager';
-import type OpenAI from 'openai';
-import { sleep, asyncTimeLruCache } from '../utils';
-import { TaskProcessingError, type apiConfig } from './types';
+import type { TaskNode, OpenRouterGenerationInfo, Model, llmSettings } from './types'
+import type { TyTaskManager } from './taskManager'
+import type OpenAI from 'openai'
+import { sleep, asyncTimeLruCache } from '../utils'
+import { TaskProcessingError, type apiConfig } from './types'
 
-export function generateHeaders(
-  apiSecret: string,
-  siteUrl: string,
-  selectedApi: string,
-) {
+export function generateHeaders(apiSecret: string, siteUrl: string, selectedApi: string) {
   let headers: Record<string, string> = {
     'Content-Type': 'application/json',
-  };
+  }
 
   if (apiSecret && !(selectedApi === 'taskyon' && apiSecret === 'anonymous')) {
-    headers.Authorization = `Bearer ${apiSecret}`;
+    headers.Authorization = `Bearer ${apiSecret}`
   }
 
   if (selectedApi == 'openrouter.ai') {
@@ -27,20 +18,18 @@ export function generateHeaders(
       ...headers,
       'HTTP-Referer': `${siteUrl}`, // To identify your app. Can be set to localhost for testing
       'X-Title': `${siteUrl}`, // Optional. Shows on openrouter.ai
-    };
+    }
   }
 
-  return headers;
+  return headers
 }
 
-function accumulateChatCompletion(
-  chunks: OpenAI.ChatCompletionChunk[],
-): OpenAI.ChatCompletion {
+function accumulateChatCompletion(chunks: OpenAI.ChatCompletionChunk[]): OpenAI.ChatCompletion {
   if (!chunks[0]) {
-    throw new Error('The message is empty!!');
+    throw new Error('The message is empty!!')
   }
 
-  const firstChunk = chunks[0];
+  const firstChunk = chunks[0]
 
   // Initialize the response with default values from the first chunk
   const response: OpenAI.ChatCompletion = {
@@ -60,38 +49,36 @@ function accumulateChatCompletion(
         logprobs: null,
       },
     ],
-  };
+  }
 
-  const toolCalls: Record<string, OpenAI.ChatCompletionMessageToolCall> = {};
+  const toolCalls: Record<string, OpenAI.ChatCompletionMessageToolCall> = {}
 
   // Step 1: Gather all top-level properties across chunks
   for (const chunk of chunks) {
-    Object.assign(response, chunk); // This will overwrite all top-level properties
+    Object.assign(response, chunk) // This will overwrite all top-level properties
   }
 
   // Accumulate the content for the choices
   const accumulatedChoice = chunks.reduce(
     (acc, chunk) => {
-      const choiceIdx = 0;
-      const currentChoice = chunk.choices[choiceIdx];
+      const choiceIdx = 0
+      const currentChoice = chunk.choices[choiceIdx]
 
       // Accumulate the content
       if (currentChoice?.delta?.content) {
-        acc.message.content =
-          (acc.message.content || '') + currentChoice.delta.content;
+        acc.message.content = (acc.message.content || '') + currentChoice.delta.content
       }
 
       // Update role if present
       acc.message.role =
-        (currentChoice?.delta?.role as OpenAI.ChatCompletionMessage['role']) ||
-        acc.message.role;
+        (currentChoice?.delta?.role as OpenAI.ChatCompletionMessage['role']) || acc.message.role
 
       // Store last non-null finish_reason and logprobs
       if (currentChoice?.finish_reason != null) {
-        acc.finish_reason = currentChoice.finish_reason;
+        acc.finish_reason = currentChoice.finish_reason
       }
       if (currentChoice?.logprobs != null) {
-        acc.logprobs = currentChoice.logprobs;
+        acc.logprobs = currentChoice.logprobs
       }
 
       // Accumulate tool calls
@@ -105,13 +92,13 @@ function accumulateChatCompletion(
             name: '',
             arguments: '',
           },
-        };
-        tcnew.id += tc.id || '';
-        tcnew.function.name += tc.function?.name || '';
-        tcnew.function.arguments += tc.function?.arguments || '';
-        toolCalls[tc.index] = tcnew;
+        }
+        tcnew.id += tc.id || ''
+        tcnew.function.name += tc.function?.name || ''
+        tcnew.function.arguments += tc.function?.arguments || ''
+        toolCalls[tc.index] = tcnew
       }
-      return acc;
+      return acc
     },
     {
       index: 0,
@@ -121,15 +108,15 @@ function accumulateChatCompletion(
       },
       finish_reason: 'stop',
     } as OpenAI.ChatCompletion['choices'][0],
-  );
+  )
 
   // Add accumulated tool calls
-  accumulatedChoice.message.tool_calls = Object.values(toolCalls);
+  accumulatedChoice.message.tool_calls = Object.values(toolCalls)
 
   // Assign the accumulated choice to response
-  response.choices = [accumulatedChoice];
+  response.choices = [accumulatedChoice]
 
-  return response;
+  return response
 }
 
 // calls OpenAI API compatible chatmodels
@@ -140,27 +127,19 @@ export async function callLLM(
   siteUrl: string,
   apiKey: string,
   stream: boolean | undefined = false,
-  contentCallBack: (
-    chunk?: OpenAI.Chat.Completions.ChatCompletionChunk,
-  ) => void,
+  contentCallBack: (chunk?: OpenAI.Chat.Completions.ChatCompletionChunk) => void,
   cancelStream: () => boolean, // a function which we can call and which indicates that we should cancel the stream
   timeoutMs: number = 10000, // Timeout in milliseconds for waiting for first streamed response
   maxRetries: number = 3, // Maximum number of retry attempts
 ): Promise<OpenAI.ChatCompletion | undefined> {
-  const headers: Record<string, string> = generateHeaders(
-    apiKey,
-    siteUrl,
-    api.name,
-  );
-  let chatCompletion: OpenAI.ChatCompletion | undefined = undefined;
+  const headers: Record<string, string> = generateHeaders(apiKey, siteUrl, api.name)
+  let chatCompletion: OpenAI.ChatCompletion | undefined = undefined
 
   if (!api.selectedModel) {
-    throw new TaskProcessingError(
-      'You need to select an AI model in order to use the AI!',
-    );
+    throw new TaskProcessingError('You need to select an AI model in order to use the AI!')
   }
 
-  type CreateBodyType = OpenAI.ChatCompletionCreateParams;
+  type CreateBodyType = OpenAI.ChatCompletionCreateParams
 
   const payload: CreateBodyType = {
     model: api.selectedModel,
@@ -171,14 +150,14 @@ export async function callLLM(
     stream_options: { include_usage: true },
     n: 1,
     ...(functions.length > 0 && { tools: functions, tool_choice: 'auto' }),
-  };
+  }
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    console.log(`Attempt ${attempt} of ${maxRetries}`);
+    console.log(`Attempt ${attempt} of ${maxRetries}`)
 
     // Use AbortController to handle stream cancellation and timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
     try {
       const response = await fetch(`${api.baseURL}/chat/completions`, {
@@ -186,108 +165,108 @@ export async function callLLM(
         headers,
         body: JSON.stringify(payload),
         signal: controller.signal,
-      });
+      })
 
-      clearTimeout(timeoutId); // Clear timeout if fetch completes in time
+      clearTimeout(timeoutId) // Clear timeout if fetch completes in time
 
       // Check for non-OK status codes and throw error
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json()
         throw {
           message: `Fetching answer from AI Api failed at attempt ${attempt}/${maxRetries}
   with status ${response.status}: ${response.statusText}`,
           details: { errorData },
-        };
+        }
       }
 
       if (stream && response.body) {
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        const chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = [];
-        let bufferedData = ''; // Buffer to hold partial JSON chunks
-        let receivedFirstChunk = false;
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        const chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = []
+        let bufferedData = '' // Buffer to hold partial JSON chunks
+        let receivedFirstChunk = false
 
         const firstChunkTimeout = setTimeout(() => {
           if (!receivedFirstChunk) {
-            console.warn('First streamed response timed out');
-            controller.abort();
+            console.warn('First streamed response timed out')
+            controller.abort()
           }
-        }, timeoutMs);
+        }, timeoutMs)
 
         while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+          const { done, value } = await reader.read()
+          if (done) break
 
-          clearTimeout(firstChunkTimeout); // Clear first-chunk timeout on receiving data
-          receivedFirstChunk = true;
+          clearTimeout(firstChunkTimeout) // Clear first-chunk timeout on receiving data
+          receivedFirstChunk = true
 
           // Decode the binary chunk into a string
-          const chunk = decoder.decode(value, { stream: true });
-          bufferedData += chunk;
+          const chunk = decoder.decode(value, { stream: true })
+          bufferedData += chunk
 
           // Process the buffered data and split at newlines (for each "data: ..." chunk)
-          const lines = bufferedData.split('\n');
+          const lines = bufferedData.split('\n')
 
           for (let i = 0; i < lines.length - 1; i++) {
-            const line = lines[i]!.trim();
+            const line = lines[i]!.trim()
 
             // Only process lines starting with "data: "
             if (line.startsWith('data: ')) {
-              const jsonString = line.replace(/^data: /, '').trim();
+              const jsonString = line.replace(/^data: /, '').trim()
 
               if (jsonString && jsonString !== '[DONE]') {
                 try {
                   // Parse the current line into a JSON object
                   const jsonChunk: OpenAI.Chat.Completions.ChatCompletionChunk =
-                    JSON.parse(jsonString);
-                  chunks.push(jsonChunk);
+                    JSON.parse(jsonString)
+                  chunks.push(jsonChunk)
 
                   // Call the callback function to process the chunk
-                  contentCallBack(jsonChunk);
+                  contentCallBack(jsonChunk)
                 } catch (err) {
                   throw {
                     message: `Failed to parse chunk; ${jsonString}`,
                     details: { err },
-                  };
+                  }
                 }
               }
             }
           }
 
           // Keep the last partial chunk in the buffer for the next iteration
-          bufferedData = lines[lines.length - 1]!;
+          bufferedData = lines[lines.length - 1]!
 
           // If the cancelStream callback signals to cancel, break the loop and abort the request
           if (cancelStream()) {
-            controller.abort();
-            break;
+            controller.abort()
+            break
           }
         }
 
         // After finishing, accumulate the full chat completion
-        chatCompletion = accumulateChatCompletion(chunks);
-        break; // Successfully received data, break out of retry loop
+        chatCompletion = accumulateChatCompletion(chunks)
+        break // Successfully received data, break out of retry loop
       } else {
         // Non-streaming case: Just return the full response
-        const completion = await response.json();
-        chatCompletion = completion;
-        break; // Non-streaming case, exit retry loop
+        const completion = await response.json()
+        chatCompletion = completion
+        break // Non-streaming case, exit retry loop
       }
     } catch (error) {
-      console.error(`Attempt ${attempt} failed:`, error);
+      console.error(`Attempt ${attempt} failed:`, error)
       if (attempt === maxRetries) {
         throw new TaskProcessingError(
           `Max retries (${maxRetries}) exceeded while waiting for the AI response.`,
           { error },
-        );
+        )
       }
     } finally {
-      clearTimeout(timeoutId);
+      clearTimeout(timeoutId)
     }
   }
 
-  console.log('AI responded:', chatCompletion);
-  return chatCompletion;
+  console.log('AI responded:', chatCompletion)
+  return chatCompletion
 }
 
 export async function getTaskyonCosts(
@@ -300,58 +279,51 @@ export async function getTaskyonCosts(
   const headers = {
     ...llmSettings.llmApis['taskyon']?.defaultHeaders,
     ...generateHeaders(apiKey, llmSettings.siteUrl, api.name),
-  };
-  const baseUrl = new URL(api.baseURL).origin;
-  console.log('get generation info from ', baseUrl);
-  const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${chatCompletion.id}`;
-  const response = await fetch(url, { headers });
+  }
+  const baseUrl = new URL(api.baseURL).origin
+  console.log('get generation info from ', baseUrl)
+  const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${chatCompletion.id}`
+  const response = await fetch(url, { headers })
   if (!response.ok) {
     // TODO: replace this with an error message in the UsageInfos
     //       so that the user can manually try to get the cost info...
-    throw new Error(`Could not find generation information for task ${taskid}`);
+    throw new Error(`Could not find generation information for task ${taskid}`)
   }
-  const data = await (response.json() as Promise<
-    { reference_data: OpenRouterGenerationInfo }[]
-  >);
+  const data = await (response.json() as Promise<{ reference_data: OpenRouterGenerationInfo }[]>)
 
-  return data[0]?.reference_data;
+  return data[0]?.reference_data
 }
 
 export async function getOpenRouterGenerationInfo(
   generationId: string,
   headers: Record<string, string>,
 ) {
-  let retryCount = 0;
-  let delay = 5000; // first delay
+  let retryCount = 0
+  let delay = 5000 // first delay
 
   while (retryCount < 3) {
-    const response = await fetch(
-      `https://openrouter.ai/api/v1/generation?id=${generationId}`,
-      {
-        headers,
-      },
-    );
+    const response = await fetch(`https://openrouter.ai/api/v1/generation?id=${generationId}`, {
+      headers,
+    })
 
     if (response.ok) {
       const generationInfo = (await response.json()) as {
-        data: OpenRouterGenerationInfo;
-      };
-      console.log('received generation info for task');
-      return generationInfo.data;
+        data: OpenRouterGenerationInfo
+      }
+      console.log('received generation info for task')
+      return generationInfo.data
     } else if (response.status === 404) {
-      console.log(`Received 404, retrying in ${delay}ms`);
-      await sleep(delay);
-      retryCount++;
-      delay *= 2; // increase delay for next retry
+      console.log(`Received 404, retrying in ${delay}ms`)
+      await sleep(delay)
+      retryCount++
+      delay *= 2 // increase delay for next retry
     } else {
       throw new Error(
         `Failed to get cost information for Openrouter.ai: ${generationId} - ${response.status}`,
-      );
+      )
     }
   }
-  throw new Error(
-    `Failed to get generation info after 3 retries for ${generationId}`,
-  );
+  throw new Error(`Failed to get generation info after 3 retries for ${generationId}`)
 }
 
 export async function enrichWithUsageInfos(
@@ -360,10 +332,7 @@ export async function enrichWithUsageInfos(
   generationInfo?: OpenRouterGenerationInfo,
 ) {
   if (generationInfo) {
-    if (
-      generationInfo.native_tokens_completion &&
-      generationInfo.native_tokens_prompt
-    ) {
+    if (generationInfo.native_tokens_completion && generationInfo.native_tokens_prompt) {
       // we get the useage data very often in an asynchronous form.
       // thats why we need to
       // openai sends back the exact number of prompt tokens :)
@@ -371,14 +340,12 @@ export async function enrichWithUsageInfos(
         promptTokens: generationInfo.native_tokens_prompt,
         resultTokens: generationInfo.native_tokens_completion,
         taskCosts: generationInfo.usage,
-        taskTokens:
-          generationInfo.native_tokens_prompt +
-          generationInfo.native_tokens_completion,
-      };
-      await taskManager.updateTask({ id: task.id, debugging }, true);
-      const childrenIDs = await taskManager.searchOneChild(task.id);
+        taskTokens: generationInfo.native_tokens_prompt + generationInfo.native_tokens_completion,
+      }
+      await taskManager.updateTask({ id: task.id, debugging }, true)
+      const childrenIDs = await taskManager.searchOneChild(task.id)
       for (const childID of childrenIDs) {
-        const child = await taskManager.getTask(childID);
+        const child = await taskManager.getTask(childID)
         if (child && !child?.debugging.promptTokens) {
           await taskManager.updateTask(
             {
@@ -386,7 +353,7 @@ export async function enrichWithUsageInfos(
               debugging: { promptTokens: task.debugging.resultTokens },
             },
             true,
-          );
+          )
         }
       }
     }
@@ -401,9 +368,7 @@ const availableModelsTmp = async (
 ): Promise<Model[]> => {
   try {
     // Construct the URL with an optional cache-busting query parameter
-    const url = invalidateCache
-      ? `${modelsUrl}?_=${new Date().getTime()}`
-      : modelsUrl;
+    const url = invalidateCache ? `${modelsUrl}?_=${new Date().getTime()}` : modelsUrl
 
     // Setting up the Fetch request
     const response = await fetch(url, {
@@ -414,27 +379,27 @@ const availableModelsTmp = async (
         //'Cache-Control': 'max-stale=3600',
         'Cache-Control': 'no-cache', // Ensure the freshest data is fetched as we're caching this function anyways...
       },
-    });
+    })
 
     // Check if the response is ok (status in the range 200-299)
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error(`HTTP error! status: ${response.status}`)
     }
 
     // Parse the JSON response
-    const data = (await response.json()) as { data: Model[] };
+    const data = (await response.json()) as { data: Model[] }
 
     // Return the list of models directly
-    return data.data;
+    return data.data
   } catch (error) {
-    console.error('Error fetching models:', error);
-    throw error; // re-throwing the error to be handled by the calling code
+    console.error('Error fetching models:', error)
+    throw error // re-throwing the error to be handled by the calling code
   }
-};
+}
 
 export const availableModels = asyncTimeLruCache(
   10, // max 10 entries
   60 * 60 * 1000, //1h
   true, // use localStorage for persistence
   'modelCache', // save it here..
-)(availableModelsTmp);
+)(availableModelsTmp)

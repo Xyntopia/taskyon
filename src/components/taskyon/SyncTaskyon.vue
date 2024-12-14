@@ -1,8 +1,6 @@
 <template>
   <q-list dense>
-    <q-item-label v-if="state.appConfiguration.expertMode" header
-      >User ID Management</q-item-label
-    >
+    <q-item-label v-if="state.appConfiguration.expertMode" header>User ID Management</q-item-label>
     <q-item v-if="state.appConfiguration.expertMode" class="items-center">
       <q-item-section avatar>
         <q-icon :name="mdiAccountKey" size="md" />
@@ -12,10 +10,9 @@
         <q-dialog v-model="showSeedPhrase" no-backdrop-dismiss>
           <q-card>
             <q-card-section class="text-warning">
-              This is the seed phrase for your new cryptographic user ID. Store
-              it securely and never share it with anyone. You can use it to
-              recover your ID if needed, but losing or exposing it could
-              compromise your access and security for taskyon.
+              This is the seed phrase for your new cryptographic user ID. Store it securely and
+              never share it with anyone. You can use it to recover your ID if needed, but losing or
+              exposing it could compromise your access and security for taskyon.
             </q-card-section>
             <q-card-section class="row">
               <div class="rounded-borders text-bold col text-info">
@@ -28,9 +25,9 @@
                 :icon="matContentCopy"
                 @click="
                   () => {
-                    console.log('copied seed phrase to clipboard...');
-                    copyToClipboard(seedPhrase);
-                    pressedSeedPhraseCopyButton = true;
+                    console.log('copied seed phrase to clipboard...')
+                    copyToClipboard(seedPhrase)
+                    pressedSeedPhraseCopyButton = true
                   }
                 "
               ></q-btn>
@@ -43,23 +40,15 @@
                 label="Accept"
                 @click="
                   () => {
-                    onAcceptSeedPhrase(seedPhrase);
-                    showSeedPhrase = false;
+                    onAcceptSeedPhrase(seedPhrase)
+                    showSeedPhrase = false
                   }
                 "
-                ><q-tooltip
-                  v-if="!pressedSeedPhraseCopyButton"
-                  class="bg-warning"
-                >
-                  Press the copy button next to the seedphrase first in order to
-                  be able to accept!
+                ><q-tooltip v-if="!pressedSeedPhraseCopyButton" class="bg-warning">
+                  Press the copy button next to the seedphrase first in order to be able to accept!
                 </q-tooltip>
               </q-btn>
-              <q-btn
-                flat
-                label="Cancel"
-                @click="showSeedPhrase = false"
-              ></q-btn>
+              <q-btn flat label="Cancel" @click="showSeedPhrase = false"></q-btn>
             </q-card-section>
           </q-card>
         </q-dialog>
@@ -74,10 +63,7 @@
           <q-tooltip> Copy User ID to Clipboard </q-tooltip>
         </q-btn>
       </q-item-section>
-      <q-item-section
-        v-if="state.llmSettings.userId"
-        class="ellipsis text-bold"
-      >
+      <q-item-section v-if="state.llmSettings.userId" class="ellipsis text-bold">
         {{ state.llmSettings.userId.slice(0, 5) }} ...
         {{ state.llmSettings.userId.slice(-10) }}
       </q-item-section>
@@ -124,17 +110,8 @@ and verify the authenticity of messages sent by other users."
         </q-btn>
       </q-item-section>
       <q-item-section>
-        <FileDropzone
-          disable-dropzone-border
-          accept="*"
-          @update:model-value="onUploadTaskyonData"
-        >
-          <q-btn
-            :icon="matUpload"
-            label="Upload Tasks from file"
-            color="secondary"
-            unelevated
-          />
+        <FileDropzone disable-dropzone-border accept="*" @update:model-value="onUploadTaskyonData">
+          <q-btn :icon="matUpload" label="Upload Tasks from file" color="secondary" unelevated />
         </FileDropzone>
       </q-item-section>
       <q-item-section>
@@ -165,21 +142,13 @@ and verify the authenticity of messages sent by other users."
       </q-item-section>
       <q-item-section>Upload Settings:</q-item-section>
       <div class="row q-gutter-xs">
-        <FileDropzone
-          disable-dropzone-border
-          accept="*"
-          @update:model-value="loadSettingsJson"
-        >
+        <FileDropzone disable-dropzone-border accept="*" @update:model-value="loadSettingsJson">
           <q-btn outline class="fit">
             JSON
             <q-tooltip>Select Json file for upload!</q-tooltip>
           </q-btn>
         </FileDropzone>
-        <FileDropzone
-          disable-dropzone-border
-          accept="*"
-          @update:model-value="loadSettingsYaml"
-        >
+        <FileDropzone disable-dropzone-border accept="*" @update:model-value="loadSettingsYaml">
           <q-btn outline class="fit">
             YAML
             <q-tooltip>Select YAML file for upload!</q-tooltip>
@@ -218,13 +187,13 @@ and verify the authenticity of messages sent by other users."
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import FileDropzone from 'components/FileDropzone.vue';
-import { copyToClipboard, exportFile, extend } from 'quasar';
-import { useTaskyonStore } from 'stores/taskyonState';
-import yaml from 'js-yaml';
-import { useGdrive } from 'src/modules/gdrive';
-import { deepMergeReactive } from 'src/modules/utils';
+import { ref } from 'vue'
+import FileDropzone from 'components/FileDropzone.vue'
+import { copyToClipboard, exportFile, extend } from 'quasar'
+import { useTaskyonStore } from 'stores/taskyonState'
+import yaml from 'js-yaml'
+import { useGdrive } from 'src/modules/gdrive'
+import { deepMergeReactive } from 'src/modules/utils'
 import {
   matSync,
   matSave,
@@ -233,50 +202,50 @@ import {
   matUpload,
   matWarning,
   matContentCopy,
-} from '@quasar/extras/material-icons';
-import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6';
-import InfoDialog from '../InfoDialog.vue';
-import { base64UrlEd25519Keys, generateRandomNewKey } from 'src/modules/crypto';
-import { useAppStateStore } from 'src/stores/appState';
-import TyResetButton from './TyResetButton.vue';
+} from '@quasar/extras/material-icons'
+import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
+import InfoDialog from '../InfoDialog.vue'
+import { base64UrlEd25519Keys, generateRandomNewKey } from 'src/modules/crypto'
+import { useAppStateStore } from 'src/stores/appState'
+import TyResetButton from './TyResetButton.vue'
 
-const tystate = useTaskyonStore();
-const state = useAppStateStore();
-const { saveObjToGdrive, loadObjFromGdrive } = useGdrive();
+const tystate = useTaskyonStore()
+const state = useAppStateStore()
+const { saveObjToGdrive, loadObjFromGdrive } = useGdrive()
 
-const showSeedPhrase = ref(false);
-const pressedSeedPhraseCopyButton = ref(false);
-const seedPhrase = ref('');
+const showSeedPhrase = ref(false)
+const pressedSeedPhraseCopyButton = ref(false)
+const seedPhrase = ref('')
 
 async function onGenerateSeedPhrase() {
-  console.log('generate user id...');
-  pressedSeedPhraseCopyButton.value = false;
-  showSeedPhrase.value = true;
-  const { mnemonic } = await generateRandomNewKey();
-  seedPhrase.value = mnemonic;
+  console.log('generate user id...')
+  pressedSeedPhraseCopyButton.value = false
+  showSeedPhrase.value = true
+  const { mnemonic } = await generateRandomNewKey()
+  seedPhrase.value = mnemonic
 }
 
 async function onAcceptSeedPhrase(seedPhrase: string) {
-  const { /*privateKey,*/ publicKey } = await base64UrlEd25519Keys(seedPhrase);
-  state.llmSettings.userId = publicKey;
+  const { /*privateKey,*/ publicKey } = await base64UrlEd25519Keys(seedPhrase)
+  state.llmSettings.userId = publicKey
 }
 
 async function onUpdateAppConfiguration() {
   const loadedConfig = await loadObjFromGdrive(
     state.appConfiguration.gdriveDir,
     state.appConfiguration.gdriveConfigurationFile,
-  );
+  )
   if (loadedConfig) {
     deepMergeReactive(
       state.appConfiguration,
       (loadedConfig.appConfiguration || {}) as Record<string, unknown>,
       'overwrite',
-    );
+    )
     deepMergeReactive(
       state.llmSettings,
       (loadedConfig.llmSettings || {}) as Record<string, unknown>,
       'overwrite',
-    );
+    )
   }
 }
 
@@ -288,99 +257,88 @@ async function onSyncGdrive() {
     },
     state.appConfiguration.gdriveDir,
     state.appConfiguration.gdriveConfigurationFile,
-  );
+  )
 }
 
 // Function to load JSON settings
 // Common function to handle file reading and state updating
-async function loadSettingsFromFile(
-  newFiles: File[],
-  parseFunction: (content: string) => unknown,
-) {
-  if (newFiles.length === 0) return; // No file uploaded
+async function loadSettingsFromFile(newFiles: File[], parseFunction: (content: string) => unknown) {
+  if (newFiles.length === 0) return // No file uploaded
 
-  const file = newFiles[0]!; // Assuming only one file is uploaded
+  const file = newFiles[0]! // Assuming only one file is uploaded
 
   // TODO: merge this function with the one we're using in tyState and make sure we do version
   //       checks...
   try {
-    const fileContent = await file.text();
-    const loadedData = parseFunction(fileContent) as Record<string, unknown>;
+    const fileContent = await file.text()
+    const loadedData = parseFunction(fileContent) as Record<string, unknown>
 
     if (loadedData?.llmSettings) {
-      deepMergeReactive(state.llmSettings, loadedData.llmSettings, 'overwrite');
+      deepMergeReactive(state.llmSettings, loadedData.llmSettings, 'overwrite')
     }
     if (loadedData?.appConfiguration) {
-      deepMergeReactive(
-        state.appConfiguration,
-        loadedData.appConfiguration,
-        'overwrite',
-      );
+      deepMergeReactive(state.appConfiguration, loadedData.appConfiguration, 'overwrite')
     }
   } catch (error) {
-    console.error('Error processing file', error);
+    console.error('Error processing file', error)
   }
-  console.log('new configuration loaded:', state);
+  console.log('new configuration loaded:', state)
 }
 
 // Function to load JSON settings
 function loadSettingsJson(newFiles: File[]) {
-  void loadSettingsFromFile(newFiles, JSON.parse);
+  void loadSettingsFromFile(newFiles, JSON.parse)
 }
 
 // Function to load YAML settings
 function loadSettingsYaml(newFiles: File[]) {
-  void loadSettingsFromFile(newFiles, yaml.load);
+  void loadSettingsFromFile(newFiles, yaml.load)
 }
 
 const downloadSettings = (format: string) => {
-  console.log('download settings');
+  console.log('download settings')
   //relevant settings:
-  const { llmSettings, appConfiguration, version } = state;
+  const { llmSettings, appConfiguration, version } = state
   // Convert reactive llmSettingsProperties to a raw object
-  const deepCopiedSettings = extend(
-    true,
-    {},
-    { version, appConfiguration, llmSettings },
-  );
+  const deepCopiedSettings = extend(true, {}, { version, appConfiguration, llmSettings })
 
-  let fileName, fileContent, mimeType;
+  let fileName, fileContent, mimeType
 
   if (format === 'json') {
-    fileName = 'taskyon_settings.json';
-    fileContent = JSON.stringify(deepCopiedSettings, null, 2);
-    mimeType = 'application/json';
+    fileName = 'taskyon_settings.json'
+    fileContent = JSON.stringify(deepCopiedSettings, null, 2)
+    mimeType = 'application/json'
   } else {
-    fileName = 'taskyon_settings.yaml';
-    fileContent = yaml.dump(deepCopiedSettings);
-    mimeType = 'text/yaml';
+    fileName = 'taskyon_settings.yaml'
+    fileContent = yaml.dump(deepCopiedSettings)
+    mimeType = 'text/yaml'
   }
 
   // Use Quasar's exportFile function for download
-  exportFile(fileName, fileContent, mimeType);
-};
+  exportFile(fileName, fileContent, mimeType)
+}
 
 async function onDownloadTaskyonData() {
-  const tm = await tystate.getTaskManager();
-  const jsonBackup = await tm.getJsonTaskBackup();
-  const fileContent = JSON.stringify(jsonBackup);
-  console.log('downloading tasks in json format');
-  const timestamp = new Date().toISOString();
-  exportFile(`${timestamp}_taskyon_data.json`, fileContent, 'application/json');
+  const tm = await tystate.getTaskManager()
+  const jsonBackup = await tm.getJsonTaskBackup()
+  const fileContent = JSON.stringify(jsonBackup)
+  console.log('downloading tasks in json format')
+  const timestamp = new Date().toISOString()
+  exportFile(`${timestamp}_taskyon_data.json`, fileContent, 'application/json')
 }
 
 async function onUploadTaskyonData(newFiles: File[]) {
-  if (newFiles.length === 0) return; // No file uploaded
+  if (newFiles.length === 0) return // No file uploaded
 
-  const file = newFiles[0]!; // Assuming only one file is uploaded
+  const file = newFiles[0]! // Assuming only one file is uploaded
 
   try {
-    const fileContent = await file.text();
-    const tm = await tystate.getTaskManager();
-    await tm.addTaskBackup(fileContent);
-    location.reload(); // reload browser window to update app state...
+    const fileContent = await file.text()
+    const tm = await tystate.getTaskManager()
+    await tm.addTaskBackup(fileContent)
+    location.reload() // reload browser window to update app state...
   } catch (error) {
-    console.error('Error processing file', error);
+    console.error('Error processing file', error)
   }
 }
 </script>

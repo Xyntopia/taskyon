@@ -1,7 +1,7 @@
-import { type RouteRecordRaw } from 'vue-router';
-import { mdRoutes } from './routes_default';
-import { defineAsyncComponent } from 'vue';
-import LoadCircle from 'components/LoadingCircle.vue';
+import { type RouteRecordRaw } from 'vue-router'
+import { mdRoutes } from './routes_default'
+import { defineAsyncComponent } from 'vue'
+import LoadCircle from 'components/LoadingCircle.vue'
 
 export const universalTyRoutes: RouteRecordRaw[] = [
   {
@@ -9,7 +9,7 @@ export const universalTyRoutes: RouteRecordRaw[] = [
     component: () => import('pages/taskyon/SettingsPage.vue'),
     meta: { title: 'Settings', description: 'Taskyon AI Chat Companion' },
   },
-];
+]
 
 export const taskyonRoutes: RouteRecordRaw[] = [
   {
@@ -32,8 +32,8 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         component: () => import('pages/taskyon/TaskManager.vue'),
         meta: { title: 'Task Manager', description: 'Manage Tasks & Chats' },
         props: (route) => {
-          console.log('open', route);
-          if (route.query) return { query: route.query };
+          console.log('open', route)
+          if (route.query) return { query: route.query }
         },
       },
       {
@@ -115,7 +115,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       description: 'libp2p connection status monitor',
     },
   },
-];
+]
 
 export const routes: RouteRecordRaw[] = [
   ...taskyonRoutes,
@@ -135,7 +135,7 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('src/pages/Error404Page.vue'),
     meta: { title: 'ERROR', description: 'Page does not exist' },
   },
-];
+]
 
 export const tyServerRoutes: RouteRecordRaw[] = [
   {
@@ -162,4 +162,4 @@ export const tyServerRoutes: RouteRecordRaw[] = [
     component: () => import('src/pages/Error404Page.vue'),
     meta: { title: 'ERROR', description: 'Page does not exist' },
   },
-];
+]

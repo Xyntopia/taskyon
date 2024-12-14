@@ -12,6 +12,6 @@
 </template>
 
 <script setup lang="ts">
-import { useAppStateStore } from 'src/stores/appState';
-const state = useAppStateStore();
+import { useAppStateStore } from 'src/stores/appState'
+const state = useAppStateStore()
 </script>

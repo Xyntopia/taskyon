@@ -1,13 +1,13 @@
-import type { Tool } from '../taskyon/tools';
-import type { PythonScriptResult } from '../pyodide';
-import { usePyodideWebworker } from '../taskyon/webWorkerApi';
+import type { Tool } from '../taskyon/tools'
+import type { PythonScriptResult } from '../pyodide'
+import { usePyodideWebworker } from '../taskyon/webWorkerApi'
 
-const { asyncRunPython } = usePyodideWebworker('execute python script tool');
+const { asyncRunPython } = usePyodideWebworker('execute python script tool')
 
 export const executePythonScript: Tool = {
   function: async ({ code }: { code: string }): Promise<PythonScriptResult> => {
-    console.log('execute python code...');
-    return await asyncRunPython(code);
+    console.log('execute python code...')
+    return await asyncRunPython(code)
   },
   description: 'Executes a Python script and returns the result.',
   longDescription: `Executes Python scripts for data processing, calculations, or library interactions, 
@@ -25,4 +25,4 @@ is the outcome of the last expression in the script. Outcomes should be of the t
     },
     required: ['code'],
   },
-};
+}

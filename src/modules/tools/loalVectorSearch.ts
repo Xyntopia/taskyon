@@ -1,8 +1,8 @@
-import type { Tool } from '../taskyon/tools';
+import type { Tool } from '../taskyon/tools'
 
 export const localVectorStoreSearch: Tool = {
   function: async ({ searchTerm }: { searchTerm: string }) => {
-    return searchTerm;
+    return searchTerm
     /*const vectorStore = useVectorStore();
       const k = 3;
       console.log(`Searching for ${searchTerm}`);
@@ -22,4 +22,4 @@ export const localVectorStoreSearch: Tool = {
     },
     required: ['searchTerm'],
   },
-};
+}

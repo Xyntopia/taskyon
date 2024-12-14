@@ -37,7 +37,6 @@ void sqlite3InitModule({
 });
 */
 
-
 /*
 import { SQLocal } from 'sqlocal';
 

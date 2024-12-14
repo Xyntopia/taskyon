@@ -1,6 +1,6 @@
-import { loadPyodide, PyProxy, type PyodideInterface } from 'pyodide';
-import { PythonScriptResult, executeScript } from './pyodide';
-import { expose } from 'comlink';
+import { loadPyodide, PyProxy, type PyodideInterface } from 'pyodide'
+import { PythonScriptResult, executeScript } from './pyodide'
+import { expose } from 'comlink'
 
 //declare const self: ServiceWorkerGlobalScope
 
@@ -9,56 +9,56 @@ import { expose } from 'comlink';
 // and `.wasm` files as well:
 // importScripts('https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js');
 
-let pyodideEnv: PyodideInterface | undefined = undefined;
-let pyodideInitPromise: Promise<PyodideInterface> | null = null;
+let pyodideEnv: PyodideInterface | undefined = undefined
+let pyodideInitPromise: Promise<PyodideInterface> | null = null
 
 async function getPyodide() {
-  if (pyodideEnv) return pyodideEnv;
-  if (pyodideInitPromise) return pyodideInitPromise; // Return ongoing initialization promise
+  if (pyodideEnv) return pyodideEnv
+  if (pyodideInitPromise) return pyodideInitPromise // Return ongoing initialization promise
 
-  console.log('load Pyodide');
+  console.log('load Pyodide')
   pyodideInitPromise = loadPyodide({
     indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
   }).then(async (pyodide) => {
-    await pyodide.loadPackage(['micropip']);
+    await pyodide.loadPackage(['micropip'])
     const micropip = pyodide.pyimport('micropip') as PyProxy & {
-      install: (txt: string) => Promise<void>;
-    };
-    await micropip.install('yake');
-    pyodideEnv = pyodide;
-    pyodideInitPromise = null; // Clear the promise after successful load
-    return pyodide;
-  });
+      install: (txt: string) => Promise<void>
+    }
+    await micropip.install('yake')
+    pyodideEnv = pyodide
+    pyodideInitPromise = null // Clear the promise after successful load
+    return pyodide
+  })
 
-  return pyodideInitPromise;
+  return pyodideInitPromise
 }
 
 const pythonWorker = {
   async runPythonScript(script: string, params?: unknown[]) {
-    const pyodide = await getPyodide();
-    let result: PythonScriptResult;
+    const pyodide = await getPyodide()
+    let result: PythonScriptResult
 
     if (params) {
-      console.log('execute python script with params');
-      const tmp = await executeScript(pyodide, script, false);
+      console.log('execute python script with params')
+      const tmp = await executeScript(pyodide, script, false)
       if (tmp) {
         const func = tmp.result as (...args: unknown[]) => {
-          toJs: () => unknown;
-        };
-        const funcRes = func(...params).toJs();
-        result = { stdout: tmp.stdout || '', result: funcRes };
+          toJs: () => unknown
+        }
+        const funcRes = func(...params).toJs()
+        result = { stdout: tmp.stdout || '', result: funcRes }
       } else {
-        result = { stdout: '', result: undefined };
+        result = { stdout: '', result: undefined }
       }
     } else {
-      console.log('execute python script without params');
-      result = await executeScript(pyodide, script);
+      console.log('execute python script without params')
+      result = await executeScript(pyodide, script)
     }
 
-    return result;
+    return result
   },
-};
+}
 
-export type pythonWorker = typeof pythonWorker;
+export type pythonWorker = typeof pythonWorker
 
-expose(pythonWorker);
+expose(pythonWorker)

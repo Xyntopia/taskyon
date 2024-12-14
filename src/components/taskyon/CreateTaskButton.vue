@@ -3,20 +3,20 @@
 </template>
 
 <script setup lang="ts">
-import { useAppStateStore } from 'src/stores/appState';
-import { useTaskyonStore } from 'src/stores/taskyonState';
+import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'src/stores/taskyonState'
 
-const tystate = useTaskyonStore();
-const state = useAppStateStore();
+const tystate = useTaskyonStore()
+const state = useAppStateStore()
 
 const props = defineProps<{
-  markdown?: string;
-  scrollToBottom?: boolean;
-}>();
+  markdown?: string
+  scrollToBottom?: boolean
+}>()
 
 const onAddTasks = async () => {
-  const newTaskId = await tystate.addMdTasks(props.markdown);
-  state.llmSettings.selectedTaskId = newTaskId;
-  state.lockBottomScroll = props.scrollToBottom;
-};
+  const newTaskId = await tystate.addMdTasks(props.markdown)
+  state.llmSettings.selectedTaskId = newTaskId
+  state.lockBottomScroll = props.scrollToBottom
+}
 </script>

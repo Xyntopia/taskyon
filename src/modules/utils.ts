@@ -811,9 +811,9 @@ export function clearBrowserCaches() {
   if ('caches' in window) {
     caches.keys().then((keys) => {
       keys.forEach((key) => {
-        caches.delete(key);
-      });
-    });
+        caches.delete(key)
+      })
+    })
   }
 }
 
@@ -821,15 +821,15 @@ export function clearServiceWorkers() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then((registrations) => {
       registrations.forEach((registration) => {
-        registration.unregister();
-      });
-    });
+        registration.unregister()
+      })
+    })
   }
 }
 
 export function clearCookies() {
   document.cookie.split(';').forEach((cookie) => {
-    const name = cookie.split('=')[0]!.trim();
-    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-  });
+    const name = cookie.split('=')[0]!.trim()
+    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`
+  })
 }

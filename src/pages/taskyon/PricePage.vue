@@ -31,22 +31,12 @@ selecting different models).
         }"
       >
         <template #top-left>
-          <q-input
-            v-model="filter"
-            dense
-            clearable
-            debounce="300"
-            placeholder="Filter Models"
-          >
+          <q-input v-model="filter" dense clearable debounce="300" placeholder="Filter Models">
             <template #append>
               <q-icon :name="matFilterList" />
             </template>
           </q-input>
-          <q-btn
-            label="Download Model file as JSON"
-            outline
-            @click="downloadModels"
-          ></q-btn>
+          <q-btn label="Download Model file as JSON" outline @click="downloadModels"></q-btn>
         </template>
         <template #top-right>
           <q-toggle
@@ -123,8 +113,7 @@ selecting different models).
               {{ humanReadablePrice(props.value, 0) }}
             </div>
             <q-tooltip :delay="500">
-              exact price: {{ props.value }}$/request or
-              {{ 1 / props.value }} requests per $
+              exact price: {{ props.value }}$/request or {{ 1 / props.value }} requests per $
             </q-tooltip>
           </q-td>
         </template>
@@ -134,53 +123,49 @@ selecting different models).
 </template>
 
 <script setup lang="ts">
-import { useTaskyonStore } from 'src/stores/taskyonState';
-import { type QTableProps, exportFile } from 'quasar';
-import { humanReadablePrice, openrouterPricing } from 'src/modules/utils';
-import InfoDialog from 'components/InfoDialog.vue';
-import { ref, computed } from 'vue';
-import { matFilterList } from '@quasar/extras/material-icons';
-import tyMarkdown from 'components/tyMarkdown.vue';
-import ApiSelect from 'components/taskyon/ApiSelect.vue';
-import { useAppStateStore } from 'src/stores/appState';
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import { type QTableProps, exportFile } from 'quasar'
+import { humanReadablePrice, openrouterPricing } from 'src/modules/utils'
+import InfoDialog from 'components/InfoDialog.vue'
+import { ref, computed } from 'vue'
+import { matFilterList } from '@quasar/extras/material-icons'
+import tyMarkdown from 'components/tyMarkdown.vue'
+import ApiSelect from 'components/taskyon/ApiSelect.vue'
+import { useAppStateStore } from 'src/stores/appState'
 
-const tystate = useTaskyonStore();
-const state = useAppStateStore();
-const filter = ref<string | null>('');
-const pricingPerPage = ref(true);
+const tystate = useTaskyonStore()
+const state = useAppStateStore()
+const filter = ref<string | null>('')
+const pricingPerPage = ref(true)
 //const { llmModels: tableData } = storeToRefs(state);
 
-type rowType = (typeof tystate.llmModels)[0];
+type rowType = (typeof tystate.llmModels)[0]
 
 const filteredTableData = computed(() => {
   return tystate.llmModels.filter((model) => {
     if (model.name || model.id) {
-      return true;
+      return true
     }
-    return false;
-  });
-});
+    return false
+  })
+})
 
 function floatSorter(a: string, b: string) {
-  const numA = parseFloat(a);
-  const numB = parseFloat(b);
+  const numA = parseFloat(a)
+  const numB = parseFloat(b)
 
-  const validA = isNaN(numA) ? -1 : numA;
-  const validB = isNaN(numB) ? -1 : numB;
+  const validA = isNaN(numA) ? -1 : numA
+  const validB = isNaN(numB) ? -1 : numB
 
-  const comparison = validA - validB;
-  return comparison;
+  const comparison = validA - validB
+  return comparison
 }
 
 const downloadModels = () => {
-  console.log('download models');
+  console.log('download models')
   // Use Quasar's exportFile function for download
-  exportFile(
-    'models.json',
-    JSON.stringify(tystate.llmModels, null, 2),
-    'application/json',
-  );
-};
+  exportFile('models.json', JSON.stringify(tystate.llmModels, null, 2), 'application/json')
+}
 
 const columns: QTableProps['columns'] = [
   {
@@ -251,23 +236,23 @@ const columns: QTableProps['columns'] = [
     field: (row: rowType) => row.architecture?.instruct_type,
     sortable: true,
   },*/
-];
+]
 
 function calculatePricePerPage(value: string | undefined) {
   if (value) {
-    const price = parseFloat(value);
+    const price = parseFloat(value)
     if (price < 0) {
-      return 'dynamic';
+      return 'dynamic'
     } else if (isNaN(price)) {
-      return 'N/A';
+      return 'N/A'
     } else if (price === 0) {
-      return 'free';
+      return 'free'
     } else {
-      const ppt = 0.01 / (price * 500);
-      return ppt.toFixed(1);
+      const ppt = 0.01 / (price * 500)
+      return ppt.toFixed(1)
     }
   } else {
-    return 'N/A';
+    return 'N/A'
   }
 }
 </script>

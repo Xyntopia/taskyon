@@ -11,9 +11,9 @@
 </template>
 
 <script setup lang="ts">
-import { matVisibility, matVisibilityOff } from '@quasar/extras/material-icons';
-import { ref } from 'vue';
+import { matVisibility, matVisibilityOff } from '@quasar/extras/material-icons'
+import { ref } from 'vue'
 
-const model = defineModel<string>();
-const isPwd = ref(true);
+const model = defineModel<string>()
+const isPwd = ref(true)
 </script>

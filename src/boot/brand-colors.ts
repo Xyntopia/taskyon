@@ -1,12 +1,12 @@
-import { defineBoot } from '#q-app/wrappers';
-import { setCssVar } from 'quasar';
+import { defineBoot } from '#q-app/wrappers'
+import { setCssVar } from 'quasar'
 
 export default defineBoot(() => {
-  console.log('set colors! :)');
-  const primary = '#2A3548';
-  const secondary = '#F78F3B';
-  setCssVar('primary', primary);
-  setCssVar('secondary', secondary);
+  console.log('set colors! :)')
+  const primary = '#2A3548'
+  const secondary = '#F78F3B'
+  setCssVar('primary', primary)
+  setCssVar('secondary', secondary)
   //setCssVar('dark-shadow-color', '#FF0000')
   //setCssVar('primary', '#00fff0', document.body);
 
@@ -25,4 +25,4 @@ $dark-shadow-color: $secondary
 $dark: $primary
 $dark-page: $primary
 */
-});
+})

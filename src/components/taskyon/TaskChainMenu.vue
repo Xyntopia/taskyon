@@ -22,42 +22,38 @@
 </template>
 
 <script setup lang="ts">
-import {
-  matDownloadForOffline,
-  matDelete,
-  matMoreHoriz,
-} from '@quasar/extras/material-icons';
-import { useTaskyonStore } from 'stores/taskyonState';
-import { exportFile } from 'quasar';
-import { useAppStateStore } from 'src/stores/appState';
+import { matDownloadForOffline, matDelete, matMoreHoriz } from '@quasar/extras/material-icons'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { exportFile } from 'quasar'
+import { useAppStateStore } from 'src/stores/appState'
 
-const tystate = useTaskyonStore();
-const state = useAppStateStore();
+const tystate = useTaskyonStore()
+const state = useAppStateStore()
 
 defineProps<{
-  conversationId: string;
-}>();
+  conversationId: string
+}>()
 
 async function onDeleteThread(conversationId: string) {
-  console.log('deleting thread!!', conversationId);
-  const tm = await tystate.getTaskManager();
-  state.llmSettings.selectedTaskId = undefined;
-  tm.deleteTaskThread(conversationId);
-  state.chatHistory = state.chatHistory.filter((id) => id != conversationId);
+  console.log('deleting thread!!', conversationId)
+  const tm = await tystate.getTaskManager()
+  state.llmSettings.selectedTaskId = undefined
+  tm.deleteTaskThread(conversationId)
+  state.chatHistory = state.chatHistory.filter((id) => id != conversationId)
 }
 
 async function onDownloadChat(conversationId: string) {
-  console.log('download thread!!', conversationId);
-  const tm = await tystate.getTaskManager();
-  const task = await tm.getTask(conversationId);
+  console.log('download thread!!', conversationId)
+  const tm = await tystate.getTaskManager()
+  const task = await tm.getTask(conversationId)
   if (task) {
-    const taskThreadYaml = await tm.chatToYaml(task.id);
+    const taskThreadYaml = await tm.chatToYaml(task.id)
     if (taskThreadYaml) {
-      const fileName = `tyn-${task.name || ''}.yaml`;
-      const mimeType = 'text/yaml';
+      const fileName = `tyn-${task.name || ''}.yaml`
+      const mimeType = 'text/yaml'
 
       // Use Quasar's exportFile function for download
-      exportFile(fileName, taskThreadYaml, mimeType);
+      exportFile(fileName, taskThreadYaml, mimeType)
     }
   }
 }
