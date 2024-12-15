@@ -1,6 +1,29 @@
 ## FAQ
 
-### 1. Local AI Processing Capabilities
+### 1. Cost Factors
+
+LLM chat completion services, like Taskyon.space' API, rely on token-based interactions. Each conversation is a sequence of prompts and completions, where every request requires sending the entire chat history to maintain context.
+
+Generally, as of _Nov 2024_, a token-based service lke Taskyon.space comes out cheaper than subscription based models.
+
+#### Key Cost Factors:
+
+1. **Token Usage**:
+   - **Prompt Tokens**: Tokens from the user's input.
+   - **Completion Tokens**: Tokens in the AI's response.
+2. **Model Selection**: Larger or more capable models have higher token costs.
+3. **Chat Length**: Since the entire conversation is sent with every request, the cost grows as chats become longer.
+
+#### Implications:
+
+- **Costs Scale with Length**: The longer the chat, the more tokens are billed for each new message.
+- **Optimization**: Keeping conversations concise can significantly reduce costs.
+
+For detailed pricing and advanced tools, visit [Taskyon Pricing](https://taskyon.space/pricing). This will work for
+the taskyon API, but also for some other backends like openrouter. For example for the OpenAI backend, while it provides information
+on their model, it does not provide pricing information with their models.
+
+### 2. Local AI Processing Capabilities
 
 **How are the local AI processing capabilities implemented? Are there specific libraries or frameworks used for local inference?**
 
@@ -10,7 +33,7 @@ Taskyon requires an OpenAI API-compatible inference endpoint for communication. 
 
 Quantized 7B/12B models can run on laptops, though better graphics cards improve performance significantly. Alternatively, cloud-hosted LLMs, such as those from Huggingface, offer diverse options.
 
-### 2. Security and Privacy
+### 3. Security and Privacy
 
 **Could you provide more details on the security measures within the sandboxed environments? How is user data isolated and protected?**
 
@@ -20,7 +43,7 @@ User data remains within the browser except during inference, where data protect
 
 Taskyon promotes local deployment and employs a label-based permission system to control AI data access.
 
-### 3. Service Integration
+### 4. Service Integration
 
 **What LLM providers are currently supported, and how does Taskyon manage switching between different providers?**
 
@@ -30,7 +53,7 @@ Taskyon supports providers with OpenAI API-compatible endpoints, including Local
 
 Taskyon is actively developed with a commitment to open-source principles, ensuring adaptability for various applications.
 
-### 4. Function Tasks
+### 5. Function Tasks
 
 **Can you elaborate on the types of function tasks that can be executed? Are there predefined templates or examples?**
 
@@ -45,7 +68,7 @@ Taskyon's frontend-based execution enhances scalability and security:
 - Browser-based execution restricts functions to browser capabilities, enforcing sandboxed security.
 - Integrating Taskyon into an app confines function declarations to app-defined capabilities, enhancing control and security.
 
-### 5. Contextual Task Management
+### 6. Contextual Task Management
 
 **How is the context attached to tasks managed and utilized? Are there specific formats or standards for attaching context like files or other tasks?**
 
@@ -62,7 +85,7 @@ Taskyon enhances task relevance and accuracy through:
 - Vectorization of tasks stored in a local vector store, optimizing task selection based on context.
 - Labeling of tasks for precise context control and selection, facilitating accurate task execution.
 
-### 6. Frontend Capabilities
+### 7. Frontend Capabilities
 
 **How are the secure sandbox environments for Python and JavaScript code execution managed? Are there limitations to the code that can be run within these sandboxes?**
 
@@ -84,7 +107,7 @@ Taskyon supports dynamic tool generation primarily in JavaScript:
   - doing data analysis using python.
   - Act as a financial advisor by interacting with a wealth Management webpage.
 
-### 7. Webpage Integration
+### 8. Webpage Integration
 
 **How can webpage owners integrate Taskyon into their sites? Are there specific scripts or APIs provided for this integration?**
 
@@ -104,7 +127,7 @@ Taskyon integration adheres to standard iframe security practices:
 - Embedded Taskyon instances operate within isolated iframes, preventing cross-site scripting and maintaining data security.
 - Taskyon interacts solely with functions explicitly granted access by the hosting webpage.
 
-### 8. Enhanced Markdown Support
+### 9. Enhanced Markdown Support
 
 **What are some use cases for the enhanced markdown features like mermaid graphics, SVG drawings, and embedded HTML widgets?**
 
@@ -122,7 +145,7 @@ Performance varies based on LLM capabilities and feature complexity:
 - Taskyon's Markdown capabilities rely on LLM performance for tasks like generating mermaid graphics and interactive widgets.
 - Ongoing improvements enhance feature robustness and performance.
 
-### 9. Vision Models
+### 10. Vision Models
 
 **Can you provide more information on the vision models integrated with Taskyon? What tasks or functionalities do they support?**
 
@@ -131,7 +154,7 @@ Taskyon integrates vision models for image interpretation:
 - Models support multi-modal functionalities, interpreting images with varying levels of complexity.
 - Use cases include image analysis, object recognition, and visual data processing.
 
-### 10. Roadmap
+### 11. Roadmap
 
 **Can you provide more details on the upcoming features like P2P task synchronization and autonomous agents?**
 
@@ -145,7 +168,7 @@ Upcoming Taskyon features include:
 - Taskyon already supports local LLM inference via OpenAI API-compatible endpoints.
 - Container deployment precedes the desktop app release, with plans for a static web server version for easy deployment.
 
-### 11. Contribution Guidelines
+### 12. Contribution Guidelines
 
 **What are the specific areas where you need the most help from contributors?**
 
