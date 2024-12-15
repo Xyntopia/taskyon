@@ -272,7 +272,7 @@ async function generateFollowupFromStructuredResponse(
           role: 'system',
           content: {
             message: `The response (${pickProperties(structResponse, ['use tool', 'try again'])})
- suggest we should use a tool, but we could not parse the ${structResponse.command}`,
+ suggests we should use a tool, but we could not parse the ${structResponse.command}`,
           },
         }),
       ]
@@ -303,18 +303,8 @@ async function generateFollowupFromStructuredResponse(
  *
  * following different types of task contents are possible:
  *
- * - MessageContent
- *    * string
- *    * structured Response (_s)
- * - ToolCallContent
- * - UploadedFilesContent
- * - ToolResultContent
- *
  * 
- * Tasks can have different *roles* which indicates who produced the content for a task: 
- * [User, Assistant (-> the AI), System (e.g. producing an error message), Function (produced by the function itself)]
- 
-here is a chart of the relations & possible transitions between tasks:
+  here is a chart of the relations & possible transitions between tasks:
 
 - [Transition Map](/docs/conversations/taskyon_description)
 
@@ -356,6 +346,7 @@ async function generateFollowUpTasksFromResult(
     const choice = finishedTask.result?.chatResponse?.choices[0]
     if (choice) {
       // check if we have any functioncalls from the llm inference
+      // in that case we shoud handle that first :)
       const functionCall = extractOpenAIFunctions(
         choice,
         await taskManager.updateToolDefinitions(true),
@@ -374,7 +365,10 @@ async function generateFollowUpTasksFromResult(
           choice,
         })
       }
-      // This happens, if we
+
+      // so now we know there are no function calls indicated from the original service
+      // so we can parse the structured response or simply get a reponse to a "normal"
+      // chat message.
       if (
         (!llmTools &&
           (('message' in finishedTask.content && finishedTask.role === 'user' && useTyTools) || // this happens, if we use tools, but no LLM-builtin tools
