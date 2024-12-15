@@ -294,7 +294,7 @@ const humanReadableTaskCosts = computed(() => {
 
 async function editTask(taskId: string) {
   const task = await taskDraftFromTask(taskId)
-  state.llmSettings.selectedTaskId = task.parentID
+  state.llmSettings.selectedTaskId = task.priorID
 }
 
 async function createNewConversation(taskId: string) {

@@ -259,7 +259,7 @@ async function generateFollowupFromStructuredResponse(
       return [
         newTask,
         await generateFollowUpTask(true, {
-          parentID: newTask.parentID,
+          priorID: newTask.priorID,
           role: 'assistant',
           content: { functionCall: command },
         }),
@@ -268,7 +268,7 @@ async function generateFollowupFromStructuredResponse(
       return [
         newTask,
         await generateFollowUpTask(true, {
-          parentID: newTask.parentID,
+          priorID: newTask.priorID,
           role: 'system',
           content: {
             message: `The response (${pickProperties(structResponse, ['use tool', 'try again'])})
@@ -631,7 +631,7 @@ export async function runTaskWorker(
         const addTasks = (finishedTask: TaskNode) => async (t: (typeof newTasks)[0]) => {
           const newTaskId = await addTask2Tree(
             t,
-            t.parentID || finishedTask.id,
+            t.priorID || finishedTask.id,
             // interrupt execution if interrupted flag is shown!
             // this makes sure that results are still saved, even if we stop any
             // further execution

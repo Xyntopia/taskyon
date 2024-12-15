@@ -27,7 +27,7 @@ const taskNodeSchemaLiteral = {
   //       so this include for example he state of the task.
   //       and other things that right now get changed "later".
   title: 'TaskNode schema',
-  version: 0,
+  version: 1,
   type: 'object',
   primaryKey: 'id',
   properties: {
@@ -55,6 +55,9 @@ const taskNodeSchemaLiteral = {
       type: 'string', // Storing configuration as a JSON string
     },
     parentID: {
+      type: ['string', 'null'],
+    },
+    priorID: {
       type: ['string', 'null'],
     },
     //TODO: get rid of this...
@@ -194,7 +197,12 @@ export const collections = {
   tasknodes: {
     schema: taskNodeSchema,
     autoMigrate: true, // <- migration will not run at creation
-    migrationStrategies: {},
+    migrationStrategies: {
+      1: function (oldDoc: Record<string, unknown>) {
+        if (oldDoc.priorID) oldDoc.priorID = oldDoc.parentID
+        return oldDoc
+      },
+    },
   },
   filemappings: {
     schema: fileMappingSchema,

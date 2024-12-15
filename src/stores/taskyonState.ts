@@ -221,7 +221,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       // we need to make sure, that our task is not already
       // the "parent" of another task in that case we only want the leaf task which is already present...
       for (const taskId of stateRefs.chatHistory) {
-        if ((await tm.getTask(taskId))?.parentID === task.id) return
+        if ((await tm.getTask(taskId))?.priorID === task.id) return
       }
     } else if (msg === 'delete') {
       // Filter out the deleted task ID
@@ -248,7 +248,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     ];*/
 
     // Remove any entries which are a parent of the current task (keeping only leaf IDs)
-    stateRefs.chatHistory = stateRefs.chatHistory.filter((t) => t !== task.parentID)
+    stateRefs.chatHistory = stateRefs.chatHistory.filter((t) => t !== task.priorID)
 
     // Enforce a maximum size of 50
     if (stateRefs.chatHistory.length > 50) {

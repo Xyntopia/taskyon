@@ -35,14 +35,14 @@ export const taskUtils = (
     // Start with the selected task
     let currentTaskID: string | undefined = taskId
 
-    // Trace back the parentIDs to the original task in the chain
+    // Trace back the priorIDs to the original task in the chain
     while (currentTaskID && (maxFollow >= conversationList.length || maxFollow == 0)) {
       // Get the current task
       const currentTask: TaskNode | undefined = await getTask(currentTaskID)
       if (currentTask) {
         // Prepend the current task to the conversation list so the selected task ends up being the last in the list
         conversationList.unshift(currentTaskID)
-        currentTaskID = currentTask.parentID
+        currentTaskID = currentTask.priorID
       } else {
         currentTaskID = undefined
       } // Break if we reach a task that doesn't exist
@@ -148,10 +148,10 @@ async function convertTaskNodeToOpenAIMessage(
     // we can still slightly change the content of this message to make clear
     // TODO: instead of using a manual "result of the tool" use the description in the type!
     // maybe refer to the actual tool call here?
-    if (task.parentID && useOpenAITools) {
+    if (task.priorID && useOpenAITools) {
       const message: OpenAI.ChatCompletionMessageParam = {
         role: 'tool',
-        tool_call_id: task.parentID, // the tool call will get the parent ID as well! :)
+        tool_call_id: task.priorID, // the tool call will get the parent ID as well! :)
         content: dump(task.content.toolResult),
       }
       return [message]

@@ -319,7 +319,11 @@ of how content can be structured. `,
     })
     .optional()
     .describe('Holds the configuration for the LLM'),
-  parentID: z.string().optional(),
+  parentID: z
+    .string()
+    .optional()
+    .describe('The ID of the parent task which created this subtask on a lower stack level'),
+  priorID: z.string().optional().describe('The ID of the previous task in the same stack level.'),
   // provide debugging information about the task execution
   // all debugging information should be purely optional...
   debugging: z
@@ -365,7 +369,7 @@ export type TaskGetter = (input: string) => Promise<TaskNode | undefined>
 export const partialTaskDraft = TaskNode.pick({
   role: true,
   content: true,
-  parentID: true,
+  priorID: true,
   name: true,
   configuration: true,
   state: true,

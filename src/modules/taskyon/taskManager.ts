@@ -36,8 +36,8 @@ export async function findRootTask(taskId: string, getTask: TyTaskManager['getTa
     const currentTask = await getTask(currentTaskID)
     if (!currentTask) return null // Return null if a task doesn't exist
 
-    if (currentTask.parentID) {
-      currentTaskID = currentTask.parentID // Trace back to the parent task
+    if (currentTask.priorID) {
+      currentTaskID = currentTask.priorID // Trace back to the parent task
     } else {
       return currentTaskID // Return the current task ID if it has no parent
     }
@@ -110,7 +110,7 @@ export const initAddTask2Tree =
   (processTasksQueue: AsyncQueue<string>, taskManager: TyTaskManager) =>
   async (
     task: RequireDefined<PartialTaskNode, 'role' | 'content'>,
-    parentID: string | undefined,
+    priorID: string | undefined,
     execute = true,
     duplicateTaskName = true,
   ): Promise<TaskNode['id']> => {
@@ -132,12 +132,12 @@ export const initAddTask2Tree =
 
     const uuid = urlSafeBase64Uuid()
 
-    const parent = parentID ? await taskManager.getTask(parentID) : undefined
+    const parent = priorID ? await taskManager.getTask(priorID) : undefined
 
     const newTask: TaskNode = {
       ...task,
       role: task.role,
-      parentID,
+      priorID,
       content: task.content,
       state: task.state || 'Open',
       debugging: task.debugging || {},
@@ -608,10 +608,10 @@ export function useTyTaskManager(
       await saveTaskToDb(task) // Save to database if required
     }
     // Update parent-child cache
-    if (task.parentID) {
-      const children = await searchOneChild(task.parentID)
+    if (task.priorID) {
+      const children = await searchOneChild(task.priorID)
       children.add(task.id)
-      parentToChildrenMap.set(task.parentID, children)
+      parentToChildrenMap.set(task.priorID, children)
     }
     notifySubscribers(task, 'new')
     unlock()
@@ -621,7 +621,7 @@ export function useTyTaskManager(
   // TODO: right now, we can only find the "first" child...
   //       this needs to become better ;). Especially, if we cache this. The first child we have in the cache
   //       will always stay there...
-  async function searchOneChild(parentId: string): Promise<Set<string>> {
+  async function searchOneChild(priorID: string): Promise<Set<string>> {
     // Check if children are already cached in the map
     // if we get an empty set (meaning we have a leaf task)
     // we assume, thats actually OK.  because the db query returned this. it
@@ -629,7 +629,7 @@ export function useTyTaskManager(
     // the only problem here is, that this is asynchronous..  so in the future we might run into problems
     // where we need to lock the parentToChildMap if multiple processes want to access it.
     // but eventually the parentToChildrenMap will be updated with the additional children..
-    let children = parentToChildrenMap.get(parentId)
+    let children = parentToChildrenMap.get(priorID)
 
     if (!children && taskyonDB) {
       // Fallback to database query if not in the cache
@@ -637,7 +637,7 @@ export function useTyTaskManager(
         await taskyonDB.tasknodes
           .find({
             selector: {
-              parentID: parentId,
+              priorID,
             },
           })
           .exec()
@@ -645,7 +645,7 @@ export function useTyTaskManager(
       children = new Set(dbChildren)
 
       // Cache the result for future lookups
-      parentToChildrenMap.set(parentId, children)
+      parentToChildrenMap.set(priorID, children)
       return children
     }
     return children ?? new Set()
@@ -719,9 +719,9 @@ export function useTyTaskManager(
 
     // Delete from local record/memorydb
     const task = tasksCache.get(taskId)
-    if (task && task.parentID) {
+    if (task && task.priorID) {
       // deleting the task from our children map...
-      const children = await searchOneChild(task.parentID)
+      const children = await searchOneChild(task.priorID)
       if (children) children.delete(taskId)
     }
     tasksCache.delete(taskId)
@@ -752,8 +752,8 @@ export function useTyTaskManager(
       if (!currentTask) break // Break if a task doesn't exist
 
       // Check if the parent task has more than one child
-      if (currentTask.parentID) {
-        const childrenIDs = await searchOneChild(currentTask.parentID)
+      if (currentTask.priorID) {
+        const childrenIDs = await searchOneChild(currentTask.priorID)
         if (childrenIDs.size > 1) {
           // in this case we need to update the parent with the fewer children
           break // Stop deletion if the parent task has more than one child. We only want to delete this branch...
@@ -763,9 +763,9 @@ export function useTyTaskManager(
       // Delete the current task
       deleteTask(currentTaskId)
 
-      if (currentTask.parentID) {
+      if (currentTask.priorID) {
         // Move to the parent task
-        currentTaskId = currentTask.parentID
+        currentTaskId = currentTask.priorID
       } else {
         break
       }
@@ -958,7 +958,7 @@ export function useTyTaskManager(
         delete partialTask.id
         delete partialTask.state
         delete partialTask.created_at
-        delete partialTask.parentID
+        delete partialTask.priorID
         if (message) delete partialTask.content
       }
       const yamlMeta = `<!--taskyon\n${dump(partialTask, { skipInvalid: true })}\n-->`
