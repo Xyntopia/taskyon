@@ -15,19 +15,17 @@
       </div>
       <div caption class="relative-position">
         <div v-if="!isHtmlResult && !useIframe" class="scroll-area">
-          {{ dump(task.result?.toolResult) }}
+          {{ dump(task.result) }}
         </div>
         <iframe
           v-else
-          :srcdoc="
-            typeof task.result?.toolResult?.result === 'string' ? task.result.toolResult.result : ''
-          "
+          :srcdoc="typeof task.result?.result === 'string' ? task.result.result : ''"
         ></iframe>
         <q-btn
           class="scroll-area-btn"
           flat
           :icon="matContentCopy"
-          @click="copyToClipboard(dump(task.result?.toolResult))"
+          @click="copyToClipboard(dump(task.result))"
         />
       </div>
     </div>
@@ -51,12 +49,12 @@ const props = defineProps<{
 const useIframe = ref(false)
 
 const isHtmlResult = computed(() => {
-  const toolResult = props.task.result?.toolResult
+  const taskResult = props.task.result
   // Simple check for HTML - you might need a more accurate way to determine this
   let isHtml = false
-  if (typeof toolResult?.result === 'string') {
-    //#const isHtml= toolResult.trim().startsWith('<');
-    isHtml = toolResult.result.trim().startsWith('<')
+  if (typeof taskResult?.result === 'string') {
+    //#const isHtml= taskResult.trim().startsWith('<');
+    isHtml = taskResult.result.trim().startsWith('<')
   }
   return isHtml
 })
