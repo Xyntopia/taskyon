@@ -52,43 +52,63 @@ export type TaskState = z.infer<typeof TaskState>
 
 const OpenAIMessage = z.object({
   content: z.string().nullable(),
-  function_call: z
-    .object({
-      name: z.string(),
-      arguments: z.string(),
-    })
-    .optional(),
+  //finish_reason: z.enum(['length', 'function_call', 'tool_calls', 'stop', 'content_filter']),
   tool_calls: z
     .array(
       z.object({
-        name: z.string(),
-        arguments: z.string(),
+        function: z.object({ arguments: z.string(), name: z.string() }),
+        type: z.literal('function'),
       }),
     )
     .optional(),
   name: z.string().optional(),
   role: z.enum(['system', 'user', 'assistant', 'function', 'tool']),
+  /*      logprobs: z
+        .object({
+          tokens: z.array(z.string()),
+          token_logprobs: z.array(z.number().nullable()),
+          top_logprobs: z.array(z.record(z.string(), z.number()).nullable()),
+          text_offset: z.array(z.number()),
+          content: z.string().optional(),
+          refusal: z.string(), // Add required field
+        })
+        .nullable(),*/
 })
 export type OpenAIMessage = z.infer<typeof OpenAIMessage>
 
-export type ChatCompletionResponse = {
-  id: string
-  object: string // "chat.completion"
-  created: number // Unix timestamp in seconds
-  model: string
-  choices: {
-    index: number
-    message: OpenAIMessage
-    finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | null
-  }[]
-  usage?: {
-    prompt_tokens: number
-    completion_tokens: number
-    total_tokens: number
-    origin?: string
-    inference_costs?: number
-  }
+// TODO: get rid of OpenAI dependency...
+// we are defining a "minimal" subset of openai chatcompletion which we need to have in our
+// our own app!
+// TODO: combine this type here with the previous, duplicate ones we have declared!! (e.g. OpenAIMessage)
+// we are removing properties which we don't need for our purposes but compare it with the
+// official OpenAI API.
+export const ChatResponseType = z.object({
+  id: z.string(),
+  //object: z.string(),
+  //created: z.number(),
+  model: z.string(),
+  choices: z.array(
+    z.object({
+      message: OpenAIMessage,
+    }),
+  ),
+  usage: z
+    .object({
+      prompt_tokens: z.number(),
+      completion_tokens: z.number(),
+      total_tokens: z.number(),
+    })
+    .optional(),
+})
+export type ChatResponseType = z.infer<typeof ChatResponseType>
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function assertType<T>(value: T): void {
+  // This function does nothing at runtime, but it enforces type checking at compile time.
 }
+// Use the function to trigger type checking
+// This will cause TypeScript to report an error if the types don't match
+//assertType<ChatResponseType>({} as SimplifyDeep<OpenAI.ChatCompletion>)
+assertType<ChatResponseType>({} as OpenAI.ChatCompletion)
 
 export interface OpenRouterGenerationInfo {
   id: string
@@ -172,88 +192,6 @@ export const ToolBase = z.object({
     ),
 })
 export type ToolBase = z.infer<typeof ToolBase> // this reflects json schema:  https://json-schema.org/specification-links
-
-// TODO: get rid of OpenAI dependency...
-/*const chatResponse: z.ZodType<OpenAI.ChatCompletion> = z.object({
-  id: z.string(),
-  object: z.string(),
-  created: z.number(),
-  model: z.string(),
-  choices: z.array(
-    z.object({
-      message: z.object({
-        role: z.string(), // Refine to enum if roles are predefined
-        content: z.string(),
-      }),
-      finish_reason: z.union([
-        z.literal('length'),
-        z.literal('function_call'),
-        z.literal('tool_calls'),
-        z.literal('stop'),
-        z.literal('content_filter'),
-      ]),
-      index: z.number(),
-      logprobs: z
-        .object({
-          tokens: z.array(z.string()),
-          token_logprobs: z.array(z.number().nullable()),
-          top_logprobs: z.array(z.record(z.string(), z.number()).nullable()),
-          text_offset: z.array(z.number()),
-          content: z.string().optional(),
-          refusal: z.string(), // Add required field
-        })
-        .nullable(),
-    }),
-  ),
-  usage: z
-    .object({
-      prompt_tokens: z.number(),
-      completion_tokens: z.number(),
-      total_tokens: z.number(),
-    })
-    .optional(),
-})*/
-
-// we are defining a "minimal" subset of openai chatcompletion which we need to have in our
-// our own app!
-// TODO: combine this type here with the previous, duplicate ones we have declared!! (e.g. OpenAIMessage)
-export const ChatResponseType = z.object({
-  id: z.string(),
-  model: z.string(),
-  choices: z.array(
-    z.object({
-      message: z.object({
-        role: z.literal('assistant'),
-        content: z.string().nullable(),
-        tool_calls: z
-          .array(
-            z.object({
-              id: z.string(),
-              function: z.object({ arguments: z.string(), name: z.string() }),
-              type: z.literal('function'),
-            }),
-          )
-          .optional(),
-      }),
-    }),
-  ),
-  usage: z
-    .object({
-      prompt_tokens: z.number(),
-      completion_tokens: z.number(),
-      total_tokens: z.number(),
-    })
-    .optional(),
-})
-export type ChatResponseType = z.infer<typeof ChatResponseType>
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function assertType<T>(value: T): void {
-  // This function does nothing at runtime, but it enforces type checking at compile time.
-}
-// Use the function to trigger type checking
-// This will cause TypeScript to report an error if the types don't match
-//assertType<ChatResponseType>({} as SimplifyDeep<OpenAI.ChatCompletion>)
-assertType<ChatResponseType>({} as OpenAI.ChatCompletion)
 
 const ToolResult = z.object({
   result: z.union([z.string(), z.record(z.unknown())]).optional(),
