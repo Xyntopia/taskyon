@@ -319,9 +319,6 @@ export const TaskNode = z.object({
 For example this is, what an LLM would actually get to see. There are only a few different ways
 of how content can be structured. `,
   ),
-  // TODO: get rid of task state...  the reason is that its stateful (as the nam suggests)
-  //       what we can do is this: move it into
-  state: TaskState,
   label: z.array(z.string()).optional(),
   context: z.record(z.string(), z.string()).optional(),
   configuration: z
@@ -389,7 +386,6 @@ export const partialTaskDraft = TaskNode.pick({
   priorID: true,
   name: true,
   configuration: true,
-  state: true,
   allowedTools: true,
   debugging: true,
   label: true,

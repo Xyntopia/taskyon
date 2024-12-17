@@ -201,14 +201,12 @@ async function parseChatResponse2TaskDraft(message: string): Promise<Record<stri
 
 // use helper function to make code more concise ;)
 const createTaskGenerator =
-  (childCosts: object, finishedTask: TaskNode) =>
-  async (execute: boolean, partialTask: partialTaskDraft) => {
+  (childCosts: object, finishedTask: TaskNode) => async (partialTask: partialTaskDraft) => {
     partialTask.debugging = { ...partialTask.debugging, ...childCosts }
     const taskTemplate: Partial<TaskNode> = {
       configuration: finishedTask.configuration,
     }
     const newTask = deepMerge(taskTemplate, partialTask)
-    newTask.state = execute ? 'Open' : 'Completed'
     return newTask
   }
 
@@ -240,7 +238,7 @@ async function generateFollowupFromStructuredResponse(
 
   if (useTool) {
     console.log('trying to get tool call from structured response')
-    const newTask = await generateFollowUpTask(false, {
+    const newTask = await generateFollowUpTask({
       role: 'assistant',
       content: { structuredResponse: choice.message.content || '' },
     })
@@ -257,7 +255,7 @@ async function generateFollowupFromStructuredResponse(
       const command = res.data
       return [
         newTask,
-        await generateFollowUpTask(true, {
+        await generateFollowUpTask({
           priorID: newTask.priorID,
           role: 'assistant',
           content: { functionCall: command },
@@ -266,7 +264,7 @@ async function generateFollowupFromStructuredResponse(
     } else {
       return [
         newTask,
-        await generateFollowUpTask(true, {
+        await generateFollowUpTask({
           priorID: newTask.priorID,
           role: 'system',
           content: {
@@ -280,7 +278,7 @@ async function generateFollowupFromStructuredResponse(
     // in the case that we don't call a tool, provide a "normal" answer :)
     // this time we declare it as "Open" and set execution to "true"
     return [
-      await generateFollowUpTask(true, {
+      await generateFollowUpTask({
         role: 'assistant',
         content: { structuredResponse: choice.message.content || '' },
       }),
@@ -335,7 +333,7 @@ async function generateFollowUpTasksFromResult(
   if (finishedTask.result) {
     if ('functionCall' in finishedTask.content) {
       return [
-        await generateFollowUpTask(true, {
+        await generateFollowUpTask({
           role: 'system',
           content: { toolResult: finishedTask.result },
         }),
@@ -354,7 +352,7 @@ async function generateFollowUpTasksFromResult(
       if (functionCall[0]) {
         // TODO: enable multiple parallel function calls
         return [
-          await generateFollowUpTask(true, {
+          await generateFollowUpTask({
             role: 'function',
             content: { functionCall: functionCall[0] },
           }),
@@ -379,7 +377,7 @@ async function generateFollowUpTasksFromResult(
       } else {
         // if 'message' in finishedTask.content && finishedTask.role === 'assistant'
         // this is the final response, so we simply add it to the chain without executing it
-        const newTask = await generateFollowUpTask(false, {
+        const newTask = await generateFollowUpTask({
           role: 'assistant',
           content: { message: choice.message.content },
         })
@@ -478,7 +476,6 @@ async function processTask(
   void taskManager.updateTask(
     {
       id: taskId,
-      state: 'In Progress',
     },
     false,
   )
@@ -512,7 +509,6 @@ async function processTask(
   // get token usage for this task..
   await addTaskCostInformation(task, taskManager, llmSettings, apiKey)
 
-  task.state = 'Completed'
   return task
 }
 
@@ -640,7 +636,7 @@ export async function runTaskWorker(
             // interrupt execution if interrupted flag is shown!
             // this makes sure that results are still saved, even if we stop any
             // further execution
-            taskWorkerController.isInterrupted() ? false : t.state == 'Open' ? true : false,
+            taskWorkerController.isInterrupted() ? false : true,
           )
           llmSettings.selectedTaskId = newTaskId
         }
@@ -656,10 +652,6 @@ export async function runTaskWorker(
         taskWorkerController.interrupt(
           `Too many errors occured, interrupting execution after ${taskWorkerController.getErrorCount()} errors!`,
         )
-      }
-
-      if (task) {
-        task.state = 'Error'
       }
 
       const errorTask: partialTaskDraft = {

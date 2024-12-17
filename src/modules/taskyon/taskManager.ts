@@ -139,7 +139,6 @@ export const initAddTask2Tree =
       role: task.role,
       priorID,
       content: task.content,
-      state: task.state || 'Open',
       debugging: task.debugging || {},
       id: uuid,
       created_at: Date.now(),
@@ -164,11 +163,9 @@ export const initAddTask2Tree =
     if (execute) {
       // we need processTasksQueue as an argument here!!!
       processTasksQueue.push(newTask.id)
-      newTask.state = 'Queued'
       await taskManager.setTask(newTask, false)
     } else {
       // in the case of a task which is not processed, we can save it :)
-      newTask.state = 'Completed'
       await taskManager.setTask(newTask, true)
     }
 
@@ -955,7 +952,6 @@ export function useTyTaskManager(
         delete partialTask.debugging
         delete partialTask.result
         delete partialTask.id
-        delete partialTask.state
         delete partialTask.created_at
         delete partialTask.priorID
         if (message) delete partialTask.content

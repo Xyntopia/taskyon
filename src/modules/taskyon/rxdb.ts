@@ -47,6 +47,7 @@ const taskNodeSchemaLiteral = {
     content: {
       type: 'string',
     },
+    // TODO: also get rid of this
     state: {
       type: 'string',
       enum: ['Open', 'Queued', 'In Progress', 'Completed', 'Error', 'Cancelled'],
@@ -70,6 +71,7 @@ const taskNodeSchemaLiteral = {
     debugging: {
       type: 'string', // Storing debugging as a JSON string
     },
+    // TODO: also get rid of this
     result: {
       type: 'string', // Storing result as a JSON string
     },
@@ -288,6 +290,8 @@ export function transformTaskNodeToDocType(taskNode: TaskNode): TaskNodeDocType 
       debugging: JSON.stringify(taskNode.debugging),
     }),
     ...(taskNode.result !== undefined && { result: JSON.stringify(taskNode.result) }),
+    // TODO: remove this state here...
+    state: 'Completed' as 'Open' | 'Queued' | 'In Progress' | 'Completed' | 'Error',
   }
 
   return convertedTask

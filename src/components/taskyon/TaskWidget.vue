@@ -6,10 +6,7 @@
       <div class="row items-end q-gutter-xs">
         <!--task icon-->
         <div
-          v-if="
-            task.state === 'Error' ||
-            (task.result && task.result instanceof Object && 'error' in task.result)
-          "
+          v-if="task.result && task.result instanceof Object && 'error' in task.result"
           class="col-auto self-center"
         >
           <q-icon :name="matWarning" color="negative" size="sm"
@@ -27,8 +24,7 @@
           <q-expansion-item
             dense
             :header-class="
-              task.state === 'Error' ||
-              (task.result && task.result instanceof Object && 'error' in task.result)
+              task.result && task.result instanceof Object && 'error' in task.result
                 ? 'text-negative'
                 : isWorking
                   ? 'text-info'
@@ -283,7 +279,6 @@ async function taskDraftFromTask(taskId: string) {
   const jsonTask = JSON.stringify(await (await tystate.getTaskManager()).getTask(taskId))
   const task = TaskNode.partial().parse(JSON.parse(jsonTask))
   task.debugging = {}
-  task.state = 'Open'
   state.llmSettings.taskDraft = partialTaskDraft.parse(task)
   return task
 }
