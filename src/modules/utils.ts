@@ -804,9 +804,9 @@ export function decodeVector(base64String: string): Float32Array {
 
 export function clearBrowserCaches() {
   if ('caches' in window) {
-    caches.keys().then((keys) => {
+    void caches.keys().then((keys) => {
       keys.forEach((key) => {
-        caches.delete(key)
+        void caches.delete(key)
       })
     })
   }
@@ -814,9 +814,9 @@ export function clearBrowserCaches() {
 
 export function clearServiceWorkers() {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then((registrations) => {
+    void navigator.serviceWorker.getRegistrations().then((registrations) => {
       registrations.forEach((registration) => {
-        registration.unregister()
+        void registration.unregister()
       })
     })
   }

@@ -170,7 +170,7 @@ async function onExportPublicGdrive(conversationId: string) {
   }
 }
 
-async function onExportIpfs(conversationId: string) {
+function onExportIpfs(conversationId: string) {
   console.log('export to ipfs', conversationId)
 }
 
@@ -184,7 +184,7 @@ async function onExportChatMD(conversationId: string, clipBoard = false) {
       const mimeType = 'text/markdown; charset=UTF-8'
 
       if (clipBoard) {
-        copyToClipboard(taskThreadMd)
+        void copyToClipboard(taskThreadMd)
       } else {
         // Use Quasar's exportFile function for download
         exportFile(fileName, taskThreadMd, mimeType)

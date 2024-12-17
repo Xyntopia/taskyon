@@ -126,7 +126,7 @@ export const initAddTask2Tree =
         selector: { name: task.name },
       })
       if (tasks.length > 0) {
-        throw `The task ${task.name} already exists!`
+        throw new Error(`The task ${task.name} already exists!`)
       }
     }
 
@@ -757,7 +757,7 @@ export function useTyTaskManager(
       }
 
       // Delete the current task
-      deleteTask(currentTaskId)
+      void deleteTask(currentTaskId)
 
       if (currentTask.priorID) {
         // Move to the parent task

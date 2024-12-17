@@ -142,7 +142,7 @@ export const useAppStateStore = defineStore(storeName, () => {
   })
 
   if (stateRefs.initialLoad) {
-    generateRandomNewKey().then((r) => (stateRefs.llmSettings.userId = r.publicKey))
+    void generateRandomNewKey().then((r) => (stateRefs.llmSettings.userId = r.publicKey))
   }
 
   // this file could potentially be replaced in kubernetes or docker using a configmap!

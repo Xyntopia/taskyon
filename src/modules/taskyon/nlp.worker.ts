@@ -62,21 +62,22 @@ export async function countToolTokens(functionList: ToolBase[]) {
 
 const nlpWorker = {
   // TODO: make sure, we don't reload models & tokenizers all the time!!
-  async vectorizeText(text: string, modelName: string) {
+  async vectorizeText(this: void, text: string, modelName: string) {
     return await getVector(text, modelName)
   },
 
-  async loadVecTokenizer(modelName: string) {
+  async loadVecTokenizer(this: void, modelName: string) {
     await loadTokenizer(modelName)
     console.log('tokenizer loaded:', modelName)
   },
 
-  async loadVecModel(modelName: string) {
+  async loadVecModel(this: void, modelName: string) {
     await loadModel(modelName)
     console.log('model loaded:', modelName)
   },
 
   async estimateChatTokens(
+    this: void,
     task: TaskNode,
     chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     tools: Record<string, ToolBase>,

@@ -97,7 +97,7 @@ export const executeJavaScript: Tool = {
 
         return executionResult
       } catch (error) {
-        return Promise.reject(error)
+        return Promise.reject(error as Error)
       }
     }
   },

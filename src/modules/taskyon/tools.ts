@@ -19,7 +19,7 @@ import { executeCodeInIframe } from './iframeWorker'
 
 const arbitraryFunctionSchema = z.custom<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (...args: any[]) => unknown | Promise<unknown>
+  (...args: any[]) => unknown // unknown also includes Promise<unknown>
 >((val) => typeof val === 'function', {
   message: 'Expected a function that accepts any arguments and returns unknown or Promise<unknown>',
 })

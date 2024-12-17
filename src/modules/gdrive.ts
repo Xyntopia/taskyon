@@ -148,7 +148,7 @@ export const useGdrive = () => {
     const jsonString = JSON.stringify(obj)
     const fileBlob = new Blob([jsonString], { type: 'application/json' })
 
-    saveFileToGdrive(fileBlob, directory, filename)
+    await saveFileToGdrive(fileBlob, directory, filename)
   }
 
   async function loadFileFromGdrive(directory: string, fileName: string) {

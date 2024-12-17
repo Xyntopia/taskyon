@@ -38,7 +38,7 @@ async function onDeleteThread(conversationId: string) {
   console.log('deleting thread!!', conversationId)
   const tm = await tystate.getTaskManager()
   state.llmSettings.selectedTaskId = undefined
-  tm.deleteTaskThread(conversationId)
+  await tm.deleteTaskThread(conversationId)
   state.chatHistory = state.chatHistory.filter((id) => id != conversationId)
 }
 

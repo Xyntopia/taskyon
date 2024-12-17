@@ -249,23 +249,25 @@ export async function createTaskyonDatabase(): Promise<TaskyonDatabase> {
   await db.addCollections(collections)
 
   //here we do te migration from or old storage
-  import('rxdb-old/plugins/storage-dexie').then(({ getRxStorageDexie: getRxStorageDexieOld }) => {
-    migrateStorage({
-      database: db as unknown as RxDatabase,
-      /**
-       * Name of the old database,
-       * using the storage migration requires that the
-       * new database has a different name.
-       */
-      oldDatabaseName: 'taskyondb',
-      oldStorage: getRxStorageDexieOld(), // RxStorage of the old database
-      batchSize: 500, // batch size
-      parallel: false, // <- true if it should migrate all collections in parallel. False (default) if should migrate in serial
-      afterMigrateBatch: (/*input: AfterMigrateBatchHandlerInput*/) => {
-        console.log('storage migration: batch processed')
-      },
-    })
-  })
+  await import('rxdb-old/plugins/storage-dexie').then(
+    ({ getRxStorageDexie: getRxStorageDexieOld }) => {
+      void migrateStorage({
+        database: db as unknown as RxDatabase,
+        /**
+         * Name of the old database,
+         * using the storage migration requires that the
+         * new database has a different name.
+         */
+        oldDatabaseName: 'taskyondb',
+        oldStorage: getRxStorageDexieOld(), // RxStorage of the old database
+        batchSize: 500, // batch size
+        parallel: false, // <- true if it should migrate all collections in parallel. False (default) if should migrate in serial
+        afterMigrateBatch: (/*input: AfterMigrateBatchHandlerInput*/) => {
+          console.log('storage migration: batch processed')
+        },
+      })
+    },
+  )
 
   return db
 }

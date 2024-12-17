@@ -135,11 +135,11 @@ async function updateName(id: string) {
 
 watch(
   [() => state.llmSettings.selectedTaskId, () => state.chatHistory],
-  async ([newTaskId, newChatHistory]) => {
+  ([newTaskId, newChatHistory]) => {
     console.log('updating sidebar chat list')
     if (newTaskId) {
       conversationIDs.value = newChatHistory.slice(0, 10)
-      conversationIDs.value.forEach((id) => updateName(id))
+      conversationIDs.value.forEach((id) => void updateName(id))
     }
   },
   {

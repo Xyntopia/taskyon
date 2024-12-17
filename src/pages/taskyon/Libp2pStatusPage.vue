@@ -11,7 +11,7 @@
 </template>
 
 <script setup lang="ts">
-async function sendMessage() {
+function sendMessage() {
   console.log('send message to server....')
 }
 </script>

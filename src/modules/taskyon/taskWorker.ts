@@ -158,7 +158,7 @@ async function processFunctionTask(
   return task
 }
 
-async function parseChatResponse2TaskDraft(message: string): Promise<Record<string, unknown>> {
+function parseChatResponse2TaskDraft(message: string): Record<string, unknown> {
   // parse the response and create a new task filled with the correct parameters
   let yamlContent = message.trim()
   // Use exec() to find a match
@@ -201,7 +201,7 @@ async function parseChatResponse2TaskDraft(message: string): Promise<Record<stri
 
 // use helper function to make code more concise ;)
 const createTaskGenerator =
-  (childCosts: object, finishedTask: TaskNode) => async (partialTask: partialTaskDraft) => {
+  (childCosts: object, finishedTask: TaskNode) => (partialTask: partialTaskDraft) => {
     partialTask.debugging = { ...partialTask.debugging, ...childCosts }
     const taskTemplate: Partial<TaskNode> = {
       configuration: finishedTask.configuration,
@@ -212,11 +212,11 @@ const createTaskGenerator =
 
 // we use this to decide whether we should call a function or to continue
 // this is usually not needed if we use llmTools (like built-in tools from openai API)
-async function generateFollowupFromStructuredResponse(
+function generateFollowupFromStructuredResponse(
   choice: ChatResponseType['choices'][0],
   generateFollowUpTask: ReturnType<typeof createTaskGenerator>,
 ) {
-  const structResponse = await parseChatResponse2TaskDraft(choice.message.content || '')
+  const structResponse = parseChatResponse2TaskDraft(choice.message.content || '')
   // depending on what role and tasktype the finishedTask has, we
   // expect different results from our structuredResponse
   // TODO: we need to do some plausibilitychecks here:
@@ -238,7 +238,7 @@ async function generateFollowupFromStructuredResponse(
 
   if (useTool) {
     console.log('trying to get tool call from structured response')
-    const newTask = await generateFollowUpTask({
+    const newTask = generateFollowUpTask({
       role: 'assistant',
       content: { structuredResponse: choice.message.content || '' },
     })
@@ -255,7 +255,7 @@ async function generateFollowupFromStructuredResponse(
       const command = res.data
       return [
         newTask,
-        await generateFollowUpTask({
+        generateFollowUpTask({
           priorID: newTask.priorID,
           role: 'assistant',
           content: { functionCall: command },
@@ -264,12 +264,12 @@ async function generateFollowupFromStructuredResponse(
     } else {
       return [
         newTask,
-        await generateFollowUpTask({
+        generateFollowUpTask({
           priorID: newTask.priorID,
           role: 'system',
           content: {
-            message: `The response (${pickProperties(structResponse, ['use tool', 'try again'])})
- suggests we should use a tool, but we could not parse the ${structResponse.command}`,
+            message: `The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
+ suggests we should use a tool, but we could not parse the ${JSON.stringify(structResponse.command)} property.`,
           },
         }),
       ]
@@ -278,7 +278,7 @@ async function generateFollowupFromStructuredResponse(
     // in the case that we don't call a tool, provide a "normal" answer :)
     // this time we declare it as "Open" and set execution to "true"
     return [
-      await generateFollowUpTask({
+      generateFollowUpTask({
         role: 'assistant',
         content: { structuredResponse: choice.message.content || '' },
       }),
@@ -333,7 +333,7 @@ async function generateFollowUpTasksFromResult(
   if (finishedTask.result) {
     if ('functionCall' in finishedTask.content) {
       return [
-        await generateFollowUpTask({
+        generateFollowUpTask({
           role: 'system',
           content: { toolResult: finishedTask.result },
         }),
@@ -352,7 +352,7 @@ async function generateFollowUpTasksFromResult(
       if (functionCall[0]) {
         // TODO: enable multiple parallel function calls
         return [
-          await generateFollowUpTask({
+          generateFollowUpTask({
             role: 'function',
             content: { functionCall: functionCall[0] },
           }),
@@ -373,11 +373,11 @@ async function generateFollowUpTasksFromResult(
             'toolResult' in finishedTask.content)) || // taskResult, but no LLM-builtin tools
         (finishedTask.role === 'system' && !('toolResult' in finishedTask.content)) // this happens e.g. in the case of an error...
       ) {
-        return await generateFollowupFromStructuredResponse(choice, generateFollowUpTask)
+        return generateFollowupFromStructuredResponse(choice, generateFollowUpTask)
       } else {
         // if 'message' in finishedTask.content && finishedTask.role === 'assistant'
         // this is the final response, so we simply add it to the chain without executing it
-        const newTask = await generateFollowUpTask({
+        const newTask = generateFollowUpTask({
           role: 'assistant',
           content: { message: choice.message.content },
         })
@@ -563,7 +563,7 @@ async function addTaskCostInformation(
           getTaskyonCosts(llmSettings, apiKey, api, chatResponse.id, task.id).then(
             (generationInfo) => {
               console.log('taskyon generation info:', generationInfo)
-              enrichWithUsageInfos(task, taskManager, generationInfo)
+              void enrichWithUsageInfos(task, taskManager, generationInfo)
             },
           ),
         )
@@ -629,18 +629,18 @@ export async function runTaskWorker(
           taskManager,
           llmSettings.enableOpenAiTools,
         )
-        const addTasks = (finishedTask: TaskNode) => async (t: (typeof newTasks)[0]) => {
-          const newTaskId = await addTask2Tree(
+        const addTasks = (finishedTask: TaskNode) => (t: (typeof newTasks)[0]) => {
+          void addTask2Tree(
             t,
             t.priorID || finishedTask.id,
-            // interrupt execution if interrupted flag is shown!
+            // interrupt execution if in  terrupted flag is shown!
             // this makes sure that results are still saved, even if we stop any
             // further execution
             taskWorkerController.isInterrupted() ? false : true,
-          )
-          llmSettings.selectedTaskId = newTaskId
+          ).then((newTaskId) => (llmSettings.selectedTaskId = newTaskId))
         }
-        newTasks.forEach(addTasks(task))
+        const taskAdder = addTasks(task)
+        newTasks.forEach(taskAdder)
 
         // and finally save the task
         void taskManager.setTask(task, true)

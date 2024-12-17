@@ -68,7 +68,7 @@ async function completionMessage() {
   return tyChat
 }
 
-async function runTest(name: string, testFunc: () => Promise<unknown> | unknown, details = false) {
+async function runTest(name: string, testFunc: () => unknown, details = false) {
   const result: Record<string, unknown> = {}
   console.log('run test:', name)
   try {
@@ -182,7 +182,7 @@ async function getData() {
   )
 }
 
-async function downloadReport() {
+function downloadReport() {
   const fileName = 'taskyon_diagnostics_report.yaml'
   const fileContent = JSON.stringify(diagnostics.value)
   const mimeType = 'application/json'

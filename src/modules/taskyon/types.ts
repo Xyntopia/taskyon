@@ -143,7 +143,7 @@ export interface JSONSchemaForFunctionParameter {
     [key: string]: {
       type: string
       description?: string | undefined
-      default?: unknown | undefined
+      default?: unknown
       items?: JSONSchemaForFunctionParameter | JSONSchemaForFunctionParameter[] | undefined
     }
   }
@@ -224,7 +224,7 @@ const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish()
 type yesno = z.infer<typeof yesno>
 
 // Convert yesno value to boolean
-export const yesnoToBoolean = (value: yesno | unknown): boolean => {
+export const yesnoToBoolean = (value: unknown): boolean => {
   if (value === 'yes') return true
   if (value === 'no') return false
   return !!value // Handles boolean, null, undefined

@@ -1,6 +1,6 @@
-import type { PyProxy} from 'pyodide';
+import type { PyProxy } from 'pyodide'
 import { loadPyodide, type PyodideInterface } from 'pyodide'
-import type { PythonScriptResult} from './pyodide';
+import type { PythonScriptResult } from './pyodide'
 import { executeScript } from './pyodide'
 import { expose } from 'comlink'
 
@@ -36,7 +36,7 @@ async function getPyodide() {
 }
 
 const pythonWorker = {
-  async runPythonScript(script: string, params?: unknown[]) {
+  async runPythonScript(this: void, script: string, params?: unknown[]) {
     const pyodide = await getPyodide()
     let result: PythonScriptResult
 

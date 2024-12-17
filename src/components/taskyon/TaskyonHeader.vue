@@ -250,6 +250,7 @@ const environmentInfo = () => ({
   supportsServiceWorker: typeof navigator !== 'undefined' && 'serviceWorker' in navigator,
   supportsES6: (() => {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
       new Function('(a = 0) => a')
       return true
     } catch {

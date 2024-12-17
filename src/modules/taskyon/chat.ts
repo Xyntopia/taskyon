@@ -172,11 +172,11 @@ export async function callLLM(
       // Check for non-OK status codes and throw error
       if (!response.ok) {
         const errorData = await response.json()
-        throw {
-          message: `Fetching answer from AI Api failed at attempt ${attempt}/${maxRetries}
+        throw new TaskProcessingError(
+          `Fetching answer from AI Api failed at attempt ${attempt}/${maxRetries}
   with status ${response.status}: ${response.statusText}`,
-          details: { errorData },
-        }
+          { errorData },
+        )
       }
 
       if (stream && response.body) {
@@ -224,10 +224,7 @@ export async function callLLM(
                   // Call the callback function to process the chunk
                   contentCallBack(jsonChunk)
                 } catch (err) {
-                  throw {
-                    message: `Failed to parse chunk; ${jsonString}`,
-                    details: { err },
-                  }
+                  throw new TaskProcessingError(`Failed to parse chunk; ${jsonString}`, { err })
                 }
               }
             }

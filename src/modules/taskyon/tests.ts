@@ -88,8 +88,8 @@ export async function testTransformersPipeline() {
 export async function testVectorizerInitialization() {
   const nlpWorker = useNlpWorker()
   const modelName = state.llmSettings.vectorizationModel // Mock model name
-  nlpWorker.loadVecModel(modelName)
-  nlpWorker.loadVecTokenizer(modelName)
+  await nlpWorker.loadVecModel(modelName)
+  await nlpWorker.loadVecTokenizer(modelName)
   return 'success'
 }
 
@@ -120,10 +120,10 @@ export async function markdownGeneration() {
   // and delete this conversation again :)
   if (lastLoadedTaskId) {
     const markdown = await tm.chatToMarkdown(lastLoadedTaskId)
-    tm.deleteTaskThread(lastLoadedTaskId)
+    await tm.deleteTaskThread(lastLoadedTaskId)
     return {
       markdown,
     }
   }
-  throw { message: 'could not found the task we just loaded!!' }
+  throw new Error('could not found the task we just loaded!!')
 }

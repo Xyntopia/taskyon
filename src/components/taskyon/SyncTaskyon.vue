@@ -251,7 +251,7 @@ async function onUpdateAppConfiguration() {
 }
 
 async function onSyncGdrive() {
-  saveObjToGdrive(
+  await saveObjToGdrive(
     {
       llmSettings: state.llmSettings,
       appConfiguration: state.appConfiguration,

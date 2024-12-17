@@ -53,14 +53,14 @@ async function updateToc(newTaskId: string) {
 }
 
 if (state.llmSettings.selectedTaskId) {
-  updateToc(state.llmSettings.selectedTaskId)
+  void updateToc(state.llmSettings.selectedTaskId)
 }
 
 watch(
   () => state.llmSettings.selectedTaskId,
-  async (newTaskId) => {
+  (newTaskId) => {
     if (newTaskId) {
-      updateToc(newTaskId)
+      void updateToc(newTaskId)
     }
   },
 )

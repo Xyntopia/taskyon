@@ -40,13 +40,13 @@ const loadMarkdown = async () => {
 }
 
 onMounted(() => {
-  loadMarkdown()
+  void loadMarkdown()
 })
 
 watch(
   () => route.fullPath,
   () => {
-    loadMarkdown()
+    void loadMarkdown()
   },
 )
 </script>

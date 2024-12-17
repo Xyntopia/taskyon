@@ -17,7 +17,7 @@ export const useNlpWorker = () => {
     nlpWorker = wrap<NlpWorkerInterface>(
       new Worker(
         /* webpackChunkName: "nlpworker" */
-        /* webpackMode: "lazy" */
+        /* webpackModnlpWorkere: "lazy" */
         /* webpackFetchPriority: "low" */
         /* webpackIgnore: "true" */
         new URL('./nlp.worker.ts', import.meta.url),

@@ -78,7 +78,7 @@ const loadAllPreviews = async () => {
 watch(
   () => props.fileMappings,
   () => {
-    loadAllPreviews()
+    void loadAllPreviews()
   },
   {
     immediate: true,

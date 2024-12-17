@@ -117,7 +117,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   function defineTyGuiTools(): Tool[] {
     return [
       {
-        function: async ({ newPrompts }: { newPrompts: { [key: string]: string } }) => {
+        function: ({ newPrompts }: { newPrompts: { [key: string]: string } }) => {
           console.log('Modifying prompts in llmSettings...')
           const newPromptsMerged = {
             ...stateRefs.llmSettings.taskChatTemplates,
@@ -128,8 +128,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
             stateRefs.llmSettings.taskChatTemplates = result.data
             console.log('Prompts modified:', stateRefs.llmSettings.taskChatTemplates)
           } else {
-            return `It was not possible to add prompts for ${Object.keys(newPrompts)} to
-  ${Object.keys(stateRefs.llmSettings.taskChatTemplates)}. Did you use the wrong 
+            return `It was not possible to add prompts for ${JSON.stringify(Object.keys(newPrompts))} to
+  ${JSON.stringify(Object.keys(stateRefs.llmSettings.taskChatTemplates))}. Did you use the wrong 
   keys and are they all defined as string?`
           }
         },
@@ -260,7 +260,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   }
 
   // update chatHistory on-the-fly whenever our taskmanager adds new tasks...
-  getTaskManager().then((tm) => {
+  void getTaskManager().then((tm) => {
     // fill chatHistory with some initial values...
     /*tm.searchTasks({
       selector: {
@@ -282,7 +282,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       const tm = await getTaskManager()
       if (selectedTask) {
         const taskNode = await tm.getTask(selectedTask)
-        if (taskNode) add2ChatHistory(taskNode, 'existing')
+        if (taskNode) void add2ChatHistory(taskNode, 'existing')
       }
     },
     { immediate: true },
@@ -296,7 +296,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   }
 
   const llmModelsInternal = ref<Model[]>([])
-  updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then((m) => (llmModelsInternal.value = m))
+  void updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then(
+    (m) => (llmModelsInternal.value = m),
+  )
   // make sure we update our model list whenever anything changes for our
   // endpoints...
   watch(
@@ -307,7 +309,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       if (api && !api.selectedModel) {
         stateRefs.llmSettings.llmApis['taskyon']!.selectedModel = api.models?.free
       }
-      updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then(
+      void updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then(
         (m) => (llmModelsInternal.value = m),
       )
     },

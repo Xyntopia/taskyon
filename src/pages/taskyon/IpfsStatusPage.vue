@@ -55,8 +55,8 @@ const startHelia = async () => {
       console.log(`Disconnected from ${evt.detail.toString()}`);
     });*/
 
-    interval = setInterval(async () => {
-      status.value = (await fetchNodeStatus()) ?? {}
+    interval = setInterval(() => {
+      void fetchNodeStatus().then((res) => (status.value = res ?? {}))
     }, pollingInterval)
 
     // Fetch status initially
@@ -74,7 +74,7 @@ const startHelia = async () => {
 onUnmounted(() => {
   clearInterval(interval)
   if (ipfsnode) {
-    ipfsnode.stop()
+    void ipfsnode.stop()
     console.log('Helia node stopped')
   }
 })

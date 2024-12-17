@@ -105,6 +105,7 @@ function convertRes2Js(result: unknown) {
       } else if ('toString' in result) {
         // Fallback to using toString() for other types of objects
         try {
+          // eslint-disable-next-line @typescript-eslint/no-base-to-string
           convres = result.toString()
         } catch (error) {
           console.error('Error converting Python object to string', error)

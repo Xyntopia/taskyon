@@ -55,7 +55,7 @@ export const getIpfsNode = (() => {
   }
 })()
 
-const getConnectedPeers = async (node: IpfsNode) => {
+const getConnectedPeers = (node: IpfsNode) => {
   const peers = node.libp2p.getPeers()
   /*for (const peer of peers) {
       const peerEl = document.createElement('li');
@@ -83,7 +83,7 @@ export async function exportToIpfs(node: IpfsNode, txt: string) {
   const s = strings(node)
 
   const myImmutableAddress = await s.add(txt)
-  node.routing.provide(myImmutableAddress)
+  void node.routing.provide(myImmutableAddress)
 
   console.log('exported string to IPFS using CID:', myImmutableAddress.toString())
   //console.log(await s.get(myImmutableAddress));
@@ -122,7 +122,7 @@ export const fetchNodeStatus = async (
 ) => {
   try {
     const metrics = node.metrics
-    const connectedPeers = await getConnectedPeers(node)
+    const connectedPeers = getConnectedPeers(node)
 
     const info: Record<string, unknown> = {
       peerId: node.libp2p.peerId.toString(),

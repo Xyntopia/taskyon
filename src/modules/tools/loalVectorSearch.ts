@@ -1,7 +1,7 @@
 import type { Tool } from '../taskyon/tools'
 
 export const localVectorStoreSearch: Tool = {
-  function: async ({ searchTerm }: { searchTerm: string }) => {
+  function: ({ searchTerm }: { searchTerm: string }) => {
     return searchTerm
     /*const vectorStore = useVectorStore();
       const k = 3;

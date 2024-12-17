@@ -1,6 +1,6 @@
 import { defineSsrMiddleware } from '#q-app/wrappers'
 import type { Request, Response } from 'express'
-import type { AxiosError } from 'axios';
+import type { AxiosError } from 'axios'
 import axios from 'axios'
 
 const { GOOGLE_API_KEY } = process.env
@@ -49,7 +49,7 @@ const handleProxyRequest = async (req: Request, res: Response) => {
   await fetchGoogleDriveFile(fileId, res)
 }
 
-export default defineSsrMiddleware(async ({ app }) => {
+export default defineSsrMiddleware(({ app }) => {
   console.log('prepare gdrive proxy')
   app.get('/proxy/gdrive/:fileId', handleProxyRequest)
 })

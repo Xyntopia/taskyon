@@ -10,26 +10,26 @@ describe('iframe integration', () => {
       Cypress.automation('remote:debugger:protocol', {
         command: 'Network.clearBrowserCache',
       }),
-    );
-    cy.visit('/');
+    )
+    cy.visit('/')
 
     // Clear local storage
-    cy.clearLocalStorage();
+    cy.clearLocalStorage()
 
     // Clear cookies
-    cy.clearCookies();
+    cy.clearCookies()
 
     // Optionally, you can clear indexedDB if your app uses it
     // somehow we're getting a lot of errors here...
     cy.window().then(async (win) => {
-      const databases = await win.indexedDB.databases();
+      const databases = await win.indexedDB.databases()
       databases.forEach((db) => {
-        win.indexedDB.deleteDatabase(db.name!);
-      });
-    });
+        win.indexedDB.deleteDatabase(db.name!)
+      })
+    })
 
-    cy.reload();
-  });
+    cy.reload()
+  })
 
   const getIframeBody = () => {
     // get the iframe > document > body
@@ -42,49 +42,43 @@ describe('iframe integration', () => {
         // wraps "body" DOM element to allow
         // chaining more Cypress commands, like ".find(...)"
         // https://on.cypress.io/wrap
-        .then(cy.wrap)
-    );
-  };
+        .then((body) => cy.wrap(body))
+    )
+  }
 
   const getIframeWindow = () => {
-    return cy.get('iframe').its('0.contentWindow').should('exist');
-  };
+    return cy.get('iframe').its('0.contentWindow').should('exist')
+  }
 
   const clearIframeStorage = () => {
     // Clear iframe localStorage and cookies
     getIframeWindow().then((iframeWin) => {
-      iframeWin.localStorage.clear();
-      iframeWin.sessionStorage.clear();
+      iframeWin.localStorage.clear()
+      iframeWin.sessionStorage.clear()
 
       // Clear IndexedDB of the iframe
       iframeWin.indexedDB.databases().then((databases: { name?: string }[]) => {
         databases.forEach((db) => {
-          iframeWin.indexedDB.deleteDatabase(db.name!);
-        });
-      });
-    });
-  };
+          iframeWin.indexedDB.deleteDatabase(db.name!)
+        })
+      })
+    })
+  }
 
-  it(
-    'Should be able to create a tool and use it through the iframe',
-    { baseUrl: null },
-    () => {
-      cy.visit('./public/docs/examples/simpleExampleLocal.html'); //.wait(10000);
+  it('Should be able to create a tool and use it through the iframe', { baseUrl: null }, () => {
+    cy.visit('./public/docs/examples/simpleExampleLocal.html') //.wait(10000);
 
-      clearIframeStorage();
+    clearIframeStorage()
 
-      cy.reload();
+    cy.reload()
 
-      getIframeBody().should('exist');
-      //getIframeBody().find('#q-app').should('exist');
-      //getIframeBody().get('.q-btn').should('exist');
-      getIframeBody().contains('Use free Taskyon').click();
-      getIframeBody()
-        .find('button[aria-label="Open Sidebar"]')
-        .should('exist')
-        .click();
+    getIframeBody().should('exist')
+    //getIframeBody().find('#q-app').should('exist');
+    //getIframeBody().get('.q-btn').should('exist');
+    getIframeBody().contains('Use free Taskyon').click()
+    getIframeBody().find('button[aria-label="Open Sidebar"]').should('exist').click()
 
-      /* TODO test "development" mode for iframe.. :)
+    /* TODO test "development" mode for iframe.. :)
       getIframeBody()
         .find('[aria-label="Expert mode"] > .q-toggle__inner')
         .click();
@@ -93,30 +87,30 @@ describe('iframe integration', () => {
         .click();
       */
 
-      //getIframeBody().find('button[aria-label="Open Sidebar"]').click();
-      getIframeBody().click();
+    //getIframeBody().find('button[aria-label="Open Sidebar"]').click();
+    getIframeBody().click()
 
-      getIframeBody().contains('your message').type(
-        'Can you add the two strings: “cypress” and “test function” for me using \
+    getIframeBody().contains('your message').type(
+      'Can you add the two strings: “cypress” and “test function” for me using \
 the myExampleStringAdderAlone tool? make sure, you display the exact string how it is displayed (with/without whitespace etc…)\
 {enter}',
-      );
+    )
 
-      cy.get('#output').contains('cypresstest function');
+    cy.get('#output').contains('cypresstest function')
 
-      getIframeBody().wait(5000).contains('myExampleStringAdderAlone').click();
-      getIframeBody()
-        .wait(10000)
-        .contains(/^result:[\|\s]*cypresstest function/)
-        .should('exist');
+    getIframeBody().wait(5000).contains('myExampleStringAdderAlone').click()
+    getIframeBody()
+      .wait(10000)
+      .contains(/^result:[|\s]*cypresstest function/)
+      .should('exist')
 
-      cy.screenshot('iframe_integration', { overwrite: true });
+    cy.screenshot('iframe_integration', { overwrite: true })
 
-      // TODO: make sure we are in minimal mode and all the other stuff required for embedded taskyon
+    // TODO: make sure we are in minimal mode and all the other stuff required for embedded taskyon
 
-      //cy.title().should('include', 'taskyon');
+    //cy.title().should('include', 'taskyon');
 
-      /*cy.contains('your message').type('hello world!{enter}');
+    /*cy.contains('your message').type('hello world!{enter}');
       //cy.get('li').first().click();
       //cy.contains('Clicks on todos: 1').should('exist');
 
@@ -164,6 +158,5 @@ the myExampleStringAdderAlone tool? make sure, you display the exact string how 
         .eq(0)
         .get('.q-field .q-chip')
         .should('not.exist');*/
-    },
-  );
-});
+  })
+})

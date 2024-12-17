@@ -213,7 +213,7 @@ async function onSearchChange(params: searchParams) {
   } else {
     // Update the URL with the search parameter
     const newQuery = { ...defaultParams, ...props.query, ...params }
-    router.push({ query: newQuery }) // Perform your search here
+    void router.push({ query: newQuery }) // Perform your search here
     console.log('Searching for: ', params)
     await searchTasks(newQuery)
     console.log('finished search!')
@@ -224,14 +224,14 @@ async function onSearchChange(params: searchParams) {
 onMounted(() => {
   if (props.query) {
     console.log('doing initial search!')
-    searchTasks({ ...defaultParams, ...props.query })
+    void searchTasks({ ...defaultParams, ...props.query })
   } else {
     searchResults.value = []
   }
 })
 
 watch(route, (newRoute) => {
-  searchTasks({ ...defaultParams, ...newRoute.query })
+  void searchTasks({ ...defaultParams, ...newRoute.query })
 })
 
 //const numberOfSearchResults = ref(5)
@@ -249,7 +249,7 @@ async function setConversation(taskId: string) {
     taskManager.getTask(taskID),
   )
   console.log('set conversation to', leafTasks[0])
-  router.push({ path: 'chat', query: { t: leafTasks[0] } })
+  void router.push({ path: 'chat', query: { t: leafTasks[0] } })
 }
 
 const columns: QTableProps['columns'] = [
