@@ -273,7 +273,7 @@ export async function getTaskyonCosts(
   llmSettings: llmSettings,
   apiKey: string,
   api: llmSettings['llmApis'][0],
-  chatCompletion: OpenAI.Chat.Completions.ChatCompletion,
+  completionId: string,
   taskid: string,
 ) {
   const headers = {
@@ -282,7 +282,7 @@ export async function getTaskyonCosts(
   }
   const baseUrl = new URL(api.baseURL).origin
   console.log('get generation info from ', baseUrl)
-  const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${chatCompletion.id}`
+  const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${completionId}`
   const response = await fetch(url, { headers })
   if (!response.ok) {
     // TODO: replace this with an error message in the UsageInfos

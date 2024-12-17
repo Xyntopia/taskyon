@@ -16,6 +16,7 @@ import {
   TaskProcessingError,
   yesnoToBoolean,
   OnInterruptFunc,
+  ChatResponseType,
 } from './types'
 import type { OpenAI } from 'openai'
 import { initAddTask2Tree, TyTaskManager } from './taskManager'
@@ -37,7 +38,7 @@ import { isTaskyonKey } from './tyCrypto'
 const { estimateChatTokens } = useNlpWorker()
 
 function extractOpenAIFunctions(
-  choice: OpenAI.ChatCompletion['choices'][0],
+  choice: ChatResponseType['choices'][0],
   tools: Record<string, ToolBase>,
 ) {
   const functionCalls: FunctionCall[] = []
@@ -216,7 +217,7 @@ const createTaskGenerator =
 // we use this to decide whether we should call a function or to continue
 // this is usually not needed if we use llmTools (like built-in tools from openai API)
 async function generateFollowupFromStructuredResponse(
-  choice: OpenAI.Chat.Completions.ChatCompletion.Choice,
+  choice: ChatResponseType['choices'][0],
   generateFollowUpTask: ReturnType<typeof createTaskGenerator>,
 ) {
   const structResponse = await parseChatResponse2TaskDraft(choice.message.content || '')
@@ -334,16 +335,17 @@ async function generateFollowUpTasksFromResult(
   // TODO: what do we do in case of an empty user message, but only a file?
   //       right now, we assume, that user message always comes after uploaded file message :)
   if (finishedTask.result) {
-    if ('functionCall' in finishedTask.content && finishedTask.result.toolResult) {
+    if ('functionCall' in finishedTask.content) {
       return [
         await generateFollowUpTask(true, {
           role: 'system',
-          content: { toolResult: finishedTask.result.toolResult },
+          content: { toolResult: finishedTask.result },
         }),
       ]
     }
     // did we get any response from an LLM?
-    const choice = finishedTask.result?.chatResponse?.choices[0]
+    // TODO: make this part of our new chatcompletion tool!
+    const choice = getChatResponseFromTask(finishedTask)?.choices[0]
     if (choice) {
       // check if we have any functioncalls from the llm inference
       // in that case we shoud handle that first :)
@@ -372,7 +374,7 @@ async function generateFollowUpTasksFromResult(
       if (
         (!llmTools &&
           (('message' in finishedTask.content && finishedTask.role === 'user' && useTyTools) || // this happens, if we use tools, but no LLM-builtin tools
-            'toolResult' in finishedTask.content)) || // toolResult, but no LLM-builtin tools
+            'toolResult' in finishedTask.content)) || // taskResult, but no LLM-builtin tools
         (finishedTask.role === 'system' && !('toolResult' in finishedTask.content)) // this happens e.g. in the case of an error...
       ) {
         return await generateFollowupFromStructuredResponse(choice, generateFollowUpTask)
@@ -523,10 +525,10 @@ async function addTaskCostInformation(
   apiKey?: string,
 ) {
   // TODO: also get cost information for other tasks, than chatCompletion ;)!
-  if (task.result && task.result.chatResponse) {
+  const chatResponse = getChatResponseFromTask(task)
+  if (chatResponse) {
     const { openAIConversationThread } = await generateCompleteChat(task, llmSettings, taskManager)
 
-    const chatResponse = task.result.chatResponse
     // openai sends back the exact number of prompt tokens :)
     if (chatResponse.usage) {
       task.debugging.promptTokens = chatResponse.usage.prompt_tokens
@@ -564,7 +566,7 @@ async function addTaskCostInformation(
         // our backend tries to get the finished costs
         // after ~4000ms, so we wait for 6000 here...
         void sleep(6000).then(() =>
-          getTaskyonCosts(llmSettings, apiKey, api, chatResponse, task.id).then(
+          getTaskyonCosts(llmSettings, apiKey, api, chatResponse.id, task.id).then(
             (generationInfo) => {
               console.log('taskyon generation info:', generationInfo)
               enrichWithUsageInfos(task, taskManager, generationInfo)
@@ -574,6 +576,11 @@ async function addTaskCostInformation(
       }
     }
   }
+}
+
+function getChatResponseFromTask(task: Readonly<TaskNode>) {
+  const res = ChatResponseType.safeParse(task.result)
+  return res.data
 }
 
 export async function runTaskWorker(

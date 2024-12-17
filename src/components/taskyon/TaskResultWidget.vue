@@ -17,10 +17,7 @@
         <div v-if="!isHtmlResult && !useIframe" class="scroll-area">
           {{ dump(task.result) }}
         </div>
-        <iframe
-          v-else
-          :srcdoc="typeof task.result?.result === 'string' ? task.result.result : ''"
-        ></iframe>
+        <iframe v-else :srcdoc="typeof task.result === 'string' ? task.result : ''"></iframe>
         <q-btn
           class="scroll-area-btn"
           flat
@@ -50,13 +47,7 @@ const useIframe = ref(false)
 
 const isHtmlResult = computed(() => {
   const taskResult = props.task.result
-  // Simple check for HTML - you might need a more accurate way to determine this
-  let isHtml = false
-  if (typeof taskResult?.result === 'string') {
-    //#const isHtml= taskResult.trim().startsWith('<');
-    isHtml = taskResult.result.trim().startsWith('<')
-  }
-  return isHtml
+  return typeof taskResult === 'string' && /<[^>]+>/.test(taskResult.trim())
 })
 </script>
 

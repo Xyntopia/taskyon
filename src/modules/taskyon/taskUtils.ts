@@ -134,7 +134,7 @@ async function convertTaskNodeToOpenAIMessage(
 
       const functionArgs = dump({
         arguments: task.content.functionCall.arguments,
-        //...t.result?.toolResult,
+        //...t.result?,
       })
       return [
         {

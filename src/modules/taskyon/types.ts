@@ -173,21 +173,94 @@ export const ToolBase = z.object({
 })
 export type ToolBase = z.infer<typeof ToolBase> // this reflects json schema:  https://json-schema.org/specification-links
 
+// TODO: get rid of OpenAI dependency...
+/*const chatResponse: z.ZodType<OpenAI.ChatCompletion> = z.object({
+  id: z.string(),
+  object: z.string(),
+  created: z.number(),
+  model: z.string(),
+  choices: z.array(
+    z.object({
+      message: z.object({
+        role: z.string(), // Refine to enum if roles are predefined
+        content: z.string(),
+      }),
+      finish_reason: z.union([
+        z.literal('length'),
+        z.literal('function_call'),
+        z.literal('tool_calls'),
+        z.literal('stop'),
+        z.literal('content_filter'),
+      ]),
+      index: z.number(),
+      logprobs: z
+        .object({
+          tokens: z.array(z.string()),
+          token_logprobs: z.array(z.number().nullable()),
+          top_logprobs: z.array(z.record(z.string(), z.number()).nullable()),
+          text_offset: z.array(z.number()),
+          content: z.string().optional(),
+          refusal: z.string(), // Add required field
+        })
+        .nullable(),
+    }),
+  ),
+  usage: z
+    .object({
+      prompt_tokens: z.number(),
+      completion_tokens: z.number(),
+      total_tokens: z.number(),
+    })
+    .optional(),
+})*/
+
+// we are defining a "minimal" subset of openai chatcompletion which we need to have in our
+// our own app!
+// TODO: combine this type here with the previous, duplicate ones we have declared!! (e.g. OpenAIMessage)
+export const ChatResponseType = z.object({
+  id: z.string(),
+  model: z.string(),
+  choices: z.array(
+    z.object({
+      message: z.object({
+        role: z.literal('assistant'),
+        content: z.string().nullable(),
+        tool_calls: z
+          .array(
+            z.object({
+              id: z.string(),
+              function: z.object({ arguments: z.string(), name: z.string() }),
+              type: z.literal('function'),
+            }),
+          )
+          .optional(),
+      }),
+    }),
+  ),
+  usage: z
+    .object({
+      prompt_tokens: z.number(),
+      completion_tokens: z.number(),
+      total_tokens: z.number(),
+    })
+    .optional(),
+})
+export type ChatResponseType = z.infer<typeof ChatResponseType>
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function assertType<T>(value: T): void {
+  // This function does nothing at runtime, but it enforces type checking at compile time.
+}
+// Use the function to trigger type checking
+// This will cause TypeScript to report an error if the types don't match
+//assertType<ChatResponseType>({} as SimplifyDeep<OpenAI.ChatCompletion>)
+assertType<ChatResponseType>({} as OpenAI.ChatCompletion)
+
 const ToolResult = z.object({
   result: z.union([z.string(), z.record(z.unknown())]).optional(),
   error: z.unknown().optional(), // 'unknown' type in Zod is handled with 'z.unknown()'
   stdout: z.string().optional(),
 })
 export type ToolResult = z.infer<typeof ToolResult>
-
-// TODO: get rid of OpenAI dependency...
-const chatResponse: z.ZodType<OpenAI.ChatCompletion> = z.any()
-
-export const TaskResult = z.object({
-  chatResponse: chatResponse.optional(),
-  toolResult: ToolResult.optional(), // Replace 'z.any()' with the specific type if available
-})
-export type TaskResult = z.infer<typeof TaskResult>
 
 export const ParamType = z.union([
   z.string(),
@@ -287,7 +360,6 @@ const MessageContent = z.object({ message: z.string() })
 const StructuredContent = z.object({ structuredResponse: z.string() })
 const ToolCallContent = z.object({ functionCall: FunctionCall })
 const UploadedFilesContent = z.object({ uploadedFiles: z.array(z.string()) })
-// TODO: restructure ToolResultContent to be a "normal message"
 const ToolResultContent = z.object({ toolResult: ToolResult })
 const TaskContent = z.union([
   StructuredContent,
@@ -309,6 +381,8 @@ export const TaskNode = z.object({
 For example this is, what an LLM would actually get to see. There are only a few different ways
 of how content can be structured. `,
   ),
+  // TODO: get rid of task state...  the reason is that its stateful (as the nam suggests)
+  //       what we can do is this: move it into
   state: TaskState,
   label: z.array(z.string()).optional(),
   context: z.record(z.string(), z.string()).optional(),
@@ -326,6 +400,9 @@ of how content can be structured. `,
   priorID: z.string().optional().describe('The ID of the previous task in the same stack level.'),
   // provide debugging information about the task execution
   // all debugging information should be purely optional...
+  // TODO: we should also include debugging information about the execution of the previous task
+  //       here. The reason we're doing this, is, that we consider every Tasknode the "Result" of
+  //       its previous/parent tas.
   debugging: z
     .object({
       threadMessage: z.any().optional(), // Replace with the correct Zod schema if available
@@ -351,7 +428,9 @@ of how content can be structured. `,
       taskPrompt: z.union([z.array(OpenAIMessage), z.any()]).optional(), // Replace 'z.any()' with the correct Zod type
     })
     .partial(),
-  result: TaskResult.optional(),
+  // TODO: get rid of "result" It is not practical, if we have immutable tasks, because we would have to update the task
+  //       and the tree with it..
+  result: z.unknown().optional(),
   id: z.string(), // can we make the id an SHA-1 value like in git? in that case we should simply remove this value...
   allowedTools: z.array(z.string()).optional(),
   authorId: z.string().optional(),

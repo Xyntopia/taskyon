@@ -6,7 +6,10 @@
       <div class="row items-end q-gutter-xs">
         <!--task icon-->
         <div
-          v-if="task.state === 'Error' || task.result?.toolResult?.error"
+          v-if="
+            task.state === 'Error' ||
+            (task.result && task.result instanceof Object && 'error' in task.result)
+          "
           class="col-auto self-center"
         >
           <q-icon :name="matWarning" color="negative" size="sm"
@@ -24,7 +27,8 @@
           <q-expansion-item
             dense
             :header-class="
-              task.state === 'Error' || task.result?.toolResult?.error
+              task.state === 'Error' ||
+              (task.result && task.result instanceof Object && 'error' in task.result)
                 ? 'text-negative'
                 : isWorking
                   ? 'text-info'
@@ -38,7 +42,7 @@
                 <div>{{ task.content.functionCall.name }}</div>
               </div>
             </template>
-            <ToolResultWidget :task="task" />
+            <TaskResultWidget :task="task" />
           </q-expansion-item>
         </div>
         <div v-if="'toolResult' in task.content" class="col q-pb-md">
@@ -50,7 +54,7 @@
             </q-expansion-item>
             <q-separator />
             <p style="white-space: pre-wrap">
-              {{ task.result?.chatResponse?.choices[0]?.message.content }}
+              {{ dump(task.result) }}
             </p>
           </q-expansion-item>
         </div>
@@ -187,9 +191,9 @@
             >
             </textarea>
           </q-tab-panel>
-          <q-tab-panel name="MESSAGECONTENT">
+          <q-tab-panel name="TASKRESULT">
             <textarea
-              :value="task.result?.chatResponse?.choices[0]?.message.content || 'N/A'"
+              :value="JSON.stringify(task, null, 2)"
               readonly
               wrap="soft"
               style="width: 100%; height: 200px; background-color: inherit; color: inherit"
@@ -214,7 +218,7 @@
 </template>
 
 <script setup lang="ts">
-import ToolResultWidget from 'components/taskyon/ToolResultWidget.vue'
+import TaskResultWidget from 'src/components/taskyon/TaskResultWidget.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
 import { TaskNode, partialTaskDraft, ToolBase } from 'src/modules/taskyon/types'

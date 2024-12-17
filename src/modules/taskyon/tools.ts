@@ -1,7 +1,7 @@
 import { dump } from 'js-yaml'
 import { bigIntToString } from '../utils'
 import {
-  TaskResult,
+  ToolResult,
   FunctionArguments,
   FunctionCall,
   ParamType,
@@ -107,25 +107,21 @@ export async function handleFunctionExecution(
   func: FunctionCall,
   tools: Record<string, ToolBase | Tool>,
   onInterrupt: OnInterruptFunc,
-): Promise<TaskResult> {
+): Promise<ToolResult> {
   let funcR: unknown
   const tool = getTool(tools, func.name)
   if ('function' in tool && tool.function) {
     console.log('using tool!', tool)
     funcR = await tool.function(func.arguments)
     funcR = bigIntToString(funcR)
-    return {
-      toolResult: { result: dump(funcR) },
-    }
+    return { result: dump(funcR) }
   } else if (tool.code) {
     console.log('compile & execute function code in iframe', tool)
     try {
       // Execute code in iframe with parameters (func.arguments)
       funcR = await executeCodeInIframe(tool.code, func.arguments, func.name + '.js', onInterrupt)
       funcR = bigIntToString(funcR) // Optionally convert bigInt
-      return {
-        toolResult: { result: dump(funcR) },
-      }
+      return { result: dump(funcR) }
     } catch (error) {
       throw new TaskProcessingError(
         `Error executing iframe code for tool: ${func.name}. Error: ${error instanceof Error ? error.message : 'unknown'}`,
@@ -136,9 +132,7 @@ export async function handleFunctionExecution(
     // and want to make sure its serializable for a postMessage function.
     // TODO: use our "onInterrupt" here somehow ;)
     const funcR = await handleRemoteFunction(func.name, func.arguments)
-    return {
-      toolResult: { result: dump(funcR) },
-    }
+    return { result: dump(funcR) }
   }
 }
 
