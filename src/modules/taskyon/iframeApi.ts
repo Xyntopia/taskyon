@@ -1,5 +1,5 @@
-import { initAddTask2Tree } from './taskManager'
-import { ToolBase, partialTaskDraft } from './types'
+import type { initAddTask2Tree } from './taskManager'
+import type { ToolBase, partialTaskDraft } from './types'
 import type { llmSettings } from './types'
 import { deepMergeReactive } from '../utils'
 import { tylog } from '../logger'

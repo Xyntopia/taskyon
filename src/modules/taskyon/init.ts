@@ -1,13 +1,15 @@
 import { initAddTask2Tree, useTyTaskManager } from './taskManager'
 import type { TaskNode } from './types'
-import { createTaskyonDatabase, TaskyonDatabase } from './rxdb'
-import { TaskWorkerController, runTaskWorker } from './taskWorker'
+import type { TaskyonDatabase } from './rxdb';
+import { createTaskyonDatabase } from './rxdb'
+import type { TaskWorkerController} from './taskWorker';
+import { runTaskWorker } from './taskWorker'
 import type { Tool } from './tools'
 import { loadFile } from 'src/modules/loadFiles'
 // TODO: make webpack automatically add all tool files from /tools/*
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
-import { llmSettings } from './types'
+import type { llmSettings } from './types'
 import { AsyncQueue, toLowerCaseKeys } from '../utils'
 
 export async function initTaskyon(

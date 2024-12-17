@@ -1,4 +1,4 @@
-import { arbitraryFunction, Tool } from '../taskyon/tools'
+import type { arbitraryFunction, Tool } from '../taskyon/tools'
 
 // the following tool is "self-referential" and because of this we can not initialize it yet
 // we instead write a factory function which creates this tool using a reference to our tools

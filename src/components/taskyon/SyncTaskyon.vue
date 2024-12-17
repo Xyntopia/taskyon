@@ -53,8 +53,8 @@
           </q-card>
         </q-dialog>
         <q-btn
-          class="col-auto"
           v-if="state.llmSettings.userId"
+          class="col-auto"
           flat
           dense
           :icon="matContentCopy"

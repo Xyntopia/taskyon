@@ -1,17 +1,20 @@
 import { dump } from 'js-yaml'
 import { bigIntToString } from '../utils'
-import {
+import type {
   ToolResult,
   FunctionArguments,
   FunctionCall,
   ParamType,
+  OnInterruptFunc} from './types';
+import {
   ToolBase,
-  TaskProcessingError,
-  OnInterruptFunc,
+  TaskProcessingError
 } from './types'
-import { RemoteFunctionCall, TaskyonMessages, RemoteFunctionResponse } from './iframeApiTypes'
+import type { RemoteFunctionResponse } from './iframeApiTypes';
+import { RemoteFunctionCall, TaskyonMessages } from './iframeApiTypes'
 import { z } from 'zod'
-import { YamlRepresentation, convertToYamlWComments } from '../zodUtils'
+import type { YamlRepresentation} from '../zodUtils';
+import { convertToYamlWComments } from '../zodUtils'
 import { executeCodeInIframe } from './iframeWorker'
 
 const arbitraryFunctionSchema = z.custom<

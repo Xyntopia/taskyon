@@ -9,18 +9,18 @@ import { useNlpWorker } from './webWorkerApi'
 import { generateCompleteChat, generateOpenAIToolDeclarations } from './promptCreation'
 import {
   FunctionCall,
-  partialTaskDraft,
-  TaskNode,
-  llmSettings,
-  ToolBase,
+  type partialTaskDraft,
+  type TaskNode,
+  type llmSettings,
+  type ToolBase,
   TaskProcessingError,
   yesnoToBoolean,
-  OnInterruptFunc,
+  type OnInterruptFunc,
   ChatResponseType,
 } from './types'
 import type { OpenAI } from 'openai'
-import { initAddTask2Tree, TyTaskManager } from './taskManager'
-import { Tool, handleFunctionExecution } from './tools'
+import { initAddTask2Tree, type TyTaskManager } from './taskManager'
+import { type Tool, handleFunctionExecution } from './tools'
 import { load } from 'js-yaml'
 import {
   type AsyncQueue,

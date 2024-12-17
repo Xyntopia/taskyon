@@ -10,9 +10,9 @@
     >
       <q-scroll-observer axis="vertical" :debounce="500" @scroll="onScroll" />
       <div
+        v-if="tystate.selectedThread.length > 0 && showIntroduction"
         class="row items-center q-pa-sm"
         style="max-width: 600px"
-        v-if="tystate.selectedThread.length > 0 && showIntroduction"
       >
         <q-icon
           class="col-auto q-pa-xl"

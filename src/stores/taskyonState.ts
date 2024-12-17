@@ -4,7 +4,7 @@ import {
   type Model,
   type TaskNode,
   llmSettings,
-  partialTaskDraft,
+  type partialTaskDraft,
   type storedSettings,
 } from 'src/modules/taskyon/types'
 import axios from 'axios' // TODO: replace with fetch
@@ -188,7 +188,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   async function addTasks(taskList: partialTaskDraft[]) {
     let lastTaskId: string | undefined = undefined
     for (const task of taskList) {
-      task.state = task.state ?? 'Completed' // Ensure state is set
       task.debugging = task.debugging ?? {} // Ensure state is set
       lastTaskId = await addTask2Tree(
         task as typeof task & {

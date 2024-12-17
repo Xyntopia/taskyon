@@ -1,5 +1,7 @@
-import { loadPyodide, PyProxy, type PyodideInterface } from 'pyodide'
-import { PythonScriptResult, executeScript } from './pyodide'
+import type { PyProxy} from 'pyodide';
+import { loadPyodide, type PyodideInterface } from 'pyodide'
+import type { PythonScriptResult} from './pyodide';
+import { executeScript } from './pyodide'
 import { expose } from 'comlink'
 
 //declare const self: ServiceWorkerGlobalScope

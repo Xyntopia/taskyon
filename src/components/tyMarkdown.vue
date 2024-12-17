@@ -19,7 +19,7 @@ import 'prismjs/components/prism-javascript'
 import 'prismjs/components/prism-typescript'
 import { uid, useQuasar } from 'quasar'
 import { computed, onMounted, getCurrentInstance } from 'vue'
-import Renderer from 'markdown-it/lib/renderer'
+import type Renderer from 'markdown-it/lib/renderer'
 import { svgToPng } from 'src/modules/svgUtils'
 const $q = useQuasar()
 

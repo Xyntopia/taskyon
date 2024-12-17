@@ -3,8 +3,8 @@
     :label="
       mode === 'all' ? 'Reset Taskyon' : mode === 'settings' ? 'Reset Settings' : 'Delete Tasks'
     "
-    @click="showResetDialog = true"
     v-bind="$attrs"
+    @click="showResetDialog = true"
   >
     <q-tooltip :delay="1000">
       {{

@@ -114,14 +114,14 @@
               v-ripple
               clickable
               exact
-              @click="showAboutDialog = true"
               active-class="text-secondary"
+              @click="showAboutDialog = true"
             >
               <q-item-section avatar>
                 <q-icon :name="mdiInformationVariant" />
               </q-item-section>
               <q-item-section> About </q-item-section>
-              <q-dialog auto-close v-model="showAboutDialog">
+              <q-dialog v-model="showAboutDialog" auto-close>
                 <q-card>
                   <q-card-section class="text-h5">About Taskyon</q-card-section>
                   <q-card-section>

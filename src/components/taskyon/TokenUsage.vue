@@ -73,8 +73,8 @@
 </template>
 
 <script setup lang="ts">
-import { PropType } from 'vue'
-import { TaskNode } from 'src/modules/taskyon/types'
+import type { PropType } from 'vue'
+import type { TaskNode } from 'src/modules/taskyon/types'
 import '@quasar/quasar-ui-qmarkdown/dist/index.css'
 
 defineProps({

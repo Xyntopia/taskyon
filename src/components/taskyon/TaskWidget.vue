@@ -322,8 +322,8 @@ function toggleMarkdown(id: string) {
     }
   }
   // If it does exist, toggle the boolean.
-  state.taskState[id]!.markdownEnabled = !state.taskState[id]!.markdownEnabled
-  console.log(`markdown for ${id}`, state.taskState[id]!.markdownEnabled)
+  state.taskState[id].markdownEnabled = !state.taskState[id].markdownEnabled
+  console.log(`markdown for ${id}`, state.taskState[id].markdownEnabled)
 }
 
 async function updateLabels(labels: string[]) {

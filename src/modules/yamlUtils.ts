@@ -1,8 +1,9 @@
 import { dump } from 'js-yaml'
+import type {
+  tyYamlObjectRepresentation,
+  tyYamlRepresentation} from './zodUtils';
 import {
   convertToYamlWComments,
-  tyYamlObjectRepresentation,
-  tyYamlRepresentation,
   zodToYAMLObject,
 } from './zodUtils'
 import { z } from 'zod'

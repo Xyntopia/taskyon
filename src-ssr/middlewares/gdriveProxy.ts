@@ -1,6 +1,7 @@
 import { defineSsrMiddleware } from '#q-app/wrappers'
 import type { Request, Response } from 'express'
-import axios, { AxiosError } from 'axios'
+import type { AxiosError } from 'axios';
+import axios from 'axios'
 
 const { GOOGLE_API_KEY } = process.env
 

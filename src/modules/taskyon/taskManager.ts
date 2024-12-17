@@ -1,5 +1,5 @@
 import {
-  TaskNode,
+  type TaskNode,
   ToolBase,
   TaskListType,
   type PartialTaskNode,
@@ -355,7 +355,7 @@ function useTaskVectors(
     console.log('Sync complete.')
   }
 
-  const resetTaskVectors = async () => {
+  async function resetTaskVectors() {
     console.log('delete vector store')
     await resetVectorStore()
     console.log('delete vector mappings')

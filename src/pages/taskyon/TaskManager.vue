@@ -74,7 +74,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import Search from 'components/SearchInput.vue'
-import { TaskNode } from 'src/modules/taskyon/types'
+import type { TaskNode } from 'src/modules/taskyon/types'
 import Task from 'components/taskyon/TaskWidget.vue'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import {

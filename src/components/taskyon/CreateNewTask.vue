@@ -286,10 +286,11 @@
 <script setup lang="ts">
 import { computed, ref, toRaw, toRefs } from 'vue'
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
-import { FunctionArguments, llmSettings, ToolBase } from 'src/modules/taskyon/types'
+import type { FunctionArguments, ToolBase } from 'src/modules/taskyon/types';
+import { llmSettings } from 'src/modules/taskyon/types'
 import '@quasar/quasar-ui-qmarkdown/dist/index.css'
 import { useTaskyonStore } from 'stores/taskyonState'
-import { TaskNode } from 'src/modules/taskyon/types'
+import type { TaskNode } from 'src/modules/taskyon/types'
 import ModelSelection from 'components/taskyon/ModelSelection.vue'
 import { writeFilesToOpfs } from 'src/modules/OPFS'
 import ObjectTreeView from '../ObjectTreeView.vue'

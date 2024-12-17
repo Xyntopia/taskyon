@@ -75,8 +75,8 @@ export default [
     extends: [
       // By default, only the recommended rules are enabled.
       //'disableTypeChecked',
-      'recommended',
-      //'recommendedTypeChecked',
+      //'recommended',
+      'recommendedTypeChecked',
       // You can also manually enable the stylistic rules.
       // "stylistic",
 

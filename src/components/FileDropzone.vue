@@ -61,7 +61,8 @@
 <script setup lang="ts">
 import { matAddAPhoto, matUploadFile } from '@quasar/extras/material-icons'
 import { onBeforeUnmount } from 'vue'
-import { onMounted, ref, Ref } from 'vue'
+import type { Ref } from 'vue';
+import { onMounted, ref } from 'vue'
 
 const emit = defineEmits(['update:modelValue'])
 

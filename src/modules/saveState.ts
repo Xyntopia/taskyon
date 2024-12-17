@@ -1,4 +1,5 @@
-import { watch, ref, UnwrapRef } from 'vue'
+import type { UnwrapRef } from 'vue';
+import { watch, ref } from 'vue'
 
 // localStorage.ts
 

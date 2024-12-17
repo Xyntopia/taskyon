@@ -1,7 +1,7 @@
 // Configuration for your app
 // https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js
 
-/* eslint-disable @typescript-eslint/no-var-requires */
+ 
 import { defineConfig } from '#q-app/wrappers';
 import path from 'path';
 import fs from 'fs';
