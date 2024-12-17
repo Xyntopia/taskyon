@@ -126,9 +126,7 @@ export async function processChatTask(
         }, // define a function to check whether we should cancel the stream ...
       )
 
-      task.result = {
-        chatResponse: chatCompletion,
-      }
+      task.result = chatCompletion
     }
   } else {
     throw new Error('Task has no inference model selected!')
