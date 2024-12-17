@@ -251,7 +251,6 @@ export async function generateCompleteChat(
   let openAIConversationThread = await taskManager.buildChatThread(
     task.id,
     llmSettings.tryUsingVisionModels,
-    toolDefs,
     llmSettings.enableOpenAiTools,
   )
   openAIConversationThread = addPrompts(task, toolDefs, llmSettings, openAIConversationThread)

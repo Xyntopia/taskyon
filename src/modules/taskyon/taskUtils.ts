@@ -1,4 +1,4 @@
-import type { TaskNode, TaskGetter, ToolBase } from './types'
+import type { TaskNode, TaskGetter } from './types'
 import type OpenAI from 'openai'
 import { dump } from 'js-yaml'
 import { type FileMappingDocType } from './rxdb'
@@ -62,7 +62,6 @@ export const taskUtils = (
   async function buildChatThread(
     taskId: string,
     useVisionModels: boolean,
-    toolCollection: Record<string, ToolBase>,
     useOpenAITools: boolean,
   ) {
     const openAIMessageThread = [] as OpenAI.ChatCompletionMessageParam[]

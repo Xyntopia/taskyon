@@ -175,8 +175,7 @@ export const initAddTask2Tree =
     // extract keywordsfrom entire chat and use it to name the task...
     // but only if a taskname doesn't exist yet.
     if (!newTask.name && task.content && !task.label?.includes('discard')) {
-      const toolDefs = await taskManager.updateToolDefinitions(true)
-      const chat = taskManager.buildChatThread(newTask.id, false, toolDefs, false)
+      const chat = taskManager.buildChatThread(newTask.id, false, false)
       const chatString = (await chat).reduce((p, n) => {
         if (typeof n.content === 'string') {
           return p + '\n\n' + n.content
