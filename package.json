@@ -9,7 +9,7 @@
     "build": "quasar build",
     "dev": "quasar dev",
     "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .gitignore",
-    "lint": "tsc --noEmit && eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}'"
+    "lint": "vue-tsc --noEmit && eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}'"
   },
   "browserslist": [
     "last 10 Chrome versions",
