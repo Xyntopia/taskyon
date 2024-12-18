@@ -123,7 +123,7 @@
 
           pkgs_unstable.deno
 
-          #python # this is needed for newer quasar versions apparently...
+          python # this is needed for newer quasar versions apparently...
 
           kdiff3
         ];
