@@ -1,39 +1,39 @@
 // Configuration for your app
 // https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js
 
- 
-import { defineConfig } from '#q-app/wrappers';
-import path from 'path';
-import fs from 'fs';
+import { defineConfig } from '#q-app/wrappers'
+import path from 'path'
+import fs from 'fs'
 // this is in order to support the not-updated version of danfojs (and other libraries which need
 // polyfills) in webpack 5:
 // also read https://quasar.dev/start/upgrade-guide#nodejs-polyfills
 // and https://github.com/quasarframework/quasar/issues/9780
 // also needs:
 //    yarn add --dev node-polyfill-webpack-plugin browserify-zlib
-import nodePolyfillWebpackPlugin from 'node-polyfill-webpack-plugin';
-import { ToolBase } from './src/modules/taskyon/types';
-import { zodSchemasToOpenApi } from './src/modules/yamlUtils';
-import { TaskyonMessages } from './src/modules/taskyon/iframeApiTypes';
+import nodePolyfillWebpackPlugin from 'node-polyfill-webpack-plugin'
+import { ToolBase } from './src/modules/taskyon/types'
+import { zodSchemasToOpenApi } from './src/modules/yamlUtils'
+import { TaskyonMessages } from './src/modules/taskyon/iframeApiTypes'
+import { ArgumentsType } from '@vueuse/core'
 
-const APPNAME = 'taskyon';
-const DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid';
+const APPNAME = 'taskyon'
+const DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid'
 
-console.log('compile app: ', APPNAME, DESCRIPTION);
+console.log('compile app: ', APPNAME, DESCRIPTION)
 
 // Function to copy multiple files
 function copyFiles(fileList: { src: string; dest: string }[]) {
   fileList.forEach((file) => {
-    const srcPath = path.resolve(__dirname, file.src);
-    const destPath = path.resolve(__dirname, file.dest);
+    const srcPath = path.resolve(__dirname, file.src)
+    const destPath = path.resolve(__dirname, file.dest)
 
     if (fs.existsSync(srcPath)) {
-      fs.copyFileSync(srcPath, destPath);
-      console.log(`Copied ${file.src} to ${file.dest}`);
+      fs.copyFileSync(srcPath, destPath)
+      console.log(`Copied ${file.src} to ${file.dest}`)
     } else {
-      console.error(`${file.src} not found`);
+      console.error(`${file.src} not found`)
     }
-  });
+  })
 }
 
 const filesToCopy = [
@@ -45,7 +45,7 @@ const filesToCopy = [
     src: 'README.md',
     dest: 'public/docs/README.md',
   },
-];
+]
 
 function createOpenAPIDocs() {
   /** This function creates openAPI docs for taskyon and saves them inside the public folder.
@@ -58,15 +58,15 @@ function createOpenAPIDocs() {
     config,
   );*/
 
-  console.log('generate docs...');
+  console.log('generate docs...')
 
   const messages = TaskyonMessages.options.reduce(
     (p, n) => {
-      p[n.shape.type.value] = n;
-      return p;
+      p[n.shape.type.value] = n
+      return p
     },
     {} as Record<string, unknown>,
-  );
+  )
 
   const openApiYaml = zodSchemasToOpenApi(
     {
@@ -77,20 +77,20 @@ function createOpenAPIDocs() {
     '1.0.0',
     Object.keys(messages),
     'yaml',
-  );
+  )
   //console.log(openApiYaml);
 
-  const destPath = path.resolve(__dirname, 'public/docs/openapi-docs.yml');
+  const destPath = path.resolve(__dirname, 'public/docs/openapi-docs.yml')
 
   fs.writeFileSync(destPath, openApiYaml, {
     encoding: 'utf-8',
-  });
+  })
 }
 
 export default defineConfig((ctx) => {
   if (ctx.prod) {
-    createOpenAPIDocs();
-    copyFiles(filesToCopy);
+    createOpenAPIDocs()
+    copyFiles(filesToCopy)
   }
 
   return {
@@ -125,6 +125,10 @@ export default defineConfig((ctx) => {
         // non-initially-required aws amplify libraries
         '@aws-amplify/ui-vue/dist'
       ]*/
+      // TODO: we override the type here because there is a bug in quasar in typescript which doesn't recognize the "disable" part
+    } as unknown as {
+      add: string[]
+      remove: string[]
     },
 
     // app boot file (/src/boot)
@@ -180,7 +184,7 @@ export default defineConfig((ctx) => {
         DESCRIPTION: DESCRIPTION,
         PUBLISH_DATE: JSON.stringify(new Date().toISOString()),
       },
-      //devtool: 'source-map', // TODO: turn this off for actua production...
+      //devtool: 'source-map', // TODO: turn this off for actual production...
       vueLoaderOptions: {
         compilerOptions: {
           // from here: https://qmarkdown.netlify.app/all-about-qmarkdown/installation-types
@@ -205,16 +209,17 @@ export default defineConfig((ctx) => {
         // Add an alias for @huggingface/transformers
         // TODO: we are doing this, because of this here, currently:
         // https://github.com/huggingface/transformers.js/issues/911#issuecomment-2329440874
-        cfg.resolve.alias['@huggingface/transformers'] = path.resolve(
-          __dirname,
-          'node_modules/@huggingface/transformers',
-        );
+        if (cfg.resolve)
+          (cfg.resolve.alias as Record<string, string | false | string[]>)[
+            '@huggingface/transformers'
+          ] = path.resolve(__dirname, 'node_modules/@huggingface/transformers')
 
         // use new webpack5 loaders for asset importing
-        cfg.module.rules.push({
-          test: /\.md/,
-          type: 'asset/source',
-        });
+        if (cfg.module?.rules)
+          cfg.module.rules.push({
+            test: /\.md/,
+            type: 'asset/source',
+          })
 
         // ignore files!
         //cfg.watchOptions = {
@@ -230,11 +235,12 @@ export default defineConfig((ctx) => {
             fs: 'empty',
           }*/
 
-        cfg.module.rules.push({
-          resolve: {
-            fallback: { fs: false, net: false, tls: false },
-          },
-        });
+        if (cfg.module?.rules)
+          cfg.module.rules.push({
+            resolve: {
+              fallback: { fs: false, net: false, tls: false },
+            },
+          })
 
         // Add chunkFilename option
         // make sure all our chunks are named in a nicer way :)
@@ -338,9 +344,10 @@ export default defineConfig((ctx) => {
               components: {
                 name: 'components',
                 test: (module) => {
-                  const name = module.resource;
-                  const valid = /src[\\/](components|assets)/.test(name);
-                  return valid;
+                  //const name = module.resource
+                  const name = module
+                  const valid = /src[\\/](components|assets)/.test(name)
+                  return valid
                 },
                 //test: /[\\/]src[\\/](pages|layout)[\\/]/,
                 priority: 25,
@@ -390,7 +397,7 @@ export default defineConfig((ctx) => {
                 name: 'json',
               },
             },
-          });
+          })
         }
 
         // we need the bwloe so that uglify can remove the console. because we want
@@ -399,9 +406,9 @@ export default defineConfig((ctx) => {
         if (ctx.prod) {
           chain
             .plugin('node-polyfill')
-            .use(nodePolyfillWebpackPlugin, [{ excludeAliases: ['console'] }]);
+            .use(nodePolyfillWebpackPlugin, [{ excludeAliases: ['console'] }])
         } else {
-          chain.plugin('node-polyfill').use(nodePolyfillWebpackPlugin);
+          chain.plugin('node-polyfill').use(nodePolyfillWebpackPlugin)
         }
         // TODO: find out, why we did this?
         //chain.resolve.alias.set('zlib', 'browserify-zlib');
@@ -560,5 +567,5 @@ export default defineConfig((ctx) => {
        */
       extraScripts: [],
     },
-  };
-});
+  }
+})

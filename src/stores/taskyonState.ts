@@ -129,7 +129,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
             console.log('Prompts modified:', stateRefs.llmSettings.taskChatTemplates)
           } else {
             return `It was not possible to add prompts for ${JSON.stringify(Object.keys(newPrompts))} to
-  ${JSON.stringify(Object.keys(stateRefs.llmSettings.taskChatTemplates))}. Did you use the wrong 
+  ${JSON.stringify(Object.keys(stateRefs.llmSettings.taskChatTemplates))}. Did you use the wrong
   keys and are they all defined as string?`
           }
         },
@@ -191,7 +191,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       task.debugging = task.debugging ?? {} // Ensure state is set
       lastTaskId = await addTask2Tree(
         task as typeof task & {
-          state: TaskNode['state']
           debugging: TaskNode['debugging']
         },
         lastTaskId, //parent

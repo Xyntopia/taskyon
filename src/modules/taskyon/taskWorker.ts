@@ -300,14 +300,14 @@ function generateFollowupFromStructuredResponse(
  *
  * following different types of task contents are possible:
  *
- * 
+ *
   here is a chart of the relations & possible transitions between tasks:
 
 - [Transition Map](/docs/conversations/taskyon_description)
 
 ```
 
- * 
+ *
  *
  */
 
@@ -399,7 +399,7 @@ export function useTaskWorkerController() {
   - We can interrupt/cancel task processing
   - we can track number of error in a task chain and cancel, if too many errors appear
   - we can track other information
-  - we can gracefully exist streamed tasks 
+  - we can gracefully exist streamed tasks
   - and more..
   */
   let interrupted = true
@@ -536,6 +536,7 @@ async function addTaskCostInformation(
       deepCopy(task),
       openAIConversationThread,
       allTools,
+      chatResponse.choices[0]!.message.content ?? '',
     )
 
     // TODO: replace this below with a taskNode in lower hierachy which does this :)

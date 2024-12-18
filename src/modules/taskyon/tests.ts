@@ -28,7 +28,6 @@ export const testIPFS = async () => {
 const mockTask: TaskNode = {
   allowedTools: ['tool1', 'tool2'],
   role: 'assistant',
-  state: 'Open',
   id: 'test',
   content: { message: 'Sample content for task node' },
   debugging: { estimatedTokens: {} },

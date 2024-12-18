@@ -1,6 +1,7 @@
 import { FunctionArguments, ToolBase, partialTaskDraft, storedSettings } from './types'
 import { deepPartialify, deepStrictify } from '../zodUtils'
 import { z } from 'zod'
+import type { PartialDeep } from 'type-fest'
 
 const RemoteFunctionBase = z.object({
   functionName: z.string().describe('the name of the function'),
@@ -31,6 +32,7 @@ export const RemoteFunctionResponse = RemoteFunctionBase.extend({
 )
 export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>
 
+export type partialTyConfiguration = PartialDeep<storedSettings>
 export const partialTyConfiguration = deepStrictify(
   deepPartialify(
     storedSettings
@@ -38,7 +40,8 @@ export const partialTyConfiguration = deepStrictify(
       .describe('This can be used to update the configuration through iframe, json or URL'),
   ),
 )
-export type partialTyConfiguration = z.infer<typeof partialTyConfiguration>
+//export type partialTyConfiguration = z.infer<typeof partialTyConfiguration>
+//export type partialTyConfiguration = PartialDeep<storedSettings>
 
 const TaskMessage = z
   .object({
@@ -49,7 +52,7 @@ const TaskMessage = z
       .boolean()
       .default(true)
       .describe(
-        `Only add the task if a task with this name doesn't exist. We do this, because otherwise tasks get 
+        `Only add the task if a task with this name doesn't exist. We do this, because otherwise tasks get
             added on every page-load if we configure our app through an iframe parent.`,
       ),
   })
@@ -64,7 +67,7 @@ const FunctionDescriptionMessage = ToolBase.extend({
   id: z.string()
     .describe(`A unique id for the function task. Tasks with the same id "overwrite" each other. The last one
     is the relevant one. Functions will get saved as a task object with the id as their name.
-    
+
     this is important!, Taskyon can be configured to prevent tasks from getting created if they already exist with the same name!
     this helps in making sure, that tasks & tools which we upload to taskyon on pageload don't get duplicated
     on every pageload.
@@ -82,6 +85,10 @@ const tyConfigurationMessage = z.object({
   type: z
     .literal('configurationMessage')
     .describe('Field to indicate that this is a function description message.'),
+  // we have to comment out the next line, because our "deeppartialify & deepstricitfy" functions
+  // are very deep and typescript reaches its limits here...  TODO: we would like to refactor those
+  // zod types, but don't have a solution yet... (deeppartial was removed fro zod...)
+  // @ts-expect-error "Type instantiation is excessively deep and possibly infinite.ts(2589)""
   conf: partialTyConfiguration,
 })
 

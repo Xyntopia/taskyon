@@ -3,6 +3,7 @@ import { getVector, loadModel, loadTokenizer } from './nlp'
 import type OpenAI from 'openai'
 import type { OpenAIMessage, ToolBase, TaskNode } from './types'
 import { mapFunctionNames } from './tools'
+import { Get } from 'type-fest'
 
 //import { getEncoding } from 'js-tiktoken';
 async function loadTikTokenEncoder() {
@@ -81,6 +82,7 @@ const nlpWorker = {
     task: TaskNode,
     chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     tools: Record<string, ToolBase>,
+    chatResult?: string,
   ): Promise<TaskNode['debugging']['estimatedTokens']> {
     const functions: ToolBase[] = mapFunctionNames(task.allowedTools || [], tools)
     // TODO: convert task.content into a legitimate string first, using the
@@ -89,9 +91,7 @@ const nlpWorker = {
     const singlePromptTokens = await countStringTokens(contentStr)
     const promptTokens = await countChatTokens(chat)
     const functionTokens = Math.floor((await countToolTokens(functions)) * 0.7)
-    const resultTokens = await countStringTokens(
-      task.result?.chatResponse?.choices[0]?.message.content || '',
-    )
+    const resultTokens = chatResult ? await countStringTokens(chatResult) : 0
     return {
       singlePromptTokens,
       promptTokens,

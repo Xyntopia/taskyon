@@ -570,7 +570,7 @@ export const llmSettings = z.object({
     .describe('The task which is currently drafted (This could for example be a simple message).'),
   useBasePrompt: z.boolean().default(true).describe(`
   <p>Toggle the base prompt on/off.</p>
-  
+
   This gives the AI instructions how to draw better graphics, math
   formulas and generally make the chat a little more fancy than just plain
   text. You can check/change the base prompt in the settings...`),

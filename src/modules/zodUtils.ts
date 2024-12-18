@@ -121,13 +121,13 @@ export function zodToYAMLObject(
 
 /**
  * Converts a string representation of an object to YAML format with comments.
- * 
+ *
  * This function takes a string representation of an object as input, extracts comments
  * from it, which are represented by a key, starting with an '#'
  * and returns a new string in YAML format with the comments preserved, but the keys removed.
- * 
+ *
  * this:
- * 
+ *
   # comment: >-
         # This is a comment
         # spanning multiple lines
@@ -145,7 +145,7 @@ and this:
 
 
 
- * 
+ *
  * @param {string} objrepr - The string representation of the object to be converted.
  * @returns {string} The converted YAML string with comments.
  */
@@ -273,6 +273,7 @@ type ZodDeepPartial<T extends z.ZodTypeAny> =
                 ? z.ZodRecord<KeySchema, ZodDeepPartial<ValueSchema>>
                 : T
 
+// TODO: replace with this:  https://gist.github.com/jaens/7e15ae1984bb338c86eb5e452dee3010
 export function deepPartialify<T extends z.ZodTypeAny>(schema: T): ZodDeepPartial<T> {
   return _deepPartialify(schema)
 }
