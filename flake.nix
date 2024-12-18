@@ -3,11 +3,11 @@
 
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
-    #nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    nixpkgs_unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, nixpkgs_unstable, flake-utils }:
 
     flake-utils.lib.eachDefaultSystem (system:
       let
@@ -16,11 +16,26 @@
         # if we want a specific rust version:
         # rust-overlay.url = "github:oxalica/rust-overlay";
         pkgs = import nixpkgs { inherit system; };
+        pkgs_unstable = import nixpkgs_unstable { inherit system; };
 
         # this is all tauri-related stuff
         libraries = with pkgs; [
 
           # tauri deps
+          at-spi2-atk
+          atkmm
+          cairo
+          gdk-pixbuf
+          glib
+          gobject-introspection
+          gobject-introspection.dev
+          gtk3
+          harfbuzz
+          librsvg
+          libsoup_3
+          pango
+          webkitgtk_4_1
+          webkitgtk_4_1.dev
           #webkitgtk
           #gtk3
           #cairo
@@ -46,6 +61,32 @@
           #mesa
           #libdrm
           cargo-tauri
+          rustup
+
+          # for cypress e2e testing
+          glib
+          nss
+          nspr
+          at-spi2-atk
+          cups
+          dbus
+          libdrm
+          gtk2
+          gtk3
+          pango
+          cairo
+          alsa-lib
+          xorg.libX11
+          xorg.libXcomposite
+          xorg.libXdamage
+          xorg.libXext
+          xorg.libXfixes
+          xorg.libXrandr
+          xorg.libxcb
+          libxkbcommon
+          #xorg
+          mesa # for libgbm
+          expat
         ];
         packages = with pkgs; [
           # rust
@@ -68,9 +109,21 @@
 
           # node
           yarn
-          nodejs_21
+          nodejs_22
 
-          # other
+          # helpers
+          graphviz # we are using this with "madge" in order to display dependency graphs...
+
+          # supabase
+          docker-compose
+          # colima # also doesn't work yet somehow...
+          # podman # doesn't work with supabase I think
+          pkgs_unstable.stripe-cli
+
+          pkgs_unstable.deno
+
+          python # this is needed for newer quasar versions apparently...
+
           kdiff3
         ];
       in {
@@ -78,7 +131,26 @@
           name = "xyntopia_gui";
           # TODO: what is this for? nativeBuildInputs = [ pkgs.bashInteractive ];
           buildInputs = libraries ++ packages;
+          # the following comes from here: https://tauri.app/start/prerequisites/
+          # but by declaring LD_LIBRARY_PATH we might have done it correctly already ;)
+          # and thats why we're commenting it out...
+          #PKG_CONFIG_PATH = "${glib.dev}/lib/pkgconfig:${libsoup_3.dev}/lib/pkgconfig:${webkitgtk_4_1.dev}/lib/pkgconfig:${at-spi2-atk.dev}/lib/pkgconfig:${gtk3.dev}/lib/pkgconfig:${gdk-pixbuf.dev}/lib/pkgconfig:${cairo.dev}/lib/pkgconfig:${pango.dev}/lib/pkgconfig:${harfbuzz.dev}/lib/pkgconfig";
           shellHook = ''
+            # python poetry related stuff
+            unset SOURCE_DATE_EPOCH
+            unset LD_PRELOAD
+
+            # Environment variables
+            # fixes libstdc++ issues, libz.so.1 issues
+            export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib/:${
+              pkgs.lib.makeLibraryPath buildInputs
+            }";
+
+            export NODE_OPTIONS="--max-old-space-size=8192"
+            echo "increasing node memory allocation to $NODE_OPTIONS"
+
+
+
             if [ -f ./.env ]; then
               set -a  # automatically export all variables
               source ./.env
