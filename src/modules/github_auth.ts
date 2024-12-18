@@ -25,7 +25,7 @@ export async function openOAuthPopup() {
         resolve(token)
       } else if (error) {
         console.error('Error:', error)
-        reject(error)
+        reject(new Error(error))
       }
 
       // Close the popup

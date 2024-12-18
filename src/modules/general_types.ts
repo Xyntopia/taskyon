@@ -32,7 +32,7 @@ export async function verifyRequest(
 export async function createSignedFetchRequest(
   url: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-  body: unknown | undefined,
+  body: unknown,
   jwtToken: string,
   publicKey: string,
   privateKey: string,

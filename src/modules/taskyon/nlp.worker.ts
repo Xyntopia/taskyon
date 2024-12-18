@@ -3,7 +3,6 @@ import { getVector, loadModel, loadTokenizer } from './nlp'
 import type OpenAI from 'openai'
 import type { OpenAIMessage, ToolBase, TaskNode } from './types'
 import { mapFunctionNames } from './tools'
-import { Get } from 'type-fest'
 
 //import { getEncoding } from 'js-tiktoken';
 async function loadTikTokenEncoder() {
