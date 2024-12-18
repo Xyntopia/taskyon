@@ -17,6 +17,7 @@
         # rust-overlay.url = "github:oxalica/rust-overlay";
         pkgs = import nixpkgs { inherit system; };
         pkgs_unstable = import nixpkgs_unstable { inherit system; };
+        python = pkgs.python310;
 
         # this is all tauri-related stuff
         libraries = with pkgs; [
@@ -122,7 +123,7 @@
 
           pkgs_unstable.deno
 
-          python # this is needed for newer quasar versions apparently...
+          #python # this is needed for newer quasar versions apparently...
 
           kdiff3
         ];
