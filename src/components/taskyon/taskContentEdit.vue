@@ -1,6 +1,6 @@
 <template>
   <q-input
-    v-model="content"
+    v-model.trim="content"
     autogrow
     filled
     color="secondary"
