@@ -27,6 +27,25 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
       },
       {
+        path: 'chat/',
+        component: defineAsyncComponent({
+          loader: () => import('pages/taskyon/TaskChat.vue'),
+          loadingComponent: LoadCircle,
+          delay: 200,
+        }),
+        meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
+      },
+      {
+        path: 'browser',
+        component: defineAsyncComponent({
+          loader: () => import('pages/taskyon/TaskChat.vue'),
+          loadingComponent: LoadCircle,
+          delay: 200,
+        }),
+        meta: { title: 'Main', description: 'Task Browser' },
+        props: { browserMode: true },
+      },
+      {
         // TODO: rename this and all references to search?
         path: 'taskmanager',
         component: () => import('pages/taskyon/TaskManager.vue'),
@@ -35,15 +54,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           console.log('open', route)
           if (route.query) return { query: route.query }
         },
-      },
-      {
-        path: 'chat/',
-        component: defineAsyncComponent({
-          loader: () => import('pages/taskyon/TaskChat.vue'),
-          loadingComponent: LoadCircle,
-          delay: 200,
-        }),
-        meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
       },
       {
         // TODO:  change this, so that we can use "arbitrary" files for this!!!

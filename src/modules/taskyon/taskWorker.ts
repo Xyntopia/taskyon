@@ -381,7 +381,11 @@ async function generateFollowUpTasksFromResult(
           [
             {
               role: 'assistant',
-              content: { finalResult: choice.message.content },
+              content: { message: choice.message.content || '' },
+            },
+            {
+              role: 'system',
+              content: { termination: 'assistant answered' },
             },
           ],
         ]
@@ -659,9 +663,11 @@ export async function runTaskWorker(
           //        of a new task and not i the task itself...
           if (lastTaskId) {
             const lastTask = await taskManager.getTask(lastTaskId)
-            if (immediateExecute && lastTask && !('finalResult' in lastTask.content)) {
+            if (immediateExecute && lastTask && !('termination' in lastTask.content)) {
               // we need processTasksQueue as an argument here!!!
               processTasksQueue.push(lastTaskId)
+            } else {
+              console.log(`task chain finished at id ${lastTaskId}!`)
             }
           }
 

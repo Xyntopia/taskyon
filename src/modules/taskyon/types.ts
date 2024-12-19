@@ -304,11 +304,12 @@ const ToolResultContent = z.object({ toolResult: ToolResult })
 const ErrorContent = z
   .object({ error: z.unknown() })
   .describe('Gets created if any error occurs during task processing.')
-const Termination = z
-  .object({ finalResult: z.unknown() })
-  .describe(
-    'A Termination content always indicates the end of an autonomous task chat execution. Every Leaf task which is not a Termination task can potentially continue to be executed...',
-  )
+const Termination = z.object({ termination: z.string() }).describe(
+  `A Termination task always indicates the end of an autonomous task chat execution.
+Every Leaf task which is not a Termination task can potentially continue to be executed...
+
+We can indicate the reason for termination here as well...`,
+)
 const TaskContent = z.union([
   StructuredContent,
   MessageContent,

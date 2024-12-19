@@ -90,6 +90,11 @@
             :get-file="getFile"
           />
         </div>
+        <div v-else-if="'termination' in task.content" class="col">
+          <div>
+            {{ task.content.termination }}
+          </div>
+        </div>
         <!--task costs-->
         <div
           v-if="state.appConfiguration.showCosts"
@@ -159,7 +164,7 @@
           <q-tab name="ERROR" label="Error" />
           <q-tab name="RAW" label="raw task data" />
           <q-tab v-if="task.debugging.taskPrompt" name="TASKPROMPT" label="task prompt" />
-          <q-tab name="MESSAGECONTENT" label="raw result" />
+          <q-tab name="TASKRESULT" label="raw result" />
         </q-tabs>
         <q-tab-panels
           v-model="state.messageDebug[task.id]"
@@ -189,7 +194,7 @@
           </q-tab-panel>
           <q-tab-panel name="TASKRESULT">
             <textarea
-              :value="JSON.stringify(task, null, 2)"
+              :value="JSON.stringify(task.result, null, 2)"
               readonly
               wrap="soft"
               style="width: 100%; height: 200px; background-color: inherit; color: inherit"

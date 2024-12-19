@@ -77,30 +77,48 @@
     <q-item v-if="!state.minimalGui" class="fit column items-center">
       <SimpleSettings class="col-auto" vertical reduced></SimpleSettings>
     </q-item>
-    <q-item v-if="!state.minimalGui">
-      <q-btn
-        v-if="state.appConfiguration.expertMode"
-        dense
-        flat
-        :icon="mdiTools"
-        label="Tools"
-        to="/tools"
-      ></q-btn>
-      <q-btn
-        v-if="state.appConfiguration.expertMode"
-        dense
-        flat
-        :icon="mdiRobotConfusedOutline"
-        label="Customize"
-        to="/prompts"
-      ></q-btn>
-      <q-btn
-        flat
-        dense
-        :icon="matManageAccounts"
-        label="AI Service"
-        to="/settings/aiserviceprovider"
-      ></q-btn>
+    <q-item v-if="!state.minimalGui" class="fit">
+      <div class="row">
+        <div>
+          <q-btn
+            v-if="state.appConfiguration.expertMode"
+            dense
+            flat
+            :icon="mdiTools"
+            label="Tools"
+            to="/tools"
+          ></q-btn>
+        </div>
+        <div>
+          <q-btn
+            v-if="state.appConfiguration.expertMode"
+            dense
+            flat
+            :icon="mdiRobotConfusedOutline"
+            label="Customize"
+            to="/prompts"
+          ></q-btn>
+        </div>
+        <div>
+          <q-btn
+            v-if="state.appConfiguration.expertMode"
+            dense
+            flat
+            :icon="mdiFileTree"
+            label="Task Browser"
+            to="/browser"
+          ></q-btn>
+        </div>
+        <div>
+          <q-btn
+            flat
+            dense
+            :icon="matManageAccounts"
+            label="AI Service"
+            to="/settings/aiserviceprovider"
+          ></q-btn>
+        </div>
+      </div>
     </q-item>
   </q-list>
 </template>
@@ -111,7 +129,7 @@ import SimpleSettings from './SimpleSettings.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import FileDropzone from 'components/FileDropzone.vue'
 import { matSearch, matManageAccounts, matFileUpload, matToc } from '@quasar/extras/material-icons'
-import { mdiTools, mdiRobotConfusedOutline, mdiForumPlus } from '@quasar/extras/mdi-v6'
+import { mdiTools, mdiRobotConfusedOutline, mdiForumPlus, mdiFileTree } from '@quasar/extras/mdi-v6'
 import TaskChainMenu from './TaskChainMenu.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { useQuasar } from 'quasar'

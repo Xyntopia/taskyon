@@ -9,13 +9,19 @@ $primary-dark: color-mix(in srgb, $primary 90%, black)
 
 $secondary-dark: color-mix(in srgb, $secondary 70%, black)
 
+$primary-dark-transparent: color-mix(in srgb, $primary-dark 90%, transparent)
+$primary-light-transparent: color-mix(in srgb, $primary-light 90%, transparent)
+
 @media screen
+  .toolbar
+    background-color: $primary-light-transparent
+
   .body--light
     background-color: $primary-light
     //text-color: white
 
     .q-header
-      background-color: color-mix(in srgb, $primary-light 90%, transparent)
+      background-color: $primary-light-transparent
       color: $primary
 
     .q-card
@@ -79,7 +85,7 @@ $secondary-dark: color-mix(in srgb, $secondary 70%, black)
     //     color: $secondary
 
     .q-header
-      background-color: color-mix(in srgb, $primary-dark 90%, transparent)
+      background-color: $primary-light-dark
 
     .q-drawer
       background-color: $primary-dark

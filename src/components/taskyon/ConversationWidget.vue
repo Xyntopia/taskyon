@@ -51,14 +51,17 @@ const props = defineProps<{
   currentTask?: TaskNode | undefined
   taskWorkerWaiting: boolean
   taskWorkerMessage?: string
+  showAllTasks?: boolean
 }>()
 
 // TODO: render tasks based on levels :)
-const filteredTasks = computed(() =>
-  props.selectedThread.filter((t) => {
+const filteredTasks = computed(() => {
+  if (props.showAllTasks) return props.selectedThread
+  return props.selectedThread.filter((t) => {
     const hide = t.label ? t.label.includes('hide') : false // TODO: hide tasks based on level as well :)
-    const structured = t.content && 'structuredResponse' in t.content
+    const structured =
+      t.content && ('structuredResponse' in t.content || 'termination' in t.content)
     return hide || !structured
-  }),
-)
+  })
+})
 </script>

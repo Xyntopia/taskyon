@@ -32,6 +32,7 @@
         :current-task="tystate.currentTask"
         :task-worker-waiting="tystate.taskWorkerWaiting"
         :task-worker-message="taskWorkerMessage || ''"
+        :show-all-tasks="showAllTasks"
       />
       <!-- Welcome Message -->
       <div
@@ -61,6 +62,14 @@
         </div>
       </div>
     </div>
+    <!--Task Browser buttons-->
+    <q-page-sticky position="top-left" class="print-hide">
+      <div class="q-pa-md toolbar">
+        <ToggleButton v-if="browserMode" v-model="showAllTasks" dense flat label="dev">
+          <q-tooltip>Show Detailed Task Chain</q-tooltip>
+        </ToggleButton>
+      </div>
+    </q-page-sticky>
     <!--Create new task area-->
     <q-page-sticky position="bottom" :offset="[0, 0]" expand class="print-hide">
       <q-resize-observer @resize="handleResize" />
@@ -94,6 +103,10 @@ import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStateStore } from 'src/stores/appState'
 import LLMProviders from 'components/taskyon/LLMProviders.vue'
+import ToggleButton from 'src/components/ToggleButton.vue'
+
+const props = defineProps<{ browserMode?: boolean }>()
+const showAllTasks = ref<boolean>(props.browserMode)
 
 const ResetButton = process.env.DEV
   ? defineAsyncComponent(
