@@ -125,36 +125,31 @@ export async function processChatTask(
         }, // define a function to check whether we should cancel the stream ...
       )
 
-      task.result = chatCompletion
+      return chatCompletion
     }
   } else {
     throw new Error('Task has no inference model selected!')
   }
-
-  return task
 }
 
-async function processFunctionTask(
-  task: TaskNode,
+async function processFunctionCall(
+  func: FunctionCall,
+  allowedTools: string[],
   tools: Record<string, ToolBase | Tool>,
   taskWorkerController: TaskWorkerController,
 ) {
-  if ('functionCall' in task.content) {
-    const func = task.content.functionCall
-    console.log(`Calling function ${func.name}`)
-    if (tools[func.name] && !taskWorkerController.isInterrupted()) {
-      const result = await handleFunctionExecution(func, tools, taskWorkerController.onInterrupt)
-      task.result = result
-    } else {
-      const toolnames = JSON.stringify(task.allowedTools)
-      throw new TaskProcessingError(
-        !taskWorkerController.isInterrupted()
-          ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
-          : 'The function execution was cancelled by taskyon',
-      )
-    }
+  console.log(`Calling function ${func.name}`)
+  if (tools[func.name] && !taskWorkerController.isInterrupted()) {
+    const result = await handleFunctionExecution(func, tools, taskWorkerController.onInterrupt)
+    return result
+  } else {
+    const toolnames = JSON.stringify(allowedTools)
+    throw new TaskProcessingError(
+      !taskWorkerController.isInterrupted()
+        ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
+        : 'The function execution was cancelled by taskyon',
+    )
   }
-  return task
 }
 
 function parseChatResponse2TaskDraft(message: string): Record<string, unknown> {
@@ -308,6 +303,7 @@ function generateFollowupFromStructuredResponse(
 //       follow-up tasks?
 // we return 2D list of tasks here..   each list represents a chain of linked tasks through priorID
 async function generateFollowUpTasksFromResult(
+  result: unknown,
   finishedTask: TaskNode,
   taskManager: TyTaskManager,
   llmTools: boolean = false,
@@ -318,7 +314,7 @@ async function generateFollowUpTasksFromResult(
   let newTasks: partialTaskDraft[][] = []
   // TODO: what do we do in case of an empty user message, but only a file?
   //       right now, we assume, that user message always comes after uploaded file message :)
-  if (finishedTask.result) {
+  if (result) {
     // TODO: instead of taking the "finishedtask.result" we should generate this content with toolResult
     //       directly in the process function area. Possibly create a generic task creation function.
     //       or a "planner" that does this... In a next step, we could also this as a function in its own right...
@@ -327,14 +323,14 @@ async function generateFollowUpTasksFromResult(
         [
           {
             role: 'system',
-            content: { toolResult: finishedTask.result },
+            content: { toolResult: result },
           },
         ],
       ]
     }
     // did we get any response from an LLM?
     // TODO: make this part of our new chatcompletion tool!
-    const choice = getChatResponseFromTask(finishedTask)?.choices[0]
+    const choice = getChatResponseFromResult(result)?.choices[0]
     if (choice) {
       // check if we have any functioncalls from the llm inference
       // in that case we shoud handle that first :)
@@ -503,6 +499,8 @@ async function processTask(
     false,
   )
 
+  let result: unknown = undefined
+
   const apiKey = llmSettings.selectedApi ? apiKeys[llmSettings.selectedApi] : undefined
 
   if (
@@ -516,33 +514,41 @@ async function processTask(
     if (!apiKey)
       throw new TaskProcessingError('We need to define an API key to process our chat Task!')
 
-    task = await processChatTask(task, llmSettings, apiKey, taskManager, taskWorkerController)
+    result = await processChatTask(task, llmSettings, apiKey, taskManager, taskWorkerController)
   } else if ('functionCall' in task.content) {
     // calculate function result
     // in the case we don't have a result yet, wPe need to calculate it :)
-    task = await processFunctionTask(
-      task,
-      await taskManager.updateToolDefinitions(false),
-      taskWorkerController,
-    )
+    if (task.allowedTools) {
+      result = await processFunctionCall(
+        task.content.functionCall,
+        task.allowedTools,
+        await taskManager.updateToolDefinitions(false),
+        taskWorkerController,
+      )
+    } else {
+      throw new TaskProcessingError(
+        `The task is to execute a function call ${task.content.functionCall.name}, but there are no allowed tools/functions!`,
+      )
+    }
   } else {
     throw new TaskProcessingError("We don't know how to process this task to get a result.")
   }
 
   // get token usage for this task..
-  await addTaskCostInformation(task, taskManager, llmSettings, apiKey)
+  await addTaskCostInformation(result, task, taskManager, llmSettings, apiKey)
 
-  return task
+  return result
 }
 
 async function addTaskCostInformation(
+  result: unknown,
   task: Readonly<TaskNode>,
   taskManager: TyTaskManager,
   llmSettings: llmSettings,
   apiKey?: string,
 ) {
   // TODO: also get cost information for other tasks, than chatCompletion ;)!
-  const chatResponse = getChatResponseFromTask(task)
+  const chatResponse = getChatResponseFromResult(result)
   if (chatResponse) {
     const { openAIConversationThread } = await generateCompleteChat(task, llmSettings, taskManager)
 
@@ -596,8 +602,8 @@ async function addTaskCostInformation(
   }
 }
 
-function getChatResponseFromTask(task: Readonly<TaskNode>) {
-  const res = ChatResponseType.safeParse(task.result)
+function getChatResponseFromResult(result: unknown) {
+  const res = ChatResponseType.safeParse(result)
   return res.data
 }
 
@@ -636,7 +642,7 @@ export async function runTaskWorker(
       console.log('processing task:', taskId)
       task = await taskManager.getTask(taskId)
       if (task && !taskWorkerController.isInterrupted()) {
-        task = await processTask(
+        const result = await processTask(
           task,
           taskManager,
           taskId,
@@ -647,6 +653,7 @@ export async function runTaskWorker(
         // create a new task form the result. E.g. in the case of a simple chat, this will
         // create a task with the Answer of the LLM which then gets displayed in the chatwindow...
         const newTasks = await generateFollowUpTasksFromResult(
+          result,
           task,
           taskManager,
           llmSettings.enableOpenAiTools,
