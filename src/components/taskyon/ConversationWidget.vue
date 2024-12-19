@@ -13,6 +13,7 @@
           :is-working="!taskWorkerWaiting && task.id === currentTask.id"
           style="min-width: 300px"
           :class="['q-pa-xs', task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"
+          :show-id="showIds"
         />
       </q-card>
       <!--Render tasks which are in progress-->
@@ -52,6 +53,7 @@ const props = defineProps<{
   taskWorkerWaiting: boolean
   taskWorkerMessage?: string
   showAllTasks?: boolean
+  showIds: boolean
 }>()
 
 // TODO: render tasks based on levels :)

@@ -33,6 +33,7 @@
         :task-worker-waiting="tystate.taskWorkerWaiting"
         :task-worker-message="taskWorkerMessage || ''"
         :show-all-tasks="showAllTasks"
+        :show-ids="showAllTasks"
       />
       <!-- Welcome Message -->
       <div

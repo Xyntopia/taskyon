@@ -1,6 +1,9 @@
 <template>
   <!--Task-->
   <div class="message-container">
+    <div v-if="showId" class="text-overline text-right">
+      {{ task.id }}<q-tooltip>Task ID</q-tooltip>
+    </div>
     <div class="relative-position">
       <!--Message Display-->
       <div class="row items-end q-gutter-xs">
@@ -243,6 +246,7 @@ const props = defineProps<{
   task: TaskNode
   isWorking?: boolean
   short?: boolean
+  showId?: boolean
 }>()
 
 const tystate = useTaskyonStore()
