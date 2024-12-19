@@ -19,7 +19,7 @@ import {
   ChatResponseType,
 } from './types'
 import type { OpenAI } from 'openai'
-import { initAddTask2Tree, type TyTaskManager } from './taskManager'
+import { type TyTaskManager } from './taskManager'
 import { type Tool, handleFunctionExecution } from './tools'
 import { load } from 'js-yaml'
 import {
@@ -257,7 +257,7 @@ function generateFollowupFromStructuredResponse(
           {
             role: 'system',
             content: {
-              message: `The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
+              error: `The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
  suggests we should use a tool, but we could not parse the ${JSON.stringify(structResponse.command)} property.`,
             },
           },
@@ -265,8 +265,8 @@ function generateFollowupFromStructuredResponse(
       ]
     }
   } else {
-    // in the case that we don't call a tool, provide a "normal" answer :)
-    // this time we declare it as "Open" and set execution to "true"
+    // in the case that we don't call a tool anymore, we simply return the structuredResponse
+    // in the next step, this will generate a "normal" response from the AI.
     return [
       [
         {
@@ -319,6 +319,9 @@ async function generateFollowUpTasksFromResult(
   // TODO: what do we do in case of an empty user message, but only a file?
   //       right now, we assume, that user message always comes after uploaded file message :)
   if (finishedTask.result) {
+    // TODO: instead of taking the "finishedtask.result" we should generate this content with toolResult
+    //       directly in the process function area. Possibly create a generic task creation function.
+    //       or a "planner" that does this... In a next step, we could also this as a function in its own right...
     if ('functionCall' in finishedTask.content) {
       newTasks = [
         [
@@ -351,9 +354,14 @@ async function generateFollowUpTasksFromResult(
         ]
       }
       if (!choice.message.content) {
-        throw new TaskProcessingError('The response content from the AI was empty!', {
-          choice,
-        })
+        newTasks = [
+          [
+            {
+              role: 'system',
+              content: { error: 'The response content from the AI was empty!' },
+            },
+          ],
+        ]
       }
 
       // so now we know there are no function calls indicated from the original service
@@ -368,12 +376,12 @@ async function generateFollowUpTasksFromResult(
         newTasks = generateFollowupFromStructuredResponse(choice)
       } else {
         // if 'message' in finishedTask.content && finishedTask.role === 'assistant'
-        // this is the final response, so we simply add it to the chain without executing it
+        // this is the final response. These will not get added to the task queue and evaluated..
         newTasks = [
           [
             {
               role: 'assistant',
-              content: { message: choice.message.content },
+              content: { finalResult: choice.message.content },
             },
           ],
         ]
@@ -387,7 +395,10 @@ async function generateFollowUpTasksFromResult(
   // it would be good to not hav this inside the tasks themselves to imprive immutability
   newTasks.forEach((ts) =>
     ts.forEach((t) => {
+      // TODO: for configuration & allowedTools it would be good if we could add
+      // this from a "default" Configuration? And then have them as function parameters?
       t.configuration = finishedTask.configuration
+      t.allowedTools = finishedTask.allowedTools
       t.debugging = {
         ...t.debugging,
         promptTokens: finishedTask.debugging.taskTokens,
@@ -595,8 +606,6 @@ export async function runTaskWorker(
 ) {
   console.log('entering task worker loop...')
 
-  const addTask2Tree = initAddTask2Tree(processTasksQueue, taskManager)
-
   while (true) {
     console.log('waiting for next task!')
     let task: TaskNode | undefined = undefined
@@ -641,16 +650,28 @@ export async function runTaskWorker(
         // we make sure to identify all parent tasks from this batch, because
         // we oly want to execute the leaf tasks..
         // we can do this, because all of these tasks are newly created. this means, we don't have any
-        const addTasks = (finishedTask: TaskNode) => (ts: (typeof newTasks)[0]) => {
+        const addTasks = (finishedTask: TaskNode) => async (taskChain: (typeof newTasks)[0]) => {
           const immediateExecute = taskWorkerController.isInterrupted() ? false : true
-          ts.forEach((t) => {
-            void addTask2Tree(t, t.priorID || finishedTask.id, immediateExecute)
-          })
-          // add last task to GUI
-          llmSettings.selectedTaskId = newTaskId,
+          const lastTaskId = await taskManager.addTaskChain(taskChain, finishedTask.id)
+          // TODO:  this needs an overhaul..  we want to save tasks only once
+          //        and have them immutable...
+          //        we are doing this by leaving out task results and save the result directly as the content
+          //        of a new task and not i the task itself...
+          if (lastTaskId) {
+            const lastTask = await taskManager.getTask(lastTaskId)
+            if (immediateExecute && lastTask && !('finalResult' in lastTask.content)) {
+              // we need processTasksQueue as an argument here!!!
+              processTasksQueue.push(lastTaskId)
+            }
+          }
+
+          // TODO: add last task to GUI by checking if our current selected task now has this child...
+          // TODO: and move this somewhere else!  this function should not be in here...
+          //       we could have this check by getting the callback function for new tasks in tystate...
+          llmSettings.selectedTaskId = lastTaskId
         }
         const taskAdder = addTasks(task)
-        newTasks.forEach(taskAdder)
+        void newTasks.map(taskAdder)
 
         // and finally save the task
         void taskManager.setTask(task, true)
@@ -659,6 +680,8 @@ export async function runTaskWorker(
       console.error('Could not complete task iteration:', error)
       taskWorkerController.increaseErrorCount()
       if (taskWorkerController.getErrorCount() >= llmSettings.maxAutonomousTasks) {
+        // TODO: somehow put this into an error tasknode...
+        // TODO: also add any taskWorkerController interrupt in an error tasknode..
         taskWorkerController.interrupt(
           `Too many errors occured, interrupting execution after ${taskWorkerController.getErrorCount()} errors!`,
         )
@@ -668,13 +691,16 @@ export async function runTaskWorker(
         role: 'system',
         configuration: task?.configuration,
         content: {
-          message: `An error occured:\n\n\`\`\`\n${JSON.stringify(error)}\n\`\`\``,
+          error: `An error occured:\n\n\`\`\`\n${JSON.stringify(error)}\n\`\`\``,
+        },
+        debugging: {
+          error,
         },
       }
       if (error instanceof TaskProcessingError) {
         errorTask.content = {
           //message: `An error occured: ${error.message}:\n\n${dump(error.details, { skipInvalid: true })}`,
-          message: `An error occured:\n\n\`\`\`\n${error.message}${
+          error: `An error occured:\n\n\`\`\`\n${error.message}${
             error.details ? ':\n\n' + JSON.stringify(makeSerializable(error.details, 7)) : ''
           }\n\`\`\``,
         }
@@ -685,12 +711,13 @@ export async function runTaskWorker(
               message: error.message,
               name: error.name,
               details: error.details,
+              location: 'task processing',
             },
           }
         }
       } else if (error instanceof Error) {
         errorTask.content = {
-          message: `An error occured:\n\n\`\`\`\n${error.message}\n\n${JSON.stringify(error)}\n\`\`\``,
+          error: `An error occured:\n\n\`\`\`\n${error.message}\n\n${JSON.stringify(error)}\n\`\`\``,
         }
         if (task) {
           task.debugging = {
@@ -698,21 +725,21 @@ export async function runTaskWorker(
             error: {
               message: error.message,
               stack: error.stack,
-              location: 'task processing',
               cause: error.cause,
             },
           }
         }
       }
 
-      const newTaskId = await addTask2Tree(
-        errorTask,
-        task?.id,
-        // interrupt execution if interrupted flag is shown!
-        // this makes sure that results are still saved, even if we stop any
-        // further execution
-        taskWorkerController.isInterrupted() ? false : true,
-      )
+      const newTaskId = await taskManager.addPartialTask2Tree(errorTask, task?.id)
+      // interrupt execution if interrupted flag is shown!
+      // this makes sure that results are still saved, even if we stop any
+      // further execution
+
+      if (!taskWorkerController.isInterrupted()) {
+        // we need processTasksQueue as an argument here!!!
+        processTasksQueue.push(newTaskId)
+      }
       llmSettings.selectedTaskId = newTaskId
 
       // TODO: run this taskWorker in a separate worker js/browser thread!

@@ -286,7 +286,7 @@
 <script setup lang="ts">
 import { computed, ref, toRaw, toRefs } from 'vue'
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
-import type { FunctionArguments, ToolBase } from 'src/modules/taskyon/types';
+import type { FunctionArguments, partialTaskDraft, ToolBase } from 'src/modules/taskyon/types'
 import { llmSettings } from 'src/modules/taskyon/types'
 import '@quasar/quasar-ui-qmarkdown/dist/index.css'
 import { useTaskyonStore } from 'stores/taskyonState'
@@ -563,7 +563,7 @@ async function createFileTask(files: File[]) {
   const fileUuids = await addFiles2Taskyon(files)
 
   if (fileUuids.length) {
-    const task: Parameters<typeof tystate.addTask2Tree>[0] = {
+    const task: partialTaskDraft = {
       role: 'system',
       configuration: currentModel.value
         ? {
@@ -584,14 +584,14 @@ async function addNewTask(execute = true) {
   // make sure we reset our execution context interrupt We do this right before adding another
   // task, because we want to make sure that
   tystate.taskWorkerController.reset()
+  const tm = await tystate.getTaskManager()
   const fileTaskObj = await createFileTask(fileAttachments.value)
   let fileTaskId = undefined
   if (fileTaskObj) {
     console.log('add files to chat:', fileTaskObj)
-    fileTaskId = await tystate.addTask2Tree(
+    fileTaskId = await tm.addPartialTask2Tree(
       fileTaskObj,
       state.llmSettings.selectedTaskId, // parent
-      false, // we do not want to execute the file object, we want to use the users prompt...
     )
     state.llmSettings.selectedTaskId = fileTaskId
     fileAttachments.value = []
@@ -601,11 +601,16 @@ async function addNewTask(execute = true) {
   //          otherwise, it won't get executed but simply saved into the tree
   console.log('adding new task, execute?', execute)
   const newTask = { ...currentnewTask.value }
-  const newTaskId = await tystate.addTask2Tree(
+  const newTaskId = await tm.addPartialTask2Tree(
     newTask,
     fileTaskId || state.llmSettings.selectedTaskId, //parent
-    execute, // execute right away...
   )
+  // push to execution queue right away...
+  if (execute) {
+    const pq = await tystate.getTaskQueue()
+    pq.push(newTaskId)
+  }
+
   state.llmSettings.selectedTaskId = newTaskId
 
   // and empty out the contents for the next chat message :)

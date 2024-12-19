@@ -15,7 +15,8 @@ const props = defineProps<{
 }>()
 
 const onAddTasks = async () => {
-  const newTaskId = await tystate.addMdTasks(props.markdown)
+  const tm = await tystate.getTaskManager()
+  const newTaskId = await tm.addMdTaskChain(props.markdown)
   state.llmSettings.selectedTaskId = newTaskId
   state.lockBottomScroll = props.scrollToBottom
 }

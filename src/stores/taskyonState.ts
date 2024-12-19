@@ -4,7 +4,6 @@ import {
   type Model,
   type TaskNode,
   llmSettings,
-  type partialTaskDraft,
   type storedSettings,
 } from 'src/modules/taskyon/types'
 import axios from 'axios' // TODO: replace with fetch
@@ -17,7 +16,6 @@ import { availableModels } from 'src/modules/taskyon/chat'
 import { setupIframeApi } from 'src/modules/taskyon/iframeApi'
 import type { Tool } from 'src/modules/taskyon/tools'
 import { tylog } from 'src/modules/logger'
-import { processMarkdown } from 'src/modules/taskyon/taskUtils'
 import { useAppStateStore } from './appState'
 import type { TaskEvent } from 'src/modules/taskyon/taskManager'
 
@@ -168,48 +166,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     defineTyGuiTools(),
   )
 
-  type TaskyonInstance = Awaited<ReturnType<typeof initTaskyon>>
-
   // Access taskManagerInstance and addTask2Tree without redundant awaits
-  const getTaskManager = async (): Promise<TaskyonInstance['taskManagerInstance']> => {
-    const { taskManagerInstance } = await initTaskyonPromise
-    return taskManagerInstance
-  }
-
-  // we are doing this here, so that we can use our addTask2Tree immediatly without
-  // multiple awaits..
-  const addTask2Tree = async (
-    ...args: Parameters<TaskyonInstance['addTask2Tree']>
-  ): ReturnType<TaskyonInstance['addTask2Tree']> => {
-    const { addTask2Tree } = await initTaskyonPromise
-    return await addTask2Tree(...args)
-  }
-
-  async function addTasks(taskList: partialTaskDraft[]) {
-    let lastTaskId: string | undefined = undefined
-    for (const task of taskList) {
-      task.debugging = task.debugging ?? {} // Ensure state is set
-      lastTaskId = await addTask2Tree(
-        task as typeof task & {
-          debugging: TaskNode['debugging']
-        },
-        lastTaskId, //parent
-        false,
-      )
-    }
-    return lastTaskId
-  }
-
-  async function addMdTasks(markdown?: string) {
-    console.log('adding new Markdown tasks!!')
-    if (markdown) {
-      const taskList = processMarkdown(markdown)
-      const lastTaskId = await addTasks(taskList)
-      return lastTaskId
-    }
-    return undefined
-    // TODO: optionally execute the last task...
-  }
+  const getTaskManager = async () => (await initTaskyonPromise)['taskManagerInstance']
+  const getTaskQueue = async () => (await initTaskyonPromise)['processTasksQueue']
 
   const add2ChatHistory = async (task: TaskNode, msg: TaskEvent | 'existing') => {
     console.log('update task history!!', task.id, msg)
@@ -329,12 +288,15 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // set up iframe API
   if ($q.platform.within.iframe) {
-    void setupIframeApi(
-      addTask2Tree,
-      stateRefs.appConfiguration,
-      stateRefs.llmSettings,
-      stateRefs.keys,
-    )
+    void (async () => {
+      const taskManager = await getTaskManager()
+      void setupIframeApi(
+        taskManager,
+        stateRefs.appConfiguration,
+        stateRefs.llmSettings,
+        stateRefs.keys,
+      )
+    })()
   }
 
   watch(
@@ -409,11 +371,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     addModelToHistory,
     taskWorkerController,
     getTaskManager,
+    getTaskQueue,
     modelLookUp,
     llmModels: computed(() => llmModelsInternal.value),
     logger,
-    addTask2Tree,
-    addMdTasks,
   }
 }) // this state stores all information which
 // should be stored e.g. in browser LocalStorage

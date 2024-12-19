@@ -314,6 +314,7 @@ const TaskContent = z.union([
   MessageContent,
   ToolCallContent,
   // TODO: replace with a "context" function which can also be a link to a URL for example or maybe a search string for other tasks...
+  //       we can declare function for a lot of these things this way :)
   UploadedFilesContent,
   ToolResultContent,
   Termination,
@@ -390,7 +391,8 @@ export type TaskListType = z.infer<typeof TaskListType>
 
 export type TaskGetter = (input: string) => Promise<TaskNode | undefined>
 
-export const partialTaskDraft = TaskNode.partial()
+export const partialTaskDraft = TaskNode.omit({ id: true, created_at: true, result: true })
+  .partial()
   .required({ role: true, content: true })
   .describe(
     'This is just a subset of the task properties which can be used to define new tasks in various places.',

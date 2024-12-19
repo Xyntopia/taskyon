@@ -9,15 +9,17 @@ import {
   createTaskNodeMangoQuery,
 } from './rxdb'
 import { openFile } from '../OPFS'
-import { type AsyncQueue, deepCopy, deepMerge, lockMap } from '../utils'
+import { deepCopy, deepMerge, lockMap } from '../utils'
 import { useVectorStore } from './hnswIndex'
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi'
 import { type Tool } from './tools'
 import { taskUtils } from './taskUtils'
 import { type MangoQuery } from 'rxdb'
 import { dump, load } from 'js-yaml'
+import { processMarkdown } from 'src/modules/taskyon/taskUtils'
 
 /**
+ *
  * Finds the root task of a given task.
  *
  * @param {string} taskId - The ID of the task.
@@ -94,95 +96,6 @@ async function taskContentHash(task: TaskNode) {
 }
 
 const { extractKeywords } = usePyodideWebworker('task manager keywords')
-
-// add a task to the db. Adding some default information such as timestamps etc...
-// whats important here is that the TaskNode can only have one type of content
-// so when calling the function, we need to pre-select which type of task
-// we want to have.
-// TODO: move this into tyManager and rename ot to "addPartialTask2Tree"
-export const initAddTask2Tree =
-  (processTasksQueue: AsyncQueue<string>, taskManager: TyTaskManager) =>
-  async (
-    task: partialTaskDraft,
-    priorID: string | undefined,
-    execute = true,
-    duplicateTaskName = true,
-  ): Promise<TaskNode['id']> => {
-    if (!duplicateTaskName && task.name) {
-      // check if task already exists and throw an error, if it does, because
-      // we are not supposed to create it in that case ;)
-      // this is specifically used in the case of repeated task
-      // declarations which come for example from a webapge which integrates the tasks
-      // TODO: instead of givien the webpage the option to "disallow" duplicate
-      //       tasks, make sure, the tasks don't get saved in the db
-      //       as the get declared every single time anyways, we don't need to store them!
-      const tasks = await taskManager.searchTasks({
-        selector: { name: task.name },
-      })
-      if (tasks.length > 0) {
-        throw new Error(`The task ${task.name} already exists!`)
-      }
-    }
-
-    const uuid = urlSafeBase64Uuid()
-
-    const parent = priorID ? await taskManager.getTask(priorID) : undefined
-
-    const newTask: TaskNode = {
-      ...task,
-      role: task.role,
-      priorID,
-      content: task.content,
-      debugging: task.debugging || {},
-      id: uuid,
-      created_at: Date.now(),
-      configuration: task.configuration,
-      allowedTools: task.allowedTools || parent?.allowedTools,
-    }
-
-    // TODO: register this in a list in taskyon so that figure out how
-    // to make use of this...
-    if (typeof crypto === 'undefined' || !crypto.subtle) {
-      console.warn('crypto.subtle is not available in this environment')
-    } else {
-      void taskContentHash(newTask)
-    }
-
-    console.log('create new Task:', newTask.id)
-
-    // Push the new function task to processTasksQueue
-    // we are not saving yet, as it is going to be processed :)
-    // TODO:  this needs an overhaul..  we want to save tasks only once
-    //        and have them immutable...
-    if (execute) {
-      // we need processTasksQueue as an argument here!!!
-      processTasksQueue.push(newTask.id)
-      await taskManager.setTask(newTask, false)
-    } else {
-      // in the case of a task which is not processed, we can save it :)
-      await taskManager.setTask(newTask, true)
-    }
-
-    // extract keywordsfrom entire chat and use it to name the task...
-    // but only if a taskname doesn't exist yet.
-    if (!newTask.name && task.content && !task.label?.includes('discard')) {
-      const chat = taskManager.buildChatThread(newTask.id, false, false)
-      const chatString = (await chat).reduce((p, n) => {
-        if (typeof n.content === 'string') {
-          return p + '\n\n' + n.content
-        }
-        return p
-      }, '')
-      void extractKeywords(chatString, 5).then((kws) => {
-        console.log('update task with kw: ', kws)
-        void taskManager.updateTask({ id: newTask.id, name: kws[0] }, true)
-      })
-    } else if (newTask.name) {
-      console.log('task already has a name:', newTask.name)
-    }
-
-    return newTask.id
-  }
 
 function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
   // TODO: make sure, we add the correct file type here!
@@ -652,6 +565,10 @@ export function useTyTaskManager(
   // we should only really try to update tasks for very specific use
   // cases, such as the debug data..   otherwise things will simply get a lot
   // more difficult
+  // TODO: when changing the updateTask to injecting a task with a different
+  //       ID, what we can do is to have our update task point to its "parent" hash
+  //       AND also dvertise the update for the parent task! It is also important
+  //       that we return the new id...
   async function updateTask(
     updateData: Partial<TaskNode> & { id: string },
     save: boolean,
@@ -779,6 +696,9 @@ export function useTyTaskManager(
     return []
   }
 
+  // TODO: set an "update" flag here somewhere which we can use to
+  //       cache this function. whenever a new tool gets added in "saveTask"
+  //       we should set this
   async function updateToolDefinitions<T extends boolean>(
     removeFunction: T = false as T,
   ): Promise<T extends true ? Record<string, ToolBase> : Record<string, ToolBase | Tool>> {
@@ -957,6 +877,113 @@ export function useTyTaskManager(
     return messageStrings.join('\n\n---\n\n')
   }
 
+  // add a task to the db. Adding some default information such as timestamps etc...
+  // whats important here is that the TaskNode can only have one type of content
+  // so when calling the function, we need to pre-select which type of task
+  // we want to have.
+  // TODO: move this into tyManager and rename ot to "addPartialTask2Tree"
+  const addPartialTask2Tree = async (
+    task: partialTaskDraft,
+    priorID: string | undefined,
+    duplicateTaskName = true,
+    persist = true,
+  ): Promise<TaskNode['id']> => {
+    if (!duplicateTaskName && task.name) {
+      // check if task already exists and throw an error, if it does, because
+      // we are not supposed to create it in that case ;)
+      // this is specifically used in the case of repeated task
+      // declarations which come for example from a webapge which integrates the tasks
+      // TODO: instead of giving the webpage the option to "disallow" duplicate
+      //       tasks, make sure, the tasks don't get saved in the db
+      //       as they get declared every single time anyways when the webpage loads...,
+      //       we don't *need* to store them! we can use the "persist" argument for this.
+      const tasks = await searchTasks({
+        selector: { name: task.name },
+      })
+      if (tasks.length > 0) {
+        throw new Error(`The task ${task.name} already exists!`)
+      }
+    }
+
+    const uuid = urlSafeBase64Uuid()
+
+    const newTask: TaskNode = {
+      ...task,
+      priorID: priorID ?? task.priorID,
+      debugging: task.debugging || {},
+      id: uuid, // TODO: always create new hashed ID in order to make sure, our tasks are vaid ;)
+      created_at: Date.now(),
+    }
+
+    // TODO: register this in a list in taskyon so that figure out how
+    // to make use of this...
+    if (typeof crypto === 'undefined' || !crypto.subtle) {
+      console.warn('crypto.subtle is not available in this environment')
+    } else {
+      // TODO: use this as an ID. (We first need to make sure that this is safe...)
+      //       also: add a signature as well! maybe by simply signing the task and adding it to the ID?
+      //       or should we add a special signature property? Or can we do this only by encoding a task into
+      //       a bytestream, similar to JWTs?
+      void taskContentHash(newTask)
+    }
+
+    console.log('create new Task:', newTask.id)
+    await setTask(newTask, persist)
+
+    // extract keywordsfrom entire chat and use it to name the task...
+    // but only if a taskname doesn't exist yet.
+    // TODO: how can we do this much faster, so that we don't have to update our task and
+    //       keep it immutable?  We should probably await keywords, but also keep a
+    //       separate index with keywords for tasks...
+    if (!newTask.name && task.content && !task.label?.includes('discard')) {
+      const chat = buildChatThread(newTask.id, false, false)
+      const chatString = (await chat).reduce((p, n) => {
+        if (typeof n.content === 'string') {
+          return p + '\n\n' + n.content
+        }
+        return p
+      }, '')
+      void extractKeywords(chatString, 5).then((kws) => {
+        console.log('update task with kw: ', kws)
+        void updateTask({ id: newTask.id, name: kws[0] }, true)
+      })
+    } else if (newTask.name) {
+      console.log('task already has a name:', newTask.name)
+    }
+
+    return newTask.id
+  }
+
+  async function addTaskChain(
+    taskList: partialTaskDraft[],
+    priorID: string | undefined = undefined,
+    duplicateTaskName = true,
+    persist = true,
+  ) {
+    let lastTaskId = priorID
+    for (const task of taskList) {
+      task.debugging = task.debugging ?? {} // Ensure state is set
+      lastTaskId = await addPartialTask2Tree(
+        task,
+        lastTaskId, //parent
+        duplicateTaskName,
+        persist,
+      )
+    }
+    return lastTaskId
+  }
+
+  async function addMdTaskChain(markdown?: string) {
+    console.log('adding new Markdown tasks!!')
+    if (markdown) {
+      const taskList = processMarkdown(markdown)
+      const lastTaskId = await addTaskChain(taskList)
+      return lastTaskId
+    }
+    return undefined
+    // TODO: optionally execute the last task...
+  }
+
   const defaultMode = {
     getTask,
     updateTask,
@@ -989,6 +1016,9 @@ export function useTyTaskManager(
     getTaskChain,
     chatToYaml,
     chatToMarkdown,
+    addPartialTask2Tree,
+    addTaskChain,
+    addMdTaskChain,
   }
 }
 export type TyTaskManager = ReturnType<typeof useTyTaskManager>

@@ -1,9 +1,9 @@
-import type { initAddTask2Tree } from './taskManager'
 import type { ToolBase, partialTaskDraft } from './types'
 import type { llmSettings } from './types'
 import { deepMergeReactive } from '../utils'
 import { tylog } from '../logger'
 import { TaskyonMessages } from './iframeApiTypes'
+import type { TyTaskManager } from './taskManager'
 
 /*function stringifyIfNotString(obj: unknown): string | undefined {
     if (typeof obj === 'undefined') return undefined;
@@ -11,7 +11,7 @@ import { TaskyonMessages } from './iframeApiTypes'
   }*/
 
 export function setupIframeApi(
-  addTask2Tree: ReturnType<typeof initAddTask2Tree>,
+  taskManager: TyTaskManager,
   appConfiguration: Record<string, unknown>,
   llmSettings: llmSettings,
   keys: Record<string, string>,
@@ -42,7 +42,9 @@ export function setupIframeApi(
                 ...msg.data.task,
                 content: msg.data.task.content,
               }
-              void addTask2Tree(newTask, undefined, false, false)
+              void taskManager
+                .addPartialTask2Tree(newTask, undefined, false, true)
+                .catch((err) => console.warn(err))
             } else if (msg.success && msg.data.type === 'configurationMessage') {
               const newConfig = msg.data.conf
               console.log('setting our configuration')
@@ -63,8 +65,8 @@ export function setupIframeApi(
               }
             } else if (msg.success && msg.data.type === 'functionDescription') {
               // TODO: somehow eslint doesn't recognize problems here, when there is a type mismatch
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              const { id, type, duplicateTaskName, ...rest } = msg.data
+              // TODO: rename "duplicateTaskName" to "persist"
+              const { id, duplicateTaskName, ...rest } = msg.data
               const newFunc: ToolBase = rest
               console.log(`functionDescription was sent by ${event.origin}`, newFunc)
               const newTask: partialTaskDraft = {
@@ -75,9 +77,9 @@ export function setupIframeApi(
                 },
                 label: ['function'],
               }
-              void addTask2Tree(newTask, undefined, false, duplicateTaskName).catch((err) =>
-                console.warn(err),
-              )
+              void taskManager
+                .addPartialTask2Tree(newTask, undefined, false, duplicateTaskName)
+                .catch((err) => console.warn(err))
             } else {
               // TODO: also add this as error, so that it gets thrown back to the parent
               tylog.clienterr('could not convert message to task:', {

@@ -125,12 +125,13 @@ const showIntroduction = computed(
 
 async function updateChatThread() {
   console.log('update chat thread')
+  const tm = await tystate.getTaskManager()
   if (typeof route.query.gd === 'string') {
     state.lockBottomScroll = false
     const gdFileId = route.query.gd
     const markdownUrl = `https://share.taskyon.space/proxy/gdrive/${gdFileId}`
     const markdownContent = await getTextFile(markdownUrl)
-    const newTaskId = await tystate.addMdTasks(markdownContent)
+    const newTaskId = await tm.addMdTaskChain(markdownContent)
 
     state.llmSettings.selectedTaskId = newTaskId
   } else if (typeof route.query.url === 'string') {
@@ -138,7 +139,7 @@ async function updateChatThread() {
     if (markdownUrl) {
       state.lockBottomScroll = false
       const markdownContent = await getTextFile(markdownUrl)
-      const newTaskId = await tystate.addMdTasks(markdownContent)
+      const newTaskId = await tm.addMdTaskChain(markdownContent)
       state.llmSettings.selectedTaskId = newTaskId
     }
   } else if (route.params.filePath) {
@@ -146,7 +147,7 @@ async function updateChatThread() {
     const urlPath = (route.params.filePath as string[]).join('/')
     const filePath = urlPath.endsWith('.md') ? urlPath : `${urlPath}.md`
     const markdownContent = filePath ? await fetchMarkdown(folder || '', filePath) : undefined
-    const newTaskId = await tystate.addMdTasks(markdownContent)
+    const newTaskId = await tm.addMdTaskChain(markdownContent)
 
     state.llmSettings.selectedTaskId = newTaskId
   } else if (typeof route.query.t === 'string') {

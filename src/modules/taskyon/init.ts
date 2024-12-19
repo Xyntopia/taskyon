@@ -1,8 +1,8 @@
-import { initAddTask2Tree, useTyTaskManager } from './taskManager'
+import { useTyTaskManager } from './taskManager'
 import type { TaskNode } from './types'
-import type { TaskyonDatabase } from './rxdb';
+import type { TaskyonDatabase } from './rxdb'
 import { createTaskyonDatabase } from './rxdb'
-import type { TaskWorkerController} from './taskWorker';
+import type { TaskWorkerController } from './taskWorker'
 import { runTaskWorker } from './taskWorker'
 import type { Tool } from './tools'
 import { loadFile } from 'src/modules/loadFiles'
@@ -109,10 +109,5 @@ export async function initTaskyon(
     taskWorkerController,
   )
 
-  const addTask2Tree = initAddTask2Tree(processTasksQueue, taskManagerInstance)
-
-  return {
-    taskManagerInstance,
-    addTask2Tree,
-  }
+  return { taskManagerInstance, processTasksQueue }
 }
