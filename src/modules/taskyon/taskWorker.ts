@@ -25,7 +25,6 @@ import { load } from 'js-yaml'
 import {
   type AsyncQueue,
   deepCopy,
-  deepMerge,
   keysToLowerCase,
   makeSerializable,
   normalizeFalsyValues,
@@ -199,23 +198,11 @@ function parseChatResponse2TaskDraft(message: string): Record<string, unknown> {
   throw new TaskProcessingError('Parse Error:  the structured response must have keys and values!')
 }
 
-// use helper function to make code more concise ;)
-const createTaskGenerator =
-  (childCosts: object, finishedTask: TaskNode) => (partialTask: partialTaskDraft) => {
-    partialTask.debugging = { ...partialTask.debugging, ...childCosts }
-    const taskTemplate: Partial<TaskNode> = {
-      configuration: finishedTask.configuration,
-    }
-    const newTask = deepMerge(taskTemplate, partialTask)
-    return newTask
-  }
-
 // we use this to decide whether we should call a function or to continue
 // this is usually not needed if we use llmTools (like built-in tools from openai API)
 function generateFollowupFromStructuredResponse(
   choice: ChatResponseType['choices'][0],
-  generateFollowUpTask: ReturnType<typeof createTaskGenerator>,
-) {
+): Pick<partialTaskDraft, 'role' | 'content'>[][] {
   const structResponse = parseChatResponse2TaskDraft(choice.message.content || '')
   // depending on what role and tasktype the finishedTask has, we
   // expect different results from our structuredResponse
@@ -238,10 +225,10 @@ function generateFollowupFromStructuredResponse(
 
   if (useTool) {
     console.log('trying to get tool call from structured response')
-    const newTask = generateFollowUpTask({
+    const newTask: partialTaskDraft = {
       role: 'assistant',
       content: { structuredResponse: choice.message.content || '' },
-    })
+    }
 
     // this doesn't say anything about whether the parameters are
     // chosen correctly for this function yet. It only says that
@@ -253,35 +240,40 @@ function generateFollowupFromStructuredResponse(
     }
     if (res.success) {
       const command = res.data
+      // TODO:  this doesn't work!!  newTask doesn't have an ID yet and the next task can#t pick it up from there!!
       return [
-        newTask,
-        generateFollowUpTask({
-          priorID: newTask.priorID,
-          role: 'assistant',
-          content: { functionCall: command },
-        }),
+        [
+          newTask,
+          {
+            role: 'assistant',
+            content: { functionCall: command },
+          },
+        ],
       ]
     } else {
       return [
-        newTask,
-        generateFollowUpTask({
-          priorID: newTask.priorID,
-          role: 'system',
-          content: {
-            message: `The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
+        [
+          newTask,
+          {
+            role: 'system',
+            content: {
+              message: `The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
  suggests we should use a tool, but we could not parse the ${JSON.stringify(structResponse.command)} property.`,
+            },
           },
-        }),
+        ],
       ]
     }
   } else {
     // in the case that we don't call a tool, provide a "normal" answer :)
     // this time we declare it as "Open" and set execution to "true"
     return [
-      generateFollowUpTask({
-        role: 'assistant',
-        content: { structuredResponse: choice.message.content || '' },
-      }),
+      [
+        {
+          role: 'assistant',
+          content: { structuredResponse: choice.message.content || '' },
+        },
+      ],
     ]
   }
 }
@@ -314,29 +306,27 @@ function generateFollowupFromStructuredResponse(
 // TODO: make this function a lot mor eexplicit in that it represents our task transition map
 // TODO: get rid of taskManager, if thats possible! :) I don#t see why we would need taskmanager in order to create
 //       follow-up tasks?
+// we return 2D list of tasks here..   each list represents a chain of linked tasks through priorID
 async function generateFollowUpTasksFromResult(
   finishedTask: TaskNode,
   taskManager: TyTaskManager,
   llmTools: boolean = false,
-) {
+): Promise<partialTaskDraft[][]> {
   console.log('generate follow up task')
-  const childCosts = {
-    promptTokens: finishedTask.debugging.taskTokens,
-    taskTokens: finishedTask.debugging.taskTokens,
-    taskCosts: finishedTask.debugging.taskCosts,
-  }
   const useTyTools = finishedTask.allowedTools?.length ? true : false
-  const generateFollowUpTask = createTaskGenerator(childCosts, finishedTask)
 
+  let newTasks: partialTaskDraft[][] = []
   // TODO: what do we do in case of an empty user message, but only a file?
   //       right now, we assume, that user message always comes after uploaded file message :)
   if (finishedTask.result) {
     if ('functionCall' in finishedTask.content) {
-      return [
-        generateFollowUpTask({
-          role: 'system',
-          content: { toolResult: finishedTask.result },
-        }),
+      newTasks = [
+        [
+          {
+            role: 'system',
+            content: { toolResult: finishedTask.result },
+          },
+        ],
       ]
     }
     // did we get any response from an LLM?
@@ -351,11 +341,13 @@ async function generateFollowUpTasksFromResult(
       )
       if (functionCall[0]) {
         // TODO: enable multiple parallel function calls
-        return [
-          generateFollowUpTask({
-            role: 'function',
-            content: { functionCall: functionCall[0] },
-          }),
+        newTasks = [
+          [
+            {
+              role: 'function',
+              content: { functionCall: functionCall[0] },
+            },
+          ],
         ]
       }
       if (!choice.message.content) {
@@ -373,22 +365,38 @@ async function generateFollowUpTasksFromResult(
             'toolResult' in finishedTask.content)) || // taskResult, but no LLM-builtin tools
         (finishedTask.role === 'system' && !('toolResult' in finishedTask.content)) // this happens e.g. in the case of an error...
       ) {
-        return generateFollowupFromStructuredResponse(choice, generateFollowUpTask)
+        newTasks = generateFollowupFromStructuredResponse(choice)
       } else {
         // if 'message' in finishedTask.content && finishedTask.role === 'assistant'
         // this is the final response, so we simply add it to the chain without executing it
-        const newTask = generateFollowUpTask({
-          role: 'assistant',
-          content: { message: choice.message.content },
-        })
+        newTasks = [
+          [
+            {
+              role: 'assistant',
+              content: { message: choice.message.content },
+            },
+          ],
+        ]
         console.log('No more follow up tasks!')
-        return [newTask]
       }
     }
   }
 
-  // no follow up tasks from this task :)
-  return []
+  // augment newest tasks with debugging information
+  // TODO: move this into a different data structure..
+  // it would be good to not hav this inside the tasks themselves to imprive immutability
+  newTasks.forEach((ts) =>
+    ts.forEach((t) => {
+      t.configuration = finishedTask.configuration
+      t.debugging = {
+        ...t.debugging,
+        promptTokens: finishedTask.debugging.taskTokens,
+        taskTokens: finishedTask.debugging.taskTokens,
+        taskCosts: finishedTask.debugging.taskCosts,
+      }
+    }),
+  )
+  return newTasks
 }
 
 export function useTaskWorkerController() {
@@ -630,15 +638,16 @@ export async function runTaskWorker(
           taskManager,
           llmSettings.enableOpenAiTools,
         )
-        const addTasks = (finishedTask: TaskNode) => (t: (typeof newTasks)[0]) => {
-          void addTask2Tree(
-            t,
-            t.priorID || finishedTask.id,
-            // interrupt execution if in  terrupted flag is shown!
-            // this makes sure that results are still saved, even if we stop any
-            // further execution
-            taskWorkerController.isInterrupted() ? false : true,
-          ).then((newTaskId) => (llmSettings.selectedTaskId = newTaskId))
+        // we make sure to identify all parent tasks from this batch, because
+        // we oly want to execute the leaf tasks..
+        // we can do this, because all of these tasks are newly created. this means, we don't have any
+        const addTasks = (finishedTask: TaskNode) => (ts: (typeof newTasks)[0]) => {
+          const immediateExecute = taskWorkerController.isInterrupted() ? false : true
+          ts.forEach((t) => {
+            void addTask2Tree(t, t.priorID || finishedTask.id, immediateExecute)
+          })
+          // add last task to GUI
+          llmSettings.selectedTaskId = newTaskId,
         }
         const taskAdder = addTasks(task)
         newTasks.forEach(taskAdder)

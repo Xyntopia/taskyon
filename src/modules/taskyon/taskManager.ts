@@ -1,10 +1,4 @@
-import {
-  type TaskNode,
-  ToolBase,
-  TaskListType,
-  type PartialTaskNode,
-  type RequireDefined,
-} from './types'
+import { type TaskNode, ToolBase, TaskListType, type partialTaskDraft } from './types'
 import { v1 as uuidv1 } from 'uuid'
 import {
   type TaskyonDatabase,
@@ -109,7 +103,7 @@ const { extractKeywords } = usePyodideWebworker('task manager keywords')
 export const initAddTask2Tree =
   (processTasksQueue: AsyncQueue<string>, taskManager: TyTaskManager) =>
   async (
-    task: RequireDefined<PartialTaskNode, 'role' | 'content'>,
+    task: partialTaskDraft,
     priorID: string | undefined,
     execute = true,
     duplicateTaskName = true,

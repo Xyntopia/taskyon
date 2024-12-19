@@ -52,6 +52,7 @@ const taskNodeSchemaLiteral = {
       type: 'string',
       enum: ['Open', 'Queued', 'In Progress', 'Completed', 'Error', 'Cancelled'],
     },
+    // TODO: remove this. is going to be part of function content arguments
     configuration: {
       type: 'string', // Storing configuration as a JSON string
     },
@@ -157,7 +158,7 @@ export type FileMappingDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
 >
 export const fileMappingSchema: RxJsonSchema<FileMappingDocType> = fileMappingSchemaLiteral
 
-/* this is used to map our db objects to the labels in the 
+/* this is used to map our db objects to the labels in the
 vector index we can also save our calculated vectors in this in order to
 exchange them between different taskyon nodes. */
 const vectorMappingSchemaLiteral = {

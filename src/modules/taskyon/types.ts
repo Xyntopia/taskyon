@@ -295,10 +295,20 @@ export const StructuredResponse = ToolResultBase.partial()
 export type StructuredResponse = z.infer<typeof StructuredResponse>
 
 const MessageContent = z.object({ message: z.string() })
+// TODO: get rid of structured content..  we should directly call a function task in order to interprete
+//       structured content with the content as a parameter in order to decide what to do :)
 const StructuredContent = z.object({ structuredResponse: z.string() })
 const ToolCallContent = z.object({ functionCall: FunctionCall })
 const UploadedFilesContent = z.object({ uploadedFiles: z.array(z.string()) })
 const ToolResultContent = z.object({ toolResult: ToolResult })
+const ErrorContent = z
+  .object({ error: z.unknown() })
+  .describe('Gets created if any error occurs during task processing.')
+const Termination = z
+  .object({ finalResult: z.unknown() })
+  .describe(
+    'A Termination content always indicates the end of an autonomous task chat execution. Every Leaf task which is not a Termination task can potentially continue to be executed...',
+  )
 const TaskContent = z.union([
   StructuredContent,
   MessageContent,
@@ -306,6 +316,8 @@ const TaskContent = z.union([
   // TODO: replace with a "context" function which can also be a link to a URL for example or maybe a search string for other tasks...
   UploadedFilesContent,
   ToolResultContent,
+  Termination,
+  ErrorContent,
 ])
 
 // TODO: add an "extended" task and put all information in there which we don't really "need"
@@ -372,25 +384,13 @@ of how content can be structured. `,
   created_at: z.number().optional(),
 })
 export type TaskNode = z.infer<typeof TaskNode>
-export const partialTaskNode = TaskNode.partial()
-export type PartialTaskNode = z.infer<typeof partialTaskNode>
 
 export const TaskListType = z.array(TaskNode)
 export type TaskListType = z.infer<typeof TaskListType>
 
 export type TaskGetter = (input: string) => Promise<TaskNode | undefined>
 
-export const partialTaskDraft = TaskNode.pick({
-  role: true,
-  content: true,
-  priorID: true,
-  name: true,
-  configuration: true,
-  allowedTools: true,
-  debugging: true,
-  label: true,
-})
-  .partial()
+export const partialTaskDraft = TaskNode.partial()
   .required({ role: true, content: true })
   .describe(
     'This is just a subset of the task properties which can be used to define new tasks in various places.',
