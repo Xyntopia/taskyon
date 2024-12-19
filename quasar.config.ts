@@ -176,6 +176,9 @@ export default defineConfig((ctx) => {
       //publicPath:  '/', TODO: check if we ca us this to deploy a "test" version of our app on gitlab pages..
       vueRouterMode: 'history', // available values: 'hash', 'history'
 
+      /**
+       * Minification options. [Full list](https://github.com/webpack-contrib/terser-webpack-plugin/#minify).
+       */
       uglifyOptions: {
         compress: { drop_console: true },
       },
@@ -403,11 +406,14 @@ export default defineConfig((ctx) => {
         // we need the bwloe so that uglify can remove the console. because we want
         //  check this:  https://stackoverflow.com/questions/76979427/quasar-app-does-not-remove-console-log-for-production-builds
         // and this:  https://github.com/quasarframework/quasar/issues/11186
-        if (ctx.prod) {
+        // TODO: remove this, I think because of the "      uglifyOptions: {compress: { drop_console: true },}," above, we
+        // don#t need this anymore, this option removes console calls in any case.....
+        /*if (ctx.prod) {
           chain
             .plugin('node-polyfill')
             .use(nodePolyfillWebpackPlugin, [{ excludeAliases: ['console'] }])
-        } else {
+        }*/
+        if (!ctx.prod) {
           chain.plugin('node-polyfill').use(nodePolyfillWebpackPlugin)
         }
         // TODO: find out, why we did this?
