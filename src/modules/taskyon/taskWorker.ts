@@ -401,6 +401,7 @@ async function generateFollowUpTasksFromResult(
       t.allowedTools = finishedTask.allowedTools
       t.debugging = {
         ...t.debugging,
+        rawInput: result,
         promptTokens: finishedTask.debugging.taskTokens,
         taskTokens: finishedTask.debugging.taskTokens,
         taskCosts: finishedTask.debugging.taskCosts,

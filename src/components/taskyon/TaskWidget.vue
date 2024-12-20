@@ -21,17 +21,18 @@
         </div>
         <!--task content-->
         <div v-if="'functionCall' in task.content" class="col q-pb-md">
-          <q-expansion-item dense>
-            <!--TODO: we need to color our task function according to their success (we can simply check if the ext task in the chain
-          is an error (maybe we could simply supply this as a property?))
-                      :header-class="
-              task.result && task.result instanceof Object && 'error' in task.result
-                ? 'text-negative'
-                : isWorking
-                  ? 'text-info'
-                  : 'text-green'
-
-          -->
+          <q-expansion-item
+            dense
+            :header-class="
+              nextTask && 'error' in nextTask.content
+                ? 'text-red'
+                : nextTask && 'toolResult' in nextTask.content
+                  ? 'error' in nextTask.content.toolResult
+                    ? 'text-red'
+                    : 'text-green'
+                  : 'text-info'
+            "
+          >
             <template #header>
               <div class="row q-gutter-sm items-center">
                 <q-spinner-orbit v-if="isWorking" size="2em"></q-spinner-orbit>
@@ -39,6 +40,16 @@
                 <div>{{ task.content.functionCall.name }}</div>
               </div>
             </template>
+            <div>
+              <ToolResultWidget
+                :function-call="task.content.functionCall"
+                :result="
+                  nextTask && 'toolResult' in nextTask.content
+                    ? nextTask.content.toolResult
+                    : undefined
+                "
+              />
+            </div>
           </q-expansion-item>
         </div>
         <div v-if="'toolResult' in task.content" class="col q-pb-md">

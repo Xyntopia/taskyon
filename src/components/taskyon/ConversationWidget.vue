@@ -46,7 +46,7 @@ import type { TaskNode } from 'src/modules/taskyon/types'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import { useQuasar } from 'quasar'
-import { computed, toRaw } from 'vue'
+import { computed } from 'vue'
 const $q = useQuasar()
 
 const props = defineProps<{
@@ -74,11 +74,12 @@ function getNextTask(id: string) {
 // TODO: render tasks based on levels :)
 const filteredTasks = computed(() => {
   if (props.showAllTasks) return props.selectedThread.values()
-  const rawSelectedThread = toRaw(props.selectedThread)
-  return rawSelectedThread.values().filter((t) => {
+  //const rawSelectedThread = toRaw(props.selectedThread)
+  return Array.from(props.selectedThread.values()).filter((t) => {
     const hide = t.label ? t.label.includes('hide') : false // TODO: hide tasks based on level as well :)
     const structured =
-      t.content && ('structuredResponse' in t.content || 'termination' in t.content)
+      t.content &&
+      ('structuredResponse' in t.content || 'termination' in t.content || 'toolResult' in t.content)
     return hide || !structured
   })
 })
