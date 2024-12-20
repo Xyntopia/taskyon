@@ -10,7 +10,7 @@
     >
       <q-scroll-observer axis="vertical" :debounce="500" @scroll="onScroll" />
       <div
-        v-if="tystate.selectedThread.length > 0 && showIntroduction"
+        v-if="tystate.selectedThread.size > 0 && showIntroduction"
         class="row items-center q-pa-sm"
         style="max-width: 600px"
       >
@@ -27,7 +27,7 @@
       </div>
       <!-- "Task" Display -->
       <ConversationWidget
-        v-if="tystate.selectedThread.length > 0"
+        v-if="tystate.selectedThread.size > 0"
         :selected-thread="tystate.selectedThread"
         :current-task="tystate.currentTask"
         :task-worker-waiting="tystate.taskWorkerWaiting"
@@ -37,7 +37,7 @@
       />
       <!-- Welcome Message -->
       <div
-        v-if="tystate.selectedThread.length == 0 || showIntroduction"
+        v-if="tystate.selectedThread.size == 0 || showIntroduction"
         class="col column justify-center items-center q-pa-sm welcome"
         style="max-width: 600px"
       >

@@ -50,7 +50,7 @@ import { computed } from 'vue'
 const $q = useQuasar()
 
 const props = defineProps<{
-  selectedThread: TaskNode[]
+  selectedThread: Map<string, TaskNode>
   currentTask?: TaskNode | undefined
   taskWorkerWaiting: boolean
   taskWorkerMessage?: string
@@ -60,8 +60,8 @@ const props = defineProps<{
 
 // TODO: render tasks based on levels :)
 const filteredTasks = computed(() => {
-  if (props.showAllTasks) return props.selectedThread
-  return props.selectedThread.filter((t) => {
+  if (props.showAllTasks) return props.selectedThread.values()
+  return props.selectedThread.values().filter((t) => {
     const hide = t.label ? t.label.includes('hide') : false // TODO: hide tasks based on level as well :)
     const structured =
       t.content && ('structuredResponse' in t.content || 'termination' in t.content)
