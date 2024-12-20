@@ -10,8 +10,8 @@
         <Task
           :id="task.id"
           :task="task"
-          :previous-task="undefined"
-          :next-task="undefined"
+          :previous-task="task.priorID ? selectedThread.get(task.priorID) : undefined"
+          :next-task="getNextTask(task.id)"
           :is-working="!taskWorkerWaiting && task.id === currentTask.id"
           style="min-width: 300px"
           :class="['q-pa-xs', task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"
@@ -46,7 +46,7 @@ import type { TaskNode } from 'src/modules/taskyon/types'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import { useQuasar } from 'quasar'
-import { computed } from 'vue'
+import { computed, toRaw } from 'vue'
 const $q = useQuasar()
 
 const props = defineProps<{
@@ -58,10 +58,24 @@ const props = defineProps<{
   showIds?: boolean
 }>()
 
+// Build task list and next task map so that we know for each task what its children are..
+// TODO: extend this to multiple children..  we'll have a tree of some sort, I guess at some point...
+const nextMap = new Map<string, TaskNode>()
+props.selectedThread.forEach((task) => {
+  const prev = props.selectedThread.get(task.priorID || '')
+  if (prev) nextMap.set(prev.id, task)
+})
+
+function getNextTask(id: string) {
+  const nextTask = nextMap.get(id)
+  return nextTask
+}
+
 // TODO: render tasks based on levels :)
 const filteredTasks = computed(() => {
   if (props.showAllTasks) return props.selectedThread.values()
-  return props.selectedThread.values().filter((t) => {
+  const rawSelectedThread = toRaw(props.selectedThread)
+  return rawSelectedThread.values().filter((t) => {
     const hide = t.label ? t.label.includes('hide') : false // TODO: hide tasks based on level as well :)
     const structured =
       t.content && ('structuredResponse' in t.content || 'termination' in t.content)
