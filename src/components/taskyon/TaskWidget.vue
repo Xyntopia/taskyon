@@ -8,7 +8,10 @@
       <!--Message Display-->
       <div class="row items-end q-gutter-xs">
         <!--task icon-->
-        <div v-if="'error' in task.content" class="col-auto self-center">
+        <div
+          v-if="(nextTask && 'error' in nextTask.content) || 'error' in task.content"
+          class="col-auto self-center"
+        >
           <q-icon :name="matWarning" color="negative" size="sm">
             <q-tooltip class="bg-warning">Error!</q-tooltip>
           </q-icon>
@@ -63,7 +66,12 @@
           />
         </div>
         <div v-else-if="'structuredResponse' in task.content" class="col">
-          <q-expansion-item dense :icon="mdiHeadCog" label="Analyze the Result:">
+          <q-expansion-item
+            dense
+            :icon="mdiHeadCog"
+            header-class="text-info"
+            label="Analyze the Result:"
+          >
             <p style="white-space: pre-wrap">
               {{ dump(task.content.structuredResponse) }}
             </p>
@@ -99,6 +107,11 @@
             :preview-size="50"
             :get-file="getFile"
           />
+        </div>
+        <div v-else-if="'error' in task.content" class="col">
+          <div>
+            {{ task.content.error }}
+          </div>
         </div>
         <div v-else-if="'termination' in task.content" class="col">
           <div>
