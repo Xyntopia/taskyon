@@ -10,6 +10,8 @@
         <Task
           :id="task.id"
           :task="task"
+          :previous-task="undefined"
+          :next-task="undefined"
           :is-working="!taskWorkerWaiting && task.id === currentTask.id"
           style="min-width: 300px"
           :class="['q-pa-xs', task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"

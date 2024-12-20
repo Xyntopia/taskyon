@@ -8,12 +8,9 @@
       <!--Message Display-->
       <div class="row items-end q-gutter-xs">
         <!--task icon-->
-        <div
-          v-if="task.result && task.result instanceof Object && 'error' in task.result"
-          class="col-auto self-center"
-        >
-          <q-icon :name="matWarning" color="negative" size="sm"
-            ><q-tooltip class="bg-warning">Error!</q-tooltip>
+        <div v-if="'error' in task.content" class="col-auto self-center">
+          <q-icon :name="matWarning" color="negative" size="sm">
+            <q-tooltip class="bg-warning">Error!</q-tooltip>
           </q-icon>
         </div>
         <div v-else-if="'uploadedFiles' in task.content" class="col-auto self-center">
@@ -24,16 +21,17 @@
         </div>
         <!--task content-->
         <div v-if="'functionCall' in task.content" class="col q-pb-md">
-          <q-expansion-item
-            dense
-            :header-class="
+          <q-expansion-item dense>
+            <!--TODO: we need to color our task function according to their success (we can simply check if the ext task in the chain
+          is an error (maybe we could simply supply this as a property?))
+                      :header-class="
               task.result && task.result instanceof Object && 'error' in task.result
                 ? 'text-negative'
                 : isWorking
                   ? 'text-info'
                   : 'text-green'
-            "
-          >
+
+          -->
             <template #header>
               <div class="row q-gutter-sm items-center">
                 <q-spinner-orbit v-if="isWorking" size="2em"></q-spinner-orbit>
@@ -41,26 +39,24 @@
                 <div>{{ task.content.functionCall.name }}</div>
               </div>
             </template>
-            <TaskResultWidget :task="task" />
           </q-expansion-item>
         </div>
         <div v-if="'toolResult' in task.content" class="col q-pb-md">
-          <q-expansion-item dense :icon="mdiHeadCog" label="Analyze the Result:">
-            <q-expansion-item dense label="Result:">
-              <p style="white-space: pre-wrap">
-                {{ dump(task.content) }}
-              </p>
-            </q-expansion-item>
-            <q-separator />
-            <p style="white-space: pre-wrap">
-              {{ dump(task.result) }}
-            </p>
-          </q-expansion-item>
+          <ToolResultWidget
+            :result="task.content.toolResult"
+            :function-call="
+              previousTask?.content && 'functionCall' in previousTask.content
+                ? previousTask?.content.functionCall
+                : undefined
+            "
+          />
         </div>
         <div v-else-if="'structuredResponse' in task.content" class="col">
-          <div class="raw-markdown q-mb-md">
-            {{ task.content.structuredResponse }}
-          </div>
+          <q-expansion-item dense :icon="mdiHeadCog" label="Analyze the Result:">
+            <p style="white-space: pre-wrap">
+              {{ dump(task.content.structuredResponse) }}
+            </p>
+          </q-expansion-item>
         </div>
         <div v-else-if="'message' in task.content" class="col">
           <q-expansion-item
@@ -167,7 +163,7 @@
           <q-tab name="ERROR" label="Error" />
           <q-tab name="RAW" label="raw task data" />
           <q-tab v-if="task.debugging.taskPrompt" name="TASKPROMPT" label="task prompt" />
-          <q-tab name="TASKRESULT" label="raw result" />
+          <q-tab name="RAW_INPUT" label="raw input" />
         </q-tabs>
         <q-tab-panels
           v-model="state.messageDebug[task.id]"
@@ -195,9 +191,9 @@
             >
             </textarea>
           </q-tab-panel>
-          <q-tab-panel name="TASKRESULT">
+          <q-tab-panel name="RAW_INPUT">
             <textarea
-              :value="JSON.stringify(task.result, null, 2)"
+              :value="JSON.stringify(task.debugging.rawInput, null, 2)"
               readonly
               wrap="soft"
               style="width: 100%; height: 200px; background-color: inherit; color: inherit"
@@ -222,7 +218,7 @@
 </template>
 
 <script setup lang="ts">
-import TaskResultWidget from 'src/components/taskyon/TaskResultWidget.vue'
+import ToolResultWidget from 'src/components/taskyon/ToolResultWidget.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
 import { TaskNode, partialTaskDraft, ToolBase } from 'src/modules/taskyon/types'
@@ -244,6 +240,8 @@ import { useAppStateStore } from 'src/stores/appState'
 
 const props = defineProps<{
   task: TaskNode
+  previousTask?: TaskNode | undefined
+  nextTask?: TaskNode | undefined
   isWorking?: boolean
   short?: boolean
   showId?: boolean

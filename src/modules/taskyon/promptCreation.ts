@@ -1,5 +1,5 @@
 import { summarizeTools } from './tools'
-import type { ToolBase, TaskNode, llmSettings} from './types';
+import type { ToolBase, TaskNode, llmSettings } from './types'
 import { StructuredResponseTypes, UseToolBase } from './types'
 import { zodToYamlString } from '../yamlUtils'
 import type OpenAI from 'openai'
@@ -81,7 +81,7 @@ type tyChatCompletionmessageParam = OpenAI.Chat.Completions.ChatCompletionMessag
 // enhance the chat by inserting prompts before certain message which
 // make them better to understand for the AI...
 export function addPrompts(
-  task: Pick<TaskNode, 'role' | 'content' | 'allowedTools' | 'result' | 'debugging'>,
+  task: Pick<TaskNode, 'role' | 'content' | 'allowedTools' | 'debugging'>,
   toolCollection: Record<string, ToolBase>,
   llmSettings: llmSettings,
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],

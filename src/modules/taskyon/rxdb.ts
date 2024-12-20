@@ -279,7 +279,7 @@ export function transformTaskNodeToDocType(taskNode: TaskNode): TaskNodeDocType 
   //       capabilities before saving anything in the db..
   const nonReactiveTaskNode = JSON.parse(JSON.stringify(taskNode)) as TaskNode
   const reducedTaskNode = removeUndefinedProperties(
-    removeKeys(nonReactiveTaskNode, ['content', 'result', 'configuration', 'debugging']),
+    removeKeys(nonReactiveTaskNode, ['content', 'configuration', 'debugging']),
   )
   const convertedTask = {
     ...reducedTaskNode,
@@ -292,7 +292,6 @@ export function transformTaskNodeToDocType(taskNode: TaskNode): TaskNodeDocType 
     ...(taskNode.debugging !== undefined && {
       debugging: JSON.stringify(taskNode.debugging),
     }),
-    ...(taskNode.result !== undefined && { result: JSON.stringify(taskNode.result) }),
     // TODO: remove this state here...
     state: 'Completed' as 'Open' | 'Queued' | 'In Progress' | 'Completed' | 'Error',
   }

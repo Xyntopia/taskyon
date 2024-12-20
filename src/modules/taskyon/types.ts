@@ -334,7 +334,6 @@ For example this is, what an LLM would actually get to see. There are only a few
 of how content can be structured. `,
   ),
   label: z.array(z.string()).optional(),
-  context: z.record(z.string(), z.string()).optional(),
   configuration: z
     .object({
       model: z.string(),
@@ -370,16 +369,13 @@ of how content can be structured. `,
       toolStreamArgsContent: z.record(z.string()).optional(),
       streamContent: z.string().optional(),
       taskCosts: z.number().optional(),
-      aiResponse: z.any().optional(), // Replace with the correct Zod schema if available
+      rawInput: z.unknown().optional(), // Replace with the correct Zod schema if available
       error: z.unknown().optional(),
       // the taskprompt is the full chat which leads to the result. This is important that we have this
       // for to debugging reasons...
       taskPrompt: z.union([z.array(OpenAIMessage), z.any()]).optional(), // Replace 'z.any()' with the correct Zod type
     })
     .partial(),
-  // TODO: get rid of "result" It is not practical, if we have immutable tasks, because we would have to update the task
-  //       and the tree with it..
-  result: z.unknown().optional(),
   id: z.string(), // can we make the id an SHA-1 value like in git? in that case we should simply remove this value...
   allowedTools: z.array(z.string()).optional(),
   authorId: z.string().optional(),
@@ -392,7 +388,7 @@ export type TaskListType = z.infer<typeof TaskListType>
 
 export type TaskGetter = (input: string) => Promise<TaskNode | undefined>
 
-export const partialTaskDraft = TaskNode.omit({ id: true, created_at: true, result: true })
+export const partialTaskDraft = TaskNode.omit({ id: true, created_at: true })
   .partial()
   .required({ role: true, content: true })
   .describe(

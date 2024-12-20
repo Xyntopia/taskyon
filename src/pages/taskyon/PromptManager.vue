@@ -101,9 +101,9 @@ The following are our current taskyon prompts:
 
 <!--taskyon
 role: system
-name: current taskyon prompts 
+name: current taskyon prompts
 label: ["discard", "hide"]
--->  
+-->
 
 ${dump(state.llmSettings.taskChatTemplates, { forceQuotes: true })}
 
@@ -111,14 +111,14 @@ ${dump(state.llmSettings.taskChatTemplates, { forceQuotes: true })}
 
 <!--taskyon
 role: user
-name: request assisted prompt change 
+name: request assisted prompt change
 label: ["discard", "hide"]
--->  
+-->
 
 I would like to change the prompts for taskyon AI. Taskyon AI uses a variety of prompts \
 which are added to the chat based on the type of expected message. For example if tools \
 are enabled, a prompt is added which informs Taskyon about the available tools. Another prompt \
-is added which explains the required return format. 
+is added which explains the required return format.
 
 Available prompts are:
 
@@ -135,7 +135,7 @@ You can leave out any yaml keys, if you think its only required to change a spec
 role: assistant
 name: ask for prompt modification
 label: ["discard"]
--->  
+-->
 
 How would you like to change the prompt?
 `
@@ -149,7 +149,7 @@ void getAllTools().then((tools) => {
 
 const structuredResponsePrompt = computed(() => {
   if (state.llmSettings.taskDraft.content) {
-    const task: Pick<TaskNode, 'role' | 'content' | 'allowedTools' | 'result' | 'debugging'> = {
+    const task: Pick<TaskNode, 'role' | 'content' | 'allowedTools' | 'debugging'> = {
       content: state.llmSettings.taskDraft.content,
       allowedTools: state.llmSettings.taskDraft.allowedTools,
       role: 'user',
