@@ -343,16 +343,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       if (taskId) {
         const TM = await getTaskManager()
         const threadIDChain = await TM.getTaskIdChain(taskId)
-        const thread = (await Promise.all(threadIDChain.map((tId) => TM.getTask(tId))))
-          .filter((t) => t)
-          .reduce((p, c) => {
-            if (c?.id) p.set(c.id, c)
-            return p
-          }, new Map<string, TaskNode>())
+        const thread = (await Promise.all(threadIDChain.map((tId) => TM.getTask(tId)))).filter(
+          (t) => t,
+        ) as TaskNode[]
         return thread
       }
-      return new Map<string, TaskNode>()
-    }, new Map<string, TaskNode>())
+      return []
+    }, [] as TaskNode[])
 
     return {
       selectedThread,

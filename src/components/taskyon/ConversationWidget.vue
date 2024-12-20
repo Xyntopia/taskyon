@@ -1,23 +1,24 @@
 <template>
   <div class="col" style="background-color: inherit; color: inherit" flat square>
     <div v-if="currentTask" class="q-gutter-xs q-px-xs task-container">
-      <q-card
-        v-for="task in filteredTasks"
-        :key="task.id"
-        :flat="$q.dark.isActive"
-        :class="[task.role, Object.keys(task.content)[0]]"
-      >
-        <Task
-          :id="task.id"
-          :task="task"
-          :previous-task="task.priorID ? selectedThread.get(task.priorID) : undefined"
-          :next-task="getNextTask(task.id)"
-          :is-working="!taskWorkerWaiting && task.id === currentTask.id"
-          style="min-width: 300px"
-          :class="['q-pa-xs', task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"
-          :show-id="!!showIds"
-        />
-      </q-card>
+      <template v-for="(task, idx) in props.selectedThread" :key="task.id">
+        <q-card
+          v-if="showAllTasks || showTask(task)"
+          :flat="$q.dark.isActive"
+          :class="[task.role, Object.keys(task.content)[0]]"
+        >
+          <Task
+            :id="task.id"
+            :task="task"
+            :previous-task="props.selectedThread[idx - 1]"
+            :next-task="props.selectedThread[idx + 1]"
+            :is-working="!taskWorkerWaiting && task.id === currentTask.id"
+            style="min-width: 300px"
+            :class="['q-pa-xs', task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"
+            :show-id="!!showIds"
+          />
+        </q-card>
+      </template>
       <!--Render tasks which are in progress-->
       <q-card v-if="!taskWorkerWaiting" class="row">
         <div class="col">
@@ -46,11 +47,10 @@ import type { TaskNode } from 'src/modules/taskyon/types'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import { useQuasar } from 'quasar'
-import { computed } from 'vue'
 const $q = useQuasar()
 
 const props = defineProps<{
-  selectedThread: Map<string, TaskNode>
+  selectedThread: TaskNode[]
   currentTask?: TaskNode | undefined
   taskWorkerWaiting: boolean
   taskWorkerMessage?: string
@@ -58,29 +58,11 @@ const props = defineProps<{
   showIds?: boolean
 }>()
 
-// Build task list and next task map so that we know for each task what its children are..
-// TODO: extend this to multiple children..  we'll have a tree of some sort, I guess at some point...
-const nextMap = new Map<string, TaskNode>()
-props.selectedThread.forEach((task) => {
-  const prev = props.selectedThread.get(task.priorID || '')
-  if (prev) nextMap.set(prev.id, task)
-})
-
-function getNextTask(id: string) {
-  const nextTask = nextMap.get(id)
-  return nextTask
+function showTask(t: TaskNode) {
+  const hide = t.label ? t.label.includes('hide') : false // TODO: hide tasks based on level as well :)
+  const structured =
+    t.content &&
+    ('structuredResponse' in t.content || 'termination' in t.content || 'toolResult' in t.content)
+  return hide || !structured
 }
-
-// TODO: render tasks based on levels :)
-const filteredTasks = computed(() => {
-  if (props.showAllTasks) return props.selectedThread.values()
-  //const rawSelectedThread = toRaw(props.selectedThread)
-  return Array.from(props.selectedThread.values()).filter((t) => {
-    const hide = t.label ? t.label.includes('hide') : false // TODO: hide tasks based on level as well :)
-    const structured =
-      t.content &&
-      ('structuredResponse' in t.content || 'termination' in t.content || 'toolResult' in t.content)
-    return hide || !structured
-  })
-})
 </script>
