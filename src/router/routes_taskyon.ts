@@ -27,13 +27,23 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
       },
       {
-        path: 'chat/',
+        path: 'chat',
         component: defineAsyncComponent({
           loader: () => import('pages/taskyon/TaskChat.vue'),
           loadingComponent: LoadCircle,
           delay: 200,
         }),
         meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
+      },
+      {
+        // TODO:  change this, so that we can use "arbitrary" files for this!!!
+        path: '/chat/:filePath([^.]*)*',
+        component: defineAsyncComponent({
+          loader: () => import('pages/taskyon/TaskChat.vue'),
+          loadingComponent: LoadCircle,
+          delay: 200,
+        }),
+        meta: { title: 'Chat', description: 'Taskyon AI Chat Companion' },
       },
       {
         path: 'browser',
@@ -54,16 +64,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           console.log('open', route)
           if (route.query) return { query: route.query }
         },
-      },
-      {
-        // TODO:  change this, so that we can use "arbitrary" files for this!!!
-        path: '/chat/:filePath([^.]*)*',
-        component: defineAsyncComponent({
-          loader: () => import('pages/taskyon/TaskChat.vue'),
-          loadingComponent: LoadCircle,
-          delay: 200,
-        }),
-        meta: { title: 'Chat', description: 'Taskyon AI Chat Companion' },
       },
       {
         path: 'pricing',

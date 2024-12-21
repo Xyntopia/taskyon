@@ -19,9 +19,12 @@
             v-for="conversationId in conversationIDs"
             :key="conversationId"
             clickable
-            :to="{ path: '/chat', query: { t: conversationId } }"
+            :to="{
+              path: $route.path === '/browser' ? '/browser' : '/chat',
+              query: { t: conversationId },
+            }"
           >
-            <!--                          clickable   q-item-section avatar>
+            <!-- clickable   q-item-section avatar>
               <q-icon name="matChatBubble" size="xs" />
             </!q-item-section-->
             <q-item-section
@@ -133,7 +136,9 @@ import { mdiTools, mdiRobotConfusedOutline, mdiForumPlus, mdiFileTree } from '@q
 import TaskChainMenu from './TaskChainMenu.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { useQuasar } from 'quasar'
+import { useRoute } from 'vue-router'
 
+const $route = useRoute()
 const $q = useQuasar()
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
