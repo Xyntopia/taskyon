@@ -65,8 +65,8 @@
     </div>
     <!--Task Browser buttons-->
     <q-page-sticky position="top-left" class="print-hide">
-      <div class="q-pa-md toolbar">
-        <ToggleButton v-if="browserMode" v-model="showAllTasks" dense flat label="dev">
+      <div v-if="browserMode" class="q-pa-md toolbar">
+        <ToggleButton v-model="showAllTasks" dense flat label="dev">
           <q-tooltip>Show Detailed Task Chain</q-tooltip>
         </ToggleButton>
       </div>

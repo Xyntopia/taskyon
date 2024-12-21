@@ -9,20 +9,21 @@ $primary-dark: color-mix(in srgb, $primary 90%, black)
 
 $secondary-dark: color-mix(in srgb, $secondary 70%, black)
 
-$primary-dark-transparent: color-mix(in srgb, $primary-dark 90%, transparent)
-$primary-light-transparent: color-mix(in srgb, $primary-light 90%, transparent)
+$primary-dark-transparent: color-mix(in srgb, $primary-dark 70%, transparent)
+$primary-light-transparent: color-mix(in srgb, $primary-light 70%, transparent)
 
 @media screen
-  .toolbar
-    background-color: $primary-light-transparent
-
   .body--light
     background-color: $primary-light
     //text-color: white
 
+    .toolbar
+      background-color: $primary-light-transparent
+
     .q-header
       background-color: $primary-light-transparent
       color: $primary
+      backdrop-filter: blur(10px) // Add this line to apply the blur effect
 
     .q-card
       background-color: white
@@ -84,8 +85,13 @@ $primary-light-transparent: color-mix(in srgb, $primary-light 90%, transparent)
     //   &:visited
     //     color: $secondary
 
+    .toolbar
+      background-color: $primary-dark-transparent
+      backdrop-filter: blur(10px) // Add this line to apply the blur effect
+
     .q-header
-      background-color: $primary-light-dark
+      background-color: $primary-dark-transparent
+      backdrop-filter: blur(10px) // Add this line to apply the blur effect
 
     .q-drawer
       background-color: $primary-dark
