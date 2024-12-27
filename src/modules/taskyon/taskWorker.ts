@@ -132,26 +132,6 @@ export async function processChatTask(
   }
 }
 
-async function processFunctionCall(
-  func: FunctionCall,
-  allowedTools: string[],
-  tools: Record<string, ToolBase | Tool>,
-  taskWorkerController: TaskWorkerController,
-) {
-  console.log(`Calling function ${func.name}`)
-  if (tools[func.name] && !taskWorkerController.isInterrupted()) {
-    const result = await handleFunctionExecution(func, tools, taskWorkerController.onInterrupt)
-    return result
-  } else {
-    const toolnames = JSON.stringify(allowedTools)
-    throw new TaskProcessingError(
-      !taskWorkerController.isInterrupted()
-        ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
-        : 'The function execution was cancelled by taskyon',
-    )
-  }
-}
-
 function parseChatResponse2TaskDraft(message: string): Record<string, unknown> {
   // parse the response and create a new task filled with the correct parameters
   let yamlContent = message.trim()
@@ -520,13 +500,22 @@ async function processTask(
     // calculate function result
     // in the case we don't have a result yet, wPe need to calculate it :)
     if (task.allowedTools) {
-      result = await processFunctionCall(
-        task.content.functionCall,
-        task.allowedTools,
-        await taskManager.updateToolDefinitions(false),
-        taskWorkerController,
-      )
+      const func = task.content.functionCall
+      const tools = await taskManager.updateToolDefinitions(false)
+      console.log(`Calling function ${func.name}`)
+      if (tools[func.name] && !taskWorkerController.isInterrupted()) {
+        const result = await handleFunctionExecution(func, tools, taskWorkerController.onInterrupt)
+        return result
+      } else {
+        const toolnames = JSON.stringify(task.allowedTools)
+        throw new TaskProcessingError(
+          !taskWorkerController.isInterrupted()
+            ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
+            : 'The function execution was cancelled by taskyon',
+        )
+      }
     } else {
+      // TODO: allow our "chat" tool as a default-tool
       throw new TaskProcessingError(
         `The task is to execute a function call ${task.content.functionCall.name}, but there are no allowed tools/functions!`,
       )
