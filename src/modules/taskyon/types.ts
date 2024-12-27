@@ -334,13 +334,6 @@ For example this is, what an LLM would actually get to see. There are only a few
 of how content can be structured. `,
   ),
   label: z.array(z.string()).optional(),
-  configuration: z
-    .object({
-      model: z.string(),
-      chatApi: z.string(),
-    })
-    .optional()
-    .describe('Holds the configuration for the LLM'),
   parentID: z
     .string()
     .optional()

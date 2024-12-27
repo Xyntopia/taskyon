@@ -279,16 +279,12 @@ export function transformTaskNodeToDocType(taskNode: TaskNode): TaskNodeDocType 
   //       capabilities before saving anything in the db..
   const nonReactiveTaskNode = JSON.parse(JSON.stringify(taskNode)) as TaskNode
   const reducedTaskNode = removeUndefinedProperties(
-    removeKeys(nonReactiveTaskNode, ['content', 'configuration', 'debugging']),
+    removeKeys(nonReactiveTaskNode, ['content', 'debugging']),
   )
   const convertedTask = {
     ...reducedTaskNode,
     // Mapping and transforming fields from TaskNode to TaskNodeDocType
     content: JSON.stringify(nonReactiveTaskNode.content),
-    // Optional properties only included if they are defined
-    ...(taskNode.configuration !== undefined && {
-      configuration: JSON.stringify(taskNode.configuration),
-    }),
     ...(taskNode.debugging !== undefined && {
       debugging: JSON.stringify(taskNode.debugging),
     }),

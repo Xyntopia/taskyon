@@ -18,7 +18,7 @@ import {
   ChatResponseType,
 } from './types'
 import { type TyTaskManager } from './taskManager'
-import { type Tool, handleFunctionExecution } from './tools'
+import { handleFunctionExecution } from './tools'
 import { load } from 'js-yaml'
 import {
   type AsyncQueue,
@@ -301,9 +301,6 @@ async function generateFollowUpTasksFromResult(
   // it would be good to not hav this inside the tasks themselves to imprive immutability
   newTasks.forEach((ts) =>
     ts.forEach((t) => {
-      // TODO: for configuration & allowedTools it would be good if we could add
-      // this from a "default" Configuration? And then have them as function parameters?
-      t.configuration = finishedTask.configuration
       t.allowedTools = finishedTask.allowedTools
       t.debugging = {
         ...t.debugging,
