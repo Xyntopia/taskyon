@@ -14,7 +14,6 @@ import { AsyncQueue, toLowerCaseKeys } from '../utils'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
-  apiKeys: Record<string, string>,
   taskWorkerController: TaskWorkerController,
   logError: (message: string) => void,
   // we explicitly provide a tasklist here, this gives us the chance to provide a reactive
@@ -101,13 +100,7 @@ export async function initTaskyon(
   // taskyon should automatically pick up on this...
   console.log('starting taskyon worker')
   const processTasksQueue = new AsyncQueue<string>()
-  void runTaskWorker(
-    processTasksQueue,
-    llmSettings,
-    taskManagerInstance,
-    apiKeys,
-    taskWorkerController,
-  )
+  void runTaskWorker(processTasksQueue, llmSettings, taskManagerInstance, taskWorkerController)
 
   return { taskManagerInstance, processTasksQueue }
 }

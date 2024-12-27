@@ -179,6 +179,24 @@ function generateFollowupFromStructuredResponse(
   }
 }
 
+// This function is a helper function to create a chat completion task
+function createChatCompletionTask(prompt: string): TaskNode {
+  return {
+    id: 'unique-task-id',
+    role: 'system',
+    content: {
+      functionCall: {
+        name: 'chatCompletion',
+        arguments: {
+          prompt: 'Hello, how are you today?',
+          model: 'gpt-3.5-turbo',
+        },
+      },
+    },
+    debugging: {},
+  }
+}
+
 /**
  * This function takes a task and generates follow up tasks automatically
  * based on content of the result!.
@@ -234,6 +252,18 @@ async function generateFollowUpTasksFromResult(
         ],
       ]
     }
+
+    if (
+      'message' in task.content ||
+      'toolResult' in task.content ||
+      'structuredResponse' in task.content
+    ) {
+      if (!apiKey)
+        throw new TaskProcessingError('We need to define an API key to process our chat Task!')
+
+      result = await processChatTask(task, llmSettings, apiKey, taskManager, taskWorkerController)
+    }
+
     // did we get any response from an LLM?
     // TODO: make this part of our new chatcompletion tool!
     const choice = getChatResponseFromResult(result)?.choices[0]
@@ -389,37 +419,9 @@ export type TaskWorkerController = ReturnType<typeof useTaskWorkerController>
 async function processTask(
   task: TaskNode,
   taskManager: TyTaskManager,
-  taskId: string,
-  llmSettings: llmSettings,
-  apiKeys: Record<string, string>,
   taskWorkerController: TaskWorkerController,
 ) {
-  // TODO: make this function return a promise so taht we can interrupt it anytime!
-  // return new Promise((resolve, reject) => {
-  void taskManager.updateTask(
-    {
-      id: taskId,
-    },
-    false,
-  )
-
-  let result: unknown = undefined
-
-  const apiKey = llmSettings.selectedApi ? apiKeys[llmSettings.selectedApi] : undefined
-
-  if (
-    'message' in task.content ||
-    'toolResult' in task.content ||
-    'structuredResponse' in task.content
-  ) {
-    // TODO: get rid of "taskManager" in processChatTask
-    // TODO: make this an "ordinary" function! :)
-
-    if (!apiKey)
-      throw new TaskProcessingError('We need to define an API key to process our chat Task!')
-
-    result = await processChatTask(task, llmSettings, apiKey, taskManager, taskWorkerController)
-  } else if ('functionCall' in task.content) {
+  if ('functionCall' in task.content) {
     // calculate function result
     // in the case we don't have a result yet, wPe need to calculate it :)
     if (task.allowedTools) {
@@ -448,12 +450,11 @@ async function processTask(
   }
 
   // get token usage for this task..
-  await addTaskCostInformation(result, task, taskManager, llmSettings, apiKey)
-
-  return result
+  //await addTaskCostInformation(result, task, taskManager, llmSettings, apiKey)
 }
 
-async function addTaskCostInformation(
+// TODO: use this function to enrich tasks with metadata (as a start in a separate database, we could use rxdb for this...)
+export async function addTaskCostInformation(
   result: unknown,
   task: Readonly<TaskNode>,
   taskManager: TyTaskManager,
@@ -497,6 +498,7 @@ async function addTaskCostInformation(
       apiKey &&
       !isTaskyonKey(apiKey, false)
     ) {
+      // TODO: remove "configuration" here and get the information from the tasks function call parameters
       const api = getApiConfigCopy(llmSettings, task.configuration?.chatApi)
       if (api) {
         console.log('getting taskyon generation info')
@@ -524,7 +526,6 @@ export async function runTaskWorker(
   processTasksQueue: AsyncQueue<string>,
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
-  apiKeys: Record<string, string>,
   taskWorkerController: TaskWorkerController,
 ) {
   console.log('entering task worker loop...')
@@ -555,14 +556,7 @@ export async function runTaskWorker(
       console.log('processing task:', taskId)
       task = await taskManager.getTask(taskId)
       if (task && !taskWorkerController.isInterrupted()) {
-        const result = await processTask(
-          task,
-          taskManager,
-          taskId,
-          llmSettings,
-          apiKeys,
-          taskWorkerController,
-        )
+        const result = await processTask(task, taskManager, taskWorkerController)
         // create a new task form the result. E.g. in the case of a simple chat, this will
         // create a task with the Answer of the LLM which then gets displayed in the chatwindow...
         const newTasks = await generateFollowUpTasksFromResult(
@@ -615,7 +609,6 @@ export async function runTaskWorker(
 
       const errorTask: partialTaskDraft = {
         role: 'system',
-        configuration: task?.configuration,
         content: {
           error: `An error occured:\n\n\`\`\`\n${JSON.stringify(error)}\n\`\`\``,
         },

@@ -5,22 +5,29 @@ import type { TyTaskManager } from '../taskyon/taskManager'
 import type { TaskWorkerController } from '../taskyon/taskWorker'
 import { getApiConfigCopy } from '../taskyon/taskWorker'
 import type { TaskNode, llmSettings } from '../taskyon/types'
+import type { Tool, TypedTool } from '../taskyon/tools'
 
 // this function processes all tasks which go to any sort of an LLM
 
+// TODO: for configuration & allowedTools it would be good if we could add
+// this from a "default" Configuration? And then have them as function parameters?
+// t.configuration = finishedTask.configuration
+
 export async function processChatTask(
   task: TaskNode,
+  configuration: { model: string; chatApi: string },
   llmSettings: llmSettings,
-  apiKey: string,
   // can we get rid of taskManager here in order to make our task more functional :)?
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController,
 ) {
-  const api = getApiConfigCopy(llmSettings, task.configuration?.chatApi)
+  const api = getApiConfigCopy(llmSettings, configuration.chatApi)
+  const apiKey = llmSettings.selectedApi ? apiKeys[llmSettings.selectedApi] : undefined
+
   if (!api) {
     throw new Error(`api doesn't exist! ${llmSettings.selectedApi || 'no api selected!'}`)
   }
-  const selectedModel = task.configuration?.model
+  const selectedModel = configuration.model
   if (selectedModel) {
     api.selectedModel = selectedModel
     console.log('execute chat task!', task)
@@ -28,6 +35,7 @@ export async function processChatTask(
     //      allow it to create new tasks...
     //TODO: we can create more things here like giving it context form other tasks, lookup
     //      main objective, previous tasks etc....
+    // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
     const { openAIConversationThread, toolDefs } = await generateCompleteChat(
       task,
       llmSettings,
@@ -80,3 +88,48 @@ export async function processChatTask(
     throw new Error('Task has no inference model selected!')
   }
 }
+
+export function createChatCompletionTool(
+  task: TaskNode,
+  llmSettings: llmSettings,
+  taskManager: TyTaskManager,
+  taskWorkerController: TaskWorkerController,
+) {
+  async function fetchChatCompletion({ prompt, model }: { prompt: string; model: string }) {
+    return processChatTask(
+      task,
+      { model, chatApi: 'openai' },
+      llmSettings,
+      taskManager,
+      taskWorkerController,
+    )
+  }
+
+  const chatCompletion: TypedTool<typeof fetchChatCompletion> = {
+    function: fetchChatCompletion,
+    description: 'Generates a chat-based response using the OpenAI API.',
+    longDescription: `This tool interfaces with an OpenAI-compatible API to generate completions for
+  conversation prompts. Useful for generating natural language responses in a chat setting.`,
+    name: 'chatCompletion',
+    parameters: {
+      type: 'object',
+      properties: {
+        prompt: {
+          type: 'string',
+          description: 'The input text or conversation history to generate a response from.',
+        },
+        model: {
+          type: 'string',
+          description:
+            'The name of the model to use for the completion. The default is "auto" if parameter is not used. A model will automatically be chosen for the task',
+          default: 'auto',
+        },
+      },
+      required: ['prompt'],
+    },
+  }
+
+  return chatCompletion
+}
+
+export type chatCompletionTool = ReturnType<typeof createChatCompletionTool>
