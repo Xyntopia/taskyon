@@ -4,8 +4,7 @@ import { generateCompleteChat, generateOpenAIToolDeclarations } from '../taskyon
 import type { TyTaskManager } from '../taskyon/taskManager'
 import type { TaskWorkerController } from '../taskyon/taskWorker'
 import { getApiConfigCopy } from '../taskyon/taskWorker'
-import type { TaskNode, llmSettings } from '../taskyon/types'
-import type { Tool, TypedTool } from '../taskyon/tools'
+import { TaskProcessingError, type TaskNode, type llmSettings } from '../taskyon/types'
 
 // this function processes all tasks which go to any sort of an LLM
 
@@ -23,9 +22,13 @@ export async function processChatTask(
 ) {
   const api = getApiConfigCopy(llmSettings, configuration.chatApi)
   const apiKey = llmSettings.selectedApi ? apiKeys[llmSettings.selectedApi] : undefined
+  if (!apiKey)
+    throw new TaskProcessingError('We need to define an API key to process our chat Task!')
 
   if (!api) {
-    throw new Error(`api doesn't exist! ${llmSettings.selectedApi || 'no api selected!'}`)
+    throw new TaskProcessingError(
+      `api doesn't exist! ${llmSettings.selectedApi || 'no api selected!'}`,
+    )
   }
   const selectedModel = configuration.model
   if (selectedModel) {
@@ -105,7 +108,7 @@ export function createChatCompletionTool(
     )
   }
 
-  const chatCompletion: TypedTool<typeof fetchChatCompletion> = {
+  const chatCompletion = {
     function: fetchChatCompletion,
     description: 'Generates a chat-based response using the OpenAI API.',
     longDescription: `This tool interfaces with an OpenAI-compatible API to generate completions for

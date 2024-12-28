@@ -5,15 +5,13 @@ import type {
   FunctionArguments,
   FunctionCall,
   ParamType,
-  OnInterruptFunc} from './types';
-import {
-  ToolBase,
-  TaskProcessingError
+  OnInterruptFunc,
 } from './types'
-import type { RemoteFunctionResponse } from './iframeApiTypes';
+import { ToolBase, TaskProcessingError } from './types'
+import type { RemoteFunctionResponse } from './iframeApiTypes'
 import { RemoteFunctionCall, TaskyonMessages } from './iframeApiTypes'
 import { z } from 'zod'
-import type { YamlRepresentation} from '../zodUtils';
+import type { YamlRepresentation } from '../zodUtils'
 import { convertToYamlWComments } from '../zodUtils'
 import { executeCodeInIframe } from './iframeWorker'
 
@@ -29,6 +27,12 @@ const Tool = ToolBase.extend({
   function: arbitraryFunctionSchema,
 })
 export type Tool = z.infer<typeof Tool>
+
+// more specialized version of Tool, which has a typed function
+
+export type TypedTool<T extends arbitraryFunction> = Omit<Tool, 'function'> & {
+  function: T
+}
 
 // This function executes code in a different browser context. E.g. executing a
 // function in the context of the parent of an iframe!

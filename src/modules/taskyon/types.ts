@@ -310,17 +310,20 @@ Every Leaf task which is not a Termination task can potentially continue to be e
 
 We can indicate the reason for termination here as well...`,
 )
+const ChatCompletionContent = z.union([MessageContent, ToolResultContent, ErrorContent])
+export type ChatCompletionContent = z.infer<typeof ChatCompletionContent>
+
 const TaskContent = z.union([
+  ChatCompletionContent,
   StructuredContent,
-  MessageContent,
   ToolCallContent,
   // TODO: replace with a "context" function which can also be a link to a URL for example or maybe a search string for other tasks...
   //       we can declare function for a lot of these things this way :)
   UploadedFilesContent,
-  ToolResultContent,
   Termination,
-  ErrorContent,
 ])
+
+export type TaskContent = z.infer<typeof TaskContent>
 
 // TODO: add an "extended" task and put all information in there which we don't really "need"
 //       to save in the database. E.g. how many follow-up tasks are allowed, how many

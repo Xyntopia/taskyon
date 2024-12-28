@@ -6,6 +6,7 @@ import {
 } from './chat'
 import { useNlpWorker } from './webWorkerApi'
 import { generateCompleteChat } from './promptCreation'
+import type { ChatCompletionContent, TaskContent } from './types'
 import {
   FunctionCall,
   type partialTaskDraft,
@@ -180,7 +181,10 @@ function generateFollowupFromStructuredResponse(
 }
 
 // This function is a helper function to create a chat completion task
-function createChatCompletionTask(prompt: string): TaskNode {
+// TODO: split this function into several smaller ones, of which one is the "task planner/weaver"
+//       which returns a structured response in order to decide how to proceed, one
+function createChatCompletionTask(content: ChatCompletionContent): TaskNode {
+  // TODO: make sure, we do all the prompting etc..  which was originally in processChatTask
   return {
     id: 'unique-task-id',
     role: 'system',
@@ -212,16 +216,14 @@ function createChatCompletionTask(prompt: string): TaskNode {
  * following different types of task contents are possible:
  *
  *
-  here is a chart of the relations & possible transitions between tasks:
-
-- [Transition Map](/docs/conversations/taskyon_description)
-
-```
-
+ *
+ *
+ * here is a chart of the relations & possible transitions between tasks:
+ *
+ * - [Transition Map](/docs/conversations/taskyon_description)
  *
  *
  */
-
 // TODO: make this function a lot mor eexplicit in that it represents our task transition map
 // TODO: get rid of taskManager, if thats possible! :) I don#t see why we would need taskmanager in order to create
 //       follow-up tasks?
@@ -249,19 +251,12 @@ async function generateFollowUpTasksFromResult(
             role: 'system',
             content: { toolResult: result },
           },
+          // TODO: in this specific situation it would be a good idea to throw away the
+          // createChatCompletionTask afterwards or hide it from the chat and puts it onto a lower level!!
+          // TODO: we shoud also indicate here, wether this is a task which needs a structured response...
+          createChatCompletionTask({ toolResult: result }),
         ],
       ]
-    }
-
-    if (
-      'message' in task.content ||
-      'toolResult' in task.content ||
-      'structuredResponse' in task.content
-    ) {
-      if (!apiKey)
-        throw new TaskProcessingError('We need to define an API key to process our chat Task!')
-
-      result = await processChatTask(task, llmSettings, apiKey, taskManager, taskWorkerController)
     }
 
     // did we get any response from an LLM?
@@ -278,33 +273,33 @@ async function generateFollowUpTasksFromResult(
         // TODO: enable multiple parallel function calls
         newTasks = [
           [
+            // this functionCall will be executed in the next step, so we don't need any additional tasks here
             {
               role: 'function',
               content: { functionCall: functionCall[0] },
             },
           ],
         ]
-      }
-      if (!choice.message.content) {
+      } else if (!choice.message.content) {
         newTasks = [
           [
             {
               role: 'system',
               content: { error: 'The response content from the AI was empty!' },
             },
+            createChatCompletionTask({ error: 'The response content from the AI was empty!' }),
           ],
         ]
-      }
-
-      // so now we know there are no function calls indicated from the original service
-      // so we can parse the structured response or simply get a reponse to a "normal"
-      // chat message.
-      if (
+      } else if (
+        // so now we know there are no function calls indicated from the original service
+        // so we can parse the structured response or simply get a reponse to a "normal"
+        // chat message.
         (!llmTools &&
           (('message' in finishedTask.content && finishedTask.role === 'user' && useTyTools) || // this happens, if we use tools, but no LLM-builtin tools
             'toolResult' in finishedTask.content)) || // taskResult, but no LLM-builtin tools
         (finishedTask.role === 'system' && !('toolResult' in finishedTask.content)) // this happens e.g. in the case of an error...
       ) {
+        // TODO: move the followup ask generation into a separate task/function! :)
         newTasks = generateFollowupFromStructuredResponse(choice)
       } else {
         // if 'message' in finishedTask.content && finishedTask.role === 'assistant'
@@ -577,6 +572,7 @@ export async function runTaskWorker(
           //        of a new task and not i the task itself...
           if (lastTaskId) {
             const lastTask = await taskManager.getTask(lastTaskId)
+            // make sure we stop execution of the task chain if we have a termination task
             if (immediateExecute && lastTask && !('termination' in lastTask.content)) {
               // we need processTasksQueue as an argument here!!!
               processTasksQueue.push(lastTaskId)
