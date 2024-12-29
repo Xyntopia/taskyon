@@ -10,7 +10,7 @@ Inside the source code you can find that right now, there are three main parts t
   - the task processor
     - This processes each task and takes the tasks "content" as input and generates a "result"
     - the tasks content can be a function call, a simple message or structured data.
-    - Based on the tasks content, the processor will also generate a prompts which cirect the LLM inference e.g. to create a specific data format in the response (json/yaml)
+    - Based on the tasks content, the processor will also generate a prompts which direct the LLM inference e.g. to create a specific data format in the response (json/yaml)
     - the output is the result of a function or another message
   - the follow up task generator creates new task(s) based on the result.
 - if an error occurs a new task which holds the error as content is generated.
