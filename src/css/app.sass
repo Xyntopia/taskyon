@@ -3,6 +3,45 @@
 $secondary: var(--q-secondary,#F78F3B)
 $primary: var(--q-primary,#2A3548)
 
+// Global link styling
+a
+  color: $secondary
+  text-decoration: none
+  &:visited
+    color: $secondary
+  &:hover
+    text-decoration: underline
+    opacity: 0.9
+
+// Documentation specific styling
+.q-markdown
+  // Link styling
+  .q-markdown--link
+    color: $secondary !important
+    &:visited
+      color: $secondary !important
+    &:hover
+      opacity: 0.9
+      text-decoration: underline
+
+  // Header styling
+  h1, h2, h3, h4, h5, h6
+    color: $primary !important
+    margin-top: 1.5em
+    margin-bottom: 0.5em
+    font-weight: 600
+
+  // Specific header spacing
+  h1
+    font-size: 2em
+    border-bottom: 2px solid $secondary
+    padding-bottom: 0.3em
+  
+  h2
+    font-size: 1.5em
+    border-bottom: 1px solid $secondary
+    padding-bottom: 0.2em
+
 $primary-light: color-mix(in srgb, $primary 20%, white)
 $primary-light-dark: color-mix(in srgb, $primary 25%, white)
 $primary-dark: color-mix(in srgb, $primary 90%, black)
