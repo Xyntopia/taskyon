@@ -9,7 +9,7 @@ export const localVectorStoreSearch: Tool = {
       const results = await vectorStore.query(searchTerm, k);
       return results;*/
   },
-  description: `Performs semantic search in a local vectorized database, ideal 
+  description: `Performs semantic search in a local vectorized database, ideal
   for retrieving documents or data segments with high relevance to natural language queries.`,
   name: 'localVectorStoreSearch',
   parameters: {
