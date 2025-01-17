@@ -1,5 +1,5 @@
 import type { Tool } from '../taskyon/tools'
-import { pg } from '../pglite.api'
+import { getDatabase } from '../pglite.api'
 
 export const localVectorStore: Tool = {
   function: async ({ searchTerm }: { searchTerm: string }) => {
