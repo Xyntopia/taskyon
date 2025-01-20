@@ -39,6 +39,7 @@ import { matContentCopy } from '@quasar/extras/material-icons'
 import {
   markdownGeneration,
   testEstimateChatTokens,
+  testPGLite,
   testTransformersPipeline,
   testVectorizerInitialization,
   testVectorizeText,
@@ -97,13 +98,7 @@ async function generateReport(details = false, onlyFirst = false) {
 
   diagnostics.value = `report_date: ${new Date().toISOString()}\n`
 
-  diagnostics.value += await runTest('testTransformersPipeline', testTransformersPipeline, details)
-
-  diagnostics.value += await runTest(
-    'load_vecorization_initialization',
-    testVectorizerInitialization,
-    details,
-  )
+  diagnostics.value += await runTest('pg lite', testPGLite, details)
 
   /*diagnostics.value += await runTest(
     'ipfs_helia_upload',
@@ -115,6 +110,14 @@ async function generateReport(details = false, onlyFirst = false) {
     console.log('diagnostics:', diagnostics.value)
     return
   }
+
+  diagnostics.value += await runTest('testTransformersPipeline', testTransformersPipeline, details)
+
+  diagnostics.value += await runTest(
+    'load_vecorization_initialization',
+    testVectorizerInitialization,
+    details,
+  )
 
   diagnostics.value += await runTest(
     'gdrive_upload',

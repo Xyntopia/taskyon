@@ -5,9 +5,42 @@ import { useTaskyonStore } from 'src/stores/taskyonState'
 import { getTextFile } from './taskUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useIpfs } from './ipfs'
+import { getDatabase } from '../pglite.api'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
+
+export const testPGLite = async () => {
+  const db = getDatabase('chatStore')
+  return {
+    db,
+    pgvector: await db.exec('CREATE EXTENSION IF NOT EXISTS vector;'),
+    createTable: await db.exec(`
+      CREATE TABLE IF NOT EXISTS test (
+        id SERIAL PRIMARY KEY,
+        task TEXT,
+        vec vector(3),
+        done BOOLEAN DEFAULT false
+      );
+      INSERT INTO test (task, done) VALUES ('Install PGlite from NPM', true);
+      INSERT INTO test (task, done) VALUES ('Load PGlite', true);
+      INSERT INTO test (task, done) VALUES ('Create a table', true);
+      INSERT INTO test (task, done) VALUES ('Insert some data', true);
+      INSERT INTO test (task) VALUES ('Update a task');
+      INSERT INTO test (task, vec) VALUES ('test1', '[1,2,3]');
+      INSERT INTO test (task, vec) VALUES ('test2', '[4,5,6]');
+      INSERT INTO test (task, vec) VALUES ('test3', '[7,8,9]');
+    `),
+    query: await db.query(`SELECT * from test WHERE id = 1;`),
+    'vector query': await db.exec(`
+      SELECT
+        task,
+        vec,
+        vec <-> '[3,1,2]' AS distance
+      FROM test;
+    `),
+  }
+}
 
 export const testIPFS = async () => {
   const markdownContent =

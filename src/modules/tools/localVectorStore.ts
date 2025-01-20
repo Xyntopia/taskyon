@@ -1,6 +1,7 @@
 import type { Tool } from '../taskyon/tools'
+import { getDatabase } from '../pglite.api'
 
-export const localVectorStoreSearch: Tool = {
+export const localVectorStore: Tool = {
   function: ({ searchTerm }: { searchTerm: string }) => {
     return searchTerm
     /*const vectorStore = useVectorStore();
@@ -9,7 +10,7 @@ export const localVectorStoreSearch: Tool = {
       const results = await vectorStore.query(searchTerm, k);
       return results;*/
   },
-  description: `Performs semantic search in a local vectorized database, ideal 
+  description: `Performs semantic search in a local vector database, ideal
   for retrieving documents or data segments with high relevance to natural language queries.`,
   name: 'localVectorStoreSearch',
   parameters: {
@@ -18,6 +19,10 @@ export const localVectorStoreSearch: Tool = {
       searchTerm: {
         type: 'string',
         description: 'The search term to use in the vector store search.',
+      },
+      saveString: {
+        type: 'string',
+        description: 'Save a string in the vector database',
       },
     },
     required: ['searchTerm'],
