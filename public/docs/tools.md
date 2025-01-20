@@ -30,21 +30,21 @@ async function zoomToPlace(placeName) {
   try {
     const response = await fetch(
       `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(placeName)}`,
-    );
-    const data = await response.json();
+    )
+    const data = await response.json()
 
     if (data && data.length > 0) {
-      const { lat, lon } = data[0];
-      map.setView([lat, lon], 13); // Adjust zoom level as needed
+      const { lat, lon } = data[0]
+      map.setView([lat, lon], 13) // Adjust zoom level as needed
       return {
         success: true,
         message: `Zoomed to ${placeName} at (${lat}, ${lon})`,
-      };
+      }
     } else {
-      return { success: false, message: `Place ${placeName} not found!` };
+      return { success: false, message: `Place ${placeName} not found!` }
     }
   } catch (error) {
-    return { success: false, message: `Error fetching data: ${error.message}` };
+    return { success: false, message: `Error fetching data: ${error.message}` }
   }
 }
 ```
@@ -69,7 +69,7 @@ const tools = [
     },
     function: (params) => zoomToPlace(params.placeName, true), // Assign the zoom function here
   },
-];
+]
 ```
 
 Better would be a description like this:
@@ -156,8 +156,55 @@ Taskyon provides several out-of-the-box tools, including:
 - JS Script Execution
 - modifyPrompts (for customizing Taskyon's prompts)
 
-## Conclusion
+## Using Third-Party Libraries
 
-Taskyon's tool system offers a robust framework for managing and executing tasks efficiently. Its flexibility allows for extensive customization and integration, whether using built-in tools, creating custom ones, or leveraging LLMs for dynamic tool generation.
+Taskyon allows you to use third-party JavaScript libraries within your sandboxed tools. Here’s how you can easily integrate them:
 
-For more information and to start creating your own tools, visit the [Tools Manager](/tools).
+### Using CDN Links
+
+1. Identify the CDN link for the library you want to use (e.g., `https://cdn.jsdelivr.net/npm/library-name`).
+2. In your tool definition, add a script element dynamically to load the library:
+
+```javascript
+;(async () => {
+  const script = document.createElement('script')
+  script.src = 'https://cdn.jsdelivr.net/npm/library-name'
+  script.onload = () => console.log('Library loaded')
+  document.head.appendChild(script)
+})()
+```
+
+3. Once loaded, you can use the library as intended.
+
+### Bundling Libraries
+
+For more complex tools, consider bundling the required libraries with your tool’s code. You can use tools like Webpack or Rollup to bundle dependencies and include them in the tool’s final output.
+
+### Debugging Libraries
+
+If you encounter issues, verify the library’s availability:
+
+- Open the browser console and ensure the library is defined (e.g., `typeof LibraryName !== 'undefined'`).
+- Check for errors during the library loading process.
+
+### Example: Using Lodash
+
+Here’s an example of using Lodash in a tool:
+
+```javascript
+;(async () => {
+  const script = document.createElement('script')
+  script.src = 'https://cdn.jsdelivr.net/npm/lodash'
+  script.onload = () => {
+    const result = _.chunk(['a', 'b', 'c', 'd'], 2)
+    console.log('Chunked array:', result)
+  }
+  document.head.appendChild(script)
+})()
+```
+
+This code dynamically loads Lodash and uses its `chunk` method.
+
+---
+
+Taskyon’s sandbox ensures that using third-party libraries is both secure and straightforward. For more information and to start creating your own tools, visit the [Tools Manager](/tools).
