@@ -287,7 +287,7 @@
 import { computed, ref, toRaw, toRefs } from 'vue'
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
 import type { FunctionArguments, partialTaskDraft, ToolBase } from 'src/modules/taskyon/types'
-import { llmSettings } from 'src/modules/taskyon/types'
+import { getApiConfig, llmSettings } from 'src/modules/taskyon/types'
 import '@quasar/quasar-ui-qmarkdown/dist/index.css'
 import { useTaskyonStore } from 'stores/taskyonState'
 import type { TaskNode } from 'src/modules/taskyon/types'
@@ -323,7 +323,6 @@ import {
   mdiFunctionVariant,
 } from '@quasar/extras/mdi-v6'
 import { deepCopy, deepMerge } from 'src/modules/utils'
-import { getApiConfig } from 'src/modules/taskyon/taskWorker'
 import { addPrompts } from 'src/modules/taskyon/promptCreation'
 import type { ChatCompletionMessageParam } from 'openai/resources/index.mjs'
 import { useNlpWorker } from 'src/modules/taskyon/webWorkerApi'

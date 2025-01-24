@@ -6,7 +6,7 @@ import {
 } from './chat'
 import { useNlpWorker } from './webWorkerApi'
 import { generateCompleteChat } from './promptCreation'
-import type { ChatCompletionContent, TaskContent } from './types'
+import type { ChatCompletionContent } from './types'
 import {
   FunctionCall,
   type partialTaskDraft,
@@ -17,6 +17,7 @@ import {
   yesnoToBoolean,
   type OnInterruptFunc,
   ChatResponseType,
+  getApiConfigCopy,
 } from './types'
 import { type TyTaskManager } from './taskManager'
 import { handleFunctionExecution } from './tools'
@@ -31,7 +32,6 @@ import {
   sleep,
 } from '../utils'
 import { isTaskyonKey } from './tyCrypto'
-import { processChatTask } from '../tools/chatCompletionTool'
 
 // get worker function for our chat :)
 const { estimateChatTokens } = useNlpWorker()
@@ -185,6 +185,8 @@ function generateFollowupFromStructuredResponse(
 //       which returns a structured response in order to decide how to proceed, one
 function createChatCompletionTask(content: ChatCompletionContent): TaskNode {
   // TODO: make sure, we do all the prompting etc..  which was originally in processChatTask
+  console.log(content)
+  const message = 'Hello, how are you today?'
   return {
     id: 'unique-task-id',
     role: 'system',
@@ -192,7 +194,7 @@ function createChatCompletionTask(content: ChatCompletionContent): TaskNode {
       functionCall: {
         name: 'chatCompletion',
         arguments: {
-          prompt: 'Hello, how are you today?',
+          message,
           model: 'gpt-3.5-turbo',
         },
       },
@@ -675,18 +677,5 @@ export async function runTaskWorker(
         continue;
       }*/
     }
-  }
-}
-export function getApiConfig(llmSettings: llmSettings) {
-  if (llmSettings.selectedApi) {
-    return llmSettings.llmApis[llmSettings.selectedApi]
-  }
-}
-
-export function getApiConfigCopy(llmSettings: llmSettings, apiName?: string) {
-  const searchName = apiName || llmSettings.selectedApi
-  if (searchName) {
-    const api = llmSettings.llmApis[searchName]
-    return deepCopy(api)
   }
 }

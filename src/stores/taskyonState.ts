@@ -10,7 +10,8 @@ import axios from 'axios' // TODO: replace with fetch
 import { Notify, setCssVar } from 'quasar' // load dynamically! :)
 import { sleep } from 'src/modules/utils'
 import { useQuasar } from 'quasar'
-import { useTaskWorkerController, getApiConfig } from 'src/modules/taskyon/taskWorker'
+import { useTaskWorkerController } from 'src/modules/taskyon/taskWorker'
+import { getApiConfig } from 'src/modules/taskyon/types'
 import { initTaskyon } from 'src/modules/taskyon/init'
 import { availableModels } from 'src/modules/taskyon/chat'
 import { setupIframeApi } from 'src/modules/taskyon/iframeApi'

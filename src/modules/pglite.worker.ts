@@ -3,7 +3,8 @@ import { PGlite } from '@electric-sql/pglite'
 import { worker } from '@electric-sql/pglite/worker'
 import { vector } from '@electric-sql/pglite/vector'
 
-worker({
+void worker({
+  // eslint-disable-next-line @typescript-eslint/require-await
   async init(options) {
     //const meta = options.meta
     // Create and return a PGlite instance

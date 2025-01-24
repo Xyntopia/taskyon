@@ -1,5 +1,6 @@
 import type OpenAI from 'openai'
 import { z } from 'zod'
+import { deepCopy } from '../utils'
 
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type RequireSome<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
@@ -678,3 +679,15 @@ export const tyPublicApiKeyObject = tyPublicKeyDraft.extend({
   v: z.number().describe('Key version'),
   iss: z.string().describe('The Issuer of the API key.'),
 })
+export function getApiConfig(llmSettings: llmSettings) {
+  if (llmSettings.selectedApi) {
+    return llmSettings.llmApis[llmSettings.selectedApi]
+  }
+}
+export function getApiConfigCopy(llmSettings: llmSettings, apiName?: string) {
+  const searchName = apiName || llmSettings.selectedApi
+  if (searchName) {
+    const api = llmSettings.llmApis[searchName]
+    return deepCopy(api)
+  }
+}

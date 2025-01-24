@@ -2,8 +2,8 @@ import type OpenAI from 'openai'
 import { callLLM } from '../taskyon/chat'
 import { generateCompleteChat, generateOpenAIToolDeclarations } from '../taskyon/promptCreation'
 import type { TyTaskManager } from '../taskyon/taskManager'
-import type { TaskWorkerController } from '../taskyon/taskWorker'
-import { getApiConfigCopy } from '../taskyon/taskWorker'
+import { type TaskWorkerController } from '../taskyon/taskWorker'
+import { getApiConfigCopy } from '../taskyon/types'
 import { TaskProcessingError, type TaskNode, type llmSettings } from '../taskyon/types'
 
 // this function processes all tasks which go to any sort of an LLM
