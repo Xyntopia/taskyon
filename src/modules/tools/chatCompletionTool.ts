@@ -12,13 +12,16 @@ import { TaskProcessingError, type TaskNode, type llmSettings } from '../taskyon
 // this from a "default" Configuration? And then have them as function parameters?
 // t.configuration = finishedTask.configuration
 
+// TODO: refactor & clean up this function ;)
 export async function processChatTask(
+  prompt: string,
   task: TaskNode,
   configuration: { model: string; chatApi: string },
   llmSettings: llmSettings,
   // can we get rid of taskManager here in order to make our task more functional :)?
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController,
+  apiKeys: { [key: string]: string },
 ) {
   const api = getApiConfigCopy(llmSettings, configuration.chatApi)
   const apiKey = llmSettings.selectedApi ? apiKeys[llmSettings.selectedApi] : undefined
@@ -33,7 +36,7 @@ export async function processChatTask(
   const selectedModel = configuration.model
   if (selectedModel) {
     api.selectedModel = selectedModel
-    console.log('execute chat task!', task)
+    console.log('execute chat completion tool with prompt:', prompt, task)
     //TODO: also do this, if we start the task "autonomously" in which we basically
     //      allow it to create new tasks...
     //TODO: we can create more things here like giving it context form other tasks, lookup
@@ -93,18 +96,23 @@ export async function processChatTask(
 }
 
 export function createChatCompletionTool(
-  task: TaskNode,
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController,
+  apiKeys: { [key: string]: string },
 ) {
-  async function fetchChatCompletion({ prompt, model }: { prompt: string; model: string }) {
+  async function fetchChatCompletion(
+    { prompt, model }: { prompt: string; model: string },
+    task: TaskNode,
+  ) {
     return processChatTask(
+      prompt,
       task,
       { model, chatApi: 'openai' },
       llmSettings,
       taskManager,
       taskWorkerController,
+      apiKeys,
     )
   }
 
