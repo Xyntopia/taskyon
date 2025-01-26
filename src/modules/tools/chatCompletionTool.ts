@@ -5,6 +5,7 @@ import type { TyTaskManager } from '../taskyon/taskManager'
 import { type TaskWorkerController } from '../taskyon/taskWorker'
 import { getApiConfigCopy } from '../taskyon/types'
 import { TaskProcessingError, type TaskNode, type llmSettings } from '../taskyon/types'
+import type { Tool } from '../taskyon/tools'
 
 // this function processes all tasks which go to any sort of an LLM
 
@@ -100,7 +101,7 @@ export function createChatCompletionTool(
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController,
   apiKeys: { [key: string]: string },
-) {
+): Tool {
   async function fetchChatCompletion(
     { prompt, model }: { prompt: string; model: string },
     task: TaskNode,
@@ -116,7 +117,7 @@ export function createChatCompletionTool(
     )
   }
 
-  const chatCompletion = {
+  const chatCompletion: Tool = {
     function: fetchChatCompletion,
     description: 'Generates a chat-based response using the OpenAI API.',
     longDescription: `This tool interfaces with an OpenAI-compatible API to generate completions for

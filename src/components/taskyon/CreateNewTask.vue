@@ -460,10 +460,6 @@ async function toggleSelectedTools() {
 const currentnewTask = computed(() => {
   const task = deepMerge(state.llmSettings.taskDraft, props.forceTaskProps || {})
   if (currentModel.value) {
-    task.configuration = {
-      model: currentModel.value,
-      chatApi: currentChatApi.value,
-    }
     task.name = undefined
     task.debugging = {}
     if (selectedTaskType.value && 'functionCall' in state.llmSettings.taskDraft.content) {
@@ -564,12 +560,6 @@ async function createFileTask(files: File[]) {
   if (fileUuids.length) {
     const task: partialTaskDraft = {
       role: 'system',
-      configuration: currentModel.value
-        ? {
-            model: currentModel.value,
-            chatApi: currentChatApi.value,
-          }
-        : undefined,
       content: {
         uploadedFiles: fileUuids,
       },
@@ -585,27 +575,46 @@ async function addNewTask(execute = true) {
   tystate.taskWorkerController.reset()
   const tm = await tystate.getTaskManager()
   const fileTaskObj = await createFileTask(fileAttachments.value)
-  let fileTaskId = undefined
+
+  // we are creating new taskchain accordig to what the user wants ;)
+  // sometimes its several tasks in one go...
+  const newTaskChain: partialTaskDraft[] = []
+
   if (fileTaskObj) {
     console.log('add files to chat:', fileTaskObj)
-    fileTaskId = await tm.addPartialTask2Tree(
-      fileTaskObj,
-      state.llmSettings.selectedTaskId, // parent
-    )
-    state.llmSettings.selectedTaskId = fileTaskId
-    fileAttachments.value = []
+    newTaskChain.push(fileTaskObj)
+    fileAttachments.value = [] // clear out fileAttachments for the next task
   }
 
   // execute: if true, we immediatly queue the task for execution in the taskManager
   //          otherwise, it won't get executed but simply saved into the tree
   console.log('adding new task, execute?', execute)
-  const newTask = { ...currentnewTask.value }
-  const newTaskId = await tm.addPartialTask2Tree(
-    newTask,
-    fileTaskId || state.llmSettings.selectedTaskId, //parent
-  )
-  // push to execution queue right away...
-  if (execute) {
+  // we are doing the ... to make sure we don't change the original, reactive object
+  newTaskChain.push({ ...currentnewTask.value })
+
+  if ('message' in currentnewTask.value.content) {
+    const completionTask: partialTaskDraft = {
+      role: 'function',
+      content: {
+        functionCall: {
+          name: 'chatCompletion',
+          arguments: {
+            prompt: currentnewTask.value.content.message,
+            model: currentModel.value,
+          },
+        },
+      },
+      allowedTools: ['chatCompletion'],
+    }
+    newTaskChain.push(completionTask)
+    console.log('adding message compltion task:', currentnewTask.value.content.message)
+  }
+
+  // add taskchain to taskManager
+  const newTaskId = await tm.addTaskChain(newTaskChain, state.llmSettings.selectedTaskId)
+
+  // push the last task to execution queue right away...
+  if (execute && newTaskId) {
     const pq = await tystate.getTaskQueue()
     pq.push(newTaskId)
   }

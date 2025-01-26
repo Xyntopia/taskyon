@@ -11,9 +11,11 @@ import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
 import type { llmSettings } from './types'
 import { AsyncQueue, toLowerCaseKeys } from '../utils'
+import { createChatCompletionTool } from '../tools/chatCompletionTool'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
+  apiKeys: { [key: string]: string },
   taskWorkerController: TaskWorkerController,
   logError: (message: string) => void,
   // we explicitly provide a tasklist here, this gives us the chance to provide a reactive
@@ -47,8 +49,8 @@ export async function initTaskyon(
   console.log('finished taskManager initialization')
 
   // add tools which have access to the taskManagerInstance itself
-
   ToolList.push(
+    createChatCompletionTool(llmSettings, taskManagerInstance, taskWorkerController, apiKeys),
     {
       function: async ({ filename }: { filename: string }) => {
         const file = await taskManagerInstance.getFileByName(filename)

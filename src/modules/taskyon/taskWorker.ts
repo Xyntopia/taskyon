@@ -565,7 +565,7 @@ export async function runTaskWorker(
         // we make sure to identify all parent tasks from this batch, because
         // we oly want to execute the leaf tasks..
         // we can do this, because all of these tasks are newly created. this means, we don't have any
-        const addTasks = (finishedTask: TaskNode) => async (taskChain: (typeof newTasks)[0]) => {
+        const addTasks = (finishedTask: TaskNode) => async (taskChain: partialTaskDraft[]) => {
           const immediateExecute = taskWorkerController.isInterrupted() ? false : true
           const lastTaskId = await taskManager.addTaskChain(taskChain, finishedTask.id)
           // TODO:  this needs an overhaul..  we want to save tasks only once
@@ -592,6 +592,8 @@ export async function runTaskWorker(
         void newTasks.map(taskAdder)
 
         // and finally save the task
+        // TODO: would be good to also already save the unfinished tasks here
+        //       so that we can continue them later...
         void taskManager.setTask(task, true)
       }
     } catch (error) {
