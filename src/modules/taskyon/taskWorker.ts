@@ -418,6 +418,8 @@ async function processTask(
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController,
 ) {
+  // TODO: long-run we don't need this anymore because
+  //       all content should always be a function call
   if ('functionCall' in task.content) {
     // calculate function result
     // in the case we don't have a result yet, wPe need to calculate it :)
@@ -426,7 +428,12 @@ async function processTask(
       const tools = await taskManager.updateToolDefinitions(false)
       console.log(`Calling function ${func.name}`)
       if (tools[func.name] && !taskWorkerController.isInterrupted()) {
-        const result = await handleFunctionExecution(func, tools, taskWorkerController.onInterrupt)
+        const result = await handleFunctionExecution(
+          func,
+          tools,
+          taskWorkerController.onInterrupt,
+          task,
+        )
         return result
       } else {
         const toolnames = JSON.stringify(task.allowedTools)

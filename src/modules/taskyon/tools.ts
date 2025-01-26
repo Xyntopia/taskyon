@@ -7,6 +7,7 @@ import type {
   ParamType,
   OnInterruptFunc,
 } from './types'
+import { TaskNode } from './types'
 import { ToolBase, TaskProcessingError } from './types'
 import type { RemoteFunctionResponse } from './iframeApiTypes'
 import { RemoteFunctionCall, TaskyonMessages } from './iframeApiTypes'
@@ -15,24 +16,39 @@ import type { YamlRepresentation } from '../zodUtils'
 import { convertToYamlWComments } from '../zodUtils'
 import { executeCodeInIframe } from './iframeWorker'
 
-const arbitraryFunctionSchema = z.custom<
+const toolContext = z
+  .object({
+    currentTask: TaskNode,
+  })
+  .describe('Context for tools which gives them access to other parts of the taskyon system')
+export type toolContext = z.infer<typeof toolContext>
+
+const internalToolFunctionSchema = z.custom<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (...args: any[]) => unknown // unknown also includes Promise<unknown>
+  (params: any, context: toolContext) => unknown // unknown also includes Promise<unknown>
 >((val) => typeof val === 'function', {
   message: 'Expected a function that accepts any arguments and returns unknown or Promise<unknown>',
 })
-export type arbitraryFunction = z.infer<typeof arbitraryFunctionSchema>
+export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSchema>
 
-const Tool = ToolBase.extend({
-  function: arbitraryFunctionSchema,
-})
-export type Tool = z.infer<typeof Tool>
+// the following doesn't really work ;) thats why we're doing the custom schema above..
+/*const internalToolFunctionSchema = z
+  .function()
+  .args(z.record(z.string(), z.unknown()), toolContext)
+  .returns(z.unknown())
+  .describe('Function definition for internal tools with context')
+export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSchema>
+*/
+/*z
+    .function()
+    .args(z.record(z.string(), z.unknown()))
+    .returns(z.unknown())
+    .describe('Simple function definition for internal tools'),*/
 
-// more specialized version of Tool, which has a typed function
-
-export type TypedTool<T extends arbitraryFunction> = Omit<Tool, 'function'> & {
-  function: T
-}
+const InternalTool = ToolBase.extend({
+  function: internalToolFunctionSchema,
+}).describe('Internal tool definition, which has access to the taskyon system')
+export type InternalTool = z.infer<typeof InternalTool>
 
 // This function executes code in a different browser context. E.g. executing a
 // function in the context of the parent of an iframe!
@@ -90,7 +106,7 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
   return funcR.response
 }
 
-function getTool(tools: Record<string, ToolBase | Tool>, name: string) {
+function getTool(tools: Record<string, ToolBase | InternalTool>, name: string) {
   const tool = tools[name]
   if (!tool) {
     throw new TaskProcessingError("Tool doesn't exist", {
@@ -112,14 +128,18 @@ function getTool(tools: Record<string, ToolBase | Tool>, name: string) {
  */
 export async function handleFunctionExecution(
   func: FunctionCall,
-  tools: Record<string, ToolBase | Tool>,
+  tools: Record<string, ToolBase | InternalTool>,
   onInterrupt: OnInterruptFunc,
+  currentTask: TaskNode,
+  // TODO: add taskManager here, so we can use it in the function execution
+  //       we somehow also want to be able to do this with "dynamically" loaded tools
+  //       but only, if they're declared "trusted" or something like that...
 ): Promise<ToolResult> {
   let funcR: unknown
   const tool = getTool(tools, func.name)
   if ('function' in tool && tool.function) {
     console.log('using tool!', tool)
-    funcR = await tool.function(func.arguments)
+    funcR = await tool.function(func.arguments, { currentTask })
     funcR = bigIntToString(funcR)
     return { result: dump(funcR) }
   } else if (tool.code) {
@@ -152,7 +172,7 @@ export async function handleFunctionExecution(
     .join('\n');
 }*/
 
-export function getDefaultParametersForTool(tool: Tool | ToolBase) {
+export function getDefaultParametersForTool(tool: InternalTool | ToolBase) {
   const params = tool.parameters
   if (!params || !params.properties) {
     console.log(`No parameters defined for tool ${tool.name}.`)

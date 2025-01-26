@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Tool } from '../taskyon/tools'
+import type { InternalTool } from '../taskyon/tools'
 
 type SeleniumState = {
   value: {
@@ -111,7 +111,7 @@ async function fetchPageContent(sessionId: string) {
   return pageSourceResponse.data.value
 }
 
-export const seleniumBrowser: Tool = {
+export const seleniumBrowser: InternalTool = {
   function: (async ({ url }: { url: string }) => {
     console.log(`Browsing to ${url}...`)
 
@@ -129,7 +129,7 @@ export const seleniumBrowser: Tool = {
       await closeSession(sessionId);
     }*/
   }) as (arg: Record<string, unknown>) => Promise<unknown>,
-  description: `Webbrowser tool to access and retrieve content from specified webpages, supporting formats such as 
+  description: `Webbrowser tool to access and retrieve content from specified webpages, supporting formats such as
 HTML, PDF, TXT, and JSON.`,
   longDescription: `Uses Selenium WebDriver REST API to browse to a specified webpage and fetch the document content.
 Supports various document formats including HTML, PDF, TXT, JSON, etc.

@@ -5,7 +5,7 @@ import type { TyTaskManager } from '../taskyon/taskManager'
 import { type TaskWorkerController } from '../taskyon/taskWorker'
 import { getApiConfigCopy } from '../taskyon/types'
 import { TaskProcessingError, type TaskNode, type llmSettings } from '../taskyon/types'
-import type { Tool } from '../taskyon/tools'
+import type { InternalTool, internalToolFunctionSchema, toolContext } from '../taskyon/tools'
 
 // this function processes all tasks which go to any sort of an LLM
 
@@ -15,7 +15,6 @@ import type { Tool } from '../taskyon/tools'
 
 // TODO: refactor & clean up this function ;)
 export async function processChatTask(
-  prompt: string,
   task: TaskNode,
   configuration: { model: string; chatApi: string },
   llmSettings: llmSettings,
@@ -37,7 +36,7 @@ export async function processChatTask(
   const selectedModel = configuration.model
   if (selectedModel) {
     api.selectedModel = selectedModel
-    console.log('execute chat completion tool with prompt:', prompt, task)
+    console.log('execute chat completion tool with prompt:', task)
     //TODO: also do this, if we start the task "autonomously" in which we basically
     //      allow it to create new tasks...
     //TODO: we can create more things here like giving it context form other tasks, lookup
@@ -101,15 +100,20 @@ export function createChatCompletionTool(
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController,
   apiKeys: { [key: string]: string },
-): Tool {
-  async function fetchChatCompletion(
-    { prompt, model }: { prompt: string; model: string },
-    task: TaskNode,
-  ) {
+): InternalTool {
+  const fetchChatCompletion: internalToolFunctionSchema = async (
+    { model }: { model: string },
+    context: toolContext,
+  ) => {
+    if (!context.currentTask) {
+      throw new Error(`No current task found!`)
+    }
+    if (!llmSettings.selectedApi) {
+      throw new TaskProcessingError('No API selected!')
+    }
     return processChatTask(
-      prompt,
-      task,
-      { model, chatApi: 'openai' },
+      context.currentTask,
+      { model, chatApi: llmSettings.selectedApi },
       llmSettings,
       taskManager,
       taskWorkerController,
@@ -117,7 +121,7 @@ export function createChatCompletionTool(
     )
   }
 
-  const chatCompletion: Tool = {
+  const chatCompletion: InternalTool = {
     function: fetchChatCompletion,
     description: 'Generates a chat-based response using the OpenAI API.',
     longDescription: `This tool interfaces with an OpenAI-compatible API to generate completions for
@@ -126,10 +130,6 @@ export function createChatCompletionTool(
     parameters: {
       type: 'object',
       properties: {
-        prompt: {
-          type: 'string',
-          description: 'The input text or conversation history to generate a response from.',
-        },
         model: {
           type: 'string',
           description:

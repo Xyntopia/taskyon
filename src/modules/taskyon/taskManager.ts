@@ -12,7 +12,7 @@ import { openFile } from '../OPFS'
 import { deepCopy, deepMerge, lockMap } from '../utils'
 import { useVectorStore } from './hnswIndex'
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi'
-import { type Tool } from './tools'
+import { type InternalTool } from './tools'
 import { taskUtils } from './taskUtils'
 import { type MangoQuery } from 'rxdb'
 import { dump, load } from 'js-yaml'
@@ -443,7 +443,7 @@ function useTaskVectors(
 */
 export function useTyTaskManager(
   tasksCache: Map<string, TaskNode>,
-  defaultTools: Tool[],
+  defaultTools: InternalTool[],
   taskyonDB?: TaskyonDatabase,
   vectorizerModel?: string,
 ) {
@@ -701,7 +701,7 @@ export function useTyTaskManager(
   //       we should set this
   async function updateToolDefinitions<T extends boolean>(
     removeFunction: T = false as T,
-  ): Promise<T extends true ? Record<string, ToolBase> : Record<string, ToolBase | Tool>> {
+  ): Promise<T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>> {
     if (taskyonDB) {
       const tasks = await searchTasks(createTaskNodeMangoQuery('function'))
 
@@ -724,18 +724,18 @@ export function useTyTaskManager(
         (pv, cv) => {
           if (removeFunction && 'function' in cv) {
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { function: unused, ...toolBaseOnly } = cv as Tool
+            const { function: unused, ...toolBaseOnly } = cv as InternalTool
             pv[toolBaseOnly.name] = toolBaseOnly
           } else {
             pv[cv.name] = cv
           }
           return pv
         },
-        {} as T extends true ? Record<string, ToolBase> : Record<string, ToolBase | Tool>,
+        {} as T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>,
       )
     }
 
-    return {} as T extends true ? Record<string, ToolBase> : Record<string, ToolBase | Tool>
+    return {} as T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>
   }
 
   /**

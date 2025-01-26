@@ -1,7 +1,7 @@
-import type { Tool } from '../taskyon/tools'
+import type { InternalTool } from '../taskyon/tools'
 import { getDatabase } from '../pglite.api'
 
-export const localVectorStore: Tool = {
+export const localVectorStore: InternalTool = {
   function: ({ searchTerm }: { searchTerm: string }) => {
     return searchTerm
     /*const vectorStore = useVectorStore();

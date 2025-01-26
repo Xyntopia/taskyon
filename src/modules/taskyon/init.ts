@@ -4,7 +4,7 @@ import type { TaskyonDatabase } from './rxdb'
 import { createTaskyonDatabase } from './rxdb'
 import type { TaskWorkerController } from './taskWorker'
 import { runTaskWorker } from './taskWorker'
-import type { Tool } from './tools'
+import type { InternalTool } from './tools'
 import { loadFile } from 'src/modules/loadFiles'
 // TODO: make webpack automatically add all tool files from /tools/*
 import { executeJavaScript } from '../tools/executeJavaScript'
@@ -21,9 +21,9 @@ export async function initTaskyon(
   // we explicitly provide a tasklist here, this gives us the chance to provide a reactive
   // value in order to get updates to the list of tasks immediatly reflected in the UI.
   TaskList: Map<string, TaskNode>,
-  AdditionalTools: Tool[],
+  AdditionalTools: InternalTool[],
 ) {
-  const ToolList: Tool[] = [
+  const ToolList: InternalTool[] = [
     executePythonScript,
     // TODO: add local context(task) search
     // localVectorStoreSearch,
