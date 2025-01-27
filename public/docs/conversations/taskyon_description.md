@@ -92,3 +92,87 @@ flowchart TD
     MessageContent_S --> MessageContent_s_A
     MessageContent_A -. if autonomous agents enabled .-> MessageContent_s_A
 ```
+
+### New Version where "everything is a tool"
+
+In taskyon vesion 1.0.0 everything will be a tool including the chatcompletion.
+Each tool can itself generate new follow-up tasks and thereby influencing
+the shape of the task transition map. So the task processing now involves two layers:
+
+- One layer represents the simple function execution chain.
+- The second layer represents the transition between different types of function.
+- the previous "structured" messages and all of that now are all handled by a tool which can
+  implement its own logic to make conclusions about errors and whether we should use a tool
+  for example
+
+Here you can see how functions/toolcall processing becomes the center of how
+taskyon works. The relevant parts in the taskyon code representing
+this are the "runTaskWorker", "processTask" and "handleFunctionExecution" functions.
+
+```mermaid
+flowchart TD
+    MessageContent_A[MessageContent_A]
+    MessageContent_U[MessageContent_U]
+    ErrorContent[Error_S]
+    ToolCallContent{{ToolCallTask_F}}
+    ErrorContent[Error_S]
+    ToolResultContent_S[ToolResultContent_S]
+    TERMINATION([TERMINATION])
+
+
+    MessageContent_A --> TERMINATION
+    ToolCallContent -- generic result --> ToolResultContent_S
+    ToolResultContent_S -- analyze result Tool --> ToolCallContent
+    ToolCallContent -- task chains created by the tool --> MessageContent_A
+    ToolCallContent -- function task chains created by tools --> ToolCallContent
+    ToolCallContent --> ErrorContent
+    ErrorContent -- analyze error tool --> ToolCallContent
+    MessageContent_U -- initiate first tool cool (e.g. ChatCompletionTool or Planner Tool) --> ToolCallContent
+```
+
+The second layer is easily extendible by defining new tools to fit your needs.
+Taskyon provides a basic layer to get started with and which can automatically
+incorporate new tools and generically analyze their results and use it.
+When a task becomes more clear and repeats itself
+often, it might make sense
+to define a new tool which works faster on repeated
+or complex tasks then trying to solve a problem
+with the generic tools available.
+
+The second layer depicts the transitions between
+the actual tasks including what kind of tools are
+being used in these transitions.
+
+```mermaid
+flowchart TD
+  cct{{ChatCompletionTool}}
+  tpt{{ToolPlannerTool}}
+  at{{AnyTool}}
+  Error_S
+  Message_U
+  Message_A
+  Message_S
+  ToolResultContent_S
+  UploadedFilesContent
+
+  subgraph Events
+      TERMINATION([TERMINATION])
+      Error_S([ERROR])
+  end
+
+  UploadedFilesContent --> Message_U
+  Message_U -- if no tools enabled --> cct
+  Message_U -- if tools enabled --> tpt
+  tpt -- don't need a tool--> cct
+  tpt -- need a tool --> at
+  at --> ToolResultContent_S
+  ToolResultContent_S -- analyze --> tpt
+  Error_S --> Message_S
+  Message_S --> tpt
+  Message_A --> TERMINATION
+  cct --> Message_A
+
+```
+
+This architecture can easily expanded in the future by adding new tools. E.g. we could add a Task planner tool
+or a subtask planner tool and many more things.
