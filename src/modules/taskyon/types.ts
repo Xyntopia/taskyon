@@ -195,7 +195,7 @@ export const ToolBase = z.object({
 export type ToolBase = z.infer<typeof ToolBase> // this reflects json schema:  https://json-schema.org/specification-links
 
 const ToolResult = z.object({
-  result: z.union([z.string(), z.record(z.unknown())]).optional(),
+  result: z.union([z.string(), z.unknown()]).optional(),
   error: z.unknown().optional(), // 'unknown' type in Zod is handled with 'z.unknown()'
   stdout: z.string().optional(),
 })
@@ -311,6 +311,8 @@ Every Leaf task which is not a Termination task can potentially continue to be e
 
 We can indicate the reason for termination here as well...`,
 )
+
+// I am not sure, if we need this here...
 const ChatCompletionContent = z.union([MessageContent, ToolResultContent, ErrorContent])
 export type ChatCompletionContent = z.infer<typeof ChatCompletionContent>
 

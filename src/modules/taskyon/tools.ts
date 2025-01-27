@@ -141,14 +141,14 @@ export async function handleFunctionExecution(
     console.log('using tool!', tool)
     funcR = await tool.function(func.arguments, { currentTask })
     funcR = bigIntToString(funcR)
-    return { result: dump(funcR) }
+    return { result: funcR }
   } else if (tool.code) {
     console.log('compile & execute function code in iframe', tool)
     try {
       // Execute code in iframe with parameters (func.arguments)
       funcR = await executeCodeInIframe(tool.code, func.arguments, func.name + '.js', onInterrupt)
       funcR = bigIntToString(funcR) // Optionally convert bigInt
-      return { result: dump(funcR) }
+      return { result: funcR }
     } catch (error) {
       throw new TaskProcessingError(
         `Error executing iframe code for tool: ${func.name}. Error: ${error instanceof Error ? error.message : 'unknown'}`,
@@ -159,7 +159,7 @@ export async function handleFunctionExecution(
     // and want to make sure its serializable for a postMessage function.
     // TODO: use our "onInterrupt" here somehow ;)
     const funcR = await handleRemoteFunction(func.name, func.arguments)
-    return { result: dump(funcR) }
+    return { result: funcR }
   }
 }
 

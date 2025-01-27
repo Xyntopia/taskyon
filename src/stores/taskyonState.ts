@@ -113,7 +113,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     }
   }
 
-  function defineTyGuiTools(): Tool[] {
+  function defineTyGuiTools(): InternalTool[] {
     return [
       {
         function: ({ newPrompts }: { newPrompts: { [key: string]: string } }) => {

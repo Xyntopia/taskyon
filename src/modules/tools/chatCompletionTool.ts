@@ -3,6 +3,7 @@ import { callLLM } from '../taskyon/chat'
 import { generateCompleteChat, generateOpenAIToolDeclarations } from '../taskyon/promptCreation'
 import type { TyTaskManager } from '../taskyon/taskManager'
 import { type TaskWorkerController } from '../taskyon/taskWorker'
+import type { partialTaskDraft } from '../taskyon/types'
 import { getApiConfigCopy } from '../taskyon/types'
 import { TaskProcessingError, type TaskNode, type llmSettings } from '../taskyon/types'
 import type { InternalTool, internalToolFunctionSchema, toolContext } from '../taskyon/tools'
@@ -111,7 +112,7 @@ export function createChatCompletionTool(
     if (!llmSettings.selectedApi) {
       throw new TaskProcessingError('No API selected!')
     }
-    return processChatTask(
+    const chatCompletion = await processChatTask(
       context.currentTask,
       { model, chatApi: llmSettings.selectedApi },
       llmSettings,
@@ -119,6 +120,28 @@ export function createChatCompletionTool(
       taskWorkerController,
       apiKeys,
     )
+
+    // chatCompletion by definition completes a chat with a message
+    // so we can just return the message here...
+    if (chatCompletion?.choices[0]?.message.content) {
+      const newTaskChain: partialTaskDraft[] = [
+        {
+          role: 'assistant',
+          content: {
+            message: chatCompletion.choices[0].message.content,
+          },
+        },
+        {
+          role: 'assistant',
+          content: {
+            message: chatCompletion.choices[0].message.content,
+          },
+        },
+      ]
+      return [newTaskChain]
+    } else {
+      throw new TaskProcessingError('No content in chat completion!')
+    }
   }
 
   const chatCompletion: InternalTool = {

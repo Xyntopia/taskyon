@@ -230,6 +230,8 @@ function createChatCompletionTask(content: ChatCompletionContent): TaskNode {
 // TODO: get rid of taskManager, if thats possible! :) I don#t see why we would need taskmanager in order to create
 //       follow-up tasks?
 // we return 2D list of tasks here..   each list represents a chain of linked tasks through priorID
+// TODO:  move all of this function into its own Tool as well! this would be our "planner" tool/function :)
+//        this tool would analyze the results of the previous function and create new tasks!
 async function generateFollowUpTasksFromResult(
   result: unknown,
   finishedTask: TaskNode,
@@ -245,7 +247,8 @@ async function generateFollowUpTasksFromResult(
   if (result) {
     // TODO: instead of taking the "finishedtask.result" we should generate this content with toolResult
     //       directly in the process function area. Possibly create a generic task creation function.
-    //       or a "planner" that does this... In a next step, we could also this as a function in its own right...
+    //       or a "planner" that does this... In a next step, we could also
+    //       this as a function in its own right...
     if ('functionCall' in finishedTask.content) {
       newTasks = [
         [
@@ -262,7 +265,8 @@ async function generateFollowUpTasksFromResult(
     }
 
     // did we get any response from an LLM?
-    // TODO: make this part of our new chatcompletion tool!
+    // TODO: make this part of our new chatcompletion tool!rif of all of this?
+    //       or we could also put this into a generic Taskplanner tool...
     const choice = getChatResponseFromResult(result)?.choices[0]
     if (choice) {
       // check if we have any functioncalls from the llm inference
