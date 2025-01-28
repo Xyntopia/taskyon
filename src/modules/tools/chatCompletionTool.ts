@@ -1,10 +1,17 @@
 import type OpenAI from 'openai'
-import { callLLM } from '../taskyon/chat'
+import {
+  callLLM,
+  enrichWithUsageInfos,
+  generateHeaders,
+  getOpenRouterGenerationInfo,
+  getTaskyonCosts,
+} from '../taskyon/chat'
 import { generateCompleteChat, generateOpenAIToolDeclarations } from '../taskyon/promptCreation'
 import type { TyTaskManager } from '../taskyon/taskManager'
 import { type TaskWorkerController } from '../taskyon/taskWorker'
-import type { partialTaskDraft } from '../taskyon/types'
-import { getApiConfigCopy } from '../taskyon/types'
+import type { partialTaskDraft, ToolBase } from '../taskyon/types'
+import { FunctionCall } from '../taskyon/types'
+import { ChatResponseType, getApiConfigCopy } from '../taskyon/types'
 import { TaskProcessingError, type TaskNode, type llmSettings } from '../taskyon/types'
 import {
   makeTaskResult,
@@ -12,6 +19,9 @@ import {
   type internalToolFunctionSchema,
   type toolContext,
 } from '../taskyon/tools'
+import { deepCopy, sleep } from '../utils'
+import { isTaskyonKey } from '../taskyon/tyCrypto'
+import { useNlpWorker } from '../taskyon/webWorkerApi'
 
 // this function processes all tasks which go to any sort of an LLM
 
@@ -99,6 +109,101 @@ export async function processChatTask(
   } else {
     throw new Error('Task has no inference model selected!')
   }
+}
+
+// TODO: use this function to enrich tasks with metadata (as a start in a separate database, we could use rxdb for this...)
+export async function addTaskCostInformation(
+  result: unknown,
+  task: Readonly<TaskNode>,
+  taskManager: TyTaskManager,
+  llmSettings: llmSettings,
+  apiKey?: string,
+) {
+  // TODO: also get cost information for other tasks, than chatCompletion ;)!
+  const chatResponse = getChatResponseFromResult(result)
+  if (chatResponse) {
+    const { openAIConversationThread } = await generateCompleteChat(task, llmSettings, taskManager)
+
+    // openai sends back the exact number of prompt tokens :)
+    if (chatResponse.usage) {
+      task.debugging.promptTokens = chatResponse.usage.prompt_tokens
+      task.debugging.resultTokens = chatResponse.usage.completion_tokens
+      task.debugging.taskTokens = chatResponse.usage.total_tokens
+    }
+    const allTools = await taskManager.updateToolDefinitions(true)
+    task.debugging.estimatedTokens = await estimateChatTokens(
+      // we are doing a deepCopy here in order to make sure we loose the^ reactivity...
+      // TODO:  once our tasks are immutable and non-reactive, we can remove this..
+      deepCopy(task),
+      openAIConversationThread,
+      allTools,
+      chatResponse.choices[0]!.message.content ?? '',
+    )
+
+    // TODO: replace this below with a taskNode in lower hierachy which does this :)
+    if (chatResponse && llmSettings.selectedApi === 'openrouter.ai' && apiKey) {
+      console.log('getting openrouter generation info')
+      void sleep(10000).then(() =>
+        getOpenRouterGenerationInfo(
+          chatResponse.id,
+          generateHeaders(apiKey, llmSettings.siteUrl, llmSettings.selectedApi || ''),
+        ).then((generationInfo) => enrichWithUsageInfos(task, taskManager, generationInfo)),
+      )
+    } else if (
+      chatResponse &&
+      llmSettings.selectedApi === 'taskyon' &&
+      !chatResponse.model.endsWith(':free') &&
+      apiKey &&
+      !isTaskyonKey(apiKey, false)
+    ) {
+      // TODO: remove "configuration" here and get the information from the tasks function call parameters
+      const api = getApiConfigCopy(llmSettings, task.configuration?.chatApi)
+      if (api) {
+        console.log('getting taskyon generation info')
+        // our backend tries to get the finished costs
+        // after ~4000ms, so we wait for 6000 here...
+        void sleep(6000).then(() =>
+          getTaskyonCosts(llmSettings, apiKey, api, chatResponse.id, task.id).then(
+            (generationInfo) => {
+              console.log('taskyon generation info:', generationInfo)
+              void enrichWithUsageInfos(task, taskManager, generationInfo)
+            },
+          ),
+        )
+      }
+    }
+  }
+}
+
+// get worker function for our chat :)
+const { estimateChatTokens } = useNlpWorker()
+
+function getChatResponseFromResult(result: unknown) {
+  const res = ChatResponseType.safeParse(result)
+  return res.data
+}
+
+export function extractOpenAIFunctions(
+  choice: ChatResponseType['choices'][0],
+  tools: Record<string, ToolBase>,
+) {
+  const functionCalls: FunctionCall[] = []
+  for (const toolCall of choice.message.tool_calls || []) {
+    // if our response contained a call to a function...
+    // TODO: update this to the new tools API from Openai
+    console.log('A function call was returned...')
+    // we convert the object into our own FunctionCall and afterwards parse it, to make
+    // sure it really worked...
+    const functionCallObj: FunctionCall = {
+      name: toolCall.function.name,
+      arguments: JSON.parse(toolCall.function.arguments),
+    }
+    const functionCall = FunctionCall.parse(functionCallObj)
+    if (tools[functionCall.name]) {
+      functionCalls.push(functionCall)
+    }
+  }
+  return functionCalls
 }
 
 export function createChatCompletionTool(

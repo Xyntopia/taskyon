@@ -206,13 +206,6 @@ if render options aren't given taskyon chtcompletion function and chatwindow ass
 })
 export type ToolBase = z.infer<typeof ToolBase> // this reflects json schema:  https://json-schema.org/specification-links
 
-const ToolResult = z.object({
-  result: z.union([z.string(), z.unknown()]).optional(),
-  error: z.unknown().optional(), // 'unknown' type in Zod is handled with 'z.unknown()'
-  stdout: z.string().optional(),
-})
-export type ToolResult = z.infer<typeof ToolResult>
-
 export const ParamType = z.union([
   z.string(),
   z.number(),
@@ -313,7 +306,7 @@ const MessageContent = z.object({ message: z.string() })
 const StructuredContent = z.object({ structuredResponse: z.string() })
 const ToolCallContent = z.object({ functionCall: FunctionCall })
 const UploadedFilesContent = z.object({ uploadedFiles: z.array(z.string()) })
-const ToolResultContent = z.object({ toolResult: ToolResult })
+const ToolResultContent = z.object({ toolResult: z.unknown() })
 const ErrorContent = z
   .object({ error: z.unknown() })
   .describe('Gets created if any error occurs during task processing.')
@@ -403,6 +396,8 @@ export type TaskListType = z.infer<typeof TaskListType>
 
 export type TaskGetter = (input: string) => Promise<TaskNode | undefined>
 
+// TODO: get rid of taskDraft once we have immutable tasks with content addressing
+//       once we have that, we can simply create tasks immediatly with the correct content address as an ID,
 export const partialTaskDraft = TaskNode.omit({ id: true, created_at: true })
   .partial()
   .required({ role: true, content: true })

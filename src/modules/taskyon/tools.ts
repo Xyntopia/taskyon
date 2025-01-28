@@ -148,7 +148,7 @@ export async function handleFunctionExecution(
   // TODO: add taskManager here, so we can use it in the function execution
   //       we somehow also want to be able to do this with "dynamically" loaded tools
   //       but only, if they're declared "trusted" or something like that...
-) {
+): Promise<partialTaskDraft[][]> {
   let funcR: unknown
   const tool = getTool(tools, func.name)
   if ('function' in tool && tool.function) {
@@ -180,10 +180,21 @@ export async function handleFunctionExecution(
     // for some reason zod will delete the task content onwards
     // of the second task in a taskchain... after parsing. so we're
     // simply using the original...
-    return { taskChains: (funcR as taskResult).taskChainList }
+    return (funcR as taskResult).taskChainList
   } else {
-    console.log('function returned generic result', funcR)
-    return { toolResult: funcR }
+    // TODO: Not really sure, what to do with this. It might be
+    //       a good idea, to have this as its a tool in its own right.
+    //       this way we could develop different kinds of function processors...
+    const newTasks: partialTaskDraft[][] = [
+      [
+        {
+          role: 'system',
+          content: { toolResult: funcR },
+        },
+      ],
+    ]
+    console.log('function returning generic result', funcR)
+    return newTasks
   }
 }
 
