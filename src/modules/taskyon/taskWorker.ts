@@ -592,9 +592,10 @@ export async function runTaskWorker(
             const lastTask = await taskManager.getTask(lastTaskId)
             // make sure we stop execution of the task chain if we have a termination task
             if (immediateExecute && lastTask && !('termination' in lastTask.content)) {
-              // we need processTasksQueue as an argument here!!!
+              // TODO: we need processTasksQueue as an argument here (not implicitly adding it to this function...)
               processTasksQueue.push(lastTaskId)
             } else {
+              //save task if we don't execute it, because it is already finished :)
               console.log(`task chain finished at id ${lastTaskId}!`)
             }
           }

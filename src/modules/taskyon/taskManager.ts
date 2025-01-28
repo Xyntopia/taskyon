@@ -489,12 +489,17 @@ export function useTyTaskManager(
     // Check if the task exists in the local record
     let task = tasksCache.get(taskId)
     if (!task && taskyonDB) {
+      // we are locking the task here in order to make other operations wait
+      // for it to be cached...
+      // TODO: somehow this doesn't work, I guess because of the async nature of lockTask?
+      const unlock = await lockTask(taskId)
       // If not, load from the database
       const taskFromDb = await taskyonDB.tasknodes.findOne(taskId).exec()
       if (taskFromDb) {
         task = transformDocToTaskNode(taskFromDb)
         tasksCache.set(taskId, task) // Update local record
       }
+      unlock()
     }
     return task
   }

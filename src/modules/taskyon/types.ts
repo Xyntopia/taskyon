@@ -329,15 +329,15 @@ const ChatCompletionContent = z.union([MessageContent, ToolResultContent, ErrorC
 export type ChatCompletionContent = z.infer<typeof ChatCompletionContent>
 
 const TaskContent = z.union([
-  MessageContent,
-  ToolResultContent,
-  ErrorContent,
-  StructuredContent,
-  ToolCallContent,
+  MessageContent.strict(),
+  ToolResultContent.strict(),
+  ErrorContent.strict(),
+  StructuredContent.strict(),
+  ToolCallContent.strict(),
   // TODO: replace with a "context" function which can also be a link to a URL for example or maybe a search string for other tasks...
   //       we can declare function for a lot of these things this way :)
-  UploadedFilesContent,
-  Termination,
+  UploadedFilesContent.strict(),
+  Termination.strict(),
 ])
 
 export type TaskContent = z.infer<typeof TaskContent>
@@ -348,7 +348,7 @@ export type TaskContent = z.infer<typeof TaskContent>
 export const TaskNode = z.object({
   role: z.enum(['system', 'user', 'assistant', 'function']),
   name: z.string().optional(),
-  content: TaskContent.default({ message: '' }).describe(
+  content: TaskContent.describe(
     `This is the actual content of the task. This is the actual content which is process at each step.
 For example this is, what an LLM would actually get to see. There are only a few different ways
 of how content can be structured. `,

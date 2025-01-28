@@ -56,6 +56,8 @@ const taskNodeSchemaLiteral = {
     configuration: {
       type: 'string', // Storing configuration as a JSON string
     },
+    // the ID from a parent task which created several subtasks...
+    // this is the ID which we will have to return result to...
     parentID: {
       type: ['string', 'null'],
     },
@@ -202,7 +204,11 @@ export const collections = {
     autoMigrate: true, // <- migration will not run at creation
     migrationStrategies: {
       1: function (oldDoc: Record<string, unknown>) {
-        if (oldDoc.priorID) oldDoc.priorID = oldDoc.parentID
+        if (oldDoc.priorID) {
+          // we are renaming the priorID, but our parentID property remains,
+          // because we are using it to hint to the parent of a subtask now.
+          oldDoc.priorID = oldDoc.parentID
+        }
         return oldDoc
       },
     },
@@ -281,7 +287,7 @@ export function transformTaskNodeToDocType(taskNode: TaskNode): TaskNodeDocType 
   const reducedTaskNode = removeUndefinedProperties(
     removeKeys(nonReactiveTaskNode, ['content', 'debugging']),
   )
-  const convertedTask = {
+  const convertedTask: TaskNodeDocType = {
     ...reducedTaskNode,
     // Mapping and transforming fields from TaskNode to TaskNodeDocType
     content: JSON.stringify(nonReactiveTaskNode.content),
@@ -309,23 +315,17 @@ export function transformDocToTaskNode(doc: RxDocument<TaskNodeDocType>): TaskNo
     typeof parsedDoc.debugging === 'string'
       ? (JSON.parse(parsedDoc.debugging) as Record<string, unknown>)
       : {}
-  const parsedConfiguration =
-    typeof parsedDoc.configuration === 'string'
-      ? (JSON.parse(parsedDoc.configuration) as Record<string, unknown>)
-      : undefined
-  const parsedResult =
-    typeof parsedDoc.result === 'string'
-      ? (JSON.parse(parsedDoc.result) as Record<string, unknown>)
-      : undefined
 
   // Parse the JSON string and transform it into an TaskNode object
   // TODO:  try to throw errors here, when our TaskNode object and our database object differ.
-  const tmpObj = {
+  const tmpObj: TaskNode = {
     ...parsedDoc,
+    parentID: parsedDoc.parentID || undefined,
+    priorID: parsedDoc.priorID || undefined,
+    authorId: parsedDoc.authorId || undefined,
+    created_at: parsedDoc.created_at || undefined,
     content: parsedContent, // we do this here, because in some situations the task has the wrong format...
     debugging: parsedDebugging,
-    configuration: parsedConfiguration,
-    result: parsedResult,
   }
   const tn = TaskNode.parse(tmpObj)
 
