@@ -30,21 +30,21 @@ async function zoomToPlace(placeName) {
   try {
     const response = await fetch(
       `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(placeName)}`,
-    );
-    const data = await response.json();
+    )
+    const data = await response.json()
 
     if (data && data.length > 0) {
-      const { lat, lon } = data[0];
-      map.setView([lat, lon], 13); // Adjust zoom level as needed
+      const { lat, lon } = data[0]
+      map.setView([lat, lon], 13) // Adjust zoom level as needed
       return {
         success: true,
         message: `Zoomed to ${placeName} at (${lat}, ${lon})`,
-      };
+      }
     } else {
-      return { success: false, message: `Place ${placeName} not found!` };
+      return { success: false, message: `Place ${placeName} not found!` }
     }
   } catch (error) {
-    return { success: false, message: `Error fetching data: ${error.message}` };
+    return { success: false, message: `Error fetching data: ${error.message}` }
   }
 }
 ```
@@ -69,7 +69,7 @@ const tools = [
     },
     function: (params) => zoomToPlace(params.placeName, true), // Assign the zoom function here
   },
-];
+]
 ```
 
 Better would be a description like this:
@@ -79,6 +79,12 @@ description: 'This function can be used by the AI to zoom a map displayed on the
 ```
 
 Here we address the AI directly and also describe the context of this function in order to make the AI aware of it.
+
+#### Tool Errors
+
+Taskyon can correct errors made in the tool parameters (e.g. buggy python code, or something else...).
+In order for this to work well it is activly envcouraged to throw "expressive" error messages in your code wherever possible. Always keep in mind that taskyon will use the error message in order to correct
+itself. So it makes sense to describe exactly and precisely what happened.
 
 ### AI-Assisted Tool Creation
 
