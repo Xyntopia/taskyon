@@ -8,7 +8,7 @@
 
 List of all of our currently available models in ${state.llmSettings.selectedApi} and their prices.
 The selected AI provider has to provide price information through an API in order to show them
-on this list. *Dynamic* means that the backend changes the prices based on the input (E.g. by automatically 
+on this list. *Dynamic* means that the backend changes the prices based on the input (E.g. by automatically
 selecting different models).
 `"
         />
@@ -22,6 +22,7 @@ selecting different models).
         :rows="filteredTableData"
         :columns="columns"
         row-key="id"
+        :filter="filter"
         :pagination="{
           sortBy: 'prompt_price',
           descending: false,
