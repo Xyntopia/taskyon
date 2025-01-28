@@ -147,7 +147,7 @@ being used in these transitions.
 flowchart TD
   subgraph ContentTypes
     cct{{ChatCompletionTool}}
-    tpt{{ToolPlannerTool}}
+    tpt{{TaskPlannerTool}}
     at{{AnyTool}}
     Message_U
     Message_A
