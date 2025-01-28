@@ -87,6 +87,16 @@ depcruise src --progress \
   | tee dependency-cruiser-graph-flat-dot.svg \
   | npx depcruise-wrap-stream-in-html \
   > dependency-cruiser-graph-flat-dot.html
+
+# leave out some files which are used all over the place to clean up the graph:
+depcruise src --progress \
+  --output-type flat \
+  --include-only "^src" \
+  --exclude "(types\.ts|utils\.ts)" \
+  | dot -Tsvg \
+  | tee dependency-cruiser-graph-flat-dot.svg \
+  | npx depcruise-wrap-stream-in-html \
+  > dependency-cruiser-graph-flat-dot.html
 ```
 
 - **Madge** (useful, but currently has issues detecting Vue file references):
