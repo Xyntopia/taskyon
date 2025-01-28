@@ -145,20 +145,23 @@ being used in these transitions.
 
 ```mermaid
 flowchart TD
-  cct{{ChatCompletionTool}}
-  tpt{{ToolPlannerTool}}
-  at{{AnyTool}}
-  Error_S
-  Message_U
-  Message_A
-  Message_S
-  ToolResultContent_S
-  UploadedFilesContent
+  subgraph ContentTypes
+    cct{{ChatCompletionTool}}
+    tpt{{ToolPlannerTool}}
+    at{{AnyTool}}
+    Message_U
+    Message_A
+    Message_S
+    ToolResultContent_S
+    UploadedFilesContent
+  end
 
   subgraph Events
       TERMINATION([TERMINATION])
       Error_S([ERROR])
   end
+
+  paramdb["Parameter Database"] --> ContentTypes
 
   UploadedFilesContent --> Message_U
   Message_U -- if no tools enabled --> cct
