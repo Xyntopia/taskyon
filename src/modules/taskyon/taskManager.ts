@@ -936,7 +936,8 @@ export function useTyTaskManager(
     //       keep it immutable?  We should probably await keywords, but also keep a
     //       separate index with keywords for tasks...
     if (!newTask.name && task.content && !task.label?.includes('discard')) {
-      const chat = buildChatThread(newTask.id, false, false)
+      const toolDefs = await updateToolDefinitions(true)
+      const chat = buildChatThread(newTask.id, false, false, toolDefs)
       const chatString = (await chat).reduce((p, n) => {
         if (typeof n.content === 'string') {
           return p + '\n\n' + n.content

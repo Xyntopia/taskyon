@@ -253,6 +253,7 @@ export async function generateCompleteChat(
     task.id,
     llmSettings.tryUsingVisionModels,
     llmSettings.enableOpenAiTools,
+    toolDefs,
   )
   openAIConversationThread = addPrompts(task, toolDefs, llmSettings, openAIConversationThread)
   return { openAIConversationThread, toolDefs }

@@ -1,4 +1,4 @@
-import type { TaskNode, TaskGetter } from './types'
+import type { TaskNode, TaskGetter, ToolBase } from './types'
 import type OpenAI from 'openai'
 import { dump } from 'js-yaml'
 import { type FileMappingDocType } from './rxdb'
@@ -63,6 +63,7 @@ export const taskUtils = (
     taskId: string,
     useVisionModels: boolean,
     useOpenAITools: boolean,
+    toolCollection: Record<string, ToolBase>,
   ) {
     const openAIMessageThread = [] as OpenAI.ChatCompletionMessageParam[]
     const taskIdChain = await getTaskIdChain(taskId)
@@ -80,6 +81,7 @@ export const taskUtils = (
             getFileMapping,
             getFile,
             useOpenAITools,
+            toolCollection,
           )
           if (messages) openAIMessageThread.push(...messages)
         }
@@ -104,8 +106,13 @@ async function convertTaskNodeToOpenAIMessage(
   getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
   getFile: (uuid: string) => Promise<File | undefined>,
   useOpenAITools: boolean,
+  toolCollection: Record<string, ToolBase>,
 ): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[] | undefined> {
   if ('functionCall' in task.content) {
+    const functionCallName = task.content.functionCall.name
+    if (!toolCollection[functionCallName]?.renderOptions?.llm) {
+      return
+    }
     if (useOpenAITools) {
       const functionMessage: OpenAI.ChatCompletionMessageParam = {
         role: 'assistant',
@@ -129,7 +136,6 @@ async function convertTaskNodeToOpenAIMessage(
       // TODO: not sure, if this is a good idea with OpenAI Functions, bcause openai seems to already have
       //       an idea about the functions which were provided with their descriptions,
       //       anyways So we should probably leave this out here...
-      const functionCallName = task.content.functionCall.name
 
       const functionArgs = dump({
         arguments: task.content.functionCall.arguments,

@@ -1,13 +1,7 @@
 import { dump } from 'js-yaml'
 import { bigIntToString } from '../utils'
-import type {
-  ToolResult,
-  FunctionArguments,
-  FunctionCall,
-  ParamType,
-  OnInterruptFunc,
-} from './types'
-import { TaskNode } from './types'
+import type { FunctionArguments, FunctionCall, ParamType, OnInterruptFunc } from './types'
+import { partialTaskDraft, TaskNode } from './types'
 import { ToolBase, TaskProcessingError } from './types'
 import type { RemoteFunctionResponse } from './iframeApiTypes'
 import { RemoteFunctionCall, TaskyonMessages } from './iframeApiTypes'
@@ -30,6 +24,26 @@ const internalToolFunctionSchema = z.custom<
   message: 'Expected a function that accepts any arguments and returns unknown or Promise<unknown>',
 })
 export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSchema>
+
+const taskMarker = '*TY_TASKRESULT*'
+
+const taskResult = z.object({
+  taskResultMarker: z
+    .literal(taskMarker)
+    .default(taskMarker)
+    .describe(
+      'we use this marker in order to indicate that the result should be added as new tasks!',
+    ),
+  taskChainList: z.array(z.array(partialTaskDraft)),
+})
+type taskResult = z.infer<typeof taskResult>
+
+export function makeTaskResult(tasks: partialTaskDraft[][]): taskResult {
+  return {
+    taskResultMarker: taskMarker,
+    taskChainList: tasks,
+  }
+}
 
 // the following doesn't really work ;) thats why we're doing the custom schema above..
 /*const internalToolFunctionSchema = z
@@ -134,21 +148,19 @@ export async function handleFunctionExecution(
   // TODO: add taskManager here, so we can use it in the function execution
   //       we somehow also want to be able to do this with "dynamically" loaded tools
   //       but only, if they're declared "trusted" or something like that...
-): Promise<ToolResult> {
+) {
   let funcR: unknown
   const tool = getTool(tools, func.name)
   if ('function' in tool && tool.function) {
     console.log('using tool!', tool)
     funcR = await tool.function(func.arguments, { currentTask })
     funcR = bigIntToString(funcR)
-    return { result: funcR }
   } else if (tool.code) {
     console.log('compile & execute function code in iframe', tool)
     try {
       // Execute code in iframe with parameters (func.arguments)
       funcR = await executeCodeInIframe(tool.code, func.arguments, func.name + '.js', onInterrupt)
       funcR = bigIntToString(funcR) // Optionally convert bigInt
-      return { result: funcR }
     } catch (error) {
       throw new TaskProcessingError(
         `Error executing iframe code for tool: ${func.name}. Error: ${error instanceof Error ? error.message : 'unknown'}`,
@@ -158,8 +170,20 @@ export async function handleFunctionExecution(
     // we do the zod object parsing/validation here, because we might have a proxy object from upstream
     // and want to make sure its serializable for a postMessage function.
     // TODO: use our "onInterrupt" here somehow ;)
-    const funcR = await handleRemoteFunction(func.name, func.arguments)
-    return { result: funcR }
+    funcR = await handleRemoteFunction(func.name, func.arguments)
+  }
+
+  // We check the result here to see whether it contains
+  if (taskResult.safeParse(funcR).success) {
+    console.log('new tasks were created:', funcR)
+    // we have to do this funny workaround with typescript because
+    // for some reason zod will delete the task content onwards
+    // of the second task in a taskchain... after parsing. so we're
+    // simply using the original...
+    return { taskChains: (funcR as taskResult).taskChainList }
+  } else {
+    console.log('function returned generic result', funcR)
+    return { toolResult: funcR }
   }
 }
 

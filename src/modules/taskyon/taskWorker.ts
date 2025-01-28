@@ -565,14 +565,19 @@ export async function runTaskWorker(
       task = await taskManager.getTask(taskId)
       if (task && !taskWorkerController.isInterrupted()) {
         const result = await processTask(task, taskManager, taskWorkerController)
-        // create a new task form the result. E.g. in the case of a simple chat, this will
-        // create a task with the Answer of the LLM which then gets displayed in the chatwindow...
-        const newTasks = await generateFollowUpTasksFromResult(
-          result,
-          task,
-          taskManager,
-          llmSettings.enableOpenAiTools,
-        )
+        let newTasks: partialTaskDraft[][] = []
+        if (result.toolResult) {
+          // create a new task form the result. E.g. in the case of a simple chat, this will
+          // create a task with the Answer of the LLM which then gets displayed in the chatwindow...
+          newTasks = await generateFollowUpTasksFromResult(
+            result.toolResult,
+            task,
+            taskManager,
+            llmSettings.enableOpenAiTools,
+          )
+        }
+        if (result.taskChains) newTasks = result.taskChains
+
         // we make sure to identify all parent tasks from this batch, because
         // we oly want to execute the leaf tasks..
         // we can do this, because all of these tasks are newly created. this means, we don't have any

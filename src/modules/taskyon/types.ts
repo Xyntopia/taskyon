@@ -180,10 +180,22 @@ export const FunctionName = z
   .describe('name of function')
 export type FunctionName = z.infer<typeof FunctionName>
 
+const renderOption = z.union([z.boolean(), z.function()])
 export const ToolBase = z.object({
   description: z.string(),
   longDescription: z.string().optional(),
   name: FunctionName,
+  renderOptions: z
+    .object({ chatWindow: renderOption, llm: renderOption })
+    .partial()
+    .optional()
+    .describe(
+      `Provide a render function to render content the of this tool as text for an AI or
+a chat window (e.g. an LLM). If we don't provide any render function, tools can still see all the information
+and do somthing with it. But most tools will simply not render it for their purpose..
+if render options aren't given taskyon chtcompletion function and chatwindow assumes them to be "true".
+`,
+    ),
   parameters: JSONSchemaForFunctionParameter,
   code: z
     .string()
@@ -317,7 +329,9 @@ const ChatCompletionContent = z.union([MessageContent, ToolResultContent, ErrorC
 export type ChatCompletionContent = z.infer<typeof ChatCompletionContent>
 
 const TaskContent = z.union([
-  ChatCompletionContent,
+  MessageContent,
+  ToolResultContent,
+  ErrorContent,
   StructuredContent,
   ToolCallContent,
   // TODO: replace with a "context" function which can also be a link to a URL for example or maybe a search string for other tasks...

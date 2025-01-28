@@ -599,7 +599,6 @@ async function addNewTask(execute = true) {
         functionCall: {
           name: 'chatCompletion',
           arguments: {
-            prompt: currentnewTask.value.content.message,
             model: currentModel.value,
           },
         },
@@ -607,7 +606,7 @@ async function addNewTask(execute = true) {
       allowedTools: ['chatCompletion'],
     }
     newTaskChain.push(completionTask)
-    console.log('adding message compltion task:', currentnewTask.value.content.message)
+    console.log('adding message completion task:', currentnewTask.value.content.message)
   }
 
   // add taskchain to taskManager

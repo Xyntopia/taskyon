@@ -6,7 +6,12 @@ import { type TaskWorkerController } from '../taskyon/taskWorker'
 import type { partialTaskDraft } from '../taskyon/types'
 import { getApiConfigCopy } from '../taskyon/types'
 import { TaskProcessingError, type TaskNode, type llmSettings } from '../taskyon/types'
-import type { InternalTool, internalToolFunctionSchema, toolContext } from '../taskyon/tools'
+import {
+  makeTaskResult,
+  type InternalTool,
+  type internalToolFunctionSchema,
+  type toolContext,
+} from '../taskyon/tools'
 
 // this function processes all tasks which go to any sort of an LLM
 
@@ -124,6 +129,7 @@ export function createChatCompletionTool(
     // chatCompletion by definition completes a chat with a message
     // so we can just return the message here...
     if (chatCompletion?.choices[0]?.message.content) {
+      console.log('received chat completion!', chatCompletion)
       const newTaskChain: partialTaskDraft[] = [
         {
           role: 'assistant',
@@ -134,11 +140,11 @@ export function createChatCompletionTool(
         {
           role: 'assistant',
           content: {
-            message: chatCompletion.choices[0].message.content,
+            termination: 'assistant answer received...',
           },
         },
       ]
-      return [newTaskChain]
+      return makeTaskResult([newTaskChain])
     } else {
       throw new TaskProcessingError('No content in chat completion!')
     }
@@ -150,6 +156,7 @@ export function createChatCompletionTool(
     longDescription: `This tool interfaces with an OpenAI-compatible API to generate completions for
   conversation prompts. Useful for generating natural language responses in a chat setting.`,
     name: 'chatCompletion',
+    renderOptions: { chatWindow: false, llm: false },
     parameters: {
       type: 'object',
       properties: {
