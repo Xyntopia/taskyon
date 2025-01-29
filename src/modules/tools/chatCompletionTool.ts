@@ -272,7 +272,7 @@ export function createChatCompletionTool(
           default: 'auto',
         },
       },
-      required: ['prompt'],
+      required: ['model'],
     },
   }
 
