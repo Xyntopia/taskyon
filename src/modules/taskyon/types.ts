@@ -137,37 +137,43 @@ export interface OpenRouterGenerationInfo {
 // in order to prevent a circular reference in zod, we need to define our JSONSchemaForFunctionParameter
 // separately
 // https://zod.dev/?id=recursive-types
-export interface JSONSchemaForFunctionParameter {
-  $schema?: string | undefined
-  type: 'object'
-  properties: {
-    [key: string]: {
-      type: string
-      description?: string | undefined
-      default?: unknown
-      items?: JSONSchemaForFunctionParameter | JSONSchemaForFunctionParameter[] | undefined
-    }
-  }
-  required?: string[] | undefined
+// Base schema definition
+// Base schema definition
+const baseSchema = z.object({
+  $schema: z.string().optional(),
+  $id: z.string().optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  type: z.enum(['string', 'number', 'integer', 'boolean', 'array', 'object', 'null']).optional(),
+  required: z.array(z.string()).optional(),
+  enum: z.array(z.unknown()).optional(),
+  const: z.unknown().optional(),
+  format: z.string().optional(),
+  default: z.unknown().optional(),
+})
+
+// Define type separately and attach it to Zod
+type JSONSchemaForFunctionParameter = z.infer<typeof baseSchema> & {
+  properties?: Record<string, JSONSchemaForFunctionParameter> | undefined
+  items?: JSONSchemaForFunctionParameter | JSONSchemaForFunctionParameter[] | undefined
 }
 
-export const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionParameter> = z.object({
-  $schema: z.union([z.string(), z.undefined()]).optional(),
-  type: z.literal('object'),
-  properties: z.record(
-    z.object({
-      type: z.string(),
-      description: z.string().optional(),
-      default: z.unknown().optional(),
-      items: z
-        .lazy(() =>
-          z.union([JSONSchemaForFunctionParameter, z.array(JSONSchemaForFunctionParameter)]),
-        )
-        .optional(),
-    }),
-  ),
-  required: z.array(z.string()).optional(),
-})
+const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionParameter> = baseSchema.extend(
+  {
+    properties: z
+      .record(
+        z.string(),
+        z.lazy(() => JSONSchemaForFunctionParameter),
+      )
+      .optional(),
+    items: z
+      .union([
+        z.lazy(() => JSONSchemaForFunctionParameter),
+        z.lazy(() => JSONSchemaForFunctionParameter.array()),
+      ])
+      .optional(),
+  },
+)
 
 export const FunctionName = z
   .string()
