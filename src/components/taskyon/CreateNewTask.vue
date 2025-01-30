@@ -250,7 +250,7 @@
             </template>
             <q-item-section>
               <q-option-group
-                v-model="allowedTools"
+                v-model="state.llmSettings.allowedTools"
                 class="q-ma-md"
                 :options="
                   Object.keys(toolCollection).map((name) => ({
@@ -384,15 +384,6 @@ const currentModel = computed(() => {
 })
 
 const currentChatApi = ref<string>(toRaw(state.llmSettings.selectedApi) || '')
-
-const allowedTools = computed({
-  get() {
-    return state.llmSettings.allowedTools || []
-  },
-  set(newValue) {
-    state.llmSettings.allowedTools = newValue
-  },
-})
 
 // Method to handle the updateBotName event
 const handleBotNameUpdate = ({ newName, newService }: { newName: string; newService?: string }) => {
