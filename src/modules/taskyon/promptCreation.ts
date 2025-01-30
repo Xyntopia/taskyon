@@ -1,9 +1,85 @@
 import { summarizeTools, mapFunctionNames } from './tools'
-import type { ToolBase, TaskNode, llmSettings } from './types'
-import { StructuredResponseTypes, UseToolBase } from './types'
+import { type ToolBase, type TaskNode, type llmSettings, FunctionCall } from './types'
 import { zodToYamlString } from '../yamlUtils'
 import type OpenAI from 'openai'
 import { dump } from 'js-yaml'
+import type { Goals } from '../tools/chatCompletionTool'
+import { z } from 'zod'
+
+const answer = z.string().nullish()
+const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish()
+type yesno = z.infer<typeof yesno>
+
+// Convert yesno value to boolean
+export const yesnoToBoolean = (value: unknown): boolean => {
+  if (value === 'yes') return true
+  if (value === 'no') return false
+  return !!value // Handles boolean, null, undefined
+}
+
+// this one here is important. It should be as simple as possible
+// this type is used to parse & describe tool commands
+// an LLM should be able to generaate this content...
+export const UseToolBase = z.object({
+  'use tool': yesno,
+  'which tool': answer,
+  command: FunctionCall.nullable()
+    // right now, we don't know a good way to simultanously
+    // parse robustly and describe precisely
+    // we simply "normalize" all "no, {}, null" etc.. into undefined
+    /*z.union([
+      FunctionCall, // Accepts valid FunctionCall
+      z.null(), // Accepts null
+      z.object({}), // Accepts an empty object {}
+      yesno, // Accepts yes/no object
+    ])*/
+    .optional()
+    .describe(
+      'If we should use a tool in the following step, provide the tool command. Otherwise do not!!',
+    ),
+})
+
+const SystemResponseEvaluation = z
+  .object({
+    'describe your thoughts': answer,
+    'was there an error?': yesno,
+    'do you think we can solve the error?': yesno,
+    'Would it help to use one of the mentioned tools to solve the issue?': yesno,
+    'Should we try to correct the error': yesno,
+    'try again': yesno,
+  })
+  .describe(
+    'This is used as a short prompt for tasks in order to determine whether we should use a more detailed task prompt',
+  )
+
+const ToolResultBase = z
+  .object({
+    'describe your thoughts': answer,
+    'was there an error?': yesno,
+    'was the tool call successfull?': answer.or(yesno),
+    'should we use a different tool?': answer.or(yesno),
+    'should we use different parameters': yesno,
+    'try again': yesno,
+  })
+  .describe('Structured answer schema for processing the result of a function call.')
+
+const ToolSelection = z
+  .object({
+    'Do we have to use a tool?': yesno,
+    'describe your thoughts': answer,
+  })
+  .describe('Structured answer schema for a task including the use of tools')
+
+export const StructuredResponseTypes = {
+  ToolResultBase,
+  ToolSelection,
+  SystemResponseEvaluation,
+}
+export const StructuredResponse = ToolResultBase.partial()
+  .merge(ToolSelection.partial())
+  .merge(SystemResponseEvaluation.partial())
+  .merge(UseToolBase.partial())
+export type StructuredResponse = z.infer<typeof StructuredResponse>
 
 /**
  * This function renders templates, substituting the necessary variables
@@ -83,20 +159,22 @@ export function addPrompts(
   toolCollection: Record<string, ToolBase>,
   llmSettings: llmSettings,
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  allowedTools: string[],
+  goal: Goals,
 ): tyChatCompletionmessageParam[] {
   // Check if task has tools and OpenAI tools are not enabled
   //console.log('Creating chat prompts');
 
-  const useToolChat = llmSettings.allowedTools?.length && !llmSettings.enableOpenAiTools
+  const useToolChat = allowedTools.length && !llmSettings.enableOpenAiTools
 
   const modifiedOpenAIConversationThread = structuredClone(openAIConversationThread)
   const prependMessages: tyChatCompletionmessageParam[] = []
   const appendMessages: tyChatCompletionmessageParam[] = []
 
-  const toolList = llmSettings.allowedTools?.map((t) => `- ${t}`).join('\n')
+  const toolList = allowedTools.map((t) => `- ${t}`).join('\n')
   const variables: Record<string, string> = {
     format: 'yaml',
-    tools: summarizeTools(llmSettings.allowedTools || [], toolCollection),
+    tools: summarizeTools(allowedTools || [], toolCollection),
     toolList: toolList || 'N/A',
   }
 
@@ -106,7 +184,7 @@ export function addPrompts(
   }
 
   let structuredResponseExpected = false
-  if ('message' in task.content && task.role === 'system') {
+  if (goal === 'AnalyzeError') {
     // this is most likely an error message or similar
     // and we need a structured response in order to decide how to
     // continue...
@@ -114,6 +192,7 @@ export function addPrompts(
       ? StructuredResponseTypes.SystemResponseEvaluation.merge(UseToolBase)
       : StructuredResponseTypes.SystemResponseEvaluation
     const yamlRepr = zodToYamlString(requiredSchema)
+    if (!('message' in task.content)) throw new Error('Task needs to have a message!')
     variables.message = task.content.message
     variables.schema = yamlRepr
     // Remove the last message from openAIConversationThread

@@ -323,10 +323,10 @@ import {
   mdiFunctionVariant,
 } from '@quasar/extras/mdi-v6'
 import { deepCopy, deepMerge } from 'src/modules/utils'
-import { addPrompts } from 'src/modules/taskyon/promptCreation'
 import type { ChatCompletionMessageParam } from 'openai/resources/index.mjs'
 import { useNlpWorker } from 'src/modules/taskyon/webWorkerApi'
 import { useAppStateStore } from 'src/stores/appState'
+import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 
 const CodeEditor = defineAsyncComponent(
   () =>
@@ -504,7 +504,11 @@ watchDebounced(
         }
       }
     } else {
-      messages = addPrompts(currentnewTask.value, toolCollection.value, state.llmSettings, [])
+      //messages = addPrompts(currentnewTask.value, toolCollection.value, state.llmSettings, [], [])
+      console.warn(
+        'TODO: get rid of this, we would rather simply "simulate" the entire chat using the actual chat tool...',
+      )
+      messages = []
     }
 
     // we need to deepCopy both ref values, so that we can send them to the thread!!
@@ -512,6 +516,7 @@ watchDebounced(
       deepCopy(currentnewTask.value),
       messages,
       deepCopy(toolCollection.value),
+      deepCopy(state.llmSettings.allowedTools),
     )
 
     const newTokens = Object.values(estimated || {}).reduce((pn, cn) => (pn ?? 0) + (cn ?? 0), 0)
@@ -584,18 +589,11 @@ async function addNewTask(execute = true) {
   newTaskChain.push({ ...currentnewTask.value })
 
   if ('message' in currentnewTask.value.content) {
-    const completionTask: partialTaskDraft = {
-      role: 'function',
-      content: {
-        functionCall: {
-          name: 'chatCompletion',
-          arguments: {
-            model: currentModel.value,
-            allowedTools: state.llmSettings.allowedTools || [],
-          },
-        },
-      },
-    }
+    const completionTask = createChatCompletionTask({
+      model: currentModel.value,
+      allowedTools: state.llmSettings.allowedTools || [],
+      goal: state.llmSettings.allowedTools.length == 0 ? 'SimpleCompletion' : 'ChooseTool',
+    })
     newTaskChain.push(completionTask)
     console.log('adding message completion task:', currentnewTask.value.content.message)
   }

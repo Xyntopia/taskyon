@@ -231,81 +231,6 @@ export const FunctionCall = z.object({
 })
 export type FunctionCall = z.infer<typeof FunctionCall>
 
-const answer = z.string().nullish()
-const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish()
-type yesno = z.infer<typeof yesno>
-
-// Convert yesno value to boolean
-export const yesnoToBoolean = (value: unknown): boolean => {
-  if (value === 'yes') return true
-  if (value === 'no') return false
-  return !!value // Handles boolean, null, undefined
-}
-
-// this one here is important. It should be as simple as possible
-// this type is used to parse & describe tool commands
-// an LLM should be able to generaate this content...
-export const UseToolBase = z.object({
-  'use tool': yesno,
-  'which tool': answer,
-  command: FunctionCall.nullable()
-    // right now, we don't know a good way to simultanously
-    // parse robustly and describe precisely
-    // we simply "normalize" all "no, {}, null" etc.. into undefined
-    /*z.union([
-      FunctionCall, // Accepts valid FunctionCall
-      z.null(), // Accepts null
-      z.object({}), // Accepts an empty object {}
-      yesno, // Accepts yes/no object
-    ])*/
-    .optional()
-    .describe(
-      'If we should use a tool in the following step, provide the tool command. Otherwise do not!!',
-    ),
-})
-
-const SystemResponseEvaluation = z
-  .object({
-    'describe your thoughts': answer,
-    'was there an error?': yesno,
-    'do you think we can solve the error?': yesno,
-    'Would it help to use one of the mentioned tools to solve the issue?': yesno,
-    'Should we try to correct the error': yesno,
-    'try again': yesno,
-  })
-  .describe(
-    'This is used as a short prompt for tasks in order to determine whether we should use a more detailed task prompt',
-  )
-
-const ToolResultBase = z
-  .object({
-    'describe your thoughts': answer,
-    'was there an error?': yesno,
-    'was the tool call successfull?': answer.or(yesno),
-    'should we use a different tool?': answer.or(yesno),
-    'should we use different parameters': yesno,
-    'try again': yesno,
-  })
-  .describe('Structured answer schema for processing the result of a function call.')
-
-const ToolSelection = z
-  .object({
-    'Do we have to use a tool?': yesno,
-    'describe your thoughts': answer,
-  })
-  .describe('Structured answer schema for a task including the use of tools')
-
-export const StructuredResponseTypes = {
-  ToolResultBase,
-  ToolSelection,
-  SystemResponseEvaluation,
-}
-export const StructuredResponse = ToolResultBase.partial()
-  .merge(ToolSelection.partial())
-  .merge(SystemResponseEvaluation.partial())
-  .merge(UseToolBase.partial())
-export type StructuredResponse = z.infer<typeof StructuredResponse>
-
 const MessageContent = z.object({ message: z.string() })
 // TODO: get rid of structured content..  we should directly call a function task in order to interprete
 //       structured content with the content as a parameter in order to decide what to do :)
@@ -580,7 +505,7 @@ export const llmSettings = z.object({
       },
     })
     .describe('The task which is currently drafted (This could for example be a simple message).'),
-  allowedTools: z.array(FunctionName).optional(),
+  allowedTools: z.array(FunctionName),
   useBasePrompt: z.boolean().default(true).describe(`
   <p>Toggle the base prompt on/off.</p>
 

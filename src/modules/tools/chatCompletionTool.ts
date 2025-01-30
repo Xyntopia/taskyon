@@ -37,7 +37,7 @@ export type Goals = 'SimpleCompletion' | 'AnalyzeError' | 'ChooseTool' | 'Analyz
 export async function processChatTask(
   goal: Goals,
   allowedTools: string[],
-  task: TaskNode,
+  currentTask: TaskNode,
   configuration: { model: string; chatApi: string },
   llmSettings: llmSettings,
   // can we get rid of taskManager here in order to make our task more functional :)?
@@ -58,7 +58,7 @@ export async function processChatTask(
   const selectedModel = configuration.model
   if (selectedModel) {
     api.selectedModel = selectedModel
-    console.log('execute chat completion tool with prompt:', task)
+    console.log('execute chat completion tool with prompt:', currentTask)
     //TODO: we can create more things here like giving it context form other tasks, lookup
     //      main objective, previous tasks etc....
     // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
@@ -67,12 +67,21 @@ export async function processChatTask(
       llmSettings.tryUsingVisionModels,
       llmSettings.enableOpenAiTools,
       toolDefs,
-      await taskManager.getTaskIdChain(task.id),
+      await taskManager.getTaskIdChain(currentTask.id),
       taskManager.getTask,
       taskManager.getFileMappingByUuid,
       taskManager.getFile,
     )
-    openAIConversationThread = addPrompts(task, toolDefs, llmSettings, openAIConversationThread)
+
+    // now add goal-specific prompts...
+    openAIConversationThread = addPrompts(
+      currentTask,
+      toolDefs,
+      llmSettings,
+      openAIConversationThread,
+      allowedTools,
+      goal,
+    )
 
     let tools: OpenAI.ChatCompletionTool[] = []
     if (llmSettings.enableOpenAiTools) {
@@ -97,17 +106,18 @@ export async function processChatTask(
         (chunk) => {
           if (chunk?.choices[0]?.delta?.tool_calls) {
             chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
-              task.debugging.toolStreamArgsContent = task.debugging.toolStreamArgsContent || {}
+              currentTask.debugging.toolStreamArgsContent =
+                currentTask.debugging.toolStreamArgsContent || {}
               if (t.function?.name) {
-                task.debugging.toolStreamArgsContent[t.function.name] =
-                  (task.debugging.toolStreamArgsContent[t.function.name] || '') +
+                currentTask.debugging.toolStreamArgsContent[t.function.name] =
+                  (currentTask.debugging.toolStreamArgsContent[t.function.name] || '') +
                   (t.function?.arguments || '')
               }
             })
           }
           if (chunk?.choices[0]?.delta?.content) {
-            task.debugging.streamContent =
-              (task.debugging.streamContent || '') + chunk.choices[0].delta.content
+            currentTask.debugging.streamContent =
+              (currentTask.debugging.streamContent || '') + chunk.choices[0].delta.content
           }
         },
         () => {
@@ -136,12 +146,12 @@ export async function addTaskCostInformation(
   const chatResponse = getChatResponseFromResult(result)
   if (chatResponse) {
     // TODO: we don't need this here anymore, we should get this from inside the chatprocessor itself
-    const { openAIConversationThread } = await generateCompleteChat(
+    /*const { openAIConversationThread } = await generateCompleteChat(
       goal,
       task,
       llmSettings,
       taskManager,
-    )
+    )*/
 
     // openai sends back the exact number of prompt tokens :)
     if (chatResponse.usage) {
@@ -397,6 +407,20 @@ async function convertFilesToOpenAIImageContent(
   return imageContent
 }
 
+type ccArguments = { model: string; goal?: Goals; llmTools?: boolean; allowedTools?: string[] }
+
+export function createChatCompletionTask(args: ccArguments): partialTaskDraft {
+  return {
+    role: 'function',
+    content: {
+      functionCall: {
+        name: 'chatCompletion',
+        arguments: args,
+      },
+    },
+  }
+}
+
 export function createChatCompletionTool(
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
@@ -404,12 +428,7 @@ export function createChatCompletionTool(
   apiKeys: { [key: string]: string },
 ): InternalTool {
   const fetchChatCompletion: internalToolFunctionSchema = async (
-    {
-      model,
-      goal,
-      llmTools,
-      allowedTools,
-    }: { model: string; goal: Goals; llmTools: true; allowedTools: string[] },
+    { model, goal, llmTools, allowedTools }: ccArguments,
     context: toolContext,
   ) => {
     console.log('calling chat completion tool...', model, goal, llmTools)
@@ -420,8 +439,8 @@ export function createChatCompletionTool(
       throw new TaskProcessingError('No API selected!')
     }
     const chatCompletion = await processChatTask(
-      goal,
-      allowedTools,
+      goal ?? 'SimpleCompletion',
+      allowedTools || [],
       context.currentTask,
       { model, chatApi: llmSettings.selectedApi },
       llmSettings,

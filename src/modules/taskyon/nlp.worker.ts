@@ -81,10 +81,10 @@ const nlpWorker = {
     task: TaskNode,
     chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     tools: Record<string, ToolBase>,
-    allowedTools: string[],
+    allowedTools?: string[],
     chatResult?: string,
   ): Promise<TaskNode['debugging']['estimatedTokens']> {
-    const functions: ToolBase[] = mapFunctionNames(allowedTools, tools)
+    const functions: ToolBase[] = mapFunctionNames(allowedTools || [], tools)
     // TODO: convert task.content into a legitimate string first, using the
     //       "original" functions toshow what actually gets sent to the LLM!
     const contentStr = JSON.stringify(Object.values(task.content)[0])

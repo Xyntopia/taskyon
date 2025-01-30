@@ -158,7 +158,15 @@ const structuredResponsePrompt = computed(() => {
 
     console.log('create structured example', toolCollection.value)
     if (Object.keys(toolCollection.value).length !== 0) {
-      const rp = addPrompts(task, toolCollection.value, state.llmSettings, [])
+      // TODO: get rid of this "addPrompts"
+      const rp = addPrompts(
+        task,
+        toolCollection.value,
+        state.llmSettings,
+        [],
+        [],
+        'SimpleCompletion',
+      )
       return rp
     }
   }

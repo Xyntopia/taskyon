@@ -9,20 +9,6 @@ import { type TyTaskManager } from './taskManager'
 import { handleFunctionExecution } from './tools'
 import { type AsyncQueue, makeSerializable } from '../utils'
 
-export function createChatCompletionTask(model: string): partialTaskDraft {
-  return {
-    role: 'system',
-    content: {
-      functionCall: {
-        name: 'chatCompletion',
-        arguments: {
-          model,
-        },
-      },
-    },
-  }
-}
-
 export function useTaskWorkerController() {
   /* This class adds context to task executions during the runtime.
   We don't necessarily need to save this information in the database
