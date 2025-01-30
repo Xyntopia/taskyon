@@ -134,6 +134,9 @@ flowchart TD
 
 Taskyon provides a basic Taskflow to get started with and which can automatically
 incorporate new tools and generically analyze their results and use it.
+The chatCompletion tool in its current form takes the previous tasks and converts them into
+an openAI API compatible list of messages, adds task-specific prompts and
+then sends it to an openAI API compatible LLM Service (which can also be local).
 When a task becomes more clear and repeats itself
 often, it might make sense
 to define a new tool which works faster on repeated
@@ -151,7 +154,7 @@ flowchart TD
   Message_S
   ToolResultContent
   UploadedFilesContent
-  cct{{"ChatCompletionTool()"}}
+  cct{{"ChatCompletionTool<br>(prompts=Chat)"}}
   cctct{{"ChatCompletionTool<br>(prompts=ChooseTool)"}}
   cctat{{"ChatCompletionTool<br>(prompts=AnalyzeToolResult)"}}
   cctae{{"ChatCompletionTool<br>(prompts=AnalyzeError)"}}
