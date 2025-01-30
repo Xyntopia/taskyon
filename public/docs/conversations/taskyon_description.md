@@ -113,16 +113,18 @@ this are the "runTaskWorker", "processTask" and "handleFunctionExecution" functi
 flowchart TD
     MessageContent_A[MessageContent_A]
     MessageContent_U[MessageContent_U]
+    ErrorContent[Error]
+    ToolCallContent{{ToolCallTask}}
     ErrorContent[Error_S]
-    ToolCallContent{{ToolCallTask_F}}
-    ErrorContent[Error_S]
-    ToolResultContent_S[ToolResultContent_S]
+    ToolResultContent[ToolResultContent]
     TERMINATION([TERMINATION])
 
+    PD@{ shape: cyl, label: "Parameter Database" }
+    PD --> ToolCallContent
 
     MessageContent_A --> TERMINATION
-    ToolCallContent -- generic result --> ToolResultContent_S
-    ToolResultContent_S -- analyze result Tool --> ToolCallContent
+    ToolCallContent -- generic result --> ToolResultContent
+    ToolResultContent -- analyze result Tool --> ToolCallContent
     ToolCallContent -- task chains created by the tool --> MessageContent_A
     ToolCallContent -- function task chains created by tools --> ToolCallContent
     ToolCallContent --> ErrorContent
@@ -130,52 +132,49 @@ flowchart TD
     MessageContent_U -- initiate first tool cool (e.g. ChatCompletionTool or Planner Tool) --> ToolCallContent
 ```
 
-The second layer is easily extendible by defining new tools to fit your needs.
-Taskyon provides a basic layer to get started with and which can automatically
+Taskyon provides a basic Taskflow to get started with and which can automatically
 incorporate new tools and generically analyze their results and use it.
 When a task becomes more clear and repeats itself
 often, it might make sense
 to define a new tool which works faster on repeated
 or complex tasks then trying to solve a problem
 with the generic tools available.
-
-The second layer depicts the transitions between
-the actual tasks including what kind of tools are
-being used in these transitions.
+If we unfold the graph from above and add the chatCompletion tool more explicitly.
+We can see the transitions between different types of task in taskyons initial
+configuration:
 
 ```mermaid
+%%{init: { "flowchart": { "curve": "cardinal", "wrappingWidth": 400 } } }%%
 flowchart TD
-  subgraph ContentTypes
-    cct{{ChatCompletionTool}}
-    tpt{{TaskPlannerTool}}
-    at{{AnyTool}}
-    Message_U
-    Message_A
-    Message_S
-    ToolResultContent_S
-    UploadedFilesContent
-  end
+  at{{AnyTool}}
+  Message_U
+  Message_A
+  Message_S
+  ToolResultContent
+  UploadedFilesContent
+  cct{{"ChatCompletionTool()"}}
+  cctct{{"ChatCompletionTool<br>(prompts=ChooseTool)"}}
+  cctat{{"ChatCompletionTool<br>(prompts=AnalyzeToolResult)"}}
+  cctae{{"ChatCompletionTool<br>(prompts=AnalyzeError)"}}
+  cct1{{"Example Custom<br>Tool Sequence"}}
+  cct2{{CT}}
 
-  subgraph Events
-      TERMINATION([TERMINATION])
-      Error_S([ERROR])
-  end
 
-  paramdb["Parameter Database"] --> ContentTypes
+  TERMINATION([TERMINATION])
+  e([ERROR])-->Message_S
+  s([Start])
 
-  UploadedFilesContent --> Message_U
-  Message_U -- if no tools enabled --> cct
-  Message_U -- if tools enabled --> tpt
-  tpt -- don't need a tool--> cct
-  tpt -- need a tool --> at
-  at --> ToolResultContent_S
-  ToolResultContent_S -- analyze --> tpt
-  Error_S --> Message_S
-  Message_S --> tpt
-  Message_A --> TERMINATION
-  cct --> Message_A
+  Message_S-->cctae
+  s-->Message_U -->cctct
+  s-->UploadedFilesContent --> Message_U --> cct --> Message_A --> TERMINATION
+  Message_U -- if tools enabled --> cctct
+  at-->ToolResultContent-->cctat
+  cctct --> at
+  cctat --> at
+  cctae --> at
+  cctct  --> cct
+  cctat  --> cct
+  cctae  --> cct
+  at --> cct1-->cct2-- e.g. go back to chatcompletion or any other task type -->cctct
 
 ```
-
-This architecture can easily expanded in the future by adding new tools. E.g. we could add a Task planner tool
-or a subtask planner tool and many more things.

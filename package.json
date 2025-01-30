@@ -61,7 +61,7 @@
     "mammoth": "^1.6.0",
     "markdown-it-mathjax3": "^4.3.2",
     "mathjs": "^11.8.2",
-    "mermaid": "^10.9.1",
+    "mermaid": "^11.4.1",
     "node-polyfill-webpack-plugin": "^2.0.1",
     "path": "^0.12.7",
     "pdfjs-dist": "^4.3.136",
