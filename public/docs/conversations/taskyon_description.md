@@ -146,7 +146,6 @@ configuration:
 ```mermaid
 %%{init: { "flowchart": { "curve": "cardinal", "wrappingWidth": 400 } } }%%
 flowchart TD
-  at{{AnyTool}}
   Message_U
   Message_A
   Message_S
@@ -157,6 +156,7 @@ flowchart TD
   cctat{{"ChatCompletionTool<br>(prompts=AnalyzeToolResult)"}}
   cctae{{"ChatCompletionTool<br>(prompts=AnalyzeError)"}}
   cct1{{"Example Custom<br>Tool Sequence"}}
+  at{{AnyTool}}
   cct2{{CT}}
 
 
@@ -165,7 +165,7 @@ flowchart TD
   s([Start])
 
   Message_S-->cctae
-  s-->Message_U -->cctct
+  s-->Message_U
   s-->UploadedFilesContent --> Message_U --> cct --> Message_A --> TERMINATION
   Message_U -- if tools enabled --> cctct
   at-->ToolResultContent-->cctat
