@@ -837,11 +837,7 @@ export function useTyTaskManager(
 
   const fm = useFileManager(taskyonDB?.filemappings)
 
-  const { getTaskIdChain, buildChatThread, getTaskChain } = taskUtils(
-    getTask,
-    fm.getFileMappingByUuid,
-    fm.getFile,
-  )
+  const { getTaskIdChain, getTaskChain } = taskUtils(getTask)
 
   // converts an antire taskchain (thread) into yaml for download
   async function chatToYaml(conversationId: string) {
@@ -941,11 +937,10 @@ export function useTyTaskManager(
     //       keep it immutable?  We should probably await keywords, but also keep a
     //       separate index with keywords for tasks...
     if (!newTask.name && task.content && !task.label?.includes('discard')) {
-      const toolDefs = await updateToolDefinitions(true)
-      const chat = buildChatThread(newTask.id, false, false, toolDefs)
+      const chat = getTaskChain(newTask.id)
       const chatString = (await chat).reduce((p, n) => {
-        if (typeof n.content === 'string') {
-          return p + '\n\n' + n.content
+        if (n && 'message' in n.content) {
+          return p + '\n\n' + n.content.message
         }
         return p
       }, '')
@@ -1018,7 +1013,6 @@ export function useTyTaskManager(
     ...defaultMode,
     ...fm,
     getTaskIdChain,
-    buildChatThread,
     getTaskChain,
     chatToYaml,
     chatToMarkdown,
