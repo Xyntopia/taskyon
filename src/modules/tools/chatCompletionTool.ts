@@ -29,8 +29,12 @@ import { useNlpWorker } from '../taskyon/webWorkerApi'
 // this from a "default" Configuration? And then have them as function parameters?
 // t.configuration = finishedTask.configuration
 
+export type Goals = 'SimpleCompletion' | 'AnalyzeError' | 'ChooseTool' | 'AnalyzeToolResult'
+
 // TODO: refactor & clean up this function ;)
 export async function processChatTask(
+  goal: Goals,
+  allowedTools: string[],
   task: TaskNode,
   configuration: { model: string; chatApi: string },
   llmSettings: llmSettings,
@@ -59,6 +63,7 @@ export async function processChatTask(
     //      main objective, previous tasks etc....
     // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
     const { openAIConversationThread, toolDefs } = await generateCompleteChat(
+      goal,
       task,
       llmSettings,
       taskManager,
@@ -122,7 +127,12 @@ export async function addTaskCostInformation(
   // TODO: also get cost information for other tasks, than chatCompletion ;)!
   const chatResponse = getChatResponseFromResult(result)
   if (chatResponse) {
-    const { openAIConversationThread } = await generateCompleteChat(task, llmSettings, taskManager)
+    const { openAIConversationThread } = await generateCompleteChat(
+      goal,
+      task,
+      llmSettings,
+      taskManager,
+    )
 
     // openai sends back the exact number of prompt tokens :)
     if (chatResponse.usage) {
@@ -137,6 +147,7 @@ export async function addTaskCostInformation(
       deepCopy(task),
       openAIConversationThread,
       allTools,
+      llmSettings.allowedTools || [],
       chatResponse.choices[0]!.message.content ?? '',
     )
 
@@ -213,9 +224,15 @@ export function createChatCompletionTool(
   apiKeys: { [key: string]: string },
 ): InternalTool {
   const fetchChatCompletion: internalToolFunctionSchema = async (
-    { model }: { model: string },
+    {
+      model,
+      goal,
+      llmTools,
+      allowedTools,
+    }: { model: string; goal: Goals; llmTools: true; allowedTools: string[] },
     context: toolContext,
   ) => {
+    console.log('calling chat completion tool...', model, goal, llmTools)
     if (!context.currentTask) {
       throw new Error(`No current task found!`)
     }
@@ -223,6 +240,8 @@ export function createChatCompletionTool(
       throw new TaskProcessingError('No API selected!')
     }
     const chatCompletion = await processChatTask(
+      goal,
+      allowedTools,
       context.currentTask,
       { model, chatApi: llmSettings.selectedApi },
       llmSettings,
@@ -270,6 +289,27 @@ export function createChatCompletionTool(
           description:
             'The name of the model to use for the completion. The default is "auto" if parameter is not used. A model will automatically be chosen for the task',
           default: 'auto',
+        },
+        goal: {
+          type: 'string',
+          description:
+            'Optional Parameter. Goals can be: "SimpleCompletion","AnalyzeError", "ChooseTool", "AnalyzeToolResult".',
+          default: 'SimpleCompletion',
+        },
+        llmTools: {
+          type: 'boolean',
+          description:
+            'Optional Parameter. If set to true, we will use a openai compatible tool api',
+          default: false,
+        },
+        allowedTools: {
+          type: 'array',
+          description:
+            'Optional Parameter. We can specify which tools are allowed to be called by the LLM',
+          items: {
+            type: 'string',
+          },
+          default: [],
         },
       },
       required: ['model'],
