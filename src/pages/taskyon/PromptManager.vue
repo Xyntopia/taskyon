@@ -149,9 +149,8 @@ void getAllTools().then((tools) => {
 
 const structuredResponsePrompt = computed(() => {
   if (state.llmSettings.taskDraft.content) {
-    const task: Pick<TaskNode, 'role' | 'content' | 'allowedTools' | 'debugging'> = {
+    const task: Pick<TaskNode, 'role' | 'content' | 'debugging'> = {
       content: state.llmSettings.taskDraft.content,
-      allowedTools: state.llmSettings.taskDraft.allowedTools,
       role: 'user',
       debugging: {},
     }

@@ -55,7 +55,6 @@ export function setupIframeApi(
 
                 deepMergeReactive(appConfiguration, newConfig.appConfiguration, 'overwrite')
               }
-              llmSettings.taskDraft.allowedTools = llmSettings.taskTemplate?.allowedTools
               // and also set a possible signature as the api key!
               if (llmSettings.selectedApi && newConfig.signatureOrKey) {
                 // we only set the API key, if it was provided by the

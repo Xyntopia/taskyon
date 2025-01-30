@@ -59,7 +59,6 @@ export const testIPFS = async () => {
 }
 
 const mockTask: TaskNode = {
-  allowedTools: ['tool1', 'tool2'],
   role: 'assistant',
   id: 'test',
   content: { message: 'Sample content for task node' },
@@ -138,7 +137,12 @@ export async function testVectorizeText() {
 export async function testEstimateChatTokens() {
   const nlpWorker = useNlpWorker()
 
-  const tokens = await nlpWorker.estimateChatTokens(mockTask, mockChatMessages, mockTools)
+  const tokens = await nlpWorker.estimateChatTokens(
+    mockTask,
+    mockChatMessages,
+    mockTools,
+    Object.values(mockTools).map((tool) => tool.name),
+  )
   console.log('Estimate Chat Tokens Result:', tokens)
   return tokens
 }

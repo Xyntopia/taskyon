@@ -100,35 +100,27 @@ async function processTask(
   task: TaskNode,
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController,
+  allowedTools: string[],
 ): Promise<partialTaskDraft[][]> {
   if ('functionCall' in task.content) {
     // calculate function result
-    // in the case we don't have a result yet, wPe need to calculate it :)
-    if (task.allowedTools) {
-      const func = task.content.functionCall
-      const tools = await taskManager.updateToolDefinitions(false)
-      console.log(`Calling function ${func.name}`)
-      if (tools[func.name] && !taskWorkerController.isInterrupted()) {
-        const result = await handleFunctionExecution(
-          func,
-          tools,
-          taskWorkerController.onInterrupt,
-          task,
-        )
-        return result
-      } else {
-        const toolnames = JSON.stringify(task.allowedTools)
-        throw new TaskProcessingError(
-          !taskWorkerController.isInterrupted()
-            ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
-            : 'The function execution was cancelled by taskyon',
-        )
-      }
+    const func = task.content.functionCall
+    const tools = await taskManager.updateToolDefinitions(false)
+    console.log(`Calling function ${func.name}`)
+    if (tools[func.name] && !taskWorkerController.isInterrupted()) {
+      const result = await handleFunctionExecution(
+        func,
+        tools,
+        taskWorkerController.onInterrupt,
+        task,
+      )
+      return result
     } else {
-      // TODO: allow our "chat" tool as a default-tool
-      // TODO: add a taskplanner here!!! :)
+      const toolnames = JSON.stringify(allowedTools)
       throw new TaskProcessingError(
-        `The task is to execute a function call ${task.content.functionCall.name}, but there are no allowed tools/functions!`,
+        !taskWorkerController.isInterrupted()
+          ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
+          : 'The function execution was cancelled by taskyon',
       )
     }
   } else {
@@ -185,7 +177,12 @@ export async function runTaskWorker(
       console.log('processing task:', taskId)
       task = await taskManager.getTask(taskId)
       if (task && !taskWorkerController.isInterrupted()) {
-        const newTasks = await processTask(task, taskManager, taskWorkerController)
+        const newTasks = await processTask(
+          task,
+          taskManager,
+          taskWorkerController,
+          llmSettings.allowedTools || [],
+        )
 
         // we make sure to identify all parent tasks from this batch, because
         // we oly want to execute the leaf tasks..

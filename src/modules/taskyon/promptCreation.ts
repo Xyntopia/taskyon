@@ -6,6 +6,7 @@ import type OpenAI from 'openai'
 import { dump } from 'js-yaml'
 import { mapFunctionNames } from './tools'
 import type { TyTaskManager } from './taskManager'
+import type { Goals } from '../tools/chatCompletionTool'
 
 /**
  * This function renders templates, substituting the necessary variables
@@ -34,10 +35,10 @@ function substituteTemplateVariables<T extends Record<string, string>>(
 }
 
 export function generateOpenAIToolDeclarations(
-  task: TaskNode,
+  allowedTools: string[],
   toolCollection: Record<string, ToolBase>,
 ): OpenAI.ChatCompletionTool[] {
-  const tools: ToolBase[] = mapFunctionNames(task.allowedTools || [], toolCollection) || []
+  const tools: ToolBase[] = mapFunctionNames(allowedTools || [], toolCollection) || []
   const openAITools: OpenAI.ChatCompletionTool[] = tools.map((t) => {
     const functionDef: OpenAI.FunctionDefinition = {
       name: t.name,
@@ -81,7 +82,7 @@ type tyChatCompletionmessageParam = OpenAI.Chat.Completions.ChatCompletionMessag
 // enhance the chat by inserting prompts before certain message which
 // make them better to understand for the AI...
 export function addPrompts(
-  task: Pick<TaskNode, 'role' | 'content' | 'allowedTools' | 'debugging'>,
+  task: Pick<TaskNode, 'role' | 'content' | 'debugging'>,
   toolCollection: Record<string, ToolBase>,
   llmSettings: llmSettings,
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
@@ -89,16 +90,16 @@ export function addPrompts(
   // Check if task has tools and OpenAI tools are not enabled
   //console.log('Creating chat prompts');
 
-  const useToolChat = task.allowedTools?.length && !llmSettings.enableOpenAiTools
+  const useToolChat = llmSettings.allowedTools?.length && !llmSettings.enableOpenAiTools
 
   const modifiedOpenAIConversationThread = structuredClone(openAIConversationThread)
   const prependMessages: tyChatCompletionmessageParam[] = []
   const appendMessages: tyChatCompletionmessageParam[] = []
 
-  const toolList = task.allowedTools?.map((t) => `- ${t}`).join('\n')
+  const toolList = llmSettings.allowedTools?.map((t) => `- ${t}`).join('\n')
   const variables: Record<string, string> = {
     format: 'yaml',
-    tools: summarizeTools(task.allowedTools || [], toolCollection),
+    tools: summarizeTools(llmSettings.allowedTools || [], toolCollection),
     toolList: toolList || 'N/A',
   }
 
@@ -244,6 +245,7 @@ function getAllFunctionsInOpenAiConversation(
 }
 
 export async function generateCompleteChat(
+  goal: Goals,
   task: TaskNode,
   llmSettings: llmSettings,
   taskManager: TyTaskManager,

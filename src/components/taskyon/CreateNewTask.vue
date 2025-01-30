@@ -387,10 +387,10 @@ const currentChatApi = ref<string>(toRaw(state.llmSettings.selectedApi) || '')
 
 const allowedTools = computed({
   get() {
-    return state.llmSettings.taskDraft.allowedTools || []
+    return state.llmSettings.allowedTools || []
   },
   set(newValue) {
-    state.llmSettings.taskDraft.allowedTools = newValue
+    state.llmSettings.allowedTools = newValue
   },
 })
 
@@ -448,13 +448,13 @@ async function setTaskType(tasktype: string | undefined | null) {
 }
 
 async function toggleSelectedTools() {
-  if (state.llmSettings.taskDraft.allowedTools) {
-    if (state.llmSettings.taskDraft.allowedTools.length > 0) {
-      state.llmSettings.taskDraft.allowedTools = []
+  if (state.llmSettings.allowedTools) {
+    if (state.llmSettings.allowedTools.length > 0) {
+      state.llmSettings.allowedTools = []
       return
     }
   }
-  state.llmSettings.taskDraft.allowedTools = Object.keys(await getAllTools())
+  state.llmSettings.allowedTools = Object.keys(await getAllTools())
 }
 
 const currentnewTask = computed(() => {
@@ -600,10 +600,10 @@ async function addNewTask(execute = true) {
           name: 'chatCompletion',
           arguments: {
             model: currentModel.value,
+            allowedTools: state.llmSettings.allowedTools || [],
           },
         },
       },
-      allowedTools: ['chatCompletion'],
     }
     newTaskChain.push(completionTask)
     console.log('adding message completion task:', currentnewTask.value.content.message)

@@ -389,9 +389,6 @@ of how content can be structured. `,
     })
     .partial(),
   id: z.string(), // can we make the id an SHA-1 value like in git? in that case we should simply remove this value...
-  // TODO: we might want to have this as a parameter for the chatCompletion function?
-  // or  separate "tool-selector" function or somthing like that...
-  allowedTools: z.array(z.string()).optional(),
   authorId: z.string().optional(),
   created_at: z.number().optional(),
 })
@@ -583,6 +580,7 @@ export const llmSettings = z.object({
       },
     })
     .describe('The task which is currently drafted (This could for example be a simple message).'),
+  allowedTools: z.array(FunctionName).optional(),
   useBasePrompt: z.boolean().default(true).describe(`
   <p>Toggle the base prompt on/off.</p>
 

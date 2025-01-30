@@ -78,6 +78,7 @@ const taskNodeSchemaLiteral = {
     result: {
       type: 'string', // Storing result as a JSON string
     },
+    // TODO: get rid of this, is now in llmsettings..
     allowedTools: {
       type: 'array',
       items: {

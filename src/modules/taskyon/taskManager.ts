@@ -91,7 +91,7 @@ async function hashObject(obj: unknown) {
 async function taskContentHash(task: TaskNode) {
   console.log('generating new hash ID for task')
   // generate this hash ID to check of there are any duplicate tasks or anything like that...
-  const hashId = await hashObject([task.content, task.role, task.allowedTools, task.label])
+  const hashId = await hashObject([task.content, task.role, task.label])
   return hashId
 }
 
