@@ -1,12 +1,9 @@
-import { summarizeTools } from './tools'
+import { summarizeTools, mapFunctionNames } from './tools'
 import type { ToolBase, TaskNode, llmSettings } from './types'
 import { StructuredResponseTypes, UseToolBase } from './types'
 import { zodToYamlString } from '../yamlUtils'
 import type OpenAI from 'openai'
 import { dump } from 'js-yaml'
-import { mapFunctionNames } from './tools'
-import type { TyTaskManager } from './taskManager'
-import type { Goals } from '../tools/chatCompletionTool'
 
 /**
  * This function renders templates, substituting the necessary variables
@@ -242,21 +239,4 @@ function getAllFunctionsInOpenAiConversation(
         : p,
     new Set<string>(),
   )
-}
-
-export async function generateCompleteChat(
-  goal: Goals,
-  task: TaskNode,
-  llmSettings: llmSettings,
-  taskManager: TyTaskManager,
-) {
-  const toolDefs = await taskManager.updateToolDefinitions(true)
-  let openAIConversationThread = await taskManager.buildChatThread(
-    task.id,
-    llmSettings.tryUsingVisionModels,
-    llmSettings.enableOpenAiTools,
-    toolDefs,
-  )
-  openAIConversationThread = addPrompts(task, toolDefs, llmSettings, openAIConversationThread)
-  return { openAIConversationThread, toolDefs }
 }

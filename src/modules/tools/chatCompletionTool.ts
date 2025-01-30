@@ -6,7 +6,11 @@ import {
   getOpenRouterGenerationInfo,
   getTaskyonCosts,
 } from '../taskyon/chat'
-import { generateCompleteChat, generateOpenAIToolDeclarations } from '../taskyon/promptCreation'
+import {
+  addPrompts,
+  generateCompleteChat,
+  generateOpenAIToolDeclarations,
+} from '../taskyon/promptCreation'
 import type { TyTaskManager } from '../taskyon/taskManager'
 import { type TaskWorkerController } from '../taskyon/taskWorker'
 import type { partialTaskDraft, ToolBase } from '../taskyon/types'
@@ -57,20 +61,21 @@ export async function processChatTask(
   if (selectedModel) {
     api.selectedModel = selectedModel
     console.log('execute chat completion tool with prompt:', task)
-    //TODO: also do this, if we start the task "autonomously" in which we basically
-    //      allow it to create new tasks...
     //TODO: we can create more things here like giving it context form other tasks, lookup
     //      main objective, previous tasks etc....
     // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
-    const { openAIConversationThread, toolDefs } = await generateCompleteChat(
-      goal,
-      task,
-      llmSettings,
-      taskManager,
+    const toolDefs = await taskManager.updateToolDefinitions(true)
+    let openAIConversationThread = await taskManager.buildChatThread(
+      task.id,
+      llmSettings.tryUsingVisionModels,
+      llmSettings.enableOpenAiTools,
+      toolDefs,
     )
+    openAIConversationThread = addPrompts(task, toolDefs, llmSettings, openAIConversationThread)
+
     let tools: OpenAI.ChatCompletionTool[] = []
     if (llmSettings.enableOpenAiTools) {
-      tools = generateOpenAIToolDeclarations(task, toolDefs)
+      tools = generateOpenAIToolDeclarations(llmSettings.allowedTools || [], toolDefs)
     }
 
     if (openAIConversationThread.length > 0) {
@@ -117,6 +122,8 @@ export async function processChatTask(
 }
 
 // TODO: use this function to enrich tasks with metadata (as a start in a separate database, we could use rxdb for this...)
+// add this function right to where we produced the conversationthread in the chatCompletionTool... and add
+// the cost information to some sort of a db, maybe postgres? :)
 export async function addTaskCostInformation(
   result: unknown,
   task: Readonly<TaskNode>,

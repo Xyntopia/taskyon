@@ -59,6 +59,7 @@ export const taskUtils = (
 
   // TODO: combine this function with follow-up tasks & prompCreation...
   //      there are too many places, where we do this stuff ;)
+  //      move this into chatCompletion function...
   async function buildChatThread(
     taskId: string,
     useVisionModels: boolean,
