@@ -30,9 +30,7 @@
               nextTask && 'error' in nextTask.content
                 ? 'text-red'
                 : nextTask && 'toolResult' in nextTask.content
-                  ? 'error' in nextTask.content.toolResult
-                    ? 'text-red'
-                    : 'text-green'
+                  ? 'text-green'
                   : 'text-info'
             "
           >

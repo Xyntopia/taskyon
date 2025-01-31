@@ -30,19 +30,19 @@
 <script setup lang="ts">
 import { matContentCopy, matHtml } from '@quasar/extras/material-icons'
 import { dump } from 'js-yaml'
-import type { FunctionCall, ToolResult } from 'src/modules/taskyon/types'
+import type { FunctionCall } from 'src/modules/taskyon/types'
 import { computed, ref } from 'vue'
 import { copyToClipboard } from 'src/modules/utils'
 
 const props = defineProps<{
-  result?: ToolResult | undefined
+  result?: unknown
   functionCall?: FunctionCall | undefined
 }>()
 
 const useIframe = ref(false)
 
 const isHtmlResult = computed(() => {
-  const taskResult = props.result?.result
+  const taskResult = props.result
   return typeof taskResult === 'string' && /<[^>]+>/.test(taskResult.trim())
 })
 </script>

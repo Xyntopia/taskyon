@@ -4,10 +4,12 @@ import {
   type llmSettings,
   TaskProcessingError,
   type OnInterruptFunc,
+  getApiConfigCopy,
 } from './types'
 import { type TyTaskManager } from './taskManager'
-import { handleFunctionExecution } from './tools'
+import { handleFunctionExecution, taskResult } from './tools'
 import { type AsyncQueue, makeSerializable } from '../utils'
+import { createChatCompletionTask } from '../tools/chatCompletionTool'
 
 export function useTaskWorkerController() {
   /* This class adds context to task executions during the runtime.
@@ -81,12 +83,15 @@ export function useTaskWorkerController() {
 }
 export type TaskWorkerController = ReturnType<typeof useTaskWorkerController>
 
-// TODO:  can we move this "down" one level ;)?
+// TODO: how about we put this here into its own tool as well!
+//       its totally possible now... Would probably make the code cleaner...
 async function processTask(
   task: TaskNode,
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController,
   allowedTools: string[],
+  analyzeModel: string | undefined,
+  llmTools: boolean,
 ): Promise<partialTaskDraft[][]> {
   if ('functionCall' in task.content) {
     // calculate function result
@@ -94,13 +99,51 @@ async function processTask(
     const tools = await taskManager.updateToolDefinitions(false)
     console.log(`Calling function ${func.name}`)
     if (tools[func.name] && !taskWorkerController.isInterrupted()) {
-      const result = await handleFunctionExecution(
+      const funcR = await handleFunctionExecution(
         func,
         tools,
         taskWorkerController.onInterrupt,
         task,
       )
-      return result
+
+      // We check the result of the task here to see whether it contains
+      // a lists of tasks. If thats the case we return
+      // those for continuation, otherwise
+      // we create a generic task result.
+      if (taskResult.safeParse(funcR).success) {
+        console.log('new tasks were created:', funcR)
+        // we have to do this funny workaround with typescript because
+        // for some reason zod will delete the task content onwards
+        // of the second task in a taskchain... after parsing. so we're
+        // simply using the original...
+        return (funcR as taskResult).taskChainList
+      } else {
+        // TODO: Not really sure, what to do with the task processor... . It might be
+        //       a good idea, to have this as its a tool in its own right.
+        //       this way we could develop different kinds of function processors and
+        //       probably also simply make the code more consistent...
+        if (!analyzeModel)
+          throw new TaskProcessingError(
+            'We need to select a model in order to analyze the result of our task!!',
+          )
+
+        const newTasks: partialTaskDraft[][] = [
+          [
+            {
+              role: 'system',
+              content: { toolResult: funcR },
+            },
+            createChatCompletionTask({
+              model: analyzeModel,
+              allowedTools,
+              goal: 'AnalyzeToolResult',
+              llmTools,
+            }),
+          ],
+        ]
+        console.log('function returning generic result', funcR)
+        return newTasks
+      }
     } else {
       const toolnames = JSON.stringify(allowedTools)
       throw new TaskProcessingError(
@@ -110,16 +153,14 @@ async function processTask(
       )
     }
   } else {
-    // if it is not a functionCall, send it to a taskplanner in order to figure out what to do next
+    // We expect all function calls to do three things:
+    // - either return a result
+    // - return a taskchain where the last task is a functionTask
+    // - return a taskchain with the last task a "terminatino" task..
     const newTasks: partialTaskDraft[] = [
       {
-        role: 'system', // TODO: not sure, if this is the right role for this...
-        content: {
-          functionCall: {
-            name: 'taskPlanner',
-            arguments: {},
-          },
-        },
+        role: 'system',
+        content: { termination: 'no follow-up tasks found!' },
       },
     ]
     return [newTasks]
@@ -163,11 +204,15 @@ export async function runTaskWorker(
       console.log('processing task:', taskId)
       task = await taskManager.getTask(taskId)
       if (task && !taskWorkerController.isInterrupted()) {
+        if (!llmSettings.selectedApi) throw new TaskProcessingError('No AI API selected!!')
+        const api = getApiConfigCopy(llmSettings, llmSettings.selectedApi)
         const newTasks = await processTask(
           task,
           taskManager,
           taskWorkerController,
           llmSettings.allowedTools || [],
+          api?.selectedModel,
+          llmSettings.enableOpenAiTools,
         )
 
         // we make sure to identify all parent tasks from this batch, because

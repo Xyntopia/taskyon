@@ -68,7 +68,6 @@ export const useAppStateStore = defineStore(storeName, () => {
     // the things below should only represent transitional states
     // which have no relevance in the actual configuration of the app.
     initialLoad: true, // if the app was loaded for the first time and needs to be initialized
-    modelDetails: false,
     expandedTaskCreation: false,
     selectChatBotExpand: true,
     allowedToolsExpand: true,

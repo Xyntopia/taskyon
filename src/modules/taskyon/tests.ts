@@ -138,7 +138,7 @@ export async function testEstimateChatTokens() {
   const nlpWorker = useNlpWorker()
 
   const tokens = await nlpWorker.estimateChatTokens(
-    mockTask,
+    mockTask.content,
     mockChatMessages,
     mockTools,
     Object.values(mockTools).map((tool) => tool.name),

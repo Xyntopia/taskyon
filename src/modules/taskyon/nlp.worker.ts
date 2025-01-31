@@ -78,7 +78,7 @@ const nlpWorker = {
 
   async estimateChatTokens(
     this: void,
-    task: TaskNode,
+    content: TaskNode['content'],
     chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     tools: Record<string, ToolBase>,
     allowedTools?: string[],
@@ -87,7 +87,7 @@ const nlpWorker = {
     const functions: ToolBase[] = mapFunctionNames(allowedTools || [], tools)
     // TODO: convert task.content into a legitimate string first, using the
     //       "original" functions toshow what actually gets sent to the LLM!
-    const contentStr = JSON.stringify(Object.values(task.content)[0])
+    const contentStr = JSON.stringify(Object.values(content)[0])
     const singlePromptTokens = await countStringTokens(contentStr)
     const promptTokens = await countChatTokens(chat)
     const functionTokens = Math.floor((await countToolTokens(functions)) * 0.7)

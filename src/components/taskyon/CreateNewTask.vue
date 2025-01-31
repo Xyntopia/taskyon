@@ -513,7 +513,7 @@ watchDebounced(
 
     // we need to deepCopy both ref values, so that we can send them to the thread!!
     const estimated = await estimateChatTokens(
-      deepCopy(currentnewTask.value),
+      deepCopy(currentnewTask.value.content),
       messages,
       deepCopy(toolCollection.value),
       deepCopy(state.llmSettings.allowedTools),

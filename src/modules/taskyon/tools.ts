@@ -27,7 +27,7 @@ export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSche
 
 const taskMarker = '*TY_TASKRESULT*'
 
-const taskResult = z.object({
+export const taskResult = z.object({
   taskResultMarker: z
     .literal(taskMarker)
     .default(taskMarker)
@@ -36,7 +36,7 @@ const taskResult = z.object({
     ),
   taskChainList: z.array(z.array(partialTaskDraft)),
 })
-type taskResult = z.infer<typeof taskResult>
+export type taskResult = z.infer<typeof taskResult>
 
 export function makeTaskResult(tasks: partialTaskDraft[][]): taskResult {
   return {
@@ -148,7 +148,9 @@ export async function handleFunctionExecution(
   // TODO: add taskManager here, so we can use it in the function execution
   //       we somehow also want to be able to do this with "dynamically" loaded tools
   //       but only, if they're declared "trusted" or something like that...
-): Promise<partialTaskDraft[][]> {
+): Promise<unknown> {
+  // TODO: test here, if tool parameters are correct according to json schema
+  //       if not, throw an error message...
   let funcR: unknown
   const tool = getTool(tools, func.name)
   if ('function' in tool && tool.function) {
@@ -172,30 +174,7 @@ export async function handleFunctionExecution(
     // TODO: use our "onInterrupt" here somehow ;)
     funcR = await handleRemoteFunction(func.name, func.arguments)
   }
-
-  // We check the result here to see whether it contains
-  if (taskResult.safeParse(funcR).success) {
-    console.log('new tasks were created:', funcR)
-    // we have to do this funny workaround with typescript because
-    // for some reason zod will delete the task content onwards
-    // of the second task in a taskchain... after parsing. so we're
-    // simply using the original...
-    return (funcR as taskResult).taskChainList
-  } else {
-    // TODO: Not really sure, what to do with this. It might be
-    //       a good idea, to have this as its a tool in its own right.
-    //       this way we could develop different kinds of function processors...
-    const newTasks: partialTaskDraft[][] = [
-      [
-        {
-          role: 'system',
-          content: { toolResult: funcR },
-        },
-      ],
-    ]
-    console.log('function returning generic result', funcR)
-    return newTasks
-  }
+  return funcR
 }
 
 /*function generateToolSummary() {

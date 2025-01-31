@@ -13,10 +13,10 @@ import {
 } from '../taskyon/promptCreation'
 import type { TyTaskManager } from '../taskyon/taskManager'
 import { type TaskWorkerController } from '../taskyon/taskWorker'
-import type { partialTaskDraft, ToolBase } from '../taskyon/types'
+import type { partialTaskDraft, ToolBase, TaskNode } from '../taskyon/types'
 import { FunctionCall } from '../taskyon/types'
 import { ChatResponseType, getApiConfigCopy } from '../taskyon/types'
-import { TaskProcessingError, type TaskNode, type llmSettings } from '../taskyon/types'
+import { TaskProcessingError, type llmSettings } from '../taskyon/types'
 import {
   makeTaskResult,
   type InternalTool,
@@ -68,6 +68,7 @@ export async function processChatTask(
   }
   const selectedModel = configuration.model
   if (selectedModel) {
+    // TODO: this seems to be a little funny, why are we doing this? ^^
     api.selectedModel = selectedModel
     console.log('execute chat completion tool with prompt:', currentTask)
     //TODO: we can create more things here like giving it context form other tasks, lookup
@@ -341,9 +342,9 @@ function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]
 //        this tool would analyze the results of the previous function and create new tasks!
 async function generateFollowUpTasksFromResult(
   goal: Goals,
-  finishedTask: TaskNode,
   choice: ChatResponseType['choices'][0],
   taskManager: TyTaskManager,
+  chatModel: string,
 ): Promise<partialTaskDraft[]> {
   console.log('generate follow up task')
 
@@ -373,14 +374,22 @@ async function generateFollowUpTasksFromResult(
       },
     ]
     if (commands.length > 0) {
-      console.log('trying to get tool call from structured response')
+      console.log('Define tool call')
       newTasks.push({
         role: 'function',
         content: { functionCall: commands[0]! },
       })
+    } else {
+      console.log('no more tools to call, finalize the result :)')
+      newTasks.push(
+        createChatCompletionTask({
+          model: chatModel,
+          goal: 'SimpleCompletion',
+        }),
+      )
     }
-  } else {
-    // for other things we simply generate a "normal" message...
+  } else if (goal === 'SimpleCompletion') {
+    //if we don't need to call a tool, we simply generate a normal message...
     newTasks = [
       {
         role: 'assistant',
@@ -392,22 +401,10 @@ async function generateFollowUpTasksFromResult(
       },
     ]
     console.log('No more follow up tasks!')
+  } else {
+    // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+    throw new TaskProcessingError(`chatCompletion goal unknown: ${goal}`)
   }
-
-  // augment newest tasks with debugging information
-  // TODO: move this into a different data structure..
-  // it would be good to not hav this inside the tasks themselves to imprive immutability
-  newTasks.forEach((ts) => {
-    ts.debugging = {
-      promptTokens: finishedTask.debugging.taskTokens,
-      taskTokens: finishedTask.debugging.taskTokens,
-      taskCosts: finishedTask.debugging.taskCosts,
-    }
-  })
-  if (newTasks[0]) {
-    newTasks[0].debugging!.rawInput = choice
-  }
-
   return newTasks
 }
 
@@ -648,16 +645,31 @@ export function createChatCompletionTool(
     )
 
     // parse the response into our own type ...
-    const choice = ChatResponseType.safeParse(chatCompletion).data?.choices[0]
+    const resp = ChatResponseType.safeParse(chatCompletion)
+    const choice = resp.data?.choices[0]
     if (!choice)
       throw new TaskProcessingError('Our ChatCompletion tool did not get a valid response!')
 
     const newTaskChain = await generateFollowUpTasksFromResult(
       goal || 'SimpleCompletion',
-      context.currentTask,
       choice,
       taskManager,
+      model,
     )
+
+    // augment newest tasks with debugging information
+    // TODO: move this into a different data structure..
+    // it would be good to not hav this inside the tasks themselves to imprive immutability
+    newTaskChain.forEach((ts) => {
+      ts.debugging = {
+        //promptTokens: finishedTask.debugging.taskTokens,
+        //taskTokens: finishedTask.debugging.taskTokens,
+        //taskCosts: finishedTask.debugging.taskCosts,
+      }
+    })
+    if (newTaskChain[0]) {
+      newTaskChain[0].debugging!.rawInput = choice
+    }
 
     // chatCompletion by definition completes a chat with a message
     // so we can just return the message here...
