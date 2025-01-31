@@ -504,7 +504,8 @@ export function useTyTaskManager(
     return task
   }
 
-  async function getTask(taskId: string): Promise<TaskNode | undefined> {
+  async function getTask(taskId: string | undefined): Promise<TaskNode | undefined> {
+    if (!taskId) return undefined
     await waitForTaskUnlock(taskId)
     return await unblockedGetTask(taskId)
   }

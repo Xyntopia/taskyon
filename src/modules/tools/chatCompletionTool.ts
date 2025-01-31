@@ -63,19 +63,27 @@ export async function processChatTask(
     //      main objective, previous tasks etc....
     // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
     const toolDefs = await taskManager.updateToolDefinitions(true)
+    const taskIdChain = await taskManager.getTaskIdChain(currentTask.id)
     let openAIConversationThread = await buildChatThread(
       llmSettings.tryUsingVisionModels,
       llmSettings.enableOpenAiTools,
       toolDefs,
-      await taskManager.getTaskIdChain(currentTask.id),
+      taskIdChain,
       taskManager.getTask,
       taskManager.getFileMappingByUuid,
       taskManager.getFile,
     )
 
     // now add goal-specific prompts...
+    const lastTaskBeforeChatCompletion = await taskManager.getTask(currentTask.priorID)
+    if (!lastTaskBeforeChatCompletion)
+      throw new Error(`chatCompletion Task needs a parent Task to work! ${currentTask.id}`)
+
+    // TODO: split llmSettings.enableOpenAiTools settings from addPrompts for refactoring
+    // TODO: split "base" prompt from "addPrompts"  and maybe have a separate function for each
+    //       goal...
     openAIConversationThread = addPrompts(
-      currentTask,
+      lastTaskBeforeChatCompletion,
       toolDefs,
       llmSettings,
       openAIConversationThread,
@@ -475,9 +483,11 @@ export function createChatCompletionTool(
 
   const chatCompletion: InternalTool = {
     function: fetchChatCompletion,
-    description: 'Generates a chat-based response using the OpenAI API.',
+    description: 'Generates a chat-based response using the OpenAI API for the previous message.',
     longDescription: `This tool interfaces with an OpenAI-compatible API to generate completions for
-  conversation prompts. Useful for generating natural language responses in a chat setting.`,
+  conversation prompts. Useful for generating natural language responses in a chat setting.
+  It will convert the chain pointed to by the previous Task (priorID) into openAI compatible message
+  list and generate a response`,
     name: 'chatCompletion',
     renderOptions: { chatWindow: false, llm: false },
     parameters: {
