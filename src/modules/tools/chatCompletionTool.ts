@@ -88,7 +88,9 @@ export async function processChatTask(
     // now add goal-specific prompts...
     const lastTaskBeforeChatCompletion = await taskManager.getTask(currentTask.priorID)
     if (!lastTaskBeforeChatCompletion)
-      throw new Error(`chatCompletion Task needs a parent Task to work! ${currentTask.id}`)
+      throw new TaskProcessingError(
+        `chatCompletion Task needs a parent Task to work! ${currentTask.id}`,
+      )
 
     // TODO: split llmSettings.enableOpenAiTools settings from addPrompts for refactoring
     // TODO: split "base" prompt from "addPrompts"  and maybe have a separate function for each
@@ -147,7 +149,7 @@ export async function processChatTask(
       return chatCompletion
     }
   } else {
-    throw new Error('Task has no inference model selected!')
+    throw new TaskProcessingError('Task has no inference model selected!')
   }
 }
 
@@ -302,7 +304,7 @@ function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]
       const command = res.data
       return [command]
     }
-    throw new Error(`The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
+    throw new TaskProcessingError(`The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
  suggests we should use a tool, but we could not parse the ${JSON.stringify(structResponse.command)} property.`)
   }
   return []
@@ -342,7 +344,6 @@ async function generateFollowUpTasksFromResult(
   finishedTask: TaskNode,
   choice: ChatResponseType['choices'][0],
   taskManager: TyTaskManager,
-  model: string,
 ): Promise<partialTaskDraft[]> {
   console.log('generate follow up task')
 
@@ -361,17 +362,6 @@ async function generateFollowUpTasksFromResult(
         role: 'function',
         content: { functionCall: functionCall[0] },
       },
-    ]
-  } else if (!choice.message.content) {
-    // if no other content...
-    newTasks = [
-      {
-        role: 'system',
-        content: {
-          error: 'The response from the chatCompletion was empty! Maybe we should try again?',
-        },
-      },
-      createChatCompletionTask({ model, goal: 'AnalyzeError' }),
     ]
   } else if (goal === 'AnalyzeToolResult' || goal === 'ChooseTool' || goal === 'AnalyzeError') {
     // TODO: move the followup ask generation into a separate task/function! :)
@@ -641,7 +631,7 @@ export function createChatCompletionTool(
   ) => {
     console.log('calling chat completion tool...', model, goal, llmTools)
     if (!context.currentTask) {
-      throw new Error(`No current task found!`)
+      throw new TaskProcessingError(`No current task found!`)
     }
     if (!llmSettings.selectedApi) {
       throw new TaskProcessingError('No API selected!')
@@ -659,36 +649,26 @@ export function createChatCompletionTool(
 
     // parse the response into our own type ...
     const choice = ChatResponseType.safeParse(chatCompletion).data?.choices[0]
-    if (!choice) throw new Error('Our ChatCompletion tool did not get a valid response!')
-    const newTaskChains = await generateFollowUpTasksFromResult(
+    if (!choice)
+      throw new TaskProcessingError('Our ChatCompletion tool did not get a valid response!')
+
+    const newTaskChain = await generateFollowUpTasksFromResult(
       goal || 'SimpleCompletion',
       context.currentTask,
       choice,
       taskManager,
-      model,
     )
 
     // chatCompletion by definition completes a chat with a message
     // so we can just return the message here...
     if (chatCompletion?.choices[0]?.message.content) {
       console.log('received chat completion!', chatCompletion)
-      const newTaskChain: partialTaskDraft[] = [
-        {
-          role: 'assistant',
-          content: {
-            message: chatCompletion.choices[0].message.content,
-          },
-        },
-        {
-          role: 'assistant',
-          content: {
-            termination: 'assistant answer received...',
-          },
-        },
-      ]
+
       return makeTaskResult([newTaskChain])
     } else {
-      throw new TaskProcessingError('No content in chat completion!')
+      throw new TaskProcessingError(
+        'The response from the chatCompletion was empty! Maybe we should try again?',
+      )
     }
   }
 

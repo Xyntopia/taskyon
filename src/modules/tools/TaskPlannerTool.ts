@@ -1,19 +1,12 @@
-import type OpenAI from 'openai'
-import { callLLM } from '../taskyon/chat'
-import { generateCompleteChat, generateOpenAIToolDeclarations } from '../taskyon/promptCreation'
 import type { TyTaskManager } from '../taskyon/taskManager'
 import { type TaskWorkerController } from '../taskyon/taskWorker'
-import type { partialTaskDraft } from '../taskyon/types'
-import { getApiConfigCopy } from '../taskyon/types'
-import { TaskProcessingError, type TaskNode, type llmSettings } from '../taskyon/types'
+import { TaskProcessingError, type llmSettings } from '../taskyon/types'
 import {
   makeTaskResult,
   type InternalTool,
   type internalToolFunctionSchema,
   type toolContext,
 } from '../taskyon/tools'
-
-// this function processes all tasks which go to any sort of an LLM
 
 // TODO: for configuration & allowedTools it would be good if we could add
 // this from a "default" Configuration? And then have them as function parameters?
