@@ -83,6 +83,7 @@ export type OpenAIMessage = z.infer<typeof OpenAIMessage>
 // TODO: combine this type here with the previous, duplicate ones we have declared!! (e.g. OpenAIMessage)
 // we are removing properties which we don't need for our purposes but compare it with the
 // official OpenAI API.
+// TODO: move all of our OpenAI functionality into chatCompletionTool...
 export const ChatResponseType = z.object({
   id: z.string(),
   //object: z.string(),
@@ -310,6 +311,7 @@ of how content can be structured. `,
       error: z.unknown().optional(),
       // the taskprompt is the full chat which leads to the result. This is important that we have this
       // for to debugging reasons...
+      // TODO:remove all openAI references hee nd move them into our chatCmpletion function...
       taskPrompt: z.union([z.array(OpenAIMessage), z.any()]).optional(), // Replace 'z.any()' with the correct Zod type
     })
     .partial(),

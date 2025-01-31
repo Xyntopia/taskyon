@@ -6,7 +6,11 @@ import {
   getOpenRouterGenerationInfo,
   getTaskyonCosts,
 } from '../taskyon/chat'
-import { addPrompts, generateOpenAIToolDeclarations } from '../taskyon/promptCreation'
+import {
+  addPrompts,
+  generateOpenAIToolDeclarations,
+  yesnoToBoolean,
+} from '../taskyon/promptCreation'
 import type { TyTaskManager } from '../taskyon/taskManager'
 import { type TaskWorkerController } from '../taskyon/taskWorker'
 import type { partialTaskDraft, ToolBase } from '../taskyon/types'
@@ -19,11 +23,18 @@ import {
   type internalToolFunctionSchema,
   type toolContext,
 } from '../taskyon/tools'
-import { deepCopy, fileToBase64, sleep } from '../utils'
+import {
+  deepCopy,
+  fileToBase64,
+  keysToLowerCase,
+  normalizeFalsyValues,
+  pickProperties,
+  sleep,
+} from '../utils'
 import { isTaskyonKey } from '../taskyon/tyCrypto'
 import { useNlpWorker } from '../taskyon/webWorkerApi'
 import type { FileMappingDocType } from '../taskyon/rxdb'
-import { dump } from 'js-yaml'
+import { dump, load } from 'js-yaml'
 
 // this function processes all tasks which go to any sort of an LLM
 
@@ -151,7 +162,7 @@ export async function addTaskCostInformation(
   apiKey?: string,
 ) {
   // TODO: also get cost information for other tasks, than chatCompletion ;)!
-  const chatResponse = getChatResponseFromResult(result)
+  const chatResponse = ChatResponseType.safeParse(result)
   if (chatResponse) {
     // TODO: we don't need this here anymore, we should get this from inside the chatprocessor itself
     /*const { openAIConversationThread } = await generateCompleteChat(
@@ -216,12 +227,7 @@ export async function addTaskCostInformation(
 // get worker function for our chat :)
 const { estimateChatTokens } = useNlpWorker()
 
-function getChatResponseFromResult(result: unknown) {
-  const res = ChatResponseType.safeParse(result)
-  return res.data
-}
-
-function parseChatResponse2TaskDraft(message: string): Record<string, unknown> {
+function parseYamlResponse2Record(message: string): Record<string, unknown> {
   // parse the response and create a new task filled with the correct parameters
   let yamlContent = message.trim()
   // Use exec() to find a match
@@ -264,10 +270,9 @@ function parseChatResponse2TaskDraft(message: string): Record<string, unknown> {
 
 // we use this to decide whether we should call a function or to continue
 // this is usually not needed if we use llmTools (like built-in tools from openai API)
-function generateFollowupFromStructuredResponse(
-  choice: ChatResponseType['choices'][0],
-): Pick<partialTaskDraft, 'role' | 'content'>[][] {
-  const structResponse = parseChatResponse2TaskDraft(choice.message.content || '')
+// TODO: ability to parse multiple commands/tasks...
+function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]): FunctionCall[] {
+  const structResponse = parseYamlResponse2Record(choice.message.content || '')
   // depending on what role and tasktype the finishedTask has, we
   // expect different results from our structuredResponse
   // TODO: we need to do some plausibilitychecks here:
@@ -288,15 +293,6 @@ function generateFollowupFromStructuredResponse(
     (!('try again' in lowerStructResponse) || yesnoToBoolean(lowerStructResponse['try again']))
 
   if (useTool) {
-    console.log('trying to get tool call from structured response')
-    const newTask: partialTaskDraft = {
-      role: 'assistant',
-      content: { structuredResponse: choice.message.content || '' },
-    }
-
-    // this doesn't say anything about whether the parameters are
-    // chosen correctly for this function yet. It only says that
-    // they are valid parameters for any function...
     let res = FunctionCall.safeParse(structResponse.command)
     if (res.error) {
       // try one more time using all lower case
@@ -304,42 +300,12 @@ function generateFollowupFromStructuredResponse(
     }
     if (res.success) {
       const command = res.data
-      // TODO:  this doesn't work!!  newTask doesn't have an ID yet and the next task can#t pick it up from there!!
-      return [
-        [
-          newTask,
-          {
-            role: 'assistant',
-            content: { functionCall: command },
-          },
-        ],
-      ]
-    } else {
-      return [
-        [
-          newTask,
-          {
-            role: 'system',
-            content: {
-              error: `The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
- suggests we should use a tool, but we could not parse the ${JSON.stringify(structResponse.command)} property.`,
-            },
-          },
-        ],
-      ]
+      return [command]
     }
-  } else {
-    // in the case that we don't call a tool anymore, we simply return the structuredResponse
-    // in the next step, this will generate a "normal" response from the AI.
-    return [
-      [
-        {
-          role: 'assistant',
-          content: { structuredResponse: choice.message.content || '' },
-        },
-      ],
-    ]
+    throw new Error(`The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
+ suggests we should use a tool, but we could not parse the ${JSON.stringify(structResponse.command)} property.`)
   }
+  return []
 }
 
 /**
@@ -372,94 +338,86 @@ function generateFollowupFromStructuredResponse(
 // TODO:  move all of this function into its own Tool as well! this would be our "planner" tool/function :)
 //        this tool would analyze the results of the previous function and create new tasks!
 async function generateFollowUpTasksFromResult(
+  goal: Goals,
   finishedTask: TaskNode,
+  choice: ChatResponseType['choices'][0],
   taskManager: TyTaskManager,
-  llmTools: boolean = false,
-): Promise<partialTaskDraft[][]> {
+  model: string,
+): Promise<partialTaskDraft[]> {
   console.log('generate follow up task')
-  const useTyTools = finishedTask.allowedTools?.length ? true : false
 
-  let newTasks: partialTaskDraft[][] = []
+  let newTasks: partialTaskDraft[] = []
   // TODO: what do we do in case of an empty user message, but only a file?
   //       right now, we assume, that user message always comes after uploaded file message :)
 
-  // did we get any response from an LLM?
-  // TODO: make this part of our new chatcompletion tool!rif of all of this?
-  //       or we could also put this into a generic Taskplanner tool...
-  const choice = getChatResponseFromResult(result)?.choices[0]
-  if (choice) {
-    // check if we have any functioncalls from the llm inference
-    // in that case we shoud handle that first :)
-    const functionCall = extractOpenAIFunctions(
-      choice,
-      await taskManager.updateToolDefinitions(true),
-    )
-    if (functionCall[0]) {
-      // TODO: enable multiple parallel function calls
-      newTasks = [
-        [
-          // this functionCall will be executed in the next step, so we don't need any additional tasks here
-          {
-            role: 'function',
-            content: { functionCall: functionCall[0] },
-          },
-        ],
-      ]
-    } else if (!choice.message.content) {
-      newTasks = [
-        [
-          {
-            role: 'system',
-            content: { error: 'The response content from the AI was empty!' },
-          },
-          createChatCompletionTask(model),
-        ],
-      ]
-    } else if (
-      // so now we know there are no function calls indicated from the original service
-      // so we can parse the structured response or simply get a reponse to a "normal"
-      // chat message.
-      (!llmTools &&
-        (('message' in finishedTask.content && finishedTask.role === 'user' && useTyTools) || // this happens, if we use tools, but no LLM-builtin tools
-          'toolResult' in finishedTask.content)) || // taskResult, but no LLM-builtin tools
-      (finishedTask.role === 'system' && !('toolResult' in finishedTask.content)) // this happens e.g. in the case of an error...
-    ) {
-      // TODO: move the followup ask generation into a separate task/function! :)
-      newTasks = generateFollowupFromStructuredResponse(choice)
-    } else {
-      // if 'message' in finishedTask.content && finishedTask.role === 'assistant'
-      // this is the final response. These will not get added to the task queue and evaluated..
-      newTasks = [
-        [
-          {
-            role: 'assistant',
-            content: { message: choice.message.content || '' },
-          },
-          {
-            role: 'system',
-            content: { termination: 'assistant answered' },
-          },
-        ],
-      ]
-      console.log('No more follow up tasks!')
+  // check if we have any functioncalls from the llm inference
+  // in that case we shoud handle that first :)
+  const functionCall = extractOpenAIFunctions(choice, await taskManager.updateToolDefinitions(true))
+  if (functionCall[0]) {
+    // TODO: enable multiple parallel function calls
+    newTasks = [
+      // this functionCall will be executed in the next step, so we don't need any additional tasks here
+      {
+        role: 'function',
+        content: { functionCall: functionCall[0] },
+      },
+    ]
+  } else if (!choice.message.content) {
+    // if no other content...
+    newTasks = [
+      {
+        role: 'system',
+        content: {
+          error: 'The response from the chatCompletion was empty! Maybe we should try again?',
+        },
+      },
+      createChatCompletionTask({ model, goal: 'AnalyzeError' }),
+    ]
+  } else if (goal === 'AnalyzeToolResult' || goal === 'ChooseTool' || goal === 'AnalyzeError') {
+    // TODO: move the followup ask generation into a separate task/function! :)
+    const commands = getCommandFromStructuredResponse(choice)
+    newTasks = [
+      {
+        role: 'assistant',
+        content: { structuredResponse: choice.message.content || '' },
+      },
+    ]
+    if (commands.length > 0) {
+      console.log('trying to get tool call from structured response')
+      newTasks.push({
+        role: 'function',
+        content: { functionCall: commands[0]! },
+      })
     }
+  } else {
+    // for other things we simply generate a "normal" message...
+    newTasks = [
+      {
+        role: 'assistant',
+        content: { message: choice.message.content || '' },
+      },
+      {
+        role: 'system',
+        content: { termination: 'assistant answered' },
+      },
+    ]
+    console.log('No more follow up tasks!')
   }
 
   // augment newest tasks with debugging information
   // TODO: move this into a different data structure..
   // it would be good to not hav this inside the tasks themselves to imprive immutability
-  newTasks.forEach((ts) =>
-    ts.forEach((t) => {
-      t.allowedTools = finishedTask.allowedTools
-      t.debugging = {
-        ...t.debugging,
-        rawInput: result,
-        promptTokens: finishedTask.debugging.taskTokens,
-        taskTokens: finishedTask.debugging.taskTokens,
-        taskCosts: finishedTask.debugging.taskCosts,
-      }
-    }),
-  )
+  newTasks.forEach((ts) => {
+    ts.debugging = {
+      promptTokens: finishedTask.debugging.taskTokens,
+      taskTokens: finishedTask.debugging.taskTokens,
+      taskCosts: finishedTask.debugging.taskCosts,
+    }
+  })
+  if (newTasks[0]) {
+    newTasks[0].debugging!.rawInput = choice
+  }
+
   return newTasks
 }
 
@@ -697,6 +655,17 @@ export function createChatCompletionTool(
       taskManager,
       taskWorkerController,
       apiKeys,
+    )
+
+    // parse the response into our own type ...
+    const choice = ChatResponseType.safeParse(chatCompletion).data?.choices[0]
+    if (!choice) throw new Error('Our ChatCompletion tool did not get a valid response!')
+    const newTaskChains = await generateFollowUpTasksFromResult(
+      goal || 'SimpleCompletion',
+      context.currentTask,
+      choice,
+      taskManager,
+      model,
     )
 
     // chatCompletion by definition completes a chat with a message
