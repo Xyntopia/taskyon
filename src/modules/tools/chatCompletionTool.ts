@@ -478,7 +478,7 @@ async function convertTaskNodeToOpenAIMessage(
 ): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[] | undefined> {
   if ('functionCall' in task.content) {
     const functionCallName = task.content.functionCall.name
-    if (!toolCollection[functionCallName]?.renderOptions?.llm) {
+    if (toolCollection[functionCallName]?.renderOptions?.hideLlm) {
       return
     }
     if (useOpenAITools) {
@@ -511,9 +511,9 @@ async function convertTaskNodeToOpenAIMessage(
       })
       return [
         {
-          role: 'assistant',
+          role: 'system',
           // and the result of the function
-          content: `I just used the following tool: ${functionCallName}. The parameters used were: ${functionArgs}`,
+          content: `You just used the following tool: ${functionCallName}. The parameters used were: ${functionArgs}`,
         },
       ]
     }
@@ -531,7 +531,7 @@ async function convertTaskNodeToOpenAIMessage(
     } else
       return [
         {
-          role: 'assistant',
+          role: 'system',
           content: dump({
             'The tool that you called returned the following result:': task.content.toolResult,
           }),
@@ -692,7 +692,7 @@ export function createChatCompletionTool(
   It will convert the chain pointed to by the previous Task (priorID) into openAI compatible message
   list and generate a response`,
     name: 'chatCompletion',
-    renderOptions: { chatWindow: false, llm: false },
+    renderOptions: { hideChat: true, hideLlm: true },
     parameters: {
       type: 'object',
       properties: {

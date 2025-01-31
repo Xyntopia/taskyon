@@ -193,7 +193,7 @@ export const ToolBase = z.object({
   longDescription: z.string().optional(),
   name: FunctionName,
   renderOptions: z
-    .object({ chatWindow: renderOption, llm: renderOption })
+    .object({ hideChat: renderOption, hideLlm: renderOption })
     .partial()
     .optional()
     .describe(

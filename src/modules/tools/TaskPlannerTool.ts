@@ -38,7 +38,7 @@ export function createTaskPlannerTool(
     longDescription: `This tool interfaces with an OpenAI-compatible API to generate completions for
   conversation prompts. Useful for generating natural language responses in a chat setting.`,
     name: 'chatCompletion',
-    renderOptions: { chatWindow: false, llm: false },
+    renderOptions: { hideLlm: true },
     parameters: {
       type: 'object',
       properties: {
