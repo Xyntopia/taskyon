@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { watch, computed, reactive, ref, type ComputedRef } from 'vue'
+import { watch, computed, reactive, ref } from 'vue'
 import {
   type Model,
   type TaskNode,
@@ -19,21 +19,13 @@ import type { InternalTool } from 'src/modules/taskyon/tools'
 import { tylog } from 'src/modules/logger'
 import { useAppStateStore } from './appState'
 import type { TaskEvent } from 'src/modules/taskyon/taskManager'
+import { asyncComputed } from './asyncComputed'
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
     const baseUrl = window.location.href.split('?')[0]
     window.history.pushState({}, document.title, baseUrl)
   }
-}
-
-function asyncComputed<T>(getter: () => Promise<T>, initialValue: T): ComputedRef<T> {
-  const state = ref<T>(initialValue)
-  const evaluate = async () => {
-    state.value = await getter()
-  }
-  watch(getter, evaluate, { immediate: true })
-  return computed(() => state.value) // Wrap in computed for write protection
 }
 
 async function updateLlmModels(
