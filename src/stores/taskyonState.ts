@@ -19,7 +19,7 @@ import type { InternalTool } from 'src/modules/taskyon/tools'
 import { tylog } from 'src/modules/logger'
 import { useAppStateStore } from './appState'
 import type { TaskEvent } from 'src/modules/taskyon/taskManager'
-import { asyncComputed } from './asyncComputed'
+import { asyncComputed } from './vueUtils'
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {

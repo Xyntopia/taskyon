@@ -47,7 +47,11 @@ import type { TaskNode } from 'src/modules/taskyon/types'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import { useQuasar } from 'quasar'
+import { asyncComputed } from 'src/stores/vueUtils'
+import { useTaskyonStore } from 'src/stores/taskyonState'
 const $q = useQuasar()
+
+const tystate = useTaskyonStore()
 
 const props = defineProps<{
   selectedThread: TaskNode[]
@@ -58,11 +62,23 @@ const props = defineProps<{
   showIds?: boolean
 }>()
 
+const toolList = asyncComputed(async () => {
+  const tm = await tystate.getTaskManager()
+  const toolList = await tm.updateToolDefinitions()
+  return toolList
+}, undefined)
+
 function showTask(t: TaskNode) {
   const hide = t.label ? t.label.includes('hide') : false // TODO: hide tasks based on level as well :)
+  let hideInChat = false
+  if ('functionCall' in t.content) {
+    if (toolList.value)
+      hideInChat = !!toolList.value[t.content.functionCall.name]?.renderOptions?.hideChat
+    else if (t.content.functionCall.name === 'chatCompletion') hideInChat = true
+  }
   const structured =
     t.content &&
     ('structuredResponse' in t.content || 'termination' in t.content || 'toolResult' in t.content)
-  return hide || !structured
+  return (hide || !structured) && !hideInChat
 }
 </script>
