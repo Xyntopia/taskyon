@@ -240,7 +240,7 @@ const ToolCallContent = z.object({ functionCall: FunctionCall })
 const UploadedFilesContent = z.object({ uploadedFiles: z.array(z.string()) })
 const ToolResultContent = z.object({ toolResult: z.unknown() })
 const ErrorContent = z
-  .object({ error: z.unknown() })
+  .object({ error: z.string() })
   .describe('Gets created if any error occurs during task processing.')
 const Termination = z.object({ termination: z.string() }).describe(
   `A Termination task always indicates the end of an autonomous task chat execution.

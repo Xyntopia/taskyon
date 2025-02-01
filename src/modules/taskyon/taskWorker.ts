@@ -244,11 +244,6 @@ export async function runTaskWorker(
         }
         const taskAdder = addTasks(task)
         void newTasks.map(taskAdder)
-
-        // and finally save the task
-        // TODO: would be good to also already save the unfinished tasks here
-        //       so that we can continue them later...
-        void taskManager.setTask(task, true)
       }
     } catch (error) {
       console.error('Could not complete task iteration:', error)
@@ -261,59 +256,28 @@ export async function runTaskWorker(
         )
       }
 
-      const errorTask: partialTaskDraft = {
-        role: 'system',
-        content: {
-          error: `An error occured:\n\n\`\`\`\n${JSON.stringify(error)}\n\`\`\``,
-        },
-        debugging: {
-          error,
-        },
-      }
-      if (error instanceof TaskProcessingError) {
-        errorTask.content = {
-          //message: `An error occured: ${error.message}:\n\n${dump(error.details, { skipInvalid: true })}`,
-          error: `An error occured:\n\n\`\`\`\n${error.message}${
-            error.details ? ':\n\n' + JSON.stringify(makeSerializable(error.details, 7)) : ''
-          }\n\`\`\``,
-        }
-        if (task) {
-          task.debugging = {
-            ...task.debugging,
-            error: {
-              message: error.message,
-              name: error.name,
-              details: error.details,
-              location: 'task processing',
-            },
-          }
-        }
-      } else if (error instanceof Error) {
-        errorTask.content = {
-          error: `An error occured:\n\n\`\`\`\n${error.message}\n\n${JSON.stringify(error)}\n\`\`\``,
-        }
-        if (task) {
-          task.debugging = {
-            ...task.debugging,
-            error: {
-              message: error.message,
-              stack: error.stack,
-              cause: error.cause,
-            },
-          }
-        }
-      }
+      if (!llmSettings.selectedApi) throw new TaskProcessingError('No AI API selected!!')
+      const api = getApiConfigCopy(llmSettings, llmSettings.selectedApi)
+      if (!api?.selectedModel)
+        throw new TaskProcessingError('No Model selected for Error analysis!!')
+      const errorTaskChain = createErrorTaskChain(
+        error,
+        task,
+        api?.selectedModel,
+        llmSettings.enableOpenAiTools,
+        llmSettings.allowedTools || [],
+      )
+      const errorTaskId = await taskManager.addTaskChain(errorTaskChain, task?.id)
 
-      const newTaskId = await taskManager.addPartialTask2Tree(errorTask, task?.id)
       // interrupt execution if interrupted flag is shown!
       // this makes sure that results are still saved, even if we stop any
       // further execution
 
-      if (!taskWorkerController.isInterrupted()) {
+      if (!taskWorkerController.isInterrupted() && errorTaskId) {
         // we need processTasksQueue as an argument here!!!
-        processTasksQueue.push(newTaskId)
+        processTasksQueue.push(errorTaskId)
       }
-      llmSettings.selectedTaskId = newTaskId
+      llmSettings.selectedTaskId = errorTaskId
 
       // TODO: run this taskWorker in a separate worker js/browser thread!
       // TODO: clean up task, create a new task with the error and  & decide if we want to try this task again!
@@ -334,4 +298,64 @@ export async function runTaskWorker(
       }*/
     }
   }
+}
+
+// TODO: move all the "debugging" stuff away nd make use of the debugging DB that we're getting ;)
+function createErrorTaskChain(
+  error: unknown,
+  task: TaskNode | undefined,
+  analyzeErrorModel: string,
+  llmTools: boolean,
+  allowedTools: string[],
+) {
+  const errorTask: partialTaskDraft = {
+    role: 'system',
+    content: {
+      error: `An error occured:\n\n\`\`\`\n${JSON.stringify(error)}\n\`\`\``,
+    },
+    debugging: {
+      error,
+    },
+  }
+  if (error instanceof TaskProcessingError) {
+    errorTask.content = {
+      //message: `An error occured: ${error.message}:\n\n${dump(error.details, { skipInvalid: true })}`,
+      error: `An error occured:\n\n\`\`\`\n${error.message}${error.details ? ':\n\n' + JSON.stringify(makeSerializable(error.details, 7)) : ''}\n\`\`\``,
+    }
+    if (task) {
+      task.debugging = {
+        ...task.debugging,
+        error: {
+          message: error.message,
+          name: error.name,
+          details: error.details,
+          location: 'task processing',
+        },
+      }
+    }
+  } else if (error instanceof Error) {
+    errorTask.content = {
+      error: `An error occured:\n\n\`\`\`\n${error.message}\n\n${JSON.stringify(error)}\n\`\`\``,
+    }
+    if (task) {
+      task.debugging = {
+        ...task.debugging,
+        error: {
+          message: error.message,
+          stack: error.stack,
+          cause: error.cause,
+        },
+      }
+    }
+  }
+
+  return [
+    errorTask,
+    createChatCompletionTask({
+      model: analyzeErrorModel,
+      goal: 'AnalyzeError',
+      llmTools,
+      allowedTools,
+    }),
+  ]
 }

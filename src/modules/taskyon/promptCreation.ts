@@ -188,7 +188,7 @@ export function addPrompts(
       ? StructuredResponseTypes.SystemResponseEvaluation.merge(UseToolBase)
       : StructuredResponseTypes.SystemResponseEvaluation
     const yamlRepr = zodToYamlString(requiredSchema)
-    if (!('message' in lastTaskBeforeChatCompletion.content))
+    if (!('error' in lastTaskBeforeChatCompletion.content))
       throw new Error('Task needs to have a message!')
     // Remove the last message from openAIConversationThread
     // because it will be replaced by our task message
@@ -197,7 +197,7 @@ export function addPrompts(
 
     const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, {
       ...variables,
-      message: lastTaskBeforeChatCompletion.content.message,
+      message: lastTaskBeforeChatCompletion.content.error,
       schema: yamlRepr,
     })
     appendMessages.push({

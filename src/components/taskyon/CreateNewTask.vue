@@ -323,10 +323,10 @@ import {
   mdiFunctionVariant,
 } from '@quasar/extras/mdi-v6'
 import { deepCopy, deepMerge } from 'src/modules/utils'
-import type { ChatCompletionMessageParam } from 'openai/resources/index.mjs'
 import { useNlpWorker } from 'src/modules/taskyon/webWorkerApi'
 import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
+import type OpenAI from 'openai'
 
 const CodeEditor = defineAsyncComponent(
   () =>
@@ -483,7 +483,7 @@ watchDebounced(
   async () => {
     let accumulatedTokens = 0
     let accumulatedEstimated = 0
-    let messages: ChatCompletionMessageParam[] = []
+    let messages: OpenAI.ChatCompletionMessageParam[] = []
     if (state.llmSettings.selectedTaskId) {
       const tm = await tystate.getTaskManager()
       // we only need the last 2 or 3 tasks in order to check for
