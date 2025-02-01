@@ -64,12 +64,7 @@
           />
         </div>
         <div v-else-if="'structuredResponse' in task.content" class="col">
-          <q-expansion-item
-            dense
-            :icon="mdiHeadCog"
-            header-class="text-info"
-            label="Analyze the Result:"
-          >
+          <q-expansion-item dense :icon="mdiHeadCog" header-class="text-info" label="Analyze...">
             <p style="white-space: pre-wrap">
               {{ dump(task.content.structuredResponse) }}
             </p>

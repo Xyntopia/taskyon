@@ -60,8 +60,10 @@ const props = defineProps<{
   taskWorkerMessage?: string
   showAllTasks?: boolean
   showIds?: boolean
+  expertMode?: boolean
 }>()
 
+// TODO: move this "one layer up" :)
 const toolList = asyncComputed(async () => {
   const tm = await tystate.getTaskManager()
   const toolList = await tm.updateToolDefinitions()
@@ -69,16 +71,16 @@ const toolList = asyncComputed(async () => {
 }, undefined)
 
 function showTask(t: TaskNode) {
-  const hide = t.label ? t.label.includes('hide') : false // TODO: hide tasks based on level as well :)
-  let hideInChat = false
+  console.log('showTask')
+  const noHideLabel = !(t.label ? t.label.includes('hide') : false) // TODO: hide tasks based on level as well :)
+  let showInChat = true
   if ('functionCall' in t.content) {
     if (toolList.value)
-      hideInChat = !!toolList.value[t.content.functionCall.name]?.renderOptions?.hideChat
-    else if (t.content.functionCall.name === 'chatCompletion') hideInChat = true
+      showInChat = !toolList.value[t.content.functionCall.name]?.renderOptions?.hideChat
+    else if (t.content.functionCall.name === 'chatCompletion') showInChat = false
   }
-  const structured =
-    t.content &&
-    ('structuredResponse' in t.content || 'termination' in t.content || 'toolResult' in t.content)
-  return (hide || !structured) && !hideInChat
+  const showType = !(t.content && ('termination' in t.content || 'toolResult' in t.content))
+  const showExpert = 'structuredResponse' in t.content ? props.expertMode : true
+  return showExpert && showType && showInChat && noHideLabel
 }
 </script>

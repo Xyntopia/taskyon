@@ -34,6 +34,7 @@
         :task-worker-message="taskWorkerMessage || ''"
         :show-all-tasks="showAllTasks"
         :show-ids="showAllTasks"
+        :expert-mode="state.appConfiguration.expertMode"
       />
       <!-- Welcome Message -->
       <div
