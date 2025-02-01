@@ -671,17 +671,7 @@ export function createChatCompletionTool(
       newTaskChain[0].debugging!.rawInput = choice
     }
 
-    // chatCompletion by definition completes a chat with a message
-    // so we can just return the message here...
-    if (chatCompletion?.choices[0]?.message.content) {
-      console.log('received chat completion!', chatCompletion)
-
-      return makeTaskResult([newTaskChain])
-    } else {
-      throw new TaskProcessingError(
-        'The response from the chatCompletion was empty! Maybe we should try again?',
-      )
-    }
+    return makeTaskResult([newTaskChain])
   }
 
   const chatCompletion: InternalTool = {
