@@ -345,6 +345,7 @@ async function generateFollowUpTasksFromResult(
   choice: ChatResponseType['choices'][0],
   taskManager: TyTaskManager,
   chatModel: string,
+  llmTools: boolean,
 ): Promise<partialTaskDraft[]> {
   console.log('generate follow up task')
 
@@ -364,6 +365,22 @@ async function generateFollowUpTasksFromResult(
         content: { functionCall: functionCall[0] },
       },
     ]
+  } else if (goal === 'SimpleCompletion' || llmTools) {
+    // if we don't need to call a tool, we simply generate a normal message...
+    // the same is true, if we have enabled native llmTools. In this case
+    // we either got a function back already (functionCall[0]) or we
+    // got a message back :)
+    newTasks = [
+      {
+        role: 'assistant',
+        content: { message: choice.message.content || '' },
+      },
+      {
+        role: 'system',
+        content: { termination: 'assistant answered' },
+      },
+    ]
+    console.log('No more follow up tasks!')
   } else if (goal === 'AnalyzeToolResult' || goal === 'ChooseTool' || goal === 'AnalyzeError') {
     // TODO: move the followup ask generation into a separate task/function! :)
     const commands = getCommandFromStructuredResponse(choice)
@@ -388,19 +405,6 @@ async function generateFollowUpTasksFromResult(
         }),
       )
     }
-  } else if (goal === 'SimpleCompletion') {
-    //if we don't need to call a tool, we simply generate a normal message...
-    newTasks = [
-      {
-        role: 'assistant',
-        content: { message: choice.message.content || '' },
-      },
-      {
-        role: 'system',
-        content: { termination: 'assistant answered' },
-      },
-    ]
-    console.log('No more follow up tasks!')
   } else {
     // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
     throw new TaskProcessingError(`chatCompletion goal unknown: ${goal}`)
@@ -633,6 +637,7 @@ export function createChatCompletionTool(
     if (!llmSettings.selectedApi) {
       throw new TaskProcessingError('No API selected!')
     }
+    // refactor this below and make it all explicit, without passing llmSettings...
     const chatCompletion = await processChatTask(
       goal ?? 'SimpleCompletion',
       allowedTools || [],
@@ -655,6 +660,7 @@ export function createChatCompletionTool(
       choice,
       taskManager,
       model,
+      !!llmTools,
     )
 
     // augment newest tasks with debugging information

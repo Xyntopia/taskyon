@@ -180,103 +180,8 @@ export function addPrompts(
     toolList: toolList || 'N/A',
   }
 
-  if (goal === 'AnalyzeError') {
-    // this is most likely an error message or similar
-    // and we need a structured response in order to decide how to
-    // continue...
-    const requiredSchema = useToolChat
-      ? StructuredResponseTypes.SystemResponseEvaluation.merge(UseToolBase)
-      : StructuredResponseTypes.SystemResponseEvaluation
-    const yamlRepr = zodToYamlString(requiredSchema)
-    if (!('error' in lastTaskBeforeChatCompletion.content))
-      throw new Error('Task needs to have a message!')
-    // Remove the last message from openAIConversationThread
-    // because it will be replaced by our task message
-    // where we have wrapped the original message...
-    modifiedOpenAIConversationThread.pop()
-
-    const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, {
-      ...variables,
-      message: lastTaskBeforeChatCompletion.content.error,
-      schema: yamlRepr,
-    })
-    appendMessages.push({
-      role: 'user',
-      content: filledTemplates.evaluate,
-    })
-  } else if (goal === 'ChooseTool') {
-    const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolSelection.merge(UseToolBase))
-    if (!('message' in lastTaskBeforeChatCompletion.content))
-      throw new Error('Task needs to have a message!')
-    // Remove the last message from openAIConversationThread
-    // because it will be replaced by our task message
-    // where we have wrapped the original message...
-    modifiedOpenAIConversationThread.pop()
-
-    const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, {
-      ...variables,
-      taskContent: lastTaskBeforeChatCompletion.content.message,
-      schema: yamlRepr,
-    })
-    appendMessages.push(
-      {
-        role: 'user',
-        content: filledTemplates.instruction,
-      },
-      {
-        role: 'user',
-        content: filledTemplates.tools,
-      },
-      {
-        role: 'user',
-        content: filledTemplates.task,
-      },
-    )
-    // TODO: to something with file tasks and
-  } else if (goal === 'AnalyzeToolResult') {
-    const requiredSchema = useToolChat
-      ? StructuredResponseTypes.ToolResultBase.merge(UseToolBase)
-      : StructuredResponseTypes.ToolResultBase
-    const yamlRepr = zodToYamlString(requiredSchema)
-    if (!('toolResult' in lastTaskBeforeChatCompletion.content))
-      throw new Error('Task needs to have a toolResult!')
-    // Remove the last message from openAIConversationThread
-    // because it will be replaced by our task message
-    // where we have wrapped the original message...
-    modifiedOpenAIConversationThread.pop()
-
-    const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, {
-      ...variables,
-      toolResult: dump(lastTaskBeforeChatCompletion.content.toolResult),
-      resultSchema: yamlRepr,
-    })
-    appendMessages.push(
-      {
-        role: 'user',
-        content: filledTemplates.instruction,
-      },
-      {
-        role: 'user',
-        content: filledTemplates.tools,
-      },
-      {
-        role: 'user',
-        content: filledTemplates.toolResult,
-      },
-    )
-    //appendMessages.push()
-    /*} else if ('message' in task.content && task.role === 'assistant') {
-    // this here gets called, if we have a structured message which was generated
-    // as the "assistant" role. In the case that we are not in an agent loop or
-    // want tools to be run. we simply want a response from the AI. we will
-    // ask it to do that from a user perspective.  Many llms will give us
-    // "null" content otherwise.
-    appendMessages.push({
-      role: 'user',
-      content: 'Can you please make a final comment on your previous evaluation?',
-    })
-  }*/
-  } else if (goal === 'SimpleCompletion' && llmSettings.useBasePrompt) {
+  // we always prepend our "fancy" prompt, if we use "native" tools...
+  if ((goal === 'SimpleCompletion' && llmSettings.useBasePrompt) || llmSettings.enableOpenAiTools) {
     const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, variables)
     prependMessages.unshift({
       role: 'system',
@@ -297,6 +202,106 @@ export function addPrompts(
           content: toolAwareness,
         })
       }
+    }
+  }
+
+  if (!llmSettings.enableOpenAiTools) {
+    if (goal === 'AnalyzeError') {
+      // this is most likely an error message or similar
+      // and we need a structured response in order to decide how to
+      // continue...
+      const requiredSchema = useToolChat
+        ? StructuredResponseTypes.SystemResponseEvaluation.merge(UseToolBase)
+        : StructuredResponseTypes.SystemResponseEvaluation
+      const yamlRepr = zodToYamlString(requiredSchema)
+      if (!('error' in lastTaskBeforeChatCompletion.content))
+        throw new Error('Task needs to have a message!')
+      // Remove the last message from openAIConversationThread
+      // because it will be replaced by our task message
+      // where we have wrapped the original message...
+      modifiedOpenAIConversationThread.pop()
+
+      const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, {
+        ...variables,
+        message: lastTaskBeforeChatCompletion.content.error,
+        schema: yamlRepr,
+      })
+      appendMessages.push({
+        role: 'user',
+        content: filledTemplates.evaluate,
+      })
+    } else if (goal === 'ChooseTool') {
+      const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolSelection.merge(UseToolBase))
+      if (!('message' in lastTaskBeforeChatCompletion.content))
+        throw new Error('Task needs to have a message!')
+      // Remove the last message from openAIConversationThread
+      // because it will be replaced by our task message
+      // where we have wrapped the original message...
+      modifiedOpenAIConversationThread.pop()
+
+      const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, {
+        ...variables,
+        taskContent: lastTaskBeforeChatCompletion.content.message,
+        schema: yamlRepr,
+      })
+      appendMessages.push(
+        {
+          role: 'user',
+          content: filledTemplates.instruction,
+        },
+        {
+          role: 'user',
+          content: filledTemplates.tools,
+        },
+        {
+          role: 'user',
+          content: filledTemplates.task,
+        },
+      )
+      // TODO: to something with file tasks and
+    } else if (goal === 'AnalyzeToolResult') {
+      const requiredSchema = useToolChat
+        ? StructuredResponseTypes.ToolResultBase.merge(UseToolBase)
+        : StructuredResponseTypes.ToolResultBase
+      const yamlRepr = zodToYamlString(requiredSchema)
+      if (!('toolResult' in lastTaskBeforeChatCompletion.content))
+        throw new Error('Task needs to have a toolResult!')
+      // Remove the last message from openAIConversationThread
+      // because it will be replaced by our task message
+      // where we have wrapped the original message...
+      modifiedOpenAIConversationThread.pop()
+
+      const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, {
+        ...variables,
+        toolResult: dump(lastTaskBeforeChatCompletion.content.toolResult),
+        resultSchema: yamlRepr,
+      })
+      appendMessages.push(
+        {
+          role: 'user',
+          content: filledTemplates.instruction,
+        },
+        {
+          role: 'user',
+          content: filledTemplates.tools,
+        },
+        {
+          role: 'user',
+          content: filledTemplates.toolResult,
+        },
+      )
+      //appendMessages.push()
+      /*} else if ('message' in task.content && task.role === 'assistant') {
+    // this here gets called, if we have a structured message which was generated
+    // as the "assistant" role. In the case that we are not in an agent loop or
+    // want tools to be run. we simply want a response from the AI. we will
+    // ask it to do that from a user perspective.  Many llms will give us
+    // "null" content otherwise.
+    appendMessages.push({
+      role: 'user',
+      content: 'Can you please make a final comment on your previous evaluation?',
+    })
+  }*/
     }
   }
 
