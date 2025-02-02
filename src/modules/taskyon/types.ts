@@ -288,7 +288,13 @@ of how content can be structured. `,
   // all debugging information should be purely optional...
   // TODO: we should also include debugging information about the execution of the previous task
   //       here. The reason we're doing this, is, that we consider every Tasknode the "Result" of
-  //       its previous/parent tas.
+  //       its previous/parent task.
+  //       remove this here entirely...
+  // TODO:  hmmm...   I am not entirely sure yet, if its really necessary to have our own "debugging"
+  //        database..  it might be sufficient to simply always attach debugging tasks to the "next one"
+  //        in line..   e.g. for costs its almost always the task following a chatCompletion function
+  //        but also some tools.
+  //        if we store debugging information inside of tasks, it would make "custom tools" so much easier..
   debugging: z
     .object({
       threadMessage: z.any().optional(), // Replace with the correct Zod schema if available

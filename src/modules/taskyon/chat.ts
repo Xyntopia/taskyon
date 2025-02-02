@@ -344,6 +344,9 @@ export async function enrichWithUsageInfos(
       for (const childID of childrenIDs) {
         const child = await taskManager.getTask(childID)
         if (child && !child?.debugging.promptTokens) {
+          // TODO: get rid of this. don't save a task like this.
+          //       we should only store tokens in the follow-up tasks right after chatCompletion
+          //       finished...
           await taskManager.updateTask(
             {
               id: child.id,
