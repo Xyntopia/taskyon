@@ -11,7 +11,7 @@ const tystate = useTaskyonStore()
 const state = useAppStateStore()
 
 export const testPGLite = async () => {
-  const db = getDatabase('chatStore')
+  const db = await getDatabase('chatStore')
   return {
     db,
     pgvector: await db.exec('CREATE EXTENSION IF NOT EXISTS vector;'),
@@ -31,7 +31,7 @@ export const testPGLite = async () => {
       INSERT INTO test (task, vec) VALUES ('test2', '[4,5,6]');
       INSERT INTO test (task, vec) VALUES ('test3', '[7,8,9]');
     `),
-    query: await db.query(`SELECT * from test WHERE id = 1;`),
+    query: await db.sql`SELECT * from test WHERE id = 1;`,
     'vector query': await db.exec(`
       SELECT
         task,

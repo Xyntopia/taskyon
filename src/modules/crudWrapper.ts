@@ -1,4 +1,5 @@
-import type { PGliteWorker } from '@electric-sql/pglite/worker'
+import { ref, onScopeDispose } from 'vue'
+import type { TyPGDB } from './pglite.api'
 
 // Helper functions
 // prevent SQL injection.. (TODO: not sure how well this works)
@@ -21,7 +22,7 @@ type Row<T> = {
   data: T
 }
 
-export const createCrudWrapper = async <T>(db: PGliteWorker, options: CrudOptions) => {
+export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => {
   const {
     tableName,
     idColumn = 'id',
@@ -62,6 +63,24 @@ export const createCrudWrapper = async <T>(db: PGliteWorker, options: CrudOption
     list: async (): Promise<Row<T>[]> => {
       const result = await db.sql<Row<T>>`SELECT ${idColumn}, ${dataColumn} FROM ${tableName};`
       return result.rows
+    },
+    // Note: onScopeDispose works when called from a Vue component or a proper effect scope.
+    readReactive: (id: string | number) => {
+      const record = ref<T | null>(null)
+      const query = `SELECT ${dataColumn} FROM ${tableName} WHERE ${idColumn} = ${formatValue(id)};`
+      const live = db.live.query<T>({
+        query,
+        callback: (res) => {
+          record.value = res.rows.length ? res.rows[0]!.data : null
+        },
+      })
+
+      // Automatically unsubscribe when the current effect scope is disposed.
+      onScopeDispose(() => {
+        live.unsubscribe()
+      })
+
+      return record
     },
   }
 }
