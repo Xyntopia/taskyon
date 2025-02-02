@@ -1,52 +1,9 @@
 import type { PGliteWorker } from '@electric-sql/pglite/worker'
 
 // Helper functions
+// prevent SQL injection.. (TODO: not sure how well this works)
 const formatValue = (value: string | number): string =>
   typeof value === 'number' ? value.toString() : `'${value.replace(/'/g, "''")}'`
-
-const buildInsertSql = (
-  table: string,
-  idColumn: string,
-  dataColumn: string,
-  id: string | number,
-  data: unknown,
-): string => {
-  const formattedId = formatValue(id)
-  const jsonData = formatValue(JSON.stringify(data))
-  return `INSERT INTO ${table} (${idColumn}, ${dataColumn})
-          VALUES (${formattedId}, ${jsonData});`
-}
-
-const buildSelectSql = (
-  table: string,
-  idColumn: string,
-  dataColumn: string,
-  id: string | number,
-): string => {
-  return `SELECT ${dataColumn} FROM ${table}
-          WHERE ${idColumn} = ${formatValue(id)};`
-}
-
-const buildUpdateSql = (
-  table: string,
-  idColumn: string,
-  dataColumn: string,
-  id: string | number,
-  data: unknown,
-): string => {
-  // NOTE: this simply replaces the entire JSON. If merging is needed,
-  // consider a JSONB merge approach.
-  const jsonData = formatValue(JSON.stringify(data))
-  return `UPDATE ${table}
-          SET ${dataColumn} = ${jsonData}
-          WHERE ${idColumn} = ${formatValue(id)};`
-}
-
-const buildDeleteSql = (table: string, idColumn: string, id: string | number): string =>
-  `DELETE FROM ${table} WHERE ${idColumn} = ${formatValue(id)};`
-
-const buildListSql = (table: string, idColumn: string, dataColumn: string): string =>
-  `SELECT ${idColumn}, ${dataColumn} FROM ${table};`
 
 // Generic CRUD wrapper options
 interface CrudOptions {
@@ -55,6 +12,7 @@ interface CrudOptions {
   dataColumn?: string
   // Optional SQL to create the table (including any special columns like vector)
   createTableSql?: string
+  pgvector?: boolean
 }
 
 type Row<T> = {
@@ -64,10 +22,16 @@ type Row<T> = {
 }
 
 export const createCrudWrapper = async <T>(db: PGliteWorker, options: CrudOptions) => {
-  const { tableName, idColumn = 'id', dataColumn = 'data', createTableSql } = options
+  const {
+    tableName,
+    idColumn = 'id',
+    dataColumn = 'data',
+    createTableSql = `CREATE TABLE IF NOT EXISTS ${tableName} (${idColumn} SERIAL PRIMARY KEY, ${dataColumn} JSONB NOT NULL);`,
+    pgvector = false,
+  } = options
 
   // Incorporate the pgvector extension if needed
-  await db.exec('CREATE EXTENSION IF NOT EXISTS vector;')
+  if (pgvector) await db.exec('CREATE EXTENSION IF NOT EXISTS vector;')
 
   // Create table if SQL provided
   if (createTableSql) {
@@ -76,25 +40,27 @@ export const createCrudWrapper = async <T>(db: PGliteWorker, options: CrudOption
 
   return {
     create: async (id: string | number, data: T) => {
-      const sql = buildInsertSql(tableName, idColumn, dataColumn, id, data)
-      await db.exec(sql)
+      const formattedId = formatValue(id)
+      const jsonData = formatValue(JSON.stringify(data))
+      await db.exec(`INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
+              VALUES (${formattedId}, ${jsonData});`)
     },
     read: async (id: string | number): Promise<T | null> => {
-      const sql = buildSelectSql(tableName, idColumn, dataColumn, id)
-      const result = await db.query<Row<T>>(sql)
+      const result = await db.sql<Row<T>>`SELECT ${dataColumn} FROM ${tableName}
+         WHERE ${idColumn} = ${formatValue(id)};`
       return result.rows.length ? result.rows[0]!.data : null
     },
     update: async (id: string | number, data: Partial<T>) => {
-      const sql = buildUpdateSql(tableName, idColumn, dataColumn, id, data)
-      await db.exec(sql)
+      const jsonData = formatValue(JSON.stringify(data))
+      await db.exec(`UPDATE ${tableName}
+              SET ${dataColumn} = ${jsonData}
+              WHERE ${idColumn} = ${formatValue(id)};`)
     },
     delete: async (id: string | number) => {
-      const sql = buildDeleteSql(tableName, idColumn, id)
-      await db.exec(sql)
+      await db.exec(`DELETE FROM ${tableName} WHERE ${idColumn} = ${formatValue(id)};`)
     },
     list: async (): Promise<Row<T>[]> => {
-      const sql = buildListSql(tableName, idColumn, dataColumn)
-      const result = await db.query<Row<T>>(sql)
+      const result = await db.sql<Row<T>>`SELECT ${idColumn}, ${dataColumn} FROM ${tableName};`
       return result.rows
     },
   }
