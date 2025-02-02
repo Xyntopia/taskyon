@@ -57,6 +57,13 @@ export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => 
               SET ${dataColumn} = ${jsonData}
               WHERE ${idColumn} = ${formatValue(id)};`)
     },
+    upsert: async (id: string | number, data: T) => {
+      const formattedId = formatValue(id)
+      const jsonData = formatValue(JSON.stringify(data))
+      await db.exec(`INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
+          VALUES (${formattedId}, ${jsonData})
+          ON CONFLICT (${idColumn}) DO UPDATE SET ${dataColumn} = ${jsonData};`)
+    },
     delete: async (id: string | number) => {
       await db.exec(`DELETE FROM ${tableName} WHERE ${idColumn} = ${formatValue(id)};`)
     },
@@ -65,10 +72,10 @@ export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => 
       return result.rows
     },
     // Note: onScopeDispose works when called from a Vue component or a proper effect scope.
-    readReactive: (id: string | number) => {
+    readReactive: async (id: string | number) => {
       const record = ref<T | null>(null)
       const query = `SELECT ${dataColumn} FROM ${tableName} WHERE ${idColumn} = ${formatValue(id)};`
-      const live = db.live.query<T>({
+      const live = await db.live.query<Row<T>>({
         query,
         callback: (res) => {
           record.value = res.rows.length ? res.rows[0]!.data : null
@@ -77,10 +84,12 @@ export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => 
 
       // Automatically unsubscribe when the current effect scope is disposed.
       onScopeDispose(() => {
-        live.unsubscribe()
+        void live.unsubscribe()
       })
 
       return record
     },
   }
 }
+
+export type CrudWrapper<T> = Awaited<ReturnType<typeof createCrudWrapper<T>>>
