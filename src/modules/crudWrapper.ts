@@ -57,6 +57,12 @@ interface CrudOptions {
   createTableSql?: string
 }
 
+type Row<T> = {
+  [key: string]: unknown
+  id: string | number
+  data: T
+}
+
 export const createCrudWrapper = async <T>(db: PGliteWorker, options: CrudOptions) => {
   const { tableName, idColumn = 'id', dataColumn = 'data', createTableSql } = options
 
@@ -75,8 +81,8 @@ export const createCrudWrapper = async <T>(db: PGliteWorker, options: CrudOption
     },
     read: async (id: string | number): Promise<T | null> => {
       const sql = buildSelectSql(tableName, idColumn, dataColumn, id)
-      const result = await db.query(sql)
-      return result.rows.length ? JSON.parse(result.rows[0] as string) : null
+      const result = await db.query<Row<T>>(sql)
+      return result.rows.length ? result.rows[0]!.data : null
     },
     update: async (id: string | number, data: Partial<T>) => {
       const sql = buildUpdateSql(tableName, idColumn, dataColumn, id, data)
@@ -86,13 +92,10 @@ export const createCrudWrapper = async <T>(db: PGliteWorker, options: CrudOption
       const sql = buildDeleteSql(tableName, idColumn, id)
       await db.exec(sql)
     },
-    list: async (): Promise<Array<{ id: string | number; data: T }>> => {
+    list: async (): Promise<Row<T>[]> => {
       const sql = buildListSql(tableName, idColumn, dataColumn)
-      const result = await db.query(sql)
-      return result.rows.map((row: unknown) => ({
-        id: row[idColumn],
-        data: JSON.parse(row[dataColumn]),
-      }))
+      const result = await db.query<Row<T>>(sql)
+      return result.rows
     },
   }
 }
