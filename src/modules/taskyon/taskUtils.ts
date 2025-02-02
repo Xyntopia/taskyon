@@ -1,6 +1,5 @@
-import type { TaskNode, TaskGetter } from './types'
+import type { TaskNode, TaskGetter, partialTaskDraft } from './types'
 import { load } from 'js-yaml'
-import { partialTaskDraft } from 'src/modules/taskyon/types'
 
 export const taskUtils = (getTask: TaskGetter) => {
   /* get a chain of taskss with the last task being the last element in the list */
