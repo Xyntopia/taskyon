@@ -167,9 +167,6 @@ async function processTask(
     ]
     return [newTasks]
   }
-
-  // get token usage for this task..
-  //await addTaskCostInformation(result, task, taskManager, llmSettings, apiKey)
 }
 
 export async function runTaskWorker(

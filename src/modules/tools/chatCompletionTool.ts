@@ -1,7 +1,6 @@
 import type OpenAI from 'openai'
 import {
   callLLM,
-  enrichWithUsageInfos,
   generateHeaders,
   getOpenRouterGenerationInfo,
   getTaskyonCosts,
@@ -13,7 +12,13 @@ import {
 } from '../taskyon/promptCreation'
 import type { TyTaskManager } from '../taskyon/taskManager'
 import { type TaskWorkerController } from '../taskyon/taskWorker'
-import type { partialTaskDraft, ToolBase, TaskNode } from '../taskyon/types'
+import type {
+  partialTaskDraft,
+  ToolBase,
+  TaskNode,
+  TaskNodeMeta,
+  OpenRouterGenerationInfo,
+} from '../taskyon/types'
 import { FunctionCall } from '../taskyon/types'
 import { ChatResponseType, getApiConfigCopy } from '../taskyon/types'
 import { TaskProcessingError, type llmSettings } from '../taskyon/types'
@@ -24,7 +29,6 @@ import {
   type toolContext,
 } from '../taskyon/tools'
 import {
-  deepCopy,
   fileToBase64,
   keysToLowerCase,
   normalizeFalsyValues,
@@ -48,6 +52,7 @@ export type Goals = 'SimpleCompletion' | 'AnalyzeError' | 'ChooseTool' | 'Analyz
 export async function processChatTask(
   goal: Goals,
   allowedTools: string[],
+  toolDefs: Record<string, ToolBase>,
   currentTask: TaskNode,
   configuration: { model: string; chatApi: string },
   llmSettings: llmSettings,
@@ -55,7 +60,9 @@ export async function processChatTask(
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController,
   apiKeys: { [key: string]: string },
+  lastTaskBeforeChatCompletion: TaskNode,
 ) {
+  //TODO: this code is duplicated, can we do this better?
   const api = getApiConfigCopy(llmSettings, configuration.chatApi)
   const apiKey = llmSettings.selectedApi ? apiKeys[llmSettings.selectedApi] : undefined
   if (!apiKey)
@@ -74,7 +81,6 @@ export async function processChatTask(
     //TODO: we can create more things here like giving it context form other tasks, lookup
     //      main objective, previous tasks etc....
     // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
-    const toolDefs = await taskManager.updateToolDefinitions(true)
     const taskIdChain = await taskManager.getTaskIdChain(currentTask.id)
     let openAIConversationThread = await buildChatThread(
       llmSettings.tryUsingVisionModels,
@@ -85,13 +91,6 @@ export async function processChatTask(
       taskManager.getFileMappingByUuid,
       taskManager.getFile,
     )
-
-    // now add goal-specific prompts...
-    const lastTaskBeforeChatCompletion = await taskManager.getTask(currentTask.priorID)
-    if (!lastTaskBeforeChatCompletion)
-      throw new TaskProcessingError(
-        `chatCompletion Task needs a parent Task to work! ${currentTask.id}`,
-      )
 
     // TODO: split llmSettings.enableOpenAiTools settings from addPrompts for refactoring
     // TODO: split "base" prompt from "addPrompts"  and maybe have a separate function for each
@@ -146,88 +145,91 @@ export async function processChatTask(
         },
       )
 
-      return chatCompletion
+      return { chatCompletion: chatCompletion, openAIConversationThread }
+    } else {
+      throw new TaskProcessingError('The generated chat for chatCompletion is empty!')
     }
   } else {
     throw new TaskProcessingError('Task has no inference model selected!')
   }
 }
 
-// TODO: use this function to enrich tasks with metadata (as a start in a separate database, we could use rxdb for this...)
-// add this function right to where we produced the conversationthread in the chatCompletionTool... and add
-// the cost information to some sort of a db, maybe postgres? :)
-export async function addTaskCostInformation(
-  result: unknown,
-  task: Readonly<TaskNode>,
-  taskManager: TyTaskManager,
+async function addTaskCostInformation(
+  chatResponse: ChatResponseType | undefined,
+  taskId: string,
   llmSettings: llmSettings,
-  apiKey?: string,
-) {
-  // TODO: also get cost information for other tasks, than chatCompletion ;)!
-  const chatResponse = ChatResponseType.safeParse(result)
-  if (chatResponse) {
-    // TODO: we don't need this here anymore, we should get this from inside the chatprocessor itself
-    /*const { openAIConversationThread } = await generateCompleteChat(
-      goal,
-      task,
-      llmSettings,
-      taskManager,
-    )*/
+  apiKeys: { [key: string]: string },
+): Promise<TaskNodeMeta> {
+  let generationInfo: OpenRouterGenerationInfo | undefined
+  const apiKey = llmSettings.selectedApi ? apiKeys[llmSettings.selectedApi] : undefined
 
-    // openai sends back the exact number of prompt tokens :)
-    if (chatResponse.usage) {
-      task.debugging.promptTokens = chatResponse.usage.prompt_tokens
-      task.debugging.resultTokens = chatResponse.usage.completion_tokens
-      task.debugging.taskTokens = chatResponse.usage.total_tokens
-    }
-    const allTools = await taskManager.updateToolDefinitions(true)
-    task.debugging.estimatedTokens = await estimateChatTokens(
-      // we are doing a deepCopy here in order to make sure we loose the^ reactivity...
-      // TODO:  once our tasks are immutable and non-reactive, we can remove this..
-      deepCopy(task),
-      openAIConversationThread,
-      allTools,
-      llmSettings.allowedTools || [],
-      chatResponse.choices[0]!.message.content ?? '',
+  // TODO: it might be a good idea to simply replace this with a tasknode ;)
+  if (chatResponse && llmSettings.selectedApi === 'openrouter.ai' && apiKey) {
+    console.log('getting openrouter generation info')
+    await sleep(10000)
+    generationInfo = await getOpenRouterGenerationInfo(
+      chatResponse.id,
+      generateHeaders(apiKey, llmSettings.siteUrl, llmSettings.selectedApi || ''),
     )
-
-    // TODO: replace this below with a taskNode in lower hierachy which does this :)
-    if (chatResponse && llmSettings.selectedApi === 'openrouter.ai' && apiKey) {
-      console.log('getting openrouter generation info')
-      void sleep(10000).then(() =>
-        getOpenRouterGenerationInfo(
-          chatResponse.id,
-          generateHeaders(apiKey, llmSettings.siteUrl, llmSettings.selectedApi || ''),
-        ).then((generationInfo) => enrichWithUsageInfos(task, taskManager, generationInfo)),
-      )
-    } else if (
-      chatResponse &&
-      llmSettings.selectedApi === 'taskyon' &&
-      !chatResponse.model.endsWith(':free') &&
-      apiKey &&
-      !isTaskyonKey(apiKey, false)
-    ) {
-      // TODO: remove "configuration" here and get the information from the tasks function call parameters
-      const api = getApiConfigCopy(llmSettings, task.configuration?.chatApi)
-      if (api) {
-        console.log('getting taskyon generation info')
-        // our backend tries to get the finished costs
-        // after ~4000ms, so we wait for 6000 here...
-        void sleep(6000).then(() =>
-          getTaskyonCosts(llmSettings, apiKey, api, chatResponse.id, task.id).then(
-            (generationInfo) => {
-              console.log('taskyon generation info:', generationInfo)
-              void enrichWithUsageInfos(task, taskManager, generationInfo)
-            },
-          ),
-        )
-      }
+  } else if (
+    chatResponse &&
+    llmSettings.selectedApi === 'taskyon' &&
+    !chatResponse.model.endsWith(':free') &&
+    apiKey &&
+    !isTaskyonKey(apiKey, false)
+  ) {
+    // TODO: remove "configuration" here and get the information from the tasks function call parameters
+    const api = getApiConfigCopy(llmSettings, llmSettings.selectedApi)
+    if (api) {
+      console.log('getting taskyon generation info')
+      // our backend tries to get the finished costs
+      // after ~4000ms, so we wait for 6000 here...
+      await sleep(6000)
+      generationInfo = await getTaskyonCosts(llmSettings, apiKey, api, chatResponse.id, taskId)
+      console.log('taskyon generation info:', generationInfo)
     }
   }
+  if (generationInfo?.native_tokens_completion && generationInfo.native_tokens_prompt) {
+    // we get the useage data very often in an asynchronous form.
+    // thats why we need to
+    // openai sends back the exact number of prompt tokens :)
+    return {
+      promptTokens: generationInfo.native_tokens_prompt,
+      resultTokens: generationInfo.native_tokens_completion,
+      taskCosts: generationInfo.usage,
+      taskTokens: generationInfo.native_tokens_prompt + generationInfo.native_tokens_completion,
+    }
+  }
+  return {}
 }
 
 // get worker function for our chat :)
 const { estimateChatTokens } = useNlpWorker()
+
+async function saveTokenUsage(
+  chatResponse: ChatResponseType,
+  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  toolDefs: Record<string, ToolBase>,
+  content: TaskNode['content'],
+  llmSettings: llmSettings,
+): Promise<TaskNodeMeta> {
+  let costInfo: TaskNodeMeta = {}
+  if (chatResponse.usage) {
+    costInfo = {
+      promptTokens: chatResponse.usage.prompt_tokens,
+      resultTokens: chatResponse.usage.completion_tokens,
+      taskTokens: chatResponse.usage.total_tokens,
+    }
+  }
+  costInfo.estimatedTokens = await estimateChatTokens(
+    content,
+    openAIConversationThread,
+    toolDefs,
+    llmSettings.allowedTools || [],
+    chatResponse.choices[0]!.message.content ?? '',
+  )
+  return costInfo
+}
 
 function parseYamlResponse2Record(message: string): Record<string, unknown> {
   // parse the response and create a new task filled with the correct parameters
@@ -339,13 +341,13 @@ function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]
 // we return 2D list of tasks here..   each list represents a chain of linked tasks through priorID
 // TODO:  move all of this function into its own Tool as well! this would be our "planner" tool/function :)
 //        this tool would analyze the results of the previous function and create new tasks!
-async function generateFollowUpTasksFromResult(
+function generateFollowUpTasksFromResult(
   goal: Goals,
   choice: ChatResponseType['choices'][0],
-  taskManager: TyTaskManager,
   chatModel: string,
   llmTools: boolean,
-): Promise<partialTaskDraft[]> {
+  allTools: Record<string, ToolBase>,
+): partialTaskDraft[] {
   console.log('generate follow up task')
 
   let newTasks: partialTaskDraft[] = []
@@ -354,7 +356,7 @@ async function generateFollowUpTasksFromResult(
 
   // check if we have any functioncalls from the llm inference
   // in that case we shoud handle that first :)
-  const functionCall = extractOpenAIFunctions(choice, await taskManager.updateToolDefinitions(true))
+  const functionCall = extractOpenAIFunctions(choice, allTools)
   if (functionCall[0]) {
     // TODO: enable multiple parallel function calls
     newTasks = [
@@ -636,34 +638,74 @@ export function createChatCompletionTool(
     if (!llmSettings.selectedApi) {
       throw new TaskProcessingError('No API selected!')
     }
+
+    const toolDefs = await taskManager.updateToolDefinitions(true)
     // refactor this below and make it all explicit, without passing llmSettings...
-    const chatCompletion = await processChatTask(
+    // now add goal-specific prompts...
+    const lastTaskBeforeChatCompletion = await taskManager.getTask(context.currentTask.priorID)
+    if (!lastTaskBeforeChatCompletion)
+      throw new TaskProcessingError(
+        `chatCompletion Task needs a parent Task to work! ${context.currentTask.id}`,
+      )
+    const { chatCompletion, openAIConversationThread } = await processChatTask(
       goal ?? 'SimpleCompletion',
       allowedTools || [],
+      toolDefs,
       context.currentTask,
       { model, chatApi: llmSettings.selectedApi },
       llmSettings,
       taskManager,
       taskWorkerController,
       apiKeys,
+      lastTaskBeforeChatCompletion,
     )
 
     // parse the response into our own type ...
     const resp = ChatResponseType.safeParse(chatCompletion)
-    const choice = resp.data?.choices[0]
-    if (!choice)
-      throw new TaskProcessingError('Our ChatCompletion tool did not get a valid response!')
 
-    const newTaskChain = await generateFollowUpTasksFromResult(
+    let metaInfo: TaskNodeMeta = {}
+    // get token usage for this task..
+    if (resp.success) {
+      // openai & openrouter sends back the exact number of prompt tokens :)
+      metaInfo = await saveTokenUsage(
+        resp.data,
+        openAIConversationThread,
+        toolDefs,
+        lastTaskBeforeChatCompletion.content,
+        llmSettings,
+      )
+      // we run this asynchronously, because it fetches data in the
+      // background and we don't want to wait here...
+      void addTaskCostInformation(resp.data, context.currentTask.id, llmSettings, apiKeys).then(
+        async (costMeta) => {
+          const oldMeta = await taskManager.debugDb.read(context.currentTask.id)
+          const newMeta = {
+            ...oldMeta,
+            ...costMeta,
+          }
+          void taskManager.debugDb.upsert(context.currentTask.id, newMeta)
+        },
+      )
+    }
+
+    const choice = resp.data?.choices[0]
+    metaInfo.choice = choice
+    if (!choice)
+      throw new TaskProcessingError(
+        'Our ChatCompletion tool did not get a valid response!',
+        resp.data,
+      )
+
+    const newTaskChain = generateFollowUpTasksFromResult(
       goal || 'SimpleCompletion',
       choice,
-      taskManager,
       model,
       !!llmTools,
+      toolDefs,
     )
 
     if (newTaskChain[0]) {
-      void taskManager.debugDb.create(context.currentTask.id, { choice })
+      void taskManager.debugDb.upsert(context.currentTask.id, metaInfo)
     }
 
     return makeTaskResult([newTaskChain])

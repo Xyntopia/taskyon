@@ -1,5 +1,4 @@
-import type { TaskNode, OpenRouterGenerationInfo, Model, llmSettings } from './types'
-import type { TyTaskManager } from './taskManager'
+import type { OpenRouterGenerationInfo, Model, llmSettings } from './types'
 import type OpenAI from 'openai'
 import { sleep, asyncTimeLruCache } from '../utils'
 import { TaskProcessingError, type apiConfig } from './types'
@@ -321,43 +320,6 @@ export async function getOpenRouterGenerationInfo(
     }
   }
   throw new Error(`Failed to get generation info after 3 retries for ${generationId}`)
-}
-
-export async function enrichWithUsageInfos(
-  task: TaskNode,
-  taskManager: TyTaskManager,
-  generationInfo?: OpenRouterGenerationInfo,
-) {
-  if (generationInfo) {
-    if (generationInfo.native_tokens_completion && generationInfo.native_tokens_prompt) {
-      // we get the useage data very often in an asynchronous form.
-      // thats why we need to
-      // openai sends back the exact number of prompt tokens :)
-      const debugging = {
-        promptTokens: generationInfo.native_tokens_prompt,
-        resultTokens: generationInfo.native_tokens_completion,
-        taskCosts: generationInfo.usage,
-        taskTokens: generationInfo.native_tokens_prompt + generationInfo.native_tokens_completion,
-      }
-      await taskManager.updateTask({ id: task.id, debugging }, true)
-      const childrenIDs = await taskManager.searchOneChild(task.id)
-      for (const childID of childrenIDs) {
-        const child = await taskManager.getTask(childID)
-        if (child && !child?.debugging.promptTokens) {
-          // TODO: get rid of this. don't save a task like this.
-          //       we should only store tokens in the follow-up tasks right after chatCompletion
-          //       finished...
-          await taskManager.updateTask(
-            {
-              id: child.id,
-              debugging: { promptTokens: task.debugging.resultTokens },
-            },
-            true,
-          )
-        }
-      }
-    }
-  }
 }
 
 const availableModelsTmp = async (
