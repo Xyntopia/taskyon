@@ -1,3 +1,4 @@
+import type { TaskNodeMeta } from './types'
 import { type TaskNode, ToolBase, TaskListType, type partialTaskDraft } from './types'
 import { v1 as uuidv1 } from 'uuid'
 import {
@@ -17,6 +18,7 @@ import { taskUtils } from './taskUtils'
 import { type MangoQuery } from 'rxdb'
 import { dump, load } from 'js-yaml'
 import { processMarkdown } from 'src/modules/taskyon/taskUtils'
+import type { CrudWrapper } from '../crudWrapper'
 
 /**
  *
@@ -444,7 +446,8 @@ function useTaskVectors(
 export function useTyTaskManager(
   tasksCache: Map<string, TaskNode>,
   defaultTools: InternalTool[],
-  taskyonDB?: TaskyonDatabase,
+  taskyonDB: TaskyonDatabase,
+  debugDb: CrudWrapper<TaskNodeMeta>,
   vectorizerModel?: string,
 ) {
   // uses RxDB as a DB backend..
@@ -1020,6 +1023,7 @@ export function useTyTaskManager(
     addPartialTask2Tree,
     addTaskChain,
     addMdTaskChain,
+    debugDb,
   }
 }
 export type TyTaskManager = ReturnType<typeof useTyTaskManager>

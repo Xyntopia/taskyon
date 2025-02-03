@@ -1,5 +1,5 @@
 import { useTyTaskManager } from './taskManager'
-import type { TaskNode } from './types'
+import type { TaskNode, TaskNodeMeta, llmSettings } from './types'
 import type { TaskyonDatabase } from './rxdb'
 import { createTaskyonDatabase } from './rxdb'
 import type { TaskWorkerController } from './taskWorker'
@@ -9,9 +9,10 @@ import { loadFile } from 'src/modules/loadFiles'
 // TODO: make webpack automatically add all tool files from /tools/*
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
-import type { llmSettings } from './types'
 import { AsyncQueue, toLowerCaseKeys } from '../utils'
 import { createChatCompletionTool } from '../tools/chatCompletionTool'
+import { getDatabase } from '../pglite.api'
+import { createCrudWrapper } from '../crudWrapper'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -31,6 +32,12 @@ export async function initTaskyon(
     ...AdditionalTools,
   ]
 
+  const pgldb = await getDatabase('taskyon')
+  const debugDb = await createCrudWrapper<TaskNodeMeta>(pgldb, {
+    tableName: 'debugDb',
+  })
+
+  // TODO: possibly move this into an "upper level?"
   console.log('initializing taskyondb')
   let taskyonDBInstance: TaskyonDatabase | undefined = undefined
   try {
@@ -44,6 +51,7 @@ export async function initTaskyon(
     TaskList,
     ToolList,
     taskyonDBInstance,
+    debugDb,
     llmSettings.vectorizationModel,
   )
   console.log('finished taskManager initialization')

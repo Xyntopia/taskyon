@@ -267,6 +267,41 @@ const TaskContent = z.union([
 
 export type TaskContent = z.infer<typeof TaskContent>
 
+export const TaskNodeMeta = z
+  .object({
+    threadMessage: z.any().optional(), // Replace with the correct Zod schema if available
+    promptTokens: z.number().optional(),
+    resultTokens: z.number().optional(),
+    taskTokens: z.number().optional(),
+    estimatedTokens: z
+      .object({
+        resultTokens: z.number().optional(),
+        taskCosts: z.number().optional(),
+        functionTokens: z.number().optional(),
+        promptTokens: z.number().optional(),
+        singlePromptTokens: z.number().optional(),
+      })
+      .optional(),
+    toolStreamArgsContent: z.record(z.string()).optional(),
+    streamContent: z.string().optional(),
+    taskCosts: z.number().optional(),
+    rawInput: z.unknown().optional(), // Replace with the correct Zod schema if available
+    choice: z
+      .unknown()
+      .optional()
+      .describe(
+        'In the case of an OpenAI chatCompletion, we can add the raw result here for debugging',
+      ),
+    error: z.unknown().optional(),
+    // the taskprompt is the full chat which leads to the result. This is important that we have this
+    // for to debugging reasons...
+    // TODO:remove all openAI references hee nd move them into our chatCmpletion function...
+    taskPrompt: z.union([z.array(OpenAIMessage), z.any()]).optional(), // Replace 'z.any()' with the correct Zod type
+  })
+  .partial()
+
+export type TaskNodeMeta = z.infer<typeof TaskNodeMeta>
+
 // TODO: add an "extended" task and put all information in there which we don't really "need"
 //       to save in the database. E.g. how many follow-up tasks are allowed, how many
 //       errors are allowed for function tasks  etc...  so mostly runtime-logic
@@ -284,43 +319,10 @@ of how content can be structured. `,
     .optional()
     .describe('The ID of the parent task which created this subtask on a lower stack level'),
   priorID: z.string().optional().describe('The ID of the previous task in the same stack level.'),
-  // provide debugging information about the task execution
+  // provide debugging information about the previous task execution
   // all debugging information should be purely optional...
-  // TODO: we should also include debugging information about the execution of the previous task
-  //       here. The reason we're doing this, is, that we consider every Tasknode the "Result" of
-  //       its previous/parent task.
-  //       remove this here entirely...
-  // TODO:  hmmm...   I am not entirely sure yet, if its really necessary to have our own "debugging"
-  //        database..  it might be sufficient to simply always attach debugging tasks to the "next one"
-  //        in line..   e.g. for costs its almost always the task following a chatCompletion function
-  //        but also some tools.
-  //        if we store debugging information inside of tasks, it would make "custom tools" so much easier..
-  debugging: z
-    .object({
-      threadMessage: z.any().optional(), // Replace with the correct Zod schema if available
-      promptTokens: z.number().optional(),
-      resultTokens: z.number().optional(),
-      taskTokens: z.number().optional(),
-      estimatedTokens: z
-        .object({
-          resultTokens: z.number().optional(),
-          taskCosts: z.number().optional(),
-          functionTokens: z.number().optional(),
-          promptTokens: z.number().optional(),
-          singlePromptTokens: z.number().optional(),
-        })
-        .optional(),
-      toolStreamArgsContent: z.record(z.string()).optional(),
-      streamContent: z.string().optional(),
-      taskCosts: z.number().optional(),
-      rawInput: z.unknown().optional(), // Replace with the correct Zod schema if available
-      error: z.unknown().optional(),
-      // the taskprompt is the full chat which leads to the result. This is important that we have this
-      // for to debugging reasons...
-      // TODO:remove all openAI references hee nd move them into our chatCmpletion function...
-      taskPrompt: z.union([z.array(OpenAIMessage), z.any()]).optional(), // Replace 'z.any()' with the correct Zod type
-    })
-    .partial(),
+  // TODO: I guess we'll leave debugging information here for now but might remove it in the future...
+  debugging: TaskNodeMeta,
   id: z.string(), // can we make the id an SHA-1 value like in git? in that case we should simply remove this value...
   authorId: z.string().optional(),
   created_at: z.number().optional(),

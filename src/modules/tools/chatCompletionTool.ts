@@ -111,6 +111,8 @@ export async function processChatTask(
     }
 
     if (openAIConversationThread.length > 0) {
+      let streamingContentTracker: string = ''
+
       const chatCompletion = await callLLM(
         openAIConversationThread,
         tools,
@@ -128,18 +130,15 @@ export async function processChatTask(
         (chunk) => {
           if (chunk?.choices[0]?.delta?.tool_calls) {
             chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
-              currentTask.debugging.toolStreamArgsContent =
-                currentTask.debugging.toolStreamArgsContent || {}
-              if (t.function?.name) {
-                currentTask.debugging.toolStreamArgsContent[t.function.name] =
-                  (currentTask.debugging.toolStreamArgsContent[t.function.name] || '') +
-                  (t.function?.arguments || '')
-              }
+              // TODO: add streaming for function calls
+              console.log(t)
             })
           }
           if (chunk?.choices[0]?.delta?.content) {
-            currentTask.debugging.streamContent =
-              (currentTask.debugging.streamContent || '') + chunk.choices[0].delta.content
+            streamingContentTracker = streamingContentTracker + chunk.choices[0].delta.content
+            void taskManager.debugDb.upsert(currentTask.id, {
+              streamContent: streamingContentTracker,
+            })
           }
         },
         () => {
@@ -663,18 +662,8 @@ export function createChatCompletionTool(
       !!llmTools,
     )
 
-    // augment newest tasks with debugging information
-    // TODO: move this into a different data structure..
-    // it would be good to not hav this inside the tasks themselves to imprive immutability
-    newTaskChain.forEach((ts) => {
-      ts.debugging = {
-        //promptTokens: finishedTask.debugging.taskTokens,
-        //taskTokens: finishedTask.debugging.taskTokens,
-        //taskCosts: finishedTask.debugging.taskCosts,
-      }
-    })
     if (newTaskChain[0]) {
-      newTaskChain[0].debugging!.rawInput = choice
+      void taskManager.debugDb.create(context.currentTask.id, { choice })
     }
 
     return makeTaskResult([newTaskChain])

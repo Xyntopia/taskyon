@@ -22,16 +22,7 @@
       <!--Render tasks which are in progress-->
       <q-card v-if="!taskWorkerWaiting" class="row">
         <div class="col">
-          <ty-markdown
-            no-line-numbers
-            no-mermaid
-            :src="currentTask.debugging.streamContent || ''"
-          />
-          <ty-markdown
-            no-line-numbers
-            no-mermaid
-            :src="JSON.stringify(currentTask.debugging.toolStreamArgsContent)"
-          />
+          <ty-markdown no-line-numbers no-mermaid :src="streamingContent || ''" />
           <q-spinner-dots size="2rem" color="secondary" />
         </div>
       </q-card>
@@ -62,6 +53,13 @@ const props = defineProps<{
   showIds?: boolean
   expertMode?: boolean
 }>()
+
+const streamingContent = asyncComputed(async () => {
+  const tm = await tystate.getTaskManager()
+  if (props.currentTask?.id)
+    return (await tm.debugDb.readReactive(props.currentTask.id)).value?.streamContent
+  else return undefined
+}, undefined)
 
 // TODO: move this "one layer up" :)
 const toolList = asyncComputed(async () => {
