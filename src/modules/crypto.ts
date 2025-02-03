@@ -1,7 +1,8 @@
 import { generateMnemonic, validateMnemonic, mnemonicToSeedSync } from '@scure/bip39'
 import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english'
 import { signAsync, getPublicKeyAsync, verifyAsync } from '@noble/ed25519'
-import { base64UrlToUint8Array, uint8ArrayToBase64Url } from './encoding'
+import { base64UrlToUint8Array, uint8ArrayToBase64Url, urlSafe64BitString } from './encoding'
+import { v1 as uuidv1 } from 'uuid'
 
 // Generate a new seed phrase (mnemonic)
 export function generateSeedPhrase(): string {
@@ -121,4 +122,17 @@ export async function decryptObject(
   const decryptedData = await decryptData(encryptedData, key)
   const jsonString = new TextDecoder().decode(decryptedData)
   return JSON.parse(jsonString) as Record<string, unknown>
+}
+
+export function urlSafeBase64Uuid() {
+  // Generate a UUID
+  const hexUuid = uuidv1()
+
+  // Convert the UUID from hex to a Buffer
+  const bufferUuid = Buffer.from(hexUuid.replace(/-/g, ''), 'hex')
+
+  // Convert the Buffer to a base64 string
+  const base64Uuid = urlSafe64BitString(bufferUuid)
+
+  return base64Uuid
 }

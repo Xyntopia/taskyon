@@ -65,3 +65,15 @@ export function base64UrlToUint8Array(base64UrlString: string) {
 
   return uint8Array
 }
+
+export function urlSafe64BitString(bufferUuid: Buffer) {
+  let base64Uuid = bufferUuid.toString('base64')
+
+  // make UUID url safe :)
+  base64Uuid = base64Uuid
+    .replace(/==$/, '') // remove padding
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '.')
+  return base64Uuid
+}

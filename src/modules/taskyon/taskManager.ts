@@ -1,6 +1,5 @@
 import type { TaskNodeMeta } from './types'
-import { type TaskNode, ToolBase, TaskListType, type partialTaskDraft } from './types'
-import { v1 as uuidv1 } from 'uuid'
+import { type TaskNode, ToolBase, TaskListType, type partialTaskDraft, llmSettings } from './types'
 import {
   type TaskyonDatabase,
   type FileMappingDocType,
@@ -19,6 +18,8 @@ import { type MangoQuery } from 'rxdb'
 import { dump, load } from 'js-yaml'
 import { processMarkdown } from 'src/modules/taskyon/taskUtils'
 import type { CrudWrapper } from '../crudWrapper'
+import { sha256UrlSafeHash } from '../hashing'
+import { urlSafeBase64Uuid } from '../crypto'
 
 /**
  *
@@ -44,26 +45,6 @@ export async function findRootTask(taskId: string, getTask: TyTaskManager['getTa
   return currentTaskID // Return null if the loop exits without finding a root task
 }
 
-function urlSafeBase64Uuid() {
-  // Generate a UUID
-  const hexUuid = uuidv1()
-
-  // Convert the UUID from hex to a Buffer
-  const bufferUuid = Buffer.from(hexUuid.replace(/-/g, ''), 'hex')
-
-  // Convert the Buffer to a base64 string
-  let base64Uuid = bufferUuid.toString('base64')
-
-  // make UUID url safe :)
-  base64Uuid = base64Uuid
-    .replace(/==$/, '') // remove padding
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '.')
-
-  return base64Uuid
-}
-
 /*function uuidToBigInt(uuid: string) {
   // Remove dashes and decode hex to a Buffer
   const buffer = Buffer.from(uuid.replace(/-/g, ''), 'hex');
@@ -78,23 +59,46 @@ function urlSafeBase64Uuid() {
   return bigint;
 }*/
 
-// use this to create hashes for every task
-async function hashObject(obj: unknown) {
-  const jsonString = JSON.stringify(obj)
-  const encoder = new TextEncoder()
-  const dataBytes = encoder.encode(jsonString)
-
-  const hash = await crypto.subtle.digest('SHA-256', dataBytes)
-  const hashArray = Array.from(new Uint8Array(hash)) // convert buffer to byte array
-  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('') // convert bytes to hex string
-  return hashHex
-}
-
-async function taskContentHash(task: TaskNode) {
+async function taskContentHash(task: Omit<TaskNode, 'id'>) {
   console.log('generating new hash ID for task')
   // generate this hash ID to check of there are any duplicate tasks or anything like that...
-  const hashId = await hashObject([task.content, task.role, task.label])
+  const hashId = await sha256UrlSafeHash(task)
   return hashId
+}
+
+/**
+ * Creates a new content addressable task here.
+ *
+ * This function creates a taskyon TaskNode where the ID is  SHA-256 hash of the
+ * content of the task.
+ *
+ */
+export async function createCATask(task: partialTaskDraft, priorID: string | undefined) {
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    throw new Error(
+      'crypto.subtle is not available in this environment, can not generate task IDs!!',
+    )
+  }
+
+  // TODO: add a signature as well! maybe by simply signing the task and adding it to the ID?
+  //       or should we add a special signature property? Or can we do this only by encoding a task into
+  //       a bytestream, similar to JWTs?
+  // TODO: right now we are not using the "name" for the content hash because we update it through
+  //       our keyword generation algorithm...
+  const taskContent = {
+    ...task,
+    priorID: priorID ?? task.priorID,
+    debugging: task.debugging || {},
+    created_at: Date.now(),
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { name, ...taskContentWithoutName } = taskContent
+  const newId = await taskContentHash(taskContentWithoutName)
+  const newTask: TaskNode = {
+    ...taskContent,
+    id: newId,
+  }
+  return newTask
 }
 
 const { extractKeywords } = usePyodideWebworker('task manager keywords')
@@ -882,6 +886,20 @@ export function useTyTaskManager(
     return messageStrings.join('\n\n---\n\n')
   }
 
+  async function updateTaskNameWKeywords(newTask: TaskNode) {
+    const chat = getTaskChain(newTask.id)
+    const chatString = (await chat).reduce((p, n) => {
+      if (n && 'message' in n.content) {
+        return p + '\n\n' + n.content.message
+      }
+      return p
+    }, '')
+    void extractKeywords(chatString, 5).then((kws) => {
+      console.log('update task with kw: ', kws)
+      void updateTask({ id: newTask.id, name: kws[0] }, true)
+    })
+  }
+
   // add a task to the db. Adding some default information such as timestamps etc...
   // whats important here is that the TaskNode can only have one type of content
   // so when calling the function, we need to pre-select which type of task
@@ -894,7 +912,7 @@ export function useTyTaskManager(
     persist = true,
   ): Promise<TaskNode['id']> => {
     if (!duplicateTaskName && task.name) {
-      // check if task already exists and throw an error, if it does, because
+      // check if a task with this name already exists and throw an error, if it does, because
       // we are not supposed to create it in that case ;)
       // this is specifically used in the case of repeated task
       // declarations which come for example from a webapge which integrates the tasks
@@ -910,27 +928,12 @@ export function useTyTaskManager(
       }
     }
 
-    const uuid = urlSafeBase64Uuid()
+    const newTask = await createCATask(task, priorID)
 
-    const newTask: TaskNode = {
-      ...task,
-      priorID: priorID ?? task.priorID,
-      debugging: task.debugging || {},
-      id: uuid, // TODO: always create new hashed ID in order to make sure, our tasks are vaid ;)
-      created_at: Date.now(),
-    }
-
-    // TODO: register this in a list in taskyon so that figure out how
-    // to make use of this...
-    if (typeof crypto === 'undefined' || !crypto.subtle) {
-      console.warn('crypto.subtle is not available in this environment')
-    } else {
-      // TODO: use this as an ID. (We first need to make sure that this is safe...)
-      //       also: add a signature as well! maybe by simply signing the task and adding it to the ID?
-      //       or should we add a special signature property? Or can we do this only by encoding a task into
-      //       a bytestream, similar to JWTs?
-      void taskContentHash(newTask)
-    }
+    // task was already added at a previous point...
+    // TODO: can we get rid of "setTask"? because we can generate task IDs now independently
+    //       from whichever database we're using...
+    if (await getTask(newTask.id)) return newTask.id
 
     console.log('create new Task:', newTask.id)
     await setTask(newTask, persist)
@@ -941,17 +944,7 @@ export function useTyTaskManager(
     //       keep it immutable?  We should probably await keywords, but also keep a
     //       separate index with keywords for tasks...
     if (!newTask.name && task.content && !task.label?.includes('discard')) {
-      const chat = getTaskChain(newTask.id)
-      const chatString = (await chat).reduce((p, n) => {
-        if (n && 'message' in n.content) {
-          return p + '\n\n' + n.content.message
-        }
-        return p
-      }, '')
-      void extractKeywords(chatString, 5).then((kws) => {
-        console.log('update task with kw: ', kws)
-        void updateTask({ id: newTask.id, name: kws[0] }, true)
-      })
+      await updateTaskNameWKeywords(newTask)
     } else if (newTask.name) {
       console.log('task already has a name:', newTask.name)
     }
