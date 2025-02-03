@@ -1,3 +1,4 @@
+import type { TaskNodeMeta } from './types'
 import {
   type partialTaskDraft,
   type TaskNode,
@@ -10,6 +11,7 @@ import { type TyTaskManager } from './taskManager'
 import { handleFunctionExecution, taskResult } from './tools'
 import { type AsyncQueue, makeSerializable } from '../utils'
 import { createChatCompletionTask } from '../tools/chatCompletionTool'
+import type { CrudWrapper } from '../crudWrapper'
 
 export function useTaskWorkerController() {
   /* This class adds context to task executions during the runtime.
@@ -266,6 +268,7 @@ export async function runTaskWorker(
         api?.selectedModel,
         llmSettings.enableOpenAiTools,
         llmSettings.allowedTools || [],
+        taskManager.debugDb,
       )
       const errorTaskId = await taskManager.addTaskChain(errorTaskChain, task?.id)
 
@@ -307,30 +310,30 @@ function createErrorTaskChain(
   analyzeErrorModel: string,
   llmTools: boolean,
   allowedTools: string[],
+  debugDb: CrudWrapper<TaskNodeMeta>,
 ) {
   const errorTask: partialTaskDraft = {
     role: 'system',
     content: {
       error: `An error occured:\n\n\`\`\`\n${JSON.stringify(error)}\n\`\`\``,
     },
-    debugging: {
-      error,
-    },
+    debugging: {},
   }
+  const debugInfo = {
+    error,
+  }
+
   if (error instanceof TaskProcessingError) {
     errorTask.content = {
       //message: `An error occured: ${error.message}:\n\n${dump(error.details, { skipInvalid: true })}`,
       error: `An error occured:\n\n\`\`\`\n${error.message}${error.details ? ':\n\n' + JSON.stringify(makeSerializable(error.details, 7)) : ''}\n\`\`\``,
     }
     if (task) {
-      task.debugging = {
-        ...task.debugging,
-        error: {
-          message: error.message,
-          name: error.name,
-          details: error.details,
-          location: 'task processing',
-        },
+      debugInfo.error = {
+        message: error.message,
+        name: error.name,
+        details: error.details,
+        location: 'task processing',
       }
     }
   } else if (error instanceof Error) {
@@ -338,16 +341,15 @@ function createErrorTaskChain(
       error: `An error occured:\n\n\`\`\`\n${error.message}\n\n${JSON.stringify(error)}\n\`\`\``,
     }
     if (task) {
-      task.debugging = {
-        ...task.debugging,
-        error: {
-          message: error.message,
-          stack: error.stack,
-          cause: error.cause,
-        },
+      debugInfo.error = {
+        message: error.message,
+        stack: error.stack,
+        cause: error.cause,
       }
     }
   }
+
+  if (task?.id) void debugDb.upsert(task?.id, debugInfo)
 
   return [
     errorTask,
