@@ -119,3 +119,18 @@ flowchart TD
   at --> cct1-->cct2-- e.g. go back to chatcompletion or any other task type -->cctct
 
 ```
+
+### Comparison of taskyon's task sequence to a reduce function
+
+The taskchain in the AI chat-app functions similarly to the "reduce" concept in functional programming, where each task builds upon the previous ones, maintaining context throughout the process. Here's a concise explanation:
+
+1. **Function Execution and Context Accumulation:**
+
+   - Each task in the taskchain receives all previous tasks as implicit arguments, allowing it to access the accumulated context and results from earlier tasks.
+   - After executing, the task produces a new task that is added to the chain, representing the next step in the sequence.
+
+2. **Similarity to Reduce Function:**
+   - Like "reduce," the taskchain uses an accumulator concept, where each task processes the accumulated context (previous tasks) and produces a new state (the next task).
+   - The process is sequential, with each step depending on the results of the previous steps, maintaining coherence and context.
+
+This design allows the AI chat-app to handle complex interactions by chaining together simpler functions, each building on the previous tasks, much like how "reduce" processes elements to build up a result.
