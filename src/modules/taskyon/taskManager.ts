@@ -1,5 +1,5 @@
 import type { TaskNodeMeta } from './types'
-import { type TaskNode, ToolBase, TaskListType, type partialTaskDraft, llmSettings } from './types'
+import { type TaskNode, ToolBase, TaskListType, type partialTaskDraft } from './types'
 import {
   type TaskyonDatabase,
   type FileMappingDocType,
