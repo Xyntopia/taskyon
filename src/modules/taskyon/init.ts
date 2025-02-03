@@ -39,13 +39,7 @@ export async function initTaskyon(
 
   // TODO: possibly move this into an "upper level?"
   console.log('initializing taskyondb')
-  let taskyonDBInstance: TaskyonDatabase | undefined = undefined
-  try {
-    taskyonDBInstance = await createTaskyonDatabase()
-  } catch (err) {
-    console.log('could not initialize taskyonDB', err)
-    logError(`could not initialize taskyonDB:\n ${JSON.stringify(err, null, 2)}`)
-  }
+  const taskyonDBInstance: TaskyonDatabase = await createTaskyonDatabase()
   console.log('initializing task manager')
   const taskManagerInstance = useTyTaskManager(
     TaskList,

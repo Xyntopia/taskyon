@@ -712,6 +712,9 @@ export function useTyTaskManager(
   // TODO: set an "update" flag here somewhere which we can use to
   //       cache this function. whenever a new tool gets added in "saveTask"
   //       we should set this
+  /**
+   * removeFunction will remove all "internal" functions from the returned tool list...
+   */
   async function updateToolDefinitions<T extends boolean>(
     removeFunction: T = false as T,
   ): Promise<T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>> {

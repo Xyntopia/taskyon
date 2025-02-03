@@ -28,8 +28,8 @@ export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => 
     idColumn = 'id',
     dataColumn = 'data',
     createTableSql = `CREATE TABLE IF NOT EXISTS ${tableName} (
-    ${idColumn} CHAR(64) PRIMARY KEY,
-    ${dataColumn} JSONB NOT NULL
+      ${idColumn} CHAR(64) PRIMARY KEY,
+      ${dataColumn} JSONB NOT NULL
 );`,
     pgvector = false,
   } = options
