@@ -1,6 +1,6 @@
 import type { TyPGDB } from './pglite.api'
-import type { LiveCallback } from './useLiveCallBacks'
-import { useLiveCallBacks, addCallback } from './useLiveCallBacks'
+import type { LiveCallback } from './useCallBacks'
+import { useLiveCallBacks, addCallback } from './useCallBacks'
 
 // TODO: add protections against SQL injection...
 
@@ -52,11 +52,11 @@ export const createCrudWrapper = async <T>(
     await db.exec(createTableSql)
   }
 
-  const { triggerLiveCallbacks, liveCallbacks, createDisposeFunction } = useLiveCallBacks<T>()
+  const { trigger, callbackList, createDisposeFunction } = useLiveCallBacks<T>()
 
   return {
     set: async (id: string | number, data: T) => {
-      triggerLiveCallbacks(id, data)
+      trigger(id, data)
       await db.query(
         `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
          VALUES ($1, $2);`,
@@ -79,7 +79,7 @@ export const createCrudWrapper = async <T>(
               WHERE ${idColumn} = ${formatValue(id)};`)
     },*/
     upsert: async (id: string | number, data: T) => {
-      triggerLiveCallbacks(id, data)
+      trigger(id, data)
       const jsonData = JSON.stringify(data)
       await db.query(
         `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
@@ -89,8 +89,8 @@ export const createCrudWrapper = async <T>(
       )
     },
     delete: async (id: string | number) => {
-      triggerLiveCallbacks(id, null)
-      liveCallbacks.delete(id)
+      trigger(id, null)
+      callbackList.delete(id)
       await db.query(`DELETE FROM ${tableName} WHERE ${idColumn} = $1;`, [id])
     },
     list: async (): Promise<Row<T>[]> => {
@@ -117,7 +117,7 @@ export const createCrudWrapper = async <T>(
     readLive: (id: string | number, callback: LiveCallback<T>) => {
       const key = id.toString()
 
-      addCallback<T>(key, liveCallbacks, callback)
+      addCallback<T>(key, callbackList, callback)
       // Optionally, get the current state and call the callback once.
       /*const currentData = await (async () => {
         const result = await db.sql<Row<T>>`
@@ -133,13 +133,14 @@ export const createCrudWrapper = async <T>(
   }
 }
 
-export const createMapCrudWrapper = <T>(): Promise<CrudWrapper<T>> => {
-  const storage = new Map<string | number, T>()
-  const { triggerLiveCallbacks, liveCallbacks, createDisposeFunction } = useLiveCallBacks<T>()
+export const createMapCrudWrapper = <T>(
+  storage: Map<string | number, T>,
+): Promise<CrudWrapper<T>> => {
+  const { trigger, callbackList: callbackList, createDisposeFunction } = useLiveCallBacks<T>()
 
   return Promise.resolve({
     set: (id: string | number, data: T): Promise<void> => {
-      triggerLiveCallbacks(id, data)
+      trigger(id, data)
       storage.set(id, data)
       return Promise.resolve()
     },
@@ -147,13 +148,13 @@ export const createMapCrudWrapper = <T>(): Promise<CrudWrapper<T>> => {
       return Promise.resolve(storage.has(id) ? storage.get(id)! : null)
     },
     upsert: (id: string | number, data: T): Promise<void> => {
-      triggerLiveCallbacks(id, data)
+      trigger(id, data)
       storage.set(id, data)
       return Promise.resolve()
     },
     delete: (id: string | number): Promise<void> => {
-      triggerLiveCallbacks(id, null)
-      liveCallbacks.delete(id)
+      trigger(id, null)
+      callbackList.delete(id)
       storage.delete(id)
       return Promise.resolve()
     },
@@ -165,7 +166,7 @@ export const createMapCrudWrapper = <T>(): Promise<CrudWrapper<T>> => {
       return Promise.resolve(rows)
     },
     readLive: (id: string | number, callback: LiveCallback<T>): (() => void) => {
-      addCallback<T>(id, liveCallbacks, callback)
+      addCallback<T>(id, callbackList, callback)
       return createDisposeFunction(id, callback)
     },
   })

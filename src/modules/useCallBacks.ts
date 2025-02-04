@@ -9,15 +9,16 @@ export function addCallback<T>(
   }
   liveCallbacks.get(key)!.add(callback)
 }
+
 // Map to hold live callbacks.
 // Using a Map that stores, for each record ID (as a string), a Set of callback functions.
 export function useLiveCallBacks<T>() {
-  const liveCallbacks = new Map<string | number, Set<LiveCallback<T>>>()
+  const callbackList = new Map<string | number, Set<LiveCallback<T>>>()
 
   // Helper to trigger callbacks for a given record id.
-  const triggerLiveCallbacks = (id: string | number, data: T | null) => {
+  const trigger = (id: string | number, data: T | null) => {
     const key = id.toString()
-    const callbacks = liveCallbacks.get(key)
+    const callbacks = callbackList.get(key)
     if (callbacks) {
       callbacks.forEach((cb) => {
         try {
@@ -30,14 +31,14 @@ export function useLiveCallBacks<T>() {
   }
 
   const createDisposeFunction = (key: string | number, callback: LiveCallback<T>) => () => {
-    const callbacks = liveCallbacks.get(key)
+    const callbacks = callbackList.get(key)
     if (callbacks) {
       callbacks.delete(callback)
       if (callbacks.size === 0) {
-        liveCallbacks.delete(key)
+        callbackList.delete(key)
       }
     }
   }
 
-  return { triggerLiveCallbacks, liveCallbacks, createDisposeFunction }
+  return { trigger, callbackList, createDisposeFunction }
 }
