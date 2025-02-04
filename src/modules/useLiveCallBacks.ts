@@ -1,7 +1,7 @@
 export type LiveCallback<T> = (data: T | null) => void
 export function addCallback<T>(
-  key: string,
-  liveCallbacks: Map<string, Set<LiveCallback<T>>>,
+  key: string | number,
+  liveCallbacks: Map<string | number, Set<LiveCallback<T>>>,
   callback: LiveCallback<T>,
 ) {
   if (!liveCallbacks.has(key)) {
@@ -12,7 +12,7 @@ export function addCallback<T>(
 // Map to hold live callbacks.
 // Using a Map that stores, for each record ID (as a string), a Set of callback functions.
 export function useLiveCallBacks<T>() {
-  const liveCallbacks = new Map<string, Set<LiveCallback<T>>>()
+  const liveCallbacks = new Map<string | number, Set<LiveCallback<T>>>()
 
   // Helper to trigger callbacks for a given record id.
   const triggerLiveCallbacks = (id: string | number, data: T | null) => {
@@ -29,7 +29,7 @@ export function useLiveCallBacks<T>() {
     }
   }
 
-  const createDisposeFunction = (key: string, callback: LiveCallback<T>) => () => {
+  const createDisposeFunction = (key: string | number, callback: LiveCallback<T>) => () => {
     const callbacks = liveCallbacks.get(key)
     if (callbacks) {
       callbacks.delete(callback)

@@ -131,3 +131,40 @@ export const createCrudWrapper = async <T>(
     },
   }
 }
+
+export const createMapCrudWrapper = <T>(): Promise<CrudWrapper<T>> => {
+  const storage = new Map<string | number, T>()
+  const { triggerLiveCallbacks, liveCallbacks, createDisposeFunction } = useLiveCallBacks<T>()
+
+  return Promise.resolve({
+    set: (id: string | number, data: T): Promise<void> => {
+      triggerLiveCallbacks(id, data)
+      storage.set(id, data)
+      return Promise.resolve()
+    },
+    get: (id: string | number): Promise<T | null> => {
+      return Promise.resolve(storage.has(id) ? storage.get(id)! : null)
+    },
+    upsert: (id: string | number, data: T): Promise<void> => {
+      triggerLiveCallbacks(id, data)
+      storage.set(id, data)
+      return Promise.resolve()
+    },
+    delete: (id: string | number): Promise<void> => {
+      triggerLiveCallbacks(id, null)
+      storage.delete(id)
+      return Promise.resolve()
+    },
+    list: (): Promise<Row<T>[]> => {
+      const rows: Row<T>[] = []
+      storage.forEach((value, key) => {
+        rows.push({ id: key, data: value })
+      })
+      return Promise.resolve(rows)
+    },
+    readLive: (id: string | number, callback: LiveCallback<T>): (() => void) => {
+      addCallback<T>(id, liveCallbacks, callback)
+      return createDisposeFunction(id, callback)
+    },
+  })
+}
