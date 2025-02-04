@@ -1,14 +1,4 @@
 export type LiveCallback<T> = (data: T | null) => void
-export function addCallback<T>(
-  key: string | number,
-  liveCallbacks: Map<string | number, Set<LiveCallback<T>>>,
-  callback: LiveCallback<T>,
-) {
-  if (!liveCallbacks.has(key)) {
-    liveCallbacks.set(key, new Set())
-  }
-  liveCallbacks.get(key)!.add(callback)
-}
 
 // Map to hold live callbacks.
 // Using a Map that stores, for each record ID (as a string), a Set of callback functions.
@@ -40,5 +30,12 @@ export function useLiveCallBacks<T>() {
     }
   }
 
-  return { trigger, callbackList, createDisposeFunction }
+  function add(key: string | number, callback: LiveCallback<T>) {
+    if (!callbackList.has(key)) {
+      callbackList.set(key, new Set())
+    }
+    callbackList.get(key)!.add(callback)
+  }
+
+  return { trigger, callbackList, createDisposeFunction, add }
 }

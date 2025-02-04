@@ -52,7 +52,7 @@ export const createCrudWrapper = async <T>(
     await db.exec(createTableSql)
   }
 
-  const { trigger, callbackList, createDisposeFunction } = useLiveCallBacks<T>()
+  const { trigger, callbackList, createDisposeFunction, add: addCallback } = useLiveCallBacks<T>()
 
   return {
     set: async (id: string | number, data: T) => {
@@ -117,7 +117,7 @@ export const createCrudWrapper = async <T>(
     readLive: (id: string | number, callback: LiveCallback<T>) => {
       const key = id.toString()
 
-      addCallback<T>(key, callbackList, callback)
+      addCallback(key, callback)
       // Optionally, get the current state and call the callback once.
       /*const currentData = await (async () => {
         const result = await db.sql<Row<T>>`
@@ -136,7 +136,7 @@ export const createCrudWrapper = async <T>(
 export const createMapCrudWrapper = <T>(
   storage: Map<string | number, T>,
 ): Promise<CrudWrapper<T>> => {
-  const { trigger, callbackList: callbackList, createDisposeFunction } = useLiveCallBacks<T>()
+  const { trigger, callbackList, createDisposeFunction, add: addCallback } = useLiveCallBacks<T>()
 
   return Promise.resolve({
     set: (id: string | number, data: T): Promise<void> => {
@@ -166,7 +166,7 @@ export const createMapCrudWrapper = <T>(
       return Promise.resolve(rows)
     },
     readLive: (id: string | number, callback: LiveCallback<T>): (() => void) => {
-      addCallback<T>(id, callbackList, callback)
+      addCallback(id, callback)
       return createDisposeFunction(id, callback)
     },
   })
