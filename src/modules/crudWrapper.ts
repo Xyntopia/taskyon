@@ -1,4 +1,6 @@
 import type { TyPGDB } from './pglite.api'
+import type { LiveCallback } from './useLiveCallBacks'
+import { useLiveCallBacks, addCallback } from './useLiveCallBacks'
 
 // TODO: add protections against SQL injection...
 
@@ -17,8 +19,6 @@ type Row<T> = {
   id: string | number
   data: T
 }
-
-type LiveCallback<T> = (data: T | null) => void
 
 export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => {
   const {
@@ -40,24 +40,7 @@ export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => 
     await db.exec(createTableSql)
   }
 
-  // Map to hold live callbacks.
-  // Using a Map that stores, for each record ID (as a string), a Set of callback functions.
-  const liveCallbacks = new Map<string, Set<LiveCallback<T>>>()
-
-  // Helper to trigger callbacks for a given record id.
-  const triggerLiveCallbacks = (id: string | number, data: T | null) => {
-    const key = id.toString()
-    const callbacks = liveCallbacks.get(key)
-    if (callbacks) {
-      callbacks.forEach((cb) => {
-        try {
-          cb(data)
-        } catch (error) {
-          console.error(`Error in live callback for id ${key}:`, error)
-        }
-      })
-    }
-  }
+  const { triggerLiveCallbacks, liveCallbacks, createDisposeFunction } = useLiveCallBacks<T>()
 
   return {
     create: async (id: string | number, data: T) => {
@@ -120,11 +103,8 @@ export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => 
      */
     readLive: (id: string | number, callback: LiveCallback<T>) => {
       const key = id.toString()
-      if (!liveCallbacks.has(key)) {
-        liveCallbacks.set(key, new Set())
-      }
-      liveCallbacks.get(key)!.add(callback)
 
+      addCallback<T>(key, liveCallbacks, callback)
       // Optionally, get the current state and call the callback once.
       /*const currentData = await (async () => {
         const result = await db.sql<Row<T>>`
@@ -135,15 +115,7 @@ export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => 
       callback(currentData)*/
 
       // Return a dispose() method to remove the callback.
-      return () => {
-        const callbacks = liveCallbacks.get(key)
-        if (callbacks) {
-          callbacks.delete(callback)
-          if (callbacks.size === 0) {
-            liveCallbacks.delete(key)
-          }
-        }
-      }
+      return createDisposeFunction(key, callback)
     },
   }
 }
