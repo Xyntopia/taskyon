@@ -62,12 +62,18 @@ export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => 
   return {
     create: async (id: string | number, data: T) => {
       triggerLiveCallbacks(id, data)
-      await db.exec(`INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
-              VALUES (${id}, ${JSON.stringify(data)});`)
+      await db.query(
+        `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
+         VALUES ($1, $2);`,
+        [id, JSON.stringify(data)],
+      )
     },
     read: async (id: string | number): Promise<T | null> => {
-      const result = await db.sql<Row<T>>`SELECT ${dataColumn} FROM ${tableName}
-         WHERE ${idColumn} = ${id};`
+      const result = await db.query<Row<T>>(
+        `SELECT ${dataColumn} FROM ${tableName}
+         WHERE ${idColumn} = $1;`,
+        [id],
+      )
       return result.rows.length ? result.rows[0]!.data : null
     },
     /*update: async (id: string | number, data: Partial<T>) => {
@@ -80,13 +86,16 @@ export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => 
     upsert: async (id: string | number, data: T) => {
       triggerLiveCallbacks(id, data)
       const jsonData = JSON.stringify(data)
-      await db.exec(`INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
-          VALUES (${id}, ${jsonData})
-          ON CONFLICT (${idColumn}) DO UPDATE SET ${dataColumn} = ${jsonData};`)
+      await db.query(
+        `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
+          VALUES ($1, $2)
+          ON CONFLICT (${idColumn}) DO UPDATE SET ${dataColumn} = $2;`,
+        [id, jsonData],
+      )
     },
     delete: async (id: string | number) => {
       triggerLiveCallbacks(id, null)
-      await db.exec(`DELETE FROM ${tableName} WHERE ${idColumn} = ${id};`)
+      await db.query(`DELETE FROM ${tableName} WHERE ${idColumn} = $1;`, [id])
     },
     list: async (): Promise<Row<T>[]> => {
       const result = await db.sql<Row<T>>`SELECT ${idColumn}, ${dataColumn} FROM ${tableName};`
