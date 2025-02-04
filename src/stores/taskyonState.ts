@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { watch, computed, reactive, ref } from 'vue'
+import { watch, computed, reactive, ref, onScopeDispose } from 'vue'
 import type { TaskNodeMeta } from 'src/modules/taskyon/types'
 import {
   type Model,
@@ -355,11 +355,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   function reactiveTaskMeta(taskid: string) {
     console.log('generate new reactive task logger...')
     const taskMeta = ref<TaskNodeMeta>({})
-    void getTaskManager().then(async (tm) => {
+
+    let dispose: (() => void) | undefined
+    void getTaskManager().then((tm) => {
       console.log('new live reader...')
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const live = await tm.debugDb.readLive(taskid, (res) => {
-        console.log('new stream arrived!')
+      dispose = tm.debugDb.readLive(taskid, (res) => {
+        //console.log('new stream arrived!')
         taskMeta.value = res || {}
       })
       // try to remove our live subscriber whenleaving the widget context..
@@ -367,6 +368,15 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         void live.unsubscribe()
       })*/
     })
+
+    // Clean up when the effect scope is disposed
+    onScopeDispose(() => {
+      if (dispose) {
+        console.log(`Unsubscribing from live updates for ${taskid}`)
+        dispose()
+      }
+    })
+
     return taskMeta
   }
 
