@@ -90,6 +90,7 @@ export const createCrudWrapper = async <T>(
     },
     delete: async (id: string | number) => {
       triggerLiveCallbacks(id, null)
+      liveCallbacks.delete(id)
       await db.query(`DELETE FROM ${tableName} WHERE ${idColumn} = $1;`, [id])
     },
     list: async (): Promise<Row<T>[]> => {
@@ -152,6 +153,7 @@ export const createMapCrudWrapper = <T>(): Promise<CrudWrapper<T>> => {
     },
     delete: (id: string | number): Promise<void> => {
       triggerLiveCallbacks(id, null)
+      liveCallbacks.delete(id)
       storage.delete(id)
       return Promise.resolve()
     },
