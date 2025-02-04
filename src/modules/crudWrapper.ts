@@ -20,7 +20,19 @@ type Row<T> = {
   data: T
 }
 
-export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => {
+export interface CrudWrapper<T> {
+  set(id: string | number, data: T): Promise<void>
+  get(id: string | number): Promise<T | null>
+  upsert(id: string | number, data: T): Promise<void>
+  delete(id: string | number): Promise<void>
+  list(): Promise<Row<T>[]>
+  readLive(id: string | number, callback: LiveCallback<T>): () => void
+}
+
+export const createCrudWrapper = async <T>(
+  db: TyPGDB,
+  options: CrudOptions,
+): Promise<CrudWrapper<T>> => {
   const {
     tableName,
     idColumn = 'id',
@@ -43,7 +55,7 @@ export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => 
   const { triggerLiveCallbacks, liveCallbacks, createDisposeFunction } = useLiveCallBacks<T>()
 
   return {
-    create: async (id: string | number, data: T) => {
+    set: async (id: string | number, data: T) => {
       triggerLiveCallbacks(id, data)
       await db.query(
         `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
@@ -51,7 +63,7 @@ export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => 
         [id, JSON.stringify(data)],
       )
     },
-    read: async (id: string | number): Promise<T | null> => {
+    get: async (id: string | number): Promise<T | null> => {
       const result = await db.query<Row<T>>(
         `SELECT ${dataColumn} FROM ${tableName}
          WHERE ${idColumn} = $1;`,
@@ -119,5 +131,3 @@ export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => 
     },
   }
 }
-
-export type CrudWrapper<T> = Awaited<ReturnType<typeof createCrudWrapper<T>>>
