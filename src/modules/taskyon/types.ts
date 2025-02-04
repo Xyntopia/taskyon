@@ -319,11 +319,8 @@ of how content can be structured. `,
     .optional()
     .describe('The ID of the parent task which created this subtask on a lower stack level'),
   priorID: z.string().optional().describe('The ID of the previous task in the same stack level.'),
-  // provide debugging information about the previous task execution
-  // all debugging information should be purely optional...
-  // TODO: I guess we'll leave debugging information here for now but might remove it in the future...
-  debugging: TaskNodeMeta,
-  id: z.string(), // can we make the id an SHA-1 value like in git? in that case we should simply remove this value...
+  // TODO: validate this ID using our content address creation functions
+  id: z.string(),
   authorId: z.string().optional(),
   created_at: z.number().optional(),
 })

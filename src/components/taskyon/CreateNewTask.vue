@@ -452,7 +452,6 @@ const currentnewTask = computed(() => {
   const task = deepMerge(state.llmSettings.taskDraft, props.forceTaskProps || {})
   if (currentModel.value) {
     task.name = undefined
-    task.debugging = {}
     if (selectedTaskType.value && 'functionCall' in state.llmSettings.taskDraft.content) {
       // here we have a function task ;)
       task.role = 'function'
@@ -481,10 +480,10 @@ const estimatedTokens = ref<number>(0)
 watchDebounced(
   [() => state.llmSettings.taskDraft.content, () => state.llmSettings.selectedTaskId],
   async () => {
-    let accumulatedTokens = 0
-    let accumulatedEstimated = 0
-    let messages: OpenAI.ChatCompletionMessageParam[] = []
-    if (state.llmSettings.selectedTaskId) {
+    const accumulatedTokens = 0
+    const accumulatedEstimated = 0
+    const messages: OpenAI.ChatCompletionMessageParam[] = []
+    /*if (state.llmSettings.selectedTaskId) {
       const tm = await tystate.getTaskManager()
       // we only need the last 2 or 3 tasks in order to check for
       const chain = await tm.getTaskIdChain(state.llmSettings.selectedTaskId, 3)
@@ -492,7 +491,8 @@ watchDebounced(
       // Assume the highest token count is the last relevant one
       for (const taskId of chain) {
         const task = await tm.getTask(taskId)
-        const taskTokens = task?.debugging.taskTokens ?? 0
+        // TODO: get the highest token count
+        //const taskTokens = task?.debugging.taskTokens ?? 0
         const taskTokensEstimated =
           (task?.debugging.estimatedTokens?.promptTokens ?? 0) +
           (task?.debugging.estimatedTokens?.resultTokens ?? 0)
@@ -509,7 +509,7 @@ watchDebounced(
         'TODO: get rid of this, we would rather simply "simulate" the entire chat using the actual chat tool...',
       )
       messages = []
-    }
+    }*/
 
     // we need to deepCopy both ref values, so that we can send them to the thread!!
     const estimated = await estimateChatTokens(

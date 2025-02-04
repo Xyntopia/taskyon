@@ -1,7 +1,7 @@
 import { expose } from 'comlink'
 import { getVector, loadModel, loadTokenizer } from './nlp'
 import type OpenAI from 'openai'
-import type { OpenAIMessage, ToolBase, TaskNode } from './types'
+import type { OpenAIMessage, ToolBase, TaskNode, TaskNodeMeta } from './types'
 import { mapFunctionNames } from './tools'
 
 //import { getEncoding } from 'js-tiktoken';
@@ -83,7 +83,7 @@ const nlpWorker = {
     tools: Record<string, ToolBase>,
     allowedTools?: string[],
     chatResult?: string,
-  ): Promise<TaskNode['debugging']['estimatedTokens']> {
+  ): Promise<TaskNodeMeta['estimatedTokens']> {
     const functions: ToolBase[] = mapFunctionNames(allowedTools || [], tools)
     // TODO: convert task.content into a legitimate string first, using the
     //       "original" functions toshow what actually gets sent to the LLM!

@@ -73,7 +73,7 @@ async function taskContentHash(task: Omit<TaskNode, 'id'>) {
  * content of the task.
  *
  */
-export async function createCATask(task: partialTaskDraft, priorID: string | undefined) {
+export async function createTaskNode(task: partialTaskDraft, priorID: string | undefined) {
   if (typeof crypto === 'undefined' || !crypto.subtle) {
     throw new Error(
       'crypto.subtle is not available in this environment, can not generate task IDs!!',
@@ -88,7 +88,6 @@ export async function createCATask(task: partialTaskDraft, priorID: string | und
   const taskContent = {
     ...task,
     priorID: priorID ?? task.priorID,
-    debugging: task.debugging || {},
     created_at: Date.now(),
   }
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -875,7 +874,6 @@ export function useTyTaskManager(
       if (!fullMeta && partialTask) {
         // delete everything which we don't require in order
         // to create new tasks...
-        delete partialTask.debugging
         delete partialTask.result
         delete partialTask.id
         delete partialTask.created_at
@@ -931,7 +929,7 @@ export function useTyTaskManager(
       }
     }
 
-    const newTask = await createCATask(task, priorID)
+    const newTask = await createTaskNode(task, priorID)
 
     // task was already added at a previous point...
     // TODO: can we get rid of "setTask"? because we can generate task IDs now independently
@@ -963,7 +961,6 @@ export function useTyTaskManager(
   ) {
     let lastTaskId = priorID
     for (const task of taskList) {
-      task.debugging = task.debugging ?? {} // Ensure state is set
       lastTaskId = await addPartialTask2Tree(
         task,
         lastTaskId, //parent

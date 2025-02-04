@@ -12,7 +12,7 @@
         <tr>
           <td class="text-left">Functions:</td>
           <td class="text-right">
-            {{ task.debugging.estimatedTokens?.functionTokens }}
+            {{ taskMeta.estimatedTokens?.functionTokens }}
             (estimated)
           </td>
         </tr>
@@ -20,50 +20,48 @@
           <td>Thread:</td>
           <td class="text-right">
             {{
-              (task.debugging.estimatedTokens?.promptTokens || 0) -
-              (task.debugging.estimatedTokens?.functionTokens || 0)
+              (taskMeta.estimatedTokens?.promptTokens || 0) -
+              (taskMeta.estimatedTokens?.functionTokens || 0)
             }}
             (estimated)
           </td>
         </tr>
         <tr>
           <td class="text-left">Prompt (Entire Thread):</td>
-          <td v-if="task.debugging?.promptTokens" class="text-right">
-            {{ task.debugging?.promptTokens }}
+          <td v-if="taskMeta.promptTokens" class="text-right">
+            {{ taskMeta.promptTokens }}
           </td>
           <td v-else class="text-right">
-            {{ task.debugging.estimatedTokens?.promptTokens }}
+            {{ taskMeta.estimatedTokens?.promptTokens }}
             (estimated)
           </td>
         </tr>
         <tr>
           <td class="text-left">Completion/Result:</td>
-          <td v-if="task.debugging?.resultTokens" class="text-right">
-            {{ task.debugging?.resultTokens }}
+          <td v-if="taskMeta.resultTokens" class="text-right">
+            {{ taskMeta.resultTokens }}
           </td>
           <td v-else class="text-right">
-            {{ task.debugging?.resultTokens }}
+            {{ taskMeta.resultTokens }}
           </td>
         </tr>
         <tr>
           <td class="text-left">Total tokens used for task:</td>
-          <td v-if="task.debugging?.taskTokens" class="text-right">
-            ={{ task.debugging?.taskTokens }}
-          </td>
+          <td v-if="taskMeta.taskTokens" class="text-right">={{ taskMeta.taskTokens }}</td>
           <td v-else class="text-right">
             ={{
-              (task.debugging.estimatedTokens?.promptTokens || 0) +
-              (task.debugging.estimatedTokens?.resultTokens || 0)
+              (taskMeta.estimatedTokens?.promptTokens || 0) +
+              (taskMeta.estimatedTokens?.resultTokens || 0)
             }}
             (estimated)
           </td>
         </tr>
-        <tr v-if="task.debugging?.taskCosts != undefined">
+        <tr v-if="taskMeta.taskCosts != undefined">
           <td class="text-left">Costs:</td>
           <td class="text-right">
             =
-            {{ Math.round(task.debugging?.taskCosts * 1e6).toLocaleString() }}
-            μ$ (exact, ={{ Math.round(0.01 / task.debugging?.taskCosts) }}
+            {{ Math.round(taskMeta.taskCosts * 1e6).toLocaleString() }}
+            μ$ (exact, ={{ Math.round(0.01 / taskMeta.taskCosts) }}
             messages to reach $0.01)
           </td>
         </tr>
@@ -74,12 +72,12 @@
 
 <script setup lang="ts">
 import type { PropType } from 'vue'
-import type { TaskNode } from 'src/modules/taskyon/types'
+import type { TaskNodeMeta } from 'src/modules/taskyon/types'
 import '@quasar/quasar-ui-qmarkdown/dist/index.css'
 
 defineProps({
-  task: {
-    type: Object as PropType<TaskNode>,
+  taskMeta: {
+    type: Object as PropType<TaskNodeMeta>,
     required: true,
   },
 })

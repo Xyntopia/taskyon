@@ -305,9 +305,6 @@ export function addPrompts(
     }
   }
 
-  // TODO: move this here out of this function and into the follow-up task or a db?
-  lastTaskBeforeChatCompletion.debugging.taskPrompt = [...prependMessages, ...appendMessages]
-
   // build our complete thread :)
   return [...prependMessages, ...modifiedOpenAIConversationThread, ...appendMessages]
 }

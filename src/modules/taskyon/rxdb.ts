@@ -285,16 +285,11 @@ export function transformTaskNodeToDocType(taskNode: TaskNode): TaskNodeDocType 
   // TODO: maybe we can do the same thing here using zod parse? This would also add some more validation
   //       capabilities before saving anything in the db..
   const nonReactiveTaskNode = JSON.parse(JSON.stringify(taskNode)) as TaskNode
-  const reducedTaskNode = removeUndefinedProperties(
-    removeKeys(nonReactiveTaskNode, ['content', 'debugging']),
-  )
+  const reducedTaskNode = removeUndefinedProperties(removeKeys(nonReactiveTaskNode, ['content']))
   const convertedTask: TaskNodeDocType = {
     ...reducedTaskNode,
     // Mapping and transforming fields from TaskNode to TaskNodeDocType
     content: JSON.stringify(nonReactiveTaskNode.content),
-    ...(taskNode.debugging !== undefined && {
-      debugging: JSON.stringify(taskNode.debugging),
-    }),
     // TODO: remove this state here...
     state: 'Completed' as 'Open' | 'Queued' | 'In Progress' | 'Completed' | 'Error',
   }
@@ -312,10 +307,6 @@ export function transformDocToTaskNode(doc: RxDocument<TaskNodeDocType>): TaskNo
     typeof parsedDoc.content === 'string'
       ? (JSON.parse(parsedDoc.content) as Record<string, unknown>)
       : {}
-  const parsedDebugging =
-    typeof parsedDoc.debugging === 'string'
-      ? (JSON.parse(parsedDoc.debugging) as Record<string, unknown>)
-      : {}
 
   // Parse the JSON string and transform it into an TaskNode object
   // TODO:  try to throw errors here, when our TaskNode object and our database object differ.
@@ -326,7 +317,6 @@ export function transformDocToTaskNode(doc: RxDocument<TaskNodeDocType>): TaskNo
     authorId: parsedDoc.authorId || undefined,
     created_at: parsedDoc.created_at || undefined,
     content: parsedContent, // we do this here, because in some situations the task has the wrong format...
-    debugging: parsedDebugging,
   }
   const tn = TaskNode.parse(tmpObj)
 

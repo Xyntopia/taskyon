@@ -35,12 +35,4 @@ watch(
 defineOptions({
   name: 'App',
 })
-
-if (process.env.DEV) {
-  onMounted(() => {
-    // we are doing this, specifically for testing purposes...
-    // although it doesn't really seem to work for cypress
-    dispatchEvent(new Event('load'))
-  })
-}
 </script>
