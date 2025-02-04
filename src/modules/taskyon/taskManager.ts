@@ -73,7 +73,7 @@ async function taskContentHash(task: Omit<TaskNode, 'id'>) {
  * content of the task.
  *
  */
-export async function createTaskNode(task: partialTaskDraft, priorID: string | undefined) {
+export async function createTaskNode(task: partialTaskDraft, priorID?: string) {
   if (typeof crypto === 'undefined' || !crypto.subtle) {
     throw new Error(
       'crypto.subtle is not available in this environment, can not generate task IDs!!',

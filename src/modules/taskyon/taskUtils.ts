@@ -1,4 +1,4 @@
-import type { TaskNode, TaskGetter, partialTaskDraft } from './types'
+import { type TaskNode, type TaskGetter, partialTaskDraft } from './types'
 import { load } from 'js-yaml'
 
 export const taskUtils = (getTask: TaskGetter) => {

@@ -195,7 +195,7 @@ export function getDefaultParametersForTool(tool: InternalTool | ToolBase) {
 
   const defaultParams: Record<string, ParamType> = {}
   Object.keys(params.properties).forEach((key) => {
-    const type = params.properties[key]?.type
+    const type = params.properties![key]!.type
     // Assign a default value based on the parameter's type.
     switch (type) {
       case 'string':
@@ -236,18 +236,22 @@ function convertToToolCommandString(tool: ToolBase): string {
   const requiredProperties = new Set(tool.parameters.required || [])
 
   // Loop over each property in the tool's parameters
-  Object.entries(tool.parameters.properties).forEach(([key, param]) => {
-    // Check if the key is in the list of required properties
-    // const isRequired = requiredProperties.has(key);
-    // If the property is required, use the key as is, otherwise add a "?" to the key
-    if (param.description) {
-      const descriptionKey = `# ${key} description`
-      args[descriptionKey] = param.description.replace(/\n/g, ' ')
-    }
+  if (tool.parameters.properties) {
+    Object.entries(tool.parameters.properties).forEach(([key, param]) => {
+      // Check if the key is in the list of required properties
+      // const isRequired = requiredProperties.has(key);
+      // If the property is required, use the key as is, otherwise add a "?" to the key
+      if (param.description) {
+        const descriptionKey = `# ${key} description`
+        args[descriptionKey] = param.description.replace(/\n/g, ' ')
+      }
 
-    const argKey = key
-    args[argKey] = param.type
-  })
+      if (param.type) {
+        const argKey = key
+        args[argKey] = param.type
+      }
+    })
+  }
 
   const argStrRaw = dump({
     'FUNCTION ARGUMENTS': args,

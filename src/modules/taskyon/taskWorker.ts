@@ -314,7 +314,6 @@ function createErrorTaskChain(
     content: {
       error: `An error occured:\n\n\`\`\`\n${JSON.stringify(error)}\n\`\`\``,
     },
-    debugging: {},
   }
   const debugInfo = {
     error,

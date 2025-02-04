@@ -85,10 +85,6 @@ const tyConfigurationMessage = z.object({
   type: z
     .literal('configurationMessage')
     .describe('Field to indicate that this is a function description message.'),
-  // we have to comment out the next line, because our "deeppartialify & deepstricitfy" functions
-  // are very deep and typescript reaches its limits here...  TODO: we would like to refactor those
-  // zod types, but don't have a solution yet... (deeppartial was removed fro zod...)
-  // @ts-expect-error "Type instantiation is excessively deep and possibly infinite.ts(2589)""
   conf: partialTyConfiguration,
 })
 

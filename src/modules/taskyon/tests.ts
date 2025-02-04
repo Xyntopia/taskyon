@@ -62,7 +62,6 @@ const mockTask: TaskNode = {
   role: 'assistant',
   id: 'test',
   content: { message: 'Sample content for task node' },
-  debugging: { estimatedTokens: {} },
 }
 
 const mockChatMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [

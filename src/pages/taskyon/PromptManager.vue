@@ -60,7 +60,6 @@ import { ref, computed } from 'vue'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
 import ObjectTreeView from 'components/ObjectTreeView.vue'
-import { type TaskNode } from 'src/modules/taskyon/types'
 import UnderConstructionHint from 'components/UnderConstructionHint.vue'
 import { addPrompts } from 'src/modules/taskyon/promptCreation'
 import ConversationWidget from 'components/taskyon/ConversationWidget.vue'
@@ -68,6 +67,8 @@ import { mdiMagicStaff } from '@quasar/extras/mdi-v6'
 import CreateTaskButton from 'components/taskyon/CreateTaskButton.vue'
 import { dump } from 'js-yaml'
 import { useAppStateStore } from 'src/stores/appState'
+import { createTaskNode } from 'src/modules/taskyon/taskManager'
+import { asyncComputed } from 'src/stores/vueUtils'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -147,14 +148,12 @@ void getAllTools().then((tools) => {
   toolCollection.value = tools
 })
 
-const structuredResponsePrompt = computed(() => {
+const structuredResponsePrompt = asyncComputed(async () => {
   if (state.llmSettings.taskDraft.content) {
-    const task: Pick<TaskNode, 'role' | 'content' | 'debugging'> = {
+    const task = await createTaskNode({
       content: state.llmSettings.taskDraft.content,
       role: 'user',
-      debugging: {},
-    }
-    task.role = 'user'
+    })
 
     console.log('create structured example', toolCollection.value)
     if (Object.keys(toolCollection.value).length !== 0) {
@@ -171,5 +170,5 @@ const structuredResponsePrompt = computed(() => {
     }
   }
   return []
-})
+}, [])
 </script>
