@@ -1,4 +1,4 @@
-export type LiveCallback<T> = (data: T | null) => void
+export type LiveCallback<T> = (data: T) => void
 
 // Map to hold live callbacks.
 // Using a Map that stores, for each record ID (as a string), a Set of callback functions.
@@ -7,7 +7,7 @@ export function useCallbacks<T>() {
   const globalCallbacks = new Set<LiveCallback<T>>()
 
   // Helper to trigger callbacks for a given record id.
-  const trigger = (id: string | number, data: T | null) => {
+  const trigger = (id: string | number, data: T) => {
     const key = id.toString()
     const callbacks = callbackList.get(key)
     if (callbacks) {
@@ -38,7 +38,7 @@ export function useCallbacks<T>() {
     callbackList.get(key)!.add(callback)
   }
 
-  const triggerGlobal = (data: T | null) => {
+  const triggerGlobal = (data: T) => {
     globalCallbacks.forEach((cb) => {
       try {
         cb(data)
@@ -51,5 +51,33 @@ export function useCallbacks<T>() {
   function addGlobal(callback: LiveCallback<T>) {
     globalCallbacks.add(callback)
   }
-  return { trigger, callbackList, createDisposeFunction, add, addGlobal, triggerGlobal }
+
+  function removeGlobal(callback: LiveCallback<T>) {
+    globalCallbacks.delete(callback)
+  }
+
+  function remove(key: string | number, callback?: LiveCallback<T>) {
+    if (callback) {
+      const callbacks = callbackList.get(key)
+      if (callbacks) {
+        callbacks.delete(callback)
+        if (callbacks.size === 0) {
+          callbackList.delete(key)
+        }
+      }
+    } else {
+      callbackList.delete(key)
+    }
+  }
+
+  return {
+    trigger,
+    callbackList,
+    createDisposeFunction,
+    add,
+    addGlobal,
+    triggerGlobal,
+    removeGlobal,
+    remove,
+  }
 }

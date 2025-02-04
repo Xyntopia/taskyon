@@ -22,7 +22,7 @@
       <!--Render tasks which are in progress-->
       <q-card v-if="!taskWorkerWaiting" class="row">
         <div class="col">
-          <ty-markdown no-line-numbers no-mermaid :src="streamingContent?.value || ''" />
+          <ty-markdown no-line-numbers no-mermaid :src="currentStream || ''" />
           <q-spinner-dots size="2rem" color="secondary" />
         </div>
       </q-card>
@@ -40,7 +40,7 @@ import tyMarkdown from 'components/tyMarkdown.vue'
 import { useQuasar } from 'quasar'
 import { asyncComputed } from 'src/stores/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount } from 'vue'
 const $q = useQuasar()
 
 const tystate = useTaskyonStore()
@@ -55,17 +55,36 @@ const props = defineProps<{
   expertMode?: boolean
 }>()
 
-// switch the current streaming content to the currently active tasks...
-const streamingContent = computed(() => {
-  console.log('new streaming content!!')
-  if (props.currentTask?.id) {
-    const taskMeta = tystate.reactiveTaskMeta(props.currentTask?.id)
-    const sc = computed(() => {
-      return taskMeta.value.streamContent
+const streamingContentTracker = new Map<string, string>()
+
+const streamCallback: Parameters<typeof tystate.streamCallBacks.addGlobal>[0] = ({
+  taskId,
+  chunk,
+}) => {
+  console.log('received stream for', taskId)
+  if (chunk?.choices[0]?.delta?.tool_calls) {
+    chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
+      // TODO: add streaming for function calls
+      console.log(t)
     })
-    return sc
-  } else return undefined
-}, undefined)
+  }
+  if (chunk?.choices[0]?.delta?.content) {
+    streamingContentTracker.set(
+      taskId,
+      (streamingContentTracker.get(taskId) ?? '') + chunk.choices[0].delta.content,
+    )
+  }
+}
+
+tystate.streamCallBacks.addGlobal(streamCallback)
+onBeforeUnmount(() => {
+  tystate.streamCallBacks.removeGlobal(streamCallback)
+})
+
+const currentStream = computed(() => {
+  if (props.currentTask) return streamingContentTracker.get(props.currentTask.id)
+  else return undefined
+})
 
 // TODO: move this "one layer up" :)
 const toolList = asyncComputed(async () => {

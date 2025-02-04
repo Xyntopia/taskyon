@@ -21,6 +21,8 @@ import { tylog } from 'src/modules/logger'
 import { useAppStateStore } from './appState'
 import type { TaskEvent } from 'src/modules/taskyon/taskManager'
 import { asyncComputed } from './vueUtils'
+import type OpenAI from 'openai'
+import { useCallbacks } from 'src/modules/useCallBacks'
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -151,6 +153,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // callin ExecutionContext.interrupt();  cancels processing of current task
   const taskWorkerController = useTaskWorkerController()
   console.log('initialize taskyon')
+
+  const { triggerGlobal, removeGlobal, addGlobal } = useCallbacks<{
+    taskId: string
+    chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined
+  }>()
+
   const initTaskyonPromise = initTaskyon(
     stateRefs.llmSettings,
     stateRefs.keys,
@@ -158,6 +166,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     stateRefs.logError,
     TaskList,
     defineTyGuiTools(),
+    () => (id: string, chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => {
+      triggerGlobal({ taskId: id, chunk })
+    },
   )
 
   // Access taskManagerInstance and addTask2Tree without redundant awaits
@@ -398,6 +409,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     modelLookUp,
     llmModels: computed(() => llmModelsInternal.value),
     logger,
+    streamCallBacks: {
+      removeGlobal,
+      addGlobal,
+    },
   }
 }) // this state stores all information which
 // should be stored e.g. in browser LocalStorage

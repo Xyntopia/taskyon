@@ -89,7 +89,6 @@ export const createCrudWrapper = async <T>(
       )
     },
     delete: async (id: string | number) => {
-      trigger(id, null)
       callbackList.delete(id)
       await db.query(`DELETE FROM ${tableName} WHERE ${idColumn} = $1;`, [id])
     },
@@ -153,7 +152,6 @@ export const createMapCrudWrapper = <T>(
       return Promise.resolve()
     },
     delete: (id: string | number): Promise<void> => {
-      trigger(id, null)
       callbackList.delete(id)
       storage.delete(id)
       return Promise.resolve()

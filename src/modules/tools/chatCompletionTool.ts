@@ -62,6 +62,7 @@ export async function processChatTask(
   taskWorkerController: TaskWorkerController,
   apiKeys: { [key: string]: string },
   lastTaskBeforeChatCompletion: TaskNode,
+  streamTracker: (chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => void,
 ) {
   //TODO: this code is duplicated, can we do this better?
   const api = getApiConfigCopy(llmSettings, configuration.chatApi)
@@ -113,8 +114,6 @@ export async function processChatTask(
     }
 
     if (openAIConversationThread.length > 0) {
-      let streamingContentTracker: string = ''
-
       const chatCompletion = await callLLM(
         openAIConversationThread,
         tools,
@@ -124,25 +123,7 @@ export async function processChatTask(
         // TODO: if the task runs in the "foreground", stream it :)
         // task.id == llmSettings.selectedTaskId ? true : false, // this doesn't work, for some reason it doesn't always detect if we're running something in the forground...
         true, // for now, we always want to stream our task...
-
-        // this function receives chunks if we stream and senfs them into
-        // our original task in the debugging property to be displayed
-        // "live" (this only works if our tasks structure in task manager is
-        // reactive)
-        (chunk) => {
-          if (chunk?.choices[0]?.delta?.tool_calls) {
-            chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
-              // TODO: add streaming for function calls
-              console.log(t)
-            })
-          }
-          if (chunk?.choices[0]?.delta?.content) {
-            streamingContentTracker = streamingContentTracker + chunk.choices[0].delta.content
-            void taskManager.debugDb.upsert(currentTask.id, {
-              streamContent: streamingContentTracker,
-            })
-          }
-        },
+        streamTracker, // track incoming streams...
         () => {
           return taskWorkerController.isInterrupted()
         },
@@ -631,6 +612,11 @@ export function createChatCompletionTool(
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController,
   apiKeys: { [key: string]: string },
+  // we can provide a callback which gets call whenever our chatCompletion updates stream of some sort...
+  streamCallback: (
+    id: string,
+    chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined,
+  ) => void,
 ): InternalTool {
   const fetchChatCompletion: internalToolFunctionSchema = async (
     { model, goal, llmTools, allowedTools }: ccArguments,
@@ -663,6 +649,9 @@ export function createChatCompletionTool(
       taskWorkerController,
       apiKeys,
       lastTaskBeforeChatCompletion,
+      (chunk) => {
+        streamCallback(context.currentTask.id, chunk)
+      },
     )
 
     // parse the response into our own type ...
@@ -683,7 +672,7 @@ export function createChatCompletionTool(
       // background and we don't want to wait here...
       void addTaskCostInformation(resp.data, context.currentTask.id, llmSettings, apiKeys).then(
         async (costMeta) => {
-          const oldMeta = await taskManager.debugDb.read(context.currentTask.id)
+          const oldMeta = await taskManager.debugDb.get(context.currentTask.id)
           const newMeta = {
             ...oldMeta,
             ...costMeta,

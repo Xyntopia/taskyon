@@ -13,6 +13,7 @@ import { AsyncQueue, toLowerCaseKeys } from '../utils'
 import { createChatCompletionTool } from '../tools/chatCompletionTool'
 import { getDatabase } from '../pglite.api'
 import { createCrudWrapper } from '../crudWrapper'
+import type OpenAI from 'openai'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -23,6 +24,10 @@ export async function initTaskyon(
   // value in order to get updates to the list of tasks immediatly reflected in the UI.
   TaskList: Map<string, TaskNode>,
   AdditionalTools: InternalTool[],
+  streamCallback: (
+    id: string,
+    chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined,
+  ) => void,
 ) {
   const ToolList: InternalTool[] = [
     executePythonScript,
@@ -52,7 +57,13 @@ export async function initTaskyon(
 
   // add tools which have access to the taskManagerInstance itself
   ToolList.push(
-    createChatCompletionTool(llmSettings, taskManagerInstance, taskWorkerController, apiKeys),
+    createChatCompletionTool(
+      llmSettings,
+      taskManagerInstance,
+      taskWorkerController,
+      apiKeys,
+      streamCallback,
+    ),
     {
       function: async ({ filename }: { filename: string }) => {
         const file = await taskManagerInstance.getFileByName(filename)
