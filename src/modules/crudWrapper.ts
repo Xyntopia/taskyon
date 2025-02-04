@@ -1,6 +1,6 @@
 import type { TyPGDB } from './pglite.api'
 import type { LiveCallback } from './useCallBacks'
-import { useLiveCallBacks, addCallback } from './useCallBacks'
+import { useCallbacks } from './useCallBacks'
 
 // TODO: add protections against SQL injection...
 
@@ -52,7 +52,7 @@ export const createCrudWrapper = async <T>(
     await db.exec(createTableSql)
   }
 
-  const { trigger, callbackList, createDisposeFunction, add: addCallback } = useLiveCallBacks<T>()
+  const { trigger, callbackList, createDisposeFunction, add: addCallback } = useCallbacks<T>()
 
   return {
     set: async (id: string | number, data: T) => {
@@ -136,7 +136,7 @@ export const createCrudWrapper = async <T>(
 export const createMapCrudWrapper = <T>(
   storage: Map<string | number, T>,
 ): Promise<CrudWrapper<T>> => {
-  const { trigger, callbackList, createDisposeFunction, add: addCallback } = useLiveCallBacks<T>()
+  const { trigger, callbackList, createDisposeFunction, add: addCallback } = useCallbacks<T>()
 
   return Promise.resolve({
     set: (id: string | number, data: T): Promise<void> => {

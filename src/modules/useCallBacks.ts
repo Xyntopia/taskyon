@@ -2,8 +2,9 @@ export type LiveCallback<T> = (data: T | null) => void
 
 // Map to hold live callbacks.
 // Using a Map that stores, for each record ID (as a string), a Set of callback functions.
-export function useLiveCallBacks<T>() {
+export function useCallbacks<T>() {
   const callbackList = new Map<string | number, Set<LiveCallback<T>>>()
+  const globalCallbacks = new Set<LiveCallback<T>>()
 
   // Helper to trigger callbacks for a given record id.
   const trigger = (id: string | number, data: T | null) => {
@@ -37,5 +38,18 @@ export function useLiveCallBacks<T>() {
     callbackList.get(key)!.add(callback)
   }
 
-  return { trigger, callbackList, createDisposeFunction, add }
+  const triggerGlobal = (data: T | null) => {
+    globalCallbacks.forEach((cb) => {
+      try {
+        cb(data)
+      } catch (error) {
+        console.error('Error in global live callback:', error)
+      }
+    })
+  }
+
+  function addGlobal(callback: LiveCallback<T>) {
+    globalCallbacks.add(callback)
+  }
+  return { trigger, callbackList, createDisposeFunction, add, addGlobal, triggerGlobal }
 }
