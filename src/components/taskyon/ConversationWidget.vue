@@ -22,7 +22,7 @@
       <!--Render tasks which are in progress-->
       <q-card v-if="!taskWorkerWaiting" class="row">
         <div class="col">
-          <ty-markdown no-line-numbers no-mermaid :src="streamingContent || ''" />
+          <ty-markdown no-line-numbers no-mermaid :src="streamingContent?.value || ''" />
           <q-spinner-dots size="2rem" color="secondary" />
         </div>
       </q-card>
@@ -40,6 +40,7 @@ import tyMarkdown from 'components/tyMarkdown.vue'
 import { useQuasar } from 'quasar'
 import { asyncComputed } from 'src/stores/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
+import { computed } from 'vue'
 const $q = useQuasar()
 
 const tystate = useTaskyonStore()
@@ -54,11 +55,16 @@ const props = defineProps<{
   expertMode?: boolean
 }>()
 
-const streamingContent = asyncComputed(async () => {
-  const tm = await tystate.getTaskManager()
-  if (props.currentTask?.id)
-    return (await tm.debugDb.readReactive(props.currentTask.id)).value?.streamContent
-  else return undefined
+// switch the current streaming content to the currently active tasks...
+const streamingContent = computed(() => {
+  console.log('new streaming content!!')
+  if (props.currentTask?.id) {
+    const taskMeta = tystate.reactiveTaskMeta(props.currentTask?.id)
+    const sc = computed(() => {
+      return taskMeta.value.streamContent
+    })
+    return sc
+  } else return undefined
 }, undefined)
 
 // TODO: move this "one layer up" :)

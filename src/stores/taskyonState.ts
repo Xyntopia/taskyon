@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { watch, computed, reactive, ref } from 'vue'
+import type { TaskNodeMeta } from 'src/modules/taskyon/types'
 import {
   type Model,
   type TaskNode,
@@ -351,12 +352,31 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     }
   }
 
+  function reactiveTaskMeta(taskid: string) {
+    console.log('generate new reactive task logger...')
+    const taskMeta = ref<TaskNodeMeta>({})
+    void getTaskManager().then(async (tm) => {
+      console.log('new live reader...')
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const live = await tm.debugDb.readLive(taskid, (res) => {
+        console.log('new stream arrived!')
+        taskMeta.value = res || {}
+      })
+      // try to remove our live subscriber whenleaving the widget context..
+      /*onScopeDispose(() => {
+        void live.unsubscribe()
+      })*/
+    })
+    return taskMeta
+  }
+
   const { selectedThread, taskWorkerWaiting, currentTask } = useReactiveTasks()
 
   // also make sure, that we update the history with the currently selected chat when initializing...
   if (currentTask.value) void add2ChatHistory(currentTask.value, 'update')
 
   return {
+    reactiveTaskMeta,
     selectedThread,
     taskWorkerWaiting,
     currentTask,

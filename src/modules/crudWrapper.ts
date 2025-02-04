@@ -1,4 +1,3 @@
-import { ref, onScopeDispose } from 'vue'
 import type { TyPGDB } from './pglite.api'
 
 // Helper functions
@@ -75,22 +74,17 @@ export const createCrudWrapper = async <T>(db: TyPGDB, options: CrudOptions) => 
       return result.rows
     },
     // Note: onScopeDispose works when called from a Vue component or a proper effect scope.
-    readReactive: async (id: string | number) => {
-      const record = ref<T | null>(null)
+    readLive: async (id: string | number, callback: (data: Row<T>['data'] | null) => void) => {
       const query = `SELECT ${dataColumn} FROM ${tableName} WHERE ${idColumn} = ${formatValue(id)};`
       const live = await db.live.query<Row<T>>({
         query,
         callback: (res) => {
-          record.value = res.rows.length ? res.rows[0]!.data : null
+          console.log('meta update received:', id)
+          const data = res.rows.length ? res.rows[0]!.data : null
+          callback(data)
         },
       })
-
-      // Automatically unsubscribe when the current effect scope is disposed.
-      onScopeDispose(() => {
-        void live.unsubscribe()
-      })
-
-      return record
+      return live
     },
   }
 }

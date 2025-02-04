@@ -19,6 +19,9 @@
         <div v-else-if="'uploadedFiles' in task.content" class="col-auto self-center">
           <q-icon :name="mdiFileDocument" size="sm" color="info"></q-icon>
         </div>
+        <div v-else-if="'termination' in task.content">
+          <q-icon :name="matPause" size="sm" color="info"></q-icon>
+        </div>
         <div v-else-if="task.role === 'system'" class="col-auto self-center">
           <q-icon :name="mdiDesktopTower" color="info" size="sm"></q-icon>
         </div>
@@ -117,31 +120,25 @@
           style="font-size: xx-small"
           class="col-auto column items-center print-hide task-costs"
         >
-          <div v-if="task.debugging.taskCosts">
+          <div v-if="taskMeta.taskCosts">
             {{ humanReadableTaskCosts }}
           </div>
           <q-icon
             :name="matMonetizationOn"
             size="xs"
-            :color="
-              task.debugging.taskCosts
-                ? 'secondary'
-                : task.debugging.promptTokens
-                  ? 'positive'
-                  : 'info'
-            "
+            :color="taskMeta.taskCosts ? 'secondary' : taskMeta.promptTokens ? 'positive' : 'info'"
           ></q-icon>
-          <div v-if="task.debugging.promptTokens">
-            {{ task.debugging.promptTokens }}
+          <div v-if="taskMeta.promptTokens">
+            {{ taskMeta.promptTokens }}
           </div>
           <div v-else>
             {{
-              (task.debugging.estimatedTokens?.promptTokens || 0) +
-              (task.debugging.estimatedTokens?.resultTokens || 0)
+              (taskMeta.estimatedTokens?.promptTokens || 0) +
+              (taskMeta.estimatedTokens?.resultTokens || 0)
             }}
           </div>
           <q-tooltip :delay="1000">
-            <TokenUsage :task="task" />
+            <TokenUsage :task-meta="taskMeta" />
           </q-tooltip>
         </div>
       </div>
@@ -179,7 +176,7 @@
         <q-tabs v-model="state.messageDebug[task.id]" dense no-caps>
           <q-tab name="ERROR" label="Error" />
           <q-tab name="RAW" label="raw task data" />
-          <q-tab v-if="task.debugging.taskPrompt" name="TASKPROMPT" label="task prompt" />
+          <q-tab v-if="taskMeta.taskPrompt" name="TASKPROMPT" label="task prompt" />
           <q-tab name="RAW_INPUT" label="raw input" />
         </q-tabs>
         <q-tab-panels
@@ -192,7 +189,7 @@
         >
           <q-tab-panel name="ERROR">
             <textarea
-              :value="JSON.stringify(task.debugging.error, null, 2)"
+              :value="JSON.stringify(taskMeta.error, null, 2)"
               readonly
               wrap="soft"
               style="width: 100%; height: 200px; background-color: inherit; color: inherit"
@@ -210,7 +207,7 @@
           </q-tab-panel>
           <q-tab-panel name="RAW_INPUT">
             <textarea
-              :value="JSON.stringify(task.debugging.rawInput, null, 2)"
+              :value="JSON.stringify(taskMeta.rawInput, null, 2)"
               readonly
               wrap="soft"
               style="width: 100%; height: 200px; background-color: inherit; color: inherit"
@@ -219,7 +216,7 @@
           </q-tab-panel>
           <q-tab-panel name="TASKPROMPT">
             <textarea
-              v-for="(tp, idx) in task.debugging.taskPrompt"
+              v-for="(tp, idx) in taskMeta.taskPrompt"
               :key="idx"
               :value="typeof tp.content === 'string' ? tp.content : ''"
               readonly
@@ -249,6 +246,7 @@ import {
   matCalculate,
   matMonetizationOn,
   matNewLabel,
+  matPause,
   matWarning,
 } from '@quasar/extras/material-icons'
 import { openrouterPricing } from 'src/modules/utils'
@@ -265,6 +263,8 @@ const props = defineProps<{
 }>()
 
 const tystate = useTaskyonStore()
+const taskMeta = tystate.reactiveTaskMeta(props.task.id)
+
 const state = useAppStateStore()
 const fileMappings = ref<FileMappingDocType[]>([])
 async function getFile(uuid: string) {
@@ -302,14 +302,13 @@ async function taskDraftFromTask(taskId: string) {
   // we are copying the current task with json stringify
   const jsonTask = JSON.stringify(await (await tystate.getTaskManager()).getTask(taskId))
   const task = TaskNode.partial().parse(JSON.parse(jsonTask))
-  task.debugging = {}
   state.llmSettings.taskDraft = partialTaskDraft.parse(task)
   return task
 }
 
 const humanReadableTaskCosts = computed(() => {
-  if (props.task.debugging.taskCosts) {
-    return openrouterPricing(props.task.debugging.taskCosts)
+  if (taskMeta.value.taskCosts) {
+    return openrouterPricing(taskMeta.value.taskCosts)
   } else {
     return ''
   }

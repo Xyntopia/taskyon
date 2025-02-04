@@ -29,6 +29,7 @@ import {
   type toolContext,
 } from '../taskyon/tools'
 import {
+  deepCopy,
   fileToBase64,
   keysToLowerCase,
   normalizeFalsyValues,
@@ -103,6 +104,8 @@ export async function processChatTask(
       allowedTools,
       goal,
     )
+
+    // TODO: save our "openAIConversationThread" inside debugdb for debuggin
 
     let tools: OpenAI.ChatCompletionTool[] = []
     if (llmSettings.enableOpenAiTools) {
@@ -221,11 +224,13 @@ async function saveTokenUsage(
       taskTokens: chatResponse.usage.total_tokens,
     }
   }
+  // doing deepcopy here, because we're communicating to a worker
+  // and need to make sure to dereference values (e.g. if they're vue reactive objects)
   costInfo.estimatedTokens = await estimateChatTokens(
-    content,
+    deepCopy(content),
     openAIConversationThread,
     toolDefs,
-    llmSettings.allowedTools || [],
+    deepCopy(llmSettings.allowedTools) || [],
     chatResponse.choices[0]!.message.content ?? '',
   )
   return costInfo
