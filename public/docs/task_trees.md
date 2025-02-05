@@ -26,10 +26,14 @@ This whitepaper outlines Taskyon’s architecture, cryptographic guarantees, ver
 Each TaskNode contains:
 
 - **Content:** The immutable payload, which may include descriptions, commands, or other task-specific data.
-- **Metadata:** Includes mutable properties such as access control lists (ACLs), versioning, and linkage information.
+- **Metadata:** Immutable properties such as access control lists (ACLs), versioning, and linkage information. _Changes to metadata require appending a new TaskNode._
 - **Signature:** Each TaskNode is cryptographically signed to ensure authenticity.
 
 #### Example JSON Representation
+
+This is a rough outline and not the exact structure used
+in the most recent version of taskyon. It is only there
+to give a general idea of what the system looks like.
 
 ```json
 {
@@ -49,6 +53,8 @@ Each TaskNode contains:
 }
 ```
 
+---
+
 ## 4. Cryptographic Signatures and Access Control
 
 ### Signature Mechanics
@@ -62,19 +68,49 @@ Each TaskNode contains:
 - **Editor Delegation:** Multiple editors can be authorized, with public keys embedded in the ACL.
 - **Append-Only Model:** Instead of modifying existing nodes, new nodes are appended, preserving an immutable task history.
 
+### Immutable Metadata and Permission Evolution
+
+Instead of mutable metadata, Taskyon treats metadata as immutable. Permission changes (e.g., ACL updates) are recorded by appending new TaskNodes to the TaskTree. This ensures cryptographic integrity while allowing dynamic policy evolution.
+
+#### How It Works
+
+- **Permission Update Nodes:**  
+  An authorized editor appends a TaskNode with updated ACL rules in its metadata. This node is immutable and signed, serving as a tamper-proof record of the change.
+
+- **Chain of Authority:**  
+  Subsequent TaskNodes reference their **parentID** or **priorID**, forming a directed chain. The effective permissions for any node are derived by traversing backward to the most recent permission update in its lineage.
+
+- **Verification Workflow:**  
+  When processing a TaskNode, clients:
+  1. Validate the signature of the current node.
+  2. Traverse the chain to resolve the effective ACL (or use cached state for efficiency).
+  3. Confirm the editor’s public key is authorized under the latest ACL.
+
+#### Pros & Cons
+
+**Pros:**
+
+- **Full Immutability:** No in-place updates; all changes are append-only.
+- **Audit Trail:** The TaskTree itself becomes a verifiable history of permission changes.
+- **Conflict Avoidance:** Immutable nodes simplify peer-to-peer exchange.
+
+**Cons:**
+
+- **Chain Traversal Overhead:** Clients must resolve permissions by walking the TaskTree (mitigated by caching).
+- **Branch Merging Complexity:** Conflicting permission updates in parallel branches require resolution rules (e.g., "latest timestamp wins").
+
+---
+
 ## 5. Versioning and Conflict Avoidance
 
-### Sequential Versioning
+### Sequential Versioning with Permission Context
 
-- **Single Editor Updates:** A version number or timestamp ensures ordered updates.
-- **Multi-Editor Support:** In multi-editor scenarios, TaskNodes form an append-only log, preventing direct conflicts.
+- **Versioning via Append-Only Log:** Each TaskNode includes a `version` field, incremented sequentially. Permission changes inherit the version of their parent node, ensuring versioned access control.
+- **Branch-Specific Permissions:** Branches can evolve independent permissions. Merging follows rules defined in the root ACL (e.g., requiring consensus from editors in both branches).
 
-### Branching and Merging
+---
 
-- **ParentID Linkage:** Each update references a parent TaskNode, ensuring structured evolution.
-- **Conflict Resolution:** Branching is explicit, and higher-level logic (or CRDTs) can be used to merge competing updates.
-
-## 6. Dynamic Task Orchestration with LLMs
+## 6. Dynamic Task Orchestration with LLMs (Excerpt)
 
 ### LLM-Driven TaskTree Evolution
 
