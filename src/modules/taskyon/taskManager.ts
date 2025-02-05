@@ -984,7 +984,6 @@ export function useTyTaskManager(
 
   const defaultMode = {
     getTask,
-    updateTask,
     deleteTask,
     searchTasks,
     setTask,

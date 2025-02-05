@@ -159,6 +159,7 @@
         <q-select
           class="fit q-pb-xs"
           dense
+          disable
           label="Task Labels"
           filled
           :model-value="task.label || []"
@@ -349,16 +350,17 @@ function toggleMarkdown(id: string) {
   console.log(`markdown for ${id}`, state.taskState[id].markdownEnabled)
 }
 
-async function updateLabels(labels: string[]) {
+// TODO: we'll get rid of this..  we only need
+function updateLabels(labels: string[]) {
   console.log(labels)
-  const tm = await tystate.getTaskManager()
+  /*const tm = await tystate.getTaskManager()
   await tm.updateTask(
     {
       id: props.task.id,
       label: labels,
     },
     true,
-  )
+  )*/
 }
 </script>
 
