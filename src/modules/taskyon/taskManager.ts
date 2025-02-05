@@ -905,7 +905,6 @@ export function useTyTaskManager(
   // whats important here is that the TaskNode can only have one type of content
   // so when calling the function, we need to pre-select which type of task
   // we want to have.
-  // TODO: move this into tyManager and rename ot to "addPartialTask2Tree"
   const addPartialTask2Tree = async (
     task: partialTaskDraft,
     priorID: string | undefined,
