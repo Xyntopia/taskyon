@@ -1,41 +1,100 @@
-### Taskyon and Task Trees
+# Taskyon Whitepaper: Immutable TaskNodes in a Dynamic TaskTree
 
-Taskyon uses a **task tree** structure to manage and execute tasks, inspired by the concept of a **call stack** or **dependency graph** seen in programming languages and workflow engines. This approach breaks down complex tasks into smaller, manageable sub-tasks, allowing for parallel or sequential execution. Each node in the task tree represents a task, and its results are propagated upwards in the tree, similar to how function results are returned in a call stack.
+## 1. Introduction
 
-While this idea isn't entirely new—**workflow engines**, **job schedulers**, and **dependency graphs** in systems like Apache Airflow or Luigi use similar techniques—Taskyon distinguishes itself by incorporating **Large Language Model (LLM) integration**. The LLM influences the tree's dynamic structure, allowing it to respond flexibly to user input and task evolution.
+Taskyon is a distributed system designed to manage and execute tasks in a **peer-to-peer environment** using a **TaskTree** structure. Inspired by dependency graphs, workflow engines, and call stacks, Taskyon breaks complex tasks into manageable sub-tasks that can be executed sequentially or in parallel. Each task is represented as an immutable **TaskNode**, ensuring cryptographic integrity and content-addressability while allowing for **dynamic orchestration** using Large Language Models (LLMs).
 
-TODO: write about how we can _record_ a tasktree. Afterwards, we would freeze parts of the tree and leave
-    the rest flexible. This way we could define processes in an easy way...
-    As parts of the tree can consist of arbitrary functions (e.g. python, reading file contents etc...)
-    we essentially developed an LLM program this way...
+This whitepaper outlines Taskyon’s architecture, cryptographic guarantees, versioning mechanisms, and how LLMs influence TaskTree evolution.
 
-#### Key Features and Challenges
+## 2. Architectural Overview
 
-- **Dynamic Task Orchestration**:
+### Immutable TaskNodes and Content Addressing
 
-  Taskyon allows the LLM to dynamically generate and manage task trees. The tree evolves based on user interactions, with tasks broken down and orchestrated on-the-fly, creating a **flexible task management system**. However, this introduces potential challenges, as LLM-generated tasks may not always be optimized for efficiency or correctness, requiring careful handling to avoid invalid task structures.
+- **Immutability:** Every TaskNode is **content-addressed** via a SHA-256 hash. Once created, a TaskNode's content and core metadata cannot be altered. Any change results in a new TaskNode.
+- **Content Addressing:** The cryptographic hash acts as a globally unique identifier, enabling efficient peer-to-peer exchange and eliminating the need for traditional conflict resolution on updates.
 
-- **Task Dependency Management**:
+### TaskTree Structure
 
-  Task trees are structured as **task dependency graphs**, where tasks depend on the completion of other sub-tasks. This method has been widely used in various computing models, but Taskyon’s unique integration of an LLM to orchestrate this process could make it more responsive to user needs, though at the risk of introducing **complexity in task scheduling** and **result propagation**.
+- **Hierarchical and Sequential Links:** TaskNodes reference their **parentID** (denoting hierarchical relationships) and **priorID** (capturing sequential dependencies). This linkage forms a structured TaskTree where tasks build upon each other.
+- **Subtasks and Results:** New tasks are appended as child TaskNodes, preserving context while keeping each node immutable.
+- **Task Execution and Propagation:** Task results propagate upwards in the tree, similar to function return values in programming.
 
-- **Concurrency and Fault Tolerance**:
+## 3. Data Structures
 
-  Managing tasks in parallel introduces potential issues like **race conditions** or **deadlocks** if not properly handled. Similarly, the failure of a task in a specific branch may require **fallback strategies** or **error handling** mechanisms to ensure the task tree can still function, making **fault tolerance** a critical feature to consider.
+### TaskNode Structure
 
-- **Scalability**:
+Each TaskNode contains:
 
-  As task trees grow in complexity, managing the size and **latency** of the tree becomes important. Taskyon's **local-first architecture** helps mitigate cloud-based latency issues, but efficient resource usage and task prioritization are necessary to ensure large task trees do not become slow or cumbersome to manage.
+- **Content:** The immutable payload, which may include descriptions, commands, or other task-specific data.
+- **Metadata:** Includes mutable properties such as access control lists (ACLs), versioning, and linkage information.
+- **Signature:** Each TaskNode is cryptographically signed to ensure authenticity.
 
-#### Will It Work?
+#### Example JSON Representation
 
-Task trees in general are proven to work well in many domains, and Taskyon’s approach borrows from these concepts. The novel integration of **LLM-driven task orchestration** could introduce new flexibility and dynamism, though it requires robust engineering to ensure that tasks are properly managed, especially as they scale.
+```json
+{
+  "content": {
+    "data": "Task description or command",
+    "contentAddress": "sha256:..."
+  },
+  "metadata": {
+    "parentID": "sha256:parentHash",
+    "priorID": "sha256:priorTaskHash",
+    "version": 1,
+    "editor": "pubkey:editorXYZ",
+    "timestamp": 1680000000,
+    "acl": ["pubkey:owner", "pubkey:editor1", "pubkey:editor2"]
+  },
+  "signature": "sig:..."
+}
+```
 
-- **Novelty**:
+## 4. Cryptographic Signatures and Access Control
 
-  While the **task tree structure** itself is not a new invention, combining it with **LLM-based task generation** offers an interesting innovation. The LLM can potentially manage tasks in ways that static systems cannot, adapting to conversations and user inputs dynamically.
+### Signature Mechanics
 
-- **Challenges**:
-  The success of Taskyon’s task trees will depend on solving known problems related to **task orchestration**, **dependency management**, and **concurrency**. Additionally, the **LLM’s unpredictability** in generating valid task trees requires safeguards to prevent inefficiency or failures.
+- **Signing Process:** TaskNodes are signed by the creator’s private key, covering the content, parent linkage, version, and editor ID.
+- **Verification:** Peers validate the signature against the editor’s public key, ensuring authenticity and preventing tampering.
 
-In summary, Taskyon's task tree model is a flexible and potentially powerful system for task management, combining established techniques with the dynamic capabilities of modern LLMs. While the core structure isn't groundbreaking, Taskyon’s unique approach to integrating AI into task orchestration holds promise for **conversational task management** and **personalized AI interaction**. However, the system must address inherent challenges in scalability, fault tolerance, and efficiency to realize its full potential.
+### Enforcing ACLs
+
+- **Root-Level Authority:** The root TaskNode defines the ACL, specifying who can append new nodes.
+- **Editor Delegation:** Multiple editors can be authorized, with public keys embedded in the ACL.
+- **Append-Only Model:** Instead of modifying existing nodes, new nodes are appended, preserving an immutable task history.
+
+## 5. Versioning and Conflict Avoidance
+
+### Sequential Versioning
+
+- **Single Editor Updates:** A version number or timestamp ensures ordered updates.
+- **Multi-Editor Support:** In multi-editor scenarios, TaskNodes form an append-only log, preventing direct conflicts.
+
+### Branching and Merging
+
+- **ParentID Linkage:** Each update references a parent TaskNode, ensuring structured evolution.
+- **Conflict Resolution:** Branching is explicit, and higher-level logic (or CRDTs) can be used to merge competing updates.
+
+## 6. Dynamic Task Orchestration with LLMs
+
+### LLM-Driven TaskTree Evolution
+
+Taskyon integrates LLMs to dynamically generate and manage task trees:
+
+- **Adaptive Task Decomposition:** LLMs break down high-level tasks into structured sub-tasks.
+- **Flexible Execution Flow:** The task tree adapts in real-time based on user input and intermediate results.
+- **Task Dependency Management:** The LLM ensures that generated task dependencies follow logical and executable sequences.
+
+### Recording and Freezing TaskTrees
+
+- **Task Replayability:** Task trees can be recorded for reproducibility.
+- **Freezing Defined Processes:** Some branches can be locked while others remain flexible, enabling structured yet adaptable workflows.
+- **LLM as a Programming Model:** Since tasks can invoke arbitrary functions (e.g., executing Python code or processing files), Taskyon effectively enables **LLM-driven programming** within its task execution model.
+
+## 7. Integration with Additional Project Data
+
+- **File References:** TaskNodes can reference external files using content-addressed storage.
+- **Unified Exchange:** TaskNodes bundle immutable content and metadata for seamless peer-to-peer exchange.
+
+## 8. Conclusion
+
+Taskyon combines immutable, cryptographically secure TaskNodes with LLM-driven task orchestration. By leveraging content-addressability, versioning, and ACL-based access control, it ensures a **distributed, conflict-resistant, and dynamically evolving** task management system. This unique combination positions Taskyon as a robust platform for secure, scalable, and AI-enhanced workflows.
