@@ -364,12 +364,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   }
 
   function reactiveTaskMeta(taskid: string) {
-    console.log('generate new reactive task logger...')
+    //console.log('generate new reactive task logger...')
     const taskMeta = ref<TaskNodeMeta>({})
 
     let dispose: (() => void) | undefined
     void getTaskManager().then((tm) => {
-      console.log('new live reader...')
+      //console.log('new live reader...')
       dispose = tm.debugDb.readLive(taskid, (res) => {
         //console.log('new stream arrived!')
         taskMeta.value = res || {}
@@ -383,7 +383,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // Clean up when the effect scope is disposed
     onScopeDispose(() => {
       if (dispose) {
-        console.log(`Unsubscribing from live updates for ${taskid}`)
+        //console.log(`Unsubscribing from live updates for ${taskid}`)
         dispose()
       }
     })

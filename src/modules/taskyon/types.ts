@@ -242,7 +242,7 @@ const ToolResultContent = z.object({ toolResult: z.unknown() })
 const ErrorContent = z
   .object({ error: z.string() })
   .describe('Gets created if any error occurs during task processing.')
-const Termination = z.object({ termination: z.string() }).describe(
+const Return = z.object({ termination: z.string() }).describe(
   `A Termination task always indicates the end of an autonomous task chat execution.
 Every Leaf task which is not a Termination task can potentially continue to be executed...
 
@@ -262,7 +262,7 @@ const TaskContent = z.union([
   // TODO: replace with a "context" function which can also be a link to a URL for example or maybe a search string for other tasks...
   //       we can declare function for a lot of these things this way :)
   UploadedFilesContent.strict(),
-  Termination.strict(),
+  Return.strict(),
 ])
 
 export type TaskContent = z.infer<typeof TaskContent>
