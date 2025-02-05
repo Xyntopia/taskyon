@@ -345,7 +345,7 @@ function createErrorTaskChain(
     }
   }
 
-  if (task?.id) void debugDb.upsert(task?.id, debugInfo)
+  if (task?.id) void debugDb.upsert(task?.id, debugInfo, 'merge0')
 
   return [
     errorTask,

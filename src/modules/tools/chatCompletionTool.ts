@@ -671,14 +671,7 @@ export function createChatCompletionTool(
       // we run this asynchronously, because it fetches data in the
       // background and we don't want to wait here...
       void addTaskCostInformation(resp.data, context.currentTask.id, llmSettings, apiKeys).then(
-        async (costMeta) => {
-          const oldMeta = await taskManager.debugDb.get(context.currentTask.id)
-          const newMeta = {
-            ...oldMeta,
-            ...costMeta,
-          }
-          void taskManager.debugDb.upsert(context.currentTask.id, newMeta)
-        },
+        (newMeta) => void taskManager.debugDb.upsert(context.currentTask.id, newMeta, 'merge0'),
       )
     }
 
@@ -699,7 +692,7 @@ export function createChatCompletionTool(
     )
 
     if (newTaskChain[0]) {
-      void taskManager.debugDb.upsert(context.currentTask.id, metaInfo)
+      void taskManager.debugDb.upsert(context.currentTask.id, metaInfo, 'merge0')
     }
 
     return makeTaskResult([newTaskChain])

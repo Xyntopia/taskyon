@@ -23,7 +23,7 @@ type Row<T> = {
 export interface CrudWrapper<T> {
   set(id: string | number, data: T): Promise<void>
   get(id: string | number): Promise<T | null>
-  upsert(id: string | number, data: T): Promise<void>
+  upsert(id: string | number, data: T, strategy?: 'merge0' | 'replace'): Promise<void>
   delete(id: string | number): Promise<void>
   list(): Promise<Row<T>[]>
   readLive(id: string | number, callback: LiveCallback<T>): () => void
@@ -54,6 +54,15 @@ export const createCrudWrapper = async <T>(
 
   const { trigger, callbackList, createDisposeFunction, add: addCallback } = useCallbacks<T>()
 
+  const get = async (id: string | number): Promise<T | null> => {
+    const result = await db.query<Row<T>>(
+      `SELECT ${dataColumn} FROM ${tableName}
+       WHERE ${idColumn} = $1;`,
+      [id],
+    )
+    return result.rows.length ? result.rows[0]!.data : null
+  }
+
   return {
     set: async (id: string | number, data: T) => {
       trigger(id, data)
@@ -63,14 +72,7 @@ export const createCrudWrapper = async <T>(
         [id, JSON.stringify(data)],
       )
     },
-    get: async (id: string | number): Promise<T | null> => {
-      const result = await db.query<Row<T>>(
-        `SELECT ${dataColumn} FROM ${tableName}
-         WHERE ${idColumn} = $1;`,
-        [id],
-      )
-      return result.rows.length ? result.rows[0]!.data : null
-    },
+    get,
     /*update: async (id: string | number, data: Partial<T>) => {
       const jsonData = formatValue(JSON.stringify(data))
       triggerLiveCallbacks(id, data)
@@ -78,9 +80,19 @@ export const createCrudWrapper = async <T>(
               SET ${dataColumn} = ${jsonData}
               WHERE ${idColumn} = ${formatValue(id)};`)
     },*/
-    upsert: async (id: string | number, data: T) => {
-      trigger(id, data)
-      const jsonData = JSON.stringify(data)
+    upsert: async (id, data, strategy = 'replace') => {
+      let newData: T
+      if (strategy === 'merge0') {
+        const oldData = await get(id)
+        newData = {
+          ...oldData,
+          ...data,
+        }
+      } else {
+        newData = data
+      }
+      trigger(id, newData)
+      const jsonData = JSON.stringify(newData)
       await db.query(
         `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
           VALUES ($1, $2)
