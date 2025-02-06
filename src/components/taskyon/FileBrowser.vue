@@ -2,13 +2,12 @@
   <q-list>
     <q-item v-for="file in fileMappings" :key="file.uuid">
       <!-- Image preview, loaded asynchronously -->
-      <q-item-section v-if="preview">
+      <q-item-section v-if="preview && previews[file.uuid] !== '__fallback__'">
         <q-img
           v-if="previews[file.uuid]"
           :src="previews[file.uuid]"
           :style="{ width: previewSize + 'px', height: previewSize + 'px' }"
         />
-        <!-- Show a skeleton loader while the image is being fetched -->
         <q-skeleton v-else :width="previewSize + 'px'" :height="previewSize + 'px'" />
       </q-item-section>
 
@@ -75,8 +74,13 @@ const loadAllPreviews = async () => {
     if (file?.uuid) {
       const previewFile = await props.getFile(file.uuid)
       if (previewFile) {
-        const scaledPreview = await createScaledImage(previewFile)
-        previews.value[file.uuid] = scaledPreview
+        // If the file isn’t an image, mark as fallback
+        if (!previewFile.type.startsWith('image/')) {
+          previews.value[file.uuid] = '__fallback__'
+        } else {
+          const scaledPreview = await createScaledImage(previewFile)
+          previews.value[file.uuid] = scaledPreview
+        }
       }
     }
   })
