@@ -50,13 +50,21 @@ const createScaledImage = async (file: File, maxSize = props.previewSize) => {
     img.src = URL.createObjectURL(file)
 
     img.onload = () => {
-      const canvas = document.createElement('canvas')
+      const dpr = window.devicePixelRatio || 1
       const scale = Math.min(maxSize / img.width, maxSize / img.height)
-      canvas.width = img.width * scale
-      canvas.height = img.height * scale
+
+      const canvas = document.createElement('canvas')
+      // Increase canvas resolution by devicePixelRatio
+      canvas.width = img.width * scale * dpr
+      canvas.height = img.height * scale * dpr
+      // Keep the displayed size as maxSize (or img.width * scale)
+      canvas.style.width = `${img.width * scale}px`
+      canvas.style.height = `${img.height * scale}px`
 
       const ctx = canvas.getContext('2d')
-      ctx?.drawImage(img, 0, 0, canvas.width, canvas.height)
+      // Scale the drawing context to counter the increased canvas resolution
+      ctx?.scale(dpr, dpr)
+      ctx?.drawImage(img, 0, 0, img.width * scale, img.height * scale)
       resolve(canvas.toDataURL())
     }
   })
