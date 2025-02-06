@@ -3,6 +3,7 @@ import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english'
 import { signAsync, getPublicKeyAsync, verifyAsync } from '@noble/ed25519'
 import { base64UrlToUint8Array, uint8ArrayToBase64Url, urlSafe64BitString } from './encoding'
 import { v1 as uuidv1 } from 'uuid'
+import { Buffer } from 'buffer'
 
 // Generate a new seed phrase (mnemonic)
 export function generateSeedPhrase(): string {

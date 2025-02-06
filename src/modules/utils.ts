@@ -1,5 +1,6 @@
 //import equal from 'fast-deep-equal/es6';
 import { deepEqual } from 'fast-equals'
+import { Buffer } from 'buffer'
 
 type LowercaseKeys<T> = {
   [K in keyof T as K extends string ? Lowercase<K> : never]: T[K]
@@ -547,6 +548,20 @@ export function deepCopy<T>(item: T): T {
   // If item is of a type not handled above, return it as is
   return item
 }
+
+/*function uuidToBigInt(uuid: string) {
+  // Remove dashes and decode hex to a Buffer
+  const buffer = Buffer.from(uuid.replace(/-/g, ''), 'hex');
+
+  let bigint = BigInt(0);
+
+  // Iterate over each byte in the buffer and shift it into the BigInt
+  for (const byte of buffer) {
+    bigint = (bigint << BigInt(8)) + BigInt(byte);
+  }
+
+  return bigint;
+}*/
 
 export function base64UrlEncode(str: string): string {
   return Buffer.from(str)

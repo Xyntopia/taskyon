@@ -1,4 +1,5 @@
 import { urlSafe64BitString } from './encoding'
+import { Buffer } from 'buffer'
 
 export async function sha256UrlSafeHash(obj: unknown) {
   const json = JSON.stringify(obj)

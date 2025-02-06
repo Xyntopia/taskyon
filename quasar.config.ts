@@ -10,12 +10,35 @@ import fs from 'fs'
 // and https://github.com/quasarframework/quasar/issues/9780
 // also needs:
 //    yarn add --dev node-polyfill-webpack-plugin browserify-zlib
-import nodePolyfillWebpackPlugin from 'node-polyfill-webpack-plugin'
 import { ToolBase } from './src/modules/taskyon/types'
 import { zodSchemasToOpenApi } from './src/modules/yamlUtils'
 import { TaskyonMessages } from './src/modules/taskyon/iframeApiTypes'
-import { ArgumentsType } from '@vueuse/core'
+import webpack from 'webpack'
+import { execSync } from 'child_process'
 
+function getGitCommitHash() {
+  try {
+    // Try to fetch commit hash locally
+    // we need to expicitly specify 8 chars, because git default behaves differently on different OS.
+    const commitHash = execSync('git rev-parse --short=8 HEAD').toString().trim()
+    console.log('building:', commitHash)
+    return commitHash
+  } catch (err) {
+    console.warn('Unable to fetch Git commit hash locally:', err)
+
+    // Check if we're in GitLab CI
+    if (process.env.CI_COMMIT_SHORT_SHA) {
+      console.log('Using GitLab CI commit hash')
+      return process.env.CI_COMMIT_SHORT_SHA // Fallback to GitLab CI environment variable
+    }
+
+    // Fallback to a default value if no hash is available
+    console.warn('No commit hash available; using default')
+    return 'unknown'
+  }
+}
+
+const commitHash = getGitCommitHash()
 const APPNAME = 'taskyon'
 const DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid'
 
@@ -92,6 +115,9 @@ export default defineConfig((ctx) => {
     createOpenAPIDocs()
     copyFiles(filesToCopy)
   }
+
+  const droplogging = ctx.prod && process.env.LOGGING !== 'true'
+  console.log('drop logging:', droplogging)
 
   return {
     eslint: {
@@ -180,12 +206,30 @@ export default defineConfig((ctx) => {
        * Minification options. [Full list](https://github.com/webpack-contrib/terser-webpack-plugin/#minify).
        */
       uglifyOptions: {
-        compress: { drop_console: true },
+        // check out this page for all available "compress options":  https://terser.org/docs/options/#compress-options
+        // we can specifically drop certain logs like this:  ['log', 'info']
+        compress: {
+          drop_console: ['log', 'info'],
+          drop_debugger: true,
+        },
       },
+
+      /**
+       * Set to `false` to disable minification, or specify the minifier to use.
+       * Available options are 'terser' or 'esbuild'.
+       * If set to anything but boolean false then it also applies to CSS.
+       * For production only.
+       * @default 'esbuild'
+       */
+      minify: 'terser',
+
+      // for production, we are doing this manually with the SourceMapDevToolPlugin plugin!
+      // sourcemap: false,
       env: {
         APPNAME: APPNAME,
         DESCRIPTION: DESCRIPTION,
         PUBLISH_DATE: JSON.stringify(new Date().toISOString()),
+        COMMIT_HASH: commitHash,
       },
       //devtool: 'source-map', // TODO: turn this off for actual production...
       vueLoaderOptions: {
@@ -403,21 +447,48 @@ export default defineConfig((ctx) => {
           })
         }
 
-        // we need the bwloe so that uglify can remove the console. because we want
-        //  check this:  https://stackoverflow.com/questions/76979427/quasar-app-does-not-remove-console-log-for-production-builds
-        // and this:  https://github.com/quasarframework/quasar/issues/11186
-        // TODO: remove this, I think because of the "      uglifyOptions: {compress: { drop_console: true },}," above, we
-        // don#t need this anymore, this option removes console calls in any case.....
-        /*if (ctx.prod) {
-          chain
-            .plugin('node-polyfill')
-            .use(nodePolyfillWebpackPlugin, [{ excludeAliases: ['console'] }])
-        }*/
-        if (!ctx.prod) {
-          chain.plugin('node-polyfill').use(nodePolyfillWebpackPlugin)
+        // TODO: remove this and replace with our own functions...   test everything
+        //       before removing it to make sure, there are no missing functions...
+        // we need this for the "buffer" function.
+        //chain.plugin('node-polyfill').use(nodePolyfillWebpackPlugin)
+
+        // in production mode we would still sometimes like to debug
+        // but we don't want the source maps in the public
+        // therefore we point the page to localhost...
+        // this way we can load them whenever we like :)
+        // TODO: not sure, if this is a good solution
+        // but it kind of works right now...
+        // more info here: https://webpack.js.org/plugins/source-map-dev-tool-plugin/
+        if (ctx.prod) {
+          // Add BannerPlugin to add a comment with the chunk name
+          //  https://webpack.js.org/plugins/banner-plugin/
+          chain.plugin('banner').use(webpack.BannerPlugin, [
+            {
+              banner: `//# sourceMappingURL=http://localhost:4000/sourcemaps/[name].${commitHash}.map`,
+              raw: true,
+              entryOnly: false,
+              // I think this is basically the ast webpack stage...
+              stage: webpack.Compilation.PROCESS_ASSETS_STAGE_REPORT,
+              footer: true,
+              test: /\.js$/, // Apply only to JavaScript files
+            },
+          ])
+          const create_sources = process.env.SOURCEMAP === 'true'
+          console.log('build sources', create_sources)
+          if (create_sources) {
+            chain.plugin('sourcemap').use(webpack.SourceMapDevToolPlugin, [
+              {
+                //append:
+                //  '\n//# sourceMappingURL=http://localhost:4000/sourcemap/[url]',
+                append: false,
+                // we are using "name" here in order to preserve the source maps across builds.
+                // we need to be
+                filename: `sourcemaps/[name].${commitHash}.map`,
+                //exclude: ['vendor.js'],
+              },
+            ])
+          }
         }
-        // TODO: find out, why we did this?
-        //chain.resolve.alias.set('zlib', 'browserify-zlib');
       },
     },
 

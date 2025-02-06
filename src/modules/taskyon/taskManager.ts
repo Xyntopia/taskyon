@@ -45,20 +45,6 @@ export async function findRootTask(taskId: string, getTask: TyTaskManager['getTa
   return currentTaskID // Return null if the loop exits without finding a root task
 }
 
-/*function uuidToBigInt(uuid: string) {
-  // Remove dashes and decode hex to a Buffer
-  const buffer = Buffer.from(uuid.replace(/-/g, ''), 'hex');
-
-  let bigint = BigInt(0);
-
-  // Iterate over each byte in the buffer and shift it into the BigInt
-  for (const byte of buffer) {
-    bigint = (bigint << BigInt(8)) + BigInt(byte);
-  }
-
-  return bigint;
-}*/
-
 async function taskContentHash(task: Omit<TaskNode, 'id'>) {
   console.log('generating new hash ID for task')
   // generate this hash ID to check of there are any duplicate tasks or anything like that...
