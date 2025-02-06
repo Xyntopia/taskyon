@@ -209,7 +209,7 @@ export default defineConfig((ctx) => {
         // check out this page for all available "compress options":  https://terser.org/docs/options/#compress-options
         // we can specifically drop certain logs like this:  ['log', 'info']
         compress: {
-          drop_console: ['log', 'info'],
+          drop_console: droplogging ? ['log', 'info'] : false,
           drop_debugger: true,
         },
       },
