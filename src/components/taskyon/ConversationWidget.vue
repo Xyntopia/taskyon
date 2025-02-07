@@ -22,7 +22,6 @@
       <!--Render tasks which are in progress-->
       <q-card v-if="!taskWorkerWaiting" class="row">
         <div class="col">
-          {{ currentStream }}
           <ty-markdown no-line-numbers no-mermaid :src="currentStream || ''" />
           <q-spinner-dots size="2rem" color="secondary" />
         </div>
@@ -96,14 +95,14 @@ const toolList = asyncComputed(async () => {
 }, undefined)
 
 function showTask(t: TaskNode) {
-  console.log('showTask')
+  //console.log('showTask')
   const noHideLabel = !(t.label ? t.label.includes('hide') : false) // TODO: hide tasks based on level as well :)
   let showInChat = true
   if (t.content.type === 'functioncall') {
     if (toolList.value) showInChat = !toolList.value[t.content.data.name]?.renderOptions?.hideChat
     else if (t.content.data.name === 'chatCompletion') showInChat = false
   }
-  const showType = !(t.content.type in ['termination', 'toolresult'])
+  const showType = !['return', 'toolresult'].includes(t.content.type)
   const showExpert = t.content.type === 'structured' ? props.expertMode : true
   return showExpert && showType && showInChat && noHideLabel
 }
