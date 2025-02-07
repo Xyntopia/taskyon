@@ -166,7 +166,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     stateRefs.logError,
     TaskList,
     defineTyGuiTools(),
-    () => (id: string, chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => {
+    (id: string, chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => {
       triggerGlobal({ taskId: id, chunk })
     },
   )

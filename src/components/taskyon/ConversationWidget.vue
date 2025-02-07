@@ -22,6 +22,7 @@
       <!--Render tasks which are in progress-->
       <q-card v-if="!taskWorkerWaiting" class="row">
         <div class="col">
+          {{ currentStream }}
           <ty-markdown no-line-numbers no-mermaid :src="currentStream || ''" />
           <q-spinner-dots size="2rem" color="secondary" />
         </div>
@@ -41,6 +42,7 @@ import { useQuasar } from 'quasar'
 import { asyncComputed } from 'src/stores/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onBeforeUnmount } from 'vue'
+import { ref } from 'vue'
 const $q = useQuasar()
 
 const tystate = useTaskyonStore()
@@ -55,7 +57,7 @@ const props = defineProps<{
   expertMode?: boolean
 }>()
 
-const streamingContentTracker = new Map<string, string>()
+const streamingContentTracker = ref<Map<string, string>>(new Map<string, string>())
 
 const streamCallback: Parameters<typeof tystate.streamCallBacks.addGlobal>[0] = ({
   taskId,
@@ -69,9 +71,9 @@ const streamCallback: Parameters<typeof tystate.streamCallBacks.addGlobal>[0] = 
     })
   }
   if (chunk?.choices[0]?.delta?.content) {
-    streamingContentTracker.set(
+    streamingContentTracker.value.set(
       taskId,
-      (streamingContentTracker.get(taskId) ?? '') + chunk.choices[0].delta.content,
+      (streamingContentTracker.value.get(taskId) ?? '') + chunk.choices[0].delta.content,
     )
   }
 }
@@ -82,7 +84,7 @@ onBeforeUnmount(() => {
 })
 
 const currentStream = computed(() => {
-  if (props.currentTask) return streamingContentTracker.get(props.currentTask.id)
+  if (props.currentTask) return streamingContentTracker.value.get(props.currentTask.id)
   else return undefined
 })
 
