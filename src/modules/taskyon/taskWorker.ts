@@ -312,7 +312,8 @@ function createErrorTaskChain(
   const errorTask: partialTaskDraft = {
     role: 'system',
     content: {
-      error: `An error occured:\n\n\`\`\`\n${JSON.stringify(error)}\n\`\`\``,
+      type: 'error',
+      data: `An error occured:\n\n\`\`\`\n${JSON.stringify(error)}\n\`\`\``,
     },
   }
   const debugInfo = {
@@ -322,7 +323,8 @@ function createErrorTaskChain(
   if (error instanceof TaskProcessingError) {
     errorTask.content = {
       //message: `An error occured: ${error.message}:\n\n${dump(error.details, { skipInvalid: true })}`,
-      error: `An error occured:\n\n\`\`\`\n${error.message}${error.details ? ':\n\n' + JSON.stringify(makeSerializable(error.details, 7)) : ''}\n\`\`\``,
+      type: 'error',
+      data: `An error occured:\n\n\`\`\`\n${error.message}${error.details ? ':\n\n' + JSON.stringify(makeSerializable(error.details, 7)) : ''}\n\`\`\``,
     }
     if (task) {
       debugInfo.error = {
@@ -334,7 +336,8 @@ function createErrorTaskChain(
     }
   } else if (error instanceof Error) {
     errorTask.content = {
-      error: `An error occured:\n\n\`\`\`\n${error.message}\n\n${JSON.stringify(error)}\n\`\`\``,
+      type: 'error',
+      data: `An error occured:\n\n\`\`\`\n${error.message}\n\n${JSON.stringify(error)}\n\`\`\``,
     }
     if (task) {
       debugInfo.error = {

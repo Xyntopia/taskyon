@@ -260,7 +260,7 @@ We can indicate the reason for termination here as well...`,
 const ChatCompletionContent = z.union([MessageContent, ToolResultContent, ErrorContent])
 export type ChatCompletionContent = z.infer<typeof ChatCompletionContent>
 
-const TaskContent = z.union([
+export const TaskContent = z.union([
   MessageContent.strict(),
   ToolResultContent.strict(),
   ToolDefinition.strict(),

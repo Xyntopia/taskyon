@@ -10,7 +10,7 @@ import {
 } from 'rxdb'
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie'
 import { RxDBJsonDumpPlugin } from 'rxdb/plugins/json-dump'
-import { removeKeys, removeUndefinedProperties, TaskNode } from './types'
+import { removeKeys, removeUndefinedProperties, TaskNode, TaskContent } from './types'
 // TOOD: remove at some point in the future...
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode'
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema'
@@ -303,10 +303,8 @@ export function transformDocToTaskNode(doc: RxDocument<TaskNodeDocType>): TaskNo
   const parsedDoc = JSON.parse(jsonString) as RxDocument<TaskNodeDocType>
 
   // Safely parse the debugging, configuration, and result fields
-  const parsedContent =
-    typeof parsedDoc.content === 'string'
-      ? (JSON.parse(parsedDoc.content) as Record<string, unknown>)
-      : {}
+  const parsedContentRes = TaskContent.safeParse(JSON.parse(parsedDoc.content || ''))
+  if (!parsedContentRes.success) throw parsedContentRes.error
 
   // Parse the JSON string and transform it into an TaskNode object
   // TODO:  try to throw errors here, when our TaskNode object and our database object differ.
@@ -316,7 +314,7 @@ export function transformDocToTaskNode(doc: RxDocument<TaskNodeDocType>): TaskNo
     priorID: parsedDoc.priorID || undefined,
     authorId: parsedDoc.authorId || undefined,
     created_at: parsedDoc.created_at || undefined,
-    content: parsedContent, // we do this here, because in some situations the task has the wrong format...
+    content: parsedContentRes.data, // we do this here, because in some situations the task has the wrong format...
   }
   const tn = TaskNode.parse(tmpObj)
 

@@ -72,7 +72,8 @@ export function setupIframeApi(
                 role: 'system',
                 name: id,
                 content: {
-                  message: JSON.stringify(newFunc),
+                  type: 'message',
+                  data: JSON.stringify(newFunc),
                 },
                 label: ['function'],
               }
