@@ -43,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, shallowRef } from 'vue'
 import { getDatabase, type TyPGDB } from 'src/modules/pglite.api'
 import { asyncComputed } from 'src/stores/vueUtils'
 
@@ -52,25 +52,26 @@ const sqlQuery = ref('SELECT * FROM my_table;')
 const queryResult = ref<unknown>(null)
 const errorMessage = ref('')
 
-// References to the database and our CRUD wrapper
-const db = ref<TyPGDB | undefined>()
+// Use shallowRef so that Vue doesn't deeply proxy the db instance
+const db = shallowRef<TyPGDB | undefined>()
 
+// List of tables computed asynchronously
 const allTables = asyncComputed(async () => {
   if (db.value) {
-    return db.value?.query(
+    const result = await db.value.query(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';",
     )
+    // Return an array of table names
+    return result.rows.map((row: unknown) => (row as { table_name: string }).table_name)
   }
   return []
 }, [])
 
 onMounted(async () => {
   try {
+    // Initialize the pglite database.
+    // Storing the instance in a shallowRef prevents Vue from wrapping its private fields.
     db.value = await getDatabase('taskyon')
-    // Ensure that the query method is bound to the db instance
-    if (db.value && typeof db.value.query === 'function') {
-      db.value.query = db.value.query.bind(db.value)
-    }
   } catch (error) {
     console.error('Database initialization error:', error)
     errorMessage.value = error instanceof Error ? error.message : String(error)
@@ -78,13 +79,10 @@ onMounted(async () => {
 })
 
 // --- SQL Query Execution ---
-// This function executes any SQL query the user enters.
 const executeQuery = async () => {
   errorMessage.value = ''
   queryResult.value = null
   try {
-    // Execute the query using the pglite database's query() method.
-    // This works because your CRUD wrapper uses db.query() underneath.
     const result = await db.value?.query(sqlQuery.value)
     queryResult.value = result?.rows
   } catch (error) {
@@ -98,12 +96,3 @@ const formattedResult = computed(() => {
   return JSON.stringify(queryResult.value, null, 2)
 })
 </script>
-
-<style scoped>
-pre {
-  background-color: #f5f5f5;
-  padding: 1rem;
-  overflow-x: auto;
-  border-radius: 4px;
-}
-</style>
