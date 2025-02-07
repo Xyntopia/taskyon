@@ -26,7 +26,7 @@ export interface CrudWrapper<T> {
   upsert(id: string | number, data: T, strategy?: 'merge0' | 'replace'): Promise<void>
   delete(id: string | number): Promise<void>
   list(): Promise<Row<T>[]>
-  readLive(id: string | number, callback: LiveCallback<T>): () => void
+  readLive(id: string | number, callback: LiveCallback<T>, immediate: true): () => void
 }
 
 export const createCrudWrapper = async <T>(
@@ -125,10 +125,15 @@ export const createCrudWrapper = async <T>(
      * The callback will be triggered on any create/update/upsert/delete for that id.
      * The returned object includes a `dispose` method to unregister the callback.
      */
-    readLive: (id: string | number, callback: LiveCallback<T>) => {
-      const key = id.toString()
+    readLive: (id: string | number, callback: LiveCallback<T>, immediate = true) => {
+      addCallback(id, callback)
 
-      addCallback(key, callback)
+      if (immediate) {
+        console.log('get initial data', id)
+        void get(id).then((data) => {
+          if (data) callback(data)
+        })
+      }
       // Optionally, get the current state and call the callback once.
       /*const currentData = await (async () => {
         const result = await db.sql<Row<T>>`
@@ -139,7 +144,7 @@ export const createCrudWrapper = async <T>(
       callback(currentData)*/
 
       // Return a dispose() method to remove the callback.
-      return createDisposeFunction(key, callback)
+      return createDisposeFunction(id, callback)
     },
   }
 }
