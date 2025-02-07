@@ -118,6 +118,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/sql',
+    component: () => import('pages/taskyon/SqlQueryPage.vue'),
+    meta: {
+      title: 'SQL debugging',
+      description: 'Do queries on taskyons databases using SQL',
+    },
+  },
+  {
     path: '/p2pmonitor',
     component: () => import('pages/taskyon/Libp2pStatusPage.vue'),
     meta: {
