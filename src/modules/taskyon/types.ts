@@ -232,17 +232,24 @@ export const FunctionCall = z.object({
 })
 export type FunctionCall = z.infer<typeof FunctionCall>
 
-const MessageContent = z.object({ message: z.string() })
+const MessageContent = z.object({ type: z.literal('message'), data: z.string() })
 // TODO: get rid of structured content..  we should directly call a function task in order to interprete
 //       structured content with the content as a parameter in order to decide what to do :)
-const StructuredContent = z.object({ structuredResponse: z.string() })
-const ToolCallContent = z.object({ functionCall: FunctionCall })
-const UploadedFilesContent = z.object({ uploadedFiles: z.array(z.string()) })
-const ToolResultContent = z.object({ toolResult: z.unknown() })
+const StructuredContent = z.object({
+  type: z.literal('structured'),
+  data: z.string(),
+})
+const ToolCallContent = z.object({ type: z.literal('functioncall'), data: FunctionCall })
+const UploadedFilesContent = z.object({
+  type: z.literal('files'),
+  data: z.array(z.string()),
+})
+const ToolResultContent = z.object({ type: z.literal('toolresult'), data: z.unknown() })
+const ToolDefinition = z.object({ type: z.literal('tooldefinition'), data: z.unknown() })
 const ErrorContent = z
-  .object({ error: z.string() })
+  .object({ type: z.literal('error'), data: z.string() })
   .describe('Gets created if any error occurs during task processing.')
-const Return = z.object({ termination: z.string() }).describe(
+const Return = z.object({ type: z.literal('return'), data: z.string() }).describe(
   `A Termination task always indicates the end of an autonomous task chat execution.
 Every Leaf task which is not a Termination task can potentially continue to be executed...
 
@@ -256,6 +263,7 @@ export type ChatCompletionContent = z.infer<typeof ChatCompletionContent>
 const TaskContent = z.union([
   MessageContent.strict(),
   ToolResultContent.strict(),
+  ToolDefinition.strict(),
   ErrorContent.strict(),
   StructuredContent.strict(),
   ToolCallContent.strict(),
@@ -346,7 +354,7 @@ export const taskTemplateTypes = {
     .required({ label: true })
     .merge(z.object({ role: z.literal('system') }))
     .default({
-      content: { message: 'Tool Description here!' },
+      content: { type: 'message', data: 'Tool Description here!' },
       role: 'system',
       label: ['function'],
     }),
@@ -354,7 +362,7 @@ export const taskTemplateTypes = {
     .required({ label: true })
     .merge(z.object({ role: z.literal('system') }))
     .default({
-      content: { uploadedFiles: [] },
+      content: { type: 'files', data: [] },
       role: 'system',
       label: ['files'],
     }),
@@ -508,7 +516,8 @@ export const llmSettings = z.object({
     .default({
       role: 'user',
       content: {
-        message: '',
+        type: 'message',
+        data: '',
       },
     })
     .describe('The task which is currently drafted (This could for example be a simple message).'),

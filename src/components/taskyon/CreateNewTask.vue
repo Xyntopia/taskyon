@@ -6,10 +6,12 @@
       <div>
         <taskContentEdit
           v-if="
-            !selectedTaskType && !codingMode && 'message' in state.llmSettings.taskDraft.content
+            !selectedTaskType &&
+            !codingMode &&
+            state.llmSettings.taskDraft.content.type === 'message'
           "
           class="text-body1"
-          :model-value="state.llmSettings.taskDraft.content.message"
+          :model-value="state.llmSettings.taskDraft.content.data"
           :execute-task="addNewTask"
           :attach-file-to-chat="attachFileToDraft"
           :use-enter-to-send="state.appConfiguration.useEnterToSend"
@@ -17,11 +19,13 @@
         />
         <div
           v-else-if="
-            !selectedTaskType && codingMode && 'message' in state.llmSettings.taskDraft.content
+            !selectedTaskType &&
+            codingMode &&
+            state.llmSettings.taskDraft.content.type === 'message'
           "
         >
           <CodeEditor
-            :model-value="state.llmSettings.taskDraft.content.message"
+            :model-value="state.llmSettings.taskDraft.content.data"
             @update:model-value="updateContent"
           />
           <taskSettingsButton v-model="expandedTaskCreation" aria-label="task settings" />
@@ -35,11 +39,13 @@
           >
         </div>
         <div
-          v-else-if="selectedTaskType && 'functionCall' in state.llmSettings.taskDraft.content"
+          v-else-if="
+            selectedTaskType && state.llmSettings.taskDraft.content.type === 'functioncall'
+          "
           class="row"
         >
           <ObjectTreeView
-            v-model="state.llmSettings.taskDraft.content.functionCall.arguments"
+            v-model="state.llmSettings.taskDraft.content.data.arguments"
             class="col"
             input-field-behavior="auto"
             :separate-labels="false"
@@ -348,7 +354,8 @@ const props = defineProps<{
 
 function updateContent(value: string | null | undefined) {
   state.llmSettings.taskDraft.content = {
-    message: value || '',
+    type: 'message',
+    data: value || '',
   }
 }
 
@@ -401,10 +408,7 @@ const handleBotNameUpdate = ({ newName, newService }: { newName: string; newServ
 
 const selectedTaskType = computed(() => {
   const task = state.llmSettings.taskDraft
-  if (task.content && 'functionCall' in task.content) {
-    return task.content.functionCall.name
-  }
-  return undefined
+  return task.content.type === 'functioncall' ? task.content.data.name : undefined
 })
 
 async function setTaskType(tasktype: string | undefined | null) {
@@ -424,8 +428,8 @@ async function setTaskType(tasktype: string | undefined | null) {
       ...(savedParams || {}),
     }
     state.llmSettings.taskDraft.content = {
-      ...state.llmSettings.taskDraft.content,
-      functionCall: {
+      type: 'functioncall',
+      data: {
         name: tasktype,
         arguments: funcArguments,
       },
@@ -433,7 +437,8 @@ async function setTaskType(tasktype: string | undefined | null) {
   } else {
     state.llmSettings.taskDraft.role = 'user'
     state.llmSettings.taskDraft.content = {
-      message: '',
+      type: 'message',
+      data: '',
     }
   }
 }
@@ -452,21 +457,20 @@ const currentnewTask = computed(() => {
   const task = deepMerge(state.llmSettings.taskDraft, props.forceTaskProps || {})
   if (currentModel.value) {
     task.name = undefined
-    if (selectedTaskType.value && 'functionCall' in state.llmSettings.taskDraft.content) {
+    if (selectedTaskType.value && state.llmSettings.taskDraft.content.type === 'functioncall') {
       // here we have a function task ;)
       task.role = 'function'
       // we do this to make suere we *only* have a functionCall and not a message
       // or other things as well...
       task.content = {
-        functionCall: state.llmSettings.taskDraft.content.functionCall,
+        type: 'functioncall',
+        data: state.llmSettings.taskDraft.content.data,
       }
-    } else if (
-      state.llmSettings.taskDraft.content &&
-      'message' in state.llmSettings.taskDraft.content
-    ) {
+    } else if (state.llmSettings.taskDraft.content.type === 'message') {
       task.role = 'user'
       task.content = {
-        message: state.llmSettings.taskDraft.content.message.trim(),
+        type: 'message',
+        data: state.llmSettings.taskDraft.content.data.trim(),
       }
     }
   }
@@ -557,7 +561,8 @@ async function createFileTask(files: File[]) {
     const task: partialTaskDraft = {
       role: 'system',
       content: {
-        uploadedFiles: fileUuids,
+        type: 'files',
+        data: fileUuids,
       },
     }
     return task
@@ -588,14 +593,14 @@ async function addNewTask(execute = true) {
   // we are doing the ... to make sure we don't change the original, reactive object
   newTaskChain.push({ ...currentnewTask.value })
 
-  if ('message' in currentnewTask.value.content) {
+  if (currentnewTask.value.content.type === 'message') {
     const completionTask = createChatCompletionTask({
       model: currentModel.value,
       allowedTools: state.llmSettings.allowedTools || [],
       goal: state.llmSettings.allowedTools.length == 0 ? 'SimpleCompletion' : 'ChooseTool',
     })
     newTaskChain.push(completionTask)
-    console.log('adding message completion task:', currentnewTask.value.content.message)
+    console.log('adding message completion task:', currentnewTask.value.content.data)
   }
 
   // add taskchain to taskManager
@@ -611,7 +616,7 @@ async function addNewTask(execute = true) {
 
   // and empty out the contents for the next chat message :)
   if (currentnewTask.value.role === 'user') {
-    state.llmSettings.taskDraft.content = { message: '' }
+    state.llmSettings.taskDraft.content = { type: 'message', data: '' }
     await setTaskType(undefined)
   }
 }

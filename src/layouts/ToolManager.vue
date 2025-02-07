@@ -105,10 +105,10 @@ void getAllTools().then((tools) => {
 const selectedToolName = ref<string>('')
 
 const taskParser = computed(() => {
-  if ('message' in state.llmSettings.taskDraft.content) {
+  if (state.llmSettings.taskDraft.content.type === 'message') {
     try {
       const jsonToolResult = ToolBase.strict().safeParse(
-        JSON.parse(state.llmSettings.taskDraft.content.message),
+        JSON.parse(state.llmSettings.taskDraft.content.data),
       )
       return jsonToolResult.success ? jsonToolResult.success : jsonToolResult.error
     } catch (error) {
@@ -161,7 +161,8 @@ function newToolStructure() {
 }`
   state.llmSettings.taskDraft.content = {
     ...state.llmSettings.taskDraft.content,
-    message: tool,
+    type: 'tooldefinition',
+    data: tool,
   }
 }
 </script>

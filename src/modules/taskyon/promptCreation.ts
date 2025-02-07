@@ -214,7 +214,7 @@ export function addPrompts(
         ? StructuredResponseTypes.SystemResponseEvaluation.merge(UseToolBase)
         : StructuredResponseTypes.SystemResponseEvaluation
       const yamlRepr = zodToYamlString(requiredSchema)
-      if (!('error' in lastTaskBeforeChatCompletion.content))
+      if (lastTaskBeforeChatCompletion.content.type !== 'error')
         throw new Error('Task needs to have a message!')
       // Remove the last message from openAIConversationThread
       // because it will be replaced by our task message
@@ -223,7 +223,7 @@ export function addPrompts(
 
       const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, {
         ...variables,
-        message: lastTaskBeforeChatCompletion.content.error,
+        message: lastTaskBeforeChatCompletion.content.data,
         schema: yamlRepr,
       })
       appendMessages.push({
@@ -232,7 +232,7 @@ export function addPrompts(
       })
     } else if (goal === 'ChooseTool') {
       const yamlRepr = zodToYamlString(StructuredResponseTypes.ToolSelection.merge(UseToolBase))
-      if (!('message' in lastTaskBeforeChatCompletion.content))
+      if (lastTaskBeforeChatCompletion.content.type !== 'message')
         throw new Error('Task needs to have a message!')
       // Remove the last message from openAIConversationThread
       // because it will be replaced by our task message
@@ -241,7 +241,7 @@ export function addPrompts(
 
       const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, {
         ...variables,
-        taskContent: lastTaskBeforeChatCompletion.content.message,
+        taskContent: lastTaskBeforeChatCompletion.content.data,
         schema: yamlRepr,
       })
       appendMessages.push(
@@ -264,7 +264,7 @@ export function addPrompts(
         ? StructuredResponseTypes.ToolResultBase.merge(UseToolBase)
         : StructuredResponseTypes.ToolResultBase
       const yamlRepr = zodToYamlString(requiredSchema)
-      if (!('toolResult' in lastTaskBeforeChatCompletion.content))
+      if (lastTaskBeforeChatCompletion.content.type !== 'toolresult')
         throw new Error('Task needs to have a toolResult!')
       // Remove the last message from openAIConversationThread
       // because it will be replaced by our task message
@@ -273,7 +273,7 @@ export function addPrompts(
 
       const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, {
         ...variables,
-        toolResult: dump(lastTaskBeforeChatCompletion.content.toolResult),
+        toolResult: dump(lastTaskBeforeChatCompletion.content.data),
         resultSchema: yamlRepr,
       })
       appendMessages.push(

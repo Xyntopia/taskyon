@@ -706,14 +706,15 @@ export function useTyTaskManager(
     if (taskyonDB) {
       const tasks = await searchTasks(createTaskNodeMangoQuery('function'))
 
-      function hasMessage(task: TaskNode): task is TaskNode & { content: { message: string } } {
-        return 'message' in task.content
+      // TODO: we can do better here ;)
+      function hasMessage(task: TaskNode): task is TaskNode & { content: { type: 'message' } } {
+        return task.content.type === 'tooldefinition'
       }
 
       const toolDefs = tasks.filter(hasMessage)
       const parsedToolDefs = toolDefs.flatMap((task) => {
         try {
-          const toolDef = ToolBase.parse(JSON.parse(task.content.message))
+          const toolDef = ToolBase.parse(JSON.parse(task.content.data))
           return [toolDef]
         } catch {
           return []
@@ -852,7 +853,7 @@ export function useTyTaskManager(
 
     //convert into a list of markdown strings
     const messageStrings = taskList.map((t) => {
-      const message = t?.content && ('message' in t.content ? '\n\n' + t.content.message : '')
+      const message = t?.content.type === 'message' ? '\n\n' + t.content.data : ''
 
       // we are doing this in order to protect the "original" tasks, e.g. if they
       // are reactive... :)
@@ -876,8 +877,8 @@ export function useTyTaskManager(
   async function updateTaskNameWKeywords(newTask: TaskNode) {
     const chat = getTaskChain(newTask.id)
     const chatString = (await chat).reduce((p, n) => {
-      if (n && 'message' in n.content) {
-        return p + '\n\n' + n.content.message
+      if (n?.content.type === 'message') {
+        return p + '\n\n' + n.content.data
       }
       return p
     }, '')
@@ -929,6 +930,8 @@ export function useTyTaskManager(
     // TODO: how can we do this much faster, so that we don't have to update our task and
     //       keep it immutable?  We should probably await keywords, but also keep a
     //       separate index with keywords for tasks...
+    // TODO: we can get rid of the "discard" lavels, things that should be "discarded" can be part of
+    //       a lower-level function or stay inside a tool etc...
     if (!newTask.name && task.content && !task.label?.includes('discard')) {
       await updateTaskNameWKeywords(newTask)
     } else if (newTask.name) {

@@ -8,31 +8,28 @@
       <!--Message Display-->
       <div class="row items-end q-gutter-xs">
         <!--task icon-->
-        <div
-          v-if="(nextTask && 'error' in nextTask.content) || 'error' in task.content"
-          class="col-auto self-center"
-        >
+        <div v-if="task.content.type === 'error'" class="col-auto self-center">
           <q-icon :name="matWarning" color="negative" size="sm">
             <q-tooltip class="bg-warning">Error!</q-tooltip>
           </q-icon>
         </div>
-        <div v-else-if="'uploadedFiles' in task.content" class="col-auto self-center">
+        <div v-else-if="task.content.type === 'files'" class="col-auto self-center">
           <q-icon :name="mdiFileDocument" size="sm" color="info"></q-icon>
         </div>
-        <div v-else-if="'termination' in task.content">
+        <div v-else-if="task.content.type === 'return'">
           <q-icon :name="matPause" size="sm" color="info"></q-icon>
         </div>
         <div v-else-if="task.role === 'system'" class="col-auto self-center">
           <q-icon :name="mdiDesktopTower" color="info" size="sm"></q-icon>
         </div>
         <!--task content-->
-        <div v-if="'functionCall' in task.content" class="col q-pb-md">
+        <div v-if="task.content.type === 'functioncall'" class="col q-pb-md">
           <q-expansion-item
             dense
             :header-class="
-              nextTask && 'error' in nextTask.content
+              nextTask?.content.type === 'error'
                 ? 'text-red'
-                : nextTask && 'toolResult' in nextTask.content
+                : nextTask?.content.type === 'toolresult'
                   ? 'text-green'
                   : 'text-info'
             "
@@ -41,39 +38,35 @@
               <div class="row q-gutter-sm items-center">
                 <q-spinner-orbit v-if="isWorking" size="2em"></q-spinner-orbit>
                 <q-icon :name="matCalculate" size="1.5em"></q-icon>
-                <div>{{ task.content.functionCall.name }}</div>
+                <div>{{ task.content.data.name }}</div>
               </div>
             </template>
             <div>
               <ToolResultWidget
-                :function-call="task.content.functionCall"
+                :function-call="task.content.data"
                 :result="
-                  nextTask && 'toolResult' in nextTask.content
-                    ? nextTask.content.toolResult
-                    : undefined
+                  nextTask?.content.type === 'toolresult' ? nextTask.content.data : undefined
                 "
               />
             </div>
           </q-expansion-item>
         </div>
-        <div v-if="'toolResult' in task.content" class="col q-pb-md">
+        <div v-if="task.content.type === 'toolresult'" class="col q-pb-md">
           <ToolResultWidget
-            :result="task.content.toolResult"
+            :result="task.content.data"
             :function-call="
-              previousTask?.content && 'functionCall' in previousTask.content
-                ? previousTask?.content.functionCall
-                : undefined
+              previousTask?.content.type === 'functioncall' ? previousTask.content.data : undefined
             "
           />
         </div>
-        <div v-else-if="'structuredResponse' in task.content" class="col">
+        <div v-else-if="task.content.type === 'structured'" class="col">
           <q-expansion-item dense :icon="mdiHeadCog" header-class="text-info" label="Analyze...">
             <p style="white-space: pre-wrap">
-              {{ dump(task.content.structuredResponse) }}
+              {{ dump(task.content.data) }}
             </p>
           </q-expansion-item>
         </div>
-        <div v-else-if="'message' in task.content" class="col">
+        <div v-else-if="task.content.type === 'message'" class="col">
           <q-expansion-item
             v-if="taskFunction"
             dense
@@ -81,20 +74,20 @@
             :label="`function: ${taskFunction.name}`"
           >
             <p style="white-space: pre-wrap">
-              {{ task.content.message }}
+              {{ task.content.data }}
             </p>
           </q-expansion-item>
           <ty-markdown
             v-else-if="state.taskState[task.id]?.markdownEnabled != false"
             no-line-numbers
             style="min-width: 50px"
-            :src="task.content.message"
+            :src="task.content.data"
           />
           <div v-else class="raw-markdown q-mb-md">
-            {{ task.content.message }}
+            {{ task.content.data }}
           </div>
         </div>
-        <div v-else-if="'uploadedFiles' in task.content" class="col">
+        <div v-else-if="task.content.type === 'files'" class="col">
           <FileBrowser
             v-if="getFile"
             :file-mappings="fileMappings"
@@ -104,14 +97,14 @@
             :get-file="getFile"
           />
         </div>
-        <div v-else-if="'error' in task.content" class="col">
+        <div v-else-if="task.content.type === 'error'" class="col">
           <div>
-            {{ task.content.error }}
+            {{ task.content.data }}
           </div>
         </div>
-        <div v-else-if="'termination' in task.content" class="col">
+        <div v-else-if="task.content.type === 'return'" class="col">
           <div>
-            {{ task.content.termination }}
+            {{ task.content.data }}
           </div>
         </div>
         <!--task costs-->
@@ -273,7 +266,7 @@ async function getFile(uuid: string) {
   return (await tystate.getTaskManager()).getFile(uuid)
 }
 
-if ('uploadedFiles' in props.task.content) {
+if (props.task.content.type === 'files') {
   console.log('get uploaded files')
   void (async (fileUuids: string[]) => {
     const tm = await tystate.getTaskManager()
@@ -283,13 +276,14 @@ if ('uploadedFiles' in props.task.content) {
       const newfm = { ...x, xinfo: { uuid: x?.uuid } };
       return newfm;
     });*/
-  })(props.task.content.uploadedFiles)
+  })(props.task.content.data)
 }
 
+// TODO: this should be a "normal" function...
 const taskFunction = computed(() => {
-  if (props.task.label?.includes('function') && 'message' in props.task.content) {
+  if (props.task.label?.includes('function') && props.task.content.type === 'message') {
     try {
-      const res = ToolBase.safeParse(JSON.parse(props.task.content.message))
+      const res = ToolBase.safeParse(JSON.parse(props.task.content.data))
       return res.success ? res.data : undefined
     } catch {
       return undefined

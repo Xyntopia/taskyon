@@ -95,9 +95,9 @@ async function processTask(
   analyzeModel: string | undefined,
   llmTools: boolean,
 ): Promise<partialTaskDraft[][]> {
-  if ('functionCall' in task.content) {
+  if (task.content.type === 'functioncall') {
     // calculate function result
-    const func = task.content.functionCall
+    const func = task.content.data
     const tools = await taskManager.updateToolDefinitions(false)
     console.log(`Calling function ${func.name}`)
     if (tools[func.name] && !taskWorkerController.isInterrupted()) {
@@ -133,7 +133,7 @@ async function processTask(
           [
             {
               role: 'system',
-              content: { toolResult: funcR },
+              content: { type: 'toolresult', data: funcR },
             },
             createChatCompletionTask({
               model: analyzeModel,
@@ -162,7 +162,7 @@ async function processTask(
     const newTasks: partialTaskDraft[] = [
       {
         role: 'system',
-        content: { termination: 'no follow-up tasks found!' },
+        content: { type: 'return', data: 'no follow-up tasks found!' },
       },
     ]
     return [newTasks]
@@ -227,7 +227,7 @@ export async function runTaskWorker(
           if (lastTaskId) {
             const lastTask = await taskManager.getTask(lastTaskId)
             // make sure we stop execution of the task chain if we have a termination task
-            if (immediateExecute && lastTask && !('termination' in lastTask.content)) {
+            if (immediateExecute && lastTask && lastTask.content.type !== 'return') {
               // TODO: we need processTasksQueue as an argument here (not implicitly adding it to this function...)
               processTasksQueue.push(lastTaskId)
             } else {

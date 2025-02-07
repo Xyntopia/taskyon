@@ -349,7 +349,7 @@ function generateFollowUpTasksFromResult(
       // this functionCall will be executed in the next step, so we don't need any additional tasks here
       {
         role: 'function',
-        content: { functionCall: functionCall[0] },
+        content: { type: 'functioncall', data: functionCall[0] },
       },
     ]
   } else if (goal === 'SimpleCompletion' || llmTools) {
@@ -360,11 +360,11 @@ function generateFollowUpTasksFromResult(
     newTasks = [
       {
         role: 'assistant',
-        content: { message: choice.message.content || '' },
+        content: { type: 'message', data: choice.message.content || '' },
       },
       {
         role: 'system',
-        content: { termination: 'assistant answered' },
+        content: { type: 'return', data: 'assistant answered' },
       },
     ]
     console.log('No more follow up tasks!')
@@ -374,14 +374,14 @@ function generateFollowUpTasksFromResult(
     newTasks = [
       {
         role: 'assistant',
-        content: { structuredResponse: choice.message.content || '' },
+        content: { type: 'structured', data: choice.message.content || '' },
       },
     ]
     if (commands.length > 0) {
       console.log('Define tool call')
       newTasks.push({
         role: 'function',
-        content: { functionCall: commands[0]! },
+        content: { type: 'functioncall', data: commands[0]! },
       })
     } else {
       console.log('no more tools to call, finalize the result :)')
@@ -467,8 +467,8 @@ async function convertTaskNodeToOpenAIMessage(
   useOpenAITools: boolean,
   toolCollection: Record<string, ToolBase>,
 ): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[] | undefined> {
-  if ('functionCall' in task.content) {
-    const functionCallName = task.content.functionCall.name
+  if (task.content.type === 'functioncall') {
+    const functionCallName = task.content.data.name
     if (toolCollection[functionCallName]?.renderOptions?.hideLlm) {
       return
     }
@@ -481,8 +481,8 @@ async function convertTaskNodeToOpenAIMessage(
             id: task.id,
             type: 'function',
             function: {
-              name: task.content.functionCall.name,
-              arguments: JSON.stringify(task.content.functionCall.arguments),
+              name: task.content.data.name,
+              arguments: JSON.stringify(task.content.data.arguments),
             },
           },
         ],
@@ -497,7 +497,7 @@ async function convertTaskNodeToOpenAIMessage(
       //       anyways So we should probably leave this out here...
 
       const functionArgs = dump({
-        arguments: task.content.functionCall.arguments,
+        arguments: task.content.data.arguments,
         //...t.result?,
       })
       return [
@@ -508,7 +508,7 @@ async function convertTaskNodeToOpenAIMessage(
         },
       ]
     }
-  } else if ('toolResult' in task.content) {
+  } else if (task.content.type === 'toolresult') {
     // we can still slightly change the content of this message to make clear
     // TODO: instead of using a manual "result of the tool" use the description in the type!
     // maybe refer to the actual tool call here?
@@ -516,7 +516,7 @@ async function convertTaskNodeToOpenAIMessage(
       const message: OpenAI.ChatCompletionMessageParam = {
         role: 'tool',
         tool_call_id: task.priorID, // the tool call will get the parent ID as well! :)
-        content: dump(task.content.toolResult),
+        content: dump(task.content.data),
       }
       return [message]
     } else
@@ -524,20 +524,18 @@ async function convertTaskNodeToOpenAIMessage(
         {
           role: 'system',
           content: dump({
-            'The tool that you called returned the following result:': task.content.toolResult,
+            'The tool that you called returned the following result:': task.content.data,
           }),
         },
       ]
-  } else if ('message' in task.content && task.role != 'function') {
+  } else if (task.content.type === 'message' && task.role != 'function') {
     const message: OpenAI.ChatCompletionMessageParam = {
       role: task.role,
-      content: task.content.message,
+      content: task.content.data,
     }
     return [message]
-  } else if ('uploadedFiles' in task.content && task.role != 'function') {
-    const fileMappings = await Promise.all(
-      task.content.uploadedFiles.map((uuid) => getFileMapping(uuid)),
-    )
+  } else if (task.content.type === 'files' && task.role != 'function') {
+    const fileMappings = await Promise.all(task.content.data.map((uuid) => getFileMapping(uuid)))
     const fileNames = fileMappings
       .map((fm) => '- ' + (fm?.name || fm?.opfs || 'unknown'))
       .join('\n')
@@ -599,7 +597,8 @@ export function createChatCompletionTask(args: ccArguments): partialTaskDraft {
   return {
     role: 'function',
     content: {
-      functionCall: {
+      type: 'functioncall',
+      data: {
         name: 'chatCompletion',
         arguments: args,
       },

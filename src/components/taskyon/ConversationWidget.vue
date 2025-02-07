@@ -97,13 +97,12 @@ function showTask(t: TaskNode) {
   console.log('showTask')
   const noHideLabel = !(t.label ? t.label.includes('hide') : false) // TODO: hide tasks based on level as well :)
   let showInChat = true
-  if ('functionCall' in t.content) {
-    if (toolList.value)
-      showInChat = !toolList.value[t.content.functionCall.name]?.renderOptions?.hideChat
-    else if (t.content.functionCall.name === 'chatCompletion') showInChat = false
+  if (t.content.type === 'functioncall') {
+    if (toolList.value) showInChat = !toolList.value[t.content.data.name]?.renderOptions?.hideChat
+    else if (t.content.data.name === 'chatCompletion') showInChat = false
   }
-  const showType = !(t.content && ('termination' in t.content || 'toolResult' in t.content))
-  const showExpert = 'structuredResponse' in t.content ? props.expertMode : true
+  const showType = !(t.content.type in ['termination', 'toolresult'])
+  const showExpert = t.content.type === 'structured' ? props.expertMode : true
   return showExpert && showType && showInChat && noHideLabel
 }
 </script>

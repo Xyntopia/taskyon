@@ -40,8 +40,8 @@ export const taskUtils = (getTask: TaskGetter) => {
 export function findAllFilesInTasks(taskList: TaskNode[]): string[] {
   const fileSet = new Set<string>()
   taskList.forEach((task) => {
-    if ('uploadedFiles' in task.content) {
-      task.content.uploadedFiles.forEach((file) => fileSet.add(file))
+    if (task.content.type === 'files') {
+      task.content.data.forEach((file) => fileSet.add(file))
     }
   })
   return Array.from(fileSet)

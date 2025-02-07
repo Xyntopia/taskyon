@@ -1,19 +1,19 @@
 <template>
   <div class="row justify-start items-stretch">
     <q-btn
-      v-if="'message' in task.content"
+      v-if="task.content.type === 'message'"
       class="col-auto"
       :icon="symOutlinedMarkdownCopy"
       dense
       flat
       size="sm"
       aria-label="copy markdown text"
-      @click="copyToClipboard(task.content.message || '')"
+      @click="copyToClipboard(task.content.data || '')"
     >
       <q-tooltip :delay="0">Copy markdown text.</q-tooltip>
     </q-btn>
     <q-btn
-      v-if="'message' in task.content"
+      v-if="task.content.type === 'message'"
       class="col-auto"
       :icon="state.taskState[task.id]?.markdownEnabled != false ? mdiLanguageMarkdown : matRawOn"
       dense
@@ -23,7 +23,7 @@
     >
       <q-tooltip :delay="0">Toggle Markdown</q-tooltip>
     </q-btn>
-    <q-separator v-if="'message' in task.content" vertical class="q-mx-sm" />
+    <q-separator v-if="task.content.type === 'message'" vertical class="q-mx-sm" />
     <q-btn
       class="col-auto"
       size="sm"
@@ -45,7 +45,7 @@
       <q-tooltip :delay="0">Start alternative chat from here</q-tooltip>
     </q-btn>
     <q-btn
-      v-if="'message' in task.content || 'functionCall' in task.content"
+      v-if="task.content.type === 'message' || task.content.type === 'functioncall'"
       class="col-auto"
       :icon="matEdit"
       dense
