@@ -18,7 +18,8 @@
     "taskDraft": {
       "role": "user",
       "content": {
-        "message": ""
+        "type": "message",
+        "data": ""
       }
     },
     "llmApis": {
