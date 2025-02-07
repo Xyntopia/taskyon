@@ -63,7 +63,7 @@ const streamCallback: Parameters<typeof tystate.streamCallBacks.addGlobal>[0] = 
   taskId,
   chunk,
 }) => {
-  console.log('received stream for', taskId)
+  //console.log('received stream for', taskId)
   if (chunk?.choices[0]?.delta?.tool_calls) {
     chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
       // TODO: add streaming for function calls
