@@ -30,7 +30,6 @@
 
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState'
-import { generateCompleteChat } from 'src/modules/taskyon/promptCreation'
 import { ref } from 'vue'
 import { exportFile } from 'quasar'
 import { dump } from 'js-yaml'

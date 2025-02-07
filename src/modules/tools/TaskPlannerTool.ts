@@ -27,8 +27,7 @@ export function createTaskPlannerTool(
     if (!llmSettings.selectedApi) {
       throw new TaskProcessingError('No API selected!')
     }
-    const newTasks = await generateFollowUpTasksFromResult(context.currentTask, taskManager, true)
-    return makeTaskResult(newTasks)
+    return ''
   }
 
   // TODO: update short & long description so that an LLM AI can use this tool
