@@ -169,9 +169,10 @@
         </q-select>
         <q-tabs v-model="state.messageDebug[task.id]" dense no-caps>
           <q-tab name="ERROR" label="Error" />
-          <q-tab name="RAW" label="raw task data" />
+          <q-tab name="TASKNODE" label="raw task data" />
           <q-tab v-if="taskMeta.taskPrompt" name="TASKPROMPT" label="task prompt" />
           <q-tab name="RAW_INPUT" label="raw input" />
+          <q-tab name="DEBUGGING" label="debugging" />
         </q-tabs>
         <q-tab-panels
           v-model="state.messageDebug[task.id]"
@@ -190,7 +191,7 @@
             >
             </textarea>
           </q-tab-panel>
-          <q-tab-panel name="RAW">
+          <q-tab-panel name="TASKNODE">
             <textarea
               :value="JSON.stringify(task, null, 2)"
               readonly
@@ -213,6 +214,15 @@
               v-for="(tp, idx) in taskMeta.taskPrompt"
               :key="idx"
               :value="typeof tp.content === 'string' ? tp.content : ''"
+              readonly
+              wrap="soft"
+              style="width: 100%; height: 200px; background-color: inherit; color: inherit"
+            >
+            </textarea>
+          </q-tab-panel>
+          <q-tab-panel name="DEBUGGING">
+            <textarea
+              :value="JSON.stringify(taskMeta, null, 2)"
               readonly
               wrap="soft"
               style="width: 100%; height: 200px; background-color: inherit; color: inherit"
