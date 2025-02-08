@@ -321,8 +321,8 @@ async function taskDraftFromTask(taskId: string) {
 }
 
 const humanReadableTaskCosts = computed(() => {
-  if (taskMeta.value?.taskCosts) {
-    return openrouterPricing(taskMeta.value.taskCosts)
+  if (taskCostMeta.value?.taskCosts) {
+    return openrouterPricing(taskCostMeta.value.taskCosts)
   } else {
     return ''
   }
