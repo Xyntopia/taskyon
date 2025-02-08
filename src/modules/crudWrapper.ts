@@ -1,7 +1,7 @@
 import type { TyPGDB } from './pglite.api'
 import type { LiveCallback } from './useCallBacks'
 import { useCallbacks } from './useCallBacks'
-import { lockMap } from './utils'
+import { deepMerge, lockMap } from './utils'
 
 // TODO: add protections against SQL injection...
 
@@ -24,7 +24,11 @@ type Row<T> = {
 export interface CrudWrapper<T> {
   set(id: string | number, data: T): Promise<void>
   get(id: string | number): Promise<T | null>
-  upsert(id: string | number, data: T, strategy?: 'shallow_merge' | 'replace'): Promise<void>
+  upsert(
+    id: string | number,
+    data: T,
+    strategy?: 'shallow_merge' | 'replace' | 'deepmerge' | 'native_shallow',
+  ): Promise<void>
   delete(id: string | number): Promise<void>
   list(): Promise<Row<T>[]>
   readLive(id: string | number, callback: LiveCallback<T>, immediate?: boolean): () => void
@@ -84,13 +88,35 @@ export const createCrudWrapper = async <T>(
     },*/
     upsert: async (id, data, strategy = 'replace') => {
       let newData: T
+      // we have to lock the item while doing the update to make sure, nothing happens
+      // between our "get" and "query" expressions from another thread e.g.
+      // adding empty data...
       const unlock = await lockItem(id)
-      if (strategy === 'shallow_merge') {
+      if (strategy === 'native_shallow') {
+        const jsonData = JSON.stringify(data)
+        await db.query(
+          `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
+             VALUES ($1, $2)
+             ON CONFLICT (${idColumn})
+             DO UPDATE SET ${dataColumn} = ${dataColumn} || EXCLUDED.${dataColumn};`,
+          [id, jsonData],
+        )
+        // TODO: in the case of a native merge, we can release the trigger asynchronously
+        // this might be a little faster than doing the shallow_merge with regard
+        // to saving the data in the db.
+        newData = (await get(id)) || ({} as T)
+        trigger(id, newData)
+      } else if (strategy === 'shallow_merge') {
+        // we're doing a js merge here instead of a pure postgresql merge, because
+        // this way we can do faster "triggers" of callbacks...
         const oldData = await get(id)
         newData = {
           ...oldData,
           ...data,
         }
+      } else if (strategy === 'deepmerge') {
+        const oldData = await get(id)
+        newData = deepMerge(oldData, data, 'overwrite')
       } else {
         newData = data
       }
