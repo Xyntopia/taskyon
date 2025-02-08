@@ -355,10 +355,10 @@ export class Lock {
 }
 
 export function lockMap(name: string = 'item') {
-  const locks = new Map<string, Lock>()
+  const locks = new Map<string | number, Lock>()
 
   // Lock a task and returns a function closure which can be used to unlock it again...
-  async function lockItem(id: string) {
+  async function lockItem(id: string | number) {
     let lock = locks.get(id)
     if (!lock) {
       lock = new Lock()
@@ -375,7 +375,7 @@ export function lockMap(name: string = 'item') {
 
   // this function simply waits for a task to be unlocked, but doesn't
   // acquire a lock itself...
-  async function waitForItemUnlock(id: string) {
+  async function waitForItemUnlock(id: string | number) {
     const lock = locks.get(id)
     if (lock) {
       // TODO: why is this called so often??

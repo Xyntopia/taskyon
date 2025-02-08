@@ -21,7 +21,7 @@
               rows="3"
             />
             <div class="q-mt-md">
-              <q-btn label="Run Query" @click="executeQuery" color="primary" />
+              <q-btn label="Run Query" color="primary" @click="executeQuery" />
             </div>
           </q-card-section>
 

@@ -1,6 +1,7 @@
 import type { TyPGDB } from './pglite.api'
 import type { LiveCallback } from './useCallBacks'
 import { useCallbacks } from './useCallBacks'
+import { lockMap } from './utils'
 
 // TODO: add protections against SQL injection...
 
@@ -23,10 +24,10 @@ type Row<T> = {
 export interface CrudWrapper<T> {
   set(id: string | number, data: T): Promise<void>
   get(id: string | number): Promise<T | null>
-  upsert(id: string | number, data: T, strategy?: 'merge0' | 'replace'): Promise<void>
+  upsert(id: string | number, data: T, strategy?: 'shallow_merge' | 'replace'): Promise<void>
   delete(id: string | number): Promise<void>
   list(): Promise<Row<T>[]>
-  readLive(id: string | number, callback: LiveCallback<T>, immediate: true): () => void
+  readLive(id: string | number, callback: LiveCallback<T>, immediate?: boolean): () => void
 }
 
 export const createCrudWrapper = async <T>(
@@ -53,6 +54,7 @@ export const createCrudWrapper = async <T>(
   }
 
   const { trigger, callbackList, createDisposeFunction, add: addCallback } = useCallbacks<T>()
+  const { lockItem /*waitForItemUnlock*/ } = lockMap('task')
 
   const get = async (id: string | number): Promise<T | null> => {
     const result = await db.query<Row<T>>(
@@ -82,7 +84,8 @@ export const createCrudWrapper = async <T>(
     },*/
     upsert: async (id, data, strategy = 'replace') => {
       let newData: T
-      if (strategy === 'merge0') {
+      const unlock = await lockItem(id)
+      if (strategy === 'shallow_merge') {
         const oldData = await get(id)
         newData = {
           ...oldData,
@@ -93,12 +96,14 @@ export const createCrudWrapper = async <T>(
       }
       trigger(id, newData)
       const jsonData = JSON.stringify(newData)
+      console.log('upserting', id, jsonData)
       await db.query(
         `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
           VALUES ($1, $2)
           ON CONFLICT (${idColumn}) DO UPDATE SET ${dataColumn} = $2;`,
         [id, jsonData],
       )
+      unlock()
     },
     delete: async (id: string | number) => {
       callbackList.delete(id)

@@ -659,6 +659,7 @@ export function createChatCompletionTool(
     let metaInfo: TaskNodeMeta = {}
     // get token usage for this task..
     if (resp.success) {
+      console.log('save token usage...')
       // openai & openrouter sends back the exact number of prompt tokens :)
       metaInfo = await saveTokenUsage(
         resp.data,
@@ -670,7 +671,9 @@ export function createChatCompletionTool(
       // we run this asynchronously, because it fetches data in the
       // background and we don't want to wait here...
       void addTaskCostInformation(resp.data, context.currentTask.id, llmSettings, apiKeys).then(
-        (newMeta) => void taskManager.debugDb.upsert(context.currentTask.id, newMeta, 'merge0'),
+        (newMeta) => {
+          void taskManager.debugDb.upsert(context.currentTask.id, newMeta, 'shallow_merge')
+        },
       )
     }
 
@@ -691,7 +694,7 @@ export function createChatCompletionTool(
     )
 
     if (newTaskChain[0]) {
-      void taskManager.debugDb.upsert(context.currentTask.id, metaInfo, 'merge0')
+      void taskManager.debugDb.upsert(context.currentTask.id, metaInfo, 'shallow_merge')
     }
 
     return makeTaskResult([newTaskChain])
