@@ -109,29 +109,31 @@
         </div>
         <!--task costs-->
         <div
-          v-if="state.appConfiguration.showCosts"
+          v-if="state.appConfiguration.showCosts && taskCostMeta"
           style="font-size: xx-small"
           class="col-auto column items-center print-hide task-costs"
         >
-          <div v-if="taskMeta.taskCosts">
+          <div v-if="taskCostMeta.taskCosts">
             {{ humanReadableTaskCosts }}
           </div>
           <q-icon
             :name="matMonetizationOn"
             size="xs"
-            :color="taskMeta.taskCosts ? 'secondary' : taskMeta.promptTokens ? 'positive' : 'info'"
+            :color="
+              taskCostMeta.taskCosts ? 'secondary' : taskCostMeta.promptTokens ? 'positive' : 'info'
+            "
           ></q-icon>
-          <div v-if="taskMeta.promptTokens">
-            {{ taskMeta.promptTokens }}
+          <div v-if="taskCostMeta.promptTokens">
+            {{ taskCostMeta.promptTokens }}
           </div>
           <div v-else>
             {{
-              (taskMeta.estimatedTokens?.promptTokens || 0) +
-              (taskMeta.estimatedTokens?.resultTokens || 0)
+              (taskCostMeta.estimatedTokens?.promptTokens || 0) +
+              (taskCostMeta.estimatedTokens?.resultTokens || 0)
             }}
           </div>
           <q-tooltip :delay="1000">
-            <TokenUsage :task-meta="taskMeta" />
+            <TokenUsage :task-meta="taskCostMeta" />
           </q-tooltip>
         </div>
       </div>
@@ -168,10 +170,10 @@
           </template>
         </q-select>
         <q-tabs v-model="state.messageDebug[task.id]" dense no-caps>
-          <q-tab name="ERROR" label="Error" />
+          <q-tab v-if="taskMeta?.error" name="ERROR" label="Error" />
           <q-tab name="TASKNODE" label="raw task data" />
-          <q-tab v-if="taskMeta.taskPrompt" name="TASKPROMPT" label="task prompt" />
-          <q-tab name="RAW_INPUT" label="raw input" />
+          <q-tab v-if="taskMeta?.taskPrompt" name="TASKPROMPT" label="task prompt" />
+          <q-tab v-if="taskMetaPrevious?.rawOutput" name="RAW_INPUT" label="raw input" />
           <q-tab name="DEBUGGING" label="debugging" />
         </q-tabs>
         <q-tab-panels
@@ -184,7 +186,7 @@
         >
           <q-tab-panel name="ERROR">
             <textarea
-              :value="JSON.stringify(taskMeta.error, null, 2)"
+              :value="JSON.stringify(taskMeta?.error, null, 2)"
               readonly
               wrap="soft"
               style="width: 100%; height: 200px; background-color: inherit; color: inherit"
@@ -200,16 +202,16 @@
             >
             </textarea>
           </q-tab-panel>
-          <q-tab-panel name="RAW_INPUT">
+          <q-tab-panel v-if="taskMetaPrevious?.rawOutput" name="RAW_INPUT">
             <textarea
-              :value="JSON.stringify(taskMeta.rawInput, null, 2)"
+              :value="JSON.stringify(taskMetaPrevious.rawOutput, null, 2)"
               readonly
               wrap="soft"
               style="width: 100%; height: 200px; background-color: inherit; color: inherit"
             >
             </textarea>
           </q-tab-panel>
-          <q-tab-panel name="TASKPROMPT">
+          <q-tab-panel v-if="taskMeta?.taskPrompt" name="TASKPROMPT">
             <textarea
               v-for="(tp, idx) in taskMeta.taskPrompt"
               :key="idx"
@@ -268,6 +270,13 @@ const props = defineProps<{
 
 const tystate = useTaskyonStore()
 const taskMeta = tystate.reactiveTaskMeta(props.task.id)
+const taskMetaPrevious = props.previousTask?.id
+  ? tystate.reactiveTaskMeta(props.previousTask.id)
+  : undefined
+const taskMetaNext = props.nextTask?.id ? tystate.reactiveTaskMeta(props.nextTask.id) : undefined
+const taskCostMeta = computed(() =>
+  taskMeta.value?.estimatedTokens ? taskMeta.value : taskMetaNext?.value,
+)
 
 const state = useAppStateStore()
 const fileMappings = ref<FileMappingDocType[]>([])
@@ -312,7 +321,7 @@ async function taskDraftFromTask(taskId: string) {
 }
 
 const humanReadableTaskCosts = computed(() => {
-  if (taskMeta.value.taskCosts) {
+  if (taskMeta.value?.taskCosts) {
     return openrouterPricing(taskMeta.value.taskCosts)
   } else {
     return ''

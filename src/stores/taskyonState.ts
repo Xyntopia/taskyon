@@ -367,7 +367,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   function reactiveTaskMeta(taskid: string) {
     console.log('generate new reactive task logger...')
-    const taskMeta = ref<TaskNodeMeta>({})
+    const taskMeta = ref<TaskNodeMeta | undefined>(undefined)
 
     let dispose: (() => void) | undefined
     void getTaskManager().then((tm) => {

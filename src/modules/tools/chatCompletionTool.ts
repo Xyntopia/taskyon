@@ -678,7 +678,7 @@ export function createChatCompletionTool(
     }
 
     const choice = resp.data?.choices[0]
-    metaInfo.choice = choice
+    metaInfo.rawOutput = { choice }
     if (!choice)
       throw new TaskProcessingError(
         'Our ChatCompletion tool did not get a valid response!',

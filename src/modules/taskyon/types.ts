@@ -293,17 +293,16 @@ export const TaskNodeMeta = z
     toolStreamArgsContent: z.record(z.string()).optional(),
     streamContent: z.string().optional(),
     taskCosts: z.number().optional(),
-    rawInput: z.unknown().optional(), // Replace with the correct Zod schema if available
-    choice: z
+    rawOutput: z
       .unknown()
       .optional()
       .describe(
-        'In the case of an OpenAI chatCompletion, we can add the raw result here for debugging',
-      ),
+        'We can optionally add some raw result data for debugging purposes, e.g. chatcompletion ...',
+      ), // Replace with the correct Zod schema if available
     error: z.unknown().optional(),
     // the taskprompt is the full chat which leads to the result. This is important that we have this
     // for to debugging reasons...
-    // TODO:remove all openAI references hee nd move them into our chatCmpletion function...
+    // TODO:remove all openAI references here nd move them into our chatCmpletion function...
     taskPrompt: z.union([z.array(OpenAIMessage), z.any()]).optional(), // Replace 'z.any()' with the correct Zod type
   })
   .partial()
