@@ -45,3 +45,4 @@ test/cypress/screenshots
 
 # this file holds secrets
 cypress.env.json
+.aider*
