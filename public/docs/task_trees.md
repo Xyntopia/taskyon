@@ -1,5 +1,17 @@
 # Taskyon Whitepaper: Immutable TaskNodes in a Dynamic TaskTree
 
+TODO:
+
+- explain:
+  - tasks inside of a chain have to be processed sequentially. chains (e.g. as subchains of tasks) can be processed in parallel.
+  - tasks returned from a functionTask will get the "parentID" assigned to them and counted as a "subtask"
+  - tasks added by the user (e.g. as a chatResponse) will be "siblings" to the selected leaf task in a specific chat
+  - chatCompletion will figure out which is the correct context to render and convert into a message chain for llm inference
+    - if there is only one subtask chain, we will probably simply render it
+    - some task/functions automatically indicate that they would not like to be rendered in the chat this is for example
+    - the case for chatCompletion itself.
+    - we should probably add some options to chatCompletion to influence that behaviour for certain situations. E.g. maybe for debugging in case of an error, we want all details to be included.... But maybe for task planning we only want the top-level stuff to be included...
+
 ## 1. Introduction
 
 Taskyon is a distributed system designed to manage and execute tasks in a **peer-to-peer environment** using a **TaskTree** structure. Inspired by dependency graphs, workflow engines, and call stacks, Taskyon breaks complex tasks into manageable sub-tasks that can be executed sequentially or in parallel. Each task is represented as an immutable **TaskNode**, ensuring cryptographic integrity and content-addressability while allowing for **dynamic orchestration** using Large Language Models (LLMs).

@@ -4,6 +4,13 @@
 
 Taskyon offers a flexible and powerful system for integrating and managing tools, allowing users to extend its capabilities. This guide provides comprehensive information on using, defining, and managing tools within Taskyon.
 
+## Built-In tools
+
+### Context-aware tools
+
+- **chatCompletion**: This function automatically takes the previous task chain as an input, converts it into a list of messages which an LLM can understand and returns new tasks for further processing of the result
+- **contextFunction**: This function acts similar to a lambda function and takes an anomyous function whose only input is the taskyon context which all functions get...
+
 ## Tool Categories
 
 Taskyon tools are modular components that perform specific tasks or functions, categorized as follows:
@@ -13,11 +20,15 @@ Taskyon tools are modular components that perform specific tasks or functions, c
 3. **Sandboxed Tools**: User-created or external tools executed in a secure iframe sandbox.
 4. **Out-of-the-Box Tools**: Pre-defined tools ready for immediate use.
 
+### Context awarenewss
+
 ## Tool Management
 
 ### Adding New Tools
 
 Users can add custom tools through the [Tools Manager](/tools), where they can create, edit, and delete tools.
+
+Check here for more examples: [Tool Examples](/tool_examples.md)
 
 #### Best Practice
 
