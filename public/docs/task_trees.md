@@ -1,17 +1,5 @@
 # Taskyon Whitepaper: Immutable TaskNodes in a Dynamic TaskTree
 
-TODO:
-
-- explain:
-  - tasks inside of a chain have to be processed sequentially. chains (e.g. as subchains of tasks) can be processed in parallel.
-  - tasks returned from a functionTask will get the "parentID" assigned to them and counted as a "subtask"
-  - tasks added by the user (e.g. as a chatResponse) will be "siblings" to the selected leaf task in a specific chat
-  - chatCompletion will figure out which is the correct context to render and convert into a message chain for llm inference
-    - if there is only one subtask chain, we will probably simply render it
-    - some task/functions automatically indicate that they would not like to be rendered in the chat this is for example
-    - the case for chatCompletion itself.
-    - we should probably add some options to chatCompletion to influence that behaviour for certain situations. E.g. maybe for debugging in case of an error, we want all details to be included.... But maybe for task planning we only want the top-level stuff to be included...
-
 ## 1. Introduction
 
 Taskyon is a distributed system designed to manage and execute tasks in a **peer-to-peer environment** using a **TaskTree** structure. Inspired by dependency graphs, workflow engines, and call stacks, Taskyon breaks complex tasks into manageable sub-tasks that can be executed sequentially or in parallel. Each task is represented as an immutable **TaskNode**, ensuring cryptographic integrity and content-addressability while allowing for **dynamic orchestration** using Large Language Models (LLMs).
@@ -30,6 +18,30 @@ This whitepaper outlines Taskyon’s architecture, cryptographic guarantees, and
 - **Hierarchical and Sequential Links:** TaskNodes reference their **parentID** (denoting hierarchical relationships) and **priorID** (capturing sequential dependencies). This linkage forms a structured TaskTree where tasks build upon each other.
 - **Subtasks and Results:** New tasks are appended as child TaskNodes, preserving context while keeping each node immutable.
 - **Task Execution and Propagation:** Task results propagate upwards in the tree, similar to function return values in programming.
+
+Below is an excerpt from the whitepaper that incorporates your new points. You can integrate it as a new subsection under the “TaskTree Structure” section (or as a new section, depending on your organization):
+
+#### Task Chain Processing and Parallelization
+
+Taskyon’s execution model distinguishes between sequential processing within a single task chain and parallel execution across independent chains. Key aspects include:
+
+- **Sequential Processing within Chains:**  
+  Tasks within a single chain are processed one after another—each task consumes the output of its predecessor, ensuring a coherent, step-by-step evolution of state.
+
+- **Parallel Execution of Subchains:**  
+  While individual chains maintain sequential execution, distinct chains (or subchains spawned by function tasks) can be processed concurrently, optimizing overall throughput.
+
+- **Parent-Child Relationships and Sibling Tasks:**
+
+  - Tasks returned from a `functionTask` automatically inherit the originating task’s `parentID` and are counted as subtasks.
+  - User-initiated tasks (e.g. a chatResponse) are added as siblings to the selected leaf task within a specific chat.
+  - Furthermore, all tasks within a function-generated chain are considered siblings, preserving a flat hierarchy within that chain.
+
+- **Context Rendering for LLM Inference:**  
+  The `chatCompletion` tool intelligently determines the appropriate context to render into a message chain for LLM inference. For instance:
+  - When only one subtask chain exists, it may be rendered directly.
+  - Some tasks or functions can indicate that they should not be rendered in the chat (e.g. `chatCompletion` itself).
+  - Configurable options can be provided to `chatCompletion` so that, in situations like debugging errors, detailed rendering is enabled, whereas in task planning only top-level information is presented.
 
 ## 3. Data Structures
 
