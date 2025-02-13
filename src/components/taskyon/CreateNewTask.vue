@@ -293,7 +293,7 @@
 import { computed, ref, toRaw, toRefs } from 'vue'
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
 import type { FunctionArguments, partialTaskDraft, ToolBase } from 'src/modules/taskyon/types'
-import { getApiConfig, llmSettings } from 'src/modules/taskyon/types'
+import { getApiConfig, llmSettings, getCurrentModel } from 'src/modules/taskyon/types'
 import '@quasar/quasar-ui-qmarkdown/dist/index.css'
 import { useTaskyonStore } from 'stores/taskyonState'
 import type { TaskNode } from 'src/modules/taskyon/types'
@@ -379,15 +379,9 @@ const toolCollection = ref<Record<string, ToolBase>>({})
 void getAllTools().then((tools) => (toolCollection.value = tools))
 
 // Computed property to determine the currently selected bot name
-// TODO: we can move this into taskyonstate?
+// TODO: we can move this into taskyonstate?// TODO: we can move this into taskyonstate?
 const currentModel = computed(() => {
-  const api = getApiConfig(state.llmSettings)
-  if (api) {
-    const modelName =
-      api.selectedModel || api.defaultModel || api.models?.free || 'No model selected!'
-    return modelName
-  }
-  return 'No model selected!'
+  return getCurrentModel(state.llmSettings)
 })
 
 const currentChatApi = ref<string>(toRaw(state.llmSettings.selectedApi) || '')

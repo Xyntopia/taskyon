@@ -650,3 +650,13 @@ export function getApiConfigCopy(llmSettings: llmSettings, apiName?: string) {
     return deepCopy(api)
   }
 }
+
+export function getCurrentModel(llmSettings: llmSettings) {
+  const api = getApiConfig(llmSettings)
+  if (api) {
+    const modelName =
+      api.selectedModel || api.defaultModel || api.models?.free || 'No model selected!'
+    return modelName
+  }
+  return 'No model selected!'
+}

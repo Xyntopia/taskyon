@@ -19,7 +19,7 @@ import type {
   TaskNodeMeta,
   OpenRouterGenerationInfo,
 } from '../taskyon/types'
-import { FunctionCall } from '../taskyon/types'
+import { FunctionCall, getCurrentModel } from '../taskyon/types'
 import { ChatResponseType, getApiConfigCopy } from '../taskyon/types'
 import { TaskProcessingError, type llmSettings } from '../taskyon/types'
 import {
@@ -610,7 +610,7 @@ async function convertFilesToOpenAIImageContent(
 }
 
 type ccArguments = {
-  model: string
+  model?: string
   goal?: Goals
   llmTools?: boolean
   allowedTools?: string[]
@@ -655,7 +655,8 @@ export async function createChatCompletionTool(
     { model, goal, llmTools, allowedTools, prompts, schema }: ccArguments,
     context: toolContext,
   ) => {
-    console.log('calling chat completion tool...', model, goal, llmTools)
+    const selectedModel = model ?? getCurrentModel(llmSettings)
+    console.log('calling chat completion tool...', selectedModel, goal, llmTools)
     if (!context.currentTask) {
       throw new TaskProcessingError(`No current task found!`)
     }
@@ -677,7 +678,7 @@ export async function createChatCompletionTool(
       allowedTools ?? [],
       toolDefs,
       context.currentTask,
-      { model, chatApi: llmSettings.selectedApi },
+      { model: selectedModel, chatApi: llmSettings.selectedApi },
       llmSettings,
       taskManager,
       taskWorkerController,
@@ -748,7 +749,7 @@ export async function createChatCompletionTool(
     const newTaskChain = generateFollowUpTasksFromResult(
       goal || 'SimpleCompletion',
       choice,
-      model,
+      selectedModel,
       !!llmTools,
       toolDefs,
     )
