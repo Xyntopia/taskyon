@@ -25,10 +25,16 @@ export const taskUtils = (getTask: TaskGetter) => {
     return conversationList
   }
 
-  async function getTaskChain(taskId: string) {
+  async function getTaskChain<T extends boolean>(
+    taskId: string,
+    onlyDefined?: T,
+  ): Promise<T extends true ? TaskNode[] : (TaskNode | undefined)[]> {
     const taskIds = await getTaskIdChain(taskId)
     const taskList = await Promise.all(taskIds.map((tid) => getTask(tid)))
-    return taskList
+    if (onlyDefined) {
+      return taskList.filter((task): task is TaskNode => task !== undefined)
+    }
+    return taskList as T extends true ? TaskNode[] : (TaskNode | undefined)[]
   }
 
   return {
