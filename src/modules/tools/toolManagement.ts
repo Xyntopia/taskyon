@@ -1,4 +1,5 @@
-import type { InternalTool, internalToolFunctionSchema } from '../taskyon/tools'
+import { makeTaskResult, type InternalTool, type internalToolFunctionSchema } from '../taskyon/tools'
+import { createChatCompletionTask } from './chatCompletionTool'
 
 // the following tool is "self-referential" and because of this we can not initialize it yet
 // we instead write a factory function which creates this tool using a reference to our tools
@@ -74,4 +75,19 @@ understanding tool functionalities and aiding in tool development or adaptation.
   }
 
   return getToolExample
+}
+
+const toolCreationWizard: InternalTool = {
+  // TODO: add an option to search for similar tools first...
+  function: () => {
+    console.log("starting function creation wizard")
+
+    return makeTaskResult([[createChatCompletionTask({}),{
+      role:
+    }]])
+  },
+  description:
+    "Creates a few curated tasks which help an LLM to program new tools! It doesn't have any parameters",
+  name: 'toolCreationWizard',
+  parameters: {},
 }
