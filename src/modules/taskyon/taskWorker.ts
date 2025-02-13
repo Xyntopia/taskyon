@@ -205,7 +205,7 @@ export async function runTaskWorker(
       if (task && !taskWorkerController.isInterrupted()) {
         if (!llmSettings.selectedApi) throw new TaskProcessingError('No AI API selected!!')
         const api = getApiConfigCopy(llmSettings, llmSettings.selectedApi)
-        const newTasks = await processTask(
+        const newTasks: partialTaskDraft[][] = await processTask(
           task,
           taskManager,
           taskWorkerController,

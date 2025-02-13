@@ -40,6 +40,10 @@ import { isTaskyonKey } from '../taskyon/tyCrypto'
 import { useNlpWorker } from '../taskyon/webWorkerApi'
 import type { FileMappingDocType } from '../taskyon/rxdb'
 import { dump, load } from 'js-yaml'
+//import type { JSONSchema7Type as JsonSchema } from 'json-schema'
+import type { JSONSchemaType } from 'ajv'
+
+type tyJsonSchema = JSONSchemaType<unknown>
 
 // this function processes all tasks which go to any sort of an LLM
 
@@ -63,6 +67,7 @@ export async function processChatTask(
   apiKeys: { [key: string]: string },
   lastTaskBeforeChatCompletion: TaskNode,
   streamTracker: (chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => void,
+  prompts: string[],
 ) {
   //TODO: this code is duplicated, can we do this better?
   const api = getApiConfigCopy(llmSettings, configuration.chatApi)
@@ -97,14 +102,27 @@ export async function processChatTask(
     // TODO: split llmSettings.enableOpenAiTools settings from addPrompts for refactoring
     // TODO: split "base" prompt from "addPrompts"  and maybe have a separate function for each
     //       goal...
-    openAIConversationThread = addPrompts(
-      lastTaskBeforeChatCompletion,
-      toolDefs,
-      llmSettings,
-      openAIConversationThread,
-      allowedTools,
-      goal,
-    )
+    if (prompts) {
+      // TODO: add schema to custom prompts...
+      openAIConversationThread.push(
+        ...prompts.map(
+          (prompt) =>
+            ({
+              role: 'user',
+              content: prompt,
+            }) as OpenAI.ChatCompletionMessageParam,
+        ),
+      )
+    } else {
+      openAIConversationThread = addPrompts(
+        lastTaskBeforeChatCompletion,
+        toolDefs,
+        llmSettings,
+        openAIConversationThread,
+        allowedTools,
+        goal,
+      )
+    }
 
     // TODO: save our "openAIConversationThread" inside debugdb for debuggin
 
@@ -591,7 +609,14 @@ async function convertFilesToOpenAIImageContent(
   return imageContent
 }
 
-type ccArguments = { model: string; goal?: Goals; llmTools?: boolean; allowedTools?: string[] }
+type ccArguments = {
+  model: string
+  goal?: Goals
+  llmTools?: boolean
+  allowedTools?: string[]
+  prompts?: string[]
+  schema?: tyJsonSchema
+}
 
 export function createChatCompletionTask(args: ccArguments): partialTaskDraft {
   return {
@@ -606,7 +631,7 @@ export function createChatCompletionTask(args: ccArguments): partialTaskDraft {
   }
 }
 
-export function createChatCompletionTool(
+export async function createChatCompletionTool(
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController,
@@ -616,9 +641,18 @@ export function createChatCompletionTool(
     id: string,
     chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined,
   ) => void,
-): InternalTool {
+): Promise<InternalTool> {
+  const Ajv = await import(
+    /* webpackPrefetch: true */
+    /* webpackChunkName: "codemirror" */
+    /* webpackMode: "lazy" */
+    /* webpackFetchPriority: "low" */
+    'ajv'
+  )
+  const ajv = new Ajv.default() // options can be passed, e.g. {allErrors: true}
+
   const fetchChatCompletion: internalToolFunctionSchema = async (
-    { model, goal, llmTools, allowedTools }: ccArguments,
+    { model, goal, llmTools, allowedTools, prompts, schema }: ccArguments,
     context: toolContext,
   ) => {
     console.log('calling chat completion tool...', model, goal, llmTools)
@@ -630,6 +664,7 @@ export function createChatCompletionTool(
     }
 
     const toolDefs = await taskManager.updateToolDefinitions(true)
+
     // refactor this below and make it all explicit, without passing llmSettings...
     // now add goal-specific prompts...
     const lastTaskBeforeChatCompletion = await taskManager.getTask(context.currentTask.priorID)
@@ -639,7 +674,7 @@ export function createChatCompletionTool(
       )
     const { chatCompletion, openAIConversationThread } = await processChatTask(
       goal ?? 'SimpleCompletion',
-      allowedTools || [],
+      allowedTools ?? [],
       toolDefs,
       context.currentTask,
       { model, chatApi: llmSettings.selectedApi },
@@ -651,6 +686,7 @@ export function createChatCompletionTool(
       (chunk) => {
         streamCallback(context.currentTask.id, chunk)
       },
+      prompts ?? [],
     )
 
     // parse the response into our own type ...
@@ -684,6 +720,30 @@ export function createChatCompletionTool(
         'Our ChatCompletion tool did not get a valid response!',
         resp.data,
       )
+    void taskManager.debugDb.upsert(context.currentTask.id, metaInfo, 'shallow_merge')
+
+    // in case a schema was given, we simply use that schema and return it as a structured message
+    // for further processing (e.g. a contextFunction)...
+    if (schema) {
+      console.log('parsing custom schema', schema)
+      const structResponse = parseYamlResponse2Record(choice.message.content || '')
+
+      const validate = ajv.compile(schema)
+      const valid = validate(structResponse)
+
+      if (!valid) {
+        throw new Error('Chat response has the wrong format: ' + ajv.errorsText(validate.errors))
+      }
+
+      makeTaskResult([
+        [
+          {
+            role: 'assistant',
+            content: { type: 'structured', data: choice.message.content || '' },
+          },
+        ],
+      ])
+    }
 
     const newTaskChain = generateFollowUpTasksFromResult(
       goal || 'SimpleCompletion',
@@ -692,10 +752,6 @@ export function createChatCompletionTool(
       !!llmTools,
       toolDefs,
     )
-
-    if (newTaskChain[0]) {
-      void taskManager.debugDb.upsert(context.currentTask.id, metaInfo, 'shallow_merge')
-    }
 
     return makeTaskResult([newTaskChain])
   }
@@ -738,6 +794,21 @@ export function createChatCompletionTool(
             type: 'string',
           },
           default: [],
+        },
+        prompts: {
+          type: 'array',
+          description:
+            "Optional Parameter. We can add a custom prompt to the chatCompletion which doesn't get recorded as a task and therefore disappears during message thread conversion.",
+          items: {
+            type: 'string',
+          },
+          default: [],
+        },
+        schema: {
+          type: 'object',
+          description:
+            'A json schema object which we can use to generate a specific response and parse it.',
+          additionalProperties: true,
         },
       },
       required: ['model'],

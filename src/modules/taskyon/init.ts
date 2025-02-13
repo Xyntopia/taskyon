@@ -57,7 +57,7 @@ export async function initTaskyon(
 
   // add tools which have access to the taskManagerInstance itself
   ToolList.push(
-    createChatCompletionTool(
+    await createChatCompletionTool(
       llmSettings,
       taskManagerInstance,
       taskWorkerController,

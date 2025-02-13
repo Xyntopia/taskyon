@@ -95,6 +95,7 @@
     "@tauri-apps/tauricon": "github:tauri-apps/tauricon",
     "@types/html-to-text": "^9.0.4",
     "@types/js-yaml": "^4.0.5",
+    "@types/json-schema": "^7.0.15",
     "@types/lodash": "^4.14.177",
     "@types/markdown-it": "^13.0.7",
     "@types/node": "^20.5.9",

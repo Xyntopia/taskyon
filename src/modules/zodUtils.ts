@@ -26,6 +26,7 @@ interface YamlArrayRepresentation {
 
 /* convert a zod schema into a nested object where the description
 appear in keys starting with '#'
+TODO: replace this with a zod to json schema thing...
 */
 export function zodToYAMLObject(
   schema: z.ZodTypeAny,

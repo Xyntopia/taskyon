@@ -140,6 +140,7 @@ export interface OpenRouterGenerationInfo {
 // https://zod.dev/?id=recursive-types
 // Base schema definition
 // Base schema definition
+// maybe we can use the "official" verison here from @types/json-schema
 const baseSchema = z.object({
   $schema: z.string().optional(),
   $id: z.string().optional(),
@@ -151,6 +152,7 @@ const baseSchema = z.object({
   const: z.unknown().optional(),
   format: z.string().optional(),
   default: z.unknown().optional(),
+  additionalProperties: z.boolean().optional(),
 })
 
 // Define type separately and attach it to Zod
@@ -237,7 +239,7 @@ const MessageContent = z.object({ type: z.literal('message'), data: z.string() }
 //       structured content with the content as a parameter in order to decide what to do :)
 const StructuredContent = z.object({
   type: z.literal('structured'),
-  data: z.string(),
+  data: z.unknown(),
 })
 const ToolCallContent = z.object({ type: z.literal('functioncall'), data: FunctionCall })
 const UploadedFilesContent = z.object({
@@ -245,7 +247,7 @@ const UploadedFilesContent = z.object({
   data: z.array(z.string()),
 })
 const ToolResultContent = z.object({ type: z.literal('toolresult'), data: z.unknown() })
-const ToolDefinition = z.object({ type: z.literal('tooldefinition'), data: z.unknown() })
+const ToolDefinition = z.object({ type: z.literal('tooldefinition'), data: ToolBase })
 const ErrorContent = z
   .object({ type: z.literal('error'), data: z.string() })
   .describe('Gets created if any error occurs during task processing.')
