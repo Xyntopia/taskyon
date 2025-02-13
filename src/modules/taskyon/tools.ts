@@ -12,7 +12,7 @@ import { executeCodeInIframe } from './iframeWorker'
 
 const toolContext = z
   .object({
-    currentTask: TaskNode,
+    taskChain: z.array(TaskNode),
   })
   .describe('Context for tools which gives them access to other parts of the taskyon system')
 export type toolContext = z.infer<typeof toolContext>
@@ -144,7 +144,7 @@ export async function handleFunctionExecution(
   func: FunctionCall,
   tools: Record<string, ToolBase | InternalTool>,
   onInterrupt: OnInterruptFunc,
-  currentTask: TaskNode,
+  context: toolContext,
   // TODO: add taskManager here, so we can use it in the function execution
   //       we somehow also want to be able to do this with "dynamically" loaded tools
   //       but only, if they're declared "trusted" or something like that...
@@ -155,11 +155,14 @@ export async function handleFunctionExecution(
   const tool = getTool(tools, func.name)
   if ('function' in tool && tool.function) {
     console.log('using tool!', tool)
-    funcR = await tool.function(func.arguments, { currentTask })
+    // TODO: try longterm, to also execute the "internal" functions in iframe..
+    //       maybe by being able to remove them all..
+    funcR = await tool.function(func.arguments, context)
     funcR = bigIntToString(funcR)
   } else if (tool.code) {
     console.log('compile & execute function code in iframe', tool)
     try {
+      // TODO: add tool context to our "safe" functions as well..
       // Execute code in iframe with parameters (func.arguments)
       funcR = await executeCodeInIframe(tool.code, func.arguments, func.name + '.js', onInterrupt)
       funcR = bigIntToString(funcR) // Optionally convert bigInt
@@ -172,6 +175,7 @@ export async function handleFunctionExecution(
     // we do the zod object parsing/validation here, because we might have a proxy object from upstream
     // and want to make sure its serializable for a postMessage function.
     // TODO: use our "onInterrupt" here somehow ;)
+    // TODO: pass tool context here as well :)
     funcR = await handleRemoteFunction(func.name, func.arguments)
   }
   return funcR

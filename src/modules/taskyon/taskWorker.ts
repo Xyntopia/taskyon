@@ -101,12 +101,11 @@ async function processTask(
     const tools = await taskManager.updateToolDefinitions(false)
     console.log(`Calling function ${func.name}`)
     if (tools[func.name] && !taskWorkerController.isInterrupted()) {
-      const funcR = await handleFunctionExecution(
-        func,
-        tools,
-        taskWorkerController.onInterrupt,
-        task,
-      )
+      // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
+      const taskChain = await taskManager.getTaskChain(task.id, true)
+      const funcR = await handleFunctionExecution(func, tools, taskWorkerController.onInterrupt, {
+        taskChain,
+      })
 
       // We check the result of the task here to see whether it contains
       // a lists of tasks. If thats the case we return
