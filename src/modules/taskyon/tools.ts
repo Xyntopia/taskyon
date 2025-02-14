@@ -62,7 +62,7 @@ const internalToolFunctionSchema = z.custom<
 export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSchema>
 
 const InternalTool = ToolBase.extend({
-  function: internalToolFunctionSchema,
+  function: internalToolFunctionSchema.optional(),
 }).describe('Internal tool definition, which has access to the taskyon system')
 export type InternalTool = z.infer<typeof InternalTool>
 

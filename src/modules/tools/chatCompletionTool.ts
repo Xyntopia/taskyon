@@ -102,7 +102,7 @@ export async function processChatTask(
     // TODO: split llmSettings.enableOpenAiTools settings from addPrompts for refactoring
     // TODO: split "base" prompt from "addPrompts"  and maybe have a separate function for each
     //       goal...
-    if (prompts) {
+    if (prompts.length > 0) {
       // TODO: add schema to custom prompts...
       openAIConversationThread.push(
         ...prompts.map(
@@ -618,14 +618,14 @@ type ccArguments = {
   schema?: tyJsonSchema
 }
 
-export function createChatCompletionTask(args: ccArguments): partialTaskDraft {
+export function createChatCompletionTask(args?: ccArguments): partialTaskDraft {
   return {
     role: 'function',
     content: {
       type: 'functioncall',
       data: {
         name: 'chatCompletion',
-        arguments: args,
+        arguments: args ?? {},
       },
     },
   }
@@ -657,7 +657,8 @@ export async function createChatCompletionTool(
   ) => {
     const selectedModel = model ?? getCurrentModel(llmSettings)
     console.log('calling chat completion tool...', selectedModel, goal, llmTools)
-    if (!context.currentTask) {
+    const currentTask = context.taskChain.at(-1)
+    if (!currentTask) {
       throw new TaskProcessingError(`No current task found!`)
     }
     if (!llmSettings.selectedApi) {
@@ -668,16 +669,16 @@ export async function createChatCompletionTool(
 
     // refactor this below and make it all explicit, without passing llmSettings...
     // now add goal-specific prompts...
-    const lastTaskBeforeChatCompletion = await taskManager.getTask(context.currentTask.priorID)
+    const lastTaskBeforeChatCompletion = await taskManager.getTask(currentTask.priorID)
     if (!lastTaskBeforeChatCompletion)
       throw new TaskProcessingError(
-        `chatCompletion Task needs a parent Task to work! ${context.currentTask.id}`,
+        `chatCompletion Task needs a parent Task to work! ${currentTask.id}`,
       )
     const { chatCompletion, openAIConversationThread } = await processChatTask(
       goal ?? 'SimpleCompletion',
       allowedTools ?? [],
       toolDefs,
-      context.currentTask,
+      currentTask,
       { model: selectedModel, chatApi: llmSettings.selectedApi },
       llmSettings,
       taskManager,
@@ -685,7 +686,7 @@ export async function createChatCompletionTool(
       apiKeys,
       lastTaskBeforeChatCompletion,
       (chunk) => {
-        streamCallback(context.currentTask.id, chunk)
+        streamCallback(currentTask.id, chunk)
       },
       prompts ?? [],
     )
@@ -707,9 +708,9 @@ export async function createChatCompletionTool(
       )
       // we run this asynchronously, because it fetches data in the
       // background and we don't want to wait here...
-      void addTaskCostInformation(resp.data, context.currentTask.id, llmSettings, apiKeys).then(
+      void addTaskCostInformation(resp.data, currentTask.id, llmSettings, apiKeys).then(
         (newMeta) => {
-          void taskManager.debugDb.upsert(context.currentTask.id, newMeta, 'shallow_merge')
+          void taskManager.debugDb.upsert(currentTask.id, newMeta, 'shallow_merge')
         },
       )
     }
@@ -721,7 +722,7 @@ export async function createChatCompletionTool(
         'Our ChatCompletion tool did not get a valid response!',
         resp.data,
       )
-    void taskManager.debugDb.upsert(context.currentTask.id, metaInfo, 'shallow_merge')
+    void taskManager.debugDb.upsert(currentTask.id, metaInfo, 'shallow_merge')
 
     // in case a schema was given, we simply use that schema and return it as a structured message
     // for further processing (e.g. a contextFunction)...

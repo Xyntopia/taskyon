@@ -14,6 +14,7 @@ import { createChatCompletionTool } from '../tools/chatCompletionTool'
 import { getDatabase } from '../pglite.api'
 import { createCrudWrapper } from '../crudWrapper'
 import type OpenAI from 'openai'
+import { toolCreationWizard } from '../tools/toolManagement'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -23,7 +24,13 @@ export async function initTaskyon(
   // we explicitly provide a tasklist here, this gives us the chance to provide a reactive
   // value in order to get updates to the list of tasks immediatly reflected in the UI.
   TaskList: Map<string, TaskNode>,
-  AdditionalTools: InternalTool[],
+  // with the Environment Tools we can provide a list of tools as closures which have access
+  // to the environment in which taskyon is running (through closure variables
+  // of this environment inside the tool).
+  // E.g. the taskyon GUI and its state.
+  // this way we can give taskyon access and the ability to read & change the environment
+  // it is running in.
+  EnvironmentTools: InternalTool[],
   streamCallback: (
     id: string,
     chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined,
@@ -34,7 +41,8 @@ export async function initTaskyon(
     // TODO: add local context(task) search
     // localVectorStoreSearch,
     executeJavaScript,
-    ...AdditionalTools,
+    toolCreationWizard,
+    ...EnvironmentTools,
   ]
 
   const pgldb = await getDatabase('taskyon')
