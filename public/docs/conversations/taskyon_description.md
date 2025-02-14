@@ -134,3 +134,52 @@ The taskchain in the AI chat-app functions similarly to the "reduce" concept in 
    - The process is sequential, with each step depending on the results of the previous steps, maintaining coherence and context.
 
 This design allows the AI chat-app to handle complex interactions by chaining together simpler functions, each building on the previous tasks, much like how "reduce" processes elements to build up a result.
+
+## Curated Tasks with Pattern Matching
+
+A typical scenario is when you have a goal that requires several processing steps (e.g., RAG or process automation). Instead of writing a separate tool for each step, you create a single tool that handles the entire process. In Taskyon, this means building a chain of tasks where:
+
+- **Curated Task Chain:** The tool outputs a list of tasks (like a flatmap in functional programming) that is then flattened into a continuous sequence.
+- **Subtask Generation:** Each task can generate its own subtasks, keeping the chain flexible.
+- **State Machine Behavior:** By using pattern matching on the previous task, the tool determines the next step, effectively acting as a state machine.
+
+This approach lets you define the steps explicitly while leaving enough flexibility for Taskyon to determine transitions dynamically based on specific input/output needs.
+
+Below is a mermaid chart illustrating this principle:
+
+```mermaid
+flowchart TB
+  A["Goal: Multi-Step Process<br>(e.g., RAG, Automation)"] --> Subchain
+
+  subgraph Task Chain
+    direction TB
+    subgraph Subchain
+      direction LR
+      C{{"Task 1: Initial Step"}}
+      C2{{"ChatCompletion<br>(pattern/schema)"}}
+      C -- generates --> C2
+    end
+    Subchain --> Subchain2
+    subgraph Subchain2
+      direction LR
+        D{{"Task 2: Intermediate Step"}}
+        D2{{"ChatCompletion<br>(pattern/schema)"}}
+        D -- generates --> D1 --> D2
+    end
+    Subchain2 --> E
+    E{{"Task 3: Final Step"}}
+    G[Next Stage / Final Output]
+  end
+
+  E --> G
+
+  B["Curated Tool<br>(Generate Task Chain & follow steps through pattern matching)"]
+  B -- inject --> Subchain
+  B -- inject --> Subchain2
+  B -- inject --> E
+
+```
+
+In many cases, the steps are tightly coupled and require specific input and output data. With this single tool approach—leveraging flatmapping and state machine-like pattern matching—you avoid having to write separate tools for each step while maintaining clear, adaptable transitions.
+
+TODO: add a json-example for a tool that can do this..
