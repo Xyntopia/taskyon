@@ -9,21 +9,7 @@ import { z } from 'zod'
 import type { YamlRepresentation } from '../zodUtils'
 import { convertToYamlWComments } from '../zodUtils'
 import { executeCodeInIframe } from './iframeWorker'
-
-const toolContext = z
-  .object({
-    taskChain: z.array(TaskNode),
-  })
-  .describe('Context for tools which gives them access to other parts of the taskyon system')
-export type toolContext = z.infer<typeof toolContext>
-
-const internalToolFunctionSchema = z.custom<
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (params: any, context: toolContext) => unknown // unknown also includes Promise<unknown>
->((val) => typeof val === 'function', {
-  message: 'Expected a function that accepts any arguments and returns unknown or Promise<unknown>',
-})
-export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSchema>
+import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
 
 const taskMarker = '*TY_TASKRESULT*'
 
@@ -59,10 +45,36 @@ export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSche
     .returns(z.unknown())
     .describe('Simple function definition for internal tools'),*/
 
+const toolContext = z
+  .object({
+    taskChain: z.array(TaskNode),
+  })
+  .describe('Context for tools which gives them access to other parts of the taskyon system')
+export type toolContext = z.infer<typeof toolContext>
+
+// TODO: make all of this generic functions in order to get better typescript checking
+const internalToolFunctionSchema = z.custom<
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (params: any, context: toolContext) => unknown // unknown also includes Promise<unknown>
+>((val) => typeof val === 'function', {
+  message: 'Expected a function that accepts any arguments and returns unknown or Promise<unknown>',
+})
+export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSchema>
+
 const InternalTool = ToolBase.extend({
   function: internalToolFunctionSchema,
 }).describe('Internal tool definition, which has access to the taskyon system')
 export type InternalTool = z.infer<typeof InternalTool>
+
+// Create a helper function to preserve schema types
+export function createTool<SCHEMA extends JSONSchema, PARAMS = FromSchema<SCHEMA>>(
+  tool: {
+    parameters: SCHEMA
+    function: (params: PARAMS, context: toolContext) => unknown
+  } & Exclude<InternalTool, 'function'>,
+) {
+  return tool
+}
 
 // This function executes code in a different browser context. E.g. executing a
 // function in the context of the parent of an iframe!

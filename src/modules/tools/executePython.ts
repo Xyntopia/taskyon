@@ -1,10 +1,10 @@
-import type { InternalTool } from '../taskyon/tools'
+import { createTool } from '../taskyon/tools'
 import type { PythonScriptResult } from '../pyodide'
 import { usePyodideWebworker } from '../taskyon/webWorkerApi'
 
 const { asyncRunPython } = usePyodideWebworker('execute python script tool')
 
-export const executePythonScript: InternalTool = {
+export const executePythonScript = createTool({
   function: async ({ code }: { code: string }): Promise<PythonScriptResult> => {
     console.log('execute python code...')
     return await asyncRunPython(code)
@@ -25,4 +25,4 @@ is the outcome of the last expression in the script. Outcomes should be of the t
     },
     required: ['code'],
   },
-}
+})

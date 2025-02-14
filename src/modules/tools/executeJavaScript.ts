@@ -1,4 +1,4 @@
-import type { InternalTool, WorkerMessage } from '../taskyon/tools'
+import { createTool, type WorkerMessage } from '../taskyon/tools'
 
 // Function to execute JavaScript in a dynamically created Web Worker
 export function executeInDynamicWorker(javascriptCode: string, workerName: string = 'js-worker') {
@@ -60,7 +60,7 @@ onmessage = function(e) {
 }
 
 // Tool to Execute JavaScript Code
-export const executeJavaScript: InternalTool = {
+export const executeJavaScript = createTool({
   function: async ({ code, useWebWorker = true }) => {
     if (!(typeof code === 'string')) throw Error('Can not read provided code', code)
     if (code.length == 0) throw Error('Provided code is empty!')
@@ -120,4 +120,4 @@ for tasks requiring DOM manipulation, data processing, or dynamic web content ge
     },
     required: ['code'],
   },
-}
+})
