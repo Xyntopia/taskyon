@@ -119,5 +119,5 @@ for tasks requiring DOM manipulation, data processing, or dynamic web content ge
       },
     },
     required: ['code'],
-  },
+  } as const,
 })

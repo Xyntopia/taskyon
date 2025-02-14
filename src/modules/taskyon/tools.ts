@@ -71,7 +71,7 @@ export function createTool<SCHEMA extends JSONSchema, PARAMS = FromSchema<SCHEMA
   tool: {
     parameters: SCHEMA
     function: (params: PARAMS, context: toolContext) => unknown
-  } & Exclude<InternalTool, 'function'>,
+  } & Omit<InternalTool, 'function'>,
 ) {
   return tool
 }
