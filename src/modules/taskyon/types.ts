@@ -1,6 +1,7 @@
 import type OpenAI from 'openai'
 import { z } from 'zod'
 import { deepCopy } from '../utils'
+import { JSONSchemaObjectSchema } from '../jsonSchema'
 
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type RequireSome<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
@@ -135,49 +136,6 @@ export interface OpenRouterGenerationInfo {
   usage: number
 }
 
-// in order to prevent a circular reference in zod, we need to define our JSONSchemaForFunctionParameter
-// separately
-// https://zod.dev/?id=recursive-types
-// Base schema definition
-// Base schema definition
-// maybe we can use the "official" verison here from @types/json-schema
-const baseSchema = z.object({
-  $schema: z.string().optional(),
-  $id: z.string().optional(),
-  title: z.string().optional(),
-  description: z.string().optional(),
-  type: z.enum(['string', 'number', 'integer', 'boolean', 'array', 'object', 'null']).optional(),
-  required: z.array(z.string()).optional(),
-  enum: z.array(z.unknown()).optional(),
-  const: z.unknown().optional(),
-  format: z.string().optional(),
-  default: z.unknown().optional(),
-  additionalProperties: z.boolean().optional(),
-})
-
-// Define type separately and attach it to Zod
-type JSONSchemaForFunctionParameter = z.infer<typeof baseSchema> & {
-  properties?: Record<string, JSONSchemaForFunctionParameter> | undefined
-  items?: JSONSchemaForFunctionParameter | JSONSchemaForFunctionParameter[] | undefined
-}
-
-const JSONSchemaForFunctionParameter: z.ZodType<JSONSchemaForFunctionParameter> = baseSchema.extend(
-  {
-    properties: z
-      .record(
-        z.string(),
-        z.lazy(() => JSONSchemaForFunctionParameter),
-      )
-      .optional(),
-    items: z
-      .union([
-        z.lazy(() => JSONSchemaForFunctionParameter),
-        z.lazy(() => JSONSchemaForFunctionParameter.array()),
-      ])
-      .optional(),
-  },
-)
-
 export const FunctionName = z
   .string()
   .refine(
@@ -205,7 +163,7 @@ and do somthing with it. But most tools will simply not render it for their purp
 if render options aren't given taskyon chtcompletion function and chatwindow assumes them to be "true".
 `,
     ),
-  parameters: JSONSchemaForFunctionParameter,
+  parameters: JSONSchemaObjectSchema,
   code: z
     .string()
     .optional()

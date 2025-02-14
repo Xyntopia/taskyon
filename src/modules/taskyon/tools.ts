@@ -199,28 +199,31 @@ export function getDefaultParametersForTool(tool: InternalTool | ToolBase) {
 
   const defaultParams: Record<string, ParamType> = {}
   Object.keys(params.properties).forEach((key) => {
-    const type = params.properties![key]!.type
-    // Assign a default value based on the parameter's type.
-    switch (type) {
-      case 'string':
-        defaultParams[key] = '' // Default empty string
-        break
-      case 'number':
-        defaultParams[key] = 0 // Default number zero
-        break
-      case 'boolean':
-        defaultParams[key] = false // Default boolean false
-        break
-      case 'object':
-        defaultParams[key] = {} // Default empty object
-        break
-      case 'array':
-        defaultParams[key] = [] // Default empty array
-        break
-      // Add cases for any other types you expect
-      default:
-        console.log(`No default value for parameter type: ${type}`)
-        defaultParams[key] = null
+    const property = params.properties![key]
+    if (property && typeof property !== 'boolean' && 'type' in property) {
+      const type = property.type
+      // Assign a default value based on the parameter's type.
+      switch (type) {
+        case 'string':
+          defaultParams[key] = '' // Default empty string
+          break
+        case 'number':
+          defaultParams[key] = 0 // Default number zero
+          break
+        case 'boolean':
+          defaultParams[key] = false // Default boolean false
+          break
+        case 'object':
+          defaultParams[key] = {} // Default empty object
+          break
+        case 'array':
+          defaultParams[key] = [] // Default empty array
+          break
+        // Add cases for any other types you expect
+        default:
+          console.log(`No default value for parameter type: ${JSON.stringify(type)}`)
+          defaultParams[key] = null
+      }
     }
   })
 
@@ -245,14 +248,17 @@ function convertToToolCommandString(tool: ToolBase): string {
       // Check if the key is in the list of required properties
       // const isRequired = requiredProperties.has(key);
       // If the property is required, use the key as is, otherwise add a "?" to the key
-      if (param.description) {
+      if (param && typeof param !== 'boolean' && 'description' in param) {
         const descriptionKey = `# ${key} description`
-        args[descriptionKey] = param.description.replace(/\n/g, ' ')
+        args[descriptionKey] = param.description?.replace(/\n/g, ' ') ?? ''
       }
 
-      if (param.type) {
+      if (param && typeof param === 'object' && 'type' in param) {
         const argKey = key
-        args[argKey] = param.type
+        // if param.type is an array, it means, multiple types are accepted
+        args[argKey] = Array.isArray(param.type)
+          ? param.type.map(String).join(', ')
+          : String(param.type)
       }
     })
   }
