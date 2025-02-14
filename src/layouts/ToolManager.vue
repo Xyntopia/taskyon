@@ -74,6 +74,7 @@ import { matTune } from '@quasar/extras/material-icons'
 import { partialTyConfiguration } from 'src/modules/taskyon/iframeApiTypes'
 import TaskyonHeader from '../components/taskyon/TaskyonHeader.vue'
 import { useAppStateStore } from 'src/stores/appState'
+import { exampleTool } from 'src/modules/taskyon/tools'
 
 const functionTemplate = taskTemplateTypes.toolDescription.parse(undefined)
 
@@ -138,27 +139,7 @@ const configParser = computed(() => {
 })
 
 function newToolStructure() {
-  const tool = `
-{
-  "name": "myExampleStringAdderAlone",
-  "description": "provide a short description which an AI can understand",
-  "longDescription": "provide a long description if the AI/Human needs more details",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "parameter1": {
-        "type": "string",
-        "description": "This is an example parameter!"
-      },
-      "parameter2": {
-        "type": "string",
-        "description": "This is another example parameter, but not required!"
-      }
-    },
-    "required": ["parameter1"]
-  },
-  "code": "({parameter1, parameter2 = 'default parameter :)'}) => {return parameter1 + ' ' + parameter2;}"
-}`
+  const tool = exampleTool
   state.llmSettings.taskDraft.content = {
     ...state.llmSettings.taskDraft.content,
     type: 'tooldefinition',

@@ -69,8 +69,8 @@ export type InternalTool = z.infer<typeof InternalTool>
 // Create a helper function to preserve schema types
 export function createTool<SCHEMA extends JSONSchema, PARAMS = FromSchema<SCHEMA>>(
   tool: {
-    parameters: SCHEMA
-    function: (params: PARAMS, context: toolContext) => unknown
+    parameters: SCHEMA & { readonly [key: string]: unknown }
+    function?: (params: PARAMS, context: toolContext) => unknown
   } & Omit<InternalTool, 'function'>,
 ) {
   return tool
@@ -311,3 +311,24 @@ export function summarizeTools(toolIDs: string[], tools: Record<string, ToolBase
 export function mapFunctionNames(toolNames: string[], tools: Record<string, ToolBase>): ToolBase[] {
   return toolNames?.map((t) => tools[t] as ToolBase).filter((t) => t)
 }
+
+export const exampleTool = createTool({
+  name: 'myExampleStringAdderAlone',
+  description: 'provide a short description which an AI can understand',
+  longDescription: 'provide a long description if the AI/Human needs more details',
+  parameters: {
+    type: 'object',
+    properties: {
+      parameter1: {
+        type: 'string',
+        description: 'This is an example parameter!',
+      },
+      parameter2: {
+        type: 'string',
+        description: 'This is another example parameter, but not required!',
+      },
+    },
+    required: ['parameter1'],
+  },
+  code: "({parameter1, parameter2 = 'default parameter :)'}) => {return parameter1 + ' ' + parameter2;}",
+})
