@@ -163,7 +163,7 @@ export function addPrompts(
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   allowedTools: string[],
   goal: Goals,
-): tyChatCompletionmessageParam[] {
+) {
   // Check if task has tools and OpenAI tools are not enabled
   //console.log('Creating chat prompts');
 
@@ -306,7 +306,7 @@ export function addPrompts(
   }
 
   // build our complete thread :)
-  return [...prependMessages, ...modifiedOpenAIConversationThread, ...appendMessages]
+  return { prependMessages, modifiedOpenAIConversationThread, appendMessages }
 }
 
 function getAllFunctionsInOpenAiConversation(

@@ -210,7 +210,7 @@
           </q-tab-panel>
           <q-tab-panel v-if="taskMeta?.taskPrompt" name="TASKPROMPT">
             <textarea
-              v-for="(tp, idx) in taskMeta.taskPrompt"
+              v-for="(tp, idx) in taskMeta.taskPrompt.openAIConversationThread as OpenAIMessage[]"
               :key="idx"
               :value="typeof tp.content === 'string' ? tp.content : ''"
               readonly
@@ -238,7 +238,7 @@
 import ToolResultWidget from 'src/components/taskyon/ToolResultWidget.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
-import { TaskNode, partialTaskDraft } from 'src/modules/taskyon/types'
+import { TaskNode, partialTaskDraft, type OpenAIMessage } from 'src/modules/taskyon/types'
 import tyMarkdown from '../tyMarkdown.vue'
 import { computed, ref } from 'vue'
 import { type FileMappingDocType } from 'src/modules/taskyon/rxdb'

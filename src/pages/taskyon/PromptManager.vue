@@ -166,7 +166,7 @@ const structuredResponsePrompt = asyncComputed(async () => {
         [],
         'SimpleCompletion',
       )
-      return rp
+      return [...rp.prependMessages, ...rp.modifiedOpenAIConversationThread, ...rp.appendMessages]
     }
   }
   return []

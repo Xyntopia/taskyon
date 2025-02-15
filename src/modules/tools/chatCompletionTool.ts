@@ -102,6 +102,11 @@ export async function processChatTask(
     // TODO: split llmSettings.enableOpenAiTools settings from addPrompts for refactoring
     // TODO: split "base" prompt from "addPrompts"  and maybe have a separate function for each
     //       goal...
+    let msgs: ReturnType<typeof addPrompts> = {
+      prependMessages: [],
+      modifiedOpenAIConversationThread: [],
+      appendMessages: [],
+    }
     if (prompts.length > 0) {
       // TODO: add schema to custom prompts...
       openAIConversationThread.push(
@@ -114,7 +119,7 @@ export async function processChatTask(
         ),
       )
     } else {
-      openAIConversationThread = addPrompts(
+      msgs = addPrompts(
         lastTaskBeforeChatCompletion,
         toolDefs,
         llmSettings,
@@ -122,6 +127,11 @@ export async function processChatTask(
         allowedTools,
         goal,
       )
+      openAIConversationThread = [
+        ...msgs.prependMessages,
+        ...msgs.modifiedOpenAIConversationThread,
+        ...msgs.appendMessages,
+      ]
     }
 
     // TODO: save our "openAIConversationThread" inside debugdb for debuggin
@@ -147,7 +157,7 @@ export async function processChatTask(
         },
       )
 
-      return { chatCompletion: chatCompletion, openAIConversationThread }
+      return { chatCompletion, metaInfo: { openAIConversationThread, msgs: msgs ?? {} } }
     } else {
       throw new TaskProcessingError('The generated chat for chatCompletion is empty!')
     }
@@ -674,7 +684,7 @@ export async function createChatCompletionTool(
       throw new TaskProcessingError(
         `chatCompletion Task needs a parent Task to work! ${currentTask.id}`,
       )
-    const { chatCompletion, openAIConversationThread } = await processChatTask(
+    const { chatCompletion, metaInfo: chatInfo } = await processChatTask(
       goal ?? 'SimpleCompletion',
       allowedTools ?? [],
       toolDefs,
@@ -694,18 +704,21 @@ export async function createChatCompletionTool(
     // parse the response into our own type ...
     const resp = ChatResponseType.safeParse(chatCompletion)
 
-    let metaInfo: TaskNodeMeta = {}
+    let metaInfo: TaskNodeMeta = { taskPrompt: chatInfo }
     // get token usage for this task..
     if (resp.success) {
       console.log('save token usage...')
       // openai & openrouter sends back the exact number of prompt tokens :)
-      metaInfo = await saveTokenUsage(
-        resp.data,
-        openAIConversationThread,
-        toolDefs,
-        lastTaskBeforeChatCompletion.content,
-        llmSettings,
-      )
+      metaInfo = {
+        ...metaInfo,
+        ...(await saveTokenUsage(
+          resp.data,
+          chatInfo.openAIConversationThread,
+          toolDefs,
+          lastTaskBeforeChatCompletion.content,
+          llmSettings,
+        )),
+      }
       // we run this asynchronously, because it fetches data in the
       // background and we don't want to wait here...
       void addTaskCostInformation(resp.data, currentTask.id, llmSettings, apiKeys).then(

@@ -260,10 +260,10 @@ export const TaskNodeMeta = z
         'We can optionally add some raw result data for debugging purposes, e.g. chatcompletion ...',
       ), // Replace with the correct Zod schema if available
     error: z.unknown().optional(),
-    // the taskprompt is the full chat which leads to the result. This is important that we have this
-    // for to debugging reasons...
-    // TODO:remove all openAI references here nd move them into our chatCmpletion function...
-    taskPrompt: z.union([z.array(OpenAIMessage), z.any()]).optional(), // Replace 'z.any()' with the correct Zod type
+    taskPrompt: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('add any prompts that were used for a task...'),
   })
   .partial()
 
