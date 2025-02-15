@@ -36,7 +36,7 @@ async function getPyodide() {
 }
 
 const pythonWorker = {
-  async runPythonScript(this: void, script: string, params?: unknown[]) {
+  runPythonScript: async (script: string, params?: unknown[]) => {
     const pyodide = await getPyodide()
     let result: PythonScriptResult
 

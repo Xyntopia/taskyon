@@ -62,28 +62,27 @@ export async function countToolTokens(functionList: ToolBase[]) {
 
 const nlpWorker = {
   // TODO: make sure, we don't reload models & tokenizers all the time!!
-  async vectorizeText(this: void, text: string, modelName: string) {
+  vectorizeText: async (text: string, modelName: string) => {
     return await getVector(text, modelName)
   },
 
-  async loadVecTokenizer(this: void, modelName: string) {
+  loadVecTokenizer: async (modelName: string) => {
     await loadTokenizer(modelName)
     console.log('tokenizer loaded:', modelName)
   },
 
-  async loadVecModel(this: void, modelName: string) {
+  loadVecModel: async (modelName: string) => {
     await loadModel(modelName)
     console.log('model loaded:', modelName)
   },
 
-  async estimateChatTokens(
-    this: void,
+  estimateChatTokens: async (
     content: TaskNode['content'],
     chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     tools: Record<string, ToolBase>,
     allowedTools?: string[],
     chatResult?: string,
-  ): Promise<TaskNodeMeta['estimatedTokens']> {
+  ): Promise<TaskNodeMeta['estimatedTokens']> => {
     const functions: ToolBase[] = mapFunctionNames(allowedTools || [], tools)
     // TODO: convert task.content into a legitimate string first, using the
     //       "original" functions toshow what actually gets sent to the LLM!
