@@ -267,10 +267,55 @@ function convertToToolCommandString(tool: ToolBase): string {
 
       if (param && typeof param === 'object' && 'type' in param) {
         const argKey = key
-        // if param.type is an array, it means, multiple types are accepted
-        args[argKey] = Array.isArray(param.type)
-          ? param.type.map(String).join(', ')
-          : String(param.type)
+
+        // Handle enum types
+        if (param.enum) {
+          args[argKey] = `enum: ${(param.enum as string[]).join(', ')}`
+        } else {
+          // Handle other types
+          args[argKey] = Array.isArray(param.type)
+            ? param.type.map(String).join(', ')
+            : String(param.type)
+        }
+
+        // Handle default values
+        if ('default' in param) {
+          args[`${argKey} default`] = String(param.default)
+        }
+
+        // Handle additional properties
+        if ('minimum' in param) {
+          args[`${argKey} minimum`] = String(param.minimum)
+        }
+        if ('maximum' in param) {
+          args[`${argKey} maximum`] = String(param.maximum)
+        }
+        if ('pattern' in param) {
+          args[`${argKey} pattern`] = String(param.pattern)
+        }
+
+        // Handle nested objects
+        if (param.type === 'object' && param.properties) {
+          Object.entries(param.properties).forEach(([nestedKey, nestedParam]) => {
+            if (nestedParam && typeof nestedParam !== 'boolean' && 'type' in nestedParam) {
+              const nestedArgKey = `${argKey}.${nestedKey}`
+              args[nestedArgKey] = Array.isArray(nestedParam.type)
+                ? nestedParam.type.map(String).join(', ')
+                : String(nestedParam.type)
+            }
+          })
+        }
+
+        // Handle array items
+        if (param.type === 'array' && param.items) {
+          const itemsType =
+            param.items && typeof param.items === 'object' && 'type' in param.items
+              ? Array.isArray(param.items.type)
+                ? param.items.type.map(String).join(', ')
+                : String(param.items.type)
+              : 'unknown'
+          args[`${argKey} items`] = itemsType
+        }
       }
     })
   }
