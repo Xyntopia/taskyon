@@ -66,19 +66,16 @@
             </p>
           </q-expansion-item>
         </div>
-        <div v-else-if="task.content.type === 'message'" class="col">
-          <q-expansion-item
-            v-if="taskFunction"
-            dense
-            :icon="mdiTools"
-            :label="`function: ${taskFunction.name}`"
-          >
+        <div v-else-if="task.content.type === 'tooldefinition'">
+          <q-expansion-item dense :icon="mdiTools" :label="`function: ${task.content.data.name}`">
             <p style="white-space: pre-wrap">
               {{ task.content.data }}
             </p>
           </q-expansion-item>
+        </div>
+        <div v-else-if="task.content.type === 'message'" class="col">
           <ty-markdown
-            v-else-if="state.taskState[task.id]?.markdownEnabled != false"
+            v-if="state.taskState[task.id]?.markdownEnabled != false"
             no-line-numbers
             style="min-width: 50px"
             :src="task.content.data"
@@ -241,7 +238,7 @@
 import ToolResultWidget from 'src/components/taskyon/ToolResultWidget.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
-import { TaskNode, partialTaskDraft, ToolBase } from 'src/modules/taskyon/types'
+import { TaskNode, partialTaskDraft } from 'src/modules/taskyon/types'
 import tyMarkdown from '../tyMarkdown.vue'
 import { computed, ref } from 'vue'
 import { type FileMappingDocType } from 'src/modules/taskyon/rxdb'
@@ -297,20 +294,6 @@ if (props.task.content.type === 'files') {
     });*/
   })(props.task.content.data)
 }
-
-// TODO: this should be a "normal" function...
-const taskFunction = computed(() => {
-  if (props.task.label?.includes('function') && props.task.content.type === 'message') {
-    try {
-      const res = ToolBase.safeParse(JSON.parse(props.task.content.data))
-      return res.success ? res.data : undefined
-    } catch {
-      return undefined
-    }
-  } else {
-    return undefined
-  }
-})
 
 async function taskDraftFromTask(taskId: string) {
   // we are copying the current task with json stringify

@@ -6,7 +6,7 @@ import {
   type InternalTool,
   type internalToolFunctionSchema,
 } from '../taskyon/tools'
-import { match } from 'ts-pattern'
+import { match, P } from 'ts-pattern'
 import { TaskProcessingError } from '../taskyon/types'
 import { sleep } from '../utils'
 
@@ -95,7 +95,8 @@ export const toolCreationWizard = createTool({
     properties: {
       step: {
         type: 'string',
-        enum: ['parsing'],
+        enum: ['parsing', 'start'],
+        description: 'leave out this parameter, if you are just starting the wizard...',
       },
     },
   } as const,
@@ -105,7 +106,7 @@ export const toolCreationWizard = createTool({
     match(step)
       .returnType<taskResult | Promise<taskResult>>()
       // "undefined" is the first step and how we start :)
-      .with(undefined, () => {
+      .with(P.union(P.nullish, P.string.includes('init'), P.string.includes('start')), () => {
         console.log('starting function creation wizard')
         console.log('Prompting for tool creation...')
         return makeTaskResult([
@@ -144,7 +145,7 @@ export const toolCreationWizard = createTool({
       .otherwise(() => {
         console.log('no state spcifi')
         throw new TaskProcessingError(
-          "toolCreationWizard doesn't know what to do with this step...",
+          `The tool doesn't know what to do with this step... available steps are: 'parsing', if you are just starting, don't specify any parameters... `,
         )
       }),
   description:
