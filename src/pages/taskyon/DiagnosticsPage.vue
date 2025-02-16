@@ -46,6 +46,7 @@ import {
 import { useGdrive } from 'src/modules/gdrive'
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
+import { chatThreadFromTaskId } from 'src/modules/tools/chatCompletionTool'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -61,7 +62,8 @@ async function completionMessage() {
     tyChat.taskIdChain = await tm.getTaskIdChain(state.llmSettings.selectedTaskId)
     const task = await (await tystate.getTaskManager()).getTask(state.llmSettings.selectedTaskId)
     if (task) {
-      const res = await generateCompleteChat(task, state.llmSettings, tm)
+      const toolDefs = await tm.updateToolDefinitions(false)
+      const res = await chatThreadFromTaskId(tm, task.id, state.llmSettings, toolDefs)
       tyChat.thread = res
     }
   }
@@ -118,6 +120,14 @@ async function generateReport(details = false, onlyFirst = false) {
     details,
   )
 
+  diagnostics.value += await runTest('markdown_generation', markdownGeneration, details)
+
+  diagnostics.value += await runTest('test_token_counter', testEstimateChatTokens, details)
+  diagnostics.value += await runTest('test_vectorization', testVectorizeText, details)
+
+  diagnostics.value += await runTest('taskyon_data', getData, details)
+
+  // we run this test at the end, because sometimes it just keeps blocking?
   diagnostics.value += await runTest(
     'gdrive_upload',
     async () => {
@@ -140,13 +150,6 @@ async function generateReport(details = false, onlyFirst = false) {
     },
     details,
   )
-
-  diagnostics.value += await runTest('markdown_generation', markdownGeneration, details)
-
-  diagnostics.value += await runTest('test_token_counter', testEstimateChatTokens, details)
-  diagnostics.value += await runTest('test_vectorization', testVectorizeText, details)
-
-  diagnostics.value += await runTest('taskyon_data', getData, details)
 
   console.log('diagnostics:', diagnostics.value)
 }

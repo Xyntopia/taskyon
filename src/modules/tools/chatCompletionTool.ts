@@ -80,90 +80,102 @@ export async function processChatTask(
       `api doesn't exist! ${llmSettings.selectedApi || 'no api selected!'}`,
     )
   }
-  const selectedModel = configuration.model
-  if (selectedModel) {
-    // TODO: this seems to be a little funny, why are we doing this? ^^
-    api.selectedModel = selectedModel
-    console.log('execute chat completion tool with prompt:', currentTask)
-    //TODO: we can create more things here like giving it context form other tasks, lookup
-    //      main objective, previous tasks etc....
-    // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
-    const taskIdChain = await taskManager.getTaskIdChain(currentTask.id)
-    let openAIConversationThread = await buildChatThread(
-      llmSettings.tryUsingVisionModels,
-      llmSettings.enableOpenAiTools,
+  // we do the following, because "api" is required by our callLLM function.
+  // TODO: explicitly get the api as a parameter in this function vs implicitly getting it form llmsettings...
+  api.selectedModel = configuration.model
+  console.log('execute chat completion tool with prompt:', currentTask)
+  //TODO: we can create more things here like giving it context form other tasks, lookup
+  //      main objective, previous tasks etc....
+  // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
+  let openAIConversationThread = await chatThreadFromTaskId(
+    taskManager,
+    currentTask.id,
+    llmSettings,
+    toolDefs,
+  )
+
+  // TODO: split llmSettings.enableOpenAiTools settings from addPrompts for refactoring
+  // TODO: split "base" prompt from "addPrompts"  and maybe have a separate function for each
+  //       goal...
+  let msgs: ReturnType<typeof addPrompts> = {
+    prependMessages: [],
+    modifiedOpenAIConversationThread: [],
+    appendMessages: [],
+  }
+  if (prompts.length > 0) {
+    // TODO: add schema to custom prompts...
+    openAIConversationThread.push(
+      ...prompts.map(
+        (prompt) =>
+          ({
+            role: 'user',
+            content: prompt,
+          }) as OpenAI.ChatCompletionMessageParam,
+      ),
+    )
+  } else {
+    msgs = addPrompts(
+      lastTaskBeforeChatCompletion,
       toolDefs,
-      taskIdChain,
-      taskManager.getTask,
-      taskManager.getFileMappingByUuid,
-      taskManager.getFile,
+      llmSettings,
+      openAIConversationThread,
+      allowedTools,
+      goal,
+    )
+    openAIConversationThread = [
+      ...msgs.prependMessages,
+      ...msgs.modifiedOpenAIConversationThread,
+      ...msgs.appendMessages,
+    ]
+  }
+
+  // TODO: save our "openAIConversationThread" inside debugdb for debuggin
+
+  let tools: OpenAI.ChatCompletionTool[] = []
+  if (llmSettings.enableOpenAiTools) {
+    tools = generateOpenAIToolDeclarations(llmSettings.allowedTools || [], toolDefs)
+  }
+
+  if (openAIConversationThread.length > 0) {
+    const chatCompletion = await callLLM(
+      openAIConversationThread,
+      tools,
+      api,
+      llmSettings.siteUrl,
+      apiKey,
+      // TODO: if the task runs in the "foreground", stream it :)
+      // task.id == llmSettings.selectedTaskId ? true : false, // this doesn't work, for some reason it doesn't always detect if we're running something in the forground...
+      true, // for now, we always want to stream our task...
+      streamTracker, // track incoming streams...
+      () => {
+        return taskWorkerController.isInterrupted()
+      },
     )
 
-    // TODO: split llmSettings.enableOpenAiTools settings from addPrompts for refactoring
-    // TODO: split "base" prompt from "addPrompts"  and maybe have a separate function for each
-    //       goal...
-    let msgs: ReturnType<typeof addPrompts> = {
-      prependMessages: [],
-      modifiedOpenAIConversationThread: [],
-      appendMessages: [],
-    }
-    if (prompts.length > 0) {
-      // TODO: add schema to custom prompts...
-      openAIConversationThread.push(
-        ...prompts.map(
-          (prompt) =>
-            ({
-              role: 'user',
-              content: prompt,
-            }) as OpenAI.ChatCompletionMessageParam,
-        ),
-      )
-    } else {
-      msgs = addPrompts(
-        lastTaskBeforeChatCompletion,
-        toolDefs,
-        llmSettings,
-        openAIConversationThread,
-        allowedTools,
-        goal,
-      )
-      openAIConversationThread = [
-        ...msgs.prependMessages,
-        ...msgs.modifiedOpenAIConversationThread,
-        ...msgs.appendMessages,
-      ]
-    }
-
-    // TODO: save our "openAIConversationThread" inside debugdb for debuggin
-
-    let tools: OpenAI.ChatCompletionTool[] = []
-    if (llmSettings.enableOpenAiTools) {
-      tools = generateOpenAIToolDeclarations(llmSettings.allowedTools || [], toolDefs)
-    }
-
-    if (openAIConversationThread.length > 0) {
-      const chatCompletion = await callLLM(
-        openAIConversationThread,
-        tools,
-        api,
-        llmSettings.siteUrl,
-        apiKey,
-        // TODO: if the task runs in the "foreground", stream it :)
-        // task.id == llmSettings.selectedTaskId ? true : false, // this doesn't work, for some reason it doesn't always detect if we're running something in the forground...
-        true, // for now, we always want to stream our task...
-        streamTracker, // track incoming streams...
-        () => {
-          return taskWorkerController.isInterrupted()
-        },
-      )
-
-      return { chatCompletion, metaInfo: { openAIConversationThread, msgs: msgs ?? {} } }
-    } else {
-      throw new TaskProcessingError('The generated chat for chatCompletion is empty!')
-    }
+    return { chatCompletion, metaInfo: { openAIConversationThread, msgs: msgs ?? {} } }
   } else {
-    throw new TaskProcessingError('Task has no inference model selected!')
+    throw new TaskProcessingError('The generated chat for chatCompletion is empty!')
   }
+}
+
+// we use this function here in other spots as well...
+export async function chatThreadFromTaskId(
+  taskManager: TyTaskManager,
+  id: string,
+  llmSettings: llmSettings,
+  toolDefs: Record<string, ToolBase>,
+) {
+  const taskIdChain = await taskManager.getTaskIdChain(id)
+  const openAIConversationThread = await buildChatThread(
+    llmSettings.tryUsingVisionModels,
+    llmSettings.enableOpenAiTools,
+    toolDefs,
+    taskIdChain,
+    taskManager.getTask,
+    taskManager.getFileMappingByUuid,
+    taskManager.getFile,
+  )
+  return openAIConversationThread
 }
 
 async function addTaskCostInformation(
