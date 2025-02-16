@@ -83,10 +83,11 @@ const nlpWorker = {
     allowedTools?: string[],
     chatResult?: string,
   ): Promise<TaskNodeMeta['estimatedTokens']> => {
+    //console.log('estimate chat tokens...')
     const functions: ToolBase[] = mapFunctionNames(allowedTools || [], tools)
     // TODO: convert task.content into a legitimate string first, using the
     //       "original" functions toshow what actually gets sent to the LLM!
-    const contentStr = JSON.stringify(Object.values(content)[0])
+    const contentStr = JSON.stringify(content.data)
     const singlePromptTokens = await countStringTokens(contentStr)
     const promptTokens = await countChatTokens(chat)
     const functionTokens = Math.floor((await countToolTokens(functions)) * 0.7)

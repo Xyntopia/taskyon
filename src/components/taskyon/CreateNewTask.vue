@@ -478,41 +478,32 @@ const estimatedTokens = ref<number>(0)
 watchDebounced(
   [() => state.llmSettings.taskDraft.content, () => state.llmSettings.selectedTaskId],
   async () => {
-    const accumulatedTokens = 0
-    const accumulatedEstimated = 0
-    const messages: OpenAI.ChatCompletionMessageParam[] = []
-    /*if (state.llmSettings.selectedTaskId) {
+    console.log('calculate tokens...')
+    let taskTokens = 0
+    if (state.llmSettings.selectedTaskId) {
       const tm = await tystate.getTaskManager()
-      // we only need the last 2 or 3 tasks in order to check for
-      const chain = await tm.getTaskIdChain(state.llmSettings.selectedTaskId, 3)
+      // we are getting quiet a few tasks here  in order to catch at least one chatCompletion task...
+      const chain = await tm.getTaskIdChain(state.llmSettings.selectedTaskId, 15)
 
-      // Assume the highest token count is the last relevant one
+      // Assume the task with the last available token count is the relevant one
       for (const taskId of chain) {
-        const task = await tm.getTask(taskId)
-        // TODO: get the highest token count
-        //const taskTokens = task?.debugging.taskTokens ?? 0
-        const taskTokensEstimated =
-          (task?.debugging.estimatedTokens?.promptTokens ?? 0) +
-          (task?.debugging.estimatedTokens?.resultTokens ?? 0)
-        if (taskTokens > accumulatedTokens) {
-          accumulatedTokens = taskTokens
+        const taskMeta = await tm.debugDb.get(taskId)
+        taskTokens = taskMeta?.taskTokens ?? 0
+        if (taskTokens === 0) {
+          taskTokens =
+            (taskMeta?.estimatedTokens?.promptTokens ?? 0) +
+            (taskMeta?.estimatedTokens?.resultTokens ?? 0)
         }
-        if (taskTokensEstimated > accumulatedEstimated) {
-          accumulatedEstimated = taskTokensEstimated
-        }
+        if (taskTokens != 0) break
       }
-    } else {
-      //messages = addPrompts(currentnewTask.value, toolCollection.value, state.llmSettings, [], [])
-      console.warn(
-        'TODO: get rid of this, we would rather simply "simulate" the entire chat using the actual chat tool...',
-      )
-      messages = []
-    }*/
+    }
 
     // we need to deepCopy both ref values, so that we can send them to the thread!!
     const estimated = await estimateChatTokens(
       deepCopy(currentnewTask.value.content),
-      messages,
+      // we don't do the next one, as we are already taking the actual prompt tokens
+      // from a  previous task
+      [] as OpenAI.ChatCompletionMessageParam[],
       deepCopy(toolCollection.value),
       deepCopy(state.llmSettings.allowedTools),
     )
@@ -520,7 +511,7 @@ watchDebounced(
     const newTokens = Object.values(estimated || {}).reduce((pn, cn) => (pn ?? 0) + (cn ?? 0), 0)
 
     // Tokenize the message
-    estimatedTokens.value = (accumulatedTokens || accumulatedEstimated) + (newTokens ?? 0)
+    estimatedTokens.value = taskTokens + (newTokens ?? 0)
   },
   { debounce: 1000, maxWait: 1500, immediate: true },
 )
