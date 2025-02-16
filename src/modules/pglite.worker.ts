@@ -15,6 +15,8 @@ void worker({
       extensions: {
         vector,
       },
+      // https://pglite.dev/docs/api
+      relaxedDurability: true, // this speeds up our pglite database significantly when run in indexdb
     })
   },
 })
