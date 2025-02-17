@@ -1,11 +1,6 @@
 import { dump } from 'js-yaml'
-import type {
-  tyYamlObjectRepresentation,
-  tyYamlRepresentation} from './zodUtils';
-import {
-  convertToYamlWComments,
-  zodToYAMLObject,
-} from './zodUtils'
+import type { tyYamlObjectRepresentation, tyYamlRepresentation } from './zodUtils'
+import { convertToYamlWComments, zodToYAMLObject } from './zodUtils'
 import { z } from 'zod'
 
 // Helper function to convert a Zod schema to an OpenAPI schema

@@ -1,5 +1,6 @@
 import type { taskResult } from '../taskyon/tools'
 import {
+  craeteToolJsonSchema,
   createTool,
   exampleTool,
   makeTaskResult,
@@ -9,6 +10,8 @@ import {
 import { match, P } from 'ts-pattern'
 import { TaskProcessingError } from '../taskyon/types'
 import { sleep } from '../utils'
+import { createChatCompletionTask } from './chatCompletionTool'
+import { dump } from 'js-yaml'
 
 // the following tool is "self-referential" and because of this we can not initialize it yet
 // we instead write a factory function which creates this tool using a reference to our tools
@@ -106,17 +109,34 @@ export const toolCreationWizard = createTool({
     match(step)
       .returnType<taskResult | Promise<taskResult>>()
       // "undefined" is the first step and how we start :)
-      .with(P.union(P.nullish, P.string.includes('init'), P.string.includes('start')), () => {
+      .with(P.union(P.nullish, P.string.includes('init'), P.string.includes('start')), async () => {
         console.log('starting function creation wizard')
         console.log('Prompting for tool creation...')
+        const toolJsonSchema = await craeteToolJsonSchema()
+
         return makeTaskResult([
           [
             {
-              role: 'system',
-              content: { type: 'message', data: 'successfully started tool creation!' },
+              role: 'assistant',
+              content: {
+                type: 'message',
+                data: 'I am gathering examples for the tool requested by the user...',
+              },
             },
             {
               role: 'system',
+              content: {
+                type: 'message',
+                data: `The required schema for creating a tool looks like this:
+                ${dump(toolJsonSchema)}`,
+              },
+            },
+            createChatCompletionTask({
+              prompts: ['Now, with the examples given to you, can you create a new tool?'],
+              schema: { toolJsonSchema },
+            }),
+            {
+              role: 'function',
               content: {
                 type: 'functioncall',
                 data: { name: 'toolCreationWizard', arguments: { step: 'parsing' } },

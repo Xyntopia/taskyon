@@ -42,6 +42,8 @@ import type { FileMappingDocType } from '../taskyon/rxdb'
 import { dump, load } from 'js-yaml'
 //import type { JSONSchema7Type as JsonSchema } from 'json-schema'
 import type { JSONSchemaType } from 'ajv'
+import type { JsonSchema7Type } from 'zod-to-json-schema'
+import type { JSONSchema7Array, JSONSchema7Object } from 'json-schema'
 
 type tyJsonSchema = JSONSchemaType<unknown>
 
@@ -637,7 +639,14 @@ type ccArguments = {
   llmTools?: boolean
   allowedTools?: string[]
   prompts?: string[]
-  schema?: tyJsonSchema
+  schema?:
+    | tyJsonSchema
+    | JsonSchema7Type
+    | string
+    | number
+    | boolean
+    | JSONSchema7Object
+    | JSONSchema7Array
 }
 
 export function createChatCompletionTask(args?: ccArguments): partialTaskDraft {

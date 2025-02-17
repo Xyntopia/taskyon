@@ -10,6 +10,7 @@ import type { YamlRepresentation } from '../zodUtils'
 import { convertToYamlWComments } from '../zodUtils'
 import { executeCodeInIframe } from './iframeWorker'
 import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
+import type { JSONSchema7Object, JSONSchema7Type } from 'json-schema'
 
 const taskMarker = '*TY_TASKRESULT*'
 
@@ -377,3 +378,27 @@ export const exampleTool = createTool({
   },
   code: "({parameter1, parameter2 = 'default parameter :)'}) => {return parameter1 + ' ' + parameter2;}",
 })
+
+export async function craeteToolJsonSchema() {
+  const { zodToJsonSchema } = await import('zod-to-json-schema')
+  const JSON_SCHEMA_PLACEHOLDER: JSONSchema7Type = { type: 'JSON_Schema' }
+
+  // Function to convert Zod schema to JSON Schema dynamically
+  const convertZodToJsonSchema = (schema: z.ZodTypeAny) => {
+    return zodToJsonSchema(schema, {
+      // Transform function to replace `JSONSchemaObjectSchema`
+      $refStrategy: 'none',
+      definitionPath: '#/definitions',
+    })
+  }
+
+  const toolBaseJsonSchema = convertZodToJsonSchema(ToolBase) as JSONSchema7Type & {
+    properties: Record<string, unknown>
+  }
+  if (toolBaseJsonSchema) {
+    toolBaseJsonSchema.properties.parameters = JSON_SCHEMA_PLACEHOLDER
+    delete (toolBaseJsonSchema as JSONSchema7Object).$schema
+  }
+
+  return toolBaseJsonSchema
+}

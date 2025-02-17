@@ -46,7 +46,10 @@ import {
 import { useGdrive } from 'src/modules/gdrive'
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
+import { ToolBase } from 'src/modules/taskyon/types'
 import { chatThreadFromTaskId } from 'src/modules/tools/chatCompletionTool'
+import { zodToYamlString } from 'src/modules/yamlUtils'
+import { craeteToolJsonSchema } from 'src/modules/taskyon/tools'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -99,6 +102,27 @@ async function generateReport(details = false, onlyFirst = false) {
 
   diagnostics.value = `report_date: ${new Date().toISOString()}\n`
 
+  diagnostics.value += await runTest(
+    'json schemas',
+    async () => {
+      console.log('create test schemas!')
+      const { zodToJsonSchema } = await import('zod-to-json-schema')
+
+      return {
+        toolBaseJsonSchema: await craeteToolJsonSchema(),
+        toolJsonSchema: zodToJsonSchema(ToolBase),
+        yamlString: zodToYamlString(ToolBase),
+      }
+    },
+    details,
+  )
+
+  // move this line behind the "first test"  in order to be able to test only the first test :)
+  if (onlyFirst) {
+    console.log('diagnostics:', diagnostics.value)
+    return
+  }
+
   diagnostics.value += await runTest('pg lite', testPGLite, details)
 
   /*diagnostics.value += await runTest(
@@ -106,11 +130,6 @@ async function generateReport(details = false, onlyFirst = false) {
     testIPFS,
     details,
   );*/
-
-  if (onlyFirst) {
-    console.log('diagnostics:', diagnostics.value)
-    return
-  }
 
   diagnostics.value += await runTest('testTransformersPipeline', testTransformersPipeline, details)
 

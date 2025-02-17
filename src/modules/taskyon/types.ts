@@ -136,22 +136,24 @@ export interface OpenRouterGenerationInfo {
   usage: number
 }
 
-export const FunctionName = z
-  .string()
-  .refine(
-    (val) => /^[a-zA-Z0-9_-]+$/.test(val),
-    (val) => ({
-      message: `The function/tool name ${val} contains illegal characters. It has to fulfill '^[a-zA-Z0-9_-]+$'`,
-    }),
-  )
-  .describe('name of function')
-export type FunctionName = z.infer<typeof FunctionName>
+const FunctionName = z.string().refine(
+  (val) => /^[a-zA-Z0-9_-]+$/.test(val),
+  (val) => ({
+    message: `The function/tool name ${val} contains illegal characters. It has to fulfill '^[a-zA-Z0-9_-]+$'`,
+  }),
+)
+type FunctionName = z.infer<typeof FunctionName>
 
 const renderOption = z.union([z.boolean(), z.function()])
 export const ToolBase = z.object({
-  description: z.string(),
-  longDescription: z.string().optional(),
-  name: FunctionName,
+  description: z
+    .string()
+    .describe('A short description about the tool so that an LLM knows when to use it...'),
+  longDescription: z
+    .string()
+    .optional()
+    .describe('An optional longer description for more complicated operations with this tool.'),
+  name: FunctionName.describe('Name of tool. Has to fulfill: /^[a-zA-Z0-9_-]+$/'),
   renderOptions: z
     .object({ hideChat: renderOption, hideLlm: renderOption })
     .partial()
@@ -159,11 +161,13 @@ export const ToolBase = z.object({
     .describe(
       `Provide a render function to render content the of this tool as text for an AI or
 a chat window (e.g. an LLM). If we don't provide any render function, tools can still see all the information
-and do somthing with it. But most tools will simply not render it for their purpose..
+and do something with it. But most tools will simply not render it for their purpose..
 if render options aren't given taskyon chtcompletion function and chatwindow assumes them to be "true".
 `,
     ),
-  parameters: JSONSchemaObjectSchema,
+  parameters: JSONSchemaObjectSchema.describe(
+    'A json schema object describing the parameters of the function',
+  ),
   code: z
     .string()
     .optional()
