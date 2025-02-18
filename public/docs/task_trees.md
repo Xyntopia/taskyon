@@ -19,14 +19,12 @@ This whitepaper outlines Taskyon’s architecture, cryptographic guarantees, and
 - **Subtasks and Results:** New tasks are appended as child TaskNodes, preserving context while keeping each node immutable.
 - **Task Execution and Propagation:** Task results propagate upwards in the tree, similar to function return values in programming.
 
-Below is an excerpt from the whitepaper that incorporates your new points. You can integrate it as a new subsection under the “TaskTree Structure” section (or as a new section, depending on your organization):
-
 #### Task Chain Processing and Parallelization
 
 Taskyon’s execution model distinguishes between sequential processing within a single task chain and parallel execution across independent chains. Key aspects include:
 
 - **Sequential Processing within Chains:**  
-  Tasks within a single chain are processed one after another—each task consumes the output of its predecessor, ensuring a coherent, step-by-step evolution of state.
+  Tasks within a single chain are processed one after another—each task consumes the output of its predecessor, ensuring a coherent, step-by-step evolution of state. Each task within a sequential chain has to wait to be processed until all subtasks of the previous chains have returned (produce a "return" task).
 
 - **Parallel Execution of Subchains:**  
   While individual chains maintain sequential execution, distinct chains (or subchains spawned by function tasks) can be processed concurrently, optimizing overall throughput.
@@ -34,7 +32,7 @@ Taskyon’s execution model distinguishes between sequential processing within a
 - **Parent-Child Relationships and Sibling Tasks:**
 
   - Tasks returned from a `functionTask` automatically inherit the originating task’s `parentID` and are counted as subtasks.
-  - User-initiated tasks (e.g. a chatResponse) are added as siblings to the selected leaf task within a specific chat.
+  - User-initiated tasks (e.g. a chatResponse) are added as siblings to the selected leaf "sibling" task within a specific chat.
   - Furthermore, all tasks within a function-generated chain are considered siblings, preserving a flat hierarchy within that chain.
 
 - **Context Rendering for LLM Inference:**  
@@ -42,6 +40,7 @@ Taskyon’s execution model distinguishes between sequential processing within a
   - When only one subtask chain exists, it may be rendered directly.
   - Some tasks or functions can indicate that they should not be rendered in the chat (e.g. `chatCompletion` itself).
   - Configurable options can be provided to `chatCompletion` so that, in situations like debugging errors, detailed rendering is enabled, whereas in task planning only top-level information is presented.
+  - we determine the correct sequence of messages through parentIds & priorIds.
 
 ## 3. Data Structures
 

@@ -22,8 +22,9 @@ The Task Transitions Map illustrates the flow and transitions of various content
 We expect all function calls to do three things:
 
 - either return a result
-- return a taskchain where the last task is a functionTask
-- return a taskchain with the last task a "terminatino" task..
+- return a taskchain where the last task is a functionTask in order to signal further processing
+- return a taskchain with the last task a "return" task.. which signals to the parent, that we're done and
+  can return to the parent
 
 #### Workflow Description:
 
