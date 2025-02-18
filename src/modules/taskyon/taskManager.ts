@@ -475,7 +475,8 @@ export function useTyTaskManager(
 
   // because our tasks only have parent IDs defined, we keep a cache of
   // child IDs in order to be able to do faster tree traversals...
-  const priorToNextMap = new Map<string, Set<string>>()
+  const nextSiblingMap = new Map<string, Set<string>>()
+  const parentToChildMap = new Map<string, Set<string>>()
 
   async function unblockedGetTask(taskId: string): Promise<TaskNode | undefined> {
     // Check if the task exists in the local record
@@ -510,9 +511,9 @@ export function useTyTaskManager(
     }
     // Update parent-child cache
     if (task.priorID) {
-      const children = await searchOneChild(task.priorID)
+      const children = await searchNextSibling(task.priorID)
       children.add(task.id)
-      priorToNextMap.set(task.priorID, children)
+      nextSiblingMap.set(task.priorID, children)
     }
     notifySubscribers(task, 'new')
     unlock()
@@ -522,7 +523,7 @@ export function useTyTaskManager(
   // TODO: right now, we can only find the "first" child...
   //       this needs to become better ;). Especially, if we cache this. The first child we have in the cache
   //       will always stay there...
-  async function searchOneChild(priorID: string): Promise<Set<string>> {
+  async function searchNextSibling(priorID: string): Promise<Set<string>> {
     // Check if children are already cached in the map
     // if we get an empty set (meaning we have a leaf task)
     // we assume, thats actually OK.  because the db query returned this. it
@@ -530,7 +531,7 @@ export function useTyTaskManager(
     // the only problem here is, that this is asynchronous..  so in the future we might run into problems
     // where we need to lock the parentToChildMap if multiple processes want to access it.
     // but eventually the parentToChildrenMap will be updated with the additional children..
-    let children = priorToNextMap.get(priorID)
+    let children = nextSiblingMap.get(priorID)
 
     if (!children && taskyonDB) {
       // Fallback to database query if not in the cache
@@ -546,7 +547,7 @@ export function useTyTaskManager(
       children = new Set(dbChildren)
 
       // Cache the result for future lookups
-      priorToNextMap.set(priorID, children)
+      nextSiblingMap.set(priorID, children)
       return children
     }
     return children ?? new Set()
@@ -565,7 +566,7 @@ export function useTyTaskManager(
   // more difficult
   // TODO: when changing the updateTask to injecting a task with a different
   //       ID, what we can do is to have our update task point to its "parent" hash
-  //       AND also dvertise the update for the parent task! It is also important
+  //       AND also advertise the update for the parent task! It is also important
   //       that we return the new id...
   async function updateTask(
     updateData: Partial<TaskNode> & { id: string },
@@ -613,7 +614,7 @@ export function useTyTaskManager(
       await taskyonDB.remove()
     }
     tasksCache.clear()
-    priorToNextMap.clear()
+    nextSiblingMap.clear()
     notifySubscribers(undefined, 'deleteAll')
   }
 
@@ -626,7 +627,7 @@ export function useTyTaskManager(
     const task = tasksCache.get(taskId)
     if (task && task.priorID) {
       // deleting the task from our children map...
-      const children = await searchOneChild(task.priorID)
+      const children = await searchNextSibling(task.priorID)
       if (children) children.delete(taskId)
     }
     tasksCache.delete(taskId)
@@ -658,7 +659,7 @@ export function useTyTaskManager(
 
       // Check if the parent task has more than one child
       if (currentTask.priorID) {
-        const childrenIDs = await searchOneChild(currentTask.priorID)
+        const childrenIDs = await searchNextSibling(currentTask.priorID)
         if (childrenIDs.size > 1) {
           // in this case we need to update the parent with the fewer children
           break // Stop deletion if the parent task has more than one child. We only want to delete this branch...
@@ -748,7 +749,7 @@ export function useTyTaskManager(
    * @returns {Promise<string[]>} - An array of IDs of the leaf tasks.
    *
    */
-  async function findOneLeafTask(
+  async function findOneSiblingLeafTask(
     taskId: string,
     getTask: TyTaskManager['getTask'],
   ): Promise<string[]> {
@@ -760,7 +761,7 @@ export function useTyTaskManager(
       const currentTask = await getTask(currentTaskId)
       if (!currentTask) continue
 
-      const children = await searchOneChild(currentTaskId)
+      const children = await searchNextSibling(currentTaskId)
 
       // If no children are found, it's a leaf
       if (children.size === 0) {
@@ -987,8 +988,8 @@ export function useTyTaskManager(
     resetTaskVectors,
     countVecs,
     filteredVectorSearch,
-    findOneLeafTask,
-    searchOneChild,
+    findOneSiblingLeafTask,
+    searchNextSibling,
     searchSimilarTasks,
     loadYamlConversation,
   }

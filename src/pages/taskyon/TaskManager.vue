@@ -245,7 +245,7 @@ const initialPagination = {
 
 async function setConversation(taskId: string) {
   const taskManager = await tystate.getTaskManager()
-  const leafTasks = await taskManager.findOneLeafTask(taskId, (taskID) =>
+  const leafTasks = await taskManager.findOneSiblingLeafTask(taskId, (taskID) =>
     taskManager.getTask(taskID),
   )
   console.log('set conversation to', leafTasks[0])
