@@ -475,7 +475,7 @@ export function useTyTaskManager(
 
   // because our tasks only have parent IDs defined, we keep a cache of
   // child IDs in order to be able to do faster tree traversals...
-  const parentToChildrenMap = new Map<string, Set<string>>()
+  const priorToNextMap = new Map<string, Set<string>>()
 
   async function unblockedGetTask(taskId: string): Promise<TaskNode | undefined> {
     // Check if the task exists in the local record
@@ -512,7 +512,7 @@ export function useTyTaskManager(
     if (task.priorID) {
       const children = await searchOneChild(task.priorID)
       children.add(task.id)
-      parentToChildrenMap.set(task.priorID, children)
+      priorToNextMap.set(task.priorID, children)
     }
     notifySubscribers(task, 'new')
     unlock()
@@ -530,7 +530,7 @@ export function useTyTaskManager(
     // the only problem here is, that this is asynchronous..  so in the future we might run into problems
     // where we need to lock the parentToChildMap if multiple processes want to access it.
     // but eventually the parentToChildrenMap will be updated with the additional children..
-    let children = parentToChildrenMap.get(priorID)
+    let children = priorToNextMap.get(priorID)
 
     if (!children && taskyonDB) {
       // Fallback to database query if not in the cache
@@ -546,7 +546,7 @@ export function useTyTaskManager(
       children = new Set(dbChildren)
 
       // Cache the result for future lookups
-      parentToChildrenMap.set(priorID, children)
+      priorToNextMap.set(priorID, children)
       return children
     }
     return children ?? new Set()
@@ -613,7 +613,7 @@ export function useTyTaskManager(
       await taskyonDB.remove()
     }
     tasksCache.clear()
-    parentToChildrenMap.clear()
+    priorToNextMap.clear()
     notifySubscribers(undefined, 'deleteAll')
   }
 
@@ -747,8 +747,6 @@ export function useTyTaskManager(
    * @param {Function} getTask - Function to retrieve a task by its ID.
    * @returns {Promise<string[]>} - An array of IDs of the leaf tasks.
    *
-   * TODO: we need to change this to become independent from "childrenIDs"
-   *       an easy algoithm would be:  build a map of all tasks and check whether they have a parent or not.
    */
   async function findOneLeafTask(
     taskId: string,
