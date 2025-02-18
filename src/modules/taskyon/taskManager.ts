@@ -948,6 +948,7 @@ export function useTyTaskManager(
     persist = true,
   ) {
     let lastTaskId = priorID
+    const taskIdList: string[] = []
     for (const task of taskList) {
       lastTaskId = await addPartialTask2Tree(
         task,
@@ -955,16 +956,17 @@ export function useTyTaskManager(
         duplicateTaskName,
         persist,
       )
+      taskIdList.push(lastTaskId)
     }
-    return lastTaskId
+    return taskIdList
   }
 
   async function addMdTaskChain(markdown?: string) {
     console.log('adding new Markdown tasks!!')
     if (markdown) {
       const taskList = processMarkdown(markdown)
-      const lastTaskId = await addTaskChain(taskList)
-      return lastTaskId
+      const taskIdList = await addTaskChain(taskList)
+      return taskIdList.at(-1)
     }
     return undefined
     // TODO: optionally execute the last task...

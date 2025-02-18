@@ -158,6 +158,8 @@ async function processTask(
     // - either return a result
     // - return a taskchain where the last task is a functionTask
     // - return a taskchain with the last task a "terminatino" task..
+    // TODO:   we should also allow tasks which aren't in the list if
+    // other functions call them...
     const newTasks: partialTaskDraft[] = [
       {
         role: 'system',
@@ -213,16 +215,11 @@ export async function runTaskWorker(
           llmSettings.enableOpenAiTools,
         )
 
-        // we make sure to identify all parent tasks from this batch, because
-        // we oly want to execute the leaf tasks..
-        // we can do this, because all of these tasks are newly created. this means, we don't have any
         const addTasks = (finishedTask: TaskNode) => async (taskChain: partialTaskDraft[]) => {
           const immediateExecute = taskWorkerController.isInterrupted() ? false : true
-          const lastTaskId = await taskManager.addTaskChain(taskChain, finishedTask.id)
-          // TODO:  this needs an overhaul..  we want to save tasks only once
-          //        and have them immutable...
-          //        we are doing this by leaving out task results and save the result directly as the content
-          //        of a new task and not i the task itself...
+          // we can already persist all of our tasks here to the taskManager, as
+          // they're immutable.
+          const lastTaskId = (await taskManager.addTaskChain(taskChain, finishedTask.id)).at(-1)
           if (lastTaskId) {
             const lastTask = await taskManager.getTask(lastTaskId)
             // make sure we stop execution of the task chain if we have a termination task
@@ -266,7 +263,7 @@ export async function runTaskWorker(
         llmSettings.allowedTools || [],
         taskManager.debugDb,
       )
-      const errorTaskId = await taskManager.addTaskChain(errorTaskChain, task?.id)
+      const errorTaskId = (await taskManager.addTaskChain(errorTaskChain, task?.id)).at(-1)
 
       // interrupt execution if interrupted flag is shown!
       // this makes sure that results are still saved, even if we stop any
