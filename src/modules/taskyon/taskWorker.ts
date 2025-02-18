@@ -9,7 +9,7 @@ import {
 } from './types'
 import { type TyTaskManager } from './taskManager'
 import { handleFunctionExecution, taskResult } from './tools'
-import { type AsyncQueue, makeSerializable } from '../utils'
+import { type AsyncQueue, createLruCache, makeSerializable } from '../utils'
 import { createChatCompletionTask } from '../tools/chatCompletionTool'
 import type { CrudWrapper } from '../crudWrapper'
 
@@ -157,9 +157,7 @@ async function processTask(
     // We expect all function calls to do three things:
     // - either return a result
     // - return a taskchain where the last task is a functionTask
-    // - return a taskchain with the last task a "terminatino" task..
-    // TODO:   we should also allow tasks which aren't in the list if
-    // other functions call them...
+    // - return a taskchain with the last task a "termination" task..
     const newTasks: partialTaskDraft[] = [
       {
         role: 'system',
@@ -177,6 +175,8 @@ export async function runTaskWorker(
   taskWorkerController: TaskWorkerController,
 ) {
   console.log('entering task worker loop...')
+
+  const finishedTaskIdMap = createLruCache<string, boolean>(10000)
 
   while (true) {
     console.log('waiting for next task!')
@@ -204,38 +204,46 @@ export async function runTaskWorker(
       console.log('processing task:', taskId)
       task = await taskManager.getTask(taskId)
       if (task && !taskWorkerController.isInterrupted()) {
+        if (task.priorID && finishedTaskIdMap.get(task.priorID) !== true) {
+          // TODO: now check manually, if we find the leaf IDs of all subtask chains...
+
+          // we need to wait until all subtasks from its previous tasks are finished before
+          // continuing with this task
+          processTasksQueue.push(task.id)
+          continue
+        }
+        // we want to signal to our cache that this task is now finished and we can continue with its siblings.
+        // this works, because our tasks are immutable so once this is set, it will never change..
+        if (task.parentID && task.content.type === 'return') {
+          finishedTaskIdMap.set(task.parentID, true)
+          continue
+        }
+
+        // TODO: try to get rid of all the llmSettings functionality here..   this should only be relevant for chatCompletion which
+        //       is now a tool! :)
         if (!llmSettings.selectedApi) throw new TaskProcessingError('No AI API selected!!')
         const api = getApiConfigCopy(llmSettings, llmSettings.selectedApi)
         const newTasks: partialTaskDraft[][] = await processTask(
           task,
           taskManager,
           taskWorkerController,
+          // TODO: replace "allowedTools" with "available Tools" in processTask...
           llmSettings.allowedTools || [],
           api?.selectedModel,
           llmSettings.enableOpenAiTools,
         )
 
         const addTasks = (finishedTask: TaskNode) => async (taskChain: partialTaskDraft[]) => {
-          const immediateExecute = taskWorkerController.isInterrupted() ? false : true
           // we can already persist all of our tasks here to the taskManager, as
           // they're immutable.
-          const lastTaskId = (await taskManager.addTaskChain(taskChain, finishedTask.id)).at(-1)
-          if (lastTaskId) {
-            const lastTask = await taskManager.getTask(lastTaskId)
-            // make sure we stop execution of the task chain if we have a termination task
-            if (immediateExecute && lastTask && lastTask.content.type !== 'return') {
-              // TODO: we need processTasksQueue as an argument here (not implicitly adding it to this function...)
-              processTasksQueue.push(lastTaskId)
-            } else {
-              //save task if we don't execute it, because it is already finished :)
-              console.log(`task chain finished at id ${lastTaskId}!`)
-            }
-          }
+          const taskIdList = await taskManager.addTaskChain(taskChain, finishedTask.id)
+          // TODO: we need processTasksQueue as an argument here (not implicitly adding it to this function...) for better FP style
+          taskIdList.forEach((tid) => processTasksQueue.push(tid))
 
           // TODO: add last task to GUI by checking if our current selected task now has this child...
           // TODO: and move this somewhere else!  this function should not be in here...
           //       we could have this check by getting the callback function for new tasks in tystate...
-          llmSettings.selectedTaskId = lastTaskId
+          llmSettings.selectedTaskId = taskIdList.at(-1)
         }
         const taskAdder = addTasks(task)
         void newTasks.map(taskAdder)
