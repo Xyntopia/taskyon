@@ -581,45 +581,45 @@ export function base64UrlDecode(str: string): string {
   return Buffer.from(str, 'base64').toString()
 }
 
-export class AsyncQueue<T> {
-  private queue: T[] = []
-  private resolveWaitingPop?: ((value: T) => void) | undefined
+export function createAsyncQueue<T>() {
+  let queue: T[] = []
+  let resolveWaitingPop: ((value: T) => void) | undefined
 
-  push(item: T) {
-    this.queue.push(item)
-    if (this.resolveWaitingPop) {
-      // Since TypeScript now expects queue.shift() to always return a T,
-      // we need to assure it's not called on an empty array.
-      // The logic ensures it's never empty at this point, but TypeScript doesn't know that.
-      const shiftedItem = this.queue.shift()
+  function push(item: T) {
+    queue.push(item)
+    if (resolveWaitingPop) {
+      const shiftedItem = queue.shift()
       if (shiftedItem !== undefined) {
-        this.resolveWaitingPop(shiftedItem)
+        resolveWaitingPop(shiftedItem)
       }
-      this.resolveWaitingPop = undefined
+      resolveWaitingPop = undefined
     }
   }
 
-  count() {
-    return this.queue.length
+  function count() {
+    return queue.length
   }
 
-  async pop(): Promise<T> {
-    const shiftedItem = this.queue.shift()
+  function pop(): Promise<T> {
+    const shiftedItem = queue.shift()
     if (shiftedItem !== undefined) {
-      return shiftedItem
+      return Promise.resolve(shiftedItem)
     } else {
       return new Promise<T>((resolve) => {
-        this.resolveWaitingPop = resolve
+        resolveWaitingPop = resolve
       })
     }
   }
 
-  clear() {
-    const oldQueue = this.queue
-    this.queue = []
+  function clear() {
+    const oldQueue = queue
+    queue = []
     return oldQueue
   }
+
+  return { push, pop, count, clear }
 }
+export type AsyncQueue<T> = ReturnType<typeof createAsyncQueue<T>>
 
 export function bigIntToString(obj: unknown): unknown {
   if (obj === null) {

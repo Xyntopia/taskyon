@@ -9,7 +9,7 @@ import { loadFile } from 'src/modules/loadFiles'
 // TODO: make webpack automatically add all tool files from /tools/*
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
-import { AsyncQueue, toLowerCaseKeys } from '../utils'
+import { createAsyncQueue, toLowerCaseKeys } from '../utils'
 import { createChatCompletionTool } from '../tools/chatCompletionTool'
 import { getDatabase } from '../pglite.api'
 import { createCrudWrapper } from '../crudWrapper'
@@ -122,7 +122,7 @@ export async function initTaskyon(
   // keys could porentially be reactive here, so in theory, when they change in the GUI,
   // taskyon should automatically pick up on this...
   console.log('starting taskyon worker')
-  const processTasksQueue = new AsyncQueue<string>()
+  const processTasksQueue = createAsyncQueue<string>()
   void runTaskWorker(processTasksQueue, llmSettings, taskManagerInstance, taskWorkerController)
 
   return { taskManagerInstance, processTasksQueue }
