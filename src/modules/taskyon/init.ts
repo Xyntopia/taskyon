@@ -45,9 +45,8 @@ export async function initTaskyon(
     ...EnvironmentTools,
   ]
 
-  const pgldb = await getDatabase('taskyon')
   const debugDb = await createEnhancedCrudWrapper<TaskNodeMeta>(
-    pgldb,
+    await getDatabase('taskyon'),
     {
       tableName: 'debugDb',
     },
