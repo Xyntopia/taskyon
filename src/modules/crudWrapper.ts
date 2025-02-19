@@ -22,15 +22,19 @@ type Row<T> = {
 }
 
 export interface CrudWrapper<T> {
-  set(id: string | number, data: T): Promise<void>
-  get(id: string | number): Promise<T | null>
-  upsert(
+  set: (id: string | number, data: T) => Promise<void>
+  get: (id: string | number) => Promise<T | null>
+  // TODO: the "upsert" strategy is potentially problematic, because
+  //       it leads to inconsistent results across different storages.
+  //       so it would probably be a good idea to only use this in the "combined"
+  //       storage
+  upsert: (
     id: string | number,
     data: T,
     strategy?: 'shallow_merge' | 'replace' | 'deepmerge' | 'native_shallow',
-  ): Promise<void>
-  delete(id: string | number): Promise<void>
-  list(): Promise<Row<T>[]>
+  ) => Promise<void>
+  delete: (id: string | number) => Promise<void>
+  list: () => Promise<Row<T>[]>
 }
 
 export const withLiveCallbacks = <T>(base: CrudWrapper<T>) => {
@@ -68,24 +72,31 @@ export const withLiveCallbacks = <T>(base: CrudWrapper<T>) => {
   }
 }
 
+const withLock =
+  (lockItem: ReturnType<typeof lockMap>['lockItem']) =>
+  async <T>(func: T, id: string | number) => {
+    const unlock = await lockItem(id)
+    try {
+      return func
+    } finally {
+      unlock()
+    }
+  }
+
 export const withLocking = <T>(
   base: CrudWrapper<T>,
   namespace: string = 'task',
 ): CrudWrapper<T> => {
   const { lockItem } = lockMap(namespace)
 
+  const locking = withLock(lockItem)
+
   return {
     ...base,
-    async upsert(id, data, strategy = 'replace') {
-      // Acquire a lock for the given id.
-      const unlock = await lockItem(id)
-      try {
-        return await base.upsert(id, data, strategy)
-      } finally {
-        // Ensure the lock is always released.
-        unlock()
-      }
-    },
+    set: async (...args) => (await locking(base.set, args[0]))(...args),
+    delete: async (...args) => (await locking(base.delete, args[0]))(...args),
+    get: async (...args) => (await locking(base.get, args[0]))(...args),
+    upsert: async (...args) => (await locking(base.upsert, args[0]))(...args),
   }
 }
 
@@ -191,15 +202,25 @@ export const createCrudWrapper = async <T>(
 export const createMapCrudWrapper = <T>(
   storage: Map<string | number, T>,
 ): Promise<CrudWrapper<T>> => {
+  const get = (id: string | number): Promise<T | null> => {
+    return Promise.resolve(storage.has(id) ? storage.get(id)! : null)
+  }
   return Promise.resolve({
+    get,
     set: (id: string | number, data: T): Promise<void> => {
       storage.set(id, data)
       return Promise.resolve()
     },
-    get: (id: string | number): Promise<T | null> => {
-      return Promise.resolve(storage.has(id) ? storage.get(id)! : null)
-    },
-    upsert: (id: string | number, data: T): Promise<void> => {
+    upsert: async (id: string | number, data: T): Promise<void> => {
+      // because we are doing an "Object.assign" we can
+      // preserve reactivity if the storage is reactive :)
+      const oldData = await get(id)
+      if (oldData) {
+        Object.assign(oldData, deepMerge(oldData, data))
+        storage.set(id, oldData)
+      } else {
+        storage.set(id, data)
+      }
       storage.set(id, data)
       return Promise.resolve()
     },

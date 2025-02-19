@@ -370,6 +370,7 @@ export function lockMap(name: string = 'item') {
     return () => {
       console.log(`unlock ${name}!`, id)
       unlock()
+      locks.delete(id) // Delete the lock from the map after unlocking
     }
   }
 
