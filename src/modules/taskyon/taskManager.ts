@@ -217,6 +217,7 @@ function tyMechanisms() {
   }
 }
 
+// TODO: replace this with pglite vector search :)
 function useTaskVectors(
   getAllTaskIds: () => Promise<string[]>,
   getTask: (taskId: string) => Promise<TaskNode | undefined>,
@@ -476,7 +477,8 @@ export function useTyTaskManager(
   // because our tasks only have parent IDs defined, we keep a cache of
   // child IDs in order to be able to do faster tree traversals...
   const nextSiblingMap = new Map<string, Set<string>>()
-  const parentToChildMap = new Map<string, Set<string>>()
+  // TODO: set up a parentToChildMap
+  //const parentToChildMap = new Map<string, Set<string>>()
 
   async function unblockedGetTask(taskId: string): Promise<TaskNode | undefined> {
     // Check if the task exists in the local record

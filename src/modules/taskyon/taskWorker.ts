@@ -206,7 +206,7 @@ export async function runTaskWorker(
       if (task && !taskWorkerController.isInterrupted()) {
         if (task.priorID && finishedTaskIdMap.get(task.priorID) !== true) {
           // TODO: now check manually, if we find the leaf IDs of all subtask chains...
-          const leafTasks: TaskNode[] = await taskManager.findOneSiblingLeafTask()
+          // const leafTasks: TaskNode[] = await taskManager.findOneSiblingLeafTask()
 
           // we need to wait until all subtasks from its previous tasks are finished before
           // continuing with this task

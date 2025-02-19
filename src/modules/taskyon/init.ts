@@ -12,7 +12,7 @@ import { executePythonScript } from '../tools/executePython'
 import { createAsyncQueue, toLowerCaseKeys } from '../utils'
 import { createChatCompletionTool } from '../tools/chatCompletionTool'
 import { getDatabase } from '../pglite.api'
-import { createCrudWrapper } from '../crudWrapper'
+import { createEnhancedCrudWrapper } from '../crudWrapper'
 import type OpenAI from 'openai'
 import { toolCreationWizard } from '../tools/toolManagement'
 
@@ -46,9 +46,13 @@ export async function initTaskyon(
   ]
 
   const pgldb = await getDatabase('taskyon')
-  const debugDb = await createCrudWrapper<TaskNodeMeta>(pgldb, {
-    tableName: 'debugDb',
-  })
+  const debugDb = await createEnhancedCrudWrapper<TaskNodeMeta>(
+    pgldb,
+    {
+      tableName: 'debugDb',
+    },
+    new Map<string, TaskNodeMeta>(),
+  )
 
   // TODO: possibly move this into an "upper level?"
   console.log('initializing taskyondb')
