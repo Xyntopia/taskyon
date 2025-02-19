@@ -223,9 +223,15 @@ export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWr
   },
 
   async get(id: string | number): Promise<T | null> {
-    for (const wrapper of wrappers) {
-      const data = await wrapper.get(id)
-      if (data !== null) return data
+    for (let i = 0; i < wrappers.length; i++) {
+      const data = await wrappers[i]!.get(id)
+      if (data !== null) {
+        // If the first wrapper doesn't have the data, update it with the found data
+        if (i > 0) {
+          await wrappers[0]!.set(id, data)
+        }
+        return data
+      }
     }
     return null
   },
