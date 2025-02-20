@@ -35,11 +35,12 @@ export interface CrudWrapper<T> {
   ) => Promise<void>
   delete: (id: string | number) => Promise<void>
   list: () => Promise<Row<T>[]>
+  listAll?: () => Promise<Row<T>[]>
   clear: () => Promise<void>
 }
 
 export const withLiveCallbacks = <T>(base: CrudWrapper<T>) => {
-  const { trigger, callbackList, createDisposeFunction, add: addCallback } = useCallbacks<T>()
+  const { trigger, callbackList, createDisposeFunction, add } = useCallbacks<T>()
 
   return {
     ...base,
@@ -64,7 +65,7 @@ export const withLiveCallbacks = <T>(base: CrudWrapper<T>) => {
     },
 
     readLive(id: string | number, callback: LiveCallback<T>): () => void {
-      addCallback(id, callback)
+      add(id, callback)
       void base.get(id).then((data) => {
         if (data !== null) callback(data)
       })
@@ -288,7 +289,18 @@ export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWr
       const list = await wrapper.list()
       if (list.length > 0) return list
     }
+
     return []
+  },
+  async listAll(): Promise<Row<T>[]> {
+    const allItems = await Promise.all(wrappers.map((w) => w.list()))
+    const uniqueItems = new Map<string | number, Row<T>>()
+
+    allItems.flat().forEach((item) => {
+      uniqueItems.set(item.id, item)
+    })
+
+    return Array.from(uniqueItems.values())
   },
   async clear(): Promise<void> {
     await Promise.all(wrappers.map((w) => w.clear()))
