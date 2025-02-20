@@ -27,3 +27,38 @@ export const getDatabase = async (name: string): Promise<TyPGDB> => {
   }
   return pgInstance
 }
+
+export interface PgLiteOptions {
+  tableName: string
+  idColumn?: string
+  dataColumn?: string
+  additionalColumns?: string[]
+  // Optional SQL to create the table (including any special columns like vector)
+  createTableSql?: string
+  pgvector?: boolean
+}
+
+export async function createVecPgLiteTable(db: TyPGDB, options: PgLiteOptions) {
+  const {
+    tableName,
+    idColumn = 'id',
+    dataColumn = 'data',
+    additionalColumns,
+    createTableSql = `CREATE TABLE IF NOT EXISTS ${tableName} (
+      ${idColumn} VARCHAR(64) PRIMARY KEY,
+      ${dataColumn} JSONB NOT NULL
+      ${additionalColumns ? `, ${additionalColumns.join(', ')}` : ''}
+    );`,
+    pgvector = false,
+  } = options
+
+  // Incorporate the pgvector extension if needed
+  if (pgvector) await db.exec('CREATE EXTENSION IF NOT EXISTS vector;')
+
+  // Create table if SQL provided
+  if (createTableSql) {
+    await db.exec(createTableSql)
+  }
+
+  return { dataColumn, tableName, idColumn }
+} // TODO: add protections against SQL injection...

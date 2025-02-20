@@ -1,19 +1,8 @@
-import type { TyPGDB } from './pglite.api'
+import type { PgLiteOptions } from './pglite.api'
+import { createVecPgLiteTable, type TyPGDB } from './pglite.api'
 import type { LiveCallback } from './useCallBacks'
 import { useCallbacks } from './useCallBacks'
 import { deepMerge, lockMap } from './utils'
-
-// TODO: add protections against SQL injection...
-
-// Generic CRUD wrapper options
-interface CrudOptions {
-  tableName: string
-  idColumn?: string
-  dataColumn?: string
-  // Optional SQL to create the table (including any special columns like vector)
-  createTableSql?: string
-  pgvector?: boolean
-}
 
 type Row<T> = {
   [key: string]: unknown
@@ -116,26 +105,9 @@ export const withLocking = <T, U>(base: CrudWrapper<U> & T, namespace: string = 
 
 export const createCrudWrapper = async <T>(
   db: TyPGDB,
-  options: CrudOptions,
+  options: PgLiteOptions,
 ): Promise<CrudWrapper<T>> => {
-  const {
-    tableName,
-    idColumn = 'id',
-    dataColumn = 'data',
-    createTableSql = `CREATE TABLE IF NOT EXISTS ${tableName} (
-      ${idColumn} VARCHAR(64) PRIMARY KEY,
-      ${dataColumn} JSONB NOT NULL
-);`,
-    pgvector = false,
-  } = options
-
-  // Incorporate the pgvector extension if needed
-  if (pgvector) await db.exec('CREATE EXTENSION IF NOT EXISTS vector;')
-
-  // Create table if SQL provided
-  if (createTableSql) {
-    await db.exec(createTableSql)
-  }
+  const { dataColumn, tableName, idColumn } = await createVecPgLiteTable(db, options)
 
   const get = async (id: string | number): Promise<T | null> => {
     const result = await db.query<Row<T>>(
@@ -314,7 +286,7 @@ export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWr
 
 export const createEnhancedCrudWrapper = async <T>(
   db: TyPGDB,
-  options: CrudOptions,
+  options: PgLiteOptions,
   storage: Map<string | number, T>,
 ) => {
   const dbWrapper = await createCrudWrapper<T>(db, options)
