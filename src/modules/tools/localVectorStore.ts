@@ -63,9 +63,10 @@ export const localVectorStore = createTool({
         const results = await db.query(
           `
         SELECT
-        data,
+        vec,
         label,
-        data <-> $1 AS distance
+        data,
+        vec <-> $1 AS distance
         FROM vectorStoreTool
         WHERE label = $3
         ORDER BY distance
@@ -81,10 +82,10 @@ export const localVectorStore = createTool({
       const vector = await vectorizeText(saveText, modelName)
       await db.query(
         `
-        INSERT INTO vectorStoreTool (label, data)
+        INSERT INTO vectorStoreTool (label, data, vec)
         VALUES ($1, $2);
       `,
-        [label, vector],
+        [label, saveText, vector],
       )
       return { message: 'Data saved successfully' }
     }
