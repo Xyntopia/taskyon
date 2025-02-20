@@ -35,6 +35,7 @@ export interface CrudWrapper<T> {
   ) => Promise<void>
   delete: (id: string | number) => Promise<void>
   list: () => Promise<Row<T>[]>
+  clear: () => Promise<void>
 }
 
 export const withLiveCallbacks = <T>(base: CrudWrapper<T>) => {
@@ -69,6 +70,10 @@ export const withLiveCallbacks = <T>(base: CrudWrapper<T>) => {
       })
       return createDisposeFunction(id, callback)
     },
+    async clear(): Promise<void> {
+      await base.clear()
+      callbackList.clear()
+    },
   }
 }
 
@@ -87,7 +92,7 @@ export const withLocking = <T>(
   base: CrudWrapper<T>,
   namespace: string = 'task',
 ): CrudWrapper<T> => {
-  const { lockItem } = lockMap(namespace)
+  const { lockItem, clearLocks } = lockMap(namespace)
 
   const locking = withLock(lockItem)
 
@@ -97,6 +102,7 @@ export const withLocking = <T>(
     delete: async (...args) => (await locking(base.delete, args[0]))(...args),
     get: async (...args) => (await locking(base.get, args[0]))(...args),
     upsert: async (...args) => (await locking(base.upsert, args[0]))(...args),
+    clear: async () => Promise.resolve(clearLocks()),
   }
 }
 
@@ -196,6 +202,9 @@ export const createCrudWrapper = async <T>(
       const result = await db.sql<Row<T>>`SELECT ${idColumn}, ${dataColumn} FROM ${tableName};`
       return result.rows
     },
+    clear: async (): Promise<void> => {
+      await db.query(`DELETE FROM ${tableName};`)
+    },
   }
 }
 
@@ -234,6 +243,10 @@ export const createMapCrudWrapper = <T>(
         rows.push({ id: key, data: value })
       })
       return Promise.resolve(rows)
+    },
+    clear: (): Promise<void> => {
+      storage.clear()
+      return Promise.resolve()
     },
   })
 }
@@ -276,6 +289,9 @@ export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWr
       if (list.length > 0) return list
     }
     return []
+  },
+  async clear(): Promise<void> {
+    await Promise.all(wrappers.map((w) => w.clear()))
   },
 })
 
