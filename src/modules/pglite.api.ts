@@ -36,9 +36,16 @@ export interface PgLiteOptions {
   // Optional SQL to create the table (including any special columns like vector)
   createTableSql?: string
   pgvector?: boolean
+  vectorDims?: number
 }
 
 export async function createVecPgLiteTable(db: TyPGDB, options: PgLiteOptions) {
+  if (options.pgvector) {
+    options.additionalColumns = options.additionalColumns || []
+    const vectorDims = options.vectorDims || 3
+    options.additionalColumns.push(`vec vector(${vectorDims})`)
+  }
+
   const {
     tableName,
     idColumn = 'id',
