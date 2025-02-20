@@ -385,7 +385,12 @@ export function lockMap(name: string = 'item') {
     }
   }
 
-  return { lockItem, waitForItemUnlock }
+  function clearLocks() {
+    locks.clear()
+    console.log(`All ${name} locks have been cleared`)
+  }
+
+  return { lockItem, waitForItemUnlock, clearLocks }
 }
 
 /**
