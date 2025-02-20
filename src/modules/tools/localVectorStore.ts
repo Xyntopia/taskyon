@@ -1,4 +1,4 @@
-import { createTool, type InternalTool } from '../taskyon/tools'
+import { createTool } from '../taskyon/tools'
 import { createVecPgLiteTable, getDatabase } from '../pglite.api'
 import { useNlpWorker } from '../taskyon/webWorkerApi'
 
