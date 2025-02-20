@@ -183,4 +183,48 @@ flowchart TB
 
 In many cases, the steps are tightly coupled and require specific input and output data. With this single tool approach—leveraging flatmapping and state machine-like pattern matching—you avoid having to write separate tools for each step while maintaining clear, adaptable transitions.
 
+## Creating Context
+
+Taskyon manages hierarchical tasks using a two-layer structure, which allows both sequential and nested execution. In this design, a primary function task (TW1) initiates a subtask chain (t1). Within that chain, specific tasks like **t1** and **t2** can each spawn their own branches—denoted here as the "a" chain (from t1) and the "b" chain (from t2)—each eventually returning a result.
+
+For example, if you select **b1** in your chat or chatCompletion, the visible sequence might be:
+
+- **TW1 → t1 → t2 → b1**
+
+However, when deeper nesting is enabled, you might see a more extended chain such as:
+
+- **TW1 → t1 → a1 → a2 → a3 → r1 → t2 → b1**
+
+The diagram below illustrates this hierarchical structure with clear branching:
+
+```
+            TW1
+             │
+             ▼
+         ┌────────┐
+         │   t1   │──► t2 ─► t3 ─► t4 ─► r3
+         └────────┘      │
+             │         b1
+             ▼          │
+            a1         r2
+             │
+             ▼
+            a2
+             │
+             ▼
+            a3
+             │
+             ▼
+            r1
+```
+
+**Diagram Explanation:**
+
+- **TW1** starts the process.
+- **t1** initiates the primary subtask chain, leading to subsequent tasks **t2**, **t3**, **t4**, and finally result **r3**.
+- The "a" branch—comprising **a1 → a2 → a3 → r1**—is spawned by **t1**.
+- The "b" branch—consisting of **b1** (which then leads to **r2**)—originates from **t2**.
+
+The chatCompletion tool flattens this hierarchical structure to capture the most crucial context for generating responses. This approach ensures that even with nested task chains, the system extracts and prioritizes the relevant information needed for coherent output.
+
 TODO: add a json-example for a tool that can do this..
