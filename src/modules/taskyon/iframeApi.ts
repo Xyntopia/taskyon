@@ -43,7 +43,7 @@ export function setupIframeApi(
                 content: msg.data.task.content,
               }
               void taskManager
-                .addPartialTask2Tree(newTask, undefined, false, true)
+                .addPartialTask2Tree(newTask, undefined, false)
                 .catch((err) => console.warn(err))
             } else if (msg.success && msg.data.type === 'configurationMessage') {
               const newConfig = msg.data.conf
@@ -63,8 +63,6 @@ export function setupIframeApi(
                 keys[llmSettings.selectedApi] = newKey
               }
             } else if (msg.success && msg.data.type === 'functionDescription') {
-              // TODO: somehow eslint doesn't recognize problems here, when there is a type mismatch
-              // TODO: rename "duplicateTaskName" to "persist"
               const { id, duplicateTaskName, ...rest } = msg.data
               const newFunc: ToolBase = rest
               console.log(`functionDescription was sent by ${event.origin}`, newFunc)
@@ -78,7 +76,7 @@ export function setupIframeApi(
                 label: ['function'],
               }
               void taskManager
-                .addPartialTask2Tree(newTask, undefined, false, duplicateTaskName)
+                .addPartialTask2Tree(newTask, undefined, duplicateTaskName)
                 .catch((err) => console.warn(err))
             } else {
               // TODO: also add this as error, so that it gets thrown back to the parent

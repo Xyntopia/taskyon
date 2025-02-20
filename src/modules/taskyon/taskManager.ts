@@ -9,7 +9,7 @@ import {
   createTaskNodeMangoQuery,
 } from './rxdb'
 import { openFile } from '../OPFS'
-import { deepCopy, deepMerge, lockMap } from '../utils'
+import { deepCopy, lockMap } from '../utils'
 import { useVectorStore } from './hnswIndex'
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi'
 import { type InternalTool } from './tools'
@@ -17,7 +17,14 @@ import { taskUtils } from './taskUtils'
 import { type MangoQuery } from 'rxdb'
 import { dump, load } from 'js-yaml'
 import { processMarkdown } from 'src/modules/taskyon/taskUtils'
-import type { CrudWrapper } from '../crudWrapper'
+import type { EnhancedCrudWrapper } from '../crudWrapper'
+import {
+  createCombinedCrudWrapper,
+  createMapCrudWrapper,
+  withLiveCallbacks,
+  withLocking,
+  type CrudWrapper,
+} from '../crudWrapper'
 import { sha256UrlSafeHash } from '../hashing'
 import { urlSafeBase64Uuid } from '../crypto'
 
@@ -220,7 +227,7 @@ function tyMechanisms() {
 // TODO: replace this with pglite vector search :)
 function useTaskVectors(
   getAllTaskIds: () => Promise<string[]>,
-  getTask: (taskId: string) => Promise<TaskNode | undefined>,
+  getTask: (taskId: string) => Promise<TaskNode | null>,
   vectorizerModel?: string,
   taskyonDB?: TaskyonDatabase,
 ) {
@@ -421,6 +428,99 @@ function useTaskVectors(
   }
 }
 
+// TODO: maybe generalize this into a "RxDB Crud?"
+const createRxDBCrudWrapper = (db: TaskyonDatabase): CrudWrapper<TaskNode> => {
+  // TODO: move this CRUD wrapper into our RXDB file and also add the database creation itself to it :)
+
+  const get = async (id: string | number) => {
+    const taskFromDb = await db.tasknodes.findOne(id.toString()).exec()
+    if (taskFromDb) {
+      const task = transformDocToTaskNode(taskFromDb)
+      return task
+    }
+    return null
+  }
+
+  // TODO: we need to add siblings /children functionality to our CRUD wrapper..
+  /*        // Update parent-child cache
+    set:
+      if (data.priorID) {
+        const siblings = await searchNextSibling(data.priorID)
+        siblings.add(data.id)
+        nextSiblingMap.set(data.priorID, siblings)
+      }
+  delete:
+                // Delete from local record/memorydb
+      const task = get(taskId)
+      if (task && task.priorID) {
+        // deleting the task from our children map...
+        const children = await searchNextSibling(task.priorID)
+        if (children) children.delete(taskId)
+      }
+
+*/
+
+  const set = async (id: string | number, data: TaskNode) => {
+    // TODO: throw an error, if we save an already existing task!
+    //       because we want to make sure, that tasks in the db are immutable.
+    //       so we can never update a task with an already existing id...
+    if (id !== data.id) throw new Error('storage ID has to be the same as task ID!!')
+    console.log('save task: ', data)
+    const newDBTask = transformTaskNodeToDocType(data)
+    await db.tasknodes.upsert(newDBTask)
+  }
+
+  return {
+    get,
+    set,
+    // TODO: in order to make our database and all task objects pure,
+    // we have to re-model trees when using this function.
+    // so whenever we update a task, we recreate the tree path
+    // updating all childen/parent properties in the path.
+    // we do *not* need to edit any branches, as long as
+    // they only have chilren properties and no parent properties...
+    // if we only have parent properties, we can update
+    // maybe also give an option to delete previous trees...
+    // we should only really try to update tasks for very specific use
+    // cases, such as the debug data..   otherwise things will simply get a lot
+    // more difficult
+    // TODO: when changing the updateTask to injecting a task with a different
+    //       ID, what we can do is to have our update task point to its "parent" hash
+    //       AND also advertise the update for the parent task! It is also important
+    //       that we return the new id...
+    upsert: async (id, data) => {
+      const oldData = await get(id)
+      if (oldData) {
+        await set(id, { ...oldData, ...data })
+      }
+    },
+    delete: async (id) => {
+      // also delete from vectordb!
+      console.log('deleting task:', id)
+
+      if (db) {
+        const taskDoc = await db.tasknodes.findOne(id.toString()).exec()
+        if (taskDoc) {
+          await taskDoc.remove()
+        }
+      }
+      console.log('done deleting task:', id)
+    },
+    list: async () => {
+      const result = await db.tasknodes.find().exec()
+      const tasks = result.map((rxdbtask) => ({
+        id: rxdbtask.id,
+        data: transformDocToTaskNode(rxdbtask),
+      }))
+      return tasks
+    },
+    clear: async () => {
+      console.log('delete the entire database!')
+      await db.remove()
+    },
+  }
+}
+
 // TODO:  break down  the individual parts of TaskManager this way into smaller parts:
 //        - on top of that build a function which encapsulates all the "high-level  function such as getting files etc..."
 //        - the vector store part
@@ -437,14 +537,12 @@ export function useTyTaskManager(
   tasksCache: Map<string, TaskNode>,
   defaultTools: InternalTool[],
   taskyonDB: TaskyonDatabase,
-  debugDb: CrudWrapper<TaskNodeMeta>,
+  debugDb: EnhancedCrudWrapper<TaskNodeMeta>,
   vectorizerModel?: string,
 ) {
   // uses RxDB as a DB backend..
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
-
-  const { lockItem: lockTask, waitForItemUnlock: waitForTaskUnlock } = lockMap('task')
 
   // TODO: replace this next expression with something less memory intensive which
   //       simply selects all tasks
@@ -453,6 +551,15 @@ export function useTyTaskManager(
 
   const { subscribeToTaskChanges, unsubscribeFromTaskChanges, notifySubscribers } = tyMechanisms()
 
+  const tyCrud = withLocking(
+    withLiveCallbacks(
+      createCombinedCrudWrapper([
+        createMapCrudWrapper(tasksCache),
+        createRxDBCrudWrapper(taskyonDB),
+      ]),
+    ),
+  )
+
   const {
     syncVectorIndexWithTasks,
     deleteTaskFromVectorStore,
@@ -460,7 +567,20 @@ export function useTyTaskManager(
     filteredVectorSearch,
     resetTaskVectors,
     searchSimilarTasks,
-  } = useTaskVectors(getAllTaskIds, getTask, vectorizerModel, taskyonDB)
+  } = useTaskVectors(getAllTaskIds, tyCrud.get, vectorizerModel, taskyonDB)
+
+  // TODO: replace this with
+  const tyCrudVec = {
+    ...tyCrud,
+    set: async (id: string, data: TaskNode) => {
+      await tyCrud.get(id)
+      await addtoVectorDB(data)
+    },
+    delete: async (id: string | number) => {
+      await tyCrud.delete(id)
+      await deleteTaskFromVectorStore(id.toString())
+    },
+  }
 
   async function countVecs() {
     if (taskyonDB) {
@@ -480,47 +600,6 @@ export function useTyTaskManager(
   // TODO: set up a parentToChildMap
   //const parentToChildMap = new Map<string, Set<string>>()
 
-  async function unblockedGetTask(taskId: string): Promise<TaskNode | undefined> {
-    // Check if the task exists in the local record
-    let task = tasksCache.get(taskId)
-    if (!task && taskyonDB) {
-      // we are locking the task here in order to make other operations wait
-      // for it to be cached...
-      // TODO: somehow this doesn't work, I guess because of the async nature of lockTask?
-      const unlock = await lockTask(taskId)
-      // If not, load from the database
-      const taskFromDb = await taskyonDB.tasknodes.findOne(taskId).exec()
-      if (taskFromDb) {
-        task = transformDocToTaskNode(taskFromDb)
-        tasksCache.set(taskId, task) // Update local record
-      }
-      unlock()
-    }
-    return task
-  }
-
-  async function getTask(taskId: string | undefined): Promise<TaskNode | undefined> {
-    if (!taskId) return undefined
-    await waitForTaskUnlock(taskId)
-    return await unblockedGetTask(taskId)
-  }
-
-  async function setTask(task: TaskNode, save: boolean): Promise<void> {
-    const unlock = await lockTask(task.id)
-    tasksCache.set(task.id, task)
-    if (save) {
-      await saveTaskToDb(task) // Save to database if required
-    }
-    // Update parent-child cache
-    if (task.priorID) {
-      const children = await searchNextSibling(task.priorID)
-      children.add(task.id)
-      nextSiblingMap.set(task.priorID, children)
-    }
-    notifySubscribers(task, 'new')
-    unlock()
-  }
-
   // find all children tasks in our parent-linked task tree
   // TODO: right now, we can only find the "first" child...
   //       this needs to become better ;). Especially, if we cache this. The first child we have in the cache
@@ -533,11 +612,11 @@ export function useTyTaskManager(
     // the only problem here is, that this is asynchronous..  so in the future we might run into problems
     // where we need to lock the parentToChildMap if multiple processes want to access it.
     // but eventually the parentToChildrenMap will be updated with the additional children..
-    let children = nextSiblingMap.get(priorID)
+    let siblings = nextSiblingMap.get(priorID)
 
-    if (!children && taskyonDB) {
+    if (!siblings && taskyonDB) {
       // Fallback to database query if not in the cache
-      const dbChildren = (
+      const dbSiblings = (
         await taskyonDB.tasknodes
           .find({
             selector: {
@@ -546,65 +625,13 @@ export function useTyTaskManager(
           })
           .exec()
       ).map((t) => t.id)
-      children = new Set(dbChildren)
+      siblings = new Set(dbSiblings)
 
       // Cache the result for future lookups
-      nextSiblingMap.set(priorID, children)
-      return children
+      nextSiblingMap.set(priorID, siblings)
+      return siblings
     }
-    return children ?? new Set()
-  }
-
-  // TODO: in order to make our database and all task objects pure,
-  // we have to re-model trees when using this function.
-  // so whenever we update a task, we recreate the tree path
-  // updating all childen/parent properties in the path.
-  // we do *not* need to edit any branches, as long as
-  // they only have chilren properties and no parent properties...
-  // if we only have parent properties, we can update
-  // maybe also give an option to delete previous trees...
-  // we should only really try to update tasks for very specific use
-  // cases, such as the debug data..   otherwise things will simply get a lot
-  // more difficult
-  // TODO: when changing the updateTask to injecting a task with a different
-  //       ID, what we can do is to have our update task point to its "parent" hash
-  //       AND also advertise the update for the parent task! It is also important
-  //       that we return the new id...
-  async function updateTask(
-    updateData: Partial<TaskNode> & { id: string },
-    save: boolean,
-  ): Promise<void> {
-    const unlock = await lockTask(updateData.id)
-    const task = await unblockedGetTask(updateData.id)
-    if (task) {
-      // Update the task with new data
-      // Object.assign(task, updateData);
-      // TODO: her we are doing the deepmerge, so that the task stays reactive, but we don't need that
-      // anymore in the future, as we are only goingto update tasks through a publish/subscribe mechanism
-      // and get rid of inherently reactive tasks...
-      Object.assign(task, deepMerge(task, updateData))
-      // because we're updating a task we should not have to update the
-      // parentToChildrenMap once, we have immutable tasks though, we are adding
-      // a task with a new ID and should probably replace the childrens ID
-      if (save) {
-        await saveTaskToDb(task) // Save to database if required
-      }
-    }
-    unlock()
-    if (task) notifySubscribers(task, 'update')
-    // TODO: return the root or leave of the new tree ;).
-  }
-
-  async function saveTaskToDb(task: TaskNode): Promise<void> {
-    // TODO: throw an error, if we save an already existing task!
-    //       because we want to make sure, that tasks in the db are immutable.
-    //       so we can never update a task with an already existing id...
-    console.log('save task: ', task)
-    if (task && taskyonDB) {
-      const newDBTask = transformTaskNodeToDocType(task)
-      await taskyonDB.tasknodes.upsert(newDBTask)
-      void addtoVectorDB(task)
-    }
+    return siblings ?? new Set()
   }
 
   async function deleteAllTasks() {
@@ -620,35 +647,6 @@ export function useTyTaskManager(
     notifySubscribers(undefined, 'deleteAll')
   }
 
-  async function deleteTask(taskId: string): Promise<void> {
-    // also delete from vectordb!
-    const unlock = await lockTask(taskId)
-    console.log('deleting task:', taskId)
-
-    // Delete from local record/memorydb
-    const task = tasksCache.get(taskId)
-    if (task && task.priorID) {
-      // deleting the task from our children map...
-      const children = await searchNextSibling(task.priorID)
-      if (children) children.delete(taskId)
-    }
-    tasksCache.delete(taskId)
-    await deleteTaskFromDB(taskId)
-    await deleteTaskFromVectorStore(taskId)
-    console.log('done deleting task:', taskId)
-    if (task) notifySubscribers(task, 'delete')
-    unlock()
-  }
-
-  const deleteTaskFromDB = async (taskId: string) => {
-    if (taskyonDB) {
-      const taskDoc = await taskyonDB.tasknodes.findOne(taskId).exec()
-      if (taskDoc) {
-        await taskDoc.remove()
-      }
-    }
-  }
-
   // deletes tasks from the supplied leaf up to the first branch
   // "split", eliminating a branch
   // which is defined by the leaf and preceding, exclusive tasks to this branch
@@ -656,7 +654,7 @@ export function useTyTaskManager(
     let currentTaskId = leafId
 
     while (currentTaskId) {
-      const currentTask = await getTask(currentTaskId)
+      const currentTask = await tyCrud.get(currentTaskId)
       if (!currentTask) break // Break if a task doesn't exist
 
       // Check if the parent task has more than one child
@@ -669,7 +667,7 @@ export function useTyTaskManager(
       }
 
       // Delete the current task
-      void deleteTask(currentTaskId)
+      void tyCrud.delete(currentTaskId)
 
       if (currentTask.priorID) {
         // Move to the parent task
@@ -825,7 +823,7 @@ export function useTyTaskManager(
     if (result.success) {
       const taskList = result.data
       taskList.forEach((t) => {
-        void setTask(t, true)
+        void tyCrud.set(t.id, t)
         last_task_id = t.id
       })
     }
@@ -835,7 +833,7 @@ export function useTyTaskManager(
 
   const fm = useFileManager(taskyonDB?.filemappings)
 
-  const { getTaskIdChain, getTaskChain } = taskUtils(getTask)
+  const { getTaskIdChain, getTaskChain } = taskUtils(tyCrud.get)
 
   // converts an antire taskchain (thread) into yaml for download
   async function chatToYaml(conversationId: string) {
@@ -885,7 +883,8 @@ export function useTyTaskManager(
     }, '')
     void extractKeywords(chatString, 5).then((kws) => {
       console.log('update task with kw: ', kws)
-      void updateTask({ id: newTask.id, name: kws[0] }, true)
+      newTask.name = kws[0]
+      void tyCrud.upsert(newTask.id, newTask)
     })
   }
 
@@ -897,7 +896,6 @@ export function useTyTaskManager(
     task: partialTaskDraft,
     priorID: string | undefined,
     duplicateTaskName = true,
-    persist = true,
   ): Promise<TaskNode['id']> => {
     if (!duplicateTaskName && task.name) {
       // check if a task with this name already exists and throw an error, if it does, because
@@ -921,10 +919,10 @@ export function useTyTaskManager(
     // task was already added at a previous point...
     // TODO: can we get rid of "setTask"? because we can generate task IDs now independently
     //       from whichever database we're using...
-    if (await getTask(newTask.id)) return newTask.id
+    if (await tyCrud.get(newTask.id)) return newTask.id
 
     console.log('create new Task:', newTask.id)
-    await setTask(newTask, persist)
+    await tyCrud.set(newTask.id, newTask)
 
     // extract keywordsfrom entire chat and use it to name the task...
     // but only if a taskname doesn't exist yet.
@@ -946,7 +944,6 @@ export function useTyTaskManager(
     taskList: partialTaskDraft[],
     priorID: string | undefined = undefined,
     duplicateTaskName = true,
-    persist = true,
   ) {
     let lastTaskId = priorID
     const taskIdList: string[] = []
@@ -955,7 +952,6 @@ export function useTyTaskManager(
         task,
         lastTaskId, //parent
         duplicateTaskName,
-        persist,
       )
       taskIdList.push(lastTaskId)
     }
@@ -974,10 +970,10 @@ export function useTyTaskManager(
   }
 
   const defaultMode = {
-    getTask,
-    deleteTask,
+    getTask: tyCrudVec.get,
+    deleteTask: tyCrudVec.delete,
     searchTasks,
-    setTask,
+    setTask: tyCrudVec.set,
     updateToolDefinitions,
     subscribeToTaskChanges,
     unsubscribeFromTaskChanges,

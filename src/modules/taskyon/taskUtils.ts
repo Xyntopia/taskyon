@@ -12,7 +12,7 @@ export const taskUtils = (getTask: TaskGetter) => {
     // Trace back the priorIDs to the original task in the chain
     while (currentTaskID && (maxFollow >= conversationList.length || maxFollow == 0)) {
       // Get the current task
-      const currentTask: TaskNode | undefined = await getTask(currentTaskID)
+      const currentTask: TaskNode | null = await getTask(currentTaskID)
       if (currentTask) {
         // Prepend the current task to the conversation list so the selected task ends up being the last in the list
         conversationList.unshift(currentTaskID)

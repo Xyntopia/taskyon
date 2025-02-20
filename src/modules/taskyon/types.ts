@@ -300,7 +300,7 @@ export type TaskNode = z.infer<typeof TaskNode>
 export const TaskListType = z.array(TaskNode)
 export type TaskListType = z.infer<typeof TaskListType>
 
-export type TaskGetter = (input: string) => Promise<TaskNode | undefined>
+export type TaskGetter = (input: string) => Promise<TaskNode | null>
 
 // TODO: get rid of taskDraft once we have immutable tasks with content addressing
 //       once we have that, we can simply create tasks immediatly with the correct content address as an ID,

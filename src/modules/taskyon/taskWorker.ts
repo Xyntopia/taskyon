@@ -128,6 +128,7 @@ async function processTask(
             'We need to select a model in order to analyze the result of our task!!',
           )
 
+        // TODO: move this into chatCompletion as a subtask chain
         const newTasks: partialTaskDraft[][] = [
           [
             {
@@ -180,7 +181,7 @@ export async function runTaskWorker(
 
   while (true) {
     console.log('waiting for next task!')
-    let task: TaskNode | undefined = undefined
+    let task: TaskNode | null = null
     try {
       if (taskWorkerController.isInterrupted()) {
         // in case of errors, especially if its an interrupt event we simply want to cancel everything :P
@@ -308,7 +309,7 @@ export async function runTaskWorker(
 // TODO: move all the "debugging" stuff away nd make use of the debugging DB that we're getting ;)
 function createErrorTaskChain(
   error: unknown,
-  task: TaskNode | undefined,
+  task: TaskNode | null,
   analyzeErrorModel: string,
   llmTools: boolean,
   allowedTools: string[],

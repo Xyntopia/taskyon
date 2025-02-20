@@ -48,7 +48,7 @@ const tystate = useTaskyonStore()
 
 const props = defineProps<{
   selectedThread: TaskNode[]
-  currentTask?: TaskNode | undefined
+  currentTask?: TaskNode | undefined | null
   taskWorkerWaiting: boolean
   taskWorkerMessage?: string
   showAllTasks?: boolean

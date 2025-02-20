@@ -470,7 +470,7 @@ async function buildChatThread(
   useOpenAITools: boolean,
   toolCollection: Record<string, ToolBase>,
   taskIdChain: string[],
-  getTask: (id: string) => Promise<TaskNode | undefined>,
+  getTask: (id: string) => Promise<TaskNode | null>,
   getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
   getFile: (uuid: string) => Promise<File | undefined>,
 ) {
@@ -700,10 +700,15 @@ export async function createChatCompletionTool(
 
     // refactor this below and make it all explicit, without passing llmSettings...
     // now add goal-specific prompts...
+    if (!currentTask.priorID) {
+      throw new TaskProcessingError(
+        `chatCompletion Task needs a prior or parent Task to work! ${currentTask.id}`,
+      )
+    }
     const lastTaskBeforeChatCompletion = await taskManager.getTask(currentTask.priorID)
     if (!lastTaskBeforeChatCompletion)
       throw new TaskProcessingError(
-        `chatCompletion Task needs a parent Task to work! ${currentTask.id}`,
+        `chatCompletion Task needs a prior or parent Task to work! ${currentTask.id}`,
       )
     const { chatCompletion, metaInfo: chatInfo } = await processChatTask(
       goal ?? 'SimpleCompletion',
@@ -764,11 +769,14 @@ export async function createChatCompletionTool(
       console.log('parsing custom schema', schema)
       const structResponse = parseYamlResponse2Record(choice.message.content || '')
 
-      const validate = ajv.compile(schema)
-      const valid = validate(structResponse)
-
-      if (!valid) {
-        throw new Error('Chat response has the wrong format: ' + ajv.errorsText(validate.errors))
+      if (typeof schema === 'object' && schema !== null) {
+        const validate = ajv.compile(schema)
+        const valid = validate(structResponse)
+        if (!valid) {
+          throw new Error('Chat response has the wrong format: ' + ajv.errorsText(validate.errors))
+        }
+      } else {
+        throw new TaskProcessingError('Invalid schema type')
       }
 
       makeTaskResult([

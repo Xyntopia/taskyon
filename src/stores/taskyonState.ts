@@ -341,8 +341,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         const TM = await getTaskManager()
         return await TM.getTask(stateRefs.llmSettings.selectedTaskId)
       }
-      return undefined
-    }, undefined)
+      return null
+    }, null)
 
     const selectedThread = asyncComputed(async () => {
       const taskId = stateRefs.llmSettings.selectedTaskId

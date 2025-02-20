@@ -39,7 +39,11 @@ export interface CrudWrapper<T> {
   clear: () => Promise<void>
 }
 
-export const withLiveCallbacks = <T>(base: CrudWrapper<T>) => {
+export const withLiveCallbacks = <T>(
+  base: CrudWrapper<T>,
+): CrudWrapper<T> & {
+  readLive: (id: string | number, callback: LiveCallback<T>) => () => void
+} => {
   const { trigger, callbackList, createDisposeFunction, add } = useCallbacks<T>()
 
   return {
@@ -63,8 +67,7 @@ export const withLiveCallbacks = <T>(base: CrudWrapper<T>) => {
       // Optionally, you could trigger a deletion event here.
       callbackList.delete(id)
     },
-
-    readLive(id: string | number, callback: LiveCallback<T>): () => void {
+    readLive: (id: string | number, callback: LiveCallback<T>) => {
       add(id, callback)
       void base.get(id).then((data) => {
         if (data !== null) callback(data)
@@ -89,21 +92,25 @@ const withLock =
     }
   }
 
-export const withLocking = <T>(
-  base: CrudWrapper<T>,
-  namespace: string = 'task',
-): CrudWrapper<T> => {
+export const withLocking = <T, U>(base: CrudWrapper<U> & T, namespace: string = 'task') => {
   const { lockItem, clearLocks } = lockMap(namespace)
 
   const locking = withLock(lockItem)
 
   return {
     ...base,
-    set: async (...args) => (await locking(base.set, args[0]))(...args),
-    delete: async (...args) => (await locking(base.delete, args[0]))(...args),
-    get: async (...args) => (await locking(base.get, args[0]))(...args),
-    upsert: async (...args) => (await locking(base.upsert, args[0]))(...args),
-    clear: async () => Promise.resolve(clearLocks()),
+    set: async (...args: Parameters<CrudWrapper<U>['set']>) =>
+      (await locking(base.set, args[0]))(...args),
+    delete: async (...args: Parameters<CrudWrapper<U>['delete']>) =>
+      (await locking(base.delete, args[0]))(...args),
+    get: async (...args: Parameters<CrudWrapper<U>['get']>) =>
+      (await locking(base.get, args[0]))(...args),
+    upsert: async (...args: Parameters<CrudWrapper<U>['upsert']>) =>
+      (await locking(base.upsert, args[0]))(...args),
+    clear: async () => {
+      await base.clear()
+      clearLocks()
+    },
   }
 }
 
@@ -209,13 +216,11 @@ export const createCrudWrapper = async <T>(
   }
 }
 
-export const createMapCrudWrapper = <T>(
-  storage: Map<string | number, T>,
-): Promise<CrudWrapper<T>> => {
+export const createMapCrudWrapper = <T>(storage: Map<string | number, T>): CrudWrapper<T> => {
   const get = (id: string | number): Promise<T | null> => {
     return Promise.resolve(storage.has(id) ? storage.get(id)! : null)
   }
-  return Promise.resolve({
+  return {
     get,
     set: (id: string | number, data: T): Promise<void> => {
       storage.set(id, data)
@@ -249,7 +254,7 @@ export const createMapCrudWrapper = <T>(
       storage.clear()
       return Promise.resolve()
     },
-  })
+  }
 }
 
 export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWrapper<T> => ({
@@ -311,12 +316,14 @@ export const createEnhancedCrudWrapper = async <T>(
   db: TyPGDB,
   options: CrudOptions,
   storage: Map<string | number, T>,
-): Promise<CrudWrapper<T>> => {
+) => {
   const dbWrapper = await createCrudWrapper<T>(db, options)
-  const mapWrapper = await createMapCrudWrapper<T>(storage)
-  const combinedWrapper = createCombinedCrudWrapper<T>([dbWrapper, mapWrapper])
+  const mapWrapper = createMapCrudWrapper<T>(storage)
+  const combinedWrapper = createCombinedCrudWrapper([dbWrapper, mapWrapper])
   const liveWrapper = withLiveCallbacks<T>(combinedWrapper)
-  const lockedWrapper = withLocking<T>(liveWrapper)
+  const lockedWrapper = withLocking(liveWrapper)
 
   return lockedWrapper
 }
+
+export type EnhancedCrudWrapper<T> = Awaited<ReturnType<typeof createEnhancedCrudWrapper<T>>>
