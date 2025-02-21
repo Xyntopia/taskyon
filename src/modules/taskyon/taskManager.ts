@@ -648,8 +648,7 @@ export function useTyTaskManager(
   // TODO: right now, we can only find the "first" child...
   //       this needs to become better ;). Especially, if we cache this. The first child we have in the cache
   //       will always stay there...
-  // "direct" children are the ones where both: parentID and priorID are set
-  // to the ID of the parent task...
+  // "direct" children are the ones where both: parentID is set, but no priorID
   async function searchAllDirectChildren(parentID: string): Promise<Set<string>> {
     // we can actually cache this result, because it will never change...
     let immediateChildren = parentToChildMap.get(parentID)
@@ -662,7 +661,7 @@ export function useTyTaskManager(
           .find({
             selector: {
               parentID,
-              priorID: parentID,
+              $or: [{ priorID: { $exists: false } }, { priorID: null }],
             },
           })
           .exec()
@@ -985,14 +984,15 @@ export function useTyTaskManager(
   async function addTaskChain(
     taskList: partialTaskDraft[],
     priorID: string | undefined = undefined,
+    parentID: string | undefined = undefined,
     duplicateTaskName = true,
   ) {
     let lastTaskId = priorID
     const taskIdList: string[] = []
     for (const task of taskList) {
       lastTaskId = await addPartialTask2Tree(
-        task,
-        lastTaskId, //parent
+        { ...task, parentID },
+        lastTaskId, //previous
         duplicateTaskName,
       )
       taskIdList.push(lastTaskId)
