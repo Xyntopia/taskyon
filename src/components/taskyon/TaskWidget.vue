@@ -149,6 +149,7 @@
       <div v-show="state.messageDebug[task.id]">
         <q-separator spaced />
         <q-select
+          v-if="false"
           class="fit q-pb-xs"
           dense
           disable
