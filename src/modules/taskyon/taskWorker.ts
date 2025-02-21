@@ -216,6 +216,28 @@ export async function runTaskWorker(
           )
           numberOfUnfinishedSubTaskChainsMap.set(task.priorID, numberOfUnfinishedSubTaskChains)
         }
+        // TODO: Rules of computing tasks
+        // - if we have a functionTask, we know that we need to get at least one subtask
+        // otherwise we dont have to process a task anymore...
+        // - only process task if we know for sure, that *all* prior tasks have finished
+        //   - if prior is a functionTask, its sufficient, to check numberOfUnfinishedSubTaskChainsMap,
+        //     because we know that this task will create at least one subtask
+        //   - if prior is any other task type, we can't say, because they have and will never been processed ^^.
+        //     So we simply need to push the current task back on the stack and wait. because non-function tasks
+        //     are only finished, if their own prior task is finished. So they will be removed from the stack
+        //     once they are finished. So we could check if the prior task is in the stack maybe?
+        //   - or we make sure, that non-function task simply never appear in the stack?
+        //   - alternativly we could go back to the next previous function task and check if it has finished
+        //   - we need to make sure, that return tasks are not added unless all tasks in a subtaskchain
+        //     are finished...
+        //   - So I guess one way to check if tasks are finished is to check if all function tasks
+        //     in a chain are finished...
+        //   - how do we check this? We need to see if there are return tasks everywhere
+        //     this means, return tasks should *only* here in the taskWorker? and from nowhere else?
+        //     how can we enforce that?
+        //   - every task chain is finished, if it ends with a non-function task...
+
+        // check if previous task is still unfinished and cancel processing in this case...
         if (task.priorID && numberOfUnfinishedSubTaskChainsMap.get(task.priorID) !== 0) {
           // we need to wait until all subtasks from its previous tasks are finished before
           // continuing with this task so we simply push this task back onto the stack
@@ -223,14 +245,16 @@ export async function runTaskWorker(
           // if this is the only task in the queue, we need to wait a little bit in order
           // to not overwhelm the browser (This will likely never be the case, but just in case)
           if (processTasksQueue.count() === 1) await sleep(500)
-
           continue
         }
         // we want to signal to our cache that this task is now finished and we can continue with its siblings.
         // this works, because our tasks are immutable so once this is set, it will never change..
-        if (task.parentID && task.content.type === 'return') {
-          const unfinishedTasks = numberOfUnfinishedSubTaskChainsMap.get(task.parentID) ?? 1
-          numberOfUnfinishedSubTaskChainsMap.set(task.parentID, unfinishedTasks - 1)
+        if (task.content.type === 'return') {
+          if (task.parentID) {
+            // we only need to monitor subtask Chains if we have a parentID
+            const unfinishedTasks = numberOfUnfinishedSubTaskChainsMap.get(task.parentID) ?? 1
+            numberOfUnfinishedSubTaskChainsMap.set(task.parentID, unfinishedTasks - 1)
+          }
           continue
         }
 
@@ -251,9 +275,17 @@ export async function runTaskWorker(
         const addTasks = (finishedTask: TaskNode) => async (taskChain: partialTaskDraft[]) => {
           // we can already persist all of our tasks here to the taskManager, as
           // they're immutable.
-          const taskIdList = await taskManager.addTaskChain(taskChain, finishedTask.id)
+          const taskIdList = await taskManager.addTaskChain(
+            taskChain,
+            undefined, // the first task should not have a priorID, but all of them should have a parentID
+            finishedTask.parentID,
+          )
           // TODO: we need processTasksQueue as an argument here (not implicitly adding it to this function...) for better FP style
-          taskIdList.forEach((tid) => processTasksQueue.push(tid))
+          // we are adding all tasks from the chain here, because some tasks
+          // might need to create subtasks before we continue with the next task
+          taskIdList.forEach((tid) => {
+            processTasksQueue.push(tid)
+          })
 
           // TODO: add last task to GUI by checking if our current selected task now has this child...
           // TODO: and move this somewhere else!  this function should not be in here...
@@ -262,6 +294,8 @@ export async function runTaskWorker(
         }
         const taskAdder = addTasks(task)
         void newTasks.map(taskAdder)
+        // add number of unfinished tasks to our map so that we can track
+        numberOfUnfinishedSubTaskChainsMap.set(task.id, newTasks.length)
       }
     } catch (error) {
       console.error('Could not complete task iteration:', error)
@@ -319,6 +353,8 @@ export async function runTaskWorker(
   }
 }
 
+// an "unfinished" task is one that
+//     - has on-going subtasks, which means,
 async function calculateUnfinishedTaskNum(taskManager: TyTaskManager, task: TaskNode) {
   const childrenIDs = await taskManager.searchAllDirectChildren(task.id)
   const numberOfSubTaskChains = childrenIDs.size
