@@ -594,10 +594,10 @@ async function addNewTask(execute = true) {
   // push the last task to execution queue right away...
   if (execute && newTaskId) {
     const pq = await tystate.getTaskQueue()
-    pq.push(newTaskId)
+    pq.push(newTaskId.id)
   }
 
-  state.llmSettings.selectedTaskId = newTaskId
+  state.llmSettings.selectedTaskId = newTaskId?.id
 
   // and empty out the contents for the next chat message :)
   if (currentnewTask.value.role === 'user') {

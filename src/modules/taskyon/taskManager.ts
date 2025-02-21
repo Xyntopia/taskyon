@@ -784,22 +784,20 @@ export function useTyTaskManager(
 
   /**
    * Finds the leaf tasks of a given task tree node using a depth-first search (DFS) iterative approach.
+   * // TODO: find all leaf tasks...
    *
    * @param {string} taskId - The ID of the task.
    * @param {Function} getTask - Function to retrieve a task by its ID.
    * @returns {Promise<string[]>} - An array of IDs of the leaf tasks.
    *
    */
-  async function findOneSiblingLeafTask(
-    taskId: string,
-    getTask: TyTaskManager['getTask'],
-  ): Promise<string[]> {
+  async function findOneSiblingLeafTask(taskId: string): Promise<string[]> {
     const stack: string[] = [taskId]
     const leafTasks: string[] = []
 
     while (stack.length > 0) {
       const currentTaskId = stack.pop() || ''
-      const currentTask = await getTask(currentTaskId)
+      const currentTask = await tyCrudVec.get(currentTaskId)
       if (!currentTask) continue
 
       const children = await searchNextSibling(currentTaskId)
@@ -937,7 +935,7 @@ export function useTyTaskManager(
     task: partialTaskDraft,
     priorID: string | undefined,
     duplicateTaskName = true,
-  ): Promise<TaskNode['id']> => {
+  ): Promise<TaskNode> => {
     if (!duplicateTaskName && task.name) {
       // check if a task with this name already exists and throw an error, if it does, because
       // we are not supposed to create it in that case ;)
@@ -978,7 +976,7 @@ export function useTyTaskManager(
       console.log('task already has a name:', newTask.name)
     }
 
-    return newTask.id
+    return newTask
   }
 
   async function addTaskChain(
@@ -988,24 +986,25 @@ export function useTyTaskManager(
     duplicateTaskName = true,
   ) {
     let lastTaskId = priorID
-    const taskIdList: string[] = []
+    const addedTaskList: TaskNode[] = []
     for (const task of taskList) {
-      lastTaskId = await addPartialTask2Tree(
+      const addedTask = await addPartialTask2Tree(
         { ...task, parentID },
         lastTaskId, //previous
         duplicateTaskName,
       )
-      taskIdList.push(lastTaskId)
+      lastTaskId = addedTask.id
+      addedTaskList.push(addedTask)
     }
-    return taskIdList
+    return addedTaskList
   }
 
   async function addMdTaskChain(markdown?: string) {
     console.log('adding new Markdown tasks!!')
     if (markdown) {
       const taskList = processMarkdown(markdown)
-      const taskIdList = await addTaskChain(taskList)
-      return taskIdList.at(-1)
+      const newTaskList = await addTaskChain(taskList)
+      return newTaskList.at(-1)?.id
     }
     return undefined
     // TODO: optionally execute the last task...

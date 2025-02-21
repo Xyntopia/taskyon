@@ -16,7 +16,8 @@ export const taskUtils = (getTask: TaskGetter) => {
       if (currentTask) {
         // Prepend the current task to the conversation list so the selected task ends up being the last in the list
         conversationList.unshift(currentTaskID)
-        currentTaskID = currentTask.priorID
+        // prioritize priorID over parentID when following the chain...
+        currentTaskID = currentTask.priorID || currentTask.parentID
       } else {
         currentTaskID = undefined
       } // Break if we reach a task that doesn't exist
