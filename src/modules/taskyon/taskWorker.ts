@@ -9,7 +9,7 @@ import {
 } from './types'
 import { type TyTaskManager } from './taskManager'
 import { handleFunctionExecution, taskResult } from './tools'
-import { type AsyncQueue, createLruCache, makeSerializable } from '../utils'
+import { type AsyncQueue, createLruCache, makeSerializable, sleep } from '../utils'
 import { createChatCompletionTask } from '../tools/chatCompletionTool'
 import type { CrudWrapper } from '../crudWrapper'
 
@@ -177,7 +177,10 @@ export async function runTaskWorker(
 ) {
   console.log('entering task worker loop...')
 
-  const finishedTaskIdMap = createLruCache<string, boolean>(10000)
+  // our numberOfUnfinishedTasksMap holds a number of unfinished Tasks
+  // every time a taskchain finished, we decrement the number of unfinished tasks
+  // and if it reaches 0, we can continue with the next task
+  const numberOfUnfinishedSubTaskChainsMap = createLruCache<string, number>(10000)
 
   while (true) {
     console.log('waiting for next task!')
@@ -205,19 +208,29 @@ export async function runTaskWorker(
       console.log('processing task:', taskId)
       task = await taskManager.getTask(taskId)
       if (task && !taskWorkerController.isInterrupted()) {
-        if (task.priorID && finishedTaskIdMap.get(task.priorID) !== true) {
-          // TODO: now check manually, if we find the leaf IDs of all subtask chains...
-          // const leafTasks: TaskNode[] = await taskManager.findOneSiblingLeafTask()
-
+        // check if we already track the state of our previous task in the map
+        if (task.priorID && !numberOfUnfinishedSubTaskChainsMap.has(task.priorID)) {
+          const numberOfUnfinishedSubTaskChains = await calculateUnfinishedTaskNum(
+            taskManager,
+            task,
+          )
+          numberOfUnfinishedSubTaskChainsMap.set(task.priorID, numberOfUnfinishedSubTaskChains)
+        }
+        if (task.priorID && numberOfUnfinishedSubTaskChainsMap.get(task.priorID) !== 0) {
           // we need to wait until all subtasks from its previous tasks are finished before
-          // continuing with this task
+          // continuing with this task so we simply push this task back onto the stack
           processTasksQueue.push(task.id)
+          // if this is the only task in the queue, we need to wait a little bit in order
+          // to not overwhelm the browser (This will likely never be the case, but just in case)
+          if (processTasksQueue.count() === 1) await sleep(500)
+
           continue
         }
         // we want to signal to our cache that this task is now finished and we can continue with its siblings.
         // this works, because our tasks are immutable so once this is set, it will never change..
         if (task.parentID && task.content.type === 'return') {
-          finishedTaskIdMap.set(task.parentID, true)
+          const unfinishedTasks = numberOfUnfinishedSubTaskChainsMap.get(task.parentID) ?? 1
+          numberOfUnfinishedSubTaskChainsMap.set(task.parentID, unfinishedTasks - 1)
           continue
         }
 
@@ -303,6 +316,27 @@ export async function runTaskWorker(
         continue;
       }*/
     }
+  }
+}
+
+async function calculateUnfinishedTaskNum(taskManager: TyTaskManager, task: TaskNode) {
+  const childrenIDs = await taskManager.searchAllDirectChildren(task.id)
+  const numberOfSubTaskChains = childrenIDs.size
+
+  if (numberOfSubTaskChains > 0) {
+    // now we need to check for the number of tasks with "return" type
+    const childTasks = await taskManager.searchTasks({
+      selector: {
+        parentID: task.priorID,
+      },
+    })
+
+    const numberOfFinishedSubTaskChains = childTasks.filter(
+      (t) => t.content.type === 'return',
+    ).length
+    return numberOfSubTaskChains - numberOfFinishedSubTaskChains
+  } else {
+    return 0
   }
 }
 

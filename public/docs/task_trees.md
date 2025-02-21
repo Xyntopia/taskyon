@@ -34,6 +34,11 @@ Taskyon’s execution model distinguishes between sequential processing within a
   - Tasks returned from a `functionTask` automatically inherit the originating task’s `parentID` and are counted as subtasks.
   - User-initiated tasks (e.g. a chatResponse) are added as siblings to the selected leaf "sibling" task within a specific chat.
   - Furthermore, all tasks within a function-generated chain are considered siblings, preserving a flat hierarchy within that chain.
+  - While Siblings can be added at later stages, "children" will always stay the same, as we are not allowed to add more generated "subtasks" at a later stage. This is important, as we use
+    the number of leaf tasks which indicate subtask finish to determine whether we can continue
+    with sibling tasks.
+  - Both: sibling tasks and children tasks are connect through "priorID" and "parentID". The reason is that we can not add "childrenIDs" or "nextID" without giving up immutability of our task nodes.
+  - The first task in every generated subtask chain has the same parentID & priorID all follow-up tasks in the chain have the same parentID. This makes navigation and task processing quicker.
 
 - **Context Rendering for LLM Inference:**  
   The `chatCompletion` tool intelligently determines the appropriate context to render into a message chain for LLM inference. For instance:
