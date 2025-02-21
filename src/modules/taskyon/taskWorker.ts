@@ -9,7 +9,7 @@ import {
 } from './types'
 import { type TyTaskManager } from './taskManager'
 import { handleFunctionExecution, taskResult } from './tools'
-import { type AsyncQueue, createLruCache, makeSerializable, sleep } from '../utils'
+import { type AsyncQueue, makeSerializable, sleep } from '../utils'
 import { createChatCompletionTask } from '../tools/chatCompletionTool'
 import type { CrudWrapper } from '../crudWrapper'
 
@@ -363,7 +363,7 @@ export async function runTaskWorker(
           const taskList = await taskManager.addTaskChain(
             taskChain,
             undefined, // the first task should not have a priorID, but all of them should have a parentID
-            finishedTask.parentID,
+            finishedTask.id,
           )
           // TODO: we need processTasksQueue as an argument here (not implicitly adding it to this function...) for better FP style
           // we are adding only function tasks to the chain and if we find out the one of the chains doesn't contain
