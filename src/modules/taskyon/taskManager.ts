@@ -679,15 +679,17 @@ export function useTyTaskManager(
   }
 
   async function deleteAllTasks() {
-    // also delete vectordb!
+    // TODO: also delete vectordb!
     // TODO: manually re-initiailized taskyondb after remove...
     await resetTaskVectors()
+
     if (taskyonDB) {
       console.log('delete the entire database!')
       await taskyonDB.remove()
     }
-    tasksCache.clear()
+    await tyCrudVec.clear()
     nextSiblingMap.clear()
+    await debugDb.clear()
     notifySubscribers(undefined, 'deleteAll')
   }
 
