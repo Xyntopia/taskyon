@@ -958,7 +958,7 @@ export function useTyTaskManager(
     // task was already added at a previous point...
     // TODO: can we get rid of "setTask"? because we can generate task IDs now independently
     //       from whichever database we're using...
-    if (await tyCrud.get(newTask.id)) return newTask.id
+    if (await tyCrud.get(newTask.id)) return newTask
 
     console.log('create new Task:', newTask.id)
     await tyCrud.set(newTask.id, newTask)
