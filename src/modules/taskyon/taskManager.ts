@@ -551,13 +551,14 @@ export function useTyTaskManager(
 
   const { subscribeToTaskChanges, unsubscribeFromTaskChanges, notifySubscribers } = tyMechanisms()
 
-  const tyCrud = withLocking(
-    withLiveCallbacks(
-      createCombinedCrudWrapper([
-        createMapCrudWrapper(tasksCache),
-        createRxDBCrudWrapper(taskyonDB),
-      ]),
-    ),
+  // because our tasks only have parent IDs defined, we keep a cache of
+  // child IDs in order to be able to do faster tree traversals...
+  const nextSiblingMap = new Map<string, Set<string>>()
+  // TODO: set up a parentToChildMap
+  //const parentToChildMap = new Map<string, Set<string>>()
+
+  const tyCrud = withLiveCallbacks(
+    createCombinedCrudWrapper([createMapCrudWrapper(tasksCache), createRxDBCrudWrapper(taskyonDB)]),
   )
 
   const {
@@ -569,18 +570,39 @@ export function useTyTaskManager(
     searchSimilarTasks,
   } = useTaskVectors(getAllTaskIds, tyCrud.get, vectorizerModel, taskyonDB)
 
-  // TODO: replace this with
-  const tyCrudVec = {
+  // add more enhanced, ty-specific functionality to our CRUD
+  const tyCrudVec = withLocking({
     ...tyCrud,
-    set: async (id: string, data: TaskNode) => {
-      await tyCrud.get(id)
-      await addtoVectorDB(data)
+    set: async (id: string | number, task: TaskNode) => {
+      await tyCrud.get(task.id)
+      await addtoVectorDB(task)
+      // Update parent-child cache
+      if (task.priorID) {
+        const children = await searchNextSibling(task.priorID)
+        children.add(task.id)
+        nextSiblingMap.set(task.priorID, children)
+      }
+      notifySubscribers(task, 'new')
     },
     delete: async (id: string | number) => {
-      await tyCrud.delete(id)
-      await deleteTaskFromVectorStore(id.toString())
+      // Delete from local record/memorydb
+      const task = await tyCrud.get(id)
+      if (task && task.priorID) {
+        // deleting the task from our children map...
+        // because our tasks are immutable, we can do this in a decentralized way :)
+        void searchNextSibling(task.priorID).then((siblings) => {
+          if (siblings) siblings.delete(id.toString())
+        })
+      }
+      void tyCrud.delete(id)
+      void deleteTaskFromVectorStore(id.toString())
+      if (task) notifySubscribers(task, 'delete')
     },
-  }
+    upsert: async (id: string | number, data: TaskNode) => {
+      await tyCrud.upsert(id, data)
+      notifySubscribers(data, 'update')
+    },
+  })
 
   async function countVecs() {
     if (taskyonDB) {
@@ -593,12 +615,6 @@ export function useTyTaskManager(
       return await taskyonDB.tasknodes.count().exec()
     } else return undefined
   }
-
-  // because our tasks only have parent IDs defined, we keep a cache of
-  // child IDs in order to be able to do faster tree traversals...
-  const nextSiblingMap = new Map<string, Set<string>>()
-  // TODO: set up a parentToChildMap
-  //const parentToChildMap = new Map<string, Set<string>>()
 
   // find all children tasks in our parent-linked task tree
   // TODO: right now, we can only find the "first" child...
