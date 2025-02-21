@@ -19,7 +19,7 @@ You can
 
 ## Overview
 
-Underneith the surface of Taskyon's Chat interface is a powerful system for managing tasks asynchronously in a tree-like structure. 🌳 This design allows for parallel processing and efficient handling of both conversations and tasks. By leveraging various LLM providers, Taskyon can execute a wide range of tasks, from basic user messages to complex function calls.
+Taskyon goes a step beyond conventional, conversational AI interfaces. Instead of just chat, it dynamically structures interactions, breaking down complex processes into manageable, evolving steps . This design allows for parallel processing and efficient handling of both conversations and tasks. By leveraging various LLM providers, Taskyon can execute a wide range of tasks, from basic user messages to complex function calls.
 
 Built on the principles of [_local-first_](https://dl.acm.org/doi/10.1145/3359591.3359737) 🏠, Taskyon ensures that most data processing happens on the user's local device, prioritizing data security and user autonomy. Whether used for personalized AI interactions, robust task management, or seamless webpage integration, Taskyon offers flexibility and control while maintaining a familiar chat interface.
 
