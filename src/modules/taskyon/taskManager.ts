@@ -21,7 +21,7 @@ import type { EnhancedCrudWrapper } from '../crudWrapper'
 import {
   createCombinedCrudWrapper,
   createMapCrudWrapper,
-  withLiveCallbacks,
+  withLiveStreams,
   withLocking,
   type CrudWrapper,
 } from '../crudWrapper'
@@ -556,7 +556,7 @@ export function useTyTaskManager(
   const nextSiblingMap = new Map<string, Set<string>>()
   const parentToChildMap = new Map<string, Set<string>>()
 
-  const tyCrud = withLiveCallbacks(
+  const tyCrud = withLiveStreams(
     createCombinedCrudWrapper([createMapCrudWrapper(tasksCache), createRxDBCrudWrapper(taskyonDB)]),
   )
 

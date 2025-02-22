@@ -369,27 +369,19 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     //console.log('generate new reactive task logger...')
     const taskMeta = ref<TaskNodeMeta | undefined>(undefined)
 
-    let dispose: (() => void) | undefined
     void getTaskManager().then((tm) => {
       //console.log('new live reader...')
-      dispose = tm.debugDb.readLive(taskid, (res) => {
+      const dispose = tm.debugDb.readLive(taskid).subscribe(({ data }) => {
         //console.log('new stream arrived!')
-        taskMeta.value = res || {}
+        taskMeta.value = data || {}
       })
-      // try to remove our live subscriber whenleaving the widget context..
-      /*onScopeDispose(() => {
-        void live.unsubscribe()
-      })*/
-    })
 
-    // Clean up when the effect scope is disposed
-    onScopeDispose(() => {
-      if (dispose) {
+      // Clean up when the effect scope is disposed
+      onScopeDispose(() => {
         //console.log(`Unsubscribing from live updates for ${taskid}`)
         dispose()
-      }
+      })
     })
-
     return taskMeta
   }
 
