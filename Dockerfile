@@ -31,6 +31,7 @@ COPY . .
 
 FROM prepare as production-builder
 
+# this should build the app inside the folder /app/dist/spa
 RUN ls -la && yarn quasar prepare && yarn quasar build
 
 
