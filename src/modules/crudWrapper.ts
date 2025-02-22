@@ -1,7 +1,7 @@
+import type { Stream } from './frpBus'
+import { createStream, filter } from './frpBus'
 import type { PgLiteOptions } from './pglite.api'
 import { createVecPgLiteTable, type TyPGDB } from './pglite.api'
-import type { LiveCallback } from './useCallBacks'
-import { useCallbacks } from './useCallBacks'
 import { deepMerge, lockMap } from './utils'
 
 type Row<T> = {
@@ -28,44 +28,37 @@ export interface CrudWrapper<T> {
   clear: () => Promise<void>
 }
 
-export const withLiveCallbacks = <T>(
+export const withLiveStreams = <T>(
   base: CrudWrapper<T>,
 ): CrudWrapper<T> & {
-  readLive: (id: string | number, callback: LiveCallback<T>) => () => void
+  readLive: (id: string | number) => Stream<{ id: string | number; data: T | null }>
 } => {
-  const { trigger, callbackList, createDisposeFunction, add } = useCallbacks<T>()
+  // Create a stream of events with a payload: { id, data }
+  const { stream: liveStream, emit } = createStream<{ id: string | number; data: T | null }>()
 
   return {
     ...base,
-    async set(id: string | number, data: T): Promise<void> {
+    async set(id, data) {
       await base.set(id, data)
-      trigger(id, data)
+      emit({ id, data })
     },
-
-    async upsert(
-      id: string | number,
-      data: T,
-      strategy: 'shallow_merge' | 'replace' | 'deepmerge' | 'native_shallow' = 'replace',
-    ): Promise<void> {
+    async upsert(id, data, strategy = 'replace') {
       await base.upsert(id, data, strategy)
-      trigger(id, data)
+      emit({ id, data })
     },
-
-    async delete(id: string | number): Promise<void> {
+    async delete(id) {
       await base.delete(id)
-      // Optionally, you could trigger a deletion event here.
-      callbackList.delete(id)
+      // Optionally, you might emit a deletion event if needed.
+      emit({ id, data: null })
     },
-    readLive: (id: string | number, callback: LiveCallback<T>) => {
-      add(id, callback)
-      void base.get(id).then((data) => {
-        if (data !== null) callback(data)
-      })
-      return createDisposeFunction(id, callback)
+    // Assuming our frpBus has a map operator as well
+    readLive: (id: string | number) => {
+      // Return a stream that filters for the specific id and maps the event to its data.
+      return filter(liveStream, (event) => event.id === id)
     },
-    async clear(): Promise<void> {
+    async clear() {
       await base.clear()
-      callbackList.clear()
+      // Optionally, you could notify subscribers here if desired.
     },
   }
 }
@@ -103,7 +96,7 @@ export const withLocking = <T, U>(base: CrudWrapper<U> & T, namespace: string = 
   }
 }
 
-export const createCrudWrapper = async <T>(
+export const createPgLiteCrudWrapper = async <T>(
   db: TyPGDB,
   options: PgLiteOptions,
 ): Promise<CrudWrapper<T>> => {
@@ -127,53 +120,32 @@ export const createCrudWrapper = async <T>(
       )
     },
     get,
-    /*update: async (id: string | number, data: Partial<T>) => {
-      const jsonData = formatValue(JSON.stringify(data))
-      triggerLiveCallbacks(id, data)
-      await db.exec(`UPDATE ${tableName}
-              SET ${dataColumn} = ${jsonData}
-              WHERE ${idColumn} = ${formatValue(id)};`)
-    },*/
     upsert: async (id, data, strategy = 'replace') => {
-      let newData: T
-      // we have to lock the item while doing the update to make sure, nothing happens
-      // between our "get" and "query" expressions from another thread e.g.
-      // adding empty data...
+      // important: this function usually also requires the "withLocking" wrapper
+      // in order to avoid race conditions
       if (strategy === 'native_shallow') {
-        const jsonData = JSON.stringify(data)
         await db.query(
           `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
-             VALUES ($1, $2)
-             ON CONFLICT (${idColumn})
-             DO UPDATE SET ${dataColumn} = ${dataColumn} || EXCLUDED.${dataColumn};`,
-          [id, jsonData],
+           VALUES ($1, $2)
+           ON CONFLICT (${idColumn})
+           DO UPDATE SET ${dataColumn} = jsonb_set(${dataColumn}, '{}', EXCLUDED.${dataColumn});`,
+          [id, JSON.stringify(data)],
         )
-        // TODO: in the case of a native merge, we can release the trigger asynchronously
-        // this might be a little faster than doing the shallow_merge with regard
-        // to saving the data in the db.
-        newData = (await get(id)) || ({} as T)
-      } else if (strategy === 'shallow_merge') {
-        // we're doing a js merge here instead of a pure postgresql merge, because
-        // this way we can do faster "triggers" of callbacks...
-        const oldData = await get(id)
-        newData = {
-          ...oldData,
-          ...data,
-        }
-      } else if (strategy === 'deepmerge') {
-        const oldData = await get(id)
-        newData = deepMerge(oldData, data, 'overwrite')
       } else {
-        newData = data
+        // Fetch and merge in JS only if necessary
+        const existingData = strategy === 'replace' ? {} : await get(id)
+        const newData =
+          strategy === 'deepmerge'
+            ? deepMerge(existingData, data, 'overwrite')
+            : { ...existingData, ...data }
+
+        await db.query(
+          `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
+           VALUES ($1, $2)
+           ON CONFLICT (${idColumn}) DO UPDATE SET ${dataColumn} = $2;`,
+          [id, JSON.stringify(newData)],
+        )
       }
-      const jsonData = JSON.stringify(newData)
-      console.log('upserting', id, jsonData)
-      await db.query(
-        `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
-          VALUES ($1, $2)
-          ON CONFLICT (${idColumn}) DO UPDATE SET ${dataColumn} = $2;`,
-        [id, jsonData],
-      )
     },
     delete: async (id: string | number) => {
       await db.query(`DELETE FROM ${tableName} WHERE ${idColumn} = $1;`, [id])
@@ -289,10 +261,10 @@ export const createEnhancedCrudWrapper = async <T>(
   options: PgLiteOptions,
   storage: Map<string | number, T>,
 ) => {
-  const dbWrapper = await createCrudWrapper<T>(db, options)
+  const dbWrapper = await createPgLiteCrudWrapper<T>(db, options)
   const mapWrapper = createMapCrudWrapper<T>(storage)
   const combinedWrapper = createCombinedCrudWrapper([dbWrapper, mapWrapper])
-  const liveWrapper = withLiveCallbacks<T>(combinedWrapper)
+  const liveWrapper = withLiveStreams<T>(combinedWrapper)
   const lockedWrapper = withLocking(liveWrapper)
 
   return lockedWrapper
