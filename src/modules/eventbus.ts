@@ -5,46 +5,45 @@ export interface EventBusOptions {
   asyncDispatch?: boolean
 }
 
-export class EventBus<Events extends Record<string, unknown>> {
-  private listeners: { [K in keyof Events]?: Listener<Events[K]>[] } = {}
-  private options: EventBusOptions
+export function createEventBus<Events extends Record<string, unknown>>(
+  options: EventBusOptions = {},
+) {
+  const listeners: { [K in keyof Events]?: Listener<Events[K]>[] } = {}
 
-  constructor(options: EventBusOptions = {}) {
-    this.options = options
-  }
-
-  subscribe<K extends keyof Events>(event: K, listener: Listener<Events[K]>): () => void {
-    if (!this.listeners[event]) {
-      this.listeners[event] = []
+  const subscribe = <K extends keyof Events>(
+    event: K,
+    listener: Listener<Events[K]>,
+  ): (() => void) => {
+    if (!listeners[event]) {
+      listeners[event] = []
     }
-    this.listeners[event]!.push(listener)
-    if (this.options.debug) {
+    listeners[event]!.push(listener)
+    if (options.debug) {
       console.debug(`Subscribed to event "${String(event)}"`)
     }
     return () => {
-      this.listeners[event] = this.listeners[event]!.filter((l) => l !== listener)
-      if (this.options.debug) {
+      listeners[event] = listeners[event]!.filter((l) => l !== listener)
+      if (options.debug) {
         console.debug(`Unsubscribed from event "${String(event)}"`)
       }
     }
   }
 
-  once<K extends keyof Events>(event: K, listener: Listener<Events[K]>): () => void {
+  const once = <K extends keyof Events>(event: K, listener: Listener<Events[K]>): (() => void) => {
     const wrapped: Listener<Events[K]> = (data: Events[K]) => {
       listener(data)
       unsubscribe()
     }
-    const unsubscribe = this.subscribe(event, wrapped)
+    const unsubscribe = subscribe(event, wrapped)
     return unsubscribe
   }
 
-  publish<K extends keyof Events>(event: K, data: Events[K]): void {
-    const eventListeners = this.listeners[event]
-    if (this.options.debug) {
+  const publish = <K extends keyof Events>(event: K, data: Events[K]): void => {
+    if (options.debug) {
       console.debug(`Publishing event "${String(event)}" with data:`, data)
     }
+    const eventListeners = listeners[event]
     if (eventListeners) {
-      // Copy listeners in case one unsubscribes during execution.
       const listenersCopy = eventListeners.slice()
       const dispatch = () => {
         listenersCopy.forEach((listener) => {
@@ -55,11 +54,13 @@ export class EventBus<Events extends Record<string, unknown>> {
           }
         })
       }
-      if (this.options.asyncDispatch) {
+      if (options.asyncDispatch) {
         setTimeout(dispatch, 0)
       } else {
         dispatch()
       }
     }
   }
+
+  return { subscribe, once, publish }
 }
