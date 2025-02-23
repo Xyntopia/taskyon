@@ -21,7 +21,7 @@ export interface CrudWrapper<T> {
     id: string | number,
     data: T,
     strategy?: 'shallow_merge' | 'replace' | 'deepmerge' | 'native_shallow',
-  ) => Promise<void>
+  ) => Promise<T>
   delete: (id: string | number) => Promise<void>
   list: () => Promise<Row<T>[]>
   listAll?: () => Promise<Row<T>[]>
@@ -43,8 +43,9 @@ export const withLiveStreams = <T>(
       emit({ id, data })
     },
     async upsert(id, data, strategy = 'replace') {
-      await base.upsert(id, data, strategy)
-      emit({ id, data })
+      const updatedData = await base.upsert(id, data, strategy)
+      emit({ id, data: updatedData })
+      return updatedData
     },
     async delete(id) {
       await base.delete(id)
@@ -140,7 +141,8 @@ export const createPgLiteCrudWrapper = async <T>(
     set: async (id: string | number, data: T) => {
       await db.query(
         `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
-         VALUES ($1, $2);`,
+         VALUES ($1, $2)
+         ON CONFLICT (${idColumn}) DO UPDATE SET ${dataColumn} = $2;`,
         [id, JSON.stringify(data)],
       )
     },
@@ -148,6 +150,7 @@ export const createPgLiteCrudWrapper = async <T>(
     upsert: async (id, data, strategy = 'replace') => {
       // important: this function usually also requires the "withLocking" wrapper
       // in order to avoid race conditions
+      let newData: T
       if (strategy === 'native_shallow' || strategy === 'shallow_merge') {
         await db.query(
           `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
@@ -156,10 +159,11 @@ export const createPgLiteCrudWrapper = async <T>(
            DO UPDATE SET ${dataColumn} = jsonb_set(${tableName}."${dataColumn}", '{}', EXCLUDED."${dataColumn}");`,
           [id, JSON.stringify(data)],
         )
+        newData = (await get(id)) ?? data
       } else {
         // Fetch and merge in JS only if necessary
         const existingData = strategy === 'replace' ? {} : await get(id)
-        const newData =
+        newData =
           strategy === 'deepmerge'
             ? deepMerge(existingData, data, 'overwrite')
             : { ...existingData, ...data }
@@ -171,6 +175,7 @@ export const createPgLiteCrudWrapper = async <T>(
           [id, JSON.stringify(newData)],
         )
       }
+      return newData
     },
     delete: async (id: string | number) => {
       await db.query(`DELETE FROM ${tableName} WHERE ${idColumn} = $1;`, [id])
@@ -195,17 +200,18 @@ export const createMapCrudWrapper = <T>(storage: Map<string | number, T>): CrudW
       storage.set(id, data)
       return Promise.resolve()
     },
-    upsert: async (id: string | number, data: T): Promise<void> => {
+    upsert: async (id, data) => {
       // because we are doing an "Object.assign" we can
       // preserve reactivity if the storage is reactive :)
       const oldData = await get(id)
       if (oldData) {
         Object.assign(oldData, deepMerge(oldData, data))
         storage.set(id, oldData)
+        return oldData
       } else {
         storage.set(id, data)
+        return data
       }
-      return Promise.resolve()
     },
     delete: (id: string | number): Promise<void> => {
       storage.delete(id)
@@ -244,12 +250,10 @@ export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWr
     return null
   },
 
-  async upsert(
-    id: string | number,
-    data: T,
-    strategy?: 'shallow_merge' | 'replace' | 'deepmerge' | 'native_shallow',
-  ): Promise<void> {
-    await Promise.all(wrappers.map((w) => w.upsert(id, data, strategy)))
+  async upsert(id, data, strategy) {
+    const updatedData = await wrappers[0]!.upsert(id, data, strategy)
+    await Promise.all(wrappers.slice(1).map((w) => w.set(id, updatedData)))
+    return updatedData
   },
 
   async delete(id: string | number): Promise<void> {
@@ -286,9 +290,9 @@ export const createEnhancedCrudWrapper = async <T>(
   storage: Map<string | number, T>,
 ) => {
   const dbWrapper = await createPgLiteCrudWrapper<T>(db, options)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const mapWrapper = createMapCrudWrapper<T>(storage)
-  const combinedWrapper = createCombinedCrudWrapper([dbWrapper])
+  // we are using mapWrapper first, because it is the fastest
+  const combinedWrapper = createCombinedCrudWrapper([mapWrapper, dbWrapper])
   const liveWrapper = withLiveStreams<T>(combinedWrapper)
   const lockedWrapper = withLocking(liveWrapper)
 
