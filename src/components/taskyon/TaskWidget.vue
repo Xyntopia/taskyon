@@ -239,6 +239,7 @@
 import ToolResultWidget from 'src/components/taskyon/ToolResultWidget.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
+import type { TaskNodeMeta } from 'src/modules/taskyon/types'
 import { TaskNode, partialTaskDraft, type OpenAIMessage } from 'src/modules/taskyon/types'
 import tyMarkdown from '../tyMarkdown.vue'
 import { computed, ref } from 'vue'
@@ -256,6 +257,8 @@ import {
 import { openrouterPricing } from 'src/modules/utils'
 import FileBrowser from './FileBrowser.vue'
 import { useAppStateStore } from 'src/stores/appState'
+import type { TyTaskManager } from 'src/modules/taskyon/taskManager'
+import { onUnmounted } from 'vue'
 
 const props = defineProps<{
   task: TaskNode
@@ -267,11 +270,31 @@ const props = defineProps<{
 }>()
 
 const tystate = useTaskyonStore()
-const taskMeta = tystate.reactiveTaskMeta(props.task.id)
-const taskMetaPrevious = props.previousTask?.id
-  ? tystate.reactiveTaskMeta(props.previousTask.id)
-  : undefined
-const taskMetaNext = props.nextTask?.id ? tystate.reactiveTaskMeta(props.nextTask.id) : undefined
+
+const initStr = undefined
+const taskMeta = ref<TaskNodeMeta | undefined>(initStr)
+const taskMetaPrevious = ref<TaskNodeMeta | undefined>(initStr)
+const taskMetaNext = ref<TaskNodeMeta | undefined>(initStr)
+
+const subscriptions: Array<() => void> = []
+onUnmounted(() => subscriptions.forEach((unsub) => unsub()))
+
+void tystate.getTaskManager().then((tm: TyTaskManager) => {
+  ;[
+    { id: props.task.id, ref: taskMeta },
+    { id: props.previousTask?.id, ref: taskMetaPrevious },
+    { id: props.nextTask?.id, ref: taskMetaNext },
+  ].forEach(({ id, ref }) => {
+    if (id) {
+      subscriptions.push(
+        tm.debugDb.readLive(id).subscribe(({ data }) => {
+          ref.value = data || undefined
+        }),
+      )
+    }
+  })
+})
+
 const taskCostMeta = computed(() =>
   taskMeta.value?.estimatedTokens ? taskMeta.value : taskMetaNext?.value,
 )
