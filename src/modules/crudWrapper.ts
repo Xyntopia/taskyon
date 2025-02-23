@@ -200,18 +200,25 @@ export const createMapCrudWrapper = <T>(storage: Map<string | number, T>): CrudW
       storage.set(id, data)
       return Promise.resolve()
     },
-    upsert: async (id, data) => {
-      // because we are doing an "Object.assign" we can
-      // preserve reactivity if the storage is reactive :)
+    upsert: async (id, data, strategy = 'replace') => {
       const oldData = await get(id)
+      let newData: T
+
       if (oldData) {
-        Object.assign(oldData, deepMerge(oldData, data))
-        storage.set(id, oldData)
-        return oldData
+        if (strategy === 'shallow_merge' || strategy === 'native_shallow') {
+          newData = { ...oldData, ...data }
+        } else if (strategy === 'deepmerge') {
+          newData = deepMerge(oldData, data, 'overwrite')
+        } else {
+          newData = data
+        }
+        storage.set(id, newData)
       } else {
-        storage.set(id, data)
-        return data
+        newData = data
+        storage.set(id, newData)
       }
+
+      return newData
     },
     delete: (id: string | number): Promise<void> => {
       storage.delete(id)
@@ -251,6 +258,9 @@ export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWr
   },
 
   async upsert(id, data, strategy) {
+    // we are using the first wrapper to upsert the data
+    // and then we are updating the other wrappers with the new data
+    // this is important, because otherwise we could end up with inconsistent data
     const updatedData = await wrappers[0]!.upsert(id, data, strategy)
     await Promise.all(wrappers.slice(1).map((w) => w.set(id, updatedData)))
     return updatedData
