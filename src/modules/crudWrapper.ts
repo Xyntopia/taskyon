@@ -51,10 +51,29 @@ export const withLiveStreams = <T>(
       // Optionally, you might emit a deletion event if needed.
       emit({ id, data: null })
     },
-    // Assuming our frpBus has a map operator as well
-    readLive: (id: string | number) => {
-      // Return a stream that filters for the specific id and maps the event to its data.
-      return filter(liveStream, (event) => event.id === id)
+    readLive: (id: string | number, emitCurrent: boolean = true) => {
+      const liveForId = filter(liveStream, (event) => event.id === id)
+      if (emitCurrent) {
+        return {
+          subscribe(observer) {
+            // Immediately subscribe to the live stream
+            const unsubLive = liveForId.subscribe(observer)
+            let cancelled = false
+            // Asynchronously fetch the current value and emit when ready
+            void base.get(id).then((current) => {
+              if (!cancelled) {
+                console.log('emitting current', current)
+                observer({ id, data: current })
+              }
+            })
+            return () => {
+              cancelled = true
+              unsubLive()
+            }
+          },
+        }
+      }
+      return liveForId
     },
     async clear() {
       await base.clear()
@@ -65,13 +84,19 @@ export const withLiveStreams = <T>(
 
 const withLock =
   (lockItem: ReturnType<typeof lockMap>['lockItem']) =>
-  async <T>(func: T, id: string | number) => {
+  async <T extends (...args: Parameters<T>) => ReturnType<T>>(
+    func: T,
+    id: string | number,
+    args: Parameters<T>,
+  ) => {
     const unlock = await lockItem(id)
+    let result: ReturnType<T> | undefined
     try {
-      return func
+      result = func(...args)
     } finally {
       unlock()
     }
+    return result
   }
 
 export const withLocking = <T, U>(base: CrudWrapper<U> & T, namespace: string = 'task') => {
@@ -82,13 +107,13 @@ export const withLocking = <T, U>(base: CrudWrapper<U> & T, namespace: string = 
   return {
     ...base,
     set: async (...args: Parameters<CrudWrapper<U>['set']>) =>
-      (await locking(base.set, args[0]))(...args),
+      await locking(base.set, args[0], args),
     delete: async (...args: Parameters<CrudWrapper<U>['delete']>) =>
-      (await locking(base.delete, args[0]))(...args),
+      await locking(base.delete, args[0], args),
     get: async (...args: Parameters<CrudWrapper<U>['get']>) =>
-      (await locking(base.get, args[0]))(...args),
+      await locking(base.get, args[0], args),
     upsert: async (...args: Parameters<CrudWrapper<U>['upsert']>) =>
-      (await locking(base.upsert, args[0]))(...args),
+      await locking(base.upsert, args[0], args),
     clear: async () => {
       await base.clear()
       clearLocks()
@@ -123,12 +148,12 @@ export const createPgLiteCrudWrapper = async <T>(
     upsert: async (id, data, strategy = 'replace') => {
       // important: this function usually also requires the "withLocking" wrapper
       // in order to avoid race conditions
-      if (strategy === 'native_shallow') {
+      if (strategy === 'native_shallow' || strategy === 'shallow_merge') {
         await db.query(
           `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
            VALUES ($1, $2)
            ON CONFLICT (${idColumn})
-           DO UPDATE SET ${dataColumn} = jsonb_set(${dataColumn}, '{}', EXCLUDED.${dataColumn});`,
+           DO UPDATE SET ${dataColumn} = jsonb_set(${tableName}."${dataColumn}", '{}', EXCLUDED."${dataColumn}");`,
           [id, JSON.stringify(data)],
         )
       } else {
@@ -180,7 +205,6 @@ export const createMapCrudWrapper = <T>(storage: Map<string | number, T>): CrudW
       } else {
         storage.set(id, data)
       }
-      storage.set(id, data)
       return Promise.resolve()
     },
     delete: (id: string | number): Promise<void> => {
@@ -262,8 +286,9 @@ export const createEnhancedCrudWrapper = async <T>(
   storage: Map<string | number, T>,
 ) => {
   const dbWrapper = await createPgLiteCrudWrapper<T>(db, options)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const mapWrapper = createMapCrudWrapper<T>(storage)
-  const combinedWrapper = createCombinedCrudWrapper([dbWrapper, mapWrapper])
+  const combinedWrapper = createCombinedCrudWrapper([dbWrapper])
   const liveWrapper = withLiveStreams<T>(combinedWrapper)
   const lockedWrapper = withLocking(liveWrapper)
 

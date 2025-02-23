@@ -6,7 +6,7 @@ export type TyPGDB = PGliteWorker & { live: LiveNamespace }
 
 let pgInstance: TyPGDB | null = null
 
-export const getDatabase = async (name: string): Promise<TyPGDB> => {
+export const getDatabase: (name: string) => Promise<TyPGDB> = async (name) => {
   if (!pgInstance) {
     pgInstance = await PGliteWorker.create(
       new Worker(new URL('./pglite.worker.ts', import.meta.url), {

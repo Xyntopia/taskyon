@@ -48,3 +48,15 @@ export function filter<T>(source: Stream<T>, predicate: (value: T) => boolean): 
   })
   return stream
 }
+
+// Operator: prepend an initial value to the source stream
+export function startWith<T>(source: Stream<T>, initial: T): Stream<T> {
+  return {
+    subscribe(observer: Observer<T>): Unsubscribe {
+      // Immediately emit the initial value to the new subscriber
+      observer(initial)
+      // Then subscribe to the source stream
+      return source.subscribe(observer)
+    },
+  }
+}
