@@ -421,7 +421,11 @@ export async function runTaskWorker(
         llmSettings.allowedTools || [],
         taskManager.debugDb,
       )
-      const errorTaskId = (await taskManager.addTaskChain(errorTaskChain, task?.id)).at(-1)?.id
+      // we are adding the error task chain as a subtaskchain with the parentID of this
+      // particular task.
+      const errorTaskId = (await taskManager.addTaskChain(errorTaskChain, undefined, task?.id)).at(
+        -1,
+      )?.id
 
       // interrupt execution if interrupted flag is shown!
       // this makes sure that results are still saved, even if we stop any

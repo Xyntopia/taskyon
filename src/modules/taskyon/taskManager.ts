@@ -9,7 +9,7 @@ import {
   createTaskNodeMangoQuery,
 } from './rxdb'
 import { openFile } from '../OPFS'
-import { deepCopy, lockMap } from '../utils'
+import { deepCopy, deepMerge, lockMap } from '../utils'
 import { useVectorStore } from './hnswIndex'
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi'
 import { type InternalTool } from './tools'
@@ -488,11 +488,19 @@ const createRxDBCrudWrapper = (db: TaskyonDatabase): CrudWrapper<TaskNode> => {
     //       ID, what we can do is to have our update task point to its "parent" hash
     //       AND also advertise the update for the parent task! It is also important
     //       that we return the new id...
-    upsert: async (id, data) => {
+    upsert: async (id, data, strategy) => {
       const oldData = await get(id)
-      if (oldData) {
-        await set(id, { ...oldData, ...data })
+      let newData: TaskNode
+      if ((oldData && strategy === 'shallow_merge') || strategy === 'native_shallow') {
+        newData = { ...oldData, ...data }
+        await set(id, newData)
+      } else if (oldData && strategy === 'deepmerge') {
+        newData = deepMerge(oldData, data, 'overwrite')
+        await set(id, newData)
       }
+      await set(id, data)
+      newData = data
+      return newData
     },
     delete: async (id) => {
       // also delete from vectordb!
@@ -603,8 +611,9 @@ export function useTyTaskManager(
       if (task) notifySubscribers(task, 'delete')
     },
     upsert: async (id: string | number, data: TaskNode) => {
-      await tyCrud.upsert(id, data)
-      notifySubscribers(data, 'update')
+      const newData = await tyCrud.upsert(id, data)
+      notifySubscribers(newData, 'update')
+      return newData
     },
   })
 
