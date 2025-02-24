@@ -730,7 +730,7 @@ export async function createChatCompletionTool(
     // parse the response into our own type ...
     const resp = ChatResponseType.safeParse(chatCompletion)
 
-    let metaInfo: TaskNodeMeta = { taskPrompt: chatInfo }
+    let metaInfo: TaskNodeMeta = { taskPrompt: chatInfo, rawOutput: resp }
     // get token usage for this task..
     if (resp.success) {
       console.log('save token usage...')
