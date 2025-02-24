@@ -348,11 +348,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       console.log('update task thread...', taskId)
       if (taskId) {
         const TM = await getTaskManager()
-        const threadIDChain = await TM.getTaskIdChain(taskId)
-        const thread = (await Promise.all(threadIDChain.map((tId) => TM.getTask(tId)))).filter(
-          (t) => t,
-        ) as TaskNode[]
-        return thread
+        const thread = (await TM.getTaskChain(taskId)).filter((t) => t)
+        return thread as TaskNode[]
       }
       return []
     }, [] as TaskNode[])
