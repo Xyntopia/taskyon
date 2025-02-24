@@ -1,24 +1,48 @@
 <template>
   <div class="col" style="background-color: inherit; color: inherit" flat square>
     <div v-if="currentTask" class="q-gutter-xs q-px-xs task-container">
-      <template v-for="(task, idx) in props.selectedThread" :key="task.id">
-        <q-card
-          v-if="showAllTasks || showTask(task)"
-          :flat="$q.dark.isActive"
-          :class="[task.role, Object.keys(task.content)[0]]"
-        >
-          <Task
-            :id="task.id"
-            :task="task"
-            :previous-task="props.selectedThread[idx - 1]"
-            :next-task="props.selectedThread[idx + 1]"
-            :is-working="!taskWorkerWaiting && task.id === currentTask.id"
-            style="min-width: 300px"
-            :class="['q-pa-xs', task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"
-            :show-id="!!showIds"
-          />
-        </q-card>
-      </template>
+      <div v-if="showTaskTree" class="q-pa-sm q-pl-md">
+        <!--<pre>{{ JSON.stringify(taskTree, undefined, 2) }}</pre>-->
+        <q-tree dense node-key="taskid" :nodes="taskTree" default-expand-all>
+          <template #default-header="prop">
+            <q-card
+              :flat="$q.dark.isActive"
+              :class="[prop.node.task.role, Object.keys(prop.node.task.content)[0]]"
+            >
+              <Task
+                :id="prop.node.task.id"
+                :task="prop.node.task"
+                style="min-width: 300px"
+                :class="[
+                  'q-pa-xs',
+                  prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
+                ]"
+                :show-id="!!showIds"
+              />
+            </q-card>
+          </template>
+        </q-tree>
+      </div>
+      <div v-else>
+        <template v-for="(task, idx) in props.selectedThread" :key="task.id">
+          <q-card
+            v-if="showAllTasks || showTask(task)"
+            :flat="$q.dark.isActive"
+            :class="[task.role, Object.keys(task.content)[0]]"
+          >
+            <Task
+              :id="task.id"
+              :task="task"
+              :previous-task="props.selectedThread[idx - 1]"
+              :next-task="props.selectedThread[idx + 1]"
+              :is-working="!taskWorkerWaiting && task.id === currentTask.id"
+              style="min-width: 300px"
+              :class="['q-pa-xs', task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"
+              :show-id="!!showIds"
+            />
+          </q-card>
+        </template>
+      </div>
       <!--Render tasks which are in progress-->
       <q-card v-if="!taskWorkerWaiting" class="row">
         <div class="col">
@@ -52,6 +76,7 @@ const props = defineProps<{
   taskWorkerWaiting: boolean
   taskWorkerMessage?: string
   showAllTasks?: boolean
+  showTaskTree?: boolean
   showIds?: boolean
   expertMode?: boolean
 }>()
@@ -77,7 +102,40 @@ const streamCallback: Parameters<typeof tystate.streamCallBacks.addGlobal>[0] = 
   }
 }
 
+interface taskTreeNodeType {
+  label: string
+  taskid: string
+  task: TaskNode
+  children: taskTreeNodeType[]
+}
+
+const taskTree = computed(() => {
+  let taskTree = [] as taskTreeNodeType[]
+  let nextDirectChildren = [] as taskTreeNodeType[]
+
+  for (const task of props.selectedThread.toReversed()) {
+    const taskobj = {
+      label: task.name || task.id.toString().slice(-5),
+      taskid: task.id,
+      task,
+      children: nextDirectChildren,
+    }
+    if (task.priorID) {
+      taskTree = [taskobj, ...taskTree]
+      nextDirectChildren = []
+    } else if (!task.priorID && task.parentID) {
+      nextDirectChildren = [taskobj, ...taskTree]
+      taskTree = []
+    } else {
+      taskTree = [taskobj, ...taskTree]
+    }
+  }
+
+  return taskTree
+})
+
 tystate.streamCallBacks.addGlobal(streamCallback)
+
 onBeforeUnmount(() => {
   tystate.streamCallBacks.removeGlobal(streamCallback)
 })

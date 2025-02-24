@@ -18,7 +18,7 @@
           class="col-auto q-pa-xl"
           size="2rem"
           name="svguse:/taskyon_mono_opt.svg#taskyon"
-          :color="$q.dark.isActive ? 'secondary' : 'primary'"
+          :color="$q.dark.isActive ? 'fsecondary' : 'primary'"
         ></q-icon>
         <div class="col text-subtitle2 text-center">
           You've been invited to read this chat! Scroll down and start reading
@@ -33,6 +33,7 @@
         :task-worker-waiting="tystate.taskWorkerWaiting"
         :task-worker-message="taskWorkerMessage || ''"
         :show-all-tasks="showAllTasks"
+        :show-task-tree="showTaskTree"
         :show-ids="showAllTasks"
         :expert-mode="state.appConfiguration.expertMode"
       />
@@ -66,9 +67,12 @@
     </div>
     <!--Task Browser buttons-->
     <q-page-sticky position="top-left" class="print-hide">
-      <div v-if="browserMode" class="q-pa-md toolbar">
+      <div v-if="browserMode" class="q-pa-md q-gutter-sm toolbar">
         <ToggleButton v-model="showAllTasks" dense flat label="dev">
           <q-tooltip>Show Detailed Task Chain</q-tooltip>
+        </ToggleButton>
+        <ToggleButton v-model="showTaskTree" :icon="mdiFileTree" dense flat>
+          <q-tooltip>Show Task Tree</q-tooltip>
         </ToggleButton>
       </div>
     </q-page-sticky>
@@ -106,9 +110,11 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAppStateStore } from 'src/stores/appState'
 import LLMProviders from 'components/taskyon/LLMProviders.vue'
 import ToggleButton from 'src/components/ToggleButton.vue'
+import { mdiFileTree } from '@quasar/extras/mdi-v6'
 
 const props = defineProps<{ browserMode?: boolean }>()
 const showAllTasks = ref<boolean>(props.browserMode)
+const showTaskTree = ref<boolean>(props.browserMode)
 
 const ResetButton = process.env.DEV
   ? defineAsyncComponent(
