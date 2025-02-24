@@ -211,7 +211,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     ];*/
 
     // Remove any entries which are a parent of the current task (keeping only leaf IDs)
-    stateRefs.chatHistory = stateRefs.chatHistory.filter((t) => t !== task.priorID)
+    stateRefs.chatHistory = stateRefs.chatHistory.filter(
+      (t) => t !== task.priorID || t !== task.parentID,
+    )
 
     // Enforce a maximum size of 50
     if (stateRefs.chatHistory.length > 50) {

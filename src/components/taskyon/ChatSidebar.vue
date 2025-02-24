@@ -42,7 +42,9 @@
                   ? `> ${tystate.currentTask?.name}`
                   : nameMap[conversationId] || `chat.${conversationId.slice(0, 3)}`
               }}
-              <q-tooltip> Select Conversation </q-tooltip>
+              <q-tooltip>
+                Select Conversation ( id: {{ conversationId.slice(0, 5) }} ...)</q-tooltip
+              >
             </q-item-section>
             <q-item-section side>
               <TaskChainMenu :conversation-id="conversationId" />
