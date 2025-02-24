@@ -1,6 +1,6 @@
 <template>
   <div class="col" style="background-color: inherit; color: inherit" flat square>
-    <div v-if="currentTask" class="q-gutter-xs q-px-xs task-container">
+    <div v-if="currentTask">
       <div v-if="showTaskTree" class="q-pa-sm q-pl-md">
         <!--<pre>{{ JSON.stringify(taskTree, undefined, 2) }}</pre>-->
         <q-tree dense node-key="taskid" :nodes="taskTree" default-expand-all>
@@ -8,10 +8,12 @@
             <q-card
               :flat="$q.dark.isActive"
               :class="[prop.node.task.role, Object.keys(prop.node.task.content)[0]]"
+              @click.stop
             >
               <Task
                 :id="prop.node.task.id"
                 :task="prop.node.task"
+                short
                 style="min-width: 300px"
                 :class="[
                   'q-pa-xs',
@@ -23,7 +25,7 @@
           </template>
         </q-tree>
       </div>
-      <div v-else>
+      <div v-else class="task-container q-gutter-xs q-px-xs">
         <template v-for="(task, idx) in props.selectedThread" :key="task.id">
           <q-card
             v-if="showAllTasks || showTask(task)"

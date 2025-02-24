@@ -74,15 +74,28 @@
           </q-expansion-item>
         </div>
         <div v-else-if="task.content.type === 'message'" class="col">
-          <ty-markdown
-            v-if="state.taskState[task.id]?.markdownEnabled != false"
-            no-line-numbers
-            style="min-width: 50px"
-            :src="task.content.data"
-          />
-          <div v-else class="raw-markdown q-mb-md">
-            {{ task.content.data }}
-          </div>
+          <q-btn
+            v-if="short"
+            flat
+            dense
+            no-caps
+            @click="expandMessageContent = !expandMessageContent"
+          >
+            {{ task.content.data.split(' ').slice(0, 10).join(' ') }}
+          </q-btn>
+          <q-slide-transition>
+            <div v-show="!short || expandMessageContent">
+              <ty-markdown
+                v-if="state.taskState[task.id]?.markdownEnabled != false"
+                no-line-numbers
+                style="min-width: 50px"
+                :src="task.content.data"
+              />
+              <div v-else class="raw-markdown q-mb-md">
+                {{ task.content.data }}
+              </div>
+            </div>
+          </q-slide-transition>
         </div>
         <div v-else-if="task.content.type === 'files'" class="col">
           <FileBrowser
@@ -272,6 +285,7 @@ const props = defineProps<{
 const tystate = useTaskyonStore()
 
 const initStr = undefined
+const expandMessageContent = ref<boolean>(false)
 const taskMeta = ref<TaskNodeMeta | undefined>(initStr)
 const taskMetaPrevious = ref<TaskNodeMeta | undefined>(initStr)
 const taskMetaNext = ref<TaskNodeMeta | undefined>(initStr)
