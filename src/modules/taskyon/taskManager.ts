@@ -634,15 +634,11 @@ export function useTyTaskManager(
   })
 
   async function countVecs() {
-    if (taskyonDB) {
-      return await taskyonDB.vectormappings.count().exec()
-    } else return undefined
+    return await taskyonDB.vectormappings.count().exec()
   }
 
   async function countTasks() {
-    if (taskyonDB) {
-      return await taskyonDB.tasknodes.count().exec()
-    } else return undefined
+    return await taskyonDB.tasknodes.count().exec()
   }
 
   function createCachedSearch(
@@ -651,7 +647,7 @@ export function useTyTaskManager(
   ) {
     return async (key: string): Promise<Set<string>> => {
       let cached = cache.get(key)
-      if (!cached && taskyonDB) {
+      if (!cached) {
         const dbResults = await taskyonDB.tasknodes
           .find({
             selector: buildSelector(key),
@@ -660,8 +656,9 @@ export function useTyTaskManager(
         cached = new Set(dbResults.map((t) => t.id))
         cache.set(key, cached)
         return cached
+      } else {
+        return cached
       }
-      return cached ?? new Set()
     }
   }
 
@@ -742,39 +739,37 @@ export function useTyTaskManager(
   async function updateToolDefinitions<T extends boolean>(
     removeFunction: T = false as T,
   ): Promise<T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>> {
-    if (taskyonDB) {
-      const tasks = await searchTasks(createTaskNodeMangoQuery('function'))
+    const tasks = await searchTasks(createTaskNodeMangoQuery('function'))
 
-      // TODO: we can do better here ;)
-      function hasMessage(task: TaskNode): task is TaskNode & { content: { type: 'message' } } {
-        return task.content.type === 'tooldefinition'
-      }
-
-      const toolDefs = tasks.filter(hasMessage)
-      const parsedToolDefs = toolDefs.flatMap((task) => {
-        try {
-          const toolDef = ToolBase.parse(JSON.parse(task.content.data))
-          return [toolDef]
-        } catch {
-          return []
-        }
-      })
-
-      // Merge parsed tool definitions with default tools
-      return parsedToolDefs.concat(Object.values(defaultTools)).reduce(
-        (pv, cv) => {
-          if (removeFunction && 'function' in cv) {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { function: unused, ...toolBaseOnly } = cv as InternalTool
-            pv[toolBaseOnly.name] = toolBaseOnly
-          } else {
-            pv[cv.name] = cv
-          }
-          return pv
-        },
-        {} as T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>,
-      )
+    // TODO: we can do better here ;)
+    function hasMessage(task: TaskNode): task is TaskNode & { content: { type: 'message' } } {
+      return task.content.type === 'tooldefinition'
     }
+
+    const toolDefs = tasks.filter(hasMessage)
+    const parsedToolDefs = toolDefs.flatMap((task) => {
+      try {
+        const toolDef = ToolBase.parse(JSON.parse(task.content.data))
+        return [toolDef]
+      } catch {
+        return []
+      }
+    })
+
+    // Merge parsed tool definitions with default tools
+    return parsedToolDefs.concat(Object.values(defaultTools)).reduce(
+      (pv, cv) => {
+        if (removeFunction && 'function' in cv) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { function: unused, ...toolBaseOnly } = cv as InternalTool
+          pv[toolBaseOnly.name] = toolBaseOnly
+        } else {
+          pv[cv.name] = cv
+        }
+        return pv
+      },
+      {} as T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>,
+    )
 
     return {} as T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>
   }
@@ -813,15 +808,13 @@ export function useTyTaskManager(
 
   async function getJsonTaskBackup() {
     // TODO: give this a callback so that we can save it in "chunks"
-    if (taskyonDB) {
-      console.log('exporting json backup db!')
-      const dbobject = await taskyonDB.exportJSON([
-        'filemappings',
-        'tasknodes',
-        //'vectormappings'
-      ])
-      return dbobject
-    }
+    console.log('exporting json backup db!')
+    const dbobject = await taskyonDB.exportJSON([
+      'filemappings',
+      'tasknodes',
+      //'vectormappings'
+    ])
+    return dbobject
   }
 
   // import tasks from json! :)
@@ -829,14 +822,12 @@ export function useTyTaskManager(
   //       we want to get rid of our rxdb dependency here... we could even backup tass as markdown!  that might be even better :)
   async function addTaskBackup(jsonObjString: string) {
     // TODO: add some zod validation here!
-    if (taskyonDB) {
-      type ImportJSONFunction = typeof taskyonDB.importJSON
-      type FirstArgumentType = Parameters<ImportJSONFunction>[0]
-      const jsonObj = JSON.parse(jsonObjString) as FirstArgumentType
-      console.log('importing json backup to db!')
-      const dbobject = await taskyonDB.importJSON(jsonObj)
-      return dbobject
-    }
+    type ImportJSONFunction = typeof taskyonDB.importJSON
+    type FirstArgumentType = Parameters<ImportJSONFunction>[0]
+    const jsonObj = JSON.parse(jsonObjString) as FirstArgumentType
+    console.log('importing json backup to db!')
+    const dbobject = await taskyonDB.importJSON(jsonObj)
+    return dbobject
     // when loading json, notify for each individual new task...
     notifySubscribers(undefined, 'new')
   }
