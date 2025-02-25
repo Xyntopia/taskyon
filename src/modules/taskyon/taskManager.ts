@@ -13,7 +13,7 @@ import { deepCopy, deepMerge, lockMap } from '../utils'
 import { useVectorStore } from './hnswIndex'
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi'
 import { type InternalTool } from './tools'
-import { taskUtils } from './taskUtils'
+import { createGetTaskIdChain } from './taskUtils'
 import { type MangoQuery } from 'rxdb'
 import { dump, load } from 'js-yaml'
 import { processMarkdown } from 'src/modules/taskyon/taskUtils'
@@ -676,6 +676,99 @@ export function useTyTaskManager(
     parentID,
   }))
 
+  const getTaskIdChain = async (taskId: string, maxFollow: number = 0, untilTaskID?: string) => {
+    const conversationList: string[] = []
+
+    // Start with the selected task
+    let currentTaskID: string | undefined = taskId
+
+    // Trace back the priorIDs to the original task in the chain
+    while (
+      currentTaskID &&
+      (maxFollow >= conversationList.length || maxFollow == 0) &&
+      untilTaskID != currentTaskID
+    ) {
+      // Get the current task
+      const currentTask: TaskNode | null = await tyCrudVec.get(currentTaskID)
+      if (currentTask) {
+        // Prepend the current task to the conversation list so the selected task ends up being the last in the list
+        conversationList.unshift(currentTaskID)
+        // prioritize priorID over parentID when following the chain...
+        currentTaskID = currentTask.priorID || currentTask.parentID
+      } else {
+        currentTaskID = undefined
+      } // Break if we reach a task that doesn't exist
+    }
+
+    return conversationList
+  }
+
+  async function getTaskChain<T extends boolean>(
+    taskId: string,
+    onlyDefined?: T,
+  ): Promise<T extends true ? TaskNode[] : (TaskNode | undefined)[]> {
+    const taskIds = await getTaskIdChain(taskId)
+    const taskList = await Promise.all(taskIds.map((tid) => tyCrudVec.get(tid)))
+    if (onlyDefined) {
+      return taskList.filter((task): task is TaskNode => task !== undefined)
+    }
+
+    return taskList as T extends true ? TaskNode[] : (TaskNode | undefined)[]
+  }
+
+  // first, get all immediate children and then, for each of them get all their leaf siblings
+  // then from each leaf sibling go backwards through prior & parent IDs to create
+  // a chain with the last task being the leaf.
+  const getTaskResults = async (taskId: string) => {
+    const immediateChildren = await searchAllDirectChildren(taskId)
+    const leafTasks: string[] = []
+
+    for (const childId of immediateChildren) {
+      const siblingLeafTasks = await findSiblingLeafTasks(childId)
+      leafTasks.push(...siblingLeafTasks)
+    }
+
+    return leafTasks
+  }
+
+  async function getFlattenedChain(
+    taskId: string,
+    untilTaskID: string | undefined = undefined,
+    onlyFirstChild = true,
+    isLastTask = true,
+  ): Promise<string[]> {
+    // get all leaf children from prior task but onyl if we are not the last task..:
+    const taskAndChildren: string[] = [taskId]
+    if (!isLastTask) {
+      const leafs = await getTaskResults(taskId)
+      const taskChildrenChain = await Promise.all(
+        leafs.map((t) => {
+          const childChain = getFlattenedChain(t, taskId, true, false)
+          return childChain
+        }),
+      )
+      if (taskChildrenChain[0] && onlyFirstChild) {
+        taskAndChildren.push(...taskChildrenChain[0])
+      } else if (!onlyFirstChild) {
+        throw new Error('we can not use multi task results yet!')
+      }
+    }
+
+    // we don't get children from this task, only from prior ones...
+    const task = await tyCrudVec.get(taskId)
+
+    // get prior task chain...
+    if (task?.priorID && !(task.priorID === untilTaskID)) {
+      const priorTaskChain = await getFlattenedChain(task.priorID, untilTaskID, true, false)
+      return [...priorTaskChain, ...taskAndChildren]
+    } else if (task?.parentID && !(task.parentID === untilTaskID)) {
+      const priorParentTaskChain = await getFlattenedChain(task.parentID, untilTaskID, true, true)
+      return [...priorParentTaskChain, ...taskAndChildren]
+    } else {
+      return [...taskAndChildren]
+    }
+  }
+
   async function deleteAllTasks() {
     // TODO: also delete vectordb! (will be done automatically, once we transition to pglite)
     // TODO: manually re-initiailized taskyondb after remove...
@@ -857,8 +950,6 @@ export function useTyTaskManager(
   }
 
   const fm = useFileManager(taskyonDB?.filemappings)
-
-  const { getTaskIdChain, getTaskChain } = taskUtils(tyCrud.get)
 
   // converts an antire taskchain (thread) into yaml for download
   async function chatToYaml(conversationId: string) {

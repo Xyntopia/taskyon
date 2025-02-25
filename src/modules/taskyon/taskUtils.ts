@@ -1,48 +1,5 @@
-import { type TaskNode, type TaskGetter, partialTaskDraft } from './types'
+import { type TaskNode, partialTaskDraft } from './types'
 import { load } from 'js-yaml'
-
-export const taskUtils = (getTask: TaskGetter) => {
-  /* get a chain of taskss with the last task being the last element in the list */
-  async function getTaskIdChain(taskId: string, maxFollow: number = 0) {
-    const conversationList: string[] = []
-
-    // Start with the selected task
-    let currentTaskID: string | undefined = taskId
-
-    // Trace back the priorIDs to the original task in the chain
-    while (currentTaskID && (maxFollow >= conversationList.length || maxFollow == 0)) {
-      // Get the current task
-      const currentTask: TaskNode | null = await getTask(currentTaskID)
-      if (currentTask) {
-        // Prepend the current task to the conversation list so the selected task ends up being the last in the list
-        conversationList.unshift(currentTaskID)
-        // prioritize priorID over parentID when following the chain...
-        currentTaskID = currentTask.priorID || currentTask.parentID
-      } else {
-        currentTaskID = undefined
-      } // Break if we reach a task that doesn't exist
-    }
-
-    return conversationList
-  }
-
-  async function getTaskChain<T extends boolean>(
-    taskId: string,
-    onlyDefined?: T,
-  ): Promise<T extends true ? TaskNode[] : (TaskNode | undefined)[]> {
-    const taskIds = await getTaskIdChain(taskId)
-    const taskList = await Promise.all(taskIds.map((tid) => getTask(tid)))
-    if (onlyDefined) {
-      return taskList.filter((task): task is TaskNode => task !== undefined)
-    }
-    return taskList as T extends true ? TaskNode[] : (TaskNode | undefined)[]
-  }
-
-  return {
-    getTaskIdChain,
-    getTaskChain,
-  }
-}
 
 export function findAllFilesInTasks(taskList: TaskNode[]): string[] {
   const fileSet = new Set<string>()
