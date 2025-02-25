@@ -770,8 +770,6 @@ export function useTyTaskManager(
       },
       {} as T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>,
     )
-
-    return {} as T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>
   }
 
   /**
