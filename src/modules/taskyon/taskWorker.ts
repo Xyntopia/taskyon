@@ -231,9 +231,7 @@ function createTaskTracker(tm: TyTaskManager) {
       // subtask chain which avoids having to check every single
       // function task & its children in a subchain
       const leafTasks = (
-        await Promise.all(
-          Array.from(childrenIDs, async (id) => await tm.findOneSiblingLeafTask(id)),
-        )
+        await Promise.all(Array.from(childrenIDs, async (id) => await tm.findSiblingLeafTasks(id)))
       ).flat()
 
       // now iterativly check again starting from each leaf task, if they're finished...

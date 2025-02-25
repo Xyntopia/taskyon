@@ -774,14 +774,13 @@ export function useTyTaskManager(
 
   /**
    * Finds the leaf tasks of a given task tree node using a depth-first search (DFS) iterative approach.
-   * // TODO: find all leaf tasks...
    *
    * @param {string} taskId - The ID of the task.
    * @param {Function} getTask - Function to retrieve a task by its ID.
    * @returns {Promise<string[]>} - An array of IDs of the leaf tasks.
    *
    */
-  async function findOneSiblingLeafTask(taskId: string): Promise<string[]> {
+  async function findSiblingLeafTasks(taskId: string): Promise<string[]> {
     const stack: string[] = [taskId]
     const leafTasks: string[] = []
 
@@ -1014,7 +1013,7 @@ export function useTyTaskManager(
     resetTaskVectors,
     countVecs,
     filteredVectorSearch,
-    findOneSiblingLeafTask,
+    findSiblingLeafTasks,
     searchNextSibling,
     searchAllDirectChildren,
     searchAllChildren,

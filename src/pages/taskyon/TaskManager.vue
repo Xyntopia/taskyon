@@ -245,7 +245,7 @@ const initialPagination = {
 
 async function setConversation(taskId: string) {
   const taskManager = await tystate.getTaskManager()
-  const leafTasks = await taskManager.findOneSiblingLeafTask(taskId)
+  const leafTasks = await taskManager.findSiblingLeafTasks(taskId)
   console.log('set conversation to', leafTasks[0])
   void router.push({ path: 'chat', query: { t: leafTasks[0] } })
 }
