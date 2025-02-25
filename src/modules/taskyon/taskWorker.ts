@@ -102,7 +102,7 @@ async function processTask(
     console.log(`Calling function ${func.name}`)
     if (tools[func.name] && !taskWorkerController.isInterrupted()) {
       // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
-      const taskChain = await taskManager.getTaskChain(task.id, true)
+      const taskChain = await taskManager.getTaskChain(task.id)
       const funcR = await handleFunctionExecution(func, tools, taskWorkerController.onInterrupt, {
         taskChain,
       })

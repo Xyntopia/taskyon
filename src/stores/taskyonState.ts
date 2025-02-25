@@ -351,7 +351,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       if (taskId) {
         const TM = await getTaskManager()
         const thread = (await TM.getTaskChain(taskId)).filter((t) => t)
-        return thread as TaskNode[]
+        return thread
       }
       return []
     }, [] as TaskNode[])

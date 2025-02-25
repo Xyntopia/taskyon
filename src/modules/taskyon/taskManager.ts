@@ -13,7 +13,6 @@ import { deepCopy, deepMerge, lockMap } from '../utils'
 import { useVectorStore } from './hnswIndex'
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi'
 import { type InternalTool } from './tools'
-import { createGetTaskIdChain } from './taskUtils'
 import { type MangoQuery } from 'rxdb'
 import { dump, load } from 'js-yaml'
 import { processMarkdown } from 'src/modules/taskyon/taskUtils'
@@ -676,44 +675,18 @@ export function useTyTaskManager(
     parentID,
   }))
 
-  const getTaskIdChain = async (taskId: string, maxFollow: number = 0, untilTaskID?: string) => {
-    const conversationList: string[] = []
-
-    // Start with the selected task
-    let currentTaskID: string | undefined = taskId
-
-    // Trace back the priorIDs to the original task in the chain
-    while (
-      currentTaskID &&
-      (maxFollow >= conversationList.length || maxFollow == 0) &&
-      untilTaskID != currentTaskID
-    ) {
-      // Get the current task
-      const currentTask: TaskNode | null = await tyCrudVec.get(currentTaskID)
-      if (currentTask) {
-        // Prepend the current task to the conversation list so the selected task ends up being the last in the list
-        conversationList.unshift(currentTaskID)
-        // prioritize priorID over parentID when following the chain...
-        currentTaskID = currentTask.priorID || currentTask.parentID
-      } else {
-        currentTaskID = undefined
-      } // Break if we reach a task that doesn't exist
-    }
-
-    return conversationList
-  }
-
-  async function getTaskChain<T extends boolean>(
-    taskId: string,
-    onlyDefined?: T,
-  ): Promise<T extends true ? TaskNode[] : (TaskNode | undefined)[]> {
+  async function getTaskChain(taskId: string): Promise<TaskNode[]> {
     const taskIds = await getTaskIdChain(taskId)
     const taskList = await Promise.all(taskIds.map((tid) => tyCrudVec.get(tid)))
-    if (onlyDefined) {
-      return taskList.filter((task): task is TaskNode => task !== undefined)
-    }
 
-    return taskList as T extends true ? TaskNode[] : (TaskNode | undefined)[]
+    // Check if any tasks are "null" or "undefined" and throw an error
+    taskList.forEach((task, index) => {
+      if (task === null || task === undefined) {
+        throw new Error(`Task at index ${index} is ${task === null ? 'null' : 'undefined'}`)
+      }
+    })
+
+    return taskList as TaskNode[]
   }
 
   // first, get all immediate children and then, for each of them get all their leaf siblings
@@ -733,23 +706,23 @@ export function useTyTaskManager(
 
   async function getFlattenedChain(
     taskId: string,
-    untilTaskID: string | undefined = undefined,
-    onlyFirstChild = true,
-    isLastTask = true,
+    maxFollow: number, // by default we can follow 1mio. tasks...
+    untilTaskID: string | undefined,
+    onlyFirstChild: boolean,
+    isLastTask: boolean,
   ): Promise<string[]> {
+    if (maxFollow <= 0) return []
     // get all leaf children from prior task but onyl if we are not the last task..:
     const taskAndChildren: string[] = [taskId]
     if (!isLastTask) {
       const leafs = await getTaskResults(taskId)
-      const taskChildrenChain = await Promise.all(
-        leafs.map((t) => {
-          const childChain = getFlattenedChain(t, taskId, true, false)
-          return childChain
-        }),
-      )
-      if (taskChildrenChain[0] && onlyFirstChild) {
-        taskAndChildren.push(...taskChildrenChain[0])
+      if (leafs[0] && onlyFirstChild) {
+        const childChain = await getFlattenedChain(leafs[0], maxFollow - 1, taskId, true, false)
+        taskAndChildren.push(...childChain)
       } else if (!onlyFirstChild) {
+        // TODO: enable some method how we can merge multiple parellel subtask chains. E.g. only take the last message
+        // results or someting like that. Or assume, that we hade a "merger"
+        // task which summarizes the results of some sort...
         throw new Error('we can not use multi task results yet!')
       }
     }
@@ -759,15 +732,41 @@ export function useTyTaskManager(
 
     // get prior task chain...
     if (task?.priorID && !(task.priorID === untilTaskID)) {
-      const priorTaskChain = await getFlattenedChain(task.priorID, untilTaskID, true, false)
+      const priorTaskChain = await getFlattenedChain(
+        task.priorID,
+        maxFollow - 1,
+        untilTaskID,
+        true,
+        false,
+      )
       return [...priorTaskChain, ...taskAndChildren]
     } else if (task?.parentID && !(task.parentID === untilTaskID)) {
-      const priorParentTaskChain = await getFlattenedChain(task.parentID, untilTaskID, true, true)
+      const priorParentTaskChain = await getFlattenedChain(
+        task.parentID,
+        maxFollow - 1,
+        untilTaskID,
+        true,
+        true,
+      )
       return [...priorParentTaskChain, ...taskAndChildren]
     } else {
       return [...taskAndChildren]
     }
   }
+
+  const getTaskIdChain = (
+    taskId: string,
+    maxFollow = 1e9, // by default we can follow 1mio. tasks...
+    untilTaskID: string | undefined = undefined,
+    onlyFirstChild = true,
+  ) =>
+    getFlattenedChain(
+      taskId,
+      maxFollow, // by default we can follow 1mio. tasks...
+      untilTaskID,
+      onlyFirstChild,
+      true,
+    )
 
   async function deleteAllTasks() {
     // TODO: also delete vectordb! (will be done automatically, once we transition to pglite)

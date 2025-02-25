@@ -47,7 +47,7 @@ async function updateToc(newTaskId: string) {
   const toc = tasks
     .filter((t) => t?.name)
     .map((t) => {
-      return { id: CSS.escape(t!.id), name: t!.name }
+      return { id: CSS.escape(t.id), name: t.name }
     })
   conversationThread.value = toc
 }
