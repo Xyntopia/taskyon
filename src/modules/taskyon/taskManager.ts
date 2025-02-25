@@ -827,9 +827,10 @@ export function useTyTaskManager(
     const jsonObj = JSON.parse(jsonObjString) as FirstArgumentType
     console.log('importing json backup to db!')
     const dbobject = await taskyonDB.importJSON(jsonObj)
-    return dbobject
     // when loading json, notify for each individual new task...
     notifySubscribers(undefined, 'new')
+
+    return dbobject
   }
 
   async function loadYamlConversation(input: File | string): Promise<string | undefined> {
