@@ -191,14 +191,14 @@ $primary-light-transparent: color-mix(in srgb, $primary-light 70%, transparent)
       background-color: $primary-dark
       text-color: white
 
-  .task-container
+  .tasks-container
     display: flex
     flex-direction: column
     max-width: 800px
     margin: 0 auto // Centers the container
 
     // Default style for all tasks
-    > div
+    .task-container
       width: fit-content // Makes the width of the task as small as its content
       max-width: 99% // Prevents the task from growing beyond the container width
       box-sizing: border-box // Ensures padding and borders are included in width calculation

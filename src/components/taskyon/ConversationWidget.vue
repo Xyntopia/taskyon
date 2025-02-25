@@ -1,11 +1,12 @@
 <template>
   <div class="col" style="background-color: inherit; color: inherit" flat square>
-    <div v-if="currentTask">
-      <div v-if="showTaskTree" class="q-pa-sm q-pl-md">
+    <div v-if="currentTask" class="q-px-xs">
+      <div v-if="showTaskTree" class="tasks-container q-pa-sm q-pl-md">
         <!--<pre>{{ JSON.stringify(taskTree, undefined, 2) }}</pre>-->
         <q-tree dense node-key="taskid" :nodes="taskTree" default-expand-all>
           <template #default-header="prop">
             <q-card
+              class="task-container"
               :flat="$q.dark.isActive"
               :class="[prop.node.task.role, Object.keys(prop.node.task.content)[0]]"
               @click.stop
@@ -25,10 +26,11 @@
           </template>
         </q-tree>
       </div>
-      <div v-else class="task-container q-gutter-xs q-px-xs">
+      <div v-else class="q-gutter-xs tasks-container">
         <template v-for="(task, idx) in props.selectedThread" :key="task.id">
           <q-card
             v-if="showAllTasks || showTask(task)"
+            class="task-container"
             :flat="$q.dark.isActive"
             :class="[task.role, Object.keys(task.content)[0]]"
           >
@@ -46,14 +48,19 @@
         </template>
       </div>
       <!--Render tasks which are in progress-->
-      <q-card v-if="!taskWorkerWaiting" class="row">
-        <div class="col">
-          <ty-markdown no-line-numbers no-mermaid :src="currentStream || ''" />
-          <q-spinner-dots size="2rem" color="secondary" />
+      <div class="tasks-container">
+        <q-card v-if="!taskWorkerWaiting" class="row">
+          <div class="col">
+            <ty-markdown no-line-numbers no-mermaid :src="currentStream || ''" />
+            <q-spinner-dots size="2rem" color="secondary" />
+          </div>
+        </q-card>
+        <div
+          v-else-if="taskWorkerMessage"
+          class="transparent text-negative text-bold q-pa-md task-container"
+        >
+          {{ taskWorkerMessage }}
         </div>
-      </q-card>
-      <div v-else-if="taskWorkerMessage" class="transparent text-negative text-bold q-pa-md">
-        {{ taskWorkerMessage }}
       </div>
     </div>
   </div>
