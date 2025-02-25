@@ -364,11 +364,11 @@ export function lockMap(name: string = 'item') {
       lock = new Lock()
       locks.set(id, lock)
     }
-    console.log(`getting lock for ${name}:`, id)
+    //console.log(`getting lock for ${name}:`, id)
     const unlock = await lock.lock()
-    console.log(`acquired lock for ${name}`, id)
+    //console.log(`acquired lock for ${name}`, id)
     return () => {
-      console.log(`unlock ${name}!`, id)
+      //console.log(`unlock ${name}!`, id)
       unlock()
       locks.delete(id) // Delete the lock from the map after unlocking
     }
