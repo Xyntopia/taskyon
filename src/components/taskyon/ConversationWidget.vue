@@ -3,7 +3,13 @@
     <div v-if="currentTask" class="q-px-xs">
       <div v-if="showTaskTree" class="tasks-container q-pa-sm q-pl-md">
         <!--<pre>{{ JSON.stringify(taskTree, undefined, 2) }}</pre>-->
-        <q-tree dense node-key="taskid" :nodes="taskTree" default-expand-all>
+        <q-tree
+          dense
+          node-key="taskid"
+          :nodes="taskTree"
+          default-expand-all
+          @lazy-load="onLazyLoad"
+        >
           <template #default-header="prop">
             <q-card
               class="task-container"
@@ -115,7 +121,8 @@ interface taskTreeNodeType {
   label: string
   taskid: string
   task: TaskNode
-  children: taskTreeNodeType[]
+  children?: taskTreeNodeType[]
+  lazy?: boolean
 }
 
 const taskTree = computed(() => {
@@ -128,6 +135,7 @@ const taskTree = computed(() => {
       taskid: task.id,
       task,
       children: nextDirectChildren,
+      lazy: task.content.type === 'functioncall',
     }
     if (task.priorID) {
       taskTree = [taskobj, ...taskTree]
@@ -142,6 +150,30 @@ const taskTree = computed(() => {
 
   return taskTree
 })
+
+async function onLazyLoad({
+  /*node,*/
+  key,
+  done,
+  /*fail,*/
+}: {
+  node: unknown
+  done: (children?: readonly any[]) => void
+  key: string
+  fail: unknown
+}) {
+  // call fail() if any error occurs
+  const tm = await tystate.getTaskManager()
+
+  const childrenChains = await tm.buildTaskTreeNode(key, 1)
+
+  const children = childrenChains.children.map((ttn) => ({
+    label: ttn.task.name || ttn.task.id.toString().slice(-5),
+    taskid: ttn.task.id,
+    task: ttn.task,
+  }))
+  done(children)
+}
 
 tystate.streamCallBacks.addGlobal(streamCallback)
 

@@ -292,11 +292,11 @@
 <script setup lang="ts">
 import { computed, ref, toRaw, toRefs } from 'vue'
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
-import type { FunctionArguments, partialTaskDraft, ToolBase } from 'src/modules/taskyon/types'
+import { partialTaskDraft } from 'src/modules/taskyon/types'
 import { getApiConfig, llmSettings, getCurrentModel } from 'src/modules/taskyon/types'
 import '@quasar/quasar-ui-qmarkdown/dist/index.css'
 import { useTaskyonStore } from 'stores/taskyonState'
-import type { TaskNode } from 'src/modules/taskyon/types'
+import type { FunctionArguments, ToolBase } from 'src/modules/taskyon/types'
 import ModelSelection from 'components/taskyon/ModelSelection.vue'
 import { writeFilesToOpfs } from 'src/modules/OPFS'
 import ObjectTreeView from '../ObjectTreeView.vue'
@@ -347,7 +347,7 @@ const CodeEditor = defineAsyncComponent(
 
 const props = defineProps<{
   codingMode?: boolean
-  forceTaskProps?: llmSettings['taskTemplate']
+  forceTaskProps?: partialTaskDraft | undefined
   sendAllowed?: boolean
   hideTaskInfo?: boolean
 }>()
@@ -468,7 +468,7 @@ const currentnewTask = computed(() => {
       }
     }
   }
-  return task as TaskNode // we can do this, because we defined the "role"
+  return partialTaskDraft.parse(task) // we can do this, because we defined the "role"
 })
 
 const { estimateChatTokens } = useNlpWorker()

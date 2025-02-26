@@ -43,7 +43,7 @@ export function setupIframeApi(
                 content: msg.data.task.content,
               }
               void taskManager
-                .addPartialTask2Tree(newTask, undefined, false)
+                .addPartialTask2Tree(newTask, undefined, undefined, false)
                 .catch((err) => console.warn(err))
             } else if (msg.success && msg.data.type === 'configurationMessage') {
               const newConfig = msg.data.conf
@@ -76,7 +76,7 @@ export function setupIframeApi(
                 label: ['function'],
               }
               void taskManager
-                .addPartialTask2Tree(newTask, undefined, duplicateTaskName)
+                .addPartialTask2Tree(newTask, undefined, undefined, duplicateTaskName)
                 .catch((err) => console.warn(err))
             } else {
               // TODO: also add this as error, so that it gets thrown back to the parent

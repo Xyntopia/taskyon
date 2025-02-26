@@ -304,7 +304,12 @@ export type TaskGetter = (input: string) => Promise<TaskNode | null>
 
 // TODO: get rid of taskDraft once we have immutable tasks with content addressing
 //       once we have that, we can simply create tasks immediatly with the correct content address as an ID,
-export const partialTaskDraft = TaskNode.omit({ id: true, created_at: true })
+export const partialTaskDraft = TaskNode.omit({
+  id: true,
+  created_at: true,
+  priorID: true,
+  parentID: true,
+})
   .partial()
   .required({ role: true, content: true })
   .describe(

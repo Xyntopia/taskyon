@@ -65,7 +65,7 @@ async function taskContentHash(task: Omit<TaskNode, 'id'>) {
  * content of the task.
  *
  */
-export async function createTaskNode(task: partialTaskDraft, priorID?: string) {
+export async function createTaskNode(task: partialTaskDraft, priorID?: string, parentID?: string) {
   if (typeof crypto === 'undefined' || !crypto.subtle) {
     throw new Error(
       'crypto.subtle is not available in this environment, can not generate task IDs!!',
@@ -79,7 +79,8 @@ export async function createTaskNode(task: partialTaskDraft, priorID?: string) {
   //       our keyword generation algorithm...
   const taskContent = {
     ...task,
-    priorID: priorID ?? task.priorID,
+    priorID,
+    parentID,
     created_at: Date.now(),
   }
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -528,6 +529,11 @@ const createRxDBCrudWrapper = (db: TaskyonDatabase): CrudWrapper<TaskNode> => {
   }
 }
 
+interface TaskTreeNode {
+  task: TaskNode
+  children: TaskTreeNode[]
+}
+
 // TODO:  break down  the individual parts of TaskManager this way into smaller parts:
 //        - on top of that build a function which encapsulates all the "high-level  function such as getting files etc..."
 //        - the vector store part
@@ -702,6 +708,49 @@ export function useTyTaskManager(
     }
 
     return leafTasks
+  }
+
+  // Recursively builds a tree node for the given task id.
+  async function buildTaskTreeNode(taskId: string, maxDepth: number): Promise<TaskTreeNode> {
+    const task = await tyCrud.get(taskId)
+    if (!task) throw new Error(`Task ${taskId} not found`)
+
+    const children: TaskTreeNode[] = []
+    // Only fetch children if we haven't hit the depth limit.
+    if (maxDepth > 0) {
+      const directChildIds = await searchAllDirectChildren(taskId)
+      for (const childId of directChildIds) {
+        // For each direct child, build its sibling chain at the next depth.
+        const siblingChain = await buildSiblingChain(childId, maxDepth - 1)
+        children.push(...siblingChain)
+      }
+    }
+
+    return { task, children }
+  }
+
+  // Follows the next-sibling chain starting at taskId.
+  async function buildSiblingChain(taskId: string, maxDepth: number): Promise<TaskTreeNode[]> {
+    const chain: TaskTreeNode[] = []
+    let currentId: string | undefined = taskId
+
+    while (currentId) {
+      const node = await buildTaskTreeNode(currentId, maxDepth)
+      chain.push(node)
+
+      // Find the next sibling using the priorID pointer.
+      const siblingSet = await searchNextSibling(currentId)
+      if (siblingSet.size > 0) {
+        if (siblingSet.size > 1) {
+          throw new Error('Multiple siblings not supported yet')
+        }
+        currentId = siblingSet.values().next().value
+      } else {
+        currentId = undefined
+      }
+    }
+
+    return chain
   }
 
   async function getFlattenedChain(
@@ -1010,6 +1059,7 @@ export function useTyTaskManager(
   const addPartialTask2Tree = async (
     task: partialTaskDraft,
     priorID: string | undefined,
+    parentID: string | undefined,
     duplicateTaskName = true,
   ): Promise<TaskNode> => {
     if (!duplicateTaskName && task.name) {
@@ -1029,7 +1079,7 @@ export function useTyTaskManager(
       }
     }
 
-    const newTask = await createTaskNode(task, priorID)
+    const newTask = await createTaskNode(task, priorID, parentID)
 
     // task was already added at a previous point...
     // TODO: can we get rid of "setTask"? because we can generate task IDs now independently
@@ -1065,8 +1115,9 @@ export function useTyTaskManager(
     const addedTaskList: TaskNode[] = []
     for (const task of taskList) {
       const addedTask = await addPartialTask2Tree(
-        { ...task, parentID },
+        { ...task },
         lastTaskId, //previous
+        parentID,
         duplicateTaskName,
       )
       lastTaskId = addedTask.id
@@ -1116,6 +1167,8 @@ export function useTyTaskManager(
     ...fm,
     getTaskIdChain,
     getTaskChain,
+    buildSiblingChain,
+    buildTaskTreeNode,
     chatToYaml,
     chatToMarkdown,
     addPartialTask2Tree,
