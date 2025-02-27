@@ -347,7 +347,7 @@ const CodeEditor = defineAsyncComponent(
 
 const props = defineProps<{
   codingMode?: boolean
-  forceTaskProps?: partialTaskDraft | undefined
+  forceTaskProps?: llmSettings['taskTemplate'] | undefined
   sendAllowed?: boolean
   hideTaskInfo?: boolean
 }>()
