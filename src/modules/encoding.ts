@@ -70,10 +70,6 @@ export function urlSafe64BitString(bufferUuid: Buffer) {
   let base64Uuid = bufferUuid.toString('base64')
 
   // make UUID url safe :)
-  base64Uuid = base64Uuid
-    .replace(/==$/, '') // remove padding
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '.')
+  base64Uuid = base64Uuid.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
   return base64Uuid
 }
