@@ -33,7 +33,8 @@
         :task-worker-waiting="tystate.taskWorkerWaiting"
         :task-worker-message="taskWorkerMessage || ''"
         :show-all-tasks="showAllTasks"
-        :show-task-tree="showTaskTree"
+        :show-hierarchy="showHierarchy"
+        :task-tree-root="taskTreeRoot"
         :show-ids="showAllTasks"
         :expert-mode="state.appConfiguration.expertMode"
       />
@@ -67,12 +68,12 @@
     </div>
     <!--Task Browser buttons-->
     <q-page-sticky position="top-left" class="print-hide">
-      <div v-if="browserMode" class="q-pa-md q-gutter-sm toolbar">
+      <div v-if="detailed" class="q-pa-sm q-gutter-sm toolbar">
         <ToggleButton v-model="showAllTasks" dense flat label="dev">
           <q-tooltip>Show Detailed Task Chain</q-tooltip>
         </ToggleButton>
-        <ToggleButton v-model="showTaskTree" :icon="mdiFileTree" dense flat>
-          <q-tooltip>Show Task Tree</q-tooltip>
+        <ToggleButton v-model="showHierarchy" :icon="mdiSubdirectoryArrowRight" dense flat>
+          <q-tooltip>Show Hierachy</q-tooltip>
         </ToggleButton>
       </div>
     </q-page-sticky>
@@ -110,11 +111,12 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAppStateStore } from 'src/stores/appState'
 import LLMProviders from 'components/taskyon/LLMProviders.vue'
 import ToggleButton from 'src/components/ToggleButton.vue'
-import { mdiFileTree } from '@quasar/extras/mdi-v6'
+import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 
-const props = defineProps<{ browserMode?: boolean }>()
-const showAllTasks = ref<boolean>(props.browserMode)
-const showTaskTree = ref<boolean>(props.browserMode)
+const props = defineProps<{ detailed?: boolean; treeBrowser?: boolean; rootTaskId?: string }>()
+const showAllTasks = ref<boolean>(props.detailed)
+const showHierarchy = ref<boolean>(props.detailed)
+const taskTreeRoot = ref<number>()
 
 const ResetButton = process.env.DEV
   ? defineAsyncComponent(

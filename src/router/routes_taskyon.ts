@@ -36,6 +36,26 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
       },
       {
+        path: 'detailed',
+        component: defineAsyncComponent({
+          loader: () => import('pages/taskyon/TaskChat.vue'),
+          loadingComponent: LoadCircle,
+          delay: 200,
+        }),
+        meta: { title: 'Detailed Chat', description: 'Detailed Chat' },
+        props: { detailed: true },
+      },
+      {
+        path: 'browser/:id',
+        component: defineAsyncComponent({
+          loader: () => import('pages/taskyon/TaskChat.vue'),
+          loadingComponent: LoadCircle,
+          delay: 200,
+        }),
+        meta: { title: 'Task Browser', description: 'Task Browser' },
+        props: (route) => ({ treeBrowser: true, rootTaskId: route.params.id }),
+      },
+      {
         // TODO:  change this, so that we can use "arbitrary" files for this!!!
         path: '/chat/:filePath([^.]*)*',
         component: defineAsyncComponent({
@@ -44,16 +64,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           delay: 200,
         }),
         meta: { title: 'Chat', description: 'Taskyon AI Chat Companion' },
-      },
-      {
-        path: 'browser',
-        component: defineAsyncComponent({
-          loader: () => import('pages/taskyon/TaskChat.vue'),
-          loadingComponent: LoadCircle,
-          delay: 200,
-        }),
-        meta: { title: 'Main', description: 'Task Browser' },
-        props: { browserMode: true },
       },
       {
         // TODO: rename this and all references to search?

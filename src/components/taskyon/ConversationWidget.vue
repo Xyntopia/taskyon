@@ -1,7 +1,7 @@
 <template>
   <div class="col" style="background-color: inherit; color: inherit" flat square>
     <div v-if="currentTask" class="q-px-xs">
-      <div v-if="showTaskTree" class="tasks-container q-pa-sm q-pl-md">
+      <div v-if="showHierarchy" class="tasks-container q-pa-sm q-pl-md">
         <!--<pre>{{ JSON.stringify(taskTree, undefined, 2) }}</pre>-->
         <q-tree
           dense
@@ -91,7 +91,8 @@ const props = defineProps<{
   taskWorkerWaiting: boolean
   taskWorkerMessage?: string
   showAllTasks?: boolean
-  showTaskTree?: boolean
+  showHierarchy?: boolean
+  taskTreeRoot?: string | undefined
   showIds?: boolean
   expertMode?: boolean
 }>()
@@ -158,7 +159,7 @@ async function onLazyLoad({
   /*fail,*/
 }: {
   node: unknown
-  done: (children?: readonly any[]) => void
+  done: (children?: readonly unknown[]) => void
   key: string
   fail: unknown
 }) {

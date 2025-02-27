@@ -20,7 +20,7 @@
             :key="conversationId"
             clickable
             :to="{
-              path: $route.path === '/browser' ? '/browser' : '/chat',
+              path: $route.path === '/detailed' ? '/detailed' : '/chat',
               query: { t: conversationId },
             }"
           >
@@ -109,9 +109,9 @@
             v-if="state.appConfiguration.expertMode"
             dense
             flat
-            :icon="mdiFileTree"
-            label="Task Browser"
-            to="/browser"
+            :icon="mdiSubdirectoryArrowRight"
+            label="Detailed Task View"
+            to="/detailed"
           ></q-btn>
         </div>
         <div>
@@ -134,7 +134,12 @@ import SimpleSettings from './SimpleSettings.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import FileDropzone from 'components/FileDropzone.vue'
 import { matSearch, matManageAccounts, matFileUpload, matToc } from '@quasar/extras/material-icons'
-import { mdiTools, mdiRobotConfusedOutline, mdiForumPlus, mdiFileTree } from '@quasar/extras/mdi-v6'
+import {
+  mdiTools,
+  mdiRobotConfusedOutline,
+  mdiForumPlus,
+  mdiSubdirectoryArrowRight,
+} from '@quasar/extras/mdi-v6'
 import TaskChainMenu from './TaskChainMenu.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { useQuasar } from 'quasar'
