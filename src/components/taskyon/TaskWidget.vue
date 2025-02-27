@@ -81,7 +81,10 @@
             no-caps
             @click="expandMessageContent = !expandMessageContent"
           >
-            {{ task.content.data.split(' ').slice(0, 10).join(' ') }}
+            <div class="text-caption">
+              {{ task.content.data.split(' ').slice(0, 10).join(' ') }}...
+            </div>
+            <q-icon :name="expandMessageContent ? matArrowDropUp : matArrowDropDown" />
           </q-btn>
           <q-slide-transition>
             <div v-show="!short || expandMessageContent">
@@ -261,6 +264,8 @@ import { dump } from 'js-yaml'
 import TaskButtons from './TaskButtons.vue'
 import { mdiDesktopTower, mdiFileDocument, mdiHeadCog, mdiTools } from '@quasar/extras/mdi-v6'
 import {
+  matArrowDropDown,
+  matArrowDropUp,
   matCalculate,
   matMonetizationOn,
   matNewLabel,
