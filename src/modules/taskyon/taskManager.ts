@@ -529,9 +529,9 @@ const createRxDBCrudWrapper = (db: TaskyonDatabase): CrudWrapper<TaskNode> => {
   }
 }
 
-interface TaskTreeNode {
+export interface TaskTreeNode {
   task: TaskNode
-  children: TaskTreeNode[]
+  children: TaskTreeNode[][]
 }
 
 // TODO:  break down  the individual parts of TaskManager this way into smaller parts:
@@ -715,14 +715,14 @@ export function useTyTaskManager(
     const task = await tyCrud.get(taskId)
     if (!task) throw new Error(`Task ${taskId} not found`)
 
-    const children: TaskTreeNode[] = []
+    const children: TaskTreeNode[][] = []
     // Only fetch children if we haven't hit the depth limit.
     if (maxDepth > 0) {
       const directChildIds = await searchAllDirectChildren(taskId)
       for (const childId of directChildIds) {
         // For each direct child, build its sibling chain at the next depth.
         const siblingChain = await buildSiblingChain(childId, maxDepth - 1)
-        children.push(...siblingChain)
+        children.push(siblingChain)
       }
     }
 

@@ -73,7 +73,7 @@
             </p>
           </q-expansion-item>
         </div>
-        <div v-else-if="task.content.type === 'message'" class="col">
+        <div v-else-if="task.content.type === 'message'" class="col q-pb-md">
           <q-btn
             v-if="short"
             flat

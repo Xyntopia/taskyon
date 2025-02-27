@@ -3,26 +3,40 @@
     <div v-if="currentTask" class="q-px-xs">
       <!--<pre>{{ JSON.stringify(taskTree, undefined, 2) }}</pre>-->
       <div v-if="taskTreeRoot" class="tasks-container q-pa-sm q-pl-md">
-        <q-tree dense node-key="taskid" :nodes="taskTree" @lazy-load="onLazyLoad">
+        <q-tree
+          dense
+          node-key="taskid"
+          :nodes="taskTree"
+          default-expand-all
+          @lazy-load="onLazyLoad"
+        >
           <template #default-header="prop">
-            <q-card
-              class="task-container"
-              :flat="$q.dark.isActive"
-              :class="[prop.node.task.role, Object.keys(prop.node.task.content)[0]]"
-              @click.stop
-            >
-              <Task
-                :id="prop.node.task.id"
-                :task="prop.node.task"
-                short
-                style="min-width: 300px"
-                :class="[
-                  'q-pa-xs',
-                  prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
-                ]"
-                :show-id="!!showIds"
-              />
-            </q-card>
+            <div class="col">
+              <div v-if="prop.node.task" class="text-caption">
+                {{ prop.node.taskid.slice(0, 5) }}
+                <q-tooltip>{{ prop.node.taskid }}</q-tooltip>
+              </div>
+              <div v-else class="text-bold">{{ prop.node.taskid.slice(0, 12) }}</div>
+              <q-card
+                v-if="prop.node.task"
+                class="task-container"
+                :flat="$q.dark.isActive"
+                :class="[prop.node.task.role, Object.keys(prop.node.task.content)[0]]"
+                @click.stop
+              >
+                <Task
+                  :id="prop.node.task.id"
+                  :task="prop.node.task"
+                  short
+                  style="min-width: 300px"
+                  :class="[
+                    'q-pa-xs',
+                    prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
+                  ]"
+                  :show-id="!!showIds"
+                />
+              </q-card>
+            </div>
           </template>
         </q-tree>
       </div>
@@ -99,6 +113,7 @@ import { asyncComputed } from 'src/stores/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onBeforeUnmount } from 'vue'
 import { ref } from 'vue'
+import { type TaskTreeNode } from 'src/modules/taskyon/taskManager'
 const $q = useQuasar()
 
 const tystate = useTaskyonStore()
@@ -138,8 +153,8 @@ const streamCallback: Parameters<typeof tystate.streamCallBacks.addGlobal>[0] = 
 
 interface taskTreeNodeType {
   label: string
-  taskid: string
-  task: TaskNode
+  taskid: string // in the case of subchains, its the id of the first task in that chain
+  task?: TaskNode
   children?: taskTreeNodeType[]
   lazy?: boolean
 }
@@ -148,7 +163,7 @@ const taskHierarchy = computed(() => {
   let taskTree = [] as taskTreeNodeType[]
   let nextDirectChildren = [] as taskTreeNodeType[]
 
-  if (!taskTree) {
+  if (!props.taskTreeRoot) {
     for (const task of props.selectedThread.toReversed()) {
       const taskobj = {
         label: task.name || task.id.toString().slice(-5),
@@ -172,26 +187,51 @@ const taskHierarchy = computed(() => {
   return taskTree
 })
 
+const tyList2QTree = (tasklist: TaskTreeNode[]) =>
+  tasklist.map((ttn) => ({
+    label: ttn.task.name || ttn.task.id.toString().slice(-5),
+    taskid: ttn.task.id,
+    task: ttn.task,
+    // we can only have expandable subchains, if our tasks are a "functioncall"
+    lazy: ttn.task.content.type === 'functioncall',
+  })) as taskTreeNodeType[]
+
+const tyChain2QTree = (taskChain: TaskTreeNode[][]) =>
+  taskChain.map((tc) => ({
+    label: `SubChain ${tc[0]?.task.id.slice(0, 3)}`,
+    taskid: `SubChain ${tc[0]?.task.id}`,
+    children: tyList2QTree(tc),
+    lazy: false,
+  })) as taskTreeNodeType[]
+
+const getQTree = async (taskID: string, justChildren = false) => {
+  const tm = await tystate.getTaskManager()
+
+  const { task, children } = await tm.buildTaskTreeNode(taskID, 1)
+
+  const childrenTrees = tyChain2QTree(children)
+
+  if (justChildren) return childrenTrees
+
+  const siblings = await tm.buildSiblingChain(taskID, 1)
+  const siblingNodes = tyList2QTree(siblings)
+
+  const taskTree: taskTreeNodeType[] = [
+    {
+      label: task.name || task.id.toString().slice(-5),
+      taskid: task.id,
+      task,
+      children: childrenTrees,
+    },
+  ]
+
+  taskTree.push(...siblingNodes.slice(1))
+  return taskTree
+}
+
 const taskTree = asyncComputed<taskTreeNodeType[]>(async () => {
   if (props.taskTreeRoot) {
-    const tm = await tystate.getTaskManager()
-
-    const { task, children } = await tm.buildTaskTreeNode(props.taskTreeRoot, 1)
-
-    const childrenTrees = children.map((ttn) => ({
-      label: ttn.task.name || ttn.task.id.toString().slice(-5),
-      taskid: ttn.task.id,
-      task: ttn.task,
-    }))
-
-    const taskTree: taskTreeNodeType[] = [
-      {
-        label: task.name || task.id.toString().slice(-5),
-        taskid: task.id,
-        task,
-        children: childrenTrees,
-      },
-    ]
+    const taskTree = await getQTree(props.taskTreeRoot)
 
     return taskTree
   }
@@ -211,16 +251,10 @@ async function onLazyLoad({
   fail: unknown
 }) {
   // call fail() if any error occurs
-  const tm = await tystate.getTaskManager()
 
-  const childrenChains = await tm.buildTaskTreeNode(key, 1)
+  const subTaskTree = await getQTree(key, true)
 
-  const children = childrenChains.children.map((ttn) => ({
-    label: ttn.task.name || ttn.task.id.toString().slice(-5),
-    taskid: ttn.task.id,
-    task: ttn.task,
-  }))
-  done(children)
+  done(subTaskTree)
 }
 
 tystate.streamCallBacks.addGlobal(streamCallback)
