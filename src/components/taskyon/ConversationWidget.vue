@@ -1,15 +1,33 @@
 <template>
   <div class="col" style="background-color: inherit; color: inherit" flat square>
     <div v-if="currentTask" class="q-px-xs">
-      <div v-if="showHierarchy" class="tasks-container q-pa-sm q-pl-md">
-        <!--<pre>{{ JSON.stringify(taskTree, undefined, 2) }}</pre>-->
-        <q-tree
-          dense
-          node-key="taskid"
-          :nodes="taskTree"
-          default-expand-all
-          @lazy-load="onLazyLoad"
-        >
+      <!--<pre>{{ JSON.stringify(taskTree, undefined, 2) }}</pre>-->
+      <div v-if="taskTreeRoot" class="tasks-container q-pa-sm q-pl-md">
+        <q-tree dense node-key="taskid" :nodes="taskTree" @lazy-load="onLazyLoad">
+          <template #default-header="prop">
+            <q-card
+              class="task-container"
+              :flat="$q.dark.isActive"
+              :class="[prop.node.task.role, Object.keys(prop.node.task.content)[0]]"
+              @click.stop
+            >
+              <Task
+                :id="prop.node.task.id"
+                :task="prop.node.task"
+                short
+                style="min-width: 300px"
+                :class="[
+                  'q-pa-xs',
+                  prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
+                ]"
+                :show-id="!!showIds"
+              />
+            </q-card>
+          </template>
+        </q-tree>
+      </div>
+      <div v-else-if="showHierarchy" class="tasks-container q-pa-sm q-pl-md">
+        <q-tree dense node-key="taskid" :nodes="taskHierarchy" default-expand-all>
           <template #default-header="prop">
             <q-card
               class="task-container"
@@ -126,31 +144,60 @@ interface taskTreeNodeType {
   lazy?: boolean
 }
 
-const taskTree = computed(() => {
+const taskHierarchy = computed(() => {
   let taskTree = [] as taskTreeNodeType[]
   let nextDirectChildren = [] as taskTreeNodeType[]
 
-  for (const task of props.selectedThread.toReversed()) {
-    const taskobj = {
-      label: task.name || task.id.toString().slice(-5),
-      taskid: task.id,
-      task,
-      children: nextDirectChildren,
-      lazy: task.content.type === 'functioncall',
-    }
-    if (task.priorID) {
-      taskTree = [taskobj, ...taskTree]
-      nextDirectChildren = []
-    } else if (!task.priorID && task.parentID) {
-      nextDirectChildren = [taskobj, ...taskTree]
-      taskTree = []
-    } else {
-      taskTree = [taskobj, ...taskTree]
+  if (!taskTree) {
+    for (const task of props.selectedThread.toReversed()) {
+      const taskobj = {
+        label: task.name || task.id.toString().slice(-5),
+        taskid: task.id,
+        task,
+        children: nextDirectChildren,
+        lazy: task.content.type === 'functioncall',
+      }
+      if (task.priorID) {
+        taskTree = [taskobj, ...taskTree]
+        nextDirectChildren = []
+      } else if (!task.priorID && task.parentID) {
+        nextDirectChildren = [taskobj, ...taskTree]
+        taskTree = []
+      } else {
+        taskTree = [taskobj, ...taskTree]
+      }
     }
   }
 
   return taskTree
 })
+
+const taskTree = asyncComputed<taskTreeNodeType[]>(async () => {
+  if (props.taskTreeRoot) {
+    const tm = await tystate.getTaskManager()
+
+    const { task, children } = await tm.buildTaskTreeNode(props.taskTreeRoot, 1)
+
+    const childrenTrees = children.map((ttn) => ({
+      label: ttn.task.name || ttn.task.id.toString().slice(-5),
+      taskid: ttn.task.id,
+      task: ttn.task,
+    }))
+
+    const taskTree: taskTreeNodeType[] = [
+      {
+        label: task.name || task.id.toString().slice(-5),
+        taskid: task.id,
+        task,
+        children: childrenTrees,
+      },
+    ]
+
+    return taskTree
+  }
+
+  return []
+}, [])
 
 async function onLazyLoad({
   /*node,*/
