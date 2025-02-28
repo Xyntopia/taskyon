@@ -1,4 +1,7 @@
 // frpBus.ts
+
+import type { Asyncify } from './taskyon/types'
+
 /**
  * Functional Reactive Programming (FRP) Bus
  * A simple implementation of an FRP bus using streams and operators.
@@ -32,16 +35,19 @@ export function createStream<T>(): { stream: Stream<T>; emit: (value: T) => void
 }
 
 // Operator: transform each value from the source stream
-export function map<A, B>(source: Stream<A>, fn: (value: A) => B): Stream<B> {
+export function map<A, B>(source: Stream<A> | Asyncify<Stream<A>>, fn: (value: A) => B): Stream<B> {
   const { stream, emit } = createStream<B>()
-  source.subscribe((value) => emit(fn(value)))
+  void source.subscribe((value) => emit(fn(value)))
   return stream
 }
 
 // Operator: filter values based on a predicate
-export function filter<T>(source: Stream<T>, predicate: (value: T) => boolean): Stream<T> {
-  const { stream, emit } = createStream<T>()
-  source.subscribe((value) => {
+export function filter<A>(
+  source: Stream<A> | Asyncify<Stream<A>>,
+  predicate: (value: A) => boolean,
+): Stream<A> {
+  const { stream, emit } = createStream<A>()
+  void source.subscribe((value) => {
     if (predicate(value)) {
       emit(value)
     }
@@ -50,13 +56,16 @@ export function filter<T>(source: Stream<T>, predicate: (value: T) => boolean): 
 }
 
 // Operator: prepend an initial value to the source stream
-export function startWith<T>(source: Stream<T>, initial: T): Stream<T> {
+export function startWith<T>(source: Stream<T> | Asyncify<Stream<T>>, initial: T): Stream<T> {
   return {
-    subscribe(observer: Observer<T>): Unsubscribe {
+    subscribe: (observer: Observer<T>): Unsubscribe => {
       // Immediately emit the initial value to the new subscriber
       observer(initial)
       // Then subscribe to the source stream
-      return source.subscribe(observer)
+      const unsubscribe = source.subscribe(observer)
+      return () => {
+        void Promise.resolve(unsubscribe).then((resolvedUnsubscribe) => resolvedUnsubscribe())
+      }
     },
   }
 }
