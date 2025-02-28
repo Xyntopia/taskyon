@@ -25,21 +25,23 @@ import type OpenAI from 'openai'
 import { useCallbacks } from 'src/modules/useCallBacks'
 import { filter } from 'src/modules/frpBus'
 
-const asyncFuncProxy =
-  <T>(prop: keyof T) =>
-  (instance: Promise<T>) =>
-    instance.then((obj) => {
-      const method = obj[prop]
-      return method
-    })
-
-function asyncProxy<T>(initializer: () => Promise<T>) {
+function asyncProxy<T extends Record<keyof T, (...args: Parameters<T[keyof T]>) => unknown>>(
+  initializer: () => Promise<T>,
+) {
   const instance = initializer()
 
   return new Proxy(
     {},
     {
-      get: (_, p) => asyncFuncProxy<T>(p as keyof T)(instance),
+      get:
+        (_, prop) =>
+        (...args: Parameters<T[keyof T]>) =>
+          instance.then((obj) => {
+            const method = obj[prop as keyof T]
+            if (!method)
+              throw new Error(`Method ${String(prop)} does not exist on the target object`)
+            return method(...args)
+          }),
     },
   ) as Asyncify<T>
 }
