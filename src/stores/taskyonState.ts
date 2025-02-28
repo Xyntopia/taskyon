@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { watch, computed, reactive, ref } from 'vue'
+import type { Asyncify } from 'src/modules/taskyon/types'
 import {
   type Model,
   type TaskNode,
@@ -22,6 +23,26 @@ import type { TaskEvent } from 'src/modules/taskyon/taskManager'
 import { asyncComputed } from './vueUtils'
 import type OpenAI from 'openai'
 import { useCallbacks } from 'src/modules/useCallBacks'
+import { filter } from 'src/modules/frpBus'
+
+const asyncFuncProxy =
+  <T>(prop: keyof T) =>
+  (instance: Promise<T>) =>
+    instance.then((obj) => {
+      const method = obj[prop]
+      return method
+    })
+
+function asyncProxy<T>(initializer: () => Promise<T>) {
+  const instance = initializer()
+
+  return new Proxy(
+    {},
+    {
+      get: (_, p) => asyncFuncProxy<T>(p as keyof T)(instance),
+    },
+  ) as Asyncify<T>
+}
 
 function removeCodeFromUrl() {
   if (window.history.pushState) {
@@ -175,6 +196,29 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // Access taskManagerInstance and addTask2Tree without redundant awaits
   const getTaskManager = async () => (await initTaskyonPromise)['taskManagerInstance']
   const getTaskQueue = async () => (await initTaskyonPromise)['processTasksQueue']
+
+  // TODO: use the proxies below to replae the "getTaskmanager" and all of that..
+  /*const taskManager = asyncProxy(async () => {
+    const instance = await initTaskyonPromise
+    return instance['taskManagerInstance']
+  })
+
+  const processTasksQueue = asyncProxy(async () => {
+    const instance = await initTaskyonPromise
+    return instance['processTasksQueue']
+  })
+
+*/
+
+  const workerStream = asyncProxy(async () => {
+    const instance = await initTaskyonPromise
+    return instance['workerStream']
+  })
+
+  filter(workerStream, (data) => data.stage === 'processing').subscribe((data) => {
+    // TODO: add last task to GUI by checking if our current selected task now has this child...
+    stateRefs.llmSettings.selectedTaskId = data.task?.id
+  })
 
   const add2ChatHistory = async (task: TaskNode, msg: TaskEvent | 'existing') => {
     console.log('update task history!!', task.id, msg)

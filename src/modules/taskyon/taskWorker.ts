@@ -1,4 +1,4 @@
-import type { TaskNodeMeta } from './types'
+import type { TaskNodeMeta, TyTaskStreamData } from './types'
 import {
   type partialTaskDraft,
   type TaskNode,
@@ -285,6 +285,7 @@ export async function runTaskWorker(
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
   taskWorkerController: TaskWorkerController,
+  emitWorkerMessage: (value: TyTaskStreamData) => void,
 ) {
   console.log('entering task worker loop...')
 
@@ -303,6 +304,7 @@ export async function runTaskWorker(
 
       if (processTasksQueue.count() === 0) {
         taskWorkerController.setWaiting(true)
+        emitWorkerMessage({ stage: 'waiting' })
       }
       const taskId = await processTasksQueue.pop()
       taskWorkerController.setWaiting(false)
@@ -319,6 +321,7 @@ export async function runTaskWorker(
         // check if the previous task was finished. only of all prior tasks are finished
         // we can continue processing this task...
         if (task.priorID && !(await isTaskFinished(task.priorID))) {
+          emitWorkerMessage({ stage: 'subtasks', task })
           // we need to wait until all subtasks from its previous tasks are finished before
           // continuing with this task so we simply push this task back onto the stack
           processTasksQueue.push(task.id)
@@ -329,16 +332,14 @@ export async function runTaskWorker(
           continue
         }
 
-        // TODO: add last task to GUI by checking if our current selected task now has this child...
-        // TODO: and move this somewhere else!  this function should not be in here...
-        //       we could have this check by getting the callback function for new tasks in tystate...
-        llmSettings.selectedTaskId = task?.id
+        emitWorkerMessage({ stage: 'processing', task })
 
         // we don't need to process tasks which aren't a function...
         // we also don't need to push them back in the queue...
         // we also don't need to add the task as the "last" task in the GUI
         // because they will automatically be called as soon as the
         if (task.content.type !== 'functioncall') {
+          emitWorkerMessage({ stage: 'processed', task })
           continue
         }
 
@@ -355,6 +356,8 @@ export async function runTaskWorker(
           api?.selectedModel,
           llmSettings.enableOpenAiTools,
         )
+
+        emitWorkerMessage({ stage: 'processed', task })
 
         // check if there are any 'functioncall' tasks in the new tasks.
         // if so, we need to add them to the queue, otherwise we can simply cancel here and

@@ -1,5 +1,5 @@
 import { useTyTaskManager } from './taskManager'
-import type { TaskNode, TaskNodeMeta, llmSettings } from './types'
+import type { TaskNode, TaskNodeMeta, TyTaskStreamData, llmSettings } from './types'
 import type { TaskyonDatabase } from './rxdb'
 import { createTaskyonDatabase } from './rxdb'
 import type { TaskWorkerController } from './taskWorker'
@@ -15,6 +15,7 @@ import { getDatabase } from '../pglite.api'
 import { createEnhancedCrudWrapper } from '../crudWrapper'
 import type OpenAI from 'openai'
 import { toolCreationWizard } from '../tools/toolManagement'
+import { createStream } from '../frpBus'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -52,6 +53,8 @@ export async function initTaskyon(
     },
     new Map<string, TaskNodeMeta>(),
   )
+
+  const taskProcessingStream = createStream<TyTaskStreamData>()
 
   // TODO: possibly move this into an "upper level?"
   console.log('initializing taskyondb')
@@ -126,7 +129,13 @@ export async function initTaskyon(
   // taskyon should automatically pick up on this...
   console.log('starting taskyon worker')
   const processTasksQueue = createAsyncQueue<string>()
-  void runTaskWorker(processTasksQueue, llmSettings, taskManagerInstance, taskWorkerController)
+  void runTaskWorker(
+    processTasksQueue,
+    llmSettings,
+    taskManagerInstance,
+    taskWorkerController,
+    taskProcessingStream.emit,
+  )
 
-  return { taskManagerInstance, processTasksQueue }
+  return { taskManagerInstance, processTasksQueue, workerStream: taskProcessingStream.stream }
 }

@@ -627,3 +627,14 @@ export function getCurrentModel(llmSettings: llmSettings) {
   }
   return 'No model selected!'
 }
+
+export interface TyTaskStreamData {
+  task?: TaskNode | null
+  // "all finished" means the task has been processes AND all its subtasks have been finished..
+  stage: 'processing' | 'processed' | 'error' | 'waiting' | 'subtasks'
+}
+
+// takes an object and turns all of its functions into async...
+export type Asyncify<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => infer R ? (...args: A) => Promise<R> : T[K]
+}
