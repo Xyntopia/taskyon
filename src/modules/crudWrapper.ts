@@ -63,7 +63,7 @@ export const withLiveStreams = <T>(
             // Asynchronously fetch the current value and emit when ready
             void base.get(id).then((current) => {
               if (!cancelled) {
-                console.log('emitting current', current)
+                //console.log('emitting current', current)
                 observer({ id, data: current })
               }
             })
