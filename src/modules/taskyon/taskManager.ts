@@ -191,39 +191,6 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
   }
 }
 
-export type TaskEvent = 'new' | 'update' | 'delete' | 'deleteAll'
-
-type TaskCallBack = (task: TaskNode, msg: TaskEvent) => Promise<void>
-
-function tyMechanisms() {
-  let subscribers: TaskCallBack[] = []
-
-  // because our tass are supposed to be "immutable" (not yet as of 2024.11.04), we only really need
-  // to subscribe to the task itself. Every time we "change" something in the
-  // tasks, we can assume that the task number changed as well...
-  function subscribeToTaskChanges(callback: TaskCallBack): void {
-    subscribers.push(callback)
-  }
-
-  // You may also need a method to unsubscribe if required
-  function unsubscribeFromTaskChanges(callback: TaskCallBack): void {
-    subscribers = subscribers.filter((sub) => sub !== callback)
-  }
-
-  function notifySubscribers(task: TaskNode | undefined, msg: TaskEvent): void {
-    if (task) {
-      subscribers.forEach((callback) => void callback(task, msg))
-    }
-  }
-
-  // this class holds utilitiy funcions to manage taskyons infrastructure
-  return {
-    subscribeToTaskChanges,
-    unsubscribeFromTaskChanges,
-    notifySubscribers,
-  }
-}
-
 // TODO: replace this with pglite vector search :)
 function useTaskVectors(
   getAllTaskIds: () => Promise<string[]>,
@@ -562,8 +529,6 @@ export function useTyTaskManager(
   const getAllTaskIds = async () =>
     taskyonDB ? (await taskyonDB.tasknodes.find().exec()).map((x) => x.id) : []
 
-  const { subscribeToTaskChanges, unsubscribeFromTaskChanges, notifySubscribers } = tyMechanisms()
-
   // because our tasks only have parent IDs defined, we keep a cache of
   // child IDs in order to be able to do faster tree traversals...
   const nextSiblingMap = new Map<string, Set<string>>()
@@ -614,7 +579,6 @@ export function useTyTaskManager(
       await addtoVectorDB(task)
       // Update parent-child cache
       updateChildAndSiblingMap(task)
-      notifySubscribers(task, 'new')
     },
     delete: async (id: string | number) => {
       // Delete from local record/memorydb
@@ -628,12 +592,10 @@ export function useTyTaskManager(
       }
       void tyCrud.delete(id)
       void deleteTaskFromVectorStore(id.toString())
-      if (task) notifySubscribers(task, 'delete')
     },
     upsert: async (id: string | number, data: TaskNode) => {
       // TODO: make sure, we never call this on tasks!
       const newData = await tyCrud.upsert(id, data)
-      notifySubscribers(newData, 'update')
       return newData
     },
   })
@@ -823,7 +785,6 @@ export function useTyTaskManager(
     await resetTaskVectors()
     await tyCrudVec.clear()
     await debugDb.clear()
-    notifySubscribers(undefined, 'deleteAll')
   }
 
   // deletes tasks from the supplied leaf up to the first branch
@@ -965,9 +926,6 @@ export function useTyTaskManager(
     const jsonObj = JSON.parse(jsonObjString) as FirstArgumentType
     console.log('importing json backup to db!')
     const dbobject = await taskyonDB.importJSON(jsonObj)
-    // when loading json, notify for each individual new task...
-    notifySubscribers(undefined, 'new')
-
     return dbobject
   }
 
@@ -1143,8 +1101,6 @@ export function useTyTaskManager(
     searchTasks,
     setTask: tyCrudVec.set,
     updateToolDefinitions,
-    subscribeToTaskChanges,
-    unsubscribeFromTaskChanges,
     getJsonTaskBackup,
     addTaskBackup,
     deleteAllTasks,

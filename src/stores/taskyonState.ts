@@ -19,7 +19,6 @@ import { setupIframeApi } from 'src/modules/taskyon/iframeApi'
 import type { InternalTool } from 'src/modules/taskyon/tools'
 import { tylog } from 'src/modules/logger'
 import { useAppStateStore } from './appState'
-import type { TaskEvent } from 'src/modules/taskyon/taskManager'
 import { asyncComputed } from './vueUtils'
 import type OpenAI from 'openai'
 import { useCallbacks } from 'src/modules/useCallBacks'
@@ -222,7 +221,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     stateRefs.llmSettings.selectedTaskId = data.task?.id
   })
 
-  const add2ChatHistory = async (task: TaskNode, msg: TaskEvent | 'existing') => {
+  const add2ChatHistory = async (
+    task: TaskNode,
+    msg: 'existing' | 'update' | 'delete' | 'deleteAll' | 'new',
+  ) => {
     console.log('update task history!!', task.id, msg)
 
     if (msg === 'new' || msg === 'update') {
@@ -270,22 +272,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // TODO: we can't do this right now, because the task timestamp is optional
     //       and we want to make sure to really include all tasks in the chathistory...
   }
-
-  // update chatHistory on-the-fly whenever our taskmanager adds new tasks...
-  void getTaskManager().then((tm) => {
-    // fill chatHistory with some initial values...
-    /*tm.searchTasks({
-      selector: {
-        created_at: { $exists: true }, // Ensures 'created_at' field is present
-      },
-      sort: [{ created_at: 'desc' }],
-      limit: 20,
-    }).then((r) => {
-      r.forEach((t) => add2ChatHistory(t, 'new'));
-    });*/
-
-    tm.subscribeToTaskChanges(add2ChatHistory)
-  })
 
   // also update chat history if we switch between tasks...
   watch(
