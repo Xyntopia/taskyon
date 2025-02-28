@@ -260,7 +260,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
     // Remove any entries which are a parent of the current task (keeping only leaf IDs)
     stateRefs.chatHistory = stateRefs.chatHistory.filter(
-      (t) => t !== task.priorID || t !== task.parentID,
+      (t) => t !== task.priorID && t !== task.parentID,
     )
 
     // Enforce a maximum size of 50
@@ -398,6 +398,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const { selectedThread, taskWorkerWaiting, currentTask } = useReactiveTasks()
 
   // also make sure, that we update the history with the currently selected chat when initializing...
+  // TODO: this here is a porblem, because "currentTask" gets updated asynchrouously..
   if (currentTask.value) void add2ChatHistory(currentTask.value, 'update')
 
   return {
