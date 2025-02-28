@@ -196,20 +196,16 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // Access taskManagerInstance and addTask2Tree without redundant awaits
   const getTaskManager = async () => (await initTaskyonPromise)['taskManagerInstance']
-  const getTaskQueue = async () => (await initTaskyonPromise)['processTasksQueue']
 
   // TODO: use the proxies below to replae the "getTaskmanager" and all of that..
   /*const taskManager = asyncProxy(async () => {
     const instance = await initTaskyonPromise
     return instance['taskManagerInstance']
-  })
+  })*/
 
-  const processTasksQueue = asyncProxy(async () => {
-    const instance = await initTaskyonPromise
-    return instance['processTasksQueue']
-  })
-
-*/
+  async function addToProcessQueue(taskId: string) {
+    ;(await initTaskyonPromise).processTasksQueue.push(taskId)
+  }
 
   const workerStream = asyncProxy(async () => {
     const instance = await initTaskyonPromise
@@ -409,7 +405,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     addModelToHistory,
     taskWorkerController,
     getTaskManager,
-    getTaskQueue,
+    addToProcessQueue,
     modelLookUp,
     llmModels: computed(() => llmModelsInternal.value),
     logger,

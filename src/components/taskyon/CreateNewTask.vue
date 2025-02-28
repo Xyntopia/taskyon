@@ -593,8 +593,7 @@ async function addNewTask(execute = true) {
 
   // push the last task to execution queue right away...
   if (execute && newTaskId) {
-    const pq = await tystate.getTaskQueue()
-    pq.push(newTaskId.id)
+    void tystate.addToProcessQueue(newTaskId.id)
   }
 
   state.llmSettings.selectedTaskId = newTaskId?.id
