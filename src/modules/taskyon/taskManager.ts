@@ -730,9 +730,19 @@ export function useTyTaskManager(
       const siblingSet = await searchNextSibling(currentId)
       if (siblingSet.size > 0) {
         if (siblingSet.size > 1) {
-          throw new Error('Multiple siblings not supported yet')
+          console.warn(
+            `Multiple siblings found for task ${currentId}. Using the oldest created task.`,
+          )
+          const siblingArray = Array.from(siblingSet)
+          const siblingTasks = await Promise.all(siblingArray.map((id) => tyCrud.get(id)))
+          siblingTasks.sort((a, b) => (a?.created_at ?? 0) - (b?.created_at ?? 0))
+          siblingTasks
+            .slice(1)
+            .forEach((task) => console.warn(`Ignoring sibling task: ${task?.id}`))
+          currentId = siblingTasks[0]?.id
+        } else {
+          currentId = siblingSet.values().next().value
         }
-        currentId = siblingSet.values().next().value
       } else {
         currentId = undefined
       }
