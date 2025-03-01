@@ -28,19 +28,16 @@
               <q-icon name="matChatBubble" size="xs" />
             </!q-item-section-->
             <q-item-section
-              v-for="(selected, idx) in [state.llmSettings.selectedTaskId == conversationId]"
-              :key="idx"
               lines
               :class="
-                selected
+                state.llmSettings.selectedTaskId == conversationId
                   ? ['text-weight-bolder', $q.dark.isActive ? 'text-secondary' : 'text-primary']
                   : [$q.dark.isActive ? 'text-white' : 'text-primary']
               "
             >
               {{
-                selected
-                  ? `> ${tystate.currentTask?.name}`
-                  : nameMap[conversationId] || `chat.${conversationId.slice(0, 3)}`
+                (state.llmSettings.selectedTaskId == conversationId ? '> ' : '') +
+                  nameMap[conversationId] || `chat.${conversationId.slice(0, 3)}`
               }}
               <q-tooltip>
                 Select Conversation ( id: {{ conversationId.slice(0, 5) }} ...)</q-tooltip
@@ -129,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, defineAsyncComponent } from 'vue'
+import { ref, watch, defineAsyncComponent } from 'vue'
 import SimpleSettings from './SimpleSettings.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import FileDropzone from 'components/FileDropzone.vue'
@@ -144,33 +141,49 @@ import TaskChainMenu from './TaskChainMenu.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { useQuasar } from 'quasar'
 import { useRoute } from 'vue-router'
+import { watchEffect } from 'vue'
 
 const $route = useRoute()
 const $q = useQuasar()
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 
+watchEffect(() => {
+  console.log(
+    'currentTask changed in sidebar:',
+    tystate.currentTask.value,
+    tystate.currentTask.value?.name,
+  )
+})
+
 const conversationIDs = ref<string[]>([])
-const nameMap = reactive<Record<string, string>>({})
+const nameMap = ref<Record<string, string>>({})
+
+void tystate.getTaskManager().then((tm) =>
+  tm.taskStream.subscribe((data) => {
+    // for every message from the stream, try to update our name map :)
+    console.log('update name', data.data)
+    nameMap.value[data.id] = data.data?.name || 'undefined'
+  }),
+)
 
 async function updateName(id: string) {
-  if (!(id in nameMap)) {
+  if (!(id in nameMap.value)) {
     const tm = await tystate.getTaskManager()
     const name = (await tm.getTask(id))?.name
     if (name) {
-      nameMap[id] = name
+      nameMap.value[id] = name
     }
   }
 }
 
 watch(
   [() => state.llmSettings.selectedTaskId, () => state.chatHistory],
-  ([newTaskId, newChatHistory]) => {
-    console.log('updating sidebar chat list')
-    if (newTaskId) {
-      conversationIDs.value = newChatHistory.slice(0, 10)
-      conversationIDs.value.forEach((id) => void updateName(id))
-    }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  ([_, newChatHistory]) => {
+    console.log('updating sidebar chat list', state.chatHistory)
+    conversationIDs.value = newChatHistory.slice(0, 10)
+    conversationIDs.value.forEach((id) => void updateName(id))
   },
   {
     immediate: true,

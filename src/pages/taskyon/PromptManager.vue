@@ -40,8 +40,8 @@
         <div class="col">
           <q-scroll-area class="fit">
             <conversation-widget
-              :selected-thread="tystate.selectedThread"
-              :current-task="tystate.currentTask"
+              :selected-thread="tystate.selectedThread.value"
+              :current-task="tystate.currentTask.value"
               :task-worker-waiting="tystate.taskWorkerWaiting"
             />
           </q-scroll-area>

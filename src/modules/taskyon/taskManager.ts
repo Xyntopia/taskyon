@@ -83,9 +83,8 @@ export async function createTaskNode(task: partialTaskDraft, priorID?: string, p
     parentID,
     created_at: Date.now(),
   }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { name, ...taskContentWithoutName } = taskContent
-  const newId = await taskContentHash(taskContentWithoutName)
+
+  const newId = await taskContentHash(taskContent)
   const newTask: TaskNode = {
     ...taskContent,
     id: newId,

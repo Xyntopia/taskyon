@@ -228,6 +228,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       if (!task) {
         void add2ChatHistory(task, id.toString(), 'delete')
       }
+      if (currentTask.value?.id === id) {
+        console.log('update current task...', task)
+        currentTask.value = task
+      }
     })
   })
 
@@ -370,42 +374,33 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     },
   )
 
-  // TODO: adapt this to non-reactive tasks in tymanager
-  function useReactiveTasks() {
-    // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
-    const taskWorkerWaiting = ref(true)
-    const currentTask = ref<TaskNode | null>(null)
-    const selectedThread = ref<TaskNode[]>([])
-    const selectedThreadIDs = ref<string[]>([])
+  // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
+  const taskWorkerWaiting = ref(true)
+  const currentTask = ref<TaskNode | null>(null)
+  const selectedThread = ref<TaskNode[]>([])
+  const selectedThreadIDs = ref<string[]>([])
 
-    // this needs to be a watch, because we're updating this variable from other sources as well...
-    // TODO: make this a readonly property...
-    watch(
-      () => stateRefs.llmSettings.selectedTaskId,
-      async (newSelectedTask) => {
-        // TODO: I don't remember why we need this delay here....
-        if (newSelectedTask) {
-          const TM = await getTaskManager()
-          currentTask.value = await TM.getTask(newSelectedTask)
-          selectedThreadIDs.value = await TM.getTaskIdChain(newSelectedTask)
-          selectedThread.value = await TM.convertTaskIDs(selectedThreadIDs.value)
-        } else {
-          currentTask.value = null
-          selectedThread.value = []
-          selectedThreadIDs.value = []
-        }
-      },
-    )
-
-    return {
-      selectedThreadIDs,
-      selectedThread,
-      taskWorkerWaiting,
-      currentTask,
-    }
-  }
-
-  const { selectedThread, taskWorkerWaiting, currentTask } = useReactiveTasks()
+  // this needs to be a watch, because we're updating this variable from other sources as well...
+  // TODO: make this a readonly property...
+  watch(
+    () => stateRefs.llmSettings.selectedTaskId,
+    async (newSelectedTask) => {
+      // TODO: I don't remember why we need this delay here....
+      if (newSelectedTask) {
+        const TM = await getTaskManager()
+        currentTask.value = await TM.getTask(newSelectedTask)
+        selectedThreadIDs.value = await TM.getTaskIdChain(newSelectedTask)
+        selectedThread.value = await TM.convertTaskIDs(selectedThreadIDs.value)
+      } else {
+        currentTask.value = null
+        selectedThread.value = []
+        selectedThreadIDs.value = []
+      }
+    },
+    {
+      immediate: true,
+    },
+  )
 
   // also make sure, that we update the history with the currently selected chat when initializing...
   // TODO: this here is a porblem, because "currentTask" gets updated asynchrouously..
@@ -418,9 +413,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   )
 
   return {
-    selectedThread,
+    selectedThread: computed(() => selectedThread),
     taskWorkerWaiting,
-    currentTask,
+    currentTask: computed(() => currentTask),
     getOpenRouterPKCEKey,
     addModelToHistory,
     taskWorkerController,

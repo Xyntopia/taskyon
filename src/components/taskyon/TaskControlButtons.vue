@@ -48,7 +48,7 @@ defineEmits<{
 async function stopTasks() {
   console.log('stopping!')
   stoppingTasks.value = true
-  tystate.taskWorkerController.interrupt(tystate.currentTask?.id)
+  tystate.taskWorkerController.interrupt(tystate.currentTask.value?.id)
 
   await sleep(1000)
   // Poll every 500ms to check if the task is stopped
