@@ -243,8 +243,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     console.log('update task history!!', id, msg)
     if (id === stateRefs.chatHistory[0]) {
       return
-    } else if (msg === 'update') {
-      const tm = await getTaskManager()
+    }
+    const tm = await getTaskManager()
+
+    if (msg === 'update') {
       // we need to make sure, that our task is not already
       // the "parent" of another task in that case we only want the leaf task which is already present...
       for (const taskId of stateRefs.chatHistory) {
@@ -278,9 +280,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     if (!task) return
 
     // Remove any entries which are a parent of the current task (keeping only leaf IDs)
+    const currentTaskChain = (await tm.getTaskIdChain(task.id, 50)).slice(0, -1)
     stateRefs.chatHistory = stateRefs.chatHistory.filter(
-      //(t) => t !== task.priorID && t !== task.parentID && !selectedThreadIDs.value.includes(t),
-      (t) => t !== task.priorID && t !== task.parentID,
+      (t) => t !== task.priorID && t !== task.parentID && !currentTaskChain.includes(t),
+      //(t) => t !== task.priorID && t !== task.parentID,
     )
 
     // Enforce a maximum size of 50

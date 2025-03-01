@@ -536,6 +536,36 @@ export function useTyTaskManager(
   const parentToChildMap = new Map<string, Set<string>>()
   const immediateChildrenMap = new Map<string, Set<string>>()
 
+  function deleteFromChildAndSiblings(task: TaskNode) {
+    if (task.priorID) {
+      const siblings = nextSiblingMap.get(task.priorID)
+      if (siblings) {
+        siblings.delete(task.id)
+        if (siblings.size === 0) {
+          nextSiblingMap.delete(task.priorID)
+        }
+      }
+    }
+    if (task.parentID) {
+      const children = parentToChildMap.get(task.parentID)
+      if (children) {
+        children.delete(task.id)
+        if (children.size === 0) {
+          parentToChildMap.delete(task.parentID)
+        }
+      }
+    }
+    if (!task.priorID && task.parentID) {
+      const immediateChildren = immediateChildrenMap.get(task.parentID)
+      if (immediateChildren) {
+        immediateChildren.delete(task.id)
+        if (immediateChildren.size === 0) {
+          immediateChildrenMap.delete(task.parentID)
+        }
+      }
+    }
+  }
+
   function updateChildAndSiblingMap(task: TaskNode) {
     if (task.priorID) {
       const currentSiblings = nextSiblingMap.get(task.priorID) ?? new Set<string>()
@@ -584,13 +614,7 @@ export function useTyTaskManager(
     delete: async (id: string | number) => {
       // Delete from local record/memorydb
       const task = await tyCrud.get(id)
-      if (task && task.priorID) {
-        // deleting the task from our children map...
-        // because our tasks are immutable, we can do this in a decentralized way :)
-        void searchNextSibling(task.priorID).then((siblings) => {
-          if (siblings) siblings.delete(id.toString())
-        })
-      }
+      if (task) void deleteFromChildAndSiblings(task)
       void tyCrud.delete(id)
       void deleteTaskFromVectorStore(id.toString())
     },
@@ -719,7 +743,7 @@ export function useTyTaskManager(
 
   async function getFlattenedChain(
     taskId: string,
-    maxFollow: number, // by default we can follow 1mio. tasks...
+    maxFollow: number,
     untilTaskID: string | undefined,
     onlyFirstChild: boolean,
     isLastTask: boolean,
@@ -740,6 +764,9 @@ export function useTyTaskManager(
       }
     }
 
+    // newMaxFollow will always be at max `maxFollow-1` because taskAnscDhilren includes the current TaskId.
+    const newMaxFollow = maxFollow - taskAndChildren.length
+
     // we don't get children from this task, only from prior ones...
     const task = await tyCrudVec.get(taskId)
 
@@ -747,7 +774,7 @@ export function useTyTaskManager(
     if (task?.priorID && !(task.priorID === untilTaskID)) {
       const priorTaskChain = await getFlattenedChain(
         task.priorID,
-        maxFollow - 1,
+        newMaxFollow,
         untilTaskID,
         true,
         false,
@@ -756,7 +783,7 @@ export function useTyTaskManager(
     } else if (task?.parentID && !(task.parentID === untilTaskID)) {
       const priorParentTaskChain = await getFlattenedChain(
         task.parentID,
-        maxFollow - 1,
+        newMaxFollow,
         untilTaskID,
         true,
         true,
