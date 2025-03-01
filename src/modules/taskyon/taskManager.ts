@@ -643,8 +643,7 @@ export function useTyTaskManager(
     parentID,
   }))
 
-  async function getTaskChain(taskId: string): Promise<TaskNode[]> {
-    const taskIds = await getTaskIdChain(taskId)
+  async function convertTaskIDs(taskIds: string[]) {
     const taskList = await Promise.all(taskIds.map((tid) => tyCrudVec.get(tid)))
 
     // Check if any tasks are "null" or "undefined" and throw an error
@@ -653,9 +652,11 @@ export function useTyTaskManager(
         throw new Error(`Task at index ${index} is ${task === null ? 'null' : 'undefined'}`)
       }
     })
-
     return taskList as TaskNode[]
   }
+
+  const getTaskChain = async (taskId: string): Promise<TaskNode[]> =>
+    await convertTaskIDs(await getTaskIdChain(taskId))
 
   // first, get all immediate children and then, for each of them get all their leaf siblings
   // then from each leaf sibling go backwards through prior & parent IDs to create
@@ -1100,6 +1101,7 @@ export function useTyTaskManager(
     deleteTask: tyCrudVec.delete,
     searchTasks,
     setTask: tyCrudVec.set,
+    taskStream: tyCrudVec.liveStream,
     updateToolDefinitions,
     getJsonTaskBackup,
     addTaskBackup,
@@ -1123,6 +1125,7 @@ export function useTyTaskManager(
     ...fm,
     getTaskIdChain,
     getTaskChain,
+    convertTaskIDs,
     buildSiblingChain,
     buildTaskTreeNode,
     chatToYaml,

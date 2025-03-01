@@ -217,22 +217,33 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     stateRefs.llmSettings.selectedTaskId = data.task?.id
   })
 
-  const add2ChatHistory = async (
-    task: TaskNode,
-    msg: 'existing' | 'update' | 'delete' | 'deleteAll' | 'new',
-  ) => {
-    console.log('update task history!!', task.id, msg)
+  void getTaskManager().then((tm) => {
+    tm.taskStream.subscribe(({ id, data: task }) => {
+      if (!task) {
+        void add2ChatHistory(task, id.toString(), 'delete')
+      }
+    })
+  })
 
-    if (msg === 'new' || msg === 'update') {
+  const add2ChatHistory = async (
+    task: TaskNode | null,
+    id: string,
+    msg: 'existing' | 'update' | 'delete' | 'deleteAll',
+  ) => {
+    console.log('update task history!!', id, msg)
+    if (id === stateRefs.chatHistory[0]) {
+      return
+    } else if (msg === 'update') {
       const tm = await getTaskManager()
       // we need to make sure, that our task is not already
       // the "parent" of another task in that case we only want the leaf task which is already present...
       for (const taskId of stateRefs.chatHistory) {
-        if ((await tm.getTask(taskId))?.priorID === task.id) return
+        const otherTask = await tm.getTask(taskId)
+        if (otherTask?.priorID === id || otherTask?.parentID === id) return
       }
     } else if (msg === 'delete') {
       // Filter out the deleted task ID
-      stateRefs.chatHistory = stateRefs.chatHistory.filter((t) => t !== task.id)
+      stateRefs.chatHistory = stateRefs.chatHistory.filter((t) => t !== id)
       return
     } else if (msg === 'deleteAll') {
       // Clear history
@@ -241,9 +252,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     }
 
     // Check if the task already exists in the history
-    if (!stateRefs.chatHistory.includes(task.id)) {
+    if (!stateRefs.chatHistory.includes(id)) {
       // Add the task to the front of the list if it doesn't exist
-      stateRefs.chatHistory.unshift(task.id)
+      stateRefs.chatHistory.unshift(id)
     }
 
     // Remove task.id if it exists, then unshift to front (avoids duplication)
@@ -254,8 +265,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       ...stateRefs.chatHistory.filter((t) => t !== task.id),
     ];*/
 
+    if (!task) return
+
     // Remove any entries which are a parent of the current task (keeping only leaf IDs)
     stateRefs.chatHistory = stateRefs.chatHistory.filter(
+      //(t) => t !== task.priorID && t !== task.parentID && !selectedThreadIDs.value.includes(t),
       (t) => t !== task.priorID && t !== task.parentID,
     )
 
@@ -276,7 +290,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       const tm = await getTaskManager()
       if (selectedTask) {
         const taskNode = await tm.getTask(selectedTask)
-        if (taskNode) void add2ChatHistory(taskNode, 'existing')
+        if (taskNode) void add2ChatHistory(taskNode, taskNode.id, 'existing')
       }
     },
     { immediate: true },
@@ -385,6 +399,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     }, [] as TaskNode[])
 
     return {
+      selectedThreadIDs,
       selectedThread,
       taskWorkerWaiting,
       currentTask,
@@ -395,7 +410,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // also make sure, that we update the history with the currently selected chat when initializing...
   // TODO: this here is a porblem, because "currentTask" gets updated asynchrouously..
-  if (currentTask.value) void add2ChatHistory(currentTask.value, 'update')
+  watch(
+    currentTask,
+    (newValue) => {
+      if (newValue) void add2ChatHistory(newValue, newValue.id, 'update')
+    },
+    { once: true },
+  )
 
   return {
     selectedThread,

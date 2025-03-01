@@ -322,7 +322,7 @@ export class Lock {
     if (!this._promise) {
       this._promise = new Promise<void>((resolve) => {
         outerResolve = () => {
-          console.log('unlock!')
+          //console.log('unlock!')
           resolve()
         }
       })
@@ -334,7 +334,7 @@ export class Lock {
         }
       }
     } else {
-      console.log('waiting for unlock to relock')
+      //console.log('waiting for unlock to relock')
       await this._promise // Wait for the lock to be released
       return this.lock() // Re-attempt to acquire the lock
     }

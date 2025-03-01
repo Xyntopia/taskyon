@@ -32,6 +32,7 @@ export const withLiveStreams = <T>(
   base: CrudWrapper<T>,
 ): CrudWrapper<T> & {
   readLive: (id: string | number) => Stream<{ id: string | number; data: T | null }>
+  liveStream: Stream<{ id: string | number; data: T | null }>
 } => {
   // Create a stream of events with a payload: { id, data }
   const { stream: liveStream, emit } = createStream<{ id: string | number; data: T | null }>()
@@ -80,6 +81,7 @@ export const withLiveStreams = <T>(
       await base.clear()
       // Optionally, you could notify subscribers here if desired.
     },
+    liveStream,
   }
 }
 
