@@ -400,7 +400,9 @@ const createRxDBCrudWrapper = (db: TaskyonDatabase): CrudWrapper<TaskNode> => {
   // TODO: move this CRUD wrapper into our RXDB file and also add the database creation itself to it :)
 
   const get = async (id: string | number) => {
-    const taskFromDb = await db.tasknodes.findOne(id.toString()).exec()
+    // we haven't found the bug yet..   but sometimes, this function seems to be called with an "undefined" id...
+    // thats why w have the ?? '' here...
+    const taskFromDb = await db.tasknodes.findOne(id?.toString() ?? '').exec()
     if (taskFromDb) {
       const task = transformDocToTaskNode(taskFromDb)
       return task

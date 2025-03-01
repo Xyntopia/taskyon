@@ -9,7 +9,6 @@ import {
 } from 'src/modules/taskyon/types'
 import axios from 'axios' // TODO: replace with fetch
 import { Notify, setCssVar } from 'quasar' // load dynamically! :)
-import { sleep } from 'src/modules/utils'
 import { useQuasar } from 'quasar'
 import { useTaskWorkerController } from 'src/modules/taskyon/taskWorker'
 import { getApiConfig } from 'src/modules/taskyon/types'
@@ -211,9 +210,17 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return instance['workerStream']
   })
 
-  filter(workerStream, (data) => data.stage === 'processing').subscribe((data) => {
+  filter(
+    workerStream,
+    (data) => data.stage === 'processing' || data.stage === 'processed',
+  ).subscribe((data) => {
     // TODO: add last task to GUI by checking if our current selected task now has this child...
     stateRefs.llmSettings.selectedTaskId = data.task?.id
+  })
+
+  void workerStream.subscribe((data) => {
+    if (data.stage === 'waiting') taskWorkerWaiting.value = true
+    else if (data.stage === 'processing') taskWorkerWaiting.value = false
   })
 
   void getTaskManager().then((tm) => {
@@ -387,7 +394,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           selectedThread.value = []
           selectedThreadIDs.value = []
         }
-        void sleep(100).then(() => (taskWorkerWaiting.value = taskWorkerController.isWaiting())) // Simulating a delay
       },
     )
 

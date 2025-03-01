@@ -382,6 +382,7 @@ export async function runTaskWorker(
           if (lastTask && functionTasks.length === 0) {
             // we can set the leaf of this chain as finished
             setTaskFinished(lastTask.id)
+            emitWorkerMessage({ stage: 'processed', task: lastTask })
           }
 
           // we only need to add function tasks to the queue
