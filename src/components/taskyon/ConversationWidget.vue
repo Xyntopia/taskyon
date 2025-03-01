@@ -14,6 +14,7 @@
             <div class="col">
               <div v-if="prop.node.task" class="text-caption">
                 {{ prop.node.taskid.slice(0, 5) }}
+                {{ new Date(prop.node.task.created_at).toLocaleString() }}
                 <q-tooltip>{{ prop.node.taskid }}</q-tooltip>
               </div>
               <div v-else class="text-bold">{{ prop.node.taskid.slice(0, 12) }}</div>
