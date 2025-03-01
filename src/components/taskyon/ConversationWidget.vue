@@ -86,7 +86,7 @@
         </template>
       </div>
       <!--Render tasks which are in progress-->
-      <div class="tasks-container">
+      <div class="tasks-container q-py-sm">
         <q-card v-if="!taskWorkerWaiting" class="row">
           <div class="col">
             <ty-markdown no-line-numbers no-mermaid :src="currentStream || ''" />
