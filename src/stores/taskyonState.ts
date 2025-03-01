@@ -19,7 +19,6 @@ import { setupIframeApi } from 'src/modules/taskyon/iframeApi'
 import type { InternalTool } from 'src/modules/taskyon/tools'
 import { tylog } from 'src/modules/logger'
 import { useAppStateStore } from './appState'
-import { asyncComputed } from './vueUtils'
 import type OpenAI from 'openai'
 import { useCallbacks } from 'src/modules/useCallBacks'
 import { filter } from 'src/modules/frpBus'
@@ -368,35 +367,29 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   function useReactiveTasks() {
     // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
     const taskWorkerWaiting = ref(true)
+    const currentTask = ref<TaskNode | null>(null)
+    const selectedThread = ref<TaskNode[]>([])
+    const selectedThreadIDs = ref<string[]>([])
+
     // this needs to be a watch, because we're updating this variable from other sources as well...
     // TODO: make this a readonly property...
     watch(
       () => stateRefs.llmSettings.selectedTaskId,
-      async () => {
+      async (newSelectedTask) => {
         // TODO: I don't remember why we need this delay here....
-        await sleep(100) // Simulating a delay
-        taskWorkerWaiting.value = taskWorkerController.isWaiting()
+        if (newSelectedTask) {
+          const TM = await getTaskManager()
+          currentTask.value = await TM.getTask(newSelectedTask)
+          selectedThreadIDs.value = await TM.getTaskIdChain(newSelectedTask)
+          selectedThread.value = await TM.convertTaskIDs(selectedThreadIDs.value)
+        } else {
+          currentTask.value = null
+          selectedThread.value = []
+          selectedThreadIDs.value = []
+        }
+        void sleep(100).then(() => (taskWorkerWaiting.value = taskWorkerController.isWaiting())) // Simulating a delay
       },
     )
-
-    const currentTask = asyncComputed(async () => {
-      if (stateRefs.llmSettings.selectedTaskId) {
-        const TM = await getTaskManager()
-        return await TM.getTask(stateRefs.llmSettings.selectedTaskId)
-      }
-      return null
-    }, null)
-
-    const selectedThread = asyncComputed(async () => {
-      const taskId = stateRefs.llmSettings.selectedTaskId
-      console.log('update task thread...', taskId)
-      if (taskId) {
-        const TM = await getTaskManager()
-        const thread = (await TM.getTaskChain(taskId)).filter((t) => t)
-        return thread
-      }
-      return []
-    }, [] as TaskNode[])
 
     return {
       selectedThreadIDs,
