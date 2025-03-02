@@ -731,11 +731,11 @@ export function useTyTaskManager(
       if (siblingSet.size > 0) {
         if (siblingSet.size > 1) {
           console.warn(
-            `Multiple siblings found for task ${currentId}. Using the oldest created task.`,
+            `Multiple siblings found for task ${currentId}. Using the latest created task.`,
           )
           const siblingArray = Array.from(siblingSet)
           const siblingTasks = await Promise.all(siblingArray.map((id) => tyCrud.get(id)))
-          siblingTasks.sort((a, b) => (a?.created_at ?? 0) - (b?.created_at ?? 0))
+          siblingTasks.sort((a, b) => (b?.created_at ?? 0) - (a?.created_at ?? 0))
           siblingTasks
             .slice(1)
             .forEach((task) => console.warn(`Ignoring sibling task: ${task?.id}`))
