@@ -381,7 +381,11 @@ export const exampleTool = createTool({
 
 export async function craeteToolJsonSchema() {
   const { zodToJsonSchema } = await import('zod-to-json-schema')
-  const JSON_SCHEMA_PLACEHOLDER: JSONSchema7Type = { type: 'JSON_Schema' }
+  const JSON_SCHEMA_PLACEHOLDER: JSONSchema7Type = {
+    type: 'object',
+    description:
+      'A valid JSON Schema object defining the structure, types, and constraints for the tool parameters. Include properties, required fields, and any other validations as needed.',
+  }
 
   // Function to convert Zod schema to JSON Schema dynamically
   const convertZodToJsonSchema = (schema: z.ZodTypeAny) => {

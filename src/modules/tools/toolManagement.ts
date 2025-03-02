@@ -132,8 +132,13 @@ export const toolCreationWizard = createTool({
               },
             },
             createChatCompletionTask({
-              prompts: ['Now, with the examples given to you, can you create a new tool?'],
-              schema: { toolJsonSchema },
+              prompts: [
+                `Now, with the examples given to you, can you create a new tool?. Please make
+    sure to give your response in yaml format. No comments, no surrounding text.
+    Just pure yaml which we can parse. make sure that you follow the schema you
+    were given for this.`,
+              ],
+              schema: toolJsonSchema,
             }),
             {
               role: 'function',
