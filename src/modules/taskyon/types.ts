@@ -277,6 +277,12 @@ export type TaskNodeMeta = z.infer<typeof TaskNodeMeta>
 //       to save in the database. E.g. how many follow-up tasks are allowed, how many
 //       errors are allowed for function tasks  etc...  so mostly runtime-logic
 export const TaskNode = z.object({
+  // TODO: get rid of "role"  and put it into chatCompletion only...
+  // we don't need it in the rest of the app, I think.. we might be able to indicate that a task was
+  // "automatically" created by using a notation in "authorID" e.g. something like.
+  // "pubKey:gen" if the task was automatically generated && pubKey if it wasn't
+  // OR: we could simply check the parents & priors of tasks. if tasks have a parent, they were generated
+  // by a function. user-generated message should not have a parent...
   role: z.enum(['system', 'user', 'assistant', 'function']),
   name: z.string().optional(),
   content: TaskContent.describe(
@@ -294,6 +300,21 @@ of how content can be structured. `,
   id: z.string(),
   authorId: z.string().optional(),
   created_at: z.number().optional(),
+  acl: z.string().array().optional()
+    .describe(`A number of public keys which act as access control lists (ACL).
+They are given certain as a list of public keys + type of ownership.
+ ["pubkey:owner", "pubkey:editor1", "pubkey:editor2"]
+
+ The value is optional. If no ACL is specified, the task is "public" and
+ can for example be freely exchange in p2p settings.
+ 
+TODO: define onwership types..`),
+  sig: z
+    .string()
+    .optional()
+    .describe(
+      'A signature from the author of the Task. It is created from the entire content of the tasj except for the signature itself.',
+    ),
 })
 export type TaskNode = z.infer<typeof TaskNode>
 

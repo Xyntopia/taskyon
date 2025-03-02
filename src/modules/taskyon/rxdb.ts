@@ -27,7 +27,7 @@ const taskNodeSchemaLiteral = {
   //       so this include for example he state of the task.
   //       and other things that right now get changed "later".
   title: 'TaskNode schema',
-  version: 1,
+  version: 3,
   type: 'object',
   primaryKey: 'id',
   properties: {
@@ -39,22 +39,22 @@ const taskNodeSchemaLiteral = {
     name: {
       type: 'string',
     },
+    // TODO: do we really need this? in our task-based system roles are kind of pointless..
+    //       we need to check if we can create roles in the conversion process when
+    //       converting TaskNodes to a openai compatible message format for chatCompletion.
     role: {
       type: 'string',
-      enum: ['system', 'user', 'assistant', 'function'],
     },
     // this can also be a json file...
     content: {
       type: 'string',
     },
-    // TODO: also get rid of this
-    state: {
+    // rxdb doesn't support nested indices as of 2025/02 so we have to split our content object
+    // long term this won't be a problem when we'll transition to pglite/wasm  anyways...
+    // check this issue here:  https://github.com/pubkey/rxdb/issues/6821
+    type: {
       type: 'string',
-      enum: ['Open', 'Queued', 'In Progress', 'Completed', 'Error', 'Cancelled'],
-    },
-    // TODO: remove this. is going to be part of function content arguments
-    configuration: {
-      type: 'string', // Storing configuration as a JSON string
+      maxLength: 128,
     },
     // the ID from a parent task which created several subtasks...
     // this is the ID which we will have to return result to...
@@ -64,26 +64,8 @@ const taskNodeSchemaLiteral = {
     priorID: {
       type: ['string', 'null'],
     },
-    //TODO: get rid of this...
-    childrenIDs: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
-    },
     debugging: {
       type: 'string', // Storing debugging as a JSON string
-    },
-    // TODO: also get rid of this
-    result: {
-      type: 'string', // Storing result as a JSON string
-    },
-    // TODO: get rid of this, is now in llmsettings..
-    allowedTools: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
     },
     // this can be used to give permissions to tasks,
     // declare functions, UI elements and other things.
@@ -99,8 +81,22 @@ const taskNodeSchemaLiteral = {
     created_at: {
       type: ['number', 'null'],
     },
+    acl: {
+      type: 'array',
+      items: {
+        type: 'string',
+      },
+    },
+    sig: {
+      type: 'string',
+    },
   },
-  required: ['id', 'role', 'state'],
+  required: ['id', 'role', 'content', 'type'],
+  indexes: [
+    'type', // <- this will create a simple index for the `firstName` field
+    //['active', 'firstName'], // <- this will create a compound-index for these two fields
+    //'active'
+  ],
 } as const
 
 export const createTaskNodeMangoQuery = (labelString: string) => {
@@ -118,8 +114,8 @@ export const createTaskNodeMangoQuery = (labelString: string) => {
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const taskNodeSchemaTyped = toTypedRxJsonSchema(taskNodeSchemaLiteral)
-export type TaskNodeDocType = ExtractDocumentTypeFromTypedRxJsonSchema<typeof taskNodeSchemaTyped>
-export const taskNodeSchema: RxJsonSchema<TaskNodeDocType> = taskNodeSchemaLiteral
+type TaskNodeDocType = ExtractDocumentTypeFromTypedRxJsonSchema<typeof taskNodeSchemaTyped>
+const taskNodeSchema: RxJsonSchema<TaskNodeDocType> = taskNodeSchemaLiteral
 
 // Assert TaskNode to be TaskNodeDocType
 //const testTaskNode: TaskNodeDocType = {} as TaskNode;
@@ -159,7 +155,7 @@ const fileMappingSchemaTyped = toTypedRxJsonSchema(fileMappingSchemaLiteral)
 export type FileMappingDocType = ExtractDocumentTypeFromTypedRxJsonSchema<
   typeof fileMappingSchemaTyped
 >
-export const fileMappingSchema: RxJsonSchema<FileMappingDocType> = fileMappingSchemaLiteral
+const fileMappingSchema: RxJsonSchema<FileMappingDocType> = fileMappingSchemaLiteral
 
 /* this is used to map our db objects to the labels in the
 vector index we can also save our calculated vectors in this in order to
@@ -192,7 +188,7 @@ type FileMappingCollection = RxCollection<FileMappingDocType>
 type VectorMappingCollection = RxCollection<vectorMappingDocType>
 
 // Define the database type
-export type TaskyonDatabaseCollections = {
+type TaskyonDatabaseCollections = {
   tasknodes: TaskNodeCollection
   filemappings: FileMappingCollection
   vectormappings: VectorMappingCollection
@@ -211,6 +207,29 @@ export const collections = {
           oldDoc.priorID = oldDoc.parentID
         }
         return oldDoc
+      },
+      2: function (oldDoc: unknown) {
+        return oldDoc
+      },
+      3: function (oldDoc: {
+        state?: unknown
+        configuration?: unknown
+        childrenIDs?: unknown
+        result?: unknown
+        allowedTools?: unknown
+        content: string
+        type?: string
+        [key: string]: unknown
+      }) {
+        // first, we delete all unused variables
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { state, configuration, childrenIDs, result, allowedTools, ...newDoc } = oldDoc
+        const oldContent = JSON.parse(oldDoc.content)
+        // then, split up our content into type / content again. we have to do this
+        // so that is becomes searcheable inside our db...
+        newDoc.type = oldContent.type ?? ('functionCall' in oldContent ? 'functioncall' : 'message')
+        newDoc.content = JSON.stringify(oldContent.data ?? Object.values(oldContent)[0])
+        return newDoc
       },
     },
   },
@@ -289,9 +308,8 @@ export function transformTaskNodeToDocType(taskNode: TaskNode): TaskNodeDocType 
   const convertedTask: TaskNodeDocType = {
     ...reducedTaskNode,
     // Mapping and transforming fields from TaskNode to TaskNodeDocType
-    content: JSON.stringify(nonReactiveTaskNode.content),
-    // TODO: remove this state here...
-    state: 'Completed' as 'Open' | 'Queued' | 'In Progress' | 'Completed' | 'Error',
+    content: JSON.stringify(nonReactiveTaskNode.content.data),
+    type: nonReactiveTaskNode.content.type,
   }
 
   return convertedTask
@@ -303,18 +321,21 @@ export function transformDocToTaskNode(doc: RxDocument<TaskNodeDocType>): TaskNo
   const parsedDoc = JSON.parse(jsonString) as RxDocument<TaskNodeDocType>
 
   // Safely parse the debugging, configuration, and result fields
-  const parsedContentRes = TaskContent.safeParse(JSON.parse(parsedDoc.content || ''))
-  if (!parsedContentRes.success) throw parsedContentRes.error
+  const parsedContentRes = TaskContent.parse({
+    data: JSON.parse(parsedDoc.content || ''),
+    type: parsedDoc.type,
+  })
 
   // Parse the JSON string and transform it into an TaskNode object
   // TODO:  try to throw errors here, when our TaskNode object and our database object differ.
   const tmpObj: TaskNode = {
     ...parsedDoc,
+    role: TaskNode.shape.role.parse(parsedDoc.role),
     parentID: parsedDoc.parentID || undefined,
     priorID: parsedDoc.priorID || undefined,
     authorId: parsedDoc.authorId || undefined,
     created_at: parsedDoc.created_at || undefined,
-    content: parsedContentRes.data, // we do this here, because in some situations the task has the wrong format...
+    content: parsedContentRes, // we do this here, because in some situations the task has the wrong format...
   }
   const tn = TaskNode.parse(tmpObj)
 

@@ -63,24 +63,24 @@ Each TaskNode contains:
 
 #### Example JSON Representation
 
-This is a rough outline and not the exact structure used
-in the most recent version of taskyon. It is only there
-to give a general idea of what the system looks like.
+This is a rough outline. Newer version of taskyon might have updated this structue already.
 
 ```json
 {
+  "role": "assistant",
+  "name": "exampleTask",
   "content": {
-    "data": "Task description or command",
-    "contentAddress": "sha256:..."
+    "type": "message",
+    "data": "This is an example task description."
   },
-  "metadata": {
-    "parentID": "sha256:parentHash",
-    "priorID": "sha256:priorTaskHash",
-    "editor": "pubkey:editorXYZ",
-    "timestamp": 1680000000,
-    "acl": ["pubkey:owner", "pubkey:editor1", "pubkey:editor2"]
-  },
-  "signature": "sig:..."
+  "label": ["example"],
+  "parentID": "sha256:parentTaskHash",
+  "priorID": "sha256:priorTaskHash",
+  "id": "sha256:exampleTaskHash",
+  "authorId": "pubkey:authorXYZ",
+  "created_at": 1680000000,
+  "acl": ["pubkey:owner", "pubkey:editor1"],
+  "sig": "sig:exampleSignature"
 }
 ```
 
