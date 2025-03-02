@@ -42,8 +42,9 @@ const fetchGoogleDriveFile = async (fileId: string, res: Response) => {
 const handleProxyRequest = async (req: Request, res: Response) => {
   const fileId = req.params.fileId
 
-  if (!fileId) {
-    return res.status(400).json({ error: 'Missing fileId parameter' })
+  const fileIdPattern = /^[a-zA-Z0-9_-]+$/;
+  if (!fileId || !fileIdPattern.test(fileId)) {
+    return res.status(400).json({ error: 'Invalid fileId parameter' })
   }
 
   await fetchGoogleDriveFile(fileId, res)
