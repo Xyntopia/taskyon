@@ -6,7 +6,6 @@ import {
   transformTaskNodeToDocType,
   transformDocToTaskNode,
   collections,
-  createTaskNodeMangoQuery,
 } from './rxdb'
 import { openFile } from '../OPFS'
 import { deepCopy, deepMerge, lockMap } from '../utils'
@@ -521,6 +520,7 @@ export function useTyTaskManager(
   debugDb: EnhancedCrudWrapper<TaskNodeMeta>,
   vectorizerModel?: string,
 ) {
+  console.log('Initialize task manager.')
   // uses RxDB as a DB backend..
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
@@ -878,20 +878,21 @@ export function useTyTaskManager(
    * removeFunction will remove all "internal" functions from the returned tool list...
    */
   async function updateToolDefinitions<T extends boolean>(
-    removeFunction: T = false as T,
+    removeFunctionProperty: T = false as T,
   ): Promise<T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>> {
-    const tasks = await searchTasks(createTaskNodeMangoQuery('function'))
+    const tasks = await searchTasks({
+      selector: {
+        type: 'tooldefinition',
+      },
+    })
 
-    // TODO: we can do better here ;)
-    function hasMessage(task: TaskNode): task is TaskNode & { content: { type: 'message' } } {
-      return task.content.type === 'tooldefinition'
-    }
-
-    const toolDefs = tasks.filter(hasMessage)
-    const parsedToolDefs = toolDefs.flatMap((task) => {
+    const parsedToolDefs = tasks.flatMap((task) => {
       try {
-        const toolDef = ToolBase.parse(JSON.parse(task.content.data))
-        return [toolDef]
+        if (task.content.type === 'tooldefinition') {
+          const toolDef = ToolBase.parse(task.content.data)
+          return toolDef
+        }
+        return []
       } catch {
         return []
       }
@@ -900,7 +901,7 @@ export function useTyTaskManager(
     // Merge parsed tool definitions with default tools
     return parsedToolDefs.concat(Object.values(defaultTools)).reduce(
       (pv, cv) => {
-        if (removeFunction && 'function' in cv) {
+        if (removeFunctionProperty && 'function' in cv) {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { function: unused, ...toolBaseOnly } = cv as InternalTool
           pv[toolBaseOnly.name] = toolBaseOnly
