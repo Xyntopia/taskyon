@@ -44,6 +44,7 @@ import { dump, load } from 'js-yaml'
 import type { JSONSchemaType } from 'ajv'
 import type { JsonSchema7Type } from 'zod-to-json-schema'
 import type { JSONSchema7Array, JSONSchema7Object } from 'json-schema'
+import { safeYamlDump } from '../yamlUtils'
 
 type tyJsonSchema = JSONSchemaType<unknown>
 
@@ -499,7 +500,7 @@ async function buildChatThread(
   return openAIMessageThread
 }
 
-// sometimes a single task can get converted to multiple messages
+// sometimes a single task can get convserted to multiple messages
 // and sometime we don't need it at all in the chat :)
 async function convertTaskNodeToOpenAIMessage(
   task: TaskNode,
@@ -554,18 +555,19 @@ async function convertTaskNodeToOpenAIMessage(
     // we can still slightly change the content of this message to make clear
     // TODO: instead of using a manual "result of the tool" use the description in the type!
     // maybe refer to the actual tool call here?
+
     if (task.priorID && useOpenAITools) {
       const message: OpenAI.ChatCompletionMessageParam = {
         role: 'tool',
         tool_call_id: task.priorID, // the tool call will get the parent ID as well! :)
-        content: dump(task.content.data),
+        content: safeYamlDump(task.content.data),
       }
       return [message]
     } else
       return [
         {
           role: 'system',
-          content: dump({
+          content: safeYamlDump({
             'The tool that you called returned the following result:': task.content.data,
           }),
         },

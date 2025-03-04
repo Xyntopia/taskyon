@@ -13,7 +13,7 @@ import { useVectorStore } from './hnswIndex'
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi'
 import { type InternalTool } from './tools'
 import { type MangoQuery } from 'rxdb'
-import { dump, load } from 'js-yaml'
+import { load } from 'js-yaml'
 import { processMarkdown } from 'src/modules/taskyon/taskUtils'
 import type { EnhancedCrudWrapper } from '../crudWrapper'
 import {
@@ -25,6 +25,7 @@ import {
 } from '../crudWrapper'
 import { sha256UrlSafeHash } from '../hashing'
 import { urlSafeBase64Uuid } from '../crypto'
+import { safeYamlDump } from '../yamlUtils'
 
 /**
  *
@@ -1002,7 +1003,7 @@ export function useTyTaskManager(
     const taskList = await getTaskChain(conversationId)
 
     if (taskList.length) {
-      const fileContent = dump(taskList)
+      const fileContent = safeYamlDump(taskList)
       return fileContent
     }
   }
@@ -1028,7 +1029,7 @@ export function useTyTaskManager(
         delete partialTask.priorID
         if (message) delete partialTask.content
       }
-      const yamlMeta = `<!--taskyon\n${dump(partialTask, { skipInvalid: true })}\n-->`
+      const yamlMeta = `<!--taskyon\n${safeYamlDump(partialTask, { skipInvalid: true })}\n-->`
       return yamlMeta + message
     })
 

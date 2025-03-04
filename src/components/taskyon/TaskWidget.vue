@@ -62,7 +62,7 @@
         <div v-else-if="task.content.type === 'structured'" class="col">
           <q-expansion-item dense :icon="mdiHeadCog" header-class="text-info" label="Analyze...">
             <p style="white-space: pre-wrap">
-              {{ dump(task.content.data) }}
+              {{ safeYamlDump(task.content.data) }}
             </p>
           </q-expansion-item>
         </div>
@@ -260,7 +260,6 @@ import { TaskNode, partialTaskDraft, type OpenAIMessage } from 'src/modules/task
 import tyMarkdown from '../tyMarkdown.vue'
 import { computed, ref } from 'vue'
 import { type FileMappingDocType } from 'src/modules/taskyon/rxdb'
-import { dump } from 'js-yaml'
 import TaskButtons from './TaskButtons.vue'
 import { mdiDesktopTower, mdiFileDocument, mdiHeadCog, mdiTools } from '@quasar/extras/mdi-v6'
 import {
@@ -277,6 +276,7 @@ import FileBrowser from './FileBrowser.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import type { TyTaskManager } from 'src/modules/taskyon/taskManager'
 import { onUnmounted } from 'vue'
+import { safeYamlDump } from 'src/modules/yamlUtils'
 
 const props = defineProps<{
   task: TaskNode

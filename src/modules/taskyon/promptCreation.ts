@@ -1,8 +1,7 @@
 import { summarizeTools, mapFunctionNames } from './tools'
 import { type ToolBase, type TaskNode, type llmSettings, FunctionCall } from './types'
-import { zodToYamlString } from '../yamlUtils'
+import { safeYamlDump, zodToYamlString } from '../yamlUtils'
 import type OpenAI from 'openai'
-import { dump } from 'js-yaml'
 import type { Goals } from '../tools/chatCompletionTool'
 import { z } from 'zod'
 
@@ -273,7 +272,7 @@ export function addPrompts(
 
       const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, {
         ...variables,
-        toolResult: dump(lastTaskBeforeChatCompletion.content.data),
+        toolResult: safeYamlDump(lastTaskBeforeChatCompletion.content.data),
         resultSchema: yamlRepr,
       })
       appendMessages.push(

@@ -14,14 +14,14 @@
     </div>
     <div caption class="relative-position">
       <div v-if="!isHtmlResult && !useIframe" class="scroll-area">
-        {{ dump(result) }}
+        {{ safeYamlDump(result) }}
       </div>
       <iframe v-else :srcdoc="typeof result === 'string' ? result : ''"></iframe>
       <q-btn
         class="scroll-area-btn"
         flat
         :icon="matContentCopy"
-        @click="copyToClipboard(dump(result))"
+        @click="copyToClipboard(safeYamlDump(result))"
       />
     </div>
   </div>
@@ -33,6 +33,7 @@ import { dump } from 'js-yaml'
 import type { FunctionCall } from 'src/modules/taskyon/types'
 import { computed, ref } from 'vue'
 import { copyToClipboard } from 'src/modules/utils'
+import { safeYamlDump } from 'src/modules/yamlUtils'
 
 const props = defineProps<{
   result?: unknown
