@@ -77,6 +77,19 @@ export function createTool<SCHEMA extends JSONSchema, PARAMS = FromSchema<SCHEMA
   return tool
 }
 
+// TODO: automatically type the FunctionCall correctly using the
+//       json definition from a tool :)
+export function createToolTask(f: FunctionCall): partialTaskDraft {
+  return {
+    role: 'function',
+    name: f.name,
+    content: {
+      type: 'functioncall',
+      data: f,
+    },
+  }
+}
+
 // This function executes code in a different browser context. E.g. executing a
 // function in the context of the parent of an iframe!
 // TODO: move this into our iframe API?

@@ -307,7 +307,7 @@ They are given certain as a list of public keys + type of ownership.
 
  The value is optional. If no ACL is specified, the task is "public" and
  can for example be freely exchange in p2p settings.
- 
+
 TODO: define onwership types..`),
   sig: z
     .string()

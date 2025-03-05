@@ -640,6 +640,7 @@ type ccArguments = {
   goal?: Goals
   llmTools?: boolean
   allowedTools?: string[]
+  function?: string
   prompts?: string[]
   schema?:
     | tyJsonSchema
@@ -685,7 +686,7 @@ export async function createChatCompletionTool(
   const ajv = new Ajv.default() // options can be passed, e.g. {allErrors: true}
 
   const fetchChatCompletion: internalToolFunctionSchema = async (
-    { model, goal, llmTools, allowedTools, prompts, schema }: ccArguments,
+    { model, goal, llmTools, allowedTools, prompts, schema, function }: ccArguments,
     context: toolContext,
   ) => {
     const selectedModel = model ?? getCurrentModel(llmSettings)
