@@ -12,7 +12,7 @@ import { TaskProcessingError } from '../taskyon/types'
 import { sleep } from '../utils'
 import { createChatCompletionTask } from './chatCompletionTool'
 import { dump } from 'js-yaml'
-import type { TyTaskManager } from '../taskyon/taskManager'
+import { createTaskNode, type TyTaskManager } from '../taskyon/taskManager'
 
 export const createSearchTool = (taskManager: TyTaskManager) =>
   createTool({
@@ -22,20 +22,24 @@ export const createSearchTool = (taskManager: TyTaskManager) =>
 - Get the definition of a single tool including source code, if available. (not case sensitive)`,
     longDescription: `You can use this tool to do the following:
 - Get a list of all tool names.
-- Get the definition of a single tool including source code, if available. (not case sensitive)`,
+- Get the definition of a single tool including source code, if available. (not case sensitive)
+
+We can not provide the code from 'internal tools' as the code has been minified with webpack and
+is now unreadable.
+`,
     parameters: {
       type: 'object',
       properties: {
         toolName: {
           type: 'string',
           default: undefined,
-          description: `- If toolname is provided: return tool definition for tool with the same name.
-- If undefined or we can not find the toolname: return a list of all tools`,
+          description: `- If toolname is provided: return complete tool definition for tool with the same name.
+- If undefined: return a list of all tools only with descriptions`,
         },
         withCode: {
           type: 'boolean',
           default: false,
-          description: `- Only show tools where the code is available.`,
+          description: `Only show tools where the js code is available.`,
         },
       },
       required: [],
@@ -49,9 +53,12 @@ export const createSearchTool = (taskManager: TyTaskManager) =>
           }
         }
       }
-      console.log('searchin for tools: ', toolName)
+      console.log('searching for tools: ', toolName)
       if (toolName && allTools[toolName.toLowerCase()]) return allTools[toolName.toLowerCase()]
-      else return allTools
+      return Object.values(allTools).map((t) => ({
+        name: t.name,
+        description: t.description,
+      }))
     },
   })
 
