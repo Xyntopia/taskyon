@@ -207,20 +207,14 @@ export function addPrompts(
       }
     }
   }
-
   if (!options.enableOpenAiTools) {
+    // Remove the last message from openAIConversationThread
+    // because it will be replaced by our task/evaluate/toolResult messages
+    // where we have wrapped the original message...
+    modifiedOpenAIConversationThread.pop()
     if (goal === 'AnalyzeError') {
-      // Remove the last message from openAIConversationThread
-      // because it will be replaced by our task message
-      // where we have wrapped the original message...
-      modifiedOpenAIConversationThread.pop()
-
       appendMessagesList.push(options.taskChatTemplates.evaluate)
     } else if (goal === 'ChooseTool') {
-      // Remove the last message from openAIConversationThread
-      // because it will be replaced by our task message
-      // where we have wrapped the original message...
-      modifiedOpenAIConversationThread.pop()
       appendMessagesList.push(
         options.taskChatTemplates.instruction,
         options.taskChatTemplates.tools,
@@ -228,7 +222,6 @@ export function addPrompts(
       )
       // TODO: to something with file tasks and
     } else if (goal === 'AnalyzeToolResult') {
-      modifiedOpenAIConversationThread.pop()
       appendMessagesList.push(
         options.taskChatTemplates.instruction,
         options.taskChatTemplates.tools,
@@ -240,8 +233,8 @@ export function addPrompts(
   const converter = string2OpenAiMessage(variables)
 
   const prependMessages = converter('system')(prependMessagesList)
-  const appendMessages = converter('system')(appendMessagesList)
-  const customPrompts = converter('system')(prompts)
+  const appendMessages = converter('user')(appendMessagesList)
+  const customPrompts = converter('user')(prompts)
 
   // build our complete thread :)
   return { prependMessages, modifiedOpenAIConversationThread, customPrompts, appendMessages }
