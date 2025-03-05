@@ -14,7 +14,7 @@ import { createChatCompletionTool } from '../tools/chatCompletionTool'
 import { getDatabase } from '../pglite.api'
 import { createEnhancedCrudWrapper } from '../crudWrapper'
 import type OpenAI from 'openai'
-import { createSearchTool, toolCreationWizard } from '../tools/toolManagement'
+import { createSearchTool, toolCreationWizard } from '../tools/toolTools'
 import { createStream } from '../frpBus'
 
 export async function initTaskyon(
