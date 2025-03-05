@@ -58,7 +58,6 @@ export type Goals = 'SimpleCompletion' | 'AnalyzeError' | 'ChooseTool' | 'Analyz
 
 // TODO: refactor & clean up this function ;)
 export async function processChatTask(
-  goal: Goals,
   allowedTools: string[],
   toolDefs: Record<string, ToolBase>,
   currentTask: TaskNode,
@@ -71,6 +70,7 @@ export async function processChatTask(
   lastTaskBeforeChatCompletion: TaskNode,
   streamTracker: (chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => void,
   prompts: string[],
+  goal?: Goals,
 ) {
   //TODO: this code is duplicated, can we do this better?
   const api = getApiConfigCopy(llmSettings, configuration.chatApi)
@@ -116,7 +116,8 @@ export async function processChatTask(
           }) as OpenAI.ChatCompletionMessageParam,
       ),
     )
-  } else {
+  }
+  if (goal) {
     msgs = addPrompts(
       lastTaskBeforeChatCompletion,
       toolDefs,
@@ -635,12 +636,59 @@ async function convertFilesToOpenAIImageContent(
   return imageContent
 }
 
+const chatCompletionParams: JSONSchema7Object = {
+  type: 'object',
+  properties: {
+    model: {
+      type: 'string',
+      description:
+        'The name of the model to use for the completion. The default is "auto" if parameter is not used. A model will automatically be chosen for the task',
+      default: 'auto',
+    },
+    goal: {
+      type: 'string',
+      description:
+        'Optional Parameter. Goals can be: "SimpleCompletion","AnalyzeError", "ChooseTool", "AnalyzeToolResult".',
+      default: '',
+    },
+    llmTools: {
+      type: 'boolean',
+      description: 'Optional Parameter. If set to true, we will use a openai compatible tool api',
+      default: false,
+    },
+    allowedTools: {
+      type: 'array',
+      description:
+        'Optional Parameter. We can specify which tools are allowed to be called by the LLM',
+      items: {
+        type: 'string',
+      },
+      default: [],
+    },
+    prompts: {
+      type: 'array',
+      description:
+        "Optional Parameter. We can add a custom prompt to the chatCompletion which doesn't get recorded as a task and therefore disappears during message thread conversion.",
+      items: {
+        type: 'string',
+      },
+      default: [],
+    },
+    schema: {
+      type: 'object',
+      description:
+        'A json schema object which we can use to generate a specific response and parse it.',
+      additionalProperties: true,
+    },
+  },
+  required: ['model'],
+}
+
 type ccArguments = {
   model?: string
   goal?: Goals
   llmTools?: boolean
   allowedTools?: string[]
-  function?: string
   prompts?: string[]
   schema?:
     | tyJsonSchema
@@ -686,7 +734,7 @@ export async function createChatCompletionTool(
   const ajv = new Ajv.default() // options can be passed, e.g. {allErrors: true}
 
   const fetchChatCompletion: internalToolFunctionSchema = async (
-    { model, goal, llmTools, allowedTools, prompts, schema, function }: ccArguments,
+    { model, goal, llmTools, allowedTools, prompts, schema }: ccArguments,
     context: toolContext,
   ) => {
     const selectedModel = model ?? getCurrentModel(llmSettings)
@@ -714,7 +762,6 @@ export async function createChatCompletionTool(
         `chatCompletion Task needs a prior or parent Task to work! ${currentTask.id}`,
       )
     const { chatCompletion, metaInfo: chatInfo } = await processChatTask(
-      goal ?? 'SimpleCompletion',
       allowedTools ?? [],
       toolDefs,
       currentTask,
@@ -728,6 +775,7 @@ export async function createChatCompletionTool(
         streamCallback(currentTask.id, chunk)
       },
       prompts ?? [],
+      goal,
     )
 
     // parse the response into our own type ...
@@ -812,54 +860,7 @@ export async function createChatCompletionTool(
   list and generate a response`,
     name: 'chatCompletion',
     renderOptions: { hideChat: true, hideLlm: true },
-    parameters: {
-      type: 'object',
-      properties: {
-        model: {
-          type: 'string',
-          description:
-            'The name of the model to use for the completion. The default is "auto" if parameter is not used. A model will automatically be chosen for the task',
-          default: 'auto',
-        },
-        goal: {
-          type: 'string',
-          description:
-            'Optional Parameter. Goals can be: "SimpleCompletion","AnalyzeError", "ChooseTool", "AnalyzeToolResult".',
-          default: 'SimpleCompletion',
-        },
-        llmTools: {
-          type: 'boolean',
-          description:
-            'Optional Parameter. If set to true, we will use a openai compatible tool api',
-          default: false,
-        },
-        allowedTools: {
-          type: 'array',
-          description:
-            'Optional Parameter. We can specify which tools are allowed to be called by the LLM',
-          items: {
-            type: 'string',
-          },
-          default: [],
-        },
-        prompts: {
-          type: 'array',
-          description:
-            "Optional Parameter. We can add a custom prompt to the chatCompletion which doesn't get recorded as a task and therefore disappears during message thread conversion.",
-          items: {
-            type: 'string',
-          },
-          default: [],
-        },
-        schema: {
-          type: 'object',
-          description:
-            'A json schema object which we can use to generate a specific response and parse it.',
-          additionalProperties: true,
-        },
-      },
-      required: ['model'],
-    },
+    parameters: chatCompletionParams,
   }
 
   return chatCompletion

@@ -1,5 +1,5 @@
 import { summarizeTools, mapFunctionNames } from './tools'
-import { type ToolBase, type TaskNode, type llmSettings, FunctionCall } from './types'
+import { type ToolBase, type TaskNode, FunctionCall } from './types'
 import { safeYamlDump, zodToYamlString } from '../yamlUtils'
 import type OpenAI from 'openai'
 import type { Goals } from '../tools/chatCompletionTool'
@@ -96,14 +96,20 @@ function substituteTemplateVariables<T extends Record<string, string>>(
     let content = templateValue
 
     // Replace placeholders in the template with values from variables
-    for (const [variableKey, variableValue] of Object.entries(variables)) {
-      content = content.replace(new RegExp(`{${variableKey}}`, 'g'), variableValue)
-    }
+    content = substituteStringVariables(variables, content)
 
     messages[templateKey as keyof T] = content
   }
 
   return messages
+}
+
+function substituteStringVariables(variables: Record<string, string>, content: string) {
+  return Object.entries(variables).reduce(
+    (acc, [variableKey, variableValue]) =>
+      acc.replace(new RegExp(`{${variableKey}}`, 'g'), variableValue),
+    content,
+  )
 }
 
 export function generateOpenAIToolDeclarations(
@@ -123,6 +129,22 @@ export function generateOpenAIToolDeclarations(
     }
   })
   return openAITools
+}
+
+function getAllFunctionsInOpenAiConversation(
+  modifiedOpenAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+) {
+  return modifiedOpenAIConversationThread.reduce(
+    (p, c) =>
+      typeof c.content === 'string'
+        ? c.role === 'function'
+          ? p.add(c.name)
+          : c.role === 'tool'
+            ? p.add(c.tool_call_id)
+            : p
+        : p,
+    new Set<string>(),
+  )
 }
 
 /**
@@ -158,7 +180,18 @@ type tyChatCompletionmessageParam = OpenAI.Chat.Completions.ChatCompletionMessag
 export function addPrompts(
   lastTaskBeforeChatCompletion: TaskNode,
   toolCollection: Record<string, ToolBase>,
-  llmSettings: llmSettings,
+  options: {
+    enableOpenAiTools: boolean
+    useBasePrompt: boolean
+    taskChatTemplates: {
+      basePrompt: string
+      evaluate: string
+      instruction: string
+      tools: string
+      task: string
+      toolResult: string
+    }
+  },
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   allowedTools: string[],
   goal: Goals,
@@ -166,7 +199,7 @@ export function addPrompts(
   // Check if task has tools and OpenAI tools are not enabled
   //console.log('Creating chat prompts');
 
-  const useToolChat = allowedTools.length && !llmSettings.enableOpenAiTools
+  const useToolChat = allowedTools.length && !options.enableOpenAiTools
 
   const modifiedOpenAIConversationThread = structuredClone(openAIConversationThread)
   const prependMessages: tyChatCompletionmessageParam[] = []
@@ -180,14 +213,14 @@ export function addPrompts(
   }
 
   // we always prepend our "fancy" prompt, if we use "native" tools...
-  if ((goal === 'SimpleCompletion' && llmSettings.useBasePrompt) || llmSettings.enableOpenAiTools) {
-    const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, variables)
+  if ((goal === 'SimpleCompletion' && options.useBasePrompt) || options.enableOpenAiTools) {
+    const filledTemplates = substituteTemplateVariables(options.taskChatTemplates, variables)
     prependMessages.unshift({
       role: 'system',
       content: filledTemplates.basePrompt,
     })
 
-    if (!llmSettings.enableOpenAiTools) {
+    if (!options.enableOpenAiTools) {
       const calledFunctions = getAllFunctionsInOpenAiConversation(modifiedOpenAIConversationThread)
       // if any tools appeared during the conversation...
       if (calledFunctions.size > 0) {
@@ -204,7 +237,7 @@ export function addPrompts(
     }
   }
 
-  if (!llmSettings.enableOpenAiTools) {
+  if (!options.enableOpenAiTools) {
     if (goal === 'AnalyzeError') {
       // this is most likely an error message or similar
       // and we need a structured response in order to decide how to
@@ -220,7 +253,7 @@ export function addPrompts(
       // where we have wrapped the original message...
       modifiedOpenAIConversationThread.pop()
 
-      const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, {
+      const filledTemplates = substituteTemplateVariables(options.taskChatTemplates, {
         ...variables,
         message: lastTaskBeforeChatCompletion.content.data,
         schema: yamlRepr,
@@ -238,7 +271,7 @@ export function addPrompts(
       // where we have wrapped the original message...
       modifiedOpenAIConversationThread.pop()
 
-      const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, {
+      const filledTemplates = substituteTemplateVariables(options.taskChatTemplates, {
         ...variables,
         taskContent: lastTaskBeforeChatCompletion.content.data,
         schema: yamlRepr,
@@ -270,7 +303,7 @@ export function addPrompts(
       // where we have wrapped the original message...
       modifiedOpenAIConversationThread.pop()
 
-      const filledTemplates = substituteTemplateVariables(llmSettings.taskChatTemplates, {
+      const filledTemplates = substituteTemplateVariables(options.taskChatTemplates, {
         ...variables,
         toolResult: safeYamlDump(lastTaskBeforeChatCompletion.content.data),
         resultSchema: yamlRepr,
@@ -306,20 +339,4 @@ export function addPrompts(
 
   // build our complete thread :)
   return { prependMessages, modifiedOpenAIConversationThread, appendMessages }
-}
-
-function getAllFunctionsInOpenAiConversation(
-  modifiedOpenAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-) {
-  return modifiedOpenAIConversationThread.reduce(
-    (p, c) =>
-      typeof c.content === 'string'
-        ? c.role === 'function'
-          ? p.add(c.name)
-          : c.role === 'tool'
-            ? p.add(c.tool_call_id)
-            : p
-        : p,
-    new Set<string>(),
-  )
 }
