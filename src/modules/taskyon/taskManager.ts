@@ -515,7 +515,6 @@ export interface TaskTreeNode {
   less flexible...
 */
 export function useTyTaskManager(
-  tasksCache: Map<string, TaskNode>,
   defaultTools: InternalTool[],
   taskyonDB: TaskyonDatabase,
   debugDb: EnhancedCrudWrapper<TaskNodeMeta>,
@@ -586,7 +585,10 @@ export function useTyTaskManager(
   }
 
   const tyCrud = withLiveStreams(
-    createCombinedCrudWrapper([createMapCrudWrapper(tasksCache), createRxDBCrudWrapper(taskyonDB)]),
+    createCombinedCrudWrapper([
+      createMapCrudWrapper(new Map<string, TaskNode>()),
+      createRxDBCrudWrapper(taskyonDB),
+    ]),
   )
 
   const {
@@ -865,8 +867,6 @@ export function useTyTaskManager(
 
     const llmtasks = taskList.map((taskDoc) => {
       const task = transformDocToTaskNode(taskDoc)
-      // update our function cache :)
-      tasksCache.set(task.id, task)
       return task
     })
     return llmtasks
@@ -1029,7 +1029,7 @@ export function useTyTaskManager(
         delete partialTask.priorID
         if (message) delete partialTask.content
       }
-      const yamlMeta = `<!--taskyon\n${safeYamlDump(partialTask, { skipInvalid: true })}\n-->`
+      const yamlMeta = `<!--taskyon\n${safeYamlDump(partialTask)}\n-->`
       return yamlMeta + message
     })
 

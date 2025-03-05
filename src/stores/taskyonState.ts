@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { watch, computed, reactive, ref } from 'vue'
+import { watch, computed, ref } from 'vue'
 import type { Asyncify } from 'src/modules/taskyon/types'
 import {
   type Model,
@@ -166,9 +166,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     ]
   }
 
-  // TODO: don't add this taslist to tyManager, but subscribe to changes from tyManager in order to update it!!
-  // last thing we do after having loaded all settings is to actually start taskyon! :)
-  const TaskList = reactive(new Map<string, TaskNode>())
   // callin ExecutionContext.interrupt();  cancels processing of current task
   const taskWorkerController = useTaskWorkerController()
   console.log('initialize taskyon')
@@ -183,7 +180,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     stateRefs.keys,
     taskWorkerController,
     stateRefs.logError,
-    TaskList,
     defineTyGuiTools(),
     // this here is used as a callback for streaming..  all streaming chat completions call this function
     // together with the ID of the chatCompletion task.
