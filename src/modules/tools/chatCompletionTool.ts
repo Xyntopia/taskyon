@@ -97,41 +97,23 @@ export async function processChatTask(
     toolDefs,
   )
 
-  // TODO: split llmSettings.enableOpenAiTools settings from addPrompts for refactoring
-  // TODO: split "base" prompt from "addPrompts"  and maybe have a separate function for each
-  //       goal...
-  let msgs: ReturnType<typeof addPrompts> = {
-    prependMessages: [],
-    modifiedOpenAIConversationThread: [],
-    appendMessages: [],
-  }
-  if (prompts.length > 0) {
-    // TODO: add schema to custom prompts...
-    openAIConversationThread.push(
-      ...prompts.map(
-        (prompt) =>
-          ({
-            role: 'user',
-            content: prompt,
-          }) as OpenAI.ChatCompletionMessageParam,
-      ),
-    )
-  }
-  if (goal) {
-    msgs = addPrompts(
-      lastTaskBeforeChatCompletion,
-      toolDefs,
-      llmSettings,
-      openAIConversationThread,
-      allowedTools,
-      goal,
-    )
-    openAIConversationThread = [
-      ...msgs.prependMessages,
-      ...msgs.modifiedOpenAIConversationThread,
-      ...msgs.appendMessages,
-    ]
-  }
+  // TODO: we need to abstract the addPrompts function quiet a lot..
+  //       e.g. split the generation of variables and add a function that can do that..
+  const msgs = addPrompts(
+    lastTaskBeforeChatCompletion,
+    toolDefs,
+    llmSettings,
+    openAIConversationThread,
+    allowedTools,
+    prompts,
+    goal,
+  )
+  openAIConversationThread = [
+    ...msgs.prependMessages,
+    ...msgs.modifiedOpenAIConversationThread,
+    ...msgs.customPrompts,
+    ...msgs.appendMessages,
+  ]
 
   // TODO: save our "openAIConversationThread" inside debugdb for debuggin
 
