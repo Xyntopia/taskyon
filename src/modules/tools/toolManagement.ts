@@ -12,6 +12,48 @@ import { TaskProcessingError } from '../taskyon/types'
 import { sleep } from '../utils'
 import { createChatCompletionTask } from './chatCompletionTool'
 import { dump } from 'js-yaml'
+import type { TyTaskManager } from '../taskyon/taskManager'
+
+export const createSearchTool = (taskManager: TyTaskManager) =>
+  createTool({
+    name: 'searchTools',
+    description: `You can use this tool to do the following:
+- Get a list of all tool names.
+- Get the definition of a single tool including source code, if available. (not case sensitive)`,
+    longDescription: `You can use this tool to do the following:
+- Get a list of all tool names.
+- Get the definition of a single tool including source code, if available. (not case sensitive)`,
+    parameters: {
+      type: 'object',
+      properties: {
+        toolName: {
+          type: 'string',
+          default: undefined,
+          description: `- If toolname is provided: return tool definition for tool with the same name.
+- If undefined or we can not find the toolname: return a list of all tools`,
+        },
+        withCode: {
+          type: 'boolean',
+          default: false,
+          description: `- Only show tools where the code is available.`,
+        },
+      },
+      required: [],
+    } as const,
+    function: async ({ toolName, withCode }) => {
+      const allTools = await taskManager.updateToolDefinitions(true)
+      if (withCode) {
+        for (const key in allTools) {
+          if (!allTools[key]!.code) {
+            delete allTools[key]
+          }
+        }
+      }
+      console.log('searchin for tools: ', toolName)
+      if (toolName && allTools[toolName.toLowerCase()]) return allTools[toolName.toLowerCase()]
+      else return allTools
+    },
+  })
 
 // the following tool is "self-referential" and because of this we can not initialize it yet
 // we instead write a factory function which creates this tool using a reference to our tools
@@ -154,6 +196,9 @@ export const toolCreationWizard = createTool({
         console.log('Parsing the tool creation input...', taskChain.at(-1))
         await sleep(5000)
         console.log('finished parsing...')
+
+        //TODO:...
+
         return makeTaskResult([
           [
             {

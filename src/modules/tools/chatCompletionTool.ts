@@ -556,10 +556,10 @@ async function convertTaskNodeToOpenAIMessage(
     // TODO: instead of using a manual "result of the tool" use the description in the type!
     // maybe refer to the actual tool call here?
 
-    if (task.priorID && useOpenAITools) {
+    if (task.parentID && useOpenAITools) {
       const message: OpenAI.ChatCompletionMessageParam = {
         role: 'tool',
-        tool_call_id: task.priorID, // the tool call will get the parent ID as well! :)
+        tool_call_id: task.parentID, // the tool call will get the parent ID as well! :)
         content: safeYamlDump(task.content.data),
       }
       return [message]

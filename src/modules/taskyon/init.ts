@@ -1,5 +1,5 @@
 import { useTyTaskManager } from './taskManager'
-import type { TaskNode, TaskNodeMeta, TyTaskStreamData, llmSettings } from './types'
+import type { TaskNodeMeta, TyTaskStreamData, llmSettings } from './types'
 import type { TaskyonDatabase } from './rxdb'
 import { createTaskyonDatabase } from './rxdb'
 import type { TaskWorkerController } from './taskWorker'
@@ -9,12 +9,12 @@ import { loadFile } from 'src/modules/loadFiles'
 // TODO: make webpack automatically add all tool files from /tools/*
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
-import { createAsyncQueue, toLowerCaseKeys } from '../utils'
+import { createAsyncQueue } from '../utils'
 import { createChatCompletionTool } from '../tools/chatCompletionTool'
 import { getDatabase } from '../pglite.api'
 import { createEnhancedCrudWrapper } from '../crudWrapper'
 import type OpenAI from 'openai'
-import { toolCreationWizard } from '../tools/toolManagement'
+import { createSearchTool, toolCreationWizard } from '../tools/toolManagement'
 import { createStream } from '../frpBus'
 
 export async function initTaskyon(
@@ -22,9 +22,6 @@ export async function initTaskyon(
   apiKeys: { [key: string]: string },
   taskWorkerController: TaskWorkerController,
   logError: (message: string) => void,
-  // we explicitly provide a tasklist here, this gives us the chance to provide a reactive
-  // value in order to get updates to the list of tasks immediatly reflected in the UI.
-  TaskList: Map<string, TaskNode>,
   // with the Environment Tools we can provide a list of tools as closures which have access
   // to the environment in which taskyon is running (through closure variables
   // of this environment inside the tool).
@@ -61,7 +58,6 @@ export async function initTaskyon(
   const taskyonDBInstance: TaskyonDatabase = await createTaskyonDatabase()
   console.log('initializing task manager')
   const taskManagerInstance = useTyTaskManager(
-    TaskList,
     ToolList,
     taskyonDBInstance,
     debugDb,
@@ -78,6 +74,7 @@ export async function initTaskyon(
       apiKeys,
       streamCallback,
     ),
+    createSearchTool(taskManagerInstance),
     {
       function: async ({ filename }: { filename: string }) => {
         const file = await taskManagerInstance.getFileByName(filename)
@@ -94,32 +91,6 @@ export async function initTaskyon(
           },
         },
         required: ['filename'],
-      },
-    },
-    {
-      name: 'searchTools',
-      description: `You can use this tool to do the following:
-- Get a list of all tool names.
-- Get the definition of a single tool including source code, if available. (not case sensitive)`,
-      longDescription: `You can use this tool to do the following:
-- Get a list of all tool names.
-- Get the definition of a single tool including source code, if available. (not case sensitive)`,
-      parameters: {
-        type: 'object',
-        properties: {
-          toolName: {
-            type: 'string',
-            default: undefined,
-            description: `- If toolname is provided: return tool definition for tool with the same name.
-- If undefined or we can not find the toolname: return a list of all tools`,
-          },
-        },
-        required: [],
-      },
-      function: async ({ toolName }: { toolName?: string }) => {
-        const allTools = toLowerCaseKeys(await taskManagerInstance.updateToolDefinitions())
-        if (toolName && allTools[toolName.toLowerCase()]) return allTools[toolName.toLowerCase()]
-        else return allTools
       },
     },
   )
