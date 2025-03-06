@@ -186,7 +186,7 @@
         <q-tabs v-model="state.messageDebug[task.id]" dense no-caps>
           <q-tab v-if="taskMeta?.error" name="ERROR" label="Error" />
           <q-tab name="TASKNODE" label="raw task data" />
-          <q-tab v-if="taskMeta?.taskPrompt" name="TASKPROMPT" label="task prompt" />
+          <q-tab v-if="taskMeta?.taskPrompt" name="TASKPROMPT" label="raw conversation" />
           <q-tab v-if="taskMetaPrevious?.rawOutput" name="RAW_INPUT" label="raw input" />
           <q-tab name="DEBUGGING" label="debugging" />
         </q-tabs>
@@ -235,6 +235,14 @@
               style="width: 100%; height: 200px; background-color: inherit; color: inherit"
             >
             </textarea>
+            <div class="text-caption">finished completion:</div>
+            <textarea
+              :value="taskChoice"
+              readonly
+              wrap="soft"
+              style="width: 100%; height: 200px; background-color: inherit; color: inherit"
+            >
+            </textarea>
           </q-tab-panel>
           <q-tab-panel name="DEBUGGING">
             <textarea
@@ -255,7 +263,7 @@
 import ToolResultWidget from 'src/components/taskyon/ToolResultWidget.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
-import type { TaskNodeMeta } from 'src/modules/taskyon/types'
+import type { ChatResponseType, TaskNodeMeta } from 'src/modules/taskyon/types'
 import { TaskNode, partialTaskDraft, type OpenAIMessage } from 'src/modules/taskyon/types'
 import tyMarkdown from '../tyMarkdown.vue'
 import { computed, ref } from 'vue'
@@ -317,6 +325,15 @@ void tystate.getTaskManager().then((tm: TyTaskManager) => {
 const taskCostMeta = computed(() =>
   taskMeta.value?.estimatedTokens ? taskMeta.value : taskMetaNext?.value,
 )
+
+const taskChoice = computed(() => {
+  try {
+    return (taskMeta.value?.rawOutput as { choice: ChatResponseType['choices'][0] }).choice?.message
+      .content
+  } catch {
+    return '<no chatcompletion output avaailable>'
+  }
+})
 
 const state = useAppStateStore()
 const fileMappings = ref<FileMappingDocType[]>([])
