@@ -1,5 +1,5 @@
 import { summarizeTools, mapFunctionNames } from './tools'
-import { type ToolBase, type TaskNode, FunctionCall } from './types'
+import { type ToolBase, FunctionCall } from './types'
 import { safeYamlDump, zodToYamlString } from '../yamlUtils'
 import type OpenAI from 'openai'
 import type { Goals } from '../tools/chatCompletionTool'
@@ -134,41 +134,14 @@ const string2OpenAiMessage =
         }) as OpenAI.ChatCompletionMessageParam,
     )
 
-// enhance the chat by inserting prompts before certain message which
-// make them better to understand for the AI...
-export function addPrompts(
-  lastTaskBeforeChatCompletion: TaskNode,
-  toolCollection: Record<string, ToolBase>,
-  options: {
-    enableOpenAiTools: boolean
-    useBasePrompt: boolean
-    taskChatTemplates: {
-      basePrompt: string
-      evaluate: string
-      instruction: string
-      tools: string
-      task: string
-      toolResult: string
-    }
-  },
-  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+export function calculateCompletionVariables(
   allowedTools: string[],
-  prompts: string[],
-  goal?: Goals,
+  useToolChat: boolean,
+  lastMessage: unknown,
+  goal: string | undefined,
+  toolCollection: Record<string, ToolBase>,
 ) {
-  // Check if task has tools and OpenAI tools are not enabled
-  //console.log('Creating chat prompts');
-
-  const useToolChat = allowedTools.length && !options.enableOpenAiTools
-
-  const modifiedOpenAIConversationThread = structuredClone(openAIConversationThread)
-  const prependMessagesList: string[] = []
-  const appendMessagesList: string[] = []
-
-  const originalMessage =
-    typeof lastTaskBeforeChatCompletion.content.data !== 'string'
-      ? safeYamlDump(lastTaskBeforeChatCompletion.content.data)
-      : lastTaskBeforeChatCompletion.content.data
+  const originalMessage = typeof lastMessage !== 'string' ? safeYamlDump(lastMessage) : lastMessage
 
   const requiredSchema =
     goal === 'AnalyzeError'
@@ -189,6 +162,41 @@ export function addPrompts(
     schema: requiredSchema ? zodToYamlString(requiredSchema) : '<No schema specified>',
     tools: summarizeTools(allowedTools || [], toolCollection),
   }
+  return variables
+}
+
+// enhance the chat by inserting prompts before certain message which
+// make them better to understand for the AI...
+export function addPrompts(
+  toolCollection: Record<string, ToolBase>,
+  options: {
+    enableOpenAiTools: boolean
+    useBasePrompt: boolean
+    taskChatTemplates: {
+      basePrompt: string
+      evaluate: string
+      instruction: string
+      tools: string
+      task: string
+      toolResult: string
+    }
+  },
+  variables: {
+    format: string
+    message: string
+    schema: string
+    tools: string
+  },
+  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  prompts: string[],
+  goal?: Goals,
+) {
+  // Check if task has tools and OpenAI tools are not enabled
+  //console.log('Creating chat prompts');
+
+  const modifiedOpenAIConversationThread = structuredClone(openAIConversationThread)
+  const prependMessagesList: string[] = []
+  const appendMessagesList: string[] = []
 
   // we always prepend our "fancy" prompt, if we use "native" tools...
   if ((goal === 'SimpleCompletion' && options.useBasePrompt) || options.enableOpenAiTools) {

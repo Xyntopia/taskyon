@@ -7,6 +7,7 @@ import {
 } from '../taskyon/chat'
 import {
   addPrompts,
+  calculateCompletionVariables,
   generateOpenAIToolDeclarations,
   yesnoToBoolean,
 } from '../taskyon/promptCreation'
@@ -97,17 +98,17 @@ export async function processChatTask(
     toolDefs,
   )
 
+  const variables = calculateCompletionVariables(
+    allowedTools,
+    allowedTools.length > 0 && !llmSettings.enableOpenAiTools,
+    lastTaskBeforeChatCompletion.content.data,
+    goal,
+    toolDefs,
+  )
+
   // TODO: we need to abstract the addPrompts function quiet a lot..
   //       e.g. split the generation of variables and add a function that can do that..
-  const msgs = addPrompts(
-    lastTaskBeforeChatCompletion,
-    toolDefs,
-    llmSettings,
-    openAIConversationThread,
-    allowedTools,
-    prompts,
-    goal,
-  )
+  const msgs = addPrompts(toolDefs, llmSettings, variables, openAIConversationThread, prompts, goal)
   openAIConversationThread = [
     ...msgs.prependMessages,
     ...msgs.modifiedOpenAIConversationThread,
