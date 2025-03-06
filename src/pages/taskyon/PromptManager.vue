@@ -61,7 +61,7 @@ import { useTaskyonStore } from 'src/stores/taskyonState'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
 import ObjectTreeView from 'components/ObjectTreeView.vue'
 import UnderConstructionHint from 'components/UnderConstructionHint.vue'
-import { addPrompts } from 'src/modules/taskyon/promptCreation'
+import { addPrompts, calculateCompletionVariables } from 'src/modules/taskyon/promptCreation'
 import ConversationWidget from 'components/taskyon/ConversationWidget.vue'
 import { mdiMagicStaff } from '@quasar/extras/mdi-v6'
 import CreateTaskButton from 'components/taskyon/CreateTaskButton.vue'
@@ -157,11 +157,18 @@ const structuredResponsePrompt = asyncComputed(async () => {
 
     console.log('create structured example', toolCollection.value)
     if (Object.keys(toolCollection.value).length !== 0) {
-      // TODO: get rid of this "addPrompts"
+      const variables = calculateCompletionVariables(
+        state.llmSettings.allowedTools,
+        state.llmSettings.allowedTools.length > 0 && !state.llmSettings.enableOpenAiTools,
+        task.content.data,
+        'SimpleCompletion',
+        toolCollection.value,
+      )
+
       const rp = addPrompts(
-        task,
         toolCollection.value,
         state.llmSettings,
+        variables,
         [],
         [],
         'SimpleCompletion',

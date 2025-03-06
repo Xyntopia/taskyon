@@ -1,7 +1,7 @@
 import type OpenAI from 'openai'
 import { z } from 'zod'
 import { deepCopy } from '../utils'
-import { JSONSchemaObjectSchema } from '../jsonSchema'
+import { JSONSchema7 } from '../jsonSchema'
 
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type RequireSome<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
@@ -165,7 +165,7 @@ and do something with it. But most tools will simply not render it for their pur
 if render options aren't given taskyon chtcompletion function and chatwindow assumes them to be "true".
 `,
     ),
-  parameters: JSONSchemaObjectSchema.describe(
+  parameters: JSONSchema7.describe(
     'A json schema object describing the parameters of the function',
   ),
   code: z

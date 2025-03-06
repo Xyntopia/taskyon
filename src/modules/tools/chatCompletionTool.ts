@@ -42,12 +42,9 @@ import { useNlpWorker } from '../taskyon/webWorkerApi'
 import type { FileMappingDocType } from '../taskyon/rxdb'
 import { dump, load } from 'js-yaml'
 //import type { JSONSchema7Type as JsonSchema } from 'json-schema'
-import type { JSONSchemaType } from 'ajv'
-import type { JsonSchema7Type } from 'zod-to-json-schema'
-import type { JSONSchema7Array, JSONSchema7Object } from 'json-schema'
+import type { JSONSchema7 } from 'json-schema'
 import { safeYamlDump } from '../yamlUtils'
-
-type tyJsonSchema = JSONSchemaType<unknown>
+import type { AnySchema } from 'ajv'
 
 // this function processes all tasks which go to any sort of an LLM
 
@@ -619,7 +616,7 @@ async function convertFilesToOpenAIImageContent(
   return imageContent
 }
 
-const chatCompletionParams: JSONSchema7Object = {
+const chatCompletionParams: JSONSchema7 = {
   type: 'object',
   properties: {
     model: {
@@ -673,14 +670,7 @@ type ccArguments = {
   llmTools?: boolean
   allowedTools?: string[]
   prompts?: string[]
-  schema?:
-    | tyJsonSchema
-    | JsonSchema7Type
-    | string
-    | number
-    | boolean
-    | JSONSchema7Object
-    | JSONSchema7Array
+  schema?: JSONSchema7 & Record<string, unknown>
 }
 
 export function createChatCompletionTask(args?: ccArguments): partialTaskDraft {
@@ -804,7 +794,9 @@ export async function createChatCompletionTool(
       const structResponse = parseYamlResponse2Record(choice.message.content || '')
 
       if (typeof schema === 'object' && schema !== null) {
-        const validate = ajv.compile(schema)
+        // I *think* we can simply cast our schema here t ajv, because it
+        // will spit out an error anyways if our schema isn't compatible..
+        const validate = ajv.compile(schema as unknown as AnySchema)
         const valid = validate(structResponse)
         if (!valid) {
           throw new Error('Chat response has the wrong format: ' + ajv.errorsText(validate.errors))
@@ -817,7 +809,7 @@ export async function createChatCompletionTool(
         [
           {
             role: 'assistant',
-            content: { type: 'structured', data: choice.message.content || '' },
+            content: { type: 'structured', data: structResponse },
           },
         ],
       ])

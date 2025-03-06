@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { JSONSchema } from 'json-schema-to-ts'
+import type { JSONSchema7, JSONSchema7Definition } from 'json-schema'
 
 /*
 // in order to prevent a circular reference in zod, we need to define our JSONSchemaForFunctionParameter
@@ -63,32 +63,36 @@ const JSONSchemaObjectRaw = z
     maxLength: z.number().optional(),
     minLength: z.number().optional(),
     pattern: z.string().optional(),
-    items: z.union([z.lazy(() => JSONSchema), z.array(z.lazy(() => JSONSchema))]).optional(),
-    additionalItems: z.lazy(() => JSONSchema).optional(),
-    contains: z.lazy(() => JSONSchema).optional(),
+    items: z
+      .union([z.lazy(() => JSONSchema7Definition), z.array(z.lazy(() => JSONSchema7Definition))])
+      .optional(),
+    additionalItems: z.lazy(() => JSONSchema7Definition).optional(),
+    contains: z.lazy(() => JSONSchema7Definition).optional(),
     maxItems: z.number().optional(),
     minItems: z.number().optional(),
     uniqueItems: z.boolean().optional(),
     maxProperties: z.number().optional(),
     minProperties: z.number().optional(),
     required: z.array(z.string()).optional(),
-    properties: z.record(z.lazy(() => JSONSchema)).optional(),
-    patternProperties: z.record(z.lazy(() => JSONSchema)).optional(),
-    additionalProperties: z.lazy(() => JSONSchema).optional(),
-    unevaluatedProperties: z.lazy(() => JSONSchema).optional(),
-    dependencies: z.record(z.union([z.lazy(() => JSONSchema), z.array(z.string())])).optional(),
-    propertyNames: z.lazy(() => JSONSchema).optional(),
-    if: z.lazy(() => JSONSchema).optional(),
-    then: z.lazy(() => JSONSchema).optional(),
-    else: z.lazy(() => JSONSchema).optional(),
-    allOf: z.array(z.lazy(() => JSONSchema)).optional(),
-    anyOf: z.array(z.lazy(() => JSONSchema)).optional(),
-    oneOf: z.array(z.lazy(() => JSONSchema)).optional(),
-    not: z.lazy(() => JSONSchema).optional(),
+    properties: z.record(z.lazy(() => JSONSchema7Definition)).optional(),
+    patternProperties: z.record(z.lazy(() => JSONSchema7Definition)).optional(),
+    additionalProperties: z.lazy(() => JSONSchema7Definition).optional(),
+    unevaluatedProperties: z.lazy(() => JSONSchema7Definition).optional(),
+    dependencies: z
+      .record(z.union([z.lazy(() => JSONSchema7Definition), z.array(z.string())]))
+      .optional(),
+    propertyNames: z.lazy(() => JSONSchema7Definition).optional(),
+    if: z.lazy(() => JSONSchema7Definition).optional(),
+    then: z.lazy(() => JSONSchema7Definition).optional(),
+    else: z.lazy(() => JSONSchema7Definition).optional(),
+    allOf: z.array(z.lazy(() => JSONSchema7Definition)).optional(),
+    anyOf: z.array(z.lazy(() => JSONSchema7Definition)).optional(),
+    oneOf: z.array(z.lazy(() => JSONSchema7Definition)).optional(),
+    not: z.lazy(() => JSONSchema7Definition).optional(),
     format: z.string().optional(),
     contentMediaType: z.string().optional(),
     contentEncoding: z.string().optional(),
-    definitions: z.record(z.lazy(() => JSONSchema)).optional(),
+    definitions: z.record(z.lazy(() => JSONSchema7Definition)).optional(),
     title: z.string().optional(),
     description: z.string().optional(),
     default: z.any().optional(),
@@ -99,31 +103,27 @@ const JSONSchemaObjectRaw = z
   })
   .strict()
 
-export type JSONSchemaObjectSchema = Exclude<JSONSchema, boolean>
 // This inline transform removes keys with undefined values.
-const JSONSchemaObjectSchema: z.ZodType<JSONSchemaObjectSchema, z.ZodTypeDef, unknown> = z.lazy(
-  () =>
-    JSONSchemaObjectRaw.transform(
-      (data) =>
-        Object.fromEntries(
-          Object.entries(data).filter(([, v]) => v !== undefined),
-        ) as JSONSchemaObjectSchema,
-    ),
+const JSONSchema7: z.ZodType<JSONSchema7, z.ZodTypeDef, unknown> = z.lazy(() =>
+  JSONSchemaObjectRaw.transform(
+    (data) =>
+      Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)) as JSONSchema7,
+  ),
 )
 
 // Extend the raw object first, then transform.
-const JSONSchemaReferenceSchema: z.ZodType<JSONSchema, z.ZodTypeDef, unknown> =
+const JSONSchemaReferenceSchema: z.ZodType<JSONSchema7, z.ZodTypeDef, unknown> =
   JSONSchemaObjectRaw.extend({
     $id: z.string(),
   }).transform(
     (data) =>
-      Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)) as JSONSchema,
+      Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)) as JSONSchema7,
   )
 
 // A JSONSchema can be a boolean or an object.
-const JSONSchema: z.ZodType<JSONSchema, z.ZodTypeDef, unknown> = z.union([
+const JSONSchema7Definition: z.ZodType<JSONSchema7Definition, z.ZodTypeDef, unknown> = z.union([
   z.boolean(),
-  JSONSchemaObjectSchema,
+  JSONSchema7,
 ])
 
-export { JSONSchema, JSONSchemaReferenceSchema, JSONSchemaObjectSchema }
+export { JSONSchema7Definition, JSONSchemaReferenceSchema, JSONSchema7 }

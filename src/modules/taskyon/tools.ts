@@ -10,7 +10,7 @@ import type { YamlRepresentation } from '../zodUtils'
 import { convertToYamlWComments } from '../zodUtils'
 import { executeCodeInIframe } from './iframeWorker'
 import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
-import type { JSONSchema7Object, JSONSchema7Type } from 'json-schema'
+import type { JSONSchema7 } from 'json-schema'
 
 const taskMarker = '*TY_TASKRESULT*'
 
@@ -394,7 +394,7 @@ export const exampleTool = createTool({
 
 export async function craeteToolJsonSchema() {
   const { zodToJsonSchema } = await import('zod-to-json-schema')
-  const JSON_SCHEMA_PLACEHOLDER: JSONSchema7Type = {
+  const JSON_SCHEMA_PLACEHOLDER: JSONSchema7 = {
     type: 'object',
     description:
       'A valid JSON Schema object defining the structure, types, and constraints for the tool parameters. Include properties, required fields, and any other validations as needed.',
@@ -403,19 +403,18 @@ export async function craeteToolJsonSchema() {
   // Function to convert Zod schema to JSON Schema dynamically
   const convertZodToJsonSchema = (schema: z.ZodTypeAny) => {
     return zodToJsonSchema(schema, {
-      // Transform function to replace `JSONSchemaObjectSchema`
       $refStrategy: 'none',
       definitionPath: '#/definitions',
     })
   }
 
-  const toolBaseJsonSchema = convertZodToJsonSchema(ToolBase) as JSONSchema7Type & {
+  const toolBaseJsonSchema = convertZodToJsonSchema(ToolBase) as JSONSchema7 & {
     properties: Record<string, unknown>
   }
   if (toolBaseJsonSchema) {
     toolBaseJsonSchema.properties.parameters = JSON_SCHEMA_PLACEHOLDER
-    delete (toolBaseJsonSchema as JSONSchema7Object).$schema
+    delete (toolBaseJsonSchema as JSONSchema7).$schema
   }
 
-  return toolBaseJsonSchema
+  return toolBaseJsonSchema as JSONSchema7 & Record<string, unknown>
 }
