@@ -474,6 +474,7 @@ const currentnewTask = computed(() => {
 const { estimateChatTokens } = useNlpWorker()
 
 // TODO:   our token estimation needs to become much better ^^
+// TODO:   e.g. add prompts to our task :)
 const estimatedTokens = ref<number>(0)
 watchDebounced(
   [() => state.llmSettings.taskDraft.content, () => state.llmSettings.selectedTaskId],

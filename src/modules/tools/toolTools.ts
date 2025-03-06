@@ -1,14 +1,7 @@
 import type { taskResult } from '../taskyon/tools'
-import {
-  craeteToolJsonSchema,
-  createTool,
-  createToolTask,
-  exampleTool,
-  makeTaskResult,
-} from '../taskyon/tools'
+import { craeteToolJsonSchema, createTool, createToolTask, makeTaskResult } from '../taskyon/tools'
 import { match, P } from 'ts-pattern'
-import { TaskProcessingError } from '../taskyon/types'
-import { sleep } from '../utils'
+import { TaskProcessingError, ToolBase } from '../taskyon/types'
 import { createChatCompletionTask } from './chatCompletionTool'
 import { dump } from 'js-yaml'
 import { type TyTaskManager } from '../taskyon/taskManager'
@@ -57,6 +50,13 @@ is now unreadable.
           }
         }
       }
+      const normalizedTools = Object.keys(allTools).reduce(
+        (acc, key) => {
+          acc[key.toLowerCase()] = allTools[key]!
+          return acc
+        },
+        {} as Record<string, (typeof allTools)[keyof typeof allTools]>,
+      )
       console.log('searching for tools: ', toolName)
 
       const toolList = Object.values(allTools).map((t) => ({
@@ -65,8 +65,10 @@ is now unreadable.
       }))
 
       let result: unknown
-      if (toolName && allTools[toolName.toLowerCase()]) {
-        result = { 'Here is the requested tool definition': allTools[toolName.toLowerCase()] }
+      if (toolName && normalizedTools[toolName.toLowerCase()]) {
+        result = {
+          'Here is the requested tool definition': normalizedTools[toolName.toLowerCase()],
+        }
       } else if (toolName) {
         result = {
           "This tool doesn't exist": toolName,
@@ -93,6 +95,28 @@ is now unreadable.
     },
   })
 
+export const createAddNewToolTool: () => Promise<ToolBase> = async () => {
+  const toolJsonSchema = await craeteToolJsonSchema()
+  return {
+    name: 'addNewTool',
+    description: 'Validates and registers a new tool with taskyon.',
+    longDescription:
+      'This tool takes a tool definition, validates it and registers it with taskyon.',
+    parameters: toolJsonSchema,
+    function: (toolDef: unknown) => {
+      const toolDefinition = ToolBase.parse(toolDef)
+      return makeTaskResult([
+        [
+          {
+            role: 'assistant',
+            content: { type: 'tooldefinition', data: toolDefinition },
+          },
+        ],
+      ])
+    },
+  }
+}
+
 // TODO: create a "multiStepTool" function which abstracts the steps below
 //       - use a list of functions to automatically create the steps and properties
 //       - with match & P.select & returning of the correct functions...
@@ -116,6 +140,7 @@ export const toolCreationWizard = createTool({
       .with(P.union(P.nullish, P.string.includes('init'), P.string.includes('start')), async () => {
         console.log('starting function creation wizard')
         console.log('Prompting for tool creation...')
+
         const toolJsonSchema = await craeteToolJsonSchema()
 
         return makeTaskResult([
@@ -133,10 +158,15 @@ export const toolCreationWizard = createTool({
             }),
             createChatCompletionTask({
               prompts: [
+                `You need to retrieve examples of existing tools in order to help you creating a new tool.
+From the list of tools you extracted earlier, which tool is the one closest to what the user would like to have?`,
+              ],
+              goal: 'SimpleCompletion',
+            }),
+            createChatCompletionTask({
+              prompts: [
                 `- Use the toolSearcher function again. You are required to use it.
-- We want to retrieve examples of existing tools in order to help us creating a new tool.
-- From the list of tools you extracted earlier, which tool do you want to inspect?
-- You have to choose a tool that was present in the list that you requested earlier.`,
+- Use the name you selected for the "toolName" argument in the "toolSearcher" tool`,
               ],
               allowedTools: ['toolSearcher'],
               goal: 'ChooseTool',
@@ -168,22 +198,24 @@ export const toolCreationWizard = createTool({
           ],
         ])
       })
-      .with('parsing', async () => {
+      .with('parsing', () => {
         console.log('Parsing the tool creation input...', taskChain.at(-1))
-        await sleep(5000)
-        console.log('finished parsing...')
 
-        //TODO:...
+        const lastMessage = taskChain.at(-1)
+
+        const toolDef = ToolBase.parse(lastMessage?.content.data)
+
+        console.log('finished parsing new tool...', toolDef)
 
         return makeTaskResult([
           [
             {
               role: 'assistant',
-              content: { type: 'message', data: 'Here is an example tool:' },
+              content: { type: 'message', data: 'I created this new tool:' },
             },
             {
               role: 'assistant',
-              content: { type: 'tooldefinition', data: exampleTool },
+              content: { type: 'tooldefinition', data: toolDef },
             },
           ],
         ])

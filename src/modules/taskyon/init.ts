@@ -14,7 +14,7 @@ import { createChatCompletionTool } from '../tools/chatCompletionTool'
 import { getDatabase } from '../pglite.api'
 import { createEnhancedCrudWrapper } from '../crudWrapper'
 import type OpenAI from 'openai'
-import { createToolSearcher, toolCreationWizard } from '../tools/toolTools'
+import { createAddNewToolTool, createToolSearcher, toolCreationWizard } from '../tools/toolTools'
 import { createStream } from '../frpBus'
 
 export async function initTaskyon(
@@ -75,6 +75,7 @@ export async function initTaskyon(
       streamCallback,
     ),
     createToolSearcher(taskManagerInstance),
+    await createAddNewToolTool(),
     {
       function: async ({ filename }: { filename: string }) => {
         const file = await taskManagerInstance.getFileByName(filename)
