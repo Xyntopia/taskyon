@@ -813,7 +813,7 @@ export async function createChatCompletionTool(
         throw new TaskProcessingError('Invalid schema type')
       }
 
-      makeTaskResult([
+      return makeTaskResult([
         [
           {
             role: 'assistant',

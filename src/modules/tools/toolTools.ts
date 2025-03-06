@@ -40,10 +40,15 @@ is now unreadable.
           default: false,
           description: `Only show tools where the js code is available.`,
         },
+        analyze: {
+          type: 'boolean',
+          default: false,
+          description: `Automatically interpret the result with an AI.`,
+        },
       },
       required: [],
     } as const,
-    function: async ({ toolName, withCode }) => {
+    function: async ({ toolName, withCode, analyze }) => {
       const allTools = await taskManager.updateToolDefinitions(true)
       if (withCode) {
         for (const key in allTools) {
@@ -53,11 +58,38 @@ is now unreadable.
         }
       }
       console.log('searching for tools: ', toolName)
-      if (toolName && allTools[toolName.toLowerCase()]) return allTools[toolName.toLowerCase()]
-      return Object.values(allTools).map((t) => ({
+
+      const toolList = Object.values(allTools).map((t) => ({
         name: t.name,
         description: t.description,
       }))
+
+      let result: unknown
+      if (toolName && allTools[toolName.toLowerCase()]) {
+        result = { 'Here is the requested tool definition': allTools[toolName.toLowerCase()] }
+      } else if (toolName) {
+        result = {
+          "This tool doesn't exist": toolName,
+          'Here are the available tools to inspect': toolList,
+        }
+      } else {
+        result = {
+          'Here are the available tools to inspect': toolList,
+        }
+      }
+
+      if (analyze) {
+        return result
+      } else {
+        return makeTaskResult([
+          [
+            {
+              role: 'system',
+              content: { type: 'toolresult', data: result },
+            },
+          ],
+        ])
+      }
     },
   })
 
@@ -70,8 +102,8 @@ export const toolCreationWizard = createTool({
     properties: {
       step: {
         type: 'string',
-        enum: ['parsing', 'start'],
-        description: '',
+        enum: ['start', 'parsing'],
+        description: 'Use "start" if we want to create a new tool...',
       },
     },
   } as const,
@@ -97,19 +129,23 @@ export const toolCreationWizard = createTool({
             },
             createToolTask({
               name: 'toolSearcher',
-              arguments: { withCode: true },
+              arguments: { withCode: true, analyze: false },
             }),
             createChatCompletionTask({
               prompts: [
-                'Now use the toolSearcher again with the name of the tool that you want to retrieve as a code example.',
+                `- Use the toolSearcher function again. You are required to use it.
+- We want to retrieve examples of existing tools in order to help us creating a new tool.
+- From the list of tools you extracted earlier, which tool do you want to inspect?
+- You have to choose a tool that was present in the list that you requested earlier.`,
               ],
-              function: 'toolSearcher',
+              allowedTools: ['toolSearcher'],
+              goal: 'ChooseTool',
             }),
             {
               role: 'system',
               content: {
                 type: 'message',
-                data: `The required schema for creating a tool looks like this:
+                data: `The required json schema for creating a tool looks like this:
                 ${dump(toolJsonSchema)}`,
               },
             },
