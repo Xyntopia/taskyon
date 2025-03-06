@@ -6,10 +6,17 @@ Taskyon offers a flexible and powerful system for integrating and managing tools
 
 ## Built-In tools
 
-### Context-aware tools
+- **chatCompletion**: This function automatically takes the previous task chain as an input, converts it into a list of messages which an LLM can understand and returns new tasks for further processing of the result. It connects to chat completion APIs in the background and can handle all the relevant things: upload of files/images, function excution, structured data response etc..
+- **toolSearcher**
+- **toolCreationWizard**
+- **executePython**
+- **executeJavascript**
+- **getFileContent**
 
-- **chatCompletion**: This function automatically takes the previous task chain as an input, converts it into a list of messages which an LLM can understand and returns new tasks for further processing of the result
-- **contextFunction**: This function acts similar to a lambda function and takes an anomyous function whose only input is the taskyon context which all functions get...
+### Context
+
+All taskyon functions have access to the _tree context_ of the node that is currently processed.
+This means, they will get a list of the predecessing chain of tasknodes. Taskyon extracts this chain from the tree by walking through priorIDs/parent IDs upwards. Siblings which are linked through their priorIDs can have their own subchains and we are using a recursive flatmap operation to flatten them in order to create the context for the current taskNode.
 
 ## Tool Categories
 
