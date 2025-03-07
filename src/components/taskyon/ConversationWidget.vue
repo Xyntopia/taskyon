@@ -197,13 +197,20 @@ const tyList2QTree = (tasklist: TaskTreeNode[]) =>
     lazy: ttn.task.content.type === 'functioncall',
   })) as taskTreeNodeType[]
 
-const tyChain2QTree = (taskChain: TaskTreeNode[][]) =>
-  taskChain.map((tc) => ({
-    label: `SubChain ${tc[0]?.task.id.slice(0, 3)}`,
-    taskid: `SubChain ${tc[0]?.task.id}`,
-    children: tyList2QTree(tc),
-    lazy: false,
-  })) as taskTreeNodeType[]
+const tyChain2QTree = (taskChain: TaskTreeNode[][]) => {
+  if (taskChain.length > 1) {
+    return taskChain.map((tc) => ({
+      label: `SubChain ${tc[0]?.task.id.slice(0, 3)}`,
+      taskid: `SubChain ${tc[0]?.task.id}`,
+      children: tyList2QTree(tc),
+      lazy: false,
+    })) as taskTreeNodeType[]
+  } else if (taskChain.length === 1) {
+    return tyList2QTree(taskChain[0]!)
+  } else {
+    return []
+  }
+}
 
 const getQTree = async (taskID: string, justChildren = false) => {
   const tm = await tystate.getTaskManager()
