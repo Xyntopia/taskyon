@@ -148,31 +148,25 @@ const renderOption = z.union([z.boolean(), z.function()])
 export const ToolBase = z.object({
   description: z
     .string()
-    .describe('A short description about the tool so that an LLM knows when to use it...'),
+    .describe('A short description about the tool so that an LLM knows when to use it.'),
   longDescription: z
     .string()
     .optional()
     .describe('An optional longer description for more complicated operations with this tool.'),
-  name: FunctionName.describe('Name of tool. Has to fulfill: /^[a-zA-Z0-9_-]+$/'),
-  renderOptions: z
-    .object({ hideChat: renderOption, hideLlm: renderOption })
-    .partial()
-    .optional()
-    .describe(
-      `Provide a render function to render content the of this tool as text for an AI or
-a chat window (e.g. an LLM). If we don't provide any render function, tools can still see all the information
-and do something with it. But most tools will simply not render it for their purpose..
-if render options aren't given taskyon chtcompletion function and chatwindow assumes them to be "true".
-`,
-    ),
+  name: FunctionName.describe('Name of the tool. Has to fulfill: /^[a-zA-Z0-9_-]+$/'),
+  renderOptions: z.object({ hideChat: renderOption, hideLlm: renderOption }).partial().optional()
+    .describe(`*hideChat*, will hide the tool in the UI chat. HideLlm will hide the  tool from an LLM.
+This is mainly useful for tools like "chatCompletion" which the llm doesn't need to see in the chatCompletion.`),
   parameters: JSONSchema7.describe(
-    'A json schema object describing the parameters of the function',
+    'A JSON schema object describing the parameters of the function.',
   ),
   code: z
     .string()
     .optional()
     .describe(
-      "If a function description doesn't include any code taskyon will call a postMessage to the parent window with the function name.",
+      `The functionality of the tool as javascript code. If a function description doesn't include any code,
+Taskyon will automatically call a postMessage event with the parameters to the parent window
+with the function name.`,
     ),
 })
 export type ToolBase = z.infer<typeof ToolBase> // this reflects json schema:  https://json-schema.org/specification-links
