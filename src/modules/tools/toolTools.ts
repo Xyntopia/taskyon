@@ -223,7 +223,7 @@ Finally, it creates a chat completion task with the selected tools in the allowe
       }
       // Default to the first tool if no match is found.
       if (selectedTools.length === 0 && toolList.length > 0) {
-        selectedTools.push(toolList[0].name)
+        selectedTools.push(toolList[0]!.name)
       }
 
       // 3. Create a chatCompletion task with the selected tools as the only allowed options.

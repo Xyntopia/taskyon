@@ -112,4 +112,54 @@ const clockTool = {
   }`,
 } as ToolBase
 
-export const smallHelperTools = [jinaMarkdownReader, jinaSearchTool, clockTool]
+const locationTool = {
+  description: 'A tool that provides the current browser location and IP address.',
+  longDescription:
+    'This tool retrieves the current browser location using the Geolocation API and the IP address using an external service. It also estimates the location based on the IP address.',
+  name: 'locationTool',
+  renderOptions: {
+    hideChat: false,
+    hideLlm: false,
+  },
+  parameters: {
+    type: 'object',
+    properties: {},
+  },
+  code: `() => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject('Geolocation is not supported by your browser');
+      } else {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const { latitude, longitude } = position.coords;
+            fetch('https://api.ipify.org?format=json')
+              .then(response => response.json())
+              .then(data => {
+                const ip = data.ip;
+                fetch(\`https://ipapi.co/\${ip}/json/\`)
+                  .then(response => response.json())
+                  .then(locationData => {
+                    resolve({
+                      latitude,
+                      longitude,
+                      ip,
+                      estimatedLocation: {
+                        city: locationData.city,
+                        region: locationData.region,
+                        country: locationData.country_name,
+                      },
+                    });
+                  })
+                  .catch(error => reject(error));
+              })
+              .catch(error => reject(error));
+          },
+          (error) => reject(error)
+        );
+      }
+    });
+  }`,
+} as ToolBase
+
+export const smallHelperTools = [jinaMarkdownReader, jinaSearchTool, clockTool, locationTool]
