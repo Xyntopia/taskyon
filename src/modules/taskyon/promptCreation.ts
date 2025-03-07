@@ -178,6 +178,7 @@ export function addPrompts(
       instruction: string
       tools: string
       task: string
+      schemaReminder: string
       toolResult: string
     }
   },
@@ -197,6 +198,7 @@ export function addPrompts(
   const modifiedOpenAIConversationThread = structuredClone(openAIConversationThread)
   const prependMessagesList: string[] = []
   const appendMessagesList: string[] = []
+  const appendSystemMessage: string[] = []
 
   // we always prepend our "fancy" prompt, if we use "native" tools...
   if ((goal === 'SimpleCompletion' && options.useBasePrompt) || options.enableOpenAiTools) {
@@ -215,35 +217,43 @@ export function addPrompts(
       }
     }
   }
-  if (!options.enableOpenAiTools && goal && goal !== 'SimpleCompletion') {
-    // Remove the last message from openAIConversationThread
-    // because it will be replaced by our task/evaluate/toolResult messages
-    // where we have wrapped the original message...
-    modifiedOpenAIConversationThread.pop()
-    if (goal === 'AnalyzeError') {
-      appendMessagesList.push(options.taskChatTemplates.evaluate)
-    } else if (goal === 'ChooseTool') {
+  if (goal && goal !== 'SimpleCompletion') {
+    // only add tools, if we don#t use the native API already
+    if (!options.enableOpenAiTools) {
       appendMessagesList.push(
         options.taskChatTemplates.instruction,
         options.taskChatTemplates.tools,
-        options.taskChatTemplates.task,
       )
-      // TODO: to something with file tasks and
-    } else if (goal === 'AnalyzeToolResult') {
-      appendMessagesList.push(
-        options.taskChatTemplates.instruction,
-        options.taskChatTemplates.tools,
-        options.taskChatTemplates.toolResult,
-      )
+      // send instructions only if there aren't any custom prompts...
+      if (prompts.length === 0) {
+        // Remove the last message from openAIConversationThread
+        // because it will be replaced by our task/evaluate/toolResult messages
+        // where we have wrapped the original message...
+        modifiedOpenAIConversationThread.pop()
+        if (goal === 'AnalyzeError') {
+          appendMessagesList.push(options.taskChatTemplates.evaluate)
+        } else if (goal === 'ChooseTool') {
+          appendMessagesList.push(options.taskChatTemplates.task)
+        } else if (goal === 'AnalyzeToolResult') {
+          appendMessagesList.push(options.taskChatTemplates.toolResult)
+        }
+      }
     }
+    // put custom prompts between general instruction, tool lists and
+    // the schema enforcer
+    appendMessagesList.push(...prompts)
+    if (!options.enableOpenAiTools)
+      appendSystemMessage.push(options.taskChatTemplates.schemaReminder)
+  } else {
+    appendMessagesList.push(...prompts)
   }
 
   const converter = string2OpenAiMessage(variables)
 
   const prependMessages = converter('system')(prependMessagesList)
   const appendMessages = converter('user')(appendMessagesList)
-  const customPrompts = converter('user')(prompts)
+  appendMessages.push(...converter('system')(appendSystemMessage))
 
   // build our complete thread :)
-  return { prependMessages, modifiedOpenAIConversationThread, customPrompts, appendMessages }
+  return { prependMessages, modifiedOpenAIConversationThread, appendMessages }
 }
