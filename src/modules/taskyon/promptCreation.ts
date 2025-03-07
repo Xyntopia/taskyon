@@ -215,7 +215,7 @@ export function addPrompts(
       }
     }
   }
-  if (!options.enableOpenAiTools) {
+  if (!options.enableOpenAiTools && goal && goal !== 'SimpleCompletion') {
     // Remove the last message from openAIConversationThread
     // because it will be replaced by our task/evaluate/toolResult messages
     // where we have wrapped the original message...
