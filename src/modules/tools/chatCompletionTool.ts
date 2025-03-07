@@ -109,7 +109,6 @@ export async function processChatTask(
   openAIConversationThread = [
     ...msgs.prependMessages,
     ...msgs.modifiedOpenAIConversationThread,
-    ...msgs.customPrompts,
     ...msgs.appendMessages,
   ]
 

@@ -1,9 +1,6 @@
-import type { taskResult } from '../taskyon/tools'
 import { craeteToolJsonSchema, createTool, createToolTask, makeTaskResult } from '../taskyon/tools'
-import { match, P } from 'ts-pattern'
-import { TaskProcessingError, ToolBase } from '../taskyon/types'
+import { ToolBase } from '../taskyon/types'
 import { createChatCompletionTask } from './chatCompletionTool'
-import { dump } from 'js-yaml'
 import { type TyTaskManager } from '../taskyon/taskManager'
 
 export const createToolSearcher = (taskManager: TyTaskManager) =>
@@ -72,11 +69,11 @@ is now unreadable.
       } else if (toolName) {
         result = {
           "This tool doesn't exist": toolName,
-          'Here are the available tools to inspect': toolList,
+          'Here are the currently available tools you can inspect': toolList,
         }
       } else {
         result = {
-          'Here are the available tools to inspect': toolList,
+          'Here are the currently available tools you can inspect': toolList,
         }
       }
 
@@ -117,115 +114,70 @@ export const createAddNewToolTool: () => Promise<ToolBase> = async () => {
   }
 }
 
-// TODO: create a "multiStepTool" function which abstracts the steps below
-//       - use a list of functions to automatically create the steps and properties
-//       - with match & P.select & returning of the correct functions...
 export const toolCreationWizard = createTool({
   parameters: {
     type: 'object',
-    properties: {
-      step: {
-        type: 'string',
-        enum: ['start', 'parsing'],
-        description: 'Use "start" if we want to create a new tool...',
-      },
-    },
+    properties: {},
   } as const,
-  // TODO: add an option to search for similar tools first...
-  // TODO: use "P" from ts-match to automatically select the correct steps etc...
-  function: ({ step }, { taskChain }) =>
-    match(step)
-      .returnType<taskResult | Promise<taskResult>>()
-      // "undefined" is the first step and how we start :)
-      .with(P.union(P.nullish, P.string.includes('init'), P.string.includes('start')), async () => {
-        console.log('starting function creation wizard')
-        console.log('Prompting for tool creation...')
+  function: () => {
+    // "undefined" is the first step and how we start :)
+    console.log('starting function creation wizard')
 
-        const toolJsonSchema = await craeteToolJsonSchema()
-
-        return makeTaskResult([
-          [
-            {
-              role: 'assistant',
-              content: {
-                type: 'message',
-                data: 'I am gathering examples from tools with code for the tool requested by the user...',
-              },
-            },
-            createToolTask({
-              name: 'toolSearcher',
-              arguments: { withCode: true, analyze: false },
-            }),
-            createChatCompletionTask({
-              prompts: [
-                `You need to retrieve examples of existing tools in order to help you creating a new tool.
-From the list of tools you extracted earlier, which tool is the one closest to what the user would like to have?`,
-              ],
-              goal: 'SimpleCompletion',
-            }),
-            createChatCompletionTask({
-              prompts: [
-                `- Use the toolSearcher function again. You are required to use it.
+    return makeTaskResult([
+      [
+        {
+          role: 'assistant',
+          content: {
+            type: 'message',
+            data: 'I am gathering examples from tools with code for the tool requested by the user...',
+          },
+        },
+        createToolTask({
+          name: 'toolSearcher',
+          arguments: { withCode: true, analyze: false },
+        }),
+        createChatCompletionTask({
+          prompts: [
+            `You need to retrieve an example of an existing tool in order to help you to create the new tool.
+If there are none that are similar just make a guess which tool code might be helpful to you!
+From the list of tools you just extracted with the toolSearcher, you have to choose one!
+Explain in one sentence, why you are choosing this tool.
+`,
+          ],
+          goal: 'SimpleCompletion',
+        }),
+        createChatCompletionTask({
+          prompts: [
+            `- Use the toolSearcher function again. You are required to use it.
 - Use the name you selected for the "toolName" argument in the "toolSearcher" tool`,
-              ],
-              allowedTools: ['toolSearcher'],
-              goal: 'ChooseTool',
-            }),
-            {
-              role: 'system',
-              content: {
-                type: 'message',
-                data: `The required json schema for creating a tool looks like this:
-                ${dump(toolJsonSchema)}`,
-              },
-            },
-            createChatCompletionTask({
-              prompts: [
-                `Now, with the examples given to you, can you create a new tool?. Please make
-    sure to give your response in yaml format. No comments, no surrounding text.
-    Just pure yaml which we can parse. make sure that you follow the schema you
-    were given for this.`,
-              ],
-              schema: toolJsonSchema,
-            }),
-            {
-              role: 'function',
-              content: {
-                type: 'functioncall',
-                data: { name: 'toolCreationWizard', arguments: { step: 'parsing' } },
-              },
-            },
           ],
-        ])
-      })
-      .with('parsing', () => {
-        console.log('Parsing the tool creation input...', taskChain.at(-1))
+          allowedTools: ['toolSearcher'],
+          goal: 'ChooseTool',
+        }),
+        createChatCompletionTask({
+          prompts: [
+            `Now, with the examples given to you, can you create a new tool using the "addNewTool" function?.
+Please make sure to give your response in {format} format.
 
-        const lastMessage = taskChain.at(-1)
+Here is the schema:  {schema}
 
-        const toolDef = ToolBase.parse(lastMessage?.content.data)
-
-        console.log('finished parsing new tool...', toolDef)
-
-        return makeTaskResult([
-          [
-            {
-              role: 'assistant',
-              content: { type: 'message', data: 'I created this new tool:' },
-            },
-            {
-              role: 'assistant',
-              content: { type: 'tooldefinition', data: toolDef },
-            },
+No comments, no surrounding text.
+Just pure {format} which we can parse. make sure that you follow the schema you
+were given for this.`,
           ],
-        ])
-      })
-      .otherwise(() => {
-        console.log('no state spcifi')
-        throw new TaskProcessingError(
-          `The tool doesn't know what to do with this step... available steps are: 'parsing', if you are just starting, don't specify any parameters... `,
-        )
-      }),
+          allowedTools: ['addNewTool'],
+          goal: 'ChooseTool',
+        }),
+        {
+          role: 'assistant',
+          content: {
+            type: 'message',
+            data: "Nice! It looks like we're done, now please start testing the tool!",
+          },
+        },
+      ],
+    ])
+  },
   description: 'Wizard for guiding LLMs in creating new tool definitions step-by-step.',
   longDescription: `A multi-step wizard that assists an LLM in creating new tool definitions.
 It leverages examples from existing tools—including their source code when available—to
@@ -235,4 +187,63 @@ It leverages examples from existing tools—including their source code when ava
   name: 'toolCreationWizard',
 })
 
-//export type toolCreationWizardParams = FromSchema<typeof toolCreationWizard.parameters>
+export const createChooseAndExecuteTool = (taskManager: TyTaskManager) =>
+  createTool({
+    name: 'chooseAndExecuteTool',
+    description: 'Chooses and parameterizes a tool for execution based on provided context.',
+    longDescription: `This tool first gathers a short list of all available tools (name and description only).
+It then selects one or more tools that seem relevant by checking if their names appear in the provided context.
+Finally, it creates a chat completion task with the selected tools in the allowed list.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        context: {
+          type: 'string',
+          description: 'Context information to help select the relevant tool(s).',
+        },
+      },
+      required: ['context'],
+    } as const,
+    function: async ({ context }) => {
+      // 1. Retrieve all tools and create a short list (only name and description).
+      const allTools = await taskManager.updateToolDefinitions(true)
+      const toolList = Object.values(allTools).map((t) => ({
+        name: t.name,
+        description: t.description,
+      }))
+
+      // 2. Choose one or several tools based on the provided context.
+      // Here we do a simple check: if the context string contains the tool name (case-insensitive), we select that tool.
+      const lowerContext = context.toLowerCase()
+      const selectedTools: string[] = []
+      for (const tool of toolList) {
+        if (lowerContext.includes(tool.name.toLowerCase())) {
+          selectedTools.push(tool.name)
+        }
+      }
+      // Default to the first tool if no match is found.
+      if (selectedTools.length === 0 && toolList.length > 0) {
+        selectedTools.push(toolList[0].name)
+      }
+
+      // 3. Create a chatCompletion task with the selected tools as the only allowed options.
+      const chatCompletionTask = createChatCompletionTask({
+        allowedTools: selectedTools,
+        goal: 'ChooseTool',
+      })
+
+      // Return a composite result containing the tool list, selected tools, and the chat completion task.
+      return makeTaskResult([
+        [
+          {
+            role: 'assistant',
+            content: {
+              type: 'message',
+              data: `Available tools: ${JSON.stringify(toolList)}. Selected tool(s): ${selectedTools.join(', ')}.`,
+            },
+          },
+          chatCompletionTask,
+        ],
+      ])
+    },
+  })
