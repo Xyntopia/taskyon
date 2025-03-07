@@ -521,20 +521,23 @@ export const llmSettings = z.object({
     .object({
       basePrompt: z
         .string()
-        .default(
+        .describe(
           'The base prompt. This should be used e.g. to set the behaviour of the AI. used as a "system" prompt.',
         ),
-      instruction: z.string().default('This prompt is used to make the AI follow instructions'),
+      instruction: z.string().describe('This prompt is used to make the AI follow instructions'),
       toolResult: z
         .string()
-        .default(
+        .describe(
           'This prompt is used to make the AI display tool results in a certain structured way.',
         ),
       task: z
         .string()
-        .default('This prompt is used to explain to the AI what to do with a specific task.'),
-      evaluate: z.string().default('This prompt is used to evaluate errors'),
-      tools: z.string().default('This prompt is used to give the AI a list of tools.'),
+        .describe('This prompt is used to explain to the AI what to do with a specific task.'),
+      evaluate: z.string().describe('This prompt is used to evaluate errors'),
+      schemaReminder: z
+        .string()
+        .describe('This prompt is used to enforce a specific schema as a response...'),
+      tools: z.string().describe('This prompt is used to give the AI a list of tools.'),
     })
     .describe(
       'These are the definitions of the prompts which are used in chats for different purposes.',
@@ -592,7 +595,7 @@ export type appConfiguration = z.infer<typeof appConfiguration>
 
 export const storedSettings = z.object({
   version: z
-    .literal(10)
+    .literal(11)
     .describe(
       'whenever the schema of the settings change, this number will get changed as well...',
     ),
