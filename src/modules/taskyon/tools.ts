@@ -294,7 +294,10 @@ function convertToToolCommandString(tool: ToolBase): string {
 
         // Handle default values
         if ('default' in param) {
-          args[`${argKey} default`] = String(param.default)
+          args[`${argKey} default`] =
+            typeof param.default === 'object'
+              ? JSON.stringify(param.default)
+              : String(param.default)
         }
 
         // Handle additional properties
