@@ -2,13 +2,15 @@
 
 <img align="left" src="/public/taskyon_fancy_logo.png" onerror="this.onerror=null; this.src='/taskyon_fancy_logo.png';" alt="Taskyon Fancy Logo" width="200" style="padding-right: 50px;"/>
 
+- 🌳✅ Task Trees
 - 🌐🔗 Seamless Web Integration
 - 👥🛠️ Personalized AI Assistant 🤖
 - 🏡🌟 Local First
-- 🌳✅ Task Trees
 - 🛡️🏖️ Tool Sandbox
 
 A Chat & Agent Interface for Users, Experts & Developers based on Tasks! 🚀
+
+> Tasks are the most fundamental units of problem solving. Taskyon supercharges them.
 
 You can
 
@@ -19,7 +21,9 @@ You can
 
 ## Overview
 
-Taskyon goes a step beyond conventional, conversational AI interfaces. Instead of just chat, it dynamically structures interactions, breaking down complex processes into manageable, evolving steps . This design allows for parallel processing and efficient handling of both conversations and tasks. By leveraging various LLM providers, Taskyon can execute a wide range of tasks, from basic user messages to complex function calls.
+> _Divide each difficulty into as many parts as is feasible and necessary to resolve it._ – René Descartes
+
+Taskyon goes a step beyond conventional, conversational AI interfaces. Instead of just chat, it dynamically structures interactions by breaking down complex requests into a manageable, evolving tree of tasks. This design allows for parallel processing and efficient handling of both conversations and tasks. By leveraging various LLM providers, Taskyon can execute a wide range of tasks, from basic user messages to complex function calls.
 
 Built on the principles of [_local-first_](https://dl.acm.org/doi/10.1145/3359591.3359737) 🏠, Taskyon ensures that most data processing happens on the user's local device, prioritizing data security and user autonomy. Whether used for personalized AI interactions, robust task management, or seamless webpage integration, Taskyon offers flexibility and control while maintaining a familiar chat interface.
 
