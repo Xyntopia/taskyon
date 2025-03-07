@@ -16,6 +16,8 @@ import { createEnhancedCrudWrapper } from '../crudWrapper'
 import type OpenAI from 'openai'
 import { createAddNewToolTool, createToolSearcher, toolCreationWizard } from '../tools/toolTools'
 import { createStream } from '../frpBus'
+import { smallHelperTools } from '../tools/helperCollection'
+import { useFullSmallTools } from '../tools/useFullSmallTools'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -67,6 +69,8 @@ export async function initTaskyon(
 
   // add tools which have access to the taskManagerInstance itself
   ToolList.push(
+    ...smallHelperTools,
+    ...useFullSmallTools,
     await createChatCompletionTool(
       llmSettings,
       taskManagerInstance,
