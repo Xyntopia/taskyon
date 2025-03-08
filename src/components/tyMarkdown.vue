@@ -1,9 +1,10 @@
 <template>
   <iframe
-    v-if="useIframe"
+    v-if="iframeHtml"
     ref="iframeRef"
-    sandbox="allow-scripts"
+    sandbox="allow-scripts allow-modals"
     style="width: 100%; height: 100%; border: none"
+    :srcdoc="iframeHtml"
   />
   <q-markdown
     v-else
@@ -34,13 +35,22 @@ import { useQuasar } from 'quasar'
 import type { MermaidConfig } from 'mermaid'
 import { svgToPng } from 'src/modules/svgUtils'
 import { copyToClipboard, copyPngToClipboard } from 'src/modules/utils'
+import { ref } from 'vue'
+import MarkdownIt from 'markdown-it'
 
 // https://mdit-plugins.github.io/mathjax.html#usage
 //const mathjaxInstance = createMathjaxInstance();
 
 const id = getCurrentInstance()?.uid || ''
 
-const props = defineProps<{
+const iframeRef = ref<HTMLIFrameElement | null>(null)
+
+const {
+  cssUrl,
+  noMermaid = false,
+  src,
+  useIframe = true,
+} = defineProps<{
   src?: string
   noMermaid?: boolean
   useIframe?: boolean
@@ -106,10 +116,44 @@ const mermaidSettings: MermaidConfig = {
 const renderMermaid = createMermaidRenderer(mermaidSettings)
 
 const plugins = computed(() => {
-  if (props.noMermaid) {
+  if (noMermaid) {
     return [addCopyButtons, mathjax3]
   }
   return [renderMermaid, addCopyButtons, mathjax3]
+})
+
+const iframeHtml = computed(() => {
+  if (useIframe) {
+    const md = new MarkdownIt({ html: true })
+    plugins.value.forEach((plugin) => {
+      md.use(plugin)
+    })
+    const renderedHtml = md.render(src || '')
+    return `
+        <html>
+          <head>
+            ${cssUrl ? `<link rel="stylesheet" href="${cssUrl}">` : ''}
+          </head>
+          <body>${renderedHtml}</body>
+        </html>
+      `
+  }
+  return ''
+  /*const doc = iframeRef.value.contentDocument
+    if (doc) {
+      doc.open()
+      doc.write()
+      doc.close()
+    }*/
+  /* else {
+    // If not using iframe, initialize any necessary libraries
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'loose',
+      theme: 'default',
+      flowchart: { htmlLabels: false, useMaxWidth: true }
+    })
+  }*/
 })
 
 onMounted(() => {
