@@ -26,6 +26,28 @@ export function copyToClipboard(text: string) {
     })
 }
 
+export async function copyPngToClipboard(pngBuffer: Uint8Array) {
+  const blob = new Blob([pngBuffer], { type: 'image/png' })
+  //const url = URL.createObjectURL(blob);
+
+  if (typeof ClipboardItem !== 'undefined') {
+    try {
+      const clipboardItem = new ClipboardItem({ 'image/png': blob })
+      await navigator.clipboard.write([clipboardItem])
+      console.log('Image copied to clipboard successfully!')
+      //URL.revokeObjectURL(url); // revoke the URL to free up memory
+    } catch (err) {
+      console.error('Failed to copy image to clipboard:', err)
+    }
+  } else {
+    console.warn('ClipboardItem is not supported in this browser. Using fallback method.')
+
+    alert(
+      'Your browser is too old to support image copying with "ClipboardItem", please upgrade your browser!',
+    )
+  }
+}
+
 export function openrouterPricing(price: number | string, digits = 1) {
   if (typeof price === 'string') {
     price = parseFloat(price)
