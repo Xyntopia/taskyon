@@ -13,6 +13,12 @@ import 'prismjs/components/prism-typescript'
 import { uid } from 'quasar'
 import type Renderer from 'markdown-it/lib/renderer'
 
+export const containsHtmlTags = (markdown: string) => {
+  // Regex to match any HTML tag
+  const tagPattern = /<\/?[a-z][a-z0-9]*\b[^>]*>/gi
+  return tagPattern.test(markdown)
+}
+
 export function addCopyButtons(md: MarkdownIt) {
   const defaultFenceRenderer =
     md.renderer.rules.fence ||
@@ -120,3 +126,53 @@ export const createMermaidRenderer = (mermaidSettings: MermaidConfig) => (md: Ma
     return defaultRenderer(tokens, idx, options, env, self)
   }
 }
+
+export const generateIframeSrc = (renderedHtml: string, cssUrl: string) =>
+  `
+  <html>
+    <head>
+      ${cssUrl ? `<link rel="stylesheet" href="${cssUrl}">` : ''}
+      <style>
+        html, body {
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          /* Make the body a container for inline-size queries */
+          container-type: inline-size;
+        }
+        /* Wrap content in a fluid container */
+        .content {
+          /* By default, use auto (shrink-wrapped) */
+          width: auto;
+          box-sizing: border-box;
+        }
+        img, svg {
+          max-width: 100%;
+          height: auto;
+        }
+        /* If the available width is 500px or more,
+           force the content to stretch to 100% */
+        @container (min-width: 500px) {
+          .content {
+            width: 100%;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="content">
+        ${renderedHtml}
+      </div>
+      <script>
+        function sendSize() {
+          console.log('Iframe content size:', document.documentElement.scrollWidth, document.documentElement.scrollHeight);
+          const height = document.documentElement.scrollHeight || document.body.scrollHeight;
+          const width = document.documentElement.scrollWidth || document.body.scrollWidth;
+          window.parent.postMessage({ type: 'resizeIframe', height, width }, '*');
+        }
+        window.addEventListener('load', sendSize);
+        window.addEventListener('resize', sendSize);
+      </script>
+    </body>
+  </html>
+  `

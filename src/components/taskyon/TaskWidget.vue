@@ -91,8 +91,8 @@
               <ty-markdown
                 v-if="state.taskState[task.id]?.markdownEnabled != false"
                 no-line-numbers
-                style="min-width: 50px"
                 :src="task.content.data"
+                use-iframe
               />
               <div v-else class="raw-markdown q-mb-md">
                 {{ task.content.data }}

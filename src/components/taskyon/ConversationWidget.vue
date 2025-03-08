@@ -1,6 +1,6 @@
 <template>
-  <div class="col" style="background-color: inherit; color: inherit" flat square>
-    <div v-if="currentTask" class="q-px-xs">
+  <div class="col q-px-xs" style="background-color: inherit; color: inherit" flat square>
+    <template v-if="currentTask">
       <!--<pre>{{ JSON.stringify(taskTree, undefined, 2) }}</pre>-->
       <div v-if="taskTreeRoot" class="tasks-container q-pa-sm q-pl-md">
         <q-tree
@@ -29,7 +29,6 @@
                   :id="prop.node.task.id"
                   :task="prop.node.task"
                   short
-                  style="min-width: 300px"
                   :class="[
                     'q-pa-xs',
                     prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
@@ -54,7 +53,6 @@
                 :id="prop.node.task.id"
                 :task="prop.node.task"
                 short
-                style="min-width: 300px"
                 :class="[
                   'q-pa-xs',
                   prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
@@ -65,32 +63,38 @@
           </template>
         </q-tree>
       </div>
-      <div v-else class="q-gutter-xs tasks-container">
-        <template v-for="(task, idx) in props.selectedThread" :key="task.id">
-          <q-card
+      <div v-else class="q-gutter-xs tasks-container col items-center">
+        <template v-for="(task, idx) in props.selectedThread">
+          <div
             v-if="showAllTasks || showTask(task)"
-            class="task-container"
-            :flat="$q.dark.isActive"
-            :class="[task.role, Object.keys(task.content)[0]]"
+            :key="task.id"
+            :class="`task-container row ${task.role === 'user' ? 'justify-end' : ''}`"
           >
-            <Task
-              :id="task.id"
-              :task="task"
-              :previous-task="props.selectedThread[idx - 1]"
-              :next-task="props.selectedThread[idx + 1]"
-              :is-working="!taskWorkerWaiting && task.id === currentTask.id"
-              style="min-width: 300px"
-              :class="['q-pa-xs', task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"
-              :show-id="!!showIds"
-            />
-          </q-card>
+            <q-card :flat="$q.dark.isActive" :class="[task.role, Object.keys(task.content)[0]]">
+              <Task
+                :id="task.id"
+                :task="task"
+                :previous-task="props.selectedThread[idx - 1]"
+                :next-task="props.selectedThread[idx + 1]"
+                :is-working="!taskWorkerWaiting && task.id === currentTask.id"
+                :class="['q-pa-xs', task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"
+                :show-id="!!showIds"
+                style="min-width: 300px"
+              />
+            </q-card>
+          </div>
         </template>
       </div>
       <!--Render tasks which are in progress-->
       <div class="tasks-container q-py-sm">
         <q-card v-if="!taskWorkerWaiting" class="row">
           <div class="col">
-            <ty-markdown no-line-numbers no-mermaid :src="currentStream || ''" />
+            <ty-markdown
+              no-line-numbers
+              no-mermaid
+              :use-iframe="false"
+              :src="currentStream || ''"
+            />
             <q-spinner-dots size="2rem" color="secondary" />
           </div>
         </q-card>
@@ -101,7 +105,7 @@
           {{ taskWorkerMessage }}
         </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 

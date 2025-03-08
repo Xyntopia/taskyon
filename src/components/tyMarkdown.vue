@@ -1,11 +1,14 @@
+<!-- eslint-disable no-useless-escape -->
 <template>
-  <iframe
-    v-if="iframeHtml"
-    ref="iframeRef"
-    sandbox="allow-scripts allow-modals"
-    style="width: 100%; height: 100%; border: none"
-    :srcdoc="iframeHtml"
-  />
+  <div v-if="iframeHtml" class="responsive-iframe row">
+    <iframe
+      ref="iframeRef"
+      class="col"
+      sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups-to-escape-sandbox"
+      :srcdoc="iframeHtml"
+      style="width: 600px"
+    />
+  </div>
   <q-markdown
     v-else
     :id="id"
@@ -30,13 +33,19 @@ import 'prismjs/components/prism-rust'
 import 'prismjs/components/prism-javascript'
 import 'prismjs/components/prism-typescript'
 import { computed, onMounted, getCurrentInstance } from 'vue'
-import { addCopyButtons, createMermaidRenderer } from 'src/modules/markdownUtils '
+import {
+  addCopyButtons,
+  containsHtmlTags,
+  createMermaidRenderer,
+  generateIframeSrc,
+} from 'src/modules/markdownUtils '
 import { useQuasar } from 'quasar'
 import type { MermaidConfig } from 'mermaid'
 import { svgToPng } from 'src/modules/svgUtils'
 import { copyToClipboard, copyPngToClipboard } from 'src/modules/utils'
 import { ref } from 'vue'
 import MarkdownIt from 'markdown-it'
+import { onUnmounted } from 'vue'
 
 // https://mdit-plugins.github.io/mathjax.html#usage
 //const mathjaxInstance = createMathjaxInstance();
@@ -49,7 +58,7 @@ const {
   cssUrl,
   noMermaid = false,
   src,
-  useIframe = true,
+  useIframe = false,
 } = defineProps<{
   src?: string
   noMermaid?: boolean
@@ -122,30 +131,30 @@ const plugins = computed(() => {
   return [renderMermaid, addCopyButtons, mathjax3]
 })
 
+const renderedHtml = (src: string) => {
+  const md = new MarkdownIt({ html: true })
+  plugins.value.forEach((plugin) => {
+    md.use(plugin)
+  })
+  const renderedHtml = md.render(src)
+  return renderedHtml
+}
+
 const iframeHtml = computed(() => {
-  if (useIframe) {
-    const md = new MarkdownIt({ html: true })
-    plugins.value.forEach((plugin) => {
-      md.use(plugin)
-    })
-    const renderedHtml = md.render(src || '')
-    return `
-        <html>
-          <head>
-            ${cssUrl ? `<link rel="stylesheet" href="${cssUrl}">` : ''}
-          </head>
-          <body>${renderedHtml}</body>
-        </html>
-      `
+  const danger = containsHtmlTags(src ?? '')
+
+  if (useIframe && danger) {
+    return generateIframeSrc(renderedHtml(src ?? ''), cssUrl ?? '')
   }
   return ''
-  /*const doc = iframeRef.value.contentDocument
+})
+/*const doc = iframeRef.value.contentDocument
     if (doc) {
       doc.open()
       doc.write()
       doc.close()
     }*/
-  /* else {
+/* else {
     // If not using iframe, initialize any necessary libraries
     mermaid.initialize({
       startOnLoad: false,
@@ -154,12 +163,36 @@ const iframeHtml = computed(() => {
       flowchart: { htmlLabels: false, useMaxWidth: true }
     })
   }*/
+
+function handleMessage(event: MessageEvent) {
+  if (!iframeRef.value || event.source !== iframeRef.value.contentWindow) return
+  if (event.data?.type !== 'resizeIframe') return
+
+  console.log('set iframe height', event.data, iframeRef.value.parentElement?.clientWidth)
+
+  // Use parent's width as a maximum
+  const parentWidth = iframeRef.value.parentElement?.clientWidth || event.data.width
+  //const newWidth = Math.min(event.data.width, parentWidth)
+  iframeRef.value.style.width = parentWidth + 'px'
+
+  iframeRef.value.style.height = `${event.data.height}px`
+  //iframeRef.value.style.width = `${newWidth}px`
+}
+
+onMounted(() => {
+  window.addEventListener('message', handleMessage)
+  // ... your existing onMounted code (e.g., mermaid initialization)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('message', handleMessage)
 })
 
 onMounted(() => {
   // if we are using the plugin, initialize mermaid as well :)
   mermaid.initialize(mermaidSettings)
   const parentElement = document.getElementById('unique-id')
+
   if (parentElement) {
     //let mermaidElements = parentElement.querySelectorAll('.mermaid');
     /*mermaidElements.forEach(element => {
@@ -176,6 +209,7 @@ onMounted(() => {
 </script>
 
 <style lang="sass">
+
 /*.code-block-with-overlay
   pre.q-markdown--code__inner
     overflow: auto !important
@@ -217,6 +251,29 @@ onMounted(() => {
     position: absolute
     top: 0
     right: 0
+
+.responsive-iframe
+  position: relative
+  //width: 100%
+
+.responsive-iframe iframe
+  position: relative
+  display: block
+  //width: auto
+  border: none
+  //height: auto
+  //min-width: 800px  // or whatever minimum you require
+
+/*.responsive-iframe iframe
+  //border: 0
+  position: absolute
+  //padding: -0%
+  top: -2%
+  left: -1%
+  width: 102% !important
+  height: 100% !important
+  //max-width: 854px
+  //max-height: 400px*/
 
 // this is in order to make mermaid sequence diagrams work on dark backgrounds
 /*.mermaid svg
