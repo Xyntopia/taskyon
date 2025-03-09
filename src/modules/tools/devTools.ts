@@ -11,20 +11,27 @@ const issueListGenerator = createTool({
     developers looking to streamline the process of converting brainstorming discussions or chat
     messages into actionable development tasks.`,
   parameters: {
-    type: 'array',
-    items: {
-      type: 'string',
-    },
-    description: `Extract a list of issues from the text which we could use
+    type: 'object',
+    properties: {
+      issuelist: {
+        type: 'array',
+        items: {
+          type: 'string',
+        },
+        description: `Extract a list of issues from the text which we could use
 in gitlab. They should roughly follow the style of a "user story".`,
+      },
+    },
+    required: ['issuelist'],
   } as const,
-  function: (issueList) => {
+  function: ({ issuelist }) => {
     const GITLAB_PROJECT_ID = 'YOUR_GITLAB_PROJECT_ID' // Replace with actual project ID
     const GITLAB_API_URL = `https://gitlab.com/api/v4/projects/${encodeURIComponent(GITLAB_PROJECT_ID)}/issues`
+    const GITLAB_ACCESS_TOKEN = 'YOUR_GITLAB_PROJECT_ID' // Replace with actual project ID
 
     const uiHtml = `<div>
     <ul id="issueList">
-      ${issueList
+      ${issuelist
         .map(
           (issue, index) =>
             `<li>
@@ -58,7 +65,7 @@ in gitlab. They should roughly follow the style of a "user story".`,
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + GITLAB_ACCESS_TOKEN
+            'Authorization': 'Bearer ' + ${GITLAB_ACCESS_TOKEN}
           },
           body: JSON.stringify({
             title: issue,
