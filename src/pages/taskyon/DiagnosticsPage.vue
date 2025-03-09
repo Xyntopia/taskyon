@@ -49,7 +49,7 @@ import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
 import { ToolBase } from 'src/modules/taskyon/types'
 import { chatThreadFromTaskId } from 'src/modules/tools/chatCompletionTool'
 import { zodToYamlString } from 'src/modules/yamlUtils'
-import { craeteToolJsonSchema } from 'src/modules/taskyon/tools'
+import { craeteToolJsonSchema, summarizeTools } from 'src/modules/taskyon/tools'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -103,6 +103,27 @@ async function generateReport(details = false, onlyFirst = false) {
   diagnostics.value = `report_date: ${new Date().toISOString()}\n`
 
   diagnostics.value += await runTest(
+    'list of Tools',
+    async () => {
+      console.log('gather all available tools in a list!')
+
+      const tm = await tystate.getTaskManager()
+
+      const allTools = (await tm.updateToolDefinitions()) ?? []
+      return {
+        'all tools': summarizeTools(Object.keys(allTools), allTools),
+      }
+    },
+    details,
+  )
+
+  // move this line behind the "first test"  in order to be able to test only the first test :)
+  if (onlyFirst) {
+    console.log('diagnostics:', diagnostics.value)
+    return
+  }
+
+  diagnostics.value += await runTest(
     'json schemas',
     async () => {
       console.log('create test schemas!')
@@ -116,12 +137,6 @@ async function generateReport(details = false, onlyFirst = false) {
     },
     details,
   )
-
-  // move this line behind the "first test"  in order to be able to test only the first test :)
-  if (onlyFirst) {
-    console.log('diagnostics:', diagnostics.value)
-    return
-  }
 
   diagnostics.value += await runTest('pg lite', testPGLite, details)
 
