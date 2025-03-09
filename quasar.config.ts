@@ -1,5 +1,5 @@
 // Configuration for your app
-// https://v2.quasar.dev/quasar-cli-vite/quasar-config-js
+// https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
 
 import { defineConfig } from '#q-app/wrappers'
 import { fileURLToPath } from 'node:url'
@@ -21,7 +21,7 @@ export default defineConfig((ctx) => {
       //'htmlDataStore'
     ],
 
-    // https://v2.quasar.dev/quasar-cli-vite/quasar-config-js#css
+    // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#css
     css: ['app.sass'],
 
     // https://github.com/quasarframework/quasar/tree/dev/extras
@@ -41,7 +41,7 @@ export default defineConfig((ctx) => {
       //'mdi-v5',
     ],
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-js#build
+    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#build
     build: {
       target: {
         browser: ['es2022', 'firefox115', 'chrome115', 'safari14'],
@@ -67,13 +67,15 @@ export default defineConfig((ctx) => {
         PUBLISH_DATE: JSON.stringify(new Date().toISOString()),
       },
       // rawDefine: {}
-      ignorePublicFolder: true,
+      // ignorePublicFolder: true,
       // minify: false,
       // polyfillModulePreload: true,
       // distDir
 
       // extendViteConf (viteConf) {},
       extendViteConf(viteConf) {
+        // TODO: check if w need this extendedConf
+        // we might be able to get rid of it...
         viteConf.worker = viteConf.worker || {}
         // we have to do the next thing, to ensure, we don't get this error:
         // [vite:worker-import-meta-url] Invalid value "iife" for option "worker.format" - UMD and IIFE output formats are not supported for code-splitting builds.
@@ -111,6 +113,7 @@ export default defineConfig((ctx) => {
             include: [fileURLToPath(new URL('./src/i18n', import.meta.url))],
           },
         ],
+
         [
           'vite-plugin-checker',
           {
@@ -125,13 +128,13 @@ export default defineConfig((ctx) => {
       ],
     },
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-js#devServer
+    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#devserver
     devServer: {
       // https: true
       open: false, // opens browser window automatically
     },
 
-    // https://v2.quasar.dev/quasar-cli-vite/quasar-config-js#framework
+    // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#framework
     framework: {
       // https://quasar.dev/vue-components/icon#options-api
       iconSet: 'svg-material-icons',
@@ -163,7 +166,7 @@ export default defineConfig((ctx) => {
     // https://v2.quasar.dev/options/animations
     animations: [],
 
-    // https://v2.quasar.dev/quasar-cli-vite/quasar-config-js#sourcefiles
+    // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#sourcefiles
     // sourceFiles: {
     //   rootComponent: 'src/App.vue',
     //   router: 'src/router/index',
@@ -197,7 +200,6 @@ export default defineConfig((ctx) => {
       // manualPostHydrationTrigger: true,
 
       pwa: false,
-
       // pwaOfflineHtmlFilename: 'offline.html', // do NOT use index.html as name!
 
       // pwaExtendGenerateSWOptions (cfg) {},
@@ -208,7 +210,7 @@ export default defineConfig((ctx) => {
     pwa: {
       workboxMode: 'GenerateSW', // 'GenerateSW' or 'InjectManifest'
       // swFilename: 'sw.js',
-      // manifestFilename: 'manifest.json'
+      // manifestFilename: 'manifest.json',
       // extendManifestJson (json) {},
       // useCredentialsForManifestTag: true,
       // injectPwaMetaTags: false,
