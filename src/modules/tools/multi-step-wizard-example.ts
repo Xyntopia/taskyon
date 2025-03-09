@@ -115,7 +115,7 @@ From the list of tools you extracted earlier, which tool is the one closest to w
           `The tool doesn't know what to do with this step... available steps are: 'parsing', if you are just starting, don't specify any parameters... `,
         )
       }),
-  description: 'Wizard for guiding LLMs in creating new tool definitions step-by-step.',
+  description: 'Multi-step tool example.',
   longDescription: `A multi-step wizard that assists an LLM in creating new tool definitions.
 It leverages examples from existing tools—including their source code when available—to
  guide the LLM through generating a new tool. Starting with schema creation and example

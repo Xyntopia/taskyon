@@ -18,6 +18,7 @@ import { createAddNewToolTool, createToolSearcher, toolCreationWizard } from '..
 import { createStream } from '../frpBus'
 import { smallHelperTools } from '../tools/helperCollection'
 import { useFullSmallTools } from '../tools/useFullSmallTools'
+import { devTools } from '../tools/devTools'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -71,6 +72,7 @@ export async function initTaskyon(
   ToolList.push(
     ...smallHelperTools,
     ...useFullSmallTools,
+    ...devTools,
     await createChatCompletionTool(
       llmSettings,
       taskManagerInstance,
