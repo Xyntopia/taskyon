@@ -11,6 +11,7 @@ import { zodSchemasToOpenApi } from './src/modules/yamlUtils'
 import { TaskyonMessages } from './src/modules/taskyon/iframeApiTypes'
 import { execSync } from 'child_process'
 import { analyzer } from 'vite-bundle-analyzer'
+import { resolve } from 'path'
 
 function getGitCommitHash() {
   try {
@@ -266,7 +267,7 @@ export default defineConfig((ctx) => {
         viteConf.build = {
           ...viteConf.build,
           lib: {
-            entry: 'src/modules/taskyon/tyClient.ts', // your lib entry point
+            entry: resolve(__dirname, 'src/modules/taskyon/tyClient.ts'), // your lib entry point
             name: 'tyclient', // global variable name in UMD
             formats: ['umd'], // UMD format for easy script inclusion
             fileName: 'tyclient',
