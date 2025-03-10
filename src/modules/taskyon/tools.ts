@@ -1,6 +1,12 @@
 import { dump } from 'js-yaml'
 import { bigIntToString } from '../utils'
-import type { FunctionArguments, FunctionCall, ParamType, OnInterruptFunc } from './types'
+import type {
+  FunctionArguments,
+  FunctionCall,
+  ParamType,
+  OnInterruptFunc,
+  WithRequired,
+} from './types'
 import { partialTaskDraft, TaskNode } from './types'
 import { ToolBase, TaskProcessingError } from './types'
 import type { RemoteFunctionResponse } from './iframeApiTypes'
@@ -67,16 +73,17 @@ const InternalTool = ToolBase.extend({
 }).describe('Internal tool definition, which has access to the taskyon system')
 export type InternalTool = z.infer<typeof InternalTool>
 
+export type ClientTool = WithRequired<InternalTool, 'function'>
+
 // Create a helper function to preserve schema types
-export function createTool<SCHEMA extends JSONSchema, PARAMS = FromSchema<SCHEMA>>(
-  tool: {
+export function createTool<T, SCHEMA extends JSONSchema, PARAMS = FromSchema<SCHEMA>>(
+  tool: T & {
     parameters: SCHEMA & { readonly [key: string]: unknown }
     function?: (params: PARAMS, context: toolContext) => unknown
   } & Omit<InternalTool, 'function'>,
-) {
+): T {
   return tool
 }
-
 // TODO: automatically type the FunctionCall correctly using the
 //       json definition from a tool :)
 export function createToolTask(f: FunctionCall): partialTaskDraft {

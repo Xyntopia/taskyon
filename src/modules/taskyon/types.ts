@@ -656,3 +656,5 @@ export interface TyTaskStreamData {
 export type Asyncify<T> = {
   [K in keyof T]: T[K] extends (...args: infer A) => infer R ? (...args: A) => Promise<R> : T[K]
 }
+
+export type WithRequired<T, K extends keyof T> = T & { [P in K]-?: T[P] }

@@ -15,10 +15,12 @@
 </template>
 
 <script setup lang="ts">
-import
+import type { partialTyConfiguration } from 'src/modules/taskyon/iframeApiTypes'
+import { createTool } from 'src/modules/taskyon/tools'
+import { api } from 'src/modules/taskyon/tyClient'
 
 // Configuration
-const configuration = {
+const configuration: partialTyConfiguration = {
   llmSettings: {
     selectedApi: 'taskyon',
     enableOpenAiTools: false,
@@ -27,19 +29,15 @@ const configuration = {
         selectedModel: 'meta-llama/llama-3.1-8b-instruct',
       },
     },
-    taskTemplate: {
-      allowedTools: ['myExampleStringAdderAlone'],
-    },
+    allowedTools: ['myExampleStringAdderAlone'],
   },
 }
 
 // Tool Definitions
 const tools = [
-  {
-    id: 'simpleExampleTask.V1',
-    name: 'myExampleStringAdderAlone',
-    description: 'provide a short description which an AI can understand',
-    longDescription: 'provide a long description if the AI/Human needs more details',
+  createTool({
+    name: 'mywebpage functionality',
+    description: 'function which adds two strings on this page and displays them!',
     parameters: {
       type: 'object',
       properties: {
@@ -53,7 +51,7 @@ const tools = [
         },
       },
       required: ['parameter1'],
-    },
+    } as const,
     function: (data) => {
       console.log('Received function call with data:', data)
       const result = `${data.parameter1}${data.parameter2}`
@@ -66,6 +64,8 @@ const tools = [
       }
       return result
     },
-  },
+  }),
 ]
+
+void api.initializeTaskyon(tools, configuration)
 </script>

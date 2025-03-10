@@ -1,11 +1,10 @@
 // we can compile this file to js using:
 // swc --config-file ./swcrc tyboilerplate.ts -o tyboilerplate.js
 
-import type { ToolBase } from './types'
+import type { partialTyConfiguration } from './iframeApiTypes'
+import type { ClientTool } from './tools'
 
-type ClientTool = ToolBase & { function: (...args: unknown[]) => unknown }
-
-async function initializeTaskyon(tools: ClientTool[], configuration: Record<string, unknown>) {
+async function initializeTaskyon(tools: ClientTool[], configuration: partialTyConfiguration) {
   const taskyon = document.getElementById('taskyon') as HTMLIFrameElement
 
   if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
@@ -62,12 +61,12 @@ async function initializeTaskyon(tools: ClientTool[], configuration: Record<stri
             console.log('received message:', event)
             // Handle function call
             const tool = tools[0]
-            if (tool && event.data) {
+            if (tool?.function && event.data) {
               if (event.data.type === 'functionCall') {
                 //if the message comes from taskyon, we can be sure that its the correct type.
                 const data = event.data
                 // with this we make sure, that we can also handle async functions :)
-                const result = await tool.function(data.arguments)
+                const result = await tool.function(data.arguments, { taskChain: [] })
 
                 // Send response to iframe
                 const response = {
