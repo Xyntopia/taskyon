@@ -123,16 +123,18 @@ function sourcemapBannerPlugin() {
           chunk.code += `\n//# sourceMappingURL=http://localhost:4000/sourcemaps/${chunk.name}.${commitHash}.map`
         }
       }
-      // Rename sourcemap assets to be under "sourcemaps/" with our naming pattern
-      for (const fileName of Object.keys(bundle)) {
-        const asset = bundle[fileName]!
-        if (asset.type === 'asset' && fileName.endsWith('.map')) {
-          const baseName = fileName.slice(0, -4) // remove '.map'
-          const newFileName = `sourcemaps/${baseName}.${commitHash}.map`
-          asset.fileName = newFileName
-          // Remove the old key and add the new one in the bundle
-          delete bundle[fileName]
-          bundle[newFileName] = asset
+      if (process.env.SOURCEMAP === 'true') {
+        // Rename sourcemap assets to be under "sourcemaps/" with our naming pattern
+        for (const fileName of Object.keys(bundle)) {
+          const asset = bundle[fileName]!
+          if (asset.type === 'asset' && fileName.endsWith('.map')) {
+            const baseName = fileName.slice(0, -4) // remove '.map'
+            const newFileName = `sourcemaps/${baseName}.${commitHash}.map`
+            asset.fileName = newFileName
+            // Remove the old key and add the new one in the bundle
+            delete bundle[fileName]
+            bundle[newFileName] = asset
+          }
         }
       }
     },
@@ -259,6 +261,27 @@ export default defineConfig((ctx) => {
 
       // extendViteConf (viteConf) {},
       extendViteConf(viteConf) {
+        //*******    taskyon Client library */
+        // Enable the library build in both dev (with watch) and production modes
+        viteConf.build = {
+          ...viteConf.build,
+          lib: {
+            entry: 'src/modules/taskyon/tyClient.ts', // your lib entry point
+            name: 'tyclient', // global variable name in UMD
+            formats: ['umd'], // UMD format for easy script inclusion
+            fileName: 'tyclient',
+          },
+          rollupOptions: {
+            external: ['vue'], // externalize dependencies
+            output: {
+              globals: { vue: 'Vue' },
+            },
+          },
+          // In dev mode, you can enable watch mode to rebuild on changes.
+          watch: ctx.prod ? null : {},
+        }
+        /*****************END TY CLIENT LIBRARY */
+
         // *******  get rid of console.log in prod mode ****
         // Add this for dropping console and debugger in production:
         viteConf.esbuild = viteConf.esbuild || {}
@@ -310,7 +333,7 @@ export default defineConfig((ctx) => {
 
       vitePlugins: [
         // Only apply this plugin in production when sourcemaps are enabled
-        ...(ctx.prod && process.env.SOURCEMAP === 'true' ? [sourcemapBannerPlugin()] : []),
+        ...(ctx.prod ? [sourcemapBannerPlugin()] : []),
 
         // https://www.npmjs.com/package/vite-bundle-analyzer
         analyzer({
