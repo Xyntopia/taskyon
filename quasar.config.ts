@@ -3,7 +3,7 @@
 
 import { defineConfig } from '#q-app/wrappers'
 import { fileURLToPath } from 'node:url'
-
+import type { NormalizedOutputOptions, OutputBundle } from 'rollup'
 import path from 'path'
 import fs from 'fs'
 import { ToolBase } from './src/modules/taskyon/types'
@@ -108,6 +108,37 @@ function createOpenAPIDocs() {
   })
 }
 
+// Custom plugin to adjust sourcemaps and add banner comment
+function sourcemapBannerPlugin() {
+  return {
+    name: 'sourcemap-banner-plugin',
+    generateBundle(_options: NormalizedOutputOptions, bundle: OutputBundle) {
+      // Update JS chunks: remove auto sourcemap comment and add our banner
+      for (const fileName in bundle) {
+        const chunk = bundle[fileName]!
+        if (chunk.type === 'chunk') {
+          // Remove default sourcemap comment(s)
+          chunk.code = chunk.code.replace(/\/\/# sourceMappingURL=.*$/gm, '')
+          // Append our custom sourcemap URL pointing to localhost with commitHash
+          chunk.code += `\n//# sourceMappingURL=http://localhost:4000/sourcemaps/${chunk.name}.${commitHash}.map`
+        }
+      }
+      // Rename sourcemap assets to be under "sourcemaps/" with our naming pattern
+      for (const fileName of Object.keys(bundle)) {
+        const asset = bundle[fileName]!
+        if (asset.type === 'asset' && fileName.endsWith('.map')) {
+          const baseName = fileName.slice(0, -4) // remove '.map'
+          const newFileName = `sourcemaps/${baseName}.${commitHash}.map`
+          asset.fileName = newFileName
+          // Remove the old key and add the new one in the bundle
+          delete bundle[fileName]
+          bundle[newFileName] = asset
+        }
+      }
+    },
+  }
+}
+
 export default defineConfig((ctx) => {
   if (ctx.prod) {
     createOpenAPIDocs()
@@ -116,6 +147,7 @@ export default defineConfig((ctx) => {
 
   const droplogging = ctx.prod && process.env.LOGGING !== 'true'
   console.log('drop logging:', droplogging)
+  console.log('generate sourcemap:', process.env.SOURCEMAP)
 
   return {
     // https://v2.quasar.dev/quasar-cli-vite/prefetch-feature
@@ -178,8 +210,6 @@ export default defineConfig((ctx) => {
       // rebuildCache: true, // rebuilds Vite/linter/etc cache on startup
 
       // publicPath: '/',
-      // TODO: renable analyzers
-      //       https://www.npmjs.com/package/vite-bundle-analyzer
       analyze: true,
 
       /**
@@ -213,6 +243,9 @@ export default defineConfig((ctx) => {
         collapseBooleanAttributes: true,
         removeScriptTypeAttributes: true,
       },
+
+      // not sure, if we need this here...
+      sourcemap: process.env.SOURCEMAP === 'true',
 
       env: {
         PUBLISH_DATE: JSON.stringify(new Date().toISOString()),
@@ -276,6 +309,9 @@ export default defineConfig((ctx) => {
       // viteVuePluginOptions: {},
 
       vitePlugins: [
+        // Only apply this plugin in production when sourcemaps are enabled
+        ...(ctx.prod && process.env.SOURCEMAP === 'true' ? [sourcemapBannerPlugin()] : []),
+
         // https://www.npmjs.com/package/vite-bundle-analyzer
         analyzer({
           openAnalyzer: true, // Automatically open the analyzer UI in your browser
