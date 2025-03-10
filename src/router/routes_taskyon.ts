@@ -143,6 +143,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       description: 'libp2p connection status monitor',
     },
   },
+  {
+    path: '/clienttest',
+    component: () => import('pages/TaskyonClientTest.vue'),
+    meta: {
+      title: 'Taskyon Client Test',
+      description: 'We are testing taskyons client library here.',
+    },
+  },
 ]
 
 export const routes: RouteRecordRaw[] = [

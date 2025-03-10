@@ -1,12 +1,11 @@
 // we can compile this file to js using:
 // swc --config-file ./swcrc tyboilerplate.ts -o tyboilerplate.js
 
-export type Tool = Record<string, unknown> & {
-  function: (...args: unknown[]) => unknown
-  name: string
-}
+import type { ToolBase } from './types'
 
-export async function initializeTaskyon(tools: Tool[], configuration: Record<string, unknown>) {
+type ClientTool = ToolBase & { function: (...args: unknown[]) => unknown }
+
+async function initializeTaskyon(tools: ClientTool[], configuration: Record<string, unknown>) {
   const taskyon = document.getElementById('taskyon') as HTMLIFrameElement
 
   if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
@@ -38,7 +37,7 @@ export async function initializeTaskyon(tools: Tool[], configuration: Record<str
     }
 
     // Send function definition to the taskyon so that taskyon is aware of it.
-    function sendFunctionToTaskyon(toolDescription: Record<string, unknown>) {
+    function sendFunctionToTaskyon(toolDescription: ClientTool) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { function: _toolfunc, ...fdescr } = toolDescription
       const fdMessage = {
@@ -49,7 +48,7 @@ export async function initializeTaskyon(tools: Tool[], configuration: Record<str
       taskyon.contentWindow?.postMessage(fdMessage, iframeTarget)
     }
 
-    function setUpToolsListener(tools: Tool[]) {
+    function setUpToolsListener(tools: ClientTool[]) {
       window.addEventListener(
         'message',
         () =>
@@ -101,5 +100,9 @@ declare global {
   }
 }
 
+export const api = {
+  initializeTaskyon,
+}
+
 // doing this here, because for some reason, swc doesn't do this for us ;)
-window.initializeTaskyon = initializeTaskyon
+//window.initializeTaskyon = initializeTaskyon
