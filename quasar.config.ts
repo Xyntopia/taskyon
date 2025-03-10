@@ -10,6 +10,7 @@ import { ToolBase } from './src/modules/taskyon/types'
 import { zodSchemasToOpenApi } from './src/modules/yamlUtils'
 import { TaskyonMessages } from './src/modules/taskyon/iframeApiTypes'
 import { execSync } from 'child_process'
+import { analyzer } from 'vite-bundle-analyzer'
 
 function getGitCommitHash() {
   try {
@@ -274,6 +275,14 @@ export default defineConfig((ctx) => {
       // viteVuePluginOptions: {},
 
       vitePlugins: [
+        // https://www.npmjs.com/package/vite-bundle-analyzer
+        analyzer({
+          openAnalyzer: true, // Automatically open the analyzer UI in your browser
+          summary: true, // Set to true if you prefer just a summary
+          fileName: '../analyze_report.html',
+          analyzerMode: 'static', // we use static here so that it also works in a CI setting.
+          // Other options can go here if needed.
+        }),
         [
           '@intlify/unplugin-vue-i18n/vite',
           {
