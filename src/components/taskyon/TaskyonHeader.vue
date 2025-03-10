@@ -1,7 +1,7 @@
 <template>
   <q-header class="column print-hide">
     <component
-      :is="!minMode ? 'q-toolbar' : 'div'"
+      :is="!minMode ? QToolbar : 'div'"
       :class="minMode ? 'q-gutter-xs row q-px-sm' : 'q-gutter-xs'"
     >
       <q-btn
@@ -47,7 +47,7 @@
           ><q-tooltip>Create New Chat</q-tooltip>
         </q-btn>
       </div>
-      <q-space />
+      <q-space class="col" />
       <div v-if="!minMode && state.llmSettings.selectedTaskId">
         <share-dialog-btn
           flat
@@ -203,6 +203,7 @@ import {
 } from '@quasar/extras/mdi-v6'
 import { useAppStateStore } from 'src/stores/appState'
 import { ref } from 'vue'
+import { QToolbar } from 'quasar'
 
 const publishDate = process.env.PUBLISH_DATE as unknown as string
 const state = useAppStateStore()

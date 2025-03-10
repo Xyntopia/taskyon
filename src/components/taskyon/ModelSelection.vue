@@ -159,7 +159,7 @@ function onModelSelect(value: string) {
   })
 }
 
-function onApiSelect(modelValue: string | null) {
+function onApiSelect(modelValue: string | null | undefined) {
   if (modelValue) {
     const newBotName = state.llmSettings.llmApis[modelValue]?.selectedModel
     emit('updateBotName', {

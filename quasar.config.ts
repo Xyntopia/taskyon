@@ -1,19 +1,14 @@
 // Configuration for your app
-// https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js
+// https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
 
 import { defineConfig } from '#q-app/wrappers'
+import { fileURLToPath } from 'node:url'
+
 import path from 'path'
 import fs from 'fs'
-// this is in order to support the not-updated version of danfojs (and other libraries which need
-// polyfills) in webpack 5:
-// also read https://quasar.dev/start/upgrade-guide#nodejs-polyfills
-// and https://github.com/quasarframework/quasar/issues/9780
-// also needs:
-//    yarn add --dev node-polyfill-webpack-plugin browserify-zlib
 import { ToolBase } from './src/modules/taskyon/types'
 import { zodSchemasToOpenApi } from './src/modules/yamlUtils'
 import { TaskyonMessages } from './src/modules/taskyon/iframeApiTypes'
-import webpack from 'webpack'
 import { execSync } from 'child_process'
 
 function getGitCommitHash() {
@@ -70,6 +65,8 @@ const filesToCopy = [
   },
 ]
 
+// TODO: move this into our regular taskyon modules
+//       and simplyiportit from here...
 function createOpenAPIDocs() {
   /** This function creates openAPI docs for taskyon and saves them inside the public folder.
    *  the reason we're doing this her as msot clients will simply want to get the json and
@@ -120,46 +117,12 @@ export default defineConfig((ctx) => {
   console.log('drop logging:', droplogging)
 
   return {
-    eslint: {
-      // fix: true,
-      // include: [],
-      // exclude: [],
-      // cache: false,
-      // rawEsbuildEslintOptions: {},
-      // rawWebpackEslintPluginOptions: {},
-      warnings: true,
-      errors: true,
-    },
-    // https://v2.quasar.dev/quasar-cli-webpack/prefetch-feature
+    // https://v2.quasar.dev/quasar-cli-vite/prefetch-feature
     // preFetch: true,
-
-    // https://quasar.dev/quasar-cli/quasar-conf-js#property-vendor
-    // if we include files such as "danfojs" the library gets huge, so we are disabling this
-    vendor: {
-      /** optional; we want a maximum of max ~200kb in the chunk when landing on our page in order to give users
-         a "good" experience...  as things like danfojs alone are already at 9MB, it'll take a long time for users to make use of this,,
-         therefore we should load those libraries lazily and only manually add some important libraries to the vendor chunk
-
-         disables vendor chunk:*/
-      disable: true,
-      /*remove: ['danfojs', 'vue$', 'amplify']
-      // we need to remove large libraries that we don't need in our index page!!
-      remove: [
-        // remove danfojs dependencies (we can get them by checking the outnput of: yarn list):
-        'xlsx','mathjs','@tensorflow','plotly.js-dist-min','danfojs', 'table',
-        'json-schema-traverse', 'ajv',
-        // non-initially-required aws amplify libraries
-        '@aws-amplify/ui-vue/dist'
-      ]*/
-      // TODO: we override the type here because there is a bug in quasar in typescript which doesn't recognize the "disable" part
-    } as unknown as {
-      add: string[]
-      remove: string[]
-    },
 
     // app boot file (/src/boot)
     // --> boot files are part of "main.js"
-    // https://v2.quasar.dev/quasar-cli-webpack/boot-files
+    // https://v2.quasar.dev/quasar-cli-vite/boot-files
     boot: [
       // make sure brand colors are loaded "on-time" :)
       { server: false, path: 'brand-colors' },
@@ -169,7 +132,7 @@ export default defineConfig((ctx) => {
       //'htmlDataStore'
     ],
 
-    // https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js#Property%3A-css
+    // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#css
     css: ['app.sass'],
 
     // https://github.com/quasarframework/quasar/tree/dev/extras
@@ -183,13 +146,19 @@ export default defineConfig((ctx) => {
       // 'themify',
       // 'line-awesome',
       // 'roboto-font-latin-ext', // this or either 'roboto-font', NEVER both!
+
       'roboto-font', // optional, you are not bound to it
       //'material-icons', // optional, you are not bound to it
       //'mdi-v5',
     ],
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js#Property%3A-build
+    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#build
     build: {
+      target: {
+        browser: ['es2022', 'firefox115', 'chrome115', 'safari14'],
+        node: 'node20',
+      },
+
       typescript: {
         strict: true, // (recommended) enables strict settings for TypeScript
         vueShim: true, // required when using ESLint with type-checked rules, will generate a shim file for `*.vue` files
@@ -199,20 +168,18 @@ export default defineConfig((ctx) => {
         },
       },
 
-      //publicPath:  '/', TODO: check if we ca us this to deploy a "test" version of our app on gitlab pages..
+      //publicPath:  '/', TODO: check if we can use this to deploy a "test" version of our app on gitlab pages..
       vueRouterMode: 'history', // available values: 'hash', 'history'
+      // vueRouterBase,
+      // vueDevtools,
+      // vueOptionsAPI: false,
 
-      /**
-       * Minification options. [Full list](https://github.com/webpack-contrib/terser-webpack-plugin/#minify).
-       */
-      uglifyOptions: {
-        // check out this page for all available "compress options":  https://terser.org/docs/options/#compress-options
-        // we can specifically drop certain logs like this:  ['log', 'info']
-        compress: {
-          drop_console: droplogging ? ['log', 'info'] : false,
-          drop_debugger: true,
-        },
-      },
+      // rebuildCache: true, // rebuilds Vite/linter/etc cache on startup
+
+      // publicPath: '/',
+      // TODO: renable analyzers
+      //       https://www.npmjs.com/package/vite-bundle-analyzer
+      analyze: true,
 
       /**
        * Set to `false` to disable minification, or specify the minifier to use.
@@ -223,284 +190,128 @@ export default defineConfig((ctx) => {
        */
       minify: 'terser',
 
-      // for production, we are doing this manually with the SourceMapDevToolPlugin plugin!
-      // sourcemap: false,
+      /**
+       * Minification options for html-minifier-terser.
+       *
+       * @see https://github.com/terser/html-minifier-terser?tab=readme-ov-file#options-quick-reference for complete list of options
+       *
+       * @default
+       *  {
+       *    removeComments: true,
+       *    collapseWhitespace: true,
+       *    removeAttributeQuotes: true,
+       *    collapseBooleanAttributes: true,
+       *    removeScriptTypeAttributes: true
+       *  }
+       */
+      htmlMinifyOptions: {
+        //TODO: remove console.log!
+        removeComments: true,
+        collapseWhitespace: true,
+        removeAttributeQuotes: true,
+        collapseBooleanAttributes: true,
+        removeScriptTypeAttributes: true,
+      },
+
       env: {
-        APPNAME: APPNAME,
-        DESCRIPTION: DESCRIPTION,
         PUBLISH_DATE: JSON.stringify(new Date().toISOString()),
         COMMIT_HASH: commitHash,
       },
-      //devtool: 'source-map', // TODO: turn this off for actual production...
-      vueLoaderOptions: {
-        compilerOptions: {
-          // from here: https://qmarkdown.netlify.app/all-about-qmarkdown/installation-types
-          // this handles the whitespace for the q-markdown component.
-          // we need this in order to be able to use newlines in q-markdown...
-          // update: 20240608: we are shutting this down for now, because w have a lot of problems with
-          // q-markdown and new lines..  maybe this is a related problem?
-          // isPreTag: (tag) => tag === 'pre ' || tag === 'q-markdown',
-        },
+      // rawDefine: {}
+      // ignorePublicFolder: true,
+      // minify: false,
+      // polyfillModulePreload: true,
+      // distDir
 
-        // there HAS to be  frontend_config file in the parent directory
-        // for this to work!
-        // TODO: better error message
-      },
-      extendWebpack(
-        cfg,
-        // eslint-disable-next-line no-empty-pattern
-        {
-          /*isServer, isClient*/
-        },
-      ) {
-        // Add an alias for @huggingface/transformers
-        // TODO: we are doing this, because of this here, currently:
-        // https://github.com/huggingface/transformers.js/issues/911#issuecomment-2329440874
-        if (cfg.resolve)
-          (cfg.resolve.alias as Record<string, string | false | string[]>)[
-            '@huggingface/transformers'
-          ] = path.resolve(__dirname, 'node_modules/@huggingface/transformers')
+      // extendViteConf (viteConf) {},
+      extendViteConf(viteConf) {
+        // *******  get rid of console.log in prod mode ****
+        // Add this for dropping console and debugger in production:
+        viteConf.esbuild = viteConf.esbuild || {}
+        viteConf.esbuild.drop = ['console', 'debugger']
 
-        // use new webpack5 loaders for asset importing
-        if (cfg.module?.rules)
-          cfg.module.rules.push({
-            test: /\.md/,
-            type: 'asset/source',
-          })
-
-        // ignore files!
-        //cfg.watchOptions = {
-        //  ignored: [
-        //    '**/public/taskyon_settings.json',
-        //    '**/node_modules',
-        //    '**/public/docs/openapi-docs.yml',
-        //  ],
-        //};
-
-        // TODO: make sure these things are only used in the browser and not in the desktop app...
-        /*cfg.node = {
-            fs: 'empty',
-          }*/
-
-        if (cfg.module?.rules)
-          cfg.module.rules.push({
-            resolve: {
-              fallback: { fs: false, net: false, tls: false },
-            },
-          })
-
-        // Add chunkFilename option
-        // make sure all our chunks are named in a nicer way :)
-        /*cfg.output = {
-          ...cfg.output,
-          chunkFilename: 'js/[name].[chunkhash:8].js',
-        };*/
-
-        /*if (process.env.NODE_ENV === "production") {
-            // ...
-            cfg.plugins.push(
-              new PrerenderSPAPlugin({
-                // Required - The path to the webpack-outputted app to prerender.
-                staticDir: path.join(__dirname, 'dist/spa'),
-                // Required - Routes to render.
-                routes: [
-                  '/', // Homepage
-                  // ...other routes
-                  '/error-404' // 404 page, it works because this route doesn't actually exist
-                ],
-                postProcess: context => {
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-                    context.html = context.html
-                      // Defer scripts
-                      .replace(/<script (.*?)>/g, '<script $1 defer>')
-                      .replace('id="app"', 'id="app" data-server-rendered="true"');
-                    return context;
-                }
-              })
-            );
-          }*/
-      },
-
-      // webpackTranspile: false,
-
-      // Add dependencies for transpiling with Babel (Array of string/regex)
-      // (from node_modules, which are by default not transpiled).
-      // Applies only if "webpackTranspile" is set to true.
-      // webpackTranspileDependencies: [],
-
-      esbuildTarget: {
-        browser: ['es2022', 'firefox115', 'chrome115', 'safari14'],
-        node: 'node20',
-      },
-
-      // rtl: true, // https://quasar.dev/options/rtl-support
-      // showProgress: false,
-      // gzip: true,
-      //analyze: false,
-      // also check this page:  https://webpack-stats-viewer.moonrailgun.com/   to see where large chunks get loaded from...
-      analyze: {
-        analyzerMode: 'static', // static generates a static html file, 'server' has more options but can not be used with CI/CD
-        reportFilename: '../analyze_report.html',
-        generateStatsFile: true, // in stats.json
-        statsFilename: '../stats.json',
-      }, // do this in order to debug our large bundle sizes...
-
-      // Options below are automatically set depending on the env, set them if you want to override
-      // extractCSS: false,
-
-      // https://v2.quasar.dev/quasar-cli-webpack/handling-webpack
-      // "chain" is a webpack-chain object https://github.com/sorrycc/webpack-chain
-      // https://webpack.js.org/plugins/split-chunks-plugin/#splitchunkschunks
-      chainWebpack(chain) {
-        // TODO: add better chunk code split behaviour
-        if (ctx.prod) {
-          chain.optimization.splitChunks({
-            //...chain.optimization.get('splitChunks'),
-            /*chunks: 'all',
-            minRemainingSize: 0,
-            minChunks: 1,
-            maxAsyncRequests: 30,
-            maxInitialRequests: 2,
-            enforceSizeThreshold: 50000,
-            name: 'rest',*/
-            //minSize: 20000,
-            minSize: 50000,
-            maxInitialRequests: 2,
-            hidePathInfo: false,
-            cacheGroups: {
-              page: {
-                name: 'page',
-                test: /src[\\/](pages|layout|router)/,
-                //test: /[\\/]src[\\/](pages|layout)[\\/]/,
-                priority: 25,
-                reuseExistingChunk: true,
-                enforce: true,
-                chunks: 'all',
-                minChunks: 1,
-              },
-              taskyon: {
-                name: 'taskyon',
-                test: /src[\\/](modules)/,
-                //test: /[\\/]src[\\/](pages|layout)[\\/]/,
-                priority: 20,
-                reuseExistingChunk: true,
-                enforce: true,
-                chunks: 'all',
-                minChunks: 1,
-              },
-              components: {
-                name: 'components',
-                test: (module) => {
-                  //const name = module.resource
-                  const name = module
-                  const valid = /src[\\/](components|assets)/.test(name)
-                  return valid
-                },
-                //test: /[\\/]src[\\/](pages|layout)[\\/]/,
-                priority: 25,
-                reuseExistingChunk: true,
-                enforce: true,
-                chunks: 'all',
-                minChunks: 1,
-              },
-              vendor_whitelist: {
-                test: /[\\/]node_modules[\\/](vue|quasar|core-js)[\\/]/,
-                priority: 30,
-                reuseExistingChunk: true,
-                name: 'vendor',
-                chunks: 'all',
-              },
-              libs: {
-                /*name(module, chunks, cacheGroupKey) {
-                  // this gives us the concrete filenames for each module:
-                  const moduleFileName = module
-                    .identifier()
-                    .split('node_modules')
-                    .reduceRight((item) => item)
-                    .replace(/[\\/]/g, '.');
-
-                  // Get the largest chunk's name
-                  //const largestChunkName = largestChunk.name;
-
-                  //return `l-${largestChunkName}-${moduleFileName}`;
-                  // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-                  return `l-${moduleFileName}`; // we can use this for debugging purposes...
-                },*/
-                test: /[\\/]node_modules[\\/]/,
-                priority: 10,
-                reuseExistingChunk: true,
-                chunks: 'all',
-                minSize: 50000,
-              },
-              commons: {
-                name: 'initial',
-                chunks: 'initial',
-                minChunks: 1,
-                priority: 40,
-                enforce: true, // Ensure this chunk is always created
-              },
-              json: {
-                type: 'json',
-                name: 'json',
-              },
-            },
-          })
+        // ********   configure pglite ********/
+        // https://pglite.dev/docs/bundler-support
+        // Extend the Vite configuration to exclude dependencies from optimization
+        viteConf.optimizeDeps = {
+          ...viteConf.optimizeDeps,
+          exclude: ['@electric-sql/pglite'], // replace 'some-library' with the module you want to exclude
         }
 
-        // TODO: remove this and replace with our own functions...   test everything
-        //       before removing it to make sure, there are no missing functions...
-        // we need this for the "buffer" function.
-        //chain.plugin('node-polyfill').use(nodePolyfillWebpackPlugin)
+        // Optional: Exclude from Rollup build as well
+        viteConf.build = {
+          ...viteConf.build,
+          rollupOptions: {
+            ...viteConf.build?.rollupOptions,
+            external: ['@electric-sql/pglite'], // ensure that Rollup does not bundle this module
+          },
+        }
+        //*****   end of pglite configuration  */
 
-        // in production mode we would still sometimes like to debug
-        // but we don't want the source maps in the public
-        // therefore we point the page to localhost...
-        // this way we can load them whenever we like :)
-        // TODO: not sure, if this is a good solution
-        // but it kind of works right now...
-        // more info here: https://webpack.js.org/plugins/source-map-dev-tool-plugin/
-        if (ctx.prod) {
-          // Add BannerPlugin to add a comment with the chunk name
-          //  https://webpack.js.org/plugins/banner-plugin/
-          chain.plugin('banner').use(webpack.BannerPlugin, [
-            {
-              banner: `//# sourceMappingURL=http://localhost:4000/sourcemaps/[name].${commitHash}.map`,
-              raw: true,
-              entryOnly: false,
-              // I think this is basically the ast webpack stage...
-              stage: webpack.Compilation.PROCESS_ASSETS_STAGE_REPORT,
-              footer: true,
-              test: /\.js$/, // Apply only to JavaScript files
-            },
-          ])
-          const create_sources = process.env.SOURCEMAP === 'true'
-          console.log('build sources', create_sources)
-          if (create_sources) {
-            chain.plugin('sourcemap').use(webpack.SourceMapDevToolPlugin, [
-              {
-                //append:
-                //  '\n//# sourceMappingURL=http://localhost:4000/sourcemap/[url]',
-                append: false,
-                // we are using "name" here in order to preserve the source maps across builds.
-                // we need to be
-                filename: `sourcemaps/[name].${commitHash}.map`,
-                //exclude: ['vendor.js'],
-              },
-            ])
-          }
+        // ****   make our old taskyon workers "work" in vite
+        // TODO: check if w need this extendedConf
+        // we might be able to get rid of it...
+        viteConf.worker = viteConf.worker || {}
+
+        // we have to do the next thing, to ensure, we don't get this error:
+        // [vite:worker-import-meta-url] Invalid value "iife" for option "worker.format" - UMD and IIFE output formats are not supported for code-splitting builds.
+        // check https://github.com/vitejs/vite/issues/18585 for more infos
+        viteConf.worker.format = 'es' // Ensure workers use ES module format
+        //*******    end of worker config */
+
+        // we are doing the following, because we always get this error here whe building our app:
+        // x Build failed in 4.18s
+        // [vite:build-import-analysis] [plugin vite:build-import-analysis] public/docs/DEVELOPMENT.md (29:182): Failed to parse source for import analysis because the content contains invalid JS syntax. You may need to install appropriate plugins to handle the .md file format, or if it's an asset, add "**/*.md" to `assetsInclude` in your configuration.
+        // file: /home/tom/git/taskyon/frontend/public/docs/DEVELOPMENT.md:29:182
+        viteConf.assetsInclude = viteConf.assetsInclude || []
+        // Treat Markdown files as static assets
+        if (Array.isArray(viteConf.assetsInclude)) {
+          viteConf.assetsInclude.push('**/*.md')
+        } else {
+          viteConf.assetsInclude = [viteConf.assetsInclude, '**/*.md']
         }
       },
+      // viteVuePluginOptions: {},
+
+      vitePlugins: [
+        [
+          '@intlify/unplugin-vue-i18n/vite',
+          {
+            // if you want to use Vue I18n Legacy API, you need to set `compositionOnly: false`
+            // compositionOnly: false,
+
+            // if you want to use named tokens in your Vue I18n messages, such as 'Hello {name}',
+            // you need to set `runtimeOnly: false`
+            // runtimeOnly: false,
+
+            ssr: ctx.modeName === 'ssr',
+
+            // you need to set i18n resource including paths !
+            include: [fileURLToPath(new URL('./src/i18n', import.meta.url))],
+          },
+        ],
+
+        [
+          'vite-plugin-checker',
+          {
+            vueTsc: true,
+            eslint: {
+              lintCommand: 'eslint -c ./eslint.config.js "./src*/**/*.{ts,js,mjs,cjs,vue}"',
+              useFlatConfig: true,
+            },
+          },
+          { server: false },
+        ],
+      ],
     },
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js#Property%3A-devServer
+    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#devserver
     devServer: {
-      server: {
-        type: 'http',
-      },
+      // https: true
       open: false, // opens browser window automatically
     },
 
-    // https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js#Property%3A-framework
+    // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#framework
     framework: {
       // https://quasar.dev/vue-components/icon#options-api
       iconSet: 'svg-material-icons',
@@ -529,15 +340,14 @@ export default defineConfig((ctx) => {
     },
 
     // animations: 'all', // --- includes all animations
-    // https://quasar.dev/options/animations
+    // https://v2.quasar.dev/options/animations
     animations: [],
 
-    // https://v2.quasar.dev/quasar-cli-webpack/quasar-config-js#property-sourcefiles
+    // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#sourcefiles
     // sourceFiles: {
     //   rootComponent: 'src/App.vue',
     //   router: 'src/router/index',
     //   store: 'src/store/index',
-    //   indexHtmlTemplate: 'index.html',
     //   pwaRegisterServiceWorker: 'src-pwa/register-service-worker',
     //   pwaServiceWorker: 'src-pwa/custom-service-worker',
     //   pwaManifestFile: 'src-pwa/manifest.json',
@@ -546,7 +356,7 @@ export default defineConfig((ctx) => {
     //   bexManifestFile: 'src-bex/manifest.json
     // },
 
-    // https://v2.quasar.dev/quasar-cli-webpack/developing-ssr/configuring-ssr
+    // https://v2.quasar.dev/quasar-cli-vite/developing-ssr/configuring-ssr
     ssr: {
       prodPort: 3000, // The default port that the production server should use
       // (gets superseded if process.env.PORT is specified at runtime)
@@ -554,6 +364,7 @@ export default defineConfig((ctx) => {
       middlewares: [
         'logger',
         'taskHttpApi',
+        'gdriveProxy',
         'render', // keep this as last one
       ],
 
@@ -566,18 +377,17 @@ export default defineConfig((ctx) => {
       // manualPostHydrationTrigger: true,
 
       pwa: false,
-
       // pwaOfflineHtmlFilename: 'offline.html', // do NOT use index.html as name!
 
       // pwaExtendGenerateSWOptions (cfg) {},
       // pwaExtendInjectManifestOptions (cfg) {}
     },
 
-    // https://v2.quasar.dev/quasar-cli-webpack/developing-pwa/configuring-pwa
+    // https://v2.quasar.dev/quasar-cli-vite/developing-pwa/configuring-pwa
     pwa: {
       workboxMode: 'GenerateSW', // 'GenerateSW' or 'InjectManifest'
       // swFilename: 'sw.js',
-      // manifestFilename: 'manifest.json'
+      // manifestFilename: 'manifest.json',
       // extendManifestJson (json) {},
       // useCredentialsForManifestTag: true,
       // injectPwaMetaTags: false,
@@ -586,17 +396,17 @@ export default defineConfig((ctx) => {
       // extendInjectManifestOptions (cfg) {}
     },
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/developing-cordova-apps/configuring-cordova
+    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/developing-cordova-apps/configuring-cordova
     cordova: {
       // noIosLegacyBuildFlag: true, // uncomment only if you know what you are doing
     },
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/developing-capacitor-apps/configuring-capacitor
+    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/developing-capacitor-apps/configuring-capacitor
     capacitor: {
       hideSplashscreen: true,
     },
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/developing-electron-apps/configuring-electron
+    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/developing-electron-apps/configuring-electron
     electron: {
       // extendElectronMainConf (esbuildConf) {},
       // extendElectronPreloadConf (esbuildConf) {},
@@ -629,7 +439,7 @@ export default defineConfig((ctx) => {
       },
     },
 
-    // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/developing-browser-extensions/configuring-bex
+    // Full list of options: https://v2.quasar.dev/quasar-cli-vite/developing-browser-extensions/configuring-bex
     bex: {
       // extendBexScriptsConf (esbuildConf) {},
       // extendBexManifestJson (json) {},

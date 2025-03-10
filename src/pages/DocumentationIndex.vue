@@ -12,27 +12,11 @@
 </template>
 
 <script setup lang="ts">
-// this only works in webpack..
-// src/toc.ts
-function generateTOC() {
-  // Create a require context for all .md files in the directory
-  const markdownContext = require.context('../../public/docs/', true, /\.md$/)
-  console.log('markdownContext', markdownContext)
-
-  // Get all filenames from the directory
-  const markdownFiles: string[] = markdownContext.keys()
-
-  // Generate a table of contents by mapping each file to a link
-  const toc = markdownFiles.map((file: string) => {
-    const fileName = file.replace('./', '').replace('.md', '')
-    return {
-      title: fileName, // You can enhance this to extract titles from file contents
-      link: `/docs/${fileName}`,
-    }
-  })
-
-  return toc
-}
-
-const toc = generateTOC()
+const toc = Object.entries(import.meta.glob('../../public/docs/**/*.md')).map(([path]) => {
+  const fileName = path.split('/').pop()?.replace('.md', '') ?? 'Unknown'
+  return {
+    title: fileName,
+    link: path.replace('../../public', ''),
+  }
+})
 </script>

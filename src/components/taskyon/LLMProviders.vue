@@ -61,7 +61,7 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
               filled
               :model-value="state.keys[apiName] || ''"
               :label="`${apiName} API key`"
-              @update:model-value="(value) => (state.keys[apiName] = value)"
+              @update:model-value="(value) => (state.keys.apiName = value || '')"
             >
             </SecretInput>
           </div>
@@ -76,7 +76,7 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
           <TyMarkdown
             src="Here, we can add new, custom APIs to taskyon that we can connect to
 it is possible to add your own LLM Inference Server to connect
-to your own AI this way. E.g. using these methods: 
+to your own AI this way. E.g. using these methods:
 
 - https://huggingface.co/blog/tgi-messages-api
 - https://github.com/bentoml/OpenLLM
@@ -141,7 +141,7 @@ or with an llm proxy such as this one:  https://github.com/BerriAI/liteLLM-proxy
               target="_blank"
             />
             <InfoDialog
-              info-text="You can also get an API key from https://platform.openai.com/account/api-keys and manually 
+              info-text="You can also get an API key from https://platform.openai.com/account/api-keys and manually
 insert into the settings below."
             />
           </div>
