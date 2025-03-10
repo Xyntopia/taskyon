@@ -21,6 +21,7 @@ export const useNlpWorker = () => {
         /* webpackFetchPriority: "low" */
         /* webpackIgnore: "true" */
         new URL('./nlp.worker.ts', import.meta.url),
+        { type: 'module' },
       ),
     )
   }
@@ -42,6 +43,7 @@ export function usePyodideWebworker(name: string) {
           /* webpackFetchPriority: "low" */
           /* webpackIgnore: "true" */
           new URL('../pyodide.worker.ts', import.meta.url),
+          { type: 'module' },
         ),
       )
     }
