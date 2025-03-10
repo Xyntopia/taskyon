@@ -229,7 +229,8 @@ export default defineConfig((ctx) => {
         // *******  get rid of console.log in prod mode ****
         // Add this for dropping console and debugger in production:
         viteConf.esbuild = viteConf.esbuild || {}
-        viteConf.esbuild.drop = ['console', 'debugger']
+        // TODO: https://github.com/evanw/esbuild/issues/3656  only drop console.log/info
+        viteConf.esbuild.drop = droplogging ? ['console', 'debugger'] : []
 
         // ********   configure pglite ********/
         // https://pglite.dev/docs/bundler-support
