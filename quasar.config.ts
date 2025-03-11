@@ -8,7 +8,7 @@ import path from 'path'
 import fs from 'fs'
 import { ToolBase } from './src/modules/taskyon/types'
 import { zodSchemasToOpenApi } from './src/modules/yamlUtils'
-import { TaskyonMessages } from './src/modules/taskyon/iframeApiTypes'
+import { TaskyonMessage } from './src/modules/taskyon/iframeApiTypes'
 import { execSync } from 'child_process'
 import { analyzer } from 'vite-bundle-analyzer'
 import { resolve } from 'path'
@@ -82,7 +82,7 @@ function createOpenAPIDocs() {
 
   console.log('generate docs...')
 
-  const messages = TaskyonMessages.options.reduce(
+  const messages = TaskyonMessage.options.reduce(
     (p, n) => {
       p[n.shape.type.value] = n
       return p

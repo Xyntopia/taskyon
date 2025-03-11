@@ -10,7 +10,7 @@ import type {
 import { partialTaskDraft, TaskNode } from './types'
 import { ToolBase, TaskProcessingError } from './types'
 import type { RemoteFunctionResponse } from './iframeApiTypes'
-import { RemoteFunctionCall, TaskyonMessages } from './iframeApiTypes'
+import { RemoteFunctionCall, TaskyonMessage } from './iframeApiTypes'
 import { z } from 'zod'
 import type { YamlRepresentation } from '../zodUtils'
 import { convertToYamlWComments } from '../zodUtils'
@@ -107,7 +107,7 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
       console.log('remoteHandler received message', event)
       // TODO: Add security checks here, e.g., verify event.origin
       if (event.source === window.parent && event.data) {
-        const response = TaskyonMessages.safeParse(event.data)
+        const response = TaskyonMessage.safeParse(event.data)
         if (response.success) {
           if (response.data.type == 'functionResponse' && response.data.functionName === name) {
             window.removeEventListener('message', listener) // remove listener

@@ -48,7 +48,7 @@ const configuration: partialTyConfiguration = {
 // Tool Definitions
 const tools = [
   createTool({
-    name: 'mywebpage functionality',
+    name: 'taskyon client test tool',
     description: 'function which adds two strings on this page and displays them!',
     parameters: {
       type: 'object',

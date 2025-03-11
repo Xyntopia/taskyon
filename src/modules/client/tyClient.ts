@@ -1,8 +1,60 @@
 // we can compile this file to js using:
 // swc --config-file ./swcrc tyboilerplate.ts -o tyboilerplate.js
 
-import type { partialTyConfiguration } from '../taskyon/iframeApiTypes'
+import type { partialTyConfiguration, TaskyonMessage } from '../taskyon/iframeApiTypes'
 import type { ClientTool } from '../taskyon/tools'
+
+const createTySend =
+  (taskyon: HTMLIFrameElement, iframeTarget: string) => (message: TaskyonMessage) =>
+    taskyon.contentWindow?.postMessage(message, iframeTarget)
+
+const waitForTaskyonReady = (iframeTarget: string) => {
+  return new Promise((resolve /*reject*/) => {
+    const handleMessage = function (event: MessageEvent<{ type: string }>) {
+      const eventOrigin = new URL(event.origin).origin
+      if (eventOrigin === iframeTarget && event.data.type === 'taskyonReady') {
+        window.removeEventListener('message', handleMessage)
+        console.log('Received message that taskyon is ready!', event)
+        resolve(event)
+      }
+    }
+
+    console.log('waiting for taskyon to be ready....')
+    window.addEventListener('message', handleMessage)
+  })
+}
+
+const handleFunctionExecutionRequest = (
+  iframeTarget: string,
+  tools: ClientTool[],
+  sendTyMessage: (message: TaskyonMessage) => void | undefined,
+) =>
+  async function (event: MessageEvent<{ type: string; arguments: unknown }>): Promise<void> {
+    // Check the origin to ensure security
+    if (event.origin !== iframeTarget) {
+      console.log('Received message from unauthorized origin')
+      return
+    }
+
+    console.log('received message:', event)
+    // Handle function call
+    const tool = tools[0]
+    if (tool?.function && event.data) {
+      if (event.data.type === 'functionCall') {
+        //if the message comes from taskyon, we can be sure that its the correct type.
+        const data = event.data
+        // with this we make sure, that we can also handle async functions :)
+        const result = await tool.function(data.arguments, { taskChain: [] })
+
+        // Send response to iframe
+        sendTyMessage({
+          type: 'functionResponse',
+          functionName: tool.name,
+          response: result,
+        })
+      }
+    }
+  }
 
 async function initializeTaskyon(tools: ClientTool[], configuration: partialTyConfiguration) {
   console.log('initialize taskyon client...')
@@ -12,85 +64,28 @@ async function initializeTaskyon(tools: ClientTool[], configuration: partialTyCo
   if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
     const iframeTarget = new URL(taskyon.src).origin
 
-    function waitForTaskyonReady() {
-      return new Promise((resolve /*reject*/) => {
-        const handleMessage = function (event: MessageEvent<{ type: string }>) {
-          const eventOrigin = new URL(event.origin).origin
-          if (eventOrigin === iframeTarget && event.data.type === 'taskyonReady') {
-            window.removeEventListener('message', handleMessage)
-            console.log('Received message that taskyon is ready!', event)
-            resolve(event)
-          }
-        }
+    const sendTyMessage = createTySend(taskyon, iframeTarget)
 
-        console.log('waiting for taskyon to be ready....')
-        window.addEventListener('message', handleMessage)
-      })
-    }
-
-    // Send function definition to the taskyon so that the taskyon is aware of it.
-    function sendConfigurationToTaskyon(configuration: unknown) {
-      const message = {
-        type: 'configurationMessage',
-        conf: configuration,
-      }
-      taskyon.contentWindow?.postMessage(message, iframeTarget)
-    }
-
-    // Send function definition to the taskyon so that taskyon is aware of it.
-    function sendFunctionToTaskyon(toolDescription: ClientTool) {
+    await waitForTaskyonReady(iframeTarget)
+    console.log('send our configuration!')
+    sendTyMessage({
+      type: 'configurationMessage',
+      conf: configuration,
+    })
+    console.log('sending our functions!')
+    tools.forEach((t) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { function: _toolfunc, ...fdescr } = toolDescription
-      const fdMessage = {
+      const { function: _toolfunc, ...fdescr } = t
+      sendTyMessage({
         type: 'functionDescription',
+        id: fdescr.name,
         duplicateTaskName: false, // we use this here in order to prevent duplicate creation of our function declaration task
         ...fdescr,
-      }
-      taskyon.contentWindow?.postMessage(fdMessage, iframeTarget)
-    }
-
-    function setUpToolsListener(tools: ClientTool[]) {
-      window.addEventListener(
-        'message',
-        () =>
-          async function (event: MessageEvent<{ type: string; arguments: unknown }>) {
-            // Check the origin to ensure security
-            if (event.origin !== iframeTarget) {
-              console.log('Received message from unauthorized origin')
-              return
-            }
-
-            console.log('received message:', event)
-            // Handle function call
-            const tool = tools[0]
-            if (tool?.function && event.data) {
-              if (event.data.type === 'functionCall') {
-                //if the message comes from taskyon, we can be sure that its the correct type.
-                const data = event.data
-                // with this we make sure, that we can also handle async functions :)
-                const result = await tool.function(data.arguments, { taskChain: [] })
-
-                // Send response to iframe
-                const response = {
-                  type: 'functionResponse',
-                  functionName: tool.name,
-                  response: result,
-                }
-                taskyon.contentWindow?.postMessage(response, iframeTarget)
-              }
-            }
-          },
-      )
-    }
-
-    await waitForTaskyonReady()
-    console.log('send our configuration!')
-    sendConfigurationToTaskyon(configuration)
-    tools.forEach((t) => {
-      console.log('sending our functions!')
-      sendFunctionToTaskyon(t)
+      })
       console.log('set up function listener!')
-      setUpToolsListener(tools)
+      window.addEventListener('message', (event) => {
+        void handleFunctionExecutionRequest(iframeTarget, tools, sendTyMessage)(event)
+      })
     })
   }
 }

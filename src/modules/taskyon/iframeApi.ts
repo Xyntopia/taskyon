@@ -1,7 +1,7 @@
 import type { ToolBase, partialTaskDraft } from './types'
 import type { llmSettings } from './types'
 import { deepMergeReactive } from '../utils'
-import { TaskyonMessages } from './iframeApiTypes'
+import { TaskyonMessage } from './iframeApiTypes'
 import type { TyTaskManager } from './taskManager'
 
 /*function stringifyIfNotString(obj: unknown): string | undefined {
@@ -19,7 +19,7 @@ export function setupIframeApi(
   // Listen for messages from the parent page
   window.addEventListener(
     'message',
-    function (event: MessageEvent<TaskyonMessages>) {
+    function (event: MessageEvent<TaskyonMessage>) {
       // Check if the iframe is not the top-level window
       if (window !== window.top) {
         // Check if the message is from the parent window
@@ -34,7 +34,7 @@ export function setupIframeApi(
           console.log('Message from unknown origin:', event.origin, event)
           try {
             // we wrap every call to the API in a try clause in order to make sure it doesn't blow up ;)
-            const msg = TaskyonMessages.safeParse(event.data)
+            const msg = TaskyonMessage.safeParse(event.data)
             if (msg.success && msg.data.type === 'task') {
               console.log(`task was sent by ${event.origin}`, msg.data)
               const newTask = {
@@ -96,6 +96,6 @@ export function setupIframeApi(
     false,
   )
 
-  const readyMessage: TaskyonMessages = { type: 'taskyonReady' }
+  const readyMessage: TaskyonMessage = { type: 'taskyonReady' }
   window.parent.postMessage(readyMessage, '*')
 }

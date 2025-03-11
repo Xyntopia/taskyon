@@ -1,7 +1,6 @@
 import { FunctionArguments, ToolBase, partialTaskDraft, storedSettings } from './types'
 import { deepPartialify, deepStrictify } from '../zodUtils'
 import { z } from 'zod'
-import type { PartialDeep } from 'type-fest'
 
 const RemoteFunctionBase = z.object({
   functionName: z.string().describe('the name of the function'),
@@ -32,7 +31,7 @@ export const RemoteFunctionResponse = RemoteFunctionBase.extend({
 )
 export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>
 
-export type partialTyConfiguration = PartialDeep<storedSettings>
+//export type partialTyConfiguration = PartialDeep<storedSettings>
 export const partialTyConfiguration = deepStrictify(
   deepPartialify(
     storedSettings
@@ -40,13 +39,14 @@ export const partialTyConfiguration = deepStrictify(
       .describe('This can be used to update the configuration through iframe, json or URL'),
   ),
 )
-//export type partialTyConfiguration = z.infer<typeof partialTyConfiguration>
+export type partialTyConfiguration = z.infer<typeof partialTyConfiguration>
 //export type partialTyConfiguration = PartialDeep<storedSettings>
 
 const TaskMessage = z
   .object({
     type: z.literal('task').describe('Field to indicate what kind of a message we have here.'),
     task: partialTaskDraft,
+    // TODO: we don't need this anymore..   any functioncall task is one that should be "executed"
     execute: z.boolean().default(false).describe('should the task be queued for execution?'),
     duplicateTaskName: z
       .boolean()
@@ -65,7 +65,7 @@ const FunctionDescriptionMessage = ToolBase.extend({
     .literal('functionDescription')
     .describe('Field to indicate that this is a function description message.'),
   id: z.string()
-    .describe(`A unique id for the function task. Tasks with the same id "overwrite" each other. The last one
+    .describe(`A unique id for the function definition task. Tasks with the same id "overwrite" each other. The last one
     is the relevant one. Functions will get saved as a task object with the id as their name.
 
     this is important!, Taskyon can be configured to prevent tasks from getting created if they already exist with the same name!
@@ -88,14 +88,16 @@ const tyConfigurationMessage = z.object({
   conf: partialTyConfiguration,
 })
 
-export const TaskyonMessages = z.discriminatedUnion('type', [
+const TyReadyMessage = z
+  .object({ type: z.literal('taskyonReady') })
+  .describe('simple message which signals, that our API is ready!')
+
+export const TaskyonMessage = z.discriminatedUnion('type', [
   RemoteFunctionCall,
   RemoteFunctionResponse,
   TaskMessage,
   FunctionDescriptionMessage,
-  z
-    .object({ type: z.literal('taskyonReady') })
-    .describe('simple message which signals, that our API is ready!'),
+  TyReadyMessage,
   tyConfigurationMessage,
 ])
-export type TaskyonMessages = z.infer<typeof TaskyonMessages>
+export type TaskyonMessage = z.infer<typeof TaskyonMessage>
