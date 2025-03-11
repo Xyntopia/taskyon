@@ -11,7 +11,6 @@ import { zodSchemasToOpenApi } from './src/modules/yamlUtils'
 import { TaskyonMessage } from './src/modules/taskyon/iframeApiTypes'
 import { execSync } from 'child_process'
 import { analyzer } from 'vite-bundle-analyzer'
-import { resolve } from 'path'
 
 function getGitCommitHash() {
   try {
