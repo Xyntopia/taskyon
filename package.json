@@ -7,6 +7,7 @@
   "type": "module",
   "scripts": {
     "build": "quasar build",
+    "build:lib": "vite build --config vite.lib.config.ts",
     "dev": "quasar dev",
     "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .gitignore",
     "lint": "vue-tsc --noEmit && eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}'"
