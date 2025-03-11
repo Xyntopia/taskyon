@@ -2,7 +2,6 @@ import { summarizeTools, mapFunctionNames } from './tools'
 import { type ToolBase, FunctionCall } from './types'
 import { safeYamlDump, zodToYamlString } from '../yamlUtils'
 import type OpenAI from 'openai'
-import type { Goals } from '../tools/chatCompletionTool'
 import { z } from 'zod'
 
 const answer = z.string().nullish()
@@ -15,6 +14,8 @@ export const yesnoToBoolean = (value: unknown): boolean => {
   if (value === 'no') return false
   return !!value // Handles boolean, null, undefined
 }
+
+export type Goals = 'SimpleCompletion' | 'AnalyzeError' | 'ChooseTool' | 'AnalyzeToolResult'
 
 // this one here is important. It should be as simple as possible
 // this type is used to parse & describe tool commands

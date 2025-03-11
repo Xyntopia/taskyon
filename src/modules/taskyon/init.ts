@@ -76,7 +76,7 @@ export async function initTaskyon(
     await createChatCompletionTool(
       llmSettings,
       taskManagerInstance,
-      taskWorkerController,
+      taskWorkerController.isInterrupted,
       apiKeys,
       streamCallback,
     ),

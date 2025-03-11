@@ -5,6 +5,7 @@ import {
   getOpenRouterGenerationInfo,
   getTaskyonCosts,
 } from '../taskyon/chat'
+import type { Goals } from '../taskyon/promptCreation'
 import {
   addPrompts,
   calculateCompletionVariables,
@@ -12,7 +13,6 @@ import {
   yesnoToBoolean,
 } from '../taskyon/promptCreation'
 import type { TyTaskManager } from '../taskyon/taskManager'
-import { type TaskWorkerController } from '../taskyon/taskWorker'
 import type {
   partialTaskDraft,
   ToolBase,
@@ -47,12 +47,9 @@ import { safeYamlDump } from '../yamlUtils'
 import type { AnySchema } from 'ajv'
 
 // this function processes all tasks which go to any sort of an LLM
-
 // TODO: for configuration & allowedTools it would be good if we could add
 // this from a "default" Configuration? And then have them as function parameters?
 // t.configuration = finishedTask.configuration
-
-export type Goals = 'SimpleCompletion' | 'AnalyzeError' | 'ChooseTool' | 'AnalyzeToolResult'
 
 // TODO: refactor & clean up this function ;)
 export async function processChatTask(
@@ -63,7 +60,7 @@ export async function processChatTask(
   llmSettings: llmSettings,
   // can we get rid of taskManager here in order to make our task more functional :)?
   taskManager: TyTaskManager,
-  taskWorkerController: TaskWorkerController,
+  shouldInterrupt: () => boolean,
   apiKeys: { [key: string]: string },
   lastTaskBeforeChatCompletion: TaskNode,
   streamTracker: (chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => void,
@@ -130,9 +127,7 @@ export async function processChatTask(
       // task.id == llmSettings.selectedTaskId ? true : false, // this doesn't work, for some reason it doesn't always detect if we're running something in the forground...
       true, // for now, we always want to stream our task...
       streamTracker, // track incoming streams...
-      () => {
-        return taskWorkerController.isInterrupted()
-      },
+      shouldInterrupt,
     )
 
     return { chatCompletion, metaInfo: { openAIConversationThread, msgs: msgs ?? {} } }
@@ -688,7 +683,7 @@ export function createChatCompletionTask(args?: ccArguments): partialTaskDraft {
 export async function createChatCompletionTool(
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
-  taskWorkerController: TaskWorkerController,
+  shouldInterrupt: () => boolean,
   apiKeys: { [key: string]: string },
   // we can provide a callback which gets call whenever our chatCompletion updates stream of some sort...
   streamCallback: (
@@ -740,7 +735,7 @@ export async function createChatCompletionTool(
       { model: selectedModel, chatApi: llmSettings.selectedApi },
       llmSettings,
       taskManager,
-      taskWorkerController,
+      shouldInterrupt,
       apiKeys,
       lastTaskBeforeChatCompletion,
       (chunk) => {
