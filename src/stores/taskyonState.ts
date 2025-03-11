@@ -16,7 +16,6 @@ import { initTaskyon } from 'src/modules/taskyon/init'
 import { availableModels } from 'src/modules/taskyon/chat'
 import { setupIframeApi } from 'src/modules/taskyon/iframeApi'
 import type { InternalTool } from 'src/modules/taskyon/tools'
-import { tylog } from 'src/modules/logger'
 import { useAppStateStore } from './appState'
 import type OpenAI from 'openai'
 import { useCallbacks } from 'src/modules/useCallBacks'
@@ -83,8 +82,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   console.log('loading taskyon store!')
 
   const $q = useQuasar()
-
-  const logger = tylog
 
   // load our store with all the settings
   // we use this here to confgure out taskyon logic
@@ -422,7 +419,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     addToProcessQueue,
     modelLookUp,
     llmModels: computed(() => llmModelsInternal.value),
-    logger,
     streamCallBacks: {
       removeGlobal,
       addGlobal,

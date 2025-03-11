@@ -1,7 +1,6 @@
 import type { ToolBase, partialTaskDraft } from './types'
 import type { llmSettings } from './types'
 import { deepMergeReactive } from '../utils'
-import { tylog } from '../logger'
 import { TaskyonMessages } from './iframeApiTypes'
 import type { TyTaskManager } from './taskManager'
 
@@ -80,7 +79,7 @@ export function setupIframeApi(
                 .catch((err) => console.warn(err))
             } else {
               // TODO: also add this as error, so that it gets thrown back to the parent
-              tylog.clienterr('could not convert message to task:', {
+              console.error('could not convert message to task:', {
                 msg,
                 event,
               })

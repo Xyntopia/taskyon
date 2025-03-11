@@ -39,6 +39,7 @@ function clearBrowserStorage() {
 //       and get rid of automatically saving it in our stores/index.ts
 const storeName = 'taskyonState'
 
+// TODO:  replace this with some sort of stream or something like that...   we def need something better here...
 function useErrors() {
   const errors = reactive<string[]>([])
   function logError(message: string) {
