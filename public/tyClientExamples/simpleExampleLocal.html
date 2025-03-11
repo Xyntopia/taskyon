@@ -46,7 +46,7 @@
           enableOpenAiTools: false,
           llmApis: {
             taskyon: {
-              selectedModel: 'meta-llama/llama-3.1-8b-instruct',
+              selectedModel: 'google/gemini-flash-1.5',
             },
           },
           allowedTools: ['clientTest'],
@@ -81,7 +81,13 @@
           function: (data) => {
             console.log('Received function call with data:', data)
             const result = `${data.parameter1}${data.parameter2}`
-            functionResult.value = result
+            const outputDiv = document.getElementById('output')
+            if (outputDiv) {
+              const output = `Function called with parameters: ${JSON.stringify(
+                data,
+              )}<br>Returned: ${JSON.stringify(result)}`
+              outputDiv.innerHTML = output
+            }
             return result
           },
         },
