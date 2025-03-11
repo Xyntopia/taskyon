@@ -1,23 +1,28 @@
 <template>
-  <div id="chat-container">
-    <iframe
-      id="taskyon"
-      frameborder="0"
-      src="https://taskyon.space"
-      width="100%"
-      height="100%"
-    ></iframe>
-  </div>
-  <div id="output-container">
-    <h2>Function Call Output</h2>
-    <div id="output"></div>
+  <div class="column">
+    <div class="col-6">
+      <iframe
+        id="taskyon"
+        frameborder="0"
+        src="http://localhost:9000"
+        width="100%"
+        height="500px"
+      ></iframe>
+    </div>
+    <div class="col-6">
+      <h2>Function Call Output</h2>
+      <div>{{ functionResult }}</div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { partialTyConfiguration } from 'src/modules/taskyon/iframeApiTypes'
 import { createTool } from 'src/modules/taskyon/tools'
-import { api } from 'src/modules/taskyon/tyClient'
+import { api } from 'src/modules/client/tyClient'
+import { ref } from 'vue'
+
+const functionResult = ref<string>()
 
 // Configuration
 const configuration: partialTyConfiguration = {
@@ -30,6 +35,12 @@ const configuration: partialTyConfiguration = {
       },
     },
     allowedTools: ['myExampleStringAdderAlone'],
+  },
+  appConfiguration: {
+    expertMode: true,
+    // we are using "default" GUI mode for debugging purposes!, in production, change this to "iframe"
+    // or leave it out :)
+    guiMode: 'default',
   },
 }
 
@@ -55,13 +66,7 @@ const tools = [
     function: (data) => {
       console.log('Received function call with data:', data)
       const result = `${data.parameter1}${data.parameter2}`
-      const outputDiv = document.getElementById('output')
-      if (outputDiv) {
-        const output = `Function called with parameters: ${JSON.stringify(
-          data,
-        )}<br>Returned: ${JSON.stringify(result)}`
-        outputDiv.innerHTML = output
-      }
+      functionResult.value = result
       return result
     },
   }),

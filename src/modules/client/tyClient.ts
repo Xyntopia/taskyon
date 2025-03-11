@@ -1,8 +1,8 @@
 // we can compile this file to js using:
 // swc --config-file ./swcrc tyboilerplate.ts -o tyboilerplate.js
 
-import type { partialTyConfiguration } from './iframeApiTypes'
-import type { ClientTool } from './tools'
+import type { partialTyConfiguration } from '../taskyon/iframeApiTypes'
+import type { ClientTool } from '../taskyon/tools'
 
 async function initializeTaskyon(tools: ClientTool[], configuration: partialTyConfiguration) {
   const taskyon = document.getElementById('taskyon') as HTMLIFrameElement

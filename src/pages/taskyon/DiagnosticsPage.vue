@@ -15,6 +15,7 @@
         <TyResetButton outline mode="all" />
         <TyResetButton outline mode="settings" />
         <q-toggle v-model="detailed" label="detailed"></q-toggle>
+        <q-btn outline label="test iframe API" to="/clienttest" />
         <q-card flat bordered>
           <q-btn flat :icon="matContentCopy" @click="copyToClipboard(diagnostics)"></q-btn>
           <pre>{{ diagnostics }}</pre>
