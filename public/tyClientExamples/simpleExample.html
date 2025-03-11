@@ -49,20 +49,21 @@
               selectedModel: 'meta-llama/llama-3.1-8b-instruct',
             },
           },
-          taskTemplate: {
-            allowedTools: ['myExampleStringAdderAlone'],
-          },
+          allowedTools: ['clientTest'],
         },
-      };
+        appConfiguration: {
+          expertMode: true,
+          // we are using "default" GUI mode for debugging purposes!, in production, change this to "iframe"
+          // or leave it out :)
+          guiMode: 'default',
+        },
+      }
 
       // Tool Definitions
       const tools = [
-        {
-          id: 'simpleExampleTask.V1',
-          name: 'myExampleStringAdderAlone',
-          description: 'provide a short description which an AI can understand',
-          longDescription:
-            'provide a long description if the AI/Human needs more details',
+        createTool({
+          name: 'clientTest',
+          description: 'function which adds two strings on this page and displays them!',
           parameters: {
             type: 'object',
             properties: {
@@ -72,30 +73,23 @@
               },
               parameter2: {
                 type: 'string',
-                description:
-                  'This is another example parameter, but not required!',
+                description: 'This is another example parameter, but not required!',
               },
             },
             required: ['parameter1'],
           },
           function: (data) => {
-            console.log('Received function call with data:', data);
-            const result = `${data.parameter1}${data.parameter2}`;
-            const outputDiv = document.getElementById('output');
-            if (outputDiv) {
-              const output = `Function called with parameters: ${JSON.stringify(
-                data,
-              )}<br>Returned: ${JSON.stringify(result)}`;
-              outputDiv.innerHTML = output;
-            }
-            return result;
+            console.log('Received function call with data:', data)
+            const result = `${data.parameter1}${data.parameter2}`
+            functionResult.value = result
+            return result
           },
-        },
-      ];
+        }),
+      ]
     </script>
 
     <script
-      src="tyboilerplate.js"
+      src="../lib/tyboilerplate.js"
       defer
       onload="initializeTaskyon(tools, configuration);"
     ></script>

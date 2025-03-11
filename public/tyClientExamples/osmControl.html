@@ -57,45 +57,45 @@
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
       // Initialize the map
-      const map = L.map('map').setView([51.505, -0.09], 13); // Default location (London)
+      const map = L.map('map').setView([51.505, -0.09], 13) // Default location (London)
 
       // Add OpenStreetMap tiles
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '© OpenStreetMap',
-      }).addTo(map);
+      }).addTo(map)
 
       // Function to zoom to a place
       async function zoomToPlace(placeName) {
         try {
           const response = await fetch(
             `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(placeName)}`,
-          );
-          const data = await response.json();
+          )
+          const data = await response.json()
 
           if (data && data.length > 0) {
-            const { lat, lon } = data[0];
-            map.setView([lat, lon], 13); // Adjust zoom level as needed
+            const { lat, lon } = data[0]
+            map.setView([lat, lon], 13) // Adjust zoom level as needed
             return {
               success: true,
               message: `Zoomed to ${placeName} at (${lat}, ${lon})`,
-            };
+            }
           } else {
-            return { success: false, message: `Place ${placeName} not found!` };
+            return { success: false, message: `Place ${placeName} not found!` }
           }
         } catch (error) {
           return {
             success: false,
             message: `Error fetching data: ${error.message}`,
-          };
+          }
         }
       }
 
       // Event listener for the button
       document.getElementById('zoom-button').addEventListener('click', () => {
-        const placeName = document.getElementById('place-input').value;
-        zoomToPlace(placeName);
-      });
+        const placeName = document.getElementById('place-input').value
+        zoomToPlace(placeName)
+      })
 
       // Configuration and Tool Definitions remain unchanged
       const configuration = {
@@ -117,7 +117,7 @@
           // or leave it out :)
           guiMode: 'default',
         },
-      };
+      }
 
       const tools = [
         {
@@ -137,11 +137,11 @@
           },
           function: (params) => zoomToPlace(params.placeName),
         },
-      ];
+      ]
     </script>
 
     <script
-      src="tyboilerplate.js"
+      src="../lib/tyboilerplate.js"
       defer
       onload="initializeTaskyon(tools, configuration);"
     ></script>
