@@ -46,3 +46,6 @@ test/cypress/screenshots
 # this file holds secrets
 cypress.env.json
 .aider*
+
+# here we compile public libraries that other poeple might want to use for taskyon:
+public/lib
