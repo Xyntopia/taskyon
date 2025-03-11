@@ -35,7 +35,7 @@ const configuration: partialTyConfiguration = {
         selectedModel: 'meta-llama/llama-3.1-8b-instruct',
       },
     },
-    allowedTools: ['myExampleStringAdderAlone'],
+    allowedTools: ['clientTest'],
   },
   appConfiguration: {
     expertMode: true,
@@ -48,7 +48,7 @@ const configuration: partialTyConfiguration = {
 // Tool Definitions
 const tools = [
   createTool({
-    name: 'taskyon client test tool',
+    name: 'clientTest',
     description: 'function which adds two strings on this page and displays them!',
     parameters: {
       type: 'object',
