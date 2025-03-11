@@ -19,7 +19,7 @@
 <script setup lang="ts">
 import type { partialTyConfiguration } from 'src/modules/taskyon/iframeApiTypes'
 import { createTool } from 'src/modules/taskyon/tools'
-import { api } from 'src/modules/client/tyClient'
+import { initializeTaskyon } from 'src/modules/client/tyClient'
 import { ref } from 'vue'
 import { onMounted } from 'vue'
 
@@ -73,5 +73,5 @@ const tools = [
   }),
 ]
 
-onMounted(() => void api.initializeTaskyon(tools, configuration))
+onMounted(() => void initializeTaskyon(tools, configuration))
 </script>

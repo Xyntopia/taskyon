@@ -61,7 +61,7 @@
 
       // Tool Definitions
       const tools = [
-        createTool({
+        {
           name: 'clientTest',
           description: 'function which adds two strings on this page and displays them!',
           parameters: {
@@ -84,14 +84,14 @@
             functionResult.value = result
             return result
           },
-        }),
+        },
       ]
     </script>
 
     <script
-      src="../lib/tyboilerplate.js"
+      src="http://localhost:9000/lib/tyclient.umd.js"
       defer
-      onload="initializeTaskyon(tools, configuration);"
+      onload="TyClient.initializeTaskyon(tools, configuration);"
     ></script>
   </body>
 </html>

@@ -23,13 +23,11 @@ export default defineConfig({
         {
           format: 'umd',
           entryFileNames: 'tyclient.umd.js', // Non-minified version
-          globals: { vue: 'Vue' },
           name: 'TyClient', // Global variable name for minified
         },
         {
           format: 'umd',
           entryFileNames: 'tyclient.umd.min.js', // Minified version
-          globals: { vue: 'Vue' },
           name: 'TyClient', // Global variable name for minified
           plugins: [
             {

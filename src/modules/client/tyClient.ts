@@ -1,5 +1,4 @@
-// we can compile this file to js using:
-// swc --config-file ./swcrc tyboilerplate.ts -o tyboilerplate.js
+// we can compile this file to js to js using "yarn build:lib"
 
 import type { partialTyConfiguration, TaskyonMessage } from '../taskyon/iframeApiTypes'
 import type { ClientTool } from '../taskyon/tools'
@@ -62,7 +61,10 @@ async function handleFunctionExecution(
   })
 }
 
-async function initializeTaskyon(tools: ClientTool[], configuration: partialTyConfiguration) {
+export async function initializeTaskyon(
+  tools: ClientTool[],
+  configuration: partialTyConfiguration,
+) {
   console.log('initialize taskyon client...')
 
   const taskyon = document.getElementById('taskyon') as HTMLIFrameElement
@@ -95,16 +97,3 @@ async function initializeTaskyon(tools: ClientTool[], configuration: partialTyCo
     })
   }
 }
-
-declare global {
-  interface Window {
-    initializeTaskyon: typeof initializeTaskyon
-  }
-}
-
-export const api = {
-  initializeTaskyon,
-}
-
-// doing this here, because for some reason, swc doesn't do this for us ;)
-//window.initializeTaskyon = initializeTaskyon
