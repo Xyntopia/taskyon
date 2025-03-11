@@ -8,6 +8,7 @@ console.log('building', libPath)
 export default defineConfig({
   build: {
     minify: false,
+    copyPublicDir: false,
     lib: {
       entry: libPath, // Adjust this to your actual library entry file
       name: 'tyclient',
