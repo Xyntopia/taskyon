@@ -21,6 +21,7 @@ import type { partialTyConfiguration } from 'src/modules/taskyon/iframeApiTypes'
 import { createTool } from 'src/modules/taskyon/tools'
 import { api } from 'src/modules/client/tyClient'
 import { ref } from 'vue'
+import { onMounted } from 'vue'
 
 const functionResult = ref<string>()
 
@@ -72,5 +73,5 @@ const tools = [
   }),
 ]
 
-void api.initializeTaskyon(tools, configuration)
+onMounted(() => void api.initializeTaskyon(tools, configuration))
 </script>

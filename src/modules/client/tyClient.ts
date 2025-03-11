@@ -5,6 +5,8 @@ import type { partialTyConfiguration } from '../taskyon/iframeApiTypes'
 import type { ClientTool } from '../taskyon/tools'
 
 async function initializeTaskyon(tools: ClientTool[], configuration: partialTyConfiguration) {
+  console.log('initialize taskyon client...')
+
   const taskyon = document.getElementById('taskyon') as HTMLIFrameElement
 
   if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
