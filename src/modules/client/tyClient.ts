@@ -39,22 +39,28 @@ const handleFunctionExecutionRequest = (
     console.log('received message:', event)
     // Handle function call
     const tool = tools[0]
-    if (tool?.function && event.data) {
-      if (event.data.type === 'functionCall') {
-        //if the message comes from taskyon, we can be sure that its the correct type.
-        const data = event.data
-        // with this we make sure, that we can also handle async functions :)
-        const result = await tool.function(data.arguments, { taskChain: [] })
-
-        // Send response to iframe
-        sendTyMessage({
-          type: 'functionResponse',
-          functionName: tool.name,
-          response: result,
-        })
-      }
+    if (tool && event.data && event.data.type === 'functionCall') {
+      //if the message comes from taskyon, we can be sure that its the correct type.
+      await handleFunctionExecution(event, tool, sendTyMessage)
     }
   }
+
+async function handleFunctionExecution(
+  event: MessageEvent<{ type: string; arguments: unknown }>,
+  tool: ClientTool,
+  sendTyMessage: (message: TaskyonMessage) => void | undefined,
+) {
+  const data = event.data
+  // with this we make sure, that we can also handle async functions :)
+  const result = await tool.function(data.arguments, { taskChain: [] })
+
+  // Send response to iframe
+  sendTyMessage({
+    type: 'functionResponse',
+    functionName: tool.name,
+    response: result,
+  })
+}
 
 async function initializeTaskyon(tools: ClientTool[], configuration: partialTyConfiguration) {
   console.log('initialize taskyon client...')

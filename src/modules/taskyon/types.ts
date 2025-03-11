@@ -657,4 +657,7 @@ export type Asyncify<T> = {
   [K in keyof T]: T[K] extends (...args: infer A) => infer R ? (...args: A) => Promise<R> : T[K]
 }
 
-export type WithRequired<T, K extends keyof T> = T & { [P in K]-?: T[P] }
+//export type WithRequired<T, K extends keyof T> = T & { [P in K]-?: T[P] }
+export type WithRequired<T, K extends keyof T> = Omit<T, K> & {
+  [P in K]-?: Exclude<T[P], undefined>
+}

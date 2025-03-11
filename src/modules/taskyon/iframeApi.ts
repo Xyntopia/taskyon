@@ -1,8 +1,9 @@
-import type { ToolBase, partialTaskDraft } from './types'
+import { type ToolBase, type partialTaskDraft } from './types'
 import type { llmSettings } from './types'
 import { deepMergeReactive } from '../utils'
 import { TaskyonMessage } from './iframeApiTypes'
 import type { TyTaskManager } from './taskManager'
+import { match } from 'ts-pattern'
 
 /*function stringifyIfNotString(obj: unknown): string | undefined {
     if (typeof obj === 'undefined') return undefined;
@@ -32,55 +33,63 @@ export function setupIframeApi(
             console.error('Message from unknown origin:', event.origin);
           }*/
           console.log('Message from unknown origin:', event.origin, event)
+          // we wrap every call to the API in a try clause in order to make sure it doesn't blow up ;)
           try {
-            // we wrap every call to the API in a try clause in order to make sure it doesn't blow up ;)
-            const msg = TaskyonMessage.safeParse(event.data)
-            if (msg.success && msg.data.type === 'task') {
-              console.log(`task was sent by ${event.origin}`, msg.data)
-              const newTask = {
-                ...msg.data.task,
-                content: msg.data.task.content,
-              }
-              void taskManager
-                .addPartialTask2Tree(newTask, undefined, undefined, false)
-                .catch((err) => console.warn(err))
-            } else if (msg.success && msg.data.type === 'configurationMessage') {
-              const newConfig = msg.data.conf
-              console.log('setting our configuration')
-              if (newConfig.llmSettings) {
-                // TODO: add an "update settings" function which can also handle
-                //       side effects such as setting the taskDrafts etc...
-                deepMergeReactive(llmSettings, newConfig.llmSettings, 'overwrite')
-
-                deepMergeReactive(appConfiguration, newConfig.appConfiguration, 'overwrite')
-              }
-              // and also set a possible signature as the api key!
-              if (llmSettings.selectedApi && newConfig.signatureOrKey) {
-                // we only set the API key, if it was provided by the
-                // parent app.
-                const newKey = newConfig.signatureOrKey
-                keys[llmSettings.selectedApi] = newKey
-              }
-            } else if (msg.success && msg.data.type === 'functionDescription') {
-              const { id, duplicateTaskName, ...rest } = msg.data
-              const newFunc: ToolBase = rest
-              console.log(`functionDescription was sent by ${event.origin}`, newFunc)
-              const newTask: partialTaskDraft = {
-                role: 'system',
-                name: id,
-                content: {
-                  type: 'message',
-                  data: JSON.stringify(newFunc),
-                },
-                label: ['function'],
-              }
-              void taskManager
-                .addPartialTask2Tree(newTask, undefined, undefined, duplicateTaskName)
-                .catch((err) => console.warn(err))
+            // make sure, our message conforms to ty
+            const res = TaskyonMessage.safeParse(event.data)
+            if (res.success) {
+              match(res.data)
+                .with({ type: 'task' }, (msg) => {
+                  console.log(`task was sent by ${event.origin}`, msg.task)
+                  void taskManager
+                    .addPartialTask2Tree(
+                      { ...msg.task, label: [event.origin] },
+                      undefined,
+                      undefined,
+                      false,
+                    )
+                    .catch((err) => console.warn(err))
+                })
+                .with({ type: 'functionDescription' }, (msg) => {
+                  const { id, duplicateTaskName, ...rest } = msg
+                  const newFunc: ToolBase = rest
+                  console.log(`functionDescription was sent by ${event.origin}`, newFunc)
+                  const newTask: partialTaskDraft = {
+                    role: 'system',
+                    name: id,
+                    content: {
+                      type: 'tooldefinition',
+                      data: newFunc,
+                    },
+                    label: [event.origin],
+                  }
+                  void taskManager
+                    .addPartialTask2Tree(newTask, undefined, undefined, duplicateTaskName)
+                    .catch((err) => console.warn(err))
+                })
+                .with({ type: 'configurationMessage' }, (msg) => {
+                  const newConfig = msg.conf
+                  console.log('setting our configuration')
+                  if (newConfig.llmSettings) {
+                    // TODO: add an "update settings" function which can also handle
+                    //       side effects such as setting the taskDrafts etc...
+                    deepMergeReactive(llmSettings, newConfig.llmSettings, 'overwrite')
+                    deepMergeReactive(appConfiguration, newConfig.appConfiguration, 'overwrite')
+                  }
+                  // and also set a possible signature as the api key!
+                  if (llmSettings.selectedApi && newConfig.signatureOrKey) {
+                    // we only set the API key, if it was provided by the
+                    // parent app.
+                    const newKey = newConfig.signatureOrKey
+                    keys[llmSettings.selectedApi] = newKey
+                  }
+                })
+              // we don't need "otherwise" here, because the other messages are currently handled by our
+              // remotefunctionhandler
+              // TODO:  BUT we want to chane this, and integrate the remote function handler with this API here as well...
             } else {
-              // TODO: also add this as error, so that it gets thrown back to the parent
               console.error('could not convert message to task:', {
-                msg,
+                res,
                 event,
               })
             }
