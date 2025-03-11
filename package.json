@@ -6,7 +6,8 @@
   "author": "thomas meschede / yeus <thomas.meschede@web.de>",
   "type": "module",
   "scripts": {
-    "build": "quasar build",
+    "build": "yarn build:lib && yarn build:app",
+    "build:app": "quasar build",
     "build:lib": "vite build --config vite.lib.config.ts",
     "dev": "quasar dev",
     "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .gitignore",
