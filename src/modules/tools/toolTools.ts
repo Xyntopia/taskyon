@@ -193,6 +193,7 @@ It leverages examples from existing tools—including their source code when ava
 export const createChooseTool = (taskManager: TyTaskManager) =>
   createTool({
     name: 'chooseTool',
+    renderOptions: { hideChat: true, hideLlm: false },
     description: 'Chooses and parameterizes a tool for execution based on provided context.',
     longDescription: `This tool first gathers a short list of all available tools (name and description only).
 It then selects one or more tools that seem relevant by checking if their names appear in the provided context.
@@ -218,7 +219,7 @@ Finally, it creates a chat completion task with the selected tools in the allowe
               createChatCompletionTask({
                 prompts: [
                   `
-Here is list of all the tools which are availble to you:
+Here is list of all the tools which are available to you:
 
 ${safeYamlDump(toolList)}
 
@@ -233,6 +234,7 @@ task.
                   },
                 },
               }),
+              createToolTask({ name: 'chooseTool', arguments: {} }),
             ],
           ])
         })
@@ -241,13 +243,10 @@ task.
           ({ content: { data: toolsChosen } }) => {
             return makeTaskResult([
               [
-                {
-                  role: 'assistant',
-                  content: {
-                    type: 'message',
-                    data: `These are the tools you have chosen: ${safeYamlDump(toolsChosen)}`,
-                  },
-                },
+                createChatCompletionTask({
+                  goal: 'ChooseTool',
+                  allowedTools: toolsChosen,
+                }),
               ],
             ])
           },
