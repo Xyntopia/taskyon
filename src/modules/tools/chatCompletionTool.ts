@@ -715,16 +715,13 @@ export async function createChatCompletionTool(
 
     // refactor this below and make it all explicit, without passing llmSettings...
     // now add goal-specific prompts...
-    if (!currentTask.priorID) {
+    const lastTaskBeforeChatCompletion = context.taskChain.at(-2)
+
+    if (!lastTaskBeforeChatCompletion) {
       throw new TaskProcessingError(
-        `chatCompletion Task needs a prior or parent Task to work! ${currentTask.id}`,
+        `chatCompletion Task needs preceding tasks to work! ${currentTask.id}`,
       )
     }
-    const lastTaskBeforeChatCompletion = await taskManager.getTask(currentTask.priorID)
-    if (!lastTaskBeforeChatCompletion)
-      throw new TaskProcessingError(
-        `chatCompletion Task needs a prior or parent Task to work! ${currentTask.id}`,
-      )
     const { chatCompletion, metaInfo: chatInfo } = await processChatTask(
       allowedTools ?? [],
       toolDefs,
