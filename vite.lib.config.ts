@@ -1,11 +1,33 @@
 import { defineConfig } from 'vite'
 import path from 'path'
 import esbuild from 'esbuild'
+import dts from 'vite-plugin-dts'
 
 const libPath = path.resolve(__dirname, './src/modules/client/tyClient.ts')
 console.log('building', libPath)
 
 export default defineConfig({
+  plugins: [
+    dts({
+      insertTypesEntry: true,
+      include: ['src/modules/client/tyClient.ts'],
+      outDir: 'public/lib',
+      rollupTypes: true, // merge all declarations in a singe file
+    }),
+    /* use the following to inclde "everything :)"
+      insertTypesEntry: true,
+      rollupTypes: true,
+      copyDtsFiles: false, // Important for single file output
+      include: ['src/modules/client', 'src/modules/taskyon'],
+      outDir: 'public/lib',
+      compilerOptions: {
+        declarationMap: false,
+      },
+      afterBuild: () => {
+        // Optional: Clean up residual files
+      },
+      */
+  ],
   build: {
     minify: false,
     copyPublicDir: false,
