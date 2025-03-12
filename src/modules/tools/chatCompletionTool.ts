@@ -243,7 +243,6 @@ function parseYamlResponse2Record(message: string): Record<string, unknown> {
   }
 
   // TODO: if we haven't found anything,  search for anything that looks like yaml!!
-
   let parsedYaml: unknown = undefined
   try {
     // Parse the extracted or original YAML content
@@ -255,22 +254,7 @@ function parseYamlResponse2Record(message: string): Record<string, unknown> {
       error: err instanceof Error ? err.message : JSON.stringify(err),
     })
   }
-  /* TODO: this is currently too difficult for LLMs, so we are doing this manually
-  which is a lot more robust. We try to keep structured responses as simple as possible
-  const structuredResponseResult =
-    await StructuredResponse.safeParseAsync(parsedYaml);
-
-  if (!structuredResponseResult.success) {
-    // TODO: as our object is completly partial, this never gets caled
-    // right now..  do we `need` to have any checks here?
-    throw new TaskProcessingError(
-      'ZOD parse error: Unknown response object type:',
-      structuredResponseResult.error.format(),
-    );
-  }*/
-  if (parsedYaml !== null && typeof parsedYaml === 'object' && !Array.isArray(parsedYaml))
-    return parsedYaml as Record<string, unknown>
-  throw new TaskProcessingError('Parse Error:  the structured response must have keys and values!')
+  return parsedYaml as Record<string, unknown>
 }
 
 // we use this to decide whether we should call a function or to continue
