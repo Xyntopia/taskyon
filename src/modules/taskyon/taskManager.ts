@@ -53,8 +53,10 @@ export async function findRootTask(taskId: string, getTask: TyTaskManager['getTa
 
 async function taskContentHash(task: Omit<TaskNode, 'id'>) {
   console.log('generating new hash ID for task')
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id, ...taskWithoutId } = task
   // generate this hash ID to check of there are any duplicate tasks or anything like that...
-  const hashId = await sha256UrlSafeHash(task)
+  const hashId = await sha256UrlSafeHash(taskWithoutId)
   return hashId
 }
 
