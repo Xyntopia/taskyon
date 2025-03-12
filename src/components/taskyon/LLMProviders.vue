@@ -61,7 +61,12 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
               filled
               :model-value="state.keys[apiName] || ''"
               :label="`${apiName} API key`"
-              @update:model-value="(value) => (state.keys.apiName = value || '')"
+              @update:model-value="
+                (value) => {
+                  console.log('switch key', value)
+                  state.keys[apiName] = value || ''
+                }
+              "
             >
             </SecretInput>
           </div>
