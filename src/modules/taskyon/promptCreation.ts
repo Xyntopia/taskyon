@@ -135,7 +135,7 @@ const string2OpenAiMessage =
         }) as OpenAI.ChatCompletionMessageParam,
     )
 
-export function calculateCompletionVariables(
+function calculateCompletionVariables(
   allowedTools: string[],
   useToolChat: boolean,
   lastMessage: unknown,
@@ -183,18 +183,27 @@ export function addPrompts(
       toolResult: string
     }
   },
-  variables: {
-    format: string
-    message: string
-    schema: string
-    tools: string
-  },
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   prompts: string[],
+  allowedTools: string[],
+  lastMessage: unknown,
   goal?: Goals,
+  schema?: Record<string, unknown>,
 ) {
   // Check if task has tools and OpenAI tools are not enabled
   //console.log('Creating chat prompts');
+  const useToolChat = allowedTools.length > 0 && !options.enableOpenAiTools
+
+  const variables = calculateCompletionVariables(
+    allowedTools,
+    useToolChat,
+    lastMessage,
+    goal,
+    toolCollection,
+  )
+
+  // override our schema variable if one was given explicitly
+  if (schema) variables.schema = safeYamlDump(schema)
 
   const modifiedOpenAIConversationThread = structuredClone(openAIConversationThread)
   const prependMessagesList: string[] = []
@@ -247,6 +256,9 @@ export function addPrompts(
       appendSystemMessage.push(options.taskChatTemplates.schemaReminder)
   } else {
     appendMessagesList.push(...prompts)
+    if (schema) {
+      appendSystemMessage.push(options.taskChatTemplates.schemaReminder)
+    }
   }
 
   const converter = string2OpenAiMessage(variables)

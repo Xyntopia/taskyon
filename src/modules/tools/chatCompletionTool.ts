@@ -8,7 +8,6 @@ import {
 import type { Goals } from '../taskyon/promptCreation'
 import {
   addPrompts,
-  calculateCompletionVariables,
   generateOpenAIToolDeclarations,
   yesnoToBoolean,
 } from '../taskyon/promptCreation'
@@ -66,6 +65,7 @@ export async function processChatTask(
   streamTracker: (chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => void,
   prompts: string[],
   goal?: Goals,
+  schema?: Record<string, unknown>,
 ) {
   //TODO: this code is duplicated, can we do this better?
   const api = getApiConfigCopy(llmSettings, configuration.chatApi)
@@ -84,6 +84,7 @@ export async function processChatTask(
   console.log('execute chat completion tool with prompt:', currentTask)
   //TODO: we can create more things here like giving it context form other tasks, lookup
   //      main objective, previous tasks etc....
+  //      actualy: this would be great for a new tool ;)
   // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
   let openAIConversationThread = await chatThreadFromTaskId(
     taskManager,
@@ -92,24 +93,22 @@ export async function processChatTask(
     toolDefs,
   )
 
-  const variables = calculateCompletionVariables(
+  const msgs = addPrompts(
+    toolDefs,
+    llmSettings,
+    openAIConversationThread,
+    prompts,
     allowedTools,
-    allowedTools.length > 0 && !llmSettings.enableOpenAiTools,
     lastTaskBeforeChatCompletion.content.data,
     goal,
-    toolDefs,
+    schema,
   )
 
-  // TODO: we need to abstract the addPrompts function quiet a lot..
-  //       e.g. split the generation of variables and add a function that can do that..
-  const msgs = addPrompts(toolDefs, llmSettings, variables, openAIConversationThread, prompts, goal)
   openAIConversationThread = [
     ...msgs.prependMessages,
     ...msgs.modifiedOpenAIConversationThread,
     ...msgs.appendMessages,
   ]
-
-  // TODO: save our "openAIConversationThread" inside debugdb for debuggin
 
   let tools: OpenAI.ChatCompletionTool[] = []
   if (llmSettings.enableOpenAiTools) {
@@ -123,8 +122,6 @@ export async function processChatTask(
       api,
       llmSettings.siteUrl,
       apiKey,
-      // TODO: if the task runs in the "foreground", stream it :)
-      // task.id == llmSettings.selectedTaskId ? true : false, // this doesn't work, for some reason it doesn't always detect if we're running something in the forground...
       true, // for now, we always want to stream our task...
       streamTracker, // track incoming streams...
       shouldInterrupt,
@@ -743,6 +740,7 @@ export async function createChatCompletionTool(
       },
       prompts ?? [],
       goal,
+      schema,
     )
 
     // parse the response into our own type ...
