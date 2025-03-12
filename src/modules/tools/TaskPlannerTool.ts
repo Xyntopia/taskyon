@@ -1,26 +1,53 @@
-import { createTool, type toolContext } from '../taskyon/tools'
+import { createTool } from '../taskyon/tools'
 
-// TODO: update short & long description so that an LLM AI can use this tool
-// TODO: make more than 1 level of subtasks possible. so taht we immediatly create sub & subsub tasks..
-export const taskPlannerTool = createTool({
-  function: ({ maxSubTaskNum }, context: toolContext) => {
-    console.log(`Split task into ${maxSubTaskNum} subtasks`, context)
-    return ''
-  },
-  description:
-    'This tool can be used to split up a task into sub-tasks which then get worked on each individually',
-  longDescription: `TODO...`,
+export const taskPlanner = createTool({
   name: 'taskPlanner',
-  renderOptions: { hideLlm: true },
+  description:
+    'Organizes complex tasks into groups that can be worked on independently. Use this tool only when breaking down a task into subtasks makes sense—not for simple tasks.',
+  longDescription: `This tool accepts a list of groups of tasks. Each group is a series of tasks that should be completed in order.
+Only use this tool when the task is complex enough to need a breakdown into multiple steps. For simple tasks, no breakdown is required.
+
+When using this tool, please explain why it is necessary to split the task into subtasks. If you have different sets of tasks that can be done concurrently, provide each set as a separate group.
+Note: This tool only supports one level of grouping. For further breakdown, use another planning step.`,
   parameters: {
     type: 'object',
     properties: {
-      maxSubTaskNum: {
-        type: 'integer',
-        description: 'Maximum number of subtasks to create.',
-        default: 5,
+      tasks: {
+        type: 'array',
+        items: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+        description:
+          'A list of groups of tasks. Each inner list represents tasks that need to be done in sequence. Multiple groups indicate that these tasks can be worked on in parallel.',
       },
     },
-    required: [],
+    required: ['tasks'],
   } as const,
+  code: `
+    async ({ tasks }) => {
+      // Format each group for clarity.
+      const groupsFormatted = tasks
+        .map((group, index) => \`Group \${index + 1}: \${group.join(' -> ')}\`)
+        .join('\\n');
+
+      return makeTaskResult([
+        [
+          {
+            role: 'assistant',
+            content: {
+              type: 'message',
+              data: \`Task Breakdown:\\n\${groupsFormatted}\`,
+            },
+          },
+          createChatCompletionTask({
+            prompts: [
+              \`Review the following task breakdown:\\n\${groupsFormatted}\\nExplain why it is necessary to break this task into multiple subtasks. Confirm if the plan works or suggest improvements.\`,
+            ],
+            goal: 'PlanTasks',
+          }),
+        ],
+      ]);
+    }
+  `,
 })
