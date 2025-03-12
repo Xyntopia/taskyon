@@ -130,8 +130,7 @@ export const issueListGenerator = createTool({
     'Converts a text message into a list of issues and then generates a UI for review and GitLab submission.',
   longDescription: `TODO...`,
   parameters: {
-    type: 'object',
-    properties: {},
+    type: 'null',
   } as const,
   function: (params, { taskChain }) =>
     // use pattern matching on the last task

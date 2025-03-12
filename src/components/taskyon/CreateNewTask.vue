@@ -192,6 +192,13 @@
           </q-tooltip>
         </ToggleButton>
         <ToggleButton
+          dense
+          outline
+          :icon="mdiTools"
+          label="use tools"
+          v-model="state.llmSettings.enableToolChooser"
+        />
+        <ToggleButton
           v-if="expertMode"
           v-model="state.llmSettings.enableOpenAiTools"
           on-icon="svguse:/taskyon_mono_opt.svg#taskyon"
@@ -227,33 +234,8 @@
         <!--Allowed Tools Selection-->
         <q-separator class="q-my-sm" />
         <q-item class="row items-center">
-          <q-icon :name="mdiTools" size="sm" />
-          <q-expansion-item
-            v-model="state.allowedToolsExpand"
-            class="col"
-            dense
-            :icon="matHandyman"
-            expand-icon-toggle
-            label="Tools"
-          >
-            <template #header>
-              <div class="row items-center q-gutter-sm">
-                <q-btn
-                  dense
-                  :icon="matChecklist"
-                  label="toggle tools"
-                  @click="toggleSelectedTools"
-                />
-                <q-btn
-                  v-if="state.appConfiguration.expertMode"
-                  dense
-                  flat
-                  :icon="matEdit"
-                  label="> manage tools"
-                  to="tools"
-                />
-              </div>
-            </template>
+          <q-icon size="sm" :name="mdiTools" />
+          <q-expansion-item v-model="state.allowedToolsExpand" dense label="Select Tools">
             <q-item-section>
               <q-option-group
                 v-model="state.llmSettings.allowedTools"
@@ -291,7 +273,7 @@
 
 <script setup lang="ts">
 import { computed, ref, toRaw, toRefs } from 'vue'
-import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
+import { createToolTask, getDefaultParametersForTool } from 'src/modules/taskyon/tools'
 import { partialTaskDraft } from 'src/modules/taskyon/types'
 import { getApiConfig, llmSettings, getCurrentModel } from 'src/modules/taskyon/types'
 import '@quasar/quasar-ui-qmarkdown/dist/index.css'
@@ -311,9 +293,6 @@ import {
   matSave,
   matUploadFile,
   matChat,
-  matHandyman,
-  matEdit,
-  matChecklist,
   matSmartToy,
   matNavigateNext,
   matKeyboardArrowUp,
@@ -435,16 +414,6 @@ async function setTaskType(tasktype: string | undefined | null) {
       data: '',
     }
   }
-}
-
-async function toggleSelectedTools() {
-  if (state.llmSettings.allowedTools) {
-    if (state.llmSettings.allowedTools.length > 0) {
-      state.llmSettings.allowedTools = []
-      return
-    }
-  }
-  state.llmSettings.allowedTools = Object.keys(await getAllTools())
 }
 
 const currentnewTask = computed(() => {
@@ -580,13 +549,22 @@ async function addNewTask(execute = true) {
   newTaskChain.push({ ...currentnewTask.value })
 
   if (currentnewTask.value.content.type === 'message') {
-    const completionTask = createChatCompletionTask({
-      model: currentModel.value,
-      allowedTools: state.llmSettings.allowedTools || [],
-      goal: state.llmSettings.allowedTools.length == 0 ? 'SimpleCompletion' : 'ChooseTool',
-    })
-    newTaskChain.push(completionTask)
-    console.log('adding message completion task:', currentnewTask.value.content.data)
+    if (state.llmSettings.enableToolChooser) {
+      const chooseTask = createToolTask({
+        name: 'chooseTool',
+        arguments: {},
+      })
+      newTaskChain.push(chooseTask)
+      console.log('adding message completion task:', currentnewTask.value.content.data)
+    } else {
+      const completionTask = createChatCompletionTask({
+        model: currentModel.value,
+        allowedTools: state.llmSettings.allowedTools || [],
+        goal: state.llmSettings.allowedTools.length == 0 ? 'SimpleCompletion' : 'ChooseTool',
+      })
+      newTaskChain.push(completionTask)
+      console.log('adding message completion task:', currentnewTask.value.content.data)
+    }
   }
 
   // add taskchain to taskManager

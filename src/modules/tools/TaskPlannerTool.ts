@@ -51,3 +51,5 @@ Note: This tool only supports one level of grouping. For further breakdown, use 
     }
   `,
 })
+
+export const taskOrganizationTools = [taskPlanner]

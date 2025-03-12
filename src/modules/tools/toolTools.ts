@@ -1,7 +1,10 @@
+import type { taskResult } from '../taskyon/tools'
 import { craeteToolJsonSchema, createTool, createToolTask, makeTaskResult } from '../taskyon/tools'
 import { ToolBase } from '../taskyon/types'
 import { createChatCompletionTask } from './chatCompletionTool'
 import { type TyTaskManager } from '../taskyon/taskManager'
+import { match, P } from 'ts-pattern'
+import { safeYamlDump } from '../yamlUtils'
 
 export const createToolSearcher = (taskManager: TyTaskManager) =>
   createTool({
@@ -187,63 +190,73 @@ It leverages examples from existing tools—including their source code when ava
   name: 'toolCreationWizard',
 })
 
-export const createChooseAndExecuteTool = (taskManager: TyTaskManager) =>
+export const createChooseTool = (taskManager: TyTaskManager) =>
   createTool({
-    name: 'chooseAndExecuteTool',
+    name: 'chooseTool',
     description: 'Chooses and parameterizes a tool for execution based on provided context.',
     longDescription: `This tool first gathers a short list of all available tools (name and description only).
 It then selects one or more tools that seem relevant by checking if their names appear in the provided context.
 Finally, it creates a chat completion task with the selected tools in the allowed list.`,
     parameters: {
-      type: 'object',
-      properties: {
-        context: {
-          type: 'string',
-          description: 'Context information to help select the relevant tool(s).',
-        },
-      },
-      required: ['context'],
+      type: 'null',
     } as const,
-    function: async ({ context }) => {
-      // 1. Retrieve all tools and create a short list (only name and description).
-      const allTools = await taskManager.updateToolDefinitions(true)
-      const toolList = Object.values(allTools).map((t) => ({
-        name: t.name,
-        description: t.description,
-      }))
+    function: async (params, { taskChain }) => {
+      console.log('choose tool!')
+      // use pattern matching on the last task
+      const result = await match(taskChain.at(-2))
+        .returnType<taskResult | Promise<taskResult>>()
+        .with({ content: { data: P.string } }, async () => {
+          console.log('1. Retrieve all tools and create a short list (only name and description).')
+          const allTools = await taskManager.updateToolDefinitions(true)
+          const toolList = Object.values(allTools).map((t) => ({
+            name: t.name,
+            description: t.description,
+          }))
+          const toolNum = 3
+          return makeTaskResult([
+            [
+              createChatCompletionTask({
+                prompts: [
+                  `
+Here is list of all the tools which are availble to you:
 
-      // 2. Choose one or several tools based on the provided context.
-      // Here we do a simple check: if the context string contains the tool name (case-insensitive), we select that tool.
-      const lowerContext = context.toLowerCase()
-      const selectedTools: string[] = []
-      for (const tool of toolList) {
-        if (lowerContext.includes(tool.name.toLowerCase())) {
-          selectedTools.push(tool.name)
-        }
-      }
-      // Default to the first tool if no match is found.
-      if (selectedTools.length === 0 && toolList.length > 0) {
-        selectedTools.push(toolList[0]!.name)
-      }
+${safeYamlDump(toolList)}
 
-      // 3. Create a chatCompletion task with the selected tools as the only allowed options.
-      const chatCompletionTask = createChatCompletionTask({
-        allowedTools: selectedTools,
-        goal: 'ChooseTool',
-      })
-
-      // Return a composite result containing the tool list, selected tools, and the chat completion task.
-      return makeTaskResult([
-        [
-          {
-            role: 'assistant',
-            content: {
-              type: 'message',
-              data: `Available tools: ${JSON.stringify(toolList)}. Selected tool(s): ${selectedTools.join(', ')}.`,
-            },
+Can you please choose ${toolNum} which you think might be relevant for this
+task.
+`,
+                ],
+                schema: {
+                  type: 'array',
+                  items: {
+                    type: 'string',
+                  },
+                },
+              }),
+            ],
+          ])
+        })
+        .with(
+          { content: { type: 'structured', data: P.array(P.string) } },
+          ({ content: { data: toolsChosen } }) => {
+            return makeTaskResult([
+              [
+                {
+                  role: 'assistant',
+                  content: {
+                    type: 'message',
+                    data: `These are the tools you have chosen: ${safeYamlDump(toolsChosen)}`,
+                  },
+                },
+              ],
+            ])
           },
-          chatCompletionTask,
-        ],
-      ])
+        )
+        .otherwise(() => {
+          throw new Error(
+            'we need a preceding message task in order to proceed with this function!',
+          )
+        })
+      return result
     },
   })

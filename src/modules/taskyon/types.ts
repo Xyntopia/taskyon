@@ -495,6 +495,12 @@ export const llmSettings = z.object({
     .describe(
       'A task template which can be provided for new tasks (E.g. which model to use). This is important when embedding tasyon in another webpage.',
     ),
+  enableToolChooser: z
+    .boolean()
+    .default(true)
+    .describe(
+      'Enable the standard tool chooser. This function enables taskyon to decide if and then which tool it should use for the task.',
+    ),
   taskDraft: partialTaskDraft
     .default({
       role: 'user',

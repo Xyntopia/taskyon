@@ -14,11 +14,17 @@ import { createChatCompletionTool } from '../tools/chatCompletionTool'
 import { getDatabase } from '../pglite.api'
 import { createEnhancedCrudWrapper } from '../crudWrapper'
 import type OpenAI from 'openai'
-import { createAddNewToolTool, createToolSearcher, toolCreationWizard } from '../tools/toolTools'
+import {
+  createAddNewToolTool,
+  createChooseTool,
+  createToolSearcher,
+  toolCreationWizard,
+} from '../tools/toolTools'
 import { createStream } from '../frpBus'
 import { smallHelperTools } from '../tools/helperCollection'
 import { useFullSmallTools } from '../tools/useFullSmallTools'
 import { devTools } from '../tools/devTools'
+import { taskOrganizationTools } from '../tools/TaskPlannerTool'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -73,6 +79,7 @@ export async function initTaskyon(
     ...smallHelperTools,
     ...useFullSmallTools,
     ...devTools,
+    ...taskOrganizationTools,
     await createChatCompletionTool(
       llmSettings,
       taskManagerInstance,
@@ -81,6 +88,7 @@ export async function initTaskyon(
       streamCallback,
     ),
     createToolSearcher(taskManagerInstance),
+    createChooseTool(taskManagerInstance),
     await createAddNewToolTool(),
     {
       function: async ({ filename }: { filename: string }) => {
