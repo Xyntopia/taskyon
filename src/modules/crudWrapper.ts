@@ -1,3 +1,5 @@
+import { decryptObject, deriveKey, encryptObject } from './crypto'
+import { randomBytes } from '@noble/ciphers/webcrypto'
 import type { Stream } from './frpBus'
 import { createStream, filter } from './frpBus'
 import type { PgLiteOptions } from './pglite.api'
@@ -312,3 +314,105 @@ export const createEnhancedCrudWrapper = async <T>(
 }
 
 export type EnhancedCrudWrapper<T> = Awaited<ReturnType<typeof createEnhancedCrudWrapper<T>>>
+
+// TODO: protect the masterPW better, by somehow not saving it in memory???
+//       maybe we can use a masterPW hash or somthing like that? or something with a salt?
+//       I dont know what strategies are out there that we could employ...
+export const withEncryption = <T>(
+  base: CrudWrapper<{ iv: string; ciphertext: string; salt: string; data: T }>,
+  deriveKey: (masterPassword: string, salt: string, id: string) => Uint8Array,
+  encryptObject: (obj: unknown, key: Uint8Array) => { iv: string; ciphertext: string },
+  decryptObject: (
+    { iv, ciphertext }: { iv: string; ciphertext: string },
+    key: Uint8Array,
+  ) => unknown,
+  masterPassword: string,
+) => {
+  return {
+    async set(id: string | number, data: T): Promise<void> {
+      const salt = randomBytes(16).toString() // Generate a unique salt
+      const key = deriveKey(masterPassword, salt, id.toString())
+      const encrypted = encryptObject(data, key)
+      await base.set(id, { ...encrypted, salt, data })
+    },
+
+    async get(id: string | number): Promise<T | null> {
+      const encryptedData = await base.get(id)
+      if (!encryptedData) return null
+      const { salt } = encryptedData
+      const key = deriveKey(masterPassword, salt, id.toString())
+      return decryptObject(encryptedData, key) as T
+    },
+
+    async delete(id: string | number): Promise<void> {
+      await base.delete(id)
+    },
+
+    async list(): Promise<Row<T>[]> {
+      const encryptedRows = await base.list()
+      return Promise.all(
+        encryptedRows.map((row) => {
+          const { salt } = row.data
+          const key = deriveKey(masterPassword, salt, row.id.toString())
+          const data = decryptObject(row.data, key) as T
+          return { id: row.id, data }
+        }),
+      )
+    },
+
+    async clear(): Promise<void> {
+      await base.clear()
+    },
+  }
+}
+
+export const withSecretStore = <T>(
+  base: CrudWrapper<{ iv: string; ciphertext: string; salt: string; data: Record<string, T> }>,
+  masterPassword: string,
+) => {
+  const encryptedCrud = withEncryption<Record<string, T>>(
+    base,
+    deriveKey,
+    encryptObject,
+    decryptObject,
+    masterPassword,
+  )
+
+  return {
+    async setSecret(id: string | number, secretName: string, secretData: T): Promise<void> {
+      // Get the existing secrets for the ID
+      const existingSecrets = (await encryptedCrud.get(id)) || {}
+      // Add or update the secret
+      existingSecrets[secretName] = secretData
+      // Save the updated secrets
+      await encryptedCrud.set(id, existingSecrets)
+    },
+
+    async getSecret(id: string | number, secretName: string): Promise<T | null> {
+      // Get the existing secrets for the ID
+      const existingSecrets = await encryptedCrud.get(id)
+      // Return the specific secret if it exists
+      return existingSecrets ? existingSecrets[secretName] || null : null
+    },
+
+    async deleteSecret(id: string | number, secretName: string): Promise<void> {
+      // Get the existing secrets for the ID
+      const existingSecrets = await encryptedCrud.get(id)
+      if (existingSecrets && secretName in existingSecrets) {
+        // Delete the specific secret
+        delete existingSecrets[secretName]
+        // Save the updated secrets
+        await encryptedCrud.set(id, existingSecrets)
+      }
+    },
+
+    async listSecrets(id: string | number): Promise<Record<string, T>> {
+      // Get all secrets for the ID
+      return (await encryptedCrud.get(id)) || {}
+    },
+
+    async clear(): Promise<void> {
+      await encryptedCrud.clear()
+    },
+  }
+}

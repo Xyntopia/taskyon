@@ -60,6 +60,14 @@ export async function initTaskyon(
     new Map<string, TaskNodeMeta>(),
   )
 
+  const secretStore = await createEnhancedCrudWrapper<string>(
+    await getDatabase('taskyon'),
+    {
+      tableName: 'vault',
+    },
+    new Map<string, TaskNodeMeta>(),
+  )
+
   const taskProcessingStream = createStream<TyTaskStreamData>()
 
   // TODO: possibly move this into an "upper level?"

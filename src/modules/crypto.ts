@@ -89,17 +89,14 @@ export function parseJwt(token: string | undefined): Record<string, unknown> | u
   }
 }
 
-export function deriveKey(password: string, salt: string, pluginHash: string): Uint8Array {
-  return pbkdf2(sha256, utf8ToBytes(password + pluginHash), utf8ToBytes(salt), {
+export function deriveKey(masterPassword: string, salt: string, id: string): Uint8Array {
+  return pbkdf2(sha256, utf8ToBytes(masterPassword + id), utf8ToBytes(salt), {
     c: 100000,
     dkLen: 32,
   })
 }
 
-export function encryptObject(
-  obj: Record<string, unknown>,
-  key: Uint8Array,
-): { iv: string; ciphertext: string } {
+export function encryptObject(obj: unknown, key: Uint8Array): { iv: string; ciphertext: string } {
   const plainText = JSON.stringify(obj)
   const iv = randomBytes(24) // Noble uses 24-byte nonce for GCM
   const aes = gcm(key, iv)
@@ -114,7 +111,7 @@ export function encryptObject(
 export function decryptObject(
   { iv, ciphertext }: { iv: string; ciphertext: string },
   key: Uint8Array,
-): Record<string, unknown> {
+): unknown {
   const aes = gcm(key, base64UrlToUint8Array(iv))
   const decrypted = aes.decrypt(base64UrlToUint8Array(ciphertext))
   return JSON.parse(bytesToUtf8(decrypted))
