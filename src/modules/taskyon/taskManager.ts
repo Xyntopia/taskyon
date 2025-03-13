@@ -23,7 +23,7 @@ import {
   withLocking,
   type CrudWrapper,
 } from '../crudWrapper'
-import { sha256UrlSafeHash } from '../hashing'
+import { sha256UrlSafeHash } from '../crypto'
 import { urlSafeBase64Uuid } from '../crypto'
 import { safeYamlDump } from '../yamlUtils'
 
@@ -104,6 +104,7 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
   // TODO: make sure, we add the correct file type here!
   async function addFile(fileMapping: Partial<FileMappingDocType>) {
     const uuidFileMapping: FileMappingDocType = {
+      // TODO: replace this with a content Hash as well!
       uuid: urlSafeBase64Uuid(),
       ...fileMapping,
     }

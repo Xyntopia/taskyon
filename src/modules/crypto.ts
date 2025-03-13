@@ -4,6 +4,11 @@ import { signAsync, getPublicKeyAsync, verifyAsync } from '@noble/ed25519'
 import { base64UrlToUint8Array, uint8ArrayToBase64Url, urlSafe64BitString } from './encoding'
 import { v1 as uuidv1 } from 'uuid'
 import { Buffer } from 'buffer'
+import { pbkdf2 } from '@noble/hashes/pbkdf2'
+import { sha256 } from '@noble/hashes/sha256'
+import { randomBytes } from '@noble/ciphers/webcrypto'
+import { gcm } from '@noble/ciphers/aes'
+import { utf8ToBytes, bytesToUtf8 } from '@noble/ciphers/utils'
 
 // Generate a new seed phrase (mnemonic)
 export function generateSeedPhrase(): string {
@@ -84,45 +89,35 @@ export function parseJwt(token: string | undefined): Record<string, unknown> | u
   }
 }
 
-// Encrypt data with a symmetric key
-export async function encryptData(data: Uint8Array, key: CryptoKey): Promise<Uint8Array> {
-  const iv = crypto.getRandomValues(new Uint8Array(12)) // 96-bit IV for AES-GCM
-  const encryptedData = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data)
-  return new Uint8Array([...iv, ...new Uint8Array(encryptedData)])
+export function deriveKey(password: string, salt: string, pluginHash: string): Uint8Array {
+  return pbkdf2(sha256, utf8ToBytes(password + pluginHash), utf8ToBytes(salt), {
+    c: 100000,
+    dkLen: 32,
+  })
 }
 
-// Decrypt data with a symmetric key
-export async function decryptData(encrypted: Uint8Array, key: CryptoKey): Promise<Uint8Array> {
-  const iv = encrypted.slice(0, 12) // Extract the IV (first 12 bytes)
-  const ciphertext = encrypted.slice(12) // The rest is the ciphertext
-  const decryptedData = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
-  return new Uint8Array(decryptedData)
+export function encryptObject(
+  obj: Record<string, unknown>,
+  key: Uint8Array,
+): { iv: string; ciphertext: string } {
+  const plainText = JSON.stringify(obj)
+  const iv = randomBytes(24) // Noble uses 24-byte nonce for GCM
+  const aes = gcm(key, iv)
+  const ciphertext = aes.encrypt(utf8ToBytes(plainText))
+
+  return {
+    iv: uint8ArrayToBase64Url(iv),
+    ciphertext: uint8ArrayToBase64Url(ciphertext),
+  }
 }
 
-// Generate a symmetric key for AES-GCM
-export async function generateSymmetricKey(): Promise<CryptoKey> {
-  return await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
-    'encrypt',
-    'decrypt',
-  ])
-}
-
-// Encrypt an object and serialize it as a string
-export async function encryptObject(obj: Record<string, unknown>, key: CryptoKey): Promise<string> {
-  const serializedData = new TextEncoder().encode(JSON.stringify(obj))
-  const encryptedData = await encryptData(serializedData, key)
-  return uint8ArrayToBase64Url(encryptedData)
-}
-
-// Decrypt an encrypted string back into an object
-export async function decryptObject(
-  encryptedString: string,
-  key: CryptoKey,
-): Promise<Record<string, unknown>> {
-  const encryptedData = base64UrlToUint8Array(encryptedString)
-  const decryptedData = await decryptData(encryptedData, key)
-  const jsonString = new TextDecoder().decode(decryptedData)
-  return JSON.parse(jsonString) as Record<string, unknown>
+export function decryptObject(
+  { iv, ciphertext }: { iv: string; ciphertext: string },
+  key: Uint8Array,
+): Record<string, unknown> {
+  const aes = gcm(key, base64UrlToUint8Array(iv))
+  const decrypted = aes.decrypt(base64UrlToUint8Array(ciphertext))
+  return JSON.parse(bytesToUtf8(decrypted))
 }
 
 export function urlSafeBase64Uuid() {
@@ -136,4 +131,13 @@ export function urlSafeBase64Uuid() {
   const base64Uuid = urlSafe64BitString(bufferUuid)
 
   return base64Uuid
+}
+
+export async function sha256UrlSafeHash(obj: unknown) {
+  const json = JSON.stringify(obj)
+  const encoder = new TextEncoder()
+  const data = encoder.encode(json)
+
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  return urlSafe64BitString(Buffer.from(hashBuffer))
 }

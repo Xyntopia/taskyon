@@ -48,7 +48,7 @@ export function uint8ArrayToBase64Url(uint8Array: Uint8Array) {
 
 export function base64UrlToUint8Array(base64UrlString: unknown) {
   if (typeof base64UrlString !== 'string') {
-    throw new TypeError('Expected base64UrlString to be a string');
+    throw new TypeError('Expected base64UrlString to be a string')
   }
   // Add padding '=' if necessary
   const padding = '='.repeat((4 - (base64UrlString.length % 4)) % 4)
