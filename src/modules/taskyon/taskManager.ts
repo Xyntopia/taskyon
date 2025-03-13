@@ -1,5 +1,5 @@
 import type { TaskNodeMeta } from './types'
-import { type TaskNode, ToolBase, TaskListType, type partialTaskDraft } from './types'
+import { TaskNode, ToolBase, TaskListType, type partialTaskDraft } from './types'
 import {
   type TaskyonDatabase,
   type FileMappingDocType,
@@ -51,10 +51,14 @@ export async function findRootTask(taskId: string, getTask: TyTaskManager['getTa
   return currentTaskID // Return null if the loop exits without finding a root task
 }
 
-async function taskContentHash(task: Omit<TaskNode, 'id'>) {
+const TaskWithoutId = TaskNode.omit({ id: true }).strip()
+
+async function taskContentHash(task: Partial<TaskNode>) {
   console.log('generating new hash ID for task')
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { id, ...taskWithoutId } = task
+  // we need to verify that our task is of type TaskNode without ID and we do this using Zod :)
+  // we also want to make sure, that we only strip away anything which isn't official
+  // part of our tasknode..
+  const taskWithoutId = TaskWithoutId.parse(task)
   // generate this hash ID to check of there are any duplicate tasks or anything like that...
   const hashId = await sha256UrlSafeHash(taskWithoutId)
   return hashId
