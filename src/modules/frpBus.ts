@@ -69,3 +69,19 @@ export function startWith<T>(source: Stream<T> | Asyncify<Stream<T>>, initial: T
     },
   }
 }
+
+/**
+ * Merges streams of different types into a single stream emitting a union type.
+ * Usage: merge(streamA, streamB) → Stream<A | B>
+ */
+export function merge<T extends unknown[]>(
+  ...sources: { [K in keyof T]: Stream<T[K]> | Asyncify<Stream<T[K]>> }
+): Stream<T[number]> {
+  const { stream, emit } = createStream<T[number]>()
+
+  sources.forEach((source) => {
+    void source.subscribe((value) => emit(value)) // Full type safety
+  })
+
+  return stream
+}
