@@ -367,9 +367,43 @@ export const withEncryption = (
 export const withSecretStore = (
   base: CrudWrapper<EncryptedDataRow>,
   publicRecoveryKey: CryptoKey,
-  getSessionKey: () => Promise<CryptoKey>,
 ) => {
+  type NewSecretRequest = {
+    type: 'newSecret'
+    payload: { id: string | number; secretName: string }
+    respond: (response: string) => void
+  }
+
+  type SessionKeyRequest = {
+    type: 'sessionKey'
+    payload: null
+    respond: (response: CryptoKey) => void
+  }
+
+  type RequestInfo = NewSecretRequest | SessionKeyRequest
+
+  const { stream, emit } = createStream<RequestInfo>()
+
+  async function getSessionKey(): Promise<CryptoKey> {
+    return new Promise<CryptoKey>((resolve) => {
+      emit({
+        type: 'sessionKey',
+        payload: null,
+        respond: resolve, // now resolve expects a CryptoKey
+      })
+    })
+  }
   const encryptedCrud = withEncryption(base, publicRecoveryKey, getSessionKey)
+
+  async function getNewSecret(id: string | number, secretName: string): Promise<string> {
+    return new Promise((resolve) => {
+      emit({
+        type: 'newSecret',
+        payload: { id, secretName },
+        respond: resolve, // Pass the resolve function as a callback
+      })
+    })
+  }
 
   type SecretData = Record<string, string>
   return {
@@ -386,7 +420,13 @@ export const withSecretStore = (
       // Get the existing secrets for the ID
       const existingSecrets = (await encryptedCrud.get(id)) as SecretData
       // Return the specific secret if it exists
-      return existingSecrets ? existingSecrets[secretName] || null : null
+      let secret = existingSecrets ? existingSecrets[secretName] || null : null
+
+      if (!secret) {
+        secret = await getNewSecret(id, secretName)
+        await this.setSecret(id, secretName, secret)
+      }
+      return secret
     },
 
     async deleteSecret(id: string | number, secretName: string): Promise<void> {
@@ -408,6 +448,8 @@ export const withSecretStore = (
     async clear(): Promise<void> {
       await encryptedCrud.clear()
     },
+
+    requestInfos: stream,
   }
 }
 

@@ -44,7 +44,6 @@ export async function initTaskyon(
     chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined,
   ) => void,
   secretRecoveryKey: CryptoKey,
-  getSessionKey: () => Promise<CryptoKey>,
 ) {
   const ToolList: InternalTool[] = [
     executePythonScript,
@@ -72,7 +71,6 @@ export async function initTaskyon(
       new Map<string, EncryptedDataRow>(),
     ),
     secretRecoveryKey,
-    getSessionKey,
   )
 
   const taskProcessingStream = createStream<TyTaskStreamData>()

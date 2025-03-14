@@ -191,11 +191,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         triggerGlobal({ taskId: id, chunk })
       },
       (await generateECDSAKeyPair()).publicKey,
-      getSessionKey,
     ))()
 
   // Access taskManagerInstance and addTask2Tree without redundant awaits
   const getTaskManager = async () => (await initTaskyonPromise)['taskManagerInstance']
+
+  const getSecretStore = async () => (await initTaskyonPromise)['secretStore']
 
   // TODO: use the proxies below to replae the "getTaskmanager" and all of that..
   /*const taskManager = asyncProxy(async () => {
@@ -425,6 +426,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     addModelToHistory,
     taskWorkerController,
     getTaskManager,
+    getSecretStore,
     addToProcessQueue,
     modelLookUp,
     llmModels: computed(() => llmModelsInternal.value),
