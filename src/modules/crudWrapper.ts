@@ -305,7 +305,7 @@ export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWr
 })
 
 // Define a type for the encrypted data structure
-type EncryptedDataRow = {
+export type EncryptedDataRow = {
   iv: string
   ciphertext: string
   salt: string

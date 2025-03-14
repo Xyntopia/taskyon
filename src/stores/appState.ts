@@ -20,7 +20,7 @@ import {
 } from 'src/modules/utils'
 import { unref } from 'vue'
 import defaultSettings from 'src/assets/taskyon_settings.json'
-import { generateRandomNewKey } from 'src/modules/crypto_webcrypto'
+import { generateAssymetricRandomNewKey } from 'src/modules/crypto_js'
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 
 interface TaskStateType {
@@ -105,7 +105,6 @@ export const useAppStateStore = defineStore(storeName, () => {
       rti: 1440,
       model: [],
     } as tyPublicKeyDraft,
-    tyPublicKeys: [] as string[],
   }
 
   // overwrite with saved configuration:
@@ -142,7 +141,7 @@ export const useAppStateStore = defineStore(storeName, () => {
   })
 
   if (stateRefs.initialLoad) {
-    void generateRandomNewKey().then((r) => (stateRefs.llmSettings.userId = r.publicKey))
+    void generateAssymetricRandomNewKey().then((r) => (stateRefs.llmSettings.userId = r.publicKey))
   }
 
   // this file could potentially be replaced in kubernetes or docker using a configmap!

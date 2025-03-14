@@ -24,8 +24,8 @@ import {
   type CrudWrapper,
 } from '../crudWrapper'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
-import { urlSafeBase64Uuid } from '../crypto_webcrypto'
 import { safeYamlDump } from '../yamlUtils'
+import { urlSafeBase64Uuid } from '../crypto'
 
 /**
  *

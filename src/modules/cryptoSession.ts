@@ -1,4 +1,4 @@
-import { generateRecoveryKey } from './crypto_webcrypto'
+import { generateRecoveryKey } from './crypto_js'
 import { base64UrlToUint8Array, uint8ArrayToBase64Url } from './encoding'
 
 /**
@@ -71,8 +71,8 @@ export async function wrapSessionToken(
     enc.encode(sessionToken),
   )
   return JSON.stringify({
-    iv: uint8ArrayToBase64Url(iv),
-    ciphertext: uint8ArrayToBase64Url(new Uint8Array(ciphertextBuffer)),
+    iv: uint8ArrayToBase64Url(iv.buffer),
+    ciphertext: uint8ArrayToBase64Url(ciphertextBuffer),
   })
 }
 
@@ -111,7 +111,7 @@ export async function initializeSession(
     const recoveryKey = generateRecoveryKey()
 
     // For demonstration, we use the base64 of recoveryKey as our session token.
-    const sessionToken = uint8ArrayToBase64Url(recoveryKey)
+    const sessionToken = uint8ArrayToBase64Url(recoveryKey.buffer)
 
     // 2. Derive the device-bound key via WebAuthn.
     const deviceKey = await deriveDeviceKey(storedCredentialId)

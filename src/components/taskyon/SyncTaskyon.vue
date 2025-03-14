@@ -206,7 +206,7 @@ import {
 } from '@quasar/extras/material-icons'
 import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
 import InfoDialog from '../InfoDialog.vue'
-import { base64UrlEd25519Keys, generateRandomNewKey } from 'src/modules/crypto'
+import { base64UrlEd25519Keys, generateAssymetricRandomNewKey } from 'src/modules/crypto_js'
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from './TyResetButton.vue'
 
@@ -222,7 +222,7 @@ async function onGenerateSeedPhrase() {
   console.log('generate user id...')
   pressedSeedPhraseCopyButton.value = false
   showSeedPhrase.value = true
-  const { mnemonic } = await generateRandomNewKey()
+  const { mnemonic } = await generateAssymetricRandomNewKey()
   seedPhrase.value = mnemonic
 }
 
