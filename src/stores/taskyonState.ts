@@ -183,7 +183,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       stateRefs.llmSettings,
       stateRefs.keys,
       taskWorkerController,
-      stateRefs.logError,
       defineTyGuiTools(),
       // this here is used as a callback for streaming..  all streaming chat completions call this function
       // together with the ID of the chatCompletion task.

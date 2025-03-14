@@ -31,7 +31,6 @@ export async function initTaskyon(
   llmSettings: llmSettings,
   apiKeys: { [key: string]: string },
   taskWorkerController: TaskWorkerController,
-  logError: (message: string) => void,
   // with the Environment Tools we can provide a list of tools as closures which have access
   // to the environment in which taskyon is running (through closure variables
   // of this environment inside the tool).

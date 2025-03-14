@@ -14,17 +14,6 @@
         ><q-tooltip>Create New Chat</q-tooltip>
       </q-btn>
       <q-space />
-      <q-btn
-        v-if="state.getErrors().length > 0"
-        flat
-        dense
-        round
-        color="warning"
-        :icon="matWarning"
-        to="diagnostics"
-      >
-        <q-tooltip>There was problem with taskyon!, click here to find out more..</q-tooltip>
-      </q-btn>
       <dark-mode-button :size="btnsize" @theme-changed="(newMode) => (state.darkTheme = newMode)" />
 
       <q-btn
@@ -64,7 +53,7 @@ const $q = useQuasar()
 
 import DarkModeButton from 'components/DarkModeButton.vue'
 import { ref } from 'vue'
-import { matLaunch, matMenu, matReviews, matWarning } from '@quasar/extras/material-icons'
+import { matLaunch, matMenu, matReviews } from '@quasar/extras/material-icons'
 import { useAppStateStore } from 'src/stores/appState'
 import { useQuasar } from 'quasar'
 

@@ -57,6 +57,7 @@
           :conversation-id="state.llmSettings.selectedTaskId"
         />
       </div>
+      <!--
       <q-btn
         v-if="state && state.getErrors().length > 0"
         flat
@@ -68,7 +69,7 @@
         to="/diagnostics"
       >
         <q-tooltip>There was problem with taskyon!, click here to find out more..</q-tooltip>
-      </q-btn>
+      </q-btn>-->
       <q-btn
         v-if="!minMode"
         flat
@@ -186,13 +187,7 @@
 <script setup lang="ts">
 import DarkModeButton from 'components/DarkModeButton.vue'
 import { defineAsyncComponent } from 'vue'
-import {
-  matHelpOutline,
-  matMenu,
-  matSearch,
-  matSettings,
-  matWarning,
-} from '@quasar/extras/material-icons'
+import { matHelpOutline, matMenu, matSearch, matSettings } from '@quasar/extras/material-icons'
 import {
   mdiForum,
   mdiForumPlus,
