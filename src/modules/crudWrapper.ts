@@ -316,7 +316,7 @@ export type EncryptedDataRow = {
 export const withEncryption = (
   base: CrudWrapper<EncryptedDataRow>,
   recoveryPublicKey: CryptoKey,
-  getSessionKey: () => Promise<Uint8Array & CryptoKey>,
+  getSessionKey: () => Promise<CryptoKey>,
 ) => {
   return {
     ...base,
@@ -367,7 +367,7 @@ export const withEncryption = (
 export const withSecretStore = (
   base: CrudWrapper<EncryptedDataRow>,
   publicRecoveryKey: CryptoKey,
-  getSessionKey: () => Promise<Uint8Array & CryptoKey>,
+  getSessionKey: () => Promise<CryptoKey>,
 ) => {
   const encryptedCrud = withEncryption(base, publicRecoveryKey, getSessionKey)
 

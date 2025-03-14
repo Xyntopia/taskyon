@@ -12,7 +12,8 @@ import { executePythonScript } from '../tools/executePython'
 import { createAsyncQueue } from '../utils'
 import { createChatCompletionTool } from '../tools/chatCompletionTool'
 import { getDatabase } from '../pglite.api'
-import { createEnhancedCrudWrapper } from '../crudWrapper'
+import type { EncryptedDataRow } from '../crudWrapper'
+import { createEnhancedCrudWrapper, withSecretStore } from '../crudWrapper'
 import type OpenAI from 'openai'
 import {
   createAddNewToolTool,
@@ -42,6 +43,8 @@ export async function initTaskyon(
     id: string,
     chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined,
   ) => void,
+  secretRecoveryKey: CryptoKey,
+  getSessionKey: () => Promise<CryptoKey>,
 ) {
   const ToolList: InternalTool[] = [
     executePythonScript,
@@ -60,12 +63,16 @@ export async function initTaskyon(
     new Map<string, TaskNodeMeta>(),
   )
 
-  const secretStore = await createEnhancedCrudWrapper<string>(
-    await getDatabase('taskyon'),
-    {
-      tableName: 'vault',
-    },
-    new Map<string, TaskNodeMeta>(),
+  const secretStore = withSecretStore(
+    await createEnhancedCrudWrapper(
+      await getDatabase('taskyon'),
+      {
+        tableName: 'vault',
+      },
+      new Map<string, EncryptedDataRow>(),
+    ),
+    secretRecoveryKey,
+    getSessionKey,
   )
 
   const taskProcessingStream = createStream<TyTaskStreamData>()
@@ -131,5 +138,10 @@ export async function initTaskyon(
     taskProcessingStream.emit,
   )
 
-  return { taskManagerInstance, processTasksQueue, workerStream: taskProcessingStream.stream }
+  return {
+    taskManagerInstance,
+    processTasksQueue,
+    workerStream: taskProcessingStream.stream,
+    secretStore,
+  }
 }

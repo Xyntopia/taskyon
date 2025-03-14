@@ -20,6 +20,8 @@ import { useAppStateStore } from './appState'
 import type OpenAI from 'openai'
 import { useCallbacks } from 'src/modules/useCallBacks'
 import { filter } from 'src/modules/frpBus'
+import { initializeSessionWithPasskey } from 'src/modules/cryptoSession'
+import { generateECDSAKeyPair } from 'src/modules/crypto_webcrypto'
 
 function asyncProxy<T extends Record<keyof T, (...args: Parameters<T[keyof T]>) => unknown>>(
   initializer: () => Promise<T>,
@@ -172,18 +174,25 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined
   }>()
 
-  const initTaskyonPromise = initTaskyon(
-    stateRefs.llmSettings,
-    stateRefs.keys,
-    taskWorkerController,
-    stateRefs.logError,
-    defineTyGuiTools(),
-    // this here is used as a callback for streaming..  all streaming chat completions call this function
-    // together with the ID of the chatCompletion task.
-    (id: string, chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => {
-      triggerGlobal({ taskId: id, chunk })
-    },
-  )
+  const getSessionKey = async () => {
+    return await initializeSessionWithPasskey('typassid', 'tysessionid')
+  }
+
+  const initTaskyonPromise = (async () =>
+    await initTaskyon(
+      stateRefs.llmSettings,
+      stateRefs.keys,
+      taskWorkerController,
+      stateRefs.logError,
+      defineTyGuiTools(),
+      // this here is used as a callback for streaming..  all streaming chat completions call this function
+      // together with the ID of the chatCompletion task.
+      (id: string, chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => {
+        triggerGlobal({ taskId: id, chunk })
+      },
+      (await generateECDSAKeyPair()).publicKey,
+      getSessionKey,
+    ))()
 
   // Access taskManagerInstance and addTask2Tree without redundant awaits
   const getTaskManager = async () => (await initTaskyonPromise)['taskManagerInstance']

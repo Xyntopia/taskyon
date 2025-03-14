@@ -85,7 +85,30 @@ export async function encryptObject<T>(
   }
 }
 
-// Encrypt rowKey with RSA-OAEP public key
+export async function importEd25519PublicKeyFromBase64(base64Key: string): Promise<CryptoKey> {
+  const publicKey = base64UrlToUint8Array(base64Key)
+  return crypto.subtle.importKey('raw', publicKey, { name: 'Ed25519' }, true, ['verify'])
+}
+
+export async function generateECDSAKeyPair(): Promise<{
+  publicKey: CryptoKey
+  privateKey: CryptoKey
+}> {
+  const keyPair = await crypto.subtle.generateKey(
+    {
+      name: 'ECDSA',
+      namedCurve: 'P-256',
+    },
+    true, // extractable keys
+    ['sign', 'verify'],
+  )
+
+  return {
+    publicKey: keyPair.publicKey,
+    privateKey: keyPair.privateKey,
+  }
+}
+
 export async function encryptWithPublicKey(
   publicKey: CryptoKey,
   dataKey: CryptoKey,
@@ -95,7 +118,6 @@ export async function encryptWithPublicKey(
   return uint8ArrayToBase64Url(encrypted)
 }
 
-// Encrypt rowKey with AES-GCM session key
 export async function encryptWithSessionKey(
   sessionKey: CryptoKey,
   dataKey: CryptoKey,
@@ -108,7 +130,6 @@ export async function encryptWithSessionKey(
   return uint8ArrayToBase64Url(combined.buffer)
 }
 
-// Decrypt rowKey with AES-GCM session key
 export async function decryptWithSessionKey(
   sessionKey: CryptoKey,
   encryptedData: string,

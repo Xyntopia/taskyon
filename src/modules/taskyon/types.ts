@@ -452,7 +452,14 @@ export const llmSettings = z.object({
     .string()
     .nullable()
     .optional()
-    .describe('a cryptographic user id whic is used to identify the user in different chats'),
+    .describe(
+      'a (public) cryptographic user id which is used to identify the user in different chats',
+    ),
+  secretPublicKey: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('A (public) cryptographic key which is used to encrypt secrets'),
   selectedTaskId: z
     .string()
     .optional()

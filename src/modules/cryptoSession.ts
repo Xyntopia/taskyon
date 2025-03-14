@@ -1,4 +1,3 @@
-import { generateRecoveryKey } from './crypto_js'
 import { base64UrlToUint8Array, uint8ArrayToBase64Url } from './encoding'
 
 /**
@@ -95,47 +94,6 @@ export async function unwrapSessionToken(
 }
 
 /**
- * Initializes (or retrieves) the session token.
- * If masterPassword is provided, we assume this is a fresh unlock.
- * Otherwise we attempt to retrieve the token from persistent storage.
- */
-export async function initializeSession(
-  storedCredentialId: Uint8Array,
-  masterPassword?: string,
-): Promise<CryptoKey> {
-  const STORAGE_KEY = 'wrappedSessionToken'
-
-  if (masterPassword) {
-    // FIRST-TIME UNLOCK:
-    // 1. Generate a recovery (master) key; in practice, you might mix the masterPassword with randomness.
-    const recoveryKey = generateRecoveryKey()
-
-    // For demonstration, we use the base64 of recoveryKey as our session token.
-    const sessionToken = uint8ArrayToBase64Url(recoveryKey.buffer)
-
-    // 2. Derive the device-bound key via WebAuthn.
-    const deviceKey = await deriveDeviceKey(storedCredentialId)
-    // 3. Wrap (encrypt) the session token with the device key.
-    const wrappedToken = await wrapSessionToken(sessionToken, deviceKey)
-    // 4. Persist the wrapped token in browser storage.
-    localStorage.setItem(STORAGE_KEY, wrappedToken)
-    // 5. Import the session token as a CryptoKey for use in our encryption routines.
-    return importSessionKey(sessionToken)
-  } else {
-    // RETURNING USER:
-    const wrappedToken = localStorage.getItem(STORAGE_KEY)
-    if (!wrappedToken) {
-      throw new Error('No stored session token, please unlock with your master password.')
-    }
-    // Derive device-bound key again.
-    const deviceKey = await deriveDeviceKey(storedCredentialId)
-    // Unwrap (decrypt) the session token.
-    const sessionToken = await unwrapSessionToken(wrappedToken, deviceKey)
-    return importSessionKey(sessionToken)
-  }
-}
-
-/**
  * Imports a session token (in base64 format) as a CryptoKey,
  * so it can be used with our WebCrypto-based wrappers.
  */
@@ -146,4 +104,45 @@ export async function importSessionKey(sessionToken: string): Promise<CryptoKey>
     'encrypt',
     'decrypt',
   ])
+}
+
+/**
+ * Ensures a passkey exists. If not, registers a new one and stores its ID.
+ */
+export async function ensurePasskey(STORAGE_CREDENTIAL_ID: string): Promise<Uint8Array> {
+  const storedId = localStorage.getItem(STORAGE_CREDENTIAL_ID)
+
+  if (storedId) {
+    return base64UrlToUint8Array(storedId)
+  }
+
+  // Register new passkey
+  const credential = await registerPasskey()
+  const newId = new Uint8Array(credential.rawId)
+  localStorage.setItem(STORAGE_CREDENTIAL_ID, uint8ArrayToBase64Url(newId.buffer))
+
+  return newId
+}
+
+/**
+ * Initializes session, ensuring a passkey exists and deriving a device-bound key.
+ */
+export async function initializeSessionWithPasskey(
+  STORAGE_CREDENTIAL_ID: string,
+  STORAGE_SESSION_KEY: string,
+): Promise<CryptoKey> {
+  const storedCredentialId = await ensurePasskey(STORAGE_CREDENTIAL_ID)
+
+  // First-time unlock: generate a session token if missing
+  if (!localStorage.getItem(STORAGE_SESSION_KEY)) {
+    const sessionToken = uint8ArrayToBase64Url(crypto.getRandomValues(new Uint8Array(32)).buffer) // Random token
+    const deviceKey = await deriveDeviceKey(storedCredentialId)
+    localStorage.setItem(STORAGE_SESSION_KEY, await wrapSessionToken(sessionToken, deviceKey))
+    return importSessionKey(sessionToken)
+  }
+
+  // Returning user: derive key and decrypt session
+  const wrappedToken = localStorage.getItem(STORAGE_SESSION_KEY)!
+  const deviceKey = await deriveDeviceKey(storedCredentialId)
+  return importSessionKey(await unwrapSessionToken(wrappedToken, deviceKey))
 }
