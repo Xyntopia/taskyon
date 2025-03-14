@@ -20,10 +20,6 @@
           <q-btn flat :icon="matContentCopy" @click="copyToClipboard(diagnostics)"></q-btn>
           <pre>{{ diagnostics }}</pre>
         </q-card>
-        <div v-for="(e, idx) of state.getErrors()" :key="idx">
-          <p class="text-bold">{{ idx }}:</p>
-          <pre>{{ e }}</pre>
-        </div>
       </q-page>
     </q-page-container>
   </q-layout>
@@ -104,6 +100,28 @@ async function generateReport(details = false, onlyFirst = false) {
   diagnostics.value = `report_date: ${new Date().toISOString()}\n`
 
   diagnostics.value += await runTest(
+    'Test Secret Store',
+    async () => {
+      console.log('request a random secret from the store')
+
+      const store = await tystate.getSecretStore()
+
+      const MYTESTTOKEN = await store.getSecret('diagnostics', 'MYTESTTOKEN')
+
+      return {
+        MYTESTTOKEN,
+      }
+    },
+    details,
+  )
+
+  // move this line behind the "first test"  in order to be able to test only the first test :)
+  if (onlyFirst) {
+    console.log('diagnostics:', diagnostics.value)
+    return
+  }
+
+  diagnostics.value += await runTest(
     'list of Tools',
     async () => {
       console.log('gather all available tools in a list!')
@@ -117,12 +135,6 @@ async function generateReport(details = false, onlyFirst = false) {
     },
     details,
   )
-
-  // move this line behind the "first test"  in order to be able to test only the first test :)
-  if (onlyFirst) {
-    console.log('diagnostics:', diagnostics.value)
-    return
-  }
 
   diagnostics.value += await runTest(
     'json schemas',
@@ -211,7 +223,6 @@ async function getData() {
       appInfo: {
         appConfiguration: state.appConfiguration,
       },
-      errors: state.getErrors(),
       taskyonStoreDiagnostics: {
         SavedState: state.getStoredStateString(),
         CurrentState: state.getStateValues(),

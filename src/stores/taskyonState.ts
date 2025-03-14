@@ -174,10 +174,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined
   }>()
 
-  const getSessionKey = async () => {
-    return await initializeSessionWithPasskey('typassid', 'tysessionid')
-  }
-
   const initTaskyonPromise = (async () =>
     await initTaskyon(
       stateRefs.llmSettings,
@@ -194,8 +190,15 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // Access taskManagerInstance and addTask2Tree without redundant awaits
   const getTaskManager = async () => (await initTaskyonPromise)['taskManagerInstance']
-
   const getSecretStore = async () => (await initTaskyonPromise)['secretStore']
+
+  void getSecretStore().then((s) => {
+    s.requestInfos.subscribe((requestInfo) => {
+      if (requestInfo.type === 'sessionKey') {
+        void initializeSessionWithPasskey('typassid', 'tysessionid')
+      }
+    })
+  })
 
   // TODO: use the proxies below to replae the "getTaskmanager" and all of that..
   /*const taskManager = asyncProxy(async () => {
