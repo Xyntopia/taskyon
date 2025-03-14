@@ -1,5 +1,11 @@
-import { decryptObject, deriveKey, encryptObject } from './crypto'
-import { randomBytes } from '@noble/ciphers/webcrypto'
+import {
+  decryptData,
+  decryptWithSessionKey,
+  encryptObject,
+  encryptWithPublicKey,
+  encryptWithSessionKey,
+  generateRandomKey,
+} from './crypto_webcrypto'
 import type { Stream } from './frpBus'
 import { createStream, filter } from './frpBus'
 import type { PgLiteOptions } from './pglite.api'
@@ -298,6 +304,113 @@ export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWr
   },
 })
 
+// Define a type for the encrypted data structure
+type EncryptedDataRow = {
+  iv: string
+  ciphertext: string
+  salt: string
+  encryptedToolKey: string
+  recoveryEncryptedToolKey: string
+}
+
+export const withEncryption = (
+  base: CrudWrapper<EncryptedDataRow>,
+  recoveryPublicKey: CryptoKey,
+  getSessionKey: () => Promise<Uint8Array & CryptoKey>,
+) => {
+  return {
+    ...base,
+    async set(id: string | number, data: unknown): Promise<void> {
+      // Generate a new random tool key for each set operation
+      const rowKey = await generateRandomKey()
+
+      // Encrypt the data using the tool key
+      const { iv, ciphertext, salt } = await encryptObject(rowKey, data, id)
+
+      // Encrypt the tool key using the recovery public key
+      const recoveryEncryptedToolKey = await encryptWithPublicKey(recoveryPublicKey, rowKey)
+
+      const sessionKey = await getSessionKey()
+      // Encrypt the tool key using the symmetric session key
+      const encryptedToolKey = await encryptWithSessionKey(sessionKey, rowKey)
+
+      // Create the encrypted data row
+      const encData: EncryptedDataRow = {
+        iv,
+        ciphertext,
+        salt,
+        encryptedToolKey,
+        recoveryEncryptedToolKey,
+      }
+
+      // Store the encrypted data row
+      await base.set(id, encData)
+    },
+
+    async get(id: string | number): Promise<unknown> {
+      // Retrieve the encrypted data row
+      const encData = await base.get(id)
+      if (!encData) return null
+
+      const sessionKey = await getSessionKey()
+      // Decrypt the tool key using the symmetric session key
+      const rowKey = await decryptWithSessionKey(sessionKey, encData.encryptedToolKey)
+
+      // Decrypt the data using the tool key
+      const data = await decryptData(rowKey, encData.iv, encData.ciphertext, encData.salt, id)
+
+      return data
+    },
+  }
+}
+
+export const withSecretStore = (
+  base: CrudWrapper<EncryptedDataRow>,
+  publicRecoveryKey: CryptoKey,
+  getSessionKey: () => Promise<Uint8Array & CryptoKey>,
+) => {
+  const encryptedCrud = withEncryption(base, publicRecoveryKey, getSessionKey)
+
+  type SecretData = Record<string, string>
+  return {
+    async setSecret(id: string | number, secretName: string, secretData: string): Promise<void> {
+      // Get the existing secrets for the ID
+      const existingSecrets: SecretData = ((await encryptedCrud.get(id)) as SecretData) || {}
+      // Add or update the secret
+      existingSecrets[secretName] = secretData
+      // Save the updated secrets
+      await encryptedCrud.set(id, existingSecrets)
+    },
+
+    async getSecret(id: string | number, secretName: string): Promise<string | null> {
+      // Get the existing secrets for the ID
+      const existingSecrets = (await encryptedCrud.get(id)) as SecretData
+      // Return the specific secret if it exists
+      return existingSecrets ? existingSecrets[secretName] || null : null
+    },
+
+    async deleteSecret(id: string | number, secretName: string): Promise<void> {
+      // Get the existing secrets for the ID
+      const existingSecrets = (await encryptedCrud.get(id)) as SecretData
+      if (existingSecrets && secretName in existingSecrets) {
+        // Delete the specific secret
+        delete existingSecrets[secretName]
+        // Save the updated secrets
+        await encryptedCrud.set(id, existingSecrets)
+      }
+    },
+
+    async listSecrets(id: string | number): Promise<Record<string, string>> {
+      // Get all secrets for the ID
+      return ((await encryptedCrud.get(id)) as SecretData) || {}
+    },
+
+    async clear(): Promise<void> {
+      await encryptedCrud.clear()
+    },
+  }
+}
+
 export const createEnhancedCrudWrapper = async <T>(
   db: TyPGDB,
   options: PgLiteOptions,
@@ -314,105 +427,3 @@ export const createEnhancedCrudWrapper = async <T>(
 }
 
 export type EnhancedCrudWrapper<T> = Awaited<ReturnType<typeof createEnhancedCrudWrapper<T>>>
-
-// TODO: protect the masterPW better, by somehow not saving it in memory???
-//       maybe we can use a masterPW hash or somthing like that? or something with a salt?
-//       I dont know what strategies are out there that we could employ...
-export const withEncryption = <T>(
-  base: CrudWrapper<{ iv: string; ciphertext: string; salt: string; data: T }>,
-  deriveKey: (masterPassword: string, salt: string, id: string) => Uint8Array,
-  encryptObject: (obj: unknown, key: Uint8Array) => { iv: string; ciphertext: string },
-  decryptObject: (
-    { iv, ciphertext }: { iv: string; ciphertext: string },
-    key: Uint8Array,
-  ) => unknown,
-  masterPassword: string,
-) => {
-  return {
-    async set(id: string | number, data: T): Promise<void> {
-      const salt = randomBytes(16).toString() // Generate a unique salt
-      const key = deriveKey(masterPassword, salt, id.toString())
-      const encrypted = encryptObject(data, key)
-      await base.set(id, { ...encrypted, salt, data })
-    },
-
-    async get(id: string | number): Promise<T | null> {
-      const encryptedData = await base.get(id)
-      if (!encryptedData) return null
-      const { salt } = encryptedData
-      const key = deriveKey(masterPassword, salt, id.toString())
-      return decryptObject(encryptedData, key) as T
-    },
-
-    async delete(id: string | number): Promise<void> {
-      await base.delete(id)
-    },
-
-    async list(): Promise<Row<T>[]> {
-      const encryptedRows = await base.list()
-      return Promise.all(
-        encryptedRows.map((row) => {
-          const { salt } = row.data
-          const key = deriveKey(masterPassword, salt, row.id.toString())
-          const data = decryptObject(row.data, key) as T
-          return { id: row.id, data }
-        }),
-      )
-    },
-
-    async clear(): Promise<void> {
-      await base.clear()
-    },
-  }
-}
-
-export const withSecretStore = <T>(
-  base: CrudWrapper<{ iv: string; ciphertext: string; salt: string; data: Record<string, T> }>,
-  masterPassword: string,
-) => {
-  const encryptedCrud = withEncryption<Record<string, T>>(
-    base,
-    deriveKey,
-    encryptObject,
-    decryptObject,
-    masterPassword,
-  )
-
-  return {
-    async setSecret(id: string | number, secretName: string, secretData: T): Promise<void> {
-      // Get the existing secrets for the ID
-      const existingSecrets = (await encryptedCrud.get(id)) || {}
-      // Add or update the secret
-      existingSecrets[secretName] = secretData
-      // Save the updated secrets
-      await encryptedCrud.set(id, existingSecrets)
-    },
-
-    async getSecret(id: string | number, secretName: string): Promise<T | null> {
-      // Get the existing secrets for the ID
-      const existingSecrets = await encryptedCrud.get(id)
-      // Return the specific secret if it exists
-      return existingSecrets ? existingSecrets[secretName] || null : null
-    },
-
-    async deleteSecret(id: string | number, secretName: string): Promise<void> {
-      // Get the existing secrets for the ID
-      const existingSecrets = await encryptedCrud.get(id)
-      if (existingSecrets && secretName in existingSecrets) {
-        // Delete the specific secret
-        delete existingSecrets[secretName]
-        // Save the updated secrets
-        await encryptedCrud.set(id, existingSecrets)
-      }
-    },
-
-    async listSecrets(id: string | number): Promise<Record<string, T>> {
-      // Get all secrets for the ID
-      return (await encryptedCrud.get(id)) || {}
-    },
-
-    async clear(): Promise<void> {
-      await encryptedCrud.clear()
-    },
-  }
-}
