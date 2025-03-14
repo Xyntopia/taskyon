@@ -17,7 +17,10 @@ const OAUTH_PROVIDERS = {
   },
 } as const
 
-async function getOAuthAccessToken(provider: keyof typeof OAUTH_PROVIDERS, authCode: string) {
+export async function getOAuthAccessToken(
+  provider: keyof typeof OAUTH_PROVIDERS,
+  authCode: string,
+) {
   const config = OAUTH_PROVIDERS[provider]
 
   const response = await fetch(config.tokenUrl, {
