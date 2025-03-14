@@ -23,8 +23,8 @@ import {
   withLocking,
   type CrudWrapper,
 } from '../crudWrapper'
-import { sha256UrlSafeHash } from '../crypto'
-import { urlSafeBase64Uuid } from '../crypto'
+import { sha256UrlSafeHash } from '../crypto_webcrypto'
+import { urlSafeBase64Uuid } from '../crypto_webcrypto'
 import { safeYamlDump } from '../yamlUtils'
 
 /**

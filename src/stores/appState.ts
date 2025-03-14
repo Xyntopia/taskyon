@@ -20,7 +20,7 @@ import {
 } from 'src/modules/utils'
 import { unref } from 'vue'
 import defaultSettings from 'src/assets/taskyon_settings.json'
-import { generateRandomNewKey } from 'src/modules/crypto'
+import { generateRandomNewKey } from 'src/modules/crypto_webcrypto'
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 
 interface TaskStateType {

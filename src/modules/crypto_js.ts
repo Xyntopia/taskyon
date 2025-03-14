@@ -8,6 +8,7 @@ import { v1 as uuidv1 } from 'uuid'
 import { Buffer } from 'buffer'
 import { pbkdf2 } from '@noble/hashes/pbkdf2'
 import { sha256 } from '@noble/hashes/sha256'
+import { hkdf } from '@noble/hashes/hkdf'
 import { randomBytes } from '@noble/ciphers/webcrypto'
 import { gcm } from '@noble/ciphers/aes'
 import { utf8ToBytes, bytesToUtf8 } from '@noble/ciphers/utils'
@@ -53,7 +54,7 @@ export async function generateEd25519Keys(seed: Uint8Array) {
 
 export async function signData(data: Uint8Array, privateKey: string) {
   const p = base64UrlToUint8Array(privateKey)
-  return uint8ArrayToBase64Url(await signAsync(data, p))
+  return uint8ArrayToBase64Url((await signAsync(data, p)).buffer)
 }
 
 export async function verifySignature(
@@ -65,7 +66,7 @@ export async function verifySignature(
   return await verifyAsync(s, data, base64UrlToUint8Array(publicKey))
 }
 
-export async function generateRandomNewKey() {
+export async function generateAssymetricRandomNewKey() {
   const mnemonic = generateSeedPhrase()
 
   return { mnemonic, ...(await base64UrlEd25519Keys(mnemonic)) }
@@ -77,8 +78,8 @@ export async function base64UrlEd25519Keys(mnemonic: string) {
   console.log('Public Key:', publicKey)
   console.log('Private Key:', privateKey)
   return {
-    publicKey: uint8ArrayToBase64Url(publicKey),
-    privateKey: uint8ArrayToBase64Url(privateKey),
+    publicKey: uint8ArrayToBase64Url(publicKey.buffer),
+    privateKey: uint8ArrayToBase64Url(privateKey.buffer),
   }
 }
 
@@ -123,8 +124,8 @@ export function encryptObject(obj: unknown, key: Uint8Array): { iv: string; ciph
   const aes = gcm(key, iv)
   const ciphertext = aes.encrypt(utf8ToBytes(plainText))
   return {
-    iv: uint8ArrayToBase64Url(iv),
-    ciphertext: uint8ArrayToBase64Url(ciphertext),
+    iv: uint8ArrayToBase64Url(iv.buffer),
+    ciphertext: uint8ArrayToBase64Url(ciphertext.buffer),
   }
 }
 
@@ -160,5 +161,11 @@ export async function sha256UrlSafeHash(obj: unknown) {
 } // Generate a new seed phrase (mnemonic)
 
 export function generateSalt(): string {
-  return uint8ArrayToBase64Url(randomBytes(16))
+  return uint8ArrayToBase64Url(randomBytes(16).buffer)
+}
+
+// Generate a random key (256 bits) for HKDF
+export function generateRandomKey() {
+  const keyBytes = randomBytes(32)
+  return hkdf(sha256, keyBytes, undefined, undefined, 32) // Derives a 256-bit key
 }

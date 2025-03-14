@@ -34,12 +34,8 @@ export function base64ToUuid(base64: string) {
   )}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
-export function uint8ArrayToBase64Url(uint8Array: Uint8Array) {
-  let binaryString = ''
-  for (let i = 0; i < uint8Array.length; i++) {
-    binaryString += String.fromCharCode(uint8Array[i]!)
-  }
-  const base64 = btoa(binaryString)
+export function uint8ArrayToBase64Url(buffer: ArrayBufferLike) {
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)))
   return base64
     .replace(/\+/g, '-') // Convert '+' to '-'
     .replace(/\//g, '_') // Convert '/' to '_'
