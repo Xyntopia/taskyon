@@ -6,6 +6,7 @@ import {
   transformTaskNodeToDocType,
   transformDocToTaskNode,
   collections,
+  createTaskyonDatabase,
 } from './rxdb'
 import { openFile } from '../OPFS'
 import { deepCopy, deepMerge, lockMap } from '../utils'
@@ -15,17 +16,20 @@ import { type InternalTool } from './tools'
 import { type MangoQuery } from 'rxdb'
 import { load } from 'js-yaml'
 import { processMarkdown } from 'src/modules/taskyon/taskUtils'
-import type { EnhancedCrudWrapper } from '../crudWrapper'
+import type { EncryptedDataRow } from '../crudWrapper'
 import {
   createCombinedCrudWrapper,
+  createEnhancedCrudWrapper,
   createMapCrudWrapper,
   withLiveStreams,
   withLocking,
+  withSecretStore,
   type CrudWrapper,
 } from '../crudWrapper'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
 import { safeYamlDump } from '../yamlUtils'
 import { urlSafeBase64Uuid } from '../crypto'
+import { getDatabase } from '../pglite.api'
 
 /**
  *
@@ -521,13 +525,17 @@ export interface TaskTreeNode {
   to the UI. We could have used the function of RxDB for this. But this approach would have been
   less flexible...
 */
-export function useTyTaskManager(
+export async function useTyTaskManager(
   defaultTools: InternalTool[],
-  taskyonDB: TaskyonDatabase,
-  debugDb: EnhancedCrudWrapper<TaskNodeMeta>,
+  publicRecoveryKey: () => Promise<CryptoKey>,
   vectorizerModel?: string,
 ) {
   console.log('Initialize task manager.')
+
+  console.log('initializing taskyondb')
+  const taskyonDB: TaskyonDatabase = await createTaskyonDatabase()
+  console.log('initializing task manager')
+
   // uses RxDB as a DB backend..
   // Usage example:
   // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
@@ -634,6 +642,25 @@ export function useTyTaskManager(
       return newData
     },
   })
+
+  const debugDb = await createEnhancedCrudWrapper<TaskNodeMeta>(
+    await getDatabase('taskyon'),
+    {
+      tableName: 'debugDb',
+    },
+    new Map<string, TaskNodeMeta>(),
+  )
+
+  const secretStore = withSecretStore(
+    await createEnhancedCrudWrapper(
+      await getDatabase('taskyon'),
+      {
+        tableName: 'vault',
+      },
+      new Map<string, EncryptedDataRow>(),
+    ),
+    publicRecoveryKey,
+  )
 
   async function countVecs() {
     return await taskyonDB.vectormappings.count().exec()
@@ -1171,6 +1198,7 @@ export function useTyTaskManager(
     ...defaultMode,
     ...fm,
     getTaskIdChain,
+    secretStore,
     getTaskChain,
     convertTaskIDs,
     buildSiblingChain,
@@ -1183,4 +1211,4 @@ export function useTyTaskManager(
     debugDb,
   }
 }
-export type TyTaskManager = ReturnType<typeof useTyTaskManager>
+export type TyTaskManager = Awaited<ReturnType<typeof useTyTaskManager>>

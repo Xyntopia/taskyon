@@ -1,7 +1,5 @@
 import { useTyTaskManager } from './taskManager'
-import type { TaskNodeMeta, TyTaskStreamData, llmSettings } from './types'
-import type { TaskyonDatabase } from './rxdb'
-import { createTaskyonDatabase } from './rxdb'
+import type { TyTaskStreamData, llmSettings } from './types'
 import type { TaskWorkerController } from './taskWorker'
 import { runTaskWorker } from './taskWorker'
 import type { InternalTool } from './tools'
@@ -11,9 +9,6 @@ import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
 import { createAsyncQueue } from '../utils'
 import { createChatCompletionTool } from '../tools/chatCompletionTool'
-import { getDatabase } from '../pglite.api'
-import type { EncryptedDataRow } from '../crudWrapper'
-import { createEnhancedCrudWrapper, withSecretStore } from '../crudWrapper'
 import type OpenAI from 'openai'
 import {
   createAddNewToolTool,
@@ -42,7 +37,7 @@ export async function initTaskyon(
     id: string,
     chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined,
   ) => void,
-  secretRecoveryKey: CryptoKey,
+  publicRecoveryKey: () => Promise<CryptoKey>,
 ) {
   const ToolList: InternalTool[] = [
     executePythonScript,
@@ -53,33 +48,9 @@ export async function initTaskyon(
     ...EnvironmentTools,
   ]
 
-  const debugDb = await createEnhancedCrudWrapper<TaskNodeMeta>(
-    await getDatabase('taskyon'),
-    {
-      tableName: 'debugDb',
-    },
-    new Map<string, TaskNodeMeta>(),
-  )
-
-  const secretStore = withSecretStore(
-    await createEnhancedCrudWrapper(
-      await getDatabase('taskyon'),
-      {
-        tableName: 'vault',
-      },
-      new Map<string, EncryptedDataRow>(),
-    ),
-    secretRecoveryKey,
-  )
-
-  // TODO: possibly move this into an "upper level?"
-  console.log('initializing taskyondb')
-  const taskyonDBInstance: TaskyonDatabase = await createTaskyonDatabase()
-  console.log('initializing task manager')
-  const taskManagerInstance = useTyTaskManager(
+  const taskManagerInstance = await useTyTaskManager(
     ToolList,
-    taskyonDBInstance,
-    debugDb,
+    publicRecoveryKey,
     llmSettings.vectorizationModel,
   )
   console.log('finished taskManager initialization')
@@ -139,6 +110,5 @@ export async function initTaskyon(
     taskManagerInstance,
     processTasksQueue,
     workerStream: taskProcessingStream.stream,
-    secretStore,
   }
 }

@@ -315,7 +315,7 @@ export type EncryptedDataRow = {
 
 export const withEncryption = (
   base: CrudWrapper<EncryptedDataRow>,
-  recoveryPublicKey: CryptoKey,
+  publicRecoveryKey: () => Promise<CryptoKey>,
   getSessionKey: () => Promise<CryptoKey>,
 ) => {
   return {
@@ -328,7 +328,7 @@ export const withEncryption = (
       const { iv, ciphertext, salt } = await encryptObject(rowKey, data, id)
 
       // Encrypt the tool key using the recovery public key
-      const recoveryEncryptedToolKey = await encryptWithPublicKey(recoveryPublicKey, rowKey)
+      const recoveryEncryptedToolKey = await encryptWithPublicKey(await publicRecoveryKey(), rowKey)
 
       const sessionKey = await getSessionKey()
       // Encrypt the tool key using the symmetric session key
@@ -366,7 +366,7 @@ export const withEncryption = (
 
 export const withSecretStore = (
   base: CrudWrapper<EncryptedDataRow>,
-  publicRecoveryKey: CryptoKey,
+  publicRecoveryKey: () => Promise<CryptoKey>,
 ) => {
   type NewSecretRequest = {
     type: 'newSecret'

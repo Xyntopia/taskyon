@@ -185,15 +185,14 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       (id: string, chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => {
         triggerGlobal({ taskId: id, chunk })
       },
-      (await generateECDSAKeyPair()).publicKey,
+      async () => (await generateECDSAKeyPair()).publicKey,
     ))()
 
   // Access taskManagerInstance and addTask2Tree without redundant awaits
   const getTaskManager = async () => (await initTaskyonPromise)['taskManagerInstance']
-  const getSecretStore = async () => (await initTaskyonPromise)['secretStore']
 
-  void getSecretStore().then((s) => {
-    s.requestInfos.subscribe((requestInfo) => {
+  void getTaskManager().then((tm) => {
+    tm.secretStore.requestInfos.subscribe((requestInfo) => {
       if (requestInfo.type === 'sessionKey') {
         void initializeSessionWithPasskey('typassid', 'tysessionid')
       }
@@ -440,7 +439,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     taskWorkerController,
     getTaskManager,
     lastTaskState,
-    getSecretStore,
     addToProcessQueue,
     modelLookUp,
     llmModels: computed(() => llmModelsInternal.value),

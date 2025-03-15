@@ -104,9 +104,9 @@ async function generateReport(details = false, onlyFirst = false) {
     async () => {
       console.log('request a random secret from the store')
 
-      const store = await tystate.getSecretStore()
+      const tm = await tystate.getTaskManager()
 
-      const MYTESTTOKEN = await store.getSecret('diagnostics', 'MYTESTTOKEN')
+      const MYTESTTOKEN = await tm.secretStore.getSecret('diagnostics', 'MYTESTTOKEN')
 
       return {
         MYTESTTOKEN,
