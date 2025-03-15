@@ -95,91 +95,103 @@ async function processTask(
   analyzeModel: string | undefined,
   llmTools: boolean,
 ): Promise<{ newTasks: partialTaskDraft[][]; task: TaskNode }> {
-  let newTasks: partialTaskDraft[][]
-  if (task.content.type === 'functioncall') {
-    // calculate function result
-    const func = task.content.data
-    const tools = await taskManager.updateToolDefinitions(false)
-    console.log(`Calling function ${func.name}`)
-    if (tools[func.name] && !taskWorkerController.isInterrupted()) {
-      // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
-      const taskChain = await taskManager.getTaskChain(task.id)
-      const funcR = await handleFunctionExecution(func, tools, taskWorkerController.onInterrupt, {
-        taskChain,
-        getSecret: async (name) => {
-          console.log('get secret name', name)
-          await sleep(10000)
-          return Promise.resolve('N/A')
-        },
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        setSecret: (name, _value) => {
-          console.log('set secret name', name)
-        },
-      })
+  try {
+    let newTasks: partialTaskDraft[][]
+    if (task.content.type === 'functioncall') {
+      // calculate function result
+      const func = task.content.data
+      const tools = await taskManager.updateToolDefinitions(false)
+      console.log(`Calling function ${func.name}`)
+      if (tools[func.name] && !taskWorkerController.isInterrupted()) {
+        // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
+        const taskChain = await taskManager.getTaskChain(task.id)
+        const funcR = await handleFunctionExecution(func, tools, taskWorkerController.onInterrupt, {
+          taskChain,
+          getSecret: async (name) => {
+            console.log('get secret name', name)
+            await sleep(10000)
+            return Promise.resolve('N/A')
+          },
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          setSecret: (name, _value) => {
+            console.log('set secret name', name)
+          },
+        })
 
-      // We check the result of the task here to see whether it contains
-      // a lists of tasks. If thats the case we return
-      // those for continuation, otherwise
-      // we create a generic task result.
-      if (taskResult.safeParse(funcR).success) {
-        console.log('new tasks were created:', funcR)
-        // we have to do this funny workaround with typescript because
-        // for some reason zod will delete the task content onwards
-        // of the second task in a taskchain... after parsing. so we're
-        // simply using the original...
-        newTasks = (funcR as taskResult).taskChainList
+        // We check the result of the task here to see whether it contains
+        // a lists of tasks. If thats the case we return
+        // those for continuation, otherwise
+        // we create a generic task result.
+        if (taskResult.safeParse(funcR).success) {
+          console.log('new tasks were created:', funcR)
+          // we have to do this funny workaround with typescript because
+          // for some reason zod will delete the task content onwards
+          // of the second task in a taskchain... after parsing. so we're
+          // simply using the original...
+          newTasks = (funcR as taskResult).taskChainList
+        } else {
+          // TODO: Not really sure, what to do with the task processor... . It might be
+          //       a good idea, to have this as its a tool in its own right.
+          //       this way we could develop different kinds of function processors and
+          //       probably also simply make the code more consistent...
+          if (!analyzeModel)
+            throw new TaskProcessingError(
+              'We need to select a model in order to analyze the result of our task!!',
+            )
+
+          // TODO: move this into chatCompletion as a subtask chain
+          newTasks = [
+            [
+              {
+                role: 'system',
+                content: { type: 'toolresult', data: funcR },
+              },
+              createChatCompletionTask({
+                model: analyzeModel,
+                allowedTools,
+                goal: 'AnalyzeToolResult',
+                llmTools,
+              }),
+            ],
+          ]
+          console.log('function returning generic result', funcR)
+        }
       } else {
-        // TODO: Not really sure, what to do with the task processor... . It might be
-        //       a good idea, to have this as its a tool in its own right.
-        //       this way we could develop different kinds of function processors and
-        //       probably also simply make the code more consistent...
-        if (!analyzeModel)
-          throw new TaskProcessingError(
-            'We need to select a model in order to analyze the result of our task!!',
-          )
-
-        // TODO: move this into chatCompletion as a subtask chain
-        newTasks = [
-          [
-            {
-              role: 'system',
-              content: { type: 'toolresult', data: funcR },
-            },
-            createChatCompletionTask({
-              model: analyzeModel,
-              allowedTools,
-              goal: 'AnalyzeToolResult',
-              llmTools,
-            }),
-          ],
-        ]
-        console.log('function returning generic result', funcR)
+        const toolnames = JSON.stringify(allowedTools)
+        throw new TaskProcessingError(
+          !taskWorkerController.isInterrupted()
+            ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
+            : 'The function execution was cancelled by taskyon',
+        )
       }
     } else {
-      const toolnames = JSON.stringify(allowedTools)
-      throw new TaskProcessingError(
-        !taskWorkerController.isInterrupted()
-          ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
-          : 'The function execution was cancelled by taskyon',
-      )
+      // We expect all function calls to do three things:
+      // - either return a result
+      // - return a taskchain where the last task is a functionTask
+      // - return a taskchain with the last task a "termination" task..
+      newTasks = [
+        [
+          {
+            role: 'system',
+            content: { type: 'return', data: 'no follow-up tasks found!' },
+          },
+        ],
+      ]
     }
-  } else {
-    // We expect all function calls to do three things:
-    // - either return a result
-    // - return a taskchain where the last task is a functionTask
-    // - return a taskchain with the last task a "termination" task..
-    newTasks = [
-      [
-        {
-          role: 'system',
-          content: { type: 'return', data: 'no follow-up tasks found!' },
-        },
-      ],
-    ]
-  }
-  return {
-    newTasks,
-    task,
+    return {
+      newTasks,
+      task,
+    }
+  } catch (error) {
+    // Attach the current task context to the error
+    if (error instanceof Error) {
+      Object.assign(error, { task })
+      throw error
+    } else {
+      const err = new Error(`Non-error thrown, with task context: ${JSON.stringify(task)}`)
+      Object.assign(err, { task })
+      throw err
+    }
   }
 }
 
@@ -430,7 +442,8 @@ export async function runTaskWorker(
           }
         })
         .catch(async (error) => {
-          console.error('Could not complete task iteration:', error)
+          const task = error.task
+          console.error('Could not complete task:', error)
           taskWorkerController.increaseErrorCount()
           if (taskWorkerController.getErrorCount() >= llmSettings.maxAutonomousTasks) {
             // TODO: somehow put this into an error tasknode...
