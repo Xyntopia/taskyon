@@ -442,7 +442,7 @@ export async function runTaskWorker(
           }
         })
         .catch(async (error) => {
-          const task = error.task
+          const errTask = error.task
           console.error('Could not complete task:', error)
           taskWorkerController.increaseErrorCount()
           if (taskWorkerController.getErrorCount() >= llmSettings.maxAutonomousTasks) {
@@ -459,7 +459,7 @@ export async function runTaskWorker(
             throw new TaskProcessingError('No Model selected for Error analysis!!')
           const errorTaskChain = createErrorTaskChain(
             error,
-            task,
+            errTask,
             api?.selectedModel,
             llmSettings.enableOpenAiTools,
             llmSettings.allowedTools || [],
@@ -468,7 +468,7 @@ export async function runTaskWorker(
           // we are adding the error task chain as a subtaskchain with the parentID of this
           // particular task.
           const errorTaskId = (
-            await taskManager.addTaskChain(errorTaskChain, undefined, task?.id)
+            await taskManager.addTaskChain(errorTaskChain, undefined, errTask?.id)
           ).at(-1)?.id
 
           // interrupt execution if interrupted flag is shown!
