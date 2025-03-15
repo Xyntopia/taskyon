@@ -217,7 +217,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   const lastTaskState = ref(new Map<string, TyTaskStreamData['stage']>())
   void workerStream.subscribe((data) => {
-    if (data.task?.id) lastTaskState.value.set(data.task.id, data.stage)
+    if (data.task?.id) {
+      lastTaskState.value.set(data.task.id, data.stage)
+      if (data.stage === 'processed') {
+        // we don't need the task anymore once we're done processing with it :)
+        lastTaskState.value.delete(data.task.id)
+      }
+    }
   })
 
   filter(
