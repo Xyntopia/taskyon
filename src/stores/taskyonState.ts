@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { watch, computed, ref } from 'vue'
-import type { Asyncify } from 'src/modules/taskyon/types'
+import type { Asyncify, TyTaskStreamData } from 'src/modules/taskyon/types'
 import {
   type Model,
   type TaskNode,
@@ -213,6 +213,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const workerStream = asyncProxy(async () => {
     const instance = await initTaskyonPromise
     return instance['workerStream']
+  })
+
+  const lastTaskState = ref(new Map<string, TyTaskStreamData['stage']>())
+  void workerStream.subscribe((data) => {
+    if (data.task?.id) lastTaskState.value.set(data.task.id, data.stage)
   })
 
   filter(
@@ -428,6 +433,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     addModelToHistory,
     taskWorkerController,
     getTaskManager,
+    lastTaskState,
     getSecretStore,
     addToProcessQueue,
     modelLookUp,
