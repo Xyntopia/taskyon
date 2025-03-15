@@ -72,8 +72,6 @@ export async function initTaskyon(
     secretRecoveryKey,
   )
 
-  const taskProcessingStream = createStream<TyTaskStreamData>()
-
   // TODO: possibly move this into an "upper level?"
   console.log('initializing taskyondb')
   const taskyonDBInstance: TaskyonDatabase = await createTaskyonDatabase()
@@ -126,6 +124,8 @@ export async function initTaskyon(
   // keys could porentially be reactive here, so in theory, when they change in the GUI,
   // taskyon should automatically pick up on this...
   console.log('starting taskyon worker')
+  const taskProcessingStream = createStream<TyTaskStreamData>()
+
   const processTasksQueue = createAsyncQueue<string>()
   void runTaskWorker(
     processTasksQueue,

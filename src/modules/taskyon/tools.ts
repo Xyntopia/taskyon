@@ -6,8 +6,9 @@ import type {
   ParamType,
   OnInterruptFunc,
   WithRequired,
+  TaskNode,
 } from './types'
-import { partialTaskDraft, TaskNode } from './types'
+import { partialTaskDraft } from './types'
 import { ToolBase, TaskProcessingError } from './types'
 import type { RemoteFunctionResponse } from './iframeApiTypes'
 import { RemoteFunctionCall, TaskyonMessage } from './iframeApiTypes'
@@ -52,12 +53,11 @@ export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSche
     .returns(z.unknown())
     .describe('Simple function definition for internal tools'),*/
 
-const toolContext = z
-  .object({
-    taskChain: z.array(TaskNode),
-  })
-  .describe('Context for tools which gives them access to other parts of the taskyon system')
-export type toolContext = z.infer<typeof toolContext>
+export type toolContext = {
+  taskChain: TaskNode[]
+  getSecret: (name: string) => Promise<string>
+  setSecret: (name: string, value: string) => void
+}
 
 // TODO: make all of this generic functions in order to get better typescript checking
 const internalToolFunctionSchema = z.custom<

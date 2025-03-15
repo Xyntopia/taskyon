@@ -51,7 +51,17 @@ async function handleFunctionExecution(
 ) {
   const data = event.data
   // with this we make sure, that we can also handle async functions :)
-  const result = await tool.function(data.arguments, { taskChain: [] })
+  const result = await tool.function(data.arguments, {
+    taskChain: [],
+    getSecret: (name) => {
+      console.log('get secret name', name)
+      return Promise.resolve('N/A')
+    },
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    setSecret: (name, _value) => {
+      console.log('set secret name', name)
+    },
+  })
 
   // Send response to iframe
   sendTyMessage({
