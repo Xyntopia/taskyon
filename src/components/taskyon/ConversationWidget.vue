@@ -76,7 +76,10 @@
                 :task="task"
                 :previous-task="props.selectedThread[idx - 1]"
                 :next-task="props.selectedThread[idx + 1]"
-                :is-working="tystate.lastTaskState.get(task.id) !== 'processed'"
+                :is-working="
+                  !!tystate.lastTaskState.get(task.id) &&
+                  tystate.lastTaskState.get(task.id) !== 'processed'
+                "
                 :class="['q-pa-xs', task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"
                 :show-id="!!showIds"
                 style="min-width: 300px"
@@ -87,7 +90,13 @@
       </div>
       <!--Render tasks which are in progress-->
       <div class="tasks-container q-py-sm">
-        <q-card v-if="tystate.lastTaskState.get(currentTask.id) !== 'processed'" class="row">
+        <q-card
+          v-if="
+            !!tystate.lastTaskState.get(currentTask.id) &&
+            tystate.lastTaskState.get(currentTask.id) !== 'processed'
+          "
+          class="row"
+        >
           <div class="col">
             <ty-markdown
               no-line-numbers
