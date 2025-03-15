@@ -106,8 +106,9 @@ async function processTask(
       const taskChain = await taskManager.getTaskChain(task.id)
       const funcR = await handleFunctionExecution(func, tools, taskWorkerController.onInterrupt, {
         taskChain,
-        getSecret: (name) => {
+        getSecret: async (name) => {
           console.log('get secret name', name)
+          await sleep(10000)
           return Promise.resolve('N/A')
         },
         // eslint-disable-next-line @typescript-eslint/no-unused-vars

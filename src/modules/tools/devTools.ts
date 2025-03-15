@@ -24,10 +24,12 @@ in gitlab. They should roughly follow the style of a "user story".`,
     },
     required: ['issuelist'],
   } as const,
-  function: ({ issuelist }) => {
-    const GITLAB_PROJECT_ID = 'YOUR_GITLAB_PROJECT_ID' // Replace with actual project ID
-    const GITLAB_API_URL = `https://gitlab.com/api/v4/projects/${encodeURIComponent(GITLAB_PROJECT_ID)}/issues`
-    const GITLAB_ACCESS_TOKEN = 'YOUR_GITLAB_PROJECT_ID' // Replace with actual project ID
+  function: async ({ issuelist }, ctx) => {
+    const GITLAB_PROJECT_ID = await ctx.getSecret('YOUR_GITLAB_PROJECT_ID') // Replace with actual project ID
+    const GITLAB_API_URL = await ctx.getSecret(
+      `https://gitlab.com/api/v4/projects/${encodeURIComponent(GITLAB_PROJECT_ID || '')}/issues`,
+    )
+    const GITLAB_ACCESS_TOKEN = await ctx.getSecret('GITLAB_ACCESS_TOKEN') // Replace with actual project ID
 
     const uiHtml = `<div>
     <ul id="issueList">
