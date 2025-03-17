@@ -13,13 +13,13 @@ function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
   iframe.style.display = 'none' // Hide the iframe
   // Restrict permissions to only allow scripts and pop ups
   // we need the pop up permission, so that we can do oauth logins..
-  iframe.sandbox.add('allow-scripts allow-popups')
+  iframe.sandbox.add('allow-scripts', 'allow-popups')
   document.body.appendChild(iframe)
 
   // Set iframe content to include a message handler for receiving code and params
   const iframeContent = `
 <script>
-window.taskyonId = ${id}
+window.taskyonId = "${id}"
 window.addEventListener('message', async (event) => {
     const { code, params, sourceURL } = event.data;
     if (code) {
@@ -89,7 +89,7 @@ export async function executeCodeInIframe(
   sourceURL: string = 'sandboxed-code.js', // TODO: add default source URL for debugging
   onInterrupt: OnInterruptFunc,
 ) {
-  const id = await sha256UrlSafeHash(code)
+  const id = sourceURL + (await sha256UrlSafeHash(code))
   let iframe = iframes.get(id)
   // Lazy initialize iframe
   if (!iframe || interrupted) {
