@@ -1,10 +1,15 @@
+import { sha256UrlSafeHash } from '../crypto'
 import { sleep } from '../utils'
 import type { OnInterruptFunc } from './types'
 
+// Store iframes by a hash id derived from the code
+const iframes = new Map<string, HTMLIFrameElement>()
+
 // Create and initialize iframe
-function createSandboxedIframe(): Promise<HTMLIFrameElement> {
-  console.log('create taskyon iframe worker')
+function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
+  console.log('create taskyon iframe worker', id)
   const iframe = document.createElement('iframe')
+  iframe.id = id
   iframe.style.display = 'none' // Hide the iframe
   // Restrict permissions to only allow scripts and pop ups
   // we need the pop up permission, so that we can do oauth logins..
@@ -14,6 +19,7 @@ function createSandboxedIframe(): Promise<HTMLIFrameElement> {
   // Set iframe content to include a message handler for receiving code and params
   const iframeContent = `
 <script>
+window.taskyonId = ${id}
 window.addEventListener('message', async (event) => {
     const { code, params, sourceURL } = event.data;
     if (code) {
@@ -51,7 +57,6 @@ window.parent.postMessage({ ready: true }, '*');
 }
 
 // Singleton iframe instance and an interrupt flag
-let iframe: HTMLIFrameElement | null = null
 let interrupted = false
 
 function jsonCopy(reactiveObject: unknown) {
@@ -59,7 +64,8 @@ function jsonCopy(reactiveObject: unknown) {
 }
 
 // Function to interrupt the execution
-function interruptExecution(handleMessage: (event: MessageEvent) => void) {
+function interruptExecution(id: string, handleMessage: (event: MessageEvent) => void) {
+  const iframe = iframes.get(id)
   if (iframe) {
     interrupted = true
 
@@ -67,8 +73,12 @@ function interruptExecution(handleMessage: (event: MessageEvent) => void) {
     window.removeEventListener('message', handleMessage)
 
     // Remove the iframe to terminate the script execution
+    // TODO: gracefully terminate the iframe. We should be able to stop execution of
+    //       a function in an iframe so that we don't loose e.g. oauth access that we've alread had..
     document.body.removeChild(iframe)
-    iframe = null
+    iframes.delete(id)
+    // Optionally, you could "reset" the iframe here if needed:
+    // iframe.srcdoc = iframe.srcdoc;
   }
 }
 
@@ -79,10 +89,11 @@ export async function executeCodeInIframe(
   sourceURL: string = 'sandboxed-code.js', // TODO: add default source URL for debugging
   onInterrupt: OnInterruptFunc,
 ) {
+  const id = await sha256UrlSafeHash(code)
+  let iframe = iframes.get(id)
   // Lazy initialize iframe
   if (!iframe || interrupted) {
-    iframe = await createSandboxedIframe()
-    interrupted = false
+    iframe = await createSandboxedIframe(id)
     // Add a delay to ensure iframe is fully ready. Its ok, because we normally do this only once here...
     await sleep(100)
   }
@@ -108,11 +119,11 @@ export async function executeCodeInIframe(
     // sure we dereference reactive objects and everything is json serializable
     // before we send it...
     const sendobj = jsonCopy({ code, params, sourceURL })
-    iframe!.contentWindow?.postMessage(sendobj, '*')
+    iframe.contentWindow?.postMessage(sendobj, '*')
 
     // Register the interrupt callback
     onInterrupt((reason) => {
-      interruptExecution(handleMessage) // Interrupt the execution
+      interruptExecution(id, handleMessage) // Interrupt the execution
       reject(new Error(reason || 'Execution interrupted'))
     })
   })
