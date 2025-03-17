@@ -21,6 +21,7 @@ import { smallHelperTools } from '../tools/helperCollection'
 import { useFullSmallTools } from '../tools/useFullSmallTools'
 import { devTools } from '../tools/devTools'
 import { taskOrganizationTools } from '../tools/TaskPlannerTool'
+import { storageTools } from '../tools/gdrive'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -40,6 +41,11 @@ export async function initTaskyon(
   publicRecoveryKey: () => Promise<CryptoKey>,
 ) {
   const ToolList: InternalTool[] = [
+    ...smallHelperTools,
+    ...useFullSmallTools,
+    ...devTools,
+    ...taskOrganizationTools,
+    ...storageTools,
     executePythonScript,
     // TODO: add local context(task) search
     // localVectorStoreSearch,
@@ -57,10 +63,6 @@ export async function initTaskyon(
 
   // add tools which have access to the taskManagerInstance itself
   ToolList.push(
-    ...smallHelperTools,
-    ...useFullSmallTools,
-    ...devTools,
-    ...taskOrganizationTools,
     await createChatCompletionTool(
       llmSettings,
       taskManagerInstance,
