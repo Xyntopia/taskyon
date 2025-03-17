@@ -6,7 +6,9 @@ function createSandboxedIframe(): Promise<HTMLIFrameElement> {
   console.log('create taskyon iframe worker')
   const iframe = document.createElement('iframe')
   iframe.style.display = 'none' // Hide the iframe
-  iframe.sandbox.add('allow-scripts') // Restrict permissions to only allow scripts
+  // Restrict permissions to only allow scripts and pop ups
+  // we need the pop up permission, so that we can do oauth logins..
+  iframe.sandbox.add('allow-scripts allow-popups')
   document.body.appendChild(iframe)
 
   // Set iframe content to include a message handler for receiving code and params
@@ -18,7 +20,7 @@ window.addEventListener('message', async (event) => {
       try {
         const func = new Function("params", "return (" + code + ")(params)\\n//# sourceURL=" + sourceURL);
         const result = await func(params);
-        
+
         // Post the result back to the parent window
         window.parent.postMessage({ result }, '*');
       } catch (error) {
