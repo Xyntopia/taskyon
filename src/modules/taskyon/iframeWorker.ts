@@ -14,7 +14,7 @@ function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
   iframe.style.display = 'none' // Hide the iframe
   // Restrict permissions to only allow scripts and pop ups
   // we need the pop up permission, so that we can do oauth logins..
-  iframe.sandbox.add('allow-scripts', 'allow-popups')
+  iframe.sandbox.add('allow-scripts', 'allow-popups', 'allow-popups-to-escape-sandbox')
   document.body.appendChild(iframe)
 
   // Set iframe content to include a message handler for receiving code and params

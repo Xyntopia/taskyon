@@ -1,3 +1,4 @@
+import { clientId } from '../gdrive'
 import { createTool } from '../taskyon/tools'
 
 const googleDriveTool = createTool({
@@ -29,10 +30,6 @@ const googleDriveTool = createTool({
         type: 'string',
         description: 'Google Drive file ID for loading',
       },
-      clientId: {
-        type: 'string',
-        description: 'Google OAuth2 client ID',
-      },
     },
   },
   code: `async ({ action, fileName, content, fileId, clientId }) => {
@@ -51,7 +48,7 @@ const googleDriveTool = createTool({
       if (!popup) return reject('Popup blocked - please allow popups');
 
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-      authUrl.searchParams.set('client_id', clientId);
+      authUrl.searchParams.set('client_id', '${clientId}');
       authUrl.searchParams.set('redirect_uri', 'urn:ietf:wg:oauth:2.0:oob');
       authUrl.searchParams.set('response_type', 'token');
       authUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/drive.file');

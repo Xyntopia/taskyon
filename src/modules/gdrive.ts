@@ -19,6 +19,9 @@ type gDriveFile = {
   webViewLink?: string // optionally a pulic link of the file
 }
 
+export const clientId = '14927198496-jaadcashh91s9gue7uicf3datk79tohc.apps.googleusercontent.com'
+export const scope = 'https://www.googleapis.com/auth/drive.file'
+
 export const useGdrive = () => {
   const maxTokenAgeMinutes = 55
   const tyGdAccessStorageName = 'tygd'
@@ -32,8 +35,6 @@ export const useGdrive = () => {
   )
 
   const tokenReceivedTime = ref(0) // Unix timestamp of when the token was received
-  const clientId = '14927198496-jaadcashh91s9gue7uicf3datk79tohc.apps.googleusercontent.com'
-  const scope = 'https://www.googleapis.com/auth/drive.file'
 
   const isTokenExpired = computed(() => {
     const currentTime = Math.floor(Date.now() / 1000) // Current Unix timestamp in seconds
