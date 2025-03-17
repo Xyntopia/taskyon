@@ -115,6 +115,7 @@ export async function executeCodeInIframe(
   // Lazy initialize iframe
   if (!iframe || interrupted) {
     iframe = await createSandboxedIframe(id)
+    iframes.set(id, iframe)
     // Add a delay to ensure iframe is fully ready. Its ok, because we normally do this only once here...
     await sleep(100)
   }
