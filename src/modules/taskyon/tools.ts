@@ -8,7 +8,7 @@ import type {
   WithRequired,
   TaskNode,
 } from './types'
-import { partialTaskDraft } from './types'
+import { partialTaskDraft, taskMarker } from './types'
 import { ToolBase, TaskProcessingError } from './types'
 import type { RemoteFunctionResponse } from './iframeApiTypes'
 import { RemoteFunctionCall, TaskyonMessage } from './iframeApiTypes'
@@ -18,8 +18,6 @@ import { convertToYamlWComments } from '../zodUtils'
 import { executeCodeInIframe } from './iframeWorker'
 import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
 import type { JSONSchema7 } from 'json-schema'
-
-const taskMarker = '*TY_TASKRESULT*'
 
 export const taskResult = z.object({
   taskResultMarker: z

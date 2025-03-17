@@ -1,5 +1,6 @@
 import { sha256UrlSafeHash } from '../crypto'
 import { sleep } from '../utils'
+import { taskMarker } from './types'
 import type { OnInterruptFunc } from './types'
 
 // Store iframes by a hash id derived from the code
@@ -19,6 +20,26 @@ function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
   // Set iframe content to include a message handler for receiving code and params
   const iframeContent = `
 <script>
+function makeTaskResult(tasks) {
+  return {
+    taskResultMarker: "${taskMarker}",
+    taskChainList: tasks,
+  }
+}
+
+function createChatCompletionTask(args) {
+  return {
+    role: 'function',
+    content: {
+      type: 'functioncall',
+      data: {
+        name: 'chatCompletion',
+        arguments: args ?? {},
+      },
+    },
+  }
+}
+
 window.taskyonId = "${id}"
 window.addEventListener('message', async (event) => {
     const { code, params, sourceURL } = event.data;
