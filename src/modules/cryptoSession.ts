@@ -4,17 +4,22 @@ import { base64UrlToUint8Array, uint8ArrayToBase64Url } from './encoding'
  * Registers a device-bound credential.
  * You would normally call this once (or on re‑registration).
  */
-export async function registerPasskey() {
-  void navigator.credentials
-    .create({
-      //id: 'ty secret store key',
-      //name: 'taskyon local secret store',
-      origin: window.origin,
-      password: 'the last visible dog',
-    })
-    .then((r) => console.log('new credentials: ', r))
-    .catch((err) => console.error(err))
-  return credential
+export async function registerPasskey(): Promise<PublicKeyCredential> {
+  const challenge = crypto.getRandomValues(new Uint8Array(32))
+  const publicKey: PublicKeyCredentialCreationOptions = {
+    challenge,
+    rp: { name: 'Taskyon' },
+    user: {
+      id: crypto.getRandomValues(new Uint8Array(16)),
+      name: 'local-encryption-key',
+      displayName: 'Local Encryption Key',
+    },
+    pubKeyCredParams: [{ type: 'public-key', alg: -7 }], // ES256
+    authenticatorSelection: { userVerification: 'preferred' },
+    timeout: 60000,
+    attestation: 'none',
+  }
+  return (await navigator.credentials.create({ publicKey })) as PublicKeyCredential
 }
 
 /**
@@ -35,7 +40,7 @@ export async function deriveDeviceKey(storedCredentialId: Uint8Array): Promise<C
     timeout: 60000,
   }
 
-  const assertion = await navigator.credentials.get({ mediation: 'optional', publicKey })
+  const assertion = await navigator.credentials.get({ mediation: 'silent', publicKey })
   if (!assertion) {
     throw new Error('Device authentication failed')
   }
@@ -114,7 +119,7 @@ export async function ensurePasskey(STORAGE_CREDENTIAL_ID: string): Promise<Uint
 
   // Register new passkey
   const credential = await registerPasskey()
-  const newId = new Uint8Array(credential?.id)
+  const newId = new Uint8Array(credential.rawId)
   localStorage.setItem(STORAGE_CREDENTIAL_ID, uint8ArrayToBase64Url(newId.buffer))
 
   return newId
