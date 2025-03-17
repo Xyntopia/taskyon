@@ -4,22 +4,17 @@ import { base64UrlToUint8Array, uint8ArrayToBase64Url } from './encoding'
  * Registers a device-bound credential.
  * You would normally call this once (or on re‑registration).
  */
-export async function registerPasskey(): Promise<PublicKeyCredential> {
-  const challenge = crypto.getRandomValues(new Uint8Array(32))
-  const publicKey: PublicKeyCredentialCreationOptions = {
-    challenge,
-    rp: { name: 'Your App' },
-    user: {
-      id: crypto.getRandomValues(new Uint8Array(16)),
-      name: 'user@example.com',
-      displayName: 'User',
-    },
-    pubKeyCredParams: [{ type: 'public-key', alg: -7 }], // ES256
-    authenticatorSelection: { userVerification: 'preferred' },
-    timeout: 60000,
-    attestation: 'none',
-  }
-  return (await navigator.credentials.create({ publicKey })) as PublicKeyCredential
+export async function registerPasskey() {
+  void navigator.credentials
+    .create({
+      //id: 'ty secret store key',
+      //name: 'taskyon local secret store',
+      origin: window.origin,
+      password: 'the last visible dog',
+    })
+    .then((r) => console.log('new credentials: ', r))
+    .catch((err) => console.error(err))
+  return credential
 }
 
 /**
@@ -40,16 +35,17 @@ export async function deriveDeviceKey(storedCredentialId: Uint8Array): Promise<C
     timeout: 60000,
   }
 
-  const assertion = await navigator.credentials.get({ publicKey })
+  const assertion = await navigator.credentials.get({ mediation: 'optional', publicKey })
   if (!assertion) {
     throw new Error('Device authentication failed')
   }
   const authResponse = (assertion as PublicKeyCredential).response as AuthenticatorAssertionResponse
   // Use the signature as raw key material. (Simplified: in practice, apply a proper KDF)
   const signature = new Uint8Array(authResponse.signature)
+  const keyMaterial = await crypto.subtle.digest('SHA-256', signature)
 
   // Derive a symmetric key from the signature using a basic import (note: you may want to hash it first)
-  return crypto.subtle.importKey('raw', signature, { name: 'AES-GCM' }, false, [
+  return crypto.subtle.importKey('raw', keyMaterial, { name: 'AES-GCM' }, false, [
     'encrypt',
     'decrypt',
   ])
@@ -118,7 +114,7 @@ export async function ensurePasskey(STORAGE_CREDENTIAL_ID: string): Promise<Uint
 
   // Register new passkey
   const credential = await registerPasskey()
-  const newId = new Uint8Array(credential.rawId)
+  const newId = new Uint8Array(credential?.id)
   localStorage.setItem(STORAGE_CREDENTIAL_ID, uint8ArrayToBase64Url(newId.buffer))
 
   return newId
@@ -144,5 +140,6 @@ export async function initializeSessionWithPasskey(
   // Returning user: derive key and decrypt session
   const wrappedToken = localStorage.getItem(STORAGE_SESSION_KEY)!
   const deviceKey = await deriveDeviceKey(storedCredentialId)
-  return importSessionKey(await unwrapSessionToken(wrappedToken, deviceKey))
+  const unwrappedKey = await unwrapSessionToken(wrappedToken, deviceKey)
+  return importSessionKey(unwrappedKey)
 }
