@@ -54,7 +54,7 @@ window.parent.postMessage({ ready: true }, '*');
 let iframe: HTMLIFrameElement | null = null
 let interrupted = false
 
-function dereferenceReactive(reactiveObject: unknown) {
+function jsonCopy(reactiveObject: unknown) {
   return JSON.parse(JSON.stringify(reactiveObject))
 }
 
@@ -76,7 +76,7 @@ function interruptExecution(handleMessage: (event: MessageEvent) => void) {
 export async function executeCodeInIframe(
   code: string,
   params: Record<string, unknown>,
-  sourceURL: string = 'sandboxed-code.js', // Default source URL for debugging
+  sourceURL: string = 'sandboxed-code.js', // TODO: add default source URL for debugging
   onInterrupt: OnInterruptFunc,
 ) {
   // Lazy initialize iframe
@@ -104,7 +104,10 @@ export async function executeCodeInIframe(
     window.addEventListener('message', handleMessage)
 
     // Send the code, parameters, and source URL to the iframe for execution
-    const sendobj = dereferenceReactive({ code, params, sourceURL })
+    // we create a deep json copy of the object here, to make
+    // sure we dereference reactive objects and everything is json serializable
+    // before we send it...
+    const sendobj = jsonCopy({ code, params, sourceURL })
     iframe!.contentWindow?.postMessage(sendobj, '*')
 
     // Register the interrupt callback
