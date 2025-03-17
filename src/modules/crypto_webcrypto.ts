@@ -21,9 +21,19 @@ export function parseJwt(token: string | undefined): Record<string, unknown> | u
 }
 
 // Generate a random key (256 bits) for HKDF
-export async function generateRandomKey(): Promise<CryptoKey> {
-  const keyBytes = crypto.getRandomValues(new Uint8Array(32))
-  return crypto.subtle.importKey('raw', keyBytes, { name: 'HKDF' }, false, ['deriveKey'])
+export async function generateRandomEncryptionKey(extractable = false): Promise<CryptoKey> {
+  const keyBytes = crypto.getRandomValues(new Uint8Array(32)) // 32 bytes = 256 bits
+  // using random values like the following doesn't work for keys as
+  // KDF derived keys are not allowed to be extracted by default browser policy
+  // thats why we are using the key generation function directly...
+  //return crypto.subtle.importKey('raw', keyBytes, { name: 'HKDF' }, extractable, ['deriveKey'])
+  return crypto.subtle.importKey(
+    'raw',
+    keyBytes,
+    { name: 'AES-GCM', length: 256 },
+    extractable,
+    ['encrypt'], // Usage required for import, though not directly used
+  )
 }
 
 export async function deriveKey(
@@ -57,20 +67,22 @@ export async function encryptObject<T>(
   const salt = crypto.getRandomValues(new Uint8Array(16))
   const info = new TextEncoder().encode(String(id))
 
+  // Export rowKey as raw bytes and import as HKDF key
+  const rawRowKey = await crypto.subtle.exportKey('raw', rowKey)
+  const hkdfKey = await crypto.subtle.importKey('raw', rawRowKey, { name: 'HKDF' }, false, [
+    'deriveKey',
+  ])
+
   // Derive AES-GCM key using HKDF
   const derivedKey = await crypto.subtle.deriveKey(
-    {
-      name: 'HKDF',
-      salt,
-      info,
-      hash: 'SHA-256',
-    },
-    rowKey,
+    { name: 'HKDF', salt, info, hash: 'SHA-256' },
+    hkdfKey,
     { name: 'AES-GCM', length: 256 },
     false,
     ['encrypt'],
   )
 
+  // Encrypt data with derived key
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const encrypted = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
@@ -109,7 +121,29 @@ export async function generateECDSAKeyPair(): Promise<{
   }
 }
 
-export async function encryptWithPublicKey(
+export async function generateRsaOaepPair(): Promise<{
+  publicKey: CryptoKey
+  privateKey: CryptoKey
+}> {
+  // Generate an RSA-OAEP key pair for encryption:
+  const keyPair = await crypto.subtle.generateKey(
+    {
+      name: 'RSA-OAEP',
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: 'SHA-256',
+    },
+    true, // extractable
+    ['encrypt', 'decrypt'],
+  )
+
+  return {
+    publicKey: keyPair.publicKey,
+    privateKey: keyPair.privateKey,
+  }
+}
+
+export async function wrapKeyWithPublicKey(
   publicKey: CryptoKey,
   dataKey: CryptoKey,
 ): Promise<string> {

@@ -16,8 +16,7 @@ if (useWebCrypto) {
   cryptoModule = await import('./crypto_js')
 }
 
-export const { encryptObject, decryptObject, deriveKey, generateSalt, generateRandomKey } =
-  cryptoModule
+export const { encryptObject, decryptObject, deriveKey, generateSalt } = cryptoModule
 
 // Add more exports as needed
 

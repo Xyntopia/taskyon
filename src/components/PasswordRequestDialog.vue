@@ -1,5 +1,5 @@
 <template>
-  <q-dialog v-model="showInfo">
+  <q-dialog v-model="show">
     <q-card>
       <q-card-section>
         <QMarkdown v-if="infoText" :src="infoText" />
@@ -11,9 +11,12 @@
           filled
           v-model="newSecret"
           label="New Secret"
-        >
-        </SecretInput>
+          @keyup.enter="submit"
+        />
       </q-card-section>
+      <q-card-actions align="right">
+        <q-btn label="OK" color="primary" @click="submit" />
+      </q-card-actions>
     </q-card>
   </q-dialog>
 </template>
@@ -24,7 +27,8 @@ import { QMarkdown } from '@quasar/quasar-ui-qmarkdown'
 import SecretInput from './SecretInput.vue'
 
 const newSecret = ref<string>('')
-const showInfo = ref(false)
+
+const show = defineModel<boolean>({ required: true })
 
 defineProps({
   infoText: {
@@ -33,4 +37,13 @@ defineProps({
     default: undefined,
   },
 })
+
+const emit = defineEmits<{
+  (e: 'ok', secret: string): void
+}>()
+
+const submit = () => {
+  emit('ok', newSecret.value)
+  show.value = false
+}
 </script>

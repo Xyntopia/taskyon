@@ -2,9 +2,9 @@ import {
   decryptData,
   decryptWithSessionKey,
   encryptObject,
-  encryptWithPublicKey,
+  wrapKeyWithPublicKey,
   encryptWithSessionKey,
-  generateRandomKey,
+  generateRandomEncryptionKey,
 } from './crypto_webcrypto'
 import type { Stream } from './frpBus'
 import { createStream, filter } from './frpBus'
@@ -322,13 +322,14 @@ export const withEncryption = (
     ...base,
     async set(id: string | number, data: unknown): Promise<void> {
       // Generate a new random tool key for each set operation
-      const rowKey = await generateRandomKey()
+      // we need the key to be extractable, so that we can encrypt it !
+      const rowKey = await generateRandomEncryptionKey(true)
 
       // Encrypt the data using the tool key
       const { iv, ciphertext, salt } = await encryptObject(rowKey, data, id)
 
       // Encrypt the tool key using the recovery public key
-      const recoveryEncryptedToolKey = await encryptWithPublicKey(await publicRecoveryKey(), rowKey)
+      const recoveryEncryptedToolKey = await wrapKeyWithPublicKey(await publicRecoveryKey(), rowKey)
 
       const sessionKey = await getSessionKey()
       // Encrypt the tool key using the symmetric session key
@@ -424,6 +425,7 @@ export const withSecretStore = (
 
       if (!secret) {
         secret = await getNewSecret(id, secretName)
+        console.log('received new secret:', id, secretName)
         await this.setSecret(id, secretName, secret)
       }
       return secret

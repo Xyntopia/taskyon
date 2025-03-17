@@ -22,6 +22,11 @@
         </q-card>
       </q-page>
     </q-page-container>
+    <password-request-dialog
+      :info-text="infoText"
+      v-model="showPassWordDialog"
+      @ok="resolveSecret"
+    />
   </q-layout>
 </template>
 
@@ -47,11 +52,27 @@ import { ToolBase } from 'src/modules/taskyon/types'
 import { chatThreadFromTaskId } from 'src/modules/tools/chatCompletionTool'
 import { zodToYamlString } from 'src/modules/yamlUtils'
 import { craeteToolJsonSchema, summarizeTools } from 'src/modules/taskyon/tools'
+import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
+import { onMounted } from 'vue'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 const diagnostics = ref<string>('')
 const detailed = ref(false)
+const showPassWordDialog = ref(false)
+
+const infoText = ref('get password')
+let resolveSecret: (secret: string) => void
+onMounted(async () => {
+  const tm = await tystate.getTaskManager()
+  tm.secretStore.requestInfos.subscribe((data) => {
+    if (data.type === 'newSecret') {
+      showPassWordDialog.value = true
+      infoText.value = `Please enter the secret '${data.payload.secretName}' for '${data.payload.id}'`
+      resolveSecret = data.respond
+    }
+  })
+})
 
 async function completionMessage() {
   const tm = await tystate.getTaskManager()
@@ -107,6 +128,7 @@ async function generateReport(details = false, onlyFirst = false) {
       const tm = await tystate.getTaskManager()
 
       const MYTESTTOKEN = await tm.secretStore.getSecret('diagnostics', 'MYTESTTOKEN')
+      await tm.secretStore.deleteSecret('diagnostics', 'MYTESTTOKEN')
 
       return {
         MYTESTTOKEN,

@@ -21,7 +21,7 @@ import type OpenAI from 'openai'
 import { useCallbacks } from 'src/modules/useCallBacks'
 import { filter } from 'src/modules/frpBus'
 import { initializeSessionWithPasskey } from 'src/modules/cryptoSession'
-import { generateECDSAKeyPair } from 'src/modules/crypto_webcrypto'
+import { generateRsaOaepPair } from 'src/modules/crypto_webcrypto'
 
 function asyncProxy<T extends Record<keyof T, (...args: Parameters<T[keyof T]>) => unknown>>(
   initializer: () => Promise<T>,
@@ -185,7 +185,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       (id: string, chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => {
         triggerGlobal({ taskId: id, chunk })
       },
-      async () => (await generateECDSAKeyPair()).publicKey,
+      async () => (await generateRsaOaepPair()).publicKey,
     ))()
 
   // Access taskManagerInstance and addTask2Tree without redundant awaits
