@@ -4,7 +4,7 @@
     <iframe
       ref="iframeRef"
       class="col"
-      sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups-to-escape-sandbox"
+      sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"
       :srcdoc="iframeHtml"
       style="width: 600px"
     />
@@ -46,6 +46,7 @@ import { copyToClipboard, copyPngToClipboard } from 'src/modules/utils'
 import { ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 import { onUnmounted } from 'vue'
+import { watch } from 'vue'
 
 // https://mdit-plugins.github.io/mathjax.html#usage
 //const mathjaxInstance = createMathjaxInstance();
@@ -75,8 +76,19 @@ function handleMarkdownClick(event: MouseEvent) {
       const imgElement = codeBlockContainer.querySelector('.mermaid img')
       if (imgElement && imgElement instanceof HTMLImageElement) {
         const svgUrl = imgElement.src
-        fetch(svgUrl)
-          .then((response) => response.text())
+        let getSvgPromise: Promise<string>
+        const parts = svgUrl.split(',')
+        if (parts.length < 2) {
+          getSvgPromise = Promise.reject(new Error('Invalid data URI'))
+        } else {
+          const data = parts[1]!
+          if (svgUrl.includes(';base64')) {
+            getSvgPromise = Promise.resolve(atob(data))
+          } else {
+            getSvgPromise = Promise.resolve(decodeURIComponent(data))
+          }
+        }
+        getSvgPromise
           .then((svgString) => {
             void svgToPng(svgString).then((res) => {
               if (res) {
@@ -91,7 +103,7 @@ function handleMarkdownClick(event: MouseEvent) {
               }
             })
           })
-          .catch((err) => console.error('Error fetching SVG: ', err))
+          .catch((err) => console.error('Error processing SVG: ', err))
       }
       const codeElement = codeBlockContainer.querySelector('code')
       if (codeElement) {
@@ -122,6 +134,16 @@ const mermaidSettings: MermaidConfig = {
   },
 }
 
+watch(
+  () => $q.dark.isActive,
+  (isDark: boolean) => {
+    mermaidSettings.theme = isDark ? 'dark' : 'default'
+    mermaid.initialize(mermaidSettings)
+    // Optionally, if you need to re-run Mermaid on existing diagrams:
+    // void mermaid.run();
+  },
+)
+
 const renderMermaid = createMermaidRenderer(mermaidSettings)
 
 const plugins = computed(() => {
@@ -142,9 +164,23 @@ const renderedHtml = (src: string) => {
 
 const iframeHtml = computed(() => {
   const danger = containsHtmlTags(src ?? '')
-
   if (useIframe && danger) {
-    return generateIframeSrc(renderedHtml(src ?? ''), cssUrl ?? '')
+    // Detect parent's computed style from document.body.
+    // (Alternatively, you could target a more specific element if needed.)
+    const parentStyle = window.getComputedStyle(document.body)
+    const fontFamily = parentStyle.fontFamily || 'Roboto, sans-serif'
+    const parentColor = parentStyle.color || 'inherit'
+    // For dark mode, override parent's color to white.
+    const textColor = $q.dark.isActive ? 'white' : parentColor
+    // Create a style block to inject into the iframe.
+    const styleBlock = `<style>
+      body {
+        font-family: ${fontFamily};
+        color: ${textColor};
+      }
+    </style>`
+    // Prepend the style block to the rendered HTML.
+    return generateIframeSrc(styleBlock + renderedHtml(src ?? ''), cssUrl ?? '')
   }
   return ''
 })
@@ -179,16 +215,13 @@ function handleMessage(event: MessageEvent) {
   //iframeRef.value.style.width = `${newWidth}px`
 }
 
-onMounted(() => {
-  window.addEventListener('message', handleMessage)
-  // ... your existing onMounted code (e.g., mermaid initialization)
-})
-
 onUnmounted(() => {
   window.removeEventListener('message', handleMessage)
 })
 
 onMounted(() => {
+  window.addEventListener('message', handleMessage)
+
   // if we are using the plugin, initialize mermaid as well :)
   mermaid.initialize(mermaidSettings)
   const parentElement = document.getElementById('unique-id')
