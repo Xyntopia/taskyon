@@ -138,7 +138,6 @@ const route = useRoute()
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 const taskThreadContainer = ref<HTMLElement | undefined>()
-$q.dark.set(state.darkTheme) // TODO: this needs to go into our taskyon store...
 const folder = ''
 
 const showIntroduction = computed(
