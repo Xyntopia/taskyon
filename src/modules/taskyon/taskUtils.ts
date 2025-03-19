@@ -56,16 +56,28 @@ export function processMarkdown(markdown: string) {
       }
     }
     const content = message.replace(metadataRegex, '').trim()
-    const task = partialTaskDraft.safeParse({
-      content: { message: content },
+    const taskDraft: Partial<partialTaskDraft> = {
+      content: { type: 'message', data: content },
       ...metadata,
-    })
+    }
+    // make sure we really hav all data we need (role!!)
+    const task = partialTaskDraft.safeParse(taskDraft)
     return task
   })
 
-  const tasks = parsedData
-    .filter((x): x is (typeof parsedData)[0] & { success: true } => x.success)
-    .map((x) => x.data)
+  const tasks = parsedData.map((x): partialTaskDraft => {
+    if (x.success) {
+      return x.data
+    } else {
+      return {
+        role: 'system',
+        content: {
+          type: 'error',
+          data: `We were not able to convert ${x.data} to a task node: \n\n${JSON.stringify(x.error)}`,
+        },
+      }
+    }
+  })
 
   return tasks
 }
