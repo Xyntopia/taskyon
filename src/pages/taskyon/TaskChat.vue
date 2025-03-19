@@ -167,8 +167,26 @@ async function updateChatThread() {
     state.lockBottomScroll = false
     const urlPath = (route.params.filePath as string[]).join('/')
     const filePath = urlPath.endsWith('.md') ? urlPath : `${urlPath}.md`
-    const markdownContent = filePath ? await fetchMarkdown(folder || '', filePath) : undefined
-    const newTaskId = await tm.addMdTaskChain(markdownContent)
+    let newTaskId
+    try {
+      const markdownContent = filePath ? await fetchMarkdown(folder || '', filePath) : undefined
+      newTaskId = await tm.addMdTaskChain(markdownContent)
+    } catch {
+      newTaskId = await tm.addMdTaskChain(
+        `# 404 - Markdown Not Found
+
+The markdown file \`${filePath}\` does not exist.
+
+## What might have happened?
+
+- The file path might be incorrect
+- The file might have been moved or deleted
+- You might not have permission to access this file
+
+Please check the path and try again.
+`,
+      )
+    }
 
     state.llmSettings.selectedTaskId = newTaskId
   } else if (typeof route.query.t === 'string') {

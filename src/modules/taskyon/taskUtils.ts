@@ -22,17 +22,17 @@ export async function getTextFile(url: URL | string) {
 }
 
 export const fetchMarkdown = async (folder: string, filePath: string) => {
-  try {
-    const fileURL = folder ? `/${folder}/${filePath}` : `/${filePath}`
-    const response = await fetch(fileURL)
-    if (!response.ok) {
-      throw new Error(`Failed to load ${fileURL}`)
-    }
-    const text = await response.text()
-    return text
-  } catch (error) {
-    console.error(error)
+  const fileURL = folder ? `/${folder}/${filePath}` : `/${filePath}`
+  const response = await fetch(fileURL)
+
+  // Check if the response is not OK or if the content type is HTML (indicating 404 page)
+  const contentType = response.headers.get('Content-Type') || ''
+  if (!response.ok || contentType.includes('text/html')) {
+    throw new Error(`Failed to load markdown file: ${fileURL}`)
   }
+
+  const text = await response.text()
+  return text
 }
 
 // Fetch, split, and parse the markdown file

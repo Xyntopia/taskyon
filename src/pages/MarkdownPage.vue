@@ -29,13 +29,17 @@ const loadMarkdown = async () => {
   const folder = props.folder
   const filePath = props.filePath
   console.log('download markdown file...', folder, filePath)
-  const txt = await fetchMarkdown(folder, filePath)
-  if (txt) {
-    markdownContent.value = txt
-  } else {
-    if (process.env.PROD) {
-      void router.replace('/404')
+  try {
+    const txt = await fetchMarkdown(folder, filePath)
+    if (txt) {
+      markdownContent.value = txt
+    } else {
+      if (process.env.PROD) {
+        void router.replace('/404')
+      }
     }
+  } catch {
+    void router.replace('/404')
   }
 }
 
