@@ -56,17 +56,77 @@
       <div v-if="!hideTaskInfo" class="q-px-sm q-pt-xs text-caption">
         <div class="row items-center">
           <div class="row">
+            <ToggleButton
+              dense
+              :size="functionToggleBtnSize"
+              outline
+              :icon="mdiTools"
+              v-model="state.llmSettings.enableToolChooser"
+            >
+              <div class="q-pl-sm gt-xs">Use Tools</div>
+              <q-tooltip :delay="200">
+                {{ llmSettings.shape.enableToolChooser.description }}
+              </q-tooltip>
+            </ToggleButton>
+            <ToggleButton
+              v-if="expertMode"
+              v-model="state.llmSettings.useBasePrompt"
+              outline
+              :size="functionToggleBtnSize"
+              dense
+              :on-icon="mdiAutoFix"
+              :off-icon="mdiAlphabeticalVariant"
+            >
+              <div class="q-pl-sm gt-xs">Fancy AI</div>
+              <q-tooltip :delay="200">
+                {{ llmSettings.shape.useBasePrompt.description }}
+              </q-tooltip>
+            </ToggleButton>
+            <ToggleButton
+              v-if="expertMode"
+              v-model="state.llmSettings.tryUsingVisionModels"
+              outline
+              :size="functionToggleBtnSize"
+              dense
+              :on-icon="matVisibility"
+              :off-icon="matVisibilityOff"
+            >
+              <div class="q-pl-sm gt-xs">Vision</div>
+              <q-tooltip :delay="200">
+                {{ llmSettings.shape.tryUsingVisionModels.description }}
+              </q-tooltip>
+            </ToggleButton>
+            <ToggleButton
+              v-if="expertMode"
+              v-model="state.llmSettings.enableOpenAiTools"
+              on-icon="svguse:/taskyon_mono_opt.svg#taskyon"
+              :off-icon="matSmartToy"
+              :size="functionToggleBtnSize"
+              dense
+              outline
+              reverse
+            >
+              <q-icon :name="mdiFunctionVariant"></q-icon>
+              <q-tooltip :dely="200">
+                If turned on, use taskyon function selection mode for models which support this.
+                Otherwise use the built-in support for models which support this. Taskyon mode is
+                usually recommended as it is model agnostic.</q-tooltip
+              ></ToggleButton
+            >
+          </div>
+          <div class="row q-px-md">
             <info-dialog
               v-if="currentModel && tystate.modelLookUp[currentModel]?.description"
               size="xs"
               :info-text="tystate.modelLookUp[currentModel]?.description || ''"
             />
             <q-btn flat dense size="sm" no-caps>
-              <div class="ellipsis">
+              <q-icon :name="matSmartToy" class="q-px-xs" />
+              <div class="ellipsis gt-sm">
                 {{ `${currentModel}` }}
               </div>
-              <div class="text-weight-thin gt-xs">/{{ currentChatApi }}</div>
-              <q-tooltip>Select AI Model</q-tooltip>
+              <div class="text-weight-thin gt-sm">/{{ currentChatApi }}</div>
+              <q-tooltip>Select AI model (current model: {{ currentModel }})</q-tooltip>
               <q-menu color="secondary">
                 <q-list style="min-width: 100px">
                   <q-item-label header>Select previous AI model!</q-item-label>
@@ -100,17 +160,19 @@
             </q-btn>
           </div>
           <q-space></q-space>
-          <div v-if="currentModel" class="gt-xs">
-            {{ `t/c: ${estimatedTokens}/${tystate.modelLookUp[currentModel]?.context_length}` }}
-            <q-tooltip :delay="1000" class="q-gutter-sm">
-              <div>
-                [approximate number of tokens in prompt] / [max number of tokens which AI can
-                understand]
-              </div>
-              <div>Tokens are roughly similar to syllables.</div>
-            </q-tooltip>
-          </div>
-          <div class="lt-sm">{{ `t/c: ${estimatedTokens}` }}</div>
+          <template v-if="currentModel && expertMode && false">
+            <div class="gt-xs">
+              {{ `t/c: ${estimatedTokens}/${tystate.modelLookUp[currentModel]?.context_length}` }}
+              <q-tooltip :delay="1000" class="q-gutter-sm">
+                <div>
+                  [approximate number of tokens in prompt] / [max number of tokens which AI can
+                  understand]
+                </div>
+                <div>Tokens are roughly similar to syllables.</div>
+              </q-tooltip>
+            </div>
+            <div class="lt-sm">{{ `t/c: ${estimatedTokens}` }}</div>
+          </template>
           <q-space></q-space>
           <div>
             <q-btn
@@ -150,7 +212,6 @@
         <q-btn v-if="selectedTaskType" flat dense :icon="matChat" @click="setTaskType(undefined)"
           ><q-tooltip>Select Simple Chat</q-tooltip>
         </q-btn>
-
         <q-select
           v-if="expertMode"
           style="min-width: 200px"
@@ -165,55 +226,6 @@
           :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
           @update:model-value="setTaskType"
         />
-        <ToggleButton
-          v-if="expertMode"
-          v-model="state.llmSettings.useBasePrompt"
-          outline
-          dense
-          :on-icon="mdiAutoFix"
-          :off-icon="mdiAlphabeticalVariant"
-        >
-          <div class="q-pl-sm gt-xs">Fancy AI</div>
-          <q-tooltip :delay="200">
-            {{ llmSettings.shape.useBasePrompt.description }}
-          </q-tooltip>
-        </ToggleButton>
-        <ToggleButton
-          v-if="expertMode"
-          v-model="state.llmSettings.tryUsingVisionModels"
-          outline
-          dense
-          :on-icon="matVisibility"
-          :off-icon="matVisibilityOff"
-        >
-          <div class="q-pl-sm gt-xs">Vision</div>
-          <q-tooltip :delay="200">
-            {{ llmSettings.shape.tryUsingVisionModels.description }}
-          </q-tooltip>
-        </ToggleButton>
-        <ToggleButton
-          dense
-          outline
-          :icon="mdiTools"
-          label="use tools"
-          v-model="state.llmSettings.enableToolChooser"
-        />
-        <ToggleButton
-          v-if="expertMode"
-          v-model="state.llmSettings.enableOpenAiTools"
-          on-icon="svguse:/taskyon_mono_opt.svg#taskyon"
-          :off-icon="matSmartToy"
-          dense
-          outline
-          reverse
-        >
-          <q-icon :name="mdiFunctionVariant"></q-icon>
-          <q-tooltip :dely="200">
-            If turned on, use taskyon function selection mode for models which support this.
-            Otherwise use the built-in support for models which support this. Taskyon mode is
-            usually recommended as it is model agnostic.</q-tooltip
-          ></ToggleButton
-        >
       </div>
     </div>
     <q-slide-transition>
@@ -314,6 +326,8 @@ import { useNlpWorker } from 'src/modules/taskyon/webWorkerApi'
 import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import type OpenAI from 'openai'
+
+const functionToggleBtnSize = 'md'
 
 const CodeEditor = defineAsyncComponent(
   () =>
