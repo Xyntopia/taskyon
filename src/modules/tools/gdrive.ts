@@ -119,7 +119,7 @@ import { useGdrive } from 'src/modules/gdrive' // Import the gdrive module
  * and publishing files to Google Drive.
  */
 export const gDriveTool = createTool({
-  name: 'gDriveTool',
+  name: 'gDriveBrowser',
   description: 'Interact with Google Drive to save, load, and publish files',
   longDescription: `This tool provides seamless integration with Google Drive, allowing you to:
 - Save JSON objects to Google Drive as JSON files

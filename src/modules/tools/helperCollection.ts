@@ -26,11 +26,11 @@ const jinaMarkdownReader = {
   }`,
 } as ToolBase
 
-const jinaSearchTool = {
+const jinaSearch = {
   description: 'A tool that searches using the Jina AI search API.',
   longDescription:
     'This tool uses the Jina AI search API to perform searches and retrieve results.',
-  name: 'jinaSearchTool',
+  name: 'jinaSearch',
   renderOptions: {
     hideChat: false,
     hideLlm: false,
@@ -83,11 +83,11 @@ const jinaSearchTool = {
   }`,
 } as ToolBase
 
-const clockTool = {
+const clock = {
   description: 'A tool that provides the current time, date, and weekday.',
   longDescription:
     'This tool returns the current time, date, and weekday when no arguments are provided. If a Unix timestamp is provided as an argument, it returns the corresponding time, date, and weekday.',
-  name: 'clockTool',
+  name: 'clock',
   renderOptions: {
     hideChat: false,
     hideLlm: false,
@@ -112,11 +112,11 @@ const clockTool = {
   }`,
 } as ToolBase
 
-const locationTool = {
+const location = {
   description: 'A tool that provides the current browser location and IP address.',
   longDescription:
     'This tool retrieves the current browser location using the Geolocation API and the IP address using an external service. It also estimates the location based on the IP address.',
-  name: 'locationTool',
+  name: 'location',
   renderOptions: {
     hideChat: false,
     hideLlm: false,
@@ -162,4 +162,4 @@ const locationTool = {
   }`,
 } as ToolBase
 
-export const smallHelperTools = [jinaMarkdownReader, jinaSearchTool, clockTool, locationTool]
+export const smallHelperTools = [jinaMarkdownReader, jinaSearch, clock, location]

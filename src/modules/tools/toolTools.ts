@@ -245,6 +245,7 @@ task.
               [
                 createChatCompletionTask({
                   goal: 'ChooseTool',
+                  prompts: ['Please use one of the tools you chose earlier'],
                   allowedTools: toolsChosen,
                 }),
               ],
