@@ -189,6 +189,7 @@ export const useGdrive = () => {
     saveObjToGdrive,
     loadObjFromGdrive,
     saveFileToGdrive,
+    loadFileFromGdrive,
     publishMarkdown,
   }
 }

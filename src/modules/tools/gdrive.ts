@@ -1,7 +1,7 @@
-import { clientId } from '../gdrive'
-import { createTool } from '../taskyon/tools'
+import { createTool, makeTaskResult } from '../taskyon/tools'
+import { useGdrive } from 'src/modules/gdrive' // Import the gdrive module
 
-const googleDriveTool = createTool({
+/*const googleDriveTool = createTool({
   description: 'A tool that saves/loads files from Google Drive using OAuth2 within the iframe',
   longDescription: 'Handles complete OAuth2 flow within iframe using popup window',
   name: 'googleDriveTool',
@@ -112,6 +112,175 @@ const googleDriveTool = createTool({
       throw new Error(\`Google Drive error: \${error.message || error}\`);
     }
   }`,
+})*/
+
+/**
+ * Tool that provides Google Drive integration capabilities for saving, loading,
+ * and publishing files to Google Drive.
+ */
+export const gDriveTool = createTool({
+  name: 'gDriveTool',
+  description: 'Interact with Google Drive to save, load, and publish files',
+  longDescription: `This tool provides seamless integration with Google Drive, allowing you to:
+- Save JSON objects to Google Drive as JSON files
+- Save any file (blob) to Google Drive
+- Load files from Google Drive
+- Load and parse JSON objects from Google Drive
+- Publish markdown files to Google Drive with optional sharing
+
+The tool handles authentication automatically and maintains token validity.
+Files can be organized in directories and optionally made public with sharable links.`,
+  parameters: {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        enum: ['saveObject', 'saveFile', 'loadObject', 'loadFile', 'publishMarkdown'],
+        description: 'The action to perform on Google Drive',
+      },
+      directory: {
+        type: 'string',
+        description:
+          'The directory/folder path in Google Drive where the file should be saved or loaded from',
+      },
+      filename: {
+        type: 'string',
+        description: 'The name of the file to save or load',
+      },
+      content: {
+        type: 'string',
+        description:
+          'Content to save (JSON string for objects, file data as base64 for files, markdown text for publishMarkdown)',
+      },
+      mimeType: {
+        type: 'string',
+        description: 'The MIME type of the file (required for saveFile action)',
+        default: 'application/json',
+      },
+      share: {
+        type: 'boolean',
+        description: 'Whether to make the file publicly accessible with a sharable link',
+        default: false,
+      },
+    },
+    required: ['action', 'directory', 'filename'],
+  } as const,
+  function: async ({ action, directory, filename, content, mimeType, share }) => {
+    try {
+      const gdrive = useGdrive()
+      let result
+
+      switch (action) {
+        case 'saveObject': {
+          if (!content) {
+            throw new Error('Content is required for saveObject action')
+          }
+          const obj = JSON.parse(content)
+          await gdrive.saveObjToGdrive(obj, directory, filename)
+          result = { success: true, message: `Object saved to ${directory}/${filename}` }
+          break
+        }
+
+        case 'saveFile': {
+          if (!content) {
+            throw new Error('Content is required for saveFile action')
+          }
+          if (!mimeType) {
+            throw new Error('MIME type is required for saveFile action')
+          }
+
+          // Convert base64 to Blob
+          const binaryString = atob(content)
+          const len = binaryString.length
+          const bytes = new Uint8Array(len)
+          for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i)
+          }
+          const blob = new Blob([bytes], { type: mimeType })
+
+          const gdriveFile = await gdrive.saveFileToGdrive(blob, directory, filename, share)
+          result = {
+            success: true,
+            message: `File saved to ${directory}/${filename}`,
+            fileInfo: gdriveFile,
+          }
+          break
+        }
+
+        case 'loadObject': {
+          const obj = await gdrive.loadObjFromGdrive(directory, filename)
+          result = {
+            success: true,
+            message: `Object loaded from ${directory}/${filename}`,
+            data: obj,
+          }
+          break
+        }
+
+        case 'loadFile': {
+          const file = await gdrive.loadFileFromGdrive(directory, filename)
+          // Convert blob to base64
+          const arrayBuffer = await file.arrayBuffer()
+          const bytes = new Uint8Array(arrayBuffer)
+          let binary = ''
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]!)
+          }
+          const base64 = btoa(binary)
+
+          result = {
+            success: true,
+            message: `File loaded from ${directory}/${filename}`,
+            data: base64,
+            mimeType: file.type,
+          }
+          break
+        }
+
+        case 'publishMarkdown': {
+          if (!content) {
+            throw new Error('Content is required for publishMarkdown action')
+          }
+
+          const gdriveFile = await gdrive.publishMarkdown(content, directory, filename, share)
+          result = {
+            success: true,
+            message: `Markdown published to ${directory}/${filename}`,
+            fileInfo: gdriveFile,
+          }
+          break
+        }
+
+        default:
+          // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+          throw new Error(`Unknown action: ${action}`)
+      }
+
+      return makeTaskResult([
+        [
+          {
+            role: 'system',
+            content: { type: 'toolresult', data: result },
+          },
+        ],
+      ])
+    } catch (error) {
+      return makeTaskResult([
+        [
+          {
+            role: 'system',
+            content: {
+              type: 'toolresult',
+              data: {
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+              },
+            },
+          },
+        ],
+      ])
+    }
+  },
 })
 
-export const storageTools = [googleDriveTool]
+export const storageTools = [gDriveTool]
