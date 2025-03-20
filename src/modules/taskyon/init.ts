@@ -18,7 +18,7 @@ import {
 } from '../tools/toolTools'
 import { createStream } from '../frpBus'
 import { smallHelperTools } from '../tools/helperCollection'
-import { useFullSmallTools } from '../tools/useFullSmallTools'
+import { useFullSmallTools } from '../tools/usefulSmallTools'
 import { devTools } from '../tools/devTools'
 import { taskOrganizationTools } from '../tools/TaskPlannerTool'
 import { storageTools } from '../tools/gdrive'
