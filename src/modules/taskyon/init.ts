@@ -22,6 +22,7 @@ import { useFullSmallTools } from '../tools/usefulSmallTools'
 import { devTools } from '../tools/devTools'
 import { taskOrganizationTools } from '../tools/TaskPlannerTool'
 import { storageTools } from '../tools/gdrive'
+import { appDevTools } from '../tools/appDev'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -42,6 +43,7 @@ export async function initTaskyon(
 ) {
   const ToolList: InternalTool[] = [
     ...smallHelperTools,
+    ...appDevTools,
     ...useFullSmallTools,
     ...devTools,
     ...taskOrganizationTools,
