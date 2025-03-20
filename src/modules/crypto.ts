@@ -1,23 +1,20 @@
 import { urlSafe64BitString } from './encoding'
 import { v1 as uuidv1 } from 'uuid'
 import { Buffer } from 'buffer'
+import * as cryptoweb from './crypto_webcrypto'
+import * as cryptojs from './crypto_js'
 
 // crypto.ts
 
-let cryptoModule
-
 const useWebCrypto = typeof window !== 'undefined' && window.crypto
 
-if (useWebCrypto) {
-  // We are in a browser environment with WebCrypto support
-  cryptoModule = await import('./crypto_webcrypto')
-} else {
-  // Fallback to custom implementation
-  cryptoModule = await import('./crypto_js')
-}
+// this doesn't work yet bcause our current targets don't support top-level await yet!
+//const loadCryptoModule = async () =>
+//  useWebCrypto ? import('./crypto_webcrypto') : import('./crypto_js')
+//const cryptoModulePromise = loadCryptoModule()
 
 export const { encryptObject, decryptObject, deriveKey, generateSalt, sha256UrlSafeHash } =
-  cryptoModule
+  useWebCrypto ? cryptoweb : cryptojs
 
 // Add more exports as needed
 
