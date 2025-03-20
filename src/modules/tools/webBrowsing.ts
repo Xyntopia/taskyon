@@ -1,7 +1,5 @@
 import { createTool, makeTaskResult } from '../taskyon/tools'
-
-// Global store for all opened windows
-const openedWindows = new Map()
+import { openedWindows } from './webAppDev'
 
 export const openThirdPartyUrlTool = createTool({
   name: 'thirdPartyUrlOpener',

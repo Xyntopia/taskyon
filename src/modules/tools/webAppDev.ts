@@ -1,7 +1,7 @@
 import { createTool, makeTaskResult } from '../taskyon/tools'
 
 // Global store for all opened windows
-const openedWindows = new Map()
+export const openedWindows = new Map()
 
 export const createNewWindowTool = createTool({
   name: 'newWindowOpener',
