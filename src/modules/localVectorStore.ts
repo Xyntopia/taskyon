@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import { Document } from 'langchain/document'
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter'
-import { loadFile } from 'src/modules/loadFiles'
+import { convertFileToText } from 'src/modules/loadFiles'
 import { useCachedModels } from './taskyon/nlp'
 import type { HierarchicalNSW } from 'hnswlib-wasm'
 import { LocalStorage } from 'quasar'
@@ -197,7 +197,7 @@ async function uploadToIndex(
   file: File,
   progressCallback: (progress: number) => Promise<void> | void,
 ) {
-  const txt = await loadFile(file)
+  const txt = await convertFileToText(file)
   const txthash = hashCode(txt || '')
   let maxsteps = 0
   let steps = 0

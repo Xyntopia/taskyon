@@ -12,7 +12,9 @@ async function getRoot() {
   return storageRoot
 }
 
-export async function writeFilesToOpfs(
+const userUploadOpfsDir = 'user_uploads'
+
+export async function saveUserUploadedFileToOpfs(
   newFiles: File[], // string is an id e.g. the uuid of our file!
 ): Promise<{ [key: number]: string }> {
   console.log('save file to OPFS', newFiles)
@@ -23,7 +25,7 @@ export async function writeFilesToOpfs(
 
   if (storageRoot) {
     for (const [fileId, file] of newFiles.entries()) {
-      const newSubDir = await storageRoot.getDirectoryHandle('fileuploads', {
+      const newSubDir = await storageRoot.getDirectoryHandle(userUploadOpfsDir, {
         create: true,
       })
 
@@ -44,7 +46,7 @@ export async function writeFilesToOpfs(
       const wtr = await newFile.createWritable()
       try {
         await wtr.write(await file.arrayBuffer())
-        filenameMapping[fileId] = newFileName // Map the original filename to the new filename
+        filenameMapping[fileId] = `${newSubDir.name}/${newFileName}` // Map the original filename to the new filename
       } finally {
         await wtr.close()
       }
@@ -91,15 +93,20 @@ export async function ls(dir: string) {
   }
 }
 
-export async function openFile(fileName: string) {
-  console.log('opening file: ', fileName)
+export async function openUserUploadedFile(filePath: string) {
+  console.log('opening file: ', filePath)
   try {
     const storageRoot = await getRoot()
     if (storageRoot) {
-      // Get the file handle:
-      const dirHandle = await storageRoot.getDirectoryHandle('fileuploads')
+      const pathParts = filePath.split('/')
+      const fileName = pathParts.pop()!
+      let dirHandle = storageRoot
+
+      for (const part of pathParts) {
+        dirHandle = await dirHandle.getDirectoryHandle(part)
+      }
+
       const fileHandle = await dirHandle.getFileHandle(fileName)
-      // Get the file object:
       const file = await fileHandle.getFile()
       return file
     }

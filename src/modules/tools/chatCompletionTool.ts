@@ -148,7 +148,7 @@ export async function chatThreadFromTaskId(
     taskIdChain,
     taskManager.getTask,
     taskManager.getFileMappingByUuid,
-    taskManager.getFile,
+    taskManager.getOpfsUploadedFile,
   )
   return openAIConversationThread
 }
@@ -429,7 +429,7 @@ async function buildChatThread(
   taskIdChain: string[],
   getTask: (id: string) => Promise<TaskNode | null>,
   getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
-  getFile: (uuid: string) => Promise<File | undefined>,
+  getUploadedFile: (uuid: string) => Promise<File | undefined>,
 ) {
   const openAIMessageThread = [] as OpenAI.ChatCompletionMessageParam[]
 
@@ -444,7 +444,7 @@ async function buildChatThread(
           task,
           useVisionModels,
           getFileMapping,
-          getFile,
+          getUploadedFile,
           useOpenAITools,
           toolCollection,
         )
@@ -462,7 +462,7 @@ async function convertTaskNodeToOpenAIMessage(
   task: TaskNode,
   useVisionModels: boolean,
   getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
-  getFile: (uuid: string) => Promise<File | undefined>,
+  getUploadedFile: (uuid: string) => Promise<File | undefined>,
   useOpenAITools: boolean,
   toolCollection: Record<string, ToolBase>,
 ): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[] | undefined> {
@@ -530,24 +530,25 @@ async function convertTaskNodeToOpenAIMessage(
       ]
   } else if (task.content.type === 'message' && task.role != 'function') {
     const message: OpenAI.ChatCompletionMessageParam = {
+      // TOOD: we need to move the "role" into the task type...
       role: task.role,
       content: task.content.data,
     }
     return [message]
-  } else if (task.content.type === 'files' && task.role != 'function') {
+  } else if (task.content.type === 'files') {
     const fileMappings = await Promise.all(task.content.data.map((uuid) => getFileMapping(uuid)))
     const fileNames = fileMappings
-      .map((fm) => '- ' + (fm?.name || fm?.opfs || 'unknown'))
+      .map((fm) => '- ' + (fm?.opfs || fm?.name || 'unknown'))
       .join('\n')
     const message: OpenAI.ChatCompletionMessageParam = {
       role: 'system',
-      content: `user uploaded files:\n${fileNames}`,
+      content: `user uploaded files to opfs:\n${fileNames}`,
     }
 
     if (useVisionModels) {
       // build data strings for all of our images in order to send them to vision...
       const imageContent: OpenAI.ChatCompletionUserMessageParam['content'] =
-        await convertFilesToOpenAIImageContent(fileMappings, getFile)
+        await convertFilesToOpenAIImageContent(fileMappings, getUploadedFile)
 
       const imageMessage: OpenAI.ChatCompletionMessageParam = {
         role: 'user',

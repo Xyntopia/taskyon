@@ -3,7 +3,6 @@ import type { TyTaskStreamData, llmSettings } from './types'
 import type { TaskWorkerController } from './taskWorker'
 import { runTaskWorker } from './taskWorker'
 import type { InternalTool } from './tools'
-import { loadFile } from 'src/modules/loadFiles'
 // TODO: make webpack automatically add all tool files from /tools/*
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
@@ -23,6 +22,7 @@ import { devTools } from '../tools/devTools'
 import { taskOrganizationTools } from '../tools/TaskPlannerTool'
 import { storageTools } from '../tools/gdrive'
 import { appDevTools } from '../tools/webAppDev'
+import { fileTools } from '../tools/fileTools'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -46,6 +46,7 @@ export async function initTaskyon(
     ...appDevTools,
     ...useFullSmallTools,
     ...devTools,
+    ...fileTools,
     ...taskOrganizationTools,
     ...storageTools,
     executePythonScript,
@@ -75,24 +76,6 @@ export async function initTaskyon(
     createToolSearcher(taskManagerInstance),
     createChooseTool(taskManagerInstance),
     await createAddNewToolTool(),
-    {
-      function: async ({ filename }: { filename: string }) => {
-        const file = await taskManagerInstance.getFileByName(filename)
-        const fileContent = await loadFile(file)
-        return fileContent
-      },
-      description: 'Get the contents of an uploaded file',
-      name: 'getFileContent',
-      parameters: {
-        type: 'object',
-        properties: {
-          filename: {
-            type: 'string',
-          },
-        },
-        required: ['filename'],
-      },
-    },
   )
   void taskManagerInstance.updateToolDefinitions()
 

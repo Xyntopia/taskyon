@@ -8,7 +8,7 @@ import {
   collections,
   createTaskyonDatabase,
 } from './rxdb'
-import { openFile } from '../OPFS'
+import { openUserUploadedFile } from '../OPFS'
 import { deepCopy, deepMerge, lockMap } from '../utils'
 import { useVectorStore } from './hnswIndex'
 import { usePyodideWebworker, useNlpWorker } from './webWorkerApi'
@@ -145,10 +145,10 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
     return []
   }
 
-  async function getFile(uuid: string): Promise<File | undefined> {
+  async function getOpfsUploadedFile(uuid: string): Promise<File | undefined> {
     const fileMap = await getFileMappingByUuid(uuid)
     if (fileMap?.opfs) {
-      const file = openFile(fileMap.opfs)
+      const file = openUserUploadedFile(fileMap.opfs)
       return file
     }
   }
@@ -165,7 +165,7 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
       // TODO: try to load files form other sources as well :)
       const fileName = fileMaps[0]?.opfs
       if (fileName) {
-        const file = await openFile(fileName)
+        const file = await openUserUploadedFile(fileName)
         if (file) {
           if (file.type.length == 0) {
             // we do this, because for some files, opfs doesn't recognize the file type
@@ -196,7 +196,7 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
     searchFiles,
     bulkUpsertFiles,
     getFileMappingByUuid,
-    getFile,
+    getOpfsUploadedFile,
     getFileByName,
   }
 }

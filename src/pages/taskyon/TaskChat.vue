@@ -115,7 +115,7 @@ import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 
 const props = defineProps<{ detailed?: boolean; treeBrowser?: boolean; rootTaskId?: string }>()
 const showAllTasks = ref<boolean>(props.detailed)
-const showHierarchy = ref<boolean>(props.detailed)
+const showHierarchy = ref<boolean>(false)
 
 const ResetButton = process.env.DEV
   ? defineAsyncComponent(

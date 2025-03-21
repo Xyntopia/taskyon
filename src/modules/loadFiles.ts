@@ -44,7 +44,7 @@ async function read_docx(file: File) {
   const magic = await WASMagic.create();
 }*/
 
-export async function loadFile(file: File) {
+export async function convertFileToText(file: File) {
   console.log('load file: ' + file.type)
   switch (file.type) {
     case 'application/pdf':

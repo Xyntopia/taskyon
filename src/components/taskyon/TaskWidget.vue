@@ -339,7 +339,7 @@ const state = useAppStateStore()
 const fileMappings = ref<FileMappingDocType[]>([])
 async function getFile(uuid: string) {
   console.log('load image', uuid)
-  return (await tystate.getTaskManager()).getFile(uuid)
+  return (await tystate.getTaskManager()).getOpfsUploadedFile(uuid)
 }
 
 if (props.task.content.type === 'files') {

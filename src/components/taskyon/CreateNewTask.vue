@@ -294,7 +294,7 @@ import '@quasar/quasar-ui-qmarkdown/dist/index.css'
 import { useTaskyonStore } from 'stores/taskyonState'
 import type { FunctionArguments, ToolBase } from 'src/modules/taskyon/types'
 import ModelSelection from 'components/taskyon/ModelSelection.vue'
-import { writeFilesToOpfs } from 'src/modules/OPFS'
+import { saveUserUploadedFileToOpfs } from 'src/modules/OPFS'
 import ObjectTreeView from '../ObjectTreeView.vue'
 import taskSettingsButton from './taskSettingsButton.vue'
 import taskContentEdit from './taskContentEdit.vue'
@@ -505,7 +505,7 @@ watchDebounced(
 async function addFiles2Taskyon(newFiles: File[]) {
   console.log('add files to our chat!')
   //first, upload file into our OPFS file system:
-  const opfsMapping = await writeFilesToOpfs(newFiles)
+  const opfsMapping = await saveUserUploadedFileToOpfs(newFiles)
 
   // Collect UUIDs from added files
   const uuids = []
