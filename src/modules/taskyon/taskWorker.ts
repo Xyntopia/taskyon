@@ -365,6 +365,9 @@ export async function runTaskWorker(
     setTaskFinished,
   )
 
+  // this is uses to track how long a list of tasks has been processing
+  let taskFinishedWaitingCount = 0
+
   while (true) {
     console.log('waiting for next task!')
     let task: TaskNode | null = null
@@ -401,8 +404,12 @@ export async function runTaskWorker(
         processTasksQueue.push(task.id)
         // if this is the only task in the queue, we need to wait a little bit in order
         // to not overwhelm the browser (This will likely never be the case, but just in case)
-        if (processTasksQueue.count() === 1) await sleep(500)
-        // we know that our prior task is finished, so we can continue with this task
+        if (taskFinishedWaitingCount >= 5) {
+          await sleep(500)
+          taskFinishedWaitingCount = 0
+        } else {
+          taskFinishedWaitingCount += 1
+        }
         continue
       }
 
