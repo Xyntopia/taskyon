@@ -99,11 +99,15 @@
         >
           <div class="col">
             <ty-markdown
+              v-if="currentStream"
               no-line-numbers
               no-mermaid
               :use-iframe="false"
               :src="currentStream || ''"
             />
+            <div v-else>
+              {{ tystate.lastTaskState.get(currentTask.id) }}
+            </div>
             <q-spinner-dots size="2rem" color="secondary" />
           </div>
         </q-card>
