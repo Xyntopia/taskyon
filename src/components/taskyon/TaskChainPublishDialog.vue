@@ -120,7 +120,14 @@ const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const canShare = navigator.canShare ? navigator.canShare() : false
 
-const baseURL = process.env.DEV ? window.origin : 'https://taskyon.space'
+// this here is done in order to check if taskyon is run locally...
+// we want poeple to always be redirected to taskyon.space when using the sharing
+// feature except if taskyon is run in development mode.
+const baseURL = process.env.DEV
+  ? window.origin
+  : window.origin.includes('dev.taskyon.space')
+    ? 'https://dev.taskyon.space'
+    : 'https://taskyon.space'
 
 const props = defineProps<{
   conversationId: string
