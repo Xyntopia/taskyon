@@ -97,10 +97,11 @@ in gitlab. They should roughly follow the style of a "user story".`,
 })
 
 const gitReader = createTool({
-  description: 'Extracts files from a Git repository using isomorphic-git in the browser.',
-  longDescription:
-    'This tool clones or fetches a Git repository and extracts the contents of a specified file or directory using isomorphic-git, adapted for browser environments without using Node.js-style imports.',
   name: 'gitReader',
+  description:
+    'Extracts files from a Git repository using isomorphic-git with memfs dynamically loaded as an ESM module.',
+  longDescription:
+    'This tool clones or fetches a Git repository and extracts the contents of a specified file or directory using isomorphic-git. It leverages memfs dynamically imported from jspm.dev to simulate a virtual filesystem in the browser, avoiding the need for a UMD bundle. It also supports specifying custom HTTP clients and CORS proxies.',
   renderOptions: {
     hideChat: false,
     hideLlm: false,
@@ -136,50 +137,29 @@ const gitReader = createTool({
     },
   },
   code: `async ({ repoUrl, filePath, ref = "HEAD", http, corsProxy = "https://cors.isomorphic-git.org" }) => {
-  // Helper to load a script dynamically
-  function loadScript(url) {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script')
-      script.src = url
-      script.async = true
-      script.onload = () => {
-        console.log(\`Script loaded: \${url}\`);
-        resolve();
-      }
-      script.onerror = () => {
-        const error = new Error(\`Failed to load \${url}\`);
-        console.error(error);
-        reject(error);
-      }
-      document.head.appendChild(script)
-    })
-  }
-
-  // Load libraries if they're not already available
-  const promises = []
-  if (!window.git) {
-    promises.push(loadScript('https://unpkg.com/isomorphic-git'))
-  }
-  if (!window.memfs) {
-    promises.push(loadScript('https://unpkg.com/memfs/dist/memfs.umd.js'))
-  }
   try {
-    await Promise.all(promises)
-  } catch (error) {
-    console.error('Failed to load one or more scripts:', error);
-    return { success: false, error: error.message };
-  }
-
-  try {
-    // Use memfs instead of LightningFS
-    if (!window.memfs) {
-      console.error('memfs is not available on the window object.');
-      return { success: false, error: 'memfs is not available.' };
+    // Ensure isomorphic-git is loaded
+    if (!window.git) {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/isomorphic-git';
+        script.async = true;
+        script.onload = () => {
+          console.log('isomorphic-git loaded.');
+          resolve();
+        };
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
     }
-    const fs = memfs.fs
-    const dir = '/repo'
-    // Determine the HTTP client: use provided http parameter if available, otherwise fallback
-    const httpClient = http || (git.http || window.http)
+
+    // Dynamically import memfs as an ESM module from jspm.dev
+    const { fs } = await import('https://jspm.dev/memfs');
+
+    const dir = '/repo';
+    // Determine the HTTP client: use the provided http parameter if available, otherwise fallback
+    const httpClient = http || (git.http || window.http);
+
     await git.clone({
       fs,
       http: httpClient,
@@ -189,11 +169,12 @@ const gitReader = createTool({
       depth: 1,
       ref,
       corsProxy,
-    })
-    const fileContent = await fs.promises.readFile(\`\${dir}/\${filePath}\`, { encoding: 'utf8' })
-    return { success: true, content: fileContent }
+    });
+
+    const fileContent = await fs.promises.readFile(\`\${dir}/\${filePath}\`, { encoding: 'utf8' });
+    return { success: true, content: fileContent };
   } catch (error) {
-    return { success: false, error: error.message }
+    return { success: false, error: error.message };
   }
 }`,
 })
