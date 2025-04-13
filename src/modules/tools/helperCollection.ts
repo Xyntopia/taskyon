@@ -162,4 +162,45 @@ const location = {
   }`,
 } as ToolBase
 
-export const smallHelperTools = [jinaMarkdownReader, jinaSearch, clock, location]
+const notification = {
+  description: 'Displays a browser-native notification with an optional delay.',
+  longDescription:
+    'This tool allows users to display a browser-native notification with a custom message. Optionally, users can specify a specific time or number of seconds to wait before displaying the notification.',
+  name: 'delayedNotification',
+  renderOptions: {
+    hideChat: false,
+    hideLlm: false,
+  },
+  parameters: {
+    type: 'object',
+    required: ['message'],
+    properties: {
+      message: {
+        type: 'string',
+        description: 'The message to be displayed in the notification.',
+      },
+      delay: {
+        type: 'number',
+        description:
+          'The time in milliseconds to wait before displaying the notification. If not provided, the notification will be displayed immediately.',
+      },
+    },
+  },
+  code: `({ message, delay = 0 }) => {
+    if (Notification.permission === 'granted') {
+      setTimeout(() => {
+        new Notification(message)
+      }, delay)
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission().then((permission) => {
+        if (permission === 'granted') {
+          setTimeout(() => {
+            new Notification(message)
+          }, delay)
+        }
+      })
+    }
+  }`,
+} as ToolBase
+
+export const smallHelperTools = [jinaMarkdownReader, jinaSearch, clock, location, notification]
