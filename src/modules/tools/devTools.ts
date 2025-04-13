@@ -96,4 +96,77 @@ in gitlab. They should roughly follow the style of a "user story".`,
   },
 })
 
-export const devTools = [issueListGenerator]
+const gitReader = createTool({
+  description: 'Extracts files from a Git repository using isomorphic-git in the browser.',
+  longDescription:
+    'This tool clones or fetches a Git repository and extracts the contents of a specified file or directory using isomorphic-git, adapted for browser environments without using Node.js-style imports.',
+  name: 'gitReader',
+  renderOptions: {
+    hideChat: false,
+    hideLlm: false,
+  },
+  parameters: {
+    type: 'object',
+    required: ['repoUrl', 'filePath'],
+    properties: {
+      repoUrl: {
+        type: 'string',
+        description: 'The URL of the Git repository to clone or fetch.',
+      },
+      filePath: {
+        type: 'string',
+        description: 'The path to the file or directory to extract from the repository.',
+      },
+      ref: {
+        type: 'string',
+        description: 'The branch, tag, or commit to checkout. Defaults to HEAD.',
+        default: 'HEAD',
+      },
+    },
+  },
+  code: `async ({ repoUrl, filePath, ref = "HEAD" }) => {
+  // Helper to load a script dynamically
+  function loadScript(url) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script')
+      script.src = url
+      script.async = true
+      script.onload = resolve
+      script.onerror = () => reject(new Error(\`Failed to load \${url}\`))
+      document.head.appendChild(script)
+    })
+  }
+
+  // Load libraries if they're not already available
+  const promises = []
+  if (!window.LightningFS) {
+    promises.push(loadScript('https://unpkg.com/@isomorphic-git/lightning-fs'))
+  }
+  if (!window.git) {
+    promises.push(loadScript('https://unpkg.com/isomorphic-git'))
+  }
+  await Promise.all(promises)
+
+  try {
+    const fs = new LightningFS('fs')
+    const dir = '/repo'
+    // Adjust the http reference as needed
+    const http = git.http || window.http
+    await git.clone({
+      fs,
+      http,
+      dir,
+      url: repoUrl,
+      singleBranch: true,
+      depth: 1,
+      ref,
+    })
+    const fileContent = await fs.promises.readFile(\`\${dir}/\${filePath}\`, { encoding: 'utf8' })
+    return { success: true, content: fileContent }
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+}`,
+})
+
+export const devTools = [issueListGenerator, gitReader]
