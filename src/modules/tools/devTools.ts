@@ -99,9 +99,9 @@ in gitlab. They should roughly follow the style of a "user story".`,
 const gitReader = createTool({
   name: 'gitReader',
   description:
-    'Extracts files from a Git repository using isomorphic-git with memfs dynamically loaded as an ESM module.',
+    'Extracts files from a Git repository using isomorphic-git with memfs and a dynamically imported HTTP client.',
   longDescription:
-    'This tool clones or fetches a Git repository and extracts the contents of a specified file or directory using isomorphic-git. It leverages memfs dynamically imported from jspm.dev to simulate a virtual filesystem in the browser, avoiding the need for a UMD bundle. It also supports specifying custom HTTP clients and CORS proxies.',
+    "This tool clones or fetches a Git repository and extracts the contents of a specified file or directory using isomorphic-git. It dynamically imports memfs from jspm.dev to simulate a virtual filesystem in the browser and loads the HTTP client from isomorphic-git's web module (from unpkg) if none is provided. This setup enables browser-based Git operations without additional bundling.",
   renderOptions: {
     hideChat: false,
     hideLlm: false,
@@ -126,7 +126,7 @@ const gitReader = createTool({
       http: {
         type: 'object',
         description:
-          'A custom HTTP client to use for network requests. If omitted, defaults to isomorphic-git’s built-in client.',
+          "An optional custom HTTP client to use for network requests. If omitted, the tool dynamically imports the client from isomorphic-git's web module.",
       },
       corsProxy: {
         type: 'string',
@@ -138,7 +138,7 @@ const gitReader = createTool({
   },
   code: `async ({ repoUrl, filePath, ref = "HEAD", http, corsProxy = "https://cors.isomorphic-git.org" }) => {
   try {
-    // Ensure isomorphic-git is loaded
+    // Ensure isomorphic-git is loaded on the window
     if (!window.git) {
       await new Promise((resolve, reject) => {
         const script = document.createElement('script');
@@ -153,16 +153,19 @@ const gitReader = createTool({
       });
     }
 
-    // Dynamically import memfs as an ESM module from jspm.dev
+    // Dynamically import memfs (ESM version) from jspm.dev
     const { fs } = await import('https://jspm.dev/memfs');
 
-    const dir = '/repo';
-    // Determine the HTTP client: use the provided http parameter if available, otherwise fallback
-    const httpClient = http || (git.http || window.http);
+    // Dynamically load the HTTP client if not provided
+    if (!http) {
+      const httpModule = await import('https://unpkg.com/isomorphic-git/http/web/index.js');
+      http = httpModule.default || httpModule;
+    }
 
+    const dir = '/repo';
     await git.clone({
       fs,
-      http: httpClient,
+      http,
       dir,
       url: repoUrl,
       singleBranch: true,
