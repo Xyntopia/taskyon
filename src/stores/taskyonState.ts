@@ -17,8 +17,6 @@ import { availableModels } from 'src/modules/taskyon/chat'
 import { setupIframeApi } from 'src/modules/taskyon/iframeApi'
 import type { InternalTool } from 'src/modules/taskyon/tools'
 import { useAppStateStore } from './appState'
-import type OpenAI from 'openai'
-import { useCallbacks } from 'src/modules/useCallBacks'
 import { filter } from 'src/modules/frpBus'
 import { initializeSessionWithPasskey } from 'src/modules/cryptoSession'
 import { generateRsaOaepPair } from 'src/modules/crypto_webcrypto'
@@ -169,22 +167,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const taskWorkerController = useTaskWorkerController()
   console.log('initialize taskyon')
 
-  const { triggerGlobal, removeGlobal, addGlobal } = useCallbacks<{
-    taskId: string
-    chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined
-  }>()
-
   const initTaskyonPromise = (async () =>
     await initTaskyon(
       stateRefs.llmSettings,
       stateRefs.keys,
       taskWorkerController,
       defineTyGuiTools(),
-      // this here is used as a callback for streaming..  all streaming chat completions call this function
-      // together with the ID of the chatCompletion task.
-      (id: string, chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => {
-        triggerGlobal({ taskId: id, chunk })
-      },
       async () => (await generateRsaOaepPair()).publicKey,
     ))()
 
@@ -212,6 +200,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const workerStream = asyncProxy(async () => {
     const instance = await initTaskyonPromise
     return instance['workerStream']
+  })
+
+  const chatCompletionStream = asyncProxy(async () => {
+    const instance = await initTaskyonPromise
+    return instance['chatCompletionStream']
   })
 
   const lastTaskState = ref(new Map<string, TyTaskStreamData['stage']>())
@@ -441,11 +434,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     lastTaskState,
     addToProcessQueue,
     modelLookUp,
+    chatCompletionStream,
     llmModels: computed(() => llmModelsInternal.value),
-    streamCallBacks: {
-      removeGlobal,
-      addGlobal,
-    },
   }
 }) // this state stores all information which
 // should be stored e.g. in browser LocalStorage

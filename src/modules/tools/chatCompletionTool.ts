@@ -44,6 +44,7 @@ import { dump, load } from 'js-yaml'
 import type { JSONSchema7 } from 'json-schema'
 import { safeYamlDump } from '../yamlUtils'
 import type { AnySchema } from 'ajv'
+import { createStream } from '../frpBus'
 
 // this function processes all tasks which go to any sort of an LLM
 // TODO: for configuration & allowedTools it would be good if we could add
@@ -667,12 +668,7 @@ export async function createChatCompletionTool(
   taskManager: TyTaskManager,
   shouldInterrupt: () => boolean,
   apiKeys: { [key: string]: string },
-  // we can provide a callback which gets call whenever our chatCompletion updates stream of some sort...
-  streamCallback: (
-    id: string,
-    chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined,
-  ) => void,
-): Promise<InternalTool> {
+) {
   const Ajv = await import(
     /* webpackPrefetch: true */
     /* webpackChunkName: "codemirror" */
@@ -681,6 +677,11 @@ export async function createChatCompletionTool(
     'ajv'
   )
   const ajv = new Ajv.default() // options can be passed, e.g. {allErrors: true}
+
+  const chatCompletionStream = createStream<{
+    taskId: string
+    chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined
+  }>()
 
   const fetchChatCompletion: internalToolFunctionSchema = async (
     { model, goal, llmTools, allowedTools, prompts, schema }: ccArguments,
@@ -718,7 +719,7 @@ export async function createChatCompletionTool(
       apiKeys,
       lastTaskBeforeChatCompletion,
       (chunk) => {
-        streamCallback(currentTask.id, chunk)
+        chatCompletionStream.emit({ taskId: currentTask.id, chunk })
       },
       prompts ?? [],
       goal,
@@ -812,7 +813,7 @@ export async function createChatCompletionTool(
     parameters: chatCompletionParams,
   }
 
-  return chatCompletion
+  return { chatCompletion, stream: chatCompletionStream.stream }
 }
 
 export type chatCompletionTool = ReturnType<typeof createChatCompletionTool>

@@ -8,7 +8,6 @@ import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
 import { createAsyncQueue } from '../utils'
 import { createChatCompletionTool } from '../tools/chatCompletionTool'
-import type OpenAI from 'openai'
 import {
   createAddNewToolTool,
   createChooseTool,
@@ -35,10 +34,6 @@ export async function initTaskyon(
   // this way we can give taskyon access and the ability to read & change the environment
   // it is running in.
   EnvironmentTools: InternalTool[],
-  streamCallback: (
-    id: string,
-    chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined,
-  ) => void,
   publicRecoveryKey: () => Promise<CryptoKey>,
 ) {
   const ToolList: InternalTool[] = [
@@ -65,14 +60,14 @@ export async function initTaskyon(
   console.log('finished taskManager initialization')
 
   // add tools which have access to the taskManagerInstance itself
+  const { chatCompletion, stream: chatCompletionStream } = await createChatCompletionTool(
+    llmSettings,
+    taskManagerInstance,
+    taskWorkerController.isInterrupted,
+    apiKeys,
+  )
   ToolList.push(
-    await createChatCompletionTool(
-      llmSettings,
-      taskManagerInstance,
-      taskWorkerController.isInterrupted,
-      apiKeys,
-      streamCallback,
-    ),
+    chatCompletion,
     createToolSearcher(taskManagerInstance),
     createChooseTool(taskManagerInstance),
     await createAddNewToolTool(),
@@ -82,6 +77,7 @@ export async function initTaskyon(
   // keys could porentially be reactive here, so in theory, when they change in the GUI,
   // taskyon should automatically pick up on this...
   console.log('starting taskyon worker')
+  // TODO: move this into th runTaskWorker function
   const taskProcessingStream = createStream<TyTaskStreamData>()
 
   const processTasksQueue = createAsyncQueue<string>()
@@ -97,5 +93,6 @@ export async function initTaskyon(
     taskManagerInstance,
     processTasksQueue,
     workerStream: taskProcessingStream.stream,
+    chatCompletionStream,
   }
 }

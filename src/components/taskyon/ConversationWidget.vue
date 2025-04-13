@@ -132,6 +132,7 @@ import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onBeforeUnmount } from 'vue'
 import { ref } from 'vue'
 import { type TaskTreeNode } from 'src/modules/taskyon/taskManager'
+import type { Unsubscribe } from 'src/modules/frpBus'
 const $q = useQuasar()
 
 const tystate = useTaskyonStore()
@@ -150,24 +151,29 @@ const props = defineProps<{
 
 const streamingContentTracker = ref<Map<string, string>>(new Map<string, string>())
 
-const streamCallback: Parameters<typeof tystate.streamCallBacks.addGlobal>[0] = ({
-  taskId,
-  chunk,
-}) => {
-  //console.log('received stream for', taskId)
-  if (chunk?.choices[0]?.delta?.tool_calls) {
-    chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
-      // TODO: add streaming for function calls
-      console.log(t)
-    })
-  }
-  if (chunk?.choices[0]?.delta?.content) {
-    streamingContentTracker.value.set(
-      taskId,
-      (streamingContentTracker.value.get(taskId) ?? '') + chunk.choices[0].delta.content,
-    )
-  }
-}
+let streamerUnsubscriber: Unsubscribe
+
+void tystate.chatCompletionStream
+  .subscribe(({ taskId, chunk }) => {
+    //console.log('received stream for', taskId)
+    if (chunk?.choices[0]?.delta?.tool_calls) {
+      chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
+        // TODO: add streaming for function calls
+        console.log(t)
+      })
+    }
+    if (chunk?.choices[0]?.delta?.content) {
+      streamingContentTracker.value.set(
+        taskId,
+        (streamingContentTracker.value.get(taskId) ?? '') + chunk.choices[0].delta.content,
+      )
+    }
+  })
+  .then((unsubscribe) => (streamerUnsubscriber = unsubscribe))
+
+onBeforeUnmount(() => {
+  streamerUnsubscriber()
+})
 
 interface taskTreeNodeType {
   label: string
@@ -281,12 +287,6 @@ async function onLazyLoad({
 
   done(subTaskTree)
 }
-
-tystate.streamCallBacks.addGlobal(streamCallback)
-
-onBeforeUnmount(() => {
-  tystate.streamCallBacks.removeGlobal(streamCallback)
-})
 
 const currentStream = computed(() => {
   if (props.currentTask) return streamingContentTracker.value.get(props.currentTask.id)
