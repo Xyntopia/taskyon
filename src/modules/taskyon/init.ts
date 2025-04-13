@@ -1,5 +1,5 @@
 import { useTyTaskManager } from './taskManager'
-import type { TyTaskStreamData, llmSettings } from './types'
+import type { llmSettings } from './types'
 import type { TaskWorkerController } from './taskWorker'
 import { runTaskWorker } from './taskWorker'
 import type { InternalTool } from './tools'
@@ -14,7 +14,6 @@ import {
   createToolSearcher,
   toolCreationWizard,
 } from '../tools/toolTools'
-import { createStream } from '../frpBus'
 import { smallHelperTools } from '../tools/helperCollection'
 import { useFullSmallTools } from '../tools/usefulSmallTools'
 import { devTools } from '../tools/devTools'
@@ -77,22 +76,18 @@ export async function initTaskyon(
   // keys could porentially be reactive here, so in theory, when they change in the GUI,
   // taskyon should automatically pick up on this...
   console.log('starting taskyon worker')
-  // TODO: move this into th runTaskWorker function
-  const taskProcessingStream = createStream<TyTaskStreamData>()
-
   const processTasksQueue = createAsyncQueue<string>()
-  void runTaskWorker(
+  const workerStream = runTaskWorker(
     processTasksQueue,
     llmSettings,
     taskManagerInstance,
     taskWorkerController,
-    taskProcessingStream.emit,
   )
 
   return {
     taskManagerInstance,
     processTasksQueue,
-    workerStream: taskProcessingStream.stream,
+    workerStream,
     chatCompletionStream,
   }
 }
