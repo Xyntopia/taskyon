@@ -122,44 +122,73 @@ const gitReader = createTool({
         description: 'The branch, tag, or commit to checkout. Defaults to HEAD.',
         default: 'HEAD',
       },
+      http: {
+        type: 'object',
+        description:
+          'A custom HTTP client to use for network requests. If omitted, defaults to isomorphic-git’s built-in client.',
+      },
+      corsProxy: {
+        type: 'string',
+        description:
+          'The URL of a CORS proxy to use for the repository fetch. Defaults to "https://cors.isomorphic-git.org".',
+        default: 'https://cors.isomorphic-git.org',
+      },
     },
   },
-  code: `async ({ repoUrl, filePath, ref = "HEAD" }) => {
+  code: `async ({ repoUrl, filePath, ref = "HEAD", http, corsProxy = "https://cors.isomorphic-git.org" }) => {
   // Helper to load a script dynamically
   function loadScript(url) {
     return new Promise((resolve, reject) => {
       const script = document.createElement('script')
       script.src = url
       script.async = true
-      script.onload = resolve
-      script.onerror = () => reject(new Error(\`Failed to load \${url}\`))
+      script.onload = () => {
+        console.log(\`Script loaded: \${url}\`);
+        resolve();
+      }
+      script.onerror = () => {
+        const error = new Error(\`Failed to load \${url}\`);
+        console.error(error);
+        reject(error);
+      }
       document.head.appendChild(script)
     })
   }
 
   // Load libraries if they're not already available
   const promises = []
-  if (!window.LightningFS) {
-    promises.push(loadScript('https://unpkg.com/@isomorphic-git/lightning-fs'))
-  }
   if (!window.git) {
     promises.push(loadScript('https://unpkg.com/isomorphic-git'))
   }
-  await Promise.all(promises)
+  if (!window.memfs) {
+    promises.push(loadScript('https://unpkg.com/memfs/dist/memfs.umd.js'))
+  }
+  try {
+    await Promise.all(promises)
+  } catch (error) {
+    console.error('Failed to load one or more scripts:', error);
+    return { success: false, error: error.message };
+  }
 
   try {
-    const fs = new LightningFS('fs')
+    // Use memfs instead of LightningFS
+    if (!window.memfs) {
+      console.error('memfs is not available on the window object.');
+      return { success: false, error: 'memfs is not available.' };
+    }
+    const fs = memfs.fs
     const dir = '/repo'
-    // Adjust the http reference as needed
-    const http = git.http || window.http
+    // Determine the HTTP client: use provided http parameter if available, otherwise fallback
+    const httpClient = http || (git.http || window.http)
     await git.clone({
       fs,
-      http,
+      http: httpClient,
       dir,
       url: repoUrl,
       singleBranch: true,
       depth: 1,
       ref,
+      corsProxy,
     })
     const fileContent = await fs.promises.readFile(\`\${dir}/\${filePath}\`, { encoding: 'utf8' })
     return { success: true, content: fileContent }
