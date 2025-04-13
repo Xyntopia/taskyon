@@ -106,7 +106,7 @@
               :src="currentStream || ''"
             />
             <div v-else>
-              {{ tystate.lastTaskState.get(currentTask.id) }}
+              {{ tystate.workerStreamLogs.at(-1) }}
             </div>
             <q-spinner-dots size="2rem" color="secondary" />
           </div>

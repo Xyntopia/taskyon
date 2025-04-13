@@ -207,6 +207,23 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return instance['chatCompletionStream']
   })
 
+  const workerStreamLogs = ref<string[]>([])
+  const maxLogRows = 50
+  void workerStream.subscribe((data) => {
+    if (data.task) {
+      let logEntry = `Processed ${data.task.content.type}: $`
+      if (data.task.content.type === 'functioncall') {
+        logEntry = `${data.task.content.data.name}: ${data.stage}`
+      }
+      workerStreamLogs.value.push(logEntry)
+
+      // Ensure the log doesn't exceed the maximum number of rows
+      if (workerStreamLogs.value.length > maxLogRows) {
+        workerStreamLogs.value.shift() // Remove the oldest entry
+      }
+    }
+  })
+
   const lastTaskState = ref(new Map<string, TyTaskStreamData['stage']>())
   void workerStream.subscribe((data) => {
     if (data.task?.id) {
@@ -432,6 +449,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     taskWorkerController,
     getTaskManager,
     lastTaskState,
+    workerStreamLogs,
     addToProcessQueue,
     modelLookUp,
     chatCompletionStream,
