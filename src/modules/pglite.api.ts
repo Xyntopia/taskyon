@@ -91,10 +91,10 @@ const getVectorStoreTable = async (name: string, modelName: string) => {
   return { db, vectorizeText, modelName }
 }
 
-export const createVectorStore = async () => {
+export const createVectorStore = async (name: string) => {
   const modelName = 'xyntopia/all-MiniLM-L6-v2'
 
-  const { db, vectorizeText } = await getVectorStoreTable('vectorStoreTool', modelName)
+  const { db, vectorizeText } = await getVectorStoreTable(name, modelName)
 
   const search = async (searchText: string, k: number, label?: string) => {
     console.log(`Searching for ${searchText}`)
@@ -107,7 +107,7 @@ export const createVectorStore = async () => {
       label,
       data,
       vec <-> $1 AS distance
-      FROM vectorStoreTool
+      FROM ${name}
       WHERE label = $3
       ORDER BY distance
       LIMIT $2;
@@ -124,7 +124,7 @@ export const createVectorStore = async () => {
     const id = await sha256UrlSafeHash(saveText)
     await db.query(
       `
-      INSERT INTO vectorStoreTool (id, label, data, vec)
+      INSERT INTO ${name} (id, label, data, vec)
       VALUES ($1, $2, $3, $4);
     `,
       // TODO: can this be made more efficient without converting
@@ -133,5 +133,33 @@ export const createVectorStore = async () => {
     )
   }
 
-  return { search, insert }
+  const deleteAll = async () => {
+    await db.query(`
+      TRUNCATE ${name};
+    `)
+  }
+
+  const getById = async (id: string): Promise<unknown> => {
+    const result = await db.query(
+      `
+      SELECT vec
+      FROM ${name}
+      WHERE id = $1;
+    `,
+      [id],
+    )
+    return result.rows[0] || null
+  }
+
+  const deleteById = async (id: string) => {
+    await db.query(
+      `
+      DELETE FROM ${name}
+      WHERE id = $1;
+    `,
+      [id],
+    )
+  }
+
+  return { search, insert, deleteAll, delete: deleteById, get: getById }
 }
