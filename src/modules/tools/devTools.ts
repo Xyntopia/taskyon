@@ -123,11 +123,6 @@ const gitReader = createTool({
         description: 'The branch, tag, or commit to checkout. Defaults to HEAD.',
         default: 'HEAD',
       },
-      http: {
-        type: 'object',
-        description:
-          "An optional custom HTTP client to use for network requests. If omitted, the tool dynamically imports the client from isomorphic-git's web module.",
-      },
       corsProxy: {
         type: 'string',
         description:
@@ -136,7 +131,7 @@ const gitReader = createTool({
       },
     },
   },
-  code: `async ({ repoUrl, filePath, ref = "HEAD", http, corsProxy = "https://cors.isomorphic-git.org" }) => {
+  code: `async ({ repoUrl, filePath, ref = "HEAD", corsProxy = "https://cors.isomorphic-git.org" }) => {
   try {
     // Ensure isomorphic-git is loaded on the window
     if (!window.git) {
@@ -156,11 +151,8 @@ const gitReader = createTool({
     // Dynamically import memfs (ESM version) from jspm.dev
     const { fs } = await import('https://jspm.dev/memfs');
 
-    // Dynamically load the HTTP client if not provided
-    if (!http) {
-      const httpModule = await import('https://unpkg.com/isomorphic-git/http/web/index.js');
-      http = httpModule.default || httpModule;
-    }
+    const httpModule = await import('https://unpkg.com/isomorphic-git/http/web/index.js');
+    http = httpModule.default || httpModule;
 
     const dir = '/repo';
     await git.clone({
