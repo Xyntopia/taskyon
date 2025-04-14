@@ -243,43 +243,6 @@
             @update-bot-name="handleBotNameUpdate"
           ></ModelSelection>
         </q-item>
-        <!--Allowed Tools Selection-->
-        <template v-if="state.appConfiguration.expertMode">
-          <q-separator class="q-my-sm" />
-          <q-item class="row items-center">
-            <q-icon size="sm" :name="mdiTools" />
-            <q-expansion-item v-model="state.allowedToolsExpand" dense label="Select Tools">
-              <q-item-section>
-                <q-option-group
-                  v-model="state.llmSettings.allowedTools"
-                  class="q-ma-md"
-                  :options="
-                    Object.keys(toolCollection).map((name) => ({
-                      label: name,
-                      value: name,
-                      description: toolCollection[name]?.description,
-                    }))
-                  "
-                  color="secondary"
-                  type="checkbox"
-                  inline
-                  dense
-                >
-                  <template #label="opt">
-                    <div>
-                      {{ opt.label }}
-                    </div>
-                    <q-tooltip anchor="bottom middle" style="max-width: 500px">{{
-                      opt.description
-                    }}</q-tooltip>
-                  </template></q-option-group
-                >
-              </q-item-section>
-            </q-expansion-item>
-            <q-space />
-            <taskSettingsButton v-model="expandedTaskCreation" />
-          </q-item>
-        </template>
       </q-list>
     </q-slide-transition>
   </div>

@@ -8,15 +8,11 @@
     </div>
   </div>
   <div v-if="result">
-    <div class="text-bold">
-      result (yaml):
-      <q-btn class="q-ml-md" :icon="matHtml" dense flat @click="useIframe = !useIframe" />
-    </div>
+    <div class="text-bold">result (yaml):</div>
     <div caption class="relative-position">
-      <div v-if="!isHtmlResult && !useIframe" class="scroll-area">
+      <div class="scroll-area">
         {{ safeYamlDump(result) }}
       </div>
-      <iframe v-else :srcdoc="typeof result === 'string' ? result : ''"></iframe>
       <q-btn
         class="scroll-area-btn"
         flat
@@ -28,24 +24,16 @@
 </template>
 
 <script setup lang="ts">
-import { matContentCopy, matHtml } from '@quasar/extras/material-icons'
+import { matContentCopy } from '@quasar/extras/material-icons'
 import { dump } from 'js-yaml'
 import type { FunctionCall } from 'src/modules/taskyon/types'
-import { computed, ref } from 'vue'
 import { copyToClipboard } from 'src/modules/utils'
 import { safeYamlDump } from 'src/modules/yamlUtils'
 
-const props = defineProps<{
+defineProps<{
   result?: unknown
   functionCall?: FunctionCall | undefined
 }>()
-
-const useIframe = ref(false)
-
-const isHtmlResult = computed(() => {
-  const taskResult = props.result
-  return typeof taskResult === 'string' && /<[^>]+>/.test(taskResult.trim())
-})
 </script>
 
 <style lang="sass" scoped>
