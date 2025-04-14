@@ -65,7 +65,6 @@ const createVectorStore = async () => {
       //       the vector to a string?
       [id, label, JSON.stringify(saveText), formattedVector],
     )
-    return { message: 'Data saved successfully' }
   }
 
   return { search, insert }
@@ -105,7 +104,8 @@ export const localVectorStore = createTool({
     if (searchText) {
       return await search(searchText, k, label)
     } else if (saveText) {
-      return await insert(saveText, label)
+      await insert(saveText, label)
+      return { message: 'Data saved successfully' }
     }
 
     throw new Error('Either searchText or saveText parameter must be provided')
