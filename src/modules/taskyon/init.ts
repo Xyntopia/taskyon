@@ -21,6 +21,7 @@ import { taskOrganizationTools } from '../tools/TaskPlannerTool'
 import { storageTools } from '../tools/gdrive'
 import { appDevTools } from '../tools/webAppDev'
 import { fileTools } from '../tools/fileTools'
+import { localVectorStore } from '../tools/localVectorStore'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -44,8 +45,7 @@ export async function initTaskyon(
     ...taskOrganizationTools,
     ...storageTools,
     executePythonScript,
-    // TODO: add local context(task) search
-    // localVectorStoreSearch,
+    localVectorStore,
     executeJavaScript,
     toolCreationWizard,
     ...EnvironmentTools,

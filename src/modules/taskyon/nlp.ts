@@ -70,9 +70,11 @@ export async function loadTokenizer(modelName: string) {
   return await modelStore.tokenizers[modelName]
 }
 
-export async function getVector(txt: string, modelName: string): Promise<number[] | undefined> {
+export async function getVector(txt: string, modelName: string): Promise<number[]> {
   const { meanPooledVector } = await vectorize(txt, modelName)
-  return meanPooledVector.tolist()[0] as number[]
+  const newVec = meanPooledVector.tolist()[0]
+  if (newVec && newVec.length > 0) return newVec as number[]
+  else throw new Error('no vector found')
 }
 
 function createChunks(tensor: Tensor, chunkSize: number, overlap: number) {
