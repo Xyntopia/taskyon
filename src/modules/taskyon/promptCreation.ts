@@ -203,7 +203,9 @@ export function addPrompts(
   )
 
   // override our schema variable if one was given explicitly
-  if (schema) variables.schema = safeYamlDump(schema)
+  if (schema) {
+    variables.schema = safeYamlDump({ schemaType: 'json schema', ...schema })
+  }
 
   const modifiedOpenAIConversationThread = structuredClone(openAIConversationThread)
   const prependMessagesList: string[] = []
