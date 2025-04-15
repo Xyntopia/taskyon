@@ -223,8 +223,14 @@ Here is list of all the tools which are available to you:
 
 ${safeYamlDump(toolList)}
 
-Can you please choose ${toolNum} which you think might be relevant for this
-task.
+Can you please choose ${toolNum} of these which you think might be relevant for this
+task. Only choose one if you think it would help you to solve the task.
+
+Examples are:
+- something that you can't answer with pure text
+- a math problem
+- something that requires an API call
+- ... and more! make sure to think about it!
 `,
                 ],
                 schema: {
