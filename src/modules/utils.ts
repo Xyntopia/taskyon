@@ -952,3 +952,13 @@ export async function fileToBase64(file: File): Promise<string> {
     }
   })
 }
+
+export function isEmpty(obj: object): boolean {
+  for (const prop in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, prop)) {
+      return false
+    }
+  }
+
+  return true
+}

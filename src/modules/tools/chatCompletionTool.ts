@@ -31,6 +31,7 @@ import {
 import {
   deepCopy,
   fileToBase64,
+  isEmpty,
   keysToLowerCase,
   normalizeFalsyValues,
   pickProperties,
@@ -39,7 +40,7 @@ import {
 import { isTaskyonKey } from '../taskyon/tyCrypto'
 import { useNlpWorker } from '../taskyon/webWorkerApi'
 import type { FileMappingDocType } from '../taskyon/rxdb'
-import { dump, load } from 'js-yaml'
+import { load } from 'js-yaml'
 //import type { JSONSchema7Type as JsonSchema } from 'json-schema'
 import type { JSONSchema7 } from 'json-schema'
 import { safeYamlDump } from '../yamlUtils'
@@ -496,15 +497,15 @@ async function convertTaskNodeToOpenAIMessage(
       //       an idea about the functions which were provided with their descriptions,
       //       anyways So we should probably leave this out here...
 
-      const functionArgs = dump({
-        arguments: task.content.data.arguments,
-        //...t.result?,
-      })
       return [
         {
           role: 'system',
           // and the result of the function
-          content: `You just used the following tool: ${functionCallName}. The parameters used were: ${functionArgs}`,
+          content:
+            `You just used the following tool: ${functionCallName}.` +
+            (!isEmpty(task.content.data.arguments)
+              ? ` The function arguments were: ${JSON.stringify(task.content.data.arguments)}`
+              : ''),
         },
       ]
     }
