@@ -1,4 +1,5 @@
 import { createVectorStore } from '../crudWrapper'
+import { sha256UrlSafeHash } from '../crypto_webcrypto'
 import { getDatabase } from '../pglite.api'
 import { createTool } from '../taskyon/tools'
 
@@ -41,7 +42,8 @@ export const localVectorStore = createTool({
     if (searchText) {
       return await search(searchText, k, label)
     } else if (saveText) {
-      await upsert(saveText, label)
+      const id = await sha256UrlSafeHash(saveText)
+      await upsert(id, saveText, label)
       return { message: 'Data saved successfully' }
     }
 

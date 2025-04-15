@@ -5,7 +5,6 @@ import {
   wrapKeyWithPublicKey,
   encryptWithSessionKey,
   generateRandomEncryptionKey,
-  sha256UrlSafeHash,
 } from './crypto_webcrypto'
 import type { Stream } from './frpBus'
 import { createStream, filter } from './frpBus'
@@ -205,6 +204,7 @@ export const createPgLiteCrudWrapper = async <T>(
 export const createVectorStore = async (db: TyPGDB, name: string) => {
   const { vectorizeText } = useNlpWorker()
   const numDimensions = 384
+  const maxStrLength = 10000 // only vectorize approx. the first page.
   const crudTable = await createPgLiteCrudWrapper<string>(db, {
     tableName: name,
     idColumn: 'id',
@@ -217,10 +217,9 @@ export const createVectorStore = async (db: TyPGDB, name: string) => {
   const modelName = 'xyntopia/all-MiniLM-L6-v2'
 
   const search = async (searchText: string, k: number, label?: string, allowedIDs?: string[]) => {
-    console.log(`Searching for ${searchText}`)
-    const searchVector = await vectorizeText(searchText, modelName)
+    console.log(`Searching for ${searchText.slice(0, maxStrLength)}`)
+    const searchVector = await vectorizeText(searchText.slice(0, maxStrLength), modelName)
     const formattedVector = `[${searchVector.join(',')}]` // Format the array as a string for pgvector
-
     let sqlQuery = `
       SELECT
       id,
@@ -253,24 +252,29 @@ export const createVectorStore = async (db: TyPGDB, name: string) => {
     }[]
   }
 
-  const upsert = async (text: string, label?: string, saveText = true) => {
-    const vector = await vectorizeText(text, modelName)
+  const upsert = async (id: string, text: string, label?: string, saveText = true) => {
+    const vector = await vectorizeText(text.slice(0, maxStrLength), modelName)
     const formattedVector = `[${vector.join(',')}]` // Format the array as a string for pgvector
-    const id = await sha256UrlSafeHash(text)
     await db.query(
       `
-      INSERT INTO ${name} (id, label, ${saveText ? 'data,' : ''} vec)
-      VALUES ($1, $2, ${saveText ? '$3,' : ''} $4)
+      INSERT INTO ${name} (id, label, data, vec)
+      VALUES ($1, $2, $3, $4)
       ON CONFLICT (id) DO UPDATE SET
       label = EXCLUDED.label,
       ${saveText ? 'data = EXCLUDED.data,' : ''}
       vec = EXCLUDED.vec;
     `,
-      saveText ? [id, label, JSON.stringify(text), formattedVector] : [id, label, formattedVector],
+      [id, label, JSON.stringify(text || ''), formattedVector],
     )
   }
 
-  return { ...crudTable, search, upsert }
+  const count = async (): Promise<number> => {
+    const result = await db.query<{ count: number }>(`SELECT COUNT(*) AS count FROM ${name};`)
+    return result.rows[0]!.count
+  }
+
+  // we are overwriting the crudTables upsert operation hre...
+  return { ...crudTable, search, upsert, count }
 }
 
 export const createMapCrudWrapper = <T>(storage: Map<string | number, T>): CrudWrapper<T> => {

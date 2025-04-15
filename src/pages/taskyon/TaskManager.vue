@@ -63,6 +63,7 @@
             <div class="col q-pa-xs">
               <div class="text-caption text-right">id: {{ rows.row.taskId }}</div>
               <Task v-if="taskDataMap[rows.row.taskId]" :task="taskDataMap[rows.row.taskId]!" />
+              <div v-else>We could not find the task, is it possible that it was deleted?</div>
             </div>
           </div>
         </td>

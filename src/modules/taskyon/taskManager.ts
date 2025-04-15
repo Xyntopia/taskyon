@@ -5,13 +5,11 @@ import {
   type FileMappingDocType,
   transformTaskNodeToDocType,
   transformDocToTaskNode,
-  collections,
   createTaskyonDatabase,
 } from './rxdb'
 import { openUserUploadedFile } from '../OPFS'
-import { deepCopy, deepMerge, lockMap } from '../utils'
-import { useVectorStore } from './hnswIndex'
-import { usePyodideWebworker, useNlpWorker } from './webWorkerApi'
+import { deepCopy, deepMerge } from '../utils'
+import { usePyodideWebworker } from './webWorkerApi'
 import { type InternalTool } from './tools'
 import { type MangoQuery } from 'rxdb'
 import { load } from 'js-yaml'
@@ -21,6 +19,7 @@ import {
   createCombinedCrudWrapper,
   createEnhancedCrudWrapper,
   createMapCrudWrapper,
+  createVectorStore,
   withLiveStreams,
   withLocking,
   withSecretStore,
@@ -202,24 +201,15 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
 }
 
 // TODO: replace this with pglite vector search :)
-function useTaskVectors(
+async function useTaskVectors(
   getAllTaskIds: () => Promise<string[]>,
   getTask: (taskId: string) => Promise<TaskNode | null>,
   vectorizerModel?: string,
   taskyonDB?: TaskyonDatabase,
 ) {
-  const { lockItem } = lockMap('vector')
-  const { vectorizeText } = useNlpWorker()
-  const { getVectorIndex, resetVectorStore } = useVectorStore('taskyondbv')
+  const vecDb = await createVectorStore(await getDatabase('taskyon'), 'tyTaskVectors')
 
   async function syncVectorIndexWithTasks(progressCallback: (done: number, total: number) => void) {
-    console.log('sync vector index')
-    const vectorIndex = await getVectorIndex()
-    if (!vectorIndex || !taskyonDB) {
-      console.warn('Vector index or database is not initialized.')
-      return
-    }
-
     let counter = 0
     //taskyonDB.vectormappings.exportJSON()
     const taskIDs = await getAllTaskIds()
@@ -238,80 +228,20 @@ function useTaskVectors(
     console.log('Sync complete.')
   }
 
-  async function resetTaskVectors() {
-    console.log('delete vector store')
-    await resetVectorStore()
-    console.log('delete vector mappings')
-    await taskyonDB?.vectormappings.remove()
-    await taskyonDB?.addCollections({
-      vectormappings: collections.vectormappings,
-    })
-  }
-
-  const vecMappingFromTask = (taskId: string) =>
-    taskyonDB?.vectormappings
-      .findOne({
-        selector: { uuid: taskId },
-      })
-      .exec()
-
-  async function deleteTaskFromVectorStore(taskId: string) {
-    const vecmapping = await vecMappingFromTask(taskId)
-    await vecmapping?.remove()
-    const vecid = Number(vecmapping?.vecid)
-    if (vecid) {
-      void (await getVectorIndex())?.markDelete(vecid)
-    }
-  }
-
-  const vecAlreadyExists = async (taskId: string) => {
-    const res = await vecMappingFromTask(taskId)
-    if (res?.vecid) {
-      const vecid = Number(res.vecid)
-      if (!isNaN(vecid)) {
-        try {
-          // this works. If we mark a label as deleted in our vector index
-          // this will throw an error, meaning the vector doesn't exist...
-          const vec = (await getVectorIndex())?.getPoint(vecid)
-          return vec
-        } catch {
-          return undefined
-        }
-      }
-    }
-    return undefined
-  }
-
   // TODO: make sure, we also stringify tool calls etc...
+  // TODO: tryto get rid of unnecessary characters in the string...
+  //       e.g. remove parenthesis from json etc..
   const task2Str = (t: TaskNode) => JSON.stringify(t.content)
 
-  async function addtoVectorDB(
-    task: TaskNode,
-    //override = false,
-    //storeInDB: false,
-  ) {
-    const unlock = await lockItem(task.id)
-    const existingVector = await vecAlreadyExists(task.id)
+  async function addtoVectorDB(task: TaskNode) {
+    const existingVector = await vecDb.get(task.id)
     if (existingVector) {
       console.log('vector already exists!', task.id)
     } else if (vectorizerModel) {
       console.log('create vector...', task.id)
-      const numvec = await vectorizeText(task2Str(task), vectorizerModel)
-      if (numvec) {
-        console.log('got a vector result.')
-        const vectorIndex = await getVectorIndex()
-        const vec = new Float32Array(numvec)
-        const label = vectorIndex?.addItems([vec], true)[0]
-        // it is important that we await all functions here becase
-        // we are in a task lock-situation and can not afford for them to be unlocked at some point :)
-        await taskyonDB?.vectormappings.upsert({
-          uuid: task.id,
-          vecid: String(label),
-          //vector: storeInDB ? encodeVector(vec) : undefined, # not saving vectors for now...
-        })
-      }
+      const txt = task2Str(task)
+      await vecDb.upsert(task.id, txt, undefined, false)
     }
-    unlock()
   }
 
   /**
@@ -328,62 +258,20 @@ function useTaskVectors(
     searchTerm: string,
     query?: MangoQuery, // used to pre-filter our vector search
     k = 10,
+    label?: string,
   ): Promise<{ taskId: string; distance: number }[]> {
     if (taskyonDB) {
+      let result: Awaited<ReturnType<(typeof vecDb)['search']>>
       if (query) {
         const taskList = await taskyonDB.tasknodes.find(query).exec()
         const taskIDs = taskList.map((taskDoc) => taskDoc.id)
-        const prefilterVectorsIds = await taskyonDB.vectormappings
-          .find({
-            selector: {
-              uuid: { $in: taskIDs },
-            },
-          })
-          .exec()
-        const vecIDs = prefilterVectorsIds.map((vm) => vm.vecid)
-        const result = vectorSearchTasks(searchTerm, k, (label: number) =>
-          vecIDs.includes(label.toString()),
-        )
-        return result
+        result = await vecDb.search(searchTerm, k, label, taskIDs)
       } else {
-        const result = vectorSearchTasks(searchTerm, k)
-        return result
+        result = await vecDb.search(searchTerm, k)
       }
+      return result.map((r) => ({ taskId: r.id, distance: r.distance }))
     }
     return []
-  }
-
-  async function vectorSearchTasks(
-    searchTerm: string,
-    k = 5,
-    filterfunction?: (label: number) => boolean,
-  ) {
-    console.log('search for', searchTerm)
-    const result: { taskId: string; distance: number }[] = []
-    const vectorIndex = await getVectorIndex()
-    if (vectorIndex && vectorizerModel) {
-      const queryVec = await vectorizeText(searchTerm, vectorizerModel)
-      if (queryVec && taskyonDB) {
-        const res = vectorIndex.searchKnn(queryVec, k, filterfunction)
-        const neighborIndices = res.neighbors.map((r) => String(r))
-
-        // Fetch the vector mappings in bulk for all neighbor indices
-        const vectorMappingDocs = await taskyonDB.vectormappings.findByIds(neighborIndices).exec()
-
-        // Use the neighbor indices to get the correct vector mapping documents
-        // and then use the uuid from those documents to fetch the tasks
-        res.neighbors.forEach((neighborIndex, searchResultIndex) => {
-          const uuid = vectorMappingDocs.get(String(neighborIndex))?.uuid
-          if (uuid) {
-            result.push({
-              taskId: uuid,
-              distance: res.distances[searchResultIndex] || 0.0,
-            })
-          }
-        })
-      }
-    }
-    return result
   }
 
   async function searchSimilarTasks(
@@ -397,10 +285,11 @@ function useTaskVectors(
 
   return {
     syncVectorIndexWithTasks,
-    deleteTaskFromVectorStore,
+    deleteTaskFromVectorStore: vecDb.delete,
     addtoVectorDB,
     filteredVectorSearch,
-    resetTaskVectors,
+    resetTaskVectors: vecDb.clear,
+    count: vecDb.count,
     searchSimilarTasks,
   }
 }
@@ -613,7 +502,8 @@ export async function useTyTaskManager(
     filteredVectorSearch,
     resetTaskVectors,
     searchSimilarTasks,
-  } = useTaskVectors(getAllTaskIds, tyCrud.get, vectorizerModel, taskyonDB)
+    count: countVecs,
+  } = await useTaskVectors(getAllTaskIds, tyCrud.get, vectorizerModel, taskyonDB)
 
   // add more enhanced, ty-specific functionality to our CRUD
   const tyCrudVec = withLocking({
@@ -661,10 +551,6 @@ export async function useTyTaskManager(
     ),
     publicRecoveryKey,
   )
-
-  async function countVecs() {
-    return await taskyonDB.vectormappings.count().exec()
-  }
 
   async function countTasks() {
     return await taskyonDB.tasknodes.count().exec()
