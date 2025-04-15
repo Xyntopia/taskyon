@@ -26,7 +26,13 @@
           color="secondary"
           @search="(q, k) => onSearchChange({ q, k })"
         />
-        <div class="text-caption"># of indexed tasks/tasks: {{ indexCount }}/{{ taskCount }}</div>
+        <div class="text-caption">
+          # of indexed tasks: {{ indexCount }}
+          <q-tooltip
+            >Number of tasks in the index (Not all task types are indexed. E.g. chatCompletion is
+            not indexed.)</q-tooltip
+          >
+        </div>
         <q-input
           :model-value="query.l"
           class="q-pl-md"

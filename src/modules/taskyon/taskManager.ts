@@ -237,6 +237,11 @@ async function useTaskVectors(
     const existingVector = await vecDb.get(task.id)
     if (existingVector) {
       console.log('vector already exists!', task.id)
+    } else if (
+      task.content.type === 'functioncall' &&
+      task.content.data.name === 'chatCompletion'
+    ) {
+      console.log('skip indexing of chatCompletion')
     } else if (vectorizerModel) {
       console.log('create vector...', task.id)
       const txt = task2Str(task)
