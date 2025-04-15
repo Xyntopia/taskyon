@@ -5,11 +5,13 @@ import {
   wrapKeyWithPublicKey,
   encryptWithSessionKey,
   generateRandomEncryptionKey,
+  sha256UrlSafeHash,
 } from './crypto_webcrypto'
 import type { Stream } from './frpBus'
 import { createStream, filter } from './frpBus'
 import type { PgLiteOptions } from './pglite.api'
 import { createVecPgLiteTable, type TyPGDB } from './pglite.api'
+import { useNlpWorker } from './taskyon/webWorkerApi'
 import { deepMerge, lockMap } from './utils'
 
 type Row<T> = {
@@ -198,6 +200,77 @@ export const createPgLiteCrudWrapper = async <T>(
       await db.query(`DELETE FROM ${tableName};`)
     },
   }
+}
+
+export const createVectorStore = async (db: TyPGDB, name: string) => {
+  const { vectorizeText } = useNlpWorker()
+  const numDimensions = 384
+  const crudTable = await createPgLiteCrudWrapper<string>(db, {
+    tableName: name,
+    idColumn: 'id',
+    dataColumn: 'data',
+    additionalColumns: ['label TEXT'],
+    pgvector: true,
+    vectorDims: numDimensions,
+  })
+
+  const modelName = 'xyntopia/all-MiniLM-L6-v2'
+
+  const search = async (searchText: string, k: number, label?: string, allowedIDs?: string[]) => {
+    console.log(`Searching for ${searchText}`)
+    const searchVector = await vectorizeText(searchText, modelName)
+    const formattedVector = `[${searchVector.join(',')}]` // Format the array as a string for pgvector
+
+    let sqlQuery = `
+      SELECT
+      id,
+      label,
+      data,
+      vec <-> $1 AS distance
+      FROM ${name}
+    `
+    const queryParams: (string | number | string[])[] = [formattedVector, k]
+
+    if (label) {
+      sqlQuery += `WHERE label = $3 `
+      queryParams.push(label)
+    }
+
+    if (allowedIDs && allowedIDs.length > 0) {
+      sqlQuery += `${label ? 'AND' : 'WHERE'} id = ANY($${queryParams.length + 1}) `
+      queryParams.push(allowedIDs)
+    }
+
+    sqlQuery += `ORDER BY distance LIMIT $2;`
+
+    const results = await db.query<Row<string>>(sqlQuery, queryParams)
+
+    return results.rows as unknown as {
+      id: string
+      label: string
+      data: string
+      distance: number
+    }[]
+  }
+
+  const upsert = async (text: string, label?: string, saveText = true) => {
+    const vector = await vectorizeText(text, modelName)
+    const formattedVector = `[${vector.join(',')}]` // Format the array as a string for pgvector
+    const id = await sha256UrlSafeHash(text)
+    await db.query(
+      `
+      INSERT INTO ${name} (id, label, ${saveText ? 'data,' : ''} vec)
+      VALUES ($1, $2, ${saveText ? '$3,' : ''} $4)
+      ON CONFLICT (id) DO UPDATE SET
+      label = EXCLUDED.label,
+      ${saveText ? 'data = EXCLUDED.data,' : ''}
+      vec = EXCLUDED.vec;
+    `,
+      saveText ? [id, label, JSON.stringify(text), formattedVector] : [id, label, formattedVector],
+    )
+  }
+
+  return { ...crudTable, search, upsert }
 }
 
 export const createMapCrudWrapper = <T>(storage: Map<string | number, T>): CrudWrapper<T> => {

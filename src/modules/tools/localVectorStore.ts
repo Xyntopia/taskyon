@@ -1,4 +1,5 @@
-import { createVectorStore } from '../pglite.api'
+import { createVectorStore } from '../crudWrapper'
+import { getDatabase } from '../pglite.api'
 import { createTool } from '../taskyon/tools'
 
 // TODO: make it possible to add "unique" identifiers as labels, so that
@@ -32,12 +33,15 @@ export const localVectorStore = createTool({
     oneOf: [{ required: ['search'] }, { required: ['save'] }],
   } as const,
   function: async ({ searchText, k, saveText, label }) => {
-    const { search, insert } = await createVectorStore()
+    const { search, upsert } = await createVectorStore(
+      await getDatabase('taskyon'),
+      'vectorStoreTool',
+    )
 
     if (searchText) {
       return await search(searchText, k, label)
     } else if (saveText) {
-      await insert(saveText, label)
+      await upsert(saveText, label)
       return { message: 'Data saved successfully' }
     }
 
