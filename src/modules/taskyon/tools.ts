@@ -80,6 +80,7 @@ export function createTool<T, SCHEMA extends JSONSchema, PARAMS = FromSchema<SCH
     function?: (params: PARAMS, context: toolContext) => unknown
   } & Omit<InternalTool, 'function'>,
 ): T {
+  console.log('create tool', tool.name)
   return tool
 }
 // TODO: automatically type the FunctionCall correctly using the

@@ -219,28 +219,50 @@ Finally, it creates a chat completion task with the selected tools in the allowe
               createChatCompletionTask({
                 prompts: [
                   `
-Here is list of all the tools which are available to you:
+      Here is list of all the tools which are available to you:
 
-${safeYamlDump(toolList)}
+      ${safeYamlDump(toolList)}
 
-Can you please choose ${toolNum} of these which you think might be relevant for this
-task. Only choose one if you think it would help you to solve the task.
+      Can you please choose ${toolNum} of these which you think might be relevant for this
+      task. Only choose one if you think it would help you to solve the task.
 
-Examples are:
-- something that you can't answer with pure text
-- a math problem
-- something that requires an API call
-- ... and more! make sure to think about it!
-`,
+      Examples are:
+      - something that you can't answer with pure text
+      - a math problem
+      - something that requires an API call
+      - ... and more! make sure to think about it!
+
+      If you are sure that none of the tools are relevant, you can simply respond with "no".
+      `,
                 ],
                 schema: {
-                  type: 'array',
-                  items: {
-                    type: 'string',
-                  },
+                  anyOf: [
+                    {
+                      type: 'string',
+                      description:
+                        'If you think that no tool is relevant, simply respond with "no".',
+                      enum: ['no'],
+                    },
+                    {
+                      type: 'array',
+                      description: 'List of tool names you think might be relevant',
+                      items: {
+                        type: 'string',
+                      },
+                    },
+                  ],
                 },
               }),
               createToolTask({ name: 'chooseTool', arguments: {} }),
+            ],
+          ])
+        })
+        .with({ content: { type: 'structured', data: 'no' } }, () => {
+          return makeTaskResult([
+            [
+              createChatCompletionTask({
+                goal: 'SimpleCompletion',
+              }),
             ],
           ])
         })
