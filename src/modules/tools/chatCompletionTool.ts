@@ -249,7 +249,6 @@ function parseYamlResponse2Record(message: string): Record<string, unknown> {
   try {
     // Parse the extracted or original YAML content
     parsedYaml = load(yamlContent)
-    parsedYaml = normalizeFalsyValues(parsedYaml)
   } catch (err) {
     throw new TaskProcessingError('Error converting the response to yaml', {
       yamlString: yamlContent,
@@ -264,6 +263,8 @@ function parseYamlResponse2Record(message: string): Record<string, unknown> {
 // TODO: ability to parse multiple commands/tasks...
 function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]): FunctionCall[] {
   const structResponse = parseYamlResponse2Record(choice.message.content || '')
+  // following makes answers more robust...
+  const structResponseN = normalizeFalsyValues(structResponse)
   // depending on what role and tasktype the finishedTask has, we
   // expect different results from our structuredResponse
   // TODO: we need to do some plausibilitychecks here:
@@ -278,7 +279,7 @@ function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]
   // structured response as a normal "message" task to the chain...
   // this way we can put all the parsing logic & interpretation and all of this here. While
   // our tasks only have to process the actual data they are receiving
-  const lowerStructResponse = keysToLowerCase(structResponse)
+  const lowerStructResponse = keysToLowerCase(structResponseN)
   const useTool =
     yesnoToBoolean(lowerStructResponse['use tool']) &&
     (!('try again' in lowerStructResponse) || yesnoToBoolean(lowerStructResponse['try again']))

@@ -206,7 +206,17 @@ Finally, it creates a chat completion task with the selected tools in the allowe
       // use pattern matching on the last task
       const result = await match(taskChain.at(-2))
         .returnType<taskResult | Promise<taskResult>>()
-        .with({ content: { data: P.string } }, async () => {
+        .with({ content: { type: 'structured', data: 'no' } }, () => {
+          return makeTaskResult([
+            [
+              createChatCompletionTask({
+                goal: 'SimpleCompletion',
+              }),
+            ],
+          ])
+        })
+        // any other string...
+        .with({ content: { type: 'message', data: P.string } }, async () => {
           console.log('1. Retrieve all tools and create a short list (only name and description).')
           const allTools = await taskManager.updateToolDefinitions(true)
           const toolList = Object.values(allTools).map((t) => ({
@@ -236,11 +246,9 @@ Finally, it creates a chat completion task with the selected tools in the allowe
       `,
                 ],
                 schema: {
-                  anyOf: [
+                  oneOf: [
                     {
                       type: 'string',
-                      description:
-                        'If you think that no tool is relevant, simply respond with "no".',
                       enum: ['no'],
                     },
                     {
@@ -249,20 +257,12 @@ Finally, it creates a chat completion task with the selected tools in the allowe
                       items: {
                         type: 'string',
                       },
+                      minItems: 1,
                     },
                   ],
                 },
               }),
               createToolTask({ name: 'chooseTool', arguments: {} }),
-            ],
-          ])
-        })
-        .with({ content: { type: 'structured', data: 'no' } }, () => {
-          return makeTaskResult([
-            [
-              createChatCompletionTask({
-                goal: 'SimpleCompletion',
-              }),
             ],
           ])
         })

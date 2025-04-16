@@ -771,7 +771,7 @@ export function keysToLowerCase<T>(obj: T): T {
 
 // this function "normalizes" boolean-like input this makes our llm structured
 // response parsing more robust.
-export function normalizeFalsyValues(input: unknown): unknown {
+export function normalizeFalsyValues<T>(input: T): T {
   // Define the set of "falsy" values
   const falsyValues: Set<unknown> = new Set([
     'no',
@@ -830,7 +830,7 @@ export function normalizeFalsyValues(input: unknown): unknown {
     }
   }
 
-  return traverse(input)
+  return traverse(input) as T
 }
 
 export function pickProperties(obj: object, keys: string[]) {
