@@ -45,13 +45,11 @@ taskyon works. The relevant parts in the taskyon code representing
 this are the "runTaskWorker", "processTask" and "handleFunctionExecution" functions.
 
 ```mermaid
+%%{init: { "flowchart": { "curve": "cardinal", "wrappingWidth": 400 } } }%%
 ---
 title: Task Processor
-config:
-  flowchart:
-    defaultRenderer: "elk"
 ---
-flowchart LR
+flowchart TB
     m_a[MessageContent_A]
     m_u[MessageContent_U]
     ErrorContent[Error]
@@ -63,18 +61,16 @@ flowchart LR
 
     tcc -- task chains created by tools --> tcc
 
-    PD@{ shape: cyl, label: "Parameter Database" }
+    PD(["Parameter Database"])
     PD --> tcc
 
     m_u -- initiate first tool cool (e.g. ChatCompletionTool or Planner Tool) --> tcc
     m_a --> TERMINATION
-        tcc --> ErrorContent
+    tcc --> ErrorContent
     ErrorContent -- analyze error tool --> tcc
     tcc -- generic result --> ToolResultContent
     ToolResultContent -- analyze result Tool --> tcc
     tcc -- task chains created by the tool --> m_a
-
-
 ```
 
 Taskyon provides a basic Taskflow to get started with and which can automatically
