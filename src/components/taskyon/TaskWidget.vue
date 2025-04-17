@@ -111,9 +111,13 @@
           />
         </div>
         <div v-else-if="task.content.type === 'error'" class="col">
-          <div>
-            {{ task.content.data }}
-          </div>
+          <q-expansion-item dense label="Error" header-class="text-negative">
+            <div>
+              <div class="text-negative" style="white-space: pre-wrap">
+                <ty-markdown :src="task.content.data" no-line-numbers />
+              </div>
+            </div>
+          </q-expansion-item>
         </div>
         <div v-else-if="task.content.type === 'return'" class="col">
           <div>

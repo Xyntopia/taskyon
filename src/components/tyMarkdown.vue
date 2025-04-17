@@ -12,6 +12,7 @@
   <q-markdown
     v-else
     :id="id"
+    no-html
     :plugins="plugins"
     :src="src"
     v-bind="$attrs"
