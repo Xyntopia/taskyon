@@ -50,7 +50,10 @@ selecting different models).
         <template #body-cell-name="props">
           <q-td :props="props">
             <div class="row items-center">
-              {{ props.value }}
+              <div :class="props.row.id === currentModel ? 'text-positive text-bold' : ''">
+                <q-icon v-if="props.row.id === currentModel" :name="matCheck" />
+                {{ props.value }}
+              </div>
               <info-dialog>
                 <ty-markdown
                   :src="
@@ -59,6 +62,13 @@ selecting different models).
                   "
                 />
               </info-dialog>
+              <q-btn
+                v-if="props.row.id !== currentModel"
+                flat
+                label="select this model"
+                @click="tystate.handleBotNameUpdate({ newName: props.row.id })"
+              />
+              <q-tooltip :delay="500"> id: {{ props.row.id }} </q-tooltip>
             </div>
           </q-td>
         </template>
@@ -129,10 +139,11 @@ import { type QTableProps, exportFile } from 'quasar'
 import { humanReadablePrice, openrouterPricing } from 'src/modules/utils'
 import InfoDialog from 'components/InfoDialog.vue'
 import { ref, computed } from 'vue'
-import { matFilterList } from '@quasar/extras/material-icons'
+import { matCheck, matFilterList } from '@quasar/extras/material-icons'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import ApiSelect from 'components/taskyon/ApiSelect.vue'
 import { useAppStateStore } from 'src/stores/appState'
+import { getCurrentModel } from 'src/modules/taskyon/types'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -141,6 +152,8 @@ const pricingPerPage = ref(true)
 //const { llmModels: tableData } = storeToRefs(state);
 
 type rowType = (typeof tystate.llmModels)[0]
+
+const currentModel = computed(() => getCurrentModel(state.llmSettings))
 
 const filteredTableData = computed(() => {
   return tystate.llmModels.filter((model) => {

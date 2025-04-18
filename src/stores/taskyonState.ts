@@ -4,6 +4,7 @@ import type { Asyncify, TyTaskStreamData } from 'src/modules/taskyon/types'
 import {
   type Model,
   type TaskNode,
+  getCurrentModel,
   llmSettings,
   type storedSettings,
 } from 'src/modules/taskyon/types'
@@ -440,6 +441,34 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     { once: true },
   )
 
+  // Computed property to determine the currently selected bot name
+  const currentModelId = computed(() => {
+    return getCurrentModel(stateRefs.llmSettings)
+  })
+
+  const currentModel = computed(() => {
+    return modelLookUp.value[currentModelId.value]
+  })
+
+  // Method to handle the updateBotName event
+  const handleBotNameUpdate = ({
+    newName,
+    newService,
+  }: {
+    newName: string
+    newService?: string
+  }) => {
+    console.log('getting an api & bot update :)', newName, newService)
+    if (newService) {
+      stateRefs.llmSettings.selectedApi = newService
+    }
+    const api = getApiConfig(stateRefs.llmSettings)
+    if (api) {
+      api.selectedModel = newName
+    }
+    addModelToHistory(newName)
+  }
+
   return {
     selectedThread: computed(() => selectedThread),
     taskWorkerWaiting,
@@ -454,6 +483,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     modelLookUp,
     chatCompletionStream,
     llmModels: computed(() => llmModelsInternal.value),
+    currentModelId,
+    currentModel,
+    handleBotNameUpdate,
   }
 }) // this state stores all information which
 // should be stored e.g. in browser LocalStorage

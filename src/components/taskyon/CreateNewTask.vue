@@ -116,17 +116,17 @@
           </div>
           <div class="row q-px-md">
             <info-dialog
-              v-if="currentModel && tystate.modelLookUp[currentModel]?.description"
+              v-if="tystate.currentModelId && tystate.currentModel?.description"
               size="xs"
-              :info-text="tystate.modelLookUp[currentModel]?.description || ''"
+              :info-text="tystate.currentModel?.description || ''"
             />
             <q-btn flat dense size="sm" no-caps>
               <q-icon :name="matSmartToy" class="q-px-xs" />
               <div class="ellipsis gt-sm">
-                {{ `${currentModel}` }}
+                {{ `${tystate.currentModelId}` }}
               </div>
-              <div class="text-weight-thin gt-sm">/{{ currentChatApi }}</div>
-              <q-tooltip>Select AI model (current model: {{ currentModel }})</q-tooltip>
+              <div class="text-weight-thin gt-sm">/{{ state.llmSettings.selectedApi }}</div>
+              <q-tooltip>Select AI model (current model: {{ tystate.currentModelId }})</q-tooltip>
               <q-menu color="secondary">
                 <q-list style="min-width: 100px">
                   <q-item-label header>Select previous AI model!</q-item-label>
@@ -138,7 +138,7 @@
                     :key="m"
                     v-close-popup
                     clickable
-                    @click="handleBotNameUpdate({ newName: m })"
+                    @click="tystate.handleBotNameUpdate({ newName: m })"
                   >
                     <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
                   </q-item>
@@ -160,9 +160,9 @@
             </q-btn>
           </div>
           <q-space></q-space>
-          <template v-if="currentModel && expertMode && false">
+          <template v-if="tystate.currentModelId && expertMode && false">
             <div class="gt-xs">
-              {{ `t/c: ${estimatedTokens}/${tystate.modelLookUp[currentModel]?.context_length}` }}
+              {{ `t/c: ${estimatedTokens}/${tystate.currentModel?.context_length}` }}
               <q-tooltip :delay="1000" class="q-gutter-sm">
                 <div>
                   [approximate number of tokens in prompt] / [max number of tokens which AI can
@@ -237,10 +237,10 @@
           <ModelSelection
             v-model:selected-api="selectedApi"
             class="col"
-            :bot-name="currentModel"
+            :bot-name="tystate.currentModelId"
             :model-list="expertMode"
             :select-api="expertMode"
-            @update-bot-name="handleBotNameUpdate"
+            @update-bot-name="tystate.handleBotNameUpdate"
           ></ModelSelection>
         </q-item>
       </q-list>
@@ -249,10 +249,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRaw, toRefs } from 'vue'
+import { computed, ref, toRefs } from 'vue'
 import { createToolTask, getDefaultParametersForTool } from 'src/modules/taskyon/tools'
 import { partialTaskDraft } from 'src/modules/taskyon/types'
-import { getApiConfig, llmSettings, getCurrentModel } from 'src/modules/taskyon/types'
+import { llmSettings } from 'src/modules/taskyon/types'
 import '@quasar/quasar-ui-qmarkdown/dist/index.css'
 import { useTaskyonStore } from 'stores/taskyonState'
 import type { FunctionArguments, ToolBase } from 'src/modules/taskyon/types'
@@ -336,28 +336,6 @@ async function getAllTools() {
 const toolCollection = ref<Record<string, ToolBase>>({})
 void getAllTools().then((tools) => (toolCollection.value = tools))
 
-// Computed property to determine the currently selected bot name
-// TODO: we can move this into taskyonstate?// TODO: we can move this into taskyonstate?
-const currentModel = computed(() => {
-  return getCurrentModel(state.llmSettings)
-})
-
-const currentChatApi = ref<string>(toRaw(state.llmSettings.selectedApi) || '')
-
-// Method to handle the updateBotName event
-const handleBotNameUpdate = ({ newName, newService }: { newName: string; newService?: string }) => {
-  console.log('getting an api & bot update :)', newName, newService)
-  if (newService) {
-    currentChatApi.value = newService
-    state.llmSettings.selectedApi = newService
-  }
-  const api = getApiConfig(state.llmSettings)
-  if (api) {
-    api.selectedModel = newName
-  }
-  tystate.addModelToHistory(newName)
-}
-
 const selectedTaskType = computed(() => {
   const task = state.llmSettings.taskDraft
   return task.content.type === 'functioncall' ? task.content.data.name : undefined
@@ -397,7 +375,7 @@ async function setTaskType(tasktype: string | undefined | null) {
 
 const currentnewTask = computed(() => {
   const task = deepMerge(state.llmSettings.taskDraft, props.forceTaskProps || {})
-  if (currentModel.value) {
+  if (tystate.currentModelId) {
     task.name = undefined
     if (selectedTaskType.value && state.llmSettings.taskDraft.content.type === 'functioncall') {
       // here we have a function task ;)
@@ -537,7 +515,7 @@ async function addNewTask(execute = true) {
       console.log('adding message completion task:', currentnewTask.value.content.data)
     } else {
       const completionTask = createChatCompletionTask({
-        model: currentModel.value,
+        model: tystate.currentModelId,
         allowedTools: state.llmSettings.allowedTools || [],
         goal: state.llmSettings.allowedTools.length == 0 ? 'SimpleCompletion' : 'ChooseTool',
       })
