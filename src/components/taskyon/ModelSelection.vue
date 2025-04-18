@@ -142,9 +142,7 @@ const modelOptions = computed(() => {
       })
       .sort(({ p: p1 }, { p: p2 }) => p1 - p2)
       .map(({ m }) => ({
-        label:
-          (m.architecture?.modality === 'text+image->text' ? '👁 ' : '') +
-          `${m.id}: ${m.pricing?.prompt || 'N/A'}/${m.pricing?.completion || 'N/A'}`,
+        label: (m.architecture?.modality === 'text+image->text' ? '👁 ' : '') + m.id,
         value: m.id,
       }))
     return options
