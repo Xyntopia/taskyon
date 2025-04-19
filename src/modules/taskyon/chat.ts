@@ -215,6 +215,7 @@ export async function callLLM(
           const { done, value } = await reader.read()
           if (done) {
             console.log('Stream finished')
+            break
           }
 
           clearTimeout(firstChunkTimeout) // Clear first-chunk timeout on receiving data

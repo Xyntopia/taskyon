@@ -139,7 +139,7 @@ async function generateReport(details = false, onlyFirst = false) {
             prompts: [
               `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
             ],
-            /*schema: {
+            schema: {
               type: 'object',
               properties: {
                 user: {
@@ -163,7 +163,7 @@ async function generateReport(details = false, onlyFirst = false) {
               },
               additionalProperties: false,
               required: ['user', 'preferences'],
-            },*/
+            },
           },
           {
             taskChain: [],

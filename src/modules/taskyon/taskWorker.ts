@@ -25,7 +25,7 @@ export function useTaskWorkerController() {
   - we can gracefully exist streamed tasks
   - and more..
   */
-  let interrupted = true
+  let interrupted = false
   let interruptReason: string | null = null
   let interruptCallbacks: ((reason: string | null) => void)[] = []
   let waiting = false
