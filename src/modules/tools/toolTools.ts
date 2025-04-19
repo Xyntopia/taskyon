@@ -199,9 +199,17 @@ export const createChooseTool = (taskManager: TyTaskManager) =>
 It then selects one or more tools that seem relevant by checking if their names appear in the provided context.
 Finally, it creates a chat completion task with the selected tools in the allowed list.`,
     parameters: {
-      type: 'null',
+      type: 'object',
+      properties: {
+        llmTools: {
+          type: 'boolean',
+          description:
+            'Optional Parameter. If set to true, we will use a openai compatible tool api',
+          default: false,
+        },
+      },
     } as const,
-    function: async (params, { taskChain }) => {
+    function: async ({ llmTools }, { taskChain }) => {
       console.log('choose tool!')
       // use pattern matching on the last task
       const result = await match(taskChain.at(-2))
@@ -211,6 +219,7 @@ Finally, it creates a chat completion task with the selected tools in the allowe
             [
               createChatCompletionTask({
                 goal: 'SimpleCompletion',
+                llmTools,
               }),
             ],
           ])
@@ -245,6 +254,7 @@ Finally, it creates a chat completion task with the selected tools in the allowe
       If you are sure that none of the tools are relevant, you can simply respond with "no".
       `,
                 ],
+                llmTools,
                 schema: {
                   oneOf: [
                     {
@@ -275,6 +285,7 @@ Finally, it creates a chat completion task with the selected tools in the allowe
                   goal: 'ChooseTool',
                   prompts: ['Please use one of the tools you chose earlier'],
                   allowedTools: toolsChosen,
+                  llmTools,
                 }),
               ],
             ])

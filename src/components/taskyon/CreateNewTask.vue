@@ -509,13 +509,16 @@ async function addNewTask(execute = true) {
     if (state.llmSettings.enableToolChooser) {
       const chooseTask = createToolTask({
         name: 'chooseTool',
-        arguments: {},
+        arguments: {
+          llmTools: state.llmSettings.enableOpenAiTools,
+        },
       })
       newTaskChain.push(chooseTask)
       console.log('adding message completion task:', currentnewTask.value.content.data)
     } else {
       const completionTask = createChatCompletionTask({
         model: tystate.currentModelId,
+        llmTools: state.llmSettings.enableOpenAiTools,
         allowedTools: state.llmSettings.allowedTools || [],
         goal: state.llmSettings.allowedTools.length == 0 ? 'SimpleCompletion' : 'ChooseTool',
       })
