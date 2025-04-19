@@ -121,6 +121,85 @@ async function generateReport(details = false, onlyFirst = false) {
   diagnostics.value = `report_date: ${new Date().toISOString()}\n`
 
   diagnostics.value += await runTest(
+    'test chatCompletion tool',
+    async () => {
+      console.log('request a random secret from the store')
+
+      const tm = await tystate.getTaskManager()
+
+      const tools = await tm.updateToolDefinitions()
+
+      // Invoke the real tool
+      const chatCompletion = tools['chatCompletion']
+      let structuredResponse
+      if (chatCompletion && 'function' in chatCompletion && chatCompletion.function !== undefined) {
+        structuredResponse = await chatCompletion.function(
+          {
+            model: 'gpt-4.1-nano', // or specify your model
+            llmTools: true,
+            allowedTools: [],
+            prompts: [
+              'Please respond with a JSON object matching the provided schema.',
+              'Ensure the response adheres to the constraints and includes nested objects.',
+            ],
+            schema: {
+              type: 'object',
+              properties: {
+                user: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    name: { type: 'string' },
+                    email: { type: 'string', format: 'email' },
+                  },
+                  required: ['id', 'name'],
+                  additionalProperties: false,
+                },
+                preferences: {
+                  type: 'object',
+                  properties: {
+                    theme: { type: 'string', enum: ['light', 'dark'] },
+                    notifications: { type: 'boolean' },
+                  },
+                  required: ['theme'],
+                  additionalProperties: false,
+                },
+                metadata: {
+                  type: 'object',
+                  properties: {
+                    createdAt: { type: 'string', format: 'date-time' },
+                    updatedAt: { type: 'string', format: 'date-time' },
+                  },
+                  required: ['createdAt'],
+                  additionalProperties: false,
+                },
+              },
+              required: ['user', 'preferences', 'metadata'],
+              additionalProperties: false,
+            },
+          },
+          {
+            taskChain: [],
+            getSecret: () => Promise.resolve('test'),
+            setSecret: () => console.log('set test secret'),
+          },
+        )
+      }
+
+      return {
+        structuredResponse,
+      }
+    },
+    details,
+  )
+
+  // move this line behind the "first test"  in order to be able to test only the first test :)
+  if (onlyFirst) {
+    console.log('diagnostics:', diagnostics.value)
+    return
+  }
+
+  diagnostics.value += await runTest(
     'Test Secret Store',
     async () => {
       console.log('request a random secret from the store')
@@ -136,12 +215,6 @@ async function generateReport(details = false, onlyFirst = false) {
     },
     details,
   )
-
-  // move this line behind the "first test"  in order to be able to test only the first test :)
-  if (onlyFirst) {
-    console.log('diagnostics:', diagnostics.value)
-    return
-  }
 
   diagnostics.value += await runTest(
     'list of Tools',
