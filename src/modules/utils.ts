@@ -57,21 +57,25 @@ export function openrouterPricing(price: number | string, digits = 1) {
   //return humanReadablePrice(price);
 }
 
-export function humanReadablePrice(price: number | string, digits: number) {
+export function humanReadablePrice(price: number | string | undefined, digits: number) {
   if (typeof price === 'string') {
     price = parseFloat(price)
   }
-  const precision = price > 1e6 ? (price > 1e3 ? 1 : 3) : 5
-  if (price < 0.001) {
-    price = parseFloat((price * 1e6).toPrecision(precision))
-    return `${price.toFixed(digits)} μ$`
-  } else if (price < 1.0) {
-    price = parseFloat((price * 1e2).toPrecision(precision))
-    return `${price.toFixed(digits)} ¢`
+  if (price) {
+    const precision = price > 1e6 ? (price > 1e3 ? 1 : 3) : 5
+    if (price < 0.001) {
+      price = parseFloat((price * 1e6).toPrecision(precision))
+      return `${price.toFixed(digits)} μ$`
+    } else if (price < 1.0) {
+      price = parseFloat((price * 1e2).toPrecision(precision))
+      return `${price.toFixed(digits)} ¢`
+    }
+    //return `${Math.round(price * 1e6)} μ$`;
+    price = parseFloat(price.toPrecision(precision))
+    return `${price.toFixed(digits)} $`
+  } else {
+    return 'N/A'
   }
-  //return `${Math.round(price * 1e6)} μ$`;
-  price = parseFloat(price.toPrecision(precision))
-  return `${price.toFixed(digits)} $`
 }
 
 /**
