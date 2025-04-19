@@ -2,6 +2,7 @@ import type { OpenRouterGenerationInfo, Model, llmSettings } from './types'
 import type OpenAI from 'openai'
 import { sleep, asyncTimeLruCache } from '../utils'
 import { TaskProcessingError, type apiConfig } from './types'
+import { sha256HashName } from '../crypto_webcrypto'
 
 export function generateHeaders(apiSecret: string, siteUrl: string, selectedApi: string) {
   let headers: Record<string, string> = {
@@ -130,6 +131,7 @@ export async function callLLM(
   cancelStream: () => boolean, // a function which we can call and which indicates that we should cancel the stream
   timeoutMs: number = 10000, // Timeout in milliseconds for waiting for first streamed response
   maxRetries: number = 3, // Maximum number of retry attempts
+  schema?: Record<string, unknown>, // optional schema for the response
 ): Promise<OpenAI.ChatCompletion | undefined> {
   const headers: Record<string, string> = generateHeaders(apiKey, siteUrl, api.name)
   let chatCompletion: OpenAI.ChatCompletion | undefined = undefined
@@ -143,6 +145,18 @@ export async function callLLM(
   const payload: CreateBodyType = {
     model: api.selectedModel,
     messages: chatMessages,
+    response_format: schema
+      ? {
+          type: 'json_schema',
+          json_schema: {
+            // we generate a hash of the schema in order to make sure the schema is cached
+            name: await sha256HashName(schema),
+            schema,
+            strict: false,
+            description: '',
+          },
+        }
+      : { type: 'text' },
     user: 'taskyon',
     temperature: 0.0,
     stream: stream && api.streamSupport,
