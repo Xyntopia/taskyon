@@ -1,7 +1,7 @@
 import type { OpenRouterGenerationInfo, Model, llmSettings } from './types'
 import type OpenAI from 'openai'
 import { sleep, asyncTimeLruCache } from '../utils'
-import { TaskProcessingError, type apiConfig } from './types'
+import { TaskProcessingError } from './types'
 import { sha256HashName } from '../crypto_webcrypto'
 
 export function generateHeaders(apiSecret: string, siteUrl: string, selectedApi: string) {
@@ -123,7 +123,12 @@ function accumulateChatCompletion(chunks: OpenAI.ChatCompletionChunk[]): OpenAI.
 export async function callLLM(
   chatMessages: OpenAI.ChatCompletionMessageParam[],
   functions: OpenAI.ChatCompletionTool[],
-  api: apiConfig,
+  api: {
+    selectedModel: string
+    streamSupport: boolean
+    baseURL: string
+    name: string
+  },
   siteUrl: string,
   apiKey: string,
   stream: boolean | undefined = false,
@@ -152,7 +157,7 @@ export async function callLLM(
             // we generate a hash of the schema in order to make sure the schema is cached
             name: await sha256HashName(schema),
             schema,
-            strict: false,
+            strict: true,
             description: '',
           },
         }
@@ -208,7 +213,9 @@ export async function callLLM(
 
         while (true) {
           const { done, value } = await reader.read()
-          if (done) break
+          if (done) {
+            console.log('Stream finished')
+          }
 
           clearTimeout(firstChunkTimeout) // Clear first-chunk timeout on receiving data
           receivedFirstChunk = true
@@ -249,6 +256,7 @@ export async function callLLM(
           // If the cancelStream callback signals to cancel, break the loop and abort the request
           if (cancelStream()) {
             controller.abort()
+            console.log('Stream cancelled by user')
             break
           }
         }

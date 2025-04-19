@@ -6,11 +6,7 @@ import {
   getTaskyonCosts,
 } from '../taskyon/chat'
 import type { Goals } from '../taskyon/promptCreation'
-import {
-  addPrompts,
-  generateOpenAIToolDeclarations,
-  yesnoToBoolean,
-} from '../taskyon/promptCreation'
+import { addPrompts, yesnoToBoolean } from '../taskyon/promptCreation'
 import type { TyTaskManager } from '../taskyon/taskManager'
 import type {
   partialTaskDraft,
@@ -24,6 +20,7 @@ import { ChatResponseType, getApiConfigCopy } from '../taskyon/types'
 import { TaskProcessingError, type llmSettings } from '../taskyon/types'
 import {
   makeTaskResult,
+  mapFunctionNames,
   type InternalTool,
   type internalToolFunctionSchema,
   type toolContext,
@@ -47,6 +44,25 @@ import { safeYamlDump } from '../yamlUtils'
 import type { AnySchema } from 'ajv'
 import { createStream } from '../frpBus'
 
+function generateOpenAIToolDeclarations(
+  allowedTools: string[],
+  toolCollection: Record<string, ToolBase>,
+): OpenAI.ChatCompletionTool[] {
+  const tools: ToolBase[] = mapFunctionNames(allowedTools || [], toolCollection) || []
+  const openAITools: OpenAI.ChatCompletionTool[] = tools.map((t) => {
+    const functionDef: OpenAI.FunctionDefinition = {
+      name: t.name,
+      parameters: t.parameters as unknown as Record<string, unknown>,
+      description: t.description,
+    }
+    return {
+      function: functionDef,
+      type: 'function',
+    }
+  })
+  return openAITools
+}
+
 // this function processes all tasks which go to any sort of an LLM
 // TODO: for configuration & allowedTools it would be good if we could add
 // this from a "default" Configuration? And then have them as function parameters?
@@ -56,14 +72,14 @@ import { createStream } from '../frpBus'
 export async function processChatTask(
   allowedTools: string[],
   toolDefs: Record<string, ToolBase>,
-  currentTask: TaskNode,
+  llmTools: boolean,
   configuration: { model: string; chatApi: string },
   llmSettings: llmSettings,
   // can we get rid of taskManager here in order to make our task more functional :)?
   taskManager: TyTaskManager,
   shouldInterrupt: () => boolean,
   apiKeys: { [key: string]: string },
-  lastTaskBeforeChatCompletion: TaskNode,
+  lastTaskBeforeChatCompletion: TaskNode | undefined,
   streamTracker: (chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => void,
   prompts: string[],
   goal?: Goals,
@@ -80,28 +96,31 @@ export async function processChatTask(
       `api doesn't exist! ${llmSettings.selectedApi || 'no api selected!'}`,
     )
   }
-  // we do the following, because "api" is required by our callLLM function.
-  // TODO: explicitly get the api as a parameter in this function vs implicitly getting it form llmsettings...
-  api.selectedModel = configuration.model
-  console.log('execute chat completion tool with prompt:', currentTask)
   //TODO: we can create more things here like giving it context form other tasks, lookup
   //      main objective, previous tasks etc....
   //      actualy: this would be great for a new tool ;)
   // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
-  let openAIConversationThread = await chatThreadFromTaskId(
-    taskManager,
-    currentTask.id,
-    llmSettings,
-    toolDefs,
-  )
+  let openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+  if (lastTaskBeforeChatCompletion) {
+    openAIConversationThread = await chatThreadFromTaskId(
+      taskManager,
+      lastTaskBeforeChatCompletion.id,
+      llmSettings,
+      toolDefs,
+    )
+  } else {
+    openAIConversationThread = []
+  }
 
   const msgs = addPrompts(
     toolDefs,
+    llmTools,
+    llmTools, // we turn on/off native structured & tools ith the same setting here!
     llmSettings,
     openAIConversationThread,
     prompts,
     allowedTools,
-    lastTaskBeforeChatCompletion.content.data,
+    lastTaskBeforeChatCompletion?.content.data,
     goal,
     schema,
   )
@@ -121,12 +140,17 @@ export async function processChatTask(
     const chatCompletion = await callLLM(
       openAIConversationThread,
       tools,
-      api,
+      // we do the following, because "api" is required by our callLLM function.
+      // TODO: explicitly get the api as a parameter in this function vs implicitly getting it form llmsettings...
+      { ...api, selectedModel: configuration.model },
       llmSettings.siteUrl,
       apiKey,
       true, // for now, we always want to stream our task...
       streamTracker, // track incoming streams...
       shouldInterrupt,
+      10000, // Timeout in milliseconds for waiting for first streamed response
+      3, // Maximum number of retry attempts
+      schema,
     )
 
     return { chatCompletion, metaInfo: { openAIConversationThread, msgs: msgs ?? {} } }
@@ -480,7 +504,8 @@ async function convertTaskNodeToOpenAIMessage(
         content: null,
         tool_calls: [
           {
-            id: task.id,
+            // tool call ids can by 40chars longs at max..
+            id: task.id.slice(0, 40),
             type: 'function',
             function: {
               name: task.content.data.name,
@@ -691,10 +716,8 @@ export async function createChatCompletionTool(
   ) => {
     const selectedModel = model ?? getCurrentModel(llmSettings)
     console.log('calling chat completion tool...', selectedModel, goal, llmTools)
+    // the current task doesn't *have* to exist. We can also works solely with prompts...
     const currentTask = context.taskChain.at(-1)
-    if (!currentTask) {
-      throw new TaskProcessingError(`No current task found!`)
-    }
     if (!llmSettings.selectedApi) {
       throw new TaskProcessingError('No API selected!')
     }
@@ -704,16 +727,10 @@ export async function createChatCompletionTool(
     // refactor this below and make it all explicit, without passing llmSettings...
     // now add goal-specific prompts...
     const lastTaskBeforeChatCompletion = context.taskChain.at(-2)
-
-    if (!lastTaskBeforeChatCompletion) {
-      throw new TaskProcessingError(
-        `chatCompletion Task needs preceding tasks to work! ${currentTask.id}`,
-      )
-    }
     const { chatCompletion, metaInfo: chatInfo } = await processChatTask(
       allowedTools ?? [],
       toolDefs,
-      currentTask,
+      !!llmTools,
       { model: selectedModel, chatApi: llmSettings.selectedApi },
       llmSettings,
       taskManager,
@@ -721,7 +738,7 @@ export async function createChatCompletionTool(
       apiKeys,
       lastTaskBeforeChatCompletion,
       (chunk) => {
-        chatCompletionStream.emit({ taskId: currentTask.id, chunk })
+        chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
       },
       prompts ?? [],
       goal,
@@ -730,39 +747,43 @@ export async function createChatCompletionTool(
 
     // parse the response into our own type ...
     const resp = ChatResponseType.safeParse(chatCompletion)
+    const choice = resp.data?.choices[0]
 
     let metaInfo: TaskNodeMeta = { taskPrompt: chatInfo, rawOutput: resp }
     // get token usage for this task..
-    if (resp.success) {
-      console.log('save token usage...')
-      // openai & openrouter sends back the exact number of prompt tokens :)
-      metaInfo = {
-        ...metaInfo,
-        ...(await saveTokenUsage(
-          resp.data,
-          chatInfo.openAIConversationThread,
-          toolDefs,
-          lastTaskBeforeChatCompletion.content,
-          llmSettings,
-        )),
+    if (currentTask && lastTaskBeforeChatCompletion) {
+      if (resp.success) {
+        console.log('save token usage...')
+        // openai & openrouter sends back the exact number of prompt tokens :)
+        metaInfo = {
+          ...metaInfo,
+          ...(await saveTokenUsage(
+            resp.data,
+            chatInfo.openAIConversationThread,
+            toolDefs,
+            lastTaskBeforeChatCompletion?.content,
+            llmSettings,
+          )),
+        }
+        // we run this asynchronously, because it fetches data in the
+        // background and we don't want to wait here...
+
+        void addTaskCostInformation(resp.data, currentTask?.id, llmSettings, apiKeys).then(
+          (newMeta) => {
+            void taskManager.debugDb.upsert(currentTask.id, newMeta, 'shallow_merge')
+          },
+        )
       }
-      // we run this asynchronously, because it fetches data in the
-      // background and we don't want to wait here...
-      void addTaskCostInformation(resp.data, currentTask.id, llmSettings, apiKeys).then(
-        (newMeta) => {
-          void taskManager.debugDb.upsert(currentTask.id, newMeta, 'shallow_merge')
-        },
-      )
+
+      metaInfo.rawOutput = { choice }
+      void taskManager.debugDb.upsert(currentTask.id, metaInfo, 'shallow_merge')
     }
 
-    const choice = resp.data?.choices[0]
-    metaInfo.rawOutput = { choice }
     if (!choice)
       throw new TaskProcessingError(
         'Our ChatCompletion tool did not get a valid response!',
         resp.data,
       )
-    void taskManager.debugDb.upsert(currentTask.id, metaInfo, 'shallow_merge')
 
     // in case a schema was given, we simply use that schema and return it as a structured message
     // for further processing (e.g. a contextFunction)...

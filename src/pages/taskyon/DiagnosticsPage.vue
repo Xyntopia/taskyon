@@ -135,48 +135,35 @@ async function generateReport(details = false, onlyFirst = false) {
       if (chatCompletion && 'function' in chatCompletion && chatCompletion.function !== undefined) {
         structuredResponse = await chatCompletion.function(
           {
-            model: 'gpt-4.1-nano', // or specify your model
-            llmTools: true,
-            allowedTools: [],
+            model: 'gpt-4.1-nano',
             prompts: [
-              'Please respond with a JSON object matching the provided schema.',
-              'Ensure the response adheres to the constraints and includes nested objects.',
+              `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
             ],
-            schema: {
+            /*schema: {
               type: 'object',
               properties: {
                 user: {
                   type: 'object',
+                  description: new Date().toISOString(),
                   properties: {
                     id: { type: 'string' },
                     name: { type: 'string' },
-                    email: { type: 'string', format: 'email' },
                   },
-                  required: ['id', 'name'],
                   additionalProperties: false,
+                  required: ['id', 'name'],
                 },
                 preferences: {
                   type: 'object',
                   properties: {
                     theme: { type: 'string', enum: ['light', 'dark'] },
-                    notifications: { type: 'boolean' },
                   },
+                  additionalProperties: false,
                   required: ['theme'],
-                  additionalProperties: false,
-                },
-                metadata: {
-                  type: 'object',
-                  properties: {
-                    createdAt: { type: 'string', format: 'date-time' },
-                    updatedAt: { type: 'string', format: 'date-time' },
-                  },
-                  required: ['createdAt'],
-                  additionalProperties: false,
                 },
               },
-              required: ['user', 'preferences', 'metadata'],
               additionalProperties: false,
-            },
+              required: ['user', 'preferences'],
+            },*/
           },
           {
             taskChain: [],

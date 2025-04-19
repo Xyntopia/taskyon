@@ -159,6 +159,8 @@ const structuredResponsePrompt = asyncComputed(async () => {
     if (Object.keys(toolCollection.value).length !== 0) {
       const rp = addPrompts(
         toolCollection.value,
+        state.llmSettings.enableOpenAiTools,
+        state.llmSettings.enableOpenAiTools,
         state.llmSettings,
         [],
         [],

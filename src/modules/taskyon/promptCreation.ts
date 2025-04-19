@@ -1,4 +1,4 @@
-import { summarizeTools, mapFunctionNames } from './tools'
+import { summarizeTools } from './tools'
 import { type ToolBase, FunctionCall } from './types'
 import { safeYamlDump, zodToYamlString } from '../yamlUtils'
 import type OpenAI from 'openai'
@@ -15,6 +15,8 @@ export const yesnoToBoolean = (value: unknown): boolean => {
   return !!value // Handles boolean, null, undefined
 }
 
+// TODO: don't add more "goals" to this list, we want chatCompletion to figure
+//       out the goals dynamically trough the parameters we provide and the messages coming before it...
 export type Goals = 'SimpleCompletion' | 'AnalyzeError' | 'ChooseTool' | 'AnalyzeToolResult'
 
 // this one here is important. It should be as simple as possible
@@ -89,25 +91,6 @@ function substituteStringVariables(variables: Record<string, string>, content: s
   )
 }
 
-export function generateOpenAIToolDeclarations(
-  allowedTools: string[],
-  toolCollection: Record<string, ToolBase>,
-): OpenAI.ChatCompletionTool[] {
-  const tools: ToolBase[] = mapFunctionNames(allowedTools || [], toolCollection) || []
-  const openAITools: OpenAI.ChatCompletionTool[] = tools.map((t) => {
-    const functionDef: OpenAI.FunctionDefinition = {
-      name: t.name,
-      parameters: t.parameters as unknown as Record<string, unknown>,
-      description: t.description,
-    }
-    return {
-      function: functionDef,
-      type: 'function',
-    }
-  })
-  return openAITools
-}
-
 // gets all the function calls in an openai conversation and makes a list from that :)
 function getAllFunctionsInOpenAiConversation(
   modifiedOpenAIConversationThread: readonly OpenAI.Chat.Completions.ChatCompletionMessageParam[],
@@ -170,8 +153,9 @@ function calculateCompletionVariables(
 // make them better to understand for the AI...
 export function addPrompts(
   toolCollection: Record<string, ToolBase>,
+  enableOpenAiTools: boolean,
+  nativeStructuredResponse: boolean,
   options: {
-    enableOpenAiTools: boolean
     useBasePrompt: boolean
     taskChatTemplates: {
       basePrompt: string
@@ -192,7 +176,7 @@ export function addPrompts(
 ) {
   // Check if task has tools and OpenAI tools are not enabled
   //console.log('Creating chat prompts');
-  const useToolChat = allowedTools.length > 0 && !options.enableOpenAiTools
+  const useToolChat = allowedTools.length > 0 && !enableOpenAiTools
 
   const variables = calculateCompletionVariables(
     allowedTools,
@@ -213,10 +197,10 @@ export function addPrompts(
   const appendSystemMessage: string[] = []
 
   // we always prepend our "fancy" prompt, if we use "native" tools...
-  if ((goal === 'SimpleCompletion' && options.useBasePrompt) || options.enableOpenAiTools) {
+  if ((goal === 'SimpleCompletion' && options.useBasePrompt) || enableOpenAiTools) {
     prependMessagesList.unshift(options.taskChatTemplates.basePrompt)
 
-    if (!options.enableOpenAiTools) {
+    if (!enableOpenAiTools) {
       const calledFunctions = getAllFunctionsInOpenAiConversation(modifiedOpenAIConversationThread)
       // if any tools appeared during the conversation...
       if (calledFunctions.size > 0) {
@@ -231,7 +215,7 @@ export function addPrompts(
   }
   if (goal && goal !== 'SimpleCompletion') {
     // only add tools, if we don#t use the native API already
-    if (!options.enableOpenAiTools) {
+    if (!enableOpenAiTools) {
       appendMessagesList.push(
         options.taskChatTemplates.instruction,
         options.taskChatTemplates.tools,
@@ -254,11 +238,10 @@ export function addPrompts(
     // put custom prompts between general instruction, tool lists and
     // the schema enforcer
     appendMessagesList.push(...prompts)
-    if (!options.enableOpenAiTools)
-      appendSystemMessage.push(options.taskChatTemplates.schemaReminder)
+    if (!enableOpenAiTools) appendSystemMessage.push(options.taskChatTemplates.schemaReminder)
   } else {
     appendMessagesList.push(...prompts)
-    if (schema) {
+    if (schema && !nativeStructuredResponse) {
       appendSystemMessage.push(options.taskChatTemplates.schemaReminder)
     }
   }
