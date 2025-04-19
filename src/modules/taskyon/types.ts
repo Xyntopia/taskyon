@@ -387,6 +387,8 @@ interface Permission {
   is_blocking: boolean
 }
 
+type modalities = 'text' | 'image'
+
 export interface Model {
   id: string
   name?: string
@@ -401,15 +403,22 @@ export interface Model {
   pricing?: {
     prompt: string
     completion: string
-    discount?: number
     image?: string
     request?: string
+    web_search?: string
+    internal_reasoning?: string
+    input_cache_read?: string
+    input_cache_write?: string
   }
   top_provider?: {
     max_completion_tokens: number | null
+    context_length: number
+    is_moderated: boolean
   }
   architecture?: {
     modality?: string
+    input_modalities?: modalities[]
+    output_modalities?: modalities[]
     tokenizer?: string
     instruct_type?: string | null
   }
