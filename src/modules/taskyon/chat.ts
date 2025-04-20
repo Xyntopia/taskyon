@@ -157,7 +157,7 @@ export async function callLLM(
             // we generate a hash of the schema in order to make sure the schema is cached
             name: await sha256HashName(schema),
             schema,
-            strict: true,
+            strict: false,
             description: '',
           },
         }
