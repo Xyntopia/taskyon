@@ -159,6 +159,40 @@ export async function processChatTask(
   }
 }
 
+// Ensures that every assistant.tool_calls is paired with a role:"tool" message.
+function ensureToolResponses(messages: OpenAI.ChatCompletionMessageParam[]) {
+  const result: OpenAI.ChatCompletionMessageParam[] = []
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]!
+    result.push(msg)
+
+    // Detect assistant messages with tool_calls
+    if ('tool_calls' in msg) {
+      const calls = msg.tool_calls
+      for (const call of calls) {
+        const callId: string = call.id
+
+        // Check if a corresponding tool message already exists later
+        const hasResponse = messages
+          .slice(i + 1)
+          .some((m) => m.role === 'tool' && m.tool_call_id === callId)
+
+        // If missing, inject a void response
+        if (!hasResponse) {
+          result.push({
+            role: 'tool',
+            tool_call_id: callId,
+            content: '', // or some default placeholder
+          })
+        }
+      }
+    }
+  }
+
+  return result
+}
+
 // we use this function here in other spots as well...
 export async function chatThreadFromTaskId(
   taskManager: TyTaskManager,
@@ -191,7 +225,8 @@ export async function chatThreadFromTaskId(
       }
     }
   }
-  return openAIConversationThread
+  // Inject any missing tool response messages (this happens, if our tools create a recursive task chain)
+  return ensureToolResponses(openAIConversationThread)
 }
 
 async function addTaskCostInformation(
