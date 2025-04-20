@@ -238,38 +238,44 @@ Finally, it creates a chat completion task with the selected tools in the allowe
               createChatCompletionTask({
                 prompts: [
                   `
-      Here is list of all the tools which are available to you:
+          Here is list of all the tools which are available to you:
 
-      ${safeYamlDump(toolList)}
+          ${safeYamlDump(toolList)}
 
-      Can you please choose ${toolNum} of these which you think might be relevant for this
-      task. Only choose one if you think it would help you to solve the task.
+          Can you please choose ${toolNum} of these which you think might be relevant for this
+          task. Only choose one if you think it would help you to solve the task.
 
-      Examples are:
-      - something that you can't answer with pure text
-      - a math problem
-      - something that requires an API call
-      - ... and more! make sure to think about it!
+          Examples are:
+          - something that you can't answer with pure text
+          - a math problem
+          - something that requires an API call
+          - ... and more! make sure to think about it!
 
-      If you are sure that none of the tools are relevant, you can simply respond with "no".
-      `,
+          If you are sure that none of the tools are relevant, you can simply respond with "no".
+          `,
                 ],
                 llmTools,
                 schema: {
-                  oneOf: [
-                    {
-                      type: 'string',
-                      enum: ['no'],
+                  type: 'object',
+                  properties: {
+                    choice: {
+                      oneOf: [
+                        {
+                          type: 'string',
+                          enum: ['no'],
+                        },
+                        {
+                          type: 'array',
+                          description: 'List of tool names you think might be relevant',
+                          items: {
+                            type: 'string',
+                          },
+                          minItems: toolNum,
+                        },
+                      ],
                     },
-                    {
-                      type: 'array',
-                      description: 'List of tool names you think might be relevant',
-                      items: {
-                        type: 'string',
-                      },
-                      minItems: 1,
-                    },
-                  ],
+                  },
+                  required: ['choice'],
                 },
               }),
               createToolTask({ name: 'chooseTool', arguments: {} }),
