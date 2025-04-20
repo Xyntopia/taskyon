@@ -440,7 +440,7 @@ watchDebounced(
     // Tokenize the message
     estimatedTokens.value = taskTokens + (newTokens ?? 0)
   },
-  { debounce: 1000, maxWait: 1500, immediate: true },
+  { debounce: 3000, maxWait: 5000, immediate: true },
 )
 
 async function addFiles2Taskyon(newFiles: File[]) {
