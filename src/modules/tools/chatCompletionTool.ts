@@ -163,19 +163,34 @@ export async function processChatTask(
 export async function chatThreadFromTaskId(
   taskManager: TyTaskManager,
   id: string,
-  llmSettings: llmSettings,
+  llmSettings: {
+    tryUsingVisionModels: boolean
+    enableOpenAiTools: boolean
+  },
   toolDefs: Record<string, ToolBase>,
 ) {
   const taskIdChain = await taskManager.getTaskIdChain(id)
-  const openAIConversationThread = await buildChatThread(
-    llmSettings.tryUsingVisionModels,
-    llmSettings.enableOpenAiTools,
-    toolDefs,
-    taskIdChain,
-    taskManager.getTask,
-    taskManager.getFileMappingByUuid,
-    taskManager.getOpfsUploadedFile,
-  )
+  const openAIConversationThread = [] as OpenAI.ChatCompletionMessageParam[]
+
+  if (taskIdChain) {
+    // we are using the reverse, because we want to build the chain starting
+    // from the lsat message, so that we have to add e.g. function descriptions etc...
+    // only once..
+    for (const mId of taskIdChain) {
+      const task = await taskManager.getTask(mId)
+      if (task) {
+        const messages = await convertTaskNodeToOpenAIMessage(
+          task,
+          llmSettings.tryUsingVisionModels,
+          taskManager.getFileMappingByUuid,
+          taskManager.getOpfsUploadedFile,
+          llmSettings.enableOpenAiTools,
+          toolDefs,
+        )
+        if (messages) openAIConversationThread.push(...messages)
+      }
+    }
+  }
   return openAIConversationThread
 }
 
@@ -446,41 +461,6 @@ export function extractOpenAIFunctions(
     }
   }
   return functionCalls
-}
-
-// TODO:  this functionis way too complex..  can we refactor this?
-async function buildChatThread(
-  useVisionModels: boolean,
-  useOpenAITools: boolean,
-  toolCollection: Record<string, ToolBase>,
-  taskIdChain: string[],
-  getTask: (id: string) => Promise<TaskNode | null>,
-  getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
-  getUploadedFile: (uuid: string) => Promise<File | undefined>,
-) {
-  const openAIMessageThread = [] as OpenAI.ChatCompletionMessageParam[]
-
-  if (taskIdChain) {
-    // we are using the reverse, because we want to build the chain starting
-    // from the lsat message, so that we have to add e.g. function descriptions etc...
-    // only once..
-    for (const mId of taskIdChain) {
-      const task = await getTask(mId)
-      if (task) {
-        const messages = await convertTaskNodeToOpenAIMessage(
-          task,
-          useVisionModels,
-          getFileMapping,
-          getUploadedFile,
-          useOpenAITools,
-          toolCollection,
-        )
-        if (messages) openAIMessageThread.push(...messages)
-      }
-    }
-  }
-
-  return openAIMessageThread
 }
 
 // sometimes a single task can get convserted to multiple messages
