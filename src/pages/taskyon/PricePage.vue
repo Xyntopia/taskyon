@@ -63,6 +63,7 @@ selecting different models).
                     `No information provided by Backend: **${state.llmSettings.selectedApi}**`
                   "
                 />
+                <object-tree-view read-only v-model="props.row" />
               </info-dialog>
               <q-btn
                 v-if="props.row.id !== tystate.currentModelId"
@@ -145,6 +146,7 @@ import { matCheck, matFilterList } from '@quasar/extras/material-icons'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import ApiSelect from 'components/taskyon/ApiSelect.vue'
 import { useAppStateStore } from 'src/stores/appState'
+import ObjectTreeView from 'src/components/ObjectTreeView.vue'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
