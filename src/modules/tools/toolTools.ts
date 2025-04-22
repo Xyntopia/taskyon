@@ -5,6 +5,7 @@ import { createChatCompletionTask } from './chatCompletionTool'
 import { type TyTaskManager } from '../taskyon/taskManager'
 import { match, P } from 'ts-pattern'
 import { safeYamlDump } from '../yamlUtils'
+import type { JSONSchema7 } from 'json-schema'
 
 export const createToolSearcher = (taskManager: TyTaskManager) =>
   createTool({
@@ -40,7 +41,7 @@ is now unreadable.
         },
       },
       required: [],
-    } as const,
+    } as const satisfies JSONSchema7,
     function: async ({ toolName, withCode, analyze }) => {
       const allTools = await taskManager.updateToolDefinitions(true)
       if (withCode) {
@@ -214,16 +215,27 @@ Finally, it creates a chat completion task with the selected tools in the allowe
       // use pattern matching on the last task
       const result = await match(taskChain.at(-2))
         .returnType<taskResult | Promise<taskResult>>()
-        .with({ content: { type: 'structured', data: 'no' } }, () => {
-          return makeTaskResult([
-            [
-              createChatCompletionTask({
-                goal: 'SimpleCompletion',
-                llmTools,
-              }),
-            ],
-          ])
-        })
+        .with(
+          {
+            content: {
+              type: 'structured',
+              data: {
+                choice: 'no',
+              },
+            },
+          },
+          () => {
+            console.log('2. No tools required, just return a simple completion task')
+            return makeTaskResult([
+              [
+                createChatCompletionTask({
+                  goal: 'SimpleCompletion',
+                  llmTools,
+                }),
+              ],
+            ])
+          },
+        )
         // any other string...
         .with({ content: { type: 'message', data: P.string } }, async () => {
           console.log('1. Retrieve all tools and create a short list (only name and description).')
@@ -237,22 +249,20 @@ Finally, it creates a chat completion task with the selected tools in the allowe
             [
               createChatCompletionTask({
                 prompts: [
-                  `
-          Here is list of all the tools which are available to you:
+                  `Here is list of all the tools which are available to you:
 
-          ${safeYamlDump(toolList)}
+${safeYamlDump(toolList)}
 
-          Can you please choose ${toolNum} of these which you think might be relevant for this
-          task. Only choose one if you think it would help you to solve the task.
+Can you please choose ${toolNum} of these which you think might be relevant for this
+task. Only choose one if you think it would help you to solve the task.
 
-          Examples are:
-          - something that you can't answer with pure text
-          - a math problem
-          - something that requires an API call
-          - ... and more! make sure to think about it!
+Examples are:
+- something that you can't answer with pure text
+- a math problem
+- something that requires an API call
+- ... and more! make sure to think about it!
 
-          If you are sure that none of the tools are relevant, you can simply respond with "no".
-          `,
+If you are sure that none of the tools are relevant, your choise should be "no".`,
                 ],
                 llmTools,
                 schema: {
@@ -261,8 +271,9 @@ Finally, it creates a chat completion task with the selected tools in the allowe
                     choice: {
                       oneOf: [
                         {
-                          type: 'string',
                           enum: ['no'],
+                          description:
+                            'If you are sure no tools are required for an answer, choose this',
                         },
                         {
                           type: 'array',
@@ -283,14 +294,25 @@ Finally, it creates a chat completion task with the selected tools in the allowe
           ])
         })
         .with(
-          { content: { type: 'structured', data: P.array(P.string) } },
-          ({ content: { data: toolsChosen } }) => {
+          {
+            content: {
+              type: 'structured',
+              data: {
+                choice: P.array(P.string),
+              },
+            },
+          },
+          ({
+            content: {
+              data: { choice },
+            },
+          }) => {
             return makeTaskResult([
               [
                 createChatCompletionTask({
                   goal: 'ChooseTool',
                   prompts: ['Please use one of the tools you chose earlier'],
-                  allowedTools: toolsChosen,
+                  allowedTools: choice,
                   llmTools,
                 }),
               ],

@@ -18,13 +18,7 @@ import type {
 import { FunctionCall, getCurrentModel } from '../taskyon/types'
 import { ChatResponseType, getApiConfigCopy } from '../taskyon/types'
 import { TaskProcessingError, type llmSettings } from '../taskyon/types'
-import {
-  makeTaskResult,
-  mapFunctionNames,
-  type InternalTool,
-  type internalToolFunctionSchema,
-  type toolContext,
-} from '../taskyon/tools'
+import { makeTaskResult, createTool, mapFunctionNames, type toolContext } from '../taskyon/tools'
 import {
   deepCopy,
   fileToBase64,
@@ -43,6 +37,7 @@ import type { JSONSchema7 } from 'json-schema'
 import { safeYamlDump } from '../yamlUtils'
 import type { AnySchema } from 'ajv'
 import { createStream } from '../frpBus'
+import type { FromSchema } from 'json-schema-to-ts'
 
 function generateOpenAIToolDeclarations(
   allowedTools: string[],
@@ -161,30 +156,28 @@ export async function processChatTask(
 
 // Ensures that every assistant.tool_calls is paired with a role:"tool" message.
 function ensureToolResponses(messages: OpenAI.ChatCompletionMessageParam[]) {
-  const result: OpenAI.ChatCompletionMessageParam[] = []
+  // 1) Pre‑scan all tool responses
+  const responded = new Set<string>()
+  for (const m of messages) {
+    if (m.role === 'tool' && 'tool_call_id' in m) {
+      responded.add(m.tool_call_id)
+    }
+  }
 
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i]!
+  // 2) Rebuild, injecting only the missing ones
+  const result: OpenAI.ChatCompletionMessageParam[] = []
+  for (const msg of messages) {
     result.push(msg)
 
-    // Detect assistant messages with tool_calls
-    if ('tool_calls' in msg) {
-      const calls = msg.tool_calls
-      for (const call of calls) {
-        const callId: string = call.id
-
-        // Check if a corresponding tool message already exists later
-        const hasResponse = messages
-          .slice(i + 1)
-          .some((m) => m.role === 'tool' && m.tool_call_id === callId)
-
-        // If missing, inject a void response
-        if (!hasResponse) {
+    if (msg.role === 'assistant' && Array.isArray(msg.tool_calls)) {
+      for (const call of msg.tool_calls) {
+        if (!responded.has(call.id)) {
           result.push({
             role: 'tool',
-            tool_call_id: callId,
-            content: '', // or some default placeholder
+            tool_call_id: call.id,
+            content: '',
           })
+          responded.add(call.id)
         }
       }
     }
@@ -635,76 +628,6 @@ async function convertFilesToOpenAIImageContent(
   return imageContent
 }
 
-const chatCompletionParams: JSONSchema7 = {
-  type: 'object',
-  properties: {
-    model: {
-      type: 'string',
-      description:
-        'The name of the model to use for the completion. The default is "auto" if parameter is not used. A model will automatically be chosen for the task',
-      default: 'auto',
-    },
-    goal: {
-      type: 'string',
-      description:
-        'Optional Parameter. Goals can be: "SimpleCompletion","AnalyzeError", "ChooseTool", "AnalyzeToolResult".',
-      default: '',
-    },
-    llmTools: {
-      type: 'boolean',
-      description: 'Optional Parameter. If set to true, we will use a openai compatible tool api',
-      default: false,
-    },
-    allowedTools: {
-      type: 'array',
-      description:
-        'Optional Parameter. We can specify which tools are allowed to be called by the LLM',
-      items: {
-        type: 'string',
-      },
-      default: [],
-    },
-    prompts: {
-      type: 'array',
-      description:
-        "Optional Parameter. We can add a custom prompt to the chatCompletion which doesn't get recorded as a task and therefore disappears during message thread conversion.",
-      items: {
-        type: 'string',
-      },
-      default: [],
-    },
-    schema: {
-      type: 'object',
-      description:
-        'A json schema object which we can use to generate a specific response and parse it.',
-      additionalProperties: true,
-    },
-  },
-  required: ['model'],
-}
-
-type ccArguments = {
-  model?: string
-  goal?: Goals
-  llmTools?: boolean
-  allowedTools?: string[]
-  prompts?: string[]
-  schema?: JSONSchema7 & Record<string, unknown>
-}
-
-export function createChatCompletionTask(args?: ccArguments): partialTaskDraft {
-  return {
-    role: 'function',
-    content: {
-      type: 'functioncall',
-      data: {
-        name: 'chatCompletion',
-        arguments: args ?? {},
-      },
-    },
-  }
-}
-
 export async function createChatCompletionTool(
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
@@ -725,122 +648,7 @@ export async function createChatCompletionTool(
     chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined
   }>()
 
-  const fetchChatCompletion: internalToolFunctionSchema = async (
-    { model, goal, llmTools, allowedTools, prompts, schema }: ccArguments,
-    context: toolContext,
-  ) => {
-    const selectedModel = model ?? getCurrentModel(llmSettings)
-    console.log('calling chat completion tool...', selectedModel, goal, llmTools)
-    // the current task doesn't *have* to exist. We can also works solely with prompts...
-    const currentTask = context.taskChain.at(-1)
-    if (!llmSettings.selectedApi) {
-      throw new TaskProcessingError('No API selected!')
-    }
-
-    const toolDefs = await taskManager.updateToolDefinitions(true)
-
-    // refactor this below and make it all explicit, without passing llmSettings...
-    // now add goal-specific prompts...
-    const lastTaskBeforeChatCompletion = context.taskChain.at(-2)
-    const { chatCompletion, metaInfo: chatInfo } = await processChatTask(
-      allowedTools ?? [],
-      toolDefs,
-      !!llmTools,
-      { model: selectedModel, chatApi: llmSettings.selectedApi },
-      llmSettings,
-      taskManager,
-      shouldInterrupt,
-      apiKeys,
-      lastTaskBeforeChatCompletion,
-      (chunk) => {
-        chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
-      },
-      prompts ?? [],
-      goal,
-      schema,
-    )
-
-    // parse the response into our own type ...
-    const resp = ChatResponseType.safeParse(chatCompletion)
-    const choice = resp.data?.choices[0]
-
-    let metaInfo: TaskNodeMeta = { taskPrompt: chatInfo, rawOutput: resp }
-    // get token usage for this task..
-    if (currentTask && lastTaskBeforeChatCompletion) {
-      if (resp.success) {
-        console.log('save token usage...')
-        // openai & openrouter sends back the exact number of prompt tokens :)
-        metaInfo = {
-          ...metaInfo,
-          ...(await saveTokenUsage(
-            resp.data,
-            chatInfo.openAIConversationThread,
-            toolDefs,
-            lastTaskBeforeChatCompletion?.content,
-            llmSettings,
-          )),
-        }
-        // we run this asynchronously, because it fetches data in the
-        // background and we don't want to wait here...
-
-        void addTaskCostInformation(resp.data, currentTask?.id, llmSettings, apiKeys).then(
-          (newMeta) => {
-            void taskManager.debugDb.upsert(currentTask.id, newMeta, 'shallow_merge')
-          },
-        )
-      }
-
-      metaInfo.rawOutput = { choice }
-      void taskManager.debugDb.upsert(currentTask.id, metaInfo, 'shallow_merge')
-    }
-
-    if (!choice)
-      throw new TaskProcessingError(
-        'Our ChatCompletion tool did not get a valid response!',
-        resp.data,
-      )
-
-    // in case a schema was given, we simply use that schema and return it as a structured message
-    // for further processing (e.g. a contextFunction)...
-    if (schema) {
-      console.log('parsing custom schema', schema)
-      const structResponse = parseYamlResponse2Record(choice.message.content || '')
-
-      if (typeof schema === 'object' && schema !== null) {
-        // I *think* we can simply cast our schema here t ajv, because it
-        // will spit out an error anyways if our schema isn't compatible..
-        const validate = ajv.compile(schema as unknown as AnySchema)
-        const valid = validate(structResponse)
-        if (!valid) {
-          throw new Error('Chat response has the wrong format: ' + ajv.errorsText(validate.errors))
-        }
-      } else {
-        throw new TaskProcessingError('Invalid schema type')
-      }
-
-      return makeTaskResult([
-        [
-          {
-            role: 'assistant',
-            content: { type: 'structured', data: structResponse },
-          },
-        ],
-      ])
-    }
-
-    const newTaskChain = generateFollowUpTasksFromResult(
-      goal || 'SimpleCompletion',
-      choice,
-      selectedModel,
-      !!llmTools,
-      toolDefs,
-    )
-
-    return makeTaskResult([newTaskChain])
-  }
-
-  const chatCompletion: InternalTool = {
-    function: fetchChatCompletion,
+  const chatCompletion = createTool({
     description: 'Generates a chat-based response using the OpenAI API for the previous message.',
     longDescription: `This tool interfaces with an OpenAI-compatible API to generate completions for
   conversation prompts. Useful for generating natural language responses in a chat setting.
@@ -848,10 +656,187 @@ export async function createChatCompletionTool(
   list and generate a response`,
     name: 'chatCompletion',
     renderOptions: { hideChat: true, hideLlm: true },
-    parameters: chatCompletionParams,
-  }
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        model: {
+          type: 'string',
+          description: 'The name of the model to use for the completion.',
+        },
+        goal: {
+          enum: ['SimpleCompletion', 'AnalyzeError', 'ChooseTool', 'AnalyzeToolResult'],
+          description:
+            'Optional Parameter to define the goal of the chat completion. If not set, the goal is dynamically inferred from the input.',
+        },
+        llmTools: {
+          type: ['boolean', 'null'],
+          description:
+            'Optional Parameter. If set to true, we will use a openai compatible tool api. If undefined, it will be treated as false.',
+        },
+        allowedTools: {
+          type: 'array',
+          description:
+            'Optional Parameter. We can specify which tools are allowed to be called by the LLM',
+          items: {
+            type: 'string',
+          },
+        },
+        prompts: {
+          type: 'array',
+          description:
+            "Optional Parameter. We can add a custom prompt to the chatCompletion which doesn't get recorded as a task and therefore disappears during message thread conversion.",
+          items: {
+            type: 'string',
+          },
+        },
+        schema: {
+          type: 'object',
+          description:
+            'A json schema object which we can use to generate a specific response and parse it.',
+          additionalProperties: true,
+        },
+      },
+    } as const satisfies JSONSchema7,
+    function: async (
+      { model, goal, llmTools, allowedTools, prompts, schema },
+      context: toolContext,
+    ) => {
+      const selectedModel = model ?? getCurrentModel(llmSettings)
+      console.log('calling chat completion tool...', selectedModel, goal, llmTools)
+      // the current task doesn't *have* to exist. We can also works solely with prompts...
+      const currentTask = context.taskChain.at(-1)
+      if (!llmSettings.selectedApi) {
+        throw new TaskProcessingError('No API selected!')
+      }
+
+      const toolDefs = await taskManager.updateToolDefinitions(true)
+
+      // refactor this below and make it all explicit, without passing llmSettings...
+      // now add goal-specific prompts...
+      const lastTaskBeforeChatCompletion = context.taskChain.at(-2)
+      const { chatCompletion, metaInfo: chatInfo } = await processChatTask(
+        allowedTools ?? [],
+        toolDefs,
+        !!llmTools,
+        { model: selectedModel, chatApi: llmSettings.selectedApi },
+        llmSettings,
+        taskManager,
+        shouldInterrupt,
+        apiKeys,
+        lastTaskBeforeChatCompletion,
+        (chunk) => {
+          chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
+        },
+        prompts ?? [],
+        goal,
+        schema,
+      )
+
+      // parse the response into our own type ...
+      const resp = ChatResponseType.safeParse(chatCompletion)
+      const choice = resp.data?.choices[0]
+
+      let metaInfo: TaskNodeMeta = { taskPrompt: chatInfo, rawOutput: resp }
+      // get token usage for this task..
+      if (currentTask && lastTaskBeforeChatCompletion) {
+        if (resp.success) {
+          console.log('save token usage...')
+          // openai & openrouter sends back the exact number of prompt tokens :)
+          metaInfo = {
+            ...metaInfo,
+            ...(await saveTokenUsage(
+              resp.data,
+              chatInfo.openAIConversationThread,
+              toolDefs,
+              lastTaskBeforeChatCompletion?.content,
+              llmSettings,
+            )),
+          }
+          // we run this asynchronously, because it fetches data in the
+          // background and we don't want to wait here...
+
+          void addTaskCostInformation(resp.data, currentTask?.id, llmSettings, apiKeys).then(
+            (newMeta) => {
+              void taskManager.debugDb.upsert(currentTask.id, newMeta, 'shallow_merge')
+            },
+          )
+        }
+
+        metaInfo.rawOutput = { choice }
+        void taskManager.debugDb.upsert(currentTask.id, metaInfo, 'shallow_merge')
+      }
+
+      if (!choice)
+        throw new TaskProcessingError(
+          'Our ChatCompletion tool did not get a valid response!',
+          resp.data,
+        )
+
+      // in case a schema was given, we simply use that schema and return it as a structured message
+      // for further processing (e.g. a contextFunction)...
+      if (schema) {
+        console.log('parsing custom schema', schema)
+        const structResponse = parseYamlResponse2Record(choice.message.content || '')
+
+        if (typeof schema === 'object' && schema !== null) {
+          // I *think* we can simply cast our schema here t ajv, because it
+          // will spit out an error anyways if our schema isn't compatible..
+          const validate = ajv.compile(schema as unknown as AnySchema)
+          const valid = validate(structResponse)
+          if (!valid) {
+            throw new Error(
+              'Chat response has the wrong format: ' + ajv.errorsText(validate.errors),
+            )
+          }
+        } else {
+          throw new TaskProcessingError('Invalid schema type')
+        }
+
+        return makeTaskResult([
+          [
+            {
+              role: 'assistant',
+              content: { type: 'structured', data: structResponse },
+            },
+          ],
+        ])
+      }
+
+      const newTaskChain = generateFollowUpTasksFromResult(
+        goal || 'SimpleCompletion',
+        choice,
+        selectedModel,
+        !!llmTools,
+        toolDefs,
+      )
+
+      return makeTaskResult([newTaskChain])
+    },
+  })
 
   return { chatCompletion, stream: chatCompletionStream.stream }
+}
+
+type chatCompletionParams = FromSchema<
+  Awaited<ReturnType<typeof createChatCompletionTool>>['chatCompletion']['parameters']
+>
+
+type ChatCompletionArgs = Omit<chatCompletionParams, 'schema'> & {
+  schema?: JSONSchema7 & Record<string, unknown>
+}
+
+export function createChatCompletionTask(args?: ChatCompletionArgs): partialTaskDraft {
+  return {
+    role: 'function',
+    content: {
+      type: 'functioncall',
+      data: {
+        name: 'chatCompletion',
+        arguments: args ?? {},
+      },
+    },
+  }
 }
 
 export type chatCompletionTool = ReturnType<typeof createChatCompletionTool>
