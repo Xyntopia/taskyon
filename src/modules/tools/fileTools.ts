@@ -1,3 +1,4 @@
+import type { JSONSchema7 } from 'json-schema'
 import { createTool, makeTaskResult } from '../taskyon/tools'
 import { convertFileToText } from 'src/modules/loadFiles'
 
@@ -46,7 +47,7 @@ between browser sessions but are private to this application.`,
       },
     },
     required: ['action'],
-  } as const,
+  } as const satisfies JSONSchema7,
   function: async ({
     action,
     directory = '/',

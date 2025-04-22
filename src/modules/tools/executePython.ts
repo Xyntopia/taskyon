@@ -1,6 +1,7 @@
 import { createTool } from '../taskyon/tools'
 import type { PythonScriptResult } from '../pyodide'
 import { usePyodideWebworker } from '../taskyon/webWorkerApi'
+import type { JSONSchema7 } from 'json-schema'
 
 const { asyncRunPython } = usePyodideWebworker('execute python script tool')
 
@@ -14,7 +15,8 @@ export const executePythonScript = createTool({
       },
     },
     required: ['code'],
-  } as const,
+    additionalProperties: false,
+  } as const satisfies JSONSchema7,
   function: async ({ code }): Promise<PythonScriptResult> => {
     console.log('execute python code...')
     return await asyncRunPython(code)

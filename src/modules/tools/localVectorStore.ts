@@ -1,3 +1,4 @@
+import type { JSONSchema7 } from 'json-schema'
 import { createVectorStore } from '../crudWrapper'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
 import { getDatabase } from '../pglite.api'
@@ -32,7 +33,7 @@ export const localVectorStore = createTool({
       },
     },
     oneOf: [{ required: ['search'] }, { required: ['save'] }],
-  } as const,
+  } as const satisfies JSONSchema7,
   function: async ({ searchText, k, saveText, label }) => {
     const { search, upsert } = await createVectorStore(
       await getDatabase('taskyon'),

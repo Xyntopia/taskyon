@@ -1,3 +1,4 @@
+import type { JSONSchema7 } from 'json-schema'
 import { createTool, makeTaskResult } from '../taskyon/tools'
 import { useGdrive } from 'src/modules/gdrive' // Import the gdrive module
 
@@ -164,7 +165,7 @@ Files can be organized in directories and optionally made public with sharable l
       },
     },
     required: ['action', 'directory', 'filename'],
-  } as const,
+  } as const satisfies JSONSchema7,
   function: async ({ action, directory, filename, content, mimeType, share }) => {
     try {
       const gdrive = useGdrive()

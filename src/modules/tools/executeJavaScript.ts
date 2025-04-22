@@ -1,3 +1,4 @@
+import type { JSONSchema7 } from 'json-schema'
 import { createTool, type WorkerMessage } from '../taskyon/tools'
 
 // Function to execute JavaScript in a dynamically created Web Worker
@@ -119,5 +120,5 @@ for tasks requiring DOM manipulation, data processing, or dynamic web content ge
       },
     },
     required: ['code'],
-  } as const,
+  } as const satisfies JSONSchema7,
 })

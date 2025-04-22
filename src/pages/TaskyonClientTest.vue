@@ -18,6 +18,7 @@
 
 <script setup lang="ts">
 import type { partialTyConfiguration } from 'src/modules/taskyon/iframeApiTypes'
+import type { ClientTool } from 'src/modules/taskyon/tools'
 import { createTool } from 'src/modules/taskyon/tools'
 import { initializeTaskyon } from 'src/modules/client/tyClient'
 import { ref } from 'vue'
@@ -46,7 +47,7 @@ const configuration: partialTyConfiguration = {
 }
 
 // Tool Definitions
-const tools = [
+const tools: ClientTool[] = [
   createTool({
     name: 'clientTest',
     description: 'function which adds two strings on this page and displays them!',
@@ -63,6 +64,7 @@ const tools = [
         },
       },
       required: ['parameter1'],
+      additionalProperties: false,
     } as const,
     function: (data) => {
       console.log('Received function call with data:', data)

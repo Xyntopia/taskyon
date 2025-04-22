@@ -1,3 +1,4 @@
+import type { JSONSchema7 } from 'json-schema'
 import { createTool } from '../taskyon/tools'
 
 export const taskPlanner = createTool({
@@ -23,7 +24,7 @@ Note: This tool only supports one level of grouping. For further breakdown, use 
       },
     },
     required: ['tasks'],
-  } as const,
+  } as const satisfies JSONSchema7,
   code: `
     async ({ tasks }) => {
       // Format each group for clarity.

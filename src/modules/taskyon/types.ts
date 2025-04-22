@@ -159,7 +159,7 @@ export const ToolBase = z.object({
 This is mainly useful for tools like "chatCompletion" which the llm doesn't need to see in the chatCompletion.`),
   parameters: JSONSchema7.describe(
     'A JSON schema object describing the parameters of the function.',
-  ),
+  ).readonly(),
   code: z
     .string()
     .optional()

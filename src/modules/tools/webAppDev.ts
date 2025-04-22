@@ -1,3 +1,4 @@
+import type { JSONSchema7 } from 'json-schema'
 import { createTool, makeTaskResult } from '../taskyon/tools'
 
 // Global store for all opened windows
@@ -25,7 +26,7 @@ Windows can be given IDs for later reference with the windowManager tool.`,
       },
     },
     required: ['html'],
-  } as const,
+  } as const satisfies JSONSchema7,
   function: ({ html, windowId = '', windowFeatures = '' }) => {
     try {
       console.log('Opening new window with HTML content via blob URL.')
@@ -114,7 +115,7 @@ export const windowManagerTool = createTool({
       },
     },
     required: ['action'],
-  } as const,
+  } as const satisfies JSONSchema7,
   function: ({ action = 'list', windowId }) => {
     switch (action) {
       case 'list': {

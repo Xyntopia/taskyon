@@ -1,3 +1,4 @@
+import type { JSONSchema7 } from 'json-schema'
 import { createTool, makeTaskResult } from '../taskyon/tools'
 
 const issueListGenerator = createTool({
@@ -23,7 +24,7 @@ in gitlab. They should roughly follow the style of a "user story".`,
       },
     },
     required: ['issuelist'],
-  } as const,
+  } as const satisfies JSONSchema7,
   function: async ({ issuelist }, ctx) => {
     const GITLAB_PROJECT_ID = await ctx.getSecret('YOUR_GITLAB_PROJECT_ID') // Replace with actual project ID
     const GITLAB_API_URL = await ctx.getSecret(
@@ -130,7 +131,7 @@ const gitReader = createTool({
         default: 'https://cors.isomorphic-git.org',
       },
     },
-  },
+  } as const satisfies JSONSchema7,
   code: `async ({ repoUrl, filePath, ref = "HEAD", corsProxy = "https://cors.isomorphic-git.org" }) => {
   try {
     // Ensure isomorphic-git is loaded on the window
