@@ -269,7 +269,7 @@ If you are sure that none of the tools are relevant, your choise should be "no".
                   type: 'object',
                   properties: {
                     choice: {
-                      oneOf: [
+                      anyOf: [
                         {
                           enum: ['no'],
                           description:
@@ -284,11 +284,13 @@ If you are sure that none of the tools are relevant, your choise should be "no".
                           // we are not using this, in order to make our tool more robust...
                           // sometimes, the LLM will select fewer tools than we expect
                           //minItems: toolNum,
-                          maxItems: toolNum, // we always leave this here though in order to prevent too many tools being shown in the next step...
+                          // TODO: in chatGPT "strict" mode, maxItems will not work...
+                          //maxItems: toolNum, // we always leave this here though in order to prevent too many tools being shown in the next step...
                         },
                       ],
                     },
                   },
+                  additionalProperties: false,
                   required: ['choice'],
                 },
               }),
