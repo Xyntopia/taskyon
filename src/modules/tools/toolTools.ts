@@ -273,7 +273,7 @@ If you are sure that none of the tools are relevant, your choise should be "no".
                         {
                           enum: ['no'],
                           description:
-                            'If you are sure no tools are required for an answer, choose this',
+                            'If you are sure no tools are required for an answer, choose "no" as an answer',
                         },
                         {
                           type: 'array',
@@ -281,7 +281,10 @@ If you are sure that none of the tools are relevant, your choise should be "no".
                           items: {
                             type: 'string',
                           },
-                          minItems: toolNum,
+                          // we are not using this, in order to make our tool more robust...
+                          // sometimes, the LLM will select fewer tools than we expect
+                          //minItems: toolNum,
+                          maxItems: toolNum, // we always leave this here though in order to prevent too many tools being shown in the next step...
                         },
                       ],
                     },
@@ -289,7 +292,7 @@ If you are sure that none of the tools are relevant, your choise should be "no".
                   required: ['choice'],
                 },
               }),
-              createToolTask({ name: 'chooseTool', arguments: {} }),
+              createToolTask({ name: 'chooseTool', arguments: { llmTools } }),
             ],
           ])
         })

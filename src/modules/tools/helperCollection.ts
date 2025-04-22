@@ -97,7 +97,8 @@ const clock = {
     properties: {
       timestamp: {
         type: 'number',
-        description: 'A Unix timestamp to convert to time, date, and weekday.',
+        description:
+          'A Unix timestamp to convert to time, date, and weekday. If not provided, the current time will be used.',
       },
     },
   },
