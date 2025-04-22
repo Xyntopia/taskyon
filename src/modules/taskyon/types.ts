@@ -178,6 +178,9 @@ export const ParamType = z.union([
   z.record(z.unknown()),
   z.array(z.unknown()),
   z.null(),
+  // We are also allowing undefined calls to the functions, even though this is not allowed in jsonschema.
+  // But we are sometimes calling our functions manually and this way we can also call them without parameters.
+  z.undefined(),
 ])
 export type ParamType = z.infer<typeof ParamType>
 export const FunctionArguments = z.record(ParamType).describe('arguments of the function')

@@ -181,7 +181,7 @@ watch(
   [() => state.llmSettings.selectedTaskId, () => state.chatHistory],
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   ([_, newChatHistory]) => {
-    console.log('updating sidebar chat list', state.chatHistory)
+    console.log('updating sidebar chat list')
     conversationIDs.value = newChatHistory.slice(0, 10)
     conversationIDs.value.forEach((id) => void updateName(id))
   },
