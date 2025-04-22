@@ -127,8 +127,8 @@ export async function processChatTask(
   ]
 
   let tools: OpenAI.ChatCompletionTool[] = []
-  if (llmSettings.enableOpenAiTools) {
-    tools = generateOpenAIToolDeclarations(llmSettings.allowedTools || [], toolDefs)
+  if (llmTools) {
+    tools = generateOpenAIToolDeclarations(allowedTools || [], toolDefs)
   }
 
   if (openAIConversationThread.length > 0) {
@@ -279,7 +279,7 @@ async function saveTokenUsage(
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   toolDefs: Record<string, ToolBase>,
   content: TaskNode['content'],
-  llmSettings: llmSettings,
+  allowedTools: string[] | undefined,
 ): Promise<TaskNodeMeta> {
   let costInfo: TaskNodeMeta = {}
   if (chatResponse.usage) {
@@ -295,7 +295,7 @@ async function saveTokenUsage(
     deepCopy(content),
     openAIConversationThread,
     toolDefs,
-    deepCopy(llmSettings.allowedTools) || [],
+    deepCopy(allowedTools) || [],
     chatResponse.choices[0]!.message.content ?? '',
   )
   return costInfo
@@ -566,7 +566,7 @@ async function convertTaskNodeToOpenAIMessage(
       ]
   } else if (task.content.type === 'message' && task.role != 'function') {
     const message: OpenAI.ChatCompletionMessageParam = {
-      // TOOD: we need to move the "role" into the task type...
+      // TOOD: we need to dynamically generate task rolws here!! and move it into the task type,  if its a message!
       role: task.role,
       content: task.content.data,
     }
@@ -595,7 +595,7 @@ async function convertTaskNodeToOpenAIMessage(
       return [message, imageMessage]
     }
     return [message]
-  }
+  } // else if (task.content.type ==='')
   // TODO: we would also like to convert structured messages, and simply don't send them to
   //       the chat, if they're configured as "lower-hierarchy"
 }
@@ -750,7 +750,7 @@ export async function createChatCompletionTool(
               chatInfo.openAIConversationThread,
               toolDefs,
               lastTaskBeforeChatCompletion?.content,
-              llmSettings,
+              allowedTools,
             )),
           }
           // we run this asynchronously, because it fetches data in the
