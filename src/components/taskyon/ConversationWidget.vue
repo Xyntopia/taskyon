@@ -105,8 +105,12 @@
               :use-iframe="false"
               :src="currentStream || ''"
             />
-            <div v-else>
-              {{ tystate.workerStreamLogs.at(-1) }}
+            <div class="row" v-else>
+              <div v-if="!showLogs">{{ tystate.workerStreamLogs.at(-1) }}</div>
+              <div v-else v-for="(log, idx) in tystate.workerStreamLogs" class="row" :key="idx">
+                {{ log }}
+              </div>
+              <q-btn flat :icon="matArrowDropDown" @click="showLogs = !showLogs" />
             </div>
             <q-spinner-dots size="2rem" color="secondary" />
           </div>
@@ -133,9 +137,11 @@ import { computed, onBeforeUnmount } from 'vue'
 import { ref } from 'vue'
 import { type TaskTreeNode } from 'src/modules/taskyon/taskManager'
 import type { Unsubscribe } from 'src/modules/frpBus'
+import { matArrowDropDown } from '@quasar/extras/material-icons'
 const $q = useQuasar()
 
 const tystate = useTaskyonStore()
+const showLogs = ref(false)
 
 const props = defineProps<{
   selectedThread: TaskNode[]
