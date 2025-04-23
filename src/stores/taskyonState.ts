@@ -208,10 +208,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return instance['chatCompletionStream']
   })
 
-  const workerStreamLogs = ref<TyTaskStreamData[]>([])
+  const workerStreamLogs = ref<(TyTaskStreamData & { timestamp: Date })[]>([])
   const maxLogRows = 50
   void workerStream.subscribe((data) => {
-    workerStreamLogs.value.push(data)
+    workerStreamLogs.value.push({ ...data, timestamp: new Date() })
 
     // Ensure the log doesn't exceed the maximum number of rows
     if (workerStreamLogs.value.length > maxLogRows) {

@@ -30,7 +30,6 @@
         v-if="tystate.selectedThread.value.length > 0"
         :selected-thread="tystate.selectedThread.value"
         :current-task="tystate.currentTask.value"
-        :task-worker-waiting="tystate.taskWorkerWaiting"
         :task-worker-message="taskWorkerMessage || ''"
         :show-all-tasks="showAllTasks"
         :show-hierarchy="showHierarchy"

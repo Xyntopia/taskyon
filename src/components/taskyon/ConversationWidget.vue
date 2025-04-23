@@ -90,16 +90,19 @@
       </div>
       <!--Render tasks which are in progress-->
       <div class="tasks-container q-py-sm">
-        <div class="row" v-if="lastWorkerEvent">
-          <div>
-            working on task: {{ lastWorkerEvent?.stage }}
+        <div class="row items-center" v-if="lastWorkerEvent">
+          <q-btn flat dense no-caps :icon-right="matArrowDropDown" @click="showLogs = !showLogs">
+            Current Task State: {{ lastWorkerEvent?.stage }}
             {{ lastWorkerEvent?.taskId || lastWorkerEvent?.task?.id }}
-          </div>
-          <q-btn flat dense :icon="matArrowDropDown" @click="showLogs = !showLogs" />
+          </q-btn>
         </div>
         <template v-if="showLogs">
-          <div v-for="(log, idx) in tystate.workerStreamLogs" class="column" :key="idx">
-            working on task: {{ log.stage }} {{ log.taskId || log.task?.id }}
+          <div
+            v-for="(log, ridx) in tystate.workerStreamLogs.toReversed()"
+            class="column"
+            :key="ridx"
+          >
+            {{ formatTimeStamp(log.timestamp) }}: {{ log.stage }} {{ log.taskId || log.task?.id }}
           </div></template
         >
         <q-card
@@ -155,7 +158,6 @@ const lastWorkerEvent = computed(() => {
 const props = defineProps<{
   selectedThread: TaskNode[]
   currentTask?: TaskNode | undefined | null
-  taskWorkerWaiting: boolean
   taskWorkerMessage?: string
   showAllTasks?: boolean
   showHierarchy?: boolean
@@ -167,6 +169,32 @@ const props = defineProps<{
 const streamingContentTracker = ref<Map<string, string>>(new Map<string, string>())
 
 let streamerUnsubscriber: Unsubscribe
+
+function formatTimeStamp(timestamp: string | number | Date): string {
+  const date = new Date(timestamp)
+  const now = new Date()
+  const elapsedMs = now.getTime() - date.getTime()
+
+  const seconds = Math.floor(elapsedMs / 1000)
+  const minutes = Math.floor(elapsedMs / (1000 * 60))
+  const hours = Math.floor(elapsedMs / (1000 * 60 * 60))
+
+  if (minutes < 5) {
+    return `${minutes > 0 ? `${minutes}m ` : ''}${seconds % 60}s ago`
+  } else if (minutes < 60) {
+    return `${minutes}m ago`
+  } else if (hours < 24) {
+    return `${hours}h ago`
+  } else {
+    return date.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+}
 
 void tystate.chatCompletionStream
   .subscribe(({ taskId, chunk }) => {

@@ -28,7 +28,6 @@ export function useTaskWorkerController() {
   let interrupted = false
   let interruptReason: string | null = null
   let interruptCallbacks: ((reason: string | null) => void)[] = []
-  let waiting = false
   let errorCount = 0
 
   function interrupt(reason: string | null = null): void {
@@ -36,15 +35,6 @@ export function useTaskWorkerController() {
     interrupted = true
     interruptReason = reason
     interruptCallbacks.forEach((callback) => callback(reason))
-  }
-
-  function isWaiting() {
-    return waiting
-  }
-
-  function setWaiting(value: boolean) {
-    console.log('task worker is waiting!')
-    waiting = value
   }
 
   function isInterrupted(): boolean {
@@ -74,8 +64,6 @@ export function useTaskWorkerController() {
     getInterruptReason,
     reset,
     onInterrupt,
-    isWaiting,
-    setWaiting,
     increaseErrorCount: () => {
       errorCount++
     },
@@ -348,20 +336,8 @@ const createAddTaskChain =
     return functionTasks.length
   }
 
-export function runTaskWorker(
-  processTasksQueue: AsyncQueue<string>,
-  llmSettings: llmSettings,
-  taskManager: TyTaskManager,
-  taskWorkerController: TaskWorkerController,
-) {
-  console.log('entering task worker loop...')
-
-  const { isTaskFinished, setTaskFinished } = createTaskTracker(taskManager)
-
+function workerLoggingHelper(processTasksQueue: AsyncQueue<string>) {
   const taskProcessingStream = createStream<TyTaskStreamData>()
-
-  // this is uses to track how long a list of tasks has been processing
-  let taskFinishedWaitingCount = 0
 
   let tasksInProgress = 0
   const taskIsProcessing = (taskId: string) => {
@@ -380,6 +356,24 @@ export function runTaskWorker(
     taskProcessingStream.emit({ stage: 'processed', taskId })
     if (tasksInProgress <= 0 && processTasksQueue.count() === 0) allTasksFinished()
   }
+  return { taskProcessingStream, allTasksFinished, taskIsProcessing, taskFinishedProcessing }
+}
+
+export function runTaskWorker(
+  processTasksQueue: AsyncQueue<string>,
+  llmSettings: llmSettings,
+  taskManager: TyTaskManager,
+  taskWorkerController: TaskWorkerController,
+) {
+  console.log('entering task worker loop...')
+
+  const { isTaskFinished, setTaskFinished } = createTaskTracker(taskManager)
+
+  // this is uses to track how long a list of tasks has been processing
+  let taskFinishedWaitingCount = 0
+
+  const { taskProcessingStream, allTasksFinished, taskIsProcessing, taskFinishedProcessing } =
+    workerLoggingHelper(processTasksQueue)
 
   const addTaskChain = createAddTaskChain(
     taskManager,

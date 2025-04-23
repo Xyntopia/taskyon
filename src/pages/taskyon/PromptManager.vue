@@ -42,7 +42,6 @@
             <conversation-widget
               :selected-thread="tystate.selectedThread.value"
               :current-task="tystate.currentTask.value"
-              :task-worker-waiting="tystate.taskWorkerWaiting"
             />
           </q-scroll-area>
         </div>
