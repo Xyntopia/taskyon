@@ -90,6 +90,18 @@
       </div>
       <!--Render tasks which are in progress-->
       <div class="tasks-container q-py-sm">
+        <div class="row" v-if="lastWorkerEvent">
+          <div>
+            working on task: {{ lastWorkerEvent?.stage }}
+            {{ lastWorkerEvent?.taskId || lastWorkerEvent?.task?.id }}
+          </div>
+          <q-btn flat dense :icon="matArrowDropDown" @click="showLogs = !showLogs" />
+        </div>
+        <template v-if="showLogs">
+          <div v-for="(log, idx) in tystate.workerStreamLogs" class="column" :key="idx">
+            working on task: {{ log.stage }} {{ log.taskId || log.task?.id }}
+          </div></template
+        >
         <q-card
           v-if="
             !!tystate.lastTaskState.get(currentTask.id) &&
@@ -105,13 +117,6 @@
               :use-iframe="false"
               :src="currentStream || ''"
             />
-            <div class="row" v-else>
-              <div v-if="!showLogs">{{ tystate.workerStreamLogs.at(-1) }}</div>
-              <div v-else v-for="(log, idx) in tystate.workerStreamLogs" class="row" :key="idx">
-                {{ log }}
-              </div>
-              <q-btn flat :icon="matArrowDropDown" @click="showLogs = !showLogs" />
-            </div>
             <q-spinner-dots size="2rem" color="secondary" />
           </div>
         </q-card>
@@ -142,6 +147,10 @@ const $q = useQuasar()
 
 const tystate = useTaskyonStore()
 const showLogs = ref(false)
+
+const lastWorkerEvent = computed(() => {
+  return tystate.workerStreamLogs.at(-1)
+})
 
 const props = defineProps<{
   selectedThread: TaskNode[]
