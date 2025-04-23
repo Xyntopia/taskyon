@@ -673,8 +673,9 @@ export function getCurrentModel(llmSettings: llmSettings) {
 
 export interface TyTaskStreamData {
   task?: TaskNode | null
+  taskId?: string | null
   // "all finished" means the task has been processes AND all its subtasks have been finished..
-  stage: 'processing' | 'processed' | 'error' | 'waiting' | 'subtasks'
+  stage: 'processing' | 'processed' | 'error' | 'waiting' | 'subtasks' | 'all finished'
 }
 
 // takes an object and turns all of its functions into async...

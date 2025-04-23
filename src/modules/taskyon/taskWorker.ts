@@ -360,6 +360,27 @@ export function runTaskWorker(
 
   const taskProcessingStream = createStream<TyTaskStreamData>()
 
+  // this is uses to track how long a list of tasks has been processing
+  let taskFinishedWaitingCount = 0
+
+  let tasksInProgress = 0
+  const taskIsProcessing = (taskId: string) => {
+    tasksInProgress += 1
+    console.log('processing task:', taskId)
+    taskProcessingStream.emit({ stage: 'processing', taskId })
+  }
+  const allTasksFinished = () => {
+    // this means that all tasks are finished and we can emit a final message
+    tasksInProgress = 0
+    console.log('all tasks finished!')
+    taskProcessingStream.emit({ stage: 'all finished' })
+  }
+  const taskFinishedProcessing = (taskId: string) => {
+    tasksInProgress -= 1
+    taskProcessingStream.emit({ stage: 'processed', taskId })
+    if (tasksInProgress <= 0 && processTasksQueue.count() === 0) allTasksFinished()
+  }
+
   const addTaskChain = createAddTaskChain(
     taskManager,
     processTasksQueue,
@@ -367,44 +388,38 @@ export function runTaskWorker(
     setTaskFinished,
   )
 
-  // this is uses to track how long a list of tasks has been processing
-  let taskFinishedWaitingCount = 0
-
   const run = async () => {
     while (true) {
       console.log('waiting for next task!')
       let task: TaskNode | null = null
 
-      if (taskWorkerController.isInterrupted()) {
-        // in case of errors, especially if its an interrupt event we simply want to cancel everything :P
-        // empty our task queue :)
-        console.log('clear out task queue due to interruption')
-        processTasksQueue.clear()
-      }
-
       if (processTasksQueue.count() === 0) {
-        taskWorkerController.setWaiting(true)
         taskProcessingStream.emit({ stage: 'waiting' })
       }
       const taskId = await processTasksQueue.pop()
-      taskWorkerController.setWaiting(false)
       if (taskWorkerController.isInterrupted()) {
+        // in case of any errors, especially if its an interrupt event we simply want to cancel everything :P
+        // empty our task queue :)
+        console.log('clear out task queue due to interruption')
+        processTasksQueue.clear()
+        allTasksFinished()
+
         // don't process tasks anymore..  all we can do now is to wait until the user manually presses the
         // "reset" button ;)
         continue
       }
-
       // make sure we know from outside that the worker is active...
-      console.log('processing task:', taskId)
+      taskIsProcessing(taskId)
       task = await taskManager.getTask(taskId)
       if (task && !taskWorkerController.isInterrupted()) {
         // check if the previous task was finished. only of all prior tasks are finished
         // we can continue processing this task...
         if (task.priorID && !(await isTaskFinished(task.priorID))) {
-          taskProcessingStream.emit({ stage: 'subtasks', task })
+          taskProcessingStream.emit({ stage: 'subtasks', task, taskId: task.id })
           // we need to wait until all subtasks from its previous tasks are finished before
           // continuing with this task so we simply push this task back onto the stack
           processTasksQueue.push(task.id)
+          taskFinishedProcessing(task.id)
           // if this is the only task in the queue, we need to wait a little bit in order
           // to not overwhelm the browser (This will likely never be the case, but just in case)
           if (taskFinishedWaitingCount >= 5) {
@@ -419,11 +434,11 @@ export function runTaskWorker(
         taskProcessingStream.emit({ stage: 'processing', task })
 
         // we don't need to process tasks which aren't a function...
-        // we also don't need to push them back in the queue...
+        // we also don'tasksInProgresst need to push them back in the queue...
         // we also don't need to add the task as the "last" task in the GUI
         // because they will automatically be called as soon as the
         if (task.content.type !== 'functioncall') {
-          taskProcessingStream.emit({ stage: 'processed', task })
+          taskFinishedProcessing(task.id)
           continue
         }
 
@@ -492,6 +507,9 @@ export function runTaskWorker(
             llmSettings.selectedTaskId = errorTaskId
 
             // TODO: run this taskWorker in a separate worker js/browser thread!
+          })
+          .finally(() => {
+            taskFinishedProcessing(task.id)
           })
       }
     }
