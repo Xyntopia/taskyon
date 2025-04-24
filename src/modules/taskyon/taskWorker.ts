@@ -4,7 +4,6 @@ import {
   type TaskNode,
   type llmSettings,
   TaskProcessingError,
-  type OnInterruptFunc,
   getApiConfigCopy,
 } from './types'
 import { type TyTaskManager } from './taskManager'
@@ -14,72 +13,12 @@ import { createChatCompletionTask } from '../tools/chatCompletionTool'
 import type { CrudWrapper } from '../crudWrapper'
 import { createStream } from '../frpBus'
 
-export function useTaskWorkerController() {
-  /* This class adds context to task executions during the runtime.
-  We don't necessarily need to save this information in the database
-  It also gives us the ability to control the task worker process
-
-  - We can interrupt/cancel task processing
-  - we can track number of error in a task chain and cancel, if too many errors appear
-  - we can track other information
-  - we can gracefully exist streamed tasks
-  - and more..
-  */
-  let interrupted = false
-  let interruptReason: string | null = null
-  let interruptCallbacks: ((reason: string | null) => void)[] = []
-  let errorCount = 0
-
-  function interrupt(reason: string | null = null): void {
-    console.log('interrupting: ', reason)
-    interrupted = true
-    interruptReason = reason
-    interruptCallbacks.forEach((callback) => callback(reason))
-  }
-
-  function isInterrupted(): boolean {
-    return interrupted
-  }
-
-  function getInterruptReason(): string | null {
-    return interruptReason
-  }
-
-  function reset(full = true): void {
-    interrupted = false
-    interruptReason = null
-    errorCount = 0
-    if (full) {
-      interruptCallbacks = []
-    }
-  }
-
-  const onInterrupt: OnInterruptFunc = (callback) => {
-    interruptCallbacks.push(callback)
-  }
-
-  return {
-    interrupt,
-    isInterrupted,
-    getInterruptReason,
-    reset,
-    onInterrupt,
-    increaseErrorCount: () => {
-      errorCount++
-    },
-    getErrorCount: () => {
-      return errorCount
-    },
-  }
-}
-export type TaskWorkerController = ReturnType<typeof useTaskWorkerController>
-
 // TODO: how about we put this here into its own tool as well!
 //       its totally possible now... Would probably make the code cleaner...
 async function processTask(
   task: TaskNode,
   taskManager: TyTaskManager,
-  taskWorkerController: TaskWorkerController,
+  stopSignal: AbortSignal,
   allowedTools: string[],
   analyzeModel: string | undefined,
   llmTools: boolean,
@@ -91,10 +30,10 @@ async function processTask(
       const func = task.content.data
       const tools = await taskManager.updateToolDefinitions(false)
       console.log(`Calling function ${func.name}`)
-      if (tools[func.name] && !taskWorkerController.isInterrupted()) {
+      if (tools[func.name] && !stopSignal.aborted) {
         // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
         const taskChain = await taskManager.getTaskChain(task.id)
-        const funcR = await handleFunctionExecution(func, tools, taskWorkerController.onInterrupt, {
+        const funcR = await handleFunctionExecution(func, tools, stopSignal, {
           taskChain,
           getSecret: async (name) => {
             console.log('get secret name', name)
@@ -105,6 +44,7 @@ async function processTask(
           setSecret: (name, _value) => {
             console.log('set secret name', name)
           },
+          stopSignal,
         })
 
         // We check the result of the task here to see whether it contains
@@ -148,12 +88,14 @@ async function processTask(
       } else {
         const toolnames = JSON.stringify(allowedTools)
         throw new TaskProcessingError(
-          !taskWorkerController.isInterrupted()
+          !stopSignal.aborted
             ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
             : 'The function execution was cancelled by taskyon',
         )
       }
     } else {
+      // TODO: get rid of this and replace with informative error message so that
+      //       the user knows some function/tool is doing something funny
       // We expect all function calls to do three things:
       // - either return a result
       // - return a taskchain where the last task is a functionTask
@@ -363,7 +305,6 @@ export function runTaskWorker(
   processTasksQueue: AsyncQueue<string>,
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
-  taskWorkerController: TaskWorkerController,
 ) {
   console.log('entering task worker loop...')
 
@@ -382,6 +323,21 @@ export function runTaskWorker(
     setTaskFinished,
   )
 
+  // ———————————————————————————————————————————————
+  // 1) Keep track of the current task’s controller
+  let currentTaskCtrl: AbortController = new AbortController()
+  let errorCount = 0
+
+  /**
+   * Stops the current task by aborting its controller and logs the provided message.
+   *
+   * @param message - A descriptive message explaining why the task is being stopped.
+   */
+  function stop(message: string) {
+    console.log('→ taskworker stop requested', message)
+    currentTaskCtrl.abort(message)
+  }
+
   const run = async () => {
     while (true) {
       console.log('waiting for next task!')
@@ -391,10 +347,11 @@ export function runTaskWorker(
         taskProcessingStream.emit({ stage: 'waiting' })
       }
       const taskId = await processTasksQueue.pop()
-      if (taskWorkerController.isInterrupted()) {
+      if (currentTaskCtrl.signal.aborted) {
         // in case of any errors, especially if its an interrupt event we simply want to cancel everything :P
         // empty our task queue :)
         console.log('clear out task queue due to interruption')
+        currentTaskCtrl = new AbortController() // reset our AbortController
         processTasksQueue.clear()
         allTasksFinished()
 
@@ -405,7 +362,7 @@ export function runTaskWorker(
       // make sure we know from outside that the worker is active...
       taskIsProcessing(taskId)
       task = await taskManager.getTask(taskId)
-      if (task && !taskWorkerController.isInterrupted()) {
+      if (task && !currentTaskCtrl.signal.aborted) {
         // check if the previous task was finished. only of all prior tasks are finished
         // we can continue processing this task...
         if (task.priorID && !(await isTaskFinished(task.priorID))) {
@@ -443,7 +400,7 @@ export function runTaskWorker(
         void processTask(
           task,
           taskManager,
-          taskWorkerController,
+          currentTaskCtrl.signal,
           // TODO: replace "allowedTools" with "available Tools" in processTask...
           llmSettings.allowedTools || [],
           api?.selectedModel,
@@ -463,13 +420,11 @@ export function runTaskWorker(
           .catch(async (error) => {
             const errTask = error.task
             console.error('Could not complete task:', error)
-            taskWorkerController.increaseErrorCount()
-            if (taskWorkerController.getErrorCount() >= llmSettings.maxAutonomousTasks) {
+            errorCount += 1
+            if (errorCount >= llmSettings.maxAutonomousTasks) {
               // TODO: somehow put this into an error tasknode...
               // TODO: also add any taskWorkerController interrupt in an error tasknode..
-              taskWorkerController.interrupt(
-                `Too many errors occured, interrupting execution after ${taskWorkerController.getErrorCount()} errors!`,
-              )
+              stop(`Too many errors occured, interrupting execution after ${errorCount} errors!`)
             }
 
             if (!llmSettings.selectedApi) throw new TaskProcessingError('No AI API selected!!')
@@ -494,7 +449,7 @@ export function runTaskWorker(
             // this makes sure that results are still saved, even if we stop any
             // further execution
 
-            if (!taskWorkerController.isInterrupted() && errorTaskId) {
+            if (!currentTaskCtrl.signal.aborted && errorTaskId) {
               // we need processTasksQueue as an argument here!!!
               processTasksQueue.push(errorTaskId)
             }
@@ -509,7 +464,10 @@ export function runTaskWorker(
     }
   }
   void run()
-  return taskProcessingStream.stream
+  return {
+    workerStream: taskProcessingStream.stream,
+    workerStop: stop,
+  }
 }
 
 // TODO: move all the "debugging" stuff away nd make use of the debugging DB that we're getting ;)

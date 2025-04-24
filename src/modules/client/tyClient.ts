@@ -27,6 +27,7 @@ const handleFunctionExecutionRequest = (
   iframeTarget: string,
   tools: ClientTool[],
   sendTyMessage: (message: TaskyonMessage) => void | undefined,
+  stopSignal: AbortSignal,
 ) =>
   async function (event: MessageEvent<{ type: string; arguments: unknown }>): Promise<void> {
     // Check the origin to ensure security
@@ -40,7 +41,7 @@ const handleFunctionExecutionRequest = (
     const tool = tools[0]
     if (tool && event.data && event.data.type === 'functionCall') {
       //if the message comes from taskyon, we can be sure that its the correct type.
-      await handleFunctionExecution(event, tool, sendTyMessage)
+      await handleFunctionExecution(event, tool, sendTyMessage, stopSignal)
     }
   }
 
@@ -48,6 +49,7 @@ async function handleFunctionExecution(
   event: MessageEvent<{ type: string; arguments: unknown }>,
   tool: ClientTool,
   sendTyMessage: (message: TaskyonMessage) => void | undefined,
+  stopSignal: AbortSignal,
 ) {
   const data = event.data
   // with this we make sure, that we can also handle async functions :)
@@ -61,6 +63,7 @@ async function handleFunctionExecution(
     setSecret: (name, _value) => {
       console.log('set secret name', name)
     },
+    stopSignal,
   })
 
   // Send response to iframe
@@ -78,6 +81,8 @@ export async function initializeTaskyon(
   console.log('initialize taskyon client...')
 
   const taskyon = document.getElementById('taskyon') as HTMLIFrameElement
+
+  const controller = new AbortController()
 
   if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
     const iframeTarget = new URL(taskyon.src).origin
@@ -102,7 +107,12 @@ export async function initializeTaskyon(
       })
       console.log('set up function listener!')
       window.addEventListener('message', (event) => {
-        void handleFunctionExecutionRequest(iframeTarget, tools, sendTyMessage)(event)
+        void handleFunctionExecutionRequest(
+          iframeTarget,
+          tools,
+          sendTyMessage,
+          controller.signal,
+        )(event)
       })
     })
   }

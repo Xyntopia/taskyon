@@ -30,7 +30,6 @@
         v-if="tystate.selectedThread.value.length > 0"
         :selected-thread="tystate.selectedThread.value"
         :current-task="tystate.currentTask.value"
-        :task-worker-message="taskWorkerMessage || ''"
         :show-all-tasks="showAllTasks"
         :show-hierarchy="showHierarchy"
         :task-tree-root="rootTaskId"
@@ -193,10 +192,6 @@ Please check the path and try again.
     state.lockBottomScroll = true
   }
 }
-
-const taskWorkerMessage = computed(() => {
-  return tystate.taskWorkerWaiting ? tystate.taskWorkerController.getInterruptReason() : ''
-})
 
 function onScroll(
   details: UnwrapRef<{

@@ -129,6 +129,8 @@ async function generateReport(details = false, onlyFirst = false) {
 
       const tools = await tm.updateToolDefinitions()
 
+      const stopSignal = new AbortController().signal
+
       // Invoke the real tool
       const chatCompletion = tools['chatCompletion']
       let structuredResponse
@@ -169,6 +171,7 @@ async function generateReport(details = false, onlyFirst = false) {
             taskChain: [],
             getSecret: () => Promise.resolve('test'),
             setSecret: () => console.log('set test secret'),
+            stopSignal,
           },
         )
       }

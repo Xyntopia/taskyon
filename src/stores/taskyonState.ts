@@ -11,7 +11,6 @@ import {
 import axios from 'axios' // TODO: replace with fetch
 import { Notify, setCssVar } from 'quasar' // load dynamically! :)
 import { useQuasar } from 'quasar'
-import { useTaskWorkerController } from 'src/modules/taskyon/taskWorker'
 import { getApiConfig } from 'src/modules/taskyon/types'
 import { initTaskyon } from 'src/modules/taskyon/init'
 import { availableModels } from 'src/modules/taskyon/chat'
@@ -165,14 +164,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   }
 
   // callin ExecutionContext.interrupt();  cancels processing of current task
-  const taskWorkerController = useTaskWorkerController()
   console.log('initialize taskyon')
-
   const initTaskyonPromise = (async () =>
     await initTaskyon(
       stateRefs.llmSettings,
       stateRefs.keys,
-      taskWorkerController,
       defineTyGuiTools(),
       async () => (await generateRsaOaepPair()).publicKey,
     ))()
@@ -202,6 +198,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     const instance = await initTaskyonPromise
     return instance['workerStream']
   })
+
+  const stopWorker = async (reason: string) => {
+    console.log('stopping worker with reason:', reason)
+    const instance = await initTaskyonPromise
+    instance.workerStop(reason)
+  }
 
   const chatCompletionStream = asyncProxy(async () => {
     const instance = await initTaskyonPromise
@@ -465,11 +467,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   return {
     selectedThread: computed(() => selectedThread),
-    taskWorkerWaiting,
+    taskWorkerWaiting: computed(() => taskWorkerWaiting.value),
     currentTask: computed(() => currentTask),
     getOpenRouterPKCEKey,
     addModelToHistory,
-    taskWorkerController,
+    stopWorker,
     getTaskManager,
     lastTaskState,
     workerStreamLogs,

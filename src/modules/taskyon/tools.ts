@@ -1,13 +1,6 @@
 import { dump } from 'js-yaml'
 import { bigIntToString } from '../utils'
-import type {
-  FunctionArguments,
-  FunctionCall,
-  ParamType,
-  OnInterruptFunc,
-  WithRequired,
-  TaskNode,
-} from './types'
+import type { FunctionArguments, FunctionCall, ParamType, WithRequired, TaskNode } from './types'
 import { partialTaskDraft, taskMarker } from './types'
 import { ToolBase, TaskProcessingError } from './types'
 import type { RemoteFunctionResponse } from './iframeApiTypes'
@@ -55,6 +48,7 @@ export type toolContext = {
   taskChain: TaskNode[]
   getSecret: (name: string) => Promise<string>
   setSecret: (name: string, value: string) => void
+  stopSignal: AbortSignal
 }
 
 // TODO: make all of this generic functions in order to get better typescript checking
@@ -175,7 +169,7 @@ function getTool(tools: Record<string, ToolBase | InternalTool>, name: string) {
 export async function handleFunctionExecution(
   func: FunctionCall,
   tools: Record<string, ToolBase | InternalTool>,
-  onInterrupt: OnInterruptFunc,
+  stopSignal: AbortSignal,
   context: toolContext,
   // TODO: add taskManager here, so we can use it in the function execution
   //       we somehow also want to be able to do this with "dynamically" loaded tools
@@ -196,7 +190,7 @@ export async function handleFunctionExecution(
     try {
       // TODO: add tool context to our "safe" functions as well..
       // Execute code in iframe with parameters (func.arguments)
-      funcR = await executeCodeInIframe(tool.code, func.arguments, func.name + '.js', onInterrupt)
+      funcR = await executeCodeInIframe(tool.code, func.arguments, func.name + '.js', stopSignal)
       funcR = bigIntToString(funcR) // Optionally convert bigInt
     } catch (error) {
       throw new TaskProcessingError(

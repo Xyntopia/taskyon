@@ -483,9 +483,6 @@ async function createFileTask(files: File[]) {
 }
 
 async function addNewTask(execute = true) {
-  // make sure we reset our execution context interrupt We do this right before adding another
-  // task, because we want to make sure that
-  tystate.taskWorkerController.reset()
   const tm = await tystate.getTaskManager()
   const fileTaskObj = await createFileTask(fileAttachments.value)
 

@@ -1,6 +1,5 @@
 import { useTyTaskManager } from './taskManager'
 import type { llmSettings } from './types'
-import type { TaskWorkerController } from './taskWorker'
 import { runTaskWorker } from './taskWorker'
 import type { InternalTool } from './tools'
 // TODO: make webpack automatically add all tool files from /tools/*
@@ -26,7 +25,6 @@ import { localVectorStore } from '../tools/localVectorStore'
 export async function initTaskyon(
   llmSettings: llmSettings,
   apiKeys: { [key: string]: string },
-  taskWorkerController: TaskWorkerController,
   // with the Environment Tools we can provide a list of tools as closures which have access
   // to the environment in which taskyon is running (through closure variables
   // of this environment inside the tool).
@@ -62,7 +60,6 @@ export async function initTaskyon(
   const { chatCompletion, stream: chatCompletionStream } = await createChatCompletionTool(
     llmSettings,
     taskManagerInstance,
-    taskWorkerController.isInterrupted,
     apiKeys,
   )
   ToolList.push(
@@ -77,11 +74,10 @@ export async function initTaskyon(
   // taskyon should automatically pick up on this...
   console.log('starting taskyon worker')
   const processTasksQueue = createAsyncQueue<string>()
-  const workerStream = runTaskWorker(
+  const { workerStream, workerStop } = runTaskWorker(
     processTasksQueue,
     llmSettings,
     taskManagerInstance,
-    taskWorkerController,
   )
 
   return {
@@ -89,5 +85,6 @@ export async function initTaskyon(
     processTasksQueue,
     workerStream,
     chatCompletionStream,
+    workerStop,
   }
 }

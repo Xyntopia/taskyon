@@ -133,7 +133,7 @@ export async function callLLM(
   apiKey: string,
   stream: boolean | undefined = false,
   contentCallBack: (chunk?: OpenAI.Chat.Completions.ChatCompletionChunk) => void,
-  cancelStream: () => boolean, // a function which we can call and which indicates that we should cancel the stream
+  stopSignal: AbortSignal,
   timeoutMs: number = 10000, // Timeout in milliseconds for waiting for first streamed response
   maxRetries: number = 3, // Maximum number of retry attempts
   schema?: Record<string, unknown>, // optional schema for the response
@@ -175,6 +175,9 @@ export async function callLLM(
 
     // Use AbortController to handle stream cancellation and timeout
     const controller = new AbortController()
+    // Propagate caller’s stopSignal into it…
+    const onAbort = () => controller.abort()
+    stopSignal.addEventListener('abort', onAbort)
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
     try {
@@ -184,8 +187,8 @@ export async function callLLM(
         body: JSON.stringify(payload),
         signal: controller.signal,
       })
-
       clearTimeout(timeoutId) // Clear timeout if fetch completes in time
+      stopSignal.removeEventListener('abort', onAbort)
 
       // Check for non-OK status codes and throw error
       if (!response.ok) {
@@ -255,7 +258,7 @@ export async function callLLM(
           bufferedData = lines[lines.length - 1]!
 
           // If the cancelStream callback signals to cancel, break the loop and abort the request
-          if (cancelStream()) {
+          if (stopSignal.aborted) {
             controller.abort()
             console.log('Stream cancelled by user')
             break
@@ -272,6 +275,7 @@ export async function callLLM(
         break // Non-streaming case, exit retry loop
       }
     } catch (error) {
+      stopSignal.removeEventListener('abort', onAbort)
       console.error(`Attempt ${attempt} failed:`, error)
       if (attempt === maxRetries) {
         throw new TaskProcessingError(

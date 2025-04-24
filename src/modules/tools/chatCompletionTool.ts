@@ -72,7 +72,7 @@ export async function processChatTask(
   llmSettings: llmSettings,
   // can we get rid of taskManager here in order to make our task more functional :)?
   taskManager: TyTaskManager,
-  shouldInterrupt: () => boolean,
+  stopSignal: AbortSignal,
   apiKeys: { [key: string]: string },
   lastTaskBeforeChatCompletion: TaskNode | undefined,
   streamTracker: (chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => void,
@@ -142,7 +142,7 @@ export async function processChatTask(
       apiKey,
       true, // for now, we always want to stream our task...
       streamTracker, // track incoming streams...
-      shouldInterrupt,
+      stopSignal,
       10000, // Timeout in milliseconds for waiting for first streamed response
       3, // Maximum number of retry attempts
       schema,
@@ -376,7 +376,6 @@ function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]
  * @param finishedTask
  * @param llmSettings
  * @param taskManager
- * @param taskWorkerController
  * @returns
  *
  * following different types of task contents are possible:
@@ -631,7 +630,6 @@ async function convertFilesToOpenAIImageContent(
 export async function createChatCompletionTool(
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
-  shouldInterrupt: () => boolean,
   apiKeys: { [key: string]: string },
 ) {
   const Ajv = await import(
@@ -722,7 +720,7 @@ export async function createChatCompletionTool(
         { model: selectedModel, chatApi: llmSettings.selectedApi },
         llmSettings,
         taskManager,
-        shouldInterrupt,
+        context.stopSignal,
         apiKeys,
         lastTaskBeforeChatCompletion,
         (chunk) => {

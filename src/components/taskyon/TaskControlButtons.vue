@@ -19,7 +19,7 @@
         class="taskyon-control-button"
         :icon="matStop"
         size="md"
-        @click="stopTasks"
+        @click="tystate.stopWorker('User stopped all tasks')"
       >
         <q-tooltip> Stop processing current task. </q-tooltip>
       </q-btn>
@@ -38,9 +38,4 @@ const state = useAppStateStore()
 defineEmits<{
   scrollToThreadEnd: []
 }>()
-
-function stopTasks() {
-  tystate.taskWorkerController.interrupt(tystate.currentTask.value?.id)
-  tystate.taskWorkerWaiting = true
-}
 </script>

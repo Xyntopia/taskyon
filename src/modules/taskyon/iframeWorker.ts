@@ -1,7 +1,6 @@
 import { sha256UrlSafeHash } from '../crypto'
 import { sleep } from '../utils'
 import { taskMarker } from './types'
-import type { OnInterruptFunc } from './types'
 
 // Store iframes by a hash id derived from the code
 const iframes = new Map<string, HTMLIFrameElement>()
@@ -108,7 +107,7 @@ export async function executeCodeInIframe(
   code: string,
   params: Record<string, unknown>,
   sourceURL: string = 'sandboxed-code.js', // TODO: add default source URL for debugging
-  onInterrupt: OnInterruptFunc,
+  stopSignal: AbortSignal,
 ) {
   const id = sourceURL + (await sha256UrlSafeHash(code))
   let iframe = iframes.get(id)
@@ -144,9 +143,10 @@ export async function executeCodeInIframe(
     iframe.contentWindow?.postMessage(sendobj, '*')
 
     // Register the interrupt callback
-    onInterrupt((reason) => {
-      interruptExecution(id, handleMessage) // Interrupt the execution
-      reject(new Error(reason || 'Execution interrupted'))
+    stopSignal.addEventListener('abort', () => {
+      console.log('Interrupting iframe execution for', id)
+      interruptExecution(id, handleMessage)
+      reject(new Error('Execution interrupted', { cause: { reason: stopSignal.reason, id } }))
     })
   })
 }
