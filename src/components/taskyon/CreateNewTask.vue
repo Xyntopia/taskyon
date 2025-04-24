@@ -528,7 +528,7 @@ async function addNewTask(execute = true) {
   // the task doesn't wait for a previous task to be finished (e.g. if there was an error
   // or the task was cancelled by the user). So we are adding a return task which makes sure
   // taskyon knows that.
-  if (tystate.currentTask.value?.content.type !== 'return') {
+  if (tystate.currentTask.value && tystate.currentTask.value.content.type !== 'return') {
     // Add a return type task as the first task in the chain
     newTaskChain.unshift({
       role: 'system',

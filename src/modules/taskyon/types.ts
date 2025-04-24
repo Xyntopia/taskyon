@@ -673,7 +673,7 @@ export interface TyTaskStreamData {
   task?: TaskNode | null | undefined
   taskId?: string | null | undefined
   // "all finished" means the task has been processes AND all its subtasks have been finished..
-  stage: 'processing' | 'processed' | 'error' | 'waiting' | 'subtasks' | 'all finished'
+  stage: 'processing' | 'processed' | 'error' | 'waiting' | 'subtasks' | 'all finished' | 'aborted'
 }
 
 // takes an object and turns all of its functions into async...

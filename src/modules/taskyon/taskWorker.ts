@@ -345,22 +345,20 @@ export function runTaskWorker(
       console.log('waiting for next task!')
       let task: TaskNode | null = null
 
-      if (processTasksQueue.count() === 0) {
-        taskProcessingStream.emit({ stage: 'waiting' })
-      }
-      const taskId = await processTasksQueue.pop()
       if (currentTaskCtrl.signal.aborted) {
         // in case of any errors, especially if its an interrupt event we simply want to cancel everything :P
         // empty our task queue :)
         console.log('clear out task queue due to interruption')
+        taskProcessingStream.emit({ stage: 'aborted' })
         currentTaskCtrl = new AbortController() // reset our AbortController
         processTasksQueue.clear()
         allTasksFinished()
-
-        // don't process tasks anymore..  all we can do now is to wait until the user manually presses the
-        // "reset" button ;)
-        continue
       }
+
+      if (processTasksQueue.count() === 0) {
+        taskProcessingStream.emit({ stage: 'waiting' })
+      }
+      const taskId = await processTasksQueue.pop()
       // make sure we know from outside that the worker is active...
       taskIsProcessing(taskId)
       task = await taskManager.getTask(taskId)
@@ -462,8 +460,10 @@ export function runTaskWorker(
             // TODO: run this taskWorker in a separate worker js/browser thread!
           })
           .finally(() => {
+            console.log('finished processing task...')
             taskFinishedProcessing(task.id)
           })
+        console.log('entering next loop...')
       }
     }
   }

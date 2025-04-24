@@ -176,7 +176,7 @@ export async function callLLM(
     // Use AbortController to handle stream cancellation and timeout
     const controller = new AbortController()
     // Propagate caller’s stopSignal into it…
-    const onAbort = () => controller.abort()
+    const onAbort = () => controller.abort(stopSignal.reason)
     stopSignal.addEventListener('abort', onAbort)
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
@@ -259,7 +259,7 @@ export async function callLLM(
 
           // If the cancelStream callback signals to cancel, break the loop and abort the request
           if (stopSignal.aborted) {
-            controller.abort()
+            controller.abort(stopSignal.reason)
             console.log('Stream cancelled by user')
             break
           }

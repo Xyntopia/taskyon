@@ -251,7 +251,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         void add2ChatHistory(task, id.toString(), 'delete')
       }
       if (currentTask.value?.id === id) {
-        console.log('update current task...', task)
+        // console.log('update current task...', task)
         currentTask.value = task
       }
     })
