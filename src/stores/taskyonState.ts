@@ -234,10 +234,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   filter(
     workerStream,
-    (data) => data.stage === 'processing' || data.stage === 'processed',
+    (data) => data.stage === 'processing' || data.stage === 'processed' || data.stage === 'error',
   ).subscribe((data) => {
     // TODO: add last task to GUI by checking if our current selected task now has this child...
-    stateRefs.llmSettings.selectedTaskId = data.task?.id
+    stateRefs.setSelectedTask(data.task?.id || data.taskId || null)
   })
 
   void workerStream.subscribe((data) => {
@@ -400,6 +400,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   )
 
   // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
+  // we want to oad them gradually into our UI
   const taskWorkerWaiting = ref(true)
   const currentTask = ref<TaskNode | null>(null)
   const selectedThread = ref<TaskNode[]>([])

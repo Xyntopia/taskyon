@@ -219,6 +219,10 @@ export const useAppStateStore = defineStore(storeName, () => {
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
   return {
+    setSelectedTask: (taskId: string | null | undefined) => {
+      console.log('set selected task:', taskId)
+      stateRefs.llmSettings.selectedTaskId = taskId || undefined
+    },
     ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
     getStateValues: () => unref(allRefs),
     getStoredStateString,

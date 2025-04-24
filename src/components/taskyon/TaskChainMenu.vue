@@ -37,7 +37,7 @@ defineProps<{
 async function onDeleteThread(conversationId: string) {
   console.log('deleting thread!!', conversationId)
   const tm = await tystate.getTaskManager()
-  state.llmSettings.selectedTaskId = undefined
+  state.setSelectedTask(undefined)
   await tm.deleteTaskThread(conversationId)
   state.chatHistory = state.chatHistory.filter((id) => id != conversationId)
 }

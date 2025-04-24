@@ -419,7 +419,6 @@ export function runTaskWorker(
           })
           .catch(async (error) => {
             const errTask = error.task
-            console.error('Could not complete task:', error)
             errorCount += 1
             if (errorCount >= llmSettings.maxAutonomousTasks) {
               // TODO: somehow put this into an error tasknode...
@@ -429,8 +428,6 @@ export function runTaskWorker(
 
             if (!llmSettings.selectedApi) throw new TaskProcessingError('No AI API selected!!')
             const api = getApiConfigCopy(llmSettings, llmSettings.selectedApi)
-            if (!api?.selectedModel)
-              throw new TaskProcessingError('No Model selected for Error analysis!!')
             const errorTaskChain = createErrorTaskChain(
               error,
               errTask,
@@ -439,11 +436,13 @@ export function runTaskWorker(
               llmSettings.allowedTools || [],
               taskManager.debugDb,
             )
+
             // we are adding the error task chain as a subtaskchain with the parentID of this
             // particular task.
             const errorTaskId = (
               await taskManager.addTaskChain(errorTaskChain, undefined, errTask?.id)
             ).at(-1)?.id
+            taskProcessingStream.emit({ stage: 'error', taskId: errorTaskId })
 
             // interrupt execution if interrupted flag is shown!
             // this makes sure that results are still saved, even if we stop any
@@ -453,7 +452,6 @@ export function runTaskWorker(
               // we need processTasksQueue as an argument here!!!
               processTasksQueue.push(errorTaskId)
             }
-            llmSettings.selectedTaskId = errorTaskId
 
             // TODO: run this taskWorker in a separate worker js/browser thread!
           })
@@ -474,11 +472,13 @@ export function runTaskWorker(
 function createErrorTaskChain(
   error: unknown,
   task: TaskNode | null,
-  analyzeErrorModel: string,
+  analyzeErrorModel: string | undefined,
   llmTools: boolean,
   allowedTools: string[],
   debugDb: CrudWrapper<TaskNodeMeta>,
 ) {
+  if (!analyzeErrorModel) throw new TaskProcessingError('No Model selected for Error analysis!!')
+
   const errorTask: partialTaskDraft = {
     role: 'system',
     content: {

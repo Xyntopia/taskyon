@@ -151,15 +151,14 @@ async function updateChatThread() {
     const markdownUrl = `https://share.taskyon.space/proxy/gdrive/${gdFileId}`
     const markdownContent = await getTextFile(markdownUrl)
     const newTaskId = await tm.addMdTaskChain(markdownContent)
-
-    state.llmSettings.selectedTaskId = newTaskId
+    state.setSelectedTask(newTaskId)
   } else if (typeof route.query.url === 'string') {
     const markdownUrl = route.query.url ? new URL(route.query.url) : undefined
     if (markdownUrl) {
       state.lockBottomScroll = false
       const markdownContent = await getTextFile(markdownUrl)
       const newTaskId = await tm.addMdTaskChain(markdownContent)
-      state.llmSettings.selectedTaskId = newTaskId
+      state.setSelectedTask(newTaskId)
     }
   } else if (route.params.filePath) {
     state.lockBottomScroll = false
@@ -186,9 +185,9 @@ Please check the path and try again.
       )
     }
 
-    state.llmSettings.selectedTaskId = newTaskId
+    state.setSelectedTask(newTaskId)
   } else if (typeof route.query.t === 'string') {
-    state.llmSettings.selectedTaskId = route.query.t
+    state.setSelectedTask(route.query.t)
     state.lockBottomScroll = true
   }
 }

@@ -59,13 +59,7 @@
               <q-tooltip>Upload Chat</q-tooltip>
             </q-btn>
           </FileDropzone>
-          <q-btn
-            dense
-            flat
-            to="/"
-            :icon="mdiForumPlus"
-            @click="state.llmSettings.selectedTaskId = undefined"
-          >
+          <q-btn dense flat to="/" :icon="mdiForumPlus" @click="state.setSelectedTask(null)">
             <q-tooltip> Create a new conversation </q-tooltip>
           </q-btn>
           <q-btn dense flat :icon="matSearch" to="/TaskManager"
@@ -196,7 +190,7 @@ async function loadYamlConversation(files: File[]) {
   for (const file of files) {
     last_loaded_id = await tm.loadYamlConversation(file)
   }
-  state.llmSettings.selectedTaskId = last_loaded_id
+  state.setSelectedTask(last_loaded_id || null)
 }
 
 const TableOfChatContent = defineAsyncComponent(

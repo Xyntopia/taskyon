@@ -40,7 +40,7 @@
       dense
       flat
       :icon="mdiMessagePlus"
-      @click="state.llmSettings.selectedTaskId = task.id"
+      @click="state.setSelectedTask(task.id)"
     >
       <q-tooltip :delay="0">Start alternative chat from here</q-tooltip>
     </q-btn>

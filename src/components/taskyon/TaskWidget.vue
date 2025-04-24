@@ -377,7 +377,7 @@ const humanReadableTaskCosts = computed(() => {
 
 async function editTask(taskId: string) {
   const task = await taskDraftFromTask(taskId)
-  state.llmSettings.selectedTaskId = task.priorID
+  state.setSelectedTask(task.priorID)
 }
 
 async function createNewConversation(taskId: string) {
@@ -385,7 +385,7 @@ async function createNewConversation(taskId: string) {
 
   // we simply need to tell our task manager that we don't have any task selected
   // the next message which will be send, will be an orphan in this case.
-  state.llmSettings.selectedTaskId = undefined
+  state.setSelectedTask(undefined)
 }
 
 function toggleMessageDebug(id: string) {

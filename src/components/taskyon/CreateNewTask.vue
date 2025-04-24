@@ -532,7 +532,7 @@ async function addNewTask(execute = true) {
     void tystate.addToProcessQueue(newTaskId.id)
   }
 
-  state.llmSettings.selectedTaskId = newTaskId?.id
+  state.setSelectedTask(newTaskId?.id)
 
   // and empty out the contents for the next chat message :)
   if (currentnewTask.value.role === 'user') {
