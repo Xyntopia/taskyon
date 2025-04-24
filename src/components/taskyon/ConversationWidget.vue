@@ -90,21 +90,6 @@
       </div>
       <!--Render tasks which are in progress-->
       <div class="tasks-container q-py-sm">
-        <div class="row items-center" v-if="lastWorkerEvent">
-          <q-btn flat dense no-caps :icon-right="matArrowDropDown" @click="showLogs = !showLogs">
-            Current Task State: {{ lastWorkerEvent?.stage }}
-            {{ lastWorkerEvent?.taskId || lastWorkerEvent?.task?.id }}
-          </q-btn>
-        </div>
-        <template v-if="showLogs">
-          <div
-            v-for="(log, ridx) in tystate.workerStreamLogs.toReversed()"
-            class="column"
-            :key="ridx"
-          >
-            {{ formatTimeStamp(log.timestamp) }}: {{ log.stage }} {{ log.taskId || log.task?.id }}
-          </div></template
-        >
         <q-card
           v-if="
             !!tystate.lastTaskState.get(currentTask.id) &&
@@ -123,12 +108,30 @@
             <q-spinner-dots size="2rem" color="secondary" />
           </div>
         </q-card>
-        <div
-          v-else-if="taskWorkerMessage"
-          class="transparent text-negative text-bold q-pa-md task-container"
-        >
-          {{ taskWorkerMessage }}
+        <div class="row items-center" v-if="lastWorkerEvent">
+          <q-btn flat dense no-caps :icon-right="matArrowDropDown" @click="showLogs = !showLogs">
+            <span
+              style="
+                max-width: 200px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+              "
+            >
+              Current Task State: {{ lastWorkerEvent?.stage }}
+              {{ lastWorkerEvent?.taskId || lastWorkerEvent?.task?.id }}
+            </span>
+          </q-btn>
         </div>
+        <template v-if="showLogs">
+          <div
+            v-for="(log, ridx) in tystate.workerStreamLogs.toReversed()"
+            class="column"
+            :key="ridx"
+          >
+            {{ formatTimeStamp(log.timestamp) }}: {{ log.stage }} {{ log.taskId || log.task?.id }}
+          </div></template
+        >
       </div>
     </template>
   </div>
@@ -158,7 +161,6 @@ const lastWorkerEvent = computed(() => {
 const props = defineProps<{
   selectedThread: TaskNode[]
   currentTask?: TaskNode | undefined | null
-  taskWorkerMessage?: string
   showAllTasks?: boolean
   showHierarchy?: boolean
   taskTreeRoot?: string | undefined
