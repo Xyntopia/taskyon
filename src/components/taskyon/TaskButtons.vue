@@ -39,7 +39,7 @@
       size="sm"
       dense
       flat
-      :icon="mdiMessagePlus"
+      :icon="matAltRoute"
       @click="state.setSelectedTask(task.id)"
     >
       <q-tooltip :delay="0">Start alternative chat from here</q-tooltip>
@@ -84,13 +84,8 @@
 </template>
 
 <script setup lang="ts">
-import { matCode, matEdit, matRawOn } from '@quasar/extras/material-icons'
-import {
-  mdiFileTree,
-  mdiForumPlus,
-  mdiLanguageMarkdown,
-  mdiMessagePlus,
-} from '@quasar/extras/mdi-v6'
+import { matAltRoute, matCode, matEdit, matRawOn } from '@quasar/extras/material-icons'
+import { mdiFileTree, mdiForumPlus, mdiLanguageMarkdown } from '@quasar/extras/mdi-v6'
 import { symOutlinedMarkdownCopy } from '@quasar/extras/material-symbols-outlined'
 import type { TaskNode } from 'src/modules/taskyon/types'
 import { copyToClipboard } from 'src/modules/utils'
