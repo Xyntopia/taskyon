@@ -220,7 +220,10 @@ function createTaskTracker(tm: TyTaskManager) {
       return await areAllSubtasksFinished(task.id)
     } else {
       // we know there are no children tasks here, so we need to check prior tasks...
-      if (task.priorID) {
+      if (task.content.type === 'return') {
+        // return type tasks are by definition always finished...
+        return true
+      } else if (task.priorID) {
         return isTaskFinishedCached(task.priorID)
       } else {
         return true
@@ -284,8 +287,7 @@ function workerLoggingHelper(processTasksQueue: AsyncQueue<string>) {
   let tasksInProgress = 0
   const taskIsProcessing = (taskId: string) => {
     tasksInProgress += 1
-    console.log('processing task:', taskId)
-    taskProcessingStream.emit({ stage: 'processing', taskId })
+    console.log('entering task loop:', taskId)
   }
   const allTasksFinished = () => {
     // this means that all tasks are finished and we can emit a final message
@@ -295,7 +297,7 @@ function workerLoggingHelper(processTasksQueue: AsyncQueue<string>) {
   }
   const taskFinishedProcessing = (taskId: string) => {
     tasksInProgress -= 1
-    taskProcessingStream.emit({ stage: 'processed', taskId })
+    console.log('finished task loop:', taskId)
     if (tasksInProgress <= 0 && processTasksQueue.count() === 0) allTasksFinished()
   }
   return { taskProcessingStream, allTasksFinished, taskIsProcessing, taskFinishedProcessing }
@@ -373,7 +375,8 @@ export function runTaskWorker(
           taskFinishedProcessing(task.id)
           // if this is the only task in the queue, we need to wait a little bit in order
           // to not overwhelm the browser (This will likely never be the case, but just in case)
-          if (taskFinishedWaitingCount >= 5) {
+          if (taskFinishedWaitingCount >= 5 || processTasksQueue.count() <= 1) {
+            console.log('sleep-waiting for task to finish')
             await sleep(500)
             taskFinishedWaitingCount = 0
           } else {
@@ -382,6 +385,9 @@ export function runTaskWorker(
           continue
         }
 
+        // only now we actually start to process our task!!
+        // if we did this earlier, we would get tasks that are still waiting
+        // for processing in the stream...
         taskProcessingStream.emit({ stage: 'processing', task })
 
         // we don't need to process tasks which aren't a function...

@@ -524,6 +524,21 @@ async function addNewTask(execute = true) {
     }
   }
 
+  // if we are attaching our task to an existing parent, we want to make sure that
+  // the task doesn't wait for a previous task to be finished (e.g. if there was an error
+  // or the task was cancelled by the user). So we are adding a return task which makes sure
+  // taskyon knows that.
+  if (tystate.currentTask.value?.content.type !== 'return') {
+    // Add a return type task as the first task in the chain
+    newTaskChain.unshift({
+      role: 'system',
+      content: {
+        type: 'return',
+        data: 'Function was cancelled for unknown reasons.',
+      },
+    })
+  }
+
   // add taskchain to taskManager
   const newTaskId = (await tm.addTaskChain(newTaskChain, state.llmSettings.selectedTaskId)).at(-1)
 
