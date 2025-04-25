@@ -191,7 +191,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   })*/
 
   async function addToProcessQueue(taskId: string) {
-    ;(await initTaskyonPromise).processTasksQueue.push(taskId)
+    ;(await initTaskyonPromise).queueTask(taskId)
   }
 
   const workerStream = asyncProxy(async () => {

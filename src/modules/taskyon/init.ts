@@ -5,7 +5,6 @@ import type { InternalTool } from './tools'
 // TODO: make webpack automatically add all tool files from /tools/*
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
-import { createAsyncQueue } from '../utils'
 import { createChatCompletionTool } from '../tools/chatCompletionTool'
 import {
   createAddNewToolTool,
@@ -73,18 +72,13 @@ export async function initTaskyon(
   // keys could porentially be reactive here, so in theory, when they change in the GUI,
   // taskyon should automatically pick up on this...
   console.log('starting taskyon worker')
-  const processTasksQueue = createAsyncQueue<string>()
-  const { workerStream, workerStop } = runTaskWorker(
-    processTasksQueue,
-    llmSettings,
-    taskManagerInstance,
-  )
+  const { workerStream, workerStop, queueTask } = runTaskWorker(llmSettings, taskManagerInstance)
 
   return {
     taskManagerInstance,
-    processTasksQueue,
     workerStream,
     chatCompletionStream,
     workerStop,
+    queueTask,
   }
 }

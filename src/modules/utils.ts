@@ -632,15 +632,45 @@ export function createAsyncQueue<T>() {
     return queue.length
   }
 
-  function pop(): Promise<T> {
+  function pop(signal?: AbortSignal): Promise<T> {
+    // if there’s already an item, just return it immediately
     const shiftedItem = queue.shift()
     if (shiftedItem !== undefined) {
       return Promise.resolve(shiftedItem)
-    } else {
-      return new Promise<T>((resolve) => {
-        resolveWaitingPop = resolve
-      })
     }
+
+    // otherwise we wait, but allow aborting
+    return new Promise<T>((resolve, reject) => {
+      // if already aborted
+      if (signal?.aborted) {
+        return reject(new DOMException('Pop aborted', 'AbortError'))
+      }
+
+      // cleanup helper
+      const cleanup = () => {
+        // only clear if it’s still our resolver
+        if (resolveWaitingPop === onValue) {
+          resolveWaitingPop = undefined
+        }
+        signal?.removeEventListener('abort', onAbort)
+      }
+
+      const onValue = (value: T) => {
+        cleanup()
+        resolve(value)
+      }
+
+      const onAbort = () => {
+        cleanup()
+        console.log('aborting async queue pop')
+        reject(new DOMException('Pop aborted', 'AbortError'))
+      }
+
+      // install our resolver
+      resolveWaitingPop = onValue
+      // listen for abort
+      signal?.addEventListener('abort', onAbort, { once: true })
+    })
   }
 
   function clear() {
