@@ -386,6 +386,8 @@ const createTaskProcessor = (
       // we also don't need to add the task as the "last" task in the GUI
       // because they will automatically be called as soon as the
       if (task.content.type !== 'functioncall') {
+        taskFinishedProcessing(task.id)
+        streamEmit({ stage: 'processed', taskId: task.id })
         return // early return, because this task is not a functioncall task
       }
 
@@ -428,17 +430,14 @@ const createTaskProcessor = (
         }
       } catch (error) {
         streamEmit({ stage: 'error', taskId: task.id })
-        void handleError(error, task, selectedModel, {
+        await handleError(error, task, selectedModel, {
           maxAutonomousTasks: llmSettings.maxAutonomousTasks,
           enableOpenAiTools: llmSettings.enableOpenAiTools,
           allowedTools: llmSettings.allowedTools || [],
         })
-
         // TODO: run this taskWorker in a separate worker js/browser thread!
-      } finally {
-        streamEmit({ stage: 'processed', taskId: task.id })
-        console.log('finished processing task...', task.id)
       }
+      streamEmit({ stage: 'processed', taskId: task.id })
       taskFinishedProcessing(task.id)
       console.log('entering next loop...')
     }
@@ -486,7 +485,6 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
         try {
           taskId = await processTasksQueue.pop(currentTaskCtrl.signal)
         } catch {
-          console.log('task worker was interrupted, stopping run...')
           streamEmit({ stage: 'aborted' })
           break
         }
