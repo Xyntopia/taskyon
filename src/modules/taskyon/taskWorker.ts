@@ -294,7 +294,10 @@ function workerLoggingHelper(streamEmit: (value: TyTaskStreamData) => void) {
 export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManager) {
   console.log('starting task worker listener...')
 
-  const setupRun = (streamEmit: (value: TyTaskStreamData) => void) => {
+  const setupRun = (
+    streamEmit: (value: TyTaskStreamData) => void,
+    stop: (message: string) => void,
+  ) => {
     console.log('setting up task worker run...')
     const { isTaskFinished, setTaskFinished } = createTaskTracker(taskManager)
 
@@ -306,16 +309,6 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
         taskProcessingStream.emit({ stage: 'queued', taskId: id })
         processTasksQueue.push(id)
       }
-    }
-    const stop = (message: string) => {
-      console.log('→ taskworker stop requested', message)
-      currentTaskCtrl.abort(message)
-      // in case of any errors, especially if its an interrupt event we simply want to cancel everything :P
-      // empty our task queue :)
-      console.log('clear out task queue due to interruption')
-      streamEmit({ stage: 'aborted' })
-      processTasksQueue.clear()
-      allTasksFinished()
     }
     const { allTasksFinished, taskIsProcessing, taskFinishedProcessing } =
       workerLoggingHelper(streamEmit)
@@ -451,6 +444,7 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
           console.log('entering next loop...')
         }
       }
+      allTasksFinished()
     }
 
     return {
@@ -465,21 +459,24 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
   const taskProcessingStream = createStream<TyTaskStreamData>()
   let currentTaskCtrl: AbortController | undefined = new AbortController()
   let queueTask: ((id: string) => void) | undefined = undefined
-  let workerStop: (message: string) => void = () => {
-    throw new TaskProcessingError('Worker not initialized!')
+
+  const stop = (message: string) => {
+    console.log('→ taskworker stop requested', message)
+    currentTaskCtrl?.abort(message)
+    // in case of any errors, especially if its an interrupt event we simply want to cancel everything :P
+    // empty our task queue :)
+    taskProcessingStream.emit({ stage: 'aborted' })
   }
 
   const externalQueueTask = (id: string) => {
     if (currentTaskCtrl?.signal.aborted || !queueTask) {
       const {
         run,
-        stop,
         queueTask: newQueueTask,
         currentTaskCtrl: newTaskCtrl,
-      } = setupRun(taskProcessingStream.emit)
+      } = setupRun(taskProcessingStream.emit, stop)
       currentTaskCtrl = newTaskCtrl
       queueTask = newQueueTask
-      workerStop = stop
       console.log('restarting task worker run...')
 
       void run()
@@ -488,7 +485,7 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
   }
   return {
     workerStream: taskProcessingStream.stream,
-    workerStop: (message: string) => workerStop?.(message),
+    workerStop: stop,
     queueTask: externalQueueTask,
   }
 }
