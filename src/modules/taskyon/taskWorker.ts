@@ -298,7 +298,7 @@ function workerLoggingHelper() {
 }
 
 function createHandleError(
-  stop: (message: string) => void,
+  stopAllTasks: (message: string) => void,
   taskManager: TyTaskManager,
   currentTaskCtrl: AbortController,
   queueTask: (id: string) => void,
@@ -319,7 +319,7 @@ function createHandleError(
     if (errorCount >= llmSettings.maxAutonomousTasks) {
       // TODO: somehow put this into an error tasknode...
       // TODO: also add any taskWorkerController interrupt in an error tasknode..
-      stop(`Too many errors occured, interrupting execution after ${errorCount} errors!`)
+      stopAllTasks(`Too many errors occured, interrupting execution after ${errorCount} errors!`)
     }
 
     const errorTaskChain = createErrorTaskChain(
@@ -347,16 +347,113 @@ function createHandleError(
   }
 }
 
+const createTaskProcessor = (
+  taskManager: TyTaskManager,
+  streamEmit: (value: TyTaskStreamData) => void,
+  queueTask: (id: string) => void,
+  currentTaskCtrl: AbortController,
+  taskIsProcessing: (taskId: string) => void,
+  taskFinishedProcessing: (taskId: string) => void,
+  stopAllTasks: (message: string) => void,
+) => {
+  // this is uses to track how long a list of tasks has been processing
+  const handleError = createHandleError(stopAllTasks, taskManager, currentTaskCtrl, queueTask)
+  const { isTaskFinished, setTaskFinished } = createTaskTracker(taskManager)
+  const addTaskChain = createAddTaskChain(taskManager, queueTask, setTaskFinished)
+
+  return async (taskId: string, llmSettings: llmSettings) => {
+    const task = await taskManager.getTask(taskId)
+    if (task && !currentTaskCtrl.signal.aborted) {
+      // make sure we know from outside that the worker is active...
+      taskIsProcessing(taskId)
+      // signal to the outside world this task is now checked if we can already execute it...
+      streamEmit({ stage: 'checking', task })
+
+      // check if the previous task was finished. only of all prior tasks are finished
+      // we can continue processing this task...
+      if (task.priorID && !(await isTaskFinished(task.priorID))) {
+        streamEmit({ stage: 'subtasks', task, taskId: task.id })
+        // we need to wait until all subtasks from its previous tasks are finished before
+        // continuing with this task so we simply push this task back onto the stack
+        console.log('sleep-waiting for task to finish', task.id)
+        await sleep(500)
+        queueTask(task.id)
+        return // early return, because this task is not ready yet
+      }
+
+      // we don't need to process tasks which aren't a function...
+      // we also don'tasksInProgresst need to push them back in the queue...
+      // we also don't need to add the task as the "last" task in the GUI
+      // because they will automatically be called as soon as the
+      if (task.content.type !== 'functioncall') {
+        return // early return, because this task is not a functioncall task
+      }
+
+      // signal to the outside world that we are processing a task
+      // this signals to the GUI that this task is activly being processes.
+      // this is for example important to signal which stream should be displayed and
+      // which task to choose as the "leaf" of a chain.
+      streamEmit({ stage: 'processing', task })
+
+      // TODO: try to get rid of all the llmSettings functionality here..   this should only be relevant for chatCompletion which
+      //       is now a tool! :)
+      if (!llmSettings.selectedApi) throw new TaskProcessingError('No AI API selected!!')
+      const selectedModel = getApiConfigCopy(llmSettings, llmSettings.selectedApi)?.selectedModel
+      try {
+        const funcR = await safeExecuteTask(
+          task,
+          taskManager,
+          currentTaskCtrl.signal,
+          // TODO: replace "allowedTools" with "available Tools" in processTask...
+          llmSettings.allowedTools || [],
+        )
+
+        // We check the result of the task here to see whether it contains
+        // a lists of tasks. If thats the case we return
+        // those for continuation, otherwise
+        // we create a generic task result.
+        const newTasks = parseResultForTaskChains(
+          funcR,
+          selectedModel,
+          llmSettings.allowedTools || [],
+          llmSettings.enableOpenAiTools,
+        )
+
+        const taskChainAdder = addTaskChain(task)
+        const chainHasFinishedStatus = await Promise.all(newTasks.map(taskChainAdder))
+        // if all subtasks in this chain are finished (means
+        // there are no functions tasks in it), we can set this task as finished
+        if (chainHasFinishedStatus.every((status) => status === false)) {
+          setTaskFinished(task.id)
+        }
+      } catch (error) {
+        streamEmit({ stage: 'error', taskId: task.id })
+        void handleError(error, task, selectedModel, {
+          maxAutonomousTasks: llmSettings.maxAutonomousTasks,
+          enableOpenAiTools: llmSettings.enableOpenAiTools,
+          allowedTools: llmSettings.allowedTools || [],
+        })
+
+        // TODO: run this taskWorker in a separate worker js/browser thread!
+      } finally {
+        streamEmit({ stage: 'processed', taskId: task.id })
+        console.log('finished processing task...', task.id)
+      }
+      taskFinishedProcessing(task.id)
+      console.log('entering next loop...')
+    }
+    return task
+  }
+}
+
 export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManager) {
   console.log('starting task worker listener...')
 
   const setupRun = (
     streamEmit: (value: TyTaskStreamData) => void,
-    stop: (message: string) => void,
+    stopAllTasks: (message: string) => void,
   ) => {
     console.log('setting up task worker run...')
-    const { isTaskFinished, setTaskFinished } = createTaskTracker(taskManager)
-
     const currentTaskCtrl: AbortController = new AbortController()
 
     const processTasksQueue = createAsyncQueue<string>()
@@ -369,17 +466,19 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
     const { allTasksFinished, taskIsProcessing, taskFinishedProcessing, getTasksInProgress } =
       workerLoggingHelper()
 
-    const addTaskChain = createAddTaskChain(taskManager, queueTask, setTaskFinished)
-
-    // this is uses to track how long a list of tasks has been processing
-    let taskFinishedWaitingCount = 0
-
-    const handleError = createHandleError(stop, taskManager, currentTaskCtrl, queueTask)
+    const asyncProcessTask = createTaskProcessor(
+      taskManager,
+      streamEmit,
+      queueTask,
+      currentTaskCtrl,
+      taskIsProcessing,
+      taskFinishedProcessing,
+      stopAllTasks,
+    )
 
     const run = async () => {
       console.log('starting task worker run...')
       while (!currentTaskCtrl.signal.aborted) {
-        let task: TaskNode | null = null
         if (getTasksInProgress() <= 0) {
           streamEmit({ stage: 'waiting' })
         }
@@ -391,96 +490,7 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
           streamEmit({ stage: 'aborted' })
           break
         }
-        task = await taskManager.getTask(taskId)
-        if (task && !currentTaskCtrl.signal.aborted) {
-          // make sure we know from outside that the worker is active...
-          taskIsProcessing(taskId)
-          // signal to the outside world this task is now checked if we can already execute it...
-          streamEmit({ stage: 'checking', task })
-
-          // check if the previous task was finished. only of all prior tasks are finished
-          // we can continue processing this task...
-          if (task.priorID && !(await isTaskFinished(task.priorID))) {
-            streamEmit({ stage: 'subtasks', task, taskId: task.id })
-            // we need to wait until all subtasks from its previous tasks are finished before
-            // continuing with this task so we simply push this task back onto the stack
-            queueTask(task.id)
-            // if this is the only task in the queue, we need to wait a little bit in order
-            // to not overwhelm the browser (This will likely never be the case, but just in case)
-            if (taskFinishedWaitingCount >= 5 || processTasksQueue.count() <= 1) {
-              console.log('sleep-waiting for task to finish')
-              await sleep(500)
-              taskFinishedWaitingCount = 0
-            } else {
-              taskFinishedWaitingCount += 1
-            }
-            continue
-          }
-
-          // we don't need to process tasks which aren't a function...
-          // we also don'tasksInProgresst need to push them back in the queue...
-          // we also don't need to add the task as the "last" task in the GUI
-          // because they will automatically be called as soon as the
-          if (task.content.type !== 'functioncall') {
-            continue
-          }
-
-          // signal to the outside world that we are processing a task
-          // this signals to the GUI that this task is activly being processes.
-          // this is for example important to signal which stream should be displayed and
-          // which task to choose as the "leaf" of a chain.
-          streamEmit({ stage: 'processing', task })
-
-          // TODO: try to get rid of all the llmSettings functionality here..   this should only be relevant for chatCompletion which
-          //       is now a tool! :)
-          if (!llmSettings.selectedApi) throw new TaskProcessingError('No AI API selected!!')
-          const selectedModel = getApiConfigCopy(
-            llmSettings,
-            llmSettings.selectedApi,
-          )?.selectedModel
-          try {
-            const funcR = await safeExecuteTask(
-              task,
-              taskManager,
-              currentTaskCtrl.signal,
-              // TODO: replace "allowedTools" with "available Tools" in processTask...
-              llmSettings.allowedTools || [],
-            )
-
-            // We check the result of the task here to see whether it contains
-            // a lists of tasks. If thats the case we return
-            // those for continuation, otherwise
-            // we create a generic task result.
-            const newTasks = parseResultForTaskChains(
-              funcR,
-              selectedModel,
-              llmSettings.allowedTools || [],
-              llmSettings.enableOpenAiTools,
-            )
-
-            const taskChainAdder = addTaskChain(task)
-            const chainHasFinishedStatus = await Promise.all(newTasks.map(taskChainAdder))
-            // if all subtasks in this chain are finished (means
-            // there are no functions tasks in it), we can set this task as finished
-            if (chainHasFinishedStatus.every((status) => status === false)) {
-              setTaskFinished(task.id)
-            }
-          } catch (error) {
-            streamEmit({ stage: 'error', taskId: task.id })
-            void handleError(error, task, selectedModel, {
-              maxAutonomousTasks: llmSettings.maxAutonomousTasks,
-              enableOpenAiTools: llmSettings.enableOpenAiTools,
-              allowedTools: llmSettings.allowedTools || [],
-            })
-
-            // TODO: run this taskWorker in a separate worker js/browser thread!
-          } finally {
-            streamEmit({ stage: 'processed', taskId: task.id })
-            console.log('finished processing task...', task.id)
-          }
-          taskFinishedProcessing(task.id)
-          console.log('entering next loop...')
-        }
+        void asyncProcessTask(taskId, llmSettings)
       }
       processTasksQueue.clear()
       allTasksFinished()
@@ -499,7 +509,7 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
   let currentTaskCtrl: AbortController | undefined = new AbortController()
   let queueTask: ((id: string) => void) | undefined = undefined
 
-  const stop = (message: string) => {
+  const stopAllTasks = (message: string) => {
     console.log('→ taskworker stop requested', message)
     currentTaskCtrl?.abort(message)
     // in case of any errors, especially if its an interrupt event we simply want to cancel everything :P
@@ -513,7 +523,7 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
         run,
         queueTask: newQueueTask,
         currentTaskCtrl: newTaskCtrl,
-      } = setupRun(taskProcessingStream.emit, stop)
+      } = setupRun(taskProcessingStream.emit, stopAllTasks)
       currentTaskCtrl = newTaskCtrl
       queueTask = newQueueTask
       console.log('restarting task worker run...')
@@ -524,7 +534,7 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
   }
   return {
     workerStream: taskProcessingStream.stream,
-    workerStop: stop,
+    workerStop: stopAllTasks,
     queueTask: externalQueueTask,
   }
 }
