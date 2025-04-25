@@ -296,6 +296,58 @@ function workerLoggingHelper(streamEmit: (value: TyTaskStreamData) => void) {
   }
 }
 
+function createHandleError(
+  stop: (message: string) => void,
+  taskManager: TyTaskManager,
+  streamEmit: (value: TyTaskStreamData) => void,
+  currentTaskCtrl: AbortController,
+  queueTask: (id: string) => void,
+) {
+  let errorCount = 0
+  errorCount += 1
+
+  return async (
+    error: unknown,
+    task: TaskNode,
+    selectedModel: string | undefined,
+    llmSettings: {
+      maxAutonomousTasks: number
+      enableOpenAiTools: boolean
+      allowedTools?: string[]
+    },
+  ) => {
+    if (errorCount >= llmSettings.maxAutonomousTasks) {
+      // TODO: somehow put this into an error tasknode...
+      // TODO: also add any taskWorkerController interrupt in an error tasknode..
+      stop(`Too many errors occured, interrupting execution after ${errorCount} errors!`)
+    }
+
+    const errorTaskChain = createErrorTaskChain(
+      error,
+      task,
+      selectedModel,
+      llmSettings.enableOpenAiTools,
+      llmSettings.allowedTools || [],
+      taskManager.debugDb,
+    )
+
+    // we are adding the error task chain as a subtaskchain with the parentID of this
+    // particular task.
+    const errorTaskId = (await taskManager.addTaskChain(errorTaskChain, undefined, task.id)).at(
+      -1,
+    )?.id
+    streamEmit({ stage: 'error', taskId: errorTaskId })
+
+    // interrupt execution if interrupted flag is shown!
+    // this makes sure that results are still saved, even if we stop any
+    // further execution
+    if (!currentTaskCtrl.signal.aborted && errorTaskId) {
+      // we need processTasksQueue as an argument here!!!
+      queueTask(errorTaskId)
+    }
+  }
+}
+
 export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManager) {
   console.log('starting task worker listener...')
 
@@ -323,7 +375,7 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
     // this is uses to track how long a list of tasks has been processing
     let taskFinishedWaitingCount = 0
 
-    let errorCount = 0
+    const handleError = createHandleError(stop, taskManager, streamEmit, currentTaskCtrl, queueTask)
 
     const run = async () => {
       console.log('starting task worker run...')
@@ -363,7 +415,7 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
           // we also don't need to add the task as the "last" task in the GUI
           // because they will automatically be called as soon as the
           if (task.content.type !== 'functioncall') {
-            return
+            continue
           }
 
           // TODO: try to get rid of all the llmSettings functionality here..   this should only be relevant for chatCompletion which
@@ -403,38 +455,11 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
               setTaskFinished(task.id)
             }
           } catch (error) {
-            errorCount += 1
-            if (errorCount >= llmSettings.maxAutonomousTasks) {
-              // TODO: somehow put this into an error tasknode...
-              // TODO: also add any taskWorkerController interrupt in an error tasknode..
-              stop(`Too many errors occured, interrupting execution after ${errorCount} errors!`)
-            }
-
-            if (!llmSettings.selectedApi) throw new TaskProcessingError('No AI API selected!!')
-            const errorTaskChain = createErrorTaskChain(
-              error,
-              task,
-              selectedModel,
-              llmSettings.enableOpenAiTools,
-              llmSettings.allowedTools || [],
-              taskManager.debugDb,
-            )
-
-            // we are adding the error task chain as a subtaskchain with the parentID of this
-            // particular task.
-            const errorTaskId = (
-              await taskManager.addTaskChain(errorTaskChain, undefined, task.id)
-            ).at(-1)?.id
-            streamEmit({ stage: 'error', taskId: errorTaskId })
-
-            // interrupt execution if interrupted flag is shown!
-            // this makes sure that results are still saved, even if we stop any
-            // further execution
-
-            if (!currentTaskCtrl.signal.aborted && errorTaskId) {
-              // we need processTasksQueue as an argument here!!!
-              queueTask(errorTaskId)
-            }
+            void handleError(error, task, selectedModel, {
+              maxAutonomousTasks: llmSettings.maxAutonomousTasks,
+              enableOpenAiTools: llmSettings.enableOpenAiTools,
+              allowedTools: llmSettings.allowedTools || [],
+            })
 
             // TODO: run this taskWorker in a separate worker js/browser thread!
           } finally {
