@@ -387,8 +387,8 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
         const taskId = await processTasksQueue.pop(currentTaskCtrl.signal)
         // make sure we know from outside that the worker is active...
         taskIsProcessing(taskId)
-        // signal to the outside world that we are processing a task
-        streamEmit({ stage: 'processing', task })
+        // signal to the outside world this task is now checked if we can already execute it...
+        streamEmit({ stage: 'checking', task })
         task = await taskManager.getTask(taskId)
         if (task && !currentTaskCtrl.signal.aborted) {
           // check if the previous task was finished. only of all prior tasks are finished
@@ -417,6 +417,12 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
           if (task.content.type !== 'functioncall') {
             continue
           }
+
+          // signal to the outside world that we are processing a task
+          // this signals to the GUI that this task is activly being processes.
+          // this is for example important to signal which stream should be displayed and
+          // which task to choose as the "leaf" of a chain.
+          streamEmit({ stage: 'processing', task })
 
           // TODO: try to get rid of all the llmSettings functionality here..   this should only be relevant for chatCompletion which
           //       is now a tool! :)

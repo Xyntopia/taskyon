@@ -674,7 +674,8 @@ export interface TyTaskStreamData {
   taskId?: string | null | undefined
   // "all finished" means the task has been processes AND all its subtasks have been finished..
   stage:
-    | 'processing'
+    | 'checking' // we check the task if it we can start processing it...
+    | 'processing' // means, the task enters the loop of processing
     | 'processed'
     | 'error'
     | 'waiting'
