@@ -242,7 +242,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   void workerStream.subscribe((data) => {
     if (data.stage === 'all finished') taskWorkerWaiting.value = true
-    else taskWorkerWaiting.value = false
+    else if (data.stage === 'processing') taskWorkerWaiting.value = false
   })
 
   void getTaskManager().then((tm) => {

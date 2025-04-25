@@ -288,7 +288,12 @@ function workerLoggingHelper(streamEmit: (value: TyTaskStreamData) => void) {
     console.log('finished task loop:', taskId)
     if (tasksInProgress <= 0) allTasksFinished()
   }
-  return { allTasksFinished, taskIsProcessing, taskFinishedProcessing }
+  return {
+    allTasksFinished,
+    taskIsProcessing,
+    taskFinishedProcessing,
+    getTasksInProgress: () => tasksInProgress,
+  }
 }
 
 export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManager) {
@@ -310,7 +315,7 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
         processTasksQueue.push(id)
       }
     }
-    const { allTasksFinished, taskIsProcessing, taskFinishedProcessing } =
+    const { allTasksFinished, taskIsProcessing, taskFinishedProcessing, getTasksInProgress } =
       workerLoggingHelper(streamEmit)
 
     const addTaskChain = createAddTaskChain(taskManager, queueTask, streamEmit, setTaskFinished)
@@ -324,12 +329,14 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
       console.log('starting task worker run...')
       while (!currentTaskCtrl.signal.aborted) {
         let task: TaskNode | null = null
-        if (processTasksQueue.count() === 0) {
+        if (getTasksInProgress() <= 0) {
           streamEmit({ stage: 'waiting' })
         }
         const taskId = await processTasksQueue.pop(currentTaskCtrl.signal)
         // make sure we know from outside that the worker is active...
         taskIsProcessing(taskId)
+        // signal to the outside world that we are processing a task
+        streamEmit({ stage: 'processing', task })
         task = await taskManager.getTask(taskId)
         if (task && !currentTaskCtrl.signal.aborted) {
           // check if the previous task was finished. only of all prior tasks are finished
@@ -339,7 +346,6 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
             // we need to wait until all subtasks from its previous tasks are finished before
             // continuing with this task so we simply push this task back onto the stack
             queueTask(task.id)
-            taskFinishedProcessing(task.id)
             // if this is the only task in the queue, we need to wait a little bit in order
             // to not overwhelm the browser (This will likely never be the case, but just in case)
             if (taskFinishedWaitingCount >= 5 || processTasksQueue.count() <= 1) {
@@ -352,17 +358,11 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
             continue
           }
 
-          // only now we actually start to process our task!!
-          // if we did this earlier, we would get tasks that are still waiting
-          // for processing in the stream...
-          streamEmit({ stage: 'processing', task })
-
           // we don't need to process tasks which aren't a function...
           // we also don'tasksInProgresst need to push them back in the queue...
           // we also don't need to add the task as the "last" task in the GUI
           // because they will automatically be called as soon as the
           if (task.content.type !== 'functioncall') {
-            taskFinishedProcessing(task.id)
             return
           }
 
@@ -439,8 +439,8 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
             // TODO: run this taskWorker in a separate worker js/browser thread!
           } finally {
             console.log('finished processing task...')
-            taskFinishedProcessing(task.id)
           }
+          taskFinishedProcessing(task.id)
           console.log('entering next loop...')
         }
       }
@@ -449,7 +449,6 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
 
     return {
       run,
-      stop,
       queueTask,
       currentTaskCtrl,
     }
