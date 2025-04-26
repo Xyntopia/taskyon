@@ -44,8 +44,14 @@ window.addEventListener('message', async (event) => {
     const { code, params, sourceURL } = event.data;
     if (code) {
       try {
-        const func = new Function("params", "return (" + code + ")(params)\\n//# sourceURL=" + sourceURL);
-        const result = await func(params);
+        const context = {
+          taskChain: [],
+          getSecret: async (name) => "getSecret not implemented in iframe worker",
+          setSecret: async (name, value) => "setSecret not implemented in iframe worker",
+          stopSignal: new AbortController().signal, // Placeholder for stop signal
+        }
+        const func = new Function("params", "context", "return (" + code + ")(params, context)\\n//# sourceURL=" + sourceURL);
+        const result = await func(params, context);
 
         // Post the result back to the parent window
         window.parent.postMessage({ result }, '*');
