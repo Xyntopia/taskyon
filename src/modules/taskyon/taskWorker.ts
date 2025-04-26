@@ -273,25 +273,25 @@ const createAddTaskChain =
     return hasFunctionTasks
   }
 
-function workerLoggingHelper() {
+function workerLoggingHelper(streamEmit: (value: TyTaskStreamData) => void) {
   let tasksInProgress = 0
-  const taskIsProcessing = (taskId: string) => {
+  const taskisInLoop = (taskId: string) => {
     tasksInProgress += 1
-    console.log('entering task loop:', taskId)
+    streamEmit({ stage: 'in loop', taskId })
   }
   const allTasksFinished = () => {
     // this means that all tasks are finished and we can emit a final message
     tasksInProgress = 0
-    console.log('all tasks finished!')
+    streamEmit({ stage: 'all finished' })
   }
   const taskFinishedProcessing = (taskId: string) => {
     tasksInProgress -= 1
-    console.log('finished task loop:', taskId)
+    streamEmit({ stage: 'processed', taskId })
     if (tasksInProgress <= 0) allTasksFinished()
   }
   return {
     allTasksFinished,
-    taskIsProcessing,
+    taskisInLoop,
     taskFinishedProcessing,
     getTasksInProgress: () => tasksInProgress,
   }
@@ -352,7 +352,7 @@ const createTaskProcessor = (
   streamEmit: (value: TyTaskStreamData) => void,
   queueTask: (id: string) => void,
   currentTaskCtrl: AbortController,
-  taskIsProcessing: (taskId: string) => void,
+  taskisInLoop: (taskId: string) => void,
   taskFinishedProcessing: (taskId: string) => void,
   stopAllTasks: (message: string) => void,
 ) => {
@@ -365,9 +365,7 @@ const createTaskProcessor = (
     const task = await taskManager.getTask(taskId)
     if (task && !currentTaskCtrl.signal.aborted) {
       // make sure we know from outside that the worker is active...
-      taskIsProcessing(taskId)
-      // signal to the outside world this task is now checked if we can already execute it...
-      streamEmit({ stage: 'checking', task })
+      taskisInLoop(taskId)
 
       // check if the previous task was finished. only of all prior tasks are finished
       // we can continue processing this task...
@@ -387,7 +385,6 @@ const createTaskProcessor = (
       // because they will automatically be called as soon as the
       if (task.content.type !== 'functioncall') {
         taskFinishedProcessing(task.id)
-        streamEmit({ stage: 'processed', taskId: task.id })
         return // early return, because this task is not a functioncall task
       }
 
@@ -437,7 +434,6 @@ const createTaskProcessor = (
         })
         // TODO: run this taskWorker in a separate worker js/browser thread!
       }
-      streamEmit({ stage: 'processed', taskId: task.id })
       taskFinishedProcessing(task.id)
       console.log('entering next loop...')
     }
@@ -462,15 +458,15 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
         processTasksQueue.push(id)
       }
     }
-    const { allTasksFinished, taskIsProcessing, taskFinishedProcessing, getTasksInProgress } =
-      workerLoggingHelper()
+    const { allTasksFinished, taskisInLoop, taskFinishedProcessing, getTasksInProgress } =
+      workerLoggingHelper(streamEmit)
 
     const asyncProcessTask = createTaskProcessor(
       taskManager,
       streamEmit,
       queueTask,
       currentTaskCtrl,
-      taskIsProcessing,
+      taskisInLoop,
       taskFinishedProcessing,
       stopAllTasks,
     )
