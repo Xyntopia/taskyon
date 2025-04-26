@@ -213,11 +213,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const workerStreamLogs = ref<(TyTaskStreamData & { timestamp: Date })[]>([])
   const maxLogRows = 50
   void workerStream.subscribe((data) => {
-    console.log('worker:', data)
-    workerStreamLogs.value.push({ ...data, timestamp: new Date() })
-    // Ensure the log doesn't exceed the maximum number of rows
-    if (workerStreamLogs.value.length > maxLogRows) {
-      workerStreamLogs.value.shift() // Remove the oldest entry
+    // console.log('worker:', data)
+    if (['all finished', 'processing', 'processed', 'error'].includes(data.stage)) {
+      workerStreamLogs.value.push({ ...data, timestamp: new Date() })
+      // Ensure the log doesn't exceed the maximum number of rows
+      if (workerStreamLogs.value.length > maxLogRows) {
+        workerStreamLogs.value.shift() // Remove the oldest entry
+      }
     }
   })
 
