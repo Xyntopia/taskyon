@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, makeTaskResult } from '../taskyon/tools'
+import { createTool } from '../taskyon/tools'
 
 const issueListGenerator = createTool({
   name: 'issueListGenerator',
@@ -25,24 +25,24 @@ in gitlab. They should roughly follow the style of a "user story".`,
     },
     required: ['issuelist'],
   } as const satisfies JSONSchema7,
-  function: async ({ issuelist }, ctx) => {
+  code: `async ({ issuelist }, ctx) => {
     const GITLAB_PROJECT_ID = await ctx.getSecret('YOUR_GITLAB_PROJECT_ID') // Replace with actual project ID
     const GITLAB_API_URL = await ctx.getSecret(
-      `https://gitlab.com/api/v4/projects/${encodeURIComponent(GITLAB_PROJECT_ID || '')}/issues`,
+      \`https://gitlab.com/api/v4/projects/\${encodeURIComponent(GITLAB_PROJECT_ID || '')}/issues\`,
     )
     const GITLAB_ACCESS_TOKEN = await ctx.getSecret('GITLAB_ACCESS_TOKEN') // Replace with actual project ID
 
-    const uiHtml = `<div>
+    const uiHtml = \`<div>
     <ul id="issueList">
-      ${issuelist
+      \${issuelist
         .map(
           (issue, index) =>
-            `<li>
-          <input type="checkbox" id="issue-${index}" value="${issue}" />
-          <label for="issue-${index}">${issue}</label>
-        </li>`,
+            \`<li>
+          <input type="checkbox" id="issue-\${index}" value="\${issue}" />
+          <label for="issue-\${index}">\${issue}</label>
+        </li>\`,
         )
-        .join('\n')}
+        .join('\\n')}
     </ul>
     <button onclick="uploadIssues()">Submit</button>
   </div>
@@ -61,14 +61,14 @@ in gitlab. They should roughly follow the style of a "user story".`,
       console.log('Submitting issues:', selectedIssues);
 
       const GITLAB_ACCESS_TOKEN = 'YOUR_GITLAB_ACCESS_TOKEN'; // Replace with actual token
-      const GITLAB_API_URL = '${GITLAB_API_URL}';
+      const GITLAB_API_URL = '\${GITLAB_API_URL}';
 
       selectedIssues.forEach(issue => {
         fetch(GITLAB_API_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + ${GITLAB_ACCESS_TOKEN}
+            'Authorization': 'Bearer ' + \${GITLAB_ACCESS_TOKEN}
           },
           body: JSON.stringify({
             title: issue,
@@ -82,19 +82,19 @@ in gitlab. They should roughly follow the style of a "user story".`,
 
       alert('Issues submitted to GitLab!');
     }
-  </script>`
+  </script>\`
     return makeTaskResult([
       [
         {
           role: 'assistant',
           content: {
             type: 'message',
-            data: `Check each issue you think is legitimate and want to upload!` + uiHtml,
+            data: \`Check each issue you think is legitimate and want to upload!\` + uiHtml,
           },
         },
       ],
     ])
-  },
+  }`,
 })
 
 const gitReader = createTool({
