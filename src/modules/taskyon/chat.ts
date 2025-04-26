@@ -157,7 +157,7 @@ export async function callLLM(
             // we generate a hash of the schema in order to make sure the schema is cached
             name: await sha256HashName(schema),
             schema,
-            strict: false, // we can use false here, because taskyon is doing its own checks and this gives us more freedom what we can do in our schemas...
+            strict: true, // we can use false here, because taskyon is doing its own checks and this gives us more freedom what we can do in our schemas...
             description: '',
           },
         }
