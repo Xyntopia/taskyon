@@ -2,19 +2,6 @@
 import { deepEqual } from 'fast-equals'
 import { Buffer } from 'buffer'
 
-type LowercaseKeys<T> = {
-  [K in keyof T as K extends string ? Lowercase<K> : never]: T[K]
-} & { [key: string]: unknown }
-
-export function toLowerCaseKeys<T extends Record<string, unknown>>(obj: T): LowercaseKeys<T> {
-  return Object.fromEntries(
-    Object.entries(obj).map(([k, v]) => [
-      k.toLowerCase(),
-      typeof v === 'object' && v !== null ? toLowerCaseKeys(v as Record<string, unknown>) : v,
-    ]),
-  ) as LowercaseKeys<T>
-}
-
 export function copyToClipboard(text: string) {
   navigator.clipboard
     .writeText(text)
@@ -778,29 +765,31 @@ export function bigIntToString(obj: unknown): unknown {
   return obj
 }
 
-export function keysToLowerCase<T>(obj: T): T {
-  if (Array.isArray(obj)) {
-    return obj.map(keysToLowerCase) as unknown as T
-  } else if (obj instanceof Map) {
-    const newMap = new Map()
-    obj.forEach((value, key) => {
-      const lowerKey = typeof key === 'string' ? key.toLowerCase() : key
-      newMap.set(lowerKey, keysToLowerCase(value))
-    })
-    return newMap as unknown as T
-  } else if (obj instanceof Set) {
-    return new Set([...obj].map(keysToLowerCase)) as unknown as T
-  } else if (obj !== null && typeof obj === 'object') {
-    return Object.entries(obj).reduce(
-      (acc, [key, value]) => {
-        const lowerKey = key.toLowerCase()
-        acc[lowerKey] = keysToLowerCase(value)
-        return acc
-      },
-      {} as Record<string, unknown>,
-    ) as unknown as T
+export const createKeyTransformer = (keyTransformer: (key: string) => string) => {
+  const transform = (obj: unknown): unknown => {
+    if (Array.isArray(obj)) {
+      return obj.map(transform)
+    } else if (obj instanceof Map) {
+      const newMap = new Map()
+      obj.forEach((value, key) => {
+        const newKey = typeof key === 'string' ? keyTransformer(key) : key
+        newMap.set(newKey, transform(value))
+      })
+      return newMap
+    } else if (obj instanceof Set) {
+      return new Set([...obj].map(transform))
+    } else if (obj !== null && typeof obj === 'object') {
+      return Object.entries(obj).reduce(
+        (acc, [key, value]) => {
+          acc[keyTransformer(key)] = transform(value)
+          return acc
+        },
+        {} as Record<string, unknown>,
+      )
+    }
+    return obj
   }
-  return obj
+  return transform
 }
 
 // this function "normalizes" boolean-like input this makes our llm structured

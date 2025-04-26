@@ -20,10 +20,10 @@ import { ChatResponseType, getApiConfigCopy } from '../taskyon/types'
 import { TaskProcessingError, type llmSettings } from '../taskyon/types'
 import { makeTaskResult, createTool, mapFunctionNames, type toolContext } from '../taskyon/tools'
 import {
+  createKeyTransformer,
   deepCopy,
   fileToBase64,
   isEmpty,
-  keysToLowerCase,
   normalizeFalsyValues,
   pickProperties,
   sleep,
@@ -325,6 +325,10 @@ function parseYamlResponse2Record(message: string): Record<string, unknown> {
   return parsedYaml as Record<string, unknown>
 }
 
+const robustKeys = createKeyTransformer((key: string) => {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, '')
+})
+
 // we use this to decide whether we should call a function or to continue
 // this is usually not needed if we use llmTools (like built-in tools from openai API)
 // TODO: ability to parse multiple commands/tasks...
@@ -346,10 +350,11 @@ function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]
   // structured response as a normal "message" task to the chain...
   // this way we can put all the parsing logic & interpretation and all of this here. While
   // our tasks only have to process the actual data they are receiving
-  const lowerStructResponse = keysToLowerCase(structResponseN)
+  const lowerStructResponse = robustKeys(structResponseN) as Record<string, string | boolean>
+  // because of our robustKeys, we can now use lower case keys without spaces and punctuation or anything...
   const useTool =
-    yesnoToBoolean(lowerStructResponse['use tool']) &&
-    (!('try again' in lowerStructResponse) || yesnoToBoolean(lowerStructResponse['try again']))
+    yesnoToBoolean(lowerStructResponse['usetool']) &&
+    (!('tryagain' in lowerStructResponse) || yesnoToBoolean(lowerStructResponse['tryagain']))
 
   if (useTool) {
     let res = FunctionCall.safeParse(structResponse.command)
