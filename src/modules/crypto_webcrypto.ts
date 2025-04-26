@@ -241,16 +241,29 @@ export async function sha256UrlSafeHash(obj: unknown) {
   return urlSafe64BitString(Buffer.from(hashBuffer))
 }
 
-export async function sha256HashName(obj: unknown): Promise<string> {
+export async function charHash(
+  obj: unknown,
+  maxLength?: number,
+  chars: string = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+): Promise<string> {
   const json = JSON.stringify(obj)
   const encoder = new TextEncoder()
   const data = encoder.encode(json)
 
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const base64Hash = Buffer.from(hashBuffer).toString('ascii')
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
 
-  // Ensure the hash meets the naming constraints
-  return base64Hash.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
+  const base = chars.length
+  const targetLength = maxLength ?? hashArray.length
+  const result = new Array<string>(targetLength)
+
+  let i = 0
+  for (const byte of hashArray) {
+    if (i >= targetLength) break
+    result[i++] = chars[byte % base]!
+  }
+
+  return result.join('')
 }
 
 export function generateSalt(): string {

@@ -2,7 +2,7 @@ import type { OpenRouterGenerationInfo, Model, llmSettings } from './types'
 import type OpenAI from 'openai'
 import { sleep, asyncTimeLruCache } from '../utils'
 import { TaskProcessingError } from './types'
-import { sha256HashName } from '../crypto_webcrypto'
+import { charHash } from '../crypto_webcrypto'
 
 export function generateHeaders(apiSecret: string, siteUrl: string, selectedApi: string) {
   let headers: Record<string, string> = {
@@ -137,6 +137,7 @@ export async function callLLM(
   timeoutMs: number = 10000, // Timeout in milliseconds for waiting for first streamed response
   maxRetries: number = 3, // Maximum number of retry attempts
   schema?: Record<string, unknown>, // optional schema for the response
+  maxSchemaIdLength: number = 9, // max length of the schema id (default is 9, because e.g. mistral has that limit)
 ): Promise<OpenAI.ChatCompletion | undefined> {
   const headers: Record<string, string> = generateHeaders(apiKey, siteUrl, api.name)
   let chatCompletion: OpenAI.ChatCompletion | undefined = undefined
@@ -155,7 +156,8 @@ export async function callLLM(
           type: 'json_schema',
           json_schema: {
             // we generate a hash of the schema in order to make sure the schema is cached
-            name: await sha256HashName(schema),
+            // we are using 9 chars max, because e.g. mistral has that limit
+            name: await charHash(schema, maxSchemaIdLength),
             schema,
             strict: true, // we can use false here, because taskyon is doing its own checks and this gives us more freedom what we can do in our schemas...
             description: '',

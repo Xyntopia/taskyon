@@ -38,6 +38,7 @@ import { safeYamlDump } from '../yamlUtils'
 import type { AnySchema } from 'ajv'
 import { createStream } from '../frpBus'
 import type { FromSchema } from 'json-schema-to-ts'
+import { charHash } from '../crypto_webcrypto'
 
 function generateOpenAIToolDeclarations(
   allowedTools: string[],
@@ -504,6 +505,7 @@ async function convertTaskNodeToOpenAIMessage(
   getUploadedFile: (uuid: string) => Promise<File | undefined>,
   useOpenAITools: boolean,
   toolCollection: Record<string, ToolBase>,
+  maxToolIdLength = 9, // the max length here is influenced by the Mistral model, which can only use 9 characters for tool ids
 ): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[] | undefined> {
   if (task.content.type === 'functioncall') {
     const functionCallName = task.content.data.name
@@ -516,8 +518,7 @@ async function convertTaskNodeToOpenAIMessage(
         content: null,
         tool_calls: [
           {
-            // tool call ids can by 40chars longs at max..
-            id: task.id.slice(0, 40),
+            id: await charHash(task.id, maxToolIdLength),
             type: 'function',
             function: {
               name: task.content.data.name,
@@ -530,11 +531,6 @@ async function convertTaskNodeToOpenAIMessage(
     } else {
       // the purpose of this is to inform the AI about what function was called and
       // the arguments in it.
-      // TODO: its probably a good idea to make this shorter in cas we have very long argumets...
-      // TODO: not sure, if this is a good idea with OpenAI Functions, bcause openai seems to already have
-      //       an idea about the functions which were provided with their descriptions,
-      //       anyways So we should probably leave this out here...
-
       return [
         {
           role: 'system',
@@ -548,14 +544,10 @@ async function convertTaskNodeToOpenAIMessage(
       ]
     }
   } else if (task.content.type === 'toolresult') {
-    // we can still slightly change the content of this message to make clear
-    // TODO: instead of using a manual "result of the tool" use the description in the type!
-    // maybe refer to the actual tool call here?
-
     if (task.parentID && useOpenAITools) {
       const message: OpenAI.ChatCompletionMessageParam = {
         role: 'tool',
-        tool_call_id: task.parentID.slice(0, 40), // the tool call will get the parent ID as well! :)
+        tool_call_id: await charHash(task.parentID, maxToolIdLength), // the tool call will get the parent ID as well! :)
         content: safeYamlDump(task.content.data),
       }
       return [message]
@@ -570,7 +562,7 @@ async function convertTaskNodeToOpenAIMessage(
       ]
   } else if (task.content.type === 'message' && task.role != 'function') {
     const message: OpenAI.ChatCompletionMessageParam = {
-      // TOOD: we need to dynamically generate task rolws here!! and move it into the task type,  if its a message!
+      // TODO: we need to dynamically generate task roles here!! and move it into the task type,  if its a message!
       role: task.role,
       content: task.content.data,
     }
@@ -593,15 +585,11 @@ async function convertTaskNodeToOpenAIMessage(
       const imageMessage: OpenAI.ChatCompletionMessageParam = {
         role: 'user',
         content: imageContent,
-        // TODO: we need to experiment with sending additional text here?
-        //{"type": "text", "text": "What’s in this image?"},
       }
       return [message, imageMessage]
     }
     return [message]
-  } // else if (task.content.type ==='')
-  // TODO: we would also like to convert structured messages, and simply don't send them to
-  //       the chat, if they're configured as "lower-hierarchy"
+  }
 }
 
 async function convertFilesToOpenAIImageContent(
