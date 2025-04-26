@@ -29,8 +29,10 @@
         <json-input
           :readonly="readOnly"
           class="col"
+          auto-save
           :model-value="prop.node.value"
           @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
+          style="min-width: 200px"
         />
         <info-dialog v-if="descriptions[prop.node.path.join('.')] && !descriptionsAsLabels">
           {{ descriptions[prop.node.path.join('.')] }}
