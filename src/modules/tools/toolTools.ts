@@ -220,7 +220,8 @@ Finally, it creates a chat completion task with the selected tools in the allowe
             content: {
               type: 'structured',
               data: {
-                choice: 'no',
+                reasoning_steps: P.optional(P._),
+                choice: P.union('no', P.array('no')),
               },
             },
           },
@@ -262,7 +263,7 @@ Examples are:
 - something that requires an API call
 - ... and more! make sure to think about it!
 
-If you are sure that none of the tools are relevant, your choise should be "no".`,
+If you are sure that none of the tools are relevant, your choice should be simple string "no".`,
                 ],
                 llmTools,
                 schema: {
@@ -280,7 +281,7 @@ If you are sure that none of the tools are relevant, your choise should be "no".
                         {
                           enum: ['no'],
                           description:
-                            'If you are sure no tools are required for an answer, choose "no" as an answer',
+                            'If you are sure no tools are required for an answer, choose "no" as an answer instead of a list!',
                         },
                         {
                           type: 'array',
@@ -310,15 +311,12 @@ If you are sure that none of the tools are relevant, your choise should be "no".
             content: {
               type: 'structured',
               data: {
-                choice: P.array(P.string),
+                reasoning_steps: P.optional(P._),
+                choice: P.select(P.array(P.string)),
               },
             },
           },
-          ({
-            content: {
-              data: { choice },
-            },
-          }) => {
+          (choice) => {
             return makeTaskResult([
               [
                 createChatCompletionTask({
