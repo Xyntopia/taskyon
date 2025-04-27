@@ -268,6 +268,13 @@ If you are sure that none of the tools are relevant, your choise should be "no".
                 schema: {
                   type: 'object',
                   properties: {
+                    reasoning_steps: {
+                      type: 'array',
+                      items: {
+                        type: 'string',
+                      },
+                      description: 'The reasoning steps leading to the final conclusion.',
+                    },
                     choice: {
                       anyOf: [
                         {
@@ -291,7 +298,7 @@ If you are sure that none of the tools are relevant, your choise should be "no".
                     },
                   },
                   additionalProperties: false,
-                  required: ['choice'],
+                  required: ['reasoning_steps', 'choice'],
                 },
               }),
               createToolTask({ name: 'chooseTool', arguments: { llmTools } }),
