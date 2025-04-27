@@ -249,7 +249,7 @@ export function addPrompts(
   const converter = string2OpenAiMessage(variables)
 
   const prependMessages = converter('system')(prependMessagesList)
-  const appendMessages = converter('user')(appendMessagesList)
+  const appendMessages = converter('system')(appendMessagesList)
   appendMessages.push(...converter('system')(appendSystemMessage))
 
   // build our complete thread :)
