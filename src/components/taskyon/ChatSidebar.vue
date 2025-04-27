@@ -156,7 +156,7 @@ const nameMap = ref<Record<string, string>>({})
 void tystate.getTaskManager().then((tm) =>
   tm.taskStream.subscribe((data) => {
     // for every message from the stream, try to update our name map :)
-    console.log('update name', data.data)
+    // console.log('update name', data.data)
     nameMap.value[data.id] = data.data?.name || 'undefined'
   }),
 )
