@@ -230,49 +230,6 @@ function createTaskTracker(tm: TyTaskManager) {
   }
 }
 
-// check if there are any 'functioncall' tasks in the new tasks.
-// if so, we need to add them to the queue, otherwise we can simply cancel here and
-// continue with the next task. And we can also push this task as the
-const createAddTaskChain =
-  (
-    taskManager: TyTaskManager,
-    queueTask: (id: string) => void,
-    setTaskFinished: (id: string) => Set<string>,
-  ) =>
-  (finishedTask: TaskNode) =>
-  async (taskChain: partialTaskDraft[]) => {
-    // we can already persist all of our tasks here to the taskManager, as
-    // they're immutable.
-    const taskList = await taskManager.addTaskChain(
-      taskChain,
-      undefined, // the first task should not have a priorID, but all of them should have a parentID
-      finishedTask.id,
-    )
-    // TODO: we need processTasksQueue as an argument here (not implicitly adding it to this function...) for better FP style
-    // we are adding only function tasks to the chain and if we find out the one of the chains doesn't contain
-
-    // set finishedTask as completed
-    //  - if all subtaskChains don't contain any functioncall task
-    const hasFunctionTasks = taskList.some((t) => t.content.type === 'functioncall')
-    const lastTask = taskList.at(-1)
-
-    if (lastTask && !hasFunctionTasks) {
-      // we can set the leaf of this chain as finished
-      // if it doesn't contain any functioncall tasks
-      // this is not strictly necessary, but it helps to speed up
-      // the search for unfinished tasks
-      setTaskFinished(lastTask.id)
-    }
-
-    // queue all tasks...  our taskWorker will automatically
-    // sort out all non-function tasks
-    taskList.forEach((t) => {
-      queueTask(t.id)
-    })
-
-    return hasFunctionTasks
-  }
-
 function workerLoggingHelper(streamEmit: (value: TyTaskStreamData) => void) {
   let tasksInProgress = new Set<string>()
   const taskisInLoop = (taskId: string) => {
@@ -359,7 +316,6 @@ const createTaskProcessor = (
   // this is uses to track how long a list of tasks has been processing
   const handleError = createHandleError(stopAllTasks, taskManager, currentTaskCtrl, queueTask)
   const { isTaskFinished, setTaskFinished } = createTaskTracker(taskManager)
-  const addTaskChain = createAddTaskChain(taskManager, queueTask, setTaskFinished)
 
   return async (taskId: string, llmSettings: llmSettings) => {
     const task = await taskManager.getTask(taskId)
@@ -399,6 +355,7 @@ const createTaskProcessor = (
       //       is now a tool! :)
       if (!llmSettings.selectedApi) throw new TaskProcessingError('No AI API selected!!')
       const selectedModel = getApiConfigCopy(llmSettings, llmSettings.selectedApi)?.selectedModel
+      let newTasks: TaskNode[][] = []
       try {
         const funcR = await safeExecuteTask(
           task,
@@ -412,18 +369,45 @@ const createTaskProcessor = (
         // a lists of tasks. If thats the case we return
         // those for continuation, otherwise
         // we create a generic task result.
-        const newTasks = parseResultForTaskChains(
+        const partialTasks = parseResultForTaskChains(
           funcR,
           selectedModel,
           llmSettings.allowedTools || [],
           llmSettings.enableOpenAiTools,
         )
 
-        const taskChainAdder = addTaskChain(task)
-        const chainHasFinishedStatus = await Promise.all(newTasks.map(taskChainAdder))
+        // we can immediatly persist all of our tasks here to the taskManager, as
+        // they're immutable and won't change anymore..
+        newTasks = await Promise.all(
+          partialTasks.map((taskChain) => taskManager.addTaskChain(taskChain, undefined, task.id)),
+        )
+
         // if all subtasks in this chain are finished (means
         // there are no functions tasks in it), we can set this task as finished
-        if (chainHasFinishedStatus.every((status) => status === false)) {
+        const chainHasFunctionTasks = newTasks.map((taskList: TaskNode[]) => {
+          // set finishedTask as completed
+          //  - if all subtaskChains don't contain any functioncall task
+          const hasFunctionTasks = taskList.some((t) => t.content.type === 'functioncall')
+          const lastTask = taskList.at(-1)
+
+          if (lastTask && !hasFunctionTasks) {
+            // we can set the leaf of this chain as finished
+            // if it doesn't contain any functioncall tasks
+            // this is not strictly necessary, but it helps to speed up
+            // the search for unfinished tasks
+            setTaskFinished(lastTask.id)
+          }
+
+          // queue all tasks...  our taskWorker will automatically
+          // sort out all non-function tasks
+          taskList.forEach((t) => {
+            queueTask(t.id)
+          })
+
+          return hasFunctionTasks
+        })
+        // if no function tasks are int eh result, we can set this task as finished as well..
+        if (chainHasFunctionTasks.every((status) => status === false)) {
           setTaskFinished(task.id)
         }
       } catch (error) {
@@ -436,6 +420,13 @@ const createTaskProcessor = (
         // TODO: run this taskWorker in a separate worker js/browser thread!
       }
       taskOutOfLoop(task.id)
+      if (currentTaskCtrl.signal.aborted) {
+        // if the task was aborted, we want to make sure, that we can see the leaf task.
+        // usually, this would automatically happen in the taskWorker loop, because
+        // all tasks are queued. But here, this won't work.
+        // TODO: should we also add function tasks here? or only non-function tasks?
+        streamEmit({ stage: 'aborted', task: newTasks.at(-1)?.at(-1) })
+      }
     }
     return task
   }

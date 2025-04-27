@@ -213,7 +213,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const workerStreamLogs = ref<(TyTaskStreamData & { timestamp: Date })[]>([])
   const maxLogRows = 50
   void workerStream.subscribe((data) => {
-    // console.log('worker:', data)
+    console.log(`worker: ${data.stage}, ${data.taskId || data.task?.id}`)
     if (['all finished', 'processing', 'processed', 'error'].includes(data.stage)) {
       workerStreamLogs.value.push({ ...data, timestamp: new Date() })
       // Ensure the log doesn't exceed the maximum number of rows
@@ -237,7 +237,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   filter(
     workerStream,
-    (data) => data.stage === 'processing' || data.stage === 'processed' || data.stage === 'error',
+    (data) =>
+      data.stage === 'processing' ||
+      data.stage === 'processed' ||
+      data.stage === 'error' ||
+      (data.stage === 'aborted' && !!(data.taskId || data.task?.id)),
   ).subscribe((data) => {
     // TODO: add last task to GUI by checking if our current selected task now has this child...
     stateRefs.setSelectedTask(data.task?.id || data.taskId || null)
