@@ -51,29 +51,20 @@ to be further processed... E.g. there could be a task with no results, which sti
 export type TaskState = z.infer<typeof TaskState>
 
 const OpenAIMessage = z.object({
-  content: z.string().nullable(),
+  content: z.string().nullish(),
   //finish_reason: z.enum(['length', 'function_call', 'tool_calls', 'stop', 'content_filter']),
   tool_calls: z
     .array(
       z.object({
         function: z.object({ arguments: z.string(), name: z.string() }),
         type: z.literal('function'),
+        id: z.string(),
       }),
     )
     .optional(),
   name: z.string().optional(),
   role: z.enum(['system', 'user', 'assistant', 'function', 'tool']),
-  /*      logprobs: z
-        .object({
-          tokens: z.array(z.string()),
-          token_logprobs: z.array(z.number().nullable()),
-          top_logprobs: z.array(z.record(z.string(), z.number()).nullable()),
-          text_offset: z.array(z.number()),
-          content: z.string().optional(),
-          refusal: z.string(), // Add required field
-        })
-        .nullable(),*/
-})
+}) // we are allowing additional properties here, because different providers sometimes returns additional properties
 export type OpenAIMessage = z.infer<typeof OpenAIMessage>
 
 // TODO: get rid of OpenAI dependency...
@@ -84,21 +75,48 @@ export type OpenAIMessage = z.infer<typeof OpenAIMessage>
 // official OpenAI API.
 // TODO: move all of our OpenAI functionality into chatCompletionTool...
 export const ChatResponseType = z.object({
-  id: z.string(),
-  //object: z.string(),
-  //created: z.number(),
-  model: z.string(),
-  choices: z.array(
-    z.object({
-      message: OpenAIMessage,
-    }),
-  ),
+  id: z.string().default('N/A'),
+  model: z.string().default('N/A'),
+  object: z.literal('chat.completion'),
+  choices: z
+    .array(
+      z.object({
+        message: OpenAIMessage,
+        finish_reason: z.enum([
+          'length',
+          'tool_calls',
+          'stop',
+          'content_filter',
+          'function_call',
+          'cancelled',
+        ]),
+        logprobs: z.unknown().optional(),
+      }),
+    )
+    .default([]),
   usage: z
     .object({
       prompt_tokens: z.number(),
       completion_tokens: z.number(),
       total_tokens: z.number(),
+      prompt_tokens_details: z
+        .object({
+          cached_tokens: z.number(),
+          audio_tokens: z.number(),
+        })
+        .partial()
+        .optional(),
+      completion_tokens_details: z
+        .object({
+          reasoning_tokens: z.number(),
+          audio_tokens: z.number(),
+          accepted_prediction_tokens: z.number(),
+          rejected_prediction_tokens: z.number(),
+        })
+        .partial()
+        .optional(),
     })
+    .nullish()
     .optional(),
 })
 export type ChatResponseType = z.infer<typeof ChatResponseType>
@@ -460,14 +478,14 @@ export type apiConfig = z.infer<typeof apiConfig>
 export const llmSettings = z.object({
   userId: z
     .string()
-    .nullable()
+    .nullish()
     .optional()
     .describe(
       'a (public) cryptographic user id which is used to identify the user in different chats',
     ),
   secretPublicKey: z
     .string()
-    .nullable()
+    .nullish()
     .optional()
     .describe('A (public) cryptographic key which is used to encrypt secrets'),
   selectedTaskId: z
@@ -482,7 +500,7 @@ export const llmSettings = z.object({
     .describe('Enable OpenAI function selection, currently outdated.'),
   selectedApi: z
     .string()
-    .nullable()
+    .nullish()
     .default('taskyon')
     .describe('which of the defined APIs are we currently using?'),
   llmApis: z.record(apiConfig).default({}).describe('A list of OpenAI compatible API definitions.'),

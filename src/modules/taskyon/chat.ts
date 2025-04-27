@@ -1,7 +1,7 @@
 import type { OpenRouterGenerationInfo, Model, llmSettings } from './types'
 import type OpenAI from 'openai'
 import { sleep, asyncTimeLruCache } from '../utils'
-import { TaskProcessingError } from './types'
+import { ChatResponseType, TaskProcessingError } from './types'
 import { charHash } from '../crypto_webcrypto'
 
 export function generateHeaders(apiSecret: string, siteUrl: string, selectedApi: string) {
@@ -24,97 +24,87 @@ export function generateHeaders(apiSecret: string, siteUrl: string, selectedApi:
   return headers
 }
 
-function accumulateChatCompletion(chunks: OpenAI.ChatCompletionChunk[]): OpenAI.ChatCompletion {
-  if (!chunks[0]) {
-    throw new Error('The message is empty!!')
-  }
-
-  const firstChunk = chunks[0]
-
-  // Initialize the response with default values from the first chunk
-  const response: OpenAI.ChatCompletion = {
-    id: firstChunk.id,
-    object: 'chat.completion',
-    created: firstChunk.created,
-    model: firstChunk.model,
-    choices: [
-      {
-        index: 0,
-        message: {
-          content: null,
-          refusal: null,
-          role: 'assistant',
-        },
-        finish_reason: 'stop',
-        logprobs: null,
-      },
-    ],
-  }
-
-  const toolCalls: Record<string, OpenAI.ChatCompletionMessageToolCall> = {}
-
-  // Step 1: Gather all top-level properties across chunks
-  for (const chunk of chunks) {
-    Object.assign(response, chunk) // This will overwrite all top-level properties
-  }
-
-  // Accumulate the content for the choices
-  const accumulatedChoice = chunks.reduce(
-    (acc, chunk) => {
-      const choiceIdx = 0
-      const currentChoice = chunk.choices[choiceIdx]
-
-      // Accumulate the content
-      if (currentChoice?.delta?.content) {
-        acc.message.content = (acc.message.content || '') + currentChoice.delta.content
+export function accumulateStep(
+  existing: OpenAI.ChatCompletion | ChatResponseType | undefined,
+  chunk: OpenAI.ChatCompletionChunk,
+): ChatResponseType {
+  // ─── 1) init or clone ───────────────────────────────────
+  const response: ChatResponseType = existing
+    ? { ...existing }
+    : {
+        id: chunk.id,
+        object: 'chat.completion',
+        created: chunk.created,
+        model: chunk.model,
+        choices: [],
       }
 
-      // Update role if present
-      acc.message.role =
-        (currentChoice?.delta?.role as OpenAI.ChatCompletionMessage['role']) || acc.message.role
+  // ─── 2) overwrite top-level with latest chunk ───────────
 
-      // Store last non-null finish_reason and logprobs
-      if (currentChoice?.finish_reason != null) {
-        acc.finish_reason = currentChoice.finish_reason
-      }
-      if (currentChoice?.logprobs != null) {
-        acc.logprobs = currentChoice.logprobs
-      }
+  const {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    choices: [chunkChoice0, ..._rest],
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    object: _ignoreObject,
+    ...meta
+  } = chunk
+  Object.assign(response, meta)
 
-      // Accumulate tool calls
-      for (const tc of chunk.choices[choiceIdx]?.delta?.tool_calls || []) {
-        // initialize toolCalls if it doesn't exist
-        // TODO: prepare openai tool cools
-        const tcnew = toolCalls[tc.index] || {
-          id: '',
-          type: 'function',
-          function: {
-            name: '',
-            arguments: '',
+  if (chunkChoice0) {
+    // ─── 3) grab our single choice and its delta ────────────
+    const choice = response.choices[0]
+      ? response.choices[0]
+      : ({
+          index: 0,
+          message: {
+            content: null,
+            refusal: null,
+            role: 'assistant',
+            tool_calls: [],
           },
-        }
-        tcnew.id += tc.id || ''
-        tcnew.function.name += tc.function?.name || ''
-        tcnew.function.arguments += tc.function?.arguments || ''
-        toolCalls[tc.index] = tcnew
+          finish_reason: 'cancelled',
+          logprobs: null,
+        } as ChatResponseType['choices'][0])
+    const delta = chunkChoice0.delta
+
+    // ─── 4) accumulate text + role + finish_reason/logprobs ─
+    if (delta.content) {
+      choice.message.content = (choice.message.content || '') + delta.content
+    }
+    if (delta.role) {
+      choice.message.role = delta.role
+    }
+
+    if (chunkChoice0.finish_reason) {
+      choice.finish_reason = chunkChoice0.finish_reason
+    }
+    if (chunkChoice0.logprobs) {
+      choice.logprobs = chunkChoice0.logprobs
+    }
+
+    // ─── 5) accumulate any tool_calls ────────────────────────
+    // rebuild a map from any existing tool_calls array
+    const toolCallsMap: Record<string, OpenAI.ChatCompletionMessageToolCall> = {}
+    for (const tc of choice.message.tool_calls || []) {
+      toolCallsMap[tc.id] = { ...tc }
+    }
+    // merge in new deltas
+    for (const tc of delta.tool_calls || []) {
+      const idx = tc.index
+      const entry = toolCallsMap[idx] ?? {
+        index: idx,
+        type: 'function',
+        id: '',
+        function: { name: '', arguments: '' },
       }
-      return acc
-    },
-    {
-      index: 0,
-      message: {
-        content: null,
-        role: 'assistant',
-      },
-      finish_reason: 'stop',
-    } as OpenAI.ChatCompletion['choices'][0],
-  )
-
-  // Add accumulated tool calls
-  accumulatedChoice.message.tool_calls = Object.values(toolCalls)
-
-  // Assign the accumulated choice to response
-  response.choices = [accumulatedChoice]
+      entry.id += tc.id || ''
+      entry.function.name += tc.function?.name || ''
+      entry.function.arguments += tc.function?.arguments || ''
+      toolCallsMap[idx] = entry
+    }
+    choice.message.tool_calls = Object.values(toolCallsMap)
+    response.choices[0] = choice // update the choice in the response
+  }
 
   return response
 }
@@ -138,10 +128,8 @@ export async function callLLM(
   maxRetries: number = 3, // Maximum number of retry attempts
   schema?: Record<string, unknown>, // optional schema for the response
   maxSchemaIdLength: number = 9, // max length of the schema id (default is 9, because e.g. mistral has that limit)
-): Promise<OpenAI.ChatCompletion | undefined> {
+): Promise<ChatResponseType | undefined> {
   const headers: Record<string, string> = generateHeaders(apiKey, siteUrl, api.name)
-  let chatCompletion: OpenAI.ChatCompletion | undefined = undefined
-
   if (!api.selectedModel) {
     throw new TaskProcessingError('You need to select an AI model in order to use the AI!')
   }
@@ -202,6 +190,7 @@ export async function callLLM(
         )
       }
 
+      let chatCompletion: ChatResponseType | undefined = undefined
       if (stream && response.body) {
         const reader = response.body.getReader()
         const decoder = new TextDecoder()
@@ -268,14 +257,17 @@ export async function callLLM(
         }
 
         // After finishing, accumulate the full chat completion
-        chatCompletion = accumulateChatCompletion(chunks)
-        break // Successfully received data, break out of retry loop
+        chatCompletion = chunks.reduce(accumulateStep, chatCompletion)!
       } else {
         // Non-streaming case: Just return the full response
-        const completion = await response.json()
-        chatCompletion = completion
-        break // Non-streaming case, exit retry loop
+        chatCompletion = await response.json()
+        break
       }
+      console.log('AI responded:', chatCompletion)
+      // we would like to keep any additional properties that are not part of the OpenAI.ChatCompletion type
+      // and are doin a "passthrough" here becaus of this :)
+      const resp = ChatResponseType.passthrough().parse(chatCompletion)
+      return resp
     } catch (error) {
       stopSignal.removeEventListener('abort', onAbort)
       console.error(`Attempt ${attempt} failed:`, error)
@@ -289,9 +281,6 @@ export async function callLLM(
       clearTimeout(timeoutId)
     }
   }
-
-  console.log('AI responded:', chatCompletion)
-  return chatCompletion
 }
 
 export async function getTaskyonCosts(

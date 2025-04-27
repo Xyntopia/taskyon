@@ -14,9 +14,10 @@ import type {
   TaskNode,
   TaskNodeMeta,
   OpenRouterGenerationInfo,
+  ChatResponseType,
 } from '../taskyon/types'
 import { FunctionCall, getCurrentModel } from '../taskyon/types'
-import { ChatResponseType, getApiConfigCopy } from '../taskyon/types'
+import { getApiConfigCopy } from '../taskyon/types'
 import { TaskProcessingError, type llmSettings } from '../taskyon/types'
 import { makeTaskResult, createTool, mapFunctionNames, type toolContext } from '../taskyon/tools'
 import {
@@ -725,19 +726,18 @@ export async function createChatCompletionTool(
       )
 
       // parse the response into our own type ...
-      const resp = ChatResponseType.safeParse(chatCompletion)
-      const choice = resp.data?.choices[0]
+      const choice = chatCompletion?.choices[0]
 
-      let metaInfo: TaskNodeMeta = { taskPrompt: chatInfo, rawOutput: resp }
+      let metaInfo: TaskNodeMeta = { taskPrompt: chatInfo, rawOutput: chatCompletion }
       // get token usage for this task..
       if (currentTask && lastTaskBeforeChatCompletion) {
-        if (resp.success) {
+        if (chatCompletion) {
           console.log('save token usage...')
           // openai & openrouter sends back the exact number of prompt tokens :)
           metaInfo = {
             ...metaInfo,
             ...(await saveTokenUsage(
-              resp.data,
+              chatCompletion,
               chatInfo.openAIConversationThread,
               toolDefs,
               lastTaskBeforeChatCompletion?.content,
@@ -747,7 +747,7 @@ export async function createChatCompletionTool(
           // we run this asynchronously, because it fetches data in the
           // background and we don't want to wait here...
 
-          void addTaskCostInformation(resp.data, currentTask?.id, llmSettings, apiKeys).then(
+          void addTaskCostInformation(chatCompletion, currentTask?.id, llmSettings, apiKeys).then(
             (newMeta) => {
               void taskManager.debugDb.upsert(currentTask.id, newMeta, 'shallow_merge')
             },
@@ -761,7 +761,7 @@ export async function createChatCompletionTool(
       if (!choice)
         throw new TaskProcessingError(
           'Our ChatCompletion tool did not get a valid response!',
-          resp.data,
+          chatCompletion,
         )
 
       // in case a schema was given, we simply use that schema and return it as a structured message

@@ -25,7 +25,7 @@ export type Goals = 'SimpleCompletion' | 'AnalyzeError' | 'ChooseTool' | 'Analyz
 export const UseToolBase = z.object({
   'use tool': yesno,
   'which tool': answer,
-  command: FunctionCall.nullable()
+  command: FunctionCall.nullish()
     // right now, we don't know a good way to simultanously
     // parse robustly and describe precisely
     // we simply "normalize" all "no, {}, null" etc.. into undefined

@@ -241,7 +241,7 @@
             </textarea>
             <div class="text-caption">finished completion:</div>
             <textarea
-              :value="taskChoice"
+              :value="taskChoice || null"
               readonly
               wrap="soft"
               style="width: 100%; height: 200px; background-color: inherit; color: inherit"
