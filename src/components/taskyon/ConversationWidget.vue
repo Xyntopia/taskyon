@@ -108,7 +108,7 @@
             <q-spinner-dots size="2rem" color="secondary" />
           </div>
         </q-card>
-        <div class="row items-center" v-if="lastWorkerEvent">
+        <div class="row items-center" v-if="lastWorkerEvent && tystate.workerStreamLogs.length > 0">
           <q-btn flat dense no-caps :icon-right="matArrowDropDown" @click="showLogs = !showLogs">
             <span
               style="
@@ -117,8 +117,10 @@
                 overflow: hidden;
                 text-overflow: ellipsis;
               "
+              class="text-caption text-weight-light"
             >
-              Current Task State: {{ lastWorkerEvent?.stage }}
+              {{ lastWorkerEvent.stage !== 'all finished' ? 'Processing:' : ''
+              }}{{ lastWorkerEvent?.stage }}
               {{ lastWorkerEvent?.taskId || lastWorkerEvent?.task?.id }}
             </span>
           </q-btn>
