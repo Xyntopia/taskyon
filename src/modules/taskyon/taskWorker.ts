@@ -533,13 +533,14 @@ function createErrorTaskChain(
   allowedTools: string[],
   debugDb: CrudWrapper<TaskNodeMeta>,
 ) {
-  if (!analyzeErrorModel) throw new TaskProcessingError('No Model selected for Error analysis!!')
-
   const errorTask: partialTaskDraft = {
     role: 'system',
     content: {
       type: 'error',
-      data: `An error occured:\n\n\`\`\`\n${JSON.stringify(error)}\n\`\`\``,
+      data: `An error occured:
+\`\`\`javscript
+${JSON.stringify(error)}
+\`\`\``,
     },
   }
   const debugInfo = {
@@ -550,7 +551,10 @@ function createErrorTaskChain(
     errorTask.content = {
       //message: `An error occured: ${error.message}:\n\n${dump(error.details, { skipInvalid: true })}`,
       type: 'error',
-      data: `An error occured:\n\n\`\`\`\n${error.message}${error.details ? ':\n\n' + JSON.stringify(makeSerializable(error.details, 7)) : ''}\n\`\`\``,
+      data: `An error occured: ${error.message}
+\`\`\`javascript
+${error.details ? ':\n\n' + JSON.stringify(makeSerializable(error.details, 7)) : ''}
+\`\`\``,
     }
     if (task) {
       debugInfo.error = {
@@ -563,7 +567,10 @@ function createErrorTaskChain(
   } else if (error instanceof Error) {
     errorTask.content = {
       type: 'error',
-      data: `An error occured:\n\n\`\`\`\n${error.message}\n\n${JSON.stringify(error)}\n\`\`\``,
+      data: `An error occured: ${error.message}
+\`\`\`javascript
+${JSON.stringify(error)}
+\`\`\``,
     }
     if (task) {
       debugInfo.error = {
@@ -578,11 +585,15 @@ function createErrorTaskChain(
 
   return [
     errorTask,
-    createChatCompletionTask({
-      model: analyzeErrorModel,
-      goal: 'AnalyzeError',
-      llmTools,
-      allowedTools,
-    }),
+    ...(analyzeErrorModel
+      ? [
+          createChatCompletionTask({
+            model: analyzeErrorModel,
+            goal: 'AnalyzeError',
+            llmTools,
+            allowedTools,
+          }),
+        ]
+      : []),
   ]
 }
