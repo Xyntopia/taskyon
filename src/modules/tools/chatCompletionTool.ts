@@ -339,35 +339,35 @@ const robustKeys = createDeepTransformer({
 // this is usually not needed if we use llmTools (like built-in tools from openai API)
 // TODO: ability to parse multiple commands/tasks...
 function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]): FunctionCall[] {
+  // all of the following is done in order to make this as robust as possible
+  // thats also why we don't just simply use zod validation on this.
   const structResponse = parseYamlResponse2Record(choice.message.content || '')
-  // following makes answers more robust and converts all falsy values such as {}, null, no, false
-  // etc..   to a simple boolean false
   const structResponseN = normalizeFalsyValues(structResponse)
-  // depending on what role and tasktype the finishedTask has, we
-  // expect different results from our structuredResponse
-
-  // we can use the robustKeys function to normalize the keys of our structured response
-  // to make this more robust
   const lowerStructResponse = robustKeys(structResponseN) as Record<string, string | boolean>
-  // because of our robustKeys, we can now use lower case keys without spaces and punctuation or anything...
-  const useTool =
-    lowerStructResponse['usetool'] &&
-    (!('tryagain' in lowerStructResponse) || lowerStructResponse['tryagain'])
 
-  if (useTool) {
-    let res = FunctionCall.safeParse(structResponse.command)
-    if (res.error) {
-      // try one more time using all lower case
-      res = FunctionCall.safeParse(lowerStructResponse.command)
-    }
-    if (res.success) {
-      const command = res.data
-      return [command]
-    }
-    throw new TaskProcessingError(`The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
- suggests we should use a tool, but we could not parse the ${JSON.stringify(structResponse.command)} property.`)
+  // 2. coerce flags with !!
+  const useTool = !!lowerStructResponse['usetool']
+  // if 'tryagain' is missing, assume true
+  const tryAgain = !!('tryagain' in lowerStructResponse ? lowerStructResponse['tryagain'] : true)
+  // conflict = explicit "tryAgain: no" while useTool=true
+  const conflict = 'tryagain' in lowerStructResponse && !tryAgain
+
+  // 3. only proceed if we really want to call a tool
+  if (!useTool || conflict) {
+    return []
   }
-  return []
+  // we *are* doing basic zod validation on teh toolcommand though.
+  let res = FunctionCall.safeParse(structResponse.command)
+  if (res.error) {
+    // try one more time using all lower case
+    res = FunctionCall.safeParse(lowerStructResponse.command)
+  }
+  if (res.success) {
+    const command = res.data
+    return [command]
+  }
+  throw new TaskProcessingError(`The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
+ suggests we should use a tool, but we could not parse the ${JSON.stringify(structResponse.command)} property.`)
 }
 
 /**
