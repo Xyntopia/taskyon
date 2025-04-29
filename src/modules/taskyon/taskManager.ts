@@ -518,9 +518,10 @@ export async function useTyTaskManager(
       if (task) updateChildAndSiblingMap(task)
       return task
     },
-    set: async (id: string | number, task: TaskNode) => {
+    set: async (id: string | number, task: TaskNode, vectors = false) => {
+      await tyCrud.set(id, task)
       await tyCrud.get(task.id)
-      await addtoVectorDB(task)
+      if (vectors) void addtoVectorDB(task)
       // Update parent-child cache
       updateChildAndSiblingMap(task)
     },
@@ -628,7 +629,7 @@ export async function useTyTaskManager(
 
   // Recursively builds a tree node for the given task id.
   async function buildTaskTreeNode(taskId: string, maxDepth: number): Promise<TaskTreeNode> {
-    const task = await tyCrud.get(taskId)
+    const task = await tyCrudVec.get(taskId)
     if (!task) throw new Error(`Task ${taskId} not found`)
 
     const children: TaskTreeNode[][] = []
@@ -662,7 +663,7 @@ export async function useTyTaskManager(
             `Multiple siblings found for task ${currentId}. Using the latest created task.`,
           )
           const siblingArray = Array.from(siblingSet)
-          const siblingTasks = await Promise.all(siblingArray.map((id) => tyCrud.get(id)))
+          const siblingTasks = await Promise.all(siblingArray.map((id) => tyCrudVec.get(id)))
           siblingTasks.sort((a, b) => (b?.created_at ?? 0) - (a?.created_at ?? 0))
           siblingTasks
             .slice(1)
@@ -761,7 +762,7 @@ export async function useTyTaskManager(
     let currentTaskId = leafId
 
     while (currentTaskId) {
-      const currentTask = await tyCrud.get(currentTaskId)
+      const currentTask = await tyCrudVec.get(currentTaskId)
       if (!currentTask) break // Break if a task doesn't exist
 
       // Check if the parent task has more than one child
@@ -774,7 +775,7 @@ export async function useTyTaskManager(
       }
 
       // Delete the current task
-      void tyCrud.delete(currentTaskId)
+      void tyCrudVec.delete(currentTaskId)
 
       if (currentTask.priorID) {
         // Move to the parent task
@@ -913,7 +914,7 @@ export async function useTyTaskManager(
     if (result.success) {
       const taskList = result.data
       taskList.forEach((t) => {
-        void tyCrud.set(t.id, t)
+        void tyCrudVec.set(t.id, t)
         last_task_id = t.id
       })
     }
@@ -972,7 +973,7 @@ export async function useTyTaskManager(
     void extractKeywords(chatString, 5).then((kws) => {
       console.log('update task with kw: ', kws)
       newTask.name = kws[0]
-      void tyCrud.upsert(newTask.id, newTask)
+      void tyCrudVec.upsert(newTask.id, newTask)
     })
   }
 
@@ -1008,10 +1009,10 @@ export async function useTyTaskManager(
     // task was already added at a previous point...
     // TODO: can we get rid of "setTask"? because we can generate task IDs now independently
     //       from whichever database we're using...
-    if (await tyCrud.get(newTask.id)) return newTask
+    if (await tyCrudVec.get(newTask.id)) return newTask
 
     console.log('create new Task:', newTask.id)
-    await tyCrud.set(newTask.id, newTask)
+    await tyCrudVec.set(newTask.id, newTask, true)
 
     // extract keywordsfrom entire chat and use it to name the task...
     // but only if a taskname doesn't exist yet.
@@ -1065,7 +1066,6 @@ export async function useTyTaskManager(
     getTask: tyCrudVec.get,
     deleteTask: tyCrudVec.delete,
     searchTasks,
-    setTask: tyCrudVec.set,
     taskStream: tyCrudVec.liveStream,
     updateToolDefinitions,
     getJsonTaskBackup,
