@@ -1,4 +1,4 @@
-import type { OpenRouterGenerationInfo, Model, llmSettings } from './types'
+import type { OpenRouterGenerationInfo, Model, llmSettings, OpenAIMessage } from './types'
 import type OpenAI from 'openai'
 import { sleep, asyncTimeLruCache } from '../utils'
 import { ChatResponseType, TaskProcessingError } from './types'
@@ -84,25 +84,26 @@ export function accumulateStep(
 
     // ─── 5) accumulate any tool_calls ────────────────────────
     // rebuild a map from any existing tool_calls array
-    const toolCallsMap: Record<string, OpenAI.ChatCompletionMessageToolCall> = {}
-    for (const tc of choice.message.tool_calls || []) {
-      toolCallsMap[tc.id] = { ...tc }
-    }
+    const toolCallsMap: Record<string, NonNullable<OpenAIMessage['tool_calls']>[0]> = {}
     // merge in new deltas
     for (const tc of delta.tool_calls || []) {
-      const idx = tc.index
-      const entry = toolCallsMap[idx] ?? {
-        index: idx,
+      const index = tc.index || 0
+      // check if we had a tool call with this index before
+      const entry = choice.message.tool_calls?.[index] ?? {
+        index: 0,
         type: 'function',
         id: '',
         function: { name: '', arguments: '' },
       }
+      // entry.idx // I assume this is an old entry...we don't use it anymore..
       entry.id += tc.id || ''
       entry.function.name += tc.function?.name || ''
       entry.function.arguments += tc.function?.arguments || ''
-      toolCallsMap[idx] = entry
+      toolCallsMap[index] = entry
     }
-    choice.message.tool_calls = Object.values(toolCallsMap)
+    if (Object.keys(toolCallsMap).length > 0) {
+      choice.message.tool_calls = Object.values(toolCallsMap)
+    }
     response.choices[0] = choice // update the choice in the response
   }
 

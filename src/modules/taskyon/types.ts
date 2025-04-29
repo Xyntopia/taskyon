@@ -50,7 +50,7 @@ it shows whether a task flow is seen as "completed" or whether its waiting
 to be further processed... E.g. there could be a task with no results, which stil counts as "completed"`)
 export type TaskState = z.infer<typeof TaskState>
 
-const OpenAIMessage = z.object({
+export const OpenAIMessage = z.object({
   content: z.string().nullish(),
   //finish_reason: z.enum(['length', 'function_call', 'tool_calls', 'stop', 'content_filter']),
   tool_calls: z
