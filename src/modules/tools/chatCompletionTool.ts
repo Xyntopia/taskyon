@@ -343,31 +343,42 @@ function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]
   // thats also why we don't just simply use zod validation on this.
   const structResponse = parseYamlResponse2Record(choice.message.content || '')
   const structResponseN = normalizeFalsyValues()(structResponse)
-  const lowerStructResponse = robustKeys(structResponseN) as Record<string, string | boolean>
+  const lowerStruct = robustKeys(structResponseN) as Record<string, string | boolean>
 
-  // 2. coerce flags with !!
-  const useTool = !!lowerStructResponse['usetool']
-  // if 'tryagain' is missing, assume true
-  const tryAgain = !!('tryagain' in lowerStructResponse ? lowerStructResponse['tryagain'] : true)
-  // conflict = explicit "tryAgain: no" while useTool=true
-  const conflict = 'tryagain' in lowerStructResponse && !tryAgain
+  // primary “call?” signal
+  const hasUseToolKey = 'usetool' in lowerStruct
+  const useTool = !!lowerStruct['usetool']
+
+  // if no useTool is present fallback
+  // const hasDWHTKey = 'dowehavetouseatool' in lowerStruct
+  const dwht = !!lowerStruct['dowehavetouseatool']
+  const whichToolKey =
+    typeof lowerStruct['whichtool'] === 'string' ? lowerStruct['whichtool'].toLowerCase() : ''
+
+  const tryAgain = !!lowerStruct['tryagain']
+
+  // attempt parse of a FunctionCall
+  let parsed = FunctionCall.safeParse(structResponse.command)
+  if (!parsed.success) {
+    parsed = FunctionCall.safeParse(lowerStruct.command)
+  }
 
   // 3. only proceed if we really want to call a tool
-  if (!useTool || conflict) {
-    return []
+  if (
+    (!hasUseToolKey && dwht && parsed.success && parsed.data.name === whichToolKey) ||
+    useTool ||
+    (tryAgain && useTool) ||
+    (dwht && tryAgain) ||
+    (dwht && useTool)
+  ) {
+    if (parsed.success) {
+      const command = parsed.data
+      return [command]
+    }
+    throw new TaskProcessingError(`The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
+   suggests we should use a tool, but we could not parse the ${JSON.stringify(structResponse.command)} property.`)
   }
-  // we *are* doing basic zod validation on teh toolcommand though.
-  let res = FunctionCall.safeParse(structResponse.command)
-  if (res.error) {
-    // try one more time using all lower case
-    res = FunctionCall.safeParse(lowerStructResponse.command)
-  }
-  if (res.success) {
-    const command = res.data
-    return [command]
-  }
-  throw new TaskProcessingError(`The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
- suggests we should use a tool, but we could not parse the ${JSON.stringify(structResponse.command)} property.`)
+  return []
 }
 
 /**
