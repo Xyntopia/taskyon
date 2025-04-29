@@ -140,7 +140,7 @@
 </template>
 
 <script setup lang="ts">
-import type { TaskNode } from 'src/modules/taskyon/types'
+import type { ChatResponseType, TaskNode } from 'src/modules/taskyon/types'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import { useQuasar } from 'quasar'
@@ -151,6 +151,7 @@ import { ref } from 'vue'
 import { type TaskTreeNode } from 'src/modules/taskyon/taskManager'
 import type { Unsubscribe } from 'src/modules/frpBus'
 import { matArrowDropDown } from '@quasar/extras/material-icons'
+import { accumulateStep } from 'src/modules/taskyon/chat'
 const $q = useQuasar()
 
 const tystate = useTaskyonStore()
@@ -170,7 +171,7 @@ const props = defineProps<{
   expertMode?: boolean
 }>()
 
-const streamingContentTracker = ref<Map<string, string>>(new Map<string, string>())
+const streamingTracker = ref<Map<string, ChatResponseType>>(new Map())
 
 let streamerUnsubscriber: Unsubscribe
 
@@ -202,24 +203,21 @@ function formatTimeStamp(timestamp: string | number | Date): string {
 
 void tystate.chatCompletionStream
   .subscribe(({ taskId, chunk }) => {
-    //console.log('received stream for', taskId)
-    if (chunk?.choices[0]?.delta?.tool_calls) {
-      chunk?.choices[0]?.delta?.tool_calls.forEach((t) => {
-        // TODO: add streaming for function calls
-        console.log(t)
-      })
-    }
-    if (chunk?.choices[0]?.delta?.content) {
-      streamingContentTracker.value.set(
-        taskId,
-        (streamingContentTracker.value.get(taskId) ?? '') + chunk.choices[0].delta.content,
-      )
-    }
+    if (!chunk) return
+    const currentStream = streamingTracker.value.get(taskId)
+    const updatedStream = accumulateStep(currentStream, chunk)
+    streamingTracker.value.set(taskId, updatedStream)
   })
   .then((unsubscribe) => (streamerUnsubscriber = unsubscribe))
 
 onBeforeUnmount(() => {
   streamerUnsubscriber()
+})
+
+const currentStream = computed(() => {
+  if (props.currentTask)
+    return streamingTracker.value.get(props.currentTask.id)?.choices?.[0]?.message?.content || ''
+  else return undefined
 })
 
 interface taskTreeNodeType {
@@ -334,11 +332,6 @@ async function onLazyLoad({
 
   done(subTaskTree)
 }
-
-const currentStream = computed(() => {
-  if (props.currentTask) return streamingContentTracker.value.get(props.currentTask.id)
-  else return undefined
-})
 
 // TODO: move this "one layer up" :)
 const toolList = asyncComputed(async () => {
