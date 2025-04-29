@@ -538,7 +538,7 @@ function createErrorTaskChain(
     content: {
       type: 'error',
       data: `An error occured:
-\`\`\`javscript
+\`\`\`javascript
 ${JSON.stringify(error)}
 \`\`\``,
     },
@@ -553,7 +553,7 @@ ${JSON.stringify(error)}
       type: 'error',
       data: `An error occured: ${error.message}
 \`\`\`javascript
-${error.details ? ':\n\n' + JSON.stringify(makeSerializable(error.details, 7)) : ''}
+${error.details ? '\n\n' + JSON.stringify(makeSerializable(error.details, 7)) : ''}
 \`\`\``,
     }
     if (task) {

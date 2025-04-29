@@ -317,12 +317,13 @@ If you are sure that none of the tools are relevant, your choice should be simpl
             },
           },
           (choice) => {
+            const filteredChoice = choice.filter((tool) => tool !== 'no')
             return makeTaskResult([
               [
                 createChatCompletionTask({
                   goal: 'ChooseTool',
                   prompts: ['Please use one of the tools you chose earlier'],
-                  allowedTools: choice,
+                  allowedTools: filteredChoice,
                   llmTools,
                 }),
               ],

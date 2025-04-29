@@ -15,6 +15,7 @@ import type {
   TaskNodeMeta,
   OpenRouterGenerationInfo,
   ChatResponseType,
+  FunctionArguments,
 } from '../taskyon/types'
 import { FunctionCall, getCurrentModel } from '../taskyon/types'
 import { getApiConfigCopy } from '../taskyon/types'
@@ -491,9 +492,20 @@ export function extractOpenAIFunctions(
     console.log('A function call was returned...')
     // we convert the object into our own FunctionCall and afterwards parse it, to make
     // sure it really worked...
+    let fargs: FunctionArguments = {}
+    try {
+      fargs = JSON.parse(toolCall.function.arguments)
+    } catch (error) {
+      console.warn('Failed to parse arguments as JSON:', error)
+      if (choice.finish_reason === 'cancelled') fargs = { cancelled: toolCall.function.arguments }
+      else
+        throw new TaskProcessingError('We cold not parse the function arguments as json', {
+          arguments: toolCall.function.arguments,
+        })
+    }
     const functionCallObj: FunctionCall = {
       name: toolCall.function.name,
-      arguments: JSON.parse(toolCall.function.arguments),
+      arguments: fargs,
     }
     const functionCall = FunctionCall.parse(functionCallObj)
     if (tools[functionCall.name]) {

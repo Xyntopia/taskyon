@@ -99,12 +99,15 @@
         >
           <div class="col">
             <ty-markdown
-              v-if="currentStream"
+              v-if="currentMessageStream"
               no-line-numbers
               no-mermaid
               :use-iframe="false"
-              :src="currentStream || ''"
+              :src="currentMessageStream || ''"
             />
+            <div>
+              {{ safeYamlDump(currentFunctionStream) }}
+            </div>
             <q-spinner-dots size="2rem" color="secondary" />
           </div>
         </q-card>
@@ -152,6 +155,7 @@ import { type TaskTreeNode } from 'src/modules/taskyon/taskManager'
 import type { Unsubscribe } from 'src/modules/frpBus'
 import { matArrowDropDown } from '@quasar/extras/material-icons'
 import { accumulateStep } from 'src/modules/taskyon/chat'
+import { safeYamlDump } from 'src/modules/yamlUtils'
 const $q = useQuasar()
 
 const tystate = useTaskyonStore()
@@ -214,9 +218,16 @@ onBeforeUnmount(() => {
   streamerUnsubscriber()
 })
 
-const currentStream = computed(() => {
+const currentMessageStream = computed(() => {
   if (props.currentTask)
     return streamingTracker.value.get(props.currentTask.id)?.choices?.[0]?.message?.content || ''
+  else return undefined
+})
+
+const currentFunctionStream = computed(() => {
+  if (props.currentTask)
+    return streamingTracker.value.get(props.currentTask.id)?.choices?.[0]?.message?.tool_calls?.[0]
+      ?.function
   else return undefined
 })
 

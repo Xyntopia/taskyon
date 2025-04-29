@@ -84,7 +84,12 @@ export function accumulateStep(
 
     // ─── 5) accumulate any tool_calls ────────────────────────
     // rebuild a map from any existing tool_calls array
+    const existingCalls = choice.message.tool_calls ?? []
     const toolCallsMap: Record<string, NonNullable<OpenAIMessage['tool_calls']>[0]> = {}
+    // 5a) seed from existingCalls by their array index
+    existingCalls.forEach((call, idx) => {
+      toolCallsMap[idx] = call
+    })
     // merge in new deltas
     for (const tc of delta.tool_calls || []) {
       const index = tc.index || 0
@@ -102,7 +107,9 @@ export function accumulateStep(
       toolCallsMap[index] = entry
     }
     if (Object.keys(toolCallsMap).length > 0) {
-      choice.message.tool_calls = Object.values(toolCallsMap)
+      choice.message.tool_calls = Object.keys(toolCallsMap)
+        .sort((a, b) => Number(a) - Number(b)) // Sort keys numerically
+        .map((key) => toolCallsMap[key]!) // Convert sorted keys to values
     }
     response.choices[0] = choice // update the choice in the response
   }
