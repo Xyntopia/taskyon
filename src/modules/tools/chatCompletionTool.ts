@@ -352,8 +352,7 @@ function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]
   // if no useTool is present fallback
   // const hasDWHTKey = 'dowehavetouseatool' in lowerStruct
   const dwht = !!lowerStruct['dowehavetouseatool']
-  const whichToolKey =
-    typeof lowerStruct['whichtool'] === 'string' ? lowerStruct['whichtool'].toLowerCase() : ''
+  const whichToolKey = lowerStruct['whichtool']
 
   const tryAgain = !!lowerStruct['tryagain']
 
