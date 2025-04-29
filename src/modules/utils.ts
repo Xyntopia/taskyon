@@ -805,13 +805,14 @@ export const createDeepTransformer = ({
     // 1) allow valueFn to replace entire node
     const v1 = valueFn(node)
 
-    // 2) stop if not an object
+    // 2) stop if primitive / null
     if (v1 == null || typeof v1 !== 'object') return v1
 
-    // 3) otherwise deep-dive
+    // 3a) arrays
     if (Array.isArray(v1)) {
       return v1.map(recurse)
     }
+    // 3b) maps
     if (v1 instanceof Map) {
       const m = new Map()
       v1.forEach((val, key) => {
@@ -820,22 +821,17 @@ export const createDeepTransformer = ({
       })
       return m
     }
+    // 3c) sets
     if (v1 instanceof Set) {
       return new Set(Array.from(v1).map(recurse))
     }
-    // plain object (allow symbol or number keys)
-    return Object.entries(v1 as Record<string, unknown>).reduce(
-      (acc, [k, val]) => {
-        // original key is string; let keyFn return string|number|symbol
-        const nk = (keyFn(
-          // try to coerce numeric strings back to numbers
-          /^\d+$/.test(k) ? Number(k) : k,
-          val,
-        )(acc)[nk] = recurse(val))
-        return acc
-      },
-      {} as Record<string | number | symbol, unknown>,
-    )
+    // 3d) plain objects
+    const out: Record<string | number | symbol, unknown> = {}
+    for (const [rawKey, val] of Object.entries(v1 as Record<string, unknown>)) {
+      const nk = keyFn(rawKey, val)
+      out[nk] = recurse(val)
+    }
+    return out
   }
 
   return recurse
