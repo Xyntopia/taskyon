@@ -342,7 +342,7 @@ function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]
   // all of the following is done in order to make this as robust as possible
   // thats also why we don't just simply use zod validation on this.
   const structResponse = parseYamlResponse2Record(choice.message.content || '')
-  const structResponseN = normalizeFalsyValues(structResponse)
+  const structResponseN = normalizeFalsyValues()(structResponse)
   const lowerStructResponse = robustKeys(structResponseN) as Record<string, string | boolean>
 
   // 2. coerce flags with !!
