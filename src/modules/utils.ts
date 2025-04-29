@@ -792,6 +792,55 @@ export const createKeyTransformer = (keyTransformer: (key: string) => string) =>
   return transform
 }
 
+export const createDeepTransformer = ({
+  // Default keyFn gets the original key (string|number|symbol) and its current value
+  keyFn = (k: string | number | symbol) => k,
+  // Default valueFn can replace any node; non-objects stop recursion
+  valueFn = <T>(v: T): T => v,
+}: {
+  keyFn?: (key: string | number | symbol, val: unknown) => string | number | symbol
+  valueFn?: <T>(val: T) => T
+} = {}) => {
+  const recurse = (node: unknown): unknown => {
+    // 1) allow valueFn to replace entire node
+    const v1 = valueFn(node)
+
+    // 2) stop if not an object
+    if (v1 == null || typeof v1 !== 'object') return v1
+
+    // 3) otherwise deep-dive
+    if (Array.isArray(v1)) {
+      return v1.map(recurse)
+    }
+    if (v1 instanceof Map) {
+      const m = new Map()
+      v1.forEach((val, key) => {
+        const nk = keyFn(key, val)
+        m.set(nk, recurse(val))
+      })
+      return m
+    }
+    if (v1 instanceof Set) {
+      return new Set(Array.from(v1).map(recurse))
+    }
+    // plain object (allow symbol or number keys)
+    return Object.entries(v1 as Record<string, unknown>).reduce(
+      (acc, [k, val]) => {
+        // original key is string; let keyFn return string|number|symbol
+        const nk = (keyFn(
+          // try to coerce numeric strings back to numbers
+          /^\d+$/.test(k) ? Number(k) : k,
+          val,
+        )(acc)[nk] = recurse(val))
+        return acc
+      },
+      {} as Record<string | number | symbol, unknown>,
+    )
+  }
+
+  return recurse
+}
+
 // this function "normalizes" boolean-like input this makes our llm structured
 // response parsing more robust.
 export function normalizeFalsyValues<T>(input: T): T {
