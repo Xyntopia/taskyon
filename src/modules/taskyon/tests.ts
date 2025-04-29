@@ -6,9 +6,126 @@ import { getTextFile } from './taskUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useIpfs } from './ipfs'
 import { getDatabase } from '../pglite.api'
+import { createDeepTransformer, normalizeFalsyValues } from '../utils'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
+
+export function testCreateDeepTansformer() {
+  const errors: unknown[] = []
+  function assert(cond: unknown, msg: string) {
+    if (!cond) errors.push(msg)
+  }
+
+  // Test 1: key-normalization
+  const robustKeys = createDeepTransformer({
+    keyFn: (k) =>
+      String(k)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, ''),
+  })
+  const input1 = {
+    'Foo-Bar': 1,
+    Nested_Key: { 'Inner Map': 2 },
+    arr: [{ 'X-Y': 3 }],
+  }
+  const expected1 = {
+    foobar: 1,
+    nestedkey: { innermap: 2 },
+    arr: [{ xy: 3 }],
+  }
+  const output1 = robustKeys(input1)
+  assert(
+    JSON.stringify(output1) === JSON.stringify(expected1),
+    `robustKeys failed:\n  expected ${JSON.stringify(expected1)}\n  got      ${JSON.stringify(output1)}`,
+  )
+
+  // Test 2: falsy-value normalization
+  const normalize = normalizeFalsyValues()
+  const input2 = {
+    a: 'no',
+    b: 'yes',
+    c: 0,
+    d: 'OK',
+    nested: ['n/a', 'Y'],
+  }
+  const expected2 = {
+    a: false,
+    b: 'yes',
+    c: false,
+    d: 'OK',
+    nested: [false, 'Y'],
+  }
+  const output2 = normalize(input2)
+  assert(
+    JSON.stringify(output2) === JSON.stringify(expected2),
+    `normalizeFalsyValues failed:\n  expected ${JSON.stringify(expected2)}\n  got      ${JSON.stringify(output2)}`,
+  )
+
+  return {
+    success: errors.length === 0,
+    errors,
+  }
+}
+
+export const testChatCompletion = async () => {
+  console.log('request a random secret from the store')
+
+  const tm = await tystate.getTaskManager()
+
+  const tools = await tm.updateToolDefinitions()
+
+  const stopSignal = new AbortController().signal
+
+  // Invoke the real tool
+  const chatCompletion = tools['chatCompletion']
+  let structuredResponse
+  if (chatCompletion && 'function' in chatCompletion && chatCompletion.function !== undefined) {
+    structuredResponse = await chatCompletion.function(
+      {
+        model: 'gpt-4.1-nano',
+        prompts: [
+          `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
+        ],
+        schema: {
+          type: 'object',
+          properties: {
+            user: {
+              type: 'object',
+              description: new Date().toISOString(),
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+              },
+              additionalProperties: false,
+              required: ['id', 'name'],
+            },
+            preferences: {
+              type: 'object',
+              properties: {
+                theme: { type: 'string', enum: ['light', 'dark'] },
+              },
+              additionalProperties: false,
+              required: ['theme'],
+            },
+          },
+          additionalProperties: false,
+          required: ['user', 'preferences'],
+        },
+      },
+      {
+        taskChain: [],
+        getSecret: () => Promise.resolve('test'),
+        setSecret: () => console.log('set test secret'),
+        stopSignal,
+      },
+    )
+  }
+
+  return {
+    structuredResponse,
+  }
+}
 
 export const testPGLite = async () => {
   const db = await getDatabase('chatStore')

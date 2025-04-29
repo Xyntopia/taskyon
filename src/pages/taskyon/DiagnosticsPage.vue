@@ -35,7 +35,7 @@ import { useTaskyonStore } from 'stores/taskyonState'
 import { ref } from 'vue'
 import { exportFile } from 'quasar'
 import { dump } from 'js-yaml'
-import { copyToClipboard } from 'src/modules/utils'
+import { copyToClipboard, getEnvironmentInfo } from 'src/modules/utils'
 import { matContentCopy } from '@quasar/extras/material-icons'
 import {
   markdownGeneration,
@@ -44,6 +44,7 @@ import {
   testTransformersPipeline,
   testVectorizerInitialization,
   testVectorizeText,
+  testChatCompletion,
 } from 'src/modules/taskyon/tests'
 import { useGdrive } from 'src/modules/gdrive'
 import { useAppStateStore } from 'src/stores/appState'
@@ -54,6 +55,7 @@ import { zodToYamlString } from 'src/modules/yamlUtils'
 import { craeteToolJsonSchema, summarizeTools } from 'src/modules/taskyon/tools'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import { onMounted } from 'vue'
+import { testCreateDeepTansformer } from 'src/modules/taskyon/tests'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -121,65 +123,8 @@ async function generateReport(details = false, onlyFirst = false) {
   diagnostics.value = `report_date: ${new Date().toISOString()}\n`
 
   diagnostics.value += await runTest(
-    'test chatCompletion tool',
-    async () => {
-      console.log('request a random secret from the store')
-
-      const tm = await tystate.getTaskManager()
-
-      const tools = await tm.updateToolDefinitions()
-
-      const stopSignal = new AbortController().signal
-
-      // Invoke the real tool
-      const chatCompletion = tools['chatCompletion']
-      let structuredResponse
-      if (chatCompletion && 'function' in chatCompletion && chatCompletion.function !== undefined) {
-        structuredResponse = await chatCompletion.function(
-          {
-            model: 'gpt-4.1-nano',
-            prompts: [
-              `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
-            ],
-            schema: {
-              type: 'object',
-              properties: {
-                user: {
-                  type: 'object',
-                  description: new Date().toISOString(),
-                  properties: {
-                    id: { type: 'string' },
-                    name: { type: 'string' },
-                  },
-                  additionalProperties: false,
-                  required: ['id', 'name'],
-                },
-                preferences: {
-                  type: 'object',
-                  properties: {
-                    theme: { type: 'string', enum: ['light', 'dark'] },
-                  },
-                  additionalProperties: false,
-                  required: ['theme'],
-                },
-              },
-              additionalProperties: false,
-              required: ['user', 'preferences'],
-            },
-          },
-          {
-            taskChain: [],
-            getSecret: () => Promise.resolve('test'),
-            setSecret: () => console.log('set test secret'),
-            stopSignal,
-          },
-        )
-      }
-
-      return {
-        structuredResponse,
-      }
-    },
+    'test createDeeptransformer',
+    testCreateDeepTansformer,
     details,
   )
 
@@ -188,6 +133,10 @@ async function generateReport(details = false, onlyFirst = false) {
     console.log('diagnostics:', diagnostics.value)
     return
   }
+
+  diagnostics.value += await runTest('test chatCompletion tool', testChatCompletion, details)
+
+  diagnostics.value += await runTest('environment info', getEnvironmentInfo)
 
   diagnostics.value += await runTest(
     'Test Secret Store',

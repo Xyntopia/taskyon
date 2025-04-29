@@ -765,43 +765,16 @@ export function bigIntToString(obj: unknown): unknown {
   return obj
 }
 
-export const createKeyTransformer = (keyTransformer: (key: string) => string) => {
-  const transform = (obj: unknown): unknown => {
-    if (Array.isArray(obj)) {
-      return obj.map(transform)
-    } else if (obj instanceof Map) {
-      const newMap = new Map()
-      obj.forEach((value, key) => {
-        const newKey = typeof key === 'string' ? keyTransformer(key) : key
-        newMap.set(newKey, transform(value))
-      })
-      return newMap
-    } else if (obj instanceof Set) {
-      return new Set([...obj].map(transform))
-    } else if (obj !== null && typeof obj === 'object') {
-      return Object.entries(obj).reduce(
-        (acc, [key, value]) => {
-          acc[keyTransformer(key)] = transform(value)
-          return acc
-        },
-        {} as Record<string, unknown>,
-      )
-    }
-    return obj
-  }
-  return transform
-}
-
 export const createDeepTransformer = ({
   // Default keyFn gets the original key (string|number|symbol) and its current value
-  keyFn = (k: string | number | symbol) => k,
+  keyFn = (k) => k,
   // Default valueFn can replace any node; non-objects stop recursion
-  valueFn = <T>(v: T): T => v,
+  valueFn = (v) => v,
 }: {
   keyFn?: (key: string | number | symbol, val: unknown) => string | number | symbol
-  valueFn?: <T>(val: T) => T
+  valueFn?: <T>(val: T) => unknown
 } = {}) => {
-  const recurse = (node: unknown): unknown => {
+  const transform = (node: unknown): unknown => {
     // 1) allow valueFn to replace entire node
     const v1 = valueFn(node)
 
@@ -810,96 +783,70 @@ export const createDeepTransformer = ({
 
     // 3a) arrays
     if (Array.isArray(v1)) {
-      return v1.map(recurse)
+      return v1.map(transform)
     }
     // 3b) maps
     if (v1 instanceof Map) {
       const m = new Map()
       v1.forEach((val, key) => {
         const nk = keyFn(key, val)
-        m.set(nk, recurse(val))
+        m.set(nk, transform(val))
       })
       return m
     }
     // 3c) sets
     if (v1 instanceof Set) {
-      return new Set(Array.from(v1).map(recurse))
+      return new Set(Array.from(v1).map(transform))
     }
     // 3d) plain objects
     const out: Record<string | number | symbol, unknown> = {}
     for (const [rawKey, val] of Object.entries(v1 as Record<string, unknown>)) {
       const nk = keyFn(rawKey, val)
-      out[nk] = recurse(val)
+      out[nk] = transform(val)
     }
     return out
   }
 
-  return recurse
+  return transform
 }
+
+// Define the set of "falsy" values
+const falsyValues: Set<unknown> = new Set([
+  'no',
+  'n/a',
+  'na',
+  'nan',
+  'n',
+  'false',
+  false,
+  '0',
+  0,
+  '{}',
+  {},
+  'null',
+  null,
+  'undefined',
+  undefined,
+])
 
 // this function "normalizes" boolean-like input this makes our llm structured
 // response parsing more robust.
-export function normalizeFalsyValues<T>(input: T): T {
-  // Define the set of "falsy" values
-  const falsyValues: Set<unknown> = new Set([
-    'no',
-    'n/a',
-    'na',
-    'nan',
-    'n',
-    'false',
-    false,
-    '0',
-    0,
-    '{}',
-    {},
-    'null',
-    null,
-    'undefined',
-    undefined,
-  ])
-
-  const normalizer = false
-  // Helper function to normalize falsy values
-  const normalize = (value: unknown): unknown => {
-    if (typeof value === 'string') {
-      const lowerCaseValue = value.toLowerCase()
-      if (falsyValues.has(lowerCaseValue)) {
-        return normalizer // Normalize falsy values to "undefined"
+export const normalizeFalsyValues = (normalizer: unknown = false): ((node: unknown) => unknown) =>
+  createDeepTransformer({
+    valueFn: (value) => {
+      if (typeof value === 'string') {
+        const lowerCaseValue = value.toLowerCase()
+        if (falsyValues.has(lowerCaseValue)) {
+          return normalizer // Normalize falsy values to "undefined"
+        }
+      } else if (typeof value === 'boolean') {
+        return value ? value : normalizer // Convert boolean false to "undefined"
+      } else if (falsyValues.has(value)) {
+        return normalizer // Convert null, undefined, or falsy values
       }
-    } else if (typeof value === 'boolean') {
-      return value ? value : normalizer // Convert boolean false to "undefined"
-    } else if (falsyValues.has(value)) {
-      return normalizer // Convert null, undefined, or falsy values
-    }
-    return value // Return unchanged if no conversion needed
-  }
-
-  // Recursive function to traverse and normalize the input
-  const traverse = (obj: unknown): unknown => {
-    if (Array.isArray(obj)) {
-      return obj.map(traverse) // Traverse arrays
-    } else if (obj instanceof Map) {
-      const result = new Map<unknown, unknown>()
-      obj.forEach((v, k) => result.set(k, traverse(v)))
-      return result
-    } else if (obj instanceof Set) {
-      const result = new Set<unknown>()
-      obj.forEach((v) => result.add(traverse(v)))
-      return result
-    } else if (typeof obj === 'object' && obj !== null) {
-      const result: { [key: string]: unknown } = {}
-      Object.entries(obj).forEach(([key, value]) => {
-        result[key] = traverse(value) // Traverse nested objects
-      })
-      return result
-    } else {
-      return normalize(obj) // Normalize primitive values
-    }
-  }
-
-  return traverse(input) as T
-}
+      return value // Return unchanged if no conversion needed
+    },
+  })
 
 export function pickProperties(obj: object, keys: string[]) {
   return Object.fromEntries(Object.entries(obj).filter(([key]) => keys.includes(key)))
@@ -1030,3 +977,58 @@ export function isEmpty(obj: object): boolean {
 
   return true
 }
+
+export const getEnvironmentInfo = () => ({
+  publishDate: process.env.PUBLISH_DATE as unknown as string,
+  isBrowser: typeof window !== 'undefined' && typeof window.document !== 'undefined',
+  isNode:
+    typeof process !== 'undefined' && process.versions != null && process.versions.node != null,
+  os: (() => {
+    if (typeof process !== 'undefined' && process.platform) {
+      return process.platform // e.g., 'win32', 'darwin', 'linux'
+    }
+    if (typeof navigator !== 'undefined' && navigator.userAgent) {
+      return navigator.userAgent
+    }
+    return 'Unknown'
+  })(),
+  isMobile: typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent),
+  nodeVersion:
+    typeof process !== 'undefined' && process.versions?.node ? process.versions.node : null,
+  browserUserAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+  browserAppVersion: typeof navigator !== 'undefined' ? navigator.appVersion : null,
+  browserPlatform: typeof navigator !== 'undefined' ? navigator.platform : null,
+  hasWebAssembly: typeof WebAssembly !== 'undefined',
+  supportsServiceWorker: typeof navigator !== 'undefined' && 'serviceWorker' in navigator,
+  supportsES6: (() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      new Function('(a = 0) => a')
+      return true
+    } catch {
+      return false
+    }
+  })(),
+  timezone: typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone,
+  language: typeof navigator !== 'undefined' ? navigator.language : null,
+  memoryUsage: (() => {
+    interface PerformanceMemory {
+      usedJSHeapSize: number
+      totalJSHeapSize: number
+      jsHeapSizeLimit: number
+    }
+    if (
+      typeof performance !== 'undefined' &&
+      (performance as { memory?: PerformanceMemory }).memory
+    ) {
+      return JSON.stringify((performance as unknown as { memory: PerformanceMemory }).memory)
+    }
+    if (typeof process !== 'undefined' && process.memoryUsage) {
+      return process.memoryUsage()
+    }
+    return null
+  })(),
+  screenResolution: typeof screen !== 'undefined' ? `${screen.width}x${screen.height}` : null,
+  supportsBigInt: typeof BigInt !== 'undefined',
+  supportsFetch: typeof fetch !== 'undefined',
+})

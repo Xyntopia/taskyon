@@ -140,7 +140,7 @@
                     <q-btn flat label="Reset Settings" to="/settings/profile" />
                   </q-card-actions>
                   <q-card-section class="text-info" style="font-size: 0.75em">
-                    <div v-for="[name, value] of Object.entries(environmentInfo())" :key="name">
+                    <div v-for="[name, value] of Object.entries(environmentInfo)" :key="name">
                       {{ name }}: {{ value }}
                     </div>
                   </q-card-section>
@@ -199,8 +199,8 @@ import {
 import { useAppStateStore } from 'src/stores/appState'
 import { ref } from 'vue'
 import { QToolbar } from 'quasar'
+import { getEnvironmentInfo } from 'src/modules/utils'
 
-const publishDate = process.env.PUBLISH_DATE as unknown as string
 const state = useAppStateStore()
 const showAboutDialog = ref(false)
 
@@ -222,60 +222,7 @@ const ShareDialogBtn = defineAsyncComponent(
     ),
 )
 
-const environmentInfo = () => ({
-  publishDate,
-  isBrowser: typeof window !== 'undefined' && typeof window.document !== 'undefined',
-  isNode:
-    typeof process !== 'undefined' && process.versions != null && process.versions.node != null,
-  os: (() => {
-    if (typeof process !== 'undefined' && process.platform) {
-      return process.platform // e.g., 'win32', 'darwin', 'linux'
-    }
-    if (typeof navigator !== 'undefined' && navigator.userAgent) {
-      return navigator.userAgent
-    }
-    return 'Unknown'
-  })(),
-  isMobile: typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent),
-  nodeVersion:
-    typeof process !== 'undefined' && process.versions?.node ? process.versions.node : null,
-  browserUserAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
-  browserAppVersion: typeof navigator !== 'undefined' ? navigator.appVersion : null,
-  browserPlatform: typeof navigator !== 'undefined' ? navigator.platform : null,
-  hasWebAssembly: typeof WebAssembly !== 'undefined',
-  supportsServiceWorker: typeof navigator !== 'undefined' && 'serviceWorker' in navigator,
-  supportsES6: (() => {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-implied-eval
-      new Function('(a = 0) => a')
-      return true
-    } catch {
-      return false
-    }
-  })(),
-  timezone: typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone,
-  language: typeof navigator !== 'undefined' ? navigator.language : null,
-  memoryUsage: (() => {
-    interface PerformanceMemory {
-      usedJSHeapSize: number
-      totalJSHeapSize: number
-      jsHeapSizeLimit: number
-    }
-    if (
-      typeof performance !== 'undefined' &&
-      (performance as { memory?: PerformanceMemory }).memory
-    ) {
-      return JSON.stringify((performance as unknown as { memory: PerformanceMemory }).memory)
-    }
-    if (typeof process !== 'undefined' && process.memoryUsage) {
-      return process.memoryUsage()
-    }
-    return null
-  })(),
-  screenResolution: typeof screen !== 'undefined' ? `${screen.width}x${screen.height}` : null,
-  supportsBigInt: typeof BigInt !== 'undefined',
-  supportsFetch: typeof fetch !== 'undefined',
-})
+const environmentInfo = getEnvironmentInfo()
 
 console.log(environmentInfo)
 </script>

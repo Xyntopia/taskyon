@@ -21,7 +21,7 @@ import { getApiConfigCopy } from '../taskyon/types'
 import { TaskProcessingError, type llmSettings } from '../taskyon/types'
 import { makeTaskResult, createTool, mapFunctionNames, type toolContext } from '../taskyon/tools'
 import {
-  createKeyTransformer,
+  createDeepTransformer,
   deepCopy,
   fileToBase64,
   isEmpty,
@@ -327,8 +327,12 @@ function parseYamlResponse2Record(message: string): Record<string, unknown> {
   return parsedYaml as Record<string, unknown>
 }
 
-const robustKeys = createKeyTransformer((key: string) => {
-  return key.toLowerCase().replace(/[^a-z0-9]/g, '')
+const robustKeys = createDeepTransformer({
+  keyFn: (key) => {
+    return String(key)
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+  },
 })
 
 // we use this to decide whether we should call a function or to continue
