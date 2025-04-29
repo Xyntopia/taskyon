@@ -238,10 +238,11 @@ async function useTaskVectors(
     if (existingVector) {
       console.log('vector already exists!', task.id)
     } else if (
-      task.content.type === 'functioncall' &&
-      task.content.data.name === 'chatCompletion'
+      (task.content.type === 'functioncall' &&
+        (task.content.data.name === 'chatCompletion' || task.content.data.name === 'chooseTool')) ||
+      (task.content.type === 'return' && task.content.data === 'assistant answered')
     ) {
-      console.log('skip indexing of chatCompletion')
+      console.log('skip indexing of task', task.id)
     } else if (vectorizerModel) {
       console.log('create vector...', task.id)
       const txt = task2Str(task)
