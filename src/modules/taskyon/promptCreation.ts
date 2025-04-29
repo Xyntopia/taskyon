@@ -8,13 +8,6 @@ const answer = z.string().nullish()
 const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish()
 type yesno = z.infer<typeof yesno>
 
-// Convert yesno value to boolean
-export const yesnoToBoolean = (value: unknown): boolean => {
-  if (value === 'yes') return true
-  if (value === 'no') return false
-  return !!value // Handles boolean, null, undefined
-}
-
 // TODO: don't add more "goals" to this list, we want chatCompletion to figure
 //       out the goals dynamically trough the parameters we provide and the messages coming before it...
 export type Goals = 'SimpleCompletion' | 'AnalyzeError' | 'ChooseTool' | 'AnalyzeToolResult'

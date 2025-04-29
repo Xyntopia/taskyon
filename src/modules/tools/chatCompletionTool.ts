@@ -6,7 +6,7 @@ import {
   getTaskyonCosts,
 } from '../taskyon/chat'
 import type { Goals } from '../taskyon/promptCreation'
-import { addPrompts, yesnoToBoolean } from '../taskyon/promptCreation'
+import { addPrompts } from '../taskyon/promptCreation'
 import type { TyTaskManager } from '../taskyon/taskManager'
 import type {
   partialTaskDraft,
@@ -340,27 +340,19 @@ const robustKeys = createDeepTransformer({
 // TODO: ability to parse multiple commands/tasks...
 function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]): FunctionCall[] {
   const structResponse = parseYamlResponse2Record(choice.message.content || '')
-  // following makes answers more robust...
+  // following makes answers more robust and converts all falsy values such as {}, null, no, false
+  // etc..   to a simple boolean false
   const structResponseN = normalizeFalsyValues(structResponse)
   // depending on what role and tasktype the finishedTask has, we
   // expect different results from our structuredResponse
-  // TODO: we need to do some plausibilitychecks here:
-  //       - e.g. if use tool=true, but no command present
-  // actually, it would be better to do this in the structreReponse processing ? :)
 
-  // we immediatly generate a follow up response here based on the structResponse. This avoids
-  // having to process it in another loop as we know the result already anyways.
-  // the "structuredMessage" type is mainly there so that the LLM can see what it said :).
-  // e.g. in case there is an error...
-  // In fact we always decide right here, what we do *after* the structured response and simply add the
-  // structured response as a normal "message" task to the chain...
-  // this way we can put all the parsing logic & interpretation and all of this here. While
-  // our tasks only have to process the actual data they are receiving
+  // we can use the robustKeys function to normalize the keys of our structured response
+  // to make this more robust
   const lowerStructResponse = robustKeys(structResponseN) as Record<string, string | boolean>
   // because of our robustKeys, we can now use lower case keys without spaces and punctuation or anything...
   const useTool =
-    yesnoToBoolean(lowerStructResponse['usetool']) &&
-    (!('tryagain' in lowerStructResponse) || yesnoToBoolean(lowerStructResponse['tryagain']))
+    lowerStructResponse['usetool'] &&
+    (!('tryagain' in lowerStructResponse) || lowerStructResponse['tryagain'])
 
   if (useTool) {
     let res = FunctionCall.safeParse(structResponse.command)
