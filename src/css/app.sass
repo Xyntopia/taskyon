@@ -39,8 +39,10 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     mask-image: linear-gradient(to bottom, black 50%, transparent 100%)
 
   .create-new-task
+    z-index: 21
     border-top-left-radius: 5px
     border-top-right-radius: 5px
+    box-shadow: 0 0 2px 1px rgba($primary,0.1) // Adds an outer border with the primary color
 
   .raw-markdown
     white-space: pre-wrap // This will display newlines and wrap text
@@ -145,7 +147,8 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
 
     .create-new-task
       backdrop-filter: blur(40px) brightness(1.0)
-      background-color: rgba(white, 0.3) // Adjust transparency as needed
+      background-color: rgba(white, 0.1) // Adjust transparency as needed
+      border: 0.5px solid rgba(white, 0.5)
 
     .tasks-container
       max-width: 800px
@@ -189,6 +192,8 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     .create-new-task
       background-color: rgba($primary, 0.3) // Adjust transparency as needed
       backdrop-filter: blur(40px) brightness(0.6)
+      border: 0.5px solid rgba(white, 0.1)
+      border-bottom: none
 
     .taskyon-control-button
       background-color: rgba($secondary,0.7)
