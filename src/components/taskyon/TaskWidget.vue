@@ -92,7 +92,7 @@
                 v-if="state.taskState[task.id]?.markdownEnabled != false"
                 no-line-numbers
                 :src="task.content.data"
-                use-iframe
+                :use-iframe="false"
               />
               <div v-else class="raw-markdown q-mb-md">
                 {{ task.content.data }}
