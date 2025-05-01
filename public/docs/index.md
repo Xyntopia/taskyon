@@ -18,7 +18,9 @@ New to Taskyon? Here's a step-by-step guide to help you get started:
 6. [**Add Tools to Taskyon**](/docs/tools): Define your own toolbox for taskyon in order to handle tasks. For example to query a database, send emails or upload content to a target URL.
 7. [**Explore Advanced Features**](/docs/taskyon_advanced): Learn about Taskyon's architecture, key concepts, and features.
 
-<!--3. [**Build Your First Tool**](): Create a simple tool using our example code and learn how to define tool functions, parameters, and responses.-->
+<!-- 3. [**Build Your First Tool**](): Create a simple tool using our example code and learn how to define tool functions, parameters, and responses. -->
+
+[comment]: <> (This is a comment)
 
 Let's get started with Taskyon!
 

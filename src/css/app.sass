@@ -1,11 +1,6 @@
 // app global css in Sass form
-
 $secondary: var(--q-secondary-rgb,#F78F3B)
 $primary: var(--q-primary-rgb,#2A3548)
-
-$primary-light: color-mix(in srgb, $primary 20%, white)
-$primary-light-dark: color-mix(in srgb, $primary 25%, white)
-$primary-dark: color-mix(in srgb, $primary 70%, black)
 
 @media screen
   .q-layout
@@ -69,6 +64,24 @@ $primary-dark: color-mix(in srgb, $primary 70%, black)
       background-attachment: fixed // fix background to viewport
       text-color: black
 
+    .q-markdown a:not(h1 a):not(h2 a):not(h3 a):not(h4 a):not(h5 a):not(h6 a)
+      color: color-mix(
+                in srgb,
+                rgb(var(--q-secondary-rgb)),
+                rgb(var(--q-primary-rgb))   50%
+              )
+
+      &:visited
+        color: color-mix(
+                in srgb,
+                rgb(var(--q-secondary-rgb)),
+                rgb(var(--q-primary-rgb))   50%
+              )
+
+      &[href^="http://"], &[href^="https://"]
+        color: $accent // Replace with a color for external links
+        text-decoration: underline
+
     .welcome-message-text
       filter: drop-shadow(0 0 5px white) drop-shadow(0 0 20px white)
 
@@ -103,7 +116,8 @@ $primary-dark: color-mix(in srgb, $primary 70%, black)
     .tasks-container
       max-width: 800px
 
-      // Specific style for tasks with the 'user' role
+      // Specific s  .q-dark
+      color: redtyle for tasks with the 'user' role
       .task-container
         &.user
           border: 1px solid rgba($primary,0.8)
@@ -111,11 +125,24 @@ $primary-dark: color-mix(in srgb, $primary 70%, black)
   .body--dark
     #q-app
       background-color: black
-      background: radial-gradient(ellipse at bottom left, rgba($primary, 1.0), transparent 80%), radial-gradient(ellipse at bottom right, rgba($secondary, 0.5) 0%, transparent 60%)
+      background: radial-gradient(ellipse at bottom left, rgba($primary, 1.0), transparent 80%), radial-gradient(ellipse at bottom right, rgba($secondary, 0.2) 0%, transparent 80%)
       background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
       background-size: cover // make sure we always cover entire viewport even if content is smaller
       background-attachment: fixed // fix background to viewport
-      text-color: white
+
+    .q-markdown a:not(h1 a):not(h2 a):not(h3 a):not(h4 a):not(h5 a):not(h6 a)
+      color: rgb($secondary)
+
+      &:visited
+        color: color-mix(
+                in srgb,
+                rgb(var(--q-secondary-rgb)),
+                rgb(var(--q-primary-rgb))   50%
+              )
+
+      &[href^="http://"], &[href^="https://"]
+        color: $accent // Replace with a color for external links
+        text-decoration: underline
 
     .create-new-task
       background-color: rgba($primary, 0.3) // Adjust transparency as needed
