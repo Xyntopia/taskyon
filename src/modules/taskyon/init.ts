@@ -20,6 +20,7 @@ import { storageTools } from '../tools/gdrive'
 import { appDevTools } from '../tools/webAppDev'
 import { fileTools } from '../tools/fileTools'
 import { localVectorStore } from '../tools/localVectorStore'
+import { proceduralTools } from '../tools/proceduralGraphics'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -41,6 +42,7 @@ export async function initTaskyon(
     ...fileTools,
     ...taskOrganizationTools,
     ...storageTools,
+    ...proceduralTools,
     executePythonScript,
     localVectorStore,
     executeJavaScript,
