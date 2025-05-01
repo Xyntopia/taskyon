@@ -4,7 +4,7 @@
       <div>Folder: {{ folder }}</div>
       <div>Path: {{ filePath }}</div>
     </div>
-    <q-card class="q-pa-sm">
+    <q-card flat class="q-pa-sm">
       <ty-markdown v-if="markdownContent" :src="markdownContent" no-line-numbers />
     </q-card>
   </q-page>

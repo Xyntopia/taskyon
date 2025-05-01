@@ -23,7 +23,7 @@
       </q-tabs>
     </q-toolbar>
     <div class="fit text-center"><ExpertEnable /></div>
-    <q-card class="q-ma-xs">
+    <q-card flat class="q-ma-xs">
       <q-tab-panels :model-value="selectedTab" animated swipeable infinite>
         <q-tab-panel name="aiserviceprovider" :class="tabPanelClass">
           <LLMProviders

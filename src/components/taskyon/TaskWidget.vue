@@ -423,20 +423,3 @@ function updateLabels(labels: string[]) {
   )*/
 }
 </script>
-
-<style lang="sass" scoped>
-.message-container
-    .message-buttons
-        position: absolute
-        bottom: -2px  // To move up by 6px
-        left: 20px   // To move left by 6px
-        opacity: 0
-        transition: opacity 0.3s
-
-    &:hover
-        .message-buttons
-            opacity: 1
-
-.raw-markdown
-  white-space: pre-wrap // This will display newlines and wrap text
-</style>

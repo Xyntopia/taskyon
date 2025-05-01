@@ -21,7 +21,7 @@
               <q-card
                 v-if="prop.node.task"
                 class="task-container"
-                :flat="$q.dark.isActive"
+                flat
                 :class="[prop.node.task.role, Object.keys(prop.node.task.content)[0]]"
                 @click.stop
               >
@@ -45,7 +45,7 @@
           <template #default-header="prop">
             <q-card
               class="task-container"
-              :flat="$q.dark.isActive"
+              flat
               :class="[prop.node.task.role, Object.keys(prop.node.task.content)[0]]"
               @click.stop
             >
@@ -68,9 +68,9 @@
           <div
             v-if="showAllTasks || showTask(task)"
             :key="task.id"
-            :class="`task-container row ${task.role === 'user' ? 'justify-end' : ''}`"
+            :class="`row ${task.role === 'user' ? 'justify-end' : ''}`"
           >
-            <q-card :flat="$q.dark.isActive" :class="[task.role, Object.keys(task.content)[0]]">
+            <q-card flat :class="[task.role, task.content.type, 'task-container']">
               <Task
                 :id="task.id"
                 :task="task"
@@ -80,7 +80,7 @@
                   !!tystate.lastTaskState.get(task.id) &&
                   tystate.lastTaskState.get(task.id) !== 'processed'
                 "
-                :class="['q-pa-xs', task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"
+                :class="['q-pa-xs']"
                 :show-id="!!showIds"
                 style="min-width: 300px"
               />
@@ -96,6 +96,7 @@
             tystate.lastTaskState.get(currentTask.id) !== 'processed'
           "
           class="row"
+          flat
         >
           <div class="col">
             <ty-markdown
@@ -146,7 +147,6 @@
 import type { ChatResponseType, TaskNode } from 'src/modules/taskyon/types'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
-import { useQuasar } from 'quasar'
 import { asyncComputed } from 'src/stores/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onBeforeUnmount } from 'vue'
@@ -156,7 +156,6 @@ import type { Unsubscribe } from 'src/modules/frpBus'
 import { matArrowDropDown } from '@quasar/extras/material-icons'
 import { accumulateStep } from 'src/modules/taskyon/chat'
 import { safeYamlDump } from 'src/modules/yamlUtils'
-const $q = useQuasar()
 
 const tystate = useTaskyonStore()
 const showLogs = ref(false)

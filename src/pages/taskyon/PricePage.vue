@@ -1,6 +1,6 @@
 <template>
   <q-page padding>
-    <q-card>
+    <q-card flat>
       <q-card-section>
         <ty-markdown
           :src="`
