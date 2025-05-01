@@ -14,8 +14,11 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
   .q-layout
     background-color: inherit
 
-  .q-drawer
+  .q-drawer--standard
     background-color: inherit
+
+  .q-drawer--on-top
+    box-shadow: 1px 0 1px rgba($secondary, 0.5)
 
   .q-header
     z-index: 20
@@ -135,9 +138,11 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       color: white
 
     .q-header
+      // this is for the text color :)
       color: rgb($primary)
 
     .q-drawer
+      // this is for the text color :)
       color: rgb($primary)
 
     .button-group
