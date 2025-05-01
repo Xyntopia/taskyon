@@ -2,6 +2,14 @@
 $secondary: var(--q-secondary-rgb,#F78F3B)
 $primary: var(--q-primary-rgb,#2A3548)
 
+$app-bg-light: linear-gradient(
+  to bottom,
+  color-mix(in srgb, white, rgb(var(--q-primary-rgb)) 20%) 20%,
+  color-mix(in srgb, white, rgb(var(--q-secondary-rgb)) 20%) 100%
+)
+
+$app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%, transparent 80%), radial-gradient(ellipse at bottom left, rgb($primary), black 80%)
+
 @media screen
   .q-layout
     background-color: inherit
@@ -10,7 +18,25 @@ $primary: var(--q-primary-rgb,#2A3548)
     background-color: inherit
 
   .q-header
-    background-color: inherit
+    z-index: 20
+    background: inherit
+
+  .fade-top-overlay
+    position: fixed
+    left: 0
+    right: 0
+    height: 4rem
+    pointer-events: none
+    z-index: 19
+
+    //background-color: red
+    background-repeat: no-repeat
+    background-size: cover
+    background-attachment: fixed
+
+    // fade to transparent
+    -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%)
+    mask-image: linear-gradient(to bottom, black 50%, transparent 100%)
 
   .create-new-task
     border-top-left-radius: 5px
@@ -57,12 +83,20 @@ $primary: var(--q-primary-rgb,#2A3548)
   .body--light
     #q-app
       //background-color: white
-      background: linear-gradient(to bottom, rgba($primary, 0.2) 20%, rgba($secondary,0.2) 100%)
+      background: $app-bg-light
       // TODO: the following is duplicated in .body--dark:
       background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
       background-size: cover // make sure we always cover entire viewport even if content is smaller
       background-attachment: fixed // fix background to viewport
       text-color: black
+
+    .fade-top-overlay
+      // **exact same** gradient
+      background: $app-bg-light
+      //background-color: red
+      background-repeat: no-repeat
+      background-size: cover
+      background-attachment: fixed
 
     .q-markdown a:not(h1 a):not(h2 a):not(h3 a):not(h4 a):not(h5 a):not(h6 a)
       color: color-mix(
@@ -125,10 +159,18 @@ $primary: var(--q-primary-rgb,#2A3548)
   .body--dark
     #q-app
       background-color: black
-      background: radial-gradient(ellipse at bottom left, rgba($primary, 1.0), transparent 80%), radial-gradient(ellipse at bottom right, rgba($secondary, 0.2) 0%, transparent 80%)
+      background: $app-bg-dark
       background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
       background-size: cover // make sure we always cover entire viewport even if content is smaller
       background-attachment: fixed // fix background to viewport
+
+    .fade-top-overlay
+      // **exact same** gradient
+      background: $app-bg-dark
+      //background-color: red
+      background-repeat: no-repeat
+      background-size: cover
+      background-attachment: fixed
 
     .q-markdown a:not(h1 a):not(h2 a):not(h3 a):not(h4 a):not(h5 a):not(h6 a)
       color: rgb($secondary)
