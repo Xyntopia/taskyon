@@ -1,11 +1,11 @@
 // app global css in Sass form
 
-$secondary: var(--q-secondary,#F78F3B)
-$primary: var(--q-primary,#2A3548)
+$secondary: var(--q-secondary-rgb,#F78F3B)
+$primary: var(--q-primary-rgb,#2A3548)
 
 $primary-light: color-mix(in srgb, $primary 20%, white)
 $primary-light-dark: color-mix(in srgb, $primary 25%, white)
-$primary-dark: color-mix(in srgb, $primary 90%, black)
+$primary-dark: color-mix(in srgb, $primary 70%, black)
 
 $secondary-dark: color-mix(in srgb, $secondary 70%, black)
 
@@ -16,6 +16,16 @@ $primary-light-transparent: color-mix(in srgb, $primary-light 70%, transparent)
 //  padding-left: 5px
 
 @media screen
+  .q-layout
+    background-color: inherit
+
+  .q-drawer
+    background-color: inherit
+
+  .q-header
+    background-color: inherit
+
+  // common settings for both:  dark & light  
   .body--light
     background-color: $primary-light
     //text-color: white
@@ -23,17 +33,9 @@ $primary-light-transparent: color-mix(in srgb, $primary-light 70%, transparent)
     .toolbar
       background-color: $primary-light-transparent
 
-    .q-header
-      background-color: $primary-light-transparent
-      color: $primary
-      backdrop-filter: blur(10px) // Add this line to apply the blur effect
-
     .q-card
       background-color: white
       color: black
-
-    .q-drawer
-      background: linear-gradient(to bottom, $primary-light, $primary-light 10%, $primary-light-dark 90%)
 
     main.q-page
       //background: radial-gradient(circle, $primary-light-dark 0%, $primary-light-dark 20%, $primary-light 75%)
@@ -62,41 +64,18 @@ $primary-light-transparent: color-mix(in srgb, $primary-light 70%, transparent)
       //background: radial-gradient(circle, $primary-light-dark 0%, $primary-light-dark 20%, $primary-light 70%)
 
   .body--dark
-    background-color: $primary-dark
-    text-color: white
+    #q-app
+      background-color: black
+      background: radial-gradient(ellipse at bottom left, rgba($primary, 1.0), transparent 80%), radial-gradient(ellipse at bottom right, rgba($secondary, 0.5) 0%, transparent 60%)
+      background-repeat: no-repeat
+      background-size: cover
 
-    .q-markdown a:not(h1 a):not(h2 a):not(h3 a):not(h4 a):not(h5 a):not(h6 a)
-      color: $secondary
-
-      &:visited
-        color: $secondary-dark
-
-      // Styles for external links
-      &[href^="http://"], &[href^="https://"]
-        color: $accent // Replace with a color for external links
-        text-decoration: underline
-
-    // a
-    //   color: $info // Replace with your desired color
-    //   //text-decoration: none // Optional, removes underline
-
-    //   &:hover
-    //     color: $secondary // Replace with hover color
-    //     text-decoration: underline // Optional, adds underline on hover
-
-    //   &:visited
-    //     color: $secondary
+      //background-color: $secondary
+      text-color: white
 
     .toolbar
       background-color: $primary-dark-transparent
       backdrop-filter: blur(10px) // Add this line to apply the blur effect
-
-    .q-header
-      background-color: $primary-dark-transparent
-      backdrop-filter: blur(10px) // Add this line to apply the blur effect
-
-    .q-drawer
-      background-color: $primary-dark
 
     $secondary-dark: color-mix(in srgb, $secondary 15%, black)
     main.q-page:has(.welcome)

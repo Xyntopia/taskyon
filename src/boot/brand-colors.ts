@@ -1,12 +1,18 @@
+// $
 import { defineBoot } from '#q-app/wrappers'
 import { setCssVar } from 'quasar'
 
 export default defineBoot(() => {
   console.log('set colors! :)')
-  const primary = '#2A3548'
-  const secondary = '#F78F3B'
-  setCssVar('primary', primary)
-  setCssVar('secondary', secondary)
+  // 42, 53, 72
+  //const primary = '#2A3548'
+  // 247, 143, 59
+  //const secondary = '#F78F3B'
+  //setCssVar('primary', primary)
+  //setCssVar('secondary', secondary)
+  // we have to use "rgb" colors, in order to make them usbale in sass :)
+  setCssVar('primary-rgb', '42, 53, 72')
+  setCssVar('secondary-rgb', '247, 143, 59')
   //setCssVar('dark-shadow-color', '#FF0000')
   //setCssVar('primary', '#00fff0', document.body);
 
