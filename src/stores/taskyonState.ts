@@ -9,7 +9,7 @@ import {
   type storedSettings,
 } from 'src/modules/taskyon/types'
 import axios from 'axios' // TODO: replace with fetch
-import { Notify, setCssVar } from 'quasar' // load dynamically! :)
+import { Notify } from 'quasar' // load dynamically! :)
 import { useQuasar } from 'quasar'
 import { getApiConfig } from 'src/modules/taskyon/types'
 import { initTaskyon } from 'src/modules/taskyon/init'
@@ -20,6 +20,7 @@ import { useAppStateStore } from './appState'
 import { filter } from 'src/modules/frpBus'
 import { initializeSessionWithPasskey } from 'src/modules/cryptoSession'
 import { generateRsaOaepPair } from 'src/modules/crypto_webcrypto'
+import { setColors } from 'src/boot/brand-colors'
 
 function asyncProxy<T extends Record<keyof T, (...args: Parameters<T[keyof T]>) => unknown>>(
   initializer: () => Promise<T>,
@@ -398,8 +399,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     ],
     ([primary, secondary]) => {
       console.log('Set new brand colors!!', primary, secondary)
-      if (primary) setCssVar('primary', primary)
-      if (secondary) setCssVar('secondary', secondary)
+      setColors(primary, secondary)
     },
     {
       immediate: true,
