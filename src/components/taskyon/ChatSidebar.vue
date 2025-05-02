@@ -3,14 +3,14 @@
   <q-list dense class="q-pa-xs">
     <!-- Conversation Area -->
     <div>
-      <div class="q-pa-xs text-caption row justify-center items-center q-gutter-md">
-        <q-icon name="svguse:/taskyon_mono_opt.svg#taskyon" size="sm" />
-        <div>Conversations</div>
-      </div>
-      <div class="col-auto">
+      <!--div class="col-auto">
         <q-expansion-item dense :icon="matToc" label="Chat Content">
           <table-of-chat-content />
         </q-expansion-item>
+      </div-->
+      <div class="q-pa-xs text-caption row justify-center items-center q-gutter-md">
+        <q-icon name="svguse:/taskyon_mono_opt.svg#taskyon" size="sm" />
+        <div>Conversations</div>
       </div>
       <q-separator v-if="!state.minimalGui" spaced />
       <div class="column items-stretch">
@@ -120,11 +120,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, defineAsyncComponent } from 'vue'
+import { ref, watch } from 'vue'
 import SimpleSettings from './SimpleSettings.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import FileDropzone from 'components/FileDropzone.vue'
-import { matSearch, matManageAccounts, matFileUpload, matToc } from '@quasar/extras/material-icons'
+import { matSearch, matManageAccounts, matFileUpload } from '@quasar/extras/material-icons'
 import {
   mdiTools,
   mdiRobotConfusedOutline,
@@ -193,13 +193,13 @@ async function loadYamlConversation(files: File[]) {
   state.setSelectedTask(last_loaded_id || null)
 }
 
-const TableOfChatContent = defineAsyncComponent(
-  () =>
-    import(
-      /* webpackChunkName: "TableOfChatContent" */
-      /* webpackMode: "lazy" */
-      /* webpackFetchPriority: "low" */
-      'components/taskyon/TableOfChatContent.vue'
-    ),
-)
+// const TableOfChatContent = defineAsyncComponent(
+//   () =>
+//     import(
+//       /* webpackChunkName: "TableOfChatContent" */
+//       /* webpackMode: "lazy" */
+//       /* webpackFetchPriority: "low" */
+//       'components/taskyon/TableOfChatContent.vue'
+//     ),
+// )
 </script>
