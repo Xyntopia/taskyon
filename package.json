@@ -70,6 +70,7 @@
     "vue-json-pretty": "^2.2.4",
     "vue-router": "^4.0.12",
     "vue3-google-login": "^2.0.25",
+    "wavefunctioncollapse": "^2.1.0",
     "xlsx": "^0.18.2",
     "zod": "^3.22.4",
     "zod-to-json-schema": "^3.24.1"

@@ -16885,6 +16885,11 @@ watskeburt@^4.2.2:
   resolved "https://registry.yarnpkg.com/watskeburt/-/watskeburt-4.2.2.tgz#e24f0afc40b7ecf511bf24c285b91dee2df4f4a5"
   integrity sha512-AOCg1UYxWpiHW1tUwqpJau8vzarZYTtzl2uu99UptBmbzx6kOzCGMfRLF6KIRX4PYekmryn89MzxlRNkL66YyA==
 
+wavefunctioncollapse@^2.1.0:
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/wavefunctioncollapse/-/wavefunctioncollapse-2.1.0.tgz#a573588800316f321833e8698cbe50a38fe3928e"
+  integrity sha512-GclizlVcMKyS2POsjrKb8sHy//NXJj3EI7957Wa+f97DtiNOsj773CzftCo59Hylvb/RBefrqtv4k0pOFfS71g==
+
 wcwidth@^1.0.1:
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/wcwidth/-/wcwidth-1.0.1.tgz#f0b0dcf915bc5ff1528afadb2c0e17b532da2fe8"
