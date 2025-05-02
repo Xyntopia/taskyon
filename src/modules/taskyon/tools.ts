@@ -11,6 +11,7 @@ import { convertToYamlWComments } from '../zodUtils'
 import { executeCodeInIframe } from './iframeWorker'
 import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
 import type { JSONSchema7 } from 'json-schema'
+import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
 
 export const taskResult = z.object({
   taskResultMarker: z
@@ -157,6 +158,32 @@ function getTool(tools: Record<string, ToolBase | InternalTool>, name: string) {
 }
 
 /**
+ * Generate an object populated with all defaults from the provided JSON Schema.
+ *
+ * @param schema - A JSON Schema (with `default` fields on its properties).
+ * @returns A fresh object with all defaults applied.
+ */
+export async function createWithDefaults<T>(schema: JSONSchemaType<T> | JSONSchema7): Promise<T> {
+  const Ajv = await import(
+    /* webpackPrefetch: true */
+    /* webpackChunkName: "codemirror" */
+    /* webpackMode: "lazy" */
+    /* webpackFetchPriority: "low" */
+    'ajv'
+  )
+
+  const ajv = new Ajv.default({ useDefaults: true })
+
+  // Compile (or reuse) a validator that applies defaults
+  const validate: ValidateFunction<T> = ajv.compile<T>(schema as unknown as AnySchema)
+
+  // Start from an empty object; AJV will inject defaults into it
+  const result = {} as T
+  validate(result)
+  return result
+}
+
+/**
  * Handle function execution for LLMs.
  * All errors of this function result in an error task in the main task worker!
  *
@@ -179,6 +206,15 @@ export async function handleFunctionExecution(
   //       if not, throw an error message...
   let funcR: unknown
   const tool = getTool(tools, func.name)
+  const toolDefaultParams = await createWithDefaults(tool.parameters)
+  // mix in with explicit parameters
+  if (typeof func.arguments === 'object' && func.arguments !== null) {
+    func.arguments = {
+      ...toolDefaultParams,
+      ...func.arguments,
+    } as FunctionArguments
+  }
+  console.log(toolDefaultParams)
   if ('function' in tool && tool.function) {
     console.log('using tool!', tool)
     // TODO: try longterm, to also execute the "internal" functions in iframe..
@@ -223,6 +259,9 @@ export function getDefaultParametersForTool(tool: InternalTool | ToolBase) {
     return {}
   }
 
+  // this tool simply creates an object consisting of basic values for
+  // certain object types in rode to initialize a good object representation
+  // for functions...
   const defaultParams: Record<string, ParamType> = {}
   Object.keys(params.properties).forEach((key) => {
     const property = params.properties![key]
