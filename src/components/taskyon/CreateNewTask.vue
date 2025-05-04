@@ -55,6 +55,7 @@
       <!--Task Creation State-->
       <div v-if="!hideTaskInfo" class="q-px-sm q-pt-xs text-caption">
         <div class="row items-center">
+          <!--Taskyon features-->
           <div class="row">
             <ToggleButton
               dense
@@ -114,6 +115,7 @@
               ></ToggleButton
             >
           </div>
+          <!--Choose Model-->
           <div class="row q-px-md">
             <info-dialog
               v-if="tystate.currentModelId && tystate.currentModel?.description"
@@ -208,10 +210,6 @@
       </div>
       <!--Task type selection and execution-->
       <div v-if="selectedTaskType || expandedTaskCreation" class="row items-center">
-        <q-btn v-if="selectedTaskType" class="q-ma-md" label="Execute Task" @click="addNewTask()" />
-        <q-btn v-if="selectedTaskType" flat dense :icon="matChat" @click="setTaskType(undefined)"
-          ><q-tooltip>Select Simple Chat</q-tooltip>
-        </q-btn>
         <q-select
           v-if="expertMode"
           style="min-width: 200px"
@@ -226,6 +224,10 @@
           :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
           @update:model-value="setTaskType"
         />
+        <q-btn v-if="selectedTaskType" class="q-ma-md" label="Execute Task" @click="addNewTask()" />
+        <q-btn v-if="selectedTaskType" flat dense :icon="matChat" @click="setTaskType(undefined)"
+          ><q-tooltip>Select Simple Chat</q-tooltip>
+        </q-btn>
       </div>
     </div>
     <q-slide-transition>
