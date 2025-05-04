@@ -12,6 +12,7 @@ import { executeCodeInIframe } from './iframeWorker'
 import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
 import type { JSONSchema7 } from 'json-schema'
 import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
+import Ajv from 'ajv'
 
 export const taskResult = z.object({
   taskResultMarker: z
@@ -259,38 +260,18 @@ export function getDefaultParametersForTool(tool: InternalTool | ToolBase) {
     return {}
   }
 
-  // this tool simply creates an object consisting of basic values for
-  // certain object types in rode to initialize a good object representation
-  // for functions...
-  const defaultParams: Record<string, ParamType> = {}
-  Object.keys(params.properties).forEach((key) => {
-    const property = params.properties![key]
-    if (property && typeof property !== 'boolean' && 'type' in property) {
-      const type = property.type
-      // Assign a default value based on the parameter's type.
-      switch (type) {
-        case 'string':
-          defaultParams[key] = '' // Default empty string
-          break
-        case 'number':
-          defaultParams[key] = 0 // Default number zero
-          break
-        case 'boolean':
-          defaultParams[key] = false // Default boolean false
-          break
-        case 'object':
-          defaultParams[key] = {} // Default empty object
-          break
-        case 'array':
-          defaultParams[key] = [] // Default empty array
-          break
-        // Add cases for any other types you expect
-        default:
-          console.log(`No default value for parameter type: ${JSON.stringify(type)}`)
-          defaultParams[key] = null
-      }
-    }
-  })
+  const ajv = new Ajv({ useDefaults: true })
+  const schema = {
+    type: 'object',
+    properties: params.properties,
+    required: params.required || [],
+  }
+
+  const validate = ajv.compile(schema)
+  const defaultParams = {} as Record<string, ParamType>
+
+  // Validate an empty object to populate it with defaults
+  validate(defaultParams)
 
   return defaultParams
 }
