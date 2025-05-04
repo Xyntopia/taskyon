@@ -179,61 +179,71 @@ const transformToTreeNodes = (
       label = subschema?.description?.trim() || key
     }
 
-    const treeNode = {
+    const base = {
       label,
       description: subschema?.description?.trim(),
       key: newPath.join('.'),
       path: newPath,
       schema: subschema,
     }
+    const isUndef = value === undefined
+    const schemaType = subschema?.type
+    const runtimeType: string = Array.isArray(value) ? 'array' : typeof value
 
-    if (subschema?.type === 'object' && subschema.properties) {
-      return {
-        ...treeNode,
-        value: null,
-        children: transformToTreeNodes(
-          value && typeof value === 'object' && !Array.isArray(value)
-            ? (value as Record<string, unknown>)
-            : {},
-          subschema,
-          newPath,
-        ),
+    // TODO: what do we do if schemaType is an array?
+    switch (schemaType || runtimeType) {
+      case 'object': {
+        // if undefined or not actually an object, start with {}
+        const childObj = !isUndef && typeof value === 'object' && !Array.isArray(value) ? value : {}
+        return {
+          ...base,
+          value: null,
+          children: transformToTreeNodes(childObj as Record<string, unknown>, subschema, newPath),
+          header: 'none',
+        }
       }
-    }
-    if (Array.isArray(value)) {
-      return { label, key: newPath.join('.'), value, path: newPath, body: 'list', header: 'none' }
-    }
-    if (typeof value === 'string') {
-      const node: QTreeNode = {
-        ...treeNode,
-        value,
-        header: 'none',
+      case 'array':
+        // unspecified arrays show the list widget, value may be `undefined` or an actual array
+        return {
+          ...base,
+          value: isUndef ? [] : (value as unknown[]),
+          body: 'list',
+          header: 'none',
+        }
+      case 'string': {
+        // pick between 'string' (single-line) vs 'text' (textarea) in one spot
+        const actualVal = isUndef ? '' : (value as string)
+        const isSingleLine =
+          actualVal.length < 100 && !actualVal.includes('\n') && inputFieldBehavior !== 'textarea'
+        return {
+          ...base,
+          value: actualVal,
+          header: 'none',
+          body: isSingleLine ? 'string' : 'text',
+        }
       }
-      node.body =
-        value.length < 100 && !value.includes('\n') && inputFieldBehavior !== 'textarea'
-          ? 'string'
-          : 'text'
-      return node
-    }
-    if (typeof value === 'boolean') {
-      return {
-        ...treeNode,
-        value,
-        header: 'boolean',
+      case 'boolean':
+        return {
+          ...base,
+          value: !!value,
+          header: 'boolean',
+        }
+      case 'number': {
+        const numVal = isUndef ? undefined : (value as number)
+        return {
+          ...base,
+          value: numVal,
+          header: 'none',
+          body: 'string',
+        }
       }
-    }
-    if (typeof value === 'number') {
-      return {
-        ...treeNode,
-        value,
-        header: 'none',
-        body: 'string',
-      }
-    }
-    return {
-      ...treeNode,
-      value: JSON.stringify(value),
-      body: 'unknown',
+      default:
+        // fallback: show raw JSON
+        return {
+          ...base,
+          value: JSON.stringify(value),
+          body: 'unknown',
+        }
     }
   }
 
