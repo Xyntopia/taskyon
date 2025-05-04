@@ -5,6 +5,7 @@
       <CreateNewTask
         :force-task-props="state.llmSettings.taskTemplate"
         class="q-pa-xs"
+        expert-mode
         :hide-task-info="state.minimalGui"
       />
       <ObjectTreeView :model-value="functionArgs" />

@@ -49,6 +49,7 @@
             class="col"
             input-field-behavior="auto"
             :separate-labels="false"
+            :schema="functionSchema"
           />
         </div>
       </div>
@@ -224,10 +225,10 @@
           :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
           @update:model-value="setTaskType"
         />
-        <q-btn v-if="selectedTaskType" class="q-ma-md" label="Execute Task" @click="addNewTask()" />
         <q-btn v-if="selectedTaskType" flat dense :icon="matChat" @click="setTaskType(undefined)"
           ><q-tooltip>Select Simple Chat</q-tooltip>
         </q-btn>
+        <q-btn v-if="selectedTaskType" class="q-ma-md" label="Execute Task" @click="addNewTask()" />
       </div>
     </div>
     <q-slide-transition>
@@ -257,7 +258,7 @@ import { partialTaskDraft } from 'src/modules/taskyon/types'
 import { llmSettings } from 'src/modules/taskyon/types'
 import '@quasar/quasar-ui-qmarkdown/dist/index.css'
 import { useTaskyonStore } from 'stores/taskyonState'
-import type { FunctionArguments, ToolBase } from 'src/modules/taskyon/types'
+import type { FunctionArguments } from 'src/modules/taskyon/types'
 import ModelSelection from 'components/taskyon/ModelSelection.vue'
 import { saveUserUploadedFileToOpfs } from 'src/modules/OPFS'
 import ObjectTreeView from '../ObjectTreeView.vue'
@@ -291,6 +292,7 @@ import { useNlpWorker } from 'src/modules/taskyon/webWorkerApi'
 import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import type OpenAI from 'openai'
+import { asyncComputed } from 'src/stores/vueUtils'
 
 const functionToggleBtnSize = 'md'
 
@@ -310,7 +312,11 @@ const props = defineProps<{
   forceTaskProps?: llmSettings['taskTemplate'] | undefined
   sendAllowed?: boolean
   hideTaskInfo?: boolean
+  expertMode?: boolean
+  expandedTaskCreation?: boolean
 }>()
+
+const { expertMode = false, expandedTaskCreation = false } = props
 
 function updateContent(value: string | null | undefined) {
   state.llmSettings.taskDraft.content = {
@@ -321,8 +327,6 @@ function updateContent(value: string | null | undefined) {
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
-const { expandedTaskCreation } = toRefs(state)
-const { expertMode } = toRefs(state.appConfiguration)
 const { selectedApi } = toRefs(state.llmSettings)
 const fileAttachments = ref<File[]>([]) // holds all attached files as a "tasklist"
 
@@ -335,12 +339,27 @@ async function getAllTools() {
   return foundTools
 }
 
-const toolCollection = ref<Record<string, ToolBase>>({})
-void getAllTools().then((tools) => (toolCollection.value = tools))
+const toolCollection = asyncComputed(getAllTools, {})
+
+const currentTaskDraft = computed(() => {
+  return state.llmSettings.taskDraft
+})
 
 const selectedTaskType = computed(() => {
-  const task = state.llmSettings.taskDraft
-  return task.content.type === 'functioncall' ? task.content.data.name : undefined
+  return currentTaskDraft.value.content.type === 'functioncall'
+    ? currentTaskDraft.value.content.data.name
+    : undefined
+})
+
+const functionSchema = computed(() => {
+  if (selectedTaskType.value) {
+    const tool = toolCollection.value[selectedTaskType.value]
+    if (!tool || !tool.parameters) {
+      return undefined
+    }
+    return tool.parameters
+  }
+  return undefined
 })
 
 async function setTaskType(tasktype: string | undefined | null) {

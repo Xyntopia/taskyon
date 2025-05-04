@@ -84,6 +84,8 @@
           :force-task-props="state.llmSettings.taskTemplate"
           class="q-pa-xs"
           :hide-task-info="state.minimalGui"
+          :expert-mode="state.appConfiguration.expertMode"
+          :expanded-task-creation="state.expandedTaskCreation"
         >
         </CreateNewTask>
       </div>
