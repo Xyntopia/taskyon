@@ -1,7 +1,8 @@
-<template>
+<template class="object-tree-view">
   <q-tree v-if="modelValue" :nodes="nodeTree" node-key="label" v-bind="$attrs">
     <template #body-text="prop">
       <div class="row">
+        <!--text-->
         <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
           {{ prop.node.label }}:
         </div>
@@ -22,7 +23,7 @@
         </info-dialog>
       </div>
     </template>
-    <template #header-none> </template>
+    <template #header-none> no header!! </template>
     <template #body-list="prop">
       <div class="row">
         <div class="col-auto" style="min-width: 200px">{{ prop.node.label }}:</div>
@@ -169,12 +170,17 @@ const transformToTreeNodes = (
       label = subschema?.description?.trim() || key
     }
 
+    const treeNode = {
+      label,
+      description: subschema?.description?.trim(),
+      key: newPath.join('.'),
+      path: newPath,
+    }
+
     // rest is unchanged…
     if (subschema?.type === 'object' && subschema.properties) {
       return {
-        label,
-        description: subschema?.description?.trim(),
-        key: newPath.join('.'),
+        ...treeNode,
         value: null,
         children: transformToTreeNodes(
           value && typeof value === 'object' && !Array.isArray(value)
@@ -190,11 +196,8 @@ const transformToTreeNodes = (
     }
     if (typeof value === 'string') {
       const node: QTreeNode = {
-        label,
-        description: subschema?.description?.trim(),
-        key: newPath.join('.'),
+        ...treeNode,
         value,
-        path: newPath,
         header: 'none',
       }
       node.body =
@@ -205,29 +208,21 @@ const transformToTreeNodes = (
     }
     if (typeof value === 'boolean') {
       return {
-        label,
-        description: subschema?.description?.trim(),
-        key: newPath.join('.'),
+        ...treeNode,
         value,
-        path: newPath,
         header: 'boolean',
       }
     }
     if (typeof value === 'number') {
       return {
-        label,
-        description: subschema?.description?.trim(),
-        key: newPath.join('.'),
+        ...treeNode,
         value,
-        path: newPath,
         header: 'none',
         body: 'string',
       }
     }
     return {
-      label,
-      description: subschema?.description?.trim(),
-      key: newPath.join('.'),
+      ...treeNode,
       value: JSON.stringify(value),
       path: newPath,
       body: 'unknown',

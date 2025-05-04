@@ -5,27 +5,19 @@
     <div>
       <div>
         <taskContentEdit
-          v-if="
-            !selectedTaskType &&
-            !codingMode &&
-            state.llmSettings.taskDraft.content.type === 'message'
-          "
+          v-if="!selectedTaskType && !codingMode && currentTaskDraft.content.type === 'message'"
           class="text-body1"
-          :model-value="state.llmSettings.taskDraft.content.data"
+          :model-value="currentTaskDraft.content.data"
           :execute-task="addNewTask"
           :attach-file-to-chat="attachFileToDraft"
           :use-enter-to-send="state.appConfiguration.useEnterToSend"
           @update:model-value="updateContent"
         />
         <div
-          v-else-if="
-            !selectedTaskType &&
-            codingMode &&
-            state.llmSettings.taskDraft.content.type === 'message'
-          "
+          v-else-if="!selectedTaskType && codingMode && currentTaskDraft.content.type === 'message'"
         >
           <CodeEditor
-            :model-value="state.llmSettings.taskDraft.content.data"
+            :model-value="currentTaskDraft.content.data"
             @update:model-value="updateContent"
           />
           <taskSettingsButton v-model="expandedTaskCreation" aria-label="task settings" />
@@ -39,13 +31,11 @@
           >
         </div>
         <div
-          v-else-if="
-            selectedTaskType && state.llmSettings.taskDraft.content.type === 'functioncall'
-          "
+          v-else-if="selectedTaskType && currentTaskDraft.content.type === 'functioncall'"
           class="row"
         >
           <ObjectTreeView
-            v-model="state.llmSettings.taskDraft.content.data.arguments"
+            v-model="currentTaskDraft.content.data.arguments"
             class="col"
             input-field-behavior="auto"
             :separate-labels="false"
@@ -319,7 +309,7 @@ const props = defineProps<{
 const { expertMode = false, expandedTaskCreation = false } = props
 
 function updateContent(value: string | null | undefined) {
-  state.llmSettings.taskDraft.content = {
+  currentTaskDraft.value.content = {
     type: 'message',
     data: value || '',
   }
@@ -365,7 +355,7 @@ const functionSchema = computed(() => {
 async function setTaskType(tasktype: string | undefined | null) {
   console.log('change tasktype to:', tasktype)
   if (tasktype) {
-    state.llmSettings.taskDraft.role = 'function'
+    currentTaskDraft.value.role = 'function'
     const toolName = tasktype
     const tool = (await getAllTools())[tasktype]
     if (!tool) {
@@ -378,7 +368,7 @@ async function setTaskType(tasktype: string | undefined | null) {
       ...(defaultParams || {}),
       ...(savedParams || {}),
     }
-    state.llmSettings.taskDraft.content = {
+    currentTaskDraft.value.content = {
       type: 'functioncall',
       data: {
         name: tasktype,
@@ -386,8 +376,8 @@ async function setTaskType(tasktype: string | undefined | null) {
       },
     }
   } else {
-    state.llmSettings.taskDraft.role = 'user'
-    state.llmSettings.taskDraft.content = {
+    currentTaskDraft.value.role = 'user'
+    currentTaskDraft.value.content = {
       type: 'message',
       data: '',
     }
@@ -395,23 +385,23 @@ async function setTaskType(tasktype: string | undefined | null) {
 }
 
 const currentnewTask = computed(() => {
-  const task = deepMerge(state.llmSettings.taskDraft, props.forceTaskProps || {})
+  const task = deepMerge(currentTaskDraft.value, props.forceTaskProps || {})
   if (tystate.currentModelId) {
     task.name = undefined
-    if (selectedTaskType.value && state.llmSettings.taskDraft.content.type === 'functioncall') {
+    if (selectedTaskType.value && currentTaskDraft.value.content.type === 'functioncall') {
       // here we have a function task ;)
       task.role = 'function'
       // we do this to make suere we *only* have a functionCall and not a message
       // or other things as well...
       task.content = {
         type: 'functioncall',
-        data: state.llmSettings.taskDraft.content.data,
+        data: currentTaskDraft.value.content.data,
       }
-    } else if (state.llmSettings.taskDraft.content.type === 'message') {
+    } else if (currentTaskDraft.value.content.type === 'message') {
       task.role = 'user'
       task.content = {
         type: 'message',
-        data: state.llmSettings.taskDraft.content.data.trim(),
+        data: currentTaskDraft.value.content.data.trim(),
       }
     }
   }
@@ -424,7 +414,7 @@ const { estimateChatTokens } = useNlpWorker()
 // TODO:   e.g. add prompts to our task :)
 const estimatedTokens = ref<number>(0)
 watchDebounced(
-  [() => state.llmSettings.taskDraft.content, () => state.llmSettings.selectedTaskId],
+  [() => currentTaskDraft.value.content, () => state.llmSettings.selectedTaskId],
   async () => {
     console.log('calculate tokens...')
     let taskTokens = 0
@@ -572,7 +562,7 @@ async function addNewTask(execute = true) {
 
   // and empty out the contents for the next chat message :)
   if (currentnewTask.value.role === 'user') {
-    state.llmSettings.taskDraft.content = { type: 'message', data: '' }
+    currentTaskDraft.value.content = { type: 'message', data: '' }
     await setTaskType(undefined)
   }
 }
