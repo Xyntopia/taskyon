@@ -22,6 +22,34 @@ import { initializeSessionWithPasskey } from 'src/modules/cryptoSession'
 import { generateRsaOaepPair } from 'src/modules/crypto_webcrypto'
 import { setColors } from 'src/boot/brand-colors'
 
+/**
+ * Creates a proxy for an asynchronous object initializer, allowing you to call methods
+ * on the target object before it has been fully initialized. The methods are invoked
+ * once the initialization is complete.
+ *
+ * @template T - A record type where each key maps to a function.
+ * @param initializer - A function that returns a promise resolving to the target object.
+ * @returns A proxy object that wraps the target object, enabling asynchronous method calls.
+ *
+ * @throws {Error} If a method is accessed that does not exist on the target object.
+ *
+ * @example
+ * ```typescript
+ * interface MyApi {
+ *   fetchData(id: number): Promise<string>;
+ *   saveData(data: string): Promise<void>;
+ * }
+ *
+ * const apiProxy = asyncProxy<MyApi>(async () => {
+ *   const api = await initializeApi(); // Assume this initializes the API object
+ *   return api;
+ * });
+ *
+ * // Usage
+ * apiProxy.fetchData(1).then((data) => console.log(data));
+ * apiProxy.saveData("example").then(() => console.log("Saved!"));
+ * ```
+ */
 function asyncProxy<T extends Record<keyof T, (...args: Parameters<T[keyof T]>) => unknown>>(
   initializer: () => Promise<T>,
 ) {
