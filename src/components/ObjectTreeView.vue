@@ -17,8 +17,8 @@
           @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
         >
         </q-input>
-        <info-dialog v-if="descriptions[prop.node.path.join('.')] && !descriptionsAsLabels">
-          {{ descriptions[prop.node.path.join('.')] }}
+        <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
+          {{ prop.node.description }}
         </info-dialog>
       </div>
     </template>
@@ -34,8 +34,8 @@
           @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
           style="min-width: 200px"
         />
-        <info-dialog v-if="descriptions[prop.node.path.join('.')] && !descriptionsAsLabels">
-          {{ descriptions[prop.node.path.join('.')] }}
+        <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
+          {{ prop.node.description }}
         </info-dialog>
       </div>
     </template>
@@ -58,8 +58,8 @@
           @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
         >
         </q-input>
-        <info-dialog v-if="descriptions[prop.node.path.join('.')] && !descriptionsAsLabels">
-          {{ descriptions[prop.node.path.join('.')] }}
+        <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
+          {{ prop.node.description }}
         </info-dialog>
       </div>
     </template>
@@ -74,8 +74,8 @@
         @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
       >
       </q-toggle>
-      <info-dialog v-if="descriptions[prop.node.path.join('.')] && !descriptionsAsLabels">
-        {{ descriptions[prop.node.path.join('.')] }}
+      <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
+        {{ prop.node.description }}
       </info-dialog>
     </template>
     <template #body-number="prop">
@@ -96,8 +96,8 @@
           @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
         />
       </div>
-      <info-dialog v-if="descriptions[prop.node.path.join('.')] && !descriptionsAsLabels">
-        {{ descriptions[prop.node.path.join('.')] }}
+      <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
+        {{ prop.node.description }}
       </info-dialog>
     </template>
   </q-tree>
@@ -109,6 +109,7 @@ import { computed, type PropType } from 'vue'
 import { type QTreeNode } from 'quasar'
 import JsonInput from 'components/JsonInput.vue' // Adjust the path as necessary
 import InfoDialog from 'components/InfoDialog.vue'
+import type { JSONSchema7 } from 'json-schema'
 
 const props = defineProps({
   readOnly: {
@@ -127,9 +128,9 @@ const props = defineProps({
     type: Number,
     default: 100,
   },
-  descriptions: {
-    type: Object as PropType<Record<string, string>>,
-    default: () => ({}),
+  schema: {
+    type: Object as PropType<JSONSchema7>,
+    required: false,
   },
   descriptionsAsLabels: {
     type: Boolean,
@@ -162,77 +163,100 @@ const updateValue = (keyPath: string[], value: unknown) => {
 
 const transformToTreeNodes = (
   obj: Record<string, unknown>,
+  schema?: JSONSchema7,
   keyPath: string[] = [],
 ): QTreeNode[] => {
-  return Object.entries(obj)
-    .map(([key, value]) => {
-      const newPath = [...keyPath, key]
-      let label = key
-      if (props.descriptionsAsLabels) {
-        label = props.descriptions[newPath.join()] || key
+  const mapEntry = (
+    key: string,
+    value: unknown,
+    subschema: JSONSchema7 | undefined,
+    path: string[],
+  ): QTreeNode => {
+    const newPath = [...path, key]
+
+    // === updated label logic ===
+    let label = key
+    if (props.descriptionsAsLabels) {
+      label = subschema?.description?.trim() || key
+    }
+
+    // rest is unchanged…
+    if (subschema?.type === 'object' && subschema.properties) {
+      return {
+        label,
+        description: subschema?.description?.trim(),
+        key: newPath.join('.'),
+        value: null,
+        children: transformToTreeNodes(
+          value && typeof value === 'object' && !Array.isArray(value)
+            ? (value as Record<string, unknown>)
+            : {},
+          subschema,
+          newPath,
+        ),
       }
-      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        return {
-          label,
-          key: newPath.join('.'),
-          value: null, // Placeholder, not used for objects
-          children: transformToTreeNodes(value as Record<string, unknown>, newPath),
-        }
-      } else if (Array.isArray(value)) {
-        return {
-          label,
-          key: newPath.join('.'),
-          value, // Keep the original array
-          path: newPath,
-          body: 'list', // Indicate this is a list
-          header: 'none',
-        }
-      } else if (typeof value === 'string') {
-        const node: QTreeNode = {
-          label,
-          key: newPath.join('.'),
-          value,
-          path: newPath,
-          header: 'none',
-        }
-        node['body'] =
-          value.length < 100 && !value.includes('\n') && !(props.inputFieldBehavior === 'textarea')
-            ? 'string'
-            : 'text'
-        return node
-      } else if (typeof value === 'boolean') {
-        return {
-          label,
-          key: newPath.join('.'),
-          value: value as string | boolean,
-          path: newPath,
-          header: 'boolean',
-        }
-      } else if (typeof value === 'number') {
-        return {
-          label,
-          key: newPath.join('.'),
-          value,
-          path: newPath,
-          header: 'none',
-          body: 'string', // or 'text' if you want to use a text input
-        }
-      } else {
-        return {
-          label,
-          key: newPath.join('.'),
-          value: JSON.stringify(value),
-          path: newPath,
-          body: 'unknown',
-        }
+    }
+    if (Array.isArray(value)) {
+      return { label, key: newPath.join('.'), value, path: newPath, body: 'list', header: 'none' }
+    }
+    if (typeof value === 'string') {
+      const node: QTreeNode = {
+        label,
+        description: subschema?.description?.trim(),
+        key: newPath.join('.'),
+        value,
+        path: newPath,
+        header: 'none',
       }
-    })
-    .filter((x) => x != undefined)
+      node.body =
+        value.length < 100 && !value.includes('\n') && props.inputFieldBehavior !== 'textarea'
+          ? 'string'
+          : 'text'
+      return node
+    }
+    if (typeof value === 'boolean') {
+      return {
+        label,
+        description: subschema?.description?.trim(),
+        key: newPath.join('.'),
+        value,
+        path: newPath,
+        header: 'boolean',
+      }
+    }
+    if (typeof value === 'number') {
+      return {
+        label,
+        description: subschema?.description?.trim(),
+        key: newPath.join('.'),
+        value,
+        path: newPath,
+        header: 'none',
+        body: 'string',
+      }
+    }
+    return {
+      label,
+      description: subschema?.description?.trim(),
+      key: newPath.join('.'),
+      value: JSON.stringify(value),
+      path: newPath,
+      body: 'unknown',
+    }
+  }
+
+  if (schema?.type === 'object' && schema.properties) {
+    return Object.entries(schema.properties).map(([key, subschema]) =>
+      mapEntry(key, obj[key], subschema as JSONSchema7, keyPath),
+    )
+  }
+
+  return Object.entries(obj).map(([key, value]) => mapEntry(key, value, undefined, keyPath))
 }
 
 const nodeTree = computed(() => {
   if (modelValue.value) {
-    return transformToTreeNodes(modelValue.value)
+    return transformToTreeNodes(modelValue.value, props.schema, undefined)
   } else {
     return []
   }
