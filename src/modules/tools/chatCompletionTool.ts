@@ -680,7 +680,7 @@ export async function createChatCompletionTool(
             'Optional Parameter to define the goal of the chat completion. If not set, the goal is dynamically inferred from the input.',
         },
         llmTools: {
-          type: ['boolean', 'null'],
+          type: 'boolean',
           description:
             'Optional Parameter. If set to true, we will use a openai compatible tool api. If undefined, it will be treated as false.',
         },
