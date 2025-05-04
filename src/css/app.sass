@@ -41,7 +41,7 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%)
     mask-image: linear-gradient(to bottom, black 50%, transparent 100%)
 
-  .create-new-task
+  .create-new-task-container
     z-index: 21
     border-top-left-radius: 5px
     border-top-right-radius: 5px
@@ -151,7 +151,7 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       border: 1px solid rgb($primary) /* add white outline */
       border-radius: 5px /* optional, to match the rounded-borders class */
 
-    .create-new-task
+    .create-new-task-container
       backdrop-filter: blur(40px) brightness(1.0)
       background-color: rgba(white, 0.1) // Adjust transparency as needed
       border: 0.5px solid rgba(white, 0.5)
@@ -195,7 +195,7 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
         color: $accent // Replace with a color for external links
         text-decoration: underline
 
-    .create-new-task
+    .create-new-task-container
       background-color: rgba($primary, 0.3) // Adjust transparency as needed
       backdrop-filter: blur(40px) brightness(0.6)
       border: 0.5px solid rgba(white, 0.1)

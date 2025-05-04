@@ -78,7 +78,7 @@
     <!--Create new task area-->
     <q-page-sticky position="bottom" :offset="[0, 0]" expand class="print-hide">
       <q-resize-observer @resize="handleResize" />
-      <div class="col" style="max-width: 48rem">
+      <div class="col create-new-task-container" style="max-width: 48rem">
         <CreateNewTask
           v-if="!showIntroduction"
           :force-task-props="state.llmSettings.taskTemplate"
