@@ -1,5 +1,15 @@
 <template class="object-tree-view">
   <q-tree v-if="modelValue" :nodes="nodeTree" node-key="label" v-bind="$attrs">
+    <!--for all the component which explicitly want to remove the header...-->
+    <template #header-none> </template>
+    <template #body-unknown="prop">
+      <div class="row">
+        unknown object type
+        <info-dialog>
+          {{ prop.node }}
+        </info-dialog>
+      </div>
+    </template>
     <template #body-text="prop">
       <div class="row">
         <!--text-->
@@ -23,7 +33,6 @@
         </info-dialog>
       </div>
     </template>
-    <template #header-none> no header!! </template>
     <template #body-list="prop">
       <div class="row">
         <div class="col-auto" style="min-width: 200px">{{ prop.node.label }}:</div>
@@ -175,9 +184,9 @@ const transformToTreeNodes = (
       description: subschema?.description?.trim(),
       key: newPath.join('.'),
       path: newPath,
+      schema: subschema,
     }
 
-    // rest is unchanged…
     if (subschema?.type === 'object' && subschema.properties) {
       return {
         ...treeNode,
@@ -224,7 +233,6 @@ const transformToTreeNodes = (
     return {
       ...treeNode,
       value: JSON.stringify(value),
-      path: newPath,
       body: 'unknown',
     }
   }
