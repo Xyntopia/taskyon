@@ -105,38 +105,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed, type PropType } from 'vue'
+import { computed } from 'vue'
 import { type QTreeNode } from 'quasar'
 import JsonInput from 'components/JsonInput.vue' // Adjust the path as necessary
 import InfoDialog from 'components/InfoDialog.vue'
 import type { JSONSchema7 } from 'json-schema'
 
-const props = defineProps({
-  readOnly: {
-    type: Boolean,
-    default: false,
-  },
-  inputFieldBehavior: {
-    type: String,
-    default: 'auto' as 'auto' | 'textarea' | 'autogrow',
-  },
-  separateLabels: {
-    type: Boolean,
-    default: true,
-  },
-  debounce: {
-    type: Number,
-    default: 100,
-  },
-  schema: {
-    type: Object as PropType<JSONSchema7>,
-    required: false,
-  },
-  descriptionsAsLabels: {
-    type: Boolean,
-    default: false,
-  },
-})
+const {
+  readOnly = false,
+  inputFieldBehavior = 'auto',
+  separateLabels = true,
+  debounce = 100,
+  schema,
+  descriptionsAsLabels = false,
+} = defineProps<{
+  readOnly?: boolean
+  inputFieldBehavior?: 'auto' | 'textarea' | 'autogrow'
+  separateLabels?: boolean
+  debounce?: number
+  schema?: JSONSchema7 | undefined
+  descriptionsAsLabels?: boolean
+}>()
 
 const modelValue = defineModel<Record<string, unknown> | undefined>({
   required: true,
@@ -176,7 +165,7 @@ const transformToTreeNodes = (
 
     // === updated label logic ===
     let label = key
-    if (props.descriptionsAsLabels) {
+    if (descriptionsAsLabels) {
       label = subschema?.description?.trim() || key
     }
 
@@ -209,7 +198,7 @@ const transformToTreeNodes = (
         header: 'none',
       }
       node.body =
-        value.length < 100 && !value.includes('\n') && props.inputFieldBehavior !== 'textarea'
+        value.length < 100 && !value.includes('\n') && inputFieldBehavior !== 'textarea'
           ? 'string'
           : 'text'
       return node
@@ -256,7 +245,7 @@ const transformToTreeNodes = (
 
 const nodeTree = computed(() => {
   if (modelValue.value) {
-    return transformToTreeNodes(modelValue.value, props.schema, undefined)
+    return transformToTreeNodes(modelValue.value, schema, undefined)
   } else {
     return []
   }
