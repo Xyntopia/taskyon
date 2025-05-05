@@ -289,6 +289,7 @@ import { useAppStateStore } from 'src/stores/appState'
 import type { TyTaskManager } from 'src/modules/taskyon/taskManager'
 import { onUnmounted } from 'vue'
 import { safeYamlDump } from 'src/modules/yamlUtils'
+import { useRouter } from 'vue-router'
 
 const props = defineProps<{
   task: TaskNode
@@ -306,6 +307,7 @@ const expandMessageContent = ref<boolean>(false)
 const taskMeta = ref<TaskNodeMeta | undefined>(initStr)
 const taskMetaPrevious = ref<TaskNodeMeta | undefined>(initStr)
 const taskMetaNext = ref<TaskNodeMeta | undefined>(initStr)
+const router = useRouter()
 
 const subscriptions: Array<() => void> = []
 onUnmounted(() => subscriptions.forEach((unsub) => unsub()))
@@ -377,7 +379,11 @@ const humanReadableTaskCosts = computed(() => {
 
 async function editTask(taskId: string) {
   const task = await taskDraftFromTask(taskId)
-  state.setSelectedTask(task.priorID || task.parentID)
+  if (task.content?.type === 'tooldefinition') {
+    void router.push(`/tool/${task.id}`)
+  } else {
+    state.setSelectedTask(task.priorID || task.parentID)
+  }
 }
 
 async function createNewConversation(taskId: string) {

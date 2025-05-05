@@ -42,7 +42,9 @@
       :icon="matAltRoute"
       @click="state.setSelectedTask(task.id)"
     >
-      <q-tooltip :delay="0">Start alternative chat from here</q-tooltip>
+      <q-tooltip :delay="0"
+        >Start a new chat from here, keeping all previous messages up to this point.</q-tooltip
+      >
     </q-btn>
     <q-btn
       v-if="
