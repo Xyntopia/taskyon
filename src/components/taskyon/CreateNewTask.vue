@@ -153,6 +153,8 @@
             </q-btn>
           </div>
           <q-space></q-space>
+          <!-- deactivate token estimation for now, because
+           when using agents this is way too hard to estimate.
           <template v-if="tystate.currentModelId && expertMode && false">
             <div class="gt-xs">
               {{ `t/c: ${estimatedTokens}/${tystate.currentModel?.context_length}` }}
@@ -165,7 +167,7 @@
               </q-tooltip>
             </div>
             <div class="lt-sm">{{ `t/c: ${estimatedTokens}` }}</div>
-          </template>
+          </template>-->
           <q-space></q-space>
           <div>
             <q-btn
@@ -256,7 +258,6 @@ import taskSettingsButton from './taskSettingsButton.vue'
 import taskContentEdit from './taskContentEdit.vue'
 //import CodeEditor from './CodeEditor.vue';
 import { defineAsyncComponent } from 'vue'
-import { watchDebounced } from '@vueuse/core'
 import InfoDialog from '../InfoDialog.vue'
 import ToggleButton from '../ToggleButton.vue'
 import {
@@ -277,11 +278,9 @@ import {
   mdiTools,
   mdiFunctionVariant,
 } from '@quasar/extras/mdi-v6'
-import { deepCopy, deepMerge } from 'src/modules/utils'
-import { useNlpWorker } from 'src/modules/taskyon/webWorkerApi'
+import { deepMerge } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { asyncComputed } from 'src/stores/vueUtils'
 
 const functionToggleBtnSize = 'md'
@@ -407,11 +406,11 @@ const currentnewTask = computed(() => {
   return partialTaskDraft.parse(task) // we can do this, because we defined the "role"
 })
 
-const { estimateChatTokens } = useNlpWorker()
+//const { estimateChatTokens } = useNlpWorker()
 
 // TODO:   our token estimation needs to become much better ^^
 // TODO:   e.g. add prompts to our task :)
-const estimatedTokens = ref<number>(0)
+/*const estimatedTokens = ref<number>(0)
 watchDebounced(
   [() => currentTaskDraft.value.content, () => state.llmSettings.selectedTaskId],
   async () => {
@@ -451,7 +450,7 @@ watchDebounced(
     estimatedTokens.value = taskTokens + (newTokens ?? 0)
   },
   { debounce: 3000, maxWait: 5000, immediate: true },
-)
+)*/
 
 async function addFiles2Taskyon(newFiles: File[]) {
   console.log('add files to our chat!')

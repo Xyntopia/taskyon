@@ -42,6 +42,8 @@
                 coding-mode
                 :force-task-props="functionTemplate"
                 :send-allowed="taskParser === true ? true : false"
+                :expanded-task-creation="true"
+                expert-mode
               />
               {{ taskParser }}
               <q-btn label="new tool" @click="newToolStructure()"></q-btn>

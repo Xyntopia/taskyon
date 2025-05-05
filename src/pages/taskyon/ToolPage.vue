@@ -1,6 +1,7 @@
 <template>
   <q-layout view="hHh lpR lFr">
     <TaskyonHeader :min-mode="false" btn-size="md" v-model:drawer-open="drawerOpen" />
+    <UnderConstructionHint />
     <q-drawer v-model="drawerOpen" show-if-above persistent behaviour="desktop" :width="250">
       <CreateNewTask
         :force-task-props="state.llmSettings.taskTemplate"
