@@ -281,7 +281,7 @@ import { deepCopy, deepMerge } from 'src/modules/utils'
 import { useNlpWorker } from 'src/modules/taskyon/webWorkerApi'
 import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
-import type OpenAI from 'openai'
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { asyncComputed } from 'src/stores/vueUtils'
 
 const functionToggleBtnSize = 'md'
@@ -297,16 +297,15 @@ const CodeEditor = defineAsyncComponent(
     ),
 )
 
-const props = defineProps<{
+const { expertMode = false, forceTaskProps } = defineProps<{
   codingMode?: boolean
   forceTaskProps?: llmSettings['taskTemplate'] | undefined
   sendAllowed?: boolean
   hideTaskInfo?: boolean
   expertMode?: boolean
-  expandedTaskCreation?: boolean
 }>()
 
-const { expertMode = false, expandedTaskCreation = false } = props
+const expandedTaskCreation = defineModel<boolean>('expandedTaskCreation', { default: false })
 
 function updateContent(value: string | null | undefined) {
   currentTaskDraft.value.content = {
@@ -385,7 +384,7 @@ async function setTaskType(tasktype: string | undefined | null) {
 }
 
 const currentnewTask = computed(() => {
-  const task = deepMerge(currentTaskDraft.value, props.forceTaskProps || {})
+  const task = deepMerge(currentTaskDraft.value, forceTaskProps || {})
   if (tystate.currentModelId) {
     task.name = undefined
     if (selectedTaskType.value && currentTaskDraft.value.content.type === 'functioncall') {
@@ -441,7 +440,7 @@ watchDebounced(
       deepCopy(currentnewTask.value.content),
       // we don't do the next one, as we are already taking the actual prompt tokens
       // from a  previous task
-      [] as OpenAI.ChatCompletionMessageParam[],
+      [] as ChatCompletionMessageParam[],
       deepCopy(toolCollection.value),
       deepCopy(state.llmSettings.allowedTools),
     )
