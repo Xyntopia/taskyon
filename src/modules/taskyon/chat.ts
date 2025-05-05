@@ -265,7 +265,11 @@ export async function callLLM(
         }
 
         // After finishing, accumulate the full chat completion
-        chatCompletion = chunks.reduce(accumulateStep, chatCompletion)!
+        chatCompletion = chunks.reduce<ChatResponseType | undefined>(
+          (existing, chunk) =>
+            accumulateStep(existing, chunk as unknown as OpenAI.ChatCompletionChunk),
+          chatCompletion,
+        )!
       } else {
         // Non-streaming case: Just return the full response
         chatCompletion = await response.json()
