@@ -158,10 +158,10 @@
       <TaskButtons
         class="message-buttons absolute-bottom-left print-hide rounded-borders"
         :task="task"
-        :toggle-markdown="toggleMarkdown"
-        :create-new-conversation="createNewConversation"
-        :edit-task="editTask"
-        :toggle-message-debug="toggleMessageDebug"
+        @toggle-markdown="toggleMarkdown"
+        @create-new-conversation="createNewConversation"
+        @edit-task="editTask"
+        @toggle-message-debug="toggleMessageDebug"
       />
     </div>
     <!--task debugging-->

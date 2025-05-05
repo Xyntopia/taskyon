@@ -19,7 +19,7 @@
       dense
       flat
       size="sm"
-      @click="toggleMarkdown(task.id)"
+      @click="emit('toggle-markdown', task.id)"
     >
       <q-tooltip :delay="0">Markdown on/off</q-tooltip>
     </q-btn>
@@ -30,7 +30,7 @@
       dense
       flat
       :icon="mdiForumPlus"
-      @click="createNewConversation(task.id)"
+      @click="emit('create_new_conversation', task.id)"
     >
       <q-tooltip :delay="0">Start a new thread with this message! </q-tooltip>
     </q-btn>
@@ -45,15 +45,19 @@
       <q-tooltip :delay="0">Start alternative chat from here</q-tooltip>
     </q-btn>
     <q-btn
-      v-if="task.content.type === 'message' || task.content.type === 'functioncall'"
+      v-if="
+        task.content.type === 'message' ||
+        task.content.type === 'functioncall' ||
+        task.content.type === 'tooldefinition'
+      "
       class="col-auto"
       :icon="matEdit"
       dense
       flat
       size="sm"
-      @click="editTask(task.id)"
+      @click="emit('edit-task', task.id)"
     >
-      <q-tooltip :delay="0">Edit Task/Message</q-tooltip>
+      <q-tooltip :delay="0">Edit Task</q-tooltip>
     </q-btn>
     <q-separator v-if="state.appConfiguration.expertMode" vertical class="q-mx-sm" />
     <q-btn
@@ -64,7 +68,7 @@
       flat
       size="sm"
       aria-label="show message context"
-      @click="toggleMessageDebug(task.id)"
+      @click="emit('toggle-message-debug', task.id)"
     >
       <q-tooltip :delay="0">Show detailed task view</q-tooltip>
     </q-btn>
@@ -95,9 +99,12 @@ const state = useAppStateStore()
 
 defineProps<{
   task: TaskNode
-  toggleMarkdown: (id: string) => void
-  createNewConversation: (taskId: string) => Promise<void>
-  editTask: (taskId: string) => Promise<void>
-  toggleMessageDebug: (id: string) => void
+}>()
+
+const emit = defineEmits<{
+  (e: 'edit-task', taskId: string): Promise<void>
+  (e: 'toggle-message-debug', taskId: string): void
+  (e: 'toggle-markdown', taskId: string): void
+  (e: 'create_new_conversation', taskId: string): Promise<void>
 }>()
 </script>
