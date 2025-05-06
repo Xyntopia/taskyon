@@ -23,105 +23,109 @@
           <q-icon :name="mdiDesktopTower" color="info" size="sm"></q-icon>
         </div>
         <!--task content-->
-        <div v-if="task.content.type === 'functioncall'" class="col q-pb-md">
-          <q-expansion-item
-            dense
-            :header-class="
-              nextTask?.content.type === 'error'
-                ? 'text-red'
-                : nextTask?.content.type === 'toolresult'
-                  ? 'text-green'
-                  : 'text-info'
-            "
-          >
-            <template #header>
-              <div class="row q-gutter-sm items-center">
-                <q-spinner-orbit v-if="isWorking" size="2em"></q-spinner-orbit>
-                <q-icon :name="matCalculate" size="1.5em"></q-icon>
-                <div>{{ task.content.data.name }}</div>
+        <div class="col q-pb-md">
+          <div v-if="task.content.type === 'functioncall'">
+            <q-expansion-item
+              dense
+              :header-class="
+                nextTask?.content.type === 'error'
+                  ? 'text-red'
+                  : nextTask?.content.type === 'toolresult'
+                    ? 'text-green'
+                    : 'text-info'
+              "
+            >
+              <template #header>
+                <div class="row q-gutter-sm items-center">
+                  <q-spinner-orbit v-if="isWorking" size="2em"></q-spinner-orbit>
+                  <q-icon :name="matCalculate" size="1.5em"></q-icon>
+                  <div>{{ task.content.data.name }}</div>
+                </div>
+              </template>
+              <div>
+                <ToolResultWidget
+                  :function-call="task.content.data"
+                  :result="
+                    nextTask?.content.type === 'toolresult' ? nextTask.content.data : undefined
+                  "
+                />
               </div>
-            </template>
-            <div>
-              <ToolResultWidget
-                :function-call="task.content.data"
-                :result="
-                  nextTask?.content.type === 'toolresult' ? nextTask.content.data : undefined
-                "
-              />
-            </div>
-          </q-expansion-item>
-        </div>
-        <div v-if="task.content.type === 'toolresult'" class="col q-pb-md">
-          <ToolResultWidget
-            :result="task.content.data"
-            :function-call="
-              previousTask?.content.type === 'functioncall' ? previousTask.content.data : undefined
-            "
-          />
-        </div>
-        <div v-else-if="task.content.type === 'structured'" class="col">
-          <q-expansion-item dense :icon="mdiHeadCog" header-class="text-info" label="Analyze...">
-            <p style="white-space: pre-wrap">
-              {{ safeYamlDump(task.content.data) }}
-            </p>
-          </q-expansion-item>
-        </div>
-        <div v-else-if="task.content.type === 'tooldefinition'">
-          <q-expansion-item dense :icon="mdiTools" :label="`function: ${task.content.data.name}`">
-            <p style="white-space: pre-wrap">
-              {{ task.content.data }}
-            </p>
-          </q-expansion-item>
-        </div>
-        <div v-else-if="task.content.type === 'message'" class="col q-pb-md">
-          <q-btn
-            v-if="short"
-            flat
-            dense
-            no-caps
-            @click="expandMessageContent = !expandMessageContent"
-          >
-            <div class="text-caption">
-              {{ task.content.data.split(' ').slice(0, 10).join(' ') }}...
-            </div>
-            <q-icon :name="expandMessageContent ? matArrowDropUp : matArrowDropDown" />
-          </q-btn>
-          <q-slide-transition>
-            <div v-show="!short || expandMessageContent">
-              <ty-markdown
-                v-if="state.taskState[task.id]?.markdownEnabled != false"
-                no-line-numbers
-                :src="task.content.data"
-                :use-iframe="false"
-              />
-              <div v-else class="raw-markdown q-mb-md">
+            </q-expansion-item>
+          </div>
+          <div v-else-if="task.content.type === 'toolresult'">
+            <ToolResultWidget
+              :result="task.content.data"
+              :function-call="
+                previousTask?.content.type === 'functioncall'
+                  ? previousTask.content.data
+                  : undefined
+              "
+            />
+          </div>
+          <div v-else-if="task.content.type === 'structured'">
+            <q-expansion-item dense :icon="mdiHeadCog" header-class="text-info" label="Analyze...">
+              <p style="white-space: pre-wrap">
+                {{ safeYamlDump(task.content.data) }}
+              </p>
+            </q-expansion-item>
+          </div>
+          <div v-else-if="task.content.type === 'tooldefinition'">
+            <q-expansion-item dense :icon="mdiTools" :label="`function: ${task.content.data.name}`">
+              <p style="white-space: pre-wrap">
                 {{ task.content.data }}
+              </p>
+            </q-expansion-item>
+          </div>
+          <div v-else-if="task.content.type === 'message'">
+            <q-btn
+              v-if="short"
+              flat
+              dense
+              no-caps
+              @click="expandMessageContent = !expandMessageContent"
+            >
+              <div class="text-caption">
+                {{ task.content.data.split(' ').slice(0, 10).join(' ') }}...
               </div>
-            </div>
-          </q-slide-transition>
-        </div>
-        <div v-else-if="task.content.type === 'files'" class="col">
-          <FileBrowser
-            v-if="getFile"
-            :file-mappings="fileMappings"
-            :expert-mode="state.appConfiguration.expertMode"
-            preview
-            :preview-size="100"
-            :get-file="getFile"
-          />
-        </div>
-        <div v-else-if="task.content.type === 'error'" class="col">
-          <q-expansion-item dense label="Error" header-class="text-negative">
+              <q-icon :name="expandMessageContent ? matArrowDropUp : matArrowDropDown" />
+            </q-btn>
+            <q-slide-transition>
+              <div v-show="!short || expandMessageContent">
+                <ty-markdown
+                  v-if="state.taskState[task.id]?.markdownEnabled != false"
+                  no-line-numbers
+                  :src="task.content.data"
+                  :use-iframe="false"
+                />
+                <div v-else class="raw-markdown q-mb-md">
+                  {{ task.content.data }}
+                </div>
+              </div>
+            </q-slide-transition>
+          </div>
+          <div v-else-if="task.content.type === 'files'">
+            <FileBrowser
+              v-if="getFile"
+              :file-mappings="fileMappings"
+              :expert-mode="state.appConfiguration.expertMode"
+              preview
+              :preview-size="100"
+              :get-file="getFile"
+            />
+          </div>
+          <div v-else-if="task.content.type === 'error'">
+            <q-expansion-item dense label="Error" header-class="text-negative">
+              <div>
+                <div class="text-negative" style="white-space: pre-wrap">
+                  <ty-markdown :src="task.content.data" no-line-numbers />
+                </div>
+              </div>
+            </q-expansion-item>
+          </div>
+          <div v-else-if="task.content.type === 'return'">
             <div>
-              <div class="text-negative" style="white-space: pre-wrap">
-                <ty-markdown :src="task.content.data" no-line-numbers />
-              </div>
+              {{ task.content.data }}
             </div>
-          </q-expansion-item>
-        </div>
-        <div v-else-if="task.content.type === 'return'" class="col">
-          <div>
-            {{ task.content.data }}
           </div>
         </div>
         <!--task costs-->

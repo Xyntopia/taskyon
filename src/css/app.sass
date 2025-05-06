@@ -68,22 +68,24 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
         //border: 1px solid rgb($primary)
         margin-right: 20px
 
-      .message-container
-        margin-left: 5px
-        margin-right: 5px
-        // TODO: make message buttons somehow always appear on screen..  never be hidden..
-        .message-buttons
-          background: rgba($secondary,0.5)
-          position: absolute
-          bottom: -2px // To move up by 6px
-          left: 20px // To move left by 6px
-          opacity: 0
-          transition: opacity 0.3s
-          //color: rgb($secondary)
+  // message container needs to stay "top-level", because sometimes messages appear without
+  // a task container (e.g. in the search results...)
+  .message-container
+    margin-left: 5px
+    margin-right: 5px
+    // TODO: make message buttons somehow always appear on screen..  never be hidden..
+    .message-buttons
+      background: rgba($secondary,0.5)
+      position: absolute
+      bottom: -2px // To move up by 6px
+      left: 20px // To move left by 6px
+      opacity: 0
+      transition: opacity 0.3s
+      //color: rgb($secondary)
 
-        &:hover
-          .message-buttons
-            opacity: 1
+    &:hover
+      .message-buttons
+        opacity: 1
 
   // common settings for both:  dark & light  
   .body--light
