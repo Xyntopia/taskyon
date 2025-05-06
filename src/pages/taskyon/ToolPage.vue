@@ -35,6 +35,9 @@ import { useTaskyonStore } from 'src/stores/taskyonState'
 import { ToolBase } from 'src/modules/taskyon/types'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { asyncComputed } from 'src/modules/vueUtils'
+
+const { name } = defineProps<{ name: string }>()
 
 const CodeEditor = defineAsyncComponent(
   () =>
@@ -47,22 +50,33 @@ const CodeEditor = defineAsyncComponent(
     ),
 )
 
-defineProps<{
-  name: string
-}>()
-
 const tystate = useTaskyonStore()
 const router = useRouter()
 
 const functionArgs = ref<Record<string, unknown>>({})
-
 const drawerOpen = ref(false)
 
-const currentToolDefinition = ref<ToolBase & { code: string }>({
-  name: '',
-  description: '',
-  parameters: {},
-  code: '',
+type PluginTool = ToolBase & { code: string }
+
+const selectedTool = asyncComputed(async () => {
+  const tm = await tystate.getTaskManager()
+  const task = await tm.getTask(name)
+  if (task?.content.type === 'tooldefinition') {
+    return task.content.data
+  } else {
+    return undefined
+  }
+}, undefined)
+
+const currentToolDefinition = computed<PluginTool>(() => {
+  return selectedTool.value
+    ? ({ code: 'define your code here!', ...selectedTool.value } as PluginTool)
+    : {
+        name: '',
+        description: '',
+        parameters: {},
+        code: '',
+      }
 })
 
 const toolParser = computed(() => {
