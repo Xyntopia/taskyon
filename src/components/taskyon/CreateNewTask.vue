@@ -263,7 +263,7 @@ import {
 import { deepMerge } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
-import { asyncComputed } from 'src/stores/vueUtils'
+import { asyncComputed } from 'src/modules/vueUtils'
 
 const functionToggleBtnSize = 'md'
 

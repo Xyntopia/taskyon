@@ -45,7 +45,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, shallowRef } from 'vue'
 import { getDatabase, type TyPGDB } from 'src/modules/pglite.api'
-import { asyncComputed } from 'src/stores/vueUtils'
+import { asyncComputed } from 'src/modules/vueUtils'
 
 // --- Reactive State ---
 const sqlQuery = ref('SELECT * FROM my_table;')

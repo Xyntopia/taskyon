@@ -67,7 +67,7 @@ import CreateTaskButton from 'components/taskyon/CreateTaskButton.vue'
 import { dump } from 'js-yaml'
 import { useAppStateStore } from 'src/stores/appState'
 import { createTaskNode } from 'src/modules/taskyon/taskManager'
-import { asyncComputed } from 'src/stores/vueUtils'
+import { asyncComputed } from 'src/modules/vueUtils'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()

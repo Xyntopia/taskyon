@@ -147,7 +147,7 @@
 import type { ChatResponseType, TaskNode } from 'src/modules/taskyon/types'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
-import { asyncComputed } from 'src/stores/vueUtils'
+import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onBeforeUnmount } from 'vue'
 import { ref } from 'vue'
