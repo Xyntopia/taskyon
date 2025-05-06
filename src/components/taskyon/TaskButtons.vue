@@ -1,19 +1,26 @@
 <template>
   <div class="row justify-start items-stretch">
     <q-btn
-      v-if="task.content.type === 'message'"
       class="col-auto"
-      :icon="symOutlinedMarkdownCopy"
+      :icon="matContentCopy"
       dense
       flat
       size="sm"
       aria-label="copy markdown text"
-      @click="copyToClipboard(task.content.data || '')"
+      @click="
+        copyToClipboard(
+          task.content.type === 'message'
+            ? task.content.data || ''
+            : JSON.stringify(task.content.data, null, 2),
+        )
+      "
     >
-      <q-tooltip :delay="0">Copy markdown text.</q-tooltip>
+      <q-tooltip :delay="0">
+        Copy {{ task.content.type === 'message' ? 'text (markdown)' : 'JSON' }}.
+      </q-tooltip>
     </q-btn>
     <q-btn
-      v-if="task.content.type === 'message'"
+      v-if="task.content.type === 'message' && state.appConfiguration.expertMode"
       class="col-auto"
       :icon="state.taskState[task.id]?.markdownEnabled != false ? mdiLanguageMarkdown : matRawOn"
       dense
@@ -90,9 +97,14 @@
 </template>
 
 <script setup lang="ts">
-import { matAltRoute, matCode, matEdit, matRawOn } from '@quasar/extras/material-icons'
+import {
+  matAltRoute,
+  matCode,
+  matContentCopy,
+  matEdit,
+  matRawOn,
+} from '@quasar/extras/material-icons'
 import { mdiFileTree, mdiForumPlus, mdiLanguageMarkdown } from '@quasar/extras/mdi-v6'
-import { symOutlinedMarkdownCopy } from '@quasar/extras/material-symbols-outlined'
 import type { TaskNode } from 'src/modules/taskyon/types'
 import { copyToClipboard } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
