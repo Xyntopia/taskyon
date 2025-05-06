@@ -39,13 +39,10 @@
                 <a href="/docs/openapi-docs.yml" target="_blank">openapi-docs.yaml</a>
               </div>
               <CreateNewTask
-                coding-mode
                 :force-task-props="functionTemplate"
-                :send-allowed="taskParser === true ? true : false"
                 :expanded-task-creation="true"
                 expert-mode
               />
-              {{ taskParser }}
               <q-btn label="new tool" @click="newToolStructure()"></q-btn>
             </div>
           </q-tab-panel>
@@ -64,7 +61,6 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ToolBase } from 'src/modules/taskyon/types'
 import CodeEditor from '../components/CodeEditor.vue'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import CreateNewTask from '../components/taskyon/CreateNewTask.vue'
@@ -106,20 +102,6 @@ void getAllTools().then((tools) => {
 //void getAllTools().then((tools) => (toolCollection.value = tools));
 
 const selectedToolName = ref<string>('')
-
-const taskParser = computed(() => {
-  if (state.llmSettings.taskDraft.content.type === 'message') {
-    try {
-      const jsonToolResult = ToolBase.strict().safeParse(
-        JSON.parse(state.llmSettings.taskDraft.content.data),
-      )
-      return jsonToolResult.success ? jsonToolResult.success : jsonToolResult.error
-    } catch (error) {
-      return error
-    }
-  }
-  return 'task is not a message task!'
-})
 
 function importCurrentSettings() {
   console.log('import current settings...')
