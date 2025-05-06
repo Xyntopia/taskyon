@@ -30,7 +30,7 @@
     >
       <q-tooltip :delay="0">Markdown on/off</q-tooltip>
     </q-btn>
-    <q-separator v-if="task.content.type === 'message'" vertical class="q-mx-sm" />
+    <q-separator vertical class="q-mx-sm" />
     <q-btn
       class="col-auto"
       size="sm"
