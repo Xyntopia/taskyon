@@ -3,9 +3,11 @@
   <div class="create-new-task">
     <!--Task Creation-->
     <div>
+      <!--Task Editing area-->
       <div>
-        <taskContentEdit
-          v-if="!selectedTaskType && !codingMode && currentTaskDraft.content.type === 'message'"
+        <!-- in case we simply want to send simple messages :)-->
+        <chatMessageEdit
+          v-if="!selectedTaskType && currentTaskDraft.content.type === 'message'"
           class="text-body1"
           :model-value="currentTaskDraft.content.data"
           :execute-task="addNewTask"
@@ -13,23 +15,7 @@
           :use-enter-to-send="state.appConfiguration.useEnterToSend"
           @update:model-value="updateContent"
         />
-        <div
-          v-else-if="!selectedTaskType && codingMode && currentTaskDraft.content.type === 'message'"
-        >
-          <CodeEditor
-            :model-value="currentTaskDraft.content.data"
-            @update:model-value="updateContent"
-          />
-          <taskSettingsButton v-model="expandedTaskCreation" aria-label="task settings" />
-          <q-btn
-            :disable="!sendAllowed"
-            :color="sendAllowed ? 'positive' : 'negative'"
-            :icon="matSave"
-            label="save task"
-            @click="addNewTask(false)"
-            ><q-tooltip>Save task without executing it...</q-tooltip></q-btn
-          >
-        </div>
+        <!--If we want to edit any pre-defined functions we can do that here...-->
         <div
           v-else-if="selectedTaskType && currentTaskDraft.content.type === 'functioncall'"
           class="row"
@@ -254,14 +240,10 @@ import type { FunctionArguments } from 'src/modules/taskyon/types'
 import ModelSelection from 'components/taskyon/ModelSelection.vue'
 import { saveUserUploadedFileToOpfs } from 'src/modules/OPFS'
 import ObjectTreeView from '../ObjectTreeView.vue'
-import taskSettingsButton from './taskSettingsButton.vue'
-import taskContentEdit from './taskContentEdit.vue'
-//import CodeEditor from './CodeEditor.vue';
-import { defineAsyncComponent } from 'vue'
+import chatMessageEdit from './chatMessageEdit.vue'
 import InfoDialog from '../InfoDialog.vue'
 import ToggleButton from '../ToggleButton.vue'
 import {
-  matSave,
   matUploadFile,
   matChat,
   matSmartToy,
@@ -285,21 +267,8 @@ import { asyncComputed } from 'src/stores/vueUtils'
 
 const functionToggleBtnSize = 'md'
 
-const CodeEditor = defineAsyncComponent(
-  () =>
-    import(
-      /* webpackPrefetch: true */
-      /* webpackChunkName: "codemirror" */
-      /* webpackMode: "lazy" */
-      /* webpackFetchPriority: "low" */
-      '../CodeEditor.vue'
-    ),
-)
-
 const { expertMode = false, forceTaskProps } = defineProps<{
-  codingMode?: boolean
   forceTaskProps?: llmSettings['taskTemplate'] | undefined
-  sendAllowed?: boolean
   hideTaskInfo?: boolean
   expertMode?: boolean
 }>()
