@@ -282,7 +282,7 @@ export interface WorkerMessage {
   error?: string
 }
 
-function convertToToolCommandString(tool: ToolBase): string {
+function convertToToolCommandString(tool: ToolBase, longDescription = false): string {
   // convert a tool into a schema which is compatible with toolCommandChat
   const args: YamlRepresentation = {}
 
@@ -361,14 +361,21 @@ function convertToToolCommandString(tool: ToolBase): string {
     'FUNCTION ARGUMENTS': args,
   })
   const argStr = convertToYamlWComments(argStrRaw)
+  const toolDescription =
+    longDescription && tool.longDescription ? tool.longDescription : tool.description
   const cmdString = `NAME: ${tool.name}:
-DESCRIPTION: ${tool.description.replace(/\n/g, ' ')}
+DESCRIPTION: ${toolDescription.replace(/\n/g, ' ')}
 ${argStr}
 REQUIRED: ${[...requiredProperties].join(', ')}`
   return cmdString
 }
 
-export function summarizeTools(toolIDs: string[], tools: Record<string, ToolBase>, short = false) {
+export function summarizeTools(
+  toolIDs: string[],
+  tools: Record<string, ToolBase>,
+  short = false,
+  longDescription = false,
+) {
   if (short) {
     const toolStr = toolIDs
       .map((t) => {
@@ -381,7 +388,7 @@ export function summarizeTools(toolIDs: string[], tools: Record<string, ToolBase
     const toolStr = toolIDs
       .map((t) => {
         const tool = getTool(tools, t)
-        const toolStr = convertToToolCommandString(tool)
+        const toolStr = convertToToolCommandString(tool, longDescription)
         return toolStr
       })
       .join('\n---\n')

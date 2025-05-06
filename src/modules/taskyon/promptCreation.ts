@@ -137,7 +137,7 @@ function calculateCompletionVariables(
     format: 'yaml',
     message: originalMessage,
     schema: requiredSchema ? zodToYamlString(requiredSchema) : '<No schema specified>',
-    tools: summarizeTools(allowedTools || [], toolCollection),
+    tools: summarizeTools(allowedTools || [], toolCollection, false, true),
   }
   return variables
 }
