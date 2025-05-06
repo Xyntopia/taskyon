@@ -93,6 +93,18 @@
     >
       <q-tooltip :delay="0">Show task tree</q-tooltip>
     </q-btn>
+    <q-btn
+      v-if="state.appConfiguration.expertMode"
+      class="col-auto"
+      :icon="matSearch"
+      dense
+      flat
+      size="sm"
+      aria-label="show message in tree browser"
+      :to="`/taskmanager?t=${task.id}`"
+    >
+      <q-tooltip :delay="0">Show similar tasks</q-tooltip>
+    </q-btn>
   </div>
 </template>
 
@@ -103,6 +115,7 @@ import {
   matContentCopy,
   matEdit,
   matRawOn,
+  matSearch,
 } from '@quasar/extras/material-icons'
 import { mdiFileTree, mdiForumPlus, mdiLanguageMarkdown } from '@quasar/extras/mdi-v6'
 import type { TaskNode } from 'src/modules/taskyon/types'
