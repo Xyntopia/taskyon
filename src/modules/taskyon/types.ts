@@ -210,8 +210,6 @@ export const FunctionCall = z.object({
 export type FunctionCall = z.infer<typeof FunctionCall>
 
 const MessageContent = z.object({ type: z.literal('message'), data: z.string() })
-// TODO: get rid of structured content..  we should directly call a function task in order to interprete
-//       structured content with the content as a parameter in order to decide what to do :)
 const StructuredContent = z.object({
   type: z.literal('structured'),
   data: z.unknown(),
@@ -233,7 +231,7 @@ Every Leaf task which is not a Termination task can potentially continue to be e
 We can indicate the reason for termination here as well...`,
 )
 
-// I am not sure, if we need this here...
+// TODO: I am not sure, if we need this here...
 const ChatCompletionContent = z.union([MessageContent, ToolResultContent, ErrorContent])
 export type ChatCompletionContent = z.infer<typeof ChatCompletionContent>
 

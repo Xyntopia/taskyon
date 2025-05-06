@@ -101,8 +101,10 @@ export const createAddNewToolTool: () => Promise<ToolBase> = async () => {
   return {
     name: 'addNewTool',
     description: 'Validates and registers a new tool with taskyon.',
-    longDescription:
-      'This tool takes a tool definition, validates it and registers it with taskyon.',
+    longDescription: `This tool takes a tool definition, validates it and registers it with taskyon.
+If you need examples of how to create tools, you can use the toolSearcher to retrieve
+existing tool definitions, including their source code when available. Additionally, you can use the toolCreationWizard
+to get some more general information how to create tools.`,
     parameters: toolJsonSchema,
     function: (toolDef: unknown) => {
       const toolDefinition = ToolBase.parse(toolDef)
@@ -160,7 +162,29 @@ Explain in one sentence, why you are choosing this tool.
         }),
         createChatCompletionTask({
           prompts: [
-            `Now, with the examples given to you, can you create a new tool using the "addNewTool" function?.
+            `
+You can return different types of tasks by calling makeTaskResult.
+makeTaskResult accepts a list of task *chains* (an array of arrays of tasks).
+• Each individual chain (an inner array) runs its tasks sequentially.
+• Multiple chains run in parallel.
+If you simply return a result without makeTaskResult, Taskyon will analyze it and decide what to do next automatically.
+
+Here are the task types you can emit:
+- MessageContent, StructuredContent, ToolCallContent, UploadedFilesContent, ToolResultContent, ToolDefinition, ErrorContent, Return
+
+If you want to display the result of a function in a specific way, you can use th following structure:
+
+return makeTaskResult([[
+  {
+    role: 'assistant',
+    content: {
+      type: 'message',
+      data: <A MARKDOWN STRING PRESENTING THE RESULT (Full HTML is allowed, don't use html fence blocks!)>,
+    },
+  },
+]])
+
+Now, with the examples given to you, can you create a new tool using the "addNewTool" function?.
 Please make sure to give your response in {format} format.
 
 Here is the schema:  {schema}
