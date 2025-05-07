@@ -199,7 +199,6 @@ const transformToTreeNodes = (
           ...base,
           value: null,
           children: transformToTreeNodes(childObj as Record<string, unknown>, subschema, newPath),
-          header: 'none',
         }
       }
       case 'array':
