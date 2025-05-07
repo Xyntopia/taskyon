@@ -8,20 +8,36 @@
     <q-page-container>
       <UnderConstructionHint />
       <q-page padding>
-        <ObjectTreeView
-          :model-value="{ ...currentToolDefinition, code: undefined }"
-          :schema="toolJsonSchema"
-        />
-        <CodeEditor v-model="currentToolDefinition.code" />
-        <q-btn
-          :disable="!isValidTool"
-          :color="isValidTool ? 'positive' : 'negative'"
-          :icon="matSave"
-          label="save task"
-          @click="addNewTask()"
-          ><q-tooltip>Save task without executing it...</q-tooltip></q-btn
-        >
-        {{ toolParser }}
+        <div class="row">
+          <q-tabs v-model="selectedTab" class="col-auto" dense no-caps vertical>
+            <q-tab name="code" :icon="mdiLanguageJavascript" label="tool code" />
+            <q-tab name="configure" :icon="mdiFormTextbox" label="tool configuration" />
+            <q-tab name="definition" :icon="mdiCodeJson" label="tool definition" />
+          </q-tabs>
+          <q-tab-panels :model-value="selectedTab" animated swipeable infinite class="col">
+            <q-tab-panel name="code">
+              <CodeEditor v-model="currentToolDefinition.code" />
+              <q-btn
+                :disable="!isValidTool"
+                :color="isValidTool ? 'positive' : 'negative'"
+                :icon="matSave"
+                label="save task"
+                @click="addNewTask()"
+                ><q-tooltip>Save task without executing it...</q-tooltip></q-btn
+              >
+              {{ toolParser }}
+            </q-tab-panel>
+            <q-tab-panel name="configure">
+              <ObjectTreeView
+                :model-value="{ ...currentToolDefinition, code: undefined }"
+                :schema="toolJsonSchema"
+              />
+            </q-tab-panel>
+            <q-tab-panel name="definition" class="column">
+              <JsonInput v-model="currentToolDefinition" auto-save />
+            </q-tab-panel>
+          </q-tab-panels>
+        </div>
       </q-page>
     </q-page-container>
   </q-layout>
@@ -40,6 +56,8 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { craeteToolJsonSchema } from 'src/modules/taskyon/tools'
+import { mdiCodeJson, mdiFormTextbox, mdiLanguageJavascript } from '@quasar/extras/mdi-v6'
+import JsonInput from 'src/components/JsonInput.vue'
 
 const { name } = defineProps<{ name: string }>()
 
@@ -54,6 +72,7 @@ const CodeEditor = defineAsyncComponent(
     ),
 )
 
+const selectedTab = ref('tools')
 const tystate = useTaskyonStore()
 const router = useRouter()
 
