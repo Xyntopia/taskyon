@@ -166,13 +166,17 @@ async function updateChatThread() {
     state.lockBottomScroll = false
     const urlPath = (route.params.filePath as string[]).join('/')
     const filePath = urlPath.endsWith('.md') ? urlPath : `${urlPath}.md`
-    let newTaskId
+    let newTaskId: string | undefined
     try {
       const markdownContent = filePath ? await fetchMarkdown(folder || '', filePath) : undefined
       newTaskId = await tm.addMdTaskChain(markdownContent)
     } catch {
-      newTaskId = await tm.addMdTaskChain(
-        `# 404 - Markdown Not Found
+      newTaskId = (
+        await tm.addPartialTask2Tree(
+          {
+            content: {
+              type: 'message',
+              data: `# 404 - Markdown Not Found
 
 The markdown file \`${filePath}\` does not exist.
 
@@ -184,7 +188,13 @@ The markdown file \`${filePath}\` does not exist.
 
 Please check the path and try again.
 `,
-      )
+            },
+            role: 'system',
+          },
+          undefined,
+          undefined,
+        )
+      ).id
     }
 
     state.setSelectedTask(newTaskId)
