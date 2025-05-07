@@ -8,7 +8,10 @@
     <q-page-container>
       <UnderConstructionHint />
       <q-page padding>
-        Tool Page {{ name }}
+        <ObjectTreeView
+          :model-value="{ ...currentToolDefinition, code: undefined }"
+          :schema="toolJsonSchema"
+        />
         <CodeEditor v-model="currentToolDefinition.code" />
         <q-btn
           :disable="!isValidTool"
@@ -36,6 +39,7 @@ import { ToolBase } from 'src/modules/taskyon/types'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { asyncComputed } from 'src/modules/vueUtils'
+import { craeteToolJsonSchema } from 'src/modules/taskyon/tools'
 
 const { name } = defineProps<{ name: string }>()
 
@@ -68,6 +72,8 @@ const selectedTool = asyncComputed(async () => {
   }
 }, undefined)
 
+const toolJsonSchema = asyncComputed(craeteToolJsonSchema, undefined)
+
 const currentToolDefinition = computed<PluginTool>(() => {
   return selectedTool.value
     ? ({ code: 'define your code here!', ...selectedTool.value } as PluginTool)
@@ -81,7 +87,8 @@ const currentToolDefinition = computed<PluginTool>(() => {
 
 const toolParser = computed(() => {
   try {
-    const jsonToolResult = ToolBase.strict().safeParse(currentToolDefinition)
+    const toolCopy = JSON.parse(JSON.stringify(currentToolDefinition.value))
+    const jsonToolResult = ToolBase.strict().safeParse(toolCopy)
     return jsonToolResult.success ? jsonToolResult.success : jsonToolResult.error
   } catch (error) {
     return error
@@ -97,7 +104,8 @@ async function addNewTask() {
       role: 'user',
       content: {
         type: 'tooldefinition',
-        data: currentToolDefinition.value,
+        // we are doing this to 1. make sure its json parsable and 2. create a copy of the current tool...
+        data: JSON.parse(JSON.stringify(currentToolDefinition.value)),
       },
     },
     undefined,
