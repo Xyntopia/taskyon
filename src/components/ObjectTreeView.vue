@@ -173,11 +173,7 @@ const transformToTreeNodes = (
   ): QTreeNode => {
     const newPath = [...path, key]
 
-    // === updated label logic ===
-    let label = key
-    if (descriptionsAsLabels) {
-      label = subschema?.description?.trim() || key
-    }
+    const label = descriptionsAsLabels ? subschema?.description?.trim() || key : key
 
     const base = {
       label,
@@ -186,12 +182,11 @@ const transformToTreeNodes = (
       path: newPath,
       schema: subschema,
     }
-    const isUndef = value === undefined
-    const schemaType = subschema?.type
-    const runtimeType: string = Array.isArray(value) ? 'array' : typeof value
+    const isUndef = value === undefined || value === null
+    const runtimeType = subschema?.type ?? (Array.isArray(value) ? 'array' : typeof value)
 
     // TODO: what do we do if schemaType is an array?
-    switch (schemaType || runtimeType) {
+    switch (runtimeType) {
       case 'object': {
         // if undefined or not actually an object, start with {}
         const childObj = !isUndef && typeof value === 'object' && !Array.isArray(value) ? value : {}
