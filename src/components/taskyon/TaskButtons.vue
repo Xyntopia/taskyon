@@ -66,7 +66,16 @@
       size="sm"
       @click="emit('edit-task', task.id)"
     >
-      <q-tooltip :delay="0">Edit Task</q-tooltip>
+      <q-tooltip :delay="0">
+        Edit
+        {{
+          task.content.type === 'message'
+            ? 'Message'
+            : task.content.type === 'functioncall'
+              ? 'Function Call'
+              : 'Tool Definition'
+        }}
+      </q-tooltip>
     </q-btn>
     <q-separator v-if="state.appConfiguration.expertMode" vertical class="q-mx-sm" />
     <q-btn
