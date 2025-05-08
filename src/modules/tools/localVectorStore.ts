@@ -38,6 +38,7 @@ export const localVectorStore = createTool({
     const { search, upsert } = await createVectorStore(
       await getDatabase('taskyon'),
       'vectorStoreTool',
+      ['label TEXT'],
     )
 
     if (searchText) {
