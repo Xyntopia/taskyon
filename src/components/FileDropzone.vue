@@ -40,6 +40,21 @@
             {{ Math.round(progress * 100) }}%
           </q-circular-progress>
         </div>
+        <!-- if we are in electron, we want a choice to scan a directory:  "webkitdirectory", "directory" -->
+        <!-- add "capture" attribute in order to accept camera newlyAddedFiles from cellphone-->
+        <!--TODO: add the following as an option
+      <q-file append class="hidden" multiple ref="filePicker" v-model="newlyAddedFiles"
+        accept="image/*,text/*,.pdf,application/*" capture="environment" />
+      <div class="row items-stretch q-gutter-x-xs">
+        <q-btn class="col-3" color="primary" text-color="white" stack @click="filePicker?.pickFiles()">
+          <div clas="row">
+            <q-icon :name="matUploadFile" />
+            <q-icon :name="matAddAPhoto" />
+          </div>
+          add file(s)
+        </q-btn>
+      <div>
+        -->
       </div>
     </slot>
     <!-- Parent-overlay drop target -->
