@@ -64,7 +64,7 @@
   <teleport v-if="dropZoneTarget" defer :to="dropZoneTarget">
     <transition name="fade">
       <div v-if="isDragging" class="drop-overlay highlighted dashedborder" v-bind="$attrs">
-        <q-icon size="xl" :name="matUpload" />
+        <q-icon size="10rem" :name="matUpload" />
       </div>
     </transition>
   </teleport>
@@ -73,6 +73,12 @@
 <script setup lang="ts">
 import { matAddAPhoto, matUpload, matUploadFile } from '@quasar/extras/material-icons'
 import { ref, onMounted, onBeforeUnmount, type Ref } from 'vue'
+
+defineOptions({
+  // we need inheritAttrs: false, because we have multiple root elements and explicitly
+  // set v-bind="$attrs"
+  inheritAttrs: false,
+})
 
 const emit = defineEmits<{
   (e: 'add-files', newFiles: File[]): void
