@@ -76,16 +76,6 @@
             v-if="state.appConfiguration.expertMode"
             dense
             flat
-            :icon="mdiTools"
-            label="Tools"
-            to="/tools"
-          ></q-btn>
-        </div>
-        <div>
-          <q-btn
-            v-if="state.appConfiguration.expertMode"
-            dense
-            flat
             :icon="mdiRobotConfusedOutline"
             label="Customize"
             to="/prompts"
@@ -122,7 +112,6 @@ import { useTaskyonStore } from 'stores/taskyonState'
 import FileDropzone from 'components/FileDropzone.vue'
 import { matSearch, matManageAccounts, matFileUpload } from '@quasar/extras/material-icons'
 import {
-  mdiTools,
   mdiRobotConfusedOutline,
   mdiForumPlus,
   mdiSubdirectoryArrowRight,
