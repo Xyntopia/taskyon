@@ -1,12 +1,13 @@
 <template>
   <div
-    :class="'dropzone ' + (disableDropzoneBorder ? '' : 'dashedborder')"
+    :class="['dropzone', disableDropzoneBorder ? '' : 'dashedborder']"
     @dragover.prevent
     @dragenter.prevent
     @drop="handleDrop"
     @click.stop="openFileInput"
   >
     <input
+      v-if="!noButtons"
       ref="fileInput"
       class="hidden"
       type="file"
@@ -16,14 +17,14 @@
       @change="handleFileInput"
       @click.stop
     />
-    <slot>
+    <slot v-if="!noButtons">
       <div class="fit inset-shadow-down column justify-center">
         <div>
           <p>{{ label }}</p>
         </div>
         <div>
-          <q-btn v-if="progress == 0" flat>
-            <div clas="row">
+          <q-btn v-if="progress === 0" flat>
+            <div class="row">
               <q-icon :name="matUploadFile" />
               <q-icon :name="matAddAPhoto" />
             </div>
@@ -35,65 +36,40 @@
             class="q-md-sm"
             size="xl"
             show-value
-            >{{ progress * 100 }}%</q-circular-progress
           >
+            {{ Math.round(progress * 100) }}%
+          </q-circular-progress>
         </div>
-        <!-- if we are in electron, we want a choice to scan a directory:  "webkitdirectory", "directory" -->
-        <!-- add "capture" attribute in order to accept camera newlyAddedFiles from cellphone-->
-        <!--TODO: add the following as an option
-    <q-file append class="hidden" multiple ref="filePicker" v-model="newlyAddedFiles"
-        accept="image/*,text/*,.pdf,application/*" capture="environment" />
-      <div class="row items-stretch q-gutter-x-xs">
-        <q-btn class="col-3" color="primary" text-color="white" stack @click="filePicker?.pickFiles()">
-          <div clas="row">
-            <q-icon :name="matUploadFile" />
-            <q-icon :name="matAddAPhoto" />
-          </div>
-          add file(s)
-        </q-btn>
-      <div>
-        -->
       </div>
     </slot>
+    <!-- Parent-overlay drop target -->
+    <teleport v-if="dropZoneTarget" defer :to="dropZoneTarget">
+      <div
+        class="drop-overlay"
+        @dragover.prevent="handleDragOver"
+        @drop.prevent="handleDrop"
+        @dragenter.prevent
+      />
+    </teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { matAddAPhoto, matUploadFile } from '@quasar/extras/material-icons'
-import { onBeforeUnmount } from 'vue'
-import type { Ref } from 'vue';
-import { onMounted, ref } from 'vue'
+import { ref, onMounted, onBeforeUnmount, type Ref } from 'vue'
 
 const emit = defineEmits(['update:modelValue'])
 
 const props = defineProps({
-  accept: {
-    type: String,
-    default: 'image/*,text/*,.pdf,application/*',
-  },
-  label: {
-    type: String,
-    default: '',
-  },
-  progress: {
-    type: Number,
-    default: 0,
-  },
-  disableDropzoneBorder: {
-    type: Boolean,
-    default: false,
-  },
-  enablePaste: {
-    type: Boolean,
-    default: false,
-  },
-  enableWholeWindowDrop: {
-    type: Boolean,
-    default: false,
-  },
+  accept: { type: String, default: 'image/*,text/*,.pdf,application/*' },
+  label: { type: String, default: '' },
+  progress: { type: Number, default: 0 },
+  disableDropzoneBorder: { type: Boolean, default: false },
+  enablePaste: { type: Boolean, default: false },
+  dropZoneTarget: { type: String },
+  noButtons: { type: Boolean, default: false },
 })
 
-//name: 'DropZone',
 const fileInput: Ref<null | HTMLInputElement> = ref(null)
 
 const handleDrop = (e: DragEvent) => {
@@ -104,11 +80,12 @@ const handleDrop = (e: DragEvent) => {
 }
 
 const handleDragOver = (e: DragEvent) => {
+  console.log('dragging over dropzone!')
   e.preventDefault()
 }
 
 const handlePaste = (e: ClipboardEvent) => {
-  console.log('paste event occured!! :)')
+  console.log('paste event occured!! :)', e)
   const items = e.clipboardData?.items
   if (items) {
     const files: File[] = []
@@ -116,22 +93,16 @@ const handlePaste = (e: ClipboardEvent) => {
       const item = items[i]!
       if (item.kind === 'file') {
         const file = item.getAsFile()
-        if (file) {
-          files.push(file)
-        }
+        if (file) files.push(file)
       }
     }
-    if (files.length > 0) {
-      handleFiles(files)
-    }
+    if (files.length) handleFiles(files)
   }
 }
 
 const handleFileInput = (e: Event) => {
   const files = (e.target as HTMLInputElement).files
-  if (files) {
-    handleFiles(files)
-  }
+  if (files?.length) handleFiles(files)
 }
 
 const handleFiles = (files: FileList | File[]) => {
@@ -139,17 +110,14 @@ const handleFiles = (files: FileList | File[]) => {
   emit('update:modelValue', fileList)
 }
 
-const openFileInput = (/*event: Event*/) => {
-  if (fileInput.value) {
-    fileInput.value.click()
-  }
+const openFileInput = () => {
+  fileInput.value?.click()
 }
 
 onMounted(() => {
-  if (props.enablePaste) {
-    document.addEventListener('paste', handlePaste)
-  }
-  if (props.enableWholeWindowDrop) {
+  if (props.enablePaste) document.addEventListener('paste', handlePaste)
+  // TODO: move
+  if (props.dropZoneTarget) {
     window.addEventListener('dragover', handleDragOver)
     window.addEventListener('drop', handleDrop)
   }
@@ -183,13 +151,20 @@ async function openDir() {
 }*/
 </script>
 
-<style lang="sass">
+<style lang="sass" scoped>
 .dashedborder
   border-width: 2px
   border-style: dashed
   border-radius: 5px
 
 .dropzone
+  position: relative
   text-align: center
   cursor: pointer
+
+.drop-overlay
+  position: absolute
+  inset: 0
+  background: transparent
+  pointer-events: all
 </style>

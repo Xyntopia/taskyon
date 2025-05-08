@@ -4,6 +4,7 @@
     <q-resize-observer :debounce="50" @resize="onResize" />
     <!--Chat Area-->
     <div
+      id="chat-area"
       ref="taskThreadContainer"
       class="col column items-center"
       :style="`padding-bottom: ${bottomPadding + 5}px;`"
@@ -64,6 +65,8 @@
         </div>
       </div>
     </div>
+    <!--File Drop Zone Overlay-->
+    <FileDropzone disable-dropzone-border no-buttons drop-zone-target="#chat-area" accept="*" />
     <!--Task Browser buttons-->
     <q-page-sticky position="top-left" class="print-hide">
       <div v-if="detailed" class="q-pa-sm q-gutter-sm toolbar">
@@ -112,6 +115,7 @@ import { useAppStateStore } from 'src/stores/appState'
 import LLMProviders from 'components/taskyon/LLMProviders.vue'
 import ToggleButton from 'src/components/ToggleButton.vue'
 import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
+import FileDropzone from 'src/components/FileDropzone.vue'
 
 const props = defineProps<{ detailed?: boolean; treeBrowser?: boolean; rootTaskId?: string }>()
 const showAllTasks = ref<boolean>(props.detailed)
