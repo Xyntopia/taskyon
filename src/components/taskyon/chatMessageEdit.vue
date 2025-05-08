@@ -11,14 +11,19 @@
     @keyup="checkKeyboardEvents"
   >
     <template #append>
-      <q-btn flat dense round :icon="matSend" @click="executeTask">
+      <q-btn flat dense round :icon="matSend" @click="$emit('execute-task')">
         <q-tooltip>
           Press to send or alternatively send with &lt;shift&gt; + &lt;enter&gt;
         </q-tooltip>
       </q-btn>
     </template>
     <template #before>
-      <FileDropzone class="fit" accept="*" enable-paste @add-files="attachFileToChat">
+      <FileDropzone
+        class="fit"
+        accept="*"
+        enable-paste
+        @add-files="(files) => emit('attach-files', files)"
+      >
         <q-btn dense class="fit" flat>
           <q-icon class="gt-xs" :name="matImage" />
           <q-icon :name="matAttachment" />
@@ -38,22 +43,25 @@ const content = defineModel<string | null | undefined>({
 })
 
 const props = defineProps<{
-  executeTask: () => Promise<void>
-  attachFileToChat: (newFiles: File[]) => void
   useEnterToSend: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'attach-files', newFiles: File[]): void
+  (e: 'execute-task'): void
 }>()
 
 const checkKeyboardEvents = (event: KeyboardEvent) => {
   if (props.useEnterToSend) {
     if (!event.shiftKey && event.key === 'Enter') {
-      void props.executeTask()
+      emit('execute-task')
       // Prevent a new line from being added to the input (optional)
       event.preventDefault()
     }
     // otherwise it'll simply be the default action and inserting a newline :)
   } else {
     if (event.shiftKey && event.key === 'Enter') {
-      void props.executeTask()
+      emit('execute-task')
       // Prevent a new line from being added to the input (optional)
       event.preventDefault()
     }

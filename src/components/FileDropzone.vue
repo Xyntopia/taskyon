@@ -73,7 +73,9 @@
 import { matAddAPhoto, matUploadFile } from '@quasar/extras/material-icons'
 import { ref, onMounted, onBeforeUnmount, type Ref } from 'vue'
 
-const emit = defineEmits(['add-files'])
+const emit = defineEmits<{
+  (e: 'add-files', newFiles: File[]): void
+}>()
 
 const props = defineProps({
   accept: { type: String, default: 'image/*,text/*,.pdf,application/*' },

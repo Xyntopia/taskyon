@@ -10,10 +10,10 @@
           v-if="!selectedTaskType && currentnewTask.content.type === 'message'"
           class="text-body1"
           :model-value="currentnewTask.content.data"
-          :execute-task="addNewTask"
-          :attach-file-to-chat="attachFileToDraft"
           :use-enter-to-send="state.appConfiguration.useEnterToSend"
           @update:model-value="updateContent"
+          @attach-files="attachFileToDraft"
+          @execute-task="addNewTask"
         />
         <!--If we want to edit any pre-defined functions we can do that here...-->
         <div
