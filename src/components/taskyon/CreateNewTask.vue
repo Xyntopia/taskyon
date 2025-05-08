@@ -7,9 +7,9 @@
       <div>
         <!-- in case we simply want to send simple messages :)-->
         <chatMessageEdit
-          v-if="!selectedTaskType && currentTaskDraft.content.type === 'message'"
+          v-if="!selectedTaskType && currentnewTask.content.type === 'message'"
           class="text-body1"
-          :model-value="currentTaskDraft.content.data"
+          :model-value="currentnewTask.content.data"
           :execute-task="addNewTask"
           :attach-file-to-chat="attachFileToDraft"
           :use-enter-to-send="state.appConfiguration.useEnterToSend"
@@ -17,11 +17,11 @@
         />
         <!--If we want to edit any pre-defined functions we can do that here...-->
         <div
-          v-else-if="selectedTaskType && currentTaskDraft.content.type === 'functioncall'"
+          v-else-if="selectedTaskType && currentnewTask.content.type === 'functioncall'"
           class="row"
         >
           <ObjectTreeView
-            v-model="currentTaskDraft.content.data.arguments"
+            v-model="currentnewTask.content.data.arguments"
             class="col"
             input-field-behavior="auto"
             :separate-labels="false"
@@ -303,8 +303,8 @@ const currentTaskDraft = computed(() => {
 })
 
 const selectedTaskType = computed(() => {
-  return currentTaskDraft.value.content.type === 'functioncall'
-    ? currentTaskDraft.value.content.data.name
+  return currentnewTask.value.content.type === 'functioncall'
+    ? currentnewTask.value.content.data.name
     : undefined
 })
 
@@ -369,6 +369,12 @@ const currentnewTask = computed(() => {
       task.content = {
         type: 'message',
         data: currentTaskDraft.value.content.data.trim(),
+      }
+    } else {
+      task.role = 'user'
+      task.content = {
+        type: 'message',
+        data: JSON.stringify(currentTaskDraft.value.content.data, null, 2),
       }
     }
   }
