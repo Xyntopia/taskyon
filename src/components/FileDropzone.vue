@@ -221,12 +221,19 @@ async function openDir() {
   position: absolute
   inset: 0
   pointer-events: none
+  /* dim background */
+  background-color: rgba(0, 0, 0, 0.4)
+  /* inset it a bit */
+  margin: 1rem
 
 .drop-overlay.highlighted
-  border: 2px dashed green
+  /* add an accent border if you like */
+  border: 2px dashed limegreen
   display: flex
   align-items: center
   justify-content: center
+  /* give the icon extra breathing room */
+  padding: 1rem
 
 .fade-enter-active,
 .fade-leave-active
