@@ -24,7 +24,7 @@
           :is-searching="isSearching"
           :show-filter-button="false"
           color="secondary"
-          @search="(q, k) => onSearchChange({ q, k })"
+          @search="(q, k) => onSearchChange({ q, k }, 'query')"
         />
         <div class="text-caption">
           # of indexed tasks: {{ indexCount }}
@@ -38,7 +38,9 @@
           class="q-pl-md"
           dense
           label="filter for labels"
-          @update:model-value="(label) => onSearchChange(label != null ? { l: String(label) } : {})"
+          @update:model-value="
+            (label) => onSearchChange(label != null ? { l: String(label) } : {}, 'query')
+          "
         />
       </template>
       <template #body-cell-task="rows">
@@ -58,7 +60,7 @@
                 outline
                 :icon="mdiApproximatelyEqual"
                 dense
-                @click="onSearchChange({ t: rows.row.taskId })"
+                @click="onSearchChange({ t: rows.row.taskId }, 'similar')"
                 ><q-tooltip>Search for similar tasks!</q-tooltip></q-btn
               >
               <div class="auto">
@@ -211,7 +213,7 @@ async function searchTasks(params: searchParams & { k: string }) {
   }
 }
 
-async function onSearchChange(params: searchParams) {
+async function onSearchChange(params: searchParams, mode: 'similar' | 'query') {
   if (params instanceof Event) {
     // for some reason, in chrome, a second event with the original input-event gets fired...
     return
@@ -220,6 +222,9 @@ async function onSearchChange(params: searchParams) {
   } else {
     // Update the URL with the search parameter
     const newQuery = { ...defaultParams, ...props.query, ...params }
+    if (mode === 'similar') {
+      delete newQuery.q
+    }
     void router.push({ query: newQuery }) // Perform your search here
     console.log('Searching for: ', params)
     await searchTasks(newQuery)
