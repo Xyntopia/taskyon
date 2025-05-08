@@ -63,15 +63,15 @@
      when rendering this component... -->
   <teleport v-if="dropZoneTarget" defer :to="dropZoneTarget">
     <transition name="fade">
-      <div v-if="isDragging" class="drop-overlay highlighted">
-        <q-icon name="add_circle" size="xl" color="green" />
+      <div v-if="isDragging" class="drop-overlay highlighted dashedborder" v-bind="$attrs">
+        <q-icon size="xl" :name="matUpload" />
       </div>
     </transition>
   </teleport>
 </template>
 
 <script setup lang="ts">
-import { matAddAPhoto, matUploadFile } from '@quasar/extras/material-icons'
+import { matAddAPhoto, matUpload, matUploadFile } from '@quasar/extras/material-icons'
 import { ref, onMounted, onBeforeUnmount, type Ref } from 'vue'
 
 const emit = defineEmits<{
@@ -208,8 +208,7 @@ async function openDir() {
 
 <style lang="sass" scoped>
 .dashedborder
-  border-width: 2px
-  border-style: dashed
+  border-width: 2px dashed
   border-radius: 5px
 
 .dropzone
@@ -218,17 +217,17 @@ async function openDir() {
   cursor: pointer
 
 .drop-overlay
-  position: absolute
+  position: fixed
   inset: 0
   pointer-events: none
-  /* dim background */
-  background-color: rgba(0, 0, 0, 0.4)
-  /* inset it a bit */
+  background-color: rgba(white, 0.4)
+  display: flex
+  align-items: center
+  justify-content: center
+  padding: 1rem
   margin: 1rem
 
 .drop-overlay.highlighted
-  /* add an accent border if you like */
-  border: 2px dashed limegreen
   display: flex
   align-items: center
   justify-content: center
