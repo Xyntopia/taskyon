@@ -207,7 +207,12 @@ async function useTaskVectors(
   vectorizerModel?: string,
   taskyonDB?: TaskyonDatabase,
 ) {
-  const vecDb = await createVectorStore(await getDatabase('taskyon'), 'tyTaskVectors')
+  const vecDb = await createVectorStore(await getDatabase('taskyon'), 'tyTaskVectors', [
+    'label TEXT',
+    /*'type VARCHAR(256)',
+    'authorId VARCHAR(512)',
+    'created_at ':*/
+  ])
 
   async function syncVectorIndexWithTasks(progressCallback: (done: number, total: number) => void) {
     let counter = 0

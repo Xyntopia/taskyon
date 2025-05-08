@@ -201,7 +201,7 @@ export const createPgLiteCrudWrapper = async <T>(
   }
 }
 
-export const createVectorStore = async (db: TyPGDB, name: string) => {
+export const createVectorStore = async (db: TyPGDB, name: string, additionalColumns?: string[]) => {
   const { vectorizeText } = useNlpWorker()
   const numDimensions = 384
   const maxStrLength = 10000 // only vectorize approx. the first page.
@@ -209,7 +209,7 @@ export const createVectorStore = async (db: TyPGDB, name: string) => {
     tableName: name,
     idColumn: 'id',
     dataColumn: 'data',
-    additionalColumns: ['label TEXT'],
+    additionalColumns: additionalColumns ?? [],
     pgvector: true,
     vectorDims: numDimensions,
   })
