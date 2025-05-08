@@ -355,7 +355,10 @@ const currentnewTask = computed(() => {
   const task = deepMerge(currentTaskDraft.value, forceTaskProps || {})
   if (tystate.currentModelId) {
     task.name = undefined
-    if (selectedTaskType.value && currentTaskDraft.value.content.type === 'functioncall') {
+    if (
+      currentTaskDraft.value.content.type === 'functioncall' &&
+      currentTaskDraft.value.content.data.name
+    ) {
       // here we have a function task ;)
       task.role = 'function'
       // we do this to make suere we *only* have a functionCall and not a message
