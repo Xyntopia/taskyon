@@ -230,7 +230,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRefs } from 'vue'
+import { computed, toRefs } from 'vue'
 import { createToolTask, getDefaultParametersForTool } from 'src/modules/taskyon/tools'
 import { partialTaskDraft } from 'src/modules/taskyon/types'
 import { llmSettings } from 'src/modules/taskyon/types'
@@ -274,6 +274,7 @@ const { expertMode = false, forceTaskProps } = defineProps<{
 }>()
 
 const expandedTaskCreation = defineModel<boolean>('expandedTaskCreation', { default: false })
+const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
 
 function updateContent(value: string | null | undefined) {
   currentTaskDraft.value.content = {
@@ -285,7 +286,6 @@ function updateContent(value: string | null | undefined) {
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { selectedApi } = toRefs(state.llmSettings)
-const fileAttachments = ref<File[]>([]) // holds all attached files as a "tasklist"
 
 // we initialize our taskDraft with the state of this window!
 

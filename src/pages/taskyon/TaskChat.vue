@@ -72,7 +72,12 @@
       no-buttons
       drop-zone-target="#chat-area"
       accept="*"
-      @add-files="(newFiles) => console.log('adding files!!', newFiles)"
+      @add-files="
+        (newFiles) => {
+          console.log('adding files!!', newFiles)
+          fileAttachments.push(...newFiles)
+        }
+      "
     />
     <!--Task Browser buttons-->
     <q-page-sticky position="top-left" class="print-hide">
@@ -91,6 +96,7 @@
       <div class="col create-new-task-container" style="max-width: 48rem">
         <CreateNewTask
           v-if="!showIntroduction"
+          :file-attachments="fileAttachments"
           :force-task-props="state.llmSettings.taskTemplate"
           class="q-pa-xs"
           :hide-task-info="state.minimalGui"
@@ -150,6 +156,7 @@ const tystate = useTaskyonStore()
 const state = useAppStateStore()
 const taskThreadContainer = ref<HTMLElement | undefined>()
 const folder = ''
+const fileAttachments = ref<File[]>([]) // holds all attached files as a "tasklist"
 
 const showIntroduction = computed(
   () => !(state.llmSettings.selectedApi && state.keys[state.llmSettings.selectedApi]),

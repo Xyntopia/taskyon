@@ -118,11 +118,6 @@ function onDrop(e: DragEvent) {
   if (e.dataTransfer) handleFiles(e.dataTransfer.files)
 }
 
-const handleDragOver = (e: DragEvent) => {
-  console.log('dragging over dropzone!')
-  e.preventDefault()
-}
-
 const handlePaste = (e: ClipboardEvent) => {
   console.log('paste event occured!! :)', e)
   const items = e.clipboardData?.items
@@ -169,11 +164,6 @@ onMounted(() => {
 
 onMounted(() => {
   if (props.enablePaste) document.addEventListener('paste', handlePaste)
-  // TODO: move
-  if (props.dropZoneTarget) {
-    window.addEventListener('dragover', handleDragOver)
-    window.addEventListener('drop', onDrop)
-  }
 })
 
 onBeforeUnmount(() => {
@@ -186,8 +176,6 @@ onBeforeUnmount(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('paste', handlePaste)
-  window.removeEventListener('dragover', handleDragOver)
-  window.removeEventListener('drop', onDrop)
 })
 
 /*
