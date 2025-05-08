@@ -18,7 +18,7 @@
       </q-btn>
     </template>
     <template #before>
-      <FileDropzone class="fit" accept="*" enable-paste @update:model-value="attachFileToChat">
+      <FileDropzone class="fit" accept="*" enable-paste @add-files="attachFileToChat">
         <q-btn dense class="fit" flat>
           <q-icon class="gt-xs" :name="matImage" />
           <q-icon :name="matAttachment" />

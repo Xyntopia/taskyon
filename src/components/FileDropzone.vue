@@ -73,7 +73,7 @@
 import { matAddAPhoto, matUploadFile } from '@quasar/extras/material-icons'
 import { ref, onMounted, onBeforeUnmount, type Ref } from 'vue'
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['add-files'])
 
 const props = defineProps({
   accept: { type: String, default: 'image/*,text/*,.pdf,application/*' },
@@ -122,7 +122,7 @@ const handleFileInput = (e: Event) => {
 
 const handleFiles = (files: FileList | File[]) => {
   const fileList = Array.from(files)
-  emit('update:modelValue', fileList)
+  emit('add-files', fileList)
 }
 
 const openFileInput = () => {

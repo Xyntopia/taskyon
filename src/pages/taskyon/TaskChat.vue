@@ -66,7 +66,13 @@
       </div>
     </div>
     <!--File Drop Zone Overlay-->
-    <FileDropzone disable-dropzone-border no-buttons drop-zone-target="#chat-area" accept="*" />
+    <FileDropzone
+      disable-dropzone-border
+      no-buttons
+      drop-zone-target="#chat-area"
+      accept="*"
+      @add-files="() => console.log('adding files!!')"
+    />
     <!--Task Browser buttons-->
     <q-page-sticky position="top-left" class="print-hide">
       <div v-if="detailed" class="q-pa-sm q-gutter-sm toolbar">

@@ -49,11 +49,7 @@
           </q-item>
         </q-list>
         <div class="row justify-around items-center">
-          <FileDropzone
-            accept="*"
-            disable-dropzone-border
-            @update:model-value="loadYamlConversation"
-          >
+          <FileDropzone accept="*" disable-dropzone-border @add-files="loadYamlConversation">
             <q-btn dense class="fit" flat>
               <q-icon :name="matFileUpload" />
               <q-tooltip>Upload Chat</q-tooltip>

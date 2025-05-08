@@ -111,7 +111,7 @@ and verify the authenticity of messages sent by other users."
         </q-btn>
       </q-item-section>
       <q-item-section>
-        <FileDropzone disable-dropzone-border accept="*" @update:model-value="onUploadTaskyonData">
+        <FileDropzone disable-dropzone-border accept="*" @add-files="onUploadTaskyonData">
           <q-btn :icon="matUpload" label="Upload Tasks from file" color="secondary" unelevated />
         </FileDropzone>
       </q-item-section>
@@ -143,13 +143,13 @@ and verify the authenticity of messages sent by other users."
       </q-item-section>
       <q-item-section>Upload Settings:</q-item-section>
       <div class="row q-gutter-xs">
-        <FileDropzone disable-dropzone-border accept="*" @update:model-value="loadSettingsJson">
+        <FileDropzone disable-dropzone-border accept="*" @add-files="loadSettingsJson">
           <q-btn outline class="fit">
             JSON
             <q-tooltip>Select Json file for upload!</q-tooltip>
           </q-btn>
         </FileDropzone>
-        <FileDropzone disable-dropzone-border accept="*" @update:model-value="loadSettingsYaml">
+        <FileDropzone disable-dropzone-border accept="*" @add-files="loadSettingsYaml">
           <q-btn outline class="fit">
             YAML
             <q-tooltip>Select YAML file for upload!</q-tooltip>
