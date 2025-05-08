@@ -1,13 +1,14 @@
 <template>
   <div
+    v-if="!noButtons"
     :class="['dropzone', disableDropzoneBorder ? '' : 'dashedborder']"
     @dragover.prevent
     @dragenter.prevent
-    @drop="handleDrop"
+    @drop="onDrop"
     @click.stop="openFileInput"
+    v-bind="$attrs"
   >
     <input
-      v-if="!noButtons"
       ref="fileInput"
       class="hidden"
       type="file"
@@ -57,16 +58,16 @@
         -->
       </div>
     </slot>
-    <!-- Parent-overlay drop target -->
-    <teleport v-if="dropZoneTarget" defer :to="dropZoneTarget">
-      <div
-        class="drop-overlay"
-        @dragover.prevent="handleDragOver"
-        @drop.prevent="handleDrop"
-        @dragenter.prevent
-      />
-    </teleport>
   </div>
+  <!-- only render overlay when dragging over target, we are using "defer" to make sure, the target exists
+     when rendering this component... -->
+  <teleport v-if="dropZoneTarget" defer :to="dropZoneTarget">
+    <transition name="fade">
+      <div v-if="isDragging" class="drop-overlay highlighted">
+        <q-icon name="add_circle" size="xl" color="green" />
+      </div>
+    </transition>
+  </teleport>
 </template>
 
 <script setup lang="ts">
@@ -87,13 +88,28 @@ const props = defineProps({
   noButtons: { type: Boolean, default: false },
 })
 
+// track “are we currently dragging over the target?”
+const isDragging = ref(false)
+let targetEl: HTMLElement | null = null
 const fileInput: Ref<null | HTMLInputElement> = ref(null)
 
-const handleDrop = (e: DragEvent) => {
+function onDragEnter(e: DragEvent) {
+  console.log('entering dropzone...')
   e.preventDefault()
-  if (e.dataTransfer) {
-    handleFiles(e.dataTransfer.files)
+  isDragging.value = true
+}
+function onDragLeave(e: DragEvent) {
+  console.log('leaving dropzone...')
+  // only turn off when truly leaving the target
+  const to = e.relatedTarget as Node | null
+  if (!to || !targetEl?.contains(to)) {
+    isDragging.value = false
   }
+}
+function onDrop(e: DragEvent) {
+  e.preventDefault()
+  isDragging.value = false
+  if (e.dataTransfer) handleFiles(e.dataTransfer.files)
 }
 
 const handleDragOver = (e: DragEvent) => {
@@ -132,18 +148,40 @@ const openFileInput = () => {
 }
 
 onMounted(() => {
+  if (props.dropZoneTarget) {
+    targetEl = document.querySelector(props.dropZoneTarget)
+    if (targetEl) {
+      targetEl.addEventListener('dragenter', onDragEnter)
+      targetEl.addEventListener('dragleave', onDragLeave)
+      targetEl.addEventListener('dragover', (e) => e.preventDefault())
+      targetEl.addEventListener('drop', onDrop)
+    } else {
+      console.error(`[FileDropzone] Could not find dropZoneTarget element: ${props.dropZoneTarget}`)
+    }
+  }
+})
+
+onMounted(() => {
   if (props.enablePaste) document.addEventListener('paste', handlePaste)
   // TODO: move
   if (props.dropZoneTarget) {
     window.addEventListener('dragover', handleDragOver)
-    window.addEventListener('drop', handleDrop)
+    window.addEventListener('drop', onDrop)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (targetEl) {
+    targetEl.removeEventListener('dragenter', onDragEnter)
+    targetEl.removeEventListener('dragleave', onDragLeave)
+    targetEl.removeEventListener('drop', onDrop)
   }
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('paste', handlePaste)
   window.removeEventListener('dragover', handleDragOver)
-  window.removeEventListener('drop', handleDrop)
+  window.removeEventListener('drop', onDrop)
 })
 
 /*
@@ -182,6 +220,18 @@ async function openDir() {
 .drop-overlay
   position: absolute
   inset: 0
-  background: transparent
-  pointer-events: all
+  pointer-events: none
+
+.drop-overlay.highlighted
+  border: 2px dashed green
+  display: flex
+  align-items: center
+  justify-content: center
+
+.fade-enter-active,
+.fade-leave-active
+  transition: opacity 150ms ease
+.fade-enter-from,
+.fade-leave-to
+  opacity: 0
 </style>

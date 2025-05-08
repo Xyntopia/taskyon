@@ -71,7 +71,7 @@
       no-buttons
       drop-zone-target="#chat-area"
       accept="*"
-      @add-files="() => console.log('adding files!!')"
+      @add-files="(newFiles) => console.log('adding files!!', newFiles)"
     />
     <!--Task Browser buttons-->
     <q-page-sticky position="top-left" class="print-hide">
