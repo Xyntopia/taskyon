@@ -91,6 +91,10 @@
                 usually recommended as it is model agnostic.</q-tooltip
               ></ToggleButton
             >
+            <div>
+              <q-tooltip>More AI Settings</q-tooltip>
+              <FormDialog dense flat :icon="matMoreHoriz" v-model="state.llmSettings"> </FormDialog>
+            </div>
           </div>
           <!--Choose Model-->
           <div class="row q-px-md">
@@ -253,6 +257,7 @@ import {
   matTune,
   matVisibility,
   matVisibilityOff,
+  matMoreHoriz,
 } from '@quasar/extras/material-icons'
 import {
   mdiAlphabeticalVariant,
@@ -264,6 +269,7 @@ import { deepMerge } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { asyncComputed } from 'src/modules/vueUtils'
+import FormDialog from './FormDialog.vue'
 
 const functionToggleBtnSize = 'md'
 
