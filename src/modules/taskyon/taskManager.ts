@@ -251,7 +251,9 @@ async function useTaskVectors(
     } else if (vectorizerModel) {
       console.log('create vector...', task.id)
       const txt = task2Str(task)
-      await vecDb.upsert(task.id, txt, undefined, false)
+      // Save the task to the vector DB, but exclude content.data for privacy or deduplication
+      const taskWithoutData = { ...task, content: { type: task.content.type, data: undefined } }
+      await vecDb.upsert(task.id, txt, undefined, taskWithoutData)
     }
   }
 

@@ -154,7 +154,7 @@ export const createPgLiteCrudWrapper = async <T>(
         `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
          VALUES ($1, $2)
          ON CONFLICT (${idColumn}) DO UPDATE SET ${dataColumn} = $2;`,
-        [id, JSON.stringify(data)],
+        [id, data],
       )
     },
     get,
@@ -168,7 +168,7 @@ export const createPgLiteCrudWrapper = async <T>(
            VALUES ($1, $2)
            ON CONFLICT (${idColumn})
            DO UPDATE SET ${dataColumn} = jsonb_set(${tableName}."${dataColumn}", '{}', EXCLUDED."${dataColumn}");`,
-          [id, JSON.stringify(data)],
+          [id, data],
         )
         newData = (await get(id)) ?? data
       } else {
@@ -216,11 +216,34 @@ export const createVectorStore = async (db: TyPGDB, name: string, additionalColu
 
   const modelName = 'xyntopia/all-MiniLM-L6-v2'
 
-  const search = async (searchText: string, k: number, label?: string, allowedIDs?: string[]) => {
+  /**
+   * Searches the vector store for entries most similar to the given search text.
+   *
+   * Performs a vector similarity search using the provided search text, returning the top-k closest matches.
+   * Optionally filters results by label, allowed IDs, and additional JSONB filters.
+   *
+   * @param searchText - The text to search for; will be vectorized and compared to stored vectors.
+   * @param k - The maximum number of results to return.
+   * @param label - (Optional) If provided, restricts results to entries with this label.
+   * @param allowedIDs - (Optional) If provided, restricts results to entries whose IDs are in this list.
+   * @param filters - (Optional) Additional JSONB key-value filters to apply to the data column.
+   * @returns A promise resolving to an array of matching entries, each containing `id`, `label`, `data`, and `distance` (similarity score).
+   *
+   *
+   *  TODO: we can possibly speed up this function by adding a GIN index:
+   *       CREATE INDEX idx_${name}_data_gin ON ${name} USING gin (data)
+   */
+  const search = async (
+    searchText: string,
+    k: number,
+    label?: string,
+    allowedIDs?: string[],
+    filters?: Record<string, string>,
+  ) => {
     console.log(`Searching for ${searchText.slice(0, maxStrLength)}`)
     const searchVector = await vectorizeText(searchText.slice(0, maxStrLength), modelName)
     const formattedVector = `[${searchVector.join(',')}]` // Format the array as a string for pgvector
-    let sqlQuery = `
+    let sql = `
       SELECT
       id,
       label,
@@ -228,31 +251,43 @@ export const createVectorStore = async (db: TyPGDB, name: string, additionalColu
       vec <-> $1 AS distance
       FROM ${name}
     `
-    const queryParams: (string | number | string[])[] = [formattedVector, k]
+    const params: (string | number | string[])[] = [formattedVector, k]
+    const whereClauses: string[] = []
 
     if (label) {
-      sqlQuery += `WHERE label = $3 `
-      queryParams.push(label)
+      whereClauses.push(`label = $${params.length + 1}`)
+      params.push(label)
     }
 
     if (allowedIDs && allowedIDs.length > 0) {
-      sqlQuery += `${label ? 'AND' : 'WHERE'} id = ANY($${queryParams.length + 1}) `
-      queryParams.push(allowedIDs)
+      whereClauses.push(`id = ANY($${params.length + 1})`)
+      params.push(allowedIDs)
     }
 
-    sqlQuery += `ORDER BY distance LIMIT $2;`
+    // Single JSONB containment filter
+    if (filters && Object.keys(filters).length) {
+      whereClauses.push(`data @> $${params.length + 1}`)
+      params.push(JSON.stringify(filters))
+    }
 
-    const results = await db.query<Row<string>>(sqlQuery, queryParams)
+    // Combine WHERE clauses
+    if (whereClauses.length) {
+      sql += `WHERE ${whereClauses.join(' AND ')}\n`
+    }
+
+    sql += `ORDER BY distance LIMIT $2;`
+
+    const results = await db.query<Row<string>>(sql, params)
 
     return results.rows as unknown as {
       id: string
-      label: string
+      label: string | null
       data: string
       distance: number
     }[]
   }
 
-  const upsert = async (id: string, text: string, label?: string, saveText = true) => {
+  const upsert = async (id: string, text: string, label?: string, saveData?: unknown) => {
     const vector = await vectorizeText(text.slice(0, maxStrLength), modelName)
     const formattedVector = `[${vector.join(',')}]` // Format the array as a string for pgvector
     await db.query(
@@ -261,10 +296,10 @@ export const createVectorStore = async (db: TyPGDB, name: string, additionalColu
       VALUES ($1, $2, $3, $4)
       ON CONFLICT (id) DO UPDATE SET
       label = EXCLUDED.label,
-      ${saveText ? 'data = EXCLUDED.data,' : ''}
+      ${saveData ? 'data = EXCLUDED.data,' : ''}
       vec = EXCLUDED.vec;
     `,
-      [id, label, JSON.stringify(text || ''), formattedVector],
+      [id, label, saveData || '', formattedVector],
     )
   }
 
