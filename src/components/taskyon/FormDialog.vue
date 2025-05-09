@@ -2,6 +2,7 @@
   <q-btn @click="() => (openDialog = true)" v-bind="$attrs" />
   <q-dialog v-model="openDialog" auto-close>
     <q-card>
+      <q-card-section v-if="title" class="text-h6"> {{ title }}</q-card-section>
       <q-card-section>
         <ObjectTreeView v-model="reactiveData" />
       </q-card-section>
@@ -17,4 +18,6 @@ defineOptions({ inheritAttrs: false })
 
 const openDialog = ref(false)
 const reactiveData = defineModel<Record<string, unknown>>()
+
+defineProps<{ title?: string }>()
 </script>

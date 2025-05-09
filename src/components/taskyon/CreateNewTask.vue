@@ -93,7 +93,13 @@
             >
             <div>
               <q-tooltip>More AI Settings</q-tooltip>
-              <FormDialog dense flat :icon="matMoreHoriz" v-model="state.llmSettings"> </FormDialog>
+              <FormDialog
+                title="AI Settings"
+                dense
+                flat
+                :icon="matMoreHoriz"
+                v-model="state.llmSettings"
+              />
             </div>
           </div>
           <!--Choose Model-->
