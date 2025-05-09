@@ -38,14 +38,13 @@ export const localVectorStore = createTool({
     const { search, upsert } = await createVectorStore(
       await getDatabase('taskyon'),
       'vectorStoreTool',
-      ['label TEXT'],
     )
 
     if (searchText) {
-      return await search(searchText, k, label)
+      return await search(searchText, k, [], { label })
     } else if (saveText) {
       const id = await sha256UrlSafeHash(saveText)
-      await upsert(id, saveText, label)
+      await upsert(id, saveText, { label })
       return { message: 'Data saved successfully' }
     }
 

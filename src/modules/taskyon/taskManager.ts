@@ -205,14 +205,8 @@ async function useTaskVectors(
   getAllTaskIds: () => Promise<string[]>,
   getTask: (taskId: string) => Promise<TaskNode | null>,
   vectorizerModel?: string,
-  taskyonDB?: TaskyonDatabase,
 ) {
-  const vecDb = await createVectorStore(await getDatabase('taskyon'), 'tyTaskVectors', [
-    'label TEXT',
-    /*'type VARCHAR(256)',
-    'authorId VARCHAR(512)',
-    'created_at ':*/
-  ])
+  const vecDb = await createVectorStore(await getDatabase('taskyon'), 'tyTaskVectors')
 
   async function syncVectorIndexWithTasks(progressCallback: (done: number, total: number) => void) {
     let counter = 0
@@ -236,7 +230,7 @@ async function useTaskVectors(
   // TODO: make sure, we also stringify tool calls etc...
   // TODO: tryto get rid of unnecessary characters in the string...
   //       e.g. remove parenthesis from json etc..
-  const task2Str = (t: TaskNode) => JSON.stringify(t.content)
+  const task2Str = (t: Partial<TaskNode>) => JSON.stringify(t.content)
 
   async function addtoVectorDB(task: TaskNode) {
     const existingVector = await vecDb.get(task.id)
@@ -244,16 +238,16 @@ async function useTaskVectors(
       console.log('vector already exists!', task.id)
     } else if (
       (task.content.type === 'functioncall' &&
-        (task.content.data.name === 'chatCompletion' || task.content.data.name === 'chooseTool')) ||
+        ['chatCompletion', 'chooseTool'].includes(task.content.data.name)) ||
       (task.content.type === 'return' && task.content.data === 'assistant answered')
     ) {
       console.log('skip indexing of task', task.id)
     } else if (vectorizerModel) {
       console.log('create vector...', task.id)
       const txt = task2Str(task)
-      // Save the task to the vector DB, but exclude content.data for privacy or deduplication
+      // Save the task to the vector DB, but exclude content.data to save space...
       const taskWithoutData = { ...task, content: { type: task.content.type, data: undefined } }
-      await vecDb.upsert(task.id, txt, undefined, taskWithoutData)
+      await vecDb.upsert(task.id, txt, taskWithoutData)
     }
   }
 
@@ -269,31 +263,16 @@ async function useTaskVectors(
    */
   async function filteredVectorSearch(
     searchTerm: string,
-    query?: MangoQuery, // used to pre-filter our vector search
     k = 10,
-    label?: string,
+    taskTemplate?: Partial<TaskNode> | Record<string, unknown>,
   ): Promise<{ taskId: string; distance: number }[]> {
-    if (taskyonDB) {
-      let result: Awaited<ReturnType<(typeof vecDb)['search']>>
-      if (query) {
-        const taskList = await taskyonDB.tasknodes.find(query).exec()
-        const taskIDs = taskList.map((taskDoc) => taskDoc.id)
-        result = await vecDb.search(searchTerm, k, label, taskIDs)
-      } else {
-        result = await vecDb.search(searchTerm, k)
-      }
-      return result.map((r) => ({ taskId: r.id, distance: r.distance }))
-    }
-    return []
+    const result = await vecDb.search(searchTerm, k, undefined, taskTemplate)
+    return result.map((r) => ({ taskId: r.id, distance: r.distance }))
   }
 
-  async function searchSimilarTasks(
-    task: TaskNode,
-    query?: MangoQuery, // used to pre-filter our vector search
-    k = 10,
-  ) {
+  async function searchSimilarTasks(task: Partial<TaskNode>, k = 10) {
     const searchStr = task2Str(task)
-    return filteredVectorSearch(searchStr, query, k)
+    return filteredVectorSearch(searchStr, k)
   }
 
   return {
@@ -516,7 +495,7 @@ export async function useTyTaskManager(
     resetTaskVectors,
     searchSimilarTasks,
     count: countVecs,
-  } = await useTaskVectors(getAllTaskIds, tyCrud.get, vectorizerModel, taskyonDB)
+  } = await useTaskVectors(getAllTaskIds, tyCrud.get, vectorizerModel)
 
   // add more enhanced, ty-specific functionality to our CRUD
   const tyCrudVec = withLocking({

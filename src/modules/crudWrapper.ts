@@ -201,6 +201,7 @@ export const createPgLiteCrudWrapper = async <T>(
   }
 }
 
+// TODO: option to create indices on specific data properties to speed up filtering...
 export const createVectorStore = async (db: TyPGDB, name: string, additionalColumns?: string[]) => {
   const { vectorizeText } = useNlpWorker()
   const numDimensions = 384
@@ -236,9 +237,8 @@ export const createVectorStore = async (db: TyPGDB, name: string, additionalColu
   const search = async (
     searchText: string,
     k: number,
-    label?: string,
     allowedIDs?: string[],
-    filters?: Record<string, string>,
+    filters?: Record<string, unknown>,
   ) => {
     console.log(`Searching for ${searchText.slice(0, maxStrLength)}`)
     const searchVector = await vectorizeText(searchText.slice(0, maxStrLength), modelName)
@@ -246,18 +246,11 @@ export const createVectorStore = async (db: TyPGDB, name: string, additionalColu
     let sql = `
       SELECT
       id,
-      label,
-      data,
       vec <-> $1 AS distance
       FROM ${name}
     `
     const params: (string | number | string[])[] = [formattedVector, k]
     const whereClauses: string[] = []
-
-    if (label) {
-      whereClauses.push(`label = $${params.length + 1}`)
-      params.push(label)
-    }
 
     if (allowedIDs && allowedIDs.length > 0) {
       whereClauses.push(`id = ANY($${params.length + 1})`)
@@ -281,13 +274,11 @@ export const createVectorStore = async (db: TyPGDB, name: string, additionalColu
 
     return results.rows as unknown as {
       id: string
-      label: string | null
-      data: string
       distance: number
     }[]
   }
 
-  const upsert = async (id: string, text: string, label?: string, saveData?: unknown) => {
+  const upsert = async (id: string, text: string, saveData?: unknown) => {
     const vector = await vectorizeText(text.slice(0, maxStrLength), modelName)
     const formattedVector = `[${vector.join(',')}]` // Format the array as a string for pgvector
     await db.query(
@@ -295,11 +286,10 @@ export const createVectorStore = async (db: TyPGDB, name: string, additionalColu
       INSERT INTO ${name} (id, label, data, vec)
       VALUES ($1, $2, $3, $4)
       ON CONFLICT (id) DO UPDATE SET
-      label = EXCLUDED.label,
       ${saveData ? 'data = EXCLUDED.data,' : ''}
       vec = EXCLUDED.vec;
     `,
-      [id, label, saveData || '', formattedVector],
+      [id, saveData || '', formattedVector],
     )
   }
 
