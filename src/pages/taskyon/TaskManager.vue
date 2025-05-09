@@ -33,14 +33,21 @@
             not indexed.)</q-tooltip
           >
         </div>
-        <q-input
-          :model-value="query.l"
+        <q-select
+          :model-value="query.ct"
           class="q-pl-md"
           dense
-          label="filter for labels"
+          clearable
+          label="filter for specific task type"
           @update:model-value="
-            (label) => onSearchChange(label != null ? { l: String(label) } : {}, 'query')
+            (contentType) =>
+              onSearchChange(
+                contentType != null ? { ct: String(contentType) } : { ct: undefined },
+                'query',
+              )
           "
+          :options="tasktypesOptions"
+          style="min-width: 200px"
         />
       </template>
       <template #body-cell-task="rows">
@@ -84,6 +91,7 @@
 import { ref, watch, computed } from 'vue'
 import Search from 'components/SearchInput.vue'
 import type { TaskNode } from 'src/modules/taskyon/types'
+import { TaskContent } from 'src/modules/taskyon/types'
 import Task from 'components/taskyon/TaskWidget.vue'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import {
@@ -95,7 +103,6 @@ import {
 import { useRouter, useRoute } from 'vue-router'
 import { onMounted } from 'vue'
 import { type QTableProps } from 'quasar'
-import { createTaskNodeMangoQuery } from 'src/modules/taskyon/rxdb'
 
 // TODO:  do some search caching ;) so that we can move faster back & forth between
 //        pages in the browser...
@@ -106,11 +113,19 @@ const defaultParams = {
   k: '10',
 }
 
+// If you want to map them to { label, value } for q-select:
+const tasktypesOptions = TaskContent._def.options.map((opt) => {
+  // each option is a ZodObject with a `type` literal
+  const obj = opt
+  const typeLiteral = obj.shape['type'].value
+  return typeLiteral
+})
+
 interface searchParams {
-  l?: string // label,
-  q?: string // searchTerm,
+  ct?: string | undefined // content type,
+  q?: string | undefined // searchTerm,
   k?: string // number of search results...
-  t?: string // search for similar tasks...
+  t?: string | undefined // search for similar tasks...
 }
 
 const props = defineProps<{
@@ -189,19 +204,18 @@ async function searchTasks(params: searchParams & { k: string }) {
       distance: number
     }[] = []
     if (params.q) {
-      result = await taskManager.filteredVectorSearch(
-        params.q,
-        params.l ? createTaskNodeMangoQuery(params.l) : undefined,
-        parseInt(params.k),
-      )
+      const jsonfilter = params.ct
+        ? {
+            content: {
+              type: params.ct,
+            },
+          }
+        : undefined
+      result = await taskManager.filteredVectorSearch(params.q, parseInt(params.k), jsonfilter)
     } else if (params.t) {
       const task = await taskManager.getTask(params.t)
       if (task) {
-        result = await taskManager.searchSimilarTasks(
-          task,
-          params.l ? createTaskNodeMangoQuery(params.l) : undefined,
-          parseInt(params.k),
-        )
+        result = await taskManager.searchSimilarTasks(task, parseInt(params.k))
       }
     }
     // Add score to each task
