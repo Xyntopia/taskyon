@@ -284,9 +284,6 @@ export const TaskNodeMeta = z
 
 export type TaskNodeMeta = z.infer<typeof TaskNodeMeta>
 
-// TODO: add an "extended" task and put all information in there which we don't really "need"
-//       to save in the database. E.g. how many follow-up tasks are allowed, how many
-//       errors are allowed for function tasks  etc...  so mostly runtime-logic
 export const TaskNode = z.object({
   // TODO: get rid of "role"  and put it into chatCompletion only...
   // we don't need it in the rest of the app, I think.. we might be able to indicate that a task was
@@ -295,7 +292,7 @@ export const TaskNode = z.object({
   // OR: we could simply check the parents & priors of tasks. if tasks have a parent, they were generated
   // by a function. user-generated message should not have a parent...
   role: z.enum(['system', 'user', 'assistant', 'function']),
-  name: z.string().optional(),
+  name: z.string().optional().describe('An optional name for the task'),
   content: TaskContent.describe(
     `This is the actual content of the task. This is the actual content which is process at each step.
 For example this is, what an LLM would actually get to see. There are only a few different ways
