@@ -4,7 +4,7 @@
       <q-page class="q-pa-md">
         <q-card>
           <q-card-section>
-            <div class="text-h6">PGLite SQL Executor</div>
+            <div class="text-h6">SQL Queries</div>
           </q-card-section>
 
           <div>all tables: {{ allTables }}</div>
