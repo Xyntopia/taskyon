@@ -1,7 +1,7 @@
 import { dump } from 'js-yaml'
 import { bigIntToString } from '../utils'
 import type { FunctionArguments, FunctionCall, ParamType, WithRequired, TaskNode } from './types'
-import { partialTaskDraft, taskMarker } from './types'
+import { convertZodToJsonSchemaCached, partialTaskDraft, taskMarker } from './types'
 import { ToolBase, TaskProcessingError } from './types'
 import type { RemoteFunctionResponse } from './iframeApiTypes'
 import { RemoteFunctionCall, TaskyonMessage } from './iframeApiTypes'
@@ -422,23 +422,14 @@ export const exampleTool = createTool({
   code: "({parameter1, parameter2 = 'default parameter :)'}) => {return parameter1 + ' ' + parameter2;}",
 })
 
-export async function craeteToolJsonSchema() {
-  const { zodToJsonSchema } = await import('zod-to-json-schema')
+export function craeteToolJsonSchema() {
   const JSON_SCHEMA_PLACEHOLDER: JSONSchema7 = {
     type: 'object',
     description:
       'A valid JSON Schema object defining the structure, types, and constraints for the tool parameters. Include properties, required fields, and any other validations as needed.',
   }
 
-  // Function to convert Zod schema to JSON Schema dynamically
-  const convertZodToJsonSchema = (schema: z.ZodTypeAny) => {
-    return zodToJsonSchema(schema, {
-      $refStrategy: 'none',
-      definitionPath: '#/definitions',
-    })
-  }
-
-  const toolBaseJsonSchema = convertZodToJsonSchema(ToolBase) as JSONSchema7 & {
+  const toolBaseJsonSchema = convertZodToJsonSchemaCached(ToolBase) as unknown as JSONSchema7 & {
     properties: Record<string, unknown>
   }
   if (toolBaseJsonSchema) {

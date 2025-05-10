@@ -91,7 +91,7 @@ const selectedTool = asyncComputed(async () => {
   }
 }, undefined)
 
-const toolJsonSchema = asyncComputed(craeteToolJsonSchema, undefined)
+const toolJsonSchema = craeteToolJsonSchema()
 
 const currentToolDefinition = computed<PluginTool>(() => {
   return selectedTool.value

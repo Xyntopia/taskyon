@@ -96,8 +96,8 @@ is now unreadable.
     },
   })
 
-export const createAddNewToolTool: () => Promise<ToolBase> = async () => {
-  const toolJsonSchema = await craeteToolJsonSchema()
+export const createAddNewToolTool: () => ToolBase = () => {
+  const toolJsonSchema = craeteToolJsonSchema()
   return {
     name: 'addNewTool',
     description: 'Validates and registers a new tool with taskyon.',

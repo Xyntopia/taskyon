@@ -1,7 +1,8 @@
 import type OpenAI from 'openai'
 import { z } from 'zod'
-import { deepCopy } from '../utils'
+import { deepCopy, lruCache } from '../utils'
 import { JSONSchema7 } from '../jsonSchema'
+import { zodToJsonSchema } from 'zod-to-json-schema'
 
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type RequireSome<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
@@ -709,3 +710,4 @@ export type WithRequired<T, K extends keyof T> = Omit<T, K> & {
   [P in K]-?: Exclude<T[P], undefined>
 }
 export const taskMarker = '*TY_TASKRESULT*'
+export const convertZodToJsonSchemaCached = lruCache(100)(zodToJsonSchema)

@@ -44,7 +44,7 @@ export async function testJsonSChemas() {
   const { zodToJsonSchema } = await import('zod-to-json-schema')
 
   return {
-    toolBaseJsonSchema: await craeteToolJsonSchema(),
+    toolBaseJsonSchema: craeteToolJsonSchema(),
     toolJsonSchema: zodToJsonSchema(ToolBase),
     yamlString: zodToYamlString(ToolBase),
   }

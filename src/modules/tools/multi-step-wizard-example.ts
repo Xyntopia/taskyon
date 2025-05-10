@@ -26,11 +26,11 @@ export const toolCreationWizard = createTool({
     match(step)
       .returnType<taskResult | Promise<taskResult>>()
       // "undefined" is the first step and how we start :)
-      .with(P.union(P.nullish, P.string.includes('init'), P.string.includes('start')), async () => {
+      .with(P.union(P.nullish, P.string.includes('init'), P.string.includes('start')), () => {
         console.log('starting function creation wizard')
         console.log('Prompting for tool creation...')
 
-        const toolJsonSchema = await craeteToolJsonSchema()
+        const toolJsonSchema = craeteToolJsonSchema()
 
         return makeTaskResult([
           [

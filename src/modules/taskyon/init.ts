@@ -69,7 +69,7 @@ export async function initTaskyon(
     chatCompletion,
     createToolSearcher(taskManagerInstance),
     createChooseTool(taskManagerInstance),
-    await createAddNewToolTool(),
+    createAddNewToolTool(),
   )
   void taskManagerInstance.updateToolDefinitions()
 
