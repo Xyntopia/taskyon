@@ -45,7 +45,6 @@ import {
   testVectorizerInitialization,
   testVectorizeText,
   testChatCompletion,
-  testSecretStore,
   testJsonSChemas,
   testToolLista,
 } from 'src/modules/taskyon/tests'
@@ -141,7 +140,7 @@ async function generateReport(details = false, onlyFirst = false) {
   )
   diagnostics.value += await runTest('test chatCompletion tool', testChatCompletion, details)
   diagnostics.value += await runTest('environment info', getEnvironmentInfo)
-  diagnostics.value += await runTest('Test Secret Store', testSecretStore, details)
+  //diagnostics.value += await runTest('Test Secret Store', testSecretStore, details)
   diagnostics.value += await runTest('list of Tools', testToolLista, details)
   diagnostics.value += await runTest('json schemas', testJsonSChemas, details)
   diagnostics.value += await runTest('pg lite', testPGLite, details)

@@ -13,6 +13,7 @@ import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
 import type { JSONSchema7 } from 'json-schema'
 import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
 import Ajv from 'ajv'
+import type { JsonSchema7ObjectType } from 'zod-to-json-schema'
 
 export const taskResult = z.object({
   taskResultMarker: z
@@ -423,15 +424,13 @@ export const exampleTool = createTool({
 })
 
 export function craeteToolJsonSchema() {
-  const JSON_SCHEMA_PLACEHOLDER: JSONSchema7 = {
+  const JSON_SCHEMA_PLACEHOLDER = {
     type: 'object',
     description:
       'A valid JSON Schema object defining the structure, types, and constraints for the tool parameters. Include properties, required fields, and any other validations as needed.',
   }
 
-  const toolBaseJsonSchema = convertZodToJsonSchemaCached(ToolBase) as unknown as JSONSchema7 & {
-    properties: Record<string, unknown>
-  }
+  const toolBaseJsonSchema = convertZodToJsonSchemaCached(ToolBase) as JsonSchema7ObjectType
   if (toolBaseJsonSchema) {
     toolBaseJsonSchema.properties.parameters = JSON_SCHEMA_PLACEHOLDER
     delete (toolBaseJsonSchema as JSONSchema7).$schema

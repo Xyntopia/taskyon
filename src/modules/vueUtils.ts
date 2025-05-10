@@ -55,7 +55,7 @@ export function buildSlimView<TObj extends object, TS extends ZodRawShape>(
   const mergedSchema = pickedSchemas.reduce((a, b) => a.merge(b))
 
   // 2. emit JSON-Schema if you need it
-  const jsonSchema = convertZodToJsonSchemaCached(mergedSchema, 'SlimView')
+  const jsonSchema = convertZodToJsonSchemaCached(mergedSchema)
 
   // 3. build the Vue reactive view by pulling each picked ref
   const entries = sources.flatMap(({ obj, pickKeys }) =>
