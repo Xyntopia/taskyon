@@ -98,7 +98,8 @@
                 dense
                 flat
                 :icon="matMoreHoriz"
-                v-model="state.llmSettings"
+                :schema="slimSettings.jsonSchema"
+                v-model="slimSettings.reactiveView"
               />
             </div>
           </div>
@@ -276,6 +277,7 @@ import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { asyncComputed } from 'src/modules/vueUtils'
 import FormDialog from './FormDialog.vue'
+import { buildSlimView } from 'src/modules/vueUtils'
 
 const functionToggleBtnSize = 'md'
 
@@ -298,6 +300,13 @@ function updateContent(value: string | null | undefined) {
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { selectedApi } = toRefs(state.llmSettings)
+const slimSettings = buildSlimView([
+  {
+    obj: state.llmSettings,
+    schema: llmSettings,
+    pickKeys: ['enableOpenAiTools', 'tryUsingVisionModels'],
+  },
+])
 
 // we initialize our taskDraft with the state of this window!
 
