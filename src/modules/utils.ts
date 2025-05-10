@@ -71,6 +71,11 @@ export function humanReadablePrice(price: number | string | undefined, digits: n
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyFunction<ReturnType> = (...args: any[]) => ReturnType
 
+// Async sleep function
+export function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 /**
  * Creates a higher-order function for caching the results of another function, using a Least Recently Used (LRU) policy.
  *
@@ -92,20 +97,11 @@ type AnyFunction<ReturnType> = (...args: any[]) => ReturnType
  * console.log(cachedExpensiveOperation(2, 3));  // Outputs: Expensive operation: 2 3 \n 6
  * console.log(cachedExpensiveOperation(2, 3));  // Outputs: Cache hit: [2,3] \n 6
  */
-
-// Async sleep function
-export function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-export function lruCache<ReturnType>(
-  size: number,
-  ignoreIndices: number[] = [],
-): (fn: AnyFunction<ReturnType>) => AnyFunction<ReturnType> {
+export function lruCache(size: number, ignoreIndices: number[] = []) {
   // The cache for storing function call results.
-  const cache = new Map<string, ReturnType>()
+  const cache = new Map<string, unknown>()
 
-  return (fn: AnyFunction<ReturnType>): AnyFunction<ReturnType> => {
+  return <ReturnType>(fn: AnyFunction<ReturnType>): AnyFunction<ReturnType> => {
     return function (...args: unknown[]): ReturnType {
       // Generate a cache key, ignoring specified arguments.
       const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index))
@@ -281,23 +277,27 @@ export function asyncTimeLruCache(
 }
 
 export function asyncLruCache(size: number, ignoreIndices: number[] = []) {
-  return <F extends (...args: Parameters<F>) => ReturnType<F> | Promise<ReturnType<F>>>(fn: F) => {
-    const cache = new Map<string, ReturnType<F>>()
+  return <TArgs extends unknown[], R>(
+    fn: (...args: TArgs) => R | Promise<R>,
+  ): ((...args: TArgs) => Promise<R>) => {
+    const cache = new Map<string, R>()
 
-    return async (...args: Parameters<F> & unknown[]): Promise<ReturnType<F>> => {
-      const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index))
+    return async (...args: TArgs): Promise<R> => {
+      // build a key, skipping any ignored positions
+      const keyArgs = args.filter((_, i) => !ignoreIndices.includes(i))
       const key = JSON.stringify(keyArgs)
 
       if (cache.has(key)) {
         console.log('Cache hit:', key)
-        return cache.get(key)!
+        return cache.get(key)! // R
       }
 
-      const result = await fn(...args)
+      // await will normalize Promise<R> → R or just give you R if it's sync
+      const result = (await fn(...args)) as R
       cache.set(key, result)
 
       if (cache.size > size) {
-        const oldestKey = Array.from(cache.keys())[0]!
+        const oldestKey = cache.keys().next().value!
         cache.delete(oldestKey)
         console.log('Evicted:', oldestKey)
       }
