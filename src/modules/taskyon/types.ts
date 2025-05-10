@@ -1,6 +1,6 @@
 import type OpenAI from 'openai'
 import { z } from 'zod'
-import { deepCopy, lruCache } from '../utils'
+import { deepCopy } from '../utils'
 import { JSONSchema7 } from '../jsonSchema'
 import { zodToJsonSchema } from 'zod-to-json-schema'
 
@@ -493,7 +493,9 @@ export const llmSettings = z.object({
   enableOpenAiTools: z
     .boolean()
     .default(false)
-    .describe('Enable OpenAI function selection, currently outdated.'),
+    .describe(
+      "Enable OpenAI function selection, This doesn't work for all models currently and is mainly recommended for all openAI models.",
+    ),
   selectedApi: z
     .string()
     .nullish()
@@ -710,4 +712,5 @@ export type WithRequired<T, K extends keyof T> = Omit<T, K> & {
   [P in K]-?: Exclude<T[P], undefined>
 }
 export const taskMarker = '*TY_TASKRESULT*'
-export const convertZodToJsonSchemaCached = lruCache(100)(zodToJsonSchema)
+//export const convertZodToJsonSchemaCached = lruCache(100)(zodToJsonSchema)
+export const convertZodToJsonSchemaCached = zodToJsonSchema
