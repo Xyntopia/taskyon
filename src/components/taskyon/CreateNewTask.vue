@@ -39,7 +39,7 @@
               :size="functionToggleBtnSize"
               outline
               :icon="mdiTools"
-              v-model="state.llmSettings.enableToolChooser"
+              v-model="slimSettings.reactiveView.enableToolChooser"
             >
               <div class="q-pl-sm gt-xs">Use Tools</div>
               <q-tooltip :delay="200">
@@ -300,11 +300,12 @@ function updateContent(value: string | null | undefined) {
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { selectedApi } = toRefs(state.llmSettings)
+
 const slimSettings = buildSlimView([
   {
     obj: state.llmSettings,
     schema: llmSettings,
-    pickKeys: ['enableOpenAiTools', 'tryUsingVisionModels'],
+    pickKeys: ['enableToolChooser', 'enableOpenAiTools', 'tryUsingVisionModels'],
   },
 ])
 
