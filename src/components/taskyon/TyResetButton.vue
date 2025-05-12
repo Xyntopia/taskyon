@@ -81,12 +81,22 @@ const tystate = useTaskyonStore()
 
 async function onResetTaskyon() {
   console.log('reset taskyon!')
+
   if (props.mode !== 'settings') {
     const tm = await tystate.getTaskManager()
     await tm.deleteAllTasks()
     state.chatHistory = []
   }
   if (props.mode !== 'tasks') state.$reset()
+
+  // 2) Clear browser caches & storage
+  // — Cache Storage (used by service workers / Cache API)
+  if ('caches' in window) {
+    const names = await caches.keys()
+    await Promise.all(names.map((n) => caches.delete(n)))
+    console.log('CacheStorage cleared:', names)
+  }
+
   // TODO: this is a superdirty version..  it would be much better to manually reinit the taskyondb in the deleteAllTasks function
   location.reload() // reload browser window to reinitialize the db...
   //location.reload(); // reload browser window to reinitialize the db...
