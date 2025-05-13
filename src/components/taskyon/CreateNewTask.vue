@@ -303,13 +303,7 @@ const { selectedApi } = toRefs(state.llmSettings)
 const slimSettings = buildSlimView({
   obj: state.llmSettings,
   schema: llmSettings,
-  pickKeys: [
-    'enableToolChooser',
-    'enableOpenAiTools',
-    'tryUsingVisionModels',
-    'selectedApi',
-    'useBasePrompt',
-  ],
+  pickKeys: ['enableToolChooser', 'enableOpenAiTools', 'tryUsingVisionModels', 'useBasePrompt'],
 })
 
 // we initialize our taskDraft with the state of this window!
