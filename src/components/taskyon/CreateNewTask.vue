@@ -87,10 +87,8 @@
             >
               <q-icon :name="mdiFunctionVariant"></q-icon>
               <q-tooltip :dely="200">
-                If turned on, use taskyon function selection mode for models which support this.
-                Otherwise use the built-in support for models which support this. Taskyon mode is
-                usually recommended as it is model agnostic.</q-tooltip
-              ></ToggleButton
+                {{ llmSettings.shape.enableOpenAiTools.description }}
+              </q-tooltip></ToggleButton
             >
             <div>
               <q-tooltip>More AI Settings</q-tooltip>
@@ -305,7 +303,13 @@ const { selectedApi } = toRefs(state.llmSettings)
 const slimSettings = buildSlimView({
   obj: state.llmSettings,
   schema: llmSettings,
-  pickKeys: ['enableToolChooser', 'enableOpenAiTools', 'tryUsingVisionModels'],
+  pickKeys: [
+    'enableToolChooser',
+    'enableOpenAiTools',
+    'tryUsingVisionModels',
+    'selectedApi',
+    'useBasePrompt',
+  ],
 })
 
 // we initialize our taskDraft with the state of this window!

@@ -494,7 +494,9 @@ export const llmSettings = z.object({
     .boolean()
     .default(false)
     .describe(
-      "Enable OpenAI function selection, This doesn't work for all models currently and is mainly recommended for all openAI models.",
+      `Enable OpenAI function selection, This doesn't work for all models currently
+and is mainly recommended for all openAI models.
+Taskyon "native" mode is usually recommended as it is model agnostic.`,
     ),
   selectedApi: z
     .string()
@@ -545,7 +547,7 @@ export const llmSettings = z.object({
     .describe('The task which is currently drafted (This could for example be a simple message).'),
   allowedTools: z.array(FunctionName),
   useBasePrompt: z.boolean().default(true).describe(`
-  <p>Toggle the base prompt on/off.</p>
+  *Toggle the base prompt on/off.*
 
   This gives the AI instructions how to draw better graphics, math
   formulas and generally make the chat a little more fancy than just plain
