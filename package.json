@@ -56,6 +56,7 @@
     "path": "^0.12.7",
     "pdfjs-dist": "^4.3.136",
     "pinia": "^3.0.1",
+    "prettier": "^3.5.3",
     "pyodide": "^0.24.1",
     "quasar": "^2.17.0",
     "rxdb": "^15.30.2",
@@ -72,9 +73,8 @@
     "vue3-google-login": "^2.0.25",
     "wavefunctioncollapse": "^2.1.0",
     "xlsx": "^0.18.2",
-    "zod": "^3.22.4",
-    "zod-to-json-schema": "^3.24.1",
-    "prettier": "^3.5.3"
+    "zod": "^4.0.0-beta.20250505T195954",
+    "zod-to-json-schema": "^3.24.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
