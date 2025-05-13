@@ -7,10 +7,11 @@ import type { NormalizedOutputOptions, OutputBundle } from 'rollup'
 import path from 'path'
 import fs from 'fs'
 import { ToolBase } from './src/modules/taskyon/types'
-import { zodSchemasToOpenApi } from './src/modules/yamlUtils'
 import { TaskyonMessage } from './src/modules/taskyon/iframeApiTypes'
 import { execSync } from 'child_process'
 import { analyzer } from 'vite-bundle-analyzer'
+import z from 'zod'
+import { dump } from 'js-yaml'
 
 function getGitCommitHash() {
   try {
@@ -66,8 +67,6 @@ const filesToCopy = [
   },
 ]
 
-// TODO: move this into our regular taskyon modules
-//       and simplyiportit from here...
 function createOpenAPIDocs() {
   /** This function creates openAPI docs for taskyon and saves them inside the public folder.
    *  the reason we're doing this her as msot clients will simply want to get the json and
@@ -81,31 +80,28 @@ function createOpenAPIDocs() {
 
   console.log('generate docs...')
 
-  const messages = TaskyonMessage.options.reduce(
-    (p, n) => {
-      p[n.shape.type.value] = n
-      return p
-    },
-    {} as Record<string, unknown>,
-  )
+  const schemas = [ToolBase, TaskyonMessage].map((zType) => z.toJSONSchema(zType))
 
-  const openApiYaml = zodSchemasToOpenApi(
-    {
-      ToolBase,
-      ...messages,
+  const openapiDoc = {
+    openapi: '3.0.0',
+    info: {
+      title: 'Taskyon API',
+      version: '1.0.0', // you can pull this from your package.json
+      description: 'Auto‑generated schema for Taskyon postmessage/iframe API',
     },
-    'Taskyon API',
-    '1.0.0',
-    Object.keys(messages),
-    'yaml',
-  )
-  //console.log(openApiYaml);
+    paths: {}, // add path defs here if you have any
+    components: {
+      schemas,
+    },
+  }
+
+  const openApiYaml = dump(openapiDoc)
 
   const destPath = path.resolve(__dirname, 'public/docs/openapi-docs.yml')
+  fs.mkdirSync(path.dirname(destPath), { recursive: true })
+  fs.writeFileSync(destPath, openApiYaml, { encoding: 'utf-8' })
 
-  fs.writeFileSync(destPath, openApiYaml, {
-    encoding: 'utf-8',
-  })
+  console.log(`OpenAPI docs written to ${destPath}`)
 }
 
 // Custom plugin to adjust sourcemaps and add banner comment
