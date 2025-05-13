@@ -1,7 +1,6 @@
 import { type ComputedRef, ref, watch, computed, toRefs, reactive } from 'vue'
 import type { ZodObject, ZodRawShape } from 'zod'
 import { convertZodToJsonSchemaCached } from './taskyon/types'
-import type { JsonSchema7Type } from 'zod-to-json-schema'
 import { z } from 'zod'
 
 export function asyncComputed<T>(
@@ -40,7 +39,7 @@ export function buildSlimView<O extends Record<string, unknown>, S extends Singl
     return schema.pick(pickMap)
   })
   const mergedSchema = pickedSchemas.reduce((a, b) => a.merge(b))
-  const jsonSchema = convertZodToJsonSchemaCached(mergedSchema) as JsonSchema7Type
+  const jsonSchema = convertZodToJsonSchemaCached(mergedSchema)
 
   const plainRefMap = sources.reduce(
     (acc, { obj, pickKeys }) => {

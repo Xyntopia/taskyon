@@ -2,7 +2,6 @@ import type OpenAI from 'openai'
 import { z } from 'zod'
 import { deepCopy } from '../utils'
 import { JSONSchema7 } from '../jsonSchema'
-import { zodToJsonSchema } from 'zod-to-json-schema'
 
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type RequireSome<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
@@ -153,15 +152,12 @@ export interface OpenRouterGenerationInfo {
   usage: number
 }
 
-const FunctionName = z.string().refine(
-  (val) => /^[a-zA-Z0-9_-]+$/.test(val),
-  (val) => ({
-    message: `The function/tool name ${val} contains illegal characters. It has to fulfill '^[a-zA-Z0-9_-]+$'`,
-  }),
-)
+const FunctionName = z.string().refine((val) => /^[a-zA-Z0-9_-]+$/.test(val), {
+  error: ({ input }) =>
+    `The function/tool name ${input} contains illegal characters. It has to fulfill '^[a-zA-Z0-9_-]+$'`,
+})
 type FunctionName = z.infer<typeof FunctionName>
 
-const renderOption = z.union([z.boolean(), z.function()])
 export const ToolBase = z.object({
   description: z
     .string()
@@ -171,9 +167,19 @@ export const ToolBase = z.object({
     .optional()
     .describe('An optional longer description for more complicated operations with this tool.'),
   name: FunctionName.describe('Name of the tool. Has to fulfill: /^[a-zA-Z0-9_-]+$/'),
-  renderOptions: z.object({ hideChat: renderOption, hideLlm: renderOption }).partial().optional()
-    .describe(`*hideChat*, will hide the tool in the UI chat. HideLlm will hide the  tool from an LLM.
-This is mainly useful for tools like "chatCompletion" which the llm doesn't need to see in the chatCompletion.`),
+  renderOptions: z
+    .object({
+      hideChat: z
+        .boolean()
+        .describe(
+          "hide the tool in the UI chat. Useful if the function is used very often and we don't want it to clutter the chatWindow",
+        ),
+      hideLlm: z.boolean(
+        'HideLlm will hide the  tool from an LLM inside chatCompletion. This is mainly useful for tools like "chatCompletion" which the llm doesn\'t need to see in the chatCompletion.',
+      ),
+    })
+    .partial()
+    .optional(),
   parameters: JSONSchema7.describe(
     'A JSON schema object describing the parameters of the function.',
   ).readonly(),
@@ -192,7 +198,7 @@ export const ParamType = z.union([
   z.string(),
   z.number(),
   z.boolean(),
-  z.record(z.unknown()),
+  z.record(z.string(), z.unknown()),
   z.array(z.unknown()),
   z.null(),
   // We are also allowing undefined calls to the functions, even though this is not allowed in jsonschema.
@@ -200,7 +206,9 @@ export const ParamType = z.union([
   z.undefined(),
 ])
 export type ParamType = z.infer<typeof ParamType>
-export const FunctionArguments = z.record(ParamType).describe('arguments of the function')
+export const FunctionArguments = z
+  .record(z.string(), ParamType)
+  .describe('arguments of the function')
 export type FunctionArguments = z.infer<typeof FunctionArguments>
 
 /* here we are essentiall declaring the taskyon API */
@@ -266,7 +274,7 @@ export const TaskNodeMeta = z
         singlePromptTokens: z.number().optional(),
       })
       .optional(),
-    toolStreamArgsContent: z.record(z.string()).optional(),
+    toolStreamArgsContent: z.record(z.string(), z.string()).optional(),
     streamContent: z.string().optional(),
     taskCosts: z.number().optional(),
     rawOutput: z
@@ -503,7 +511,10 @@ Taskyon "native" mode is usually recommended as it is model agnostic.`,
     .nullish()
     .default('taskyon')
     .describe('which of the defined APIs are we currently using?'),
-  llmApis: z.record(apiConfig).default({}).describe('A list of OpenAI compatible API definitions.'),
+  llmApis: z
+    .record(z.string(), apiConfig)
+    .default({})
+    .describe('A list of OpenAI compatible API definitions.'),
   siteUrl: z
     .string()
     .default('https://taskyon.space')
@@ -525,7 +536,6 @@ Taskyon "native" mode is usually recommended as it is model agnostic.`,
       'Maximum number of tasks which are allowed to be performed autonomously before stopping.',
     ),
   taskTemplate: partialTaskDraft
-    .deepPartial()
     .optional()
     .describe(
       'A task template which can be provided for new tasks (E.g. which model to use). This is important when embedding tasyon in another webpage.',
@@ -715,4 +725,4 @@ export type WithRequired<T, K extends keyof T> = Omit<T, K> & {
 }
 export const taskMarker = '*TY_TASKRESULT*'
 //export const convertZodToJsonSchemaCached = lruCache(100)(zodToJsonSchema)
-export const convertZodToJsonSchemaCached = zodToJsonSchema
+export const convertZodToJsonSchemaCached = z.toJSONSchema

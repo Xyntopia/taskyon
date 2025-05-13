@@ -10,10 +10,9 @@ import type { YamlRepresentation } from '../zodUtils'
 import { convertToYamlWComments } from '../zodUtils'
 import { executeCodeInIframe } from './iframeWorker'
 import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
-import type { JSONSchema7 } from 'json-schema'
+import type { JSONSchema7, JSONSchema7Object } from 'json-schema'
 import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
 import Ajv from 'ajv'
-import type { JsonSchema7ObjectType } from 'zod-to-json-schema'
 
 export const taskResult = z.object({
   taskResultMarker: z
@@ -430,8 +429,12 @@ export function craeteToolJsonSchema() {
       'A valid JSON Schema object defining the structure, types, and constraints for the tool parameters. Include properties, required fields, and any other validations as needed.',
   }
 
-  const toolBaseJsonSchema = convertZodToJsonSchemaCached(ToolBase) as JsonSchema7ObjectType
-  if (toolBaseJsonSchema) {
+  const toolBaseJsonSchema = convertZodToJsonSchemaCached(ToolBase) as JSONSchema7Object
+  if (
+    toolBaseJsonSchema.properties &&
+    typeof toolBaseJsonSchema.properties === 'object' &&
+    !Array.isArray(toolBaseJsonSchema.properties)
+  ) {
     toolBaseJsonSchema.properties.parameters = JSON_SCHEMA_PLACEHOLDER
     delete (toolBaseJsonSchema as JSONSchema7).$schema
   }

@@ -1,9 +1,11 @@
-import { type ToolBase, type partialTaskDraft } from './types'
+import { ToolBase, type partialTaskDraft } from './types'
 import type { llmSettings } from './types'
 import { deepMergeReactive } from '../utils'
 import { TaskyonMessage } from './iframeApiTypes'
 import type { TyTaskManager } from './taskManager'
 import { match } from 'ts-pattern'
+import { dump } from 'js-yaml'
+import z from 'zod'
 
 /*function stringifyIfNotString(obj: unknown): string | undefined {
     if (typeof obj === 'undefined') return undefined;
@@ -126,4 +128,42 @@ function setConfiguration(
       keys[llmSettings.selectedApi] = newKey
     }
   }
+}
+
+export function createOpenAPIDocs() {
+  /** This function creates openAPI docs for taskyon and saves them inside the public folder.
+   *  the reason we're doing this her as msot clients will simply want to get the json and
+   * not have to run the entire taskyon app in order to generate the docs...
+   */
+  // make sure to validate this using https://editor.swagger.io/
+
+  /*const docs = new OpenApiGeneratorV3(registry.definitions).generateDocument(
+    config,
+  );*/
+
+  console.log('generate docs...')
+
+  const schemas = [ToolBase, TaskyonMessage].map((zType) => z.toJSONSchema(zType))
+
+  const openapiDoc = {
+    openapi: '3.0.0',
+    info: {
+      title: 'Taskyon API',
+      version: '1.0.0', // you can pull this from your package.json
+      description: 'Auto‑generated schema for Taskyon postmessage/iframe API',
+    },
+    paths: {}, // add path defs here if you have any
+    components: {
+      schemas,
+    },
+  }
+
+  const openApiYaml = dump(openapiDoc)
+
+  /*const destPath = path.resolve(__dirname, 'public/docs/openapi-docs.yml')
+  fs.mkdirSync(path.dirname(destPath), { recursive: true })
+  fs.writeFileSync(destPath, openApiYaml, { encoding: 'utf-8' })*/
+
+  //console.log(`OpenAPI docs written to ${destPath}`)
+  return openApiYaml
 }

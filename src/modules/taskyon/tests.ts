@@ -11,6 +11,7 @@ import { createDeepTransformer, normalizeFalsyValues } from '../utils'
 import { useGdrive } from '../gdrive'
 import { craeteToolJsonSchema, summarizeTools } from './tools'
 import { zodToYamlString } from '../yamlUtils'
+import z from 'zod'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -39,13 +40,12 @@ export async function testToolLista() {
   }
 }
 
-export async function testJsonSChemas() {
+export function testJsonSchemas() {
   console.log('create test schemas!')
-  const { zodToJsonSchema } = await import('zod-to-json-schema')
 
   return {
     toolBaseJsonSchema: craeteToolJsonSchema(),
-    toolJsonSchema: zodToJsonSchema(ToolBase),
+    toolJsonSchema: z.toJSONSchema(ToolBase),
     yamlString: zodToYamlString(ToolBase),
   }
 }

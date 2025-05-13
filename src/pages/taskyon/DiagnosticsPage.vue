@@ -45,7 +45,7 @@ import {
   testVectorizerInitialization,
   testVectorizeText,
   testChatCompletion,
-  testJsonSChemas,
+  testJsonSchemas,
   testToolLista,
 } from 'src/modules/taskyon/tests'
 import { useAppStateStore } from 'src/stores/appState'
@@ -148,7 +148,7 @@ async function generateReport(details = false, onlyFirst = false) {
   diagnostics.value += await runTest('environment info', getEnvironmentInfo)
   //diagnostics.value += await runTest('Test Secret Store', testSecretStore, details)
   diagnostics.value += await runTest('list of Tools', testToolLista, details)
-  diagnostics.value += await runTest('json schemas', testJsonSChemas, details)
+  diagnostics.value += await runTest('json schemas', testJsonSchemas, details)
   diagnostics.value += await runTest('pg lite', testPGLite, details)
 
   /*diagnostics.value += await runTest(
