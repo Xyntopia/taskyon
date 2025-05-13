@@ -35,6 +35,7 @@
           <!--Taskyon features-->
           <div class="row">
             <ToggleButton
+              v-if="expertMode"
               dense
               :size="functionToggleBtnSize"
               outline
