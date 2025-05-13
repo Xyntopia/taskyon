@@ -301,13 +301,11 @@ const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { selectedApi } = toRefs(state.llmSettings)
 
-const slimSettings = buildSlimView([
-  {
-    obj: state.llmSettings,
-    schema: llmSettings,
-    pickKeys: ['enableToolChooser', 'enableOpenAiTools', 'tryUsingVisionModels'],
-  },
-])
+const slimSettings = buildSlimView({
+  obj: state.llmSettings,
+  schema: llmSettings,
+  pickKeys: ['enableToolChooser', 'enableOpenAiTools', 'tryUsingVisionModels'],
+})
 
 // we initialize our taskDraft with the state of this window!
 

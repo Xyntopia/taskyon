@@ -58,7 +58,7 @@ export function buildSlimView<O extends Record<string, unknown>, T extends Singl
     // --- extract the union of all pickKeys ---
     T[number]['pickKeys'][number],
     // --- your return-value type here ---
-    unknown
+    T[number]['obj'][T[number]['pickKeys'][number]]
   >
   return { mergedSchema, jsonSchema, reactiveView }
 }
