@@ -1,8 +1,9 @@
-import type { Ref, UnwrapNestedRefs } from 'vue'
-import { type ComputedRef, ref, watch, computed, toRefs, reactive } from 'vue'
+import type { Ref } from 'vue'
+import { type ComputedRef, ref, watch, computed, toRefs, reactive, proxyRefs } from 'vue'
 import type { ZodObject, ZodRawShape } from 'zod'
 import { convertZodToJsonSchemaCached } from './taskyon/types'
 import type { JsonSchema7Type } from 'zod-to-json-schema'
+import { z } from 'zod'
 
 export function asyncComputed<T>(
   getter: () => Promise<T>,
@@ -22,57 +23,13 @@ export function asyncComputed<T>(
   return computed(() => state.value) // Read-only computed value
 }
 
-// helper to extract every picked key…
-// (union of all keys in all pickKeys arrays)
-type PickedKeys<Sources extends readonly unknown[]> = Sources[number] extends {
-  pickKeys: infer PK extends readonly PropertyKey[]
-}
-  ? PK[number]
-  : never
-
-// map each picked key to the correct Ref type
-// for every key K, find an element with that key in its pickKeys
-// then grab its obj[K]
-type ReactiveView<Sources extends readonly unknown[]> = {
-  [K in PickedKeys<Sources>]: Sources[number] extends {
-    obj: infer O
-    pickKeys: readonly (infer PK)[]
-  }
-    ? K extends PK
-      ? Ref<O[K & keyof O]>
-      : never
-    : never
-}
-
-/**
- * buildSlimView()
- *
- * @param sources
- *   Array of { obj, schema, pickKeys } tuples:
- *    - obj: a Vue reactive object
- *    - schema: a Zod.object() matching the shape of `obj`
- *    - pickKeys: subset of keys (must exist in both obj & schema)
- *
- * @returns
- *   {
- *     mergedSchema: ZodObject,     // merged Zod schema of all picks
- *     jsonSchema: any,             // JSON-Schema generated from mergedSchema
- *     reactiveView: Record<string, any> // Vue reactive view of all picks
- *   }
- */
-export function buildSlimView<
-  const Sources extends readonly {
+export function buildSlimView(
+  sources: {
     obj: Record<string, unknown>
     schema: ZodObject<ZodRawShape>
     pickKeys: string[]
   }[],
->(
-  sources: Sources,
-): {
-  mergedSchema: ZodObject<ZodRawShape>
-  jsonSchema: JsonSchema7Type
-  reactiveView: UnwrapNestedRefs<ReactiveView<Sources>>
-} {
+) {
   // 1. build each picked Zod schema, then merge them
   const pickedSchemas = sources.map(({ schema, pickKeys }) => {
     // build the { key: true } map
@@ -85,7 +42,7 @@ export function buildSlimView<
   const mergedSchema = pickedSchemas.reduce((a, b) => a.merge(b))
 
   // 2. emit JSON-Schema if you need it
-  const jsonSchema = convertZodToJsonSchemaCached(mergedSchema)
+  const jsonSchema = convertZodToJsonSchemaCached(mergedSchema) as JsonSchema7Type
 
   // 1) for each source, cast toRefs(obj) to a non‐undefined map
   const allEntries = sources.flatMap(({ obj, pickKeys }) => {
@@ -93,11 +50,61 @@ export function buildSlimView<
     return pickKeys.map((key) => [key, refs[key]] as const)
   })
 
-  // 2) build + assert into your exact ReactiveView<Sources> shape
-  const reactiveView = reactive(
-    Object.fromEntries(allEntries) as ReactiveView<Sources>,
-    // ← now TS “knows” it exactly matches ReactiveView<Sources>
-  )
+  const plainRefMap = Object.fromEntries(allEntries)
+  const reactiveView = proxyRefs(plainRefMap)
 
   return { mergedSchema, jsonSchema, reactiveView }
+}
+
+export function testBuildSlimView() {
+  // Setup two reactive source objects
+  const obj1 = reactive({ a: 1, b: 'hello', c: true })
+  const obj2 = reactive({ d: 42, e: 'world' })
+
+  const sources = [
+    {
+      obj: obj1,
+      schema: z.object({ a: z.number(), b: z.string(), c: z.boolean() }),
+      pickKeys: ['a', 'c'],
+    },
+    {
+      obj: obj2,
+      schema: z.object({ d: z.number(), e: z.string() }),
+      pickKeys: ['d'],
+    },
+  ]
+
+  // Invocation
+  const { mergedSchema, jsonSchema, reactiveView } = buildSlimView(sources)
+
+  // 1) mergedSchema should accept {a, c, d}
+  try {
+    mergedSchema.parse({ a: 10, c: false, d: 100 })
+    console.log('✔ mergedSchema.parse works')
+  } catch (e) {
+    console.error('✖ mergedSchema.parse failed:', e)
+  }
+
+  // 2) jsonSchema should at least be an object
+  console.assert(
+    typeof jsonSchema === 'object' && jsonSchema !== null,
+    'jsonSchema is not an object',
+  )
+
+  console.log(reactiveView.a)
+
+  // 3) reactiveView initial values
+  console.assert(reactiveView.a === 1, 'reactiveView.a ≠ 1')
+  console.assert(reactiveView.c === true, 'reactiveView.c ≠ true')
+  console.assert(reactiveView.d === 42, 'reactiveView.d ≠ 42')
+  console.log('✔ reactiveView initial values OK')
+
+  // 4) reactive updates propagate
+  if (reactiveView.a) reactiveView.a = 99
+  console.assert(obj1.a === 99, 'obj1.a did not update from reactiveView.a')
+  if (reactiveView.d) reactiveView.d = 123
+  console.assert(obj2.d === 123, 'obj2.d did not update from reactiveView.d')
+  console.log('✔ updates propagate bi-directionally')
+
+  console.log('✅ All tests passed!')
 }

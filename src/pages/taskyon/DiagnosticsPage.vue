@@ -55,6 +55,7 @@ import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import { onMounted } from 'vue'
 import { testCreateDeepTansformer } from 'src/modules/taskyon/tests'
 import { testGdriveUpload } from 'src/modules/taskyon/tests'
+import { testBuildSlimView } from 'src/modules/vueUtils'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -110,7 +111,10 @@ async function runTest(name: string, testFunc: () => unknown, details = false) {
     result[name] = {
       status: 'ERROR',
       message: 'an error occured during this test...',
-      error,
+      error:
+        error instanceof Error
+          ? { message: error.message, stack: error.stack }
+          : JSON.parse(JSON.stringify(error)),
     }
   }
   return dump(result, { skipInvalid: true })
@@ -121,17 +125,19 @@ async function generateReport(details = false, onlyFirst = false) {
 
   diagnostics.value = `report_date: ${new Date().toISOString()}\n`
 
-  diagnostics.value += await runTest(
-    'test openrouter websearch chatCompletion',
-    testChatCompletion,
-    details,
-  )
+  diagnostics.value += await runTest('test build slim view', testBuildSlimView, details)
 
   // move this line behind the "first test"  in order to be able to test only the first test :)
   if (onlyFirst) {
     console.log('diagnostics:', diagnostics.value)
     return
   }
+
+  diagnostics.value += await runTest(
+    'test openrouter websearch chatCompletion',
+    testChatCompletion,
+    details,
+  )
 
   diagnostics.value += await runTest(
     'test createDeeptransformer',
