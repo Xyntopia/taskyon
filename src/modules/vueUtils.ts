@@ -28,8 +28,8 @@ type SingleSource<O extends Record<string, unknown>> = {
   pickKeys: Array<keyof O & string>
 }
 
-export function buildSlimView<O extends Record<string, unknown>, T extends SingleSource<O>[]>(
-  ...sources: T
+export function buildSlimView<O extends Record<string, unknown>, S extends SingleSource<O>[]>(
+  ...sources: S
 ) {
   // — your runtime code stays exactly the same —
   const pickedSchemas = sources.map(({ schema, pickKeys }) => {
@@ -54,12 +54,12 @@ export function buildSlimView<O extends Record<string, unknown>, T extends Singl
   )
 
   // 4) assert the map really has the shape we typed above
-  const reactiveView = reactive(plainRefMap) as Record<
-    // --- extract the union of all pickKeys ---
-    T[number]['pickKeys'][number],
-    // --- your return-value type here ---
-    T[number]['obj'][T[number]['pickKeys'][number]]
-  >
+  const reactiveView = reactive(plainRefMap) as {
+    [K in S[number]['pickKeys'][number] & string]: {
+      [I in keyof S]: K extends S[I]['pickKeys'][number] ? S[I]['obj'][K] : never
+    }[number]
+  }
+
   return { mergedSchema, jsonSchema, reactiveView }
 }
 
