@@ -9853,18 +9853,6 @@ helia@^5.1.0:
     libp2p "^2.0.0"
     multiformats "^13.1.0"
 
-hnsw@^1.0.2:
-  version "1.0.3"
-  resolved "https://registry.yarnpkg.com/hnsw/-/hnsw-1.0.3.tgz#679a059ba1d8c9c868b62e32fbbfad7e5fbf2f85"
-  integrity sha512-Od3hZC3hRIG8tCDNWq+QX8dCfN8MuQPZTW+taF50hC4mbF1fuZsF0UcHOrnYssYBVeujQUjFfRmwkmttEInqoQ==
-  dependencies:
-    idb "^7.1.1"
-
-hnswlib-wasm@^0.7.0:
-  version "0.7.0"
-  resolved "https://registry.yarnpkg.com/hnswlib-wasm/-/hnswlib-wasm-0.7.0.tgz#e1827b1ce5923837c0a75f9f79b27d4378a4381f"
-  integrity sha512-Ki28kZmrdan67LvHKJxGFmszUn92skeW+i3Z1d7CQVvk0k8V5zuxESmi2kbFNUG8lvpvVT2PLgiPfu2faxcT2A==
-
 hookable@^5.5.3:
   version "5.5.3"
   resolved "https://registry.yarnpkg.com/hookable/-/hookable-5.5.3.tgz#6cfc358984a1ef991e2518cb9ed4a778bbd3215d"
@@ -10059,7 +10047,7 @@ idb@7.0.1:
   resolved "https://registry.yarnpkg.com/idb/-/idb-7.0.1.tgz#d2875b3a2f205d854ee307f6d196f246fea590a7"
   integrity sha512-UUxlE7vGWK5RfB/fDwEGgRf84DY/ieqNha6msMV99UsEMQhJ1RwbCd8AYBj3QMgnE3VZnfQvm4oKVCJTYlqIgg==
 
-idb@7.1.1, idb@^7.1.1:
+idb@7.1.1:
   version "7.1.1"
   resolved "https://registry.yarnpkg.com/idb/-/idb-7.1.1.tgz#d910ded866d32c7ced9befc5bfdf36f572ced72b"
   integrity sha512-gchesWBzyvGHRO9W8tzUWFDycow5gwjvFKfyV9FF32Y7F50yZMp7mP+T2mJIWFx49zicqyC4uefHM17o6xKIVQ==

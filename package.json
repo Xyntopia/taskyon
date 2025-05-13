@@ -41,8 +41,6 @@
     "datastore-level": "^11.0.1",
     "fast-equals": "^5.0.1",
     "helia": "^5.1.0",
-    "hnsw": "^1.0.2",
-    "hnswlib-wasm": "^0.7.0",
     "html-to-text": "^9.0.5",
     "js-tiktoken": "^1.0.7",
     "js-yaml": "^4.1.0",
