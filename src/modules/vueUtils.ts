@@ -1,5 +1,4 @@
-import type { Ref } from 'vue'
-import { type ComputedRef, ref, watch, computed, toRefs, reactive, proxyRefs } from 'vue'
+import { type ComputedRef, ref, watch, computed, toRefs, reactive } from 'vue'
 import type { ZodObject, ZodRawShape } from 'zod'
 import { convertZodToJsonSchemaCached } from './taskyon/types'
 import type { JsonSchema7Type } from 'zod-to-json-schema'
@@ -23,16 +22,17 @@ export function asyncComputed<T>(
   return computed(() => state.value) // Read-only computed value
 }
 
-export function buildSlimView(
-  sources: {
-    obj: Record<string, unknown>
-    schema: ZodObject<ZodRawShape>
-    pickKeys: string[]
-  }[],
+type SingleSource<O extends Record<string, unknown>> = {
+  obj: O
+  schema: ZodObject<ZodRawShape>
+  pickKeys: Array<keyof O & string>
+}
+
+export function buildSlimView<O extends Record<string, unknown>, T extends SingleSource<O>[]>(
+  ...sources: T
 ) {
-  // 1. build each picked Zod schema, then merge them
+  // — your runtime code stays exactly the same —
   const pickedSchemas = sources.map(({ schema, pickKeys }) => {
-    // build the { key: true } map
     const pickMap = pickKeys.reduce(
       (acc, k) => ({ ...acc, [k]: true }),
       {} as Record<keyof (typeof schema)['_def']['shape'], true>,
@@ -40,19 +40,26 @@ export function buildSlimView(
     return schema.pick(pickMap)
   })
   const mergedSchema = pickedSchemas.reduce((a, b) => a.merge(b))
-
-  // 2. emit JSON-Schema if you need it
   const jsonSchema = convertZodToJsonSchemaCached(mergedSchema) as JsonSchema7Type
 
-  // 1) for each source, cast toRefs(obj) to a non‐undefined map
-  const allEntries = sources.flatMap(({ obj, pickKeys }) => {
-    const refs = toRefs(obj) as { [K in keyof typeof obj]: Ref<(typeof obj)[K]> }
-    return pickKeys.map((key) => [key, refs[key]] as const)
-  })
+  const plainRefMap = sources.reduce(
+    (acc, { obj, pickKeys }) => {
+      const refs = toRefs(obj)
+      pickKeys.forEach((key) => {
+        acc[key] = refs[key]
+      })
+      return acc
+    },
+    {} as Record<string, unknown>,
+  )
 
-  const plainRefMap = Object.fromEntries(allEntries)
-  const reactiveView = proxyRefs(plainRefMap)
-
+  // 4) assert the map really has the shape we typed above
+  const reactiveView = reactive(plainRefMap) as Record<
+    // --- extract the union of all pickKeys ---
+    T[number]['pickKeys'][number],
+    // --- your return-value type here ---
+    unknown
+  >
   return { mergedSchema, jsonSchema, reactiveView }
 }
 
@@ -61,7 +68,8 @@ export function testBuildSlimView() {
   const obj1 = reactive({ a: 1, b: 'hello', c: true })
   const obj2 = reactive({ d: 42, e: 'world' })
 
-  const sources = [
+  // Invocation
+  const { mergedSchema, jsonSchema, reactiveView } = buildSlimView(
     {
       obj: obj1,
       schema: z.object({ a: z.number(), b: z.string(), c: z.boolean() }),
@@ -72,10 +80,7 @@ export function testBuildSlimView() {
       schema: z.object({ d: z.number(), e: z.string() }),
       pickKeys: ['d'],
     },
-  ]
-
-  // Invocation
-  const { mergedSchema, jsonSchema, reactiveView } = buildSlimView(sources)
+  )
 
   // 1) mergedSchema should accept {a, c, d}
   try {
