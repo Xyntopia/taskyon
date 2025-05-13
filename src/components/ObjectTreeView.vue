@@ -142,22 +142,16 @@ const modelValue = defineModel<Record<string, unknown> | undefined>({
 })
 
 const updateValue = (keyPath: string[], value: unknown) => {
-  if (modelValue.value) {
-    // Create a new object to ensure reactivity
-    const newValue = { ...modelValue.value }
-    let currentPart: Record<string, unknown> = newValue
+  if (!modelValue.value) return
 
-    // Iterate over the keyPath to find the correct property to update
-    for (let i = 0; i < keyPath.length - 1; i++) {
-      currentPart = currentPart[keyPath[i]!] as Record<string, unknown>
-    }
-
-    // Update the value at the final key
-    currentPart[keyPath[keyPath.length - 1]!] = value
-
-    // Emit the entire new object and emit vue events etc...
-    modelValue.value = newValue
+  // walk down the existing object…
+  let target: Record<string, unknown> = modelValue.value
+  for (let i = 0; i < keyPath.length - 1; i++) {
+    target = target[keyPath[i]!] as Record<string, unknown>
   }
+
+  // …and set the leaf. Vue will pick up the change.
+  target[keyPath[keyPath.length - 1]!] = value
 }
 
 const transformToTreeNodes = (
