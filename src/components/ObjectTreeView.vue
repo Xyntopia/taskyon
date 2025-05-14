@@ -120,6 +120,7 @@ import { type QTreeNode } from 'quasar'
 import JsonInput from 'components/JsonInput.vue' // Adjust the path as necessary
 import InfoDialog from 'components/InfoDialog.vue'
 import type { JSONSchema7 } from 'json-schema'
+import type z from 'zod'
 
 const {
   readOnly = false,
@@ -133,7 +134,7 @@ const {
   inputFieldBehavior?: 'auto' | 'textarea' | 'autogrow'
   separateLabels?: boolean
   debounce?: number
-  schema?: JSONSchema7 | undefined
+  schema?: JSONSchema7 | z.core.JSONSchema.BaseSchema | undefined
   descriptionsAsLabels?: boolean
 }>()
 
@@ -156,7 +157,7 @@ const updateValue = (keyPath: string[], value: unknown) => {
 
 const transformToTreeNodes = (
   obj: Record<string, unknown>,
-  schema?: JSONSchema7,
+  schema?: JSONSchema7 | z.core.JSONSchema.BaseSchema,
   keyPath: string[] = [],
 ): QTreeNode[] => {
   const mapEntry = (

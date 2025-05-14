@@ -1,7 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // the reason we are disabling no-explicit-any for this entire file is so that we can use the deepPartial function...
-import { z } from 'zod'
+import { dump } from 'js-yaml'
+import type { JSONSchema7, JSONSchema7Definition } from 'json-schema'
 
+// TODO: move these into yaml utils and get rid of this file...
 export interface tyYamlObjectRepresentation {
   [key: string]: tyYamlRepresentation
 }
@@ -22,102 +23,6 @@ export type YamlRepresentation = string | YamlObjectRepresentation | YamlArrayRe
 interface YamlArrayRepresentation {
   type: 'array'
   items: YamlRepresentation
-}
-
-/* convert a zod schema into a nested object where the description
-appear in keys starting with '#'
-TODO: replace this with a zod to json schema thing...
-*/
-export function zodToYAMLObject(
-  schema: z.ZodTypeAny,
-  optionalSymbol = '',
-  short = false,
-): YamlRepresentation {
-  // Base case for primitive types
-  if (schema instanceof z.ZodString) {
-    return 'string'
-  } else if (schema instanceof z.ZodNumber) {
-    return 'number'
-  } else if (schema instanceof z.ZodBoolean) {
-    return 'boolean'
-  } else if (schema instanceof z.ZodNull) {
-    return 'null'
-  } else if (schema instanceof z.ZodEnum) {
-    return Object.keys(schema.Values).join('|')
-  } else if (schema instanceof z.ZodEffects) {
-    return zodToYAMLObject(schema.innerType())
-  }
-
-  // Modified ZodObject case to handle optionals
-  if (schema instanceof z.ZodObject) {
-    if (short) return 'object'
-    const shape: Record<string, z.ZodTypeAny> = schema.shape as Record<string, z.ZodTypeAny>
-    const yamlObject: YamlObjectRepresentation = {}
-    for (const key in shape) {
-      const fieldSchema = shape[key]!
-      const optionalSuffix = fieldSchema instanceof z.ZodOptional ? optionalSymbol : ''
-      if (fieldSchema?.description) {
-        yamlObject[`# ${key} description`] = `${fieldSchema.description} ${optionalSuffix}`.trim()
-      }
-      yamlObject[key] = zodToYAMLObject(fieldSchema)
-    }
-    return yamlObject
-  }
-
-  // Handle arrays
-  if (schema instanceof z.ZodArray) {
-    return short
-      ? 'array'
-      : {
-          type: 'array',
-          items: zodToYAMLObject(schema.element),
-        }
-  }
-
-  // records
-  if (schema instanceof z.ZodRecord) {
-    const values = zodToYAMLObject(schema.element)
-    return short
-      ? 'record'
-      : {
-          key1: values,
-          key2: values,
-          '...': '...',
-        }
-  }
-
-  // TODO: what do we do with arrays & objects in this example?
-  // Handle union types
-  // if we have an object, right now we are returning undefined. So we can not handle that yet..
-  if (schema instanceof z.ZodUnion) {
-    if (short) return 'union'
-    const options = (schema.options as z.ZodTypeAny[])
-      .map((option) => {
-        const val = zodToYAMLObject(option, '', true)
-        if (typeof val === 'object') {
-          throw Error(
-            'We can currently not convert a union with an object, this is currently too difficult for our AI to understand...',
-          )
-        }
-        return val
-      })
-      .filter((r) => r)
-    return options.join('|')
-  }
-
-  // Modified ZodOptional case
-  if (schema instanceof z.ZodOptional) {
-    return zodToYAMLObject(schema.unwrap())
-  }
-
-  // Modified ZodOptional case
-  if (schema instanceof z.ZodNullable) {
-    return zodToYAMLObject(schema.unwrap())
-  }
-
-  // Add more cases as needed for other Zod types (unions, etc.)
-  // Fallback for unsupported types
-  return 'unsupported'
 }
 
 /**
@@ -189,194 +94,140 @@ export function convertToYamlWComments(objrepr: string) {
   )
 }
 
-export function zodToDescriptionObject(schema: z.ZodTypeAny): {
-  [key: string]: string
-} {
-  const descriptions: { [key: string]: string } = {}
+// Convert JSON Schema to our YAML-like representation
+export function jsonSchemaToYAMLObject(
+  schema: JSONSchema7Definition,
+  optionalSymbol = '',
+): unknown {
+  // --- handle boolean schemas up front ---
+  if (schema === true) {
+    // “anything goes” → treat as string
+    return 'string'
+  }
+  if (schema === false) {
+    // totally disallowed → mark unsupported
+    return 'unsupported'
+  }
 
-  function traverseSchema(schema: z.ZodTypeAny, path: string = '') {
-    if (schema instanceof z.ZodObject) {
-      const shape: Record<string, z.ZodTypeAny> = schema.shape as Record<string, z.ZodTypeAny>
-      for (const key in shape) {
-        const fieldSchema = shape[key]!
-        const newPath = path ? `${path}.${key}` : key
-        if (fieldSchema.description) {
-          descriptions[newPath] = fieldSchema.description
-        }
-        traverseSchema(fieldSchema, newPath)
+  // primitives
+  if (schema.type === 'string') return 'string'
+  if (schema.type === 'number' || schema.type === 'integer') return 'number'
+  if (schema.type === 'boolean') return 'boolean'
+  if (schema.type === 'null') return 'null'
+  // enums
+  if (schema.enum)
+    return schema.enum.map((v) => (typeof v === 'string' ? v : JSON.stringify(v))).join('|')
+  // objects
+  if (schema.type === 'object' && schema.properties) {
+    const yamlObj: Record<string, unknown> = {}
+    const req = new Set(Array.isArray(schema.required) ? schema.required : [])
+    const properties = schema.properties as { [key: string]: { description?: string } }
+    for (const key of Object.keys(properties)) {
+      const prop = properties[key]!
+      const optSuffix = req.has(key) ? '' : optionalSymbol
+      if (prop.description) {
+        yamlObj[`# ${key} description`] = `${prop.description}${optSuffix}`
+      }
+      yamlObj[key] = jsonSchemaToYAMLObject(prop, optionalSymbol)
+    }
+    return yamlObj
+  }
+
+  // arrays: schema.items may be an array or single
+  if (schema.type === 'array' && schema.items) {
+    const itemSchema = Array.isArray(schema.items) ? schema.items[0] : schema.items
+    if (itemSchema === undefined) {
+      return {
+        type: 'array',
+        items: 'unsupported',
       }
     }
+    return {
+      type: 'array',
+      items: jsonSchemaToYAMLObject(itemSchema, optionalSymbol),
+    }
   }
 
-  traverseSchema(schema)
-  return descriptions
-}
-
-// our own little custom implementation of deepPartial for ZoD
-export function deepPartial(schema: z.ZodTypeAny): z.ZodTypeAny {
-  if (schema instanceof z.ZodObject) {
-    const shape: Record<string, z.ZodTypeAny> = schema.shape as Record<string, z.ZodTypeAny>
-
-    const partialShape: Record<string, z.ZodTypeAny> = {}
-    for (const key in shape) {
-      const fieldSchema = shape[key]!
-      partialShape[key] = deepPartial(fieldSchema)
-    }
-
-    return z.object(partialShape).partial()
-  } else if (schema instanceof z.ZodArray) {
-    return z.array(deepPartial(schema.element))
-  } else if (schema instanceof z.ZodRecord) {
-    return z.record(deepPartial(schema.element))
-  } else if (schema instanceof z.ZodUnion) {
-    const partialUnionTypes = schema.options.map(deepPartial)
-
-    if (partialUnionTypes.length === 1) {
-      return partialUnionTypes[0] // Single type, no need for a union
+  // records/additionalProperties
+  if (schema.type === 'object' && schema.additionalProperties !== undefined) {
+    let valSchema: JSONSchema7Definition
+    if (schema.additionalProperties === true) {
+      valSchema = { type: 'string' }
+    } else if (schema.additionalProperties === false) {
+      // nothing allowed
+      return {}
     } else {
-      return z.union(partialUnionTypes as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
+      valSchema = schema.additionalProperties
     }
-  } else if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) {
-    // Unwrap and apply deepPartial to the underlying schema
-    return schema.constructor(deepPartial(schema.unwrap()))
-  } else {
-    // Return the schema unchanged for non-object types (string, number, etc.)
-    return schema
+    const valRep = jsonSchemaToYAMLObject(valSchema, optionalSymbol)
+    return { key1: valRep, key2: valRep, '...': '...' }
   }
+
+  // oneOf unions: now OK because we accept Definition[]
+  if (schema.oneOf) {
+    const parts = schema.oneOf.map((opt) => jsonSchemaToYAMLObject(opt, optionalSymbol))
+    return parts.join('|')
+  }
+
+  // fallback
+  return 'unsupported'
 }
 
-type ZodDeepPartial<T extends z.ZodTypeAny> =
-  T extends z.ZodObject<z.ZodRawShape>
-    ? z.ZodObject<
-        {
-          [k in keyof T['shape']]: z.ZodOptional<ZodDeepPartial<T['shape'][k]>>
+// Top‑level: from JSON Schema to YAML string with comments
+export function jsonSchemaToYamlString(schema: JSONSchema7, optionalSymbol = ''): string {
+  const objrepr = jsonSchemaToYAMLObject(schema, optionalSymbol)
+  return convertToYamlWComments(dump(objrepr))
+}
+
+export function testJsonSchemaToYaml() {
+  const schema: JSONSchema7 = {
+    type: 'object',
+    required: ['id'],
+    properties: {
+      id: { type: 'string', description: 'identifier' },
+      count: { type: 'number', default: 0, description: 'counter' },
+      tags: { type: 'array', items: { type: 'string' }, description: 'labels' },
+      meta: {
+        type: 'object',
+        properties: {
+          flag: { type: 'boolean' },
+          tier: { enum: ['free', 'pro', 'enterprise'], description: 'user tier' },
         },
-        T['_def']['unknownKeys'],
-        T['_def']['catchall']
-      >
-    : T extends z.ZodArray<infer Type, infer Card>
-      ? z.ZodArray<ZodDeepPartial<Type>, Card>
-      : T extends z.ZodOptional<infer Type>
-        ? z.ZodOptional<ZodDeepPartial<Type>>
-        : T extends z.ZodNullable<infer Type>
-          ? z.ZodNullable<ZodDeepPartial<Type>>
-          : T extends z.ZodTuple<infer Items>
-            ? {
-                [k in keyof Items]: Items[k] extends z.ZodTypeAny ? ZodDeepPartial<Items[k]> : never
-              } extends infer PI
-              ? PI extends z.ZodTupleItems
-                ? z.ZodTuple<PI>
-                : never
-              : never
-            : T extends z.ZodDefault<infer Type>
-              ? z.ZodDefault<ZodDeepPartial<Type>>
-              : T extends z.ZodRecord<infer KeySchema, infer ValueSchema>
-                ? z.ZodRecord<KeySchema, ZodDeepPartial<ValueSchema>>
-                : T
-
-// TODO: replace with this:  https://gist.github.com/jaens/7e15ae1984bb338c86eb5e452dee3010
-export function deepPartialify<T extends z.ZodTypeAny>(schema: T): ZodDeepPartial<T> {
-  return _deepPartialify(schema)
-}
-
-function _deepPartialify(schema: z.ZodTypeAny): any {
-  if (schema instanceof z.ZodObject) {
-    const newShape: any = {}
-
-    for (const key in schema.shape) {
-      const fieldSchema = schema.shape[key]
-      newShape[key] = z.ZodOptional.create(_deepPartialify(fieldSchema))
-    }
-    return new z.ZodObject({
-      ...schema._def,
-      shape: () => newShape,
-    }) as any
-  } else if (schema instanceof z.ZodArray) {
-    return new z.ZodArray({
-      ...schema._def,
-      type: _deepPartialify(schema.element),
-    })
-  } else if (schema instanceof z.ZodOptional) {
-    return z.ZodOptional.create(_deepPartialify(schema.unwrap()))
-  } else if (schema instanceof z.ZodNullable) {
-    return z.ZodNullable.create(_deepPartialify(schema.unwrap()))
-  } else if (schema instanceof z.ZodDefault) {
-    // TODO: right now, we're simply leaving default values out of the equation ;). Because
-    // for some reason it adds "undefined" default values. maybe add that in the future at some point...
-    /*return z.ZodDefault.create(
-      _deepPartialify(schema._def.innerType),
-      schema._def.defaultValue(),
-    );*/
-    return _deepPartialify(schema._def.innerType)
-  } else if (schema instanceof z.ZodTuple) {
-    return z.ZodTuple.create(schema.items.map((item: any) => _deepPartialify(item)))
-  } else if (schema instanceof z.ZodRecord) {
-    return new z.ZodRecord({
-      ...schema._def,
-      valueType: _deepPartialify(schema._def.valueType), // Recursively partialify value type of the record
-    })
-  } else {
-    return schema
+        description: 'metadata',
+      },
+    },
   }
-}
+  const out = jsonSchemaToYamlString(schema, '?')
 
-type ZodDeepStrict<T extends z.ZodTypeAny> =
-  T extends z.ZodObject<infer Shape>
-    ? z.ZodObject<
-        {
-          [K in keyof Shape]: ZodDeepStrict<Shape[K]>
-        },
-        T['_def']['unknownKeys'],
-        T['_def']['catchall']
-      >
-    : T extends z.ZodArray<infer Type, infer Card>
-      ? z.ZodArray<ZodDeepStrict<Type>, Card>
-      : T extends z.ZodRecord<infer KeySchema, infer ValueSchema>
-        ? z.ZodRecord<KeySchema, ZodDeepStrict<ValueSchema>>
-        : T extends z.ZodOptional<infer Type>
-          ? z.ZodOptional<ZodDeepStrict<Type>>
-          : T extends z.ZodNullable<infer Type>
-            ? z.ZodNullable<ZodDeepStrict<Type>>
-            : T extends z.ZodUnion<infer Options>
-              ? z.ZodUnion<{ [K in keyof Options]: ZodDeepStrict<Options[K]> }>
-              : T
+  const expected = `\
+# id description: identifier
+id: string
+# count description: counter?
+count: number
+# tags description: labels?
+tags:
+  type: array
+  items: string
+# meta description: metadata?
+meta:
+  # flag description
+  # tier description: user tier?
+  tier: free|pro|enterprise
+  flag: boolean
+`
 
-export function deepStrictify<T extends z.ZodTypeAny>(schema: T): ZodDeepStrict<T> {
-  return _deepStrict(schema) as ZodDeepStrict<T>
-}
+  if (out.trim() !== expected.trim()) {
+    throw new Error(`
+YAML output doesn’t match expected snapshot!
 
-export function _deepStrict(schema: z.ZodTypeAny): any {
-  if (schema instanceof z.ZodObject) {
-    const newShape: any = {}
+— expected —
+${expected}
 
-    for (const key in schema.shape) {
-      const fieldSchema = schema.shape[key]
-      newShape[key] = _deepStrict(fieldSchema)
-    }
-    return new z.ZodObject({
-      ...schema._def,
-      shape: () => newShape,
-      unknownKeys: 'strict',
-    }) as any
-  } else if (schema instanceof z.ZodArray) {
-    return new z.ZodArray({
-      ...schema._def,
-      type: _deepStrict(schema.element),
-    })
-  } else if (schema instanceof z.ZodOptional) {
-    return z.ZodOptional.create(_deepStrict(schema.unwrap()))
-  } else if (schema instanceof z.ZodNullable) {
-    return z.ZodNullable.create(_deepStrict(schema.unwrap()))
-  } else if (schema instanceof z.ZodDefault) {
-    return z.ZodDefault.create(_deepStrict(schema._def.innerType), schema._def.defaultValue())
-  } else if (schema instanceof z.ZodTuple) {
-    return z.ZodTuple.create(schema.items.map((item: any) => _deepStrict(item)))
-  } else if (schema instanceof z.ZodRecord) {
-    return new z.ZodRecord({
-      ...schema._def,
-      valueType: _deepStrict(schema._def.valueType), // Recursively partialify value type of the record
-    })
-  } else {
-    return schema
+— received —
+${out}
+    `)
   }
+
+  console.log('✅ test passed')
+  return { out }
 }

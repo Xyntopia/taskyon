@@ -125,7 +125,11 @@ function setConfiguration(
       // we only set the API key, if it was provided by the
       // parent app.
       const newKey = newConfig.signatureOrKey
-      keys[llmSettings.selectedApi] = newKey
+      if (typeof newKey === 'string') {
+        keys[llmSettings.selectedApi] = newKey
+      } else {
+        console.warn('Provided signatureOrKey is not a string:', newKey)
+      }
     }
   }
 }

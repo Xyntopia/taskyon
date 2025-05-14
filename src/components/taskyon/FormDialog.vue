@@ -14,11 +14,12 @@
 import { ref } from 'vue'
 import ObjectTreeView from '../ObjectTreeView.vue'
 import { type JSONSchema7 } from 'json-schema'
+import type z from 'zod'
 
 defineOptions({ inheritAttrs: false })
 
 const openDialog = ref(false)
 const reactiveData = defineModel<Record<string, unknown>>()
 
-defineProps<{ title?: string; schema?: JSONSchema7 | undefined }>()
+defineProps<{ title?: string; schema?: JSONSchema7 | z.core.JSONSchema.BaseSchema | undefined }>()
 </script>

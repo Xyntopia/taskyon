@@ -153,8 +153,10 @@ export interface OpenRouterGenerationInfo {
 }
 
 const FunctionName = z.string().refine((val) => /^[a-zA-Z0-9_-]+$/.test(val), {
-  error: ({ input }) =>
-    `The function/tool name ${input} contains illegal characters. It has to fulfill '^[a-zA-Z0-9_-]+$'`,
+  error: ({ input }) => {
+    const msg = typeof input === 'string' ? input : JSON.stringify(input)
+    return `The function/tool name ${msg} contains illegal characters. It has to fulfill '^[a-zA-Z0-9_-]+$'`
+  },
 })
 type FunctionName = z.infer<typeof FunctionName>
 

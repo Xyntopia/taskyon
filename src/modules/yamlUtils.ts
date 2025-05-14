@@ -1,10 +1,11 @@
 import { dump } from 'js-yaml'
-import { convertToYamlWComments, zodToYAMLObject } from './zodUtils'
-import type { z } from 'zod'
+import { jsonSchemaToYamlString } from './zodUtils'
+import { z } from 'zod'
+import type { JSONSchema7 } from 'json-schema'
 
-export function zodToYamlString(schema: z.ZodTypeAny): string {
-  const objrepr = zodToYAMLObject(schema)
-  const yamlSchema = convertToYamlWComments(dump(objrepr))
+export function zodToYamlString(schema: z.ZodType): string {
+  const jsonSchema = z.toJSONSchema(schema) as JSONSchema7
+  const yamlSchema = jsonSchemaToYamlString(jsonSchema)
   return yamlSchema
 }
 

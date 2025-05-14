@@ -1,5 +1,6 @@
-import { FunctionArguments, ToolBase, partialTaskDraft, storedSettings } from './types'
-import { deepPartialify, deepStrictify } from '../zodUtils'
+import type { DeepPartial } from 'quasar'
+import type { storedSettings } from './types'
+import { FunctionArguments, ToolBase, partialTaskDraft } from './types'
 import { z } from 'zod'
 
 const RemoteFunctionBase = z.object({
@@ -32,14 +33,7 @@ export const RemoteFunctionResponse = RemoteFunctionBase.extend({
 export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>
 
 //export type partialTyConfiguration = PartialDeep<storedSettings>
-export const partialTyConfiguration = deepStrictify(
-  deepPartialify(
-    storedSettings
-      .partial()
-      .describe('This can be used to update the configuration through iframe, json or URL'),
-  ),
-)
-export type partialTyConfiguration = z.infer<typeof partialTyConfiguration>
+export type partialTyConfiguration = DeepPartial<storedSettings>
 //export type partialTyConfiguration = PartialDeep<storedSettings>
 
 const TaskMessage = z
@@ -85,7 +79,7 @@ const tyConfigurationMessage = z.object({
   type: z
     .literal('configurationMessage')
     .describe('Field to indicate that this is a function description message.'),
-  conf: partialTyConfiguration,
+  conf: z.record(z.string(), z.unknown()),
 })
 
 const TyReadyMessage = z

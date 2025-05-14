@@ -65,14 +65,14 @@ import CodeEditor from '../components/CodeEditor.vue'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import CreateNewTask from '../components/taskyon/CreateNewTask.vue'
 import ObjectTreeView from '../components/ObjectTreeView.vue'
-import { taskTemplateTypes } from 'src/modules/taskyon/types'
+import { storedSettings, taskTemplateTypes } from 'src/modules/taskyon/types'
 import UnderConstructionHint from '../components/UnderConstructionHint.vue'
 import { mdiToolbox, mdiTools } from '@quasar/extras/mdi-v6'
 import { matTune } from '@quasar/extras/material-icons'
-import { partialTyConfiguration } from 'src/modules/taskyon/iframeApiTypes'
 import TaskyonHeader from '../components/taskyon/TaskyonHeader.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { exampleTool } from 'src/modules/taskyon/tools'
+import { deepMerge } from 'src/modules/utils'
 
 const functionTemplate = taskTemplateTypes.toolDescription.parse(undefined)
 
@@ -103,19 +103,24 @@ void getAllTools().then((tools) => {
 
 const selectedToolName = ref<string>('')
 
-function importCurrentSettings() {
-  console.log('import current settings...')
-  const newObj = (({ llmSettings, appConfiguration }) => ({
+const currentSettings = computed(() => {
+  return (({ llmSettings, appConfiguration }) => ({
     llmSettings,
     appConfiguration,
   }))(state)
-  state.configurationDraft = JSON.stringify(newObj, null, 2)
+})
+
+function importCurrentSettings() {
+  console.log('import current settings...')
+  state.configurationDraft = JSON.stringify(currentSettings.value, null, 2)
 }
 
 const configParser = computed(() => {
   try {
-    const jsonConfigResult = partialTyConfiguration.safeParse(JSON.parse(state.configurationDraft))
-    return jsonConfigResult.success ? jsonConfigResult.success : jsonConfigResult.error
+    const configPatch = JSON.parse(state.configurationDraft)
+    const newSettings = deepMerge(state, configPatch)
+    const res = storedSettings.safeParse(newSettings)
+    return res.success ? res.data : res.error
   } catch (error) {
     console.log(error)
     return error
