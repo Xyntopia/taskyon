@@ -12,6 +12,8 @@ import { useGdrive } from '../gdrive'
 import { craeteToolJsonSchema, summarizeTools } from './tools'
 import { zodToYamlString } from '../yamlUtils'
 import z from 'zod'
+import type { JSONSchema7 } from 'json-schema'
+import { jsonSchemaToYamlString } from '../yamlUtils'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -336,4 +338,57 @@ export async function markdownGeneration() {
     }
   }
   throw new Error('could not found the task we just loaded!!')
+}
+
+export function testJsonSchemaToYaml() {
+  const schema: JSONSchema7 = {
+    type: 'object',
+    required: ['id'],
+    properties: {
+      id: { type: 'string', description: 'identifier' },
+      count: { type: 'number', default: 0, description: 'counter' },
+      tags: { type: 'array', items: { type: 'string' }, description: 'labels' },
+      meta: {
+        type: 'object',
+        properties: {
+          flag: { type: 'boolean' },
+          tier: { enum: ['free', 'pro', 'enterprise'], description: 'user tier' },
+        },
+        description: 'metadata',
+      },
+    },
+  }
+  const postfix = ' (optional)'
+  const out = jsonSchemaToYamlString(schema, postfix)
+
+  const expected = `\
+# identifier
+id: string
+# counter${postfix}
+count: number
+# labels${postfix}
+tags:
+  type: array
+  items: string
+# metadata${postfix}
+meta:
+  flag: boolean
+  # user tier${postfix}
+  tier: free|pro|enterprise
+`
+
+  if (out.trim() !== expected.trim()) {
+    throw new Error(`
+YAML output doesn’t match expected snapshot!
+
+— expected —
+${expected}
+
+— received —
+${out}
+    `)
+  }
+
+  console.log('✅ test passed')
+  return { out }
 }
