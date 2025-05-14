@@ -4,12 +4,7 @@ import type { JSONSchema7, JSONSchema7Definition } from 'json-schema'
 const JSONSchemaEnum = z.enum(['string', 'number', 'integer', 'boolean', 'object', 'array', 'null'])
 
 // This inline transform removes keys with undefined values.
-const JSONSchema7: z.ZodType<JSONSchema7> = z.lazy(() =>
-  JSONSchemaObjectRaw.transform(
-    (data) =>
-      Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)) as JSONSchema7,
-  ),
-)
+const JSONSchema7: z.ZodType<JSONSchema7> = z.lazy(() => JSONSchemaObjectRaw)
 
 // A JSONSchema can be a boolean or an object.
 const JSONSchema7Definition: z.ZodType<JSONSchema7Definition> = z.lazy(() =>
@@ -77,9 +72,6 @@ const JSONSchemaObjectRaw = z.strictObject({
 // Extend the raw object first, then transform.
 const JSONSchemaReferenceSchema: z.ZodType<JSONSchema7> = JSONSchemaObjectRaw.extend({
   $id: z.string(),
-}).transform(
-  (data) =>
-    Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)) as JSONSchema7,
-)
+})
 
 export { JSONSchema7Definition, JSONSchemaReferenceSchema, JSONSchema7 }

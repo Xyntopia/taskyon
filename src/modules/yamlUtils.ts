@@ -198,9 +198,10 @@ export function jsonSchemaToYAMLObject(
     return { key1: valRep, key2: valRep, '...': '...' }
   }
 
-  // oneOf unions: now OK because we accept Definition[]
-  if (schema.oneOf) {
-    const parts = schema.oneOf.map((opt) => jsonSchemaToYAMLObject(opt, optionalSymbol))
+  if (schema.oneOf || schema.anyOf) {
+    const parts = (schema.oneOf ?? schema.anyOf)!.map((opt) =>
+      jsonSchemaToYAMLObject(opt, optionalSymbol),
+    )
     return parts.join('|')
   }
 

@@ -363,10 +363,10 @@ function convertToToolCommandString(tool: ToolBase, longDescription = false): st
   const argStr = convertToYamlWComments(argStrRaw)
   const toolDescription =
     longDescription && tool.longDescription ? tool.longDescription : tool.description
-  const cmdString = `NAME: ${tool.name}:
+  const cmdString = `NAME: ${tool.name}
 DESCRIPTION: ${toolDescription.replace(/\n/g, ' ')}
 ${argStr}
-REQUIRED: ${[...requiredProperties].join(', ')}`
+${requiredProperties.size > 0 ? `REQUIRED: ${[...requiredProperties].join(', ')}` : ''}`
   return cmdString
 }
 
