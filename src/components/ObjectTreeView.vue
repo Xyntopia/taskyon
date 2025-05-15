@@ -182,13 +182,15 @@ const transformToTreeNodes = (
           icon?: string | undefined
           offIcon?: string | undefined
           onIcon?: string | undefined
+          label?: string | undefined
         })
       | undefined,
     path: string[],
   ): QTreeNode => {
     const newPath = [...path, key]
 
-    const label = descriptionsAsLabels ? subschema?.description?.trim() || key : key
+    const label =
+      (descriptionsAsLabels ? subschema?.description?.trim() : undefined) ?? subschema?.label ?? key
 
     const base: QTreeNode = {
       label,
