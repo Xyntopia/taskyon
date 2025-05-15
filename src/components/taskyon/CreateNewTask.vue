@@ -34,62 +34,6 @@
         <div class="row items-center">
           <!--Taskyon features-->
           <div class="row">
-            <ToggleButton
-              v-if="expertMode"
-              dense
-              :size="functionToggleBtnSize"
-              outline
-              :icon="mdiTools"
-              v-model="slimSettings.reactiveView.enableToolChooser"
-            >
-              <div class="q-pl-sm gt-xs">Use Tools</div>
-              <q-tooltip :delay="200">
-                {{ llmSettings.shape.enableToolChooser.description }}
-              </q-tooltip>
-            </ToggleButton>
-            <ToggleButton
-              v-if="expertMode"
-              v-model="state.llmSettings.useBasePrompt"
-              outline
-              :size="functionToggleBtnSize"
-              dense
-              :on-icon="mdiAutoFix"
-              :off-icon="mdiAlphabeticalVariant"
-            >
-              <div class="q-pl-sm gt-xs">Fancy AI</div>
-              <q-tooltip :delay="200">
-                {{ llmSettings.shape.useBasePrompt.description }}
-              </q-tooltip>
-            </ToggleButton>
-            <ToggleButton
-              v-if="expertMode"
-              v-model="state.llmSettings.tryUsingVisionModels"
-              outline
-              :size="functionToggleBtnSize"
-              dense
-              :on-icon="matVisibility"
-              :off-icon="matVisibilityOff"
-            >
-              <div class="q-pl-sm gt-xs">Vision</div>
-              <q-tooltip :delay="200">
-                {{ llmSettings.shape.tryUsingVisionModels.description }}
-              </q-tooltip>
-            </ToggleButton>
-            <ToggleButton
-              v-if="expertMode"
-              v-model="state.llmSettings.enableOpenAiTools"
-              on-icon="svguse:/taskyon_mono_opt.svg#taskyon"
-              :off-icon="matSmartToy"
-              :size="functionToggleBtnSize"
-              dense
-              outline
-              reverse
-            >
-              <q-icon :name="mdiFunctionVariant"></q-icon>
-              <q-tooltip :dely="200">
-                {{ llmSettings.shape.enableOpenAiTools.description }}
-              </q-tooltip></ToggleButton
-            >
             <div>
               <q-tooltip>More AI Settings</q-tooltip>
               <FormDialog
@@ -111,10 +55,10 @@
             />
             <q-btn flat dense size="sm" no-caps>
               <q-icon :name="matSmartToy" class="q-px-xs" />
-              <div class="ellipsis gt-sm">
+              <div class="ellipsis">
                 {{ `${tystate.currentModelId}` }}
               </div>
-              <div class="text-weight-thin gt-sm">/{{ state.llmSettings.selectedApi }}</div>
+              <div class="text-weight-thin gt-xs">/{{ state.llmSettings.selectedApi }}</div>
               <q-tooltip>Select AI model (current model: {{ tystate.currentModelId }})</q-tooltip>
               <q-menu color="secondary">
                 <q-list style="min-width: 100px">
@@ -148,7 +92,6 @@
               </q-menu>
             </q-btn>
           </div>
-          <q-space></q-space>
           <!-- deactivate token estimation for now, because
            when using agents this is way too hard to estimate.
           <template v-if="tystate.currentModelId && expertMode && false">
@@ -164,22 +107,6 @@
             </div>
             <div class="lt-sm">{{ `t/c: ${estimatedTokens}` }}</div>
           </template>-->
-          <q-space></q-space>
-          <div>
-            <q-btn
-              flat
-              size="sm"
-              aria-label="toggle task settings"
-              @click="expandedTaskCreation = !expandedTaskCreation"
-            >
-              <q-icon size="xs" :name="matTune" class="q-pl-sm"></q-icon>
-              <q-icon
-                size="xs"
-                :name="expandedTaskCreation ? matKeyboardArrowUp : matKeyboardArrowDown"
-              ></q-icon>
-              <q-tooltip>Chat Settings</q-tooltip>
-            </q-btn>
-          </div>
         </div>
         <div v-if="fileAttachments.length">
           <div>Attached files:</div>
@@ -220,7 +147,7 @@
       </div>
     </div>
     <q-slide-transition>
-      <q-list v-show="expandedTaskCreation" dense>
+      <q-list v-show="expertMode" dense>
         <q-separator class="q-my-sm" />
         <!--Model Selection-->
         <q-item class="row items-center">
@@ -252,33 +179,19 @@ import { saveUserUploadedFileToOpfs } from 'src/modules/OPFS'
 import ObjectTreeView from '../ObjectTreeView.vue'
 import chatMessageEdit from './chatMessageEdit.vue'
 import InfoDialog from '../InfoDialog.vue'
-import ToggleButton from '../ToggleButton.vue'
 import {
   matUploadFile,
   matChat,
   matSmartToy,
   matNavigateNext,
-  matKeyboardArrowUp,
-  matKeyboardArrowDown,
-  matTune,
-  matVisibility,
-  matVisibilityOff,
   matMoreHoriz,
 } from '@quasar/extras/material-icons'
-import {
-  mdiAlphabeticalVariant,
-  mdiAutoFix,
-  mdiTools,
-  mdiFunctionVariant,
-} from '@quasar/extras/mdi-v6'
 import { deepMerge } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { asyncComputed } from 'src/modules/vueUtils'
 import FormDialog from './FormDialog.vue'
 import { buildSlimView } from 'src/modules/vueUtils'
-
-const functionToggleBtnSize = 'md'
 
 const { expertMode = false, forceTaskProps } = defineProps<{
   forceTaskProps?: llmSettings['taskTemplate'] | undefined

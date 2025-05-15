@@ -74,11 +74,16 @@
       </div>
     </template>
     <template #header-boolean="prop">
+      <q-icon v-if="prop.node.icon" :name="prop.node.icon"></q-icon>
       <q-toggle
         :disable="readOnly"
         style="min-width: 200px"
+        dense
+        size="lg"
         :label="prop.node.label"
         left-label
+        :checked-icon="prop.node.onIcon"
+        :unchecked-icon="prop.node.offIcon"
         color="secondary"
         :model-value="prop.node.value"
         @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
@@ -163,20 +168,30 @@ const transformToTreeNodes = (
   const mapEntry = (
     key: string,
     value: unknown,
-    subschema: JSONSchema7 | undefined,
+    subschema:
+      | (JSONSchema7 & {
+          icon?: string | undefined
+          offIcon?: string | undefined
+          onIcon?: string | undefined
+        })
+      | undefined,
     path: string[],
   ): QTreeNode => {
     const newPath = [...path, key]
 
     const label = descriptionsAsLabels ? subschema?.description?.trim() || key : key
 
-    const base = {
+    const base: QTreeNode = {
       label,
       description: subschema?.description?.trim(),
       key: newPath.join('.'),
       path: newPath,
       schema: subschema,
     }
+    if (subschema?.icon) base.icon = subschema.icon
+    if (subschema?.offIcon) base.offIcon = subschema.offIcon
+    if (subschema?.onIcon) base.onIcon = subschema.onIcon
+
     const isUndef = value === undefined || value === null
     const runtimeType = subschema?.type ?? (Array.isArray(value) ? 'array' : typeof value)
 

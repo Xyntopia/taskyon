@@ -2,6 +2,13 @@ import type OpenAI from 'openai'
 import { z } from 'zod'
 import { deepCopy } from '../utils'
 import { JSONSchema7 } from '../jsonSchema'
+import {
+  mdiAlphabeticalVariant,
+  mdiAutoFix,
+  mdiFunctionVariant,
+  mdiTools,
+} from '@quasar/extras/mdi-v6'
+import { matSmartToy, matVisibility, matVisibilityOff } from '@quasar/extras/material-icons'
 
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type RequireSome<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
@@ -493,11 +500,17 @@ export const llmSettings = z.object({
   enableOpenAiTools: z
     .boolean()
     .default(false)
-    .describe(
-      `Enable OpenAI function selection, This doesn't work for all models currently
-and is mainly recommended for all openAI models.
-Taskyon "native" mode is usually recommended as it is model agnostic.`,
-    ),
+    .meta({
+      onIcon: matSmartToy,
+      offIcon: 'svguse:/taskyon_mono_opt.svg#taskyon',
+      icon: mdiFunctionVariant,
+      label: 'Native Agent Tools',
+      description: `Enable native AI function selection. If this is enabled Taskyon will try to
+leverage the native tool selection functionality of AI models.
+Turning this off is usually recommended in order to use Taskyons model-agnostic mechanisms.
+
+This doesn't work for all models currently and is mainly recommended for all openAI models.`,
+    }),
   selectedApi: z.string().nullish().default('taskyon').meta({
     description: 'which of the defined APIs are we currently using?',
   }),
@@ -525,6 +538,8 @@ Taskyon "native" mode is usually recommended as it is model agnostic.`,
   enableToolChooser: z.boolean().default(true).meta({
     description:
       'Enable the standard tool chooser. This function enables taskyon to decide if and then which tool it should use for the task.',
+    icon: mdiTools,
+    label: 'Use Tools',
   }),
   taskDraft: partialTaskDraft
     .default({
@@ -539,13 +554,24 @@ Taskyon "native" mode is usually recommended as it is model agnostic.`,
         'The task which is currently drafted (This could for example be a simple message).',
     }),
   allowedTools: z.array(FunctionName),
-  useBasePrompt: z.boolean().default(true).describe(`
+  useBasePrompt: z
+    .boolean()
+    .default(true)
+    .meta({
+      offIcon: mdiAlphabeticalVariant,
+      icon: mdiAutoFix,
+      label: 'Fancy AI',
+      description: `
   *Toggle the base prompt on/off.*
 
   This gives the AI instructions how to draw better graphics, math
   formulas and generally make the chat a little more fancy than just plain
-  text. You can check/change the base prompt in the settings...`),
+  text. You can check/change the base prompt in the settings...`,
+    }),
   tryUsingVisionModels: z.boolean().default(true).meta({
+    icon: matVisibility,
+    offIcon: matVisibilityOff,
+    label: 'Vision',
     description:
       'Toggle Vision ON/OFF. If a model supports vision, we will try to use that for uploaded images',
   }),
