@@ -1,6 +1,6 @@
 <template>
   <div>
-    <q-btn flat round dense :icon="matHelpOutline" v-bind="$attrs" @click="showInfo = true">
+    <q-btn flat round dense :icon="matHelpOutline" v-bind="$attrs" @click.stop="showInfo = true">
       <q-dialog v-model="showInfo">
         <q-card>
           <q-card-section>
