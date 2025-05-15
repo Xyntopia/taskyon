@@ -161,13 +161,12 @@ const FunctionName = z.string().refine((val) => /^[a-zA-Z0-9_-]+$/.test(val), {
 type FunctionName = z.infer<typeof FunctionName>
 
 export const ToolBase = z.object({
-  description: z
-    .string()
-    .describe('A short description about the tool so that an LLM knows when to use it.'),
-  longDescription: z
-    .string()
-    .optional()
-    .describe('An optional longer description for more complicated operations with this tool.'),
+  description: z.string().meta({
+    description: 'A short description about the tool so that an LLM knows when to use it.',
+  }),
+  longDescription: z.string().optional().meta({
+    description: 'An optional longer description for more complicated operations with this tool.',
+  }),
   name: FunctionName.describe('Name of the tool. Has to fulfill: /^[a-zA-Z0-9_-]+$/'),
   renderOptions: z
     .object({
@@ -208,9 +207,9 @@ export const ParamType = z.union([
   z.undefined(),
 ])
 export type ParamType = z.infer<typeof ParamType>
-export const FunctionArguments = z
-  .record(z.string(), ParamType)
-  .describe('arguments of the function')
+export const FunctionArguments = z.record(z.string(), ParamType).meta({
+  description: 'arguments of the function',
+})
 export type FunctionArguments = z.infer<typeof FunctionArguments>
 
 /* here we are essentiall declaring the taskyon API */
@@ -232,9 +231,9 @@ const UploadedFilesContent = z.object({
 })
 const ToolResultContent = z.object({ type: z.literal('toolresult'), data: z.unknown() })
 const ToolDefinition = z.object({ type: z.literal('tooldefinition'), data: ToolBase })
-const ErrorContent = z
-  .object({ type: z.literal('error'), data: z.string() })
-  .describe('Gets created if any error occurs during task processing.')
+const ErrorContent = z.object({ type: z.literal('error'), data: z.string() }).meta({
+  description: 'Gets created if any error occurs during task processing.',
+})
 const Return = z.object({ type: z.literal('return'), data: z.string() }).describe(
   `A Termination task always indicates the end of an autonomous task chat execution.
 Every Leaf task which is not a Termination task can potentially continue to be executed...
@@ -279,17 +278,14 @@ export const TaskNodeMeta = z
     toolStreamArgsContent: z.record(z.string(), z.string()).optional(),
     streamContent: z.string().optional(),
     taskCosts: z.number().optional(),
-    rawOutput: z
-      .unknown()
-      .optional()
-      .describe(
+    rawOutput: z.unknown().optional().meta({
+      description:
         'We can optionally add some raw result data for debugging purposes, e.g. chatcompletion ...',
-      ), // Replace with the correct Zod schema if available
+    }), // Replace with the correct Zod schema if available
     error: z.unknown().optional(),
-    taskPrompt: z
-      .record(z.string(), z.unknown())
-      .optional()
-      .describe('add any prompts that were used for a task...'),
+    taskPrompt: z.record(z.string(), z.unknown()).optional().meta({
+      description: 'add any prompts that were used for a task...',
+    }),
   })
   .partial()
 
@@ -310,10 +306,9 @@ For example this is, what an LLM would actually get to see. There are only a few
 of how content can be structured. `,
   ),
   label: z.array(z.string()).optional(),
-  parentID: z
-    .string()
-    .optional()
-    .describe('The ID of the parent task which created this subtask on a lower stack level'),
+  parentID: z.string().optional().meta({
+    description: 'The ID of the parent task which created this subtask on a lower stack level',
+  }),
   priorID: z.string().optional().describe('The ID of the previous task in the same stack level.'),
   // TODO: validate this ID using our content address creation functions
   id: z.string(),
@@ -328,12 +323,10 @@ They are given certain as a list of public keys + type of ownership.
  can for example be freely exchange in p2p settings.
 
 TODO: define onwership types..`),
-  sig: z
-    .string()
-    .optional()
-    .describe(
+  sig: z.string().optional().meta({
+    description:
       'A signature from the author of the Task. It is created from the entire content of the tasj except for the signature itself.',
-    ),
+  }),
 })
 export type TaskNode = z.infer<typeof TaskNode>
 
@@ -352,9 +345,10 @@ export const partialTaskDraft = TaskNode.omit({
 })
   .partial()
   .required({ role: true, content: true })
-  .describe(
-    'This is just a subset of the task properties which can be used to define new tasks in various places.',
-  )
+  .meta({
+    description:
+      'This is just a subset of the task properties which can be used to define new tasks in various places.',
+  })
 export type partialTaskDraft = z.infer<typeof partialTaskDraft>
 
 export const taskTemplateTypes = {
@@ -467,39 +461,35 @@ const apiConfig = z
       })
       .partial()
       .optional()
-      .describe('Define default models for some tasks.'),
+      .meta({
+        description: 'Define default models for some tasks.',
+      }),
     streamSupport: z.boolean().describe('Does the API support streaming?'),
-    defaultHeaders: z
-      .record(z.string(), z.string())
-      .optional()
-      .describe('If the API needs some special headers for communication (e.g. an API key.)'),
+    defaultHeaders: z.record(z.string(), z.string()).optional().meta({
+      description: 'If the API needs some special headers for communication (e.g. an API key.)',
+    }),
     routes: z.object({
       chatCompletion: z.string().describe('Endpoint for chatcompletion.'),
       models: z.string().describe('Endpoint for list of models.'),
     }),
   })
-  .describe('Definition of an OpenAI Compatible API.')
+  .meta({
+    description: 'Definition of an OpenAI Compatible API.',
+  })
 export type apiConfig = z.infer<typeof apiConfig>
 
 export const llmSettings = z.object({
-  userId: z
-    .string()
-    .nullish()
-    .optional()
-    .describe(
+  userId: z.string().nullish().optional().meta({
+    description:
       'a (public) cryptographic user id which is used to identify the user in different chats',
-    ),
-  secretPublicKey: z
-    .string()
-    .nullish()
-    .optional()
-    .describe('A (public) cryptographic key which is used to encrypt secrets'),
-  selectedTaskId: z
-    .string()
-    .optional()
-    .describe(
+  }),
+  secretPublicKey: z.string().nullish().optional().meta({
+    description: 'A (public) cryptographic key which is used to encrypt secrets',
+  }),
+  selectedTaskId: z.string().optional().meta({
+    description:
       'The currently selected conversation defined by the ID of its last node. The task chain is defined through each tasknodes parent IDs',
-    ),
+  }),
   enableOpenAiTools: z
     .boolean()
     .default(false)
@@ -508,46 +498,34 @@ export const llmSettings = z.object({
 and is mainly recommended for all openAI models.
 Taskyon "native" mode is usually recommended as it is model agnostic.`,
     ),
-  selectedApi: z
-    .string()
-    .nullish()
-    .default('taskyon')
-    .describe('which of the defined APIs are we currently using?'),
-  llmApis: z
-    .record(z.string(), apiConfig)
-    .default({})
-    .describe('A list of OpenAI compatible API definitions.'),
-  siteUrl: z
-    .string()
-    .default('https://taskyon.space')
-    .describe(
+  selectedApi: z.string().nullish().default('taskyon').meta({
+    description: 'which of the defined APIs are we currently using?',
+  }),
+  llmApis: z.record(z.string(), apiConfig).default({}).meta({
+    description: 'A list of OpenAI compatible API definitions.',
+  }),
+  siteUrl: z.string().default('https://taskyon.space').meta({
+    description:
       'wha is the URL of this page?. This helps identifying Backends, where the request is coming from.',
-    ),
-  summaryModel: z
-    .string()
-    .default('Xenova/distilbart-cnn-6-6')
-    .describe('Which model are we using for local summary?'),
-  vectorizationModel: z
-    .string()
-    .default('Xenova/all-MiniLM-L6-v2')
-    .describe('Which model should be used for vectorization?'),
-  maxAutonomousTasks: z
-    .number()
-    .default(3)
-    .describe(
+  }),
+  summaryModel: z.string().default('Xenova/distilbart-cnn-6-6').meta({
+    description: 'Which model are we using for local summary?',
+  }),
+  vectorizationModel: z.string().default('Xenova/all-MiniLM-L6-v2').meta({
+    description: 'Which model should be used for vectorization?',
+  }),
+  maxAutonomousTasks: z.number().default(3).meta({
+    description:
       'Maximum number of tasks which are allowed to be performed autonomously before stopping.',
-    ),
-  taskTemplate: partialTaskDraft
-    .optional()
-    .describe(
+  }),
+  taskTemplate: partialTaskDraft.optional().meta({
+    description:
       'A task template which can be provided for new tasks (E.g. which model to use). This is important when embedding tasyon in another webpage.',
-    ),
-  enableToolChooser: z
-    .boolean()
-    .default(true)
-    .describe(
+  }),
+  enableToolChooser: z.boolean().default(true).meta({
+    description:
       'Enable the standard tool chooser. This function enables taskyon to decide if and then which tool it should use for the task.',
-    ),
+  }),
   taskDraft: partialTaskDraft
     .default({
       role: 'user',
@@ -556,7 +534,10 @@ Taskyon "native" mode is usually recommended as it is model agnostic.`,
         data: '',
       },
     })
-    .describe('The task which is currently drafted (This could for example be a simple message).'),
+    .meta({
+      description:
+        'The task which is currently drafted (This could for example be a simple message).',
+    }),
   allowedTools: z.array(FunctionName),
   useBasePrompt: z.boolean().default(true).describe(`
   *Toggle the base prompt on/off.*
@@ -564,37 +545,34 @@ Taskyon "native" mode is usually recommended as it is model agnostic.`,
   This gives the AI instructions how to draw better graphics, math
   formulas and generally make the chat a little more fancy than just plain
   text. You can check/change the base prompt in the settings...`),
-  tryUsingVisionModels: z
-    .boolean()
-    .default(true)
-    .describe(
+  tryUsingVisionModels: z.boolean().default(true).meta({
+    description:
       'Toggle Vision ON/OFF. If a model supports vision, we will try to use that for uploaded images',
-    ),
+  }),
   taskChatTemplates: z
     .object({
-      basePrompt: z
-        .string()
-        .describe(
+      basePrompt: z.string().meta({
+        description:
           'The base prompt. This should be used e.g. to set the behaviour of the AI. used as a "system" prompt.',
-        ),
+      }),
       instruction: z.string().describe('This prompt is used to make the AI follow instructions'),
-      toolResult: z
-        .string()
-        .describe(
+      toolResult: z.string().meta({
+        description:
           'This prompt is used to make the AI display tool results in a certain structured way.',
-        ),
-      task: z
-        .string()
-        .describe('This prompt is used to explain to the AI what to do with a specific task.'),
+      }),
+      task: z.string().meta({
+        description: 'This prompt is used to explain to the AI what to do with a specific task.',
+      }),
       evaluate: z.string().describe('This prompt is used to evaluate errors'),
-      schemaReminder: z
-        .string()
-        .describe('This prompt is used to enforce a specific schema as a response...'),
+      schemaReminder: z.string().meta({
+        description: 'This prompt is used to enforce a specific schema as a response...',
+      }),
       tools: z.string().describe('This prompt is used to give the AI a list of tools.'),
     })
-    .describe(
-      'These are the definitions of the prompts which are used in chats for different purposes.',
-    ),
+    .meta({
+      description:
+        'These are the definitions of the prompts which are used in chats for different purposes.',
+    }),
 })
 export type llmSettings = z.infer<typeof llmSettings>
 
@@ -610,48 +588,42 @@ const HexColor = z.string().superRefine((value, ctx) => {
 type HexColor = z.infer<typeof HexColor>
 
 const appConfiguration = z.object({
-  appConfigurationUrl: z
-    .string()
-    .default('/taskyon_settings.json')
-    .describe('URL from which to load the initial app configuration'),
-  gdriveConfigurationFile: z
-    .string()
-    .default('taskyon_settings.json')
-    .describe('gDrive fileid of the configuration'),
-  expertMode: z
-    .boolean()
-    .default(false)
-    .describe('Turns on additional settings and configurations.'),
+  appConfigurationUrl: z.string().default('/taskyon_settings.json').meta({
+    description: 'URL from which to load the initial app configuration',
+  }),
+  gdriveConfigurationFile: z.string().default('taskyon_settings.json').meta({
+    description: 'gDrive fileid of the configuration',
+  }),
+  expertMode: z.boolean().default(false).meta({
+    description: 'Turns on additional settings and configurations.',
+  }),
   showCosts: z.boolean().default(false).describe('Shows the costs of API calls.'),
-  gdriveDir: z
-    .string()
-    .default('taskyon')
-    .describe('The default directory in gdrive, where taskyon saves its configuration.'), // not sure, if we need this here?
-  useEnterToSend: z
-    .boolean()
-    .default(true)
-    .describe('Determines, if enter will automatically send a message or rather shift-enter'),
-  guiMode: z
-    .enum(['auto', 'iframe', 'default'])
-    .default('auto')
-    .describe('Sets whether we want to have a minimalist chat or the full app'),
-  primaryColor: HexColor.describe('The primary color of taskyons color scheme.')
-    .optional()
-    .describe('Primary color for custom taskyon theming. This should be a dark color'),
+  gdriveDir: z.string().default('taskyon').meta({
+    description: 'The default directory in gdrive, where taskyon saves its configuration.',
+  }), // not sure, if we need this here?
+  useEnterToSend: z.boolean().default(true).meta({
+    description: 'Determines, if enter will automatically send a message or rather shift-enter',
+  }),
+  guiMode: z.enum(['auto', 'iframe', 'default']).default('auto').meta({
+    description: 'Sets whether we want to have a minimalist chat or the full app',
+  }),
+  primaryColor: HexColor.describe('The primary color of taskyons color scheme.').optional().meta({
+    description: 'Primary color for custom taskyon theming. This should be a dark color',
+  }),
   secondaryColor: HexColor.describe('The secondary color of taskyons color scheme.')
     .optional()
-    .describe(
-      'Secondary color for custom taskyon theming. This color should be a bright color and contrast the primary color.',
-    ),
+    .meta({
+      description:
+        'Secondary color for custom taskyon theming. This color should be a bright color and contrast the primary color.',
+    }),
 })
 export type appConfiguration = z.infer<typeof appConfiguration>
 
 export const storedSettings = z.object({
-  version: z
-    .literal(11)
-    .describe(
+  version: z.literal(11).meta({
+    description:
       'whenever the schema of the settings change, this number will get changed as well...',
-    ),
+  }),
   appConfiguration,
   llmSettings,
   signatureOrKey: z.string().optional()

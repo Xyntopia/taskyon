@@ -34,9 +34,10 @@ const SystemResponseEvaluation = z
     'Should we try to correct the error': yesno,
     'try again': yesno,
   })
-  .describe(
-    'This is used as a short prompt for tasks in order to determine whether we should use a more detailed task prompt',
-  )
+  .meta({
+    description:
+      'This is used as a short prompt for tasks in order to determine whether we should use a more detailed task prompt',
+  })
 
 const ToolResultBase = z
   .object({
@@ -47,14 +48,18 @@ const ToolResultBase = z
     'should we use different parameters': yesno,
     'try again': yesno,
   })
-  .describe('Structured answer schema for processing the result of a function call.')
+  .meta({
+    description: 'Structured answer schema for processing the result of a function call.',
+  })
 
 const ToolSelection = z
   .object({
     'Do we have to use a tool?': yesno,
     'describe your thoughts': answer,
   })
-  .describe('Structured answer schema for a task including the use of tools')
+  .meta({
+    description: 'Structured answer schema for a task including the use of tools',
+  })
 
 export const StructuredResponseTypes = {
   ToolResultBase,

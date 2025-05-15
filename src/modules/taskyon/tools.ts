@@ -15,12 +15,10 @@ import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
 import Ajv from 'ajv'
 
 export const taskResult = z.object({
-  taskResultMarker: z
-    .literal(taskMarker)
-    .default(taskMarker)
-    .describe(
+  taskResultMarker: z.literal(taskMarker).default(taskMarker).meta({
+    description:
       'we use this marker in order to indicate that the result should be added as new tasks!',
-    ),
+  }),
   taskChainList: z.array(z.array(partialTaskDraft)),
 })
 export type taskResult = z.infer<typeof taskResult>
@@ -37,14 +35,18 @@ export function makeTaskResult(tasks: partialTaskDraft[][]): taskResult {
   .function()
   .args(z.record(z.string(), z.unknown()), toolContext)
   .returns(z.unknown())
-  .describe('Function definition for internal tools with context')
+  .meta({
+    description: 'Function definition for internal tools with context',
+  })
 export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSchema>
 */
 /*z
     .function()
     .args(z.record(z.string(), z.unknown()))
     .returns(z.unknown())
-    .describe('Simple function definition for internal tools'),*/
+    .meta({
+      description: 'Simple function definition for internal tools',
+    }),*/
 
 export type toolContext = {
   taskChain: TaskNode[]
