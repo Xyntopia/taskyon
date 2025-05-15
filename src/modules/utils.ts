@@ -827,10 +827,12 @@ const falsyValues: Set<unknown> = new Set([
   null,
   'undefined',
   undefined,
+  'disabled',
 ])
 
 // this function "normalizes" boolean-like input this makes our llm structured
 // response parsing more robust.
+// TODO: can we use zods "stringbool" for this? https://v4.zod.dev/api#stringbool
 export const normalizeFalsyValues = (normalizer: unknown = false): ((node: unknown) => unknown) =>
   createDeepTransformer({
     valueFn: (value) => {
