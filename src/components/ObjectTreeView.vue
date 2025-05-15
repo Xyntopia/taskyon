@@ -187,6 +187,7 @@ const transformToTreeNodes = (
       key: newPath.join('.'),
       path: newPath,
       schema: subschema,
+      children: [],
     }
     if (subschema?.icon) base.icon = subschema.icon
     if (subschema?.offIcon) base.offIcon = subschema.offIcon
@@ -262,7 +263,7 @@ const transformToTreeNodes = (
 
 const nodeTree = computed(() => {
   if (modelValue.value) {
-    return transformToTreeNodes(modelValue.value, schema, undefined)
+    return transformToTreeNodes(modelValue.value, schema)
   } else {
     return []
   }

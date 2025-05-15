@@ -36,12 +36,20 @@
         </q-tab-panel>
         <q-tab-panel name="agent config" :class="tabPanelClass">
           <div>All of the Agent configuration</div>
-          <ObjectTreeView v-model="state.llmSettings" class="fit" />
+          <ObjectTreeView
+            v-model="state.llmSettings"
+            :schema="convertZodToJsonSchemaCached(storedSettings.shape.llmSettings)"
+            class="fit"
+          />
           <!--{{ state.llmSettings }}-->
         </q-tab-panel>
         <q-tab-panel name="app config" :class="tabPanelClass">
           <div>All of the app configurations</div>
-          <ObjectTreeView v-model="state.appConfiguration" class="fit" />
+          <ObjectTreeView
+            v-model="state.appConfiguration"
+            :schema="convertZodToJsonSchemaCached(storedSettings.shape.appConfiguration)"
+            class="fit"
+          />
         </q-tab-panel>
       </q-tab-panels>
     </q-card>
@@ -56,6 +64,7 @@ import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'
 import { useRoute } from 'vue-router'
 import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
 import { useAppStateStore } from 'src/stores/appState'
+import { convertZodToJsonSchemaCached, storedSettings } from 'src/modules/taskyon/types'
 
 const route = useRoute()
 const state = useAppStateStore()
