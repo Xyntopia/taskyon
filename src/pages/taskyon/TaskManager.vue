@@ -116,8 +116,7 @@ const defaultParams = {
 // If you want to map them to { label, value } for q-select:
 const tasktypesOptions = TaskContent.options.map((opt) => {
   // each option is a ZodObject with a `type` literal
-  const obj = opt
-  const typeLiteral = obj.shape.type
+  const typeLiteral = opt.shape.type._zod.def.values[0]
   return typeLiteral
 })
 
