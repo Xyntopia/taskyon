@@ -283,8 +283,8 @@ export const createVectorStore = async (db: TyPGDB, name: string, additionalColu
     const formattedVector = `[${vector.join(',')}]` // Format the array as a string for pgvector
     await db.query(
       `
-      INSERT INTO ${name} (id, label, data, vec)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO ${name} (id, data, vec)
+      VALUES ($1, $2, $3)
       ON CONFLICT (id) DO UPDATE SET
       ${saveData ? 'data = EXCLUDED.data,' : ''}
       vec = EXCLUDED.vec;
