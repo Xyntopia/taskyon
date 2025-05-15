@@ -1,5 +1,11 @@
-<template class="object-tree-view">
-  <q-tree v-if="modelValue" :nodes="nodeTree" node-key="label" v-bind="$attrs">
+<template>
+  <q-tree
+    v-if="modelValue"
+    :nodes="nodeTree"
+    node-key="label"
+    v-bind="$attrs"
+    class="object-tree-view"
+  >
     <!--for all the component which explicitly want to remove the header...-->
     <template #header-none> </template>
     <template #body-unknown="prop">
@@ -73,25 +79,28 @@
         </info-dialog>
       </div>
     </template>
-    <template #header-boolean="prop">
-      <q-icon v-if="prop.node.icon" :name="prop.node.icon"></q-icon>
-      <q-toggle
-        :disable="readOnly"
-        style="min-width: 200px"
-        dense
-        size="lg"
-        :label="prop.node.label"
-        left-label
-        :checked-icon="prop.node.onIcon"
-        :unchecked-icon="prop.node.offIcon"
-        color="secondary"
-        :model-value="prop.node.value"
-        @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
-      >
-      </q-toggle>
-      <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
-        {{ prop.node.description }}
-      </info-dialog>
+    <template #body-boolean="prop">
+      <div class="row q-gutter-sm items-center">
+        <q-icon v-if="prop.node.icon" size="sm" :name="prop.node.icon"></q-icon>
+        <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
+          {{ prop.node.label }}:
+        </div>
+        <q-toggle
+          :disable="readOnly"
+          dense
+          size="lg"
+          left-label
+          :checked-icon="prop.node.onIcon"
+          :unchecked-icon="prop.node.offIcon"
+          color="secondary"
+          :model-value="prop.node.value"
+          @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
+        >
+        </q-toggle>
+        <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
+          {{ prop.node.description }}
+        </info-dialog>
+      </div>
     </template>
     <template #body-number="prop">
       <div class="row">
@@ -231,7 +240,8 @@ const transformToTreeNodes = (
         return {
           ...base,
           value: !!value,
-          header: 'boolean',
+          body: 'boolean',
+          header: 'none',
         }
       case 'number': {
         const numVal = isUndef ? undefined : (value as number)
