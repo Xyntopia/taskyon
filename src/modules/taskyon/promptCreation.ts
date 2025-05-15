@@ -4,34 +4,25 @@ import { safeYamlDump, zodToYamlString } from '../yamlUtils'
 import type OpenAI from 'openai'
 import { z } from 'zod'
 
-const answer = z.string().nullish()
-const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullish()
+const answer = z.string()
+const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullable()
 type yesno = z.infer<typeof yesno>
 
 // TODO: don't add more "goals" to this list, we want chatCompletion to figure
 //       out the goals dynamically trough the parameters we provide and the messages coming before it...
+//       in fact in the future we would like to get rid of this part and provide all of this
+//       functionality with different tools while utilizing a very "slim" chatCompletion
 export type Goals = 'SimpleCompletion' | 'AnalyzeError' | 'ChooseTool' | 'AnalyzeToolResult'
 
 // this one here is important. It should be as simple as possible
 // this type is used to parse & describe tool commands
-// an LLM should be able to generaate this content...
+// an LLM should be able to generate this content...
 export const UseToolBase = z.object({
   'use tool': yesno,
   'which tool': answer,
-  command: FunctionCall.nullish()
-    // right now, we don't know a good way to simultanously
-    // parse robustly and describe precisely
-    // we simply "normalize" all "no, {}, null" etc.. into undefined
-    /*z.union([
-      FunctionCall, // Accepts valid FunctionCall
-      z.null(), // Accepts null
-      z.object({}), // Accepts an empty object {}
-      yesno, // Accepts yes/no object
-    ])*/
-    .optional()
-    .describe(
-      'If we should use a tool in the following step, provide the tool command. Otherwise do not!!',
-    ),
+  command: FunctionCall.nullish().describe(
+    'If we should use a tool in the following step, provide the tool command. Otherwise do not!!',
+  ),
 })
 
 const SystemResponseEvaluation = z

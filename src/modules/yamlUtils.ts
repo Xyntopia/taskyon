@@ -129,18 +129,16 @@ export function convertToYamlWComments(objrepr: string) {
   )
 }
 
-// Convert JSON Schema to our YAML-like representation
 export function jsonSchemaToYAMLObject(
   schema: JSONSchema7Definition,
   optionalSymbol = '',
+  isOptional = false,
 ): unknown {
   // --- handle boolean schemas up front ---
   if (schema === true) {
-    // “anything goes” → treat as string
     return 'string'
   }
   if (schema === false) {
-    // totally disallowed → mark unsupported
     return 'unsupported'
   }
 
@@ -149,60 +147,93 @@ export function jsonSchemaToYAMLObject(
   if (schema.type === 'number' || schema.type === 'integer') return 'number'
   if (schema.type === 'boolean') return 'boolean'
   if (schema.type === 'null') return 'null'
+
   // enums
-  if (schema.enum)
+  if (schema.enum) {
     return schema.enum.map((v) => (typeof v === 'string' ? v : JSON.stringify(v))).join('|')
-  // objects
-  if (schema.type === 'object' && schema.properties) {
-    const yamlObj: Record<string, unknown> = {}
-    const req = new Set(Array.isArray(schema.required) ? schema.required : [])
-    const properties = schema.properties as { [key: string]: { description?: string } }
-    for (const key of Object.keys(properties)) {
-      const prop = properties[key]!
-      const optSuffix = req.has(key) ? '' : optionalSymbol
-      if (prop.description) {
-        yamlObj[`# ${key} description`] = `${prop.description}${optSuffix}`
-      }
-      yamlObj[key] = jsonSchemaToYAMLObject(prop, optionalSymbol)
-    }
-    return yamlObj
   }
 
-  // arrays: schema.items may be an array or single
-  if (schema.type === 'array' && schema.items) {
-    const itemSchema = Array.isArray(schema.items) ? schema.items[0] : schema.items
-    if (itemSchema === undefined) {
-      return {
-        type: 'array',
-        items: 'unsupported',
+  // object with explicit properties
+  if (schema.type === 'object' && schema.properties) {
+    const required = new Set<string>(Array.isArray(schema.required) ? schema.required : [])
+    const out: Record<string, unknown> = {}
+    for (const [key, propSchema] of Object.entries(schema.properties)) {
+      const propIsOptional = !required.has(key)
+      // comments: preserve as real YAML comments later when you dump
+      if (typeof propSchema === 'object' && propSchema.description) {
+        out[`# ${key} description`] =
+          `${propSchema.description}${propIsOptional ? optionalSymbol : ''}`
       }
+      out[key] = jsonSchemaToYAMLObject(propSchema, optionalSymbol, propIsOptional)
     }
+    return out
+  }
+
+  // arrays
+  if (schema.type === 'array') {
+    const items = Array.isArray(schema.items) ? schema.items[0] : schema.items
+
+    if (!items) {
+      return { type: 'array', items: 'unsupported' }
+    }
+
     return {
       type: 'array',
-      items: jsonSchemaToYAMLObject(itemSchema, optionalSymbol),
+      // TODO: not sure, if the isOptional is needed here!
+      items: jsonSchemaToYAMLObject(items, optionalSymbol, isOptional),
     }
   }
 
-  // records/additionalProperties
+  // object as a "record" or generic object
   if (schema.type === 'object' && schema.additionalProperties !== undefined) {
     let valSchema: JSONSchema7Definition
+
     if (schema.additionalProperties === true) {
       valSchema = { type: 'string' }
     } else if (schema.additionalProperties === false) {
-      // nothing allowed
-      return {}
+      return {} // nothing allowed
     } else {
       valSchema = schema.additionalProperties
     }
-    const valRep = jsonSchemaToYAMLObject(valSchema, optionalSymbol)
-    return { key1: valRep, key2: valRep, '...': '...' }
+
+    const rep = jsonSchemaToYAMLObject(valSchema, optionalSymbol, isOptional)
+    // if it's a true nested shape, keep it; otherwise classify
+    const leaf = typeof rep === 'string' ? rep : valSchema.type === 'array' ? 'array' : 'record'
+
+    return {
+      key1: leaf,
+      key2: leaf,
+      '...': '...',
+    }
   }
 
-  if (schema.oneOf || schema.anyOf) {
-    const parts = (schema.oneOf ?? schema.anyOf)!.map((opt) =>
-      jsonSchemaToYAMLObject(opt, optionalSymbol),
+  // unions (oneOf / anyOf)
+  const union = schema.oneOf ?? schema.anyOf
+  if (union) {
+    // 1) Map & normalize each branch
+    const mapped = union
+      .map((sub) => ({
+        schema: sub,
+        rep: jsonSchemaToYAMLObject(sub, optionalSymbol, isOptional),
+      }))
+      // 2) Filter out null if optional
+      .filter(({ rep }) => !(isOptional && rep === 'null'))
+
+    // 3) If only one left and it's an object schema → recurse
+    if (mapped[0] && typeof mapped[0].schema === 'object' && mapped[0].schema.type === 'object') {
+      return jsonSchemaToYAMLObject(mapped[0].schema, optionalSymbol, isOptional)
+    }
+
+    // 4) Otherwise, label and join
+    const labels = mapped.map(({ schema: sub, rep }) =>
+      typeof rep === 'string'
+        ? rep
+        : typeof sub === 'object' && sub.type === 'array'
+          ? 'array'
+          : 'object',
     )
-    return parts.join('|')
+    // 5) dedupe & join with commas
+    return Array.from(new Set(labels)).join(',')
   }
 
   // fallback
