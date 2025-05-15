@@ -16,6 +16,7 @@ A Chat & Agent Interface for Users, Experts & Developers based on Tasks! 🚀
 You can
 
 - use Taskyon here: [https://taskyon.space](https://taskyon.space)
+- or try out our newest version here: [https://dev.taskyon.space](https://dev.taskyon.space)
 - Or deploy it yourself!
 
 ---
