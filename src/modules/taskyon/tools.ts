@@ -66,7 +66,9 @@ export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSche
 
 const InternalTool = ToolBase.extend({
   function: internalToolFunctionSchema.optional(),
-}).describe('Internal tool definition, which has access to the taskyon system')
+}).meta({
+  description: 'Internal tool definition, which has access to the taskyon system',
+})
 export type InternalTool = z.infer<typeof InternalTool>
 
 export type ClientTool = WithRequired<InternalTool, 'function'>

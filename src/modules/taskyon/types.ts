@@ -174,7 +174,9 @@ export const ToolBase = z.object({
   longDescription: z.string().optional().meta({
     description: 'An optional longer description for more complicated operations with this tool.',
   }),
-  name: FunctionName.describe('Name of the tool. Has to fulfill: /^[a-zA-Z0-9_-]+$/'),
+  name: FunctionName.meta({
+    description: 'Name of the tool. Has to fulfill: /^[a-zA-Z0-9_-]+$/',
+  }),
   renderOptions: z
     .object({
       hideChat: z
@@ -188,9 +190,9 @@ export const ToolBase = z.object({
     })
     .partial()
     .optional(),
-  parameters: JSONSchema7.describe(
-    'A JSON schema object describing the parameters of the function.',
-  ).readonly(),
+  parameters: JSONSchema7.meta({
+    description: 'A JSON schema object describing the parameters of the function.',
+  }).readonly(),
   code: z
     .string()
     .optional()
@@ -306,7 +308,9 @@ export const TaskNode = z.object({
   // OR: we could simply check the parents & priors of tasks. if tasks have a parent, they were generated
   // by a function. user-generated message should not have a parent...
   role: z.enum(['system', 'user', 'assistant', 'function']),
-  name: z.string().optional().describe('An optional name for the task'),
+  name: z.string().optional().meta({
+    description: 'An optional name for the task',
+  }),
   content: TaskContent.describe(
     `This is the actual content of the task. This is the actual content which is process at each step.
 For example this is, what an LLM would actually get to see. There are only a few different ways
@@ -316,7 +320,9 @@ of how content can be structured. `,
   parentID: z.string().optional().meta({
     description: 'The ID of the parent task which created this subtask on a lower stack level',
   }),
-  priorID: z.string().optional().describe('The ID of the previous task in the same stack level.'),
+  priorID: z.string().optional().meta({
+    description: 'The ID of the previous task in the same stack level.',
+  }),
   // TODO: validate this ID using our content address creation functions
   id: z.string(),
   authorId: z.string().optional(),
@@ -456,10 +462,18 @@ export interface Model {
 
 const apiConfig = z
   .object({
-    name: z.string().describe('The name of the API.'),
-    baseURL: z.string().describe('Base URL of the api.'),
-    defaultModel: z.string().describe('the default model which should be used for this API.'),
-    selectedModel: z.string().optional().describe('which model is currently selected.'),
+    name: z.string().meta({
+      description: 'The name of the API.',
+    }),
+    baseURL: z.string().meta({
+      description: 'Base URL of the api.',
+    }),
+    defaultModel: z.string().meta({
+      description: 'the default model which should be used for this API.',
+    }),
+    selectedModel: z.string().optional().meta({
+      description: 'which model is currently selected.',
+    }),
     models: z
       .object({
         instruction: z.string(),
@@ -471,13 +485,19 @@ const apiConfig = z
       .meta({
         description: 'Define default models for some tasks.',
       }),
-    streamSupport: z.boolean().describe('Does the API support streaming?'),
+    streamSupport: z.boolean().meta({
+      description: 'Does the API support streaming?',
+    }),
     defaultHeaders: z.record(z.string(), z.string()).optional().meta({
       description: 'If the API needs some special headers for communication (e.g. an API key.)',
     }),
     routes: z.object({
-      chatCompletion: z.string().describe('Endpoint for chatcompletion.'),
-      models: z.string().describe('Endpoint for list of models.'),
+      chatCompletion: z.string().meta({
+        description: 'Endpoint for chatcompletion.',
+      }),
+      models: z.string().meta({
+        description: 'Endpoint for list of models.',
+      }),
     }),
   })
   .meta({
@@ -581,7 +601,9 @@ This doesn't work for all models currently and is mainly recommended for all ope
         description:
           'The base prompt. This should be used e.g. to set the behaviour of the AI. used as a "system" prompt.',
       }),
-      instruction: z.string().describe('This prompt is used to make the AI follow instructions'),
+      instruction: z.string().meta({
+        description: 'This prompt is used to make the AI follow instructions',
+      }),
       toolResult: z.string().meta({
         description:
           'This prompt is used to make the AI display tool results in a certain structured way.',
@@ -589,11 +611,15 @@ This doesn't work for all models currently and is mainly recommended for all ope
       task: z.string().meta({
         description: 'This prompt is used to explain to the AI what to do with a specific task.',
       }),
-      evaluate: z.string().describe('This prompt is used to evaluate errors'),
+      evaluate: z.string().meta({
+        description: 'This prompt is used to evaluate errors',
+      }),
       schemaReminder: z.string().meta({
         description: 'This prompt is used to enforce a specific schema as a response...',
       }),
-      tools: z.string().describe('This prompt is used to give the AI a list of tools.'),
+      tools: z.string().meta({
+        description: 'This prompt is used to give the AI a list of tools.',
+      }),
     })
     .meta({
       description:
@@ -623,7 +649,9 @@ const appConfiguration = z.object({
   expertMode: z.boolean().default(false).meta({
     description: 'Turns on additional settings and configurations.',
   }),
-  showCosts: z.boolean().default(false).describe('Shows the costs of API calls.'),
+  showCosts: z.boolean().default(false).meta({
+    description: 'Shows the costs of API calls.',
+  }),
   gdriveDir: z.string().default('taskyon').meta({
     description: 'The default directory in gdrive, where taskyon saves its configuration.',
   }), // not sure, if we need this here?
@@ -633,10 +661,16 @@ const appConfiguration = z.object({
   guiMode: z.enum(['auto', 'iframe', 'default']).default('auto').meta({
     description: 'Sets whether we want to have a minimalist chat or the full app',
   }),
-  primaryColor: HexColor.describe('The primary color of taskyons color scheme.').optional().meta({
-    description: 'Primary color for custom taskyon theming. This should be a dark color',
-  }),
-  secondaryColor: HexColor.describe('The secondary color of taskyons color scheme.')
+  primaryColor: HexColor.meta({
+    description: 'The primary color of taskyons color scheme.',
+  })
+    .optional()
+    .meta({
+      description: 'Primary color for custom taskyon theming. This should be a dark color',
+    }),
+  secondaryColor: HexColor.meta({
+    description: 'The secondary color of taskyons color scheme.',
+  })
     .optional()
     .meta({
       description:
@@ -659,20 +693,48 @@ usage of an API key. This way you can give your users access to taskyon with you
 export type storedSettings = z.infer<typeof storedSettings>
 
 export const tyPublicKeyDraft = z.object({
-  name: z.string().describe('Name of the key.').optional(),
-  maxc: z.number().describe('Maximum allowed credits in this key').optional(),
-  cpi: z.number().describe('Credit refill per inteval'),
-  rti: z.number().describe('Refill time interval in minutes'),
-  model: z.string().array().describe('List of models which are allowed with this key.').optional(),
+  name: z
+    .string()
+    .meta({
+      description: 'Name of the key.',
+    })
+    .optional(),
+  maxc: z
+    .number()
+    .meta({
+      description: 'Maximum allowed credits in this key',
+    })
+    .optional(),
+  cpi: z.number().meta({
+    description: 'Credit refill per inteval',
+  }),
+  rti: z.number().meta({
+    description: 'Refill time interval in minutes',
+  }),
+  model: z
+    .string()
+    .array()
+    .meta({
+      description: 'List of models which are allowed with this key.',
+    })
+    .optional(),
 })
 
 export type tyPublicKeyDraft = z.infer<typeof tyPublicKeyDraft>
 
 export const tyPublicApiKeyObject = tyPublicKeyDraft.extend({
-  iat: z.number().describe('Time at which the key was issued.'),
-  auid: z.string().describe('anonymous User ID for billing purposes.'),
-  v: z.number().describe('Key version'),
-  iss: z.string().describe('The Issuer of the API key.'),
+  iat: z.number().meta({
+    description: 'Time at which the key was issued.',
+  }),
+  auid: z.string().meta({
+    description: 'anonymous User ID for billing purposes.',
+  }),
+  v: z.number().meta({
+    description: 'Key version',
+  }),
+  iss: z.string().meta({
+    description: 'The Issuer of the API key.',
+  }),
 })
 export function getApiConfig(llmSettings: llmSettings) {
   if (llmSettings.selectedApi) {

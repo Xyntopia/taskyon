@@ -4,19 +4,22 @@ import { FunctionArguments, ToolBase, partialTaskDraft } from './types'
 import { z } from 'zod'
 
 const RemoteFunctionBase = z.object({
-  functionName: z.string().describe('the name of the function'),
+  functionName: z.string().meta({
+    description: 'the name of the function',
+  }),
 })
 
 export const RemoteFunctionCall = RemoteFunctionBase.extend({
   type: z.literal('functionCall').meta({
     description: 'Field to indicate what kind of a message we have here.',
   }),
-  arguments: FunctionArguments.optional().describe(
-    'the arguments for the function as a json object',
-  ),
-}).describe(
-  'This type is used for sending messages with function calls between windows. E.g. from iframe to parent',
-)
+  arguments: FunctionArguments.optional().meta({
+    description: 'the arguments for the function as a json object',
+  }),
+}).meta({
+  description:
+    'This type is used for sending messages with function calls between windows. E.g. from iframe to parent',
+})
 export type RemoteFunctionCall = z.infer<typeof RemoteFunctionCall>
 
 export const RemoteFunctionResponse = RemoteFunctionBase.extend({
@@ -26,9 +29,10 @@ export const RemoteFunctionResponse = RemoteFunctionBase.extend({
   response: z.unknown().optional().meta({
     description: 'response of a FunctionCall, e.g. through postMessage with iframes.',
   }),
-}).describe(
-  'This type is used for sending messages with the result of a remote function call between windows. E.g. from parent to taskyon iframe',
-)
+}).meta({
+  description:
+    'This type is used for sending messages with the result of a remote function call between windows. E.g. from parent to taskyon iframe',
+})
 export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>
 
 //export type partialTyConfiguration = PartialDeep<storedSettings>
@@ -37,10 +41,14 @@ export type partialTyConfiguration = DeepPartial<storedSettings>
 
 const TaskMessage = z
   .object({
-    type: z.literal('task').describe('Field to indicate what kind of a message we have here.'),
+    type: z.literal('task').meta({
+      description: 'Field to indicate what kind of a message we have here.',
+    }),
     task: partialTaskDraft,
     // TODO: we don't need this anymore..   any functioncall task is one that should be "executed"
-    execute: z.boolean().default(false).describe('should the task be queued for execution?'),
+    execute: z.boolean().default(false).meta({
+      description: 'should the task be queued for execution?',
+    }),
     duplicateTaskName: z
       .boolean()
       .default(true)

@@ -20,9 +20,10 @@ export type Goals = 'SimpleCompletion' | 'AnalyzeError' | 'ChooseTool' | 'Analyz
 export const UseToolBase = z.object({
   'use tool': yesno,
   'which tool': answer,
-  command: FunctionCall.nullish().describe(
-    'If we should use a tool in the following step, provide the tool command. Otherwise do not!!',
-  ),
+  command: FunctionCall.nullish().meta({
+    description:
+      'If we should use a tool in the following step, provide the tool command. Otherwise do not!!',
+  }),
 })
 
 const SystemResponseEvaluation = z
