@@ -33,7 +33,7 @@
           :readonly="readOnly"
           class="col"
           filled
-          :label="separateLabels ? undefined : prop.node.label"
+          :label="prop.node.fieldHint"
           input-style="max-height: 300px"
           type="textarea"
           :debounce="debounce"
@@ -49,7 +49,7 @@
           class="col"
           auto-save
           filled
-          :label="separateLabels ? undefined : prop.node.label"
+          :label="prop.node.fieldHint"
           :model-value="prop.node.value"
           @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
           style="min-width: 200px"
@@ -62,7 +62,7 @@
           :readonly="readOnly"
           class="col"
           style="min-width: 200px"
-          :label="separateLabels ? undefined : prop.node.label"
+          :label="prop.node.fieldHint"
           filled
           dense
           autogrow
@@ -80,6 +80,7 @@
           dense
           size="lg"
           left-label
+          label="prop.node.fieldHint"
           :checked-icon="prop.node.onIcon"
           :unchecked-icon="prop.node.offIcon"
           color="secondary"
@@ -94,7 +95,7 @@
           :readonly="readOnly"
           class="col"
           style="min-width: 200px"
-          :label="separateLabels ? undefined : prop.node.label"
+          label="prop.node.fieldHint"
           filled
           dense
           type="number"
@@ -175,7 +176,8 @@ const transformToTreeNodes = (
       (descriptionsAsLabels ? subschema?.description?.trim() : undefined) ?? subschema?.label ?? key
 
     const base: QTreeNode = {
-      label,
+      ...(separateLabels ? { label } : {}),
+      ...(!separateLabels ? { fieldHint: label } : {}),
       description: subschema?.description?.trim(),
       key: newPath.join('.'),
       path: newPath,
