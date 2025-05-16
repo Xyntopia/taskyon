@@ -137,10 +137,10 @@
           :model-value="prop.node.value"
           @update:model-value="(value: unknown) => updateValue(prop.node.path, Number(value))"
         />
+        <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
+          {{ prop.node.description }}
+        </info-dialog>
       </div>
-      <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
-        {{ prop.node.description }}
-      </info-dialog>
     </template>
   </q-tree>
   <div v-else>no input data!</div>
