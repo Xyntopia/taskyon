@@ -63,6 +63,7 @@
           class="col"
           auto-save
           filled
+          :label="separateLabels ? undefined : prop.node.label"
           :model-value="prop.node.value"
           @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
           style="min-width: 200px"
