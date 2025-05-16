@@ -6,8 +6,22 @@
     v-bind="$attrs"
     class="object-tree-view"
   >
+    <!--This is only used for debuging..-->
+    <!--template #default-header="prop">
+      {{ prop.node }}
+    </template-->
     <!--for all the component which explicitly want to remove the header...-->
-    <template #header-none> </template>
+    <template #default-header></template>
+    <template #header-object="prop">
+      <div class="row items-center">
+        <div class="col">
+          {{ prop.node.label }}
+        </div>
+        <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
+          {{ prop.node.description }}
+        </info-dialog>
+      </div>
+    </template>
     <template #body-unknown="prop">
       <div class="row">
         unknown object type
@@ -41,11 +55,14 @@
     </template>
     <template #body-list="prop">
       <div class="row">
-        <div class="col-auto" style="min-width: 200px">{{ prop.node.label }}:</div>
+        <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
+          {{ prop.node.label }}:
+        </div>
         <json-input
           :readonly="readOnly"
           class="col"
           auto-save
+          filled
           :model-value="prop.node.value"
           @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
           style="min-width: 200px"
@@ -117,7 +134,7 @@
           type="number"
           :debounce="debounce"
           :model-value="prop.node.value"
-          @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
+          @update:model-value="(value: unknown) => updateValue(prop.node.path, Number(value))"
         />
       </div>
       <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
@@ -216,6 +233,7 @@ const transformToTreeNodes = (
           ...base,
           value: null,
           children: transformToTreeNodes(childObj as Record<string, unknown>, subschema, newPath),
+          header: 'object',
         }
       }
       case 'array':
@@ -224,7 +242,6 @@ const transformToTreeNodes = (
           ...base,
           value: isUndef ? [] : (value as unknown[]),
           body: 'list',
-          header: 'none',
         }
       case 'string': {
         // pick between 'string' (single-line) vs 'text' (textarea) in one spot
@@ -234,7 +251,6 @@ const transformToTreeNodes = (
         return {
           ...base,
           value: actualVal,
-          header: 'none',
           body: isSingleLine ? 'string' : 'text',
         }
       }
@@ -243,15 +259,13 @@ const transformToTreeNodes = (
           ...base,
           value: !!value,
           body: 'boolean',
-          header: 'none',
         }
       case 'number': {
         const numVal = isUndef ? undefined : (value as number)
         return {
           ...base,
           value: numVal,
-          header: 'none',
-          body: 'string',
+          body: 'number',
         }
       }
       default:
