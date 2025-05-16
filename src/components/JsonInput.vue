@@ -2,7 +2,6 @@
   <q-input
     v-model="jsonString"
     type="textarea"
-    filled
     :readonly="readonly"
     v-bind="$attrs"
     :rules="[jsonRule]"

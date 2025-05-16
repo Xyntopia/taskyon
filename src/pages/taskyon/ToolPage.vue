@@ -34,7 +34,7 @@
               />
             </q-tab-panel>
             <q-tab-panel name="definition" class="column">
-              <JsonInput v-model="currentToolDefinition" auto-save />
+              <JsonInput filled v-model="currentToolDefinition" auto-save />
             </q-tab-panel>
           </q-tab-panels>
         </div>
