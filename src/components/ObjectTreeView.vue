@@ -13,29 +13,22 @@
     <!--for all the component which explicitly want to remove the header...-->
     <template #default-header></template>
     <template #header-object="prop">
-      <div class="row items-center">
-        <div class="col">
-          {{ prop.node.label }}
-        </div>
-        <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
-          {{ prop.node.description }}
-        </info-dialog>
-      </div>
+      <FieldView :item="prop.node" />
     </template>
     <template #body-unknown="prop">
-      <div class="row">
-        unknown object type
-        <info-dialog>
+      <FieldView :item="prop.node">
+        <info-dialog
+          label="This field can’t be changed right now."
+          flat
+          :round="false"
+          :icon="matInfo"
+        >
           {{ prop.node }}
         </info-dialog>
-      </div>
+      </FieldView>
     </template>
     <template #body-text="prop">
-      <div class="row">
-        <!--text-->
-        <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
-          {{ prop.node.label }}:
-        </div>
+      <FieldView :item="prop.node">
         <q-input
           :readonly="readOnly"
           class="col"
@@ -46,18 +39,11 @@
           :debounce="debounce"
           :model-value="prop.node.value"
           @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
-        >
-        </q-input>
-        <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
-          {{ prop.node.description }}
-        </info-dialog>
-      </div>
+        />
+      </FieldView>
     </template>
     <template #body-list="prop">
-      <div class="row">
-        <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
-          {{ prop.node.label }}:
-        </div>
+      <FieldView :item="prop.node">
         <json-input
           :readonly="readOnly"
           class="col"
@@ -68,16 +54,10 @@
           @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
           style="min-width: 200px"
         />
-        <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
-          {{ prop.node.description }}
-        </info-dialog>
-      </div>
+      </FieldView>
     </template>
     <template #body-string="prop">
-      <div class="row">
-        <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
-          {{ prop.node.label }}:
-        </div>
+      <FieldView :item="prop.node">
         <q-input
           :readonly="readOnly"
           class="col"
@@ -90,19 +70,11 @@
           :debounce="debounce"
           :model-value="prop.node.value"
           @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
-        >
-        </q-input>
-        <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
-          {{ prop.node.description }}
-        </info-dialog>
-      </div>
+        />
+      </FieldView>
     </template>
     <template #body-boolean="prop">
-      <div class="row q-gutter-sm items-center">
-        <q-icon v-if="prop.node.icon" size="sm" :name="prop.node.icon"></q-icon>
-        <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
-          {{ prop.node.label }}:
-        </div>
+      <FieldView :item="prop.node">
         <q-toggle
           :disable="readOnly"
           dense
@@ -113,18 +85,11 @@
           color="secondary"
           :model-value="prop.node.value"
           @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
-        >
-        </q-toggle>
-        <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
-          {{ prop.node.description }}
-        </info-dialog>
-      </div>
+        />
+      </FieldView>
     </template>
     <template #body-number="prop">
-      <div class="row">
-        <div v-if="separateLabels" class="col-auto" style="min-width: 200px">
-          {{ prop.node.label }}:
-        </div>
+      <FieldView :item="prop.node">
         <q-input
           :readonly="readOnly"
           class="col"
@@ -137,10 +102,7 @@
           :model-value="prop.node.value"
           @update:model-value="(value: unknown) => updateValue(prop.node.path, Number(value))"
         />
-        <info-dialog v-if="prop.node.description && !descriptionsAsLabels">
-          {{ prop.node.description }}
-        </info-dialog>
-      </div>
+      </FieldView>
     </template>
   </q-tree>
   <div v-else>no input data!</div>
@@ -153,6 +115,8 @@ import JsonInput from 'components/JsonInput.vue' // Adjust the path as necessary
 import InfoDialog from 'components/InfoDialog.vue'
 import type { JSONSchema7 } from 'json-schema'
 import type z from 'zod'
+import FieldView from './FieldView.vue'
+import { matInfo } from '@quasar/extras/material-icons'
 
 const {
   readOnly = false,
