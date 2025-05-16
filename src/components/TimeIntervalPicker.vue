@@ -24,33 +24,38 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-// v-model binding as a ref
-defineProps<{
-  modelValue: number
-}>()
-const emit = defineEmits<{
-  (e: 'update:modelValue', seconds: number): void
-}>()
-
 const unitOptions = [
   { label: 'sec', value: 'seconds' },
   { label: 'min', value: 'minutes' },
   { label: 'h', value: 'hours' },
   { label: 'd', value: 'days' },
+  { label: 'm', value: 'months' },
+  { label: 'y', value: 'years' },
 ]
-
-function updateSeconds(timeUnits: string | number | null) {
-  console.log('picker', Number(timeUnits) * conversions[currentUnit.value]!)
-  return emit('update:modelValue', Number(timeUnits) * conversions[currentUnit.value]!)
-}
-const currentUnit = ref<string>('seconds')
 
 const conversions: Record<string, number> = {
   seconds: 1,
   minutes: 60,
   hours: 3600,
   days: 86400,
+  months: 86400 * 30,
+  years: 86400 * 365,
 }
+
+// v-model binding as a ref
+const { initialUnit = 'months' } = defineProps<{
+  modelValue: number
+  initialUnit?: keyof typeof conversions
+}>()
+const emit = defineEmits<{
+  (e: 'update:modelValue', seconds: number): void
+}>()
+
+function updateSeconds(timeUnits: string | number | null) {
+  console.log('picker', Number(timeUnits) * conversions[currentUnit.value]!)
+  return emit('update:modelValue', Number(timeUnits) * conversions[currentUnit.value]!)
+}
+const currentUnit = ref<string>(initialUnit)
 
 // react to external changes
 /*watch(modelValue, (secs = 0) => {
