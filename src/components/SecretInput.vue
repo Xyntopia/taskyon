@@ -1,14 +1,18 @@
 <template>
   <q-input v-model="model" :type="isPwd ? 'password' : 'text'" v-bind="$attrs">
-    <template #append>
-      <q-icon
-        :name="isPwd ? matVisibilityOff : matVisibility"
-        class="cursor-pointer"
-        @click="isPwd = !isPwd"
-      />
+    <!-- 1) Forward all incoming slots except 'append' -->
+    <template v-for="(_, name) in $slots" #[name]="slotProps">
+      <slot :name="name" v-bind="slotProps || {}"></slot>
     </template>
-    <template #after>
-      <slot> </slot>
+
+    <template #append>
+      <slot name="append">
+        <q-icon
+          :name="isPwd ? matVisibilityOff : matVisibility"
+          class="cursor-pointer"
+          @click="isPwd = !isPwd"
+        />
+      </slot>
     </template>
   </q-input>
 </template>
