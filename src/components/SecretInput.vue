@@ -7,6 +7,9 @@
         @click="isPwd = !isPwd"
       />
     </template>
+    <template #after>
+      <slot> </slot>
+    </template>
   </q-input>
 </template>
 
