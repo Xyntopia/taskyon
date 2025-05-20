@@ -200,7 +200,7 @@ export async function createWithDefaults<T>(schema: JSONSchemaType<T> | JSONSche
  */
 export async function handleFunctionExecution(
   func: FunctionCall,
-  tools: Record<string, ToolBase | InternalTool>,
+  tool: ToolBase | InternalTool,
   stopSignal: AbortSignal,
   context: toolContext,
   // TODO: add taskManager here, so we can use it in the function execution
@@ -210,7 +210,6 @@ export async function handleFunctionExecution(
   // TODO: test here, if tool parameters are correct according to json schema
   //       if not, throw an error message...
   let funcR: unknown
-  const tool = getTool(tools, func.name)
   const toolDefaultParams = await createWithDefaults(tool.parameters)
   // mix in with explicit parameters
   if (typeof func.arguments === 'object' && func.arguments !== null) {
