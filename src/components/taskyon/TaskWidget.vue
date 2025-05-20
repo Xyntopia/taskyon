@@ -24,9 +24,8 @@
         </div>
         <!--task content-->
         <div class="col q-pb-md">
-          <div v-if="task.content.type === 'functioncall'">
+          <div v-if="task.content.type === 'functioncall'" class="row">
             <q-expansion-item
-              dense
               :header-class="
                 nextTask?.content.type === 'error'
                   ? 'text-red'
@@ -40,6 +39,13 @@
                   <q-spinner-orbit v-if="isWorking" size="2em"></q-spinner-orbit>
                   <q-icon :name="matCalculate" size="1.5em"></q-icon>
                   <div>{{ task.content.data.name }}</div>
+                  <q-btn
+                    v-if="state.appConfiguration.expertMode"
+                    flat
+                    size="sm"
+                    :icon="matBuild"
+                    :to="`/tool/${task.content.data.name}`"
+                  />
                 </div>
               </template>
               <div>
@@ -281,6 +287,7 @@ import { mdiDesktopTower, mdiFileDocument, mdiHeadCog, mdiTools } from '@quasar/
 import {
   matArrowDropDown,
   matArrowDropUp,
+  matBuild,
   matCalculate,
   matMonetizationOn,
   matNewLabel,
