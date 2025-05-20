@@ -629,14 +629,18 @@ This doesn't work for all models currently and is mainly recommended for all ope
 export type llmSettings = z.infer<typeof llmSettings>
 
 const hexColorRegex = /^#([A-Fa-f0-9]{6})$/
-const HexColor = z.string().superRefine((value, ctx) => {
-  if (!hexColorRegex.test(value)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Invalid hexadecimal color',
-    })
-  }
-})
+const HexColor = z
+  .string()
+  .superRefine((value, ctx) => {
+    if (!hexColorRegex.test(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invalid hexadecimal color',
+      })
+    }
+  })
+  .meta({ format: 'color', description: 'Must be a 6‑digit hex color, e.g. #00FFAA' })
+
 type HexColor = z.infer<typeof HexColor>
 
 const appConfiguration = z.object({
@@ -662,20 +666,12 @@ const appConfiguration = z.object({
     description: 'Sets whether we want to have a minimalist chat or the full app',
   }),
   primaryColor: HexColor.meta({
-    description: 'The primary color of taskyons color scheme.',
-  })
-    .optional()
-    .meta({
-      description: 'Primary color for custom taskyon theming. This should be a dark color',
-    }),
+    description: 'Primary color for custom taskyon theming. This should be a dark color',
+  }).optional(),
   secondaryColor: HexColor.meta({
-    description: 'The secondary color of taskyons color scheme.',
-  })
-    .optional()
-    .meta({
-      description:
-        'Secondary color for custom taskyon theming. This color should be a bright color and contrast the primary color.',
-    }),
+    description:
+      'Secondary color for custom taskyon theming. This color should be a bright color and contrast the primary color.',
+  }).optional(),
 })
 export type appConfiguration = z.infer<typeof appConfiguration>
 
