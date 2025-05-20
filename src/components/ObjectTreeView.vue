@@ -118,6 +118,32 @@
         />
       </FieldView>
     </template>
+    <template #body-color="prop">
+      <FieldView :item="prop.node">
+        <q-input
+          filled
+          dense
+          :disable="readOnly"
+          hide-bottom-space
+          hide-hint
+          :model-value="prop.node.value"
+          @update:model-value="(val: string | number | null) => updateValue(prop.node.path, val)"
+          :rules="['anyColor']"
+        >
+          <template v-slot:append>
+            <q-icon :name="matColorize" class="cursor-pointer">
+              <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                <q-color
+                  :disable="readOnly"
+                  :model-value="prop.node.value"
+                  @update:model-value="(val: string | null) => updateValue(prop.node.path, val)"
+                />
+              </q-popup-proxy>
+            </q-icon>
+          </template>
+        </q-input>
+      </FieldView>
+    </template>
   </q-tree>
   <div v-else>no input data!</div>
 </template>
@@ -130,7 +156,7 @@ import InfoDialog from 'components/InfoDialog.vue'
 import type { JSONSchema7 } from 'json-schema'
 import type z from 'zod'
 import FieldView from './FieldView.vue'
-import { matInfo } from '@quasar/extras/material-icons'
+import { matColorize, matInfo } from '@quasar/extras/material-icons'
 
 const {
   readOnly = false,
@@ -204,7 +230,9 @@ const transformToTreeNodes = (
     const isUndef = value === undefined || value === null
     const runtimeType = subschema?.enum
       ? 'enum'
-      : (subschema?.type ?? (Array.isArray(value) ? 'array' : typeof value))
+      : subschema?.format === 'color'
+        ? 'color'
+        : (subschema?.type ?? (Array.isArray(value) ? 'array' : typeof value))
 
     // TODO: what do we do if schemaType is an array?
     switch (runtimeType) {
@@ -217,6 +245,16 @@ const transformToTreeNodes = (
           value: actualVal,
           options: subschema!.enum as Array<string | number>,
           body: 'enum',
+        }
+      }
+      case 'color': {
+        // pick default if none set
+        const actualVal = isUndef ? (subschema!.default ?? '#000000') : value
+
+        return {
+          ...base,
+          value: actualVal as string,
+          body: 'color',
         }
       }
       case 'object': {
