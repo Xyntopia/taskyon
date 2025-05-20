@@ -108,6 +108,10 @@
           wget
           pkg-config
 
+          # for running local llm models:
+          # not sure, why..  but this isn't working, currently.. so we are using docker
+          # local-ai
+
           # node
           yarn
           nodejs_22

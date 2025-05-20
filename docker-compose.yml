@@ -21,6 +21,40 @@ services:
     #volumes:
     #  - ~/.cache/yarn:/app/.yarn-cache
 
+  llmapi:
+    #image: localai/localai:latest-aio-cpu
+    image: localai/localai:latest-cpu
+    # For a specific version:
+    # image: localai/localai:v2.29.0-aio-cpu
+    # For Nvidia GPUs decomment one of the following (cuda11 or cuda12):
+    # image: localai/localai:v2.29.0-aio-gpu-nvidia-cuda-11
+    # image: localai/localai:v2.29.0-aio-gpu-nvidia-cuda-12
+    # image: localai/localai:latest-aio-gpu-nvidia-cuda-11
+    # image: localai/localai:latest-aio-gpu-nvidia-cuda-12
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8080/readyz']
+      interval: 1m
+      timeout: 20m
+      retries: 5
+    ports:
+      - 8080:8080
+    environment:
+      DEBUG: true
+      #- MODELS=["hermes-2-theta-llama-3-8b"]
+      # MODELS_PATH: /build/models:cached
+      #- LOCALAI_CORS_ALLOW_ORIGINS=https://taskyon.space
+      LOCALAI_CORS: 1
+    volumes:
+      - $PWD/models:/build/models:cached
+    # decomment the following piece if running with Nvidia GPUs
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
   taskyon-server:
     image: xyntopia/taskyon-server
     build:
@@ -32,5 +66,5 @@ services:
     restart: always
     #volumes:
     #  - ~/.cache/yarn:/app/.yarn-cache
-    env_file:
-      - .env.local # we can declare GOOGLE_API_KEY this way..
+    #env_file:
+    #  - .env.local # we can declare GOOGLE_API_KEY this way..
