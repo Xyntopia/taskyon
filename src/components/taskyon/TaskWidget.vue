@@ -26,6 +26,7 @@
         <div class="col q-pb-md">
           <div v-if="task.content.type === 'functioncall'" class="row">
             <q-expansion-item
+              dense
               :header-class="
                 nextTask?.content.type === 'error'
                   ? 'text-red'
