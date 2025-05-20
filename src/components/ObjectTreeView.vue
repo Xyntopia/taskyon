@@ -80,7 +80,7 @@
           dense
           size="lg"
           left-label
-          label="prop.node.fieldHint"
+          :label="prop.node.fieldHint"
           :checked-icon="prop.node.onIcon"
           :unchecked-icon="prop.node.offIcon"
           color="secondary"
@@ -95,7 +95,7 @@
           :readonly="readOnly"
           class="col"
           style="min-width: 200px"
-          label="prop.node.fieldHint"
+          :label="prop.node.fieldHint"
           filled
           dense
           type="number"
