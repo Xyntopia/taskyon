@@ -12,9 +12,6 @@
     "secondaryColor": "#F78F3B"
   },
   "llmSettings": {
-    "userId": null,
-    "enableOpenAiTools": false,
-    "selectedApi": null,
     "taskDraft": {
       "role": "user",
       "content": {
@@ -44,7 +41,7 @@
       "openai": {
         "name": "openai",
         "baseURL": "https://api.openai.com/v1/",
-        "defaultModel": "gpt-4o",
+        "defaultModel": "gpt-4.1",
         "streamSupport": true,
         "routes": {
           "chatCompletion": "/chat/completions",
@@ -60,14 +57,26 @@
           "chatCompletion": "/chat/completions",
           "models": "/models"
         }
+      },
+      "local": {
+        "name": "openai",
+        "baseURL": "http://localhost:8080/v1",
+        "defaultModel": "qwen3-4b",
+        "streamSupport": true,
+        "routes": {
+          "chatCompletion": "/chat/completions",
+          "models": "/models"
+        }
       }
     },
     "siteUrl": "https://taskyon.space",
     "summaryModel": "Xenova/distilbart-cnn-6-6",
     "vectorizationModel": "xyntopia/all-MiniLM-L6-v2",
     "maxAutonomousTasks": 5,
+    "enableToolChooser": true,
     "useBasePrompt": true,
     "tryUsingVisionModels": true,
+    "enableOpenAiTools": false,
     "allowedTools": [],
     "taskChatTemplates": {
       "basePrompt": "You are a helpful assistant called *Taskyon*. In your markdown-based responses, you can use the following features:\n\n- **Mermaid charts**: Include diagrams, mindmaps, Gantt diagrams, quadrants, and XY charts using the 'mermaid' keyword in fenced code blocks. For example:\n```mermaid\n...\n```\n- **SVG graphics**: Use HTML to embed SVG graphics.\n- **HTML widgets**: Create interactive elements within the markdown using HTML.\n- **MathJax**: Write mathematical formulas using $$ ... $$ for block formulas and $ ... $ for inline formulas. **Note:** Only `$` and `$$` syntax is supported.",
