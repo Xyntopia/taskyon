@@ -105,6 +105,19 @@
         />
       </FieldView>
     </template>
+    <template #body-enum="prop">
+      <FieldView :item="prop.node">
+        <q-select
+          :disable="readOnly"
+          filled
+          dense
+          :label="prop.node.fieldHint"
+          :options="prop.node.options.map((v: string) => ({ label: String(v), value: v }))"
+          :model-value="prop.node.value"
+          @update:model-value="(val) => updateValue(prop.node.path, val)"
+        />
+      </FieldView>
+    </template>
   </q-tree>
   <div v-else>no input data!</div>
 </template>
@@ -189,10 +202,23 @@ const transformToTreeNodes = (
     if (subschema?.onIcon) base.onIcon = subschema.onIcon
 
     const isUndef = value === undefined || value === null
-    const runtimeType = subschema?.type ?? (Array.isArray(value) ? 'array' : typeof value)
+    const runtimeType = subschema?.enum
+      ? 'enum'
+      : (subschema?.type ?? (Array.isArray(value) ? 'array' : typeof value))
 
     // TODO: what do we do if schemaType is an array?
     switch (runtimeType) {
+      case 'enum': {
+        // pick default if none set
+        const actualVal = isUndef ? (subschema!.default ?? subschema!.enum![0]) : value
+
+        return {
+          ...base,
+          value: actualVal,
+          options: subschema!.enum as Array<string | number>,
+          body: 'enum',
+        }
+      }
       case 'object': {
         // if undefined or not actually an object, start with {}
         const childObj = !isUndef && typeof value === 'object' && !Array.isArray(value) ? value : {}
