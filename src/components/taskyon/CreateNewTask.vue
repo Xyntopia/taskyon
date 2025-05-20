@@ -12,7 +12,6 @@
           :model-value="currentnewTask.content.data"
           :use-enter-to-send="state.appConfiguration.useEnterToSend"
           @update:model-value="updateContent"
-          @attach-files="attachFileToDraft"
           @execute-task="addNewTask"
         />
         <!--If we want to edit any pre-defined functions we can do that here...-->
@@ -29,11 +28,33 @@
           />
         </div>
       </div>
+      <!--show attached files-->
+      <div v-if="fileAttachments.length">
+        <q-chip
+          v-for="file in fileAttachments"
+          :key="file.name"
+          removable
+          :icon="matUploadFile"
+          @remove="fileAttachments = fileAttachments.filter((f) => f !== file)"
+        >
+          <div class="ellipsis" style="max-width: 100px">
+            {{ `${file.name}` }}
+          </div>
+          <q-tooltip :delay="0.5">{{ `${file.name}` }}</q-tooltip>
+        </q-chip>
+      </div>
       <!--Task Creation State-->
-      <div v-if="!hideTaskInfo" class="q-px-sm q-pt-xs text-caption">
+      <div v-if="!hideTaskInfo" class="q-px-sm q-pt-xs">
         <div class="row items-center">
+          <!--attach files...-->
+          <FileDropzone class="col-auto" accept="*" enable-paste @add-files="attachFileToDraft">
+            <q-btn dense class="fit" flat>
+              <q-icon :name="matAttachment" />
+              <q-tooltip>Attach file or image to message</q-tooltip>
+            </q-btn>
+          </FileDropzone>
           <!--Taskyon features-->
-          <div class="row">
+          <div class="col-auto row">
             <div>
               <q-tooltip>More AI Settings</q-tooltip>
               <FormDialog
@@ -46,8 +67,48 @@
               />
             </div>
           </div>
+          <!--Task type selection and execution-->
+          <div class="col-auto">
+            <q-btn
+              v-if="selectedTaskType"
+              flat
+              dense
+              :icon="matChat"
+              @click="setTaskType(undefined)"
+              ><q-tooltip>Select Simple Chat</q-tooltip>
+            </q-btn>
+          </div>
+          <div v-if="expertMode" class="col-auto q-pa-md">
+            <!--q-select
+              :model-value="selectedTaskType || ''"
+              :options="toolNames"
+              @update:model-value="setTaskType"
+              use-input
+            /-->
+            <q-select
+              class="q-pl-sm col"
+              use-input
+              fill-input
+              dense
+              options-dense
+              input-debounce="0"
+              borderless
+              @filter="filterFn"
+              color="secondary"
+              :model-value="selectedTaskType"
+              :options="filteredToolCollection"
+              :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
+              @update:model-value="setTaskType"
+              behavior="default"
+            />
+          </div>
+          <!--
+          <div v-else-if="expertMode">
+            <q-btn dense flat :icon="mdiFunctionVariant" @click="" />
+          </div>
+        -->
           <!--Choose Model-->
-          <div class="row q-px-md">
+          <div class="col-auto row q-px-md">
             <info-dialog
               v-if="tystate.currentModelId && tystate.currentModel?.description"
               size="xs"
@@ -75,11 +136,7 @@
                   >
                     <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
                   </q-item>
-                  <q-item
-                    v-close-popup
-                    clickable
-                    @click="expandedTaskCreation = !expandedTaskCreation"
-                  >
+                  <q-item v-close-popup clickable>
                     <q-item-section avatar>
                       <q-icon :name="matSmartToy"></q-icon>
                     </q-item-section>
@@ -90,6 +147,17 @@
                   </q-item>
                 </q-list>
               </q-menu>
+            </q-btn>
+          </div>
+          <div class="col-auto">
+            <q-btn
+              v-if="selectedTaskType"
+              class="q-ma-md"
+              flat
+              :icon-right="matSend"
+              @click="addNewTask()"
+            >
+              <q-tooltip>Execute Task</q-tooltip>
             </q-btn>
           </div>
           <!-- deactivate token estimation for now, because
@@ -108,42 +176,6 @@
             <div class="lt-sm">{{ `t/c: ${estimatedTokens}` }}</div>
           </template>-->
         </div>
-        <div v-if="fileAttachments.length">
-          <div>Attached files:</div>
-          <q-chip
-            v-for="file in fileAttachments"
-            :key="file.name"
-            removable
-            :icon="matUploadFile"
-            @remove="fileAttachments = fileAttachments.filter((f) => f !== file)"
-          >
-            <div class="ellipsis" style="max-width: 100px">
-              {{ `${file.name}` }}
-            </div>
-            <q-tooltip :delay="0.5">{{ `${file.name}` }}</q-tooltip>
-          </q-chip>
-        </div>
-      </div>
-      <!--Task type selection and execution-->
-      <div v-if="selectedTaskType || expandedTaskCreation" class="row items-center">
-        <q-select
-          v-if="expertMode"
-          style="min-width: 200px"
-          class="q-pt-xs q-px-md"
-          dense
-          outlined
-          color="secondary"
-          clearable
-          :bg-color="selectedTaskType ? 'secondary' : ''"
-          :model-value="selectedTaskType"
-          :options="Object.keys(toolCollection)"
-          :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
-          @update:model-value="setTaskType"
-        />
-        <q-btn v-if="selectedTaskType" flat dense :icon="matChat" @click="setTaskType(undefined)"
-          ><q-tooltip>Select Simple Chat</q-tooltip>
-        </q-btn>
-        <q-btn v-if="selectedTaskType" class="q-ma-md" label="Execute Task" @click="addNewTask()" />
       </div>
     </div>
     <q-slide-transition>
@@ -167,7 +199,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs } from 'vue'
+import { computed, ref, toRefs } from 'vue'
 import { createToolTask, getDefaultParametersForTool } from 'src/modules/taskyon/tools'
 import { partialTaskDraft } from 'src/modules/taskyon/types'
 import { llmSettings } from 'src/modules/taskyon/types'
@@ -185,6 +217,8 @@ import {
   matSmartToy,
   matNavigateNext,
   matMoreHoriz,
+  matAttachment,
+  matSend,
 } from '@quasar/extras/material-icons'
 import { deepMerge } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
@@ -192,6 +226,8 @@ import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { asyncComputed } from 'src/modules/vueUtils'
 import FormDialog from './FormDialog.vue'
 import { buildSlimView } from 'src/modules/vueUtils'
+import FileDropzone from '../FileDropzone.vue'
+import { QSelect } from 'quasar'
 
 const { expertMode = false, forceTaskProps } = defineProps<{
   forceTaskProps?: llmSettings['taskTemplate'] | undefined
@@ -199,7 +235,6 @@ const { expertMode = false, forceTaskProps } = defineProps<{
   expertMode?: boolean
 }>()
 
-const expandedTaskCreation = defineModel<boolean>('expandedTaskCreation', { default: false })
 const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
 
 function updateContent(value: string | null | undefined) {
@@ -229,6 +264,8 @@ async function getAllTools() {
 }
 
 const toolCollection = asyncComputed(getAllTools, {})
+const toolNames = computed(() => Object.keys(toolCollection.value))
+const filteredToolCollection = ref<string[]>([])
 
 const currentTaskDraft = computed(() => {
   return state.llmSettings.taskDraft
@@ -239,6 +276,22 @@ const selectedTaskType = computed(() => {
     ? currentnewTask.value.content.data.name
     : undefined
 })
+
+const filterFn = (inputValue: string, doneFn: (callbackFn: () => void) => void) => {
+  if (inputValue === '') {
+    doneFn(() => {
+      filteredToolCollection.value = toolNames.value
+    })
+    return
+  }
+
+  doneFn(() => {
+    const needle = inputValue.toLowerCase()
+    filteredToolCollection.value = toolNames.value.filter(
+      (v) => v.toLowerCase().indexOf(needle) > -1,
+    )
+  })
+}
 
 const functionSchema = computed(() => {
   if (selectedTaskType.value) {

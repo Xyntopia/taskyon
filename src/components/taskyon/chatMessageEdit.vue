@@ -17,26 +17,11 @@
         </q-tooltip>
       </q-btn>
     </template>
-    <template #before>
-      <FileDropzone
-        class="fit"
-        accept="*"
-        enable-paste
-        @add-files="(files) => emit('attach-files', files)"
-      >
-        <q-btn dense class="fit" flat>
-          <q-icon class="gt-xs" :name="matImage" />
-          <q-icon :name="matAttachment" />
-          <q-tooltip>Attach file or image to message</q-tooltip>
-        </q-btn>
-      </FileDropzone>
-    </template>
   </q-input>
 </template>
 
 <script setup lang="ts">
-import { matAttachment, matImage, matSend } from '@quasar/extras/material-icons'
-import FileDropzone from '../FileDropzone.vue'
+import { matSend } from '@quasar/extras/material-icons'
 
 const content = defineModel<string | null | undefined>({
   required: true,
@@ -47,7 +32,6 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'attach-files', newFiles: File[]): void
   (e: 'execute-task'): void
 }>()
 
