@@ -131,7 +131,15 @@
           :rules="['anyColor']"
         >
           <template v-slot:append>
-            <q-icon :name="matColorize" class="cursor-pointer">
+            <div
+              class="cursor-pointer"
+              :style="{
+                width: '0.8em',
+                height: '0.8em',
+                borderRadius: '50%',
+                background: prop.node.value || '#000',
+              }"
+            >
               <q-popup-proxy cover transition-show="scale" transition-hide="scale">
                 <q-color
                   :disable="readOnly"
@@ -139,7 +147,7 @@
                   @update:model-value="(val: string | null) => updateValue(prop.node.path, val)"
                 />
               </q-popup-proxy>
-            </q-icon>
+            </div>
           </template>
         </q-input>
       </FieldView>
@@ -156,7 +164,7 @@ import InfoDialog from 'components/InfoDialog.vue'
 import type { JSONSchema7 } from 'json-schema'
 import type z from 'zod'
 import FieldView from './FieldView.vue'
-import { matColorize, matInfo } from '@quasar/extras/material-icons'
+import { matInfo } from '@quasar/extras/material-icons'
 
 const {
   readOnly = false,
