@@ -133,12 +133,10 @@ export const testChatCompletion = async () => {
 
   const tm = await tystate.getTaskManager()
 
-  const tools = await tm.updateToolDefinitions()
-
   const stopSignal = new AbortController().signal
 
   // Invoke the real tool
-  const chatCompletion = tools['chatCompletion']
+  const chatCompletion = await tm.getTool('chatCompletion')
   let structuredResponse
   if (chatCompletion && 'function' in chatCompletion && chatCompletion.function !== undefined) {
     structuredResponse = await chatCompletion.function(

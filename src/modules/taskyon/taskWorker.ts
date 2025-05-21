@@ -25,9 +25,8 @@ async function safeExecuteTask(
     if (task.content.type === 'functioncall') {
       // calculate function result
       const func = task.content.data
-      const tools = await taskManager.updateToolDefinitions(false)
       console.log(`Calling function ${func.name}`)
-      const tool = tools[func.name]
+      const tool = await taskManager.getTool(func.name)
       if (tool && !stopSignal.aborted) {
         // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
         const taskChain = await taskManager.getTaskChain(task.id)

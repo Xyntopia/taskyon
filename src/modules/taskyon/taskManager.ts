@@ -445,7 +445,7 @@ export async function useTyTaskManager(
   }
   // we simply assume, that all tools HAVE to be defined in the toolmap, no matter what.
   // if they are not there, we are doing something wrong ;)
-  async function getTool(name: string) {
+  async function getTool(name: string): Promise<InternalTool | undefined> {
     const toolTaskId = toolIndex.get(name)
     if (toolTaskId) {
       const toolTask = await tyCrudVec.get(toolTaskId)
