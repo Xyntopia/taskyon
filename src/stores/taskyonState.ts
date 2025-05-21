@@ -21,6 +21,7 @@ import { filter } from 'src/modules/frpBus'
 import { initializeSessionWithPasskey } from 'src/modules/cryptoSession'
 import { generateRsaOaepPair } from 'src/modules/crypto_webcrypto'
 import { setColors } from 'src/boot/brand-colors'
+import { setPrismTheme } from 'src/modules/markdownUtils '
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -500,6 +501,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     }
     addModelToHistory(newName)
   }
+
+  watch(
+    () => $q.dark.isActive,
+    (newState) => setPrismTheme(newState),
+  )
 
   return {
     selectedThread: computed(() => selectedThread),

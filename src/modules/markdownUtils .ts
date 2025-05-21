@@ -3,15 +3,64 @@ import type MarkdownIt from 'markdown-it'
 //import katex from  '@mdit/plugin-katex-slim'
 import type { MermaidConfig } from 'mermaid'
 import mermaid from 'mermaid'
-import '@quasar/quasar-ui-qmarkdown/dist/index.css'
-// !!!!!!!!!!! it is superimportant, that our "prismjs" imports come AFTER the QMarkdown import !!!!!
-// otherwise this will result in errors for some reason...
+
+// we fist import "Prism" and then the languages we need
+// the subsequent imports need Prism to be initialized, because
+// they add the languages to the Prism instance
+import Prism from 'prismjs'
+// TODO: do this as a dynamic import :)
 import 'prismjs/components/prism-python'
 import 'prismjs/components/prism-rust'
-import 'prismjs/components/prism-javascript'
 import 'prismjs/components/prism-typescript'
+import 'prismjs/components/prism-markup'
+import 'prismjs/components/prism-css'
+import 'prismjs/components/prism-javascript'
+import 'prismjs/components/prism-bash'
+
+// we import the themes as URLs so that vite bundler
+// creates static assets for them and we can use them
+// dynamically
+import lightHref from 'prismjs/themes/prism.css?url'
+import darkHref from 'prismjs/themes/prism-tomorrow.css?url'
+
 import { uid } from 'quasar'
 import type Renderer from 'markdown-it/lib/renderer'
+
+export const highlighter = (code: string, lang: string) => {
+  // non-null assertion or coalesce to JS grammar
+  const grammar = Prism.languages[lang]! ?? Prism.languages.javascript!
+  const result = Prism.highlight(code, grammar, lang)
+  return `<pre class="language-${lang}"><code>${result}</code></pre>`
+}
+
+// src/utils/prismTheme.ts
+let linkEl: HTMLLinkElement | null = null
+const prismId = 'prism-theme'
+
+/**
+ * Injects the <link> once and sets initial theme.
+ * @param isDark  whether to load dark or light theme first
+ * @param opts    override paths or link id
+ */
+export function initPrismTheme(isDark: boolean) {
+  console.log('init prism theme')
+  if (linkEl) return
+  linkEl = document.createElement('link')
+  linkEl.rel = 'stylesheet'
+  linkEl.id = prismId
+  document.head.appendChild(linkEl)
+  setPrismTheme(isDark)
+}
+
+/**
+ * Swaps the theme on the existing link.
+ * @param isDark  dark=true → darkHref, false → lightHref
+ */
+export function setPrismTheme(isDark: boolean) {
+  console.log('set prism theme to', isDark)
+  if (!linkEl) return
+  linkEl.href = isDark ? darkHref : lightHref
+}
 
 export const containsHtmlTags = (markdown: string) => {
   // Regex to match any HTML tag

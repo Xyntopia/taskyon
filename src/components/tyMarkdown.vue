@@ -1,15 +1,6 @@
 <!-- eslint-disable no-useless-escape -->
 <template>
-  <q-markdown
-    v-if="useQMarkdown"
-    :id="id"
-    :no-html="false"
-    :plugins="plugins"
-    :src="src"
-    v-bind="$attrs"
-    @click="handleMarkdownClick"
-  />
-  <div v-else-if="useIframe && iframeHtml" class="responsive-iframe row" v-bind="$attrs">
+  <div v-if="useIframe && iframeHtml" class="responsive-iframe row" v-bind="$attrs">
     <iframe
       ref="iframeRef"
       class="col"
@@ -22,29 +13,21 @@
 </template>
 
 <script setup lang="ts">
-import { QMarkdown } from '@quasar/quasar-ui-qmarkdown'
 //import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
 //import katex from  '@mdit/plugin-katex-slim'
 import mathjax3 from 'markdown-it-mathjax3'
 import mermaid from 'mermaid'
-import '@quasar/quasar-ui-qmarkdown/dist/index.css'
-// !!!!!!!!!!! it is superimportant, that our "prismjs" imports come AFTER the QMarkdown import !!!!!
-// otherwise this will result in errors for some reason...
-import 'prismjs/components/prism-python'
-import 'prismjs/components/prism-rust'
-import 'prismjs/components/prism-javascript'
-import 'prismjs/components/prism-typescript'
-import { computed, onMounted, getCurrentInstance } from 'vue'
+import { computed, onMounted } from 'vue'
 import {
   addCopyButtons,
   containsHtmlTags,
   createMermaidRenderer,
   generateIframeSrc,
-} from 'src/modules/markdownUtils '
+  highlighter,
+  initPrismTheme,
+} from '../modules/markdownUtils '
 import { useQuasar } from 'quasar'
 import type { MermaidConfig } from 'mermaid'
-import { svgToPng } from 'src/modules/svgUtils'
-import { copyToClipboard, copyPngToClipboard } from 'src/modules/utils'
 import { ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 import { onUnmounted } from 'vue'
@@ -53,29 +36,28 @@ import { watch } from 'vue'
 // https://mdit-plugins.github.io/mathjax.html#usage
 //const mathjaxInstance = createMathjaxInstance();
 
-const id = getCurrentInstance()?.uid || ''
-
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 
 defineOptions({
   inheritAttrs: false,
 })
 
+const $q = useQuasar()
+initPrismTheme($q.dark.isActive)
+
 const {
   cssUrl,
-  useQMarkdown = false,
   noMermaid = false,
   src,
   useIframe = false,
 } = defineProps<{
   src?: string
-  useQMarkdown?: boolean
   noMermaid?: boolean
   useIframe?: boolean
   cssUrl?: string // optional external CSS URL for iframe content
 }>()
 
-function handleMarkdownClick(event: MouseEvent) {
+/*function handleMarkdownClick(event: MouseEvent) {
   const target = (event.target as HTMLElement).closest('.copy-button')
   if (target) {
     // Find the closest .code-block-with-overlay and then find the <code> element inside it
@@ -128,9 +110,7 @@ function handleMarkdownClick(event: MouseEvent) {
       }
     }
   }
-}
-
-const $q = useQuasar()
+}*/
 
 const mermaidSettings: MermaidConfig = {
   startOnLoad: false, // if false: prevent mermaid.run  to start automatically after load...
@@ -186,9 +166,7 @@ const md2Html = (src: string) => {
     // Highlighter function. Should return escaped HTML,
     // or '' if the source string is not changed and should be escaped externally.
     // If result starts with <pre... internal wrapper is skipped.
-    highlight: function (/*str, lang*/) {
-      return ''
-    },
+    highlight: highlighter,
   })
   plugins.value.forEach((plugin) => {
     md.use(plugin)
@@ -281,49 +259,6 @@ onMounted(() => {
 </script>
 
 <style lang="sass">
-
-/*.code-block-with-overlay
-  pre.q-markdown--code__inner
-    overflow: auto !important
-    max-width: 100% !important
-    white-space: pre !important
-    word-wrap: normal !important
-    max-height: 300px !important // adjust the height to your liking
-
-.q-markdown pre,
-.q-markdown code
-  white-space: pre-wrap // Ensure that long lines of code wrap within the container
-  word-break: break-word // Break long words to fit within the container
-
-
-// we need this, because otherwise long words like links will
-// completly mess up our scrolling and overflow etc...
-.q-markdown
-  word-break: break-word
-  overflow-wrap: break-word
-
-.q-markdown
-  color: black
-
-.q-markdown--note--info .q-markdown--note-title
-  color: $accent
-
-.q-markdown p
-  text-align: justify
-
-.q-markdown--note--info
-  background-color: scale($secondary, 87.5%)
-  border: 0
-  border-radius: 10px 10px 10px 10px
-
-.code-block-with-overlay
-  position: relative
-
-  .copy-button
-    position: absolute
-    top: 0
-    right: 0
-
 .responsive-iframe
   position: relative
   //width: 100%
@@ -335,23 +270,4 @@ onMounted(() => {
   border: none
   //height: auto
   //min-width: 800px  // or whatever minimum you require
-
-/*.responsive-iframe iframe
-  //border: 0
-  position: absolute
-  //padding: -0%
-  top: -2%
-  left: -1%
-  width: 102% !important
-  height: 100% !important
-  //max-width: 854px
-  //max-height: 400px*/
-
-// this is in order to make mermaid sequence diagrams work on dark backgrounds
-/*.mermaid svg
-  .messageLine0
-    stroke: $secondary !important
-  .messageText
-    stroke: $secondary !important
-    fill: $secondary !important
 </style>
