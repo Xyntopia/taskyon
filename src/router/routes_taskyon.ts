@@ -115,6 +115,12 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     meta: { title: 'Tool Manager', description: 'Create & Manage AI Tools' },
   },
   {
+    path: '/tool',
+    component: () => import('src/pages/taskyon/ToolPage.vue'),
+    meta: { title: 'Tool Page', description: 'Use Individual Tool' },
+    props: true,
+  },
+  {
     path: '/tool/:name',
     component: () => import('src/pages/taskyon/ToolPage.vue'),
     meta: { title: 'Tool Page', description: 'Use Individual Tool' },

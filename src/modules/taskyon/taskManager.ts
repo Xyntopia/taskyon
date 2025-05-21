@@ -407,7 +407,6 @@ export interface TaskTreeNode {
   less flexible...
 */
 export async function useTyTaskManager(
-  defaultTools: InternalTool[],
   publicRecoveryKey: () => Promise<CryptoKey>,
   vectorizerModel?: string,
 ) {
@@ -435,6 +434,15 @@ export async function useTyTaskManager(
   // we use this index to quickly look up tools from our database!
   // We require that the toolIndex should contain only the latest version of a tool
   const toolIndex = new Map<string, string>()
+  const defaultToolMap: Record<string, InternalTool> = {}
+  const updateDefaultTools = (defaultTools: InternalTool[]) => {
+    for (const tool of defaultTools) {
+      const toolDef = ToolBase.safeParse(tool)
+      if (toolDef.success) {
+        defaultToolMap[toolDef.data.name] = tool
+      }
+    }
+  }
   // we simply assume, that all tools HAVE to be defined in the toolmap, no matter what.
   // if they are not there, we are doing something wrong ;)
   async function getTool(name: string) {
@@ -445,9 +453,7 @@ export async function useTyTaskManager(
         return toolTask?.content.data
       }
     }
-    if (name in defaultToolMap) {
-      return defaultToolMap[name]
-    }
+    return defaultToolMap[name]
   }
   async function updateToolIndex(task: TaskNode) {
     if (task.content.type === 'tooldefinition') {
@@ -466,10 +472,6 @@ export async function useTyTaskManager(
     }
     return false
   }
-  const defaultToolMap = defaultTools.reduce<Record<string, InternalTool>>((p, c) => {
-    p[c.name] = c
-    return p
-  }, {})
 
   function deleteFromChildAndSiblings(task: TaskNode) {
     if (task.priorID) {
@@ -1105,6 +1107,7 @@ export async function useTyTaskManager(
   }
 
   const defaultMode = {
+    updateDefaultTools,
     getTool,
     getTask: tyCrudVec.get,
     deleteTask: tyCrudVec.delete,

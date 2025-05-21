@@ -53,13 +53,14 @@ export async function initTaskyon(
   ]
 
   const taskManagerInstance = await useTyTaskManager(
-    ToolList,
     publicRecoveryKey,
     llmSettings.vectorizationModel,
   )
   console.log('finished taskManager initialization')
 
   // add tools which have access to the taskManagerInstance itself
+  // TODO: we should get rid of this and supply an instanc eof the taskManager insider the tool
+  // function itself if it is a "normal" function...
   const { chatCompletion, stream: chatCompletionStream } = await createChatCompletionTool(
     llmSettings,
     taskManagerInstance,
@@ -71,6 +72,7 @@ export async function initTaskyon(
     createChooseTool(taskManagerInstance),
     createAddNewToolTool(),
   )
+  taskManagerInstance.updateDefaultTools(ToolList)
   void taskManagerInstance.updateToolDefinitions()
 
   // keys could porentially be reactive here, so in theory, when they change in the GUI,

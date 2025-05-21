@@ -8,35 +8,67 @@
     <q-page-container>
       <UnderConstructionHint />
       <q-page padding>
-        <div class="row">
-          <q-tabs v-model="selectedTab" class="col-auto" dense no-caps vertical>
-            <q-tab name="code" :icon="mdiLanguageJavascript" label="tool code" />
-            <q-tab name="configure" :icon="mdiFormTextbox" label="tool configuration" />
-            <q-tab name="definition" :icon="mdiCodeJson" label="tool definition" />
-          </q-tabs>
-          <q-tab-panels :model-value="selectedTab" animated swipeable infinite class="col">
-            <q-tab-panel name="code">
-              <CodeEditor v-model="currentToolDefinition.code" />
-              <q-btn
-                :disable="!isValidTool"
-                :color="isValidTool ? 'positive' : 'negative'"
-                :icon="matSave"
-                label="save task"
-                @click="addNewTask()"
-                ><q-tooltip>Save task without executing it...</q-tooltip></q-btn
-              >
-              {{ toolParser }}
-            </q-tab-panel>
-            <q-tab-panel name="configure">
-              <ObjectTreeView
-                :model-value="{ ...currentToolDefinition, code: undefined }"
-                :schema="toolJsonSchema"
-              />
-            </q-tab-panel>
-            <q-tab-panel name="definition" class="column">
-              <JsonInput filled v-model="currentToolDefinition" auto-save />
-            </q-tab-panel>
-          </q-tab-panels>
+        <div v-if="selectedTool || !name" class="column">
+          <div class="row">
+            <q-tabs v-model="selectedTab" class="col-auto" dense no-caps vertical>
+              <q-tab name="code" :icon="mdiLanguageJavascript" label="tool code" />
+              <q-tab name="configure" :icon="mdiFormTextbox" label="tool configuration" />
+              <q-tab name="definition" :icon="mdiCodeJson" label="tool definition" />
+            </q-tabs>
+            <q-tab-panels :model-value="selectedTab" animated swipeable infinite class="col">
+              <q-tab-panel name="code">
+                <div class="q-pa-lg text-negative" v-if="currentToolDefinition.function">
+                  The current Tool is a Taskyon-internal tool with a "function" property and can not
+                  be edited here. You can however replace it with your own tool with the same name.
+                </div>
+                <CodeEditor
+                  v-else-if="currentToolDefinition.code"
+                  v-model="currentToolDefinition.code"
+                />
+                {{ toolParser }}
+              </q-tab-panel>
+              <q-tab-panel name="configure">
+                <ObjectTreeView
+                  :model-value="{ ...currentToolDefinition, code: undefined }"
+                  :schema="toolJsonSchema"
+                />
+              </q-tab-panel>
+              <q-tab-panel name="definition" class="column">
+                <JsonInput filled v-model="currentToolDefinition" auto-save />
+              </q-tab-panel>
+            </q-tab-panels>
+          </div>
+          <q-btn
+            class="q-mt-md"
+            :disable="!isValidTool"
+            :color="isValidTool ? 'positive' : 'negative'"
+            :icon="matSave"
+            label="save task"
+            @click="addNewTask()"
+            ><q-tooltip>Save task without executing it...</q-tooltip></q-btn
+          >
+        </div>
+        <div v-else>
+          The selected tool "{{ name }}" is not available for editing. Please select one of the
+          following tools or:
+          <q-btn flat class="q-ma-sm" :to="{ path: '/tool' }">
+            <div>
+              create a new tool.
+              <q-icon :name="mdiMagicStaff" />
+              <q-icon :name="mdiFunctionVariant" />
+            </div>
+          </q-btn>
+
+          <div v-if="alphabeticalTools" class="column q-mt-sm">
+            <q-btn
+              dense
+              flat
+              :to="{ path: `/tool/${t.name}` }"
+              v-for="t in alphabeticalTools"
+              :key="t.name"
+              >{{ t.name }}</q-btn
+            >
+          </div>
         </div>
       </q-page>
     </q-page-container>
@@ -55,11 +87,18 @@ import { ToolBase } from 'src/modules/taskyon/types'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { asyncComputed } from 'src/modules/vueUtils'
+import type { InternalTool } from 'src/modules/taskyon/tools'
 import { craeteToolJsonSchema } from 'src/modules/taskyon/tools'
-import { mdiCodeJson, mdiFormTextbox, mdiLanguageJavascript } from '@quasar/extras/mdi-v6'
+import {
+  mdiCodeJson,
+  mdiFormTextbox,
+  mdiFunctionVariant,
+  mdiLanguageJavascript,
+  mdiMagicStaff,
+} from '@quasar/extras/mdi-v6'
 import JsonInput from 'src/components/JsonInput.vue'
 
-const { name } = defineProps<{ name: string }>()
+const { name } = defineProps<{ name?: string }>()
 
 const CodeEditor = defineAsyncComponent(
   () =>
@@ -72,30 +111,40 @@ const CodeEditor = defineAsyncComponent(
     ),
 )
 
-const selectedTab = ref('tools')
+const selectedTab = ref('code')
 const tystate = useTaskyonStore()
 const router = useRouter()
 
 const functionArgs = ref<Record<string, unknown>>({})
 const drawerOpen = ref(false)
 
-type PluginTool = ToolBase & { code: string }
-
-const selectedTool = asyncComputed(async () => {
+const allTools = asyncComputed(async () => {
   const tm = await tystate.getTaskManager()
-  const task = await tm.getTask(name)
-  if (task?.content.type === 'tooldefinition') {
-    return task.content.data
-  } else {
-    return undefined
-  }
+  const tools = await tm.updateToolDefinitions()
+  return tools
 }, undefined)
+
+const alphabeticalTools = computed(() => {
+  return allTools.value
+    ? Object.values(allTools.value).sort((a, b) => a.name.localeCompare(b.name))
+    : undefined
+})
+
+const selectedTool = asyncComputed(
+  async () => {
+    const tm = await tystate.getTaskManager()
+    if (name) return await tm.getTool(name)
+    else return undefined
+  },
+  undefined,
+  () => name,
+)
 
 const toolJsonSchema = craeteToolJsonSchema()
 
-const currentToolDefinition = computed<PluginTool>(() => {
+const currentToolDefinition = computed<InternalTool>(() => {
   return selectedTool.value
-    ? ({ code: 'define your code here!', ...selectedTool.value } as PluginTool)
+    ? { code: 'define your code here!', ...selectedTool.value }
     : {
         name: '',
         description: '',
