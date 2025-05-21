@@ -99,7 +99,7 @@
           flat
         >
           <div class="col">
-            <ty-markdown
+            <tyMarkdown
               v-if="currentMessageStream"
               no-line-numbers
               no-mermaid

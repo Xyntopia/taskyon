@@ -525,11 +525,15 @@ export const llmSettings = z.object({
       offIcon: 'svguse:/taskyon_mono_opt.svg#taskyon',
       icon: mdiFunctionVariant,
       label: 'Native Agent Tools',
-      description: `Enable native AI function selection. If this is enabled Taskyon will try to
+      description: `### Enable native AI function selection.
+
+If this is enabled Taskyon will try to
 leverage the native tool selection functionality of AI models.
 Turning this off is usually recommended in order to use Taskyons model-agnostic mechanisms.
 
-This doesn't work for all models currently and is mainly recommended for all openAI models.`,
+This doesn't work for all models currently and is mainly recommended for all openAI models.
+
+For more information check this link: https://platform.openai.com/docs/guides/function-calling`,
     }),
   selectedApi: z.string().nullish().default('taskyon').meta({
     description: 'which of the defined APIs are we currently using?',

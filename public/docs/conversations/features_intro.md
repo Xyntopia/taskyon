@@ -94,4 +94,12 @@ gantt
     another task      : 24d
 ```
 
+**Interactive Button Example**
+
+You can also include interactive HTML elements. Here's an example of a button:
+
+<button onclick="alert('Hello! This is a demonstration of a button click.')">Click Me!</button>
+
+When you click the button above, it will display a simple alert message.
+
 These are just a few examples of what I can do with MathJax and charts. Let me know if you have any specific questions or if you'd like to see more examples!

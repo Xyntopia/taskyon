@@ -228,9 +228,9 @@ Finally, it creates a chat completion task with the selected tools in the allowe
       properties: {
         llmTools: {
           type: 'boolean',
-          description:
-            'Optional Parameter. If set to true, we will use a openai compatible tool api',
-          default: false,
+          description: `Optional Parameter. If set to true, we will make use of taskyons
+tool Selection capabilities, otherwise we will use an openai compatible tool api`,
+          default: true,
         },
       },
     } as const,

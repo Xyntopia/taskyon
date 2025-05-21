@@ -73,7 +73,6 @@
 <script setup lang="ts">
 import type { PropType } from 'vue'
 import type { TaskNodeMeta } from 'src/modules/taskyon/types'
-import '@quasar/quasar-ui-qmarkdown/dist/index.css'
 
 defineProps({
   taskMeta: {

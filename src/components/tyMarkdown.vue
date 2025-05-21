@@ -1,6 +1,15 @@
 <!-- eslint-disable no-useless-escape -->
 <template>
-  <div v-if="iframeHtml" class="responsive-iframe row">
+  <q-markdown
+    v-if="useQMarkdown"
+    :id="id"
+    :no-html="false"
+    :plugins="plugins"
+    :src="src"
+    v-bind="$attrs"
+    @click="handleMarkdownClick"
+  />
+  <div v-else-if="useIframe && iframeHtml" class="responsive-iframe row" v-bind="$attrs">
     <iframe
       ref="iframeRef"
       class="col"
@@ -9,15 +18,7 @@
       style="width: 600px"
     />
   </div>
-  <q-markdown
-    v-else
-    :id="id"
-    :no-html="false"
-    :plugins="plugins"
-    :src="src"
-    v-bind="$attrs"
-    @click="handleMarkdownClick"
-  />
+  <div v-else v-html="renderedHtml" v-bind="$attrs" />
 </template>
 
 <script setup lang="ts">
@@ -56,13 +57,19 @@ const id = getCurrentInstance()?.uid || ''
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 
+defineOptions({
+  inheritAttrs: false,
+})
+
 const {
   cssUrl,
+  useQMarkdown = false,
   noMermaid = false,
   src,
   useIframe = false,
 } = defineProps<{
   src?: string
+  useQMarkdown?: boolean
   noMermaid?: boolean
   useIframe?: boolean
   cssUrl?: string // optional external CSS URL for iframe content
@@ -154,7 +161,7 @@ const plugins = computed(() => {
   return [renderMermaid, addCopyButtons, mathjax3]
 })
 
-const renderedHtml = (src: string) => {
+const md2Html = (src: string) => {
   const md = new MarkdownIt({ html: true })
   plugins.value.forEach((plugin) => {
     md.use(plugin)
@@ -162,6 +169,10 @@ const renderedHtml = (src: string) => {
   const renderedHtml = md.render(src)
   return renderedHtml
 }
+
+const renderedHtml = computed(() => {
+  return md2Html(src ?? '')
+})
 
 const iframeHtml = computed(() => {
   const danger = containsHtmlTags(src ?? '')
@@ -181,7 +192,7 @@ const iframeHtml = computed(() => {
       }
     </style>`
     // Prepend the style block to the rendered HTML.
-    return generateIframeSrc(styleBlock + renderedHtml(src ?? ''), cssUrl ?? '')
+    return generateIframeSrc(styleBlock + renderedHtml.value, cssUrl ?? '')
   }
   return ''
 })

@@ -64,7 +64,6 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import '@quasar/quasar-ui-qmarkdown/dist/index.css'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { matSmartToy, matList, matVisibility } from '@quasar/extras/material-icons'
 import ApiSelect from './ApiSelect.vue'

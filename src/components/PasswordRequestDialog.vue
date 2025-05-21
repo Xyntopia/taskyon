@@ -2,7 +2,7 @@
   <q-dialog v-model="show">
     <q-card>
       <q-card-section>
-        <QMarkdown v-if="infoText" :src="infoText" />
+        <TyMarkdown v-if="infoText" :src="infoText" />
         <slot></slot>
       </q-card-section>
       <q-card-section>
@@ -23,8 +23,8 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { QMarkdown } from '@quasar/quasar-ui-qmarkdown'
 import SecretInput from './SecretInput.vue'
+import TyMarkdown from './tyMarkdown.vue'
 
 const newSecret = ref<string>('')
 

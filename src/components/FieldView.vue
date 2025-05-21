@@ -4,9 +4,7 @@
     <div v-if="item.label" class="col-auto" style="min-width: 200px">{{ item.label }}:</div>
     <!--valueSlot-->
     <slot> </slot>
-    <info-dialog v-if="item.description">
-      {{ item.description }}
-    </info-dialog>
+    <info-dialog v-if="item.description" :info-text="item.description" />
   </div>
 </template>
 
