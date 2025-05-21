@@ -432,6 +432,45 @@ export async function useTyTaskManager(
   const parentToChildMap = new Map<string, Set<string>>()
   const immediateChildrenMap = new Map<string, Set<string>>()
 
+  // we use this index to quickly look up tools from our database!
+  // We require that the toolIndex should contain only the latest version of a tool
+  const toolIndex = new Map<string, string>()
+  // we simply assume, that all tools HAVE to be defined in the toolmap, no matter what.
+  // if they are not there, we are doing something wrong ;)
+  async function getTool(name: string) {
+    const toolTaskId = toolIndex.get(name)
+    if (toolTaskId) {
+      const toolTask = await tyCrudVec.get(toolTaskId)
+      if (toolTask?.content.type === 'tooldefinition') {
+        return toolTask?.content.data
+      }
+    }
+    if (name in defaultToolMap) {
+      return defaultToolMap[name]
+    }
+  }
+  async function updateToolIndex(task: TaskNode) {
+    if (task.content.type === 'tooldefinition') {
+      const toolDef = ToolBase.safeParse(task.content.data)
+      if (toolDef.success) {
+        const oldToolId = toolIndex.get(toolDef.data.name)
+        // of old tool already exists, we need tocheck which one is newer
+        // and only update if the new one is newer than the old one
+        if (oldToolId) {
+          const oldTool = await tyCrudVec.get(oldToolId)
+          if ((oldTool?.created_at ?? 0) >= (task?.created_at ?? 0)) return undefined
+        }
+        toolIndex.set(task.content.data.name, task.id)
+        return toolDef.data
+      }
+    }
+    return false
+  }
+  const defaultToolMap = defaultTools.reduce<Record<string, InternalTool>>((p, c) => {
+    p[c.name] = c
+    return p
+  }, {})
+
   function deleteFromChildAndSiblings(task: TaskNode) {
     if (task.priorID) {
       const siblings = nextSiblingMap.get(task.priorID)
@@ -487,6 +526,7 @@ export async function useTyTaskManager(
     ]),
   )
 
+  // TODO: unify our tyCrudVec and useTaskVectors in one db...
   const {
     syncVectorIndexWithTasks,
     deleteTaskFromVectorStore,
@@ -511,6 +551,8 @@ export async function useTyTaskManager(
       if (vectors) void addtoVectorDB(task)
       // Update parent-child cache
       updateChildAndSiblingMap(task)
+      // update our toolIndex with the new toolname :)
+      void updateToolIndex(task)
     },
     delete: async (id: string | number) => {
       // Delete from local record/memorydb
@@ -518,6 +560,7 @@ export async function useTyTaskManager(
       if (task) void deleteFromChildAndSiblings(task)
       void tyCrud.delete(id)
       void deleteTaskFromVectorStore(id.toString())
+      if (task?.content.type === 'tooldefinition') toolIndex.delete(task.content.data.name)
     },
     upsert: async (id: string | number, data: TaskNode) => {
       // TODO: make sure, we never call this on tasks!
@@ -785,42 +828,54 @@ export async function useTyTaskManager(
     return llmtasks
   }
 
-  // TODO: set an "update" flag here somewhere which we can use to
-  //       cache this function. whenever a new tool gets added in "saveTask"
-  //       we should set this
   /**
    * removeFunction will remove all "internal" functions from the returned tool list...
    */
   async function updateToolDefinitions<T extends boolean>(
     removeFunctionProperty: T = false as T,
   ): Promise<T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>> {
+    // first we simply search for all tool definitions in the db
     const tasks = await searchTasks({
       selector: {
         type: 'tooldefinition',
       },
     })
 
-    const parsedToolDefs = tasks.flatMap((task) => {
-      try {
-        if (task.content.type === 'tooldefinition') {
-          const toolDef = ToolBase.parse(task.content.data)
-          return toolDef
-        }
-        return []
-      } catch {
-        return []
-      }
-    })
+    // then update our tool index...
+    // and filter out non-valid tasks
+    // Update toolIndex and reduce tasks to a Record with tool names as keys
+    const toolTasks: Record<string, ToolBase> = Object.fromEntries(
+      (
+        await Promise.all(
+          tasks.map(async (task) => {
+            if (task.content?.type === 'tooldefinition') {
+              // Update toolIndex with the latest tool definition
+              const toolDef = await updateToolIndex(task)
+              if (toolDef) {
+                return [toolDef.name, toolDef]
+              }
+            }
+            return undefined
+          }, {}),
+        )
+      ).filter((x) => x !== undefined),
+    )
 
     // Merge parsed tool definitions with default tools
-    return parsedToolDefs.concat(Object.values(defaultTools)).reduce(
+    // and we also check if we should remove the function property
+    // from the list, because we don't need it in the UI
+    const allTools = { ...defaultToolMap, ...toolTasks }
+
+    return Object.values(allTools).reduce(
       (pv, cv) => {
-        if (removeFunctionProperty && 'function' in cv) {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { function: unused, ...toolBaseOnly } = cv as InternalTool
-          pv[toolBaseOnly.name] = toolBaseOnly
-        } else {
-          pv[cv.name] = cv
+        if (cv) {
+          if (removeFunctionProperty && 'function' in cv) {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { function: unused, ...toolBaseOnly } = cv
+            pv[toolBaseOnly.name] = toolBaseOnly
+          } else {
+            pv[cv.name] = cv
+          }
         }
         return pv
       },
@@ -1050,6 +1105,7 @@ export async function useTyTaskManager(
   }
 
   const defaultMode = {
+    getTool,
     getTask: tyCrudVec.get,
     deleteTask: tyCrudVec.delete,
     searchTasks,
