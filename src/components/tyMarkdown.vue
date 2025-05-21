@@ -18,7 +18,7 @@
       style="width: 600px"
     />
   </div>
-  <div v-else v-html="renderedHtml" v-bind="$attrs" />
+  <div v-else v-html="renderedHtml" v-bind="$attrs" class="tyMarkdown" />
 </template>
 
 <script setup lang="ts">
@@ -162,7 +162,34 @@ const plugins = computed(() => {
 })
 
 const md2Html = (src: string) => {
-  const md = new MarkdownIt({ html: true })
+  // for options check this link:
+  // https://github.com/markdown-it/markdown-it?tab=readme-ov-file#simple
+  const md = new MarkdownIt({
+    // Convert '\n' in paragraphs into <br>
+    breaks: false,
+    // CSS language prefix for fenced blocks. Can be
+    // useful for external highlighters.
+    langPrefix: 'language-',
+    //allow html
+    html: true,
+    // Autoconvert URL-like text to links
+    linkify: true,
+    // Enable some language-neutral replacement + quotes beautification
+    // For the full list of replacements, see https://github.com/markdown-it/markdown-it/blob/master/lib/rules_core/replacements.mjs
+    typographer: true,
+    // Double + single quotes replacement pairs, when typographer enabled,
+    // and smartquotes on. Could be either a String or an Array.
+    //
+    // For example, you can use '«»„“' for Russian, '„“‚‘' for German,
+    // and ['«\xA0', '\xA0»', '‹\xA0', '\xA0›'] for French (including nbsp).
+    quotes: '“”‘’',
+    // Highlighter function. Should return escaped HTML,
+    // or '' if the source string is not changed and should be escaped externally.
+    // If result starts with <pre... internal wrapper is skipped.
+    highlight: function (/*str, lang*/) {
+      return ''
+    },
+  })
   plugins.value.forEach((plugin) => {
     md.use(plugin)
   })

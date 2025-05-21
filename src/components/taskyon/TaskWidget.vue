@@ -98,7 +98,7 @@
             </q-btn>
             <q-slide-transition>
               <div v-show="!short || expandMessageContent">
-                <ty-markdown
+                <tyMarkdown
                   v-if="state.taskState[task.id]?.markdownEnabled != false"
                   no-line-numbers
                   :src="task.content.data"

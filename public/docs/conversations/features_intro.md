@@ -102,4 +102,38 @@ You can also include interactive HTML elements. Here's an example of a button:
 
 When you click the button above, it will display a simple alert message.
 
+**Rendering code**
+
+```python
+def calculate_fibonacci(n: int) -> list[int]:
+    """
+    Calculate Fibonacci sequence up to nth number.
+
+    Args:
+        n: Integer number of sequence items
+    Returns:
+        List of Fibonacci numbers
+    """
+    result = [0, 1]
+    while len(result) < n:
+        result.append(result[-1] + result[-2])
+    return result
+
+# Example usage with different data types
+numbers = calculate_fibonacci(10)
+text = "Hello, World!"
+flag = True
+pi = 3.14159
+
+# Dictionary with mixed types
+config = {
+    "name": "example",
+    "values": [1, 2, 3],
+    "enabled": True,
+    "ratio": 0.75
+}
+
+print(f"Sequence: {numbers}")
+```
+
 These are just a few examples of what I can do with MathJax and charts. Let me know if you have any specific questions or if you'd like to see more examples!

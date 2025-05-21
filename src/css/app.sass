@@ -10,6 +10,31 @@ $app-bg-light: linear-gradient(
 
 $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%, transparent 80%), radial-gradient(ellipse at bottom left, rgb($primary), black 80%)
 
+/* under your .tyMarkdown (or .q-markdown) scope… */
+.tyMarkdown 
+  blockquote 
+    background: #f5f5f5;         // light gray background
+    border-left: 4px solid #ccc; // accent bar
+    margin: 1em 0;
+    padding: 0.5em 1em;
+    color: #333;
+  
+  pre 
+    background: #2d2d2d;         // dark shell for code
+    color: #eee;
+    padding: 1em;
+    border-radius: 4px;
+    overflow: auto;
+  
+
+  code 
+    font-family: monospace;
+    background: rgba(27,31,35,.05);
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+  
+
+
 @media screen
   .q-layout
     background-color: inherit

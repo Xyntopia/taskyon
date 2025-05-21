@@ -9,6 +9,7 @@
           label="Generate Diagnostics Report"
           @click="generateReport(detailed, false)"
         ></q-btn>
+        <q-btn outline label="open markdown test page" to="/docs/markdown_it_test_page" />
         <q-btn outline label="Only run first test" @click="generateReport(detailed, true)"></q-btn>
         <q-btn outline label="IPFS status" to="ipfsmonitor"></q-btn>
         <q-btn v-if="diagnostics" outline label="download report" @click="downloadReport"></q-btn>
