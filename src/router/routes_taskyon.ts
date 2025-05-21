@@ -110,11 +110,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     },
   },
   {
-    path: '/tools',
-    component: () => import('src/layouts/ToolManager.vue'),
-    meta: { title: 'Tool Manager', description: 'Create & Manage AI Tools' },
-  },
-  {
     path: '/tool',
     component: () => import('src/pages/taskyon/ToolPage.vue'),
     meta: { title: 'Tool Page', description: 'Use Individual Tool' },
@@ -125,11 +120,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     component: () => import('src/pages/taskyon/ToolPage.vue'),
     meta: { title: 'Tool Page', description: 'Use Individual Tool' },
     props: true,
-  },
-  {
-    path: '/integration',
-    component: () => import('src/layouts/ToolManager.vue'),
-    meta: { title: 'Integration', description: 'Integrate Tasyon' },
   },
   {
     path: '/ipfsmonitor',
