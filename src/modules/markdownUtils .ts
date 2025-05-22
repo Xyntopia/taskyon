@@ -102,28 +102,81 @@ export function createWrapPlugin(
   }
 }
 
-export const copyButton = createWrapPlugin(/.*/, (token: Token, lang: string, content: string) => {
-  // give each block a unique ID so the button knows what to copy
-  const uid = `code-${Math.random().toString(36).slice(2)}`
+/**
+ * Wraps code fences matching `langMatcher`, injecting a lang label + buttons.
+ */
+export function createMultiButtonPlugin(
+  langMatcher: RegExp,
+  buttons: {
+    label: string // button text
+    languages: RegExp // which langs to show on
+    callback: (code: string, lang: string) => void
+  }[],
+) {
+  // 1) wire up your handlers to listen for events named === label
+  buttons.forEach((b) => {
+    document.addEventListener(b.label, (ev: Event) => {
+      const ce = ev as CustomEvent<{ code: string; lang: string }>
+      b.callback(ce.detail.code, ce.detail.lang)
+    })
+  })
 
-  // inject that ID into the <pre> tag
-  const contentWithId = content.replace('<pre', `<pre id="${uid}"`)
+  // 2) return a wrap-plugin that injects buttons which dispatch those events
+  return createWrapPlugin(langMatcher, (_token: Token, lang, content) => {
+    const uid = `code-${Math.random().toString(36).slice(2)}`
+    // inject that ID into the <pre> tag
+    const contentWithId = content.replace('<pre', `<pre id="${uid}"`)
 
-  return `
-    <div class="code-block-with-copy" style="position: relative;">
-      ${contentWithId}
-      <button
-        class="copy-btn"
-        style="position: absolute; top: 8px; right: 8px;"
-        onclick="
-          navigator.clipboard.writeText(
-            document.getElementById('${uid}').innerText
-          )
-        "
-      >Copy</button>
-    </div>
-  `
-})
+    const btnsHtml = buttons
+      .filter((b) => b.languages.test(lang))
+      .map((b) => {
+        return `
+          <button
+            class="btn-${b.label.replace(/\s+/g, '-').toLowerCase()}"
+            style="margin-left:4px"
+            onclick="
+              const code = document.getElementById('${uid}').innerText;
+              document.dispatchEvent(
+                new CustomEvent('${b.label}', {
+                  detail: { code, lang: '${lang}' }
+                })
+              );
+            "
+          >${b.label}</button>
+        `
+      })
+      .join('')
+
+    return `
+      <div class="code-block-with-btns" style="position:relative">
+        ${contentWithId}
+        <div style="position:absolute; top:8px; right:8px; display:flex; align-items:center">
+          <span style="font-size:.75em; opacity:.6">${lang}</span>
+          ${btnsHtml}
+        </div>
+      </div>
+    `
+  })
+}
+
+export const codeButtons = createMultiButtonPlugin(/.*/, [
+  {
+    label: 'Copy',
+    languages: /.*/,
+    callback: (code, lang) => {
+      console.log(`copy ${lang}:`, code)
+      void navigator.clipboard.writeText(code)
+    },
+  },
+  {
+    label: 'Run Code',
+    languages: /^(js|ts)$/,
+    callback: (code, lang) => {
+      // your runner here…
+      console.log(`Running ${lang}:`, code)
+    },
+  },
+])
 
 export const createMermaidRenderer = (mermaidSettings: MermaidConfig) => (md: MarkdownIt) => {
   /*
