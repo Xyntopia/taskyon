@@ -11,8 +11,6 @@ $app-bg-light: linear-gradient(
 
 $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%, transparent 80%), radial-gradient(ellipse at bottom left, rgb($primary), black 80%)
 
-@import 'src/css/markdown'
-
 @media screen
   .q-layout
     background-color: inherit
@@ -115,24 +113,6 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       background-size: cover
       background-attachment: fixed
 
-    .q-markdown a:not(h1 a):not(h2 a):not(h3 a):not(h4 a):not(h5 a):not(h6 a)
-      color: color-mix(
-                in srgb,
-                rgb(var(--q-secondary-rgb)),
-                rgb(var(--q-primary-rgb))   50%
-              )
-
-      &:visited
-        color: color-mix(
-                in srgb,
-                rgb(var(--q-secondary-rgb)),
-                rgb(var(--q-primary-rgb))   50%
-              )
-
-      &[href^="http://"], &[href^="https://"]
-        color: $accent // Replace with a color for external links
-        text-decoration: underline
-
     .welcome-message-text
       filter: drop-shadow(0 0 5px white) drop-shadow(0 0 20px white)
 
@@ -191,20 +171,6 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       background-repeat: no-repeat
       background-size: cover
       background-attachment: fixed
-
-    .q-markdown a:not(h1 a):not(h2 a):not(h3 a):not(h4 a):not(h5 a):not(h6 a)
-      color: rgb($secondary)
-
-      &:visited
-        color: color-mix(
-                in srgb,
-                rgb(var(--q-secondary-rgb)),
-                rgb(var(--q-primary-rgb))   50%
-              )
-
-      &[href^="http://"], &[href^="https://"]
-        color: $accent // Replace with a color for external links
-        text-decoration: underline
 
     .create-new-task-container
       background-color: rgba($primary, 0.3) // Adjust transparency as needed
@@ -265,3 +231,5 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     padding: 0
     box-shadow: none /* Remove shadows, if any */
     min-height: 0 !important /* Override min-height if necessary */
+
+@import 'src/css/markdown'

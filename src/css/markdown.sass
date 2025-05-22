@@ -1,5 +1,5 @@
-$secondary: var(--q-secondary)
-$primary: var(--q-primary)
+$secondary: var(--q-secondary-rgb)
+$primary: var(--q-primary-rgb)
 
 /* under your .tyMarkdown (or .q-markdown) scope… */
 .tyMarkdown
@@ -12,31 +12,41 @@ $primary: var(--q-primary)
     line-height: 1.25
 
   h1
-    font-size: 2em
+    font-size: 2rem
   h2
-    font-size: 1.75em
+    font-size: 1.75rem
   h3
-    font-size: 1.5em
+    font-size: 1.5rem
   h4
-    font-size: 1.25em
+    font-size: 1.25rem
   h5
-    font-size: 1.125em
+    font-size: 1.125rem
   h6
-    font-size: 1em
-    opacity: 0.8
+    font-size: 1rem
+    opacity: 0.85
 
   p
     margin: 0.75em 0
+
+  mark
+    background: rgb($secondary)
+    color: rgb($primary)
+    padding: 0.2em 0.4em
+    border-radius: 3px
 
   a
     color: $primary
     text-decoration: underline
     &:hover
       text-decoration: none
-      color: color-mix(in srgb, black, rgb(var(--q-secondary-rgb)) 90%) 20%,
+
+    // TODO: specially mark external links..
+    /*&[href^="http://"], &[href^="https://"]
+     color: $accent // Replace with a color for external links
+     text-decoration: underline
 
   blockquote
-    border-left: 4px solid $secondary
+    border-left: 4px solid rgb($secondary)
     margin: 1em 0
     padding: 0.5em 1em
     opacity: 0.85
@@ -48,17 +58,6 @@ $primary: var(--q-primary)
     overflow: auto
     font-size: 0.9rem
 
-  code
-    font-family: inherit
-    padding: 0.2em 0.4em
-    border-radius: 3px
-    font-size: 0.95em
-
-  pre code
-    background: none
-    padding: 0
-    font-size: 0.95rem
-
   img
     max-width: 100%
     height: auto
@@ -67,9 +66,7 @@ $primary: var(--q-primary)
     border-radius: 4px
 
   hr
-    border: none
-    border-top: 1px solid rgba($secondary, 0.3)
-    margin: 2rem 0
+    margin: 1rem 0
 
   ul, ol
     padding-left: 1.5em
@@ -85,14 +82,100 @@ $primary: var(--q-primary)
     overflow-x: auto
 
     th, td
-      border: 1px solid rgba($secondary, 0.2)
       padding: 0.5rem
 
     thead
-      background: rgba($primary, 0.05)
       th
         font-weight: bold
 
     tbody
       tr:nth-child(even)
         background: rgba($secondary, 0.05)
+
+  img
+    display: block
+    margin: 1rem auto
+    border-radius: 4px
+    height: auto
+    max-height: 80vh
+
+    // Let images use natural size unless too big
+    max-width: 100%
+    width: auto
+
+    // If the image *is smaller* than the container, just use intrinsic size
+    &[width], &[height]
+      max-width: none
+      height: auto
+      width: auto
+
+    // Optional: prevent SVGs from expanding if they lack dimensions
+    &:not([width]):not([height])
+      max-width: 90%
+      height: auto
+      width: auto
+
+.body--light .tyMarkdown
+  blockquote
+    background: rgba(black, 0.1)
+
+  table
+    th, td
+      border: 1px solid white
+    thead
+      background: rgba($primary, 0.7)
+      color: white
+    tbody
+      tr:nth-child(even)
+        background: rgba($secondary, 0.1)
+
+  a
+    color: $primary
+
+    &:hover
+      color: color-mix(
+                in srgb,
+                rgb(var(--q-secondary-rgb)),
+                rgb(var(--q-primary-rgb))   50%
+              )
+
+    &:visited
+      color: color-mix(
+                in srgb,
+                rgb(var(--q-secondary-rgb)),
+                rgb(var(--q-primary-rgb))   50%
+              )
+
+.body--dark .tyMarkdown
+  blockquote
+    background: rgba(white, 0.05)
+
+  table
+    th, td
+      border: 1px solid rgba($secondary, 0.1)
+    thead
+      background: rgba($secondary, 0.5)
+      color: black
+    tbody
+      tr:nth-child(even)
+        background: rgba($secondary, 0.05)
+
+  hr
+    border-bottom: 1px solid rgba($secondary, 0.8)
+
+  a
+    color: $secondary
+
+    &:hover
+      color: color-mix(
+                in srgb,
+                rgb(var(--q-secondary-rgb)),
+                rgb(var(--q-primary-rgb))   50%
+              )
+
+    &:visited
+      color: color-mix(
+                in srgb,
+                rgb(var(--q-secondary-rgb)),
+                rgb(var(--q-primary-rgb))   50%
+              )

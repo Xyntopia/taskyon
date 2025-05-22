@@ -135,6 +135,8 @@ Autoconverted link https://github.com/nodeca/pica (enable linkify to see)
 
 ## Images
 
+![small_test](https://upload.wikimedia.org/wikipedia/commons/thumb/7/72/Noto_Emoji_Oreo_1f405.svg/128px-Noto_Emoji_Oreo_1f405.svg.png)
+
 ![Minion](https://octodex.github.com/images/minion.png)
 ![Stormtroopocat](https://octodex.github.com/images/stormtroopocat.jpg 'The Stormtroopocat')
 
