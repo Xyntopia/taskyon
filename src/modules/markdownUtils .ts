@@ -24,7 +24,6 @@ import lightHref from 'prismjs/themes/prism.css?url'
 import darkHref from 'prismjs/themes/prism-tomorrow.css?url'
 
 import { uid } from 'quasar'
-import type Renderer from 'markdown-it/lib/renderer'
 import type { Token } from 'markdown-it'
 
 export const highlighter = (code: string, lang: string) => {
@@ -166,17 +165,21 @@ export const codeButtons = createMultiButtonPlugin(/.*/, [
   },
 ])
 
-export const createMermaidRenderer = (mermaidSettings: MermaidConfig) => (md: MarkdownIt) => {
+/**
+ * A plugin that transforms ```mermaid``` fences into live-rendered SVGs.
+ */
+export const createMermaidRenderer = (mermaidConfig: MermaidConfig) => {
   /*
   not sure, if we will need this...
+  sometimes good for sanitizing the input
   const htmlEntities = (str: unknown) =>
     String(str)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');*/
 
-  // if we are using the plugin, initialize mermaid as well :)
-  mermaid.initialize(mermaidSettings)
+  // 1) initialize mermaid once
+  mermaid.initialize(mermaidConfig)
 
   // Example of using the render function
   const drawDiagram = async function (code: string, selector: string, img_id: string) {
@@ -204,32 +207,25 @@ export const createMermaidRenderer = (mermaidSettings: MermaidConfig) => (md: Ma
     // Create a save as button
     // TODO: right now, the "svg"  includes the iframe with the svg...
     /*const copyButton = document.createElement('button');
-        copyButton.textContent = 'Copy SVG';
-        element.appendChild(copyButton);
+      copyButton.textContent = 'Copy SVG';
+      element.appendChild(copyButton);
 
-        // Add event listener to copy button
-        copyButton.addEventListener('click', () => {
-          void navigator.clipboard.writeText(svg);
-        });*/
+      // Add event listener to copy button
+      copyButton.addEventListener('click', () => {
+        void navigator.clipboard.writeText(svg);
+      });*/
   }
 
-  let defaultRenderer: Renderer.RenderRule
-  if (md.renderer.rules.fence) {
-    defaultRenderer = md.renderer.rules.fence.bind(md.renderer.rules)
-  }
+  // 2) return a fence-transformer scoped to mermaid
+  return createFenceTransformPlugin(/^mermaid$/, (token) => {
+    const mid = uid()
+    const img_id = `d${mid}`
+    const mm_code = token.content.trim()
 
-  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
-    const token = tokens[idx]
-    if (token && token.info.trim() === 'mermaid') {
-      const mid = uid()
-      const img_id = `d${mid}`
-      const mm_code = token.content.trim()
-      void drawDiagram(mm_code, mid, img_id)
+    void drawDiagram(mm_code, mid, img_id)
 
-      return `<div id="${img_id}" class="mermaid">${mm_code}</div>`
-    }
-    return defaultRenderer(tokens, idx, options, env, self)
-  }
+    return `<div id="${img_id}" class="mermaid">${mm_code}</div>`
+  })
 }
 
 export const generateIframeSrc = (renderedHtml: string, cssUrl: string) =>
