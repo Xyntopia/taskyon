@@ -157,6 +157,23 @@ $primary: var(--q-primary-rgb)
       height: auto
       width: auto
 
+  .container > div
+    position: relative
+    border-radius: 4px
+    padding: 1.2em
+    background-color: rgba($secondary, 0.2)
+
+    &::before
+      content: attr(class)
+      position: absolute
+      top: 0
+      left: 0
+      background: transparent
+      color: rgb($secondary, )
+      font-weight: bold
+      font-size: 0.75rem
+      padding: 0 0.5em
+
 .body--light .tyMarkdown
   blockquote
     background: rgba(black, 0.1)

@@ -69,24 +69,13 @@ export const containsHtmlTags = (markdown: string) => {
   return tagPattern.test(markdown)
 }
 
-export interface WrapPluginFactoryOptions {
-  /** For code fences: one language or list of langs to match */
-  codeLang?: string | string[]
-  /** Your HTML wrapper for matching code blocks */
-  wrapCodeBlock?: (token: Token, lang: string, content: string) => string
-
-  /** For images: regex on src or alt to match */
-  imageMatcher?: RegExp
-  /** Your HTML wrapper for matching images */
-  wrapImage?: (token: Token, rendered: string) => string
-}
-
 /**
- * Returns a markdown-it plugin that only wraps matching code fences/images.
+ * Returns a markdown-it plugin that transforms matching code fences.
  */
-export function createWrapPlugin(
+export function createFenceTransformPlugin(
   langMatcher: RegExp, // regex or string to match
-  htmlWrapper: (token: Token, lang: string, content: string) => string,
+  // transform the content into something else..
+  transformer: (token: Token, lang: string, content: string) => string,
 ) {
   return function wrapPlugin(md: MarkdownIt) {
     const defaultFence = md.renderer.rules.fence!
@@ -95,7 +84,7 @@ export function createWrapPlugin(
       const info = token?.info.trim().split(/\s+/)[0]
       const content = defaultFence(tokens, idx, options, env, self)
       if (info && langMatcher.test(info)) {
-        return htmlWrapper(token, info, content)
+        return transformer(token, info, content)
       }
       return content
     }
@@ -122,7 +111,7 @@ export function createMultiButtonPlugin(
   })
 
   // 2) return a wrap-plugin that injects buttons which dispatch those events
-  return createWrapPlugin(langMatcher, (_token: Token, lang, content) => {
+  return createFenceTransformPlugin(langMatcher, (_token: Token, lang, content) => {
     const uid = `code-${Math.random().toString(36).slice(2)}`
     // inject that ID into the <pre> tag
     const contentWithId = content.replace('<pre', `<pre id="${uid}"`)

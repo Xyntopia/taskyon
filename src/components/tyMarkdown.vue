@@ -199,7 +199,9 @@ const md2Html = (src: string) => {
     render: function (tokens: Token[], idx: number) {
       const token = tokens[idx]
       if (!token) return
-      return token.nesting === 1 ? `<div class="${token.info.trim()} container">` : '</div>'
+      return token.nesting === 1
+        ? `<div class="container"><div class="${token.info.trim()}">`
+        : '</div></div>'
     },
   })
   const renderedHtml = md.render(src)
