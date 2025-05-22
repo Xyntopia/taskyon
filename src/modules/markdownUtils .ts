@@ -101,16 +101,29 @@ export function createMultiButtonPlugin(
     callback: (code: string, lang: string) => void
   }[],
 ) {
-  // 1) wire up your handlers to listen for events named === label
-  buttons.forEach((b) => {
-    document.addEventListener(b.label, (ev: Event) => {
+  // Store event listeners for cleanup
+  const listeners = buttons.map((b) => ({
+    label: b.label,
+    handler: (ev: Event) => {
       const ce = ev as CustomEvent<{ code: string; lang: string }>
       b.callback(ce.detail.code, ce.detail.lang)
-    })
+    },
+  }))
+
+  // 1) wire up your handlers to listen for events named === label
+  listeners.forEach(({ label, handler }) => {
+    document.addEventListener(label, handler)
   })
 
-  // 2) return a wrap-plugin that injects buttons which dispatch those events
-  return createFenceTransformPlugin(langMatcher, (_token: Token, lang, content) => {
+  // 2) return cleanup function along with the plugin
+  const cleanup = () => {
+    listeners.forEach(({ label, handler }) => {
+      document.removeEventListener(label, handler)
+    })
+  }
+
+  // 3) return a wrap-plugin that injects buttons which dispatch those events
+  const plugin = createFenceTransformPlugin(langMatcher, (_token: Token, lang, content) => {
     const uid = `code-${Math.random().toString(36).slice(2)}`
     // inject that ID into the <pre> tag
     const contentWithId = content.replace('<pre', `<pre id="${uid}"`)
@@ -144,26 +157,12 @@ export function createMultiButtonPlugin(
       </div>
     `
   })
-}
 
-export const codeButtons = createMultiButtonPlugin(/.*/, [
-  {
-    label: 'Copy',
-    languages: /.*/,
-    callback: (code, lang) => {
-      console.log(`copy ${lang}:`, code)
-      void navigator.clipboard.writeText(code)
-    },
-  },
-  {
-    label: 'Run Code',
-    languages: /^(js|ts)$/,
-    callback: (code, lang) => {
-      // your runner here…
-      console.log(`Running ${lang}:`, code)
-    },
-  },
-])
+  return {
+    plugin,
+    cleanup,
+  }
+}
 
 /**
  * A plugin that transforms ```mermaid``` fences into live-rendered SVGs.

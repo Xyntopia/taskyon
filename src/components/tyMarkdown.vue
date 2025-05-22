@@ -39,10 +39,10 @@ import { computed, onMounted } from 'vue'
 import {
   containsHtmlTags,
   createMermaidRenderer,
+  createMultiButtonPlugin,
   generateIframeSrc,
   highlighter,
   initPrismTheme,
-  codeButtons,
 } from '../modules/markdownUtils '
 import { useQuasar } from 'quasar'
 import type { MermaidConfig } from 'mermaid'
@@ -150,6 +150,24 @@ watch(
 )
 
 const renderMermaid = createMermaidRenderer(mermaidSettings)
+const { plugin: codeButtons, cleanup } = createMultiButtonPlugin(/.*/, [
+  {
+    label: 'Copy',
+    languages: /.*/,
+    callback: (code, lang) => {
+      console.log(`copy ${lang}:`, code)
+      void navigator.clipboard.writeText(code)
+    },
+  },
+  {
+    label: 'Run Code',
+    languages: /^(js|ts)$/,
+    callback: (code, lang) => {
+      // your runner here…
+      console.log(`Running ${lang}:`, code)
+    },
+  },
+])
 
 const plugins = [
   emoji,
@@ -270,6 +288,7 @@ function handleMessage(event: MessageEvent) {
 
 onUnmounted(() => {
   window.removeEventListener('message', handleMessage)
+  cleanup()
 })
 
 onMounted(() => {
