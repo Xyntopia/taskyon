@@ -138,7 +138,7 @@ export function createMultiButtonPlugin(
       <div class="code-block-with-btns">
         ${contentWithId}
         <span class="langlabel">${lang}</span>
-        <div>
+        <div class="code-buttons">
           ${btnsHtml}
         </div>
       </div>
@@ -189,11 +189,12 @@ export const createMermaidRenderer = (mermaidConfig: MermaidConfig) => {
     fragment.appendChild(velement)
     document.body.appendChild(velement)
     let innerHTML: string
+
     try {
       const { svg } = await mermaid.render(`mg${selector}`, graphDefinition, velement)
       const svgBlob = new Blob([svg], { type: 'image/svg+xml' })
-      const svgUrl = URL.createObjectURL(svgBlob)
-      innerHTML = `<img src="${svgUrl}" alt="Mermaid diagram" />`
+      const imgUrl = URL.createObjectURL(svgBlob)
+      innerHTML = `<img src="${imgUrl}" alt="Mermaid diagram" />`
     } catch (err) {
       console.log('error rendering mermaid!!', err)
       innerHTML = `${code}\n<div>${JSON.stringify(err)}</div>`
@@ -202,7 +203,9 @@ export const createMermaidRenderer = (mermaidConfig: MermaidConfig) => {
     }
 
     const element = document.querySelector(`#${img_id}`)
-    if (element) element.innerHTML = innerHTML
+    if (element) {
+      element.innerHTML = innerHTML
+    }
 
     // Create a save as button
     // TODO: right now, the "svg"  includes the iframe with the svg...
@@ -217,14 +220,15 @@ export const createMermaidRenderer = (mermaidConfig: MermaidConfig) => {
   }
 
   // 2) return a fence-transformer scoped to mermaid
-  return createFenceTransformPlugin(/^mermaid$/, (token) => {
+  return createFenceTransformPlugin(/^mermaid$/, (token, _, content) => {
     const mid = uid()
     const img_id = `d${mid}`
     const mm_code = token.content.trim()
 
     void drawDiagram(mm_code, mid, img_id)
 
-    return `<div id="${img_id}" class="mermaid">${mm_code}</div>`
+    return `<div id="${img_id}" class="mermaid">${mm_code}</div>
+<div style="display: none">${content}</div>`
   })
 }
 

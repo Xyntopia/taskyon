@@ -66,12 +66,10 @@ initPrismTheme($q.dark.isActive)
 
 const {
   cssUrl,
-  noMermaid = false,
   src,
   useIframe = false,
 } = defineProps<{
   src?: string
-  noMermaid?: boolean
   useIframe?: boolean
   cssUrl?: string // optional external CSS URL for iframe content
 }>()
@@ -153,13 +151,18 @@ watch(
 
 const renderMermaid = createMermaidRenderer(mermaidSettings)
 
-const plugins = computed(() => {
-  const defaultPlugins = [emoji, sub, sup, ins, mark, footnote, deflist, mathjax3, codeButtons]
-  if (noMermaid) {
-    return [...defaultPlugins]
-  }
-  return [...defaultPlugins, renderMermaid]
-})
+const plugins = [
+  emoji,
+  sub,
+  sup,
+  ins,
+  mark,
+  footnote,
+  deflist,
+  mathjax3,
+  renderMermaid,
+  codeButtons,
+]
 
 const md2Html = (src: string) => {
   // for options check this link:
@@ -188,7 +191,7 @@ const md2Html = (src: string) => {
     // If result starts with <pre... internal wrapper is skipped.
     highlight: highlighter,
   })
-  plugins.value.forEach((plugin) => {
+  plugins.forEach((plugin) => {
     md.use(plugin)
   })
   md.use(abbr)
