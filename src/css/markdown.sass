@@ -1,0 +1,98 @@
+$secondary: var(--q-secondary)
+$primary: var(--q-primary)
+
+/* under your .tyMarkdown (or .q-markdown) scope… */
+.tyMarkdown
+  // Let font and color inherit naturally
+  line-height: 1.6
+
+  h1, h2, h3, h4, h5, h6
+    font-weight: 600
+    margin: 1.5em 0 0.5em
+    line-height: 1.25
+
+  h1
+    font-size: 2em
+  h2
+    font-size: 1.75em
+  h3
+    font-size: 1.5em
+  h4
+    font-size: 1.25em
+  h5
+    font-size: 1.125em
+  h6
+    font-size: 1em
+    opacity: 0.8
+
+  p
+    margin: 0.75em 0
+
+  a
+    color: $primary
+    text-decoration: underline
+    &:hover
+      text-decoration: none
+      color: color-mix(in srgb, black, rgb(var(--q-secondary-rgb)) 90%) 20%,
+
+  blockquote
+    border-left: 4px solid $secondary
+    margin: 1em 0
+    padding: 0.5em 1em
+    opacity: 0.85
+    font-style: italic
+
+  pre
+    padding: 1em
+    border-radius: 4px
+    overflow: auto
+    font-size: 0.9rem
+
+  code
+    font-family: inherit
+    padding: 0.2em 0.4em
+    border-radius: 3px
+    font-size: 0.95em
+
+  pre code
+    background: none
+    padding: 0
+    font-size: 0.95rem
+
+  img
+    max-width: 100%
+    height: auto
+    display: block
+    margin: 1rem auto
+    border-radius: 4px
+
+  hr
+    border: none
+    border-top: 1px solid rgba($secondary, 0.3)
+    margin: 2rem 0
+
+  ul, ol
+    padding-left: 1.5em
+    margin: 1em 0
+
+  li
+    margin: 0.25em 0
+
+  table
+    border-collapse: collapse
+    width: 100%
+    margin: 1rem 0
+    overflow-x: auto
+
+    th, td
+      border: 1px solid rgba($secondary, 0.2)
+      padding: 0.5rem
+
+    thead
+      background: rgba($primary, 0.05)
+      th
+        font-weight: bold
+
+    tbody
+      tr:nth-child(even)
+        background: rgba($secondary, 0.05)
