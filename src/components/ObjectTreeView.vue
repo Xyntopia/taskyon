@@ -16,7 +16,7 @@
       <FieldView :item="prop.node" />
     </template>
     <template #body-unknown="prop">
-      <FieldView :item="prop.node">
+      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
         <info-dialog
           label="This field can’t be changed right now."
           flat
@@ -28,7 +28,7 @@
       </FieldView>
     </template>
     <template #body-text="prop">
-      <FieldView :item="prop.node">
+      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
         <q-input
           :readonly="readOnly"
           class="col"
@@ -43,7 +43,7 @@
       </FieldView>
     </template>
     <template #body-list="prop">
-      <FieldView :item="prop.node">
+      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
         <json-input
           :readonly="readOnly"
           class="col"
@@ -57,7 +57,7 @@
       </FieldView>
     </template>
     <template #body-string="prop">
-      <FieldView :item="prop.node">
+      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
         <q-input
           :readonly="readOnly"
           class="col"
@@ -74,7 +74,7 @@
       </FieldView>
     </template>
     <template #body-boolean="prop">
-      <FieldView :item="prop.node">
+      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
         <q-toggle
           :disable="readOnly"
           dense
@@ -90,7 +90,7 @@
       </FieldView>
     </template>
     <template #body-number="prop">
-      <FieldView :item="prop.node">
+      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
         <q-input
           :readonly="readOnly"
           class="col"
@@ -106,7 +106,7 @@
       </FieldView>
     </template>
     <template #body-enum="prop">
-      <FieldView :item="prop.node">
+      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
         <q-select
           :disable="readOnly"
           filled
@@ -119,7 +119,7 @@
       </FieldView>
     </template>
     <template #body-color="prop">
-      <FieldView :item="prop.node">
+      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
         <q-input
           filled
           dense
@@ -234,6 +234,7 @@ const transformToTreeNodes = (
     if (subschema?.icon) base.icon = subschema.icon
     if (subschema?.offIcon) base.offIcon = subschema.offIcon
     if (subschema?.onIcon) base.onIcon = subschema.onIcon
+    if (subschema?.default) base.default = subschema.default
 
     const isUndef = value === undefined || value === null
     const runtimeType = subschema?.enum

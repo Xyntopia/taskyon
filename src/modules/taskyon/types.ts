@@ -671,11 +671,15 @@ const appConfiguration = z.object({
   }),
   primaryColor: HexColor.meta({
     description: 'Primary color for custom taskyon theming. This should be a dark color',
-  }).optional(),
+  })
+    .default('#2A3548')
+    .optional(),
   secondaryColor: HexColor.meta({
     description:
       'Secondary color for custom taskyon theming. This color should be a bright color and contrast the primary color.',
-  }).optional(),
+  })
+    .default('#F78F3B')
+    .optional(),
 })
 export type appConfiguration = z.infer<typeof appConfiguration>
 
