@@ -25,6 +25,7 @@ import darkHref from 'prismjs/themes/prism-tomorrow.css?url'
 
 import { uid } from 'quasar'
 import type Renderer from 'markdown-it/lib/renderer'
+import type { Token } from 'markdown-it'
 
 export const highlighter = (code: string, lang: string) => {
   // non-null assertion or coalesce to JS grammar
@@ -68,47 +69,61 @@ export const containsHtmlTags = (markdown: string) => {
   return tagPattern.test(markdown)
 }
 
-export function addCopyButtons(md: MarkdownIt) {
-  const defaultFenceRenderer =
-    md.renderer.rules.fence ||
-    ((tokens, idx, options, env, self) => {
-      return self.renderToken(tokens, idx, options)
-    })
+export interface WrapPluginFactoryOptions {
+  /** For code fences: one language or list of langs to match */
+  codeLang?: string | string[]
+  /** Your HTML wrapper for matching code blocks */
+  wrapCodeBlock?: (token: Token, lang: string, content: string) => string
 
-  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
-    // console.log('render code fence blocks...');
-    // Original rendered HTML of the code block
-    const originalRenderedHtml = defaultFenceRenderer(tokens, idx, options, env, self)
+  /** For images: regex on src or alt to match */
+  imageMatcher?: RegExp
+  /** Your HTML wrapper for matching images */
+  wrapImage?: (token: Token, rendered: string) => string
+}
 
-    // Custom HTML for the button
-    const customHtml = `
-        <div class="code-block-with-overlay q-ma-xs">
-          ${originalRenderedHtml}
-          <button class="copy-button q-btn q-btn-item non-selectable transparent q-btn--flat q-btn--rectangle
-            q-btn--actionable q-focusable q-hoverable q-btn--dense copy-button print-hide">
-            <span class="q-focus-helper"></span>
-            <span class="q-btn__content text-center col items-center q-anchor--skip justify-center row">
-              <i class="q-icon" aria-hidden="true" role="img">
-                <svg viewBox="0 0 24 24">
-                  <path d="M0 0h24v24H0z" style="fill: none;">
-                  </path>
-                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0
-                  1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z">
-                  </path>
-                </svg>
-              </i>
-            </span>
-          </button>
-        </div>
-      `
-
-    //const customHtml = originalRenderedHtml;
-
-    //const customHtml = tokens[idx].content;
-
-    return customHtml
+/**
+ * Returns a markdown-it plugin that only wraps matching code fences/images.
+ */
+export function createWrapPlugin(
+  langMatcher: RegExp, // regex or string to match
+  htmlWrapper: (token: Token, lang: string, content: string) => string,
+) {
+  return function wrapPlugin(md: MarkdownIt) {
+    const defaultFence = md.renderer.rules.fence!
+    md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+      const token = tokens[idx]
+      const info = token?.info.trim().split(/\s+/)[0]
+      const content = defaultFence(tokens, idx, options, env, self)
+      if (info && langMatcher.test(info)) {
+        return htmlWrapper(token, info, content)
+      }
+      return content
+    }
   }
 }
+
+export const copyButton = createWrapPlugin(/.*/, (token: Token, lang: string, content: string) => {
+  // give each block a unique ID so the button knows what to copy
+  const uid = `code-${Math.random().toString(36).slice(2)}`
+
+  // inject that ID into the <pre> tag
+  const contentWithId = content.replace('<pre', `<pre id="${uid}"`)
+
+  return `
+    <div class="code-block-with-copy" style="position: relative;">
+      ${contentWithId}
+      <button
+        class="copy-btn"
+        style="position: absolute; top: 8px; right: 8px;"
+        onclick="
+          navigator.clipboard.writeText(
+            document.getElementById('${uid}').innerText
+          )
+        "
+      >Copy</button>
+    </div>
+  `
+})
 
 export const createMermaidRenderer = (mermaidSettings: MermaidConfig) => (md: MarkdownIt) => {
   /*

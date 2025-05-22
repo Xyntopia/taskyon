@@ -42,6 +42,7 @@ import {
   generateIframeSrc,
   highlighter,
   initPrismTheme,
+  copyButton,
 } from '../modules/markdownUtils '
 import { useQuasar } from 'quasar'
 import type { MermaidConfig } from 'mermaid'
@@ -153,7 +154,7 @@ watch(
 const renderMermaid = createMermaidRenderer(mermaidSettings)
 
 const plugins = computed(() => {
-  const defaultPlugins = [emoji, sub, sup, ins, mark, footnote, deflist, mathjax3]
+  const defaultPlugins = [emoji, sub, sup, ins, mark, footnote, deflist, mathjax3, copyButton]
   if (noMermaid) {
     return [...defaultPlugins]
   }
