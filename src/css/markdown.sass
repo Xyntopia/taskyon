@@ -25,26 +25,28 @@ $primary: var(--q-primary-rgb)
       right: 8px
       display: flex
       align-items: center
+      background: inherit
+      gap: 4px
 
-      button
-        text-transform: uppercase
-        top: 0.5rem
-        right: 0.5rem
-        padding: 0.25rem 0.5rem
-        font-size: 0.875rem
-        line-height: 1
-        background: rgba($secondary, 0.2)
-        border: none
-        border-radius: 0.25rem
-        cursor: pointer
-        transition: background 0.2s ease
-        z-index: 10
+  button
+    text-transform: uppercase
+    top: 0.5rem
+    right: 0.5rem
+    padding: 0.25rem 0.5rem
+    font-size: 0.875rem
+    line-height: 1
+    background: rgba($secondary, 0.2)
+    border: none
+    border-radius: 0.25rem
+    cursor: pointer
+    transition: background 0.2s ease
+    z-index: 10
 
-        &:hover
-          background: rgba($secondary, 0.05)
+    &:hover
+      background: rgba($secondary, 0.05)
 
-          &:active
-            transform: scale(0.95)
+      &:active
+        transform: scale(0.95)
 
   h1, h2, h3, h4, h5, h6
     font-weight: 600
@@ -197,7 +199,9 @@ $primary: var(--q-primary-rgb)
     color: rgb($secondary)
 
   table
-    th, td
+    th
+      border: 1px solid black
+    td
       border: 1px solid rgba($secondary, 0.1)
     thead
       background: rgba($secondary, 0.5)
