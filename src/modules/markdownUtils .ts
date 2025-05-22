@@ -133,7 +133,6 @@ export function createMultiButtonPlugin(
         return `
           <button
             class="btn-${b.label.replace(/\s+/g, '-').toLowerCase()}"
-            style="margin-left:4px"
             onclick="
               const code = document.getElementById('${uid}').innerText;
               document.dispatchEvent(
@@ -148,10 +147,10 @@ export function createMultiButtonPlugin(
       .join('')
 
     return `
-      <div class="code-block-with-btns" style="position:relative">
+      <div class="code-block-with-btns">
         ${contentWithId}
-        <div style="position:absolute; top:8px; right:8px; display:flex; align-items:center">
-          <span style="font-size:.75em; opacity:.6">${lang}</span>
+        <span class="langlabel">${lang}</span>
+        <div>
           ${btnsHtml}
         </div>
       </div>
