@@ -5,18 +5,28 @@ $primary: var(--q-primary-rgb)
 .tyMarkdown
   // Let font and color inherit naturally
   line-height: 1.6
+  width: 100%
+  overflow: auto
+  box-sizing: border-box
+  max-width: 100% !important
+  max-height: 100% !important
+
+  pre
+    padding: 1em
+    border-radius: 4px
+    overflow: auto
+    font-size: 0.9rem
+
+  pre
+    code
+      width: 100% // fill the wrapper’s width
+      box-sizing: border-box
+      white-space: pre-wrap // or `pre` if you want scroll instead of wrap */
+      overflow-wrap: anywhere
+      overflow-x: auto // optional: scroll when it still overflows */
 
   .code-block-with-btns
     position: relative
-
-    pre
-      code
-        overflow: auto
-        min-width: 0
-        //max-width: 80%
-        white-space: pre
-        white-space: pre-wrap
-        word-wrap: break-word
 
     .langlabel
       font-size: .75em
@@ -102,12 +112,6 @@ $primary: var(--q-primary-rgb)
     padding: 0.5em 1em
     opacity: 0.85
     font-style: italic
-
-  pre
-    padding: 1em
-    border-radius: 4px
-    overflow: auto
-    font-size: 0.9rem
 
   img
     max-width: 100%
