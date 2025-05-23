@@ -91,11 +91,14 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     .message-buttons
       background: rgba($secondary,0.5)
       position: absolute
-      bottom: -2px // To move up by 6px
-      left: 20px // To move left by 6px
+      bottom: -2px
+      left: -2px
       opacity: 0
       transition: opacity 0.3s
-      //color: rgb($secondary)
+      display: flex
+      flex-wrap: nowrap
+      overflow-x: auto // In case buttons overflow, allow horizontal scrolling
+      white-space: nowrap
 
     &:hover
       .message-buttons
