@@ -1,4 +1,27 @@
-import type MarkdownIt from 'markdown-it'
+import MarkdownIt from 'markdown-it'
+
+//import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
+//import katex from  '@mdit/plugin-katex-slim'
+import mathjax3 from 'markdown-it-mathjax3'
+//@ts-expect-error no types for this package
+import sub from 'markdown-it-sub'
+//@ts-expect-error no types for this package
+import sup from 'markdown-it-sup'
+//@ts-expect-error no types for this package
+import ins from 'markdown-it-ins'
+//@ts-expect-error no types for this package
+import mark from 'markdown-it-mark'
+//@ts-expect-error no types for this package
+import footnote from 'markdown-it-footnote'
+//@ts-expect-error no types for this package
+import deflist from 'markdown-it-deflist'
+//@ts-expect-error no types for this package
+import abbr from 'markdown-it-abbr'
+//@ts-expect-error no types for this package
+import container from 'markdown-it-container'
+//@ts-expect-error no types for this package
+import { full as emoji } from 'markdown-it-emoji'
+
 //import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
 //import katex from  '@mdit/plugin-katex-slim'
 import type { MermaidConfig } from 'mermaid'
@@ -229,6 +252,96 @@ export const createMermaidRenderer = (mermaidConfig: MermaidConfig) => {
     return `<div id="${img_id}" class="mermaid">${mm_code}</div>
 <div style="display: none">${content}</div>`
   })
+}
+
+const createMermaidSettings = (darkMode: boolean): MermaidConfig => ({
+  startOnLoad: false,
+  securityLevel: 'loose',
+  theme: darkMode ? 'dark' : 'default',
+  flowchart: {
+    htmlLabels: false,
+    useMaxWidth: true,
+  },
+})
+const { plugin: codeButtons } = createMultiButtonPlugin(/.*/, [
+  {
+    label: 'Copy',
+    languages: /.*/,
+    callback: (code, lang) => {
+      console.log(`copy ${lang}:`, code)
+      void navigator.clipboard.writeText(code)
+    },
+  },
+  {
+    label: 'Run Code',
+    languages: /^(js|ts)$/,
+    callback: (code, lang) => {
+      // your runner here…
+      console.log(`Running ${lang}:`, code)
+    },
+  },
+])
+
+// TODO: make this more efficient...
+export const md2Html = (src: string, darkMode = false) => {
+  // for options check this link:
+  // https://github.com/markdown-it/markdown-it?tab=readme-ov-file#simple
+  const md = new MarkdownIt({
+    // Convert '\n' in paragraphs into <br>
+    breaks: false,
+    // CSS language prefix for fenced blocks. Can be
+    // useful for external highlighters.
+    langPrefix: 'language-',
+    //allow html
+    html: true,
+    // Autoconvert URL-like text to links
+    linkify: true,
+    // Enable some language-neutral replacement + quotes beautification
+    // For the full list of replacements, see https://github.com/markdown-it/markdown-it/blob/master/lib/rules_core/replacements.mjs
+    typographer: true,
+    // Double + single quotes replacement pairs, when typographer enabled,
+    // and smartquotes on. Could be either a String or an Array.
+    //
+    // For example, you can use '«»„“' for Russian, '„“‚‘' for German,
+    // and ['«\xA0', '\xA0»', '‹\xA0', '\xA0›'] for French (including nbsp).
+    quotes: '“”‘’',
+    // Highlighter function. Should return escaped HTML,
+    // or '' if the source string is not changed and should be escaped externally.
+    // If result starts with <pre... internal wrapper is skipped.
+    highlight: highlighter,
+  })
+  const renderMermaid = createMermaidRenderer(createMermaidSettings(darkMode))
+  const plugins = [
+    emoji,
+    sub,
+    sup,
+    ins,
+    mark,
+    footnote,
+    deflist,
+    mathjax3,
+    renderMermaid,
+    codeButtons,
+  ]
+
+  plugins.forEach((plugin) => {
+    md.use(plugin)
+  })
+  md.use(abbr)
+  md.use(container, 'dynamic', {
+    validate: function () {
+      return true
+    },
+    render: function (tokens: Token[], idx: number) {
+      const token = tokens[idx]
+      if (!token) return
+      return token.nesting === 1
+        ? `<div class="container"><div class="${token.info.trim()}">`
+        : '</div></div>'
+    },
+  })
+  const renderedHtml = md.render(src)
+  return renderedHtml
 }
 
 export const generateIframeSrc = (renderedHtml: string, cssUrl: string) =>

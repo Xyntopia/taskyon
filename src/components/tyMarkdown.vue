@@ -13,44 +13,16 @@
 </template>
 
 <script setup lang="ts">
-//import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
-//import katex from  '@mdit/plugin-katex-slim'
-import mathjax3 from 'markdown-it-mathjax3'
-//@ts-expect-error no types for this package
-import sub from 'markdown-it-sub'
-//@ts-expect-error no types for this package
-import sup from 'markdown-it-sup'
-//@ts-expect-error no types for this package
-import ins from 'markdown-it-ins'
-//@ts-expect-error no types for this package
-import mark from 'markdown-it-mark'
-//@ts-expect-error no types for this package
-import footnote from 'markdown-it-footnote'
-//@ts-expect-error no types for this package
-import deflist from 'markdown-it-deflist'
-//@ts-expect-error no types for this package
-import abbr from 'markdown-it-abbr'
-//@ts-expect-error no types for this package
-import container from 'markdown-it-container'
-//@ts-expect-error no types for this package
-import { full as emoji } from 'markdown-it-emoji'
-import mermaid from 'mermaid'
 import { computed, onMounted } from 'vue'
 import {
   containsHtmlTags,
-  createMermaidRenderer,
-  createMultiButtonPlugin,
   generateIframeSrc,
-  highlighter,
   initPrismTheme,
+  md2Html,
 } from '../modules/markdownUtils '
 import { useQuasar } from 'quasar'
-import type { MermaidConfig } from 'mermaid'
 import { ref } from 'vue'
-import MarkdownIt from 'markdown-it'
 import { onUnmounted } from 'vue'
-import { watch } from 'vue'
-import type Token from 'markdown-it/lib/token'
 
 // https://mdit-plugins.github.io/mathjax.html#usage
 //const mathjaxInstance = createMathjaxInstance();
@@ -129,108 +101,8 @@ const {
   }
 }*/
 
-const mermaidSettings: MermaidConfig = {
-  startOnLoad: false, // if false: prevent mermaid.run  to start automatically after load...
-  securityLevel: 'loose',
-  theme: $q.dark.isActive ? 'dark' : 'default',
-  flowchart: {
-    htmlLabels: false,
-    useMaxWidth: true,
-  },
-}
-
-watch(
-  () => $q.dark.isActive,
-  (isDark: boolean) => {
-    mermaidSettings.theme = isDark ? 'dark' : 'default'
-    mermaid.initialize(mermaidSettings)
-    // Optionally, if you need to re-run Mermaid on existing diagrams:
-    // void mermaid.run();
-  },
-)
-
-const renderMermaid = createMermaidRenderer(mermaidSettings)
-const { plugin: codeButtons, cleanup } = createMultiButtonPlugin(/.*/, [
-  {
-    label: 'Copy',
-    languages: /.*/,
-    callback: (code, lang) => {
-      console.log(`copy ${lang}:`, code)
-      void navigator.clipboard.writeText(code)
-    },
-  },
-  {
-    label: 'Run Code',
-    languages: /^(js|ts)$/,
-    callback: (code, lang) => {
-      // your runner here…
-      console.log(`Running ${lang}:`, code)
-    },
-  },
-])
-
-const plugins = [
-  emoji,
-  sub,
-  sup,
-  ins,
-  mark,
-  footnote,
-  deflist,
-  mathjax3,
-  renderMermaid,
-  codeButtons,
-]
-
-const md2Html = (src: string) => {
-  // for options check this link:
-  // https://github.com/markdown-it/markdown-it?tab=readme-ov-file#simple
-  const md = new MarkdownIt({
-    // Convert '\n' in paragraphs into <br>
-    breaks: false,
-    // CSS language prefix for fenced blocks. Can be
-    // useful for external highlighters.
-    langPrefix: 'language-',
-    //allow html
-    html: true,
-    // Autoconvert URL-like text to links
-    linkify: true,
-    // Enable some language-neutral replacement + quotes beautification
-    // For the full list of replacements, see https://github.com/markdown-it/markdown-it/blob/master/lib/rules_core/replacements.mjs
-    typographer: true,
-    // Double + single quotes replacement pairs, when typographer enabled,
-    // and smartquotes on. Could be either a String or an Array.
-    //
-    // For example, you can use '«»„“' for Russian, '„“‚‘' for German,
-    // and ['«\xA0', '\xA0»', '‹\xA0', '\xA0›'] for French (including nbsp).
-    quotes: '“”‘’',
-    // Highlighter function. Should return escaped HTML,
-    // or '' if the source string is not changed and should be escaped externally.
-    // If result starts with <pre... internal wrapper is skipped.
-    highlight: highlighter,
-  })
-  plugins.forEach((plugin) => {
-    md.use(plugin)
-  })
-  md.use(abbr)
-  md.use(container, 'dynamic', {
-    validate: function () {
-      return true
-    },
-    render: function (tokens: Token[], idx: number) {
-      const token = tokens[idx]
-      if (!token) return
-      return token.nesting === 1
-        ? `<div class="container"><div class="${token.info.trim()}">`
-        : '</div></div>'
-    },
-  })
-  const renderedHtml = md.render(src)
-  return renderedHtml
-}
-
 const renderedHtml = computed(() => {
-  return md2Html(src ?? '')
+  return md2Html(src ?? '', $q.dark.isActive)
 })
 
 const iframeHtml = computed(() => {
@@ -288,28 +160,10 @@ function handleMessage(event: MessageEvent) {
 
 onUnmounted(() => {
   window.removeEventListener('message', handleMessage)
-  cleanup()
 })
 
 onMounted(() => {
   window.addEventListener('message', handleMessage)
-
-  // if we are using the plugin, initialize mermaid as well :)
-  mermaid.initialize(mermaidSettings)
-  const parentElement = document.getElementById('unique-id')
-
-  if (parentElement) {
-    //let mermaidElements = parentElement.querySelectorAll('.mermaid');
-    /*mermaidElements.forEach(element => {
-          // Do something with each .mermaid element
-          console.log(element);
-      });*/
-    /*void mermaid.run({
-      nodes: [...mermaidElements] as HTMLElement[],
-      postRenderCallback: (id: string) => console.log('postRenderHook', id),
-      //suppressErrors: true,
-    });*/
-  }
 })
 </script>
 
