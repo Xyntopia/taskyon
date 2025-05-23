@@ -61,6 +61,13 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     padding-top: 20px
     max-width: 800px
 
+    // we try to do all of the following in order to really make sure
+    // that the task containers are not too wide, and that they are
+    // centered in the screen
+    width: 100%
+    box-sizing: border-box
+    min-width: 0
+
     // Specific style for tasks with the 'user' role
     .task-container
       &.user

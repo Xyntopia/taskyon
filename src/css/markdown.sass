@@ -1,6 +1,36 @@
 $secondary: var(--q-secondary-rgb)
 $primary: var(--q-primary-rgb)
 
+// BEGIN we do all of this to really make sure, that 
+// pasted html inside our markdown editor is not too wide
+.tyMarkdown *
+  max-width: 100% !important
+  max-height: 100% !important
+  box-sizing: border-box
+
+/* 3) Clamp every descendant to that 100%-of-ancestor width */
+.tyMarkdown *,
+.tyMarkdown *::before,
+.tyMarkdown *::after
+  max-width: 100% !important
+  box-sizing: border-box
+  overflow-wrap: anywhere
+  word-break: break-word
+
+/* 4) Specific rules for any <pre> you might paste */
+.tyMarkdown pre
+  /* fill the container and never exceed it */
+  width: 100% !important
+  max-width: 100% !important
+  box-sizing: border-box
+
+  /* pick your behavior: */
+  white-space: pre-wrap; /* wrap long lines */
+  /* white-space: pre;       /* preserve lines + scroll horizontally */
+  overflow-x: auto; /* scroll if wrapping is off */
+
+// END html width restrictions...
+
 /* under your .tyMarkdown (or .q-markdown) scope… */
 .tyMarkdown
   // Let font and color inherit naturally
@@ -8,8 +38,7 @@ $primary: var(--q-primary-rgb)
   width: 100%
   overflow: auto
   box-sizing: border-box
-  max-width: 100% !important
-  max-height: 100% !important
+  min-width: 0
 
   pre
     padding: 1em

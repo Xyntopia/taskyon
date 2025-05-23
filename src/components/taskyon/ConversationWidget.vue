@@ -82,7 +82,6 @@
                 "
                 :class="['q-pa-xs']"
                 :show-id="!!showIds"
-                style="min-width: 300px"
               />
             </q-card>
           </div>
