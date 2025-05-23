@@ -80,10 +80,10 @@ export function createFenceTransformPlugin(
     const defaultFence = md.renderer.rules.fence!
     md.renderer.rules.fence = (tokens, idx, options, env, self) => {
       const token = tokens[idx]
-      const info = token?.info.trim().split(/\s+/)[0]
+      const info = (token?.info || '').trim().split(/\s+/)[0]
       const content = defaultFence(tokens, idx, options, env, self)
-      if (info && langMatcher.test(info)) {
-        return transformer(token, info, content)
+      if (token && langMatcher.test(info ?? '')) {
+        return transformer(token, info ?? '', content)
       }
       return content
     }
