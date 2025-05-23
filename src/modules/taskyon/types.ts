@@ -647,7 +647,7 @@ const HexColor = z
 
 type HexColor = z.infer<typeof HexColor>
 
-const appConfiguration = z.object({
+export const appConfiguration = z.object({
   appConfigurationUrl: z.string().default('/taskyon_settings.json').meta({
     description: 'URL from which to load the initial app configuration',
   }),
