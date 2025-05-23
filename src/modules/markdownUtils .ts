@@ -177,9 +177,9 @@ export function createMultiButtonPlugin(
     return `
       <div class="code-block-with-btns" id="${blockId}">
         ${contentWithId}
-        <span class="langlabel">${lang}</span>
         <div class="code-buttons print-hide">
           ${btnsHtml}
+          <span class="langlabel">${lang}</span>
         </div>
       </div>
     `
@@ -319,7 +319,7 @@ const { plugin: codeButtons } = createMultiButtonPlugin(/.*/, [
   },
   // Mermaid: Copy Source
   {
-    label: 'Copy Mermaid Source',
+    label: 'Copy Source',
     languages: /^mermaid$/,
     callback: (code) => {
       console.log('copy mermaid source:', code)
