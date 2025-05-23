@@ -48,7 +48,7 @@ import darkHref from 'prismjs/themes/prism-tomorrow.css?url'
 
 import { uid } from 'quasar'
 import type { Token } from 'markdown-it'
-import { svgToPng } from './svgUtils'
+import { svgStringToPngUint8 } from './svgUtils'
 import { copyPngToClipboard } from './utils'
 
 export const highlighter = (code: string, lang: string) => {
@@ -232,17 +232,6 @@ export const createMermaidRenderer = (mermaidConfig: MermaidConfig) => {
     if (element) {
       element.innerHTML = innerHTML
     }
-
-    // Create a save as button
-    // TODO: right now, the "svg"  includes the iframe with the svg...
-    /*const copyButton = document.createElement('button');
-      copyButton.textContent = 'Copy SVG';
-      element.appendChild(copyButton);
-
-      // Add event listener to copy button
-      copyButton.addEventListener('click', () => {
-        void navigator.clipboard.writeText(svg);
-      });*/
   }
 
   // 2) return a fence-transformer scoped to mermaid
@@ -318,7 +307,7 @@ const { plugin: codeButtons } = createMultiButtonPlugin(/.*/, [
       try {
         const response = await fetch(img.src)
         const svgString = await response.text()
-        const res = await svgToPng(svgString)
+        const res = await svgStringToPngUint8(svgString, 1024)
         if (res) {
           await copyPngToClipboard(res)
           console.log('copied png to clipboard')

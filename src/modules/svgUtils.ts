@@ -46,13 +46,9 @@ export async function svgToPng(svgString: string) {
   );*/
 
   const options: Record<string, unknown> = {
-    fitTo: {
-      mode: 'width', // If you need to change the size
-      value: 1024,
-    },
-    font: {
-      fontBuffers: [buffer], // New in 2.5.0, loading custom fonts
-    },
+    fitTo: { mode: 'width', value: 1024 },
+    fonts: [buffer],
+    defaultFontFamily: { sansSerif: 'Roboto' },
   }
 
   /*const options: Record<string, unknown> = {
@@ -75,4 +71,49 @@ export async function svgToPng(svgString: string) {
   const pngData = resvg.render()
   const pngBuffer = pngData.asPng()
   return pngBuffer
+}
+
+function getSvgSize(svg: string): { width: number; height: number } {
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
+  const svgEl = doc.documentElement
+  // try viewBox first
+  const vb = svgEl.getAttribute('viewBox')
+  if (vb) {
+    const [, , vbW, vbH] = vb.split(/\s+|,/).map(parseFloat)
+    if (vbW && vbH) {
+      return { width: vbW, height: vbH }
+    }
+  }
+  // fallback to width/height attrs (assume px or unitless)
+  const w = parseFloat(svgEl.getAttribute('width') || '0')
+  const h = parseFloat(svgEl.getAttribute('height') || '0')
+  return { width: w, height: h }
+}
+
+export async function svgStringToPngUint8(svg: string, targetWidth: number): Promise<Uint8Array> {
+  // 1. figure out intrinsic size
+  const { width: origW, height: origH } = getSvgSize(svg)
+  const targetHeight = Math.round(origH * (targetWidth / origW))
+
+  // 2. render into canvas
+  const svgBlob = new Blob([svg], { type: 'image/svg+xml' })
+  const url = URL.createObjectURL(svgBlob)
+  const img = new Image()
+  img.src = url
+  await new Promise<void>((res, rej) => {
+    img.onload = () => res()
+    img.onerror = () => rej(new Error('SVG load failed'))
+  })
+  URL.revokeObjectURL(url)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = targetWidth
+  canvas.height = targetHeight
+  const ctx = canvas.getContext('2d')!
+  ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
+
+  // 3. export to Blob → ArrayBuffer → Uint8Array
+  const blob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/png'))
+  const ab = await blob.arrayBuffer()
+  return new Uint8Array(ab)
 }
