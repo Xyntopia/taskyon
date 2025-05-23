@@ -46,61 +46,6 @@ const {
   cssUrl?: string // optional external CSS URL for iframe content
 }>()
 
-/*function handleMarkdownClick(event: MouseEvent) {
-  const target = (event.target as HTMLElement).closest('.copy-button')
-  if (target) {
-    // Find the closest .code-block-with-overlay and then find the <code> element inside it
-    const codeBlockContainer = target.closest('.code-block-with-overlay')
-    if (codeBlockContainer) {
-      const imgElement = codeBlockContainer.querySelector('.mermaid img')
-      if (imgElement && imgElement instanceof HTMLImageElement) {
-        const svgUrl = imgElement.src
-        let getSvgPromise: Promise<string>
-        const parts = svgUrl.split(',')
-        if (parts.length < 2) {
-          getSvgPromise = Promise.reject(new Error('Invalid data URI'))
-        } else {
-          const data = parts[1]!
-          if (svgUrl.includes(';base64')) {
-            getSvgPromise = Promise.resolve(atob(data))
-          } else {
-            getSvgPromise = Promise.resolve(decodeURIComponent(data))
-          }
-        }
-        getSvgPromise
-          .then((svgString) => {
-            void svgToPng(svgString).then((res) => {
-              if (res) {
-                void copyPngToClipboard(res)
-                $q.notify({
-                  message: 'Copied image to clipboard as png!',
-                  type: 'info',
-                  position: 'right',
-                  timeout: 500,
-                  html: false,
-                })
-              }
-            })
-          })
-          .catch((err) => console.error('Error processing SVG: ', err))
-      }
-      const codeElement = codeBlockContainer.querySelector('code')
-      if (codeElement) {
-        const codeText = codeElement.textContent || '' // Get the text content of the <code> element
-        copyToClipboard(codeText)
-        $q.notify({
-          message: 'Copied text to clipboard!',
-          type: 'info',
-          position: 'right',
-          timeout: 500,
-          html: false,
-        })
-        return
-      }
-    }
-  }
-}*/
-
 const renderedHtml = computed(() => {
   return md2Html(src ?? '', $q.dark.isActive)
 })

@@ -48,6 +48,8 @@ import darkHref from 'prismjs/themes/prism-tomorrow.css?url'
 
 import { uid } from 'quasar'
 import type { Token } from 'markdown-it'
+import { svgToPng } from './svgUtils'
+import { copyPngToClipboard } from './utils'
 
 export const highlighter = (code: string, lang: string) => {
   // non-null assertion or coalesce to JS grammar
@@ -121,15 +123,15 @@ export function createMultiButtonPlugin(
   buttons: {
     label: string // button text
     languages: RegExp // which langs to show on
-    callback: (code: string, lang: string) => void
+    callback: (code: string, lang: string, containerId: string) => void | Promise<void>
   }[],
 ) {
   // Store event listeners for cleanup
   const listeners = buttons.map((b) => ({
     label: b.label,
     handler: (ev: Event) => {
-      const ce = ev as CustomEvent<{ code: string; lang: string }>
-      b.callback(ce.detail.code, ce.detail.lang)
+      const ce = ev as CustomEvent<{ code: string; lang: string; containerId: string }>
+      void b.callback(ce.detail.code, ce.detail.lang, ce.detail.containerId)
     },
   }))
 
@@ -148,6 +150,8 @@ export function createMultiButtonPlugin(
   // 3) return a wrap-plugin that injects buttons which dispatch those events
   const plugin = createFenceTransformPlugin(langMatcher, (_token: Token, lang, content) => {
     const uid = `code-${Math.random().toString(36).slice(2)}`
+    const blockId = `block-${Math.random().toString(36).slice(2)}`
+
     // inject that ID into the <pre> tag
     const contentWithId = content.replace('<pre', `<pre id="${uid}"`)
 
@@ -161,7 +165,7 @@ export function createMultiButtonPlugin(
               const code = document.getElementById('${uid}').innerText;
               document.dispatchEvent(
                 new CustomEvent('${b.label}', {
-                  detail: { code, lang: '${lang}' }
+                  detail: { code, lang: '${lang}', containerId: '${blockId}' }
                 })
               );
             "
@@ -171,10 +175,10 @@ export function createMultiButtonPlugin(
       .join('')
 
     return `
-      <div class="code-block-with-btns">
+      <div class="code-block-with-btns" id="${blockId}">
         ${contentWithId}
         <span class="langlabel">${lang}</span>
-        <div class="code-buttons">
+        <div class="code-buttons print-hide">
           ${btnsHtml}
         </div>
       </div>
@@ -266,18 +270,71 @@ const createMermaidSettings = (darkMode: boolean): MermaidConfig => ({
 const { plugin: codeButtons } = createMultiButtonPlugin(/.*/, [
   {
     label: 'Copy',
-    languages: /.*/,
+    languages: /^(?!mermaid$).*/, // Exclude mermaid
     callback: (code, lang) => {
       console.log(`copy ${lang}:`, code)
       void navigator.clipboard.writeText(code)
     },
   },
-  {
+  // TODO: Run code for js/python
+  /*{
     label: 'Run Code',
-    languages: /^(js|ts)$/,
+    languages: /^(js)$/,
     callback: (code, lang) => {
       // your runner here…
       console.log(`Running ${lang}:`, code)
+    },
+  },*/
+  // Copy SVG
+  // TODO: enable this with some workaround
+  // e.g. https://github.com/mermaid-js/mermaid/issues/2102 but search for more
+  // we currently don't do this, because exported svg looks "funny"
+  /*{
+    label: 'Copy SVG',
+    languages: /^mermaid$/,
+    callback: (code, lang, blockId) => {
+      const block = document.getElementById(blockId)
+      if (!block) return
+      const img = block.querySelector('img')
+      if (!img) return
+      void fetch(img.src)
+        .then((res) => res.text())
+        .then((svg) => {
+          void navigator.clipboard.writeText(svg)
+        })
+    },
+  },*/
+  // Copy as PNG
+  {
+    label: 'Copy as PNG',
+    languages: /^mermaid$/,
+    callback: async (code, lang, blockId) => {
+      const block = document.getElementById(blockId)
+      if (!block) return
+
+      const img = block.querySelector('img') as HTMLImageElement
+      if (!img || !img.src.startsWith('blob:')) return
+
+      try {
+        const response = await fetch(img.src)
+        const svgString = await response.text()
+        const res = await svgToPng(svgString)
+        if (res) {
+          await copyPngToClipboard(res)
+          console.log('copied png to clipboard')
+        }
+      } catch (err) {
+        console.error('Error converting blob to PNG:', err)
+      }
+    },
+  },
+  // Mermaid: Copy Source
+  {
+    label: 'Copy Mermaid Source',
+    languages: /^mermaid$/,
+    callback: (code) => {
+      console.log('copy mermaid source:', code)
+      void navigator.clipboard.writeText(code)
     },
   },
 ])
