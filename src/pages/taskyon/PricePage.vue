@@ -40,11 +40,12 @@ selecting different models).
           <q-btn label="Download Model file as JSON" outline @click="downloadModels"></q-btn>
         </template>
         <template #top-right>
-          <q-toggle
-            v-model="pricingPerPage"
-            label="Calculate price information as pages/0.01$ (assuming 500 token/page)"
-            left-label
-            color="secondary"
+          <q-select
+            v-model="priceDisplay"
+            dense
+            :options="pricingOptions"
+            label="Price Display"
+            class="q-mr-md"
           />
         </template>
         <template #body-cell-name="props">
@@ -78,19 +79,23 @@ selecting different models).
         <template #header-cell-prompt_price="props">
           <q-th :props="props">
             <div>prompt</div>
-            {{ pricingPerPage ? 'pages/0.01$' : '$ / token' }}
+            {{ priceDisplay }}
           </q-th>
         </template>
         <template #body-cell-prompt_price="props">
           <q-td :props="props">
-            <div v-if="!pricingPerPage">
-              {{ openrouterPricing(props.value, 3) }}
+            <div v-if="priceDisplay === '$/million tokens'">
+              {{ calculatePricePerMillion(props.value) }}
+            </div>
+            <div v-else-if="priceDisplay === 'pages/0.01$'">
+              {{ calculatePricePerPage(props.value) }}
             </div>
             <div v-else>
-              {{ calculatePricePerPage(props.value) }}
+              {{ openrouterPricing(props.value, 3) }}
             </div>
             <q-tooltip :delay="500">
               exact price: {{ props.value }}$/token <br />
+              {{ calculatePricePerMillion(props.value) }} $/million tokens
               {{ calculatePricePerPage(props.value) }} pages/¢
             </q-tooltip>
           </q-td>
@@ -98,19 +103,23 @@ selecting different models).
         <template #header-cell-completion_price="props">
           <q-th :props="props">
             <div>completion</div>
-            {{ pricingPerPage ? 'pages/0.01$' : '$ / token' }}
+            {{ priceDisplay }}
           </q-th>
         </template>
         <template #body-cell-completion_price="props">
           <q-td :props="props">
-            <div v-if="!pricingPerPage">
-              {{ openrouterPricing(props.value, 3) }}
+            <div v-if="priceDisplay === '$/million tokens'">
+              {{ calculatePricePerMillion(props.value) }}
+            </div>
+            <div v-else-if="priceDisplay === 'pages/0.01$'">
+              {{ calculatePricePerPage(props.value) }}
             </div>
             <div v-else>
-              {{ calculatePricePerPage(props.value) }}
+              {{ openrouterPricing(props.value, 3) }}
             </div>
             <q-tooltip :delay="500">
               exact price: {{ props.value }}$/token <br />
+              {{ calculatePricePerMillion(props.value) }} $/million tokens
               {{ calculatePricePerPage(props.value) }} pages/¢
             </q-tooltip>
           </q-td>
@@ -148,10 +157,12 @@ import ApiSelect from 'components/taskyon/ApiSelect.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import ObjectTreeView from 'src/components/ObjectTreeView.vue'
 
+const pricingOptions = ['$/token', 'pages/0.01$', '$/million tokens'] as const
+
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 const filter = ref<string | null>('')
-const pricingPerPage = ref(true)
+const priceDisplay = ref<(typeof pricingOptions)[number]>(pricingOptions[2])
 //const { llmModels: tableData } = storeToRefs(state);
 
 type rowType = (typeof tystate.llmModels)[0]
@@ -282,6 +293,23 @@ function calculatePricePerPage(value: string | undefined) {
     } else {
       const ppt = 0.01 / (price * 500)
       return ppt.toFixed(1)
+    }
+  } else {
+    return 'N/A'
+  }
+}
+
+function calculatePricePerMillion(value: string | undefined) {
+  if (value) {
+    const price = parseFloat(value)
+    if (price < 0) {
+      return 'dynamic'
+    } else if (isNaN(price)) {
+      return 'N/A'
+    } else if (price === 0) {
+      return 'free'
+    } else {
+      return `$${(price * 1000000).toFixed(2)}`
     }
   } else {
     return 'N/A'
