@@ -43,12 +43,77 @@
         class="col column justify-center items-center q-pa-sm welcome"
         style="max-width: 600px"
       >
-        <q-icon
+        <!-- <q-icon
           class="q-pa-xl"
           size="10rem"
           name="svguse:/taskyon_mono_opt.svg#taskyon"
           :color="$q.dark.isActive ? 'secondary' : 'primary'"
-        ></q-icon>
+        ></q-icon> -->
+        <svg
+          version="1.1"
+          id="Layer_1"
+          xmlns="http://www.w3.org/2000/svg"
+          xmlns:xlink="http://www.w3.org/1999/xlink"
+          viewBox="0 0 301 315"
+          style="width: 10rem; height: 10rem"
+        >
+          <!-- Main structure (white paths) -->
+          <path
+            class="logo-path white-path path-1 reverse"
+            d="M189.6,109.6l-30.2,30.2c-0.9,0.9-1.5,2.2-1.5,3.5v116.6c0,1.3,0.5,2.6,1.5,3.5l27.9,27.9"
+          />
+          <path
+            class="logo-path white-path path-2 reverse"
+            d="M112.9,89.6l31.2,31.2c0.9,0.9,1.5,2.2,1.5,3.5v135.9c0,1.3-0.5,2.6-1.5,3.5l-27.8,27.8"
+          />
+
+          <path
+            class="logo-path orange-path path-3 reverse"
+            d="M168.2,192.3l21.8-21.8c0.9-0.9,2.2-1.5,3.5-1.5h37.3"
+          />
+          <path
+            class="logo-path orange-path path-4"
+            d="M192.9,157.5h35.7c1.3,0,2.6-0.5,3.5-1.5l20.6-20.6c0.9-0.9,2.2-1.5,3.5-1.5h21.7"
+          />
+          <path class="logo-path orange-path path-5" d="M226.3,145.7l38.1-38.1" />
+          <path class="logo-path orange-path path-6" d="M168.1,145.7l74.3-74.3" />
+          <path
+            class="logo-path orange-path path-7"
+            d="M197.6,179.3h21.5c1.3,0,2.6,0.5,3.5,1.5l22.8,22.8"
+          />
+          <path
+            class="logo-path orange-path path-8"
+            d="M135,179.9l-22.9-22.9c-0.9-0.9-2.2-1.5-3.5-1.5H72.7"
+          />
+          <path
+            class="logo-path orange-path path-9"
+            d="M106.3,165.7H64.1c-1.3,0-2.6,0.5-3.5,1.5l-23.2,23.2"
+          />
+          <path
+            class="logo-path orange-path path-10"
+            d="M135.6,163.6L87,114.9c-0.9-0.9-2.2-1.5-3.5-1.5H32.7"
+          />
+          <path class="logo-path orange-path path-11" d="M129.3,120.4L68.7,59.8" />
+          <path
+            class="logo-path orange-path path-12"
+            d="M156.3,126.7l15.9-15.9c0.9-0.9,1.5-2.2,1.5-3.5V31.1"
+          />
+          <path class="logo-path orange-path path-13" d="M135.6,29.1v54" />
+          <path
+            class="logo-path orange-path path-14 reverse"
+            d="M110.7,35.6l14,14c0.9,0.9,1.5,2.2,1.5,3.5v32.6c0,1.3,0.5,2.6,1.5,3.5l22.5,22.5"
+          />
+
+          <!-- Bottom white paths -->
+          <path
+            class="logo-path white-path path-15 reverse"
+            d="M168.1,255.1l12.8,12.8c0.9,0.9,2.2,1.5,3.5,1.5h24.8"
+          />
+          <path
+            class="logo-path white-path path-16"
+            d="M95.4,269.3h25.3c1.3,0,2.6-0.5,3.5-1.5l12.6-12.6"
+          />
+        </svg>
         <component
           :is="ResetButton"
           v-if="ResetButton"
@@ -295,3 +360,50 @@ watch(
   { immediate: true },
 )
 </script>
+<style scoped>
+.logo-path {
+  fill: none;
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-miterlimit: 10;
+  stroke-dasharray: 1000;
+  animation: drawLine 1.5s ease forwards;
+}
+
+.white-path {
+  stroke: #fff;
+}
+
+.orange-path {
+  stroke: var(--q-secondary);
+}
+
+.reverse {
+  stroke-dashoffset: -1000;
+}
+
+@keyframes drawLine {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.path-1,
+.path-2,
+.path-3,
+.path-4,
+.path-5,
+.path-6,
+.path-7,
+.path-8,
+.path-9,
+.path-10,
+.path-11,
+.path-12,
+.path-13,
+.path-14,
+.path-15,
+.path-16 {
+  stroke-dashoffset: -1000;
+}
+</style>
