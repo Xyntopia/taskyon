@@ -12,6 +12,7 @@
           outline
           no-caps
           :color="$q.dark.isActive ? 'secondary' : 'primary'"
+          style="height: 100%"
         />
         <q-btn
           v-else-if="s.url"
@@ -20,6 +21,7 @@
           outline
           no-caps
           :color="$q.dark.isActive ? 'secondary' : 'primary'"
+          style="height: 100%"
         />
       </div>
     </div>
