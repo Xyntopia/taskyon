@@ -23,6 +23,7 @@ import { localVectorStore } from '../tools/localVectorStore'
 import { proceduralTools } from '../tools/proceduralGraphics'
 import { wfcGenerator } from '../tools/wavefunctioncollapse'
 import { createOAuthTool } from '../tools/authTools'
+import { ragSearchTool, ragAddTool } from '../tools/ragTool'
 import type { EncryptedDataRow } from '../crudWrapper'
 import {
   createCombinedCrudWrapper,
@@ -58,6 +59,8 @@ export async function initTaskyon(
     localVectorStore,
     executeJavaScript,
     toolCreationWizard,
+    ragSearchTool,
+    ragAddTool,
     ...EnvironmentTools,
   ]
 
