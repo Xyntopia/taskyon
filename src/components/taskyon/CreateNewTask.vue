@@ -35,7 +35,7 @@
           :key="file.name"
           removable
           :icon="matUploadFile"
-          @remove="fileAttachments = fileAttachments.filter((f) => f !== file)"
+          @remove="removeFileFromDraft(file)"
         >
           <div class="ellipsis" style="max-width: 100px">
             {{ `${file.name}` }}
@@ -539,5 +539,12 @@ async function addNewTask(execute = true) {
 function attachFileToDraft(newFiles: File[]) {
   console.log('attach file to chat')
   fileAttachments.value.push(...newFiles)
+}
+
+const removeFileFromDraft = (file: File) => {
+  const index = fileAttachments.value.indexOf(file)
+  if (index > -1) {
+    fileAttachments.value.splice(index, 1)
+  }
 }
 </script>
