@@ -20,7 +20,7 @@
             }
 
             .orange-path {
-              stroke: #F78F3B;
+              stroke: var(--q-secondary);
             }
 
             .reverse {
