@@ -412,6 +412,7 @@ function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]
 function generateFollowUpTasksFromResult(
   goal: Goals,
   choice: ChatResponseType['choices'][0],
+  allowedTools: string[] | undefined,
   chatModel: string,
   llmTools: boolean,
   allTools: Record<string, ToolBase>,
@@ -453,6 +454,18 @@ function generateFollowUpTasksFromResult(
   } else if (goal === 'AnalyzeToolResult' || goal === 'ChooseTool' || goal === 'AnalyzeError') {
     // TODO: move the followup ask generation into a separate task/function! :)
     const commands = getCommandFromStructuredResponse(choice)
+    if (commands.length > 0) {
+      const command = commands[0]!
+      if (!allowedTools?.includes(command.name)) {
+        throw new TaskProcessingError(
+          `Tool '${command.name}' is not in the list of allowed tools`,
+          {
+            allowedTools,
+            requestedTool: command.name,
+          },
+        )
+      }
+    }
     newTasks = [
       {
         role: 'assistant',
@@ -815,6 +828,7 @@ export async function createChatCompletionTool(
       const newTaskChain = generateFollowUpTasksFromResult(
         goal || 'SimpleCompletion',
         choice,
+        allowedTools,
         selectedModel,
         !!llmTools,
         toolDefs,
