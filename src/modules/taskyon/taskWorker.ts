@@ -552,9 +552,7 @@ ${JSON.stringify(error)}
       //message: `An error occured: ${error.message}:\n\n${dump(error.details, { skipInvalid: true })}`,
       type: 'error',
       data: `An error occured: ${error.message}
-\`\`\`javascript
-${error.details ? '\n\n' + JSON.stringify(makeSerializable(error.details, 7)) : ''}
-\`\`\``,
+${error.details ? '```javascript\n\n' + JSON.stringify(makeSerializable(error.details, 7)) : '````'}`,
     }
     if (task) {
       debugInfo.error = {
