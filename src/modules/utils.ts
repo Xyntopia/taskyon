@@ -980,60 +980,66 @@ export function isEmpty(obj: object): boolean {
   return true
 }
 
-export const getEnvironmentInfo = () => ({
-  publishDate: process.env.PUBLISH_DATE as unknown as string,
-  isBrowser: typeof window !== 'undefined' && typeof window.document !== 'undefined',
-  isNode:
-    typeof process !== 'undefined' && process.versions != null && process.versions.node != null,
-  os: (() => {
-    if (typeof process !== 'undefined' && process.platform) {
-      return process.platform // e.g., 'win32', 'darwin', 'linux'
-    }
-    if (typeof navigator !== 'undefined' && navigator.userAgent) {
-      return navigator.userAgent
-    }
-    return 'Unknown'
-  })(),
-  isMobile: typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent),
-  nodeVersion:
-    typeof process !== 'undefined' && process.versions?.node ? process.versions.node : null,
-  browserUserAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
-  browserAppVersion: typeof navigator !== 'undefined' ? navigator.appVersion : null,
-  browserPlatform: typeof navigator !== 'undefined' ? navigator.platform : null,
-  hasWebAssembly: typeof WebAssembly !== 'undefined',
-  supportsServiceWorker: typeof navigator !== 'undefined' && 'serviceWorker' in navigator,
-  supportsES6: (() => {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-implied-eval
-      new Function('(a = 0) => a')
-      return true
-    } catch {
-      return false
-    }
-  })(),
-  timezone: typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone,
-  language: typeof navigator !== 'undefined' ? navigator.language : null,
-  memoryUsage: (() => {
-    interface PerformanceMemory {
-      usedJSHeapSize: number
-      totalJSHeapSize: number
-      jsHeapSizeLimit: number
-    }
-    if (
-      typeof performance !== 'undefined' &&
-      (performance as { memory?: PerformanceMemory }).memory
-    ) {
-      return JSON.stringify((performance as unknown as { memory: PerformanceMemory }).memory)
-    }
-    if (typeof process !== 'undefined' && process.memoryUsage) {
-      return process.memoryUsage()
-    }
-    return null
-  })(),
-  screenResolution: typeof screen !== 'undefined' ? `${screen.width}x${screen.height}` : null,
-  supportsBigInt: typeof BigInt !== 'undefined',
-  supportsFetch: typeof fetch !== 'undefined',
-})
+export const getEnvironmentInfo = () => {
+  const publishDateUTC = process.env.PUBLISH_DATE as unknown as string
+  return {
+    publishDate: {
+      utc: publishDateUTC,
+      local: new Date(String(publishDateUTC)).toLocaleString(),
+    },
+    isBrowser: typeof window !== 'undefined' && typeof window.document !== 'undefined',
+    isNode:
+      typeof process !== 'undefined' && process.versions != null && process.versions.node != null,
+    os: (() => {
+      if (typeof process !== 'undefined' && process.platform) {
+        return process.platform // e.g., 'win32', 'darwin', 'linux'
+      }
+      if (typeof navigator !== 'undefined' && navigator.userAgent) {
+        return navigator.userAgent
+      }
+      return 'Unknown'
+    })(),
+    isMobile: typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent),
+    nodeVersion:
+      typeof process !== 'undefined' && process.versions?.node ? process.versions.node : null,
+    browserUserAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+    browserAppVersion: typeof navigator !== 'undefined' ? navigator.appVersion : null,
+    browserPlatform: typeof navigator !== 'undefined' ? navigator.platform : null,
+    hasWebAssembly: typeof WebAssembly !== 'undefined',
+    supportsServiceWorker: typeof navigator !== 'undefined' && 'serviceWorker' in navigator,
+    supportsES6: (() => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-implied-eval
+        new Function('(a = 0) => a')
+        return true
+      } catch {
+        return false
+      }
+    })(),
+    timezone: typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone,
+    language: typeof navigator !== 'undefined' ? navigator.language : null,
+    memoryUsage: (() => {
+      interface PerformanceMemory {
+        usedJSHeapSize: number
+        totalJSHeapSize: number
+        jsHeapSizeLimit: number
+      }
+      if (
+        typeof performance !== 'undefined' &&
+        (performance as { memory?: PerformanceMemory }).memory
+      ) {
+        return JSON.stringify((performance as unknown as { memory: PerformanceMemory }).memory)
+      }
+      if (typeof process !== 'undefined' && process.memoryUsage) {
+        return process.memoryUsage()
+      }
+      return null
+    })(),
+    screenResolution: typeof screen !== 'undefined' ? `${screen.width}x${screen.height}` : null,
+    supportsBigInt: typeof BigInt !== 'undefined',
+    supportsFetch: typeof fetch !== 'undefined',
+  }
+}
 export function hexToRgb(hex: string): string {
   const bigint = parseInt(hex.slice(1), 16)
   const r = (bigint >> 16) & 255

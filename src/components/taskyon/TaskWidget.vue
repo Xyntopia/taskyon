@@ -36,10 +36,10 @@
               "
             >
               <template #header>
-                <div class="row q-gutter-sm items-center">
+                <div class="row no-wrap q-gutter-sm items-center">
                   <q-spinner-orbit v-if="isWorking" size="2em"></q-spinner-orbit>
                   <q-icon :name="matCalculate" size="1.5em"></q-icon>
-                  <div>{{ task.content.data.name }}</div>
+                  <div class="ellipsis">{{ task.content.data.name }}</div>
                   <q-btn
                     v-if="state.appConfiguration.expertMode"
                     flat

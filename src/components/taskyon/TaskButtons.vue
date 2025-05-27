@@ -1,5 +1,5 @@
 <template>
-  <div class="row justify-start items-stretch">
+  <div>
     <q-btn
       class="col-auto"
       :icon="matContentCopy"

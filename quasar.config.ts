@@ -204,7 +204,7 @@ export default defineConfig((ctx) => {
       sourcemap: process.env.SOURCEMAP === 'true',
 
       env: {
-        PUBLISH_DATE: JSON.stringify(new Date().toISOString()),
+        PUBLISH_DATE: new Date().toISOString(),
         COMMIT_HASH: commitHash,
       },
       // rawDefine: {}

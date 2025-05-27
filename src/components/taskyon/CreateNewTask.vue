@@ -35,7 +35,7 @@
           :key="file.name"
           removable
           :icon="matUploadFile"
-          @remove="fileAttachments = fileAttachments.filter((f) => f !== file)"
+          @remove="removeFileFromDraft(file)"
         >
           <div class="ellipsis" style="max-width: 100px">
             {{ `${file.name}` }}
@@ -64,7 +64,26 @@
                 :icon="matMoreHoriz"
                 :schema="slimSettings.jsonSchema"
                 v-model="slimSettings.reactiveView"
-              />
+              >
+                <template #before>
+                  Change some settings for taskyon here. For a full list of settings, please check
+                  the <router-link to="/settings/agent%20config">settings page</router-link>.
+                </template>
+                <template #after>
+                  <q-item class="row items-center">
+                    <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
+                    <ModelSelection
+                      v-model:selected-api="selectedApi"
+                      class="col"
+                      :bot-name="tystate.currentModelId"
+                      :model-list="expertMode"
+                      :select-api="expertMode"
+                      @update-bot-name="tystate.handleBotNameUpdate"
+                      @click.stop
+                    ></ModelSelection>
+                  </q-item>
+                </template>
+              </FormDialog>
             </div>
           </div>
           <!--Task type selection and execution-->
@@ -78,7 +97,7 @@
               ><q-tooltip>Select Simple Chat</q-tooltip>
             </q-btn>
           </div>
-          <div v-if="expertMode" class="col-auto q-pa-md">
+          <div v-if="expertMode" class="col-auto q-px-md">
             <!--q-select
               :model-value="selectedTaskType || ''"
               :options="toolNames"
@@ -86,7 +105,7 @@
               use-input
             /-->
             <q-select
-              class="q-pl-sm col"
+              class="col"
               use-input
               fill-input
               dense
@@ -178,23 +197,6 @@
         </div>
       </div>
     </div>
-    <q-slide-transition>
-      <q-list v-show="expertMode" dense>
-        <q-separator class="q-my-sm" />
-        <!--Model Selection-->
-        <q-item class="row items-center">
-          <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
-          <ModelSelection
-            v-model:selected-api="selectedApi"
-            class="col"
-            :bot-name="tystate.currentModelId"
-            :model-list="expertMode"
-            :select-api="expertMode"
-            @update-bot-name="tystate.handleBotNameUpdate"
-          ></ModelSelection>
-        </q-item>
-      </q-list>
-    </q-slide-transition>
   </div>
 </template>
 
@@ -202,7 +204,7 @@
 import { computed, ref, toRefs } from 'vue'
 import { createToolTask, getDefaultParametersForTool } from 'src/modules/taskyon/tools'
 import { partialTaskDraft } from 'src/modules/taskyon/types'
-import { llmSettings } from 'src/modules/taskyon/types'
+import { llmSettings, appConfiguration } from 'src/modules/taskyon/types'
 import { useTaskyonStore } from 'stores/taskyonState'
 import type { FunctionArguments } from 'src/modules/taskyon/types'
 import ModelSelection from 'components/taskyon/ModelSelection.vue'
@@ -247,11 +249,18 @@ const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { selectedApi } = toRefs(state.llmSettings)
 
-const slimSettings = buildSlimView({
-  obj: state.llmSettings,
-  schema: llmSettings,
-  pickKeys: ['enableToolChooser', 'enableOpenAiTools', 'tryUsingVisionModels', 'useBasePrompt'],
-})
+const slimSettings = buildSlimView(
+  {
+    obj: state.llmSettings,
+    schema: llmSettings,
+    pickKeys: ['enableToolChooser', 'enableOpenAiTools', 'tryUsingVisionModels', 'useBasePrompt'],
+  },
+  {
+    obj: state.appConfiguration,
+    schema: appConfiguration,
+    pickKeys: ['useEnterToSend', 'primaryColor', 'secondaryColor'],
+  },
+)
 
 // we initialize our taskDraft with the state of this window!
 
@@ -530,5 +539,12 @@ async function addNewTask(execute = true) {
 function attachFileToDraft(newFiles: File[]) {
   console.log('attach file to chat')
   fileAttachments.value.push(...newFiles)
+}
+
+const removeFileFromDraft = (file: File) => {
+  const index = fileAttachments.value.indexOf(file)
+  if (index > -1) {
+    fileAttachments.value.splice(index, 1)
+  }
 }
 </script>
