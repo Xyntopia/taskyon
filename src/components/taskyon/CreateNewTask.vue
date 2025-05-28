@@ -7,20 +7,16 @@
       <div>
         <!-- in case we simply want to send simple messages :)-->
         <chatMessageEdit
-          v-if="!selectedTaskType && currentnewTask.content.type === 'message'"
+          v-if="!selectedTaskType"
           class="text-body1"
-          :model-value="currentnewTask.content.data"
+          v-model="state.messageDraft"
           :use-enter-to-send="state.appConfiguration.useEnterToSend"
-          @update:model-value="updateContent"
           @execute-task="addNewTask"
         />
         <!--If we want to edit any pre-defined functions we can do that here...-->
-        <div
-          v-else-if="selectedTaskType && currentnewTask.content.type === 'functioncall'"
-          class="row"
-        >
+        <div v-else-if="selectedTaskType" class="row">
           <ObjectTreeView
-            v-model="currentnewTask.content.data.arguments"
+            v-model="state.draftParameters[selectedTaskType]"
             class="col"
             input-field-behavior="auto"
             :separate-labels="false"
@@ -93,7 +89,7 @@
               flat
               dense
               :icon="matChat"
-              @click="setTaskType(undefined)"
+              @click="tystate.switchTaskType(undefined)"
               ><q-tooltip>Select Simple Chat</q-tooltip>
             </q-btn>
           </div>
@@ -117,7 +113,7 @@
               :model-value="selectedTaskType"
               :options="filteredToolCollection"
               :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
-              @update:model-value="setTaskType"
+              @update:model-value="tystate.switchTaskType"
               behavior="default"
             />
           </div>
@@ -202,11 +198,10 @@
 
 <script setup lang="ts">
 import { computed, ref, toRefs } from 'vue'
-import { createToolTask, getDefaultParametersForTool } from 'src/modules/taskyon/tools'
+import { createToolTask } from 'src/modules/taskyon/tools'
 import { partialTaskDraft } from 'src/modules/taskyon/types'
 import { llmSettings, appConfiguration } from 'src/modules/taskyon/types'
 import { useTaskyonStore } from 'stores/taskyonState'
-import type { FunctionArguments } from 'src/modules/taskyon/types'
 import ModelSelection from 'components/taskyon/ModelSelection.vue'
 import { saveUserUploadedFileToOpfs } from 'src/modules/OPFS'
 import ObjectTreeView from '../ObjectTreeView.vue'
@@ -221,7 +216,6 @@ import {
   matAttachment,
   matSend,
 } from '@quasar/extras/material-icons'
-import { deepMerge } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { asyncComputed } from 'src/modules/vueUtils'
@@ -229,21 +223,15 @@ import FormDialog from './FormDialog.vue'
 import { buildSlimView } from 'src/modules/vueUtils'
 import FileDropzone from '../FileDropzone.vue'
 import { QSelect } from 'quasar'
+import { deepCopy } from 'src/modules/utils'
 
 const { expertMode = false, forceTaskProps } = defineProps<{
-  forceTaskProps?: llmSettings['taskTemplate'] | undefined
+  forceTaskProps?: partialTaskDraft | undefined
   hideTaskInfo?: boolean
   expertMode?: boolean
 }>()
 
 const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
-
-function updateContent(value: string | null | undefined) {
-  currentTaskDraft.value.content = {
-    type: 'message',
-    data: value || '',
-  }
-}
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
@@ -266,23 +254,12 @@ const slimSettings = buildSlimView(
 
 //const funcArgs = computed(() => );
 
-async function getAllTools() {
-  const foundTools = await (await tystate.getTaskManager()).updateToolDefinitions(true)
-  return foundTools
-}
-
-const toolCollection = asyncComputed(getAllTools, {})
+const toolCollection = asyncComputed(tystate.getAllTools, {})
 const toolNames = computed(() => Object.keys(toolCollection.value))
 const filteredToolCollection = ref<string[]>([])
 
-const currentTaskDraft = computed(() => {
-  return state.llmSettings.taskDraft
-})
-
 const selectedTaskType = computed(() => {
-  return currentnewTask.value.content.type === 'functioncall'
-    ? currentnewTask.value.content.data.name
-    : undefined
+  return state.createTaskType.type === 'functioncall' ? state.createTaskType.name : undefined
 })
 
 const filterFn = (inputValue: string, doneFn: (callbackFn: () => void) => void) => {
@@ -312,66 +289,31 @@ const functionSchema = computed(() => {
   return undefined
 })
 
-async function setTaskType(tasktype: string | undefined | null) {
-  console.log('change tasktype to:', tasktype)
-  if (tasktype) {
-    currentTaskDraft.value.role = 'function'
-    const toolName = tasktype
-    const tool = (await getAllTools())[tasktype]
-    if (!tool) {
-      console.log(`Tool ${toolName} not found.`)
-      return null
-    }
-    const defaultParams = getDefaultParametersForTool(tool)
-    const savedParams = state.draftParameters[tasktype]
-    const funcArguments: FunctionArguments = {
-      ...(defaultParams || {}),
-      ...(savedParams || {}),
-    }
-    currentTaskDraft.value.content = {
-      type: 'functioncall',
-      data: {
-        name: tasktype,
-        arguments: funcArguments,
-      },
-    }
-  } else {
-    currentTaskDraft.value.role = 'user'
-    currentTaskDraft.value.content = {
-      type: 'message',
-      data: '',
-    }
-  }
-}
-
 const currentnewTask = computed(() => {
-  const task = deepMerge(currentTaskDraft.value, forceTaskProps || {})
+  const task = deepCopy(forceTaskProps || ({} as partialTaskDraft))
   if (tystate.currentModelId) {
     task.name = undefined
-    if (
-      currentTaskDraft.value.content.type === 'functioncall' &&
-      currentTaskDraft.value.content.data.name
-    ) {
+    if (state.createTaskType.type === 'functioncall') {
       // here we have a function task ;)
       task.role = 'function'
       // we do this to make suere we *only* have a functionCall and not a message
       // or other things as well...
       task.content = {
         type: 'functioncall',
-        data: currentTaskDraft.value.content.data,
+        data: {
+          name: state.createTaskType.name,
+          arguments: state.draftParameters[state.createTaskType.name] || {},
+        },
       }
-    } else if (currentTaskDraft.value.content.type === 'message') {
+    } else if (state.createTaskType.type === 'message') {
       task.role = 'user'
       task.content = {
         type: 'message',
-        data: currentTaskDraft.value.content.data.trim(),
+        data: state.messageDraft.trim(),
       }
     } else {
-      task.role = 'user'
-      task.content = {
-        type: 'message',
-        data: JSON.stringify(currentTaskDraft.value.content.data, null, 2),
-      }
+      console.error('we currently only support function calls and messages as task types!')
+      return undefined
     }
   }
   return partialTaskDraft.parse(task) // we can do this, because we defined the "role"
@@ -479,6 +421,8 @@ async function addNewTask(execute = true) {
   // execute: if true, we immediatly queue the task for execution in the taskManager
   //          otherwise, it won't get executed but simply saved into the tree
   console.log('adding new task, execute?', execute)
+  if (!currentnewTask.value) throw new Error('No task to add!')
+
   // we are doing the ... to make sure we don't change the original, reactive object
   newTaskChain.push({ ...currentnewTask.value })
 
@@ -531,8 +475,7 @@ async function addNewTask(execute = true) {
 
   // and empty out the contents for the next chat message :)
   if (currentnewTask.value.role === 'user') {
-    currentTaskDraft.value.content = { type: 'message', data: '' }
-    await setTaskType(undefined)
+    tystate.setNewContentDraft({ type: 'message', data: '' })
   }
 }
 

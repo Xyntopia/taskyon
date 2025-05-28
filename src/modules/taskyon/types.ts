@@ -273,7 +273,7 @@ export type TaskContent = z.infer<typeof TaskContent>
 export const taskTypeOptions = TaskContent.options.map((opt) => {
   // each option is a ZodObject with a `type` literal
   const typeLiteral = opt.shape.type._zod.def.values[0]
-  return typeLiteral
+  return typeLiteral as TaskContent['type']
 })
 
 export const TaskNodeMeta = z
@@ -572,18 +572,6 @@ For more information check this link: https://platform.openai.com/docs/guides/fu
     icon: mdiTools,
     label: 'Use Tools',
   }),
-  taskDraft: partialTaskDraft
-    .default({
-      role: 'user',
-      content: {
-        type: 'message',
-        data: '',
-      },
-    })
-    .meta({
-      description:
-        'The task which is currently drafted (This could for example be a simple message).',
-    }),
   allowedTools: z.array(FunctionName),
   useBasePrompt: z
     .boolean()
@@ -691,7 +679,7 @@ export const appConfiguration = z.object({
 export type appConfiguration = z.infer<typeof appConfiguration>
 
 export const storedSettings = z.object({
-  version: z.literal(11).meta({
+  version: z.literal(12).meta({
     description:
       'whenever the schema of the settings change, this number will get changed as well...',
   }),

@@ -66,8 +66,6 @@ import { mdiMagicStaff } from '@quasar/extras/mdi-v6'
 import CreateTaskButton from 'components/taskyon/CreateTaskButton.vue'
 import { dump } from 'js-yaml'
 import { useAppStateStore } from 'src/stores/appState'
-import { createTaskNode } from 'src/modules/taskyon/taskManager'
-import { asyncComputed } from 'src/modules/vueUtils'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -147,13 +145,8 @@ void getAllTools().then((tools) => {
   toolCollection.value = tools
 })
 
-const structuredResponsePrompt = asyncComputed(async () => {
-  if (state.llmSettings.taskDraft.content) {
-    const task = await createTaskNode({
-      content: state.llmSettings.taskDraft.content,
-      role: 'user',
-    })
-
+const structuredResponsePrompt = computed(() => {
+  if (tystate.taskContentDraft) {
     console.log('create structured example', toolCollection.value)
     if (Object.keys(toolCollection.value).length !== 0) {
       const rp = addPrompts(
@@ -164,12 +157,12 @@ const structuredResponsePrompt = asyncComputed(async () => {
         [],
         [],
         state.llmSettings.allowedTools,
-        task.content.data,
+        tystate.taskContentDraft,
         'SimpleCompletion',
       )
       return [...rp.prependMessages, ...rp.modifiedOpenAIConversationThread, ...rp.appendMessages]
     }
   }
   return []
-}, [])
+})
 </script>

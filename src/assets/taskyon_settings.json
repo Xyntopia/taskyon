@@ -1,5 +1,5 @@
 {
-  "version": 11,
+  "version": 12,
   "appConfiguration": {
     "appConfigurationUrl": "/taskyon_settings.json",
     "gdriveConfigurationFile": "taskyon_settings.json",
@@ -12,13 +12,6 @@
     "secondaryColor": "#F78F3B"
   },
   "llmSettings": {
-    "taskDraft": {
-      "role": "user",
-      "content": {
-        "type": "message",
-        "data": ""
-      }
-    },
     "llmApis": {
       "taskyon": {
         "name": "taskyon",

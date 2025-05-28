@@ -23,7 +23,7 @@ export const taskSearcher = (taskManager: TyTaskManager) =>
         },
         taskType: {
           type: 'string',
-          enum: taskTypeOptions as string[],
+          enum: taskTypeOptions,
           default: undefined,
           description: `Filter tasks by type. If not provided, all types are included.`,
         },

@@ -285,8 +285,8 @@
 import ToolResultWidget from 'src/components/taskyon/ToolResultWidget.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
-import type { ChatResponseType, TaskNodeMeta } from 'src/modules/taskyon/types'
-import { TaskNode, partialTaskDraft, type OpenAIMessage } from 'src/modules/taskyon/types'
+import type { ChatResponseType, TaskNodeMeta, TaskNode } from 'src/modules/taskyon/types'
+import { type OpenAIMessage } from 'src/modules/taskyon/types'
 import tyMarkdown from '../tyMarkdown.vue'
 import { computed, ref } from 'vue'
 import { type FileMappingDocType } from 'src/modules/taskyon/rxdb'
@@ -381,14 +381,6 @@ if (props.task.content.type === 'files') {
   })(props.task.content.data)
 }
 
-async function taskDraftFromTask(taskId: string) {
-  // we are copying the current task with json stringify
-  const jsonTask = JSON.stringify(await (await tystate.getTaskManager()).getTask(taskId))
-  const task = TaskNode.partial().parse(JSON.parse(jsonTask))
-  state.llmSettings.taskDraft = partialTaskDraft.parse(task)
-  return task
-}
-
 const humanReadableTaskCosts = computed(() => {
   if (taskCostMeta.value?.taskCosts) {
     return openrouterPricing(taskCostMeta.value.taskCosts)
@@ -398,16 +390,18 @@ const humanReadableTaskCosts = computed(() => {
 })
 
 async function editTask(taskId: string) {
-  const task = await taskDraftFromTask(taskId)
-  if (task.content?.type === 'tooldefinition') {
+  const task = await (await tystate.getTaskManager()).getTask(taskId)
+  if (task?.content?.type === 'tooldefinition') {
     void router.push(`/tool/${task.id}`)
   } else {
-    state.setSelectedTask(task.priorID || task.parentID)
+    tystate.setContentDraftFromTask(task)
+    state.setSelectedTask(task?.priorID || task?.parentID)
   }
 }
 
 async function createNewConversation(taskId: string) {
-  await taskDraftFromTask(taskId)
+  const task = await (await tystate.getTaskManager()).getTask(taskId)
+  tystate.setContentDraftFromTask(task)
 
   // we simply need to tell our task manager that we don't have any task selected
   // the next message which will be send, will be an orphan in this case.

@@ -3,7 +3,7 @@ import { watch, computed, ref } from 'vue'
 import type { Asyncify, TyTaskStreamData } from 'src/modules/taskyon/types'
 import {
   type Model,
-  type TaskNode,
+  TaskNode,
   getCurrentModel,
   llmSettings,
   type storedSettings,
@@ -15,7 +15,7 @@ import { getApiConfig } from 'src/modules/taskyon/types'
 import { initTaskyon } from 'src/modules/taskyon/init'
 import { availableModels } from 'src/modules/taskyon/chat'
 import { setupIframeApi } from 'src/modules/taskyon/iframeApi'
-import type { InternalTool } from 'src/modules/taskyon/tools'
+import { getDefaultParametersForTool, type InternalTool } from 'src/modules/taskyon/tools'
 import { useAppStateStore } from './appState'
 import { filter } from 'src/modules/frpBus'
 import { initializeSessionWithPasskey } from 'src/modules/cryptoSession'
@@ -507,7 +507,85 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     (newState) => setPrismTheme(newState),
   )
 
+  function setNewContentDraft(content: TaskNode['content'] | undefined) {
+    if (content?.type === 'message') {
+      stateRefs.messageDraft = content.data || ''
+      stateRefs.createTaskType = { type: 'message' } // set the type to message
+    } else if (content?.type === 'functioncall') {
+      stateRefs.draftParameters[content.data.name] = content.data.arguments
+      stateRefs.createTaskType = {
+        type: 'functioncall',
+        name: content.data.name,
+      }
+    } else {
+      console.warn('Unknown content type:', content?.type)
+      stateRefs.messageDraft = ''
+      stateRefs.createTaskType = { type: 'message' } // default to message
+    }
+  }
+
+  function setContentDraftFromTask(task: TaskNode | null) {
+    // we are copying the current task with json stringify
+    const jsonTask = JSON.stringify(task)
+    const content = TaskNode.partial().parse(JSON.parse(jsonTask)).content
+    setNewContentDraft(content)
+  }
+
+  const taskContentDraft = computed(() => {
+    if (stateRefs.createTaskType.type === 'message') {
+      return {
+        type: 'message',
+        data: stateRefs.messageDraft || '',
+      }
+    } else if (stateRefs.createTaskType.type === 'functioncall') {
+      return {
+        type: 'functioncall',
+        functionName: stateRefs.createTaskType.name,
+        arguments: stateRefs.messageDraft || '',
+      }
+    }
+    return undefined
+  })
+
+  async function getAllTools() {
+    const foundTools = await (await getTaskManager()).updateToolDefinitions(true)
+    return foundTools
+  }
+
+  async function switchTaskType(tasktype: string | undefined | null) {
+    console.log('change tasktype to:', tasktype)
+    if (tasktype) {
+      const toolName = tasktype
+      const tool = (await getAllTools())[tasktype]
+      if (!tool) {
+        console.log(`Tool ${toolName} not found.`)
+        return null
+      }
+
+      const savedParams = stateRefs.draftParameters[tasktype]
+      const defaultParams = getDefaultParametersForTool(tool)
+
+      setNewContentDraft({
+        type: 'functioncall',
+        data: {
+          name: tasktype,
+          arguments: savedParams || defaultParams,
+        },
+      })
+    } else {
+      setNewContentDraft({
+        type: 'message',
+        data: stateRefs.messageDraft || '',
+      })
+    }
+  }
+
   return {
+    setNewContentDraft,
+    setContentDraftFromTask,
+    getAllTools,
+    switchTaskType,
+    taskContentDraft,
     selectedThread: computed(() => selectedThread),
     taskWorkerWaiting: computed(() => taskWorkerWaiting.value),
     currentTask: computed(() => currentTask),

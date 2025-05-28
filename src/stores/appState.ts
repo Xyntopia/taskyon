@@ -3,11 +3,8 @@
 
 import { defineStore } from 'pinia'
 import { computed, reactive, toRefs, type Reactive, watch } from 'vue'
-import {
-  type FunctionArguments,
-  type tyPublicKeyDraft,
-  storedSettings,
-} from 'src/modules/taskyon/types'
+import type { FunctionCall } from 'src/modules/taskyon/types'
+import { type tyPublicKeyDraft, storedSettings } from 'src/modules/taskyon/types'
 import axios from 'axios'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
 import {
@@ -66,7 +63,6 @@ export const useAppStateStore = defineStore(storeName, () => {
     chatHistory: [] as string[],
     newToolDraftCode: '' as string,
     configurationDraft: '' as string,
-    draftParameters: {} as Record<string, FunctionArguments>,
     // remembers how tasks are display in the chatwindow in task widgets...
     // TODO: rename this to "taskWidgetState"
     taskState: {} as Record<string, TaskStateType>,
@@ -77,6 +73,12 @@ export const useAppStateStore = defineStore(storeName, () => {
       accessWhiteList: [] as string[],
       parentUrl: '',
     },
+    createTaskType: {
+      type: 'message',
+    } as { type: 'message' } | { type: 'functioncall'; name: FunctionCall['name'] }, // the type of task we are currently working on
+    messageDraft: '' as string,
+    // we use this here to store the different types of task drafts that we were working on.
+    draftParameters: {} as Record<FunctionCall['name'], FunctionCall['arguments']>,
     // can be used to exchange certain keys and make taskyon
     // aware of different URLs etc...
     developerMode: false,
