@@ -66,20 +66,6 @@ const FunctionDescriptionMessage = ToolBase.extend({
   type: z.literal('functionDescription').meta({
     description: 'Field to indicate that this is a function description message.',
   }),
-  id: z.string()
-    .describe(`A unique id for the function definition task. Tasks with the same id "overwrite" each other. The last one
-    is the relevant one. Functions will get saved as a task object with the id as their name.
-
-    this is important!, Taskyon can be configured to prevent tasks from getting created if they already exist with the same name!
-    this helps in making sure, that tasks & tools which we upload to taskyon on pageload don't get duplicated
-    on every pageload.
-    If that option is turned on, we can use this as a version string for our tasks... And every time we want
-    to update our webpage with a new AI tool, we simply change the version string...
-    `),
-  duplicateTaskName: z.boolean().meta({
-    description:
-      'we use this here in order to prevent duplicate creation of our function declaration task',
-  }),
 })
 
 const tyConfigurationMessage = z.object({

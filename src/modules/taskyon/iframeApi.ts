@@ -1,4 +1,4 @@
-import { ToolBase, type partialTaskDraft } from './types'
+import { ToolBase } from './types'
 import type { llmSettings } from './types'
 import { deepMergeReactive } from '../utils'
 import { TaskyonMessage } from './iframeApiTypes'
@@ -88,21 +88,9 @@ function addNewTask(event: TyMessage, taskManager: TyTaskManager) {
 
 function addNewFunctionDescription(event: TyMessage, taskManager: TyTaskManager) {
   return (msg: Extract<TaskyonMessage, { type: 'functionDescription' }>) => {
-    const { id, duplicateTaskName, ...rest } = msg
-    const newFunc: ToolBase = rest
+    const newFunc: ToolBase = msg
     console.log(`functionDescription was sent by ${event.origin}`, newFunc)
-    const newTask: partialTaskDraft = {
-      role: 'system',
-      name: id,
-      content: {
-        type: 'tooldefinition',
-        data: newFunc,
-      },
-      label: [event.origin],
-    }
-    void taskManager
-      .addPartialTask2Tree(newTask, undefined, undefined, duplicateTaskName)
-      .catch((err: unknown) => console.warn(err))
+    void taskManager.addDefaultTools([newFunc])
   }
 }
 

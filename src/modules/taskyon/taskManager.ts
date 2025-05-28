@@ -394,7 +394,7 @@ export function createToolIndex(tyCrudVec: CrudWrapper<TaskNode>) {
   // We require that the toolIndex should contain only the latest version of a tool
   const toolIndex = new Map<string, string>()
   const defaultToolMap: Record<string, InternalTool> = {}
-  const updateDefaultTools = (defaultTools: InternalTool[]) => {
+  const addDefaultTools = (defaultTools: InternalTool[]) => {
     for (const tool of defaultTools) {
       const toolDef = ToolBase.safeParse(tool)
       if (toolDef.success) {
@@ -445,7 +445,7 @@ export function createToolIndex(tyCrudVec: CrudWrapper<TaskNode>) {
   return {
     toolIndex,
     defaultToolMap,
-    updateDefaultTools,
+    addDefaultTools,
     getTool,
     updateToolIndex,
   }
@@ -559,7 +559,7 @@ export async function useTyTaskManager(
     count: countVecs,
   } = await useTaskVectors(getAllTaskIds, tyCrud.get, vectorizerModel)
 
-  const { toolIndex, defaultToolMap, updateDefaultTools, getTool, updateToolIndex } =
+  const { toolIndex, defaultToolMap, addDefaultTools, getTool, updateToolIndex } =
     createToolIndex(tyCrud)
 
   // add more enhanced, ty-specific functionality to our CRUD
@@ -1132,7 +1132,7 @@ export async function useTyTaskManager(
   }
 
   const defaultMode = {
-    updateDefaultTools,
+    addDefaultTools,
     getTool,
     getTask: tyCrudVec.get,
     deleteTask: tyCrudVec.delete,

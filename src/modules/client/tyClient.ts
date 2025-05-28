@@ -101,8 +101,6 @@ export async function initializeTaskyon(
       const { function: _toolfunc, ...fdescr } = t
       sendTyMessage({
         type: 'functionDescription',
-        id: fdescr.name,
-        duplicateTaskName: false, // we use this here in order to prevent duplicate creation of our function declaration task
         ...fdescr,
       })
       console.log('set up function listener!')
