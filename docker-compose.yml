@@ -45,7 +45,7 @@ services:
       #- LOCALAI_CORS_ALLOW_ORIGINS=https://taskyon.space
       LOCALAI_CORS: 1
     volumes:
-      - $PWD/models:/build/models:cached
+      - $HOME/models:/build/models:cached
     # decomment the following piece if running with Nvidia GPUs
     # deploy:
     #   resources:
