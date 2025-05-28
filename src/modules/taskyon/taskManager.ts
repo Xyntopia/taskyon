@@ -389,6 +389,68 @@ const createRxDBCrudWrapper = (db: TaskyonDatabase): CrudWrapper<TaskNode> => {
   }
 }
 
+export function createToolIndex(tyCrudVec: CrudWrapper<TaskNode>) {
+  // we use this index to quickly look up tools from our database!
+  // We require that the toolIndex should contain only the latest version of a tool
+  const toolIndex = new Map<string, string>()
+  const defaultToolMap: Record<string, InternalTool> = {}
+  const updateDefaultTools = (defaultTools: InternalTool[]) => {
+    for (const tool of defaultTools) {
+      const toolDef = ToolBase.safeParse(tool)
+      if (toolDef.success) {
+        defaultToolMap[toolDef.data.name] = tool
+      }
+    }
+  }
+  // we simply assume, that all tools HAVE to be defined in the toolmap, no matter what.
+  // if they are not there, we are doing something wrong ;)
+  async function getTool(name: string): Promise<InternalTool | undefined> {
+    const toolTaskId = toolIndex.get(name)
+    if (toolTaskId) {
+      const toolTask = await tyCrudVec.get(toolTaskId)
+      if (toolTask?.content.type === 'tooldefinition') {
+        return toolTask?.content.data
+      }
+    }
+    return defaultToolMap[name]
+  }
+
+  async function updateToolIndex(task: TaskNode) {
+    let currentToolDef: ToolBase | undefined | null = undefined
+    if (task.content.type === 'tooldefinition') {
+      const toolDef = ToolBase.safeParse(task.content.data)
+      if (toolDef.success) {
+        const oldToolId = toolIndex.get(toolDef.data.name)
+        // of old tool already exists, we need tocheck which one is newer
+        // and only update if the new one is newer than the old one
+        if (oldToolId) {
+          const oldTool = await tyCrudVec.get(oldToolId)
+          if (
+            (oldTool?.created_at ?? 0) >= (task?.created_at ?? 0) &&
+            oldTool?.content.type === 'tooldefinition'
+          ) {
+            currentToolDef = oldTool?.content.data
+          }
+        }
+        if (!currentToolDef) {
+          toolIndex.set(task.content.data.name, task.id)
+          currentToolDef = toolDef.data
+        }
+      }
+    }
+    return {
+      current: currentToolDef,
+    }
+  }
+  return {
+    toolIndex,
+    defaultToolMap,
+    updateDefaultTools,
+    getTool,
+    updateToolIndex,
+  }
+}
+
 export interface TaskTreeNode {
   task: TaskNode
   children: TaskTreeNode[][]
@@ -430,48 +492,6 @@ export async function useTyTaskManager(
   const nextSiblingMap = new Map<string, Set<string>>()
   const parentToChildMap = new Map<string, Set<string>>()
   const immediateChildrenMap = new Map<string, Set<string>>()
-
-  // we use this index to quickly look up tools from our database!
-  // We require that the toolIndex should contain only the latest version of a tool
-  const toolIndex = new Map<string, string>()
-  const defaultToolMap: Record<string, InternalTool> = {}
-  const updateDefaultTools = (defaultTools: InternalTool[]) => {
-    for (const tool of defaultTools) {
-      const toolDef = ToolBase.safeParse(tool)
-      if (toolDef.success) {
-        defaultToolMap[toolDef.data.name] = tool
-      }
-    }
-  }
-  // we simply assume, that all tools HAVE to be defined in the toolmap, no matter what.
-  // if they are not there, we are doing something wrong ;)
-  async function getTool(name: string): Promise<InternalTool | undefined> {
-    const toolTaskId = toolIndex.get(name)
-    if (toolTaskId) {
-      const toolTask = await tyCrudVec.get(toolTaskId)
-      if (toolTask?.content.type === 'tooldefinition') {
-        return toolTask?.content.data
-      }
-    }
-    return defaultToolMap[name]
-  }
-  async function updateToolIndex(task: TaskNode) {
-    if (task.content.type === 'tooldefinition') {
-      const toolDef = ToolBase.safeParse(task.content.data)
-      if (toolDef.success) {
-        const oldToolId = toolIndex.get(toolDef.data.name)
-        // of old tool already exists, we need tocheck which one is newer
-        // and only update if the new one is newer than the old one
-        if (oldToolId) {
-          const oldTool = await tyCrudVec.get(oldToolId)
-          if ((oldTool?.created_at ?? 0) >= (task?.created_at ?? 0)) return undefined
-        }
-        toolIndex.set(task.content.data.name, task.id)
-        return toolDef.data
-      }
-    }
-    return false
-  }
 
   function deleteFromChildAndSiblings(task: TaskNode) {
     if (task.priorID) {
@@ -538,6 +558,9 @@ export async function useTyTaskManager(
     searchSimilarTasks,
     count: countVecs,
   } = await useTaskVectors(getAllTaskIds, tyCrud.get, vectorizerModel)
+
+  const { toolIndex, defaultToolMap, updateDefaultTools, getTool, updateToolIndex } =
+    createToolIndex(tyCrud)
 
   // add more enhanced, ty-specific functionality to our CRUD
   const tyCrudVec = withLocking({
@@ -852,9 +875,11 @@ export async function useTyTaskManager(
           tasks.map(async (task) => {
             if (task.content?.type === 'tooldefinition') {
               // Update toolIndex with the latest tool definition
-              const toolDef = await updateToolIndex(task)
-              if (toolDef) {
-                return [toolDef.name, toolDef]
+              const { current: newTool } = await updateToolIndex(task)
+              // if newTool was returned, it means we got a tool definition which
+              // is valid and newer than the previous one
+              if (newTool) {
+                return [newTool.name, newTool]
               }
             }
             return undefined
