@@ -15,7 +15,7 @@ import {
 import { smallHelperTools } from '../tools/helperCollection'
 import { useFullSmallTools } from '../tools/usefulSmallTools'
 import { devTools } from '../tools/devTools'
-import { taskOrganizationTools } from '../tools/TaskPlannerTool'
+import { taskOrganizationTools, taskSearcher } from '../tools/TaskPlannerTool'
 import { storageTools } from '../tools/gdrive'
 import { appDevTools } from '../tools/webAppDev'
 import { fileTools } from '../tools/fileTools'
@@ -70,9 +70,10 @@ export async function initTaskyon(
     chatCompletion,
     createToolSearcher(taskManagerInstance),
     createChooseTool(taskManagerInstance),
+    taskSearcher(taskManagerInstance),
     createAddNewToolTool(),
   )
-  taskManagerInstance.updateDefaultTools(ToolList)
+  taskManagerInstance.addDefaultTools(ToolList)
   void taskManagerInstance.updateToolDefinitions()
 
   // keys could porentially be reactive here, so in theory, when they change in the GUI,

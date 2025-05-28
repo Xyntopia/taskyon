@@ -1,5 +1,47 @@
 import type { JSONSchema7 } from 'json-schema'
 import { createTool } from '../taskyon/tools'
+import { taskTypeOptions } from '../taskyon/types'
+import type { TyTaskManager } from '../taskyon/taskManager'
+
+export const taskSearcher = (taskManager: TyTaskManager) =>
+  createTool({
+    name: 'taskSearcher',
+    description: 'Search through available tasks using a search string',
+    longDescription: `This tool allows you to search for tasks based on a search string. You can specify the number of tasks to return and filter by task type.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        searchString: {
+          type: 'string',
+          default: undefined,
+          description: `Use a searchstring which is similar to the task you want to find.`,
+        },
+        k: {
+          type: 'number',
+          default: 5,
+          description: `The number of tasks to return. Default is 5.`,
+        },
+        taskType: {
+          type: 'string',
+          enum: taskTypeOptions as string[],
+          default: undefined,
+          description: `Filter tasks by type. If not provided, all types are included.`,
+        },
+      },
+      required: [],
+    } as const satisfies JSONSchema7,
+    function: async ({ searchString, k, taskType }) => {
+      const jsonfilter = taskType
+        ? {
+            content: {
+              type: taskType,
+            },
+          }
+        : undefined
+      const result = await taskManager.filteredVectorSearch(searchString, k, jsonfilter)
+      return result
+    },
+  })
 
 export const taskPlanner = createTool({
   name: 'taskPlanner',

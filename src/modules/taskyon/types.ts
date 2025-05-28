@@ -269,6 +269,13 @@ export const TaskContent = z.union([
 
 export type TaskContent = z.infer<typeof TaskContent>
 
+// If you want to map them to { label, value } for q-select:
+export const taskTypeOptions = TaskContent.options.map((opt) => {
+  // each option is a ZodObject with a `type` literal
+  const typeLiteral = opt.shape.type._zod.def.values[0]
+  return typeLiteral
+})
+
 export const TaskNodeMeta = z
   .object({
     threadMessage: z.any().optional(), // Replace with the correct Zod schema if available
