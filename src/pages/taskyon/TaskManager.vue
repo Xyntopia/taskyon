@@ -76,15 +76,12 @@
               </div>
             </div>
             <div class="col q-pa-xs">
-              <div class="text-caption text-right">
-                id: {{ rows.row.taskId }} created:
-                {{
-                  taskDataMap[rows.row.taskId]?.created_at != null
-                    ? new Date(taskDataMap[rows.row.taskId]?.created_at!).toLocaleString()
-                    : ''
-                }}
-              </div>
-              <Task v-if="taskDataMap[rows.row.taskId]" :task="taskDataMap[rows.row.taskId]!" />
+              <Task
+                v-if="taskDataMap[rows.row.taskId]"
+                :task="taskDataMap[rows.row.taskId]!"
+                show-date
+                show-id
+              />
               <div v-else>We could not find the task, is it possible that it was deleted?</div>
             </div>
           </div>

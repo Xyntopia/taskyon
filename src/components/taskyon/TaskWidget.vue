@@ -1,7 +1,14 @@
 <template>
   <!--Task-->
   <div class="message-container">
-    <div v-if="showId" class="text-overline text-right">
+    <div
+      v-if="showDate && task.created_at"
+      class="text-overline text-right"
+      style="font-size: 75%; line-height: 1.5"
+    >
+      {{ new Date(task.created_at).toLocaleString() }}<q-tooltip>Task Creation Date</q-tooltip>
+    </div>
+    <div v-if="showId" class="text-overline text-right" style="font-size: 75%; line-height: 1.5">
       {{ task.id }}<q-tooltip>Task ID</q-tooltip>
     </div>
     <div class="relative-position">
@@ -310,6 +317,7 @@ const props = defineProps<{
   isWorking?: boolean
   short?: boolean
   showId?: boolean
+  showDate?: boolean
 }>()
 
 const tystate = useTaskyonStore()
