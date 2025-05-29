@@ -39,7 +39,7 @@ export const fetchMarkdown = async (folder: string, filePath: string) => {
 export function processMarkdown(markdown: string) {
   console.log('add new tasks', markdown)
   // Split the markdown content by the separator
-  const messages = markdown.split(/^---/gm).map((message) => message.trim())
+  const messages = markdown.split(/---(?=\s*<!--taskyon)/g).map((message) => message.trim())
 
   // Regular expression for matching metadata
   const metadataRegex = /<!--taskyon([\s\S]*?)-->/
