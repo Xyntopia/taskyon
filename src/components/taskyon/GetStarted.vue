@@ -42,7 +42,7 @@ const starters = computed(() => {
       label: 'Showcase Taskyons features',
     },
     {
-      url: '/chat/docs/examples/simpleExampleTutorial',
+      url: '/chat/tyClientExamples/simpleExampleTutorial',
       label: 'How do I integrate taskyon into my own webpage?',
     },
     {
@@ -65,7 +65,7 @@ label: ["discard"]
 Some AI models to get you started with:
 
   - meta-llama/llama-3.2-90b-vision-instruct: much cheaper than GPT4o and best for most tasks (including coding) and if you want to use "tools"
-  - openai/gpt-4o: visual tasks and if you need t work in languages other than english
+  - openai/gpt-4o: visual tasks and if you need to work in languages other than english
   - meta-llama/llama-3.2-11b-vision-instruct:  a very good "free" model
   - checkout the entire list of models and descriptions [here](https://taskyon.space/pricing)!
 
