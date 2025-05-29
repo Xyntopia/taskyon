@@ -111,6 +111,7 @@
           :disable="readOnly"
           filled
           dense
+          emit-value
           :label="prop.node.fieldHint"
           :options="prop.node.options.map((v: string) => ({ label: String(v), value: v }))"
           :model-value="prop.node.value"
