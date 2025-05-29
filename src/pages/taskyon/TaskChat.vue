@@ -9,7 +9,7 @@
       class="col column items-center"
       :style="`padding-bottom: ${bottomPadding + 5}px;`"
     >
-      <q-scroll-observer axis="vertical" :debounce="500" @scroll="onScroll" />
+      <q-scroll-observer axis="vertical" :debounce="1000" @scroll="onScroll" />
       <div
         v-if="tystate.selectedThread.value.length > 0 && showIntroduction"
         class="row items-center q-pa-sm"
@@ -25,6 +25,12 @@
           You've been invited to read this chat! Scroll down and start reading
           <q-btn label="Or start using Taskyon" dense no-caps outline @click="scrollToThreadEnd" />
         </div>
+      </div>
+      <div v-if="loadingFromGdrive" class="q-pa-xl">
+        <q-spinner-box color="secondary" size="2rem" class="q-mr-md" />
+        <span class="text-subtitle2">
+          Loading your shared conversation. Thank you for your patience...
+        </span>
       </div>
       <!-- "Task" Display -->
       <ConversationWidget
@@ -113,6 +119,13 @@
     <q-page-sticky position="bottom-right" :offset="[10, bottomPadding + 5]" class="print-hide">
       <TaskControlButtons @scroll-to-thread-end="scrollToThreadEnd" />
     </q-page-sticky>
+    <!-- Popup Messages -->
+    <q-dialog v-model="showPopupMessage" persistent>
+      <q-card class="q-pa-md">
+        <q-card-section class="text-body1">{{ popupMessage }}</q-card-section>
+        <q-btn flat label="Close" @click="showPopupMessage = false" />
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -160,10 +173,18 @@ const state = useAppStateStore()
 const taskThreadContainer = ref<HTMLElement | undefined>()
 const folder = ''
 const fileAttachments = ref<File[]>([]) // holds all attached files as a "tasklist"
+const loadingFromGdrive = ref(false)
+const popupMessage = ref<string | undefined>(undefined)
+const showPopupMessage = ref(false)
 
 const showIntroduction = computed(
   () => !(state.llmSettings.selectedApi && state.keys[state.llmSettings.selectedApi]),
 )
+
+const openPopupMessage = (message: string) => {
+  popupMessage.value = message
+  showPopupMessage.value = true
+}
 
 async function updateChatThread() {
   console.log('update chat thread')
@@ -172,9 +193,19 @@ async function updateChatThread() {
     state.lockBottomScroll = false
     const gdFileId = route.query.gd
     const markdownUrl = `https://share.taskyon.space/proxy/gdrive/${gdFileId}`
-    const markdownContent = await getTextFile(markdownUrl)
-    const newTaskId = await tm.addMdTaskChain(markdownContent)
-    state.setSelectedTask(newTaskId)
+    loadingFromGdrive.value = true
+    try {
+      const markdownContent = await getTextFile(markdownUrl)
+      const newTaskId = await tm.addMdTaskChain(markdownContent)
+      state.setSelectedTask(newTaskId)
+    } catch (error) {
+      console.error('Error loading from Google Drive:', error)
+      openPopupMessage(
+        `Error loading from Google Drive: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    } finally {
+      loadingFromGdrive.value = false
+    }
   } else if (typeof route.query.url === 'string') {
     const markdownUrl = route.query.url ? new URL(route.query.url) : undefined
     if (markdownUrl) {
