@@ -48,8 +48,8 @@
           size="10rem"
           name="svguse:/taskyon_logo_complex_animated.svg#taskyon"
           :style="{
-            '--icon-primary': !$q.dark.isActive ? 'var(--q-primary)' : 'var(--q-secondary)',
-            '--icon-secondary': !$q.dark.isActive ? 'var(--q-primary)' : 'var(--q-secondary)',
+            '--icon-primary': $q.dark.isActive ? 'white' : 'var(--q-primary)',
+            '--icon-secondary': $q.dark.isActive ? 'var(--q-secondary)' : 'var(--q-primary)',
           }"
         ></q-icon>
         <component

@@ -175,6 +175,14 @@ Taskyon provides a Nix flake (flake.nix) as a development environment which can 
 
 To debug Taskyon, we recommend using **Vue DevTools**, which integrates seamlessly with the development environment. You can inspect components, monitor Vuex state, and track changes in real time, ensuring efficient debugging and development workflows.
 
+## Icons
+
+icons can be generated using quasars "icongenie" program. This is the commandline that we should use:
+
+```bash
+icongenie generate --skip-trim --theme-color 2A3548 --svg-color 2A3548 -i
+```
+
 ## Contribution Guidelines
 
 Taskyon is designed to be **developer-friendly**, and we encourage contributions, especially around building new GUI features using **Quasar** and **Vue3**. Taskyon’s architecture is modular, and you’ll find that adding new functionality, like UI components or task management enhancements, is both straightforward and rewarding.
