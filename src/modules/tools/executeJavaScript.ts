@@ -62,7 +62,7 @@ onmessage = function(e) {
 
 // Tool to Execute JavaScript Code
 export const executeJavaScript = createTool({
-  function: async ({ code, useWebWorker = true }) => {
+  function: async ({ code, useWebWorker }) => {
     if (!(typeof code === 'string')) throw Error('Can not read provided code', code)
     if (code.length == 0) throw Error('Provided code is empty!')
     console.log('Executing JavaScript code...')
