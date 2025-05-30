@@ -15,53 +15,41 @@ async function safeExecuteTask(
   stopSignal: AbortSignal,
   allowedTools: string[],
 ): Promise<unknown> {
-  try {
-    if (task.content.type === 'functioncall') {
-      // calculate function result
-      const func = task.content.data
-      console.log(`Calling function ${func.name}`)
-      const tool = await taskManager.getTool(func.name)
-      if (tool && !stopSignal.aborted) {
-        // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
-        const taskChain = await taskManager.getTaskChain(task.id)
-        const funcR = await handleFunctionExecution(func, tool, stopSignal, {
-          taskChain,
-          getSecret: async (name) => {
-            console.log('get secret name', name)
-            await sleep(10000)
-            return Promise.resolve('N/A')
-          },
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          setSecret: (name, _value) => {
-            console.log('set secret name', name)
-          },
-          stopSignal,
-        })
+  if (task.content.type === 'functioncall') {
+    // calculate function result
+    const func = task.content.data
+    console.log(`Calling function ${func.name}`)
+    const tool = await taskManager.getTool(func.name)
+    if (tool && !stopSignal.aborted) {
+      // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
+      const taskChain = await taskManager.getTaskChain(task.id)
+      const funcR = await handleFunctionExecution(func, tool, stopSignal, {
+        taskChain,
+        getSecret: async (name) => {
+          console.log('get secret name', name)
+          await sleep(10000)
+          return Promise.resolve('N/A')
+        },
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        setSecret: (name, _value) => {
+          console.log('set secret name', name)
+        },
+        stopSignal,
+      })
 
-        return funcR
-      } else {
-        const toolnames = JSON.stringify(allowedTools)
-        throw new Error(
-          !stopSignal.aborted
-            ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
-            : 'The function execution was cancelled by taskyon',
-        )
-      }
+      return funcR
     } else {
+      const toolnames = JSON.stringify(allowedTools)
       throw new Error(
-        `Task with id ${task.id} is not a functioncall task, but of type ${task.content.type}. This should not happen!`,
+        !stopSignal.aborted
+          ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
+          : 'The function execution was cancelled by taskyon',
       )
     }
-  } catch (error) {
-    // Attach the current task context to the error
-    if (error instanceof Error) {
-      Object.assign(error, { task })
-      throw error
-    } else {
-      const err = new Error(`Non-error thrown, with task context: ${JSON.stringify(task)}`)
-      Object.assign(err, { task })
-      throw err
-    }
+  } else {
+    throw new Error(
+      `Task with id ${task.id} is not a functioncall task, but of type ${task.content.type}. This should not happen!`,
+    )
   }
 }
 
@@ -424,62 +412,64 @@ const createTaskProcessor = (
   }
 }
 
-export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManager) {
-  console.log('starting task worker listener...')
+const setupRun = (
+  streamEmit: (value: TyTaskStreamData) => void,
+  stopAllTasks: (message: string) => void,
+  llmSettings: llmSettings,
+  taskManager: TyTaskManager,
+) => {
+  console.log('setting up task worker run...')
+  const currentTaskCtrl: AbortController = new AbortController()
 
-  const setupRun = (
-    streamEmit: (value: TyTaskStreamData) => void,
-    stopAllTasks: (message: string) => void,
-  ) => {
-    console.log('setting up task worker run...')
-    const currentTaskCtrl: AbortController = new AbortController()
-
-    const processTasksQueue = createAsyncQueue<string>()
-    const queueTask = (id: string) => {
-      if (!currentTaskCtrl.signal.aborted) {
-        taskProcessingStream.emit({ stage: 'queued', taskId: id })
-        processTasksQueue.push(id)
-      }
-    }
-    const { allTasksFinished, taskisInLoop, taskOutOfLoop, getTasksInProgress } =
-      workerLoggingHelper(streamEmit)
-
-    const asyncProcessTask = createTaskProcessor(
-      taskManager,
-      streamEmit,
-      queueTask,
-      currentTaskCtrl,
-      taskisInLoop,
-      taskOutOfLoop,
-      stopAllTasks,
-    )
-
-    const run = async () => {
-      console.log('starting task worker run...')
-      while (!currentTaskCtrl.signal.aborted) {
-        if (getTasksInProgress() <= 0) {
-          streamEmit({ stage: 'waiting' })
-        }
-        let taskId: string
-        try {
-          taskId = await processTasksQueue.pop(currentTaskCtrl.signal)
-        } catch {
-          streamEmit({ stage: 'aborted' })
-          break
-        }
-        void asyncProcessTask(taskId, llmSettings)
-      }
-      processTasksQueue.clear()
-      allTasksFinished()
-      streamEmit({ stage: 'all finished' })
-    }
-
-    return {
-      run,
-      queueTask,
-      currentTaskCtrl,
+  const processTasksQueue = createAsyncQueue<string>()
+  const queueTask = (id: string) => {
+    if (!currentTaskCtrl.signal.aborted) {
+      streamEmit({ stage: 'queued', taskId: id })
+      processTasksQueue.push(id)
     }
   }
+  const { allTasksFinished, taskisInLoop, taskOutOfLoop, getTasksInProgress } =
+    workerLoggingHelper(streamEmit)
+
+  const asyncProcessTask = createTaskProcessor(
+    taskManager,
+    streamEmit,
+    queueTask,
+    currentTaskCtrl,
+    taskisInLoop,
+    taskOutOfLoop,
+    stopAllTasks,
+  )
+
+  const run = async () => {
+    console.log('starting task worker run...')
+    while (!currentTaskCtrl.signal.aborted) {
+      if (getTasksInProgress() <= 0) {
+        streamEmit({ stage: 'waiting' })
+      }
+      let taskId: string
+      try {
+        taskId = await processTasksQueue.pop(currentTaskCtrl.signal)
+      } catch {
+        streamEmit({ stage: 'aborted' })
+        break
+      }
+      void asyncProcessTask(taskId, llmSettings)
+    }
+    processTasksQueue.clear()
+    allTasksFinished()
+    streamEmit({ stage: 'all finished' })
+  }
+
+  return {
+    run,
+    queueTask,
+    currentTaskCtrl,
+  }
+}
+
+export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManager) {
+  console.log('starting task worker listener...')
 
   // create all variables that we want to access from outside
   const taskProcessingStream = createStream<TyTaskStreamData>()
@@ -494,13 +484,16 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
     taskProcessingStream.emit({ stage: 'aborted' })
   }
 
+  // we have put all our dependencies in re-startable workers.
+  // if anyone calls the "workerStop" the function wil simply re-start the worker
+  // as soon as a new task was added....
   const externalQueueTask = (id: string) => {
     if (currentTaskCtrl?.signal.aborted || !queueTask) {
       const {
         run,
         queueTask: newQueueTask,
         currentTaskCtrl: newTaskCtrl,
-      } = setupRun(taskProcessingStream.emit, stopAllTasks)
+      } = setupRun(taskProcessingStream.emit, stopAllTasks, llmSettings, taskManager)
       currentTaskCtrl = newTaskCtrl
       queueTask = newQueueTask
       console.log('restarting task worker run...')
