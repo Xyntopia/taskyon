@@ -16,10 +16,9 @@ import type {
   OpenRouterGenerationInfo,
   ChatResponseType,
   FunctionArguments,
+  llmSettings,
 } from '../taskyon/types'
-import { FunctionCall, getCurrentModel } from '../taskyon/types'
-import { getApiConfigCopy } from '../taskyon/types'
-import { TaskProcessingError, type llmSettings } from '../taskyon/types'
+import { FunctionCall, getCurrentModel, getApiConfigCopy } from '../taskyon/types'
 import { makeTaskResult, createTool, mapFunctionNames, type toolContext } from '../taskyon/tools'
 import {
   createDeepTransformer,
@@ -86,13 +85,10 @@ export async function processChatTask(
   //TODO: this code is duplicated, can we do this better?
   const api = getApiConfigCopy(llmSettings, configuration.chatApi)
   const apiKey = llmSettings.selectedApi ? apiKeys[llmSettings.selectedApi] : undefined
-  if (!apiKey)
-    throw new TaskProcessingError('We need to define an API key to process our chat Task!')
+  if (!apiKey) throw new Error('We need to define an API key to process our chat Task!')
 
   if (!api) {
-    throw new TaskProcessingError(
-      `api doesn't exist! ${llmSettings.selectedApi || 'no api selected!'}`,
-    )
+    throw new Error(`api doesn't exist! ${llmSettings.selectedApi || 'no api selected!'}`)
   }
   //TODO: we can create more things here like giving it context form other tasks, lookup
   //      main objective, previous tasks etc....
@@ -134,27 +130,26 @@ export async function processChatTask(
     tools = generateOpenAIToolDeclarations(allowedTools || [], toolDefs)
   }
 
-  if (openAIConversationThread.length > 0) {
-    const chatCompletion = await callLLM(
-      openAIConversationThread,
-      tools,
-      // we do the following, because "api" is required by our callLLM function.
-      // TODO: explicitly get the api as a parameter in this function vs implicitly getting it form llmsettings...
-      { ...api, selectedModel: configuration.model },
-      llmSettings.siteUrl,
-      apiKey,
-      true, // for now, we always want to stream our task...
-      streamTracker, // track incoming streams...
-      stopSignal,
-      10000, // Timeout in milliseconds for waiting for first streamed response
-      3, // Maximum number of retry attempts
-      schema,
-    )
-
-    return { chatCompletion, metaInfo: { openAIConversationThread, msgs: msgs ?? {} } }
-  } else {
-    throw new TaskProcessingError('The generated chat for chatCompletion is empty!')
+  if (openAIConversationThread.length <= 0) {
+    throw new Error('We were not able to convert our tasks into an AI-compatible format!')
   }
+  const chatCompletion = await callLLM(
+    openAIConversationThread,
+    tools,
+    // we do the following, because "api" is required by our callLLM function.
+    // TODO: explicitly get the api as a parameter in this function vs implicitly getting it form llmsettings...
+    { ...api, selectedModel: configuration.model },
+    llmSettings.siteUrl,
+    apiKey,
+    true, // for now, we always want to stream our task...
+    streamTracker, // track incoming streams...
+    stopSignal,
+    10000, // Timeout in milliseconds for waiting for first streamed response
+    3, // Maximum number of retry attempts
+    schema,
+  )
+
+  return { chatCompletion, metaInfo: { openAIConversationThread, msgs: msgs ?? {} } }
 }
 
 // Ensures that every assistant.tool_calls is paired with a role:"tool" message.
@@ -320,10 +315,25 @@ function parseYamlResponse2Record(message: string): Record<string, unknown> {
     // Parse the extracted or original YAML content
     parsedYaml = load(yamlContent)
   } catch (err) {
-    throw new TaskProcessingError('Error converting the response to yaml', {
-      yamlString: yamlContent,
-      error: err instanceof Error ? err.message : JSON.stringify(err),
-    })
+    const errmsg = err instanceof Error ? err.message : JSON.stringify(err)
+    throw new Error(
+      `Not able to convert the response to yaml:
+
+We got:
+
+${message}
+
+and the Error:
+
+${errmsg}
+`,
+      {
+        cause: {
+          yamlString: yamlContent,
+          error: err,
+        },
+      },
+    )
   }
   return parsedYaml as Record<string, unknown>
 }
@@ -375,8 +385,9 @@ function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]
       const command = parsed.data
       return [command]
     }
-    throw new TaskProcessingError(`The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
-   suggests we should use a tool, but we could not parse the ${JSON.stringify(structResponse.command)} property.`)
+    throw new Error(`The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
+suggests we should use a tool, but we could not parse the ${JSON.stringify(structResponse.command)}
+property correctly.`)
   }
   return []
 }
@@ -452,18 +463,13 @@ function generateFollowUpTasksFromResult(
     ]
     console.log('No more follow up tasks!')
   } else if (goal === 'AnalyzeToolResult' || goal === 'ChooseTool' || goal === 'AnalyzeError') {
-    // TODO: move the followup ask generation into a separate task/function! :)
     const commands = getCommandFromStructuredResponse(choice)
     if (commands.length > 0) {
       const command = commands[0]!
       if (!allowedTools?.includes(command.name)) {
-        throw new TaskProcessingError(
-          `Tool '${command.name}' is not in the list of allowed tools`,
-          {
-            allowedTools,
-            requestedTool: command.name,
-          },
-        )
+        throw new Error(`Tool '${command.name}' is not in the list of allowed tools`, {
+          cause: { allowedTools, requestedTool: command.name },
+        })
       }
     }
     newTasks = [
@@ -489,7 +495,7 @@ function generateFollowUpTasksFromResult(
     }
   } else {
     // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-    throw new TaskProcessingError(`chatCompletion goal unknown: ${goal}`)
+    throw new Error(`chatCompletion goal unknown: ${goal}`)
   }
   return newTasks
 }
@@ -512,9 +518,11 @@ export function extractOpenAIFunctions(
       console.warn('Failed to parse arguments as JSON:', error)
       if (choice.finish_reason === 'cancelled') fargs = { cancelled: toolCall.function.arguments }
       else
-        throw new TaskProcessingError('We cold not parse the function arguments as json', {
-          arguments: toolCall.function.arguments,
-        })
+        throw new Error(
+          `We cold not parse the function arguments as json:
+
+${toolCall.function.arguments}`,
+        )
     }
     const functionCallObj: FunctionCall = {
       name: toolCall.function.name,
@@ -730,7 +738,7 @@ export async function createChatCompletionTool(
       // the current task doesn't *have* to exist. We can also works solely with prompts...
       const currentTask = context.taskChain.at(-1)
       if (!llmSettings.selectedApi) {
-        throw new TaskProcessingError('No API selected!')
+        throw new Error('No API selected!')
       }
 
       const toolDefs = await taskManager.updateToolDefinitions(true)
@@ -790,10 +798,9 @@ export async function createChatCompletionTool(
       }
 
       if (!choice)
-        throw new TaskProcessingError(
-          'Our ChatCompletion tool did not get a valid response!',
-          chatCompletion,
-        )
+        throw new Error('The AI gave us an incomplete response!', {
+          cause: chatCompletion,
+        })
 
       // in case a schema was given, we simply use that schema and return it as a structured message
       // for further processing (e.g. a contextFunction)...
@@ -812,7 +819,7 @@ export async function createChatCompletionTool(
             )
           }
         } else {
-          throw new TaskProcessingError('Invalid schema type')
+          throw new Error('Schema needs to be an object!', { cause: schema })
         }
 
         return makeTaskResult([

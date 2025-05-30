@@ -39,16 +39,6 @@ export function removeUndefinedProperties<T extends object>(obj: T): RemoveUndef
   ) as RemoveUndefined<T, keyof T>
 }
 
-export class TaskProcessingError extends Error {
-  details: Record<string, unknown> | undefined
-
-  constructor(message: string, details?: Record<string, unknown>) {
-    super(message)
-    this.name = 'TaskFollowUpError'
-    this.details = details
-  }
-}
-
 // TODO: the goal should be to slowly replace this state by the "result of the task"
 //       E.g. when a task had an error, this would be represented in the task result as an "error"
 const TaskState = z.enum(['Open', 'Queued', 'In Progress', 'Completed', 'Cancelled', 'Error'])

@@ -1,7 +1,7 @@
 import type { OpenRouterGenerationInfo, Model, llmSettings, OpenAIMessage } from './types'
 import type OpenAI from 'openai'
 import { sleep, asyncTimeLruCache } from '../utils'
-import { ChatResponseType, TaskProcessingError } from './types'
+import { ChatResponseType } from './types'
 import { charHash } from '../crypto_webcrypto'
 
 export function generateHeaders(apiSecret: string, siteUrl: string, selectedApi: string) {
@@ -139,7 +139,7 @@ export async function callLLM(
 ): Promise<ChatResponseType | undefined> {
   const headers: Record<string, string> = generateHeaders(apiKey, siteUrl, api.name)
   if (!api.selectedModel) {
-    throw new TaskProcessingError('You need to select an AI model in order to use the AI!')
+    throw new Error('No AI model was selected for chat completion!')
   }
 
   type CreateBodyType = OpenAI.ChatCompletionCreateParams
@@ -168,6 +168,8 @@ export async function callLLM(
     ...(functions.length > 0 && { tools: functions, tool_choice: 'auto' }),
   }
 
+  const accumulatedErrors: Set<string> = new Set()
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     console.log(`Attempt ${attempt} of ${maxRetries}`)
 
@@ -190,12 +192,8 @@ export async function callLLM(
 
       // Check for non-OK status codes and throw error
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new TaskProcessingError(
-          `Fetching answer from AI Api failed at attempt ${attempt}/${maxRetries}
-  with status ${response.status}: ${response.statusText}`,
-          { errorData },
-        )
+        accumulatedErrors.add(await response.json())
+        continue
       }
 
       let chatCompletion: ChatResponseType | undefined = undefined
@@ -238,17 +236,16 @@ export async function callLLM(
               const jsonString = line.replace(/^data: /, '').trim()
 
               if (jsonString && jsonString !== '[DONE]') {
+                let jsonChunk: OpenAI.Chat.Completions.ChatCompletionChunk
                 try {
                   // Parse the current line into a JSON object
-                  const jsonChunk: OpenAI.Chat.Completions.ChatCompletionChunk =
-                    JSON.parse(jsonString)
-                  chunks.push(jsonChunk)
-
-                  // Call the callback function to process the chunk
-                  contentCallBack(jsonChunk)
+                  jsonChunk = JSON.parse(jsonString)
                 } catch (err) {
-                  throw new TaskProcessingError(`Failed to parse chunk; ${jsonString}`, { err })
+                  throw new Error(`Failed to parse chunk; ${jsonString}`, { cause: err })
                 }
+                chunks.push(jsonChunk)
+                // Call the callback function to process the chunk
+                contentCallBack(jsonChunk)
               }
             }
           }
@@ -284,10 +281,9 @@ export async function callLLM(
       stopSignal.removeEventListener('abort', onAbort)
       console.error(`Attempt ${attempt} failed:`, error)
       if (attempt === maxRetries) {
-        throw new TaskProcessingError(
-          `Max retries (${maxRetries}) exceeded while waiting for the AI response.`,
-          { error },
-        )
+        throw new Error(`Max retries (${maxRetries}) exceeded while waiting for the AI response.`, {
+          cause: error,
+        })
       }
     } finally {
       clearTimeout(timeoutId)

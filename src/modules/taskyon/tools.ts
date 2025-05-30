@@ -2,7 +2,7 @@ import { dump } from 'js-yaml'
 import { bigIntToString } from '../utils'
 import type { FunctionArguments, FunctionCall, ParamType, WithRequired, TaskNode } from './types'
 import { convertZodToJsonSchemaCached, partialTaskDraft, taskMarker } from './types'
-import { ToolBase, TaskProcessingError } from './types'
+import { ToolBase } from './types'
 import type { RemoteFunctionResponse } from './iframeApiTypes'
 import { RemoteFunctionCall, TaskyonMessage } from './iframeApiTypes'
 import { z } from 'zod'
@@ -114,8 +114,8 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
           }
         } else {
           reject(
-            new TaskProcessingError('The message had the wrong format for taskyon!', {
-              error: response.error,
+            new Error('The message had the wrong format for taskyon!', {
+              cause: response.error,
             }),
           )
         }
@@ -126,7 +126,7 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
     const timeoutSeconds = 10
     setTimeout(() => {
       reject(
-        new TaskProcessingError(
+        new Error(
           `Response timeout (${timeoutSeconds}). Waiting for function ${name} more than ${timeoutSeconds}s`,
         ),
       )
@@ -155,9 +155,7 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
 function getTool(tools: Record<string, ToolBase | InternalTool>, name: string) {
   const tool = tools[name]
   if (!tool) {
-    throw new TaskProcessingError("Tool doesn't exist", {
-      toolName: name,
-    })
+    throw new Error(`Tool doesn't exist: "${name}"`)
   }
   return tool
 }
@@ -233,9 +231,7 @@ export async function handleFunctionExecution(
       funcR = await executeCodeInIframe(tool.code, func.arguments, func.name + '.js', stopSignal)
       funcR = bigIntToString(funcR) // Optionally convert bigInt
     } catch (error) {
-      throw new TaskProcessingError(
-        `Error executing iframe code for tool: ${func.name}. Error: ${error instanceof Error ? error.message : 'unknown'}`,
-      )
+      throw new Error(`Error executing iframe code for tool: ${func.name}`, { cause: error })
     }
   } else {
     // we do the zod object parsing/validation here, because we might have a proxy object from upstream

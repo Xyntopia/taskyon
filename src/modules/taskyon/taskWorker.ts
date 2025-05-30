@@ -1,14 +1,8 @@
 import type { TaskNodeMeta, TyTaskStreamData } from './types'
-import {
-  type partialTaskDraft,
-  type TaskNode,
-  type llmSettings,
-  TaskProcessingError,
-  getApiConfigCopy,
-} from './types'
+import { type partialTaskDraft, type TaskNode, type llmSettings, getApiConfigCopy } from './types'
 import { type TyTaskManager } from './taskManager'
 import { handleFunctionExecution, taskResult } from './tools'
-import { createAsyncQueue, makeSerializable, sleep } from '../utils'
+import { createAsyncQueue, sleep } from '../utils'
 import { createChatCompletionTask } from '../tools/chatCompletionTool'
 import type { CrudWrapper } from '../crudWrapper'
 import { createStream } from '../frpBus'
@@ -47,14 +41,14 @@ async function safeExecuteTask(
         return funcR
       } else {
         const toolnames = JSON.stringify(allowedTools)
-        throw new TaskProcessingError(
+        throw new Error(
           !stopSignal.aborted
             ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
             : 'The function execution was cancelled by taskyon',
         )
       }
     } else {
-      throw new TaskProcessingError(
+      throw new Error(
         `Task with id ${task.id} is not a functioncall task, but of type ${task.content.type}. This should not happen!`,
       )
     }
@@ -91,9 +85,7 @@ function parseResultForTaskChains(
     //       this way we could develop different kinds of function processors and
     //       probably also simply make the code more consistent...
     if (!analyzeModel)
-      throw new TaskProcessingError(
-        'We need to select a model in order to analyze the result of our task!!',
-      )
+      throw new Error('We need to select a model in order to analyze the result of our task!!')
 
     // TODO: maybe move this into chatCompletion?
     //       I am not sure, if that makes sense, because we don't know yet what kind of result a tool produces...
@@ -205,7 +197,7 @@ function createTaskTracker(tm: TyTaskManager) {
   // this function recursivly checks if a task is finished
   async function isTaskFinished(taskId: string): Promise<boolean> {
     const task = await tm.getTask(taskId)
-    if (!task) throw new TaskProcessingError('Task not found!')
+    if (!task) throw new Error('Task not found!')
     if (task.content.type === 'functioncall') {
       return await areAllSubtasksFinished(task.id)
     } else {
@@ -353,7 +345,7 @@ const createTaskProcessor = (
 
       // TODO: try to get rid of all the llmSettings functionality here..   this should only be relevant for chatCompletion which
       //       is now a tool! :)
-      if (!llmSettings.selectedApi) throw new TaskProcessingError('No AI API selected!!')
+      if (!llmSettings.selectedApi) throw new Error('No AI API selected!!')
       const selectedModel = getApiConfigCopy(llmSettings, llmSettings.selectedApi)?.selectedModel
       let newTasks: TaskNode[][] = []
       try {
@@ -524,7 +516,6 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
   }
 }
 
-// TODO: move all the "debugging" stuff away nd make use of the debugging DB that we're getting ;)
 function createErrorTaskChain(
   error: unknown,
   task: TaskNode | null,
@@ -547,28 +538,10 @@ ${JSON.stringify(error)}
     error,
   }
 
-  if (error instanceof TaskProcessingError) {
-    errorTask.content = {
-      //message: `An error occured: ${error.message}:\n\n${dump(error.details, { skipInvalid: true })}`,
-      type: 'error',
-      data: `An error occured: ${error.message}
-${error.details ? '```json\n\n' + JSON.stringify(makeSerializable(error.details, 7)) : '````'}`,
-    }
-    if (task) {
-      debugInfo.error = {
-        message: error.message,
-        name: error.name,
-        details: error.details,
-        location: 'task processing',
-      }
-    }
-  } else if (error instanceof Error) {
+  if (error instanceof Error) {
     errorTask.content = {
       type: 'error',
-      data: `An error occured: ${error.message}
-\`\`\`json
-${JSON.stringify(error)}
-\`\`\``,
+      data: `An error occured: ${error.message}`,
     }
     if (task) {
       debugInfo.error = {
