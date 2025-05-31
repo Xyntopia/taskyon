@@ -76,9 +76,9 @@
 
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState'
-import type { ChatResponseType, TaskNodeMeta, TaskNode } from 'src/modules/taskyon/types'
+import type { ChatResponseType, TaskNode } from 'src/modules/taskyon/types'
 import { type OpenAIMessage } from 'src/modules/taskyon/types'
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { onUnmounted } from 'vue'
 
@@ -94,23 +94,8 @@ const state = useAppStateStore()
 const subscriptions: Array<() => void> = []
 onUnmounted(() => subscriptions.forEach((unsub) => unsub()))
 
-// we are using this function here to async gather debug information about this task...
-function getTaskMeta(taskId: string | undefined) {
-  const taskMetaRef = ref<TaskNodeMeta>()
-  if (taskId) {
-    void tystate.getTaskManager().then((tm) => {
-      subscriptions.push(
-        tm.debugDb.readLive(taskId).subscribe(({ data }) => {
-          taskMetaRef.value = data || undefined
-        }),
-      )
-    })
-  }
-  return computed(() => taskMetaRef.value)
-}
-
-const taskMeta = getTaskMeta(task.id)
-const taskMetaPrevious = getTaskMeta(task.priorID ?? task.parentID)
+const taskMeta = tystate.getTaskMetaRef(task.id)
+const taskMetaPrevious = tystate.getTaskMetaRef(task.priorID ?? task.parentID)
 
 const taskChoice = computed(() => {
   try {

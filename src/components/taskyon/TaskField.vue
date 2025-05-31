@@ -86,7 +86,7 @@
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
-import type { TaskNodeMeta, TaskNode } from 'src/modules/taskyon/types'
+import type { TaskNode } from 'src/modules/taskyon/types'
 import { computed, ref } from 'vue'
 import TaskButtons from './TaskButtons.vue'
 import { matArrowDropDown, matArrowDropUp, matMonetizationOn } from '@quasar/extras/material-icons'
@@ -94,7 +94,6 @@ import { openrouterPricing } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useRouter } from 'vue-router'
 import TaskDebugTabs from './TaskDebugTabs.vue'
-import { onScopeDispose } from 'vue'
 
 const props = defineProps<{
   task: TaskNode
@@ -111,24 +110,8 @@ const tystate = useTaskyonStore()
 const expandMessageContent = ref<boolean>(false)
 const router = useRouter()
 
-function getTaskMeta(taskId: string | undefined) {
-  const taskMetaRef = ref<TaskNodeMeta>()
-  let subscriptionUnsub: (() => void) | null = null
-  if (taskId) {
-    void tystate.getTaskManager().then((tm) => {
-      subscriptionUnsub = tm.debugDb.readLive(taskId).subscribe(({ data }) => {
-        taskMetaRef.value = data || undefined
-      })
-    })
-  }
-  onScopeDispose(() => {
-    if (subscriptionUnsub) subscriptionUnsub()
-  })
-  return computed(() => taskMetaRef.value)
-}
-
-const taskMeta = getTaskMeta(task.id)
-const taskMetaNext = getTaskMeta(task.id)
+const taskMeta = tystate.getTaskMetaRef(task.id)
+const taskMetaNext = tystate.getTaskMetaRef(task.id)
 const taskCostMeta = computed(() =>
   taskMeta.value?.estimatedTokens ? taskMeta.value : taskMetaNext?.value,
 )

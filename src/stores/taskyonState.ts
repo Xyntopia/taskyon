@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { watch, computed, ref } from 'vue'
-import type { Asyncify, TyTaskStreamData } from 'src/modules/taskyon/types'
+import type { Asyncify, TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
 import {
   type Model,
   TaskNode,
@@ -22,6 +22,7 @@ import { initializeSessionWithPasskey } from 'src/modules/cryptoSession'
 import { generateRsaOaepPair } from 'src/modules/crypto_webcrypto'
 import { setColors } from 'src/boot/brand-colors'
 import { setPrismTheme } from 'src/modules/markdownUtils '
+import { onScopeDispose } from 'vue'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -580,7 +581,24 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     }
   }
 
+  function getTaskMetaRef(taskId: string | undefined) {
+    const taskMetaRef = ref<TaskNodeMeta>()
+    let subscriptionUnsub: (() => void) | null = null
+    if (taskId) {
+      void getTaskManager().then((tm) => {
+        subscriptionUnsub = tm.debugDb.readLive(taskId).subscribe(({ data }) => {
+          taskMetaRef.value = data || undefined
+        })
+      })
+    }
+    onScopeDispose(() => {
+      if (subscriptionUnsub) subscriptionUnsub()
+    })
+    return computed(() => taskMetaRef.value)
+  }
+
   return {
+    getTaskMetaRef,
     setNewContentDraft,
     setContentDraftFromTask,
     getAllTools,
