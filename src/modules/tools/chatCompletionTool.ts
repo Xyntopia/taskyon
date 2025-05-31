@@ -1,6 +1,7 @@
 import type OpenAI from 'openai'
 import {
   callLLM,
+  createOpenAIRequest,
   generateHeaders,
   getOpenRouterGenerationInfo,
   getTaskyonCosts,
@@ -133,20 +134,26 @@ export async function processChatTask(
   if (openAIConversationThread.length <= 0) {
     throw new Error('We were not able to convert our tasks into an AI-compatible format!')
   }
-  const chatCompletion = await callLLM(
-    openAIConversationThread,
-    tools,
+
+  const streamTask = true
+  const { headers, payload, url } = await createOpenAIRequest(
+    apiKey,
+    llmSettings.siteUrl,
     // we do the following, because "api" is required by our callLLM function.
     // TODO: explicitly get the api as a parameter in this function vs implicitly getting it form llmsettings...
     { ...api, selectedModel: configuration.model },
-    llmSettings.siteUrl,
-    apiKey,
-    true, // for now, we always want to stream our task...
+    openAIConversationThread,
+    schema,
+    streamTask, // for now, we always want to stream our task...
+    tools,
+  )
+  const chatCompletion = await callLLM(
+    { headers, payload, url },
+    streamTask,
     streamTracker, // track incoming streams...
     stopSignal,
     10000, // Timeout in milliseconds for waiting for first streamed response
     3, // Maximum number of retry attempts
-    schema,
   )
 
   return { chatCompletion, metaInfo: { openAIConversationThread, msgs: msgs ?? {} } }
