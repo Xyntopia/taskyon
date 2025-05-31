@@ -509,6 +509,16 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
   }
 }
 
+function formatReadableError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err)
+
+  let current: unknown = err
+  while (current instanceof Error && current.cause) {
+    current = current.cause
+  }
+  return current instanceof Error ? current.message : String(current)
+}
+
 function createErrorTaskChain(
   error: unknown,
   task: TaskNode | null,
@@ -517,35 +527,30 @@ function createErrorTaskChain(
   allowedTools: string[],
   debugDb: CrudWrapper<TaskNodeMeta>,
 ) {
+  const humanMsg = formatReadableError(error)
+
   const errorTask: partialTaskDraft = {
     role: 'system',
     content: {
       type: 'error',
-      data: `An error occured:
-\`\`\`json
-${JSON.stringify(error)}
-\`\`\``,
+      data: humanMsg,
     },
   }
-  const debugInfo = {
-    error,
-  }
 
-  if (error instanceof Error) {
-    errorTask.content = {
-      type: 'error',
-      data: `An error occured: ${error.message}`,
-    }
-    if (task) {
-      debugInfo.error = {
-        message: error.message,
-        stack: error.stack,
-        cause: error.cause,
-      }
+  const debugInfo = { error }
+
+  if (error instanceof Error && task) {
+    // preserve full debug info
+    debugInfo.error = {
+      message: error.message,
+      stack: error.stack,
+      cause: error.cause,
     }
   }
 
-  if (task?.id) void debugDb.upsert(task?.id, debugInfo, 'shallow_merge')
+  if (task?.id) {
+    void debugDb.upsert(task.id, debugInfo, 'shallow_merge')
+  }
 
   return [
     errorTask,
