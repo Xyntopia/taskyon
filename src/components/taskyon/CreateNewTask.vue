@@ -239,6 +239,11 @@ const { selectedApi } = toRefs(state.llmSettings)
 
 const slimSettings = buildSlimView(
   {
+    obj: state.appConfiguration,
+    schema: appConfiguration,
+    pickKeys: ['expertMode', 'showCosts'],
+  },
+  {
     obj: state.llmSettings,
     schema: llmSettings,
     pickKeys: ['enableToolChooser', 'enableOpenAiTools', 'tryUsingVisionModels', 'useBasePrompt'],

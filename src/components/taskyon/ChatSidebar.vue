@@ -66,9 +66,6 @@
     </div>
     <q-separator v-if="!state.minimalGui" spaced />
     <!-- Settings Area -->
-    <q-item v-if="!state.minimalGui" class="fit column items-center">
-      <SimpleSettings class="col-auto" vertical reduced></SimpleSettings>
-    </q-item>
     <q-item v-if="!state.minimalGui" class="fit">
       <div class="row">
         <div>
@@ -107,7 +104,6 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import SimpleSettings from './SimpleSettings.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import FileDropzone from 'components/FileDropzone.vue'
 import { matSearch, matManageAccounts, matFileUpload } from '@quasar/extras/material-icons'
