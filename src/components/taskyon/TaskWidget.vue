@@ -38,7 +38,12 @@
     >
       {{ task.content.data }}
     </TaskField>
-    <TaskField v-else-if="task.content.type === 'functioncall'" :task="task" :showMeta="showMeta">
+    <TaskField
+      v-else-if="task.content.type === 'functioncall'"
+      :task="task"
+      :showMeta="showMeta"
+      short
+    >
       <template #header>
         <div
           :class="

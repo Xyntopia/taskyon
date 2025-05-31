@@ -92,9 +92,9 @@ import TaskButtons from './TaskButtons.vue'
 import { matArrowDropDown, matArrowDropUp, matMonetizationOn } from '@quasar/extras/material-icons'
 import { openrouterPricing } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
-import { onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import TaskDebugTabs from './TaskDebugTabs.vue'
+import { onScopeDispose } from 'vue'
 
 const props = defineProps<{
   task: TaskNode
@@ -111,20 +111,19 @@ const tystate = useTaskyonStore()
 const expandMessageContent = ref<boolean>(false)
 const router = useRouter()
 
-const subscriptions: Array<() => void> = []
-onUnmounted(() => subscriptions.forEach((unsub) => unsub()))
-
 function getTaskMeta(taskId: string | undefined) {
   const taskMetaRef = ref<TaskNodeMeta>()
+  let subscriptionUnsub: (() => void) | null = null
   if (taskId) {
     void tystate.getTaskManager().then((tm) => {
-      subscriptions.push(
-        tm.debugDb.readLive(taskId).subscribe(({ data }) => {
-          taskMetaRef.value = data || undefined
-        }),
-      )
+      subscriptionUnsub = tm.debugDb.readLive(taskId).subscribe(({ data }) => {
+        taskMetaRef.value = data || undefined
+      })
     })
   }
+  onScopeDispose(() => {
+    if (subscriptionUnsub) subscriptionUnsub()
+  })
   return computed(() => taskMetaRef.value)
 }
 
