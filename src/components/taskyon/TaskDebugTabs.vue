@@ -1,0 +1,123 @@
+<template>
+  <div>
+    <q-tabs v-model="state.messageDebug[task.id]" dense no-caps>
+      <q-tab v-if="taskMeta?.error" name="ERROR" label="Error" />
+      <q-tab name="TASKNODE" label="raw task data" />
+      <q-tab v-if="taskMeta?.taskPrompt" name="TASKPROMPT" label="raw conversation" />
+      <q-tab v-if="taskMetaPrevious?.rawOutput" name="RAW_INPUT" label="raw input" />
+      <q-tab name="DEBUGGING" label="debugging" />
+    </q-tabs>
+    <q-tab-panels
+      v-model="state.messageDebug[task.id]"
+      animated
+      swipeable
+      horizontal
+      transition-prev="jump-right"
+      transition-next="jump-left"
+    >
+      <q-tab-panel name="ERROR">
+        <textarea
+          :value="JSON.stringify(taskMeta?.error, null, 2)"
+          readonly
+          wrap="soft"
+          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
+        >
+        </textarea>
+      </q-tab-panel>
+      <q-tab-panel name="TASKNODE">
+        <textarea
+          :value="JSON.stringify(task, null, 2)"
+          readonly
+          wrap="soft"
+          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
+        >
+        </textarea>
+      </q-tab-panel>
+      <q-tab-panel v-if="taskMetaPrevious?.rawOutput" name="RAW_INPUT">
+        <textarea
+          :value="JSON.stringify(taskMetaPrevious.rawOutput, null, 2)"
+          readonly
+          wrap="soft"
+          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
+        >
+        </textarea>
+      </q-tab-panel>
+      <q-tab-panel v-if="taskMeta?.taskPrompt" name="TASKPROMPT">
+        <textarea
+          v-for="(tp, idx) in taskMeta.taskPrompt.openAIConversationThread as OpenAIMessage[]"
+          :key="idx"
+          :value="typeof tp.content === 'string' ? tp.content : ''"
+          readonly
+          wrap="soft"
+          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
+        >
+        </textarea>
+        <div class="text-caption">finished completion:</div>
+        <textarea
+          :value="taskChoice || null"
+          readonly
+          wrap="soft"
+          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
+        >
+        </textarea>
+      </q-tab-panel>
+      <q-tab-panel name="DEBUGGING">
+        <textarea
+          :value="JSON.stringify(taskMeta, null, 2)"
+          readonly
+          wrap="soft"
+          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
+        >
+        </textarea>
+      </q-tab-panel>
+    </q-tab-panels>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { useTaskyonStore } from 'stores/taskyonState'
+import type { ChatResponseType, TaskNodeMeta, TaskNode } from 'src/modules/taskyon/types'
+import { type OpenAIMessage } from 'src/modules/taskyon/types'
+import { computed, ref } from 'vue'
+import { useAppStateStore } from 'src/stores/appState'
+import { onUnmounted } from 'vue'
+
+const props = defineProps<{
+  task: TaskNode
+}>()
+
+const { task } = props
+
+const tystate = useTaskyonStore()
+const state = useAppStateStore()
+
+const subscriptions: Array<() => void> = []
+onUnmounted(() => subscriptions.forEach((unsub) => unsub()))
+
+// we are using this function here to async gather debug information about this task...
+function getTaskMeta(taskId: string | undefined) {
+  const taskMetaRef = ref<TaskNodeMeta>()
+  if (taskId) {
+    void tystate.getTaskManager().then((tm) => {
+      subscriptions.push(
+        tm.debugDb.readLive(taskId).subscribe(({ data }) => {
+          taskMetaRef.value = data || undefined
+        }),
+      )
+    })
+  }
+  return computed(() => taskMetaRef.value)
+}
+
+const taskMeta = getTaskMeta(task.id)
+const taskMetaPrevious = getTaskMeta(task.priorID ?? task.parentID)
+
+const taskChoice = computed(() => {
+  try {
+    return (taskMeta.value?.rawOutput as { choice: ChatResponseType['choices'][0] }).choice?.message
+      .content
+  } catch {
+    return '<no chatcompletion output avaailable>'
+  }
+})
+</script>

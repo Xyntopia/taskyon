@@ -77,78 +77,7 @@
     <!--task debugging-->
     <q-slide-transition>
       <div v-show="state.messageDebug[task.id]">
-        <q-separator spaced />
-        <q-tabs v-model="state.messageDebug[task.id]" dense no-caps>
-          <q-tab v-if="taskMeta?.error" name="ERROR" label="Error" />
-          <q-tab name="TASKNODE" label="raw task data" />
-          <q-tab v-if="taskMeta?.taskPrompt" name="TASKPROMPT" label="raw conversation" />
-          <q-tab v-if="taskMetaPrevious?.rawOutput" name="RAW_INPUT" label="raw input" />
-          <q-tab name="DEBUGGING" label="debugging" />
-        </q-tabs>
-        <q-tab-panels
-          v-model="state.messageDebug[task.id]"
-          animated
-          swipeable
-          horizontal
-          transition-prev="jump-right"
-          transition-next="jump-left"
-        >
-          <q-tab-panel name="ERROR">
-            <textarea
-              :value="JSON.stringify(taskMeta?.error, null, 2)"
-              readonly
-              wrap="soft"
-              style="width: 100%; height: 200px; background-color: inherit; color: inherit"
-            >
-            </textarea>
-          </q-tab-panel>
-          <q-tab-panel name="TASKNODE">
-            <textarea
-              :value="JSON.stringify(task, null, 2)"
-              readonly
-              wrap="soft"
-              style="width: 100%; height: 200px; background-color: inherit; color: inherit"
-            >
-            </textarea>
-          </q-tab-panel>
-          <q-tab-panel v-if="taskMetaPrevious?.rawOutput" name="RAW_INPUT">
-            <textarea
-              :value="JSON.stringify(taskMetaPrevious.rawOutput, null, 2)"
-              readonly
-              wrap="soft"
-              style="width: 100%; height: 200px; background-color: inherit; color: inherit"
-            >
-            </textarea>
-          </q-tab-panel>
-          <q-tab-panel v-if="taskMeta?.taskPrompt" name="TASKPROMPT">
-            <textarea
-              v-for="(tp, idx) in taskMeta.taskPrompt.openAIConversationThread as OpenAIMessage[]"
-              :key="idx"
-              :value="typeof tp.content === 'string' ? tp.content : ''"
-              readonly
-              wrap="soft"
-              style="width: 100%; height: 200px; background-color: inherit; color: inherit"
-            >
-            </textarea>
-            <div class="text-caption">finished completion:</div>
-            <textarea
-              :value="taskChoice || null"
-              readonly
-              wrap="soft"
-              style="width: 100%; height: 200px; background-color: inherit; color: inherit"
-            >
-            </textarea>
-          </q-tab-panel>
-          <q-tab-panel name="DEBUGGING">
-            <textarea
-              :value="JSON.stringify(taskMeta, null, 2)"
-              readonly
-              wrap="soft"
-              style="width: 100%; height: 200px; background-color: inherit; color: inherit"
-            >
-            </textarea>
-          </q-tab-panel>
-        </q-tab-panels>
+        <TaskDebugTabs :task="task" />
       </div>
     </q-slide-transition>
   </div>
@@ -157,16 +86,15 @@
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
-import type { ChatResponseType, TaskNodeMeta, TaskNode } from 'src/modules/taskyon/types'
-import { type OpenAIMessage } from 'src/modules/taskyon/types'
+import type { TaskNodeMeta, TaskNode } from 'src/modules/taskyon/types'
 import { computed, ref } from 'vue'
 import TaskButtons from './TaskButtons.vue'
 import { matArrowDropDown, matArrowDropUp, matMonetizationOn } from '@quasar/extras/material-icons'
 import { openrouterPricing } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
-import type { TyTaskManager } from 'src/modules/taskyon/taskManager'
 import { onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import TaskDebugTabs from './TaskDebugTabs.vue'
 
 const props = defineProps<{
   task: TaskNode
@@ -180,39 +108,31 @@ const { short = true, task } = props
 
 const tystate = useTaskyonStore()
 
-const initStr = undefined
 const expandMessageContent = ref<boolean>(false)
-const taskMetaPrevious = ref<TaskNodeMeta | undefined>(initStr)
-const taskMetaNext = ref<TaskNodeMeta | undefined>(initStr)
 const router = useRouter()
 
 const subscriptions: Array<() => void> = []
 onUnmounted(() => subscriptions.forEach((unsub) => unsub()))
 
-async function getTaskMeta(taskId: string) {
+function getTaskMeta(taskId: string | undefined) {
   const taskMetaRef = ref<TaskNodeMeta>()
-  const tm = await tystate.getTaskManager()
-  subscriptions.push(
-    tm.debugDb.readLive(taskId).subscribe(({ data }) => {
-      taskMetaRef.value = data || undefined
-    }),
-  )
-  return computed(() => taskMetaRef)
+  if (taskId) {
+    void tystate.getTaskManager().then((tm) => {
+      subscriptions.push(
+        tm.debugDb.readLive(taskId).subscribe(({ data }) => {
+          taskMetaRef.value = data || undefined
+        }),
+      )
+    })
+  }
+  return computed(() => taskMetaRef.value)
 }
 
 const taskMeta = getTaskMeta(task.id)
+const taskMetaNext = getTaskMeta(task.id)
 const taskCostMeta = computed(() =>
   taskMeta.value?.estimatedTokens ? taskMeta.value : taskMetaNext?.value,
 )
-
-const taskChoice = computed(() => {
-  try {
-    return (taskMeta.value?.rawOutput as { choice: ChatResponseType['choices'][0] }).choice?.message
-      .content
-  } catch {
-    return '<no chatcompletion output avaailable>'
-  }
-})
 
 const state = useAppStateStore()
 
