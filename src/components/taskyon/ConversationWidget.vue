@@ -11,32 +11,25 @@
           @lazy-load="onLazyLoad"
         >
           <template #default-header="prop">
-            <div class="col">
-              <div v-if="prop.node.task" class="text-caption">
-                {{ prop.node.taskid.slice(0, 5) }}
-                {{ new Date(prop.node.task.created_at).toLocaleString() }}
-                <q-tooltip>{{ prop.node.taskid }}</q-tooltip>
-              </div>
-              <div v-else class="text-bold">{{ prop.node.taskid.slice(0, 12) }}</div>
-              <q-card
-                v-if="prop.node.task"
-                class="task-container"
-                flat
-                :class="[prop.node.task.role, Object.keys(prop.node.task.content)[0]]"
-                @click.stop
-              >
-                <Task
-                  :id="prop.node.task.id"
-                  :task="prop.node.task"
-                  short
-                  :class="[
-                    'q-pa-xs',
-                    prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
-                  ]"
-                  :show-id="!!showIds"
-                />
-              </q-card>
-            </div>
+            <q-card
+              v-if="prop.node.task"
+              class="task-container"
+              flat
+              :class="[prop.node.task.role, Object.keys(prop.node.task.content)[0]]"
+              @click.stop
+            >
+              <Task
+                :id="prop.node.task.id"
+                :task="prop.node.task"
+                short
+                :class="[
+                  'q-pa-xs',
+                  prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
+                ]"
+                :show-id="!!showIds"
+              />
+            </q-card>
+            <div v-else class="text-bold">{{ prop.node.taskid.slice(0, 12) }}</div>
           </template>
         </q-tree>
       </div>
