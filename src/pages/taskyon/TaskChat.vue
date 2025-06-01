@@ -89,7 +89,7 @@
       "
     />
     <!--Task Browser buttons-->
-    <q-page-sticky position="top-left" class="print-hide">
+    <q-page-sticky position="top-left" class="task-browser-buttons">
       <div v-if="detailed" class="q-pa-sm q-gutter-sm toolbar">
         <ToggleButton v-model="showAllTasks" dense flat label="dev">
           <q-tooltip>Show Detailed Task Chain</q-tooltip>
@@ -100,7 +100,7 @@
       </div>
     </q-page-sticky>
     <!--Create new task area-->
-    <q-page-sticky position="bottom" :offset="[0, 0]" expand class="print-hide">
+    <q-page-sticky position="bottom" :offset="[0, 0]" expand>
       <q-resize-observer @resize="handleResize" />
       <div class="col create-new-task-container" style="max-width: 48rem">
         <CreateNewTask
@@ -116,7 +116,7 @@
       </div>
     </q-page-sticky>
     <!--Task Chat Control Buttons-->
-    <q-page-sticky position="bottom-right" :offset="[10, bottomPadding + 5]" class="print-hide">
+    <q-page-sticky position="bottom-right" :offset="[10, bottomPadding + 5]">
       <TaskControlButtons @scroll-to-thread-end="scrollToThreadEnd" />
     </q-page-sticky>
     <!-- Popup Messages -->

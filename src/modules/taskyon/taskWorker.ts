@@ -223,7 +223,11 @@ function workerLoggingHelper(streamEmit: (value: TyTaskStreamData) => void) {
   }
   const taskOutOfLoop = (taskId: string) => {
     tasksInProgress.delete(taskId)
-    streamEmit({ stage: 'processed', taskId, info: tasksInProgress.size.toString() })
+    streamEmit({
+      stage: 'processed',
+      taskId,
+      info: `Tasks in queue: ${tasksInProgress.size.toString()}`,
+    })
     if (tasksInProgress.size === 0) allTasksFinished()
   }
   return {
@@ -391,7 +395,7 @@ const createTaskProcessor = (
           setTaskFinished(task.id)
         }
       } catch (error) {
-        streamEmit({ stage: 'error', taskId: task.id })
+        streamEmit({ stage: 'error', taskId: task.id, info: formatReadableError(error) })
         await handleError(error, task, selectedModel, {
           maxAutonomousTasks: llmSettings.maxAutonomousTasks,
           enableOpenAiTools: llmSettings.enableOpenAiTools,

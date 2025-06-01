@@ -22,10 +22,7 @@
                 :id="prop.node.task.id"
                 :task="prop.node.task"
                 short
-                :class="[
-                  'q-pa-xs',
-                  prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
-                ]"
+                :class="[prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"
                 :show-id="!!showIds"
               />
             </q-card>
@@ -46,10 +43,7 @@
                 :id="prop.node.task.id"
                 :task="prop.node.task"
                 short
-                :class="[
-                  'q-pa-xs',
-                  prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
-                ]"
+                :class="[prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"
                 :show-id="!!showIds"
               />
             </q-card>
@@ -73,7 +67,6 @@
                   !!tystate.lastTaskState.get(task.id) &&
                   tystate.lastTaskState.get(task.id) !== 'processed'
                 "
-                :class="['q-pa-xs']"
                 :show-id="!!showIds"
               />
             </q-card>
@@ -81,7 +74,7 @@
         </template>
       </div>
       <!--Render tasks which are in progress-->
-      <div class="tasks-container q-py-sm">
+      <div class="task-logs tasks-container q-py-sm">
         <q-card
           v-if="
             !!tystate.lastTaskState.get(currentTask.id) &&
@@ -127,7 +120,8 @@
             class="column"
             :key="ridx"
           >
-            {{ formatTimeStamp(log.timestamp) }}: {{ log.stage }} {{ log.taskId || log.task?.id }}
+            {{ formatTimeStamp(log.timestamp) }} {{ log.stage
+            }}{{ log.info ? ': ' + log.info : '' }}
           </div></template
         >
       </div>

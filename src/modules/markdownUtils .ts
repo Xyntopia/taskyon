@@ -177,7 +177,7 @@ export function createMultiButtonPlugin(
     return `
       <div class="code-block-with-btns" id="${blockId}">
         ${contentWithId}
-        <div class="code-buttons print-hide">
+        <div class="code-buttons">
           ${btnsHtml}
           <span class="langlabel">${lang}</span>
         </div>

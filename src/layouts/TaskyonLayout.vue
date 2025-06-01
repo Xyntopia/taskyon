@@ -11,7 +11,6 @@
       persistent
       :width="250"
       :breakpoint="minMode ? 5000 : 800"
-      class="print-hide"
     >
       <ChatSidebar />
     </q-drawer>

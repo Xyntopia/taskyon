@@ -1,35 +1,37 @@
 <template>
   <div>
-    <!--task header-->
+    <!--task meta data-->
     <div v-if="showMeta" class="text-overline text-right" style="font-size: 75%; line-height: 1.5">
       {{ task.id.slice(0, 5) }}
       {{ task.created_at ? new Date(task.created_at).toLocaleString() : '' }}
       <q-tooltip>{{ task.id }}</q-tooltip>
     </div>
-    <!--task content-->
-    <div class="relative-position">
+    <div class="message-display column items-stretch">
       <!--Message Display-->
-      <div class="row items-end q-gutter-xs">
+      <div class="row items-end">
         <!--task icon-->
-        <div v-if="icon" class="col-auto self-center">
+        <div v-if="icon" class="col-auto self-center q-pr-sm">
           <q-icon :name="icon" :color="iconColor" size="sm" />
         </div>
         <!--task content-->
-        <div class="col q-pb-md">
+        <div class="col">
           <q-btn
             v-if="short"
+            stretch
             flat
             dense
+            :icon-right="expandMessageContent ? matArrowDropUp : matArrowDropDown"
             no-caps
             @click="expandMessageContent = !expandMessageContent"
           >
+            <!--task header-->
             <div class="text-caption">
               <slot name="header"></slot>
             </div>
-            <q-icon :name="expandMessageContent ? matArrowDropUp : matArrowDropDown" />
           </q-btn>
           <q-slide-transition>
             <div v-show="!short || expandMessageContent">
+              <!--expandable task content-->
               <slot></slot>
             </div>
           </q-slide-transition>
@@ -38,7 +40,7 @@
         <div
           v-if="state.appConfiguration.showCosts && taskCostMeta"
           style="font-size: xx-small"
-          class="col-auto column items-center print-hide task-costs"
+          class="col-auto column items-center task-costs"
         >
           <div v-if="taskCostMeta.taskCosts">
             {{ humanReadableTaskCosts }}
@@ -66,7 +68,7 @@
       </div>
       <!--buttons-->
       <TaskButtons
-        class="message-buttons absolute-bottom-left print-hide rounded-borders"
+        class="message-buttons col self-end"
         :task="task"
         @toggle-markdown="toggleMarkdown"
         @create-new-conversation="createNewConversation"
@@ -75,7 +77,7 @@
       />
     </div>
     <!--task debugging-->
-    <q-slide-transition>
+    <q-slide-transition class="debug-container">
       <div v-show="state.messageDebug[task.id]">
         <TaskDebugTabs :task="task" />
       </div>

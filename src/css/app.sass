@@ -70,6 +70,7 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
 
     // Specific style for tasks with the 'user' role
     .task-container
+      margin-bottom: 8px
       &.user
         //background: linear-gradient(to left, rgba($secondary,0.075), $dark 100%)
         //border-right: 1px solid rgba($secondary, 0.5)
@@ -87,17 +88,26 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
   .message-container
     margin-left: 5px
     margin-right: 5px
+
+  .debug-container
+    padding-top: 5px
+
+  .message-display
+    position: relative
+
     // TODO: make message buttons somehow always appear on screen..  never be hidden..
     .message-buttons
-      background: rgba($secondary,0.5)
+      border-radius: 5px
+      background: white
+      color: rgb($primary)
       position: absolute
-      bottom: -2px
-      left: -2px
+      bottom: -10px // shift it 10px downward
+      //bottom: 0px
+      right: 0px
       opacity: 0
-      transition: opacity 0.3s
+      transition: opacity 1s
       display: flex
       flex-wrap: nowrap
-      overflow-x: auto // In case buttons overflow, allow horizontal scrolling
       white-space: nowrap
 
     &:hover
@@ -158,8 +168,6 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       border: 0.5px solid rgba(white, 0.5)
 
     .tasks-container
-      max-width: 800px
-
       // Specific s  .q-dark
       color: redtyle for tasks with the 'user' role
       .task-container
@@ -190,6 +198,10 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
 
     .taskyon-control-button
       background-color: rgba($secondary,0.7)
+
+    .message-buttons
+      background: $dark
+      color: rgb($secondary)
 
     .button-group
       display: inline-block
@@ -241,5 +253,8 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     padding: 0
     box-shadow: none /* Remove shadows, if any */
     min-height: 0 !important /* Override min-height if necessary */
+
+  .task-logs, .task-costs, .message-buttons, .code-buttons, .task-browser-buttons, .create-new-task-container, .task-control-buttons
+    visibility: hidden
 
 @import 'src/css/markdown'

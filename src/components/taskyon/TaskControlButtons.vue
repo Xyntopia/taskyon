@@ -1,5 +1,5 @@
 <template>
-  <div class="column q-gutter-xs">
+  <div class="column q-gutter-xs task-control-buttons">
     <div class="col-auto">
       <q-btn
         v-if="!state.lockBottomScroll"

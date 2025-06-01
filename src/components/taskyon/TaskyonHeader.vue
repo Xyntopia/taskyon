@@ -1,5 +1,5 @@
 <template>
-  <q-header class="column print-hide">
+  <q-header class="column">
     <component
       :is="!minMode ? QToolbar : 'div'"
       :class="minMode ? 'q-gutter-xs row q-px-sm' : 'q-gutter-xs'"
