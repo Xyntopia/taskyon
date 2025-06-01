@@ -244,8 +244,8 @@ function createHandleError(
   currentTaskCtrl: AbortController,
   queueTask: (id: string) => void,
 ) {
+  console.log('create error handler function...')
   let errorCount = 0
-  errorCount += 1
 
   return async (
     error: unknown,
@@ -257,6 +257,7 @@ function createHandleError(
       allowedTools?: string[]
     },
   ) => {
+    errorCount += 1
     if (errorCount >= llmSettings.maxAutonomousTasks) {
       // TODO: somehow put this into an error tasknode...
       // TODO: also add any taskWorkerController interrupt in an error tasknode..
@@ -409,7 +410,11 @@ const createTaskProcessor = (
         // usually, this would automatically happen in the taskWorker loop, because
         // all tasks are queued. But here, this won't work.
         // TODO: should we also add function tasks here? or only non-function tasks?
-        streamEmit({ stage: 'aborted', task: newTasks.at(-1)?.at(-1) })
+        streamEmit({
+          stage: 'aborted',
+          task: newTasks.at(-1)?.at(-1),
+          info: currentTaskCtrl.signal.reason,
+        })
       }
     }
     return task

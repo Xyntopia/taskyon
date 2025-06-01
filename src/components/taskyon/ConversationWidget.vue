@@ -110,7 +110,7 @@
             >
               {{ lastWorkerEvent.stage !== 'all finished' ? 'Processing:' : ''
               }}{{ lastWorkerEvent?.stage }}
-              {{ lastWorkerEvent?.taskId || lastWorkerEvent?.task?.id }}
+              {{ lastWorkerEvent?.info }}
             </span>
           </q-btn>
         </div>
@@ -120,10 +120,10 @@
             class="column"
             :key="ridx"
           >
-            {{ formatTimeStamp(log.timestamp) }} {{ log.stage
-            }}{{ log.info ? ': ' + log.info : '' }}
-          </div></template
-        >
+            {{ formatTimeStamp(log.timestamp) }} : {{ log.stage }}
+            {{ log.info ? ' | ' + log.info : '' }}
+          </div>
+        </template>
       </div>
     </template>
   </div>
