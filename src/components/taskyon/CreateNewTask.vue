@@ -138,7 +138,7 @@
               <q-tooltip>Select AI model (current model: {{ tystate.currentModelId }})</q-tooltip>
               <q-menu color="secondary">
                 <q-list style="min-width: 100px">
-                  <q-item-label header>Select previous AI model!</q-item-label>
+                  <q-item-label header>Previously selected AI models!</q-item-label>
                   <q-item v-if="state.modelHistory.length === 0" v-close-popup>
                     No other models were selected yet!
                   </q-item>
@@ -151,11 +151,11 @@
                   >
                     <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
                   </q-item>
-                  <q-item v-close-popup clickable>
+                  <q-item v-close-popup clickable to="/pricing">
                     <q-item-section avatar>
                       <q-icon :name="matSmartToy"></q-icon>
                     </q-item-section>
-                    <q-item-section> More AI Settings </q-item-section>
+                    <q-item-section> All Models </q-item-section>
                     <q-item-section side>
                       <q-icon :name="matNavigateNext"></q-icon>
                     </q-item-section>

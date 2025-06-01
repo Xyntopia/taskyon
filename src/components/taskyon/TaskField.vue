@@ -17,15 +17,15 @@
         <div class="col">
           <q-btn
             v-if="short"
-            stretch
             flat
             dense
             :icon-right="expandMessageContent ? matArrowDropUp : matArrowDropDown"
             no-caps
             @click="expandMessageContent = !expandMessageContent"
+            style="width: 100%"
           >
             <!--task header-->
-            <div class="text-caption">
+            <div class="text-caption col">
               <slot name="header"></slot>
             </div>
           </q-btn>
@@ -139,6 +139,7 @@ async function editTask(taskId: string) {
 }
 
 async function createNewConversation(taskId: string) {
+  console.log('create new conversation...')
   const task = await (await tystate.getTaskManager()).getTask(taskId)
   tystate.setContentDraftFromTask(task)
 

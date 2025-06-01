@@ -32,12 +32,13 @@
     </q-btn>
     <q-separator vertical class="q-mx-sm" />
     <q-btn
+      v-if="task.content.type === 'message' || task.content.type === 'functioncall'"
       class="col-auto"
       size="sm"
       dense
       flat
       :icon="mdiForumPlus"
-      @click="emit('create_new_conversation', task.id)"
+      @click="emit('create-new-conversation', task.id)"
     >
       <q-tooltip :delay="0">Start a new thread with this message! </q-tooltip>
     </q-btn>
@@ -141,6 +142,6 @@ const emit = defineEmits<{
   (e: 'edit-task', taskId: string): Promise<void>
   (e: 'toggle-message-debug', taskId: string): void
   (e: 'toggle-markdown', taskId: string): void
-  (e: 'create_new_conversation', taskId: string): Promise<void>
+  (e: 'create-new-conversation', taskId: string): Promise<void>
 }>()
 </script>
