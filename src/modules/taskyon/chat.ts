@@ -117,20 +117,57 @@ export function accumulateStep(
   return response
 }
 
-/** Helper: always include HTTP status in the message */
 async function getClearErrorMessage(response: Response): Promise<string> {
-  const statusLine = `${response.status}${response.statusText ? ` ${response.statusText}` : ''}`
-
-  try {
-    // try JSON `{ error, message }`
-    const body = await response.clone().json()
-    const serverMsg = body.error || body.message
-    return serverMsg ? `${statusLine}: ${serverMsg}` : statusLine
-  } catch {
-    // fallback to plain text
-    const text = await response.text()
-    return text ? `${statusLine}: ${text}` : statusLine
+  const statusCode = response.status
+  let statusText = response.statusText || ''
+  const defaultPhrases: Record<number, string> = {
+    400: 'Bad Request',
+    401: 'Unauthorized',
+    403: 'Forbidden',
+    404: 'Not Found',
+    500: 'Internal Server Error',
+    502: 'Bad Gateway',
+    503: 'Service Unavailable',
+    // …add others as needed…
   }
+
+  // Formatter: fill in default statusText if empty, then prepend "<code> <statusText>: "
+  const fmt = (msg: string) => {
+    if (!statusText && defaultPhrases[statusCode]) {
+      statusText = defaultPhrases[statusCode]
+    }
+    const prefix = `${statusCode}${statusText ? ` ${statusText}` : ''}`
+    return `${prefix}: ${msg}`
+  }
+
+  // 1) Try JSON { error, message } but only accept non-empty strings
+  try {
+    const body = await response.clone().json()
+    const errField = body.error
+    const msgField = body.message
+
+    if (typeof errField === 'string' && errField.trim()) {
+      return fmt(errField.trim())
+    }
+    if (typeof msgField === 'string' && msgField.trim()) {
+      return fmt(msgField.trim())
+    }
+  } catch {
+    // non-JSON or parse failure → ignore
+  }
+
+  // 2) Fallback to plain text, but skip if it looks like JSON
+  try {
+    const text = (await response.text()).trim()
+    if (text && !text.startsWith('{') && !text.startsWith('[')) {
+      return fmt(text)
+    }
+  } catch {
+    // ignore read errors
+  }
+
+  // 3) No useful JSON/text → “No additional information available.”
+  return fmt('No additional information available.')
 }
 
 // calls OpenAI API compatible chatmodels
