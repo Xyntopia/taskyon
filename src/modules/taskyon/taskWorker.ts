@@ -490,7 +490,9 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
     currentTaskCtrl?.abort(message)
     // in case of any errors, especially if its an interrupt event we simply want to cancel everything :P
     // empty our task queue :)
-    taskProcessingStream.emit({ stage: 'aborted' })
+    // TODO:  not sure, if we need this here, becaise we are already giving the "currentTaskCtrl" a rason
+    // which gets streamed at a later stage...
+    taskProcessingStream.emit({ stage: 'aborted', info: message })
   }
 
   // we have put all our dependencies in re-startable workers.
