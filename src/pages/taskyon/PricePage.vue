@@ -22,7 +22,7 @@ selecting different models).
         :rows="filteredTableData"
         :columns="columns"
         row-key="id"
-        :filter="filter"
+        :filter="state.modelFilter"
         :pagination="{
           sortBy: 'prompt_price',
           descending: false,
@@ -32,7 +32,13 @@ selecting different models).
         }"
       >
         <template #top-left>
-          <q-input v-model="filter" dense clearable debounce="300" placeholder="Filter Models">
+          <q-input
+            v-model="state.modelFilter"
+            dense
+            clearable
+            debounce="300"
+            placeholder="Filter Models"
+          >
             <template #append>
               <q-icon :name="matFilterList" />
             </template>
@@ -161,7 +167,6 @@ const pricingOptions = ['$/token', 'pages/0.01$', '$/million tokens'] as const
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
-const filter = ref<string | null>('')
 const priceDisplay = ref<(typeof pricingOptions)[number]>(pricingOptions[2])
 //const { llmModels: tableData } = storeToRefs(state);
 

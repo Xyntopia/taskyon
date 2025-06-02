@@ -92,6 +92,10 @@ export const useAppStateStore = defineStore(storeName, () => {
       rti: 1440,
       model: [],
     } as tyPublicKeyDraft,
+    // save our model search string on the pricing page...
+    // this makes it easier to come back to a filtered list for model
+    // selection
+    modelFilter: '' as string | null,
   }
 
   // overwrite with saved configuration:
