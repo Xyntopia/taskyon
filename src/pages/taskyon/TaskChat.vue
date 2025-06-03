@@ -33,7 +33,7 @@
         </span>
       </div>
       <!-- "Task" Display -->
-      <ConversationWidget
+      <TaskChainViewer
         v-if="tystate.selectedThread.value.length > 0"
         :selected-thread="tystate.selectedThread.value"
         :current-task="tystate.currentTask.value"
@@ -135,7 +135,7 @@ import { useQuasar, scroll } from 'quasar'
 import { useTaskyonStore } from 'stores/taskyonState'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
 import GetStarted from 'components/taskyon/GetStarted.vue'
-import ConversationWidget from 'components/taskyon/ConversationWidget.vue'
+import TaskChainViewer from 'components/taskyon/TaskChainViewer.vue'
 import { defineAsyncComponent } from 'vue'
 import { fetchMarkdown, getTextFile } from 'src/modules/taskyon/taskUtils'
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue'

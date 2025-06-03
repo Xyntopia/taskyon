@@ -39,7 +39,7 @@
         </div>
         <div class="col">
           <q-scroll-area class="fit">
-            <conversation-widget
+            <TaskChainViewer
               :selected-thread="tystate.selectedThread.value"
               :current-task="tystate.currentTask.value"
             />
@@ -61,7 +61,7 @@ import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
 import ObjectTreeView from 'components/ObjectTreeView.vue'
 import UnderConstructionHint from 'components/UnderConstructionHint.vue'
 import { addPrompts } from 'src/modules/taskyon/promptCreation'
-import ConversationWidget from 'components/taskyon/ConversationWidget.vue'
+import TaskChainViewer from 'components/taskyon/TaskChainViewer.vue'
 import { mdiMagicStaff } from '@quasar/extras/mdi-v6'
 import CreateTaskButton from 'components/taskyon/CreateTaskButton.vue'
 import { dump } from 'js-yaml'
