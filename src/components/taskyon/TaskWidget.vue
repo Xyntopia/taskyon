@@ -86,7 +86,7 @@
       class="text-info"
       :task="task"
       :showMeta="showMeta"
-      icon="mdiHeadCog"
+      :icon="mdiHeadCog"
     >
       <template #header> Analyze... </template>
       <p style="white-space: pre-wrap">
@@ -133,7 +133,7 @@ import type { TaskNode } from 'src/modules/taskyon/types'
 import tyMarkdown from '../tyMarkdown.vue'
 import { ref } from 'vue'
 import { type FileMappingDocType } from 'src/modules/taskyon/rxdb'
-import { mdiDesktopTower, mdiFileDocument, mdiTools } from '@quasar/extras/mdi-v6'
+import { mdiDesktopTower, mdiFileDocument, mdiTools, mdiHeadCog } from '@quasar/extras/mdi-v6'
 import { matBuild, matCalculate, matPause, matWarning } from '@quasar/extras/material-icons'
 import FileBrowser from './FileBrowser.vue'
 import { useAppStateStore } from 'src/stores/appState'
