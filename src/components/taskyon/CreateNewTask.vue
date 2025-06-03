@@ -238,22 +238,30 @@ const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { selectedApi } = toRefs(state.llmSettings)
 
-const slimSettings = buildSlimView(
-  {
-    obj: state.appConfiguration,
-    schema: appConfiguration,
-    pickKeys: ['expertMode', 'showCosts'],
-  },
-  {
-    obj: state.llmSettings,
-    schema: llmSettings,
-    pickKeys: ['enableToolChooser', 'enableOpenAiTools', 'tryUsingVisionModels', 'useBasePrompt'],
-  },
-  {
-    obj: state.appConfiguration,
-    schema: appConfiguration,
-    pickKeys: ['useEnterToSend', 'primaryColor', 'secondaryColor'],
-  },
+const em = computed(() => state.appConfiguration.expertMode)
+
+const slimSettings = computed(() =>
+  buildSlimView(
+    {
+      obj: state.appConfiguration,
+      schema: appConfiguration,
+      pickKeys: ['expertMode', ...(em.value ? ['showCosts'] : [])],
+    },
+    {
+      obj: state.llmSettings,
+      schema: llmSettings,
+      pickKeys: [
+        ...(em.value
+          ? ['enableToolChooser', 'enableOpenAiTools', 'tryUsingVisionModels', 'useBasePrompt']
+          : []),
+      ],
+    },
+    {
+      obj: state.appConfiguration,
+      schema: appConfiguration,
+      pickKeys: ['useEnterToSend', 'primaryColor', 'secondaryColor'],
+    },
+  ),
 )
 
 // we initialize our taskDraft with the state of this window!

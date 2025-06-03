@@ -640,7 +640,8 @@ export const appConfiguration = z.object({
     description: 'gDrive fileid of the configuration',
   }),
   expertMode: z.boolean().default(false).meta({
-    description: 'Turns on additional settings and configurations.',
+    description:
+      'Turn on additional settings and configurations and debugging tools for advanced users.',
   }),
   showCosts: z.boolean().default(false).meta({
     description: 'Shows the costs of API calls.',
