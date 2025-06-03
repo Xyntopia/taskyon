@@ -55,8 +55,9 @@
               <q-tooltip>More AI Settings</q-tooltip>
               <FormDialog
                 title="AI Settings"
-                dense
                 flat
+                dense
+                denseOptions
                 :icon="matMoreHoriz"
                 :schema="slimSettings.jsonSchema"
                 v-model="slimSettings.reactiveView"

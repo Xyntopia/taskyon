@@ -8,11 +8,14 @@
         <slot name="before" />
       </q-card-section>
       <q-card-section>
-        <ObjectTreeView v-model="reactiveData" :schema="schema" />
+        <ObjectTreeView v-model="reactiveData" :schema="schema" :dense="!!denseOptions" />
       </q-card-section>
       <q-card-section v-if="$slots.after">
         <slot name="after" />
       </q-card-section>
+      <q-card-actions class="float-right">
+        <q-btn flat label="Ok" v-close-popup />
+      </q-card-actions>
     </q-card>
   </q-dialog>
 </template>
@@ -28,5 +31,9 @@ defineOptions({ inheritAttrs: false })
 const openDialog = ref(false)
 const reactiveData = defineModel<Record<string, unknown>>()
 
-defineProps<{ title?: string; schema?: JSONSchema7 | z.core.JSONSchema.BaseSchema | undefined }>()
+defineProps<{
+  title?: string
+  schema?: JSONSchema7 | z.core.JSONSchema.BaseSchema | undefined
+  denseOptions?: boolean
+}>()
 </script>
