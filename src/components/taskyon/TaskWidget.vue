@@ -2,19 +2,7 @@
   <!--Task-->
   <div class="message-container">
     <TaskField
-      v-if="task.content.type === 'error'"
-      :task="task"
-      :icon="matWarning"
-      icon-color="negative"
-      :showMeta="showMeta"
-    >
-      <template #header> Error </template>
-      <div class="text-negative">
-        <ty-markdown :src="task.content.data" no-line-numbers />
-      </div>
-    </TaskField>
-    <TaskField
-      v-else-if="task.content.type === 'files'"
+      v-if="task.content.type === 'files'"
       :task="task"
       :icon="mdiFileDocument"
       icon-color="info"
@@ -75,8 +63,15 @@
         </div>
       </div>
     </TaskField>
-    <TaskField v-else-if="task.content.type === 'toolresult'" :task="task" :showMeta="showMeta">
-      <div class="text-bold">result (yaml):</div>
+    <TaskField
+      v-else-if="task.content.type === 'toolresult'"
+      :task="task"
+      :showMeta="showMeta"
+      short
+    >
+      <template #header>
+        Result: {{ safeYamlDump(task.content.data).split(' ').slice(0, 10).join(' ') }}...
+      </template>
       <div caption class="relative-position">
         <div class="scroll-area">
           {{ safeYamlDump(task.content.data) }}
@@ -89,6 +84,7 @@
       :task="task"
       :showMeta="showMeta"
       :icon="mdiHeadCog"
+      short
     >
       <template #header> Analyze... </template>
       <p style="white-space: pre-wrap">
@@ -123,6 +119,21 @@
       />
       <div v-else class="raw-markdown q-mb-md">
         {{ task.content.data }}
+      </div>
+    </TaskField>
+    <TaskField
+      v-else-if="task.content.type === 'error'"
+      :task="task"
+      :icon="matWarning"
+      icon-color="negative"
+      :showMeta="showMeta"
+      short
+    >
+      <template #header>
+        Error: {{ task.content.data.split(' ').slice(0, 10).join(' ') }}...
+      </template>
+      <div class="text-negative">
+        <ty-markdown :src="task.content.data" no-line-numbers />
       </div>
     </TaskField>
   </div>
