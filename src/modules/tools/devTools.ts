@@ -7,10 +7,6 @@ declare global {
   }
 }
 
-function randomId() {
-  return Math.random().toString(36).slice(2, 10)
-}
-
 const gitlabOAuthTest = createTool({
   name: 'gitlabOAuthTest',
   description: 'Initiates a GitLab OAuth login flow in a popup window for testing.',
@@ -27,7 +23,7 @@ const gitlabOAuthTest = createTool({
     const clientId = '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b'
     const scope = 'read_user'
     const redirectUri = `${window.location.origin}/oauth/return/gitlab`
-    const handlerName = `__gitlab_oauth_btn_${randomId()}`
+    const handlerName = `__gitlab_oauth_btn_${Math.random().toString(36).slice(2, 10)}`
 
     // Register globally so the button can call it
     window[handlerName] = async () => {

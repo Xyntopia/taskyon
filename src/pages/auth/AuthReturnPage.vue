@@ -1,8 +1,24 @@
 <template>
   <q-layout>
     <q-page-container>
-      <q-page>
-        <div>Auth Return Page for: {{ serviceName }}</div>
+      <q-page class="q-pa-md flex flex-center column items-center">
+        <q-card flat bordered class="q-pa-lg bg-grey-2 text-center">
+          <div class="text-h6 q-mb-sm">OAuth Login Success</div>
+          <div v-if="loading">Finalizing login…</div>
+          <div v-else-if="error" class="text-negative q-mt-sm">{{ error }}</div>
+          <div v-else class="text-positive">
+            Access token received. You can now close this window.
+          </div>
+
+          <q-btn
+            v-if="!loading"
+            class="q-mt-md"
+            label="Close Window"
+            color="primary"
+            flat
+            @click="closeWindow"
+          />
+        </q-card>
       </q-page>
     </q-page-container>
   </q-layout>
@@ -11,36 +27,32 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 
-// (1) Define props exactly as before:
 const props = defineProps<{ serviceName: string; query: Record<string, string> }>()
 
-// (2) A reactive to hold any error or “loading” state, if you want to show a spinner/text:
 const error = ref<string | null>(null)
-const loading = ref(false)
-const accessToken = ref<string | null>(null)
+const loading = ref(true)
 
-// (3) Once mounted, grab the code + verifier, then POST for token:
+const closeWindow = () => window.close()
+
 onMounted(async () => {
-  // (a) Extract “code” from props.query
   const code = props.query.code
   if (!code) {
-    error.value = 'No code found in URL query params'
+    error.value = 'No code in URL'
+    loading.value = false
     return
   }
 
-  // (b) Pull PKCE verifier back out of sessionStorage
   const verifier = sessionStorage.getItem('gitlab_code_verifier')
   if (!verifier) {
-    error.value = 'Missing PKCE verifier in sessionStorage'
+    error.value = 'Missing PKCE verifier'
+    loading.value = false
     return
   }
 
-  loading.value = true
   try {
     const clientId = '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b'
     const redirectUri = `${window.location.origin}/oauth/return/${props.serviceName}`
 
-    // Build x-www-form-urlencoded body
     const body = new URLSearchParams({
       client_id: clientId,
       grant_type: 'authorization_code',
@@ -56,21 +68,32 @@ onMounted(async () => {
     })
 
     if (!res.ok) {
-      const text = await res.text()
-      throw new Error(`Token endpoint returned ${res.status}: ${text}`)
+      throw new Error(`Token request failed (${res.status})`)
     }
 
     const data = await res.json()
-    accessToken.value = data.access_token as string
+    const accessToken = data.access_token
 
-    // (c) At this point you have the access token. You can:
-    //     • store it in a Vuex/Pinia store,
-    //     • call your backend to persist it,
-    //     • or immediately redirect/close this page.
-    console.log('✅ GitLab access token:', accessToken.value)
+    // Optionally store locally
+    sessionStorage.setItem('gitlab_access_token', accessToken)
+
+    // Send token back to parent
+    if (window.opener) {
+      window.opener.postMessage(
+        {
+          type: 'oauth-success',
+          service: props.serviceName,
+          token: accessToken,
+        },
+        '*',
+      )
+    }
+
+    // Close the window
+    window.close()
   } catch (err) {
     console.error(err)
-    error.value = err instanceof Error ? err.message : 'Unknown error during token exchange'
+    error.value = err instanceof Error ? err.message : 'Token exchange failed'
   } finally {
     loading.value = false
   }
