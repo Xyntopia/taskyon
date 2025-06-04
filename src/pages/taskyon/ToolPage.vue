@@ -7,6 +7,23 @@
     </q-drawer>
     <q-page-container>
       <UnderConstructionHint />
+      <q-select
+        class="col"
+        use-input
+        dense
+        hide-selected
+        fill-input
+        options-dense
+        input-debounce="0"
+        borderless
+        @filter="filterFn"
+        color="secondary"
+        :model-value="selectedTool?.name"
+        :options="filteredToolCollection"
+        :label="selectedTool ? 'selected Tool' : 'Select Tool'"
+        @update:model-value="switchTool"
+        behavior="default"
+      />
       <q-page padding>
         <div v-if="selectedTool || !name" class="column">
           <div class="row">
@@ -114,6 +131,29 @@ const CodeEditor = defineAsyncComponent(
 const selectedTab = ref('code')
 const tystate = useTaskyonStore()
 const router = useRouter()
+const toolCollection = asyncComputed(tystate.getAllTools, {})
+const toolNames = computed(() => Object.keys(toolCollection.value))
+
+const filteredToolCollection = ref<string[]>([])
+const filterFn = (inputValue: string, doneFn: (callbackFn: () => void) => void) => {
+  if (inputValue === '') {
+    doneFn(() => {
+      filteredToolCollection.value = toolNames.value
+    })
+    return
+  }
+
+  doneFn(() => {
+    const needle = inputValue.toLowerCase()
+    filteredToolCollection.value = toolNames.value.filter(
+      (v) => v.toLowerCase().indexOf(needle) > -1,
+    )
+  })
+}
+
+function switchTool(toolName: string) {
+  void router.push({ path: `/tool/${toolName}` })
+}
 
 const functionArgs = ref<Record<string, unknown>>({})
 const drawerOpen = ref(false)
