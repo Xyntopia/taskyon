@@ -60,6 +60,24 @@ const gitlabOAuthTest = createTool({
       window.open(url, 'gitlab_oauth', 'width=500,height=700')
     }
 
+    window.addEventListener('message', (event) => {
+      // Only accept messages from our own origin:
+      if (event.origin !== window.location.origin) {
+        return
+      }
+      const data = event.data as { type?: string; service?: string; token?: string }
+      if (
+        data.type === 'oauth-success' &&
+        data.service === serviceName &&
+        typeof data.token === 'string'
+      ) {
+        // Store in localStorage instead of sessionStorage:
+        localStorage.setItem(`${serviceName}_access_token`, data.token)
+        // (Optionally, you could dispatch a custom event or update UI here.)
+      }
+    })
+    // ―――――――――→
+
     const html = `
 <button onclick="window.${handlerName}()">Login with GitLab</button>
     `
