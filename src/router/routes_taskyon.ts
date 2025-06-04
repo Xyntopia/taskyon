@@ -159,11 +159,9 @@ export const routes: RouteRecordRaw[] = [
   ...taskyonRoutes,
   {
     // we are making sure to only load urls without any extensions here...
-    path: '/authreturngit', // we can declare new routes for different service and extract the access tokens from the return parameters
+    path: '/oauth/return/:servicename', // we can declare new routes for different service and extract the access tokens from the return parameters
     component: () => import('pages/auth/AuthReturnPage.vue'),
-    props: (route) => ({
-      accessToken: route.query, // whatever we find in the URL here :)
-    }),
+    props: (route) => ({ query: route.query, serviceName: route.params.servicename }),
   },
 
   // Always leave this as last one,

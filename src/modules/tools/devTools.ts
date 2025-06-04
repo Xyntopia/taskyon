@@ -1,5 +1,82 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool } from '../taskyon/tools'
+import { createTool, makeTaskResult } from '../taskyon/tools'
+
+declare global {
+  interface Window {
+    [key: string]: unknown
+  }
+}
+
+function randomId() {
+  return Math.random().toString(36).slice(2, 10)
+}
+
+const gitlabOAuthTest = createTool({
+  name: 'gitlabOAuthTest',
+  description: 'Initiates a GitLab OAuth login flow in a popup window for testing.',
+  longDescription: `This tool displays a button in the chat. When clicked, it opens a popup window to start the GitLab OAuth login flow (Authorization Code + PKCE).`,
+  renderOptions: {
+    hideChat: false,
+    hideLlm: false,
+  },
+  parameters: {
+    type: 'object',
+    properties: {},
+  } as const satisfies JSONSchema7,
+  function: () => {
+    const clientId = '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b'
+    const scope = 'read_user'
+    const redirectUri = `${window.location.origin}/oauth/return/gitlab`
+    const handlerName = `__gitlab_oauth_btn_${randomId()}`
+
+    // Register globally so the button can call it
+    window[handlerName] = async () => {
+      const array = new Uint8Array(64)
+      crypto.getRandomValues(array)
+      const verifier = btoa(String.fromCharCode(...array))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '')
+
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
+      const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '')
+
+      sessionStorage.setItem('gitlab_code_verifier', verifier)
+
+      const url = [
+        'https://gitlab.com/oauth/authorize',
+        `?client_id=${encodeURIComponent(clientId)}`,
+        `&redirect_uri=${encodeURIComponent(redirectUri)}`,
+        `&response_type=code`,
+        `&scope=${encodeURIComponent(scope)}`,
+        `&code_challenge=${encodeURIComponent(challenge)}`,
+        `&code_challenge_method=S256`,
+      ].join('')
+
+      window.open(url, 'gitlab_oauth', 'width=500,height=700')
+    }
+
+    const html = `
+<p>This will open GitLab OAuth in a popup. After login, you'll return to:<br><code>${redirectUri}</code></p>
+<button onclick="window.${handlerName}()">Login with GitLab</button>
+    `
+
+    return makeTaskResult([
+      [
+        {
+          role: 'assistant',
+          content: {
+            type: 'message',
+            data: html,
+          },
+        },
+      ],
+    ])
+  },
+})
 
 const issueListGenerator = createTool({
   name: 'issueListGenerator',
@@ -175,4 +252,4 @@ const gitReader = createTool({
 }`,
 })
 
-export const devTools = [issueListGenerator, gitReader]
+export const devTools = [issueListGenerator, gitReader, gitlabOAuthTest]
