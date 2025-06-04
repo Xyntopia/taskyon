@@ -22,6 +22,14 @@
             :separate-labels="false"
             :schema="functionSchema"
           />
+          <q-btn
+            v-if="state.appConfiguration.expertMode"
+            flat
+            dense
+            size="sm"
+            :icon="matBuild"
+            :to="`/tool/${selectedTaskType}`"
+          />
         </div>
       </div>
       <!--show attached files-->
@@ -104,8 +112,9 @@
             <q-select
               class="col"
               use-input
-              fill-input
               dense
+              hide-selected
+              fill-input
               options-dense
               input-debounce="0"
               borderless
@@ -115,7 +124,6 @@
               :options="filteredToolCollection"
               :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
               @update:model-value="tystate.switchTaskType"
-              behavior="default"
             />
           </div>
           <!--
@@ -216,6 +224,7 @@ import {
   matMoreHoriz,
   matAttachment,
   matSend,
+  matBuild,
 } from '@quasar/extras/material-icons'
 import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
@@ -237,6 +246,7 @@ const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { selectedApi } = toRefs(state.llmSettings)
+//const selectedTaskTypeVar = ref<string>('testasdad')
 
 const em = computed(() => state.appConfiguration.expertMode)
 
