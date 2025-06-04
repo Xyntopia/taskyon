@@ -7,94 +7,86 @@ declare global {
   }
 }
 
-const gitlabOAuthTest = createTool({
-  name: 'gitlabOAuthTest',
-  description: 'Initiates a GitLab OAuth login flow in a popup window for testing.',
-  longDescription: `This tool displays a button in the chat. When clicked, it opens a popup window to start the GitLab OAuth login flow (Authorization Code + PKCE).`,
-  renderOptions: {
-    hideChat: false,
-    hideLlm: false,
-  },
-  parameters: {
-    type: 'object',
-    properties: {},
-  } as const satisfies JSONSchema7,
-  function: () => {
-    const serviceName = 'gitlab'
-    const clientId = '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b'
-    const scope = 'read_user'
-    const handlerName = `__gitlab_oauth_btn_${Math.random().toString(36).slice(2, 10)}`
+const makeOauthLogin = ({
+  serviceName,
+  clientId,
+  scope,
+}: {
+  serviceName: string
+  clientId: string
+  scope: string
+}) => {
+  const redirectUri = `${window.location.origin}/oauth/return/${serviceName}` as const
+  const handlerName = `__gitlab_oauth_btn_${Math.random().toString(36).slice(2, 10)}`
 
-    // Register globally so the button can call it
-    window[handlerName] = async () => {
-      const array = new Uint8Array(64)
-      crypto.getRandomValues(array)
-      const verifier = btoa(String.fromCharCode(...array))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '')
+  // Register globally so the button can call it
+  window[handlerName] = async () => {
+    const array = new Uint8Array(64)
+    crypto.getRandomValues(array)
+    const verifier = btoa(String.fromCharCode(...array))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
 
-      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
-      const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '')
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
+    const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
 
-      // store PKCE under a per-service key:
-      sessionStorage.setItem(`oauth_pkce_verifier_${serviceName}`, verifier)
+    // store PKCE under a per-service key:
+    sessionStorage.setItem(`oauth_pkce_verifier_${serviceName}`, verifier)
 
-      // store clientId (and serviceName redundantly if you like) under a per-service config key:
-      sessionStorage.setItem(`oauth_config_${serviceName}`, JSON.stringify({ clientId }))
+    // store clientId (and serviceName redundantly if you like) under a per-service config key:
+    sessionStorage.setItem(`oauth_config_${serviceName}`, JSON.stringify({ clientId }))
 
-      const redirectUri = `${window.location.origin}/oauth/return/${serviceName}`
-      const url = [
-        'https://gitlab.com/oauth/authorize',
-        `?client_id=${encodeURIComponent(clientId)}`,
-        `&redirect_uri=${encodeURIComponent(redirectUri)}`,
-        `&response_type=code`,
-        `&scope=${encodeURIComponent(scope)}`,
-        `&code_challenge=${encodeURIComponent(challenge)}`,
-        `&code_challenge_method=S256`,
-      ].join('')
+    const url = [
+      'https://gitlab.com/oauth/authorize',
+      `?client_id=${encodeURIComponent(clientId)}`,
+      `&redirect_uri=${encodeURIComponent(redirectUri)}`,
+      `&response_type=code`,
+      `&scope=${encodeURIComponent(scope)}`,
+      `&code_challenge=${encodeURIComponent(challenge)}`,
+      `&code_challenge_method=S256`,
+    ].join('')
 
-      window.open(url, 'gitlab_oauth', 'width=500,height=700')
+    window.open(url, 'gitlab_oauth', 'width=500,height=700')
+  }
+
+  window.addEventListener('message', (event) => {
+    // Only accept messages from our own origin:
+    if (event.origin !== window.location.origin) {
+      return
     }
+    const data = event.data as { type?: string; service?: string; token?: string }
+    if (
+      data.type === 'oauth-success' &&
+      data.service === serviceName &&
+      typeof data.token === 'string'
+    ) {
+      // Store in localStorage instead of sessionStorage:
+      localStorage.setItem(`${serviceName}_access_token`, data.token)
+      // (Optionally, you could dispatch a custom event or update UI here.)
+    }
+  })
+  // ―――――――――→
 
-    window.addEventListener('message', (event) => {
-      // Only accept messages from our own origin:
-      if (event.origin !== window.location.origin) {
-        return
-      }
-      const data = event.data as { type?: string; service?: string; token?: string }
-      if (
-        data.type === 'oauth-success' &&
-        data.service === serviceName &&
-        typeof data.token === 'string'
-      ) {
-        // Store in localStorage instead of sessionStorage:
-        localStorage.setItem(`${serviceName}_access_token`, data.token)
-        // (Optionally, you could dispatch a custom event or update UI here.)
-      }
-    })
-    // ―――――――――→
-
-    const html = `
-<button onclick="window.${handlerName}()">Login with GitLab</button>
+  const html = `
+<button onclick="window.${handlerName}()">Login with ${serviceName}</button>
     `
 
-    return makeTaskResult([
-      [
-        {
-          role: 'assistant',
-          content: {
-            type: 'message',
-            data: html,
-          },
+  return makeTaskResult([
+    [
+      {
+        role: 'assistant',
+        content: {
+          type: 'message',
+          data: html,
         },
-      ],
-    ])
-  },
-})
+      },
+    ],
+  ])
+}
 
 const issueListGenerator = createTool({
   name: 'issueListGenerator',
@@ -120,24 +112,31 @@ in gitlab. They should roughly follow the style of a "user story".`,
     },
     required: ['issuelist'],
   } as const satisfies JSONSchema7,
-  code: `async ({ issuelist }, ctx) => {
+  function: async ({ issuelist }, ctx) => {
     const GITLAB_PROJECT_ID = await ctx.getSecret('YOUR_GITLAB_PROJECT_ID') // Replace with actual project ID
     const GITLAB_API_URL = await ctx.getSecret(
-      \`https://gitlab.com/api/v4/projects/\${encodeURIComponent(GITLAB_PROJECT_ID || '')}/issues\`,
+      `https://gitlab.com/api/v4/projects/${encodeURIComponent(GITLAB_PROJECT_ID || '')}/issues`,
     )
     const GITLAB_ACCESS_TOKEN = await ctx.getSecret('GITLAB_ACCESS_TOKEN') // Replace with actual project ID
 
-    const uiHtml = \`<div>
+    const oauthHtml = makeOauthLogin({
+      serviceName: 'gitlab',
+      clientId: '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b',
+      scope: 'read_user',
+    })
+    console.log(oauthHtml)
+
+    const uiHtml = `<div>
     <ul id="issueList">
-      \${issuelist
+      ${issuelist
         .map(
           (issue, index) =>
-            \`<li>
-          <input type="checkbox" id="issue-\${index}" value="\${issue}" />
-          <label for="issue-\${index}">\${issue}</label>
-        </li>\`,
+            `<li>
+          <input type="checkbox" id="issue-${index}" value="${issue}" />
+          <label for="issue-${index}">${issue}</label>
+        </li>`,
         )
-        .join('\\n')}
+        .join('\n')}
     </ul>
     <button onclick="uploadIssues()">Submit</button>
   </div>
@@ -156,14 +155,14 @@ in gitlab. They should roughly follow the style of a "user story".`,
       console.log('Submitting issues:', selectedIssues);
 
       const GITLAB_ACCESS_TOKEN = 'YOUR_GITLAB_ACCESS_TOKEN'; // Replace with actual token
-      const GITLAB_API_URL = '\${GITLAB_API_URL}';
+      const GITLAB_API_URL = '${GITLAB_API_URL}';
 
       selectedIssues.forEach(issue => {
         fetch(GITLAB_API_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + \${GITLAB_ACCESS_TOKEN}
+            'Authorization': 'Bearer ' + ${GITLAB_ACCESS_TOKEN}
           },
           body: JSON.stringify({
             title: issue,
@@ -177,19 +176,19 @@ in gitlab. They should roughly follow the style of a "user story".`,
 
       alert('Issues submitted to GitLab!');
     }
-  </script>\`
+  </script>`
     return makeTaskResult([
       [
         {
           role: 'assistant',
           content: {
             type: 'message',
-            data: \`Check each issue you think is legitimate and want to upload!\` + uiHtml,
+            data: `Check each issue you think is legitimate and want to upload!` + uiHtml,
           },
         },
       ],
     ])
-  }`,
+  },
 })
 
 const gitReader = createTool({
@@ -270,4 +269,4 @@ const gitReader = createTool({
 }`,
 })
 
-export const devTools = [issueListGenerator, gitReader, gitlabOAuthTest]
+export const devTools = [issueListGenerator, gitReader]
