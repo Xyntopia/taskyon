@@ -70,7 +70,7 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
 
     // Specific style for tasks with the 'user' role
     .task-container
-      margin-bottom: 8px
+      margin-bottom: 15px
       &.user
         //background: linear-gradient(to left, rgba($secondary,0.075), $dark 100%)
         //border-right: 1px solid rgba($secondary, 0.5)
@@ -82,6 +82,15 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
         //border-right: 1px solid rgba($primary, 1.0)
         //border: 1px solid rgb($primary)
         margin-right: 20px
+
+  .scroll-area
+    white-space: pre-wrap
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3)
+    max-height: 300px // Adjust this value based on your needs
+    overflow-y: auto
+    margin-bottom: 5px
+    width: auto // Ensures it takes the necessary width up to its parent's maximum
+    min-width: 100% // Ensures it stretches to at least the width of its parent
 
   // message container needs to stay "top-level", because sometimes messages appear without
   // a task container (e.g. in the search results...)
@@ -98,10 +107,12 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     // TODO: make message buttons somehow always appear on screen..  never be hidden..
     .message-buttons
       border-radius: 5px
+      z-index: 10
+      //border: 1px solid rgb($primary)
       background: white
       color: rgb($primary)
       position: absolute
-      bottom: -10px // shift it 10px downward
+      bottom: -20px // shift it 10px downward
       //bottom: 0px
       right: 0px
       opacity: 0

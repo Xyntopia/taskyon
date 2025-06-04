@@ -47,7 +47,26 @@ const {
 }>()
 
 const renderedHtml = computed(() => {
-  return md2Html(src ?? '', $q.dark.isActive)
+  const raw = src ?? ''
+  const isPureHtml =
+    containsHtmlTags(raw) &&
+    ![
+      /(^|\n)\s*#{1,6}\s/, // headings: #, ##, ...
+      /(^|\n)\s*>\s/, // blockquotes: >
+      /(^|\n)\s*[-+*]\s/, // unordered lists
+      /(^|\n)\s*\d+\.\s/, // ordered lists
+      /\*\*(.*?)\*\*/, // bold: **bold**
+      /_(.*?)_/, // italic: _italic_
+      /`{1,3}[^`]+`{1,3}/, // inline or fenced code: `code`, ```block```
+      /(?<!\\)\$\$[^$]+\$\$/, // mathjax: $$block$$
+      /(?<!\\)\$[^$\n]+\$/, // mathjax: $inline$
+      /!\[.*?\]\(.*?\)/, // image
+      /\[.*?\]\(.*?\)/, // link
+      /(^|\n)\s*---+/, // horizontal rule
+      /(^|\n)\s*:::/, // custom containers (like :::note)
+    ].some((pattern) => pattern.test(raw))
+
+  return isPureHtml ? raw : md2Html(raw, $q.dark.isActive)
 })
 
 const iframeHtml = computed(() => {

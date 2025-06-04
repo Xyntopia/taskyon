@@ -344,7 +344,7 @@ function showTask(t: TaskNode) {
     if (toolList.value) showInChat = !toolList.value[t.content.data.name]?.renderOptions?.hideChat
     else if (t.content.data.name === 'chatCompletion') showInChat = false
   }
-  const showType = !['return', 'toolresult'].includes(t.content.type)
+  const showType = !['return'].includes(t.content.type)
   const showExpert = t.content.type === 'structured' ? props.expertMode : true
   return showExpert && showType && showInChat && noHideLabel
 }

@@ -68,18 +68,20 @@
           </div>
         </div>
       </template>
-      <ToolResultWidget
-        :function-call="task.content.data"
-        :result="nextTask?.content.type === 'toolresult' ? nextTask.content.data : undefined"
-      />
+      <div class="text-bold">arguments (yaml):</div>
+      <div caption>
+        <div class="scroll-area">
+          {{ dump(task.content.data.arguments) }}
+        </div>
+      </div>
     </TaskField>
     <TaskField v-else-if="task.content.type === 'toolresult'" :task="task" :showMeta="showMeta">
-      <ToolResultWidget
-        :result="task.content.data"
-        :function-call="
-          previousTask?.content.type === 'functioncall' ? previousTask.content.data : undefined
-        "
-      />
+      <div class="text-bold">result (yaml):</div>
+      <div caption class="relative-position">
+        <div class="scroll-area">
+          {{ safeYamlDump(task.content.data) }}
+        </div>
+      </div>
     </TaskField>
     <TaskField
       v-else-if="task.content.type === 'structured'"
@@ -127,7 +129,6 @@
 </template>
 
 <script setup lang="ts">
-import ToolResultWidget from 'src/components/taskyon/ToolResultWidget.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import type { TaskNode } from 'src/modules/taskyon/types'
 import tyMarkdown from '../tyMarkdown.vue'
@@ -139,6 +140,7 @@ import FileBrowser from './FileBrowser.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { safeYamlDump } from 'src/modules/yamlUtils'
 import TaskField from './TaskField.vue'
+import { dump } from 'js-yaml'
 
 const props = defineProps<{
   task: TaskNode
