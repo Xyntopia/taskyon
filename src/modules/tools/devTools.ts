@@ -20,9 +20,9 @@ const gitlabOAuthTest = createTool({
     properties: {},
   } as const satisfies JSONSchema7,
   function: () => {
+    const serviceName = 'gitlab'
     const clientId = '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b'
     const scope = 'read_user'
-    const redirectUri = `${window.location.origin}/oauth/return/gitlab`
     const handlerName = `__gitlab_oauth_btn_${Math.random().toString(36).slice(2, 10)}`
 
     // Register globally so the button can call it
@@ -40,8 +40,13 @@ const gitlabOAuthTest = createTool({
         .replace(/\//g, '_')
         .replace(/=+$/, '')
 
-      sessionStorage.setItem('gitlab_code_verifier', verifier)
+      // store PKCE under a per-service key:
+      sessionStorage.setItem(`oauth_pkce_verifier_${serviceName}`, verifier)
 
+      // store clientId (and serviceName redundantly if you like) under a per-service config key:
+      sessionStorage.setItem(`oauth_config_${serviceName}`, JSON.stringify({ clientId }))
+
+      const redirectUri = `${window.location.origin}/oauth/return/${serviceName}`
       const url = [
         'https://gitlab.com/oauth/authorize',
         `?client_id=${encodeURIComponent(clientId)}`,
@@ -56,7 +61,6 @@ const gitlabOAuthTest = createTool({
     }
 
     const html = `
-<p>This will open GitLab OAuth in a popup. After login, you'll return to:<br><code>${redirectUri}</code></p>
 <button onclick="window.${handlerName}()">Login with GitLab</button>
     `
 

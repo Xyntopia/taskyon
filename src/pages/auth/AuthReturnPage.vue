@@ -35,6 +35,7 @@ const loading = ref(true)
 const closeWindow = () => window.close()
 
 onMounted(async () => {
+  const service = props.serviceName
   const code = props.query.code
   if (!code) {
     error.value = 'No code in URL'
@@ -42,16 +43,32 @@ onMounted(async () => {
     return
   }
 
-  const verifier = sessionStorage.getItem('gitlab_code_verifier')
+  // Read the per-service PKCE verifier and config:
+  const verifierKey = `oauth_pkce_verifier_${service}`
+  const configKey = `oauth_config_${service}`
+  const verifier = sessionStorage.getItem(verifierKey)
+  const configStr = sessionStorage.getItem(configKey)
+
   if (!verifier) {
     error.value = 'Missing PKCE verifier'
     loading.value = false
     return
   }
+  if (!configStr) {
+    error.value = 'Missing OAuth configuration'
+    loading.value = false
+    return
+  }
+
+  // Once read, clear them so nothing collides with a future login:
+  sessionStorage.removeItem(verifierKey)
+  sessionStorage.removeItem(configKey)
+
+  // Parse out clientId (we only stored that):
+  const { clientId } = JSON.parse(configStr)
 
   try {
-    const clientId = '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b'
-    const redirectUri = `${window.location.origin}/oauth/return/${props.serviceName}`
+    const redirectUri = `${window.location.origin}/oauth/return/${service}`
 
     const body = new URLSearchParams({
       client_id: clientId,
@@ -74,22 +91,19 @@ onMounted(async () => {
     const data = await res.json()
     const accessToken = data.access_token
 
-    // Optionally store locally
-    sessionStorage.setItem('gitlab_access_token', accessToken)
+    // Optionally store per-service access token (or whatever)
+    sessionStorage.setItem(`${service}_access_token`, accessToken)
 
-    // Send token back to parent
-    if (window.opener) {
-      window.opener.postMessage(
-        {
-          type: 'oauth-success',
-          service: props.serviceName,
-          token: accessToken,
-        },
-        '*',
-      )
-    }
+    // Let the opener know which service just finished:
+    window.opener?.postMessage(
+      {
+        type: 'oauth-success',
+        service,
+        token: accessToken,
+      },
+      window.location.origin,
+    )
 
-    // Close the window
     window.close()
   } catch (err) {
     console.error(err)
