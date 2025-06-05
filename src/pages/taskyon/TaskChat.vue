@@ -34,6 +34,7 @@
       </div>
       <!-- "Task" Display -->
       <TaskChainViewer
+        class="col-auto"
         v-if="tystate.selectedThread.value.length > 0 && tystate.currentTask.value"
         :selected-thread="tystate.selectedThread.value"
         :current-task="tystate.currentTask.value"

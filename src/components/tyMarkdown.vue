@@ -1,14 +1,17 @@
 <!-- eslint-disable no-useless-escape -->
 <template>
-  <iframe
-    v-if="useIframe && iframeHtml"
-    class="responsive-iframe"
-    v-bind="$attrs"
-    ref="iframeRef"
-    sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"
-    :srcdoc="`<div class=tyMarkdown>${iframeHtml}<div>`"
-  />
-  <div v-else v-html="renderedHtml" v-bind="$attrs" class="tyMarkdown" />
+  <div class="iframe-wrapper">
+    <iframe
+      style="width: 100%; min-width: 0; flex: 1 1 0%; display: block; border: none"
+      v-if="useIframe && iframeHtml"
+      class="responsive-iframe"
+      v-bind="$attrs"
+      ref="iframeRef"
+      sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"
+      :srcdoc="`<div class=tyMarkdown>${iframeHtml}<div>`"
+    />
+    <div v-else v-html="renderedHtml" v-bind="$attrs" class="tyMarkdown" />
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -161,10 +164,4 @@ onMounted(() => {
 })
 </script>
 
-<style lang="sass">
-.responsive-iframe
-  width: 100%
-  display: block
-  border: none
-  /* Optionally, set max-width: 100% if you want to be extra safe */
-</style>
+<style></style>

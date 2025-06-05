@@ -6,7 +6,7 @@
       {{ task.created_at ? new Date(task.created_at).toLocaleString() : '' }}
       <q-tooltip>{{ task.id }}</q-tooltip>
     </div>
-    <div class="message-display column items-stretch">
+    <div class="message-display">
       <!--Message Display-->
       <div class="row items-end">
         <!--task icon-->
@@ -25,7 +25,7 @@
             style="width: 100%"
           >
             <!--task header-->
-            <div class="text-caption col">
+            <div class="text-caption">
               <slot name="header"></slot>
             </div>
           </q-btn>
@@ -68,7 +68,7 @@
       </div>
       <!--buttons-->
       <TaskButtons
-        class="message-buttons col self-end"
+        class="message-buttons"
         :task="task"
         @toggle-markdown="toggleMarkdown"
         @create-new-conversation="createNewConversation"

@@ -49,22 +49,30 @@
         />
       </template>
     </q-tree>
-    <div v-else class="q-gutter-xs items-center column">
-      <template v-for="(task, idx) in props.selectedThread">
-        <Task
-          v-if="showAllTasks || showTask(task)"
-          :key="task.id"
-          :class="['col', task.role, task.content.type, task.role === 'user' ? 'justify-end' : '']"
-          :id="task.id"
-          :task="task"
-          :previous-task="props.selectedThread[idx - 1]"
-          :next-task="props.selectedThread[idx + 1]"
-          :is-working="
-            !!tystate.lastTaskState.get(task.id) &&
-            tystate.lastTaskState.get(task.id) !== 'processed'
-          "
-          :show-id="!!showIds"
-        />
+    <div v-else class="items-stretch column">
+      <template v-for="(task, idx) in props.selectedThread" :key="task.id">
+        <!--
+        We are packing this into an additional div:
+
+        the first div is responsible to add the margins and should always stretch to the full size,
+        the second one is responsible at moving
+        the task div left or right, based on content....
+        -->
+        <div :class="['col-auto', 'row', task.role === 'user' ? 'justify-end' : '']">
+          <Task
+            v-if="showAllTasks || showTask(task)"
+            :class="['col-auto', task.role, task.content.type]"
+            :id="task.id"
+            :task="task"
+            :previous-task="props.selectedThread[idx - 1]"
+            :next-task="props.selectedThread[idx + 1]"
+            :is-working="
+              !!tystate.lastTaskState.get(task.id) &&
+              tystate.lastTaskState.get(task.id) !== 'processed'
+            "
+            :show-id="!!showIds"
+          />
+        </div>
       </template>
     </div>
     <!--Render tasks which are in progress-->
