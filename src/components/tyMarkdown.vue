@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import {
   containsHtmlTags,
   generateIframeSrc,
@@ -89,35 +89,90 @@ const iframeHtml = computed(() => {
     getCssVar('--q-secondary-rgb') || '#00ffff',
   )
 })
-/*const doc = iframeRef.value.contentDocument
-      if (doc) {
-        doc.open()
-        doc.write()
-        doc.close()
-      }*/
-/* else {
-      // If not using iframe, initialize any necessary libraries
-      mermaid.initialize({
-        startOnLoad: false,
-        securityLevel: 'loose',
-        theme: 'default',
-        flowchart: { htmlLabels: false, useMaxWidth: true }
-      })
-    }*/
 
-/*function handleMessage(event: MessageEvent) {
-  if (!iframeRef.value || event.source !== iframeRef.value.contentWindow) return
-  if (event.data?.type !== 'resizeIframe') return
+interface ResizeIframeMessage {
+  type: 'resizeIframe'
+  width: number
+  height: number
+}
 
-  console.log('set iframe height', event.data, iframeRef.value.parentElement?.clientWidth)
+let resizeTimeout: ReturnType<typeof setTimeout> | null = null
+let pendingResize: { width: number; height: number } | null = null
+let lastWidth: number | null = null
+let lastHeight: number | null = null
+let resizeCount = 0
+const MAX_RESIZE_ATTEMPTS = 3
+let resizeLoopDetected = false
 
-  // Use parent's width as a maximum
-  const parentWidth = iframeRef.value.parentElement?.clientWidth || event.data.width
-  //const newWidth = Math.min(event.data.width, parentWidth)
-  iframeRef.value.style.width = parentWidth + 'px'
+function handleMessage(event: MessageEvent) {
+  const data = event.data as ResizeIframeMessage
+  if (
+    !iframeRef.value ||
+    event.source !== iframeRef.value.contentWindow ||
+    data?.type !== 'resizeIframe'
+  ) {
+    return
+  }
 
-  iframeRef.value.style.height = `${event.data.height}px`
-  //iframeRef.value.style.width = `${newWidth}px`
+  pendingResize = {
+    width: data.width,
+    height: data.height,
+  }
+
+  if (resizeTimeout) clearTimeout(resizeTimeout)
+  resizeTimeout = setTimeout(() => {
+    if (!iframeRef.value || !pendingResize) return
+
+    const { width: newWidth, height: newHeight } = pendingResize
+
+    // Only update if width/height changed significantly
+    const widthChanged = lastWidth === null || Math.abs(newWidth - lastWidth) > 1
+    const heightChanged = lastHeight === null || Math.abs(newHeight - lastHeight) > 1
+
+    if (resizeLoopDetected) {
+      // Only update height, never width again
+      if (heightChanged) {
+        iframeRef.value.style.height = `${newHeight}px`
+        lastHeight = newHeight
+        console.info(
+          '[iframe] Resize loop detected previously, now only updating height to avoid scrollbars.',
+        )
+      }
+      pendingResize = null
+      return
+    }
+
+    if (widthChanged || heightChanged) {
+      resizeCount++
+      if (resizeCount > MAX_RESIZE_ATTEMPTS) {
+        resizeLoopDetected = true
+        // Do one last resize: only update height, not width
+        if (heightChanged) {
+          iframeRef.value.style.height = `${newHeight}px`
+          lastHeight = newHeight
+        }
+        console.warn(
+          '[iframe] Resize loop detected, switching to height-only resizing to avoid scrollbars.',
+        )
+        pendingResize = null
+        return
+      }
+
+      if (widthChanged) {
+        iframeRef.value.style.width = `${newWidth}px`
+        lastWidth = newWidth
+      }
+      if (heightChanged) {
+        iframeRef.value.style.height = `${newHeight}px`
+        lastHeight = newHeight
+      }
+    } else {
+      // Reset counter if no significant change
+      resizeCount = 0
+    }
+
+    pendingResize = null
+  }, 100)
 }
 
 onUnmounted(() => {
@@ -126,15 +181,15 @@ onUnmounted(() => {
 
 onMounted(() => {
   window.addEventListener('message', handleMessage)
-})*/
+})
 </script>
 
 <style lang="sass">
-/*.responsive-iframe
+.responsive-iframe
   position: relative
   //width: 100%
 
-/*.responsive-iframe iframe
+.responsive-iframe iframe
   position: relative
   display: block
   //width: auto
