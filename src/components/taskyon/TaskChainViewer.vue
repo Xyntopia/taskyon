@@ -58,10 +58,14 @@
         the second one is responsible at moving
         the task div left or right, based on content....
         -->
-        <div :class="['col-auto', 'row', task.role === 'user' ? 'justify-end' : '']">
+        <div class="col-auto">
           <Task
             v-if="showAllTasks || showTask(task)"
-            :class="['col-auto', task.role, task.content.type]"
+            :class="[
+              task.role,
+              task.content.type,
+              task.role === 'user' ? 'float-right' : 'float-left',
+            ]"
             :id="task.id"
             :task="task"
             :previous-task="props.selectedThread[idx - 1]"

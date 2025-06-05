@@ -14,7 +14,7 @@
           <q-icon :name="icon" :color="iconColor" size="sm" />
         </div>
         <!--task content-->
-        <div class="col">
+        <div>
           <q-btn
             v-if="short"
             flat
