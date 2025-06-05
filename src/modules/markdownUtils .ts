@@ -45,11 +45,17 @@ import 'prismjs/components/prism-bash'
 // dynamically
 import lightHref from 'prismjs/themes/prism.css?url'
 import darkHref from 'prismjs/themes/prism-tomorrow.css?url'
+import tyMarkdownCss from 'src/css/markdown.sass?inline'
 
 import { uid } from 'quasar'
 import type { Token } from 'markdown-it'
 import { svgStringToPngUint8 } from './svgUtils'
-import { copyPngToClipboard } from './utils'
+import { copyPngToClipboard, hexToRgb } from './utils'
+
+export const tyMdCssUrls = {
+  dark: [darkHref],
+  light: [lightHref],
+} as const
 
 export const highlighter = (code: string, lang: string) => {
   // non-null assertion or coalesce to JS grammar
@@ -390,11 +396,25 @@ export const md2Html = (src: string, darkMode = false) => {
   return renderedHtml
 }
 
-export const generateIframeSrc = (renderedHtml: string, cssUrl: string) =>
-  `
-  <html>
+export const generateIframeSrc = (
+  renderedHtml: string,
+  linkTags: string,
+  primaryColorHex: string,
+  secondaryColorHex: string,
+) => {
+  const primary = hexToRgb(primaryColorHex)
+  const secondary = hexToRgb(secondaryColorHex)
+  return `<html>
     <head>
-      ${cssUrl ? `<link rel="stylesheet" href="${cssUrl}">` : ''}
+      ${linkTags}
+      <style>
+      :root {
+        --q-primary-rgb: ${primary};
+        --q-secondary-rgb: ${secondary};
+      }
+
+      ${tyMarkdownCss}
+      <style>
       <style>
         html, body {
           margin: 0;
@@ -439,3 +459,4 @@ export const generateIframeSrc = (renderedHtml: string, cssUrl: string) =>
     </body>
   </html>
   `
+}

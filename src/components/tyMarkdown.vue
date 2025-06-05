@@ -1,11 +1,11 @@
 <!-- eslint-disable no-useless-escape -->
 <template>
-  <div v-if="useIframe && iframeHtml" class="responsive-iframe row" v-bind="$attrs">
+  <div v-if="useIframe && iframeHtml" class="responsive-iframe row ty-md-iframe" v-bind="$attrs">
     <iframe
       ref="iframeRef"
       class="col"
       sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"
-      :srcdoc="iframeHtml"
+      :srcdoc="`<div class=tyMarkdown>${iframeHtml}<div>`"
       style="width: 600px"
     />
   </div>
@@ -13,16 +13,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import {
   containsHtmlTags,
   generateIframeSrc,
   initPrismTheme,
   md2Html,
+  tyMdCssUrls,
 } from '../modules/markdownUtils '
-import { useQuasar } from 'quasar'
+import { getCssVar, useQuasar } from 'quasar'
 import { ref } from 'vue'
-import { onUnmounted } from 'vue'
 
 // https://mdit-plugins.github.io/mathjax.html#usage
 //const mathjaxInstance = createMathjaxInstance();
@@ -36,14 +36,9 @@ defineOptions({
 const $q = useQuasar()
 initPrismTheme($q.dark.isActive)
 
-const {
-  cssUrl,
-  src,
-  useIframe = false,
-} = defineProps<{
+const { src, useIframe = false } = defineProps<{
   src?: string
   useIframe?: boolean
-  cssUrl?: string // optional external CSS URL for iframe content
 }>()
 
 const renderedHtml = computed(() => {
@@ -70,44 +65,47 @@ const renderedHtml = computed(() => {
 })
 
 const iframeHtml = computed(() => {
-  const danger = containsHtmlTags(src ?? '')
-  if (useIframe && danger) {
-    // Detect parent's computed style from document.body.
-    // (Alternatively, you could target a more specific element if needed.)
-    const parentStyle = window.getComputedStyle(document.body)
-    const fontFamily = parentStyle.fontFamily || 'Roboto, sans-serif'
-    const parentColor = parentStyle.color || 'inherit'
-    // For dark mode, override parent's color to white.
-    const textColor = $q.dark.isActive ? 'white' : parentColor
-    // Create a style block to inject into the iframe.
-    const styleBlock = `<style>
-      body {
-        font-family: ${fontFamily};
-        color: ${textColor};
-      }
-    </style>`
-    // Prepend the style block to the rendered HTML.
-    return generateIframeSrc(styleBlock + renderedHtml.value, cssUrl ?? '')
-  }
-  return ''
+  // check if we realy need to use an iframe...
+  // this is only necessary, if we render html & scripts
+  if (!useIframe || !containsHtmlTags(src ?? '')) return ''
+
+  // Detect parent's computed style from document.body.
+  // (Alternatively, you could target a more specific element if needed.)
+  const parentStyle = window.getComputedStyle(document.body)
+  const fontFamily = parentStyle.fontFamily || 'Roboto, sans-serif'
+  // For dark mode, override parent's color to white.
+  const textColor = $q.dark.isActive ? 'white' : parentStyle.color || 'inherit'
+
+  const inlineStyle = `<style>body { font-family: ${fontFamily}; color: ${textColor}; }</style>`
+
+  const linkTags = ($q.dark.isActive ? tyMdCssUrls.dark : tyMdCssUrls.light)
+    .map((href) => `<link rel="stylesheet" href="${href}">`)
+    .join('\n')
+
+  return generateIframeSrc(
+    renderedHtml.value,
+    `${linkTags}${inlineStyle}`,
+    getCssVar('--q-primary-rgb') || '#000000',
+    getCssVar('--q-secondary-rgb') || '#00ffff',
+  )
 })
 /*const doc = iframeRef.value.contentDocument
-    if (doc) {
-      doc.open()
-      doc.write()
-      doc.close()
-    }*/
+      if (doc) {
+        doc.open()
+        doc.write()
+        doc.close()
+      }*/
 /* else {
-    // If not using iframe, initialize any necessary libraries
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: 'loose',
-      theme: 'default',
-      flowchart: { htmlLabels: false, useMaxWidth: true }
-    })
-  }*/
+      // If not using iframe, initialize any necessary libraries
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'loose',
+        theme: 'default',
+        flowchart: { htmlLabels: false, useMaxWidth: true }
+      })
+    }*/
 
-function handleMessage(event: MessageEvent) {
+/*function handleMessage(event: MessageEvent) {
   if (!iframeRef.value || event.source !== iframeRef.value.contentWindow) return
   if (event.data?.type !== 'resizeIframe') return
 
@@ -128,15 +126,15 @@ onUnmounted(() => {
 
 onMounted(() => {
   window.addEventListener('message', handleMessage)
-})
+})*/
 </script>
 
 <style lang="sass">
-.responsive-iframe
+/*.responsive-iframe
   position: relative
   //width: 100%
 
-.responsive-iframe iframe
+/*.responsive-iframe iframe
   position: relative
   display: block
   //width: auto

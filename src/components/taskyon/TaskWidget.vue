@@ -115,7 +115,7 @@
         v-if="state.taskState[task.id]?.markdownEnabled != false"
         no-line-numbers
         :src="task.content.data"
-        :use-iframe="false"
+        use-iframe
       />
       <div v-else class="raw-markdown q-mb-md">
         {{ task.content.data }}
@@ -133,7 +133,7 @@
         Error: {{ task.content.data.split(' ').slice(0, 10).join(' ') }}...
       </template>
       <div class="text-negative">
-        <ty-markdown :src="task.content.data" no-line-numbers />
+        <tyMarkdown :src="task.content.data" no-line-numbers use-iframe />
       </div>
     </TaskField>
   </div>
