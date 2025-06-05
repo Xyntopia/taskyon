@@ -71,6 +71,10 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     // Specific style for tasks with the 'user' role
     .task-container
       margin-bottom: 15px
+      padding-left: 5px
+      padding-right: 5px
+      border-radius: 5px
+
       &.user
         //background: linear-gradient(to left, rgba($secondary,0.075), $dark 100%)
         //border-right: 1px solid rgba($secondary, 0.5)
@@ -91,12 +95,6 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     margin-bottom: 5px
     width: auto // Ensures it takes the necessary width up to its parent's maximum
     min-width: 100% // Ensures it stretches to at least the width of its parent
-
-  // message container needs to stay "top-level", because sometimes messages appear without
-  // a task container (e.g. in the search results...)
-  .message-container
-    margin-left: 5px
-    margin-right: 5px
 
   .debug-container
     padding-top: 5px
@@ -178,12 +176,10 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       background-color: rgba(white, 0.1) // Adjust transparency as needed
       border: 0.5px solid rgba(white, 0.5)
 
-    .tasks-container
-      // Specific s  .q-dark
-      color: redtyle for tasks with the 'user' role
-      .task-container
-        &.user
-          border: 1px solid rgba($primary,0.8)
+    .task-container
+      background-color: white
+      &.user
+        border: 1px solid rgba($primary,0.8)
 
   .body--dark
     #q-app
@@ -219,16 +215,10 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       border: 1px solid white /* add white outline */
       border-radius: 5px /* optional, to match the rounded-borders class */
 
-    .tasks-container
-      // Specific style for tasks with the 'user' role
-      .task-container
-        background-color: rgba($dark,1.0)
-        &.user
-          border: 1px solid rgba($secondary,0.3)
-
-        .message-container
-          margin-left: 5px
-          margin-right: 5px
+    .task-container
+      background-color: rgba($dark,1.0)
+      &.user
+        border: 1px solid rgba($secondary,0.3)
 
 @media print
   /* Hide everything initially */

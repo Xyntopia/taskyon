@@ -1,131 +1,119 @@
 <template>
-  <div class="col q-px-xs" style="background-color: inherit; color: inherit" flat square>
-    <template v-if="currentTask">
-      <!--<pre>{{ JSON.stringify(taskTree, undefined, 2) }}</pre>-->
-      <div v-if="taskTreeRoot" class="tasks-container q-pa-sm q-pl-md">
-        <q-tree
-          dense
-          node-key="taskid"
-          :nodes="taskTree"
-          default-expand-all
-          @lazy-load="onLazyLoad"
-        >
-          <template #default-header="prop">
-            <q-card
-              v-if="prop.node.task"
-              class="task-container"
-              flat
-              :class="[prop.node.task.role, Object.keys(prop.node.task.content)[0]]"
-              @click.stop
-            >
-              <Task
-                :id="prop.node.task.id"
-                :task="prop.node.task"
-                short
-                :class="[prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"
-                :show-id="!!showIds"
-              />
-            </q-card>
-            <div v-else class="text-bold">{{ prop.node.taskid.slice(0, 12) }}</div>
-          </template>
-        </q-tree>
-      </div>
-      <div v-else-if="showHierarchy" class="tasks-container q-pa-sm q-pl-md">
-        <q-tree dense node-key="taskid" :nodes="taskHierarchy" default-expand-all>
-          <template #default-header="prop">
-            <q-card
-              class="task-container"
-              flat
-              :class="[prop.node.task.role, Object.keys(prop.node.task.content)[0]]"
-              @click.stop
-            >
-              <Task
-                :id="prop.node.task.id"
-                :task="prop.node.task"
-                short
-                :class="[prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '']"
-                :show-id="!!showIds"
-              />
-            </q-card>
-          </template>
-        </q-tree>
-      </div>
-      <div v-else class="q-gutter-xs tasks-container col items-center">
-        <template v-for="(task, idx) in props.selectedThread">
-          <div
-            v-if="showAllTasks || showTask(task)"
-            :key="task.id"
-            :class="`row ${task.role === 'user' ? 'justify-end' : ''}`"
-          >
-            <q-card flat :class="[task.role, task.content.type, 'task-container']">
-              <Task
-                :id="task.id"
-                :task="task"
-                :previous-task="props.selectedThread[idx - 1]"
-                :next-task="props.selectedThread[idx + 1]"
-                :is-working="
-                  !!tystate.lastTaskState.get(task.id) &&
-                  tystate.lastTaskState.get(task.id) !== 'processed'
-                "
-                :show-id="!!showIds"
-              />
-            </q-card>
-          </div>
-        </template>
-      </div>
-      <!--Render tasks which are in progress-->
-      <div class="task-logs tasks-container q-py-sm">
-        <q-card
-          v-if="
-            !!tystate.lastTaskState.get(currentTask.id) &&
-            tystate.lastTaskState.get(currentTask.id) !== 'processed'
+  <div class="tasks-container q-pa-sm q-pl-md">
+    <!--if we want to see the task tree-->
+    <q-tree
+      v-if="taskTreeRoot"
+      dense
+      node-key="taskid"
+      :nodes="taskTree"
+      default-expand-all
+      @lazy-load="onLazyLoad"
+    >
+      <template #default-header="prop">
+        <Task
+          v-if="prop.node.task"
+          :id="prop.node.task.id"
+          :task="prop.node.task"
+          short
+          :class="[
+            prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
+            prop.node.task.role,
+            Object.keys(prop.node.task.content)[0],
+          ]"
+          :show-id="!!showIds"
+          @click.stop
+        />
+        <div v-else class="text-bold">{{ prop.node.taskid.slice(0, 12) }}</div>
+      </template>
+    </q-tree>
+    <!--if we want to see debug view-->
+    <q-tree
+      v-else-if="showHierarchy"
+      dense
+      node-key="taskid"
+      :nodes="taskHierarchy"
+      default-expand-all
+    >
+      <template #default-header="prop">
+        <Task
+          :id="prop.node.task.id"
+          :task="prop.node.task"
+          short
+          :class="[
+            prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
+            prop.node.task.role,
+            Object.keys(prop.node.task.content)[0],
+          ]"
+          :show-id="!!showIds"
+          @click.stop
+        />
+      </template>
+    </q-tree>
+    <div v-else class="q-gutter-xs items-center column">
+      <template v-for="(task, idx) in props.selectedThread">
+        <Task
+          v-if="showAllTasks || showTask(task)"
+          :key="task.id"
+          :class="['col', task.role, task.content.type, task.role === 'user' ? 'justify-end' : '']"
+          :id="task.id"
+          :task="task"
+          :previous-task="props.selectedThread[idx - 1]"
+          :next-task="props.selectedThread[idx + 1]"
+          :is-working="
+            !!tystate.lastTaskState.get(task.id) &&
+            tystate.lastTaskState.get(task.id) !== 'processed'
           "
-          class="row"
-          flat
-        >
-          <div class="col">
-            <tyMarkdown
-              v-if="currentMessageStream"
-              no-line-numbers
-              no-mermaid
-              :use-iframe="false"
-              :src="currentMessageStream || ''"
-            />
-            <div>
-              {{ safeYamlDump(currentFunctionStream) }}
-            </div>
-            <q-spinner-dots size="2rem" color="secondary" />
+          :show-id="!!showIds"
+        />
+      </template>
+    </div>
+    <!--Render tasks which are in progress-->
+    <div class="task-logs q-py-sm">
+      <q-card
+        v-if="
+          !!tystate.lastTaskState.get(currentTask.id) &&
+          tystate.lastTaskState.get(currentTask.id) !== 'processed'
+        "
+        class="row"
+        flat
+      >
+        <div class="col">
+          <tyMarkdown
+            v-if="currentMessageStream"
+            no-line-numbers
+            no-mermaid
+            :use-iframe="false"
+            :src="currentMessageStream || ''"
+          />
+          <div>
+            {{ safeYamlDump(currentFunctionStream) }}
           </div>
-        </q-card>
-        <div class="row items-center" v-if="lastWorkerEvent && tystate.workerStreamLogs.length > 0">
-          <q-btn flat dense no-caps :icon-right="matArrowDropDown" @click="showLogs = !showLogs">
-            <span
-              style="
-                max-width: 200px;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-              "
-              class="text-caption text-weight-light"
-            >
-              {{ lastWorkerEvent.stage !== 'all finished' ? 'Processing:' : ''
-              }}{{ lastWorkerEvent?.stage }}
-              {{ lastWorkerEvent?.info }}
-            </span>
-          </q-btn>
+          <q-spinner-dots size="2rem" color="secondary" />
         </div>
-        <template v-if="showLogs">
-          <div
-            v-for="(log, ridx) in tystate.workerStreamLogs.toReversed()"
-            class="column"
-            :key="ridx"
+      </q-card>
+      <div class="row items-center" v-if="lastWorkerEvent && tystate.workerStreamLogs.length > 0">
+        <q-btn flat dense no-caps :icon-right="matArrowDropDown" @click="showLogs = !showLogs">
+          <span
+            style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"
+            class="text-caption text-weight-light"
           >
-            {{ formatTimeStamp(log.timestamp) }} : {{ log.stage }}
-            {{ log.info ? ' | ' + log.info : '' }}
-          </div>
-        </template>
+            {{ lastWorkerEvent.stage !== 'all finished' ? 'Processing:' : ''
+            }}{{ lastWorkerEvent?.stage }}
+            {{ lastWorkerEvent?.info }}
+          </span>
+        </q-btn>
       </div>
-    </template>
+      <template v-if="showLogs">
+        <div
+          v-for="(log, ridx) in tystate.workerStreamLogs.toReversed()"
+          class="column"
+          :key="ridx"
+        >
+          {{ formatTimeStamp(log.timestamp) }} : {{ log.stage }}
+          {{ log.info ? ' | ' + log.info : '' }}
+        </div>
+      </template>
+    </div>
   </div>
 </template>
 
@@ -152,7 +140,7 @@ const lastWorkerEvent = computed(() => {
 
 const props = defineProps<{
   selectedThread: TaskNode[]
-  currentTask?: TaskNode | undefined | null
+  currentTask: TaskNode
   showAllTasks?: boolean
   showHierarchy?: boolean
   taskTreeRoot?: string | undefined

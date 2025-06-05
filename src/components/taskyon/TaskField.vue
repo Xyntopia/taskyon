@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="task-container">
     <!--task meta data-->
     <div v-if="showMeta" class="text-overline text-right" style="font-size: 75%; line-height: 1.5">
       {{ task.id.slice(0, 5) }}

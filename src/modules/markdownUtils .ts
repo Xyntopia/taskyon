@@ -417,28 +417,19 @@ export const generateIframeSrc = (
       <style>
       <style>
         html, body {
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
           margin: 0;
           padding: 0;
-          width: 100%;
-          /* Make the body a container for inline-size queries */
-          container-type: inline-size;
         }
-        /* Wrap content in a fluid container */
         .content {
-          /* By default, use auto (shrink-wrapped) */
-          width: auto;
+          width: 100%;
           box-sizing: border-box;
         }
         img, svg {
           max-width: 100%;
           height: auto;
-        }
-        /* If the available width is 500px or more,
-           force the content to stretch to 100% */
-        @container (min-width: 500px) {
-          .content {
-            width: 100%;
-          }
         }
       </style>
     </head>

@@ -1,12 +1,12 @@
 <template>
   <!--Task Page-->
-  <q-page class="column">
+  <q-page>
     <q-resize-observer :debounce="50" @resize="onResize" />
     <!--Chat Area-->
     <div
       id="chat-area"
       ref="taskThreadContainer"
-      class="col column items-center"
+      class="column items-center"
       :style="`padding-bottom: ${bottomPadding + 5}px;`"
     >
       <q-scroll-observer axis="vertical" :debounce="1000" @scroll="onScroll" />
@@ -34,7 +34,7 @@
       </div>
       <!-- "Task" Display -->
       <TaskChainViewer
-        v-if="tystate.selectedThread.value.length > 0"
+        v-if="tystate.selectedThread.value.length > 0 && tystate.currentTask.value"
         :selected-thread="tystate.selectedThread.value"
         :current-task="tystate.currentTask.value"
         :show-all-tasks="showAllTasks"

@@ -1,14 +1,13 @@
 <!-- eslint-disable no-useless-escape -->
 <template>
-  <div v-if="useIframe && iframeHtml" class="responsive-iframe row ty-md-iframe" v-bind="$attrs">
-    <iframe
-      ref="iframeRef"
-      class="col"
-      sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"
-      :srcdoc="`<div class=tyMarkdown>${iframeHtml}<div>`"
-      style="width: 600px"
-    />
-  </div>
+  <iframe
+    v-if="useIframe && iframeHtml"
+    class="responsive-iframe"
+    v-bind="$attrs"
+    ref="iframeRef"
+    sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"
+    :srcdoc="`<div class=tyMarkdown>${iframeHtml}<div>`"
+  />
   <div v-else v-html="renderedHtml" v-bind="$attrs" class="tyMarkdown" />
 </template>
 
@@ -85,8 +84,8 @@ const iframeHtml = computed(() => {
   return generateIframeSrc(
     renderedHtml.value,
     `${linkTags}${inlineStyle}`,
-    getCssVar('--q-primary-rgb') || '#000000',
-    getCssVar('--q-secondary-rgb') || '#00ffff',
+    getCssVar('--q-primary') || '#000000',
+    getCssVar('--q-secondary') || '#00ffff',
   )
 })
 
@@ -98,11 +97,11 @@ interface ResizeIframeMessage {
 
 let resizeTimeout: ReturnType<typeof setTimeout> | null = null
 let pendingResize: { width: number; height: number } | null = null
-let lastWidth: number | null = null
+const lastWidth: number | null = null
 let lastHeight: number | null = null
-let resizeCount = 0
+const resizeCount = 0
 const MAX_RESIZE_ATTEMPTS = 3
-let resizeLoopDetected = false
+const resizeLoopDetected = false
 
 function handleMessage(event: MessageEvent) {
   const data = event.data as ResizeIframeMessage
@@ -129,6 +128,8 @@ function handleMessage(event: MessageEvent) {
     const widthChanged = lastWidth === null || Math.abs(newWidth - lastWidth) > 1
     const heightChanged = lastHeight === null || Math.abs(newHeight - lastHeight) > 1
 
+    console.log(widthChanged, resizeCount, MAX_RESIZE_ATTEMPTS)
+
     if (resizeLoopDetected) {
       // Only update height, never width again
       if (heightChanged) {
@@ -142,33 +143,9 @@ function handleMessage(event: MessageEvent) {
       return
     }
 
-    if (widthChanged || heightChanged) {
-      resizeCount++
-      if (resizeCount > MAX_RESIZE_ATTEMPTS) {
-        resizeLoopDetected = true
-        // Do one last resize: only update height, not width
-        if (heightChanged) {
-          iframeRef.value.style.height = `${newHeight}px`
-          lastHeight = newHeight
-        }
-        console.warn(
-          '[iframe] Resize loop detected, switching to height-only resizing to avoid scrollbars.',
-        )
-        pendingResize = null
-        return
-      }
-
-      if (widthChanged) {
-        iframeRef.value.style.width = `${newWidth}px`
-        lastWidth = newWidth
-      }
-      if (heightChanged) {
-        iframeRef.value.style.height = `${newHeight}px`
-        lastHeight = newHeight
-      }
-    } else {
-      // Reset counter if no significant change
-      resizeCount = 0
+    if (heightChanged) {
+      iframeRef.value.style.height = `${newHeight}px`
+      lastHeight = newHeight
     }
 
     pendingResize = null
@@ -186,14 +163,8 @@ onMounted(() => {
 
 <style lang="sass">
 .responsive-iframe
-  position: relative
-  //width: 100%
-
-.responsive-iframe iframe
-  position: relative
+  width: 100%
   display: block
-  //width: auto
   border: none
-  //height: auto
-  //min-width: 800px  // or whatever minimum you require
+  /* Optionally, set max-width: 100% if you want to be extra safe */
 </style>

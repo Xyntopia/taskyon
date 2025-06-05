@@ -37,7 +37,7 @@
             :icon="mdiMagicStaff"
           />
         </div>
-        <div class="col">
+        <div v-if="tystate.currentTask.value" class="col">
           <q-scroll-area class="fit">
             <TaskChainViewer
               :selected-thread="tystate.selectedThread.value"
