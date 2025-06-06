@@ -1,17 +1,20 @@
 <!-- eslint-disable no-useless-escape -->
 <template>
-  <div class="iframe-wrapper">
+  <div
+    v-if="useIframe && iframeHtml"
+    class="iframe-wrapper"
+    style="width: 100%; min-width: 0; flex: 1 1 0%"
+    v-bind="$attrs"
+  >
     <iframe
-      style="width: 100%; min-width: 0; flex: 1 1 0%; display: block; border: none"
-      v-if="useIframe && iframeHtml"
+      style="display: block; border: none"
       class="responsive-iframe"
-      v-bind="$attrs"
       ref="iframeRef"
       sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"
       :srcdoc="`<div class=tyMarkdown>${iframeHtml}<div>`"
     />
-    <div v-else v-html="renderedHtml" v-bind="$attrs" class="tyMarkdown" />
   </div>
+  <div v-else v-html="renderedHtml" v-bind="$attrs" class="tyMarkdown" />
 </template>
 
 <script setup lang="ts">
