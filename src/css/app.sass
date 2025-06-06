@@ -71,16 +71,19 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       min-width: 0
 
       .task-container
-        width: 100%
-        min-width: 0
         display: flex
         flex-direction: column
+        min-width: 0
+        /* Cap width to (100% of parent – 20px margin). 
+         This ensures the iframe can grow up to the container’s full width minus the margin. */
+        width: calc(100% - 20px)
 
         &.user
-          align-self: end
+          align-self: flex-end
           margin-left: 20px
 
         &:not(.user)
+          align-self: flex-start
           margin-right: 20px
 
         .task-display
