@@ -94,9 +94,20 @@ export function setPrismTheme(isDark: boolean) {
 }
 
 export const containsHtmlTags = (markdown: string) => {
-  // Regex to match any HTML tag
+  const cleaned = markdown
+    // 1. remove fenced code blocks ```…```
+    .replace(/```[\s\S]*?```/g, '')
+    // 2. remove indented code blocks (4 spaces or a tab)
+    .replace(/^(?: {4}|\t).*(\r?\n(?: {4}|\t).*)*/gm, '')
+    // 3. remove inline code spans `…`
+    .replace(/`[^`\n]+`/g, '')
+    // 4. remove any <code>…</code> sections
+    .replace(/<code\b[^>]*>[\s\S]*?<\/code>/gi, '')
+    // 5. remove HTML comments <!-- … -->
+    .replace(/<!--[\s\S]*?-->/g, '')
+
   const tagPattern = /<\/?[a-z][a-z0-9]*\b[^>]*>/gi
-  return tagPattern.test(markdown)
+  return tagPattern.test(cleaned)
 }
 
 /**
