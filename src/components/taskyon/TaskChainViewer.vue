@@ -1,5 +1,5 @@
 <template>
-  <div class="tasks-container q-pa-sm q-pl-md">
+  <div class="tasks-container">
     <!--if we want to see the task tree-->
     <q-tree
       v-if="taskTreeRoot"
@@ -49,32 +49,23 @@
         />
       </template>
     </q-tree>
-    <div v-else class="items-stretch column">
+    <template v-else>
       <template v-for="(task, idx) in props.selectedThread" :key="task.id">
-        <!--
-        We are packing this into an additional div:
-
-        the first div is responsible to add the margins and should always stretch to the full size,
-        the second one is responsible at moving
-        the task div left or right, based on content....
-        -->
-        <div class="col-auto">
-          <Task
-            v-if="showAllTasks || showTask(task)"
-            :class="[task.role, task.content.type]"
-            :id="task.id"
-            :task="task"
-            :previous-task="props.selectedThread[idx - 1]"
-            :next-task="props.selectedThread[idx + 1]"
-            :is-working="
-              !!tystate.lastTaskState.get(task.id) &&
-              tystate.lastTaskState.get(task.id) !== 'processed'
-            "
-            :show-id="!!showIds"
-          />
-        </div>
+        <Task
+          v-if="showAllTasks || showTask(task)"
+          :class="[task.role, task.content.type]"
+          :id="task.id"
+          :task="task"
+          :previous-task="props.selectedThread[idx - 1]"
+          :next-task="props.selectedThread[idx + 1]"
+          :is-working="
+            !!tystate.lastTaskState.get(task.id) &&
+            tystate.lastTaskState.get(task.id) !== 'processed'
+          "
+          :show-id="!!showIds"
+        />
       </template>
-    </div>
+    </template>
     <!--Render tasks which are in progress-->
     <div class="task-logs q-py-sm">
       <q-card

@@ -6,70 +6,69 @@
       {{ task.created_at ? new Date(task.created_at).toLocaleString() : '' }}
       <q-tooltip>{{ task.id }}</q-tooltip>
     </div>
-    <div class="message-display">
-      <!--Message Display-->
-      <div class="row items-end">
+    <!--Message Display-->
+    <div class="task-display">
+      <!--task-header-->
+      <div class="task-header">
         <!--task icon-->
         <div v-if="icon" class="col-auto self-center q-pr-sm">
           <q-icon :name="icon" :color="iconColor" size="sm" />
         </div>
-        <!--task content-->
-        <div class="col">
-          <q-btn
-            v-if="short"
-            flat
-            dense
-            :icon-right="expandMessageContent ? matArrowDropUp : matArrowDropDown"
-            no-caps
-            @click="expandMessageContent = !expandMessageContent"
-            style="width: 100%"
-          >
-            <!--task header-->
-            <!--we need "col" here in roder to make sure, the div stretches..-->
-            <div class="text-caption col">
-              <slot name="header"></slot>
-            </div>
-          </q-btn>
-          <q-slide-transition>
-            <div v-show="!short || expandMessageContent">
-              <!--expandable task content-->
-              <slot></slot>
-            </div>
-          </q-slide-transition>
-        </div>
-        <!--task costs-->
-        <div
-          v-if="state.appConfiguration.showCosts && taskCostMeta"
-          style="font-size: xx-small"
-          class="col-auto column items-center task-costs"
+        <q-btn
+          v-if="short"
+          flat
+          dense
+          :icon-right="expandMessageContent ? matArrowDropUp : matArrowDropDown"
+          no-caps
+          @click="expandMessageContent = !expandMessageContent"
+          style="width: 100%"
         >
-          <div v-if="taskCostMeta.taskCosts">
-            {{ humanReadableTaskCosts }}
+          <!--task header-->
+          <!--we need "col" here in roder to make sure, the div stretches..-->
+          <div class="text-caption col">
+            <slot name="header"></slot>
           </div>
-          <q-icon
-            :name="matMonetizationOn"
-            size="xs"
-            :color="
-              taskCostMeta.taskCosts ? 'secondary' : taskCostMeta.promptTokens ? 'positive' : 'info'
-            "
-          ></q-icon>
-          <div v-if="taskCostMeta.promptTokens">
-            {{ taskCostMeta.promptTokens }}
-          </div>
-          <div v-else>
-            {{
-              (taskCostMeta.estimatedTokens?.promptTokens || 0) +
-              (taskCostMeta.estimatedTokens?.resultTokens || 0)
-            }}
-          </div>
-          <q-tooltip :delay="1000">
-            <TokenUsage :task-meta="taskCostMeta" />
-          </q-tooltip>
+        </q-btn>
+      </div>
+      <!--task content-->
+      <q-slide-transition>
+        <div v-show="!short || expandMessageContent">
+          <!--expandable task content-->
+          <slot></slot>
         </div>
+      </q-slide-transition>
+      <!--task costs-->
+      <div
+        v-if="state.appConfiguration.showCosts && taskCostMeta"
+        style="font-size: xx-small"
+        class="col-auto column items-center task-costs"
+      >
+        <div v-if="taskCostMeta.taskCosts">
+          {{ humanReadableTaskCosts }}
+        </div>
+        <q-icon
+          :name="matMonetizationOn"
+          size="xs"
+          :color="
+            taskCostMeta.taskCosts ? 'secondary' : taskCostMeta.promptTokens ? 'positive' : 'info'
+          "
+        ></q-icon>
+        <div v-if="taskCostMeta.promptTokens">
+          {{ taskCostMeta.promptTokens }}
+        </div>
+        <div v-else>
+          {{
+            (taskCostMeta.estimatedTokens?.promptTokens || 0) +
+            (taskCostMeta.estimatedTokens?.resultTokens || 0)
+          }}
+        </div>
+        <q-tooltip :delay="1000">
+          <TokenUsage :task-meta="taskCostMeta" />
+        </q-tooltip>
       </div>
       <!--buttons-->
       <TaskButtons
-        class="message-buttons"
+        class="task-buttons"
         :task="task"
         @toggle-markdown="toggleMarkdown"
         @create-new-conversation="createNewConversation"

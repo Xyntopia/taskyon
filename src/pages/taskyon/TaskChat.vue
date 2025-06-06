@@ -6,10 +6,10 @@
     <div
       id="chat-area"
       ref="taskThreadContainer"
-      class="column items-center"
       :style="`padding-bottom: ${bottomPadding + 5}px;`"
     >
       <q-scroll-observer axis="vertical" :debounce="1000" @scroll="onScroll" />
+      <!--chat share welcome message-->
       <div
         v-if="tystate.selectedThread.value.length > 0 && showIntroduction"
         class="row items-center q-pa-sm"
@@ -26,6 +26,7 @@
           <q-btn label="Or start using Taskyon" dense no-caps outline @click="scrollToThreadEnd" />
         </div>
       </div>
+      <!--gdrive loader-->
       <div v-if="loadingFromGdrive" class="q-pa-xl">
         <q-spinner-box color="secondary" size="2rem" class="q-mr-md" />
         <span class="text-subtitle2">
@@ -34,7 +35,6 @@
       </div>
       <!-- "Task" Display -->
       <TaskChainViewer
-        class="col-auto"
         v-if="tystate.selectedThread.value.length > 0 && tystate.currentTask.value"
         :selected-thread="tystate.selectedThread.value"
         :current-task="tystate.currentTask.value"
