@@ -437,14 +437,32 @@ export const generateIframeSrc = (
         ${renderedHtml}
       </div>
       <script>
+        const contentEl = document.querySelector('.content');
         function sendSize() {
-          console.log('Iframe content size:', document.documentElement.scrollWidth, document.documentElement.scrollHeight);
-          const height = document.documentElement.scrollHeight || document.body.scrollHeight;
-          const width = document.documentElement.scrollWidth || document.body.scrollWidth;
-          window.parent.postMessage({ type: 'resizeIframe', height, width }, '*');
+          if (!contentEl) return;
+
+          // 1) get the raw box
+          const rect = contentEl.getBoundingClientRect();
+
+          // 2) detect any bottom margin on the last child
+          const last = contentEl.lastElementChild;
+          const mb = last
+            ? parseFloat(getComputedStyle(last).marginBottom) || 0
+            : 0;
+
+          // 3) compute height = box height + margin, then ceil to avoid fractions
+          // we add 5 px on top, because for some reason the value we are calculating here is just
+          // a little bit too low for the scrollbars to disappear in the parent..
+          const height = Math.ceil(rect.height + mb) + 20;
+
+          // 4) width in the same way (optional)
+          const width = Math.ceil(rect.width);
+          console.log('Iframe content size:', width, height);
+          window.parent.postMessage({ type: 'resizeIframe', width, height }, '*');
         }
+
         window.addEventListener('load', sendSize);
-        window.addEventListener('resize', sendSize);
+        new ResizeObserver(sendSize).observe(contentEl);
       </script>
     </body>
   </html>

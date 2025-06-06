@@ -69,11 +69,19 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       align-items: flex-start
       max-width: 800px
       min-width: 0
+      min-height: 0
+      padding: 0 2px
 
       .task-container
+        margin-bottom: 15px
+        padding-left: 5px
+        padding-right: 5px
+        border-radius: 5px
         display: flex
         flex-direction: column
         min-width: 0
+        min-height: 0
+
         //width: calc(100% - 20px)
 
         // Only if there is an <iframe> child:
@@ -85,6 +93,7 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
         &.user
           align-self: flex-end
           margin-left: 20px
+          border: 1px solid rgba($primary,0.8)
 
         &:not(.user)
           align-self: flex-start
@@ -106,21 +115,10 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
             border: none
             min-width: 100px
             width: 100%
+            min-height: 20px
 
           .tyMarkdown
             align-self: auto
-
-  .tasks-container
-    padding-top: 20px
-
-    .task-container
-      margin-bottom: 15px
-      padding-left: 5px
-      padding-right: 5px
-      border-radius: 5px
-
-      &.user
-        border: 1px solid rgba($primary,0.8)
 
   .task-display
     position: relative

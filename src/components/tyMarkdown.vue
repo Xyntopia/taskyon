@@ -100,8 +100,7 @@ let pendingResize: { width: number; height: number } | null = null
 const lastWidth: number | null = null
 let lastHeight: number | null = null
 let resizeCount = 0
-const MAX_RESIZE_ATTEMPTS = 3
-let resizeLoopDetected = false
+const MAX_RESIZE_ATTEMPTS = 10
 
 function handleMessage(event: MessageEvent) {
   const data = event.data as ResizeIframeMessage
@@ -128,23 +127,9 @@ function handleMessage(event: MessageEvent) {
     const widthChanged = lastWidth === null || Math.abs(newWidth - lastWidth) > 1
     const heightChanged = lastHeight === null || Math.abs(newHeight - lastHeight) > 1
 
-    if (resizeLoopDetected) {
-      // Only update height, never width again
-      if (heightChanged) {
-        iframeRef.value.style.height = `${newHeight}px`
-        lastHeight = newHeight
-        console.info(
-          '[iframe] Resize loop detected previously, now only updating height to avoid scrollbars.',
-        )
-      }
-      pendingResize = null
-      return
-    }
-
     if (widthChanged || heightChanged) {
       resizeCount++
       if (resizeCount > MAX_RESIZE_ATTEMPTS) {
-        resizeLoopDetected = true
         // Do one last resize: only update height, not width
         if (heightChanged) {
           iframeRef.value.style.height = `${newHeight}px`
