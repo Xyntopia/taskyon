@@ -97,7 +97,7 @@ interface ResizeIframeMessage {
 
 let resizeTimeout: ReturnType<typeof setTimeout> | null = null
 let pendingResize: { width: number; height: number } | null = null
-let lastWidth: number | null = null
+const lastWidth: number | null = null
 let lastHeight: number | null = null
 let resizeCount = 0
 const MAX_RESIZE_ATTEMPTS = 3
@@ -128,8 +128,6 @@ function handleMessage(event: MessageEvent) {
     const widthChanged = lastWidth === null || Math.abs(newWidth - lastWidth) > 1
     const heightChanged = lastHeight === null || Math.abs(newHeight - lastHeight) > 1
 
-    console.log(widthChanged, resizeCount, MAX_RESIZE_ATTEMPTS)
-
     if (resizeLoopDetected) {
       // Only update height, never width again
       if (heightChanged) {
@@ -159,10 +157,10 @@ function handleMessage(event: MessageEvent) {
         return
       }
 
-      if (widthChanged) {
+      /*if (widthChanged) {
         iframeRef.value.style.width = `${newWidth}px`
         lastWidth = newWidth
-      }
+      }*/
       if (heightChanged) {
         iframeRef.value.style.height = `${newHeight}px`
         lastHeight = newHeight

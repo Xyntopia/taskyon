@@ -66,29 +66,42 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       width: min(100%, 500px)
       display: flex
       flex-direction: column
-      align-items: flex-end
+      align-items: flex-start
       max-width: 500px
       min-width: 0
 
       .task-container
+        width: 100%
+        min-width: 0
+        display: flex
+        flex-direction: column
 
         &.user
           align-self: end
+          margin-left: 20px
 
         &:not(.user)
-          align-self: flex-start
+          margin-right: 20px
 
         .task-display
+          display: inline-flex
+          flex-direction: column
+          align-items: auto
+
           .task-header
             display: flex
             flex-flow: row nowrap
             align-items: flex-start
 
-          .markdown-iframe
-            width: 100% ! important
+          iframe.markdown-iframe
+            display: block // so it behaves like a block-level box
+            max-width: 100% // never exceed parent’s width, but allow smaller
             border: none
+            min-width: 100px
+            width: 100%
 
-          //.tyMarkdown
+          .tyMarkdown
+            align-self: auto
 
   .tasks-container
     padding-top: 20px
@@ -101,10 +114,6 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
 
       &.user
         border: 1px solid rgba($primary,0.8)
-        margin-left: 20px
-
-      &:not(.user)
-        margin-right: 20px
 
   .task-display
     position: relative
