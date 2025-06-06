@@ -1,13 +1,8 @@
 <!-- eslint-disable no-useless-escape -->
 <template>
-  <div
-    v-if="useIframe && iframeHtml"
-    class="iframe-wrapper"
-    style="width: 100%; min-width: 0; flex: 1 1 0%"
-    v-bind="$attrs"
-  >
+  <div v-if="useIframe && iframeHtml" class="iframe-wrapper" v-bind="$attrs">
     <iframe
-      style="display: block; border: none"
+      style="width: 100%; border: none"
       class="responsive-iframe"
       ref="iframeRef"
       sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"

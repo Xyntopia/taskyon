@@ -14,7 +14,7 @@
           <q-icon :name="icon" :color="iconColor" size="sm" />
         </div>
         <!--task content-->
-        <div>
+        <div class="col">
           <q-btn
             v-if="short"
             flat
@@ -25,7 +25,8 @@
             style="width: 100%"
           >
             <!--task header-->
-            <div class="text-caption">
+            <!--we need "col" here in roder to make sure, the div stretches..-->
+            <div class="text-caption col">
               <slot name="header"></slot>
             </div>
           </q-btn>

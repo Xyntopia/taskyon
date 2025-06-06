@@ -61,11 +61,7 @@
         <div class="col-auto">
           <Task
             v-if="showAllTasks || showTask(task)"
-            :class="[
-              task.role,
-              task.content.type,
-              task.role === 'user' ? 'float-right' : 'float-left',
-            ]"
+            :class="[task.role, task.content.type]"
             :id="task.id"
             :task="task"
             :previous-task="props.selectedThread[idx - 1]"
