@@ -97,11 +97,11 @@ interface ResizeIframeMessage {
 
 let resizeTimeout: ReturnType<typeof setTimeout> | null = null
 let pendingResize: { width: number; height: number } | null = null
-const lastWidth: number | null = null
+let lastWidth: number | null = null
 let lastHeight: number | null = null
-const resizeCount = 0
+let resizeCount = 0
 const MAX_RESIZE_ATTEMPTS = 3
-const resizeLoopDetected = false
+let resizeLoopDetected = false
 
 function handleMessage(event: MessageEvent) {
   const data = event.data as ResizeIframeMessage
@@ -133,7 +133,7 @@ function handleMessage(event: MessageEvent) {
     if (resizeLoopDetected) {
       // Only update height, never width again
       if (heightChanged) {
-        //iframeRef.value.style.height = `${newHeight}px`
+        iframeRef.value.style.height = `${newHeight}px`
         lastHeight = newHeight
         console.info(
           '[iframe] Resize loop detected previously, now only updating height to avoid scrollbars.',
@@ -143,9 +143,33 @@ function handleMessage(event: MessageEvent) {
       return
     }
 
-    if (heightChanged) {
-      //iframeRef.value.style.height = `${newHeight}px`
-      lastHeight = newHeight
+    if (widthChanged || heightChanged) {
+      resizeCount++
+      if (resizeCount > MAX_RESIZE_ATTEMPTS) {
+        resizeLoopDetected = true
+        // Do one last resize: only update height, not width
+        if (heightChanged) {
+          iframeRef.value.style.height = `${newHeight}px`
+          lastHeight = newHeight
+        }
+        console.warn(
+          '[iframe] Resize loop detected, switching to height-only resizing to avoid scrollbars.',
+        )
+        pendingResize = null
+        return
+      }
+
+      if (widthChanged) {
+        iframeRef.value.style.width = `${newWidth}px`
+        lastWidth = newWidth
+      }
+      if (heightChanged) {
+        iframeRef.value.style.height = `${newHeight}px`
+        lastHeight = newHeight
+      }
+    } else {
+      // Reset counter if no significant change
+      resizeCount = 0
     }
 
     pendingResize = null
