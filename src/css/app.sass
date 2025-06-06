@@ -71,16 +71,22 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       min-width: 0
 
       .task-container
+
         &.user
           align-self: end
 
         &:not(.user)
           align-self: flex-start
 
-        .task-header
-          display: flex
-          flex-flow: row nowrap
-          align-items: flex-start
+        .task-display
+          .task-header
+            display: flex
+            flex-flow: row nowrap
+            align-items: flex-start
+
+          .markdown-iframe
+            width: 100% ! important
+            border: none
 
   .tasks-container
     padding-top: 20px

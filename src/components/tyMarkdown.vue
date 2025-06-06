@@ -2,7 +2,7 @@
 <template>
   <iframe
     v-if="useIframe && iframeHtml"
-    class="responsive-iframe"
+    class="markdown-iframe"
     ref="iframeRef"
     sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"
     :srcdoc="`<div class=tyMarkdown>${iframeHtml}<div>`"
@@ -160,12 +160,3 @@ onMounted(() => {
   window.addEventListener('message', handleMessage)
 })
 </script>
-
-<style>
-.iframe-wrapper,
-.responsive-iframe {
-  width: 100%;
-  min-width: 0;
-  display: block;
-}
-</style>

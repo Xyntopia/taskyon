@@ -31,11 +31,9 @@
         </q-btn>
       </div>
       <!--task content-->
-      <q-slide-transition>
-        <div v-show="!short || expandMessageContent">
-          <!--expandable task content-->
-          <slot></slot>
-        </div>
+      <q-slide-transition v-show="!short || expandMessageContent">
+        <!--expandable task content-->
+        <slot></slot>
       </q-slide-transition>
       <!--task costs-->
       <div
