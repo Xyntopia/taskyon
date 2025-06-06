@@ -408,14 +408,13 @@ export const generateIframeSrc = (
     <head>
       ${linkTags}
       <style>
-      :root {
-        --q-primary-rgb: ${primary};
-        --q-secondary-rgb: ${secondary};
-      }
+        :root {
+          --q-primary-rgb: ${primary};
+          --q-secondary-rgb: ${secondary};
+        }
 
-      ${tyMarkdownCss}
-      <style>
-      <style>
+        ${tyMarkdownCss}
+
         html, body {
           width: 100%;
           min-width: 0;
