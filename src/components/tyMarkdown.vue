@@ -4,7 +4,7 @@
     v-if="useIframe && iframeHtml"
     class="markdown-iframe"
     ref="iframeRef"
-    sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"
+    sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups allow-clipboard-write"
     :srcdoc="`<div class=tyMarkdown>${iframeHtml}<div>`"
     v-bind="$attrs"
   />
@@ -22,6 +22,7 @@ import {
 } from '../modules/markdownUtils '
 import { getCssVar, useQuasar } from 'quasar'
 import { ref } from 'vue'
+import { asyncComputed } from 'src/modules/vueUtils'
 
 // https://mdit-plugins.github.io/mathjax.html#usage
 //const mathjaxInstance = createMathjaxInstance();
@@ -40,7 +41,7 @@ const { src, useIframe = false } = defineProps<{
   useIframe?: boolean
 }>()
 
-const renderedHtml = computed(() => {
+const renderedHtml = asyncComputed(async () => {
   const raw = src ?? ''
   const isPureHtml =
     containsHtmlTags(raw) &&
@@ -60,8 +61,8 @@ const renderedHtml = computed(() => {
       /(^|\n)\s*:::/, // custom containers (like :::note)
     ].some((pattern) => pattern.test(raw))
 
-  return isPureHtml ? raw : md2Html(raw, $q.dark.isActive)
-})
+  return isPureHtml ? raw : await md2Html(raw, $q.dark.isActive)
+}, 'rendering ...')
 
 const iframeHtml = computed(() => {
   // check if we realy need to use an iframe...

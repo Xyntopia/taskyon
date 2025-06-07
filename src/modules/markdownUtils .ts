@@ -24,7 +24,7 @@ import { full as emoji } from 'markdown-it-emoji'
 
 //import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
 //import katex from  '@mdit/plugin-katex-slim'
-import type { MermaidConfig } from 'mermaid'
+import type { Mermaid, MermaidConfig } from 'mermaid'
 import mermaid from 'mermaid'
 
 // we fist import "Prism" and then the languages we need
@@ -208,71 +208,6 @@ export function createMultiButtonPlugin(
   }
 }
 
-/**
- * A plugin that transforms ```mermaid``` fences into live-rendered SVGs.
- */
-export const createMermaidRenderer = (mermaidConfig: MermaidConfig) => {
-  /*
-  not sure, if we will need this...
-  sometimes good for sanitizing the input
-  const htmlEntities = (str: unknown) =>
-    String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');*/
-
-  // 1) initialize mermaid once
-  mermaid.initialize(mermaidConfig)
-
-  // Example of using the render function
-  const drawDiagram = async function (code: string, selector: string, img_id: string) {
-    const graphDefinition = code
-    const velement = document.createElement('div')
-    const fragment = document.createDocumentFragment()
-    fragment.appendChild(velement)
-    document.body.appendChild(velement)
-    let innerHTML: string
-
-    try {
-      const { svg } = await mermaid.render(`mg${selector}`, graphDefinition, velement)
-      const svgBlob = new Blob([svg], { type: 'image/svg+xml' })
-      const imgUrl = URL.createObjectURL(svgBlob)
-      innerHTML = `<img src="${imgUrl}" alt="Mermaid diagram" />`
-    } catch (err) {
-      console.log('error rendering mermaid!!', err)
-      innerHTML = `${code}\n<div>${JSON.stringify(err)}</div>`
-    } finally {
-      velement.remove()
-    }
-
-    const element = document.querySelector(`#${img_id}`)
-    if (element) {
-      element.innerHTML = innerHTML
-    }
-  }
-
-  // 2) return a fence-transformer scoped to mermaid
-  return createFenceTransformPlugin(/^mermaid$/, (token, _, content) => {
-    const mid = uid()
-    const img_id = `d${mid}`
-    const mm_code = token.content.trim()
-
-    void drawDiagram(mm_code, mid, img_id)
-
-    return `<div id="${img_id}" class="mermaid">${mm_code}</div>
-<div style="display: none">${content}</div>`
-  })
-}
-
-const createMermaidSettings = (darkMode: boolean): MermaidConfig => ({
-  startOnLoad: false,
-  securityLevel: 'loose',
-  theme: darkMode ? 'dark' : 'default',
-  flowchart: {
-    htmlLabels: false,
-    useMaxWidth: true,
-  },
-})
 const { plugin: codeButtons } = createMultiButtonPlugin(/.*/, [
   {
     label: 'Copy',
@@ -345,8 +280,87 @@ const { plugin: codeButtons } = createMultiButtonPlugin(/.*/, [
   },
 ])
 
+// Example of using the render function
+export const drawDiagram =
+  (mermaid: Mermaid) =>
+  async (code: string, selector: string, objecturl = false) => {
+    const graphDefinition = code
+    const velement = document.createElement('div')
+    const fragment = document.createDocumentFragment()
+    fragment.appendChild(velement)
+    document.body.appendChild(velement)
+    let innerHTML: string
+
+    try {
+      const { svg } = await mermaid.render(`mg${selector}`, graphDefinition, velement)
+      if (objecturl) {
+        const svgBlob = new Blob([svg], { type: 'image/svg+xml' })
+        const imgUrl = URL.createObjectURL(svgBlob)
+        innerHTML = `<img src="${imgUrl}" alt="Mermaid diagram" />`
+      } else {
+        innerHTML = svg
+      }
+    } catch (err) {
+      console.log('error rendering mermaid!!', err)
+      innerHTML = `${code}\n<div>${JSON.stringify(err)}</div>`
+    } finally {
+      velement.remove()
+    }
+
+    return innerHTML
+  }
+
+export const renderMermaidPlaceholders =
+  (mermaid: Mermaid) =>
+  async (html: string): Promise<string> => {
+    const wrapper = document.createElement('div')
+    wrapper.innerHTML = html
+
+    const placeholders = wrapper.querySelectorAll('.mermaid-placeholder')
+
+    for (const el of placeholders) {
+      const code = el.textContent?.trim() || ''
+      const id = el.id || uid()
+      try {
+        const { svg } = await mermaid.render(`mid-${id}`, code)
+        el.outerHTML = svg
+      } catch (err) {
+        el.outerHTML = `<pre class="mermaid-error">${code}</pre><div>${String(err)}</div>`
+      }
+    }
+
+    return wrapper.innerHTML
+  }
+
+/**
+ * A plugin that transforms ```mermaid``` fences into live-rendered SVGs.
+ */
+export const createMermaidPlaceholders = createFenceTransformPlugin(
+  /^mermaid$/,
+  (token, _, content) => {
+    const mid = uid()
+    const img_id = `d${mid}`
+    const mm_code = token.content.trim()
+
+    return `<div id="${img_id}" class="mermaid-placeholder">
+    ${mm_code}
+    </div>
+    <div style="display: none">${content}</div>`
+  },
+)
+
+const createMermaidSettings = (darkMode: boolean): MermaidConfig => ({
+  startOnLoad: false,
+  securityLevel: 'loose',
+  theme: darkMode ? 'dark' : 'default',
+  flowchart: {
+    htmlLabels: false,
+    useMaxWidth: true,
+  },
+})
+
 // TODO: make this more efficient...
-export const md2Html = (src: string, darkMode = false) => {
+export const md2Html = async (src: string, darkMode = false) => {
   // for options check this link:
   // https://github.com/markdown-it/markdown-it?tab=readme-ov-file#simple
   const md = new MarkdownIt({
@@ -373,7 +387,6 @@ export const md2Html = (src: string, darkMode = false) => {
     // If result starts with <pre... internal wrapper is skipped.
     highlight: highlighter,
   })
-  const renderMermaid = createMermaidRenderer(createMermaidSettings(darkMode))
   const plugins = [
     emoji,
     sub,
@@ -383,7 +396,7 @@ export const md2Html = (src: string, darkMode = false) => {
     footnote,
     deflist,
     mathjax3,
-    renderMermaid,
+    createMermaidPlaceholders,
     codeButtons,
   ]
 
@@ -403,7 +416,11 @@ export const md2Html = (src: string, darkMode = false) => {
         : '</div></div>'
     },
   })
-  const renderedHtml = md.render(src)
+  const preliminaryHtml = md.render(src)
+
+  // 1) initialize mermaid once
+  mermaid.initialize(createMermaidSettings(darkMode))
+  const renderedHtml = await renderMermaidPlaceholders(mermaid)(preliminaryHtml)
   return renderedHtml
 }
 
