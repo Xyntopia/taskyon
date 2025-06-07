@@ -84,8 +84,8 @@ const iframeHtml = computed(() => {
   return generateIframeSrc(
     renderedHtml.value,
     `${linkTags}${inlineStyle}`,
-    getCssVar('--q-primary') || '#000000',
-    getCssVar('--q-secondary') || '#00ffff',
+    getCssVar('primary') ?? '#000000',
+    getCssVar('secondary') ?? '#00ffff',
   )
 })
 
