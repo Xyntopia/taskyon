@@ -140,7 +140,8 @@ export function createMultiButtonPlugin(
   buttons: {
     label: string
     languages: RegExp
-    callback: (code: string, lang: string, containerId: string) => void | Promise<void>
+    // now receives full HTML, not just raw code
+    callback: (html: string, lang: string, containerId: string) => void | Promise<void>
   }[],
 ) {
   // 1) Setup a single message listener
@@ -149,11 +150,11 @@ export function createMultiButtonPlugin(
   function setupListener() {
     if (listener) return // Only once
     listener = (event: MessageEvent) => {
-      const { type, code, lang, containerId } = event.data || {}
+      const { type, html, lang, containerId } = event.data || {}
       if (!type) return
       const btn = buttons.find((b) => b.label === type && b.languages.test(lang))
       if (btn) {
-        void btn.callback(code, lang, containerId)
+        void btn.callback(html, lang, containerId)
       }
     }
     window.addEventListener('message', listener)
@@ -173,13 +174,15 @@ export function createMultiButtonPlugin(
           <button
             class="btn-${b.label.replace(/\s+/g, '-').toLowerCase()}"
             onclick="
-              const code = document.getElementById('${uid}').innerText;
+              // grab the full HTML of the entire block
+              const html = document.getElementById('${blockId}').innerHTML;
               const msg = {
                 type: '${b.label}',
-                code,
+                html,
                 lang: '${lang}',
                 containerId: '${blockId}'
               };
+              // post it upstream
               if (window.parent !== window) {
                 window.parent.postMessage(msg, '*');
               } else {
@@ -216,7 +219,26 @@ const { plugin: codeButtons, setupListener } = createMultiButtonPlugin(/.*/, [
   {
     label: 'Copy',
     languages: /^(?!mermaid$).*/, // Exclude mermaid
-    callback: (code, lang) => {
+    callback: (html, lang) => {
+      // parse the HTML
+      const doc = new DOMParser().parseFromString(html, 'text/html')
+      // find the first <code>…</code>
+      const codeEl = doc.querySelector('pre code')
+      const code = codeEl?.textContent ?? ''
+      console.log(`copy ${lang}:`, code)
+      void navigator.clipboard.writeText(code)
+    },
+  },
+  // Mermaid: Copy Source
+  {
+    label: 'Copy Source',
+    languages: /^mermaid$/,
+    callback: (html, lang) => {
+      // parse the HTML
+      const doc = new DOMParser().parseFromString(html, 'text/html')
+      // find the first <code>…</code>
+      const codeEl = doc.querySelector('pre code')
+      const code = codeEl?.textContent ?? ''
       console.log(`copy ${lang}:`, code)
       void navigator.clipboard.writeText(code)
     },
@@ -253,17 +275,14 @@ const { plugin: codeButtons, setupListener } = createMultiButtonPlugin(/.*/, [
   {
     label: 'Copy as PNG',
     languages: /^mermaid$/,
-    callback: async (code, lang, blockId) => {
-      const block = document.getElementById(blockId)
-      if (!block) {
-        console.error('Block not found:', blockId)
-        return
-      }
+    callback: async (html, lang, blockId) => {
+      const doc = new DOMParser().parseFromString(html, 'text/html')
+      // look for inline <svg> or <img src="blob:…">
 
       // Try to find an <img> (blob) or <svg> (inline)
       let svgString = ''
-      const img = block.querySelector('img')
-      const svg = block.querySelector('svg')
+      const img = doc.querySelector('img')
+      const svg = doc.querySelector('svg')
 
       if (img && img.src.startsWith('blob:')) {
         try {
@@ -276,7 +295,7 @@ const { plugin: codeButtons, setupListener } = createMultiButtonPlugin(/.*/, [
       } else if (svg) {
         svgString = svg.outerHTML
       } else {
-        console.error('No <img> or <svg> found in block:', blockId, block.innerHTML)
+        console.error('No <img> or <svg> found in block:', blockId, doc.documentElement.innerHTML)
         return
       }
 
@@ -296,15 +315,6 @@ const { plugin: codeButtons, setupListener } = createMultiButtonPlugin(/.*/, [
       } catch (err) {
         console.error('Error converting/copying PNG:', err)
       }
-    },
-  },
-  // Mermaid: Copy Source
-  {
-    label: 'Copy Source',
-    languages: /^mermaid$/,
-    callback: (code) => {
-      console.log('copy mermaid source:', code)
-      void navigator.clipboard.writeText(code)
     },
   },
 ])
