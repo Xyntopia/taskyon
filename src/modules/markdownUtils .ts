@@ -255,21 +255,46 @@ const { plugin: codeButtons, setupListener } = createMultiButtonPlugin(/.*/, [
     languages: /^mermaid$/,
     callback: async (code, lang, blockId) => {
       const block = document.getElementById(blockId)
-      if (!block) return
+      if (!block) {
+        console.error('Block not found:', blockId)
+        return
+      }
 
-      const img = block.querySelector('img') as HTMLImageElement
-      if (!img || !img.src.startsWith('blob:')) return
+      // Try to find an <img> (blob) or <svg> (inline)
+      let svgString = ''
+      const img = block.querySelector('img')
+      const svg = block.querySelector('svg')
+
+      if (img && img.src.startsWith('blob:')) {
+        try {
+          const response = await fetch(img.src)
+          svgString = await response.text()
+        } catch (err) {
+          console.error('Failed to fetch SVG from blob:', err)
+          return
+        }
+      } else if (svg) {
+        svgString = svg.outerHTML
+      } else {
+        console.error('No <img> or <svg> found in block:', blockId, block.innerHTML)
+        return
+      }
+
+      if (!svgString.startsWith('<svg')) {
+        console.error('SVG string is invalid:', svgString.slice(0, 100))
+        return
+      }
 
       try {
-        const response = await fetch(img.src)
-        const svgString = await response.text()
         const res = await svgStringToPngUint8(svgString, 1024)
         if (res) {
           await copyPngToClipboard(res)
-          console.log('copied png to clipboard')
+          console.log('Copied PNG to clipboard')
+        } else {
+          console.error('SVG to PNG conversion failed')
         }
       } catch (err) {
-        console.error('Error converting blob to PNG:', err)
+        console.error('Error converting/copying PNG:', err)
       }
     },
   },
