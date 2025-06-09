@@ -1,19 +1,20 @@
 <!-- eslint-disable no-useless-escape -->
 <template>
-  <!--TODO: maybe also use "allow-presentation, allow-top-navigation-by-user-activation"-->
+  <!--TODO: maybe also use "allow-presentation, allow-top-navigation-by-user-activation"
+  or also allow="clipboard write"?-->
   <iframe
+    :key="iframeHtml"
     v-if="useIframe && iframeHtml"
     class="markdown-iframe"
     ref="iframeRef"
-    sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups clipboard-write"
-    :srcdoc="`<div class=tyMarkdown>${iframeHtml}<div>`"
+    sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"
     v-bind="$attrs"
   />
   <div v-else v-html="renderedHtml" v-bind="$attrs" class="tyMarkdown" />
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import {
   containsHtmlTags,
   generateIframeSrc,
@@ -65,13 +66,11 @@ const renderedHtml = asyncComputed(async () => {
   return isPureHtml ? raw : await md2Html(raw, $q.dark.isActive)
 }, 'rendering ...')
 
-const iframeHtml = computed(() => {
-  // check if we realy need to use an iframe...
-  // this is only necessary, if we render html & scripts
-  if (!useIframe || !containsHtmlTags(src ?? '')) return ''
+// Only produce iFrame HTML once real content is ready
+const iframeHtml = computed<string | undefined>(() => {
+  if (!useIframe || !containsHtmlTags(src ?? '')) return undefined
+  if (renderedHtml.value === 'rendering ...') return undefined
 
-  // Detect parent's computed style from document.body.
-  // (Alternatively, you could target a more specific element if needed.)
   const parentStyle = window.getComputedStyle(document.body)
   const fontFamily = parentStyle.fontFamily || 'Roboto, sans-serif'
   // For dark mode, override parent's color to white.
@@ -90,6 +89,17 @@ const iframeHtml = computed(() => {
     getCssVar('secondary') ?? '#00ffff',
   )
 })
+
+watch(
+  iframeHtml,
+  async (html) => {
+    if (html && iframeRef.value) {
+      await nextTick()
+      iframeRef.value.srcdoc = `<div class=tyMarkdown>${html}<div>`
+    }
+  },
+  { flush: 'post' },
+)
 
 interface ResizeIframeMessage {
   type: 'resizeIframe'
