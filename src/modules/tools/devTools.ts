@@ -17,76 +17,80 @@ const makeOauthLogin = ({
   scope: string
 }) => {
   const redirectUri = `${window.location.origin}/oauth/return/${serviceName}` as const
-  const handlerName = `__gitlab_oauth_btn_${Math.random().toString(36).slice(2, 10)}`
-
-  // Register globally so the button can call it
-  window[handlerName] = async () => {
-    const array = new Uint8Array(64)
-    crypto.getRandomValues(array)
-    const verifier = btoa(String.fromCharCode(...array))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '')
-
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
-    const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '')
-
-    // store PKCE under a per-service key:
-    sessionStorage.setItem(`oauth_pkce_verifier_${serviceName}`, verifier)
-
-    // store clientId (and serviceName redundantly if you like) under a per-service config key:
-    sessionStorage.setItem(`oauth_config_${serviceName}`, JSON.stringify({ clientId }))
-
-    const url = [
-      'https://gitlab.com/oauth/authorize',
-      `?client_id=${encodeURIComponent(clientId)}`,
-      `&redirect_uri=${encodeURIComponent(redirectUri)}`,
-      `&response_type=code`,
-      `&scope=${encodeURIComponent(scope)}`,
-      `&code_challenge=${encodeURIComponent(challenge)}`,
-      `&code_challenge_method=S256`,
-    ].join('')
-
-    window.open(url, 'gitlab_oauth', 'width=500,height=700')
-  }
-
-  window.addEventListener('message', (event) => {
-    // Only accept messages from our own origin:
-    if (event.origin !== window.location.origin) {
-      return
-    }
-    const data = event.data as { type?: string; service?: string; token?: string }
-    if (
-      data.type === 'oauth-success' &&
-      data.service === serviceName &&
-      typeof data.token === 'string'
-    ) {
-      // Store in localStorage instead of sessionStorage:
-      localStorage.setItem(`${serviceName}_access_token`, data.token)
-      // (Optionally, you could dispatch a custom event or update UI here.)
-    }
-  })
-  // ―――――――――→
 
   const html = `
-<button onclick="window.${handlerName}()">Login with ${serviceName}</button>
-    `
+<div>
+  <button id="oauth-btn">Login with ${serviceName}</button>
+</div>
+<script>
+  (async () => {
+    const btn = document.getElementById('oauth-btn');
+    btn.addEventListener('click', async () => {
+      // generate PKCE verifier + challenge
+      const array = new Uint8Array(64);
+      crypto.getRandomValues(array);
+      const verifier = btoa(String.fromCharCode(...array))
+        .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+      const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+        .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
 
+      // stash PKCE & config
+      sessionStorage.setItem('oauth_pkce_verifier_${serviceName}', verifier);
+      sessionStorage.setItem('oauth_config_${serviceName}', JSON.stringify({ clientId: '${clientId}' }));
+
+      // redirect to GitLab
+      const url = [
+        'https://gitlab.com/oauth/authorize',
+        '?client_id=' + encodeURIComponent('${clientId}'),
+        '&redirect_uri=' + encodeURIComponent('${redirectUri}'),
+        '&response_type=code',
+        '&scope=' + encodeURIComponent('${scope}'),
+        '&code_challenge=' + encodeURIComponent(challenge),
+        '&code_challenge_method=S256',
+      ].join('');
+      window.open(url, 'gitlab_oauth', 'width=500,height=700');
+    });
+
+    // listen for the OAuth callback message
+    window.addEventListener('message', (event) => {
+      if (event.origin !== window.location.origin) return;
+      const { type, service, token } = event.data || {};
+      if (type === 'oauth-success' && service === '${serviceName}' && typeof token === 'string') {
+        localStorage.setItem('${serviceName}_access_token', token);
+        // you could dispatch a CustomEvent here if you need to notify parent code
+      }
+    });
+  })();
+</script>
+  `
   return makeTaskResult([
     [
       {
         role: 'assistant',
-        content: {
-          type: 'message',
-          data: html,
-        },
+        content: { type: 'message', data: html },
       },
     ],
   ])
 }
+
+export const gitlabLogin = createTool({
+  name: 'gitlabLogin',
+  description: 'Displays a GitLab OAuth login button via makeOauthLogin',
+  parameters: {
+    type: 'object',
+    properties: {},
+    additionalProperties: false,
+  },
+  function: () => {
+    // reuse your PKCE + iframe-ready login snippet
+    return makeOauthLogin({
+      serviceName: 'gitlab',
+      clientId: '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b',
+      scope: 'read_user',
+    })
+  },
+})
 
 const issueListGenerator = createTool({
   name: 'issueListGenerator',
@@ -269,4 +273,4 @@ const gitReader = createTool({
 }`,
 })
 
-export const devTools = [issueListGenerator, gitReader]
+export const devTools = [gitlabLogin, issueListGenerator, gitReader]
