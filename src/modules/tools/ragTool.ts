@@ -78,9 +78,11 @@ export const ragSearchTool = createTool({
         name: 'jinaSearch',
         arguments: {
           query: searchText,
-          apiKey: process.env.JINA_API_KEY || '',
+          apiKey: '[REDACTED]',
+          // apiKey: process.env.JINA_API_KEY || '',
         },
       })
+
       return makeTaskResult([
         [
           task,
@@ -89,7 +91,8 @@ export const ragSearchTool = createTool({
             arguments: {
               prompts: [
                 `Based on the web search results above, please provide a comprehensive answer to the query: "${searchText}".
-                Use the information from the search results and format your response in a clear, well-structured way.`,
+                Use the information from the search results and format your response in a clear, well-structured way.
+                List all the references below the answer, make sure all the links open in a new tab.`,
               ],
             },
           }),
@@ -109,28 +112,31 @@ export const ragAddTool = createTool({
     properties: {
       inputType: {
         type: 'string',
-        description: 'The type of source to use for the search.',
+        description: 'The type of source to add to the vector store.',
         enum: ['web', 'userInput', 'localFile'],
         default: 'userInput',
       },
       saveText: {
         type: 'string',
-        description: 'The string to be saved in the vector database.',
+        description:
+          'The string to be saved in the vector database if the input type is userInput.',
       },
       label: {
         type: 'string',
-        description: 'The label for the string to be saved.',
+        description: 'The label for the string to be saved if the input type is userInput.',
       },
       url: {
         type: 'string',
-        description: 'The URL of the webpage to read and add to the vector store.',
+        description:
+          'The URL of the webpage to read and add to the vector store if the input type is web.',
       },
       localFileName: {
         type: 'string',
-        description: 'The name of the local file to add to the vector store.',
+        description:
+          'The name of the local file to add to the vector store if the input type is localFile.',
       },
     },
-    required: ['sourceType'],
+    required: ['inputType'],
   } as const satisfies JSONSchema7,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function: async ({ inputType, saveText, label, url, localFileName }) => {
