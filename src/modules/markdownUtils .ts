@@ -138,38 +138,32 @@ export function createFenceTransformPlugin(
 export function createMultiButtonPlugin(
   langMatcher: RegExp,
   buttons: {
-    label: string // button text
-    languages: RegExp // which langs to show on
+    label: string
+    languages: RegExp
     callback: (code: string, lang: string, containerId: string) => void | Promise<void>
   }[],
 ) {
-  // Store event listeners for cleanup
-  const listeners = buttons.map((b) => ({
-    label: b.label,
-    handler: (ev: Event) => {
-      const ce = ev as CustomEvent<{ code: string; lang: string; containerId: string }>
-      void b.callback(ce.detail.code, ce.detail.lang, ce.detail.containerId)
-    },
-  }))
+  // 1) Setup a single message listener
+  let listener: ((event: MessageEvent) => void) | null = null
 
-  // 1) wire up your handlers to listen for events named === label
-  listeners.forEach(({ label, handler }) => {
-    document.addEventListener(label, handler)
-  })
-
-  // 2) return cleanup function along with the plugin
-  const cleanup = () => {
-    listeners.forEach(({ label, handler }) => {
-      document.removeEventListener(label, handler)
-    })
+  function setupListener() {
+    if (listener) return // Only once
+    listener = (event: MessageEvent) => {
+      const { type, code, lang, containerId } = event.data || {}
+      if (!type) return
+      const btn = buttons.find((b) => b.label === type && b.languages.test(lang))
+      if (btn) {
+        void btn.callback(code, lang, containerId)
+      }
+    }
+    window.addEventListener('message', listener)
   }
 
-  // 3) return a wrap-plugin that injects buttons which dispatch those events
+  // 2) Return a plugin that injects buttons using postMessage
   const plugin = createFenceTransformPlugin(langMatcher, (_token: Token, lang, content) => {
     const uid = `code-${Math.random().toString(36).slice(2)}`
     const blockId = `block-${Math.random().toString(36).slice(2)}`
 
-    // inject that ID into the <pre> tag
     const contentWithId = content.replace('<pre', `<pre id="${uid}"`)
 
     const btnsHtml = buttons
@@ -180,11 +174,17 @@ export function createMultiButtonPlugin(
             class="btn-${b.label.replace(/\s+/g, '-').toLowerCase()}"
             onclick="
               const code = document.getElementById('${uid}').innerText;
-              document.dispatchEvent(
-                new CustomEvent('${b.label}', {
-                  detail: { code, lang: '${lang}', containerId: '${blockId}' }
-                })
-              );
+              const msg = {
+                type: '${b.label}',
+                code,
+                lang: '${lang}',
+                containerId: '${blockId}'
+              };
+              if (window.parent !== window) {
+                window.parent.postMessage(msg, '*');
+              } else {
+                window.postMessage(msg, '*');
+              }
             "
           >${b.label}</button>
         `
@@ -204,11 +204,15 @@ export function createMultiButtonPlugin(
 
   return {
     plugin,
-    cleanup,
+    setupListener,
+    cleanup: () => {
+      if (listener) window.removeEventListener('message', listener)
+      listener = null
+    },
   }
 }
 
-const { plugin: codeButtons } = createMultiButtonPlugin(/.*/, [
+const { plugin: codeButtons, setupListener } = createMultiButtonPlugin(/.*/, [
   {
     label: 'Copy',
     languages: /^(?!mermaid$).*/, // Exclude mermaid
@@ -279,6 +283,7 @@ const { plugin: codeButtons } = createMultiButtonPlugin(/.*/, [
     },
   },
 ])
+setupListener()
 
 // Example of using the render function
 export const drawDiagram =
