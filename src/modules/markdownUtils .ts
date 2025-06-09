@@ -424,6 +424,8 @@ export const md2Html = async (src: string, darkMode = false) => {
   return renderedHtml
 }
 
+//TODO: we don't entirely manage to calculate the correct size of iframes yet.
+//      maybe we should use "marginheight" or somthing like that?
 export const generateIframeSrc = (
   renderedHtml: string,
   linkTags: string,

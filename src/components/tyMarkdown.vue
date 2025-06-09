@@ -1,10 +1,11 @@
 <!-- eslint-disable no-useless-escape -->
 <template>
+  <!--TODO: maybe also use "allow-presentation, allow-top-navigation-by-user-activation"-->
   <iframe
     v-if="useIframe && iframeHtml"
     class="markdown-iframe"
     ref="iframeRef"
-    sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups allow-clipboard-write"
+    sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups clipboard-write"
     :srcdoc="`<div class=tyMarkdown>${iframeHtml}<div>`"
     v-bind="$attrs"
   />
