@@ -7,7 +7,25 @@ declare global {
   }
 }
 
-const makeOauthLogin = ({
+// Ensure we only ever wire up one listener:
+let listenerInstalled = false
+function ensureOauthListener() {
+  if (listenerInstalled) return
+  listenerInstalled = true
+
+  window.addEventListener('message', (event) => {
+    const { type, service, clientId, scope } = event.data || {}
+    if (type !== 'oauth-init') return
+
+    // open our own “auth-start” page, which will do PKCE→redirect for us:
+    const startUrl = new URL(`${window.location.origin}/oauth/start/${service}`)
+    startUrl.searchParams.set('clientId', clientId)
+    startUrl.searchParams.set('scope', scope)
+    window.open(startUrl.toString(), `oauth_${service}`, `width=500,height=700`)
+  })
+}
+
+export function createLoginButton({
   serviceName,
   clientId,
   scope,
@@ -15,63 +33,31 @@ const makeOauthLogin = ({
   serviceName: string
   clientId: string
   scope: string
-}) => {
-  const redirectUri = `${window.location.origin}/oauth/return/${serviceName}` as const
+}) {
+  // stash config for the listener
+  ensureOauthListener()
 
+  // return your existing tool, but swap out the iframe HTML:
   const html = `
 <div>
   <button id="oauth-btn">Login with ${serviceName}</button>
 </div>
 <script>
-  (async () => {
-    const btn = document.getElementById('oauth-btn');
-    btn.addEventListener('click', async () => {
-      // generate PKCE verifier + challenge
-      const array = new Uint8Array(64);
-      crypto.getRandomValues(array);
-      const verifier = btoa(String.fromCharCode(...array))
-        .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
-      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
-      const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
-        .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
-
-      // stash PKCE & config
-      sessionStorage.setItem('oauth_pkce_verifier_${serviceName}', verifier);
-      sessionStorage.setItem('oauth_config_${serviceName}', JSON.stringify({ clientId: '${clientId}' }));
-
-      // redirect to GitLab
-      const url = [
-        'https://gitlab.com/oauth/authorize',
-        '?client_id=' + encodeURIComponent('${clientId}'),
-        '&redirect_uri=' + encodeURIComponent('${redirectUri}'),
-        '&response_type=code',
-        '&scope=' + encodeURIComponent('${scope}'),
-        '&code_challenge=' + encodeURIComponent(challenge),
-        '&code_challenge_method=S256',
-      ].join('');
-      window.open(url, 'gitlab_oauth', 'width=500,height=700');
-    });
-
-    // listen for the OAuth callback message
-    window.addEventListener('message', (event) => {
-      if (event.origin !== window.location.origin) return;
-      const { type, service, token } = event.data || {};
-      if (type === 'oauth-success' && service === '${serviceName}' && typeof token === 'string') {
-        localStorage.setItem('${serviceName}_access_token', token);
-        // you could dispatch a CustomEvent here if you need to notify parent code
-      }
-    });
-  })();
+  document.getElementById('oauth-btn')
+    .addEventListener('click', () => {
+      window.parent.postMessage(
+        {
+          type: 'oauth-init',
+          service: '${serviceName}',
+          clientId: '${clientId}',
+          scope: '${scope}'
+        },
+        '*'
+      )
+    })
 </script>
   `
-  return makeTaskResult([
-    [
-      {
-        role: 'assistant',
-        content: { type: 'message', data: html },
-      },
-    ],
-  ])
+  return html
 }
 
 export const gitlabLogin = createTool({
@@ -84,11 +70,19 @@ export const gitlabLogin = createTool({
   },
   function: () => {
     // reuse your PKCE + iframe-ready login snippet
-    return makeOauthLogin({
+    const html = createLoginButton({
       serviceName: 'gitlab',
       clientId: '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b',
       scope: 'read_user',
     })
+    return makeTaskResult([
+      [
+        {
+          role: 'assistant',
+          content: { type: 'message', data: html },
+        },
+      ],
+    ])
   },
 })
 
@@ -122,13 +116,6 @@ in gitlab. They should roughly follow the style of a "user story".`,
       `https://gitlab.com/api/v4/projects/${encodeURIComponent(GITLAB_PROJECT_ID || '')}/issues`,
     )
     const GITLAB_ACCESS_TOKEN = await ctx.getSecret('GITLAB_ACCESS_TOKEN') // Replace with actual project ID
-
-    const oauthHtml = makeOauthLogin({
-      serviceName: 'gitlab',
-      clientId: '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b',
-      scope: 'read_user',
-    })
-    console.log(oauthHtml)
 
     const uiHtml = `<div>
     <ul id="issueList">

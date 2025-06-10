@@ -3,13 +3,13 @@
     <q-page-container>
       <q-page class="q-pa-md flex flex-center column items-center">
         <q-card flat bordered class="q-pa-lg bg-grey-2 text-center">
+          <div>Authenticate: {{ serviceName }}</div>
           <div class="text-h6 q-mb-sm">OAuth Login Success</div>
           <div v-if="loading">Finalizing login…</div>
           <div v-else-if="error" class="text-negative q-mt-sm">{{ error }}</div>
           <div v-else class="text-positive">
             Access token received. You can now close this window.
           </div>
-
           <q-btn
             v-if="!loading"
             class="q-mt-md"
@@ -18,6 +18,14 @@
             flat
             @click="closeWindow"
           />
+          <q-btn
+            v-if="phase === 'start'"
+            class="q-mt-md"
+            label="Start Oauth Process"
+            color="primary"
+            flat
+            @click="startOauth"
+          />
         </q-card>
       </q-page>
     </q-page-container>
@@ -25,18 +33,56 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * This window is meant to be opened as a popup window for oauth applications!
+ * it will automatically forward to a specified oauth
+ */
 import { onMounted, ref } from 'vue'
 
-const props = defineProps<{ serviceName: string; query: Record<string, string> }>()
+const props = defineProps<{
+  phase: 'start' | 'return'
+  serviceName: string
+  query?: Record<string, string>
+}>()
 
+const svc = props.serviceName
 const error = ref<string | null>(null)
 const loading = ref(true)
+const clientId = props.query?.clientId
+const code = props.query?.code
+const scope = props.query?.scope
 
 const closeWindow = () => window.close()
 
+async function startOauth() {
+  // 1) Generate PKCE
+  const challenge = await generatePKCE(svc)
+
+  // 3) Redirect into GitLab’s authorize endpoint
+  const redirectUri = `${window.location.origin}/oauth/return/${svc}`
+  if (clientId && scope) {
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: scope,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+    })
+    window.location.replace(`https://gitlab.com/oauth/authorize?${params.toString()}`)
+  } else {
+    error.value = 'need clientId and scope!!'
+  }
+}
+
 onMounted(async () => {
-  const service = props.serviceName
-  const code = props.query.code
+  if (props.phase === 'start') {
+    //await startOauth()
+    return
+  }
+
+  // ————————————————
+  // else: mode === 'return' (your existing “exchange code for token”)
   if (!code) {
     error.value = 'No code in URL'
     loading.value = false
@@ -44,8 +90,8 @@ onMounted(async () => {
   }
 
   // Read the per-service PKCE verifier and config:
-  const verifierKey = `oauth_pkce_verifier_${service}`
-  const configKey = `oauth_config_${service}`
+  const verifierKey = `oauth_pkce_verifier_${svc}`
+  const configKey = `oauth_config_${svc}`
   const verifier = sessionStorage.getItem(verifierKey)
   const configStr = sessionStorage.getItem(configKey)
 
@@ -68,7 +114,7 @@ onMounted(async () => {
   const { clientId } = JSON.parse(configStr)
 
   try {
-    const redirectUri = `${window.location.origin}/oauth/return/${service}`
+    const redirectUri = `${window.location.origin}/oauth/return/${svc}`
 
     const body = new URLSearchParams({
       client_id: clientId,
@@ -92,19 +138,19 @@ onMounted(async () => {
     const accessToken = data.access_token
 
     // Optionally store per-service access token (or whatever)
-    sessionStorage.setItem(`${service}_access_token`, accessToken)
+    sessionStorage.setItem(`${svc}_access_token`, accessToken)
 
     // Let the opener know which service just finished:
     window.opener?.postMessage(
       {
         type: 'oauth-success',
-        service,
+        svc,
         token: accessToken,
       },
       window.location.origin,
     )
 
-    window.close()
+    //window.close()
   } catch (err) {
     console.error(err)
     error.value = err instanceof Error ? err.message : 'Token exchange failed'
@@ -112,4 +158,28 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+async function generatePKCE(svc: string) {
+  const array = crypto.getRandomValues(new Uint8Array(64))
+  const verifier = btoa(String.fromCharCode(...array))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
+  const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+
+  // 2) Stash for later
+  sessionStorage.setItem(`oauth_pkce_verifier_${svc}`, verifier)
+  sessionStorage.setItem(
+    `oauth_config_${svc}`,
+    JSON.stringify({
+      clientId: clientId,
+      scope: scope,
+    }),
+  )
+  return challenge
+}
 </script>
