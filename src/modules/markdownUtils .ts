@@ -399,10 +399,20 @@ const createMermaidSettings = (darkMode: boolean): MermaidConfig => ({
   },
 })
 
-// TODO: make this more efficient...
 export const md2Html = async (src: string, darkMode = false) => {
-  // for options check this link:
-  // https://github.com/markdown-it/markdown-it?tab=readme-ov-file#simple
+  // 0) make a one-off random marker for this invocation
+  const rand = Math.random().toString(36).slice(2, 20) // e.g. "x9fj3k2a"
+  const wrap = `${rand}` // e.g. "HTMLBLOCK_x9fj3k2a..."
+  const placeholder = (i: number) => `${wrap}${i}${wrap}`
+
+  // 1) extract raw HTML blocks
+  const htmlBlocks: string[] = []
+  const srcWithPH = src.replace(/<([A-Za-z][A-Za-z0-9-]*)(\s[^>]*)?>.*?<\/\1>/gs, (m) => {
+    const idx = htmlBlocks.push(m) - 1
+    return placeholder(idx)
+  })
+
+  // 2) run normal Markdown-it on   the rest
   const md = new MarkdownIt({
     // Convert '\n' in paragraphs into <br>
     breaks: false,
@@ -439,7 +449,6 @@ export const md2Html = async (src: string, darkMode = false) => {
     createMermaidPlaceholders,
     codeButtons,
   ]
-
   plugins.forEach((plugin) => {
     md.use(plugin)
   })
@@ -456,12 +465,16 @@ export const md2Html = async (src: string, darkMode = false) => {
         : '</div></div>'
     },
   })
-  const preliminaryHtml = md.render(src)
 
-  // 1) initialize mermaid once
+  const interim = md.render(srcWithPH)
+
+  // 3) restore raw HTML
+  const phRe = new RegExp(wrap + '(\\d+)' + wrap, 'g')
+  const finalHtml = interim.replace(phRe, (_, idx) => htmlBlocks[+idx] ?? '')
+
+  // … mermaid, iframe, etc …
   mermaid.initialize(createMermaidSettings(darkMode))
-  const renderedHtml = await renderMermaidPlaceholders(mermaid)(preliminaryHtml)
-  return renderedHtml
+  return await renderMermaidPlaceholders(mermaid)(finalHtml)
 }
 
 //TODO: we don't entirely manage to calculate the correct size of iframes yet.
