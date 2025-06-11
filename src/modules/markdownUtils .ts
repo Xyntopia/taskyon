@@ -466,6 +466,29 @@ export const md2Html = async (src: string, darkMode = false) => {
     },
   })
 
+  // make links work a certain way...
+  // Remember the old renderer if overridden, or proxy to the default renderer.
+  const defaultRender =
+    md.renderer.rules.link_open ||
+    function (tokens, idx, options, env, self) {
+      return self.renderToken(tokens, idx, options)
+    }
+  md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
+    // Get the href attribute
+    const href = tokens[idx]?.attrs?.find(([name]) => name === 'href')?.[1]
+
+    // If it's an external link (starts with http:// or https:// or //), add target="_blank"
+    if (
+      href &&
+      (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('//'))
+    ) {
+      tokens[idx]!.attrSet('target', '_blank')
+    }
+
+    // Pass the token to the default renderer.
+    return defaultRender(tokens, idx, options, env, self)
+  }
+
   const interim = md.render(srcWithPH)
 
   // 3) restore raw HTML

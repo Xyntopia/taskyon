@@ -122,17 +122,6 @@ $primary: var(--q-primary-rgb)
     padding: 0.2em 0.4em
     border-radius: 3px
 
-  a
-    color: $primary
-    text-decoration: underline
-    &:hover
-      text-decoration: none
-
-    // TODO: specially mark external links..
-    /*&[href^="http://"], &[href^="https://"]
-     color: $accent // Replace with a color for external links
-     text-decoration: underline
-
   blockquote
     border-left: 4px solid rgb($secondary)
     margin: 1em 0
@@ -233,8 +222,10 @@ $primary: var(--q-primary-rgb)
 
   a
     color: $primary
+    text-decoration: underline
 
     &:hover
+      text-decoration: none
       color: color-mix(
                 in srgb,
                 rgb(var(--q-secondary-rgb)),
@@ -247,6 +238,21 @@ $primary: var(--q-primary-rgb)
                 rgb(var(--q-secondary-rgb)),
                 rgb(var(--q-primary-rgb))   50%
               )
+
+    /*&[href^="http://"], &[href^="https://"]
+    &[target="_blank"]::after
+      content: url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>\
+<path fill='currentColor' d='M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3z'/>\
+<path fill='currentColor' d='M5 5h5V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14\
+c1.1 0 2-.9 2-2v-5h-2v5H5V5z'/>\
+</svg>")
+      display: inline-block
+      width: 1em
+      height: 1em
+      margin-left: 0.25em
+      vertical-align: middle
+      transform: translateY(-0.1em)
 
 .body--dark .tyMarkdown
   blockquote
