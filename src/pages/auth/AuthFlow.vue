@@ -39,6 +39,9 @@
  */
 import { onMounted, ref } from 'vue'
 import { base64UrlDecode, base64UrlEncode } from '../../modules/utils'
+import { useAppStateStore } from 'src/stores/appState'
+
+const state = useAppStateStore()
 
 const props = defineProps<{
   phase: 'start' | 'return'
@@ -81,7 +84,7 @@ async function startOauth(oauthURL: string) {
 
 onMounted(async () => {
   if (props.phase === 'start' && oauthURL) {
-    //await startOauth(oauthURL)
+    await startOauth(oauthURL)
     return
   }
 
@@ -140,19 +143,9 @@ onMounted(async () => {
     const accessToken = data.access_token
 
     // Optionally store per-service access token (or whatever)
-    sessionStorage.setItem(`${oauthURL}_access_token`, accessToken)
+    state.oauthTokens[`${oauthURL}`] = accessToken
 
-    // Let the opener know which service just finished:
-    window.opener?.postMessage(
-      {
-        type: 'oauth-success',
-        svc: oauthURL,
-        token: accessToken,
-      },
-      window.location.origin,
-    )
-
-    //window.close()
+    closeWindow()
   } catch (err) {
     console.error(err)
     error.value = err instanceof Error ? err.message : 'Token exchange failed'
