@@ -22,6 +22,7 @@ import { fileTools } from '../tools/fileTools'
 import { localVectorStore } from '../tools/localVectorStore'
 import { proceduralTools } from '../tools/proceduralGraphics'
 import { wfcGenerator } from '../tools/wavefunctioncollapse'
+import { createOAuthTool } from '../tools/authTools'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -72,6 +73,7 @@ export async function initTaskyon(
     createChooseTool(taskManagerInstance),
     taskSearcher(taskManagerInstance),
     createAddNewToolTool(),
+    createOAuthTool(),
   )
   taskManagerInstance.addDefaultTools(ToolList)
   void taskManagerInstance.updateToolDefinitions()
