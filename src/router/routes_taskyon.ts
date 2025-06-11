@@ -159,11 +159,10 @@ export const routes: RouteRecordRaw[] = [
   ...taskyonRoutes,
   {
     // we are making sure to only load urls without any extensions here...
-    path: '/oauth/:phase/:servicename', // we can declare new routes for different service and extract the access tokens from the return parameters
+    path: '/oauth/:phase',
     component: () => import('pages/auth/AuthFlow.vue'),
     props: (route) => ({
       query: route.query,
-      serviceName: route.params.servicename,
       phase: route.params.phase,
     }),
   },

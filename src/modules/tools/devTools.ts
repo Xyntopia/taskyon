@@ -14,23 +14,24 @@ function ensureOauthListener() {
   listenerInstalled = true
 
   window.addEventListener('message', (event) => {
-    const { type, service, clientId, scope } = event.data || {}
+    const { type, oauthURL, clientId, scope } = event.data || {}
     if (type !== 'oauth-init') return
 
     // open our own “auth-start” page, which will do PKCE→redirect for us:
-    const startUrl = new URL(`${window.location.origin}/oauth/start/${service}`)
-    startUrl.searchParams.set('clientId', clientId)
+    const startUrl = new URL(`${window.location.origin}/oauth/start`)
+    startUrl.searchParams.set('svcUrl', oauthURL)
+    startUrl.searchParams.set('cid', clientId)
     startUrl.searchParams.set('scope', scope)
-    window.open(startUrl.toString(), `oauth_${service}`, `width=500,height=700`)
+    window.open(startUrl.toString(), `oauth:${oauthURL}`, `width=500,height=700`)
   })
 }
 
 export function createLoginButton({
-  serviceName,
+  oauthURL,
   clientId,
   scope,
 }: {
-  serviceName: string
+  oauthURL: string
   clientId: string
   scope: string
 }) {
@@ -40,7 +41,7 @@ export function createLoginButton({
   // return your existing tool, but swap out the iframe HTML:
   const html = `
 <div>
-  <button id="oauth-btn">Login with ${serviceName}</button>
+  <button id="oauth-btn">Login with ${oauthURL}</button>
 </div>
 <script>
   document.getElementById('oauth-btn')
@@ -48,7 +49,7 @@ export function createLoginButton({
       window.parent.postMessage(
         {
           type: 'oauth-init',
-          service: '${serviceName}',
+          oauthURL: '${oauthURL}',
           clientId: '${clientId}',
           scope: '${scope}'
         },
@@ -71,7 +72,7 @@ export const gitlabLogin = createTool({
   function: () => {
     // reuse your PKCE + iframe-ready login snippet
     const html = createLoginButton({
-      serviceName: 'gitlab',
+      oauthURL: 'https://gitlab.com/oauth/authorize',
       clientId: '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b',
       scope: 'read_user',
     })

@@ -3,8 +3,8 @@
     <q-page-container>
       <q-page class="q-pa-md flex flex-center column items-center">
         <q-card flat bordered class="q-pa-lg bg-grey-2 text-center">
-          <div>Authenticate: {{ serviceName }}</div>
-          <div class="text-h6 q-mb-sm">OAuth Login Success</div>
+          <div>Authenticate: {{ oauthURL }}</div>
+          <div v-if="code" class="text-h6 q-mb-sm">OAuth Login Success</div>
           <div v-if="loading">Finalizing login…</div>
           <div v-else-if="error" class="text-negative q-mt-sm">{{ error }}</div>
           <div v-else class="text-positive">
@@ -19,12 +19,12 @@
             @click="closeWindow"
           />
           <q-btn
-            v-if="phase === 'start'"
+            v-if="phase === 'start' && oauthURL"
             class="q-mt-md"
             label="Start Oauth Process"
             color="primary"
             flat
-            @click="startOauth"
+            @click="startOauth(oauthURL)"
           />
         </q-card>
       </q-page>
@@ -38,28 +38,32 @@
  * it will automatically forward to a specified oauth
  */
 import { onMounted, ref } from 'vue'
+import { base64UrlDecode, base64UrlEncode } from '../../modules/utils'
 
 const props = defineProps<{
   phase: 'start' | 'return'
-  serviceName: string
   query?: Record<string, string>
 }>()
 
-const svc = props.serviceName
+// because our service will return to our URL with its oan query parameters,
+// we need the svcId to be base64 encoded so that we can use it as a path
+const oauthURL = props.query?.svcUrl || base64UrlDecode(props.query?.svcId || '')
 const error = ref<string | null>(null)
 const loading = ref(true)
-const clientId = props.query?.clientId
+const clientId = props.query?.cid
 const code = props.query?.code
 const scope = props.query?.scope
 
 const closeWindow = () => window.close()
 
-async function startOauth() {
+const svcId64 = base64UrlEncode(oauthURL)
+const redirectUri = `${window.location.origin}/oauth/return?svcId=${svcId64}`
+
+async function startOauth(oauthURL: string) {
   // 1) Generate PKCE
-  const challenge = await generatePKCE(svc)
+  const challenge = await generatePKCE(oauthURL)
 
   // 3) Redirect into GitLab’s authorize endpoint
-  const redirectUri = `${window.location.origin}/oauth/return/${svc}`
   if (clientId && scope) {
     const params = new URLSearchParams({
       client_id: clientId,
@@ -69,15 +73,15 @@ async function startOauth() {
       code_challenge: challenge,
       code_challenge_method: 'S256',
     })
-    window.location.replace(`https://gitlab.com/oauth/authorize?${params.toString()}`)
+    window.location.replace(`${oauthURL}?${params.toString()}`)
   } else {
     error.value = 'need clientId and scope!!'
   }
 }
 
 onMounted(async () => {
-  if (props.phase === 'start') {
-    //await startOauth()
+  if (props.phase === 'start' && oauthURL) {
+    //await startOauth(oauthURL)
     return
   }
 
@@ -90,8 +94,8 @@ onMounted(async () => {
   }
 
   // Read the per-service PKCE verifier and config:
-  const verifierKey = `oauth_pkce_verifier_${svc}`
-  const configKey = `oauth_config_${svc}`
+  const verifierKey = `oauth_pkce_verifier_${oauthURL}`
+  const configKey = `oauth_config_${oauthURL}`
   const verifier = sessionStorage.getItem(verifierKey)
   const configStr = sessionStorage.getItem(configKey)
 
@@ -114,8 +118,6 @@ onMounted(async () => {
   const { clientId } = JSON.parse(configStr)
 
   try {
-    const redirectUri = `${window.location.origin}/oauth/return/${svc}`
-
     const body = new URLSearchParams({
       client_id: clientId,
       grant_type: 'authorization_code',
@@ -138,13 +140,13 @@ onMounted(async () => {
     const accessToken = data.access_token
 
     // Optionally store per-service access token (or whatever)
-    sessionStorage.setItem(`${svc}_access_token`, accessToken)
+    sessionStorage.setItem(`${oauthURL}_access_token`, accessToken)
 
     // Let the opener know which service just finished:
     window.opener?.postMessage(
       {
         type: 'oauth-success',
-        svc,
+        svc: oauthURL,
         token: accessToken,
       },
       window.location.origin,
