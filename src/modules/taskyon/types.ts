@@ -218,6 +218,13 @@ export const FunctionCall = z.object({
 })
 export type FunctionCall = z.infer<typeof FunctionCall>
 
+export type toolContext = {
+  taskChain: TaskNode[]
+  getSecret: (name: string) => Promise<string>
+  setSecret: (name: string, value: string) => void
+  stopSignal: AbortSignal
+}
+
 const MessageContent = z.object({ type: z.literal('message'), data: z.string() })
 const StructuredContent = z.object({
   type: z.literal('structured'),

@@ -1,6 +1,6 @@
 import { dump } from 'js-yaml'
 import { bigIntToString } from '../utils'
-import type { FunctionArguments, FunctionCall, ParamType, WithRequired, TaskNode } from './types'
+import type { FunctionArguments, FunctionCall, ParamType, WithRequired, toolContext } from './types'
 import { convertZodToJsonSchemaCached, partialTaskDraft, taskMarker } from './types'
 import { ToolBase } from './types'
 import type { RemoteFunctionResponse } from './iframeApiTypes'
@@ -47,13 +47,6 @@ export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSche
     .meta({
       description: 'Simple function definition for internal tools',
     }),*/
-
-export type toolContext = {
-  taskChain: TaskNode[]
-  getSecret: (name: string) => Promise<string>
-  setSecret: (name: string, value: string) => void
-  stopSignal: AbortSignal
-}
 
 // TODO: make all of this generic functions in order to get better typescript checking
 const internalToolFunctionSchema = z.custom<

@@ -1,5 +1,6 @@
 import { sha256UrlSafeHash } from '../crypto'
 import { sleep } from '../utils'
+import type { toolContext } from './types'
 import { taskMarker } from './types'
 
 // Store iframes by a hash id derived from the code
@@ -113,7 +114,10 @@ function interruptExecution(id: string, handleMessage: (event: MessageEvent) => 
 // Function to execute code in the iframe with parameters
 export async function executeCodeInIframe(
   code: string,
-  args: { params: unknown; context?: { taskChain?: unknown } },
+  args: {
+    params: unknown
+    context: toolContext
+  },
   sourceURL: string = 'sandboxed-code.js', // TODO: add default source URL for debugging
   stopSignal: AbortSignal,
 ) {

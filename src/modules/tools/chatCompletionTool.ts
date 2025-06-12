@@ -18,9 +18,10 @@ import type {
   ChatResponseType,
   FunctionArguments,
   llmSettings,
+  toolContext,
 } from '../taskyon/types'
 import { FunctionCall, getCurrentModel, getApiConfigCopy } from '../taskyon/types'
-import { makeTaskResult, createTool, mapFunctionNames, type toolContext } from '../taskyon/tools'
+import { makeTaskResult, createTool, mapFunctionNames } from '../taskyon/tools'
 import {
   createDeepTransformer,
   deepCopy,
