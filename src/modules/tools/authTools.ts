@@ -65,7 +65,7 @@ export const createOAuthTool = () => {
   ensureOauthListener()
 
   return createTool({
-    name: 'gitlabLogin',
+    name: 'oauthLogin',
     description: `Start Oauth login for various services (currently only gitlab.com)`,
     longDescription: `Displays an OAuth login button in order to get an access token from the
 specified service. Currently tested sevices are:

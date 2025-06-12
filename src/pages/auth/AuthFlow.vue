@@ -39,9 +39,6 @@
  */
 import { onMounted, ref } from 'vue'
 import { base64UrlDecode, base64UrlEncode } from '../../modules/utils'
-import { useAppStateStore } from 'src/stores/appState'
-
-const state = useAppStateStore()
 
 const props = defineProps<{
   phase: 'start' | 'return'
@@ -142,8 +139,10 @@ onMounted(async () => {
     const data = await res.json()
     const accessToken = data.access_token
 
-    // Optionally store per-service access token (or whatever)
-    state.oauthTokens[`${oauthURL}`] = accessToken
+    console.log('recevied new accessToken:', accessToken)
+
+    // TODO: somehow save the accessToken into the correct passwordDB?
+    //       or maybe we are somehow able to "relay" the access token to the correct
 
     closeWindow()
   } catch (err) {

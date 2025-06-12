@@ -102,7 +102,7 @@ const clock = {
       },
     },
   },
-  code: `({timestamp}) => {
+  code: `({timestamp}, ctx) => {
     const date = timestamp ? new Date(timestamp * 1000) : new Date();
     return {
       time: date.toLocaleTimeString(),

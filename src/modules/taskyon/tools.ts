@@ -228,7 +228,12 @@ export async function handleFunctionExecution(
     try {
       // TODO: add tool context to our "safe" functions as well..
       // Execute code in iframe with parameters (func.arguments)
-      funcR = await executeCodeInIframe(tool.code, func.arguments, func.name + '.js', stopSignal)
+      funcR = await executeCodeInIframe(
+        tool.code,
+        { params: func.arguments, context },
+        func.name + '.js',
+        stopSignal,
+      )
       funcR = bigIntToString(funcR) // Optionally convert bigInt
     } catch (error) {
       throw new Error(`Error executing iframe code for tool: ${func.name}`, { cause: error })

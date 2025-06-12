@@ -83,7 +83,6 @@ export const useAppStateStore = defineStore(storeName, () => {
     // aware of different URLs etc...
     developerMode: false,
     useDevVersion: false,
-    oauthTokens: {} as Record<string, string>,
     messageDebug: {} as Record<string, 'RAW' | 'MESSAGECONTENT' | 'RAWTASK' | 'ERROR' | undefined>, // whether message with ID should be open or not...
     // taskyon.space-specific section, TODO: move this somewhere else!
     keyDraft: {

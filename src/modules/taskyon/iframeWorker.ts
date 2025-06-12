@@ -41,14 +41,16 @@ function createChatCompletionTask(args) {
 
 window.taskyonId = "${id}"
 window.addEventListener('message', async (event) => {
-    const { code, params, sourceURL } = event.data;
+    const { code, args: { params, context }, sourceURL } = event.data;
     if (code) {
       try {
-        const context = {
-          taskChain: [],
+        const ctx = {
+          ...context,
           getSecret: async (name) => "getSecret not implemented in iframe worker",
           setSecret: async (name, value) => "setSecret not implemented in iframe worker",
-          stopSignal: new AbortController().signal, // Placeholder for stop signal
+          // Placeholder for stop signal it isn't needed in the iframe worker as we
+          // can simply destroy the iframe from the parent...
+          stopSignal: new AbortController().signal,
         }
         const func = new Function("params", "context", "return (" + code + ")(params, context)\\n//# sourceURL=" + sourceURL);
         const result = await func(params, context);
@@ -111,7 +113,7 @@ function interruptExecution(id: string, handleMessage: (event: MessageEvent) => 
 // Function to execute code in the iframe with parameters
 export async function executeCodeInIframe(
   code: string,
-  params: Record<string, unknown>,
+  args: { params: unknown; context?: { taskChain?: unknown } },
   sourceURL: string = 'sandboxed-code.js', // TODO: add default source URL for debugging
   stopSignal: AbortSignal,
 ) {
@@ -145,7 +147,16 @@ export async function executeCodeInIframe(
     // we create a deep json copy of the object here, to make
     // sure we dereference reactive objects and everything is json serializable
     // before we send it...
-    const sendobj = jsonCopy({ code, params, sourceURL })
+    const sendobj = jsonCopy({
+      code,
+      args: {
+        params: args.params,
+        context: {
+          taskChain: args.context?.taskChain,
+        },
+      },
+      sourceURL,
+    })
     iframe.contentWindow?.postMessage(sendobj, '*')
 
     // Register the interrupt callback
