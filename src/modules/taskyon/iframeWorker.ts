@@ -18,6 +18,26 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
   // Inject a small runner that listens for a port transfer
   iframe.srcdoc = `
 <script>
+  const pending = new Map()
+
+  let secretId = 0
+
+  const getSecret = (name) => {
+    const id = ++secretId
+    return new Promise((resolve) => {
+      pending.set('getSecret:' + id, resolve)
+      port.postMessage({ type: 'getSecret', name, id })
+    })
+  }
+
+  const setSecret = (name, value) => {
+    const id = ++secretId
+    return new Promise((resolve) => {
+      pending.set('setSecret:' + id, resolve)
+      port.postMessage({ type: 'setSecret', name, value, id })
+    })
+  }
+
   function makeTaskResult(tasks) {
     return {
       taskResultMarker: "${taskMarker}",
@@ -42,19 +62,33 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
 
   window.addEventListener('message', async (e) => {
     const port = e.ports[0]
+
+    port.onmessage = (e) => {
+      const { type, name, value, id } = e.data
+      if (type === 'getSecretResult') {
+        const resolve = pending.get('getSecret:' + id)
+        resolve(value)
+        pending.delete('getSecret:' + id)
+      } else if (type === 'setSecretResult') {
+        const resolve = pending.get('setSecret:' + id)
+        resolve()
+        pending.delete('setSecret:' + id)
+      }
+    }
+
     const { code, args: { params, context }, sourceURL } = e.data
     if (code) {
       try {
         const ctx = {
           ...context,
-          getSecret: async (name) => "getSecret not implemented in iframe worker",
-          setSecret: async (name, value) => "setSecret not implemented in iframe worker",
+          getSecret,
+          setSecret,
           // Placeholder for stop signal it isn't needed in the iframe worker as we
           // can simply destroy the iframe from the parent...
           stopSignal: new AbortController().signal,
         }
         const func = new Function("params", "context", "return (" + code + ")(params, context)\\n//# sourceURL=" + sourceURL);
-        const result = await func(params, context)
+        const result = await func(params, ctx)
         // Post the result back to the parent window
         port.postMessage({ result })
       } catch (err) {
@@ -123,11 +157,21 @@ export async function executeCodeInIframe(
     const channel = new MessageChannel()
     const port = channel.port1
 
-    port.onmessage = (ev) => {
-      const { result, error } = ev.data
-      port.close()
-      if (error) reject(new Error(error))
-      else resolve(result)
+    port.onmessage = async (ev) => {
+      const { type, name, value } = ev.data
+
+      if (type === 'getSecret') {
+        const secret = await args.context.getSecret(name)
+        port.postMessage({ type: 'getSecretResult', name, value: secret })
+      } else if (type === 'setSecret') {
+        args.context.setSecret(name, value)
+        port.postMessage({ type: 'setSecretResult', name })
+      } else {
+        const { result, error } = ev.data
+        port.close()
+        if (error) reject(new Error(error))
+        else resolve(result)
+      }
     }
 
     // 2) send code + port2 to iframe
