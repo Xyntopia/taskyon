@@ -1,31 +1,40 @@
 <template>
   <q-layout view="hHh lpR lFr">
     <TaskyonHeader :min-mode="false" btn-size="md" v-model:drawer-open="drawerOpen" />
-    <q-drawer v-model="drawerOpen" show-if-above persistent behaviour="desktop" :width="250">
+    <!--<q-drawer v-model="drawerOpen" show-if-above persistent behaviour="desktop" :width="250">
       <CreateNewTask class="q-pa-xs" expert-mode />
       <ObjectTreeView :model-value="functionArgs" />
-    </q-drawer>
+    </q-drawer>-->
     <q-page-container>
       <UnderConstructionHint />
-      <q-select
-        class="col"
-        use-input
-        dense
-        hide-selected
-        fill-input
-        options-dense
-        input-debounce="0"
-        borderless
-        @filter="filterFn"
-        color="secondary"
-        :model-value="selectedTool?.name"
-        :options="filteredToolCollection"
-        :label="selectedTool ? 'selected Tool' : 'Select Tool'"
-        @update:model-value="switchTool"
-        behavior="default"
-      />
       <q-page padding>
-        <div v-if="selectedTool || !name" class="column">
+        <div class="row">
+          <q-select
+            class="col"
+            use-input
+            dense
+            hide-selected
+            fill-input
+            options-dense
+            input-debounce="0"
+            borderless
+            @filter="filterFn"
+            color="secondary"
+            :model-value="selectedTool?.name"
+            :options="filteredToolCollection"
+            :label="selectedTool ? 'selected Tool' : 'Select Tool'"
+            @update:model-value="switchTool"
+            behavior="default"
+          >
+            <template v-slot:before>
+              <q-icon :name="mdiToolbox" />
+            </template>
+          </q-select>
+          <q-btn flat dense label="New Tool" @click="switchTool()" />
+        </div>
+        <q-separator class="q-my-md" />
+        <div v-if="selectedTool || !name" class="column q-gutter-sm">
+          <q-input dense filled label="New Tool Name" v-model="toolDraft.name" />
           <div class="row">
             <q-tabs v-model="selectedTab" class="col-auto" dense no-caps vertical>
               <q-tab name="code" :icon="mdiLanguageJavascript" label="tool code" />
@@ -34,24 +43,38 @@
             </q-tabs>
             <q-tab-panels :model-value="selectedTab" animated swipeable infinite class="col">
               <q-tab-panel name="code">
-                <div class="q-pa-lg text-negative" v-if="currentToolDefinition.function">
-                  The current Tool is a Taskyon-internal tool with a "function" property and can not
-                  be edited here. You can however replace it with your own tool with the same name.
+                <div class="q-pa-lg text-negative" v-if="selectedTool && selectedTool.function">
+                  The currently selected Tool is a Taskyon-internal tool with a "function" property
+                  and can not be edited here. You can however replace it with your own tool with the
+                  same name.
                 </div>
-                <CodeEditor
-                  v-else-if="currentToolDefinition.code"
-                  v-model="currentToolDefinition.code"
-                />
+                <div v-if="toolDraft.code" class="column">
+                  <q-btn
+                    class="self-end"
+                    flat
+                    dense
+                    :icon="matContentCopy"
+                    label="copy as js string"
+                    @click="copyAsJsString(toolDraft.code)"
+                  />
+                  <CodeEditor v-model="toolDraft.code" />
+                </div>
+                <div v-else>
+                  This tool dosn't contain any code. It might be a taskyon-internal tool, an
+                  external tool defined on a parent webpage or from an MCP server.
+                  <q-btn
+                    label="Add tool code"
+                    :icon="matAdd"
+                    @click="() => (toolDraft.code = freshTool.code)"
+                  />
+                </div>
                 {{ toolParser }}
               </q-tab-panel>
               <q-tab-panel name="configure">
-                <ObjectTreeView
-                  :model-value="{ ...currentToolDefinition, code: undefined }"
-                  :schema="toolJsonSchema"
-                />
+                <ObjectTreeView :model-value="toolDraft" :schema="toolJsonSchema" />
               </q-tab-panel>
               <q-tab-panel name="definition" class="column">
-                <JsonInput filled v-model="currentToolDefinition" auto-save />
+                <JsonInput filled v-model="toolDraft" auto-save />
               </q-tab-panel>
             </q-tab-panels>
           </div>
@@ -60,9 +83,9 @@
             :disable="!isValidTool"
             :color="isValidTool ? 'positive' : 'negative'"
             :icon="matSave"
-            label="save task"
+            label="save tool"
             @click="addNewTask()"
-            ><q-tooltip>Save task without executing it...</q-tooltip></q-btn
+            ><q-tooltip>Save tool inside our tasktree.</q-tooltip></q-btn
           >
         </div>
         <div v-else>
@@ -93,18 +116,16 @@
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent, ref } from 'vue'
+import { defineAsyncComponent, ref, watch } from 'vue'
 import TaskyonHeader from '../../components/taskyon/TaskyonHeader.vue'
 import ObjectTreeView from 'src/components/ObjectTreeView.vue'
-import CreateNewTask from 'src/components/taskyon/CreateNewTask.vue'
 import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
-import { matSave } from '@quasar/extras/material-icons'
+import { matAdd, matContentCopy, matSave } from '@quasar/extras/material-icons'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { ToolBase } from 'src/modules/taskyon/types'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { asyncComputed } from 'src/modules/vueUtils'
-import type { InternalTool } from 'src/modules/taskyon/tools'
 import { craeteToolJsonSchema } from 'src/modules/taskyon/tools'
 import {
   mdiCodeJson,
@@ -112,8 +133,10 @@ import {
   mdiFunctionVariant,
   mdiLanguageJavascript,
   mdiMagicStaff,
+  mdiToolbox,
 } from '@quasar/extras/mdi-v6'
 import JsonInput from 'src/components/JsonInput.vue'
+import { copyToClipboard } from 'quasar'
 
 const { name } = defineProps<{ name?: string }>()
 
@@ -133,6 +156,26 @@ const tystate = useTaskyonStore()
 const router = useRouter()
 const toolCollection = asyncComputed(tystate.getAllTools, {})
 const toolNames = computed(() => Object.keys(toolCollection.value))
+const freshTool = {
+  name: '',
+  description: '',
+  parameters: {},
+  code: `(param_obj, {taskChain, setSecret, getSecret}) => {
+  console.log('calling with params:', param_obj)
+}`,
+}
+const toolDraft = ref<ToolBase>(freshTool)
+
+const copyAsJsString = (txt: string) => {
+  // 1) remove exactly one trailing newline, if present
+  const trimmed = txt.endsWith('\n') ? txt.slice(0, -1) : txt
+
+  // 2) escape backslashes, backticks and `${…}` so nothing gets broken or interpolated
+  const escaped = trimmed.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${')
+
+  // 3) wrap in backticks
+  void copyToClipboard(`\`${escaped}\``)
+}
 
 const filteredToolCollection = ref<string[]>([])
 const filterFn = (inputValue: string, doneFn: (callbackFn: () => void) => void) => {
@@ -151,11 +194,10 @@ const filterFn = (inputValue: string, doneFn: (callbackFn: () => void) => void) 
   })
 }
 
-function switchTool(toolName: string) {
-  void router.push({ path: `/tool/${toolName}` })
+function switchTool(toolName?: string) {
+  void router.push({ path: '/tool' + (toolName ? `/${toolName}` : '') })
 }
 
-const functionArgs = ref<Record<string, unknown>>({})
 const drawerOpen = ref(false)
 
 const allTools = asyncComputed(async () => {
@@ -180,22 +222,25 @@ const selectedTool = asyncComputed(
   () => name,
 )
 
-const toolJsonSchema = craeteToolJsonSchema()
+watch(
+  selectedTool,
+  (newTool) => {
+    toolDraft.value = newTool
+      ? {
+          ...newTool,
+          name: newTool.name + '_copy',
+        }
+      : freshTool
+  },
+  { immediate: true },
+)
 
-const currentToolDefinition = computed<InternalTool>(() => {
-  return selectedTool.value
-    ? { code: 'define your code here!', ...selectedTool.value }
-    : {
-        name: '',
-        description: '',
-        parameters: {},
-        code: '',
-      }
-})
+const toolJsonSchema = craeteToolJsonSchema()
 
 const toolParser = computed(() => {
   try {
-    const toolCopy = JSON.parse(JSON.stringify(currentToolDefinition.value))
+    // we are copying th whole thing as json to make sure we have a legitimate json :)
+    const toolCopy = JSON.parse(JSON.stringify(toolDraft.value))
     const jsonToolResult = ToolBase.strict().safeParse(toolCopy)
     return jsonToolResult.success ? jsonToolResult.success : jsonToolResult.error
   } catch (error) {
@@ -213,7 +258,7 @@ async function addNewTask() {
       content: {
         type: 'tooldefinition',
         // we are doing this to 1. make sure its json parsable and 2. create a copy of the current tool...
-        data: JSON.parse(JSON.stringify(currentToolDefinition.value)),
+        data: JSON.parse(JSON.stringify(toolDraft.value)),
       },
     },
     undefined,
