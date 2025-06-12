@@ -15,27 +15,30 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
   iframe.sandbox.add('allow-scripts', 'allow-popups', 'allow-popups-to-escape-sandbox')
   document.body.appendChild(iframe)
 
-  // Inject a small runner that listens for a port transfer
-  iframe.srcdoc = `
+  try {
+    // Inject a small runner that listens for a port transfer
+    iframe.srcdoc = `
 <script>
-  const pending = new Map()
-
-  let secretId = 0
-
-  const getSecret = (name) => {
-    const id = ++secretId
-    return new Promise((resolve) => {
-      pending.set('getSecret:' + id, resolve)
-      port.postMessage({ type: 'getSecret', name, id })
-    })
-  }
-
-  const setSecret = (name, value) => {
-    const id = ++secretId
-    return new Promise((resolve) => {
-      pending.set('setSecret:' + id, resolve)
-      port.postMessage({ type: 'setSecret', name, value, id })
-    })
+  // core RPC maker over dedicated channel:
+  function makeInvoker(port, reqType, argNames = []) {
+    return (...args) => {
+      // 1) build your payload
+      const payload = argNames.reduce((p, name, i) => (p[name] = args[i], p), {})
+      // 2) create a fresh channel
+      const chan = new MessageChannel()
+      return new Promise(resolve => {
+        // 3) hook the reply port
+        chan.port1.onmessage = e => {
+          resolve(e.data)       // whatever the parent sends
+          chan.port1.close()    // clean up
+        }
+        // 4) send request + reply-port to parent
+        port.postMessage(
+          { type: reqType, ...payload },
+          [ chan.port2 ]        // transfer port2
+        )
+      })
+    }
   }
 
   function makeTaskResult(tasks) {
@@ -62,6 +65,7 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
 
   window.addEventListener('message', async (e) => {
     const port = e.ports[0]
+    const { code, args: { params, context }, rpcc, sourceURL } = e.data
 
     port.onmessage = (e) => {
       const { type, name, value, id } = e.data
@@ -76,13 +80,18 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
       }
     }
 
-    const { code, args: { params, context }, sourceURL } = e.data
+    // we need to re-instantiate our rpcs on every function call
+    // as they rely on specific message channels
+    // this is partially done for security reasons. But it also makes
+    // our functions dynamic...
+    const rpcs = Object.keys(rpcc).reduce((p,c)=>{p[c] = makeInvoker(port, c, rpcc[c]); return p},{})
+
+
     if (code) {
       try {
         const ctx = {
           ...context,
-          getSecret,
-          setSecret,
+          ...rpcs,
           // Placeholder for stop signal it isn't needed in the iframe worker as we
           // can simply destroy the iframe from the parent...
           stopSignal: new AbortController().signal,
@@ -101,6 +110,14 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
   //# sourceURL=iframeWorker.js
 
 </script>`
+  } catch (error: unknown) {
+    throw new Error(
+      `Iframe worker code contains errors: ${error instanceof Error ? error.message : String(error)}`,
+      {
+        cause: error,
+      },
+    )
+  }
 
   // wait for the ready ping
   return new Promise((resolve) => {
@@ -135,6 +152,10 @@ function jsonCopy(obj: unknown) {
   return JSON.parse(JSON.stringify(obj))
 }
 
+type RpcConfig = {
+  [key: string]: string[]
+}
+
 // Main executor
 export async function executeCodeInIframe(
   code: string,
@@ -142,6 +163,12 @@ export async function executeCodeInIframe(
   sourceURL = 'sandboxed-code.js',
   stopSignal: AbortSignal,
 ) {
+  const rpcConfig: RpcConfig = {
+    getSecret: ['name'],
+    setSecret: ['name', 'value'],
+    // …any more RPC names…
+  }
+
   const id = sourceURL + (await sha256UrlSafeHash(code))
   let iframe = iframes.get(id)
   // Lazy initialize iframe
@@ -186,6 +213,7 @@ export async function executeCodeInIframe(
         context: { taskChain: args.context.taskChain },
       },
       sourceURL,
+      rpcc: rpcConfig,
     })
     iframe.contentWindow!.postMessage(payload, '*', [channel.port2])
 
