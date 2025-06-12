@@ -7,42 +7,42 @@ import { taskMarker } from './types'
 const iframes = new Map<string, HTMLIFrameElement>()
 
 // Create and initialize iframe
-function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
+async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
   console.log('create taskyon iframe worker', id)
   const iframe = document.createElement('iframe')
   iframe.id = id
-  iframe.style.display = 'none' // Hide the iframe
-  // Restrict permissions to only allow scripts and pop ups
-  // we need the pop up permission, so that we can do oauth logins..
+  iframe.style.display = 'none'
   iframe.sandbox.add('allow-scripts', 'allow-popups', 'allow-popups-to-escape-sandbox')
   document.body.appendChild(iframe)
 
-  // Set iframe content to include a message handler for receiving code and params
-  const iframeContent = `
+  // Inject a small runner that listens for a port transfer
+  iframe.srcdoc = `
 <script>
-function makeTaskResult(tasks) {
-  return {
-    taskResultMarker: "${taskMarker}",
-    taskChainList: tasks,
+  function makeTaskResult(tasks) {
+    return {
+      taskResultMarker: "${taskMarker}",
+      taskChainList: tasks,
+    }
   }
-}
 
-function createChatCompletionTask(args) {
-  return {
-    role: 'function',
-    content: {
-      type: 'functioncall',
-      data: {
-        name: 'chatCompletion',
-        arguments: args ?? {},
+  function createChatCompletionTask(args) {
+    return {
+      role: 'function',
+      content: {
+        type: 'functioncall',
+        data: {
+          name: 'chatCompletion',
+          arguments: args ?? {},
+        },
       },
-    },
+    }
   }
-}
 
-window.taskyonId = "${id}"
-window.addEventListener('message', async (event) => {
-    const { code, args: { params, context }, sourceURL } = event.data;
+  window.taskyonId = "${id}"
+
+  window.addEventListener('message', async (e) => {
+    const port = e.ports[0]
+    const { code, args: { params, context }, sourceURL } = e.data
     if (code) {
       try {
         const ctx = {
@@ -54,71 +54,58 @@ window.addEventListener('message', async (event) => {
           stopSignal: new AbortController().signal,
         }
         const func = new Function("params", "context", "return (" + code + ")(params, context)\\n//# sourceURL=" + sourceURL);
-        const result = await func(params, context);
-
+        const result = await func(params, context)
         // Post the result back to the parent window
-        window.parent.postMessage({ result }, '*');
-      } catch (error) {
-        window.parent.postMessage({ error: error.message }, '*');
+        port.postMessage({ result })
+      } catch (err) {
+        port.postMessage({ error: err?.message || String(err) })
       }
     }
-});
-// Notify parent that the iframe is ready
-window.parent.postMessage({ ready: true }, '*');
-//# sourceURL=iframeWorker.js
-</script>
-`
+  })
+  // signal readiness immediately
+  window.parent.postMessage({ ready: true }, '*')
+  //# sourceURL=iframeWorker.js
 
-  // Write the sandboxed script into the iframe
-  iframe.srcdoc = iframeContent
+</script>`
 
-  // Return a promise that resolves when the iframe has notified that it is ready
+  // wait for the ready ping
   return new Promise((resolve) => {
-    function handleReady(event: MessageEvent) {
-      if (event.data.ready && event.source === iframe.contentWindow) {
-        // Remove the listener now that the iframe is ready
-        window.removeEventListener('message', handleReady)
+    function onReady(ev: MessageEvent) {
+      if (ev.data.ready && ev.source === iframe.contentWindow) {
+        window.removeEventListener('message', onReady)
         resolve(iframe)
       }
     }
-    window.addEventListener('message', handleReady)
+    window.addEventListener('message', onReady)
   })
 }
 
-// Singleton iframe instance and an interrupt flag
+// Interrupt logic (same as before)
 let interrupted = false
-
-function jsonCopy(reactiveObject: unknown) {
-  return JSON.parse(JSON.stringify(reactiveObject))
-}
-
-// Function to interrupt the execution
-function interruptExecution(id: string, handleMessage: (event: MessageEvent) => void) {
+function interruptExecution(id: string, port: MessagePort) {
   const iframe = iframes.get(id)
-  if (iframe) {
-    interrupted = true
-
-    // Remove the function return listener if it exists
-    window.removeEventListener('message', handleMessage)
-
-    // Remove the iframe to terminate the script execution
-    // TODO: gracefully terminate the iframe. We should be able to stop execution of
-    //       a function in an iframe so that we don't loose e.g. oauth access that we've alread had..
-    document.body.removeChild(iframe)
-    iframes.delete(id)
-    // Optionally, you could "reset" the iframe here if needed:
-    // iframe.srcdoc = iframe.srcdoc;
-  }
+  if (!iframe) return
+  interrupted = true
+  port.close()
+  // Remove the iframe to terminate the script execution
+  // TODO: gracefully terminate the iframe. We should be able to stop execution of
+  //       a function in an iframe so that we don't loose e.g. oauth access that we've alread had..
+  document.body.removeChild(iframe)
+  iframes.delete(id)
+  // Optionally, you could "reset" the iframe here if needed:
+  // iframe.srcdoc = iframe.srcdoc;
 }
 
-// Function to execute code in the iframe with parameters
+// Deep‐copy helper
+function jsonCopy(obj: unknown) {
+  return JSON.parse(JSON.stringify(obj))
+}
+
+// Main executor
 export async function executeCodeInIframe(
   code: string,
-  args: {
-    params: unknown
-    context: toolContext
-  },
-  sourceURL: string = 'sandboxed-code.js', // TODO: add default source URL for debugging
+  args: { params: unknown; context: toolContext },
+  sourceURL = 'sandboxed-code.js',
   stopSignal: AbortSignal,
 ) {
   const id = sourceURL + (await sha256UrlSafeHash(code))
@@ -132,42 +119,37 @@ export async function executeCodeInIframe(
   }
 
   return new Promise((resolve, reject) => {
-    function handleMessage(event: MessageEvent) {
-      // Ensure the message is coming from the correct iframe
-      if (event.source === iframe?.contentWindow) {
-        window.removeEventListener('message', handleMessage)
-        if (event.data.error) {
-          reject(new Error(event.data.error))
-        } else {
-          resolve(event.data.result)
-        }
-      }
+    // 1) create a fresh channel
+    const channel = new MessageChannel()
+    const port = channel.port1
+
+    port.onmessage = (ev) => {
+      const { result, error } = ev.data
+      port.close()
+      if (error) reject(new Error(error))
+      else resolve(result)
     }
 
-    // Listen for messages from the iframe
-    window.addEventListener('message', handleMessage)
-
+    // 2) send code + port2 to iframe
     // Send the code, parameters, and source URL to the iframe for execution
     // we create a deep json copy of the object here, to make
     // sure we dereference reactive objects and everything is json serializable
     // before we send it...
-    const sendobj = jsonCopy({
+    const payload = jsonCopy({
       code,
       args: {
         params: args.params,
-        context: {
-          taskChain: args.context?.taskChain,
-        },
+        context: { taskChain: args.context.taskChain },
       },
       sourceURL,
     })
-    iframe.contentWindow?.postMessage(sendobj, '*')
+    iframe.contentWindow!.postMessage(payload, '*', [channel.port2])
 
-    // Register the interrupt callback
+    // 3) wire up abort
     stopSignal.addEventListener('abort', () => {
       console.log('Interrupting iframe execution for', id)
-      interruptExecution(id, handleMessage)
-      reject(new Error('Execution interrupted', { cause: { reason: stopSignal.reason, id } }))
+      interruptExecution(id, port)
+      reject(new Error('Execution interrupted', { cause: stopSignal.reason }))
     })
   })
 }
