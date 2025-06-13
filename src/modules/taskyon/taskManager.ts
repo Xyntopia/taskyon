@@ -1,4 +1,4 @@
-import type { TaskNodeMeta } from './types'
+import type { TaskNodeMeta, TaskNodeType } from './types'
 import { TaskNode, ToolBase, TaskListType, type partialTaskDraft } from './types'
 import {
   type TaskyonDatabase,
@@ -404,15 +404,25 @@ export function createToolIndex(tyCrudVec: CrudWrapper<TaskNode>) {
   }
   // we simply assume, that all tools HAVE to be defined in the toolmap, no matter what.
   // if they are not there, we are doing something wrong ;)
-  async function getTool(name: string): Promise<InternalTool | undefined> {
+  async function getToolDefinition(
+    name: string,
+  ): Promise<{ def?: TaskNodeType<'tooldefinition'> | undefined; tool?: InternalTool }> {
     const toolTaskId = toolIndex.get(name)
     if (toolTaskId) {
       const toolTask = await tyCrudVec.get(toolTaskId)
       if (toolTask?.content.type === 'tooldefinition') {
-        return toolTask?.content.data
+        return {
+          def: toolTask as TaskNodeType<'tooldefinition'>,
+          tool: toolTask.content.data,
+        }
       }
     }
-    return defaultToolMap[name]
+    if (defaultToolMap[name])
+      return {
+        def: undefined,
+        tool: defaultToolMap[name],
+      }
+    return {}
   }
 
   async function updateToolIndex(task: TaskNode) {
@@ -446,7 +456,7 @@ export function createToolIndex(tyCrudVec: CrudWrapper<TaskNode>) {
     toolIndex,
     defaultToolMap,
     addDefaultTools,
-    getTool,
+    getToolDefinition,
     updateToolIndex,
   }
 }
@@ -559,7 +569,7 @@ export async function useTyTaskManager(
     count: countVecs,
   } = await useTaskVectors(getAllTaskIds, tyCrud.get, vectorizerModel)
 
-  const { toolIndex, defaultToolMap, addDefaultTools, getTool, updateToolIndex } =
+  const { toolIndex, defaultToolMap, addDefaultTools, getToolDefinition, updateToolIndex } =
     createToolIndex(tyCrud)
 
   // add more enhanced, ty-specific functionality to our CRUD
@@ -1133,7 +1143,7 @@ export async function useTyTaskManager(
 
   const defaultMode = {
     addDefaultTools,
-    getTool,
+    getToolDefinition,
     getTask: tyCrudVec.get,
     deleteTask: tyCrudVec.delete,
     searchTasks,

@@ -136,7 +136,7 @@ export const testChatCompletion = async () => {
   const stopSignal = new AbortController().signal
 
   // Invoke the real tool
-  const chatCompletion = await tm.getTool('chatCompletion')
+  const { tool: chatCompletion } = await tm.getToolDefinition('chatCompletion')
   let structuredResponse
   if (chatCompletion && 'function' in chatCompletion && chatCompletion.function !== undefined) {
     structuredResponse = await chatCompletion.function(

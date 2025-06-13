@@ -1,6 +1,13 @@
 import { dump } from 'js-yaml'
 import { bigIntToString } from '../utils'
-import type { FunctionArguments, FunctionCall, ParamType, WithRequired, toolContext } from './types'
+import type {
+  FunctionArguments,
+  FunctionCall,
+  ParamType,
+  TaskNodeType,
+  WithRequired,
+  toolContext,
+} from './types'
 import { convertZodToJsonSchemaCached, partialTaskDraft, taskMarker } from './types'
 import { ToolBase } from './types'
 import type { RemoteFunctionResponse } from './iframeApiTypes'
@@ -13,6 +20,7 @@ import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
 import type { JSONSchema7, JSONSchema7Object } from 'json-schema'
 import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
 import Ajv from 'ajv'
+import { sha256UrlSafeHash } from '../crypto_webcrypto'
 
 export const taskResult = z.object({
   taskResultMarker: z.literal(taskMarker).default(taskMarker).meta({
@@ -58,6 +66,7 @@ const internalToolFunctionSchema = z.custom<
 export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSchema>
 
 const InternalTool = ToolBase.extend({
+  // TODO: take away he "optional" from this type here...
   function: internalToolFunctionSchema.optional(),
 }).meta({
   description: 'Internal tool definition, which has access to the taskyon system',
@@ -191,7 +200,8 @@ export async function createWithDefaults<T>(schema: JSONSchemaType<T> | JSONSche
  */
 export async function handleFunctionExecution(
   func: FunctionCall,
-  tool: ToolBase | InternalTool,
+  tool: InternalTool,
+  toolDef: TaskNodeType<'tooldefinition'> | undefined,
   stopSignal: AbortSignal,
   context: toolContext,
   // TODO: add taskManager here, so we can use it in the function execution
@@ -210,24 +220,28 @@ export async function handleFunctionExecution(
     } as FunctionArguments
   }
   console.log(toolDefaultParams)
-  if ('function' in tool && tool.function) {
+  if (tool.function) {
     console.log('using tool!', tool)
     // TODO: try longterm, to also execute the "internal" functions in iframe..
-    //       maybe by being able to remove them all..
+    //       maybe by being able to remove all dependencies to taskyon lib? maybe by
+    //       using the taskyon iframe api also inside iframe towards the parent?
     funcR = await tool.function(func.arguments, context)
-    funcR = bigIntToString(funcR)
+    // TODO: what do we do for tools which have "code" but no id??,
   } else if (tool.code) {
-    console.log('compile & execute function code in iframe', tool)
+    console.log('compile & execute function code in iframe', toolDef)
+    const sourceURL = func.name + '.js'
+    // if w are dealing with a tool definition use that id. otherwise generate an id on the fly )
+    const toolId = toolDef?.id ?? sourceURL + (await sha256UrlSafeHash(tool.code))
     try {
       // TODO: add tool context to our "safe" functions as well..
       // Execute code in iframe with parameters (func.arguments)
       funcR = await executeCodeInIframe(
         tool.code,
+        toolId,
         { params: func.arguments, context },
-        func.name + '.js',
+        sourceURL,
         stopSignal,
       )
-      funcR = bigIntToString(funcR) // Optionally convert bigInt
     } catch (error) {
       throw new Error(`Error executing iframe code for tool: ${func.name}`, { cause: error })
     }
@@ -236,8 +250,12 @@ export async function handleFunctionExecution(
     // and want to make sure its serializable for a postMessage function.
     // TODO: use our "onInterrupt" here somehow ;)
     // TODO: pass tool context here as well :)
+    // TODO: right now, this also serves as a fallback for any tool whch doesn't define
+    //       code or function..  this works even, if the tool isn't defined in our tool list!
     funcR = await handleRemoteFunction(func.name, func.arguments)
   }
+  funcR = bigIntToString(funcR) // Optionally convert bigInt
+
   return funcR
 }
 

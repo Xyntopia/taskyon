@@ -1,5 +1,4 @@
 import z from 'zod'
-import { sha256UrlSafeHash } from '../crypto'
 import { sleep } from '../utils'
 import type { toolContext } from './types'
 import { taskMarker } from './types'
@@ -64,7 +63,7 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
     }
   }
 
-  window.taskyonId = "${id}"
+  window.toolId = "${id}"
 
   window.addEventListener('message', async (e) => {
     const port = e.ports[0]
@@ -155,18 +154,18 @@ const portMessageSchema = z.union([rpcMessageSchema, finalMessageSchema])
 // Main executor
 export async function executeCodeInIframe(
   code: string,
+  toolId: string,
   args: { params: unknown; context: toolContext },
   sourceURL = 'sandboxed-code.js',
   stopSignal: AbortSignal,
 ) {
   const rpcs = ['getSecret', 'setSecret']
 
-  const id = sourceURL + (await sha256UrlSafeHash(code))
-  let iframe = iframes.get(id)
+  let iframe = iframes.get(toolId)
   // Lazy initialize iframe
   if (!iframe || interrupted) {
-    iframe = await createSandboxedIframe(id)
-    iframes.set(id, iframe)
+    iframe = await createSandboxedIframe(toolId)
+    iframes.set(toolId, iframe)
     // Add a delay to ensure iframe is fully ready. Its ok, because we normally do this only once here...
     await sleep(100)
   }
@@ -227,7 +226,7 @@ export async function executeCodeInIframe(
       code,
       args: {
         params: args.params,
-        context: { taskChain: args.context.taskChain },
+        context: { taskChain: args.context.taskChain, toolId },
       },
       sourceURL,
       rpcs,
@@ -236,8 +235,8 @@ export async function executeCodeInIframe(
 
     // 3) wire up abort
     stopSignal.addEventListener('abort', () => {
-      console.log('Interrupting iframe execution for', id)
-      interruptExecution(id, port)
+      console.log('Interrupting iframe execution for', toolId)
+      interruptExecution(toolId, port)
       reject(new Error('Execution interrupted', { cause: stopSignal.reason }))
     })
   })

@@ -217,8 +217,8 @@ const selectedTool = asyncComputed<InternalTool | undefined>(
   async () => {
     const tm = await tystate.getTaskManager()
     if (name) {
-      const toolDef = await tm.getTool(name)
-      if (toolDef) return toolDef
+      const { tool } = await tm.getToolDefinition(name)
+      if (tool) return tool
       // otherwise check if name is actually a task id...
       const toolDefTask = await tm.getTask(name)
       if (toolDefTask?.content.type === 'tooldefinition') return toolDefTask.content.data

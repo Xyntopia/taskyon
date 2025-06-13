@@ -368,7 +368,7 @@ export type Expand<T> = T extends infer U ? { [K in keyof U]: U[K] } : never
   : never*/
 
 // 2. Generic extractor by content.type
-export type NodeOfType<K extends TaskNode['content']['type']> = TaskNode extends {
+export type TaskNodeType<K extends TaskNode['content']['type']> = TaskNode extends {
   content: infer C
 }
   ? C extends { type: K }
@@ -377,9 +377,9 @@ export type NodeOfType<K extends TaskNode['content']['type']> = TaskNode extends
   : never
 /*
 // 3. Example usages
-type ToolDefNode    = NodeOfType<"tooldefinition">
-type MessageNode    = NodeOfType<"message">
-type ToolResultNode = NodeOfType<"toolresult">
+type ToolDefNode    = TaskNodeType<"tooldefinition">
+type MessageNode    = TaskNodeType<"message">
+type ToolResultNode = TaskNodeType<"toolresult">
 */
 
 export const TaskListType = z.array(TaskNode)
