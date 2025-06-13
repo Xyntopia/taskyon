@@ -20,26 +20,20 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
     iframe.srcdoc = `
 <script>
   // core RPC maker over dedicated channel:
-  function makeInvoker(port, reqType, argNames = []) {
-    return (...args) => {
-      // 1) build your payload
-      const payload = argNames.reduce((p, name, i) => (p[name] = args[i], p), {})
-      // 2) create a fresh channel
-      const chan = new MessageChannel()
-      return new Promise(resolve => {
-        // 3) hook the reply port
-        chan.port1.onmessage = e => {
-          resolve(e.data)       // whatever the parent sends
-          chan.port1.close()    // clean up
-        }
-        // 4) send request + reply-port to parent
-        port.postMessage(
-          { type: reqType, ...payload },
-          [ chan.port2 ]        // transfer port2
-        )
-      })
-    }
+  const makeChannelInvoker = (port /*MessagePort*/, reqType /*string*/) => (...args) => {
+    const chan = new MessageChannel()
+    return new Promise((resolve) => {
+      chan.port1.onmessage = (e) => {
+        resolve(e.data)
+        chan.port1.close()
+      }
+      port.postMessage(
+        { type: reqType, args },
+        [chan.port2]
+      )
+    })
   }
+
 
   function makeTaskResult(tasks) {
     return {
@@ -65,33 +59,19 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
 
   window.addEventListener('message', async (e) => {
     const port = e.ports[0]
-    const { code, args: { params, context }, rpcc, sourceURL } = e.data
-
-    port.onmessage = (e) => {
-      const { type, name, value, id } = e.data
-      if (type === 'getSecretResult') {
-        const resolve = pending.get('getSecret:' + id)
-        resolve(value)
-        pending.delete('getSecret:' + id)
-      } else if (type === 'setSecretResult') {
-        const resolve = pending.get('setSecret:' + id)
-        resolve()
-        pending.delete('setSecret:' + id)
-      }
-    }
+    const { code, args: { params, context }, rpcs, sourceURL } = e.data
 
     // we need to re-instantiate our rpcs on every function call
     // as they rely on specific message channels
     // this is partially done for security reasons. But it also makes
     // our functions dynamic...
-    const rpcs = Object.keys(rpcc).reduce((p,c)=>{p[c] = makeInvoker(port, c, rpcc[c]); return p},{})
-
+    const rpcdefs = rpcs.reduce((p,c)=>{p[c] = makeChannelInvoker(port, c); return p},{})
 
     if (code) {
       try {
         const ctx = {
           ...context,
-          ...rpcs,
+          ...rpcdefs,
           // Placeholder for stop signal it isn't needed in the iframe worker as we
           // can simply destroy the iframe from the parent...
           stopSignal: new AbortController().signal,
@@ -152,10 +132,6 @@ function jsonCopy(obj: unknown) {
   return JSON.parse(JSON.stringify(obj))
 }
 
-type RpcConfig = {
-  [key: string]: string[]
-}
-
 // Main executor
 export async function executeCodeInIframe(
   code: string,
@@ -163,11 +139,7 @@ export async function executeCodeInIframe(
   sourceURL = 'sandboxed-code.js',
   stopSignal: AbortSignal,
 ) {
-  const rpcConfig: RpcConfig = {
-    getSecret: ['name'],
-    setSecret: ['name', 'value'],
-    // …any more RPC names…
-  }
+  const rpcs = ['getSecret', 'setSecret']
 
   const id = sourceURL + (await sha256UrlSafeHash(code))
   let iframe = iframes.get(id)
@@ -213,7 +185,7 @@ export async function executeCodeInIframe(
         context: { taskChain: args.context.taskChain },
       },
       sourceURL,
-      rpcc: rpcConfig,
+      rpcs,
     })
     iframe.contentWindow!.postMessage(payload, '*', [channel.port2])
 
