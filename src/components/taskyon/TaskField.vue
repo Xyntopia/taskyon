@@ -74,6 +74,7 @@
         @create-new-conversation="createNewConversation"
         @edit-task="editTask"
         @toggle-message-debug="toggleMessageDebug"
+        @delete-task="deleteTask"
       />
     </div>
     <!--task debugging-->
@@ -136,6 +137,13 @@ async function editTask(taskId: string) {
     tystate.setContentDraftFromTask(task)
     state.setSelectedTask(task?.priorID || task?.parentID)
   }
+}
+
+async function deleteTask(taskId: string) {
+  const tm = await tystate.getTaskManager()
+  const task = await tm.getTask(taskId)
+  if (task) void tm.deleteTask(task.id)
+  state.setSelectedTask(task?.priorID || task?.parentID)
 }
 
 async function createNewConversation(taskId: string) {

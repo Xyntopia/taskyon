@@ -115,6 +115,18 @@
     >
       <q-tooltip :delay="0">Show similar tasks</q-tooltip>
     </q-btn>
+    <q-btn flat dense :icon="matMoreHoriz" @click.prevent.stop>
+      <q-menu class="column q-gutter-sm q-pa-xs" auto-close>
+        <q-list dense>
+          <q-item clickable @click="emit('delete-task', task.id)">
+            <q-item-section> Delete Task/Message </q-item-section>
+            <q-item-section side>
+              <q-icon :name="matDelete"></q-icon>
+            </q-item-section>
+          </q-item>
+        </q-list>
+      </q-menu>
+    </q-btn>
   </div>
 </template>
 
@@ -123,7 +135,9 @@ import {
   matAltRoute,
   matCode,
   matContentCopy,
+  matDelete,
   matEdit,
+  matMoreHoriz,
   matRawOn,
   matSearch,
 } from '@quasar/extras/material-icons'
@@ -143,5 +157,6 @@ const emit = defineEmits<{
   (e: 'toggle-message-debug', taskId: string): void
   (e: 'toggle-markdown', taskId: string): void
   (e: 'create-new-conversation', taskId: string): Promise<void>
+  (e: 'delete-task', taskId: string): Promise<void>
 }>()
 </script>
