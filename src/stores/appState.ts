@@ -51,7 +51,6 @@ export const useAppStateStore = defineStore(storeName, () => {
     // the things below should only represent transitional states
     // which have no relevance in the actual configuration of the app.
     initialLoad: true, // if the app was loaded for the first time and needs to be initialized
-    expandedTaskCreation: false,
     drawerRight: false,
     // variable to track if the user is at the bottom of a task chat
     lockBottomScroll: true,
@@ -65,12 +64,6 @@ export const useAppStateStore = defineStore(storeName, () => {
     // TODO: rename this to "taskWidgetState"
     taskState: {} as Record<string, TaskStateType>,
     darkTheme: 'auto' as boolean | 'auto',
-    // this store everything relevant to iframes
-    iframe: {
-      accessGranted: false,
-      accessWhiteList: [] as string[],
-      parentUrl: '',
-    },
     createTaskType: {
       type: 'message',
     } as { type: 'message' } | { type: 'functioncall'; name: FunctionCall['name'] }, // the type of task we are currently working on
