@@ -53,8 +53,8 @@
       <template v-for="(task, idx) in props.selectedThread" :key="task.id">
         <Task
           v-if="showAllTasks || showTask(task)"
-          :class="[task.role, task.content.type]"
           :id="task.id"
+          :class="[task.role, task.content.type]"
           :task="task"
           :previous-task="props.selectedThread[idx - 1]"
           :next-task="props.selectedThread[idx + 1]"
@@ -90,7 +90,7 @@
           <q-spinner-dots size="2rem" color="secondary" />
         </div>
       </q-card>
-      <div class="row items-center" v-if="lastWorkerEvent && tystate.workerStreamLogs.length > 0">
+      <div v-if="lastWorkerEvent && tystate.workerStreamLogs.length > 0" class="row items-center">
         <q-btn flat dense no-caps :icon-right="matArrowDropDown" @click="showLogs = !showLogs">
           <span
             style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"
@@ -105,8 +105,8 @@
       <template v-if="showLogs">
         <div
           v-for="(log, ridx) in tystate.workerStreamLogs.toReversed()"
-          class="column"
           :key="ridx"
+          class="column"
         >
           {{ formatTimeStamp(log.timestamp) }} : {{ log.stage }}
           {{ log.info ? ' | ' + log.info : '' }}

@@ -8,8 +8,8 @@
         <!-- in case we simply want to send simple messages :)-->
         <chatMessageEdit
           v-if="!selectedTaskType"
-          class="text-body1"
           v-model="state.messageDraft"
+          class="text-body1"
           :use-enter-to-send="state.appConfiguration.useEnterToSend"
           @execute-task="addNewTask"
         />
@@ -62,13 +62,13 @@
             <div>
               <q-tooltip>More AI Settings</q-tooltip>
               <FormDialog
+                v-model="slimSettings.reactiveView"
                 title="AI Settings"
                 flat
                 dense
-                denseOptions
+                dense-options
                 :icon="matMoreHoriz"
                 :schema="slimSettings.jsonSchema"
-                v-model="slimSettings.reactiveView"
               >
                 <template #before>
                   Change some settings for taskyon here. For a full list of settings, please check
@@ -118,11 +118,11 @@
               options-dense
               input-debounce="0"
               borderless
-              @filter="filterFn"
               color="secondary"
               :model-value="selectedTaskType"
               :options="filteredToolCollection"
               :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
+              @filter="filterFn"
               @update:model-value="tystate.switchTaskType"
             />
           </div>

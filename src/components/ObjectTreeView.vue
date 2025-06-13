@@ -51,8 +51,8 @@
           filled
           :label="prop.node.fieldHint"
           :model-value="prop.node.value"
-          @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
           style="min-width: 200px"
+          @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
         />
       </FieldView>
     </template>
@@ -128,10 +128,10 @@
           hide-bottom-space
           hide-hint
           :model-value="prop.node.value"
-          @update:model-value="(val: string | number | null) => updateValue(prop.node.path, val)"
           :rules="['anyColor']"
+          @update:model-value="(val: string | number | null) => updateValue(prop.node.path, val)"
         >
-          <template v-slot:append>
+          <template #append>
             <div
               class="cursor-pointer"
               :style="{

@@ -70,7 +70,7 @@ selecting different models).
                     `No information provided by Backend: **${state.llmSettings.selectedApi}**`
                   "
                 />
-                <object-tree-view read-only v-model="props.row" />
+                <object-tree-view v-model="props.row" read-only />
               </info-dialog>
               <q-btn
                 v-if="props.row.id !== tystate.currentModelId"

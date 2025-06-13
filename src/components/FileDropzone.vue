@@ -2,11 +2,11 @@
   <div
     v-if="!noButtons"
     :class="['dropzone', disableDropzoneBorder ? '' : 'dashedborder']"
+    v-bind="$attrs"
     @dragover.prevent
     @dragenter.prevent
     @drop="onDrop"
     @click.stop="openFileInput"
-    v-bind="$attrs"
   >
     <input
       ref="fileInput"
@@ -90,7 +90,7 @@ const props = defineProps({
   progress: { type: Number, default: 0 },
   disableDropzoneBorder: { type: Boolean, default: false },
   enablePaste: { type: Boolean, default: false },
-  dropZoneTarget: { type: String },
+  dropZoneTarget: { type: String, default: undefined },
   noButtons: { type: Boolean, default: false },
 })
 

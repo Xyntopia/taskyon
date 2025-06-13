@@ -1,16 +1,22 @@
+<!--
+ we are disabling the no-v-html warning, because we take a lot of precautions
+ against XSS attacks. we only render markdown html locally and only if it doesn't
+ contain any html code. If it does, we render it in an iframe.
+-->
+<!-- eslint-disable vue/no-v-html -->
 <!-- eslint-disable no-useless-escape -->
 <template>
   <!--TODO: maybe also use "allow-presentation, allow-top-navigation-by-user-activation"
   or also allow="clipboard write"?-->
   <iframe
-    :key="iframeHtml"
     v-if="useIframe && iframeHtml"
-    class="markdown-iframe"
+    :key="iframeHtml"
     ref="iframeRef"
+    class="markdown-iframe"
     sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"
     v-bind="$attrs"
   />
-  <div v-else v-html="renderedHtml" v-bind="$attrs" class="tyMarkdown" />
+  <div v-else v-bind="$attrs" class="tyMarkdown" v-html="renderedHtml" />
 </template>
 
 <script setup lang="ts">

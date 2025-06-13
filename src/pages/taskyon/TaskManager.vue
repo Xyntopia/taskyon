@@ -39,6 +39,8 @@
           dense
           clearable
           label="filter for specific task type"
+          :options="tasktypesOptions"
+          style="min-width: 200px"
           @update:model-value="
             (contentType) =>
               onSearchChange(
@@ -46,8 +48,6 @@
                 'query',
               )
           "
-          :options="tasktypesOptions"
-          style="min-width: 200px"
         />
       </template>
       <template #body-cell-task="rows">

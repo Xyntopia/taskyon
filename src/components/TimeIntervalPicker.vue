@@ -2,11 +2,11 @@
   <div class="time-interval-picker">
     <q-input
       :model-value="modelValue / conversions[currentUnit]!"
-      @update:model-value="updateSeconds"
       type="number"
       v-bind="$attrs"
+      @update:model-value="updateSeconds"
     >
-      <template v-slot:after>
+      <template #after>
         <q-select
           v-model="currentUnit"
           :options="unitOptions"

@@ -7,9 +7,9 @@
       </q-card-section>
       <q-card-section>
         <SecretInput
+          v-model="newSecret"
           placeholder="Add Secret key here!"
           filled
-          v-model="newSecret"
           label="New Secret"
           @keyup.enter="submit"
         />

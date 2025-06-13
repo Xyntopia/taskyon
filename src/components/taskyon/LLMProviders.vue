@@ -89,7 +89,7 @@ to your own AI this way. E.g. using these methods:
 or with an llm proxy such as this one:  https://github.com/BerriAI/liteLLM-proxy
 "
           />
-          <JsonInput filled v-model="state.llmSettings.llmApis" />
+          <JsonInput v-model="state.llmSettings.llmApis" filled />
         </q-expansion-item>
       </q-card>
       <div class="row q-py-md">

@@ -1,5 +1,5 @@
 <template>
-  <q-btn @click="() => (openDialog = true)" v-bind="$attrs" />
+  <q-btn v-bind="$attrs" @click="() => (openDialog = true)" />
   <q-dialog v-model="openDialog" auto-close>
     <!--prevent clicks from closing the dialog...-->
     <q-card @click.stop>
@@ -14,7 +14,7 @@
         <slot name="after" />
       </q-card-section>
       <q-card-actions class="float-right">
-        <q-btn flat label="Ok" v-close-popup />
+        <q-btn v-close-popup flat label="Ok" />
       </q-card-actions>
     </q-card>
   </q-dialog>

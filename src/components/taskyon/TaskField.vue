@@ -20,8 +20,8 @@
           dense
           :icon-right="expandMessageContent ? matArrowDropUp : matArrowDropDown"
           no-caps
-          @click="expandMessageContent = !expandMessageContent"
           style="width: 100%"
+          @click="expandMessageContent = !expandMessageContent"
         >
           <!--task header-->
           <!--we need "col" here in roder to make sure, the div stretches..-->

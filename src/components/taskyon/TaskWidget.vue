@@ -5,7 +5,7 @@
     :task="task"
     :icon="mdiFileDocument"
     icon-color="info"
-    :showMeta="showMeta"
+    :show-meta="showMeta"
   >
     <FileBrowser
       v-if="getFile"
@@ -21,14 +21,14 @@
     :task="task"
     :icon="matPause"
     icon-color="info"
-    :showMeta="showMeta"
+    :show-meta="showMeta"
   >
     {{ task.content.data }}
   </TaskField>
   <TaskField
     v-else-if="task.content.type === 'functioncall'"
     :task="task"
-    :showMeta="showMeta"
+    :show-meta="showMeta"
     short
   >
     <template #header>
@@ -62,7 +62,12 @@
       </div>
     </div>
   </TaskField>
-  <TaskField v-else-if="task.content.type === 'toolresult'" :task="task" :showMeta="showMeta" short>
+  <TaskField
+    v-else-if="task.content.type === 'toolresult'"
+    :task="task"
+    :show-meta="showMeta"
+    short
+  >
     <template #header>
       Result: {{ safeYamlDump(task.content.data).split(' ').slice(0, 10).join(' ') }}...
     </template>
@@ -76,7 +81,7 @@
     v-else-if="task.content.type === 'structured'"
     class="text-info"
     :task="task"
-    :showMeta="showMeta"
+    :show-meta="showMeta"
     :icon="mdiHeadCog"
     short
   >
@@ -89,7 +94,7 @@
     v-else-if="task.content.type === 'tooldefinition'"
     :task="task"
     :icon="mdiTools"
-    :showMeta="showMeta"
+    :show-meta="showMeta"
     short
   >
     <template #header> function: {{ task.content.data.name }} </template>
@@ -102,7 +107,7 @@
     :task="task"
     :icon="task.role === 'system' ? mdiDesktopTower : undefined"
     icon-color="info"
-    :showMeta="showMeta"
+    :show-meta="showMeta"
     :short="short"
   >
     <template #header> {{ task.content.data.split(' ').slice(0, 10).join(' ') }}... </template>
@@ -121,7 +126,7 @@
     :task="task"
     :icon="matWarning"
     icon-color="negative"
-    :showMeta="showMeta"
+    :show-meta="showMeta"
     short
   >
     <template #header>

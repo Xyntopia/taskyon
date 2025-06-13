@@ -24,8 +24,8 @@
       </q-page>
     </q-page-container>
     <password-request-dialog
-      :info-text="infoText"
       v-model="showPassWordDialog"
+      :info-text="infoText"
       @ok="resolveSecret"
     />
   </q-layout>

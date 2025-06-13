@@ -1,6 +1,6 @@
 <template>
   <q-layout view="hHh lpR lFr">
-    <TaskyonHeader :min-mode="false" btn-size="md" v-model:drawer-open="drawerOpen" />
+    <TaskyonHeader v-model:drawer-open="drawerOpen" :min-mode="false" btn-size="md" />
     <!--<q-drawer v-model="drawerOpen" show-if-above persistent behaviour="desktop" :width="250">
       <CreateNewTask class="q-pa-xs" expert-mode />
       <ObjectTreeView :model-value="functionArgs" />
@@ -18,15 +18,15 @@
             options-dense
             input-debounce="0"
             borderless
-            @filter="filterFn"
             color="secondary"
             :model-value="selectedTool?.name"
             :options="filteredToolCollection"
             :label="selectedTool ? 'selected Tool' : 'Select Tool'"
-            @update:model-value="switchTool"
             behavior="default"
+            @filter="filterFn"
+            @update:model-value="switchTool"
           >
-            <template v-slot:before>
+            <template #before>
               <q-icon :name="mdiToolbox" />
             </template>
           </q-select>
@@ -34,7 +34,7 @@
         </div>
         <q-separator class="q-my-md" />
         <div v-if="selectedTool || !name" class="column q-gutter-sm">
-          <q-input dense filled label="New Tool Name" v-model="toolDraft.name" />
+          <q-input v-model="toolDraft.name" dense filled label="New Tool Name" />
           <div class="row">
             <q-tabs v-model="selectedTab" class="col-auto" dense no-caps vertical>
               <q-tab name="code" :icon="mdiLanguageJavascript" label="tool code" />
@@ -43,7 +43,7 @@
             </q-tabs>
             <q-tab-panels :model-value="selectedTab" animated swipeable infinite class="col">
               <q-tab-panel name="code">
-                <div class="q-pa-lg text-negative" v-if="selectedTool && selectedTool.function">
+                <div v-if="selectedTool && selectedTool.function" class="q-pa-lg text-negative">
                   The currently selected Tool is a Taskyon-internal tool with a "function" property
                   and can not be edited here. You can however replace it with your own tool with the
                   same name.
@@ -74,7 +74,7 @@
                 <ObjectTreeView :model-value="toolDraft" :schema="toolJsonSchema" />
               </q-tab-panel>
               <q-tab-panel name="definition" class="column">
-                <JsonInput filled v-model="toolDraft" auto-save />
+                <JsonInput v-model="toolDraft" filled auto-save />
               </q-tab-panel>
             </q-tab-panels>
           </div>
@@ -101,11 +101,11 @@
 
           <div v-if="alphabeticalTools" class="column q-mt-sm">
             <q-btn
+              v-for="t in alphabeticalTools"
+              :key="t.name"
               dense
               flat
               :to="{ path: `/tool/${t.name}` }"
-              v-for="t in alphabeticalTools"
-              :key="t.name"
               >{{ t.name }}</q-btn
             >
           </div>
