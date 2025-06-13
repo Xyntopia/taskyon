@@ -90,6 +90,7 @@
     :task="task"
     :icon="mdiTools"
     :showMeta="showMeta"
+    short
   >
     <template #header> function: {{ task.content.data.name }} </template>
     <p style="white-space: pre-wrap">

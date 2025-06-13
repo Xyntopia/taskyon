@@ -126,6 +126,7 @@ import { ToolBase } from 'src/modules/taskyon/types'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { asyncComputed } from 'src/modules/vueUtils'
+import type { InternalTool } from 'src/modules/taskyon/tools'
 import { craeteToolJsonSchema } from 'src/modules/taskyon/tools'
 import {
   mdiCodeJson,
@@ -212,11 +213,17 @@ const alphabeticalTools = computed(() => {
     : undefined
 })
 
-const selectedTool = asyncComputed(
+const selectedTool = asyncComputed<InternalTool | undefined>(
   async () => {
     const tm = await tystate.getTaskManager()
-    if (name) return await tm.getTool(name)
-    else return undefined
+    if (name) {
+      const toolDef = await tm.getTool(name)
+      if (toolDef) return toolDef
+      // otherwise check if name is actually a task id...
+      const toolDefTask = await tm.getTask(name)
+      if (toolDefTask?.content.type === 'tooldefinition') return toolDefTask.content.data
+    }
+    return undefined
   },
   undefined,
   () => name,
