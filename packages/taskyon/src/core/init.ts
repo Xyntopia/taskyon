@@ -199,6 +199,8 @@ const staticContext = (createIframeMultiPlexer: CreateIframeMultiPlexer) => {
     executePythonScript,
     executeJavaScript,
     toolCreationWizard,
+    arcgisMapTool,
+    overpassMapTool,
     //ragSearchTool,
     // TODO: finish the ragAddTool
     //ragAddTool,

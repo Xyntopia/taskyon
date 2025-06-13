@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, createToolTask, makeTaskResult } from '../taskyon/tools'
+import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 
 interface Location {
   coordinates: [number, number]
@@ -68,10 +68,12 @@ returns locations with coordinates, and provides a URL to an embedded ArcGIS map
     const [x, y] = first.coordinates
     const mapUrl = `https://www.arcgis.com/home/webmap/viewer.html?center=${x},${y}&level=13`
 
-
     // Format a simple summary string of all found locations
     const locationsText = locations
-      .map((loc, i) => `${i + 1}. ${loc.displayName} [${loc.coordinates[0].toFixed(4)}, ${loc.coordinates[1].toFixed(4)}]`)
+      .map(
+        (loc, i) =>
+          `${i + 1}. ${loc.displayName} [${loc.coordinates[0].toFixed(4)}, ${loc.coordinates[1].toFixed(4)}]`,
+      )
       .join('\n')
 
     // Compose the message data string, including the map URL (you can adapt if your frontend renders HTML)
@@ -86,7 +88,7 @@ returns locations with coordinates, and provides a URL to an embedded ArcGIS map
             data: messageData,
           },
         },
-        createToolTask({
+        toolCall({
           name: 'show_map',
           arguments: {
             prompts: [

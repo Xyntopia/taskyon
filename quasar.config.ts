@@ -412,6 +412,10 @@ export default defineConfig((ctx) => {
 
         ...(fastDevBuild ? [] : [checkerPlugin]),
       ],
+
+      //  optimizeDeps: {
+      //     exclude: ['pdfjs-dist/build/pdf.worker.mjs']
+      //   }
     },
 
     // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#devserver
