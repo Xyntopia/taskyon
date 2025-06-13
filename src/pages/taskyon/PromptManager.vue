@@ -156,7 +156,7 @@ const structuredResponsePrompt = computed(() => {
         state.llmSettings,
         [],
         [],
-        state.llmSettings.allowedTools,
+        [],
         tystate.taskContentDraft,
         'SimpleCompletion',
       )

@@ -166,12 +166,11 @@ We will now create the JavaScript file step-by-step, explaining each part in det
 const configuration = {
   llmSettings: {
     selectedApi: 'taskyon',
-    taskTemplate: {
-      allowedTools: ['myExampleStringAdderAlone'],
-    },
+    // make sure, our app can choose from all available tools!
+    enableToolChooser: true,
   },
   signatureOrKey: '2o8zbackwughbck73tqbc3r', // Replace with your actual key
-};
+}
 
 // Define the list of tools for Taskyon
 const tools = [
@@ -179,8 +178,7 @@ const tools = [
     id: 'simpleExampleTask.V1',
     name: 'myExampleStringAdderAlone',
     description: 'provide a short description which an AI can understand',
-    longDescription:
-      'provide a long description if the AI/Human needs more details',
+    longDescription: 'provide a long description if the AI/Human needs more details',
     parameters: {
       type: 'object',
       properties: {
@@ -196,17 +194,17 @@ const tools = [
       required: ['parameter1'],
     },
     function: function (data) {
-      console.log('Received function call with data:', data);
-      const result = `${data.parameter1}${data.parameter2}`;
-      const outputDiv = document.getElementById('output');
+      console.log('Received function call with data:', data)
+      const result = `${data.parameter1}${data.parameter2}`
+      const outputDiv = document.getElementById('output')
       if (outputDiv) {
-        const output = `Function called with parameters: ${JSON.stringify(data)}<br>Returned: ${JSON.stringify(result)}`;
-        outputDiv.innerHTML = output;
+        const output = `Function called with parameters: ${JSON.stringify(data)}<br>Returned: ${JSON.stringify(result)}`
+        outputDiv.innerHTML = output
       }
-      return result;
+      return result
     },
   },
-];
+]
 ```
 
 #### Initializing Taskyon
@@ -214,33 +212,26 @@ const tools = [
 ```javascript
 // Initialize Taskyon with the list of tools and configuration object
 async function initializeTaskyon(tools, configuration) {
-  const taskyon = document.getElementById('taskyon');
+  const taskyon = document.getElementById('taskyon')
 
-  if (
-    taskyon !== null &&
-    taskyon.tagName === 'IFRAME' &&
-    taskyon.contentWindow !== null
-  ) {
-    const iframeTarget = new URL(taskyon.src).origin;
+  if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
+    const iframeTarget = new URL(taskyon.src).origin
 
     // Wait for the Taskyon iframe to signal that it is ready
     function waitForTaskyonReady() {
       return new Promise((resolve) => {
         const handleMessage = function (event) {
-          const eventOrigin = new URL(event.origin).origin;
-          if (
-            eventOrigin === iframeTarget &&
-            event.data.type === 'taskyonReady'
-          ) {
-            window.removeEventListener('message', handleMessage);
-            console.log('Received message that taskyon is ready!', event);
-            resolve(event);
+          const eventOrigin = new URL(event.origin).origin
+          if (eventOrigin === iframeTarget && event.data.type === 'taskyonReady') {
+            window.removeEventListener('message', handleMessage)
+            console.log('Received message that taskyon is ready!', event)
+            resolve(event)
           }
-        };
+        }
 
-        console.log('waiting for taskyon to be ready....');
-        window.addEventListener('message', handleMessage);
-      });
+        console.log('waiting for taskyon to be ready....')
+        window.addEventListener('message', handleMessage)
+      })
     }
 
     // Send the configuration object to Taskyon
@@ -248,60 +239,60 @@ async function initializeTaskyon(tools, configuration) {
       const message = {
         type: 'configurationMessage',
         conf: configuration,
-      };
-      taskyon.contentWindow.postMessage(message, iframeTarget);
+      }
+      taskyon.contentWindow.postMessage(message, iframeTarget)
     }
 
     // Send the function description to Taskyon
     function sendFunctionToTaskyon(toolDescription) {
-      const { function: _toolfunc, ...fdescr } = toolDescription;
+      const { function: _toolfunc, ...fdescr } = toolDescription
       const fdMessage = {
         type: 'functionDescription',
         duplicateTaskName: false,
         ...fdescr,
-      };
-      taskyon.contentWindow.postMessage(fdMessage, iframeTarget);
+      }
+      taskyon.contentWindow.postMessage(fdMessage, iframeTarget)
     }
 
     // Set up a listener for tool function calls from Taskyon
     function setUpToolsListener(tools) {
       window.addEventListener('message', function (event) {
         if (event.origin !== iframeTarget) {
-          console.log('Received message from unauthorized origin');
-          return;
+          console.log('Received message from unauthorized origin')
+          return
         }
 
-        console.log('received message:', event);
-        const tool = tools[0];
+        console.log('received message:', event)
+        const tool = tools[0]
         if (tool && event.data) {
           if (event.data.type === 'functionCall') {
-            const data = event.data;
-            const result = tool.function(data.arguments);
+            const data = event.data
+            const result = tool.function(data.arguments)
 
             const response = {
               type: 'functionResponse',
               functionName: tool.name,
               response: result,
-            };
-            taskyon.contentWindow.postMessage(response, iframeTarget);
+            }
+            taskyon.contentWindow.postMessage(response, iframeTarget)
           }
         }
-      });
+      })
     }
 
-    await waitForTaskyonReady();
-    console.log('send our configuration!');
-    sendConfigurationToTaskyon(configuration);
+    await waitForTaskyonReady()
+    console.log('send our configuration!')
+    sendConfigurationToTaskyon(configuration)
     tools.forEach((t) => {
-      console.log('sending our functions!');
-      sendFunctionToTaskyon(t);
-      console.log('set up function listener!');
-      setUpToolsListener(tools);
-    });
+      console.log('sending our functions!')
+      sendFunctionToTaskyon(t)
+      console.log('set up function listener!')
+      setUpToolsListener(tools)
+    })
   }
 }
 
-initializeTaskyon(tools, configuration);
+initializeTaskyon(tools, configuration)
 ```
 
 ### Explanation of Key Parts

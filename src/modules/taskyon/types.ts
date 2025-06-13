@@ -569,7 +569,6 @@ For more information check this link: https://platform.openai.com/docs/guides/fu
     icon: mdiTools,
     label: 'Use Tools',
   }),
-  allowedTools: z.array(FunctionName),
   useBasePrompt: z
     .boolean()
     .default(true)

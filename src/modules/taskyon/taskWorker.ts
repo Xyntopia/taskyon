@@ -13,7 +13,6 @@ async function safeExecuteTask(
   task: TaskNode,
   taskManager: TyTaskManager,
   stopSignal: AbortSignal,
-  allowedTools: string[],
 ): Promise<unknown> {
   if (task.content.type === 'functioncall') {
     // calculate function result
@@ -39,10 +38,10 @@ async function safeExecuteTask(
 
       return funcR
     } else {
-      const toolnames = JSON.stringify(allowedTools)
       throw new Error(
         !stopSignal.aborted
-          ? `The function '${func.name}' is not available in tools. Please select a valid function from this list: ${toolnames}`
+          ? `The function '${func.name}' is not available in tools. Please select a valid toolname. You can use
+          the toolSearcher to search for valid names.`
           : 'The function execution was cancelled by taskyon',
       )
     }
@@ -56,7 +55,6 @@ async function safeExecuteTask(
 function parseResultForTaskChains(
   funcR: unknown,
   analyzeModel: string | undefined,
-  allowedTools: string[],
   llmTools: boolean,
 ): partialTaskDraft[][] {
   if (taskResult.safeParse(funcR).success) {
@@ -85,7 +83,6 @@ function parseResultForTaskChains(
         },
         createChatCompletionTask({
           model: analyzeModel,
-          allowedTools,
           goal: 'AnalyzeToolResult',
           llmTools,
         }),
@@ -251,14 +248,11 @@ function createHandleError(
     error: unknown,
     task: TaskNode,
     selectedModel: string | undefined,
-    llmSettings: {
-      maxAutonomousTasks: number
-      enableOpenAiTools: boolean
-      allowedTools?: string[]
-    },
+    maxAutonomousTasks: number,
+    enableOpenAiTools: boolean,
   ) => {
     errorCount += 1
-    if (errorCount >= llmSettings.maxAutonomousTasks) {
+    if (errorCount >= maxAutonomousTasks) {
       // TODO: somehow put this into an error tasknode...
       // TODO: also add any taskWorkerController interrupt in an error tasknode..
       stopAllTasks(`Too many errors occured, interrupting execution after ${errorCount} errors!`)
@@ -268,8 +262,7 @@ function createHandleError(
       error,
       task,
       selectedModel,
-      llmSettings.enableOpenAiTools,
-      llmSettings.allowedTools || [],
+      enableOpenAiTools,
       taskManager.debugDb,
     )
 
@@ -342,13 +335,7 @@ const createTaskProcessor = (
       const selectedModel = getApiConfigCopy(llmSettings, llmSettings.selectedApi)?.selectedModel
       let newTasks: TaskNode[][] = []
       try {
-        const funcR = await safeExecuteTask(
-          task,
-          taskManager,
-          currentTaskCtrl.signal,
-          // TODO: replace "allowedTools" with "available Tools" in processTask...
-          llmSettings.allowedTools || [],
-        )
+        const funcR = await safeExecuteTask(task, taskManager, currentTaskCtrl.signal)
 
         // We check the result of the task here to see whether it contains
         // a lists of tasks. If thats the case we return
@@ -357,7 +344,6 @@ const createTaskProcessor = (
         const partialTasks = parseResultForTaskChains(
           funcR,
           selectedModel,
-          llmSettings.allowedTools || [],
           llmSettings.enableOpenAiTools,
         )
 
@@ -397,11 +383,13 @@ const createTaskProcessor = (
         }
       } catch (error) {
         streamEmit({ stage: 'error', taskId: task.id, info: formatReadableError(error) })
-        await handleError(error, task, selectedModel, {
-          maxAutonomousTasks: llmSettings.maxAutonomousTasks,
-          enableOpenAiTools: llmSettings.enableOpenAiTools,
-          allowedTools: llmSettings.allowedTools || [],
-        })
+        await handleError(
+          error,
+          task,
+          selectedModel,
+          llmSettings.maxAutonomousTasks,
+          llmSettings.enableOpenAiTools,
+        )
         // TODO: run this taskWorker in a separate worker js/browser thread!
       }
       taskOutOfLoop(task.id)
@@ -535,7 +523,6 @@ function createErrorTaskChain(
   task: TaskNode | null,
   analyzeErrorModel: string | undefined,
   llmTools: boolean,
-  allowedTools: string[],
   debugDb: CrudWrapper<TaskNodeMeta>,
 ) {
   const humanMsg = formatReadableError(error)
@@ -571,7 +558,6 @@ function createErrorTaskChain(
             model: analyzeErrorModel,
             goal: 'AnalyzeError',
             llmTools,
-            allowedTools,
           }),
         ]
       : []),

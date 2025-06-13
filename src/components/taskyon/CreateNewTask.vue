@@ -378,7 +378,6 @@ watchDebounced(
       // from a  previous task
       [] as ChatCompletionMessageParam[],
       deepCopy(toolCollection.value),
-      deepCopy(state.llmSettings.allowedTools),
     )
 
     const newTokens = Object.values(estimated || {}).reduce((pn, cn) => (pn ?? 0) + (cn ?? 0), 0)
@@ -463,9 +462,7 @@ async function addNewTask(execute = true) {
     } else {
       const completionTask = createChatCompletionTask({
         model: tystate.currentModelId,
-        llmTools: state.llmSettings.enableOpenAiTools,
-        allowedTools: state.llmSettings.allowedTools || [],
-        goal: state.llmSettings.allowedTools.length == 0 ? 'SimpleCompletion' : 'ChooseTool',
+        goal: 'SimpleCompletion',
       })
       newTaskChain.push(completionTask)
       console.log('adding message completion task:', currentnewTask.value.content.data)

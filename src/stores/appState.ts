@@ -52,8 +52,6 @@ export const useAppStateStore = defineStore(storeName, () => {
     // which have no relevance in the actual configuration of the app.
     initialLoad: true, // if the app was loaded for the first time and needs to be initialized
     expandedTaskCreation: false,
-    selectChatBotExpand: true,
-    allowedToolsExpand: true,
     drawerRight: false,
     // variable to track if the user is at the bottom of a task chat
     lockBottomScroll: true,
