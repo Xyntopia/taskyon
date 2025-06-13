@@ -79,8 +79,7 @@
               <Task
                 v-if="taskDataMap[rows.row.taskId]"
                 :task="taskDataMap[rows.row.taskId]!"
-                show-date
-                show-id
+                show-meta
               />
               <div v-else>We could not find the task, is it possible that it was deleted?</div>
             </div>
