@@ -21,11 +21,18 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
     iframe.srcdoc = `
 <script>
   // core RPC maker over dedicated channel:
-  const makeChannelInvoker = (port /*MessagePort*/, reqType /*string*/) => (...args) => {
+  const makeChannelInvoker = (port, reqType) => (...args) => {
     const chan = new MessageChannel()
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       chan.port1.onmessage = (e) => {
-        resolve(e.data)
+        const msg = e.data
+        if (msg && msg.type === 'error') {
+          reject(new Error(msg.error || 'Unknown RPC error'))
+        } else if (msg && msg.type === 'result') {
+          resolve(msg.value)
+        } else {
+          reject(new Error('Unexpected RPC response: ' + JSON.stringify(msg)))
+        }
         chan.port1.close()
       }
       port.postMessage(
@@ -34,6 +41,7 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
       )
     })
   }
+
 
 
   function makeTaskResult(tasks) {
@@ -169,26 +177,35 @@ export async function executeCodeInIframe(
     const port = channel.port1
 
     port.onmessage = async (ev: MessageEvent) => {
-      // 2) Runtime-validate & infer types
       const msg = portMessageSchema.parse(ev.data)
 
       // 3) RPC calls during iframe task execution..
       if ('type' in msg && rpcs.includes(msg.type)) {
         const fnName = msg.type as keyof toolContext
         const fn = args.context[fnName] as (...args: unknown[]) => unknown
+        // Use the transferred port for this RPC call
+        const rpcPort = ev.ports && ev.ports[0]
+        if (!rpcPort) {
+          // Defensive: If no port, send error back on main port
+          port.postMessage({ type: `${msg.type}Error`, error: 'No response port provided for RPC' })
+          return
+        }
         if (typeof fn === 'function') {
           try {
             const fnargs = msg.args ?? []
             const res = await fn(...fnargs)
-            port.postMessage({ type: `${msg.type}Result`, value: res })
+            rpcPort.postMessage({ type: 'result', value: res })
           } catch (err) {
-            port.postMessage({
-              type: `${msg.type}Error`,
+            rpcPort.postMessage({
+              type: 'error',
               error: err instanceof Error ? err.message : String(err),
             })
+          } finally {
+            rpcPort.close()
           }
         } else {
-          port.postMessage({ type: `${msg.type}Error`, error: `RPC "${msg.type}" not found` })
+          rpcPort.postMessage({ type: 'error', error: `RPC "${msg.type}" not found` })
+          rpcPort.close()
         }
         return
       }
