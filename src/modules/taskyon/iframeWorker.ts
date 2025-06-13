@@ -1,3 +1,4 @@
+import z from 'zod'
 import { sha256UrlSafeHash } from '../crypto'
 import { sleep } from '../utils'
 import type { toolContext } from './types'
@@ -132,6 +133,17 @@ function jsonCopy(obj: unknown) {
   return JSON.parse(JSON.stringify(obj))
 }
 
+// 1) Define schemas for the two message “shapes”
+const rpcMessageSchema = z.object({
+  type: z.string(),
+  args: z.array(z.unknown()).optional(),
+})
+const finalMessageSchema = z.object({
+  result: z.unknown().optional(),
+  error: z.string().optional(),
+})
+const portMessageSchema = z.union([rpcMessageSchema, finalMessageSchema])
+
 // Main executor
 export async function executeCodeInIframe(
   code: string,
@@ -156,20 +168,36 @@ export async function executeCodeInIframe(
     const channel = new MessageChannel()
     const port = channel.port1
 
-    port.onmessage = async (ev) => {
-      const { type, name, value } = ev.data
+    port.onmessage = async (ev: MessageEvent) => {
+      // 2) Runtime-validate & infer types
+      const msg = portMessageSchema.parse(ev.data)
 
-      if (type === 'getSecret') {
-        const secret = await args.context.getSecret(name)
-        port.postMessage({ type: 'getSecretResult', name, value: secret })
-      } else if (type === 'setSecret') {
-        args.context.setSecret(name, value)
-        port.postMessage({ type: 'setSecretResult', name })
-      } else {
-        const { result, error } = ev.data
+      // 3) RPC calls during iframe task execution..
+      if ('type' in msg && rpcs.includes(msg.type)) {
+        const fnName = msg.type as keyof toolContext
+        const fn = args.context[fnName] as (...args: unknown[]) => unknown
+        if (typeof fn === 'function') {
+          try {
+            const fnargs = msg.args ?? []
+            const res = await fn(...fnargs)
+            port.postMessage({ type: `${msg.type}Result`, value: res })
+          } catch (err) {
+            port.postMessage({
+              type: `${msg.type}Error`,
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
+        } else {
+          port.postMessage({ type: `${msg.type}Error`, error: `RPC "${msg.type}" not found` })
+        }
+        return
+      }
+
+      // 4) Final sandbox result
+      if ('result' in msg || 'error' in msg) {
         port.close()
-        if (error) reject(new Error(error))
-        else resolve(result)
+        if (msg.error) reject(new Error(msg.error))
+        else resolve(msg.result)
       }
     }
 
