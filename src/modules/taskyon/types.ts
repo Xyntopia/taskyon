@@ -347,6 +347,41 @@ TODO: define onwership types..`),
 })
 export type TaskNode = z.infer<typeof TaskNode>
 
+// Recursively expand every object level
+export type ExpandRecursively<T> = T extends object
+  ? { [K in keyof T]: ExpandRecursively<T[K]> }
+  : T
+
+export type Expand<T> = T extends infer U ? { [K in keyof U]: U[K] } : never
+
+// Now pull out the tooldefinition variant and fully expand it:
+/*type ToolDefinitionNode = ExpandRecursively<
+  Omit<TaskNode, 'content'> & {
+    content: Extract<TaskNode['content'], { type: 'tooldefinition' }>
+  }
+>*/
+
+/*type ToolDefinitionNode = TaskNode extends { content: infer C }
+  ? C extends { type: 'tooldefinition' }
+    ? Expand<Omit<TaskNode, 'content'> & { content: C }>
+    : never
+  : never*/
+
+// 2. Generic extractor by content.type
+export type NodeOfType<K extends TaskNode['content']['type']> = TaskNode extends {
+  content: infer C
+}
+  ? C extends { type: K }
+    ? Expand<Omit<TaskNode, 'content'> & { content: C }>
+    : never
+  : never
+/*
+// 3. Example usages
+type ToolDefNode    = NodeOfType<"tooldefinition">
+type MessageNode    = NodeOfType<"message">
+type ToolResultNode = NodeOfType<"toolresult">
+*/
+
 export const TaskListType = z.array(TaskNode)
 export type TaskListType = z.infer<typeof TaskListType>
 
