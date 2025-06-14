@@ -53,8 +53,11 @@
           flat
           round
           dense
+          buttons
+          download
+          share
           :size="btnSize"
-          :conversation-id="state.llmSettings.selectedTaskId"
+          :task-id="state.llmSettings.selectedTaskId"
         />
       </div>
       <!--

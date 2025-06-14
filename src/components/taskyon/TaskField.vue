@@ -74,7 +74,9 @@
         @create-new-conversation="createNewConversation"
         @edit-task="editTask"
         @toggle-message-debug="toggleMessageDebug"
-        @delete-task="deleteTask"
+        @delete="deleteTask"
+        @download="showDownloadDlg = true"
+        @share="showShareDlg = true"
       />
     </div>
     <!--task debugging-->
@@ -83,6 +85,8 @@
         <TaskDebugTabs :task="task" />
       </div>
     </q-slide-transition>
+    <share-dialog-btn v-model="showShareDlg" single share :task-id="task.id" />
+    <share-dialog-btn v-model="showDownloadDlg" single download :task-id="task.id" />
   </div>
 </template>
 
@@ -90,7 +94,7 @@
 import { useTaskyonStore } from 'stores/taskyonState'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
 import type { TaskNode } from 'src/modules/taskyon/types'
-import { computed, ref } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import TaskButtons from './TaskButtons.vue'
 import { matArrowDropDown, matArrowDropUp, matMonetizationOn } from '@quasar/extras/material-icons'
 import { openrouterPricing } from 'src/modules/utils'
@@ -106,6 +110,16 @@ const props = defineProps<{
   showMeta: boolean | undefined
 }>()
 
+const ShareDialogBtn = defineAsyncComponent(
+  () =>
+    import(
+      /* webpackChunkName: "ShareDialogButton" */
+      /* webpackMode: "lazy" */
+      /* webpackFetchPriority: "low" */
+      '../taskyon/TaskChainPublishDialog.vue'
+    ),
+)
+
 const { short = true, task } = props
 
 const tystate = useTaskyonStore()
@@ -113,6 +127,8 @@ const tystate = useTaskyonStore()
 const expandMessageContent = ref<boolean>(false)
 const router = useRouter()
 
+const showShareDlg = ref(false)
+const showDownloadDlg = ref(false)
 const taskMeta = tystate.getTaskMetaRef(task.id)
 const taskMetaNext = tystate.getTaskMetaRef(task.id)
 const taskCostMeta = computed(() =>

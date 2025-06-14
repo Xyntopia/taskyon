@@ -329,7 +329,7 @@ export async function markdownGeneration() {
   //const newTaskId = await state.addMdTasks(markdownContent, undefined);
   // and delete this conversation again :)
   if (lastLoadedTaskId) {
-    const markdown = await tm.chatToMarkdown(lastLoadedTaskId)
+    const markdown = await tm.chat2Md(lastLoadedTaskId)
     await tm.deleteTaskThread(lastLoadedTaskId)
     return {
       markdown,

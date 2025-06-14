@@ -115,14 +115,26 @@
     >
       <q-tooltip :delay="0">Show similar tasks</q-tooltip>
     </q-btn>
-    <q-btn flat dense :icon="matMoreHoriz" @click.prevent.stop>
-      <q-menu class="column q-gutter-sm q-pa-xs" auto-close>
+    <q-btn flat dense size="sm" :icon="matMoreHoriz" @click.prevent.stop>
+      <q-menu class="column" auto-close>
         <q-list dense>
-          <q-item clickable @click="emit('delete-task', task.id)">
-            <q-item-section> Delete Task/Message </q-item-section>
+          <q-item clickable @click="emit('download', task.id)">
+            <q-item-section side>
+              <q-icon :name="matDownload"></q-icon>
+            </q-item-section>
+            <q-item-section> Download </q-item-section>
+          </q-item>
+          <q-item clickable @click="emit('share', task.id)">
+            <q-item-section side>
+              <q-icon :name="matShare"></q-icon>
+            </q-item-section>
+            <q-item-section> Share </q-item-section>
+          </q-item>
+          <q-item clickable @click="emit('delete', task.id)">
             <q-item-section side>
               <q-icon :name="matDelete"></q-icon>
             </q-item-section>
+            <q-item-section> Delete</q-item-section>
           </q-item>
         </q-list>
       </q-menu>
@@ -136,10 +148,12 @@ import {
   matCode,
   matContentCopy,
   matDelete,
+  matDownload,
   matEdit,
   matMoreHoriz,
   matRawOn,
   matSearch,
+  matShare,
 } from '@quasar/extras/material-icons'
 import { mdiFileTree, mdiForumPlus, mdiLanguageMarkdown } from '@quasar/extras/mdi-v6'
 import type { TaskNode } from 'src/modules/taskyon/types'
@@ -157,6 +171,8 @@ const emit = defineEmits<{
   (e: 'toggle-message-debug', taskId: string): void
   (e: 'toggle-markdown', taskId: string): void
   (e: 'create-new-conversation', taskId: string): Promise<void>
-  (e: 'delete-task', taskId: string): Promise<void>
+  (e: 'delete', taskId: string): Promise<void>
+  (e: 'download', taskId: string): Promise<void>
+  (e: 'share', taskId: string): Promise<void>
 }>()
 </script>

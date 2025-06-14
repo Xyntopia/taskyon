@@ -126,6 +126,7 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     // TODO: make message buttons somehow always appear on screen..  never be hidden..
     .task-buttons
       border-radius: 5px
+      border: 1px solid rgb($primary)
       z-index: 10
       //border: 1px solid rgb($primary)
       background: white
@@ -252,6 +253,10 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       background-color: rgba($dark,1.0)
       &.user
         border: 1px solid rgba($secondary,0.3)
+
+    .task-buttons
+      border-radius: 5px
+      border: 1px solid rgb($secondary)
 
 @media print
   /* Hide everything initially */

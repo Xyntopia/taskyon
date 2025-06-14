@@ -1,29 +1,28 @@
 <template>
-  <q-btn
-    class="gt-xs"
-    v-bind="$attrs"
-    :icon="matCopyAll"
-    @click="onExportChatMD(conversationId, true)"
-  >
-    <q-tooltip>Copy entire chat as markdown</q-tooltip>
-  </q-btn>
-  <q-btn v-bind="$attrs" :icon="matShare" aria-label="share content" @click="showDialog = true">
-    <q-tooltip>Share Content</q-tooltip>
-    <q-dialog v-model="showDialog">
-      <q-card>
-        <q-card-section>
-          <div class="text-h5 row items-center">
-            <q-icon class="q-pr-md" :name="matShare" />
-            <div>Select Method for Sharing This Chat</div>
-          </div>
-          <div class="column q-gutter-sm q-pt-md">
+  <template v-if="buttons">
+    <q-btn class="gt-xs" v-bind="$attrs" :icon="matCopyAll" @click="onExportChatMD(taskId, true)">
+      <q-tooltip>Copy entire chat as markdown</q-tooltip>
+    </q-btn>
+    <q-btn v-bind="$attrs" :icon="matShare" aria-label="share content" @click="showDialog = true">
+      <q-tooltip>Share Content</q-tooltip>
+    </q-btn>
+  </template>
+  <q-dialog v-model="showDialog">
+    <q-card>
+      <q-card-section>
+        <div class="text-h5 row items-center">
+          <q-icon class="q-pr-md" :name="matShare" />
+          <div>Choose how to share or export your {{ single ? 'task' : 'chat' }}</div>
+        </div>
+        <div class="column q-gutter-sm q-pt-md">
+          <template v-if="share">
             <q-btn v-if="false" outline :icon="matLink" label="Create Public Link" />
             <q-btn
               v-if="false"
               outline
               :icon="symOutlinedPublic"
               label="Share with public link"
-              @click="onExportIpfs(conversationId)"
+              @click="onExportIpfs(taskId)"
             />
             <q-btn
               v-if="!gdriveLink"
@@ -31,7 +30,7 @@
               :icon="symOutlinedDriveExport"
               label="Share through Gdrive"
               :loading="loadingGdrive"
-              @click="onExportPublicGdrive(conversationId)"
+              @click="onExportPublicGdrive(taskId)"
             />
             <div v-else class="text-caption">Gdrive Store & Share:</div>
             <q-slide-transition v-if="gdriveLink">
@@ -69,35 +68,38 @@
                 </div>
               </div>
             </q-slide-transition>
-            <q-btn
-              class="lt-sm"
-              outline
-              :icon="matCopyAll"
-              label="Copy chat as markdown"
-              @click="onExportChatMD(conversationId, true)"
-            >
-            </q-btn>
+          </template>
+          <!--we only show this on small screens, because the copy button will disappear here-->
+          <q-btn
+            class="lt-sm"
+            outline
+            :icon="matCopyAll"
+            label="Copy chat as markdown"
+            @click="onExportChatMD(taskId, true)"
+          >
+          </q-btn>
+          <template v-if="download">
             <div class="text-caption col">or download as:</div>
             <q-btn
               outline
               :icon="symOutlinedMarkdown"
               label="Markdown"
-              @click="onExportChatMD(conversationId)"
+              @click="onExportChatMD(taskId)"
             />
             <q-btn
               outline
               :icon="symOutlinedFileSave"
               label="YAML"
-              @click="onExportChatYaml(conversationId)"
+              @click="onExportChatYaml(taskId)"
             />
-          </div>
-        </q-card-section>
-        <q-card-actions align="right">
-          <q-btn flat label="Done" @click="showDialog = false"></q-btn>
-        </q-card-actions>
-      </q-card>
-    </q-dialog>
-  </q-btn>
+          </template>
+        </div>
+      </q-card-section>
+      <q-card-actions align="right">
+        <q-btn flat label="Done" @click="showDialog = false"></q-btn>
+      </q-card-actions>
+    </q-card>
+  </q-dialog>
 </template>
 
 <script setup lang="ts">
@@ -113,8 +115,11 @@ import {
 import { getFileId, useGdrive } from 'src/modules/gdrive'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
+import type { TyTaskManager } from 'src/modules/taskyon/taskManager'
+import type { TaskNode } from 'src/modules/taskyon/types'
+import { safeYamlDump } from 'src/modules/yamlUtils'
 
-const showDialog = ref(false)
+const showDialog = defineModel({ type: Boolean, default: false })
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
@@ -129,15 +134,25 @@ const baseURL = process.env.DEV
     ? 'https://dev.taskyon.space'
     : 'https://taskyon.space'
 
-const props = defineProps<{
-  conversationId: string
+const {
+  buttons = false,
+  taskId,
+  single = false,
+  share = false,
+  download = false,
+} = defineProps<{
+  taskId: string
+  buttons?: boolean
+  single?: boolean
+  share?: boolean
+  download?: boolean
 }>()
 
 const gdriveLink = ref<string>()
 const loadingGdrive = ref(false)
 
 watch(
-  () => props.conversationId,
+  () => taskId,
   () => (gdriveLink.value = undefined),
 )
 
@@ -150,13 +165,19 @@ const taskyonShareLink = computed(() => {
   }
 })
 
-async function onExportPublicGdrive(conversationId: string) {
-  const tm = await tystate.getTaskManager()
-  const task = await tm.getTask(conversationId)
+async function taskId2Md(tm: TyTaskManager, task: TaskNode) {
+  if (single) return tm.task2Md(task)
+  return await tm.chat2Md(task.id)
+}
+
+async function onExportPublicGdrive(taskId: string) {
   try {
+    const tm = await tystate.getTaskManager()
+    const task = await tm.getTask(taskId)
+
     if (task) {
       loadingGdrive.value = true
-      const taskThreadMd = await tm.chatToMarkdown(task.id)
+      const taskThreadMd = await taskId2Md(tm, task)
       if (taskThreadMd) {
         const { publishMarkdown } = useGdrive()
 
@@ -177,15 +198,15 @@ async function onExportPublicGdrive(conversationId: string) {
   }
 }
 
-function onExportIpfs(conversationId: string) {
-  console.log('export to ipfs', conversationId)
+function onExportIpfs(taskId: string) {
+  console.log('export to ipfs', taskId)
 }
 
-async function onExportChatMD(conversationId: string, clipBoard = false) {
+async function onExportChatMD(taskId: string, clipBoard = false) {
   const tm = await tystate.getTaskManager()
-  const task = await tm.getTask(conversationId)
+  const task = await tm.getTask(taskId)
   if (task) {
-    const taskThreadMd = await tm.chatToMarkdown(task.id)
+    const taskThreadMd = await taskId2Md(tm, task)
     if (taskThreadMd) {
       const fileName = `tyn-${task.name || ''}.md`
       const mimeType = 'text/markdown; charset=UTF-8'
@@ -200,11 +221,11 @@ async function onExportChatMD(conversationId: string, clipBoard = false) {
   }
 }
 
-async function onExportChatYaml(conversationId: string) {
+async function onExportChatYaml(taskId: string) {
   const tm = await tystate.getTaskManager()
-  const task = await tm.getTask(conversationId)
+  const task = await tm.getTask(taskId)
   if (task) {
-    const taskThreadYaml = await tm.chatToYaml(task.id)
+    const taskThreadYaml = single ? safeYamlDump([task]) : await tm.chatToYaml(task.id)
     if (taskThreadYaml) {
       const fileName = `tyn-${task.name || ''}.yaml`
       const mimeType = 'text/yaml'

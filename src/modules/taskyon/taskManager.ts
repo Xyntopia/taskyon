@@ -1003,7 +1003,7 @@ export async function useTyTaskManager(
 
   const fm = useFileManager(taskyonDB?.filemappings)
 
-  // converts an antire taskchain (thread) into yaml for download
+  // converts an antire taskchain (thread) into yaml
   async function chatToYaml(conversationId: string) {
     const taskList = await getTaskChain(conversationId)
 
@@ -1013,30 +1013,33 @@ export async function useTyTaskManager(
     }
   }
 
-  // converts an antire taskchain (thread) into yaml for download
-  async function chatToMarkdown(conversationId: string, fullMeta = false) {
+  const task2Md = (t: TaskNode, fullMeta = false) => {
+    const message = t?.content.type === 'message' ? '\n\n' + t.content.data : ''
+
+    // TODO: aso add debugging meta to this!
+    // we are doing this in order to protect the "original" tasks, e.g. if they
+    // are reactive... :)
+    const partialTask = deepCopy(t) as Record<string, unknown>
+    if (!fullMeta && partialTask) {
+      // delete everything which we don't require in order
+      // to create new tasks...
+      delete partialTask.result
+      delete partialTask.id
+      delete partialTask.created_at
+      delete partialTask.priorID
+      if (message) delete partialTask.content
+    }
+    const yamlMeta = `<!--taskyon\n${safeYamlDump(partialTask)}\n-->`
+    return yamlMeta + message
+  }
+
+  // converts an antire taskchain (thread) into markdown
+  async function chat2Md(conversationId: string, fullMeta = false) {
     console.log('convert Chat to markdown!')
     const taskList = await getTaskChain(conversationId)
 
     //convert into a list of markdown strings
-    const messageStrings = taskList.map((t) => {
-      const message = t?.content.type === 'message' ? '\n\n' + t.content.data : ''
-
-      // we are doing this in order to protect the "original" tasks, e.g. if they
-      // are reactive... :)
-      const partialTask = deepCopy(t) as Record<string, unknown>
-      if (!fullMeta && partialTask) {
-        // delete everything which we don't require in order
-        // to create new tasks...
-        delete partialTask.result
-        delete partialTask.id
-        delete partialTask.created_at
-        delete partialTask.priorID
-        if (message) delete partialTask.content
-      }
-      const yamlMeta = `<!--taskyon\n${safeYamlDump(partialTask)}\n-->`
-      return yamlMeta + message
-    })
+    const messageStrings = taskList.map((t) => task2Md(t, fullMeta))
 
     return messageStrings.join('\n\n---\n\n')
   }
@@ -1176,7 +1179,8 @@ export async function useTyTaskManager(
     buildSiblingChain,
     buildTaskTreeNode,
     chatToYaml,
-    chatToMarkdown,
+    chat2Md,
+    task2Md,
     addPartialTask2Tree,
     addTaskChain,
     addMdTaskChain,
