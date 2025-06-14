@@ -39,9 +39,16 @@
               v-if="preliminaryTaskNode"
               buttons
               download
+              flat
               share
               single
               :task-or-id="preliminaryTaskNode"
+            />
+            <q-btn
+              flat
+              :icon="matSearch"
+              label="Search for similar tools"
+              :to="`/taskmanager?k=10&ct=tooldefinition&q=${JSON.stringify(selectedTool)}`"
             />
           </div>
           <q-input v-model="toolDraft.name" dense filled label="New Tool Name" />
@@ -131,7 +138,7 @@ import { defineAsyncComponent, ref, watch } from 'vue'
 import TaskyonHeader from '../../components/taskyon/TaskyonHeader.vue'
 import ObjectTreeView from 'src/components/ObjectTreeView.vue'
 import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
-import { matAdd, matContentCopy, matSave } from '@quasar/extras/material-icons'
+import { matAdd, matContentCopy, matSave, matSearch } from '@quasar/extras/material-icons'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import type { partialTaskDraft } from 'src/modules/taskyon/types'
 import { ToolBase } from 'src/modules/taskyon/types'
