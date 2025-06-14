@@ -57,7 +57,7 @@
           download
           share
           :size="btnSize"
-          :task-id="state.llmSettings.selectedTaskId"
+          :task-or-id="state.llmSettings.selectedTaskId"
         />
       </div>
       <!--

@@ -1,3 +1,5 @@
+import { deepCopy } from '../utils'
+import { safeYamlDump } from '../yamlUtils'
 import { type TaskNode, partialTaskDraft } from './types'
 import { load } from 'js-yaml'
 
@@ -80,4 +82,39 @@ export function processMarkdown(markdown: string) {
   })
 
   return tasks
+}
+
+// converts an antire taskchain (thread) into yaml
+export function chatToYaml(taskList: TaskNode[]) {
+  const fileContent = safeYamlDump(taskList)
+  return fileContent
+}
+
+export const task2Md = (t: TaskNode, fullMeta = false) => {
+  const message = t?.content.type === 'message' ? '\n\n' + t.content.data : ''
+
+  // TODO: aso add debugging meta to this!
+  // we are doing this in order to protect the "original" tasks, e.g. if they
+  // are reactive... :)
+  const partialTask = deepCopy(t) as Record<string, unknown>
+  if (!fullMeta && partialTask) {
+    // delete everything which we don't require in order
+    // to create new tasks...
+    delete partialTask.result
+    delete partialTask.id
+    delete partialTask.created_at
+    delete partialTask.priorID
+    if (message) delete partialTask.content
+  }
+  const yamlMeta = `<!--taskyon\n${safeYamlDump(partialTask)}\n-->`
+  return yamlMeta + message
+}
+
+// converts an antire taskchain (thread) into markdown
+export function chat2Md(taskList: TaskNode[], fullMeta = false) {
+  console.log('convert Chat to markdown!')
+  //convert into a list of markdown strings
+  const messageStrings = taskList.map((t) => task2Md(t, fullMeta))
+
+  return messageStrings.join('\n\n---\n\n')
 }

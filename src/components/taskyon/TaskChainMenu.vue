@@ -26,6 +26,7 @@ import { matDownloadForOffline, matDelete, matMoreHoriz } from '@quasar/extras/m
 import { useTaskyonStore } from 'stores/taskyonState'
 import { exportFile } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
+import { chatToYaml } from 'src/modules/taskyon/taskUtils'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -47,7 +48,8 @@ async function onDownloadChat(conversationId: string) {
   const tm = await tystate.getTaskManager()
   const task = await tm.getTask(conversationId)
   if (task) {
-    const taskThreadYaml = await tm.chatToYaml(task.id)
+    const taskList = await tm.getTaskChain(conversationId)
+    const taskThreadYaml = chatToYaml(taskList)
     if (taskThreadYaml) {
       const fileName = `tyn-${task.name || ''}.yaml`
       const mimeType = 'text/yaml'

@@ -8,7 +8,7 @@ import {
   createTaskyonDatabase,
 } from './rxdb'
 import { openUserUploadedFile } from '../OPFS'
-import { deepCopy, deepMerge } from '../utils'
+import { deepMerge } from '../utils'
 import { usePyodideWebworker } from './webWorkerApi'
 import { type InternalTool } from './tools'
 import { type MangoQuery } from 'rxdb'
@@ -26,7 +26,6 @@ import {
   type CrudWrapper,
 } from '../crudWrapper'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
-import { safeYamlDump } from '../yamlUtils'
 import { urlSafeBase64Uuid } from '../crypto'
 import { getDatabase } from '../pglite.api'
 
@@ -1003,47 +1002,6 @@ export async function useTyTaskManager(
 
   const fm = useFileManager(taskyonDB?.filemappings)
 
-  // converts an antire taskchain (thread) into yaml
-  async function chatToYaml(conversationId: string) {
-    const taskList = await getTaskChain(conversationId)
-
-    if (taskList.length) {
-      const fileContent = safeYamlDump(taskList)
-      return fileContent
-    }
-  }
-
-  const task2Md = (t: TaskNode, fullMeta = false) => {
-    const message = t?.content.type === 'message' ? '\n\n' + t.content.data : ''
-
-    // TODO: aso add debugging meta to this!
-    // we are doing this in order to protect the "original" tasks, e.g. if they
-    // are reactive... :)
-    const partialTask = deepCopy(t) as Record<string, unknown>
-    if (!fullMeta && partialTask) {
-      // delete everything which we don't require in order
-      // to create new tasks...
-      delete partialTask.result
-      delete partialTask.id
-      delete partialTask.created_at
-      delete partialTask.priorID
-      if (message) delete partialTask.content
-    }
-    const yamlMeta = `<!--taskyon\n${safeYamlDump(partialTask)}\n-->`
-    return yamlMeta + message
-  }
-
-  // converts an antire taskchain (thread) into markdown
-  async function chat2Md(conversationId: string, fullMeta = false) {
-    console.log('convert Chat to markdown!')
-    const taskList = await getTaskChain(conversationId)
-
-    //convert into a list of markdown strings
-    const messageStrings = taskList.map((t) => task2Md(t, fullMeta))
-
-    return messageStrings.join('\n\n---\n\n')
-  }
-
   async function updateTaskNameWKeywords(newTask: TaskNode) {
     const chat = getTaskChain(newTask.id)
     const chatString = (await chat).reduce((p, n) => {
@@ -1178,9 +1136,6 @@ export async function useTyTaskManager(
     convertTaskIDs,
     buildSiblingChain,
     buildTaskTreeNode,
-    chatToYaml,
-    chat2Md,
-    task2Md,
     addPartialTask2Tree,
     addTaskChain,
     addMdTaskChain,

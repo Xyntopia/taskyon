@@ -3,7 +3,7 @@ import { ToolBase } from './types'
 import type OpenAI from 'openai'
 import { useNlpWorker } from './webWorkerApi'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { getTextFile } from './taskUtils'
+import { chat2Md, getTextFile } from './taskUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useIpfs } from './ipfs'
 import { getDatabase } from '../pglite.api'
@@ -329,7 +329,8 @@ export async function markdownGeneration() {
   //const newTaskId = await state.addMdTasks(markdownContent, undefined);
   // and delete this conversation again :)
   if (lastLoadedTaskId) {
-    const markdown = await tm.chat2Md(lastLoadedTaskId)
+    const taskList = await tm.getTaskChain(lastLoadedTaskId)
+    const markdown = chat2Md(taskList)
     await tm.deleteTaskThread(lastLoadedTaskId)
     return {
       markdown,

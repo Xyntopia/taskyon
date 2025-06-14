@@ -34,6 +34,16 @@
         </div>
         <q-separator class="q-my-md" />
         <div v-if="selectedTool || !name" class="column q-gutter-sm">
+          <div>
+            <TaskChainPublishDialog
+              v-if="preliminaryTaskNode"
+              buttons
+              download
+              share
+              single
+              :task-or-id="preliminaryTaskNode"
+            />
+          </div>
           <q-input v-model="toolDraft.name" dense filled label="New Tool Name" />
           <div class="row">
             <q-tabs v-model="selectedTab" class="col-auto" dense no-caps vertical>
@@ -79,12 +89,13 @@
             </q-tab-panels>
           </div>
           <q-btn
+            v-if="preliminaryTaskNode"
             class="q-mt-md"
             :disable="!isValidTool"
             :color="isValidTool ? 'positive' : 'negative'"
             :icon="matSave"
             label="save tool"
-            @click="addNewTask()"
+            @click="addNewTask(preliminaryTaskNode)"
             ><q-tooltip>Save tool inside our tasktree.</q-tooltip></q-btn
           >
         </div>
@@ -122,6 +133,7 @@ import ObjectTreeView from 'src/components/ObjectTreeView.vue'
 import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
 import { matAdd, matContentCopy, matSave } from '@quasar/extras/material-icons'
 import { useTaskyonStore } from 'src/stores/taskyonState'
+import type { partialTaskDraft } from 'src/modules/taskyon/types'
 import { ToolBase } from 'src/modules/taskyon/types'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
@@ -138,6 +150,8 @@ import {
 } from '@quasar/extras/mdi-v6'
 import JsonInput from 'src/components/JsonInput.vue'
 import { copyToClipboard } from 'quasar'
+import TaskChainPublishDialog from 'src/components/taskyon/TaskChainPublishDialog.vue'
+import { createTaskNode } from 'src/modules/taskyon/taskManager'
 
 const { name } = defineProps<{ name?: string }>()
 
@@ -161,8 +175,8 @@ const freshTool = {
   name: '',
   description: '',
   parameters: {},
-  code: `(param_obj, {taskChain, setSecret, getSecret}) => {
-  console.log('calling with params:', param_obj)
+  code: `(param_obj, {taskChain, setSecret, getSecret, toolId}) => {
+  console.log('calling with params:', param_obj, toolId)
 }`,
 }
 const toolDraft = ref<ToolBase>(freshTool)
@@ -257,20 +271,22 @@ const toolParser = computed(() => {
 
 const isValidTool = computed(() => toolParser.value === true)
 
-async function addNewTask() {
-  const tm = await tystate.getTaskManager()
-  const newTask = await tm.addPartialTask2Tree(
-    {
+const preliminaryTaskNode = asyncComputed(
+  () =>
+    createTaskNode({
       role: 'user',
       content: {
         type: 'tooldefinition',
         // we are doing this to 1. make sure its json parsable and 2. create a copy of the current tool...
         data: JSON.parse(JSON.stringify(toolDraft.value)),
       },
-    },
-    undefined,
-    undefined,
-  )
+    }),
+  undefined,
+)
+
+async function addNewTask(task: partialTaskDraft) {
+  const tm = await tystate.getTaskManager()
+  const newTask = await tm.addPartialTask2Tree(task, undefined, undefined)
   void router.push({
     params: { name: newTask.id },
   })
