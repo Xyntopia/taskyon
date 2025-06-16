@@ -141,8 +141,9 @@ onMounted(async () => {
 
     console.log('recevied new accessToken:', accessToken)
 
-    // TODO: somehow save the accessToken into the correct passwordDB?
-    //       or maybe we are somehow able to "relay" the access token to the correct
+    if (window.opener) {
+      window.opener.postMessage({ type: 'oauth-access-token', accessToken }, window.location.origin)
+    }
 
     closeWindow()
   } catch (err) {
