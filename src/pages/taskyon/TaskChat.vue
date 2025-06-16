@@ -1,7 +1,7 @@
 <template>
   <!--Task Page-->
   <q-page>
-    <q-resize-observer :debounce="50" @resize="onResize" />
+    <q-resize-observer :debounce="500" @resize="onResize" />
     <!--Chat Area-->
     <div
       id="chat-area"
