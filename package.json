@@ -59,7 +59,7 @@
     "markdown-it-sub": "^2.0.0",
     "markdown-it-sup": "^2.0.0",
     "mathjs": "^11.8.2",
-    "mermaid": "^10.9.1",
+    "mermaid": "^11.6.0",
     "path": "^0.12.7",
     "pdfjs-dist": "^4.3.136",
     "pinia": "^3.0.1",
