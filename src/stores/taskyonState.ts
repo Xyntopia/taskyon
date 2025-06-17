@@ -211,6 +211,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     tm.secretStore.requestInfos.subscribe((requestInfo) => {
       if (requestInfo.type === 'sessionKey') {
         void initializeSessionWithPasskey('typassid', 'tysessionid')
+        // TODO: we need to return the session key back to our secretStore...
       }
     })
   })

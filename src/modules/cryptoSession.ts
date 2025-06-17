@@ -4,7 +4,7 @@ import { base64UrlToUint8Array, uint8ArrayToBase64Url } from './encoding'
  * Registers a device-bound credential.
  * You would normally call this once (or on re‑registration).
  */
-export async function registerPasskey(): Promise<PublicKeyCredential> {
+async function registerPasskey(): Promise<PublicKeyCredential> {
   const challenge = crypto.getRandomValues(new Uint8Array(32))
   const publicKey: PublicKeyCredentialCreationOptions = {
     challenge,
@@ -26,7 +26,7 @@ export async function registerPasskey(): Promise<PublicKeyCredential> {
  * Derives a device-bound key by initiating a WebAuthn authentication.
  * The returned key is derived from the signature of a random challenge.
  */
-export async function deriveDeviceKey(storedCredentialId: Uint8Array): Promise<CryptoKey> {
+async function deriveDeviceKey(storedCredentialId: Uint8Array): Promise<CryptoKey> {
   const challenge = crypto.getRandomValues(new Uint8Array(32))
   const publicKey: PublicKeyCredentialRequestOptions = {
     challenge,
@@ -59,10 +59,7 @@ export async function deriveDeviceKey(storedCredentialId: Uint8Array): Promise<C
 /**
  * Wrap (encrypt) the session token with the device-bound key.
  */
-export async function wrapSessionToken(
-  sessionToken: string,
-  deviceKey: CryptoKey,
-): Promise<string> {
+async function wrapSessionToken(sessionToken: string, deviceKey: CryptoKey): Promise<string> {
   const enc = new TextEncoder()
   const iv = crypto.getRandomValues(new Uint8Array(12)) // AES-GCM recommended IV length
   const ciphertextBuffer = await crypto.subtle.encrypt(
@@ -79,10 +76,7 @@ export async function wrapSessionToken(
 /**
  * Unwrap (decrypt) the session token using the device-bound key.
  */
-export async function unwrapSessionToken(
-  encryptedData: string,
-  deviceKey: CryptoKey,
-): Promise<string> {
+async function unwrapSessionToken(encryptedData: string, deviceKey: CryptoKey): Promise<string> {
   const { iv, ciphertext } = JSON.parse(encryptedData)
   const ivArray = base64UrlToUint8Array(iv)
   const ctArray = base64UrlToUint8Array(ciphertext)
@@ -98,7 +92,7 @@ export async function unwrapSessionToken(
  * Imports a session token (in base64 format) as a CryptoKey,
  * so it can be used with our WebCrypto-based wrappers.
  */
-export async function importSessionKey(sessionToken: string): Promise<CryptoKey> {
+async function importSessionKey(sessionToken: string): Promise<CryptoKey> {
   const raw = base64UrlToUint8Array(sessionToken)
   return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, [
     'deriveKey',
@@ -110,7 +104,7 @@ export async function importSessionKey(sessionToken: string): Promise<CryptoKey>
 /**
  * Ensures a passkey exists. If not, registers a new one and stores its ID.
  */
-export async function ensurePasskey(STORAGE_CREDENTIAL_ID: string): Promise<Uint8Array> {
+async function ensurePasskey(STORAGE_CREDENTIAL_ID: string): Promise<Uint8Array> {
   const storedId = localStorage.getItem(STORAGE_CREDENTIAL_ID)
 
   if (storedId) {

@@ -415,6 +415,15 @@ export type EncryptedDataRow = {
   recoveryEncryptedToolKey: string
 }
 
+/**
+ * Wraps a CRUD interface to transparently encrypt and decrypt data rows.
+ *
+ * @param {CrudWrapper<EncryptedDataRow>} base - The base CRUD interface for storing encrypted rows.
+ * @param {() => Promise<CryptoKey>} publicRecoveryKey - Async function returning the public key for recovery encryption.
+ * @param {() => Promise<CryptoKey>} getSessionKey - Async function returning the session key for symmetric encryption.
+ * @returns {CrudWrapper<unknown>} A CRUD interface that encrypts on set and decrypts on get.
+ */
+// TODO: also encrypt the ids!!
 export const withEncryption = (
   base: CrudWrapper<EncryptedDataRow>,
   publicRecoveryKey: () => Promise<CryptoKey>,
@@ -467,9 +476,19 @@ export const withEncryption = (
   }
 }
 
+/**
+ * Wraps a CRUD interface to provide secret storage, with optional encryption.
+ *
+ * @param {CrudWrapper<EncryptedDataRow | Record<string, string>>} base - The base CRUD interface.
+ * @param {() => Promise<CryptoKey>} publicRecoveryKey - Async function returning the public key for recovery encryption.
+ * @param {Object} [options] - Optional settings.
+ * @param {boolean} [options.encryption=true] - Whether to enable encryption for stored secrets.
+ * @returns {Object} An interface for managing secrets (set, get, delete, list, clear), and a stream for requests.
+ */
 export const withSecretStore = (
   base: CrudWrapper<EncryptedDataRow>,
   publicRecoveryKey: () => Promise<CryptoKey>,
+  options?: { encryption?: boolean },
 ) => {
   type NewSecretRequest = {
     type: 'newSecret'
@@ -492,24 +511,32 @@ export const withSecretStore = (
       emit({
         type: 'sessionKey',
         payload: null,
-        respond: resolve, // now resolve expects a CryptoKey
+        respond: resolve,
       })
     })
   }
-  const encryptedCrud = withEncryption(base, publicRecoveryKey, getSessionKey)
+
+  // Decide whether to use encryption or not
+  const useEncryption = options?.encryption !== false
+  const encryptedCrud = useEncryption
+    ? withEncryption(base, publicRecoveryKey, getSessionKey)
+    : base
 
   async function getNewSecret(id: string | number, secretName: string): Promise<string> {
     return new Promise((resolve) => {
       emit({
         type: 'newSecret',
         payload: { id, secretName },
-        respond: resolve, // Pass the resolve function as a callback
+        respond: resolve,
       })
     })
   }
 
   type SecretData = Record<string, string>
   return {
+    /**
+     * Stores or updates a secret for a given ID and secret name.
+     */
     async setSecret(id: string | number, secretName: string, secretData: string): Promise<void> {
       // Get the existing secrets for the ID
       const existingSecrets: SecretData = ((await encryptedCrud.get(id)) as SecretData) || {}
@@ -519,6 +546,9 @@ export const withSecretStore = (
       await encryptedCrud.set(id, existingSecrets)
     },
 
+    /**
+     * Retrieves a secret by ID and secret name. If not found, requests a new secret.
+     */
     async getSecret(id: string | number, secretName: string): Promise<string | null> {
       // Get the existing secrets for the ID
       const existingSecrets = (await encryptedCrud.get(id)) as SecretData
@@ -533,6 +563,9 @@ export const withSecretStore = (
       return secret
     },
 
+    /**
+     * Deletes a secret by ID and secret name.
+     */
     async deleteSecret(id: string | number, secretName: string): Promise<void> {
       // Get the existing secrets for the ID
       const existingSecrets = (await encryptedCrud.get(id)) as SecretData
@@ -544,18 +577,29 @@ export const withSecretStore = (
       }
     },
 
+    /**
+     * Lists all secrets for a given ID.
+     */
     async listSecrets(id: string | number): Promise<Record<string, string>> {
       // Get all secrets for the ID
       return ((await encryptedCrud.get(id)) as SecretData) || {}
     },
 
+    /**
+     * Clears all stored secrets.
+     */
     async clear(): Promise<void> {
       await encryptedCrud.clear()
     },
 
+    /**
+     * Stream for handling secret and session key requests.
+     */
     requestInfos: stream,
   }
 }
+
+export type SecretStore = ReturnType<typeof withSecretStore>
 
 export const createEnhancedCrudWrapper = async <T>(
   db: TyPGDB,

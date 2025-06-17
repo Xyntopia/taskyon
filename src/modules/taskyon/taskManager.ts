@@ -620,6 +620,7 @@ export async function useTyTaskManager(
       new Map<string, EncryptedDataRow>(),
     ),
     publicRecoveryKey,
+    { encryption: false },
   )
 
   async function countTasks() {

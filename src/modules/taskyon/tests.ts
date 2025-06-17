@@ -23,11 +23,19 @@ export async function testSecretStore() {
 
   const tm = await tystate.getTaskManager()
 
-  const MYTESTTOKEN = await tm.secretStore.getSecret('diagnostics', 'MYTESTTOKEN')
-  await tm.secretStore.deleteSecret('diagnostics', 'MYTESTTOKEN')
+  const secretName = 'MYTESTTOKEN'
+  const MYTESTTOKEN = await tm.secretStore.getSecret('diagnostics', secretName)
+  await tm.secretStore.deleteSecret('diagnostics', secretName)
+
+  // Generate a random string as the test secret
+  const test_secret = Math.random().toString(36).slice(2) + Date.now().toString()
+  await tm.secretStore.setSecret('diagnostics', secretName, test_secret)
+  const returned_secret = await tm.secretStore.getSecret('diagnostics', secretName)
 
   return {
     MYTESTTOKEN,
+    returned_secret,
+    test_secret,
   }
 }
 
