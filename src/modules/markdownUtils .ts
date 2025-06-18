@@ -399,7 +399,9 @@ export const createMermaidPlaceholders = createFenceTransformPlugin(
 
 const createMermaidSettings = (darkMode: boolean): MermaidConfig => ({
   startOnLoad: false,
-  securityLevel: 'loose',
+  // TODO: allow "loose" if we render in iframe, in order to
+  //       allow interactivity with diagram
+  securityLevel: 'strict',
   theme: darkMode ? 'dark' : 'default',
   flowchart: {
     htmlLabels: false,

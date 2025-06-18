@@ -90,30 +90,58 @@ function getSvgSize(svg: string): { width: number; height: number } {
   return { width: w, height: h }
 }
 
-export async function svgStringToPngUint8(svg: string, targetWidth: number): Promise<Uint8Array> {
-  // 1. figure out intrinsic size
-  const { width: origW, height: origH } = getSvgSize(svg)
-  const targetHeight = Math.round(origH * (targetWidth / origW))
+function createCanvas(w: number, h: number) {
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('2D context unavailable')
+  return { canvas, ctx }
+}
 
-  // 2. render into canvas
-  const svgBlob = new Blob([svg], { type: 'image/svg+xml' })
-  const url = URL.createObjectURL(svgBlob)
+async function blobUrlImageDraw(svg: string, ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const blob = new Blob([svg], { type: 'image/svg+xml' })
+  const url = URL.createObjectURL(blob)
   const img = new Image()
+  // img.crossOrigin = 'anonymous'   // only if loading external assets
   img.src = url
   await new Promise<void>((res, rej) => {
     img.onload = () => res()
     img.onerror = () => rej(new Error('SVG load failed'))
   })
   URL.revokeObjectURL(url)
+  ctx.drawImage(img, 0, 0, w, h)
+}
 
-  const canvas = document.createElement('canvas')
-  canvas.width = targetWidth
-  canvas.height = targetHeight
-  const ctx = canvas.getContext('2d')!
-  ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
+async function canvgDraw(svg: string, ctx: CanvasRenderingContext2D) {
+  const { Canvg } = await import('canvg')
+  const renderer = Canvg.fromString(ctx, svg)
+  await renderer.render()
+}
 
-  // 3. export to Blob → ArrayBuffer → Uint8Array
-  const blob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/png'))
+async function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {
+  const blob = await new Promise<Blob | null>((r) => canvas.toBlob((b) => r(b), 'image/png'))
+  if (!blob) throw new Error('toBlob returned null')
   const ab = await blob.arrayBuffer()
   return new Uint8Array(ab)
+}
+
+export async function svgStringToPngUint8(svg: string, targetWidth: number): Promise<Uint8Array> {
+  // compute target size
+  const { width: origW, height: origH } = getSvgSize(svg)
+  const targetHeight = Math.round(origH * (targetWidth / origW))
+
+  // 1) try with native <img> → canvas
+  try {
+    const { canvas, ctx } = createCanvas(targetWidth, targetHeight)
+    await blobUrlImageDraw(svg, ctx, targetWidth, targetHeight)
+    return await canvasToPngBytes(canvas)
+  } catch (err) {
+    console.warn('Native SVG→PNG failed, falling back to Canvg:', err)
+  }
+
+  // 2) fallback: fresh canvas + Canvg render
+  const { canvas: fbCanvas, ctx: fbCtx } = createCanvas(targetWidth, targetHeight)
+  await canvgDraw(svg, fbCtx)
+  return await canvasToPngBytes(fbCanvas)
 }

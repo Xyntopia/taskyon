@@ -8,5 +8,8 @@
   "typescript.tsdk": "node_modules/typescript/lib",
   "[sass]": {
     "editor.defaultFormatter": "syler.sass-indented"
+  },
+  "[xml]": {
+    "editor.defaultFormatter": "redhat.vscode-xml"
   }
 }
