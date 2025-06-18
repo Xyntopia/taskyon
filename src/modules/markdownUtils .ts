@@ -417,14 +417,7 @@ export const md2Html = async (src: string, darkMode = false) => {
   const wrap = `${rand}` // e.g. "HTMLBLOCK_x9fj3k2a..."
   const placeholder = (i: number) => `${wrap}${i}${wrap}`
 
-  // 1) extract raw HTML blocks
-  const htmlBlocks: string[] = []
-  const srcWithPH = src.replace(/<([A-Za-z][A-Za-z0-9-]*)(\s[^>]*)?>.*?<\/\1>/gs, (m) => {
-    const idx = htmlBlocks.push(m) - 1
-    return placeholder(idx)
-  })
-
-  // 2) run normal Markdown-it on   the rest
+  // 1) Set up markdown-it
   const md = new MarkdownIt({
     // Convert '\n' in paragraphs into <br>
     breaks: false,
@@ -501,13 +494,25 @@ export const md2Html = async (src: string, darkMode = false) => {
     return defaultRender(tokens, idx, options, env, self)
   }
 
-  const interim = md.render(srcWithPH)
+  // 2) Parse tokens and replace html_block tokens with placeholders
+  const env = {}
+  const tokens = md.parse(src, env)
+  const htmlBlocks: string[] = []
+  tokens.forEach((token) => {
+    if (token.type === 'html_block') {
+      const i = htmlBlocks.push(token.content) - 1
+      token.content = placeholder(i)
+    }
+  })
 
-  // 3) restore raw HTML
+  // 3) Render tokens back to HTML
+  const interim = md.renderer.render(tokens, md.options, env)
+
+  // 4) Restore HTML blocks
   const phRe = new RegExp(wrap + '(\\d+)' + wrap, 'g')
   const finalHtml = interim.replace(phRe, (_, idx) => htmlBlocks[+idx] ?? '')
 
-  // … mermaid, iframe, etc …
+  // 5) Mermaid, iframe, etc.
   mermaid.initialize(createMermaidSettings(darkMode))
   return await renderMermaidPlaceholders(mermaid)(finalHtml)
 }
