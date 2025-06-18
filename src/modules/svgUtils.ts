@@ -1,93 +1,38 @@
-import { initWasm, Resvg } from '@resvg/resvg-wasm'
+// src/modules/svgUtils.ts
 
-const wasmPath = new URL('@resvg/resvg-wasm/index_bg.wasm', import.meta.url)
+import type { Resvg as ResvgClass, ResvgRenderOptions } from '@resvg/resvg-wasm'
 
-let resvgInitialized = false
-
-async function initResvg() {
-  if (!resvgInitialized) {
-    const res = await fetch(wasmPath)
-    await initWasm(res)
-    resvgInitialized = true
-  }
+/** shape of the dynamically‑loaded resvg module */
+interface ResvgModule {
+  initWasm(bytes: Response): Promise<void>
+  Resvg: typeof ResvgClass
 }
 
-/*async function loadFont(url: string) {
-  const fontResponse = await fetch(url);
-  if (!fontResponse.ok) {
-    throw new Error('Failed to load font');
-  }
-  const fontData = await fontResponse.arrayBuffer();
-  return new Uint8Array(fontData);
-}*/
+let wasmModule: ResvgModule | null = null
 
-/*
-example options:
-{
-  //fitTo: { mode: 'width', value: 1200 },
-  fitTo: { mode: 'original'},
-  fonts: [new Uint8Array(robotoFont)],
-  defaultFontFamily: { sansSerifFamily: 'Roboto' },
-  scale: 2,
-}
-*/
+async function loadResvg(): Promise<ResvgModule> {
+  if (wasmModule) return wasmModule
 
-export async function svgToPng(svgString: string) {
-  await initResvg()
+  const mod = (await import('@resvg/resvg-wasm')) as unknown as ResvgModule
+  const wasmPath = new URL('index_bg.wasm', import.meta.url)
+  const resp = await fetch(wasmPath)
+  await mod.initWasm(resp)
 
-  const font = await fetch('./fonts/Roboto-Regular.ttf')
-  if (!font.ok) return
-
-  const fontData = await font.arrayBuffer()
-  const buffer = new Uint8Array(fontData)
-
-  /*const fontBuffer = await loadFont(
-    '/fonts/KFOmCnqEu92Fr1Mu4mxM.f1e2a767.woff'
-  );*/
-
-  const options: Record<string, unknown> = {
-    fitTo: { mode: 'width', value: 1024 },
-    fonts: [buffer],
-    defaultFontFamily: { sansSerif: 'Roboto' },
-  }
-
-  /*const options: Record<string, unknown> = {
-    //fitTo: { mode: 'width', value: 1200 },
-    fitTo: { mode: 'original' },
-    font: { fontBuffers: [fontBuffer] },
-    //defaultFontFamily: { sansSerifFamily: 'Roboto' },
-    //scale: 2,
-  };*/
-
-  // Load custom font if specified in options
-  /*if (options.fontUrl) {
-    const fontBuffer = await loadFont(options.fontUrl);
-    options.font = {
-      fontBuffers: [fontBuffer],
-    };
-  }*/
-
-  const resvg = new Resvg(svgString, options)
-  const pngData = resvg.render()
-  const pngBuffer = pngData.asPng()
-  return pngBuffer
+  return (wasmModule = mod)
 }
 
 function getSvgSize(svg: string): { width: number; height: number } {
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
-  const svgEl = doc.documentElement
-  // try viewBox first
-  const vb = svgEl.getAttribute('viewBox')
+  const el = doc.documentElement
+  const vb = el.getAttribute('viewBox')
   if (vb) {
-    const [, , vbW, vbH] = vb.split(/\s+|,/).map(parseFloat)
-    if (vbW && vbH) {
-      return { width: vbW, height: vbH }
-    }
+    const [, , w, h] = vb.split(/[\s,]+/).map(parseFloat)
+    if (w && h) return { width: w, height: h }
   }
-  // fallback to width/height attrs (assume px or unitless)
-  const w = parseFloat(svgEl.getAttribute('width') || '0')
-  const h = parseFloat(svgEl.getAttribute('height') || '0')
-  return { width: w, height: h }
+  return {
+    width: parseFloat(el.getAttribute('width') || '0'),
+    height: parseFloat(el.getAttribute('height') || '0'),
+  }
 }
 
 function createCanvas(w: number, h: number) {
@@ -99,49 +44,61 @@ function createCanvas(w: number, h: number) {
   return { canvas, ctx }
 }
 
-async function blobUrlImageDraw(svg: string, ctx: CanvasRenderingContext2D, w: number, h: number) {
+async function nativeRender(svg: string, w: number, h: number): Promise<Uint8Array> {
+  const { canvas, ctx } = createCanvas(w, h)
   const blob = new Blob([svg], { type: 'image/svg+xml' })
   const url = URL.createObjectURL(blob)
   const img = new Image()
-  // img.crossOrigin = 'anonymous'   // only if loading external assets
   img.src = url
+
   await new Promise<void>((res, rej) => {
     img.onload = () => res()
-    img.onerror = () => rej(new Error('SVG load failed'))
+    img.onerror = () => rej(new Error('native SVG load failed'))
   })
   URL.revokeObjectURL(url)
+
   ctx.drawImage(img, 0, 0, w, h)
+  const out = await new Promise<Blob | null>((r) => canvas.toBlob((b) => r(b), 'image/png'))
+  if (!out) throw new Error('toBlob returned null')
+  return new Uint8Array(await out.arrayBuffer())
 }
 
-async function canvgDraw(svg: string, ctx: CanvasRenderingContext2D) {
-  const { Canvg } = await import('canvg')
-  const renderer = Canvg.fromString(ctx, svg)
-  await renderer.render()
+function stripForeignObjects(svg: string): string {
+  return svg.replace(/<foreignObject[\s\S]*?<\/foreignObject>/g, '')
 }
 
-async function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {
-  const blob = await new Promise<Blob | null>((r) => canvas.toBlob((b) => r(b), 'image/png'))
-  if (!blob) throw new Error('toBlob returned null')
-  const ab = await blob.arrayBuffer()
-  return new Uint8Array(ab)
+async function resvgRender(svg: string): Promise<Uint8Array> {
+  const { Resvg } = await loadResvg()
+  const { width } = getSvgSize(svg)
+  const opts: ResvgRenderOptions = { fitTo: { mode: 'width', value: width } }
+  const r = new Resvg(svg, opts)
+  return r.render().asPng()
 }
 
+/**
+ * Convert an SVG string into a PNG Uint8Array
+ * @param svg         raw SVG markup
+ * @param targetWidth desired pixel width
+ */
 export async function svgStringToPngUint8(svg: string, targetWidth: number): Promise<Uint8Array> {
-  // compute target size
   const { width: origW, height: origH } = getSvgSize(svg)
   const targetHeight = Math.round(origH * (targetWidth / origW))
 
-  // 1) try with native <img> → canvas
+  // 1) try native
   try {
-    const { canvas, ctx } = createCanvas(targetWidth, targetHeight)
-    await blobUrlImageDraw(svg, ctx, targetWidth, targetHeight)
-    return await canvasToPngBytes(canvas)
-  } catch (err) {
-    console.warn('Native SVG→PNG failed, falling back to Canvg:', err)
+    return await nativeRender(svg, targetWidth, targetHeight)
+  } catch (e1) {
+    console.warn('native render failed → stripping foreignObject…', e1)
   }
 
-  // 2) fallback: fresh canvas + Canvg render
-  const { canvas: fbCanvas, ctx: fbCtx } = createCanvas(targetWidth, targetHeight)
-  await canvgDraw(svg, fbCtx)
-  return await canvasToPngBytes(fbCanvas)
+  // 2) strip foreignObject + retry native
+  const cleaned = stripForeignObjects(svg)
+  try {
+    return await nativeRender(cleaned, targetWidth, targetHeight)
+  } catch (e2) {
+    console.warn('native after strip failed → falling back to resvg…', e2)
+  }
+
+  // 3) final fallback: resvg
+  return await resvgRender(svg)
 }
