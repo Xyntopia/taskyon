@@ -56,43 +56,42 @@ async function nativeRender(svg: string, w: number, h: number): Promise<Uint8Arr
   return new Uint8Array(await out.arrayBuffer())
 }
 
-/**
- * Replace each <foreignObject> with a <text>, preserving:
- * - inner <div> style & class
- * - textContent
- * - if style contains "text-align: center", adjust x & text-anchor
- */
 function transformForeignObjects(svg: string): string {
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
 
   doc.querySelectorAll('foreignObject').forEach((fo) => {
     const div = fo.querySelector('div')
-    const style = div?.getAttribute('style') ?? ''
+    const styleStr = div?.getAttribute('style') ?? ''
     const cls = div?.getAttribute('class') ?? ''
-
-    // original x/y and width
     const xAttr = fo.getAttribute('x') ?? '0'
     const yAttr = fo.getAttribute('y') ?? '0'
-    const widthAttr = fo.getAttribute('width') ?? '0'
-
+    const wAttr = fo.getAttribute('width') ?? '0'
     const text = div?.textContent?.trim() || fo.textContent?.trim() || ''
+
+    const xNum = parseFloat(xAttr)
+    const yNum = parseFloat(yAttr)
+    const wNum = parseFloat(wAttr)
+
     const textEl = doc.createElementNS('http://www.w3.org/2000/svg', 'text')
 
-    // parse numbers once
-    const xNum = parseFloat(xAttr)
-
-    // if the div had text-align:center, shift to midpoint & middle-anchor
-    if (/text-align\s*:\s*center/.test(style)) {
-      const wNum = parseFloat(widthAttr)
+    // horizontal centering if present
+    if (/text-align\s*:\s*center/.test(styleStr)) {
       textEl.setAttribute('text-anchor', 'middle')
       textEl.setAttribute('x', String(xNum + wNum / 2))
     } else {
       textEl.setAttribute('x', xAttr)
     }
 
-    textEl.setAttribute('y', yAttr)
+    // vertical centering only when style implies it…
+    if (/(?:vertical-align\s*:\s*middle|display\s*:\s*table-cell)/.test(styleStr)) {
+      const yMid = yNum + parseFloat(fo.getAttribute('height') || '0') / 2
+      textEl.setAttribute('dominant-baseline', 'middle')
+      textEl.setAttribute('y', String(yMid))
+    } else {
+      textEl.setAttribute('y', yAttr)
+    }
 
-    if (style) textEl.setAttribute('style', style)
+    if (styleStr) textEl.setAttribute('style', styleStr)
     if (cls) textEl.setAttribute('class', cls)
     textEl.textContent = text
 
