@@ -56,20 +56,49 @@ async function nativeRender(svg: string, w: number, h: number): Promise<Uint8Arr
   return new Uint8Array(await out.arrayBuffer())
 }
 
-/** Replace each <foreignObject> with a <text> at the same x/y, preserving textContent */
+/**
+ * Replace each <foreignObject> with a <text>, preserving:
+ * - inner <div> style & class
+ * - textContent
+ * - if style contains "text-align: center", adjust x & text-anchor
+ */
 function transformForeignObjects(svg: string): string {
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
-  const fxs = Array.from(doc.getElementsByTagName('foreignObject'))
-  for (const fo of fxs) {
-    const x = fo.getAttribute('x') || '0'
-    const y = fo.getAttribute('y') || '0'
-    const txt = fo.textContent?.trim() || ''
+
+  doc.querySelectorAll('foreignObject').forEach((fo) => {
+    const div = fo.querySelector('div')
+    const style = div?.getAttribute('style') ?? ''
+    const cls = div?.getAttribute('class') ?? ''
+
+    // original x/y and width
+    const xAttr = fo.getAttribute('x') ?? '0'
+    const yAttr = fo.getAttribute('y') ?? '0'
+    const widthAttr = fo.getAttribute('width') ?? '0'
+
+    const text = div?.textContent?.trim() || fo.textContent?.trim() || ''
     const textEl = doc.createElementNS('http://www.w3.org/2000/svg', 'text')
-    textEl.setAttribute('x', x)
-    textEl.setAttribute('y', y)
-    textEl.textContent = txt
-    fo.parentNode?.replaceChild(textEl, fo)
-  }
+
+    // parse numbers once
+    const xNum = parseFloat(xAttr)
+
+    // if the div had text-align:center, shift to midpoint & middle-anchor
+    if (/text-align\s*:\s*center/.test(style)) {
+      const wNum = parseFloat(widthAttr)
+      textEl.setAttribute('text-anchor', 'middle')
+      textEl.setAttribute('x', String(xNum + wNum / 2))
+    } else {
+      textEl.setAttribute('x', xAttr)
+    }
+
+    textEl.setAttribute('y', yAttr)
+
+    if (style) textEl.setAttribute('style', style)
+    if (cls) textEl.setAttribute('class', cls)
+    textEl.textContent = text
+
+    fo.replaceWith(textEl)
+  })
+
   return new XMLSerializer().serializeToString(doc)
 }
 
@@ -90,14 +119,14 @@ export async function svgStringToPngUint8(svg: string, targetWidth: number): Pro
   const { width: origW, height: origH } = getSvgSize(svg)
   const targetHeight = Math.round(origH * (targetWidth / origW))
 
-  // 1) try native
+  // 1) native
   try {
     return await nativeRender(svg, targetWidth, targetHeight)
   } catch (e1) {
     console.warn('native render failed:', e1)
   }
 
-  // 2) transform foreignObject → retry native
+  // 2) transform + native
   const transformed = transformForeignObjects(svg)
   try {
     return await nativeRender(transformed, targetWidth, targetHeight)
@@ -105,6 +134,6 @@ export async function svgStringToPngUint8(svg: string, targetWidth: number): Pro
     console.warn('native after transform failed:', e2)
   }
 
-  // 3) fallback to resvg
+  // 3) resvg fallback
   return await resvgRender(svg)
 }
