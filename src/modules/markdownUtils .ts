@@ -365,7 +365,15 @@ export const renderMermaidPlaceholders =
         const { svg } = await mermaid.render(`mid-${id}`, code)
         el.outerHTML = svg
       } catch (err) {
-        el.outerHTML = `<pre class="mermaid-error">${code}</pre><div>${String(err)}</div>`
+        el.outerHTML = `
+          <div class="mermaid-error-container" style="border:2px solid #e53935;padding:1em;margin:0.5em 0;border-radius:6px;">
+            <div style="color:#b71c1c;font-weight:bold;font-size:1.1em;margin-bottom:0.5em;">
+              Mermaid Diagram Error
+            </div>
+            <pre class="mermaid-error" style="background:rgba(255,240,240,0.5);color:#b71c1c;padding:0.5em;border-radius:4px;overflow-x:auto;">${code}</pre>
+            <div style="color:#b71c1c;margin-top:0.5em;">${String(err)}</div>
+          </div>
+        `
       }
     }
 
@@ -397,6 +405,8 @@ const createMermaidSettings = (darkMode: boolean): MermaidConfig => ({
     htmlLabels: false,
     useMaxWidth: true,
   },
+  // we have our oown error handling :)
+  suppressErrorRendering: true,
 })
 
 export const md2Html = async (src: string, darkMode = false) => {
