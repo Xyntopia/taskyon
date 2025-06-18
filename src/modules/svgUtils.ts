@@ -2,22 +2,17 @@
 
 import type { Resvg as ResvgClass, ResvgRenderOptions } from '@resvg/resvg-wasm'
 
-/** shape of the dynamically‑loaded resvg module */
 interface ResvgModule {
   initWasm(bytes: Response): Promise<void>
   Resvg: typeof ResvgClass
 }
 
 let wasmModule: ResvgModule | null = null
-
 async function loadResvg(): Promise<ResvgModule> {
   if (wasmModule) return wasmModule
-
   const mod = (await import('@resvg/resvg-wasm')) as unknown as ResvgModule
   const wasmPath = new URL('index_bg.wasm', import.meta.url)
-  const resp = await fetch(wasmPath)
-  await mod.initWasm(resp)
-
+  await mod.initWasm(await fetch(wasmPath))
   return (wasmModule = mod)
 }
 
@@ -50,21 +45,32 @@ async function nativeRender(svg: string, w: number, h: number): Promise<Uint8Arr
   const url = URL.createObjectURL(blob)
   const img = new Image()
   img.src = url
-
   await new Promise<void>((res, rej) => {
     img.onload = () => res()
     img.onerror = () => rej(new Error('native SVG load failed'))
   })
   URL.revokeObjectURL(url)
-
   ctx.drawImage(img, 0, 0, w, h)
   const out = await new Promise<Blob | null>((r) => canvas.toBlob((b) => r(b), 'image/png'))
   if (!out) throw new Error('toBlob returned null')
   return new Uint8Array(await out.arrayBuffer())
 }
 
-function stripForeignObjects(svg: string): string {
-  return svg.replace(/<foreignObject[\s\S]*?<\/foreignObject>/g, '')
+/** Replace each <foreignObject> with a <text> at the same x/y, preserving textContent */
+function transformForeignObjects(svg: string): string {
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
+  const fxs = Array.from(doc.getElementsByTagName('foreignObject'))
+  for (const fo of fxs) {
+    const x = fo.getAttribute('x') || '0'
+    const y = fo.getAttribute('y') || '0'
+    const txt = fo.textContent?.trim() || ''
+    const textEl = doc.createElementNS('http://www.w3.org/2000/svg', 'text')
+    textEl.setAttribute('x', x)
+    textEl.setAttribute('y', y)
+    textEl.textContent = txt
+    fo.parentNode?.replaceChild(textEl, fo)
+  }
+  return new XMLSerializer().serializeToString(doc)
 }
 
 async function resvgRender(svg: string): Promise<Uint8Array> {
@@ -88,17 +94,17 @@ export async function svgStringToPngUint8(svg: string, targetWidth: number): Pro
   try {
     return await nativeRender(svg, targetWidth, targetHeight)
   } catch (e1) {
-    console.warn('native render failed → stripping foreignObject…', e1)
+    console.warn('native render failed:', e1)
   }
 
-  // 2) strip foreignObject + retry native
-  const cleaned = stripForeignObjects(svg)
+  // 2) transform foreignObject → retry native
+  const transformed = transformForeignObjects(svg)
   try {
-    return await nativeRender(cleaned, targetWidth, targetHeight)
+    return await nativeRender(transformed, targetWidth, targetHeight)
   } catch (e2) {
-    console.warn('native after strip failed → falling back to resvg…', e2)
+    console.warn('native after transform failed:', e2)
   }
 
-  // 3) final fallback: resvg
+  // 3) fallback to resvg
   return await resvgRender(svg)
 }
