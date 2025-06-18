@@ -620,6 +620,8 @@ export async function useTyTaskManager(
       new Map<string, EncryptedDataRow>(),
     ),
     publicRecoveryKey,
+    // TODO: enable encryption as soon
+    //       as we ahve found a comfortable and safe way to do so
     { encryption: false },
   )
 

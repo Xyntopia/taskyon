@@ -1,80 +1,12 @@
 import type { JSONSchema7 } from 'json-schema'
 import { createTool, makeTaskResult } from '../taskyon/tools'
+import type { SecretStore } from '../crudWrapper'
 
 declare global {
   interface Window {
     [key: string]: unknown
   }
 }
-
-// Map to track open popups and their toolIds
-const openPopups = new Map<WindowProxy, string>()
-
-// Function to open the OAuth popup and track it
-function openAuthPopup({
-  oauthURL,
-  clientId,
-  scope,
-  toolId,
-}: {
-  oauthURL: string
-  clientId: string
-  scope: string
-  toolId: string
-}) {
-  const startUrl = new URL(`${window.location.origin}/oauth/start`)
-  startUrl.searchParams.set('svcUrl', oauthURL)
-  startUrl.searchParams.set('cid', clientId)
-  startUrl.searchParams.set('scope', scope)
-
-  const popup = window.open(startUrl.toString(), `oauth:${oauthURL}`, `width=500,height=700`)
-  if (popup) {
-    openPopups.set(popup, toolId)
-  }
-}
-
-// Listener for messages from popups
-function oauthPopupListener(event: MessageEvent) {
-  // Always check origin!
-  if (event.origin !== window.location.origin) return
-
-  const { type, accessToken } = event.data || {}
-  if (type !== 'oauth-access-token') return
-
-  // Find the toolId for this popup
-  const toolId = openPopups.get(event.source as WindowProxy)
-  if (!toolId) return // Unknown popup
-
-  // Handle the access token for this toolId
-  console.log(`🎉 Got token for tool: ${toolId}`, accessToken)
-
-  // Clean up: close popup and remove from map
-  try {
-    ;(event.source as WindowProxy).close()
-  } catch {
-    // Ignore errors when closing the popup
-  }
-  openPopups.delete(event.source as WindowProxy)
-
-  // TODO: Save the token for this toolId in your password DB...
-}
-
-// Install the listener once
-window.addEventListener('message', oauthPopupListener)
-
-// --- Listener for button clicks from the iframe ---
-function oauthButtonListener(event: MessageEvent) {
-  // The iframe's origin is likely "null", so we can't check origin here.
-  // If you want, you can check event.data for a known structure.
-  const { type, oauthURL, clientId, scope, toolId } = event.data || {}
-  if (type !== 'oauth-init') return
-  if (!oauthURL || !clientId || !toolId) return
-
-  openAuthPopup({ oauthURL, clientId, scope, toolId })
-}
-
-// Install the button listener once
-window.addEventListener('message', oauthButtonListener)
 
 export function createLoginButton({
   oauthURL,
@@ -111,7 +43,76 @@ export function createLoginButton({
   return html
 }
 
-export const createOAuthTool = () => {
+export const createOAuthTool = (secretStore: SecretStore) => {
+  // Map to track open popups and their toolIds
+  const openPopups = new Map<WindowProxy, string>()
+
+  // Function to open the OAuth popup and track it
+  function openAuthPopup({
+    oauthURL,
+    clientId,
+    scope,
+    toolId,
+  }: {
+    oauthURL: string
+    clientId: string
+    scope: string
+    toolId: string
+  }) {
+    const startUrl = new URL(`${window.location.origin}/oauth/start`)
+    startUrl.searchParams.set('svcUrl', oauthURL)
+    startUrl.searchParams.set('cid', clientId)
+    startUrl.searchParams.set('scope', scope)
+
+    const popup = window.open(startUrl.toString(), `oauth:${oauthURL}`, `width=500,height=700`)
+    if (popup) {
+      openPopups.set(popup, toolId)
+    }
+  }
+
+  // Listener for messages from popups
+  function oauthPopupListener(event: MessageEvent) {
+    // Always check origin!
+    if (event.origin !== window.location.origin) return
+
+    const { type, accessToken } = event.data || {}
+    if (type !== 'oauth-access-token') return
+
+    // Find the toolId for this popup
+    const toolId = openPopups.get(event.source as WindowProxy)
+    if (!toolId) return // Unknown popup
+
+    // Handle the access token for this toolId
+    console.log(`🎉 Got token for tool: ${toolId}`, accessToken)
+
+    // Clean up: close popup and remove from map
+    try {
+      ;(event.source as WindowProxy).close()
+    } catch {
+      // Ignore errors when closing the popup
+    }
+    openPopups.delete(event.source as WindowProxy)
+
+    void secretStore.setSecret(toolId, 'oauth-acces-token', accessToken)
+  }
+
+  // Install the listener once
+  window.addEventListener('message', oauthPopupListener)
+
+  // --- Listener for button clicks from the iframe ---
+  function oauthButtonListener(event: MessageEvent) {
+    // The iframe's origin is likely "null", so we can't check origin here.
+    // If you want, you can check event.data for a known structure.
+    const { type, oauthURL, clientId, scope, toolId } = event.data || {}
+    if (type !== 'oauth-init') return
+    if (!oauthURL || !clientId || !toolId) return
+
+    openAuthPopup({ oauthURL, clientId, scope, toolId })
+  }
+
+  // Install the button listener once
+  window.addEventListener('message', oauthButtonListener)
+
   return createTool({
     name: 'ensureOauthLogin',
     description: `Ensure, that we have an oauth token for the calling tool.`,

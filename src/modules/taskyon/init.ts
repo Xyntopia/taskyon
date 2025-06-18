@@ -73,7 +73,7 @@ export async function initTaskyon(
     createChooseTool(taskManagerInstance),
     taskSearcher(taskManagerInstance),
     createAddNewToolTool(),
-    createOAuthTool(),
+    createOAuthTool(taskManagerInstance.secretStore),
   )
   taskManagerInstance.addDefaultTools(ToolList)
   void taskManagerInstance.updateToolDefinitions()
