@@ -126,6 +126,8 @@ export async function svgStringToPngUint8(svg: string, targetWidth: number): Pro
   }
 
   // 2) transform + native
+  //    we do this, because mermaid includes "<foreignObject>" in their svgs which
+  //    prevents browsers from rendering it. with an error like this: on 'HTMLCanvasElement': Tainted canvases may not be exported.
   const transformed = transformForeignObjects(svg)
   try {
     return await nativeRender(transformed, targetWidth, targetHeight)
