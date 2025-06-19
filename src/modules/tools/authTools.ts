@@ -131,17 +131,15 @@ not working:
         oauthURL: {
           type: 'string',
           description: 'The OAuth authorization URL',
-          default: 'https://gitlab.com/oauth/authorize',
         },
         clientId: {
           type: 'string',
           description: 'The OAuth client ID.',
-          default: '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b',
         },
         scope: {
           type: 'string',
           description: 'The OAuth scope requested',
-          default: 'read_user',
+          default: '',
         },
         toolId: {
           type: 'string',
@@ -153,6 +151,7 @@ not working:
     } as const satisfies JSONSchema7,
     function: ({ oauthURL, clientId, scope, toolId }) => {
       // reuse your PKCE + iframe-ready login snippet
+
       const buttonhtml = createLoginButton({ oauthURL, clientId, scope, toolId })
 
       // TODO: return a siple "return" message, if the login was already succesful, otherwise

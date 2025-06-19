@@ -6,6 +6,7 @@ import { createAsyncQueue, sleep } from '../utils'
 import { createChatCompletionTask } from '../tools/chatCompletionTool'
 import type { CrudWrapper } from '../crudWrapper'
 import { createStream } from '../frpBus'
+import { sha256UrlSafeHash } from '../crypto_webcrypto'
 
 // TODO: how about we put this here into its own tool as well!
 //       its totally possible now... Would probably make the code cleaner...
@@ -22,7 +23,7 @@ async function safeExecuteTask(
     if (tool && !stopSignal.aborted) {
       // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
       const taskChain = await taskManager.getTaskChain(task.id)
-      const funcR = await handleFunctionExecution(func, tool, def, stopSignal, {
+      const funcR = await handleFunctionExecution(func, tool, stopSignal, {
         taskChain,
         getSecret: async (name) => {
           console.log('get secret name', name)
@@ -34,6 +35,8 @@ async function safeExecuteTask(
           console.log('set secret name', name)
         },
         stopSignal,
+        // if w are dealing with a tool definition use that id. otherwise generate an id on the fly )
+        toolId: def?.id ?? tool.name + (await sha256UrlSafeHash(tool.code)),
       })
 
       return funcR

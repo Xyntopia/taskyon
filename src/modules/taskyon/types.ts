@@ -220,9 +220,10 @@ export type FunctionCall = z.infer<typeof FunctionCall>
 
 export type toolContext = {
   taskChain: TaskNode[]
-  getSecret: (name: string) => Promise<string>
+  getSecret: (name: string) => Promise<string | undefined>
   setSecret: (name: string, value: string) => void
   stopSignal: AbortSignal
+  toolId: string
 }
 
 const MessageContent = z.object({ type: z.literal('message'), data: z.string() })

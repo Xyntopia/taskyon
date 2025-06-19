@@ -135,11 +135,6 @@ function interruptExecution(id: string, port: MessagePort) {
   // iframe.srcdoc = iframe.srcdoc;
 }
 
-// Deep‐copy helper
-function jsonCopy(obj: unknown) {
-  return JSON.parse(JSON.stringify(obj))
-}
-
 // 1) Define schemas for the two message “shapes”
 const rpcMessageSchema = z.object({
   type: z.string(),
@@ -154,13 +149,13 @@ const portMessageSchema = z.union([rpcMessageSchema, finalMessageSchema])
 // Main executor
 export async function executeCodeInIframe(
   code: string,
-  toolId: string,
   args: { params: unknown; context: toolContext },
   sourceURL = 'sandboxed-code.js',
   stopSignal: AbortSignal,
 ) {
   const rpcs = ['getSecret', 'setSecret']
 
+  const toolId = args.context.toolId
   let iframe = iframes.get(toolId)
   // Lazy initialize iframe
   if (!iframe || interrupted) {
@@ -222,15 +217,17 @@ export async function executeCodeInIframe(
     // we create a deep json copy of the object here, to make
     // sure we dereference reactive objects and everything is json serializable
     // before we send it...
-    const payload = jsonCopy({
-      code,
-      args: {
-        params: args.params,
-        context: { taskChain: args.context.taskChain, toolId },
-      },
-      sourceURL,
-      rpcs,
-    })
+    const payload = JSON.parse(
+      JSON.stringify({
+        code,
+        args: {
+          params: args.params,
+          context: { taskChain: args.context.taskChain, toolId },
+        },
+        sourceURL,
+        rpcs,
+      }),
+    )
     iframe.contentWindow!.postMessage(payload, '*', [channel.port2])
 
     // 3) wire up abort
