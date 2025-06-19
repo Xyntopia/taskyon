@@ -1,5 +1,75 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, makeTaskResult } from '../taskyon/tools'
+import { createTool, createToolTask, makeTaskResult } from '../taskyon/tools'
+
+const CLIENT_ID = '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b'
+const OAUTH_URL = 'https://gitlab.com/oauth/authorize'
+
+const getGitlabInfo = createTool({
+  name: 'getGitlabInfo',
+  description: 'Read-only fetch of your GitLab profile, projects, and groups.',
+  longDescription: `Calls the GitLab REST API with a read-only token to retrieve:
+  1) Your user profile (username, name, avatar_url, email, bio)
+  2) A list of your projects (id, name, web_url, visibility)
+  3) A list of your groups (id, name, web_url, access_level)`,
+  parameters: {
+    type: 'object',
+    properties: {
+      // No required inputs for profile/projects/groups
+    },
+    additionalProperties: false,
+  },
+  function: async (_args, ctx) => {
+    const GITLAB_BASE = 'https://gitlab.com/api/v4'
+    const TOKEN = await ctx.getSecret('oauth-acces-token')
+    if (!TOKEN) {
+      return makeTaskResult([
+        [
+          createToolTask({
+            name: 'ensureOauthLogin',
+            arguments: {
+              oauthURL: OAUTH_URL,
+              clientId: CLIENT_ID,
+              scope: 'read_user+read_api',
+              toolId: ctx.toolId,
+            },
+          }),
+          createToolTask({ name: 'getGitlabInfo', arguments: {} }),
+        ],
+      ])
+    }
+
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${TOKEN}`,
+    }
+
+    // 1) Profile
+    const profileRes = await fetch(`${GITLAB_BASE}/user`, { headers })
+    const profile = await profileRes.json()
+
+    // 2) Projects you’re a member of
+    const projectsRes = await fetch(`${GITLAB_BASE}/projects?membership=true&per_page=100`, {
+      headers,
+    })
+    const projects = await projectsRes.json()
+
+    // 3) Groups you belong to
+    const groupsRes = await fetch(`${GITLAB_BASE}/groups?per_page=100`, { headers })
+    const groups = await groupsRes.json()
+
+    return makeTaskResult([
+      [
+        {
+          role: 'assistant',
+          content: {
+            type: 'structured',
+            data: { profile, projects, groups },
+          },
+        },
+      ],
+    ])
+  },
+})
 
 const issueListGenerator = createTool({
   name: 'issueListGenerator',
@@ -22,15 +92,39 @@ const issueListGenerator = createTool({
         description: `Extract a list of issues from the text which we could use
 in gitlab. They should roughly follow the style of a "user story".`,
       },
+      project: {
+        type: 'string',
+        description: 'The name of the GitLab project where issues will be submitted.',
+      },
     },
     required: ['issuelist'],
   } as const satisfies JSONSchema7,
-  function: async ({ issuelist }, ctx) => {
-    const GITLAB_PROJECT_ID = await ctx.getSecret('YOUR_GITLAB_PROJECT_ID') // Replace with actual project ID
+  function: async ({ issuelist, project }, ctx) => {
     const GITLAB_API_URL = await ctx.getSecret(
-      `https://gitlab.com/api/v4/projects/${encodeURIComponent(GITLAB_PROJECT_ID || '')}/issues`,
+      `https://gitlab.com/api/v4/projects/${encodeURIComponent(project || '')}/issues`,
     )
-    const GITLAB_ACCESS_TOKEN = await ctx.getSecret('GITLAB_ACCESS_TOKEN') // Replace with actual project ID
+    const GITLAB_ACCESS_TOKEN = await ctx.getSecret('oauth-acces-token') // Replace with actual project ID
+
+    if (!GITLAB_ACCESS_TOKEN) {
+      // information needed to register with gitlab
+      return makeTaskResult([
+        [
+          createToolTask({
+            name: 'ensureOauthLogin',
+            arguments: {
+              oauthURL: OAUTH_URL,
+              clientId: CLIENT_ID,
+              scope: 'read_user',
+              toolId: ctx.toolId,
+            },
+          }),
+          createToolTask({
+            name: 'issueListGenerator',
+            arguments: { issuelist, project },
+          }),
+        ],
+      ])
+    }
 
     const uiHtml = `<div>
     <ul id="issueList">
@@ -175,4 +269,4 @@ const gitReader = createTool({
 }`,
 })
 
-export const devTools = [issueListGenerator, gitReader]
+export const devTools = [issueListGenerator, getGitlabInfo, gitReader]
