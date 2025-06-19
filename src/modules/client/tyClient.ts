@@ -62,8 +62,10 @@ async function handleFunctionExecution(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     setSecret: (name, _value) => {
       console.log('set secret name', name)
+      return Promise.resolve()
     },
     stopSignal,
+    toolId: 'N/A',
   })
 
   // Send response to iframe

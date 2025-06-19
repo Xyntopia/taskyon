@@ -23,20 +23,21 @@ async function safeExecuteTask(
     if (tool && !stopSignal.aborted) {
       // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
       const taskChain = await taskManager.getTaskChain(task.id)
+      const toolId = def?.id ?? tool.name + (await sha256UrlSafeHash(tool.code))
       const funcR = await handleFunctionExecution(func, tool, stopSignal, {
         taskChain,
         getSecret: async (name) => {
           console.log('get secret name', name)
-          await sleep(10000)
-          return Promise.resolve('N/A')
+          const secr = await taskManager.secretStore.getSecret(toolId, name)
+          return secr ?? undefined
         },
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        setSecret: (name, _value) => {
+        setSecret: async (name, value) => {
           console.log('set secret name', name)
+          await taskManager.secretStore.setSecret(toolId, name, value)
         },
         stopSignal,
         // if w are dealing with a tool definition use that id. otherwise generate an id on the fly )
-        toolId: def?.id ?? tool.name + (await sha256UrlSafeHash(tool.code)),
+        toolId,
       })
 
       return funcR

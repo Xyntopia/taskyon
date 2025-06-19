@@ -32,10 +32,13 @@ export async function testSecretStore() {
   await tm.secretStore.setSecret('diagnostics', secretName, test_secret)
   const returned_secret = await tm.secretStore.getSecret('diagnostics', secretName)
 
+  const undefinedSecret = await tm.secretStore.getSecret('diagnostics', 'unknown_secret')
+
   return {
     MYTESTTOKEN,
     returned_secret,
     test_secret,
+    undefinedSecret,
   }
 }
 
@@ -182,8 +185,12 @@ export const testChatCompletion = async () => {
       {
         taskChain: [],
         getSecret: () => Promise.resolve('test'),
-        setSecret: () => console.log('set test secret'),
+        setSecret: () => {
+          console.log('set test secret')
+          return Promise.resolve()
+        },
         stopSignal,
+        toolId: 'N/A',
       },
     )
   }

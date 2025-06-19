@@ -370,7 +370,7 @@ export class Lock {
 export function lockMap(name: string = 'item') {
   const locks = new Map<string | number, Lock>()
 
-  // Lock a task and returns a function closure which can be used to unlock it again...
+  // Lock am item and returns a function closure which can be used to unlock it again...
   async function lockItem(id: string | number) {
     let lock = locks.get(id)
     if (!lock) {
@@ -387,7 +387,7 @@ export function lockMap(name: string = 'item') {
     }
   }
 
-  // this function simply waits for a task to be unlocked, but doesn't
+  // this function simply waits for an item to be unlocked, but doesn't
   // acquire a lock itself...
   async function waitForItemUnlock(id: string | number) {
     const lock = locks.get(id)

@@ -140,6 +140,7 @@ export const createPgLiteCrudWrapper = async <T>(
   const { dataColumn, tableName, idColumn } = await createVecPgLiteTable(db, options)
 
   const get = async (id: string | number): Promise<T | null> => {
+    await db.waitReady
     const result = await db.query<Row<T>>(
       `SELECT ${dataColumn} FROM ${tableName}
        WHERE ${idColumn} = $1;`,
@@ -150,6 +151,7 @@ export const createPgLiteCrudWrapper = async <T>(
 
   return {
     set: async (id: string | number, data: T) => {
+      await db.waitReady
       await db.query(
         `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
          VALUES ($1, $2)
@@ -163,6 +165,7 @@ export const createPgLiteCrudWrapper = async <T>(
       // in order to avoid race conditions
       let newData: T
       if (strategy === 'native_shallow' || strategy === 'shallow_merge') {
+        await db.waitReady
         await db.query(
           `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
            VALUES ($1, $2)
@@ -178,7 +181,7 @@ export const createPgLiteCrudWrapper = async <T>(
           strategy === 'deepmerge'
             ? deepMerge(existingData, data, 'overwrite')
             : { ...existingData, ...data }
-
+        await db.waitReady
         await db.query(
           `INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
            VALUES ($1, $2)
@@ -189,13 +192,16 @@ export const createPgLiteCrudWrapper = async <T>(
       return newData
     },
     delete: async (id: string | number) => {
+      await db.waitReady
       await db.query(`DELETE FROM ${tableName} WHERE ${idColumn} = $1;`, [id])
     },
     list: async (): Promise<Row<T>[]> => {
+      await db.waitReady
       const result = await db.sql<Row<T>>`SELECT ${idColumn}, ${dataColumn} FROM ${tableName};`
       return result.rows
     },
     clear: async (): Promise<void> => {
+      await db.waitReady
       await db.query(`DELETE FROM ${tableName};`)
     },
   }
@@ -415,6 +421,21 @@ export type EncryptedDataRow = {
   recoveryEncryptedToolKey: string
 }
 
+type AskSession = () => Promise<CryptoKey>
+type AskNewSecret = (id: string | number, name: string) => Promise<string>
+
+type EncryptedCrudWrapper<GetSK extends boolean> = Omit<
+  CrudWrapper<EncryptedDataRow>,
+  'set' | 'get'
+> & {
+  set: GetSK extends true
+    ? (id: string | number, data: unknown, askSession?: AskSession) => Promise<void>
+    : (id: string | number, data: unknown, askSession: AskSession) => Promise<void>
+  get: GetSK extends true
+    ? (id: string | number, askSession?: AskSession) => Promise<unknown>
+    : (id: string | number, askSession: AskSession) => Promise<unknown>
+}
+
 /**
  * Wraps a CRUD interface to transparently encrypt and decrypt data rows.
  *
@@ -424,14 +445,27 @@ export type EncryptedDataRow = {
  * @returns {CrudWrapper<unknown>} A CRUD interface that encrypts on set and decrypts on get.
  */
 // TODO: also encrypt the ids!!
-export const withEncryption = (
+// —————— Overload #1: no getSessionKey ⇒ askSession **required** ——————
+export function withEncryption(
+  base: CrudWrapper<EncryptedDataRow>,
+  publicRecoveryKey: () => Promise<CryptoKey>,
+): EncryptedCrudWrapper<false>
+
+// —————— Overload #2: with getSessionKey ⇒ askSession **optional** ——————
+export function withEncryption(
   base: CrudWrapper<EncryptedDataRow>,
   publicRecoveryKey: () => Promise<CryptoKey>,
   getSessionKey: () => Promise<CryptoKey>,
-) => {
+): EncryptedCrudWrapper<true>
+
+export function withEncryption(
+  base: CrudWrapper<EncryptedDataRow>,
+  publicRecoveryKey: () => Promise<CryptoKey>,
+  getSessionKey?: () => Promise<CryptoKey>,
+) {
   return {
     ...base,
-    async set(id: string | number, data: unknown): Promise<void> {
+    async set(id: string | number, data: unknown, askSession?: AskSession): Promise<void> {
       // Generate a new random tool key for each set operation
       // we need the key to be extractable, so that we can encrypt it !
       const rowKey = await generateRandomEncryptionKey(true)
@@ -442,7 +476,10 @@ export const withEncryption = (
       // Encrypt the tool key using the recovery public key
       const recoveryEncryptedToolKey = await wrapKeyWithPublicKey(await publicRecoveryKey(), rowKey)
 
-      const sessionKey = await getSessionKey()
+      if (!askSession && !getSessionKey) {
+        throw new Error('No session key provider (askSession or getSessionKey) was provided.')
+      }
+      const sessionKey = await (askSession ?? getSessionKey!)()
       // Encrypt the tool key using the symmetric session key
       const encryptedToolKey = await encryptWithSessionKey(sessionKey, rowKey)
 
@@ -459,12 +496,15 @@ export const withEncryption = (
       await base.set(id, encData)
     },
 
-    async get(id: string | number): Promise<unknown> {
+    async get(id: string | number, askSession?: AskSession): Promise<unknown> {
       // Retrieve the encrypted data row
       const encData = await base.get(id)
       if (!encData) return null
 
-      const sessionKey = await getSessionKey()
+      if (!askSession && !getSessionKey) {
+        throw new Error('No session key provider (askSession or getSessionKey) was provided.')
+      }
+      const sessionKey = await (askSession ?? getSessionKey!)()
       // Decrypt the tool key using the symmetric session key
       const rowKey = await decryptWithSessionKey(sessionKey, encData.encryptedToolKey)
 
@@ -487,78 +527,79 @@ export const withEncryption = (
  */
 export const withSecretStore = (
   base: CrudWrapper<EncryptedDataRow>,
-  publicRecoveryKey: () => Promise<CryptoKey>,
+  publicRecoveryKey?: () => Promise<CryptoKey>,
   options?: { encryption?: boolean },
 ) => {
-  type NewSecretRequest = {
-    type: 'newSecret'
-    payload: { id: string | number; secretName: string }
-    respond: (response: string) => void
-  }
-
-  type SessionKeyRequest = {
-    type: 'sessionKey'
-    payload: null
-    respond: (response: CryptoKey) => void
-  }
-
-  type RequestInfo = NewSecretRequest | SessionKeyRequest
-
-  const { stream, emit } = createStream<RequestInfo>()
-
-  async function getSessionKey(): Promise<CryptoKey> {
-    return new Promise<CryptoKey>((resolve) => {
-      emit({
-        type: 'sessionKey',
-        payload: null,
-        respond: resolve,
-      })
-    })
-  }
-
   // Decide whether to use encryption or not
   const useEncryption = options?.encryption !== false
-  const encryptedCrud = useEncryption
-    ? withEncryption(base, publicRecoveryKey, getSessionKey)
-    : base
 
-  async function getNewSecret(id: string | number, secretName: string): Promise<string> {
-    return new Promise((resolve) => {
-      emit({
-        type: 'newSecret',
-        payload: { id, secretName },
-        respond: resolve,
-      })
+  const effectivePublicRecoveryKey =
+    publicRecoveryKey ??
+    (async () => {
+      // Generate a temporary RSA key pair for fallback
+      const keyPair = await window.crypto.subtle.generateKey(
+        {
+          name: 'RSA-OAEP',
+          modulusLength: 2048,
+          publicExponent: new Uint8Array([1, 0, 1]),
+          hash: 'SHA-256',
+        },
+        true,
+        ['encrypt', 'decrypt'],
+      )
+      return keyPair.publicKey
     })
+  // Provide a default session key if encryption is enabled and none is supplied
+  const defaultSessionKey = async () => {
+    // AES-GCM 256-bit key, extractable for demo purposes
+    return window.crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
+      'encrypt',
+      'decrypt',
+    ])
   }
+
+  const encryptedCrud = useEncryption
+    ? withEncryption(base, effectivePublicRecoveryKey, defaultSessionKey)
+    : withEncryption(base, effectivePublicRecoveryKey)
 
   type SecretData = Record<string, string>
   return {
     /**
      * Stores or updates a secret for a given ID and secret name.
      */
-    async setSecret(id: string | number, secretName: string, secretData: string): Promise<void> {
+    async setSecret(
+      id: string | number,
+      secretName: string,
+      secretData: string,
+      askSession: AskSession,
+    ): Promise<void> {
       // Get the existing secrets for the ID
-      const existingSecrets: SecretData = ((await encryptedCrud.get(id)) as SecretData) || {}
+      const existingSecrets: SecretData =
+        ((await encryptedCrud.get(id, askSession)) as SecretData) || {}
       // Add or update the secret
       existingSecrets[secretName] = secretData
       // Save the updated secrets
-      await encryptedCrud.set(id, existingSecrets)
+      await encryptedCrud.set(id, existingSecrets, askSession)
     },
 
     /**
      * Retrieves a secret by ID and secret name. If not found, requests a new secret.
      */
-    async getSecret(id: string | number, secretName: string): Promise<string | null> {
+    async getSecret(
+      id: string | number,
+      secretName: string,
+      askSession: AskSession,
+      askNew?: AskNewSecret,
+    ): Promise<string | null> {
       // Get the existing secrets for the ID
-      const existingSecrets = (await encryptedCrud.get(id)) as SecretData
+      const existingSecrets = (await encryptedCrud.get(id, askSession)) as SecretData
       // Return the specific secret if it exists
       let secret = existingSecrets ? existingSecrets[secretName] || null : null
 
-      if (!secret) {
-        secret = await getNewSecret(id, secretName)
+      if (!secret && askNew) {
+        secret = await askNew(id, secretName)
         console.log('received new secret:', id, secretName)
-        await this.setSecret(id, secretName, secret)
+        await this.setSecret(id, secretName, secret, askSession)
       }
       return secret
     },
@@ -566,23 +607,30 @@ export const withSecretStore = (
     /**
      * Deletes a secret by ID and secret name.
      */
-    async deleteSecret(id: string | number, secretName: string): Promise<void> {
+    async deleteSecret(
+      id: string | number,
+      secretName: string,
+      askSession: AskSession,
+    ): Promise<void> {
       // Get the existing secrets for the ID
-      const existingSecrets = (await encryptedCrud.get(id)) as SecretData
+      const existingSecrets = (await encryptedCrud.get(id, askSession)) as SecretData
       if (existingSecrets && secretName in existingSecrets) {
         // Delete the specific secret
         delete existingSecrets[secretName]
         // Save the updated secrets
-        await encryptedCrud.set(id, existingSecrets)
+        await encryptedCrud.set(id, existingSecrets, askSession)
       }
     },
 
     /**
      * Lists all secrets for a given ID.
      */
-    async listSecrets(id: string | number): Promise<Record<string, string>> {
+    async listSecrets(
+      id: string | number,
+      askSession: AskSession,
+    ): Promise<Record<string, string>> {
       // Get all secrets for the ID
-      return ((await encryptedCrud.get(id)) as SecretData) || {}
+      return ((await encryptedCrud.get(id, askSession)) as SecretData) || {}
     },
 
     /**
@@ -591,11 +639,6 @@ export const withSecretStore = (
     async clear(): Promise<void> {
       await encryptedCrud.clear()
     },
-
-    /**
-     * Stream for handling secret and session key requests.
-     */
-    requestInfos: stream,
   }
 }
 

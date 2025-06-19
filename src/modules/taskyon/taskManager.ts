@@ -19,6 +19,7 @@ import {
   createCombinedCrudWrapper,
   createEnhancedCrudWrapper,
   createMapCrudWrapper,
+  createPgLiteCrudWrapper,
   createVectorStore,
   withLiveStreams,
   withLocking,
@@ -27,6 +28,7 @@ import {
 } from '../crudWrapper'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
 import { urlSafeBase64Uuid } from '../crypto'
+import type { TyPGDB } from '../pglite.api'
 import { getDatabase } from '../pglite.api'
 
 /**
@@ -201,11 +203,12 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
 
 // TODO: replace this with pglite vector search :)
 async function useTaskVectors(
+  db: TyPGDB,
   getAllTaskIds: () => Promise<string[]>,
   getTask: (taskId: string) => Promise<TaskNode | null>,
   vectorizerModel?: string,
 ) {
-  const vecDb = await createVectorStore(await getDatabase('taskyon'), 'tyTaskVectors')
+  const vecDb = await createVectorStore(db, 'tyTaskVectors')
 
   async function syncVectorIndexWithTasks(progressCallback: (done: number, total: number) => void) {
     let counter = 0
@@ -557,6 +560,8 @@ export async function useTyTaskManager(
     ]),
   )
 
+  const tySqlDb = await getDatabase('taskyon')
+
   // TODO: unify our tyCrudVec and useTaskVectors in one db...
   const {
     syncVectorIndexWithTasks,
@@ -566,7 +571,7 @@ export async function useTyTaskManager(
     resetTaskVectors,
     searchSimilarTasks,
     count: countVecs,
-  } = await useTaskVectors(getAllTaskIds, tyCrud.get, vectorizerModel)
+  } = await useTaskVectors(tySqlDb, getAllTaskIds, tyCrud.get, vectorizerModel)
 
   const { toolIndex, defaultToolMap, addDefaultTools, getToolDefinition, updateToolIndex } =
     createToolIndex(tyCrud)
@@ -604,7 +609,7 @@ export async function useTyTaskManager(
   })
 
   const debugDb = await createEnhancedCrudWrapper<TaskNodeMeta>(
-    await getDatabase('taskyon'),
+    tySqlDb,
     {
       tableName: 'debugDb',
     },
@@ -612,13 +617,12 @@ export async function useTyTaskManager(
   )
 
   const secretStore = withSecretStore(
-    await createEnhancedCrudWrapper(
-      await getDatabase('taskyon'),
-      {
+    createCombinedCrudWrapper([
+      createMapCrudWrapper(new Map<string, EncryptedDataRow>()),
+      await createPgLiteCrudWrapper<EncryptedDataRow>(tySqlDb, {
         tableName: 'vault',
-      },
-      new Map<string, EncryptedDataRow>(),
-    ),
+      }),
+    ]),
     publicRecoveryKey,
     // TODO: enable encryption as soon
     //       as we ahve found a comfortable and safe way to do so
