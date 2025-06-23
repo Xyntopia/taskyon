@@ -43,7 +43,6 @@ export async function initTaskyon(
   // it is running in.
   EnvironmentTools: InternalTool[],
   publicRecoveryKey: () => Promise<CryptoKey>,
-  sessionKey: () => Promise<CryptoKey>,
 ) {
   const ToolList: InternalTool[] = [
     ...smallHelperTools,
@@ -72,7 +71,7 @@ export async function initTaskyon(
       }),
     ]),
     publicRecoveryKey,
-    sessionKey,
+    true, // make sure, we always ask for new secrets, if they don't exist yet :)
   )
 
   console.log('finished taskManager initialization')

@@ -74,7 +74,7 @@ export const withLiveStreams = <T>(
             void base.get(id).then((current) => {
               if (!cancelled) {
                 //console.log('emitting current', current)
-                observer({ id, data: current })
+                void observer({ id, data: current })
               }
             })
             return () => {
@@ -504,15 +504,17 @@ export function withEncryption(
 export const withSecretStore = (
   base: CrudWrapper<EncryptedDataRow>,
   publicRecoveryKey: () => Promise<CryptoKey>,
+  askNew: boolean = false,
+  askTimeoutMs = 100000,
 ) => {
   const { emitFunc: getSessionKey, stream: askSessionKeyStream } = streamProcedureCall<
     [],
     CryptoKey
-  >(1000)
+  >(askTimeoutMs)
   const { emitFunc: getNewKey, stream: askNewKeyStream } = streamProcedureCall<
     [{ id: string | number; secretName: string }],
     string
-  >(1000)
+  >(askTimeoutMs)
 
   const encryptedCrud = withEncryption(base, publicRecoveryKey, getSessionKey)
   type SecretData = Record<string, string>
@@ -533,11 +535,7 @@ export const withSecretStore = (
     /**
      * Retrieves a secret by ID and secret name. If not found, requests a new secret.
      */
-    async getSecret(
-      id: string | number,
-      secretName: string,
-      askNew: boolean,
-    ): Promise<string | null> {
+    async getSecret(id: string | number, secretName: string): Promise<string | null> {
       // Get the existing secrets for the ID
       const existingSecrets = (await encryptedCrud.get(id, getSessionKey)) as SecretData
       // Return the specific secret if it exists

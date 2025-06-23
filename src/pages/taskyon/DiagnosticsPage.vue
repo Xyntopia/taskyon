@@ -68,14 +68,11 @@ const showPassWordDialog = ref(false)
 
 const infoText = ref('get password')
 let resolveSecret: (secret: string) => void
-onMounted(async () => {
-  const tm = await tystate.getTaskManager()
-  tm.secretStore.requestInfos.subscribe((data) => {
-    if (data.type === 'newSecret') {
-      showPassWordDialog.value = true
-      infoText.value = `Please enter the secret '${data.payload.secretName}' for '${data.payload.id}'`
-      resolveSecret = data.respond
-    }
+onMounted(() => {
+  tystate.secretStore.askNewKeyStream.subscribe(({ args: [{ id, secretName }], respond }) => {
+    showPassWordDialog.value = true
+    infoText.value = `Please enter the secret '${secretName}' for '${id}'`
+    resolveSecret = respond
   })
 })
 
@@ -128,7 +125,11 @@ async function generateReport(details = false, onlyFirst = false) {
 
   diagnostics.value = `report_date: ${new Date().toISOString()}\n`
 
-  diagnostics.value += await runTest('Test Secret Store', testSecretStore, details)
+  diagnostics.value += await runTest(
+    'Test Secret Store',
+    testSecretStore(tystate.secretStore),
+    details,
+  )
 
   // move this line behind the "first test"  in order to be able to test only the first test :)
   if (onlyFirst) {

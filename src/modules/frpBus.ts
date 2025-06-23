@@ -7,7 +7,7 @@ import type { Asyncify } from './taskyon/types'
  * A simple implementation of an FRP bus using streams and operators.
  * This is a basic implementation and can be extended with more operators as needed.
  */
-export type Observer<T> = (value: T) => void
+export type Observer<T> = (value: T) => void | Promise<void>
 export type Unsubscribe = () => void
 
 export interface Stream<T> {
@@ -29,7 +29,7 @@ export function createStream<T>(): { stream: Stream<T>; emit: (value: T) => void
     },
     emit(value: T) {
       // Create a copy to avoid issues if observers unsubscribe during iteration
-      ;[...observers].forEach((observer) => observer(value))
+      ;[...observers].forEach((observer) => void observer(value))
     },
   }
 }
@@ -53,21 +53,6 @@ export function filter<A>(
     }
   })
   return stream
-}
-
-// Operator: prepend an initial value to the source stream
-export function startWith<T>(source: Stream<T> | Asyncify<Stream<T>>, initial: T): Stream<T> {
-  return {
-    subscribe: (observer: Observer<T>): Unsubscribe => {
-      // Immediately emit the initial value to the new subscriber
-      observer(initial)
-      // Then subscribe to the source stream
-      const unsubscribe = source.subscribe(observer)
-      return () => {
-        void Promise.resolve(unsubscribe).then((resolvedUnsubscribe) => resolvedUnsubscribe())
-      }
-    },
-  }
 }
 
 /**

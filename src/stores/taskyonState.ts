@@ -18,7 +18,6 @@ import { setupIframeApi } from 'src/modules/taskyon/iframeApi'
 import { getDefaultParametersForTool, type InternalTool } from 'src/modules/taskyon/tools'
 import { useAppStateStore } from './appState'
 import { filter } from 'src/modules/frpBus'
-import { initializeSessionWithPasskey } from 'src/modules/cryptoSession'
 import { generateRsaOaepPair } from 'src/modules/crypto_webcrypto'
 import { setColors } from 'src/boot/brand-colors'
 import { setPrismTheme } from 'src/modules/markdownUtils '
@@ -221,14 +220,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       //       so recovery is currenty impossible. We would like to give te user the ability
       //       to save this recovery key somewhere else in order to be able to recover their passwords.
       async () => (await generateRsaOaepPair()).publicKey,
-      // Provide a default session key if encryption is enabled and none is supplied
-      async () => {
-        // AES-GCM 256-bit key, extractable for demo purposes
-        return window.crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
-          'encrypt',
-          'decrypt',
-        ])
-      },
     ))()
 
   // Access taskManagerInstance and addTask2Tree without redundant awaits
@@ -239,11 +230,24 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return instance['secretStore']
   })
 
-  secretStore.requestInfos.subscribe((requestInfo) => {
-    if (requestInfo.type === 'sessionKey') {
-      void initializeSessionWithPasskey('typassid', 'tysessionid')
-      // TODO: we need to return the session key back to our secretStore...
-    }
+  // Use a fixed key for demo purposes (not secure for production!)
+  const fixedKeyBytes = new Uint8Array([
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+    27, 28, 29, 30, 31, 32,
+  ]) // 32 bytes = 256 bits
+
+  secretStore.askSessionKeyStream.subscribe(async ({ respond }) => {
+    // Import the fixed key as an AES-GCM CryptoKey
+    // this means our secretStore is "de-facto" non encrypted
+    // TODO: generate a good session key by either using passKey or a password.
+    const key = await window.crypto.subtle.importKey(
+      'raw',
+      fixedKeyBytes,
+      { name: 'AES-GCM' },
+      true,
+      ['encrypt', 'decrypt'],
+    )
+    respond(key)
   })
 
   // TODO: use the proxies below to replae the "getTaskmanager" and all of that..

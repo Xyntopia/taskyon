@@ -14,25 +14,24 @@ import { zodToYamlString } from '../yamlUtils'
 import z from 'zod'
 import type { JSONSchema7 } from 'json-schema'
 import { jsonSchemaToYamlString } from '../yamlUtils'
+import type { SecretStore } from '../crudWrapper'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 
-export async function testSecretStore() {
+export const testSecretStore = (secretStore: SecretStore) => async () => {
   console.log('request a random secret from the store')
 
-  const tm = await tystate.getTaskManager()
-
   const secretName = 'MYTESTTOKEN'
-  const MYTESTTOKEN = await tm.secretStore.getSecret('diagnostics', secretName)
-  await tm.secretStore.deleteSecret('diagnostics', secretName)
+  const MYTESTTOKEN = await secretStore.getSecret('diagnostics', secretName)
+  await secretStore.deleteSecret('diagnostics', secretName)
 
   // Generate a random string as the test secret
   const test_secret = Math.random().toString(36).slice(2) + Date.now().toString()
-  await tm.secretStore.setSecret('diagnostics', secretName, test_secret)
-  const returned_secret = await tm.secretStore.getSecret('diagnostics', secretName)
+  await secretStore.setSecret('diagnostics', secretName, test_secret)
+  const returned_secret = await secretStore.getSecret('diagnostics', secretName)
 
-  const undefinedSecret = await tm.secretStore.getSecret('diagnostics', 'unknown_secret')
+  const undefinedSecret = await secretStore.getSecret('diagnostics', 'unknown_secret')
 
   return {
     MYTESTTOKEN,
