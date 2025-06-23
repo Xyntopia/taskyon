@@ -14,16 +14,13 @@ import { type InternalTool } from './tools'
 import { type MangoQuery } from 'rxdb'
 import { load } from 'js-yaml'
 import { processMarkdown } from 'src/modules/taskyon/taskUtils'
-import type { EncryptedDataRow } from '../crudWrapper'
 import {
   createCombinedCrudWrapper,
   createEnhancedCrudWrapper,
   createMapCrudWrapper,
-  createPgLiteCrudWrapper,
   createVectorStore,
   withLiveStreams,
   withLocking,
-  withSecretStore,
   type CrudWrapper,
 } from '../crudWrapper'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
@@ -480,10 +477,7 @@ export interface TaskTreeNode {
   to the UI. We could have used the function of RxDB for this. But this approach would have been
   less flexible...
 */
-export async function useTyTaskManager(
-  publicRecoveryKey: () => Promise<CryptoKey>,
-  vectorizerModel?: string,
-) {
+export async function useTyTaskManager(vectorizerModel?: string) {
   console.log('Initialize task manager.')
 
   console.log('initializing taskyondb')
@@ -614,19 +608,6 @@ export async function useTyTaskManager(
       tableName: 'debugDb',
     },
     new Map<string, TaskNodeMeta>(),
-  )
-
-  const secretStore = withSecretStore(
-    createCombinedCrudWrapper([
-      createMapCrudWrapper(new Map<string, EncryptedDataRow>()),
-      await createPgLiteCrudWrapper<EncryptedDataRow>(tySqlDb, {
-        tableName: 'vault',
-      }),
-    ]),
-    publicRecoveryKey,
-    // TODO: enable encryption as soon
-    //       as we ahve found a comfortable and safe way to do so
-    { encryption: false },
   )
 
   async function countTasks() {
@@ -1138,7 +1119,6 @@ export async function useTyTaskManager(
     ...defaultMode,
     ...fm,
     getTaskIdChain,
-    secretStore,
     getTaskChain,
     convertTaskIDs,
     buildSiblingChain,

@@ -23,6 +23,14 @@ import { localVectorStore } from '../tools/localVectorStore'
 import { proceduralTools } from '../tools/proceduralGraphics'
 import { wfcGenerator } from '../tools/wavefunctioncollapse'
 import { createOAuthTool } from '../tools/authTools'
+import type { EncryptedDataRow } from '../crudWrapper'
+import {
+  createCombinedCrudWrapper,
+  createMapCrudWrapper,
+  createPgLiteCrudWrapper,
+  withSecretStore,
+} from '../crudWrapper'
+import { getDatabase } from '../pglite.api'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -35,6 +43,7 @@ export async function initTaskyon(
   // it is running in.
   EnvironmentTools: InternalTool[],
   publicRecoveryKey: () => Promise<CryptoKey>,
+  sessionKey: () => Promise<CryptoKey>,
 ) {
   const ToolList: InternalTool[] = [
     ...smallHelperTools,
@@ -53,10 +62,19 @@ export async function initTaskyon(
     ...EnvironmentTools,
   ]
 
-  const taskManagerInstance = await useTyTaskManager(
+  const taskManagerInstance = await useTyTaskManager(llmSettings.vectorizationModel)
+
+  const secretStore = withSecretStore(
+    createCombinedCrudWrapper([
+      createMapCrudWrapper(new Map<string, EncryptedDataRow>()),
+      await createPgLiteCrudWrapper<EncryptedDataRow>(await getDatabase('taskyon'), {
+        tableName: 'vault',
+      }),
+    ]),
     publicRecoveryKey,
-    llmSettings.vectorizationModel,
+    sessionKey,
   )
+
   console.log('finished taskManager initialization')
 
   // add tools which have access to the taskManagerInstance itself
@@ -73,7 +91,7 @@ export async function initTaskyon(
     createChooseTool(taskManagerInstance),
     taskSearcher(taskManagerInstance),
     createAddNewToolTool(),
-    createOAuthTool(taskManagerInstance.secretStore),
+    createOAuthTool(secretStore),
   )
   taskManagerInstance.addDefaultTools(ToolList)
   void taskManagerInstance.updateToolDefinitions()
@@ -81,7 +99,11 @@ export async function initTaskyon(
   // keys could porentially be reactive here, so in theory, when they change in the GUI,
   // taskyon should automatically pick up on this...
   console.log('starting taskyon worker')
-  const { workerStream, workerStop, queueTask } = runTaskWorker(llmSettings, taskManagerInstance)
+  const { workerStream, workerStop, queueTask } = runTaskWorker(
+    llmSettings,
+    taskManagerInstance,
+    secretStore,
+  )
 
   return {
     taskManagerInstance,
@@ -89,5 +111,6 @@ export async function initTaskyon(
     chatCompletionStream,
     workerStop,
     queueTask,
+    secretStore,
   }
 }

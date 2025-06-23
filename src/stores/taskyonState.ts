@@ -201,19 +201,33 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       stateRefs.llmSettings,
       stateRefs.keys,
       defineTyGuiTools(),
+      // TODO: right now, we're simply generating a reandom keypair for every launch
+      //       so recovery is currenty impossible. We would like to give te user the ability
+      //       to save this recovery key somewhere else in order to be able to recover their passwords.
       async () => (await generateRsaOaepPair()).publicKey,
+      // Provide a default session key if encryption is enabled and none is supplied
+      async () => {
+        // AES-GCM 256-bit key, extractable for demo purposes
+        return window.crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
+          'encrypt',
+          'decrypt',
+        ])
+      },
     ))()
 
   // Access taskManagerInstance and addTask2Tree without redundant awaits
   const getTaskManager = async () => (await initTaskyonPromise)['taskManagerInstance']
 
-  void getTaskManager().then((tm) => {
-    tm.secretStore.requestInfos.subscribe((requestInfo) => {
-      if (requestInfo.type === 'sessionKey') {
-        void initializeSessionWithPasskey('typassid', 'tysessionid')
-        // TODO: we need to return the session key back to our secretStore...
-      }
-    })
+  const secretStore = asyncProxy(async () => {
+    const instance = await initTaskyonPromise
+    return instance['secretStore']
+  })
+
+  secretStore.requestInfos.subscribe((requestInfo) => {
+    if (requestInfo.type === 'sessionKey') {
+      void initializeSessionWithPasskey('typassid', 'tysessionid')
+      // TODO: we need to return the session key back to our secretStore...
+    }
   })
 
   // TODO: use the proxies below to replae the "getTaskmanager" and all of that..
@@ -599,6 +613,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   }
 
   return {
+    secretStore,
     getTaskMetaRef,
     setNewContentDraft,
     setContentDraftFromTask,

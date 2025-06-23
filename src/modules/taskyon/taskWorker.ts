@@ -4,7 +4,7 @@ import { type TyTaskManager } from './taskManager'
 import { handleFunctionExecution, taskResult } from './tools'
 import { createAsyncQueue, sleep } from '../utils'
 import { createChatCompletionTask } from '../tools/chatCompletionTool'
-import type { CrudWrapper } from '../crudWrapper'
+import type { CrudWrapper, SecretStore } from '../crudWrapper'
 import { createStream } from '../frpBus'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
 
@@ -13,6 +13,7 @@ import { sha256UrlSafeHash } from '../crypto_webcrypto'
 async function safeExecuteTask(
   task: TaskNode,
   taskManager: TyTaskManager,
+  secretStore: SecretStore,
   stopSignal: AbortSignal,
 ): Promise<unknown> {
   if (task.content.type === 'functioncall') {
@@ -28,12 +29,12 @@ async function safeExecuteTask(
         taskChain,
         getSecret: async (name) => {
           console.log('get secret name', name)
-          const secr = await taskManager.secretStore.getSecret(toolId, name)
+          const secr = await secretStore.getSecret(toolId, name)
           return secr ?? undefined
         },
         setSecret: async (name, value) => {
           console.log('set secret name', name)
-          await taskManager.secretStore.setSecret(toolId, name, value)
+          await secretStore.setSecret(toolId, name, value)
         },
         stopSignal,
         // if w are dealing with a tool definition use that id. otherwise generate an id on the fly )
@@ -294,6 +295,7 @@ const createTaskProcessor = (
   taskisInLoop: (taskId: string) => void,
   taskOutOfLoop: (taskId: string) => void,
   stopAllTasks: (message: string) => void,
+  secretStore: SecretStore,
 ) => {
   // this is uses to track how long a list of tasks has been processing
   const handleError = createHandleError(stopAllTasks, taskManager, currentTaskCtrl, queueTask)
@@ -339,7 +341,7 @@ const createTaskProcessor = (
       const selectedModel = getApiConfigCopy(llmSettings, llmSettings.selectedApi)?.selectedModel
       let newTasks: TaskNode[][] = []
       try {
-        const funcR = await safeExecuteTask(task, taskManager, currentTaskCtrl.signal)
+        const funcR = await safeExecuteTask(task, taskManager, secretStore, currentTaskCtrl.signal)
 
         // We check the result of the task here to see whether it contains
         // a lists of tasks. If thats the case we return
@@ -418,6 +420,7 @@ const setupRun = (
   stopAllTasks: (message: string) => void,
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
+  secretStore: SecretStore,
 ) => {
   console.log('setting up task worker run...')
   const currentTaskCtrl: AbortController = new AbortController()
@@ -440,6 +443,7 @@ const setupRun = (
     taskisInLoop,
     taskOutOfLoop,
     stopAllTasks,
+    secretStore,
   )
 
   const run = async () => {
@@ -469,7 +473,11 @@ const setupRun = (
   }
 }
 
-export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManager) {
+export function runTaskWorker(
+  llmSettings: llmSettings,
+  taskManager: TyTaskManager,
+  secretStore: SecretStore,
+) {
   console.log('starting task worker listener...')
 
   // create all variables that we want to access from outside
@@ -496,7 +504,7 @@ export function runTaskWorker(llmSettings: llmSettings, taskManager: TyTaskManag
         run,
         queueTask: newQueueTask,
         currentTaskCtrl: newTaskCtrl,
-      } = setupRun(taskProcessingStream.emit, stopAllTasks, llmSettings, taskManager)
+      } = setupRun(taskProcessingStream.emit, stopAllTasks, llmSettings, taskManager, secretStore)
       currentTaskCtrl = newTaskCtrl
       queueTask = newQueueTask
       console.log('restarting task worker run...')
