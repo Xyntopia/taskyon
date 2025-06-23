@@ -85,3 +85,53 @@ export function merge<T extends unknown[]>(
 
   return stream
 }
+
+export function requireSubscribers<T>(
+  source: Stream<T> | Asyncify<Stream<T>>,
+  min: number = 1,
+): Stream<T> {
+  const { stream, emit } = createStream<T>()
+  let subscriberCount = 0
+
+  // Subscribe to the source stream
+  void source.subscribe((value) => {
+    if (subscriberCount < min) {
+      throw new Error(`Not enough subscribers: got ${subscriberCount}, need at least ${min}`)
+    }
+    emit(value)
+  })
+
+  return {
+    subscribe: (observer: Observer<T>): Unsubscribe => {
+      subscriberCount++
+      const unsubscribe = stream.subscribe(observer)
+      return () => {
+        subscriberCount--
+        void Promise.resolve(unsubscribe).then((resolvedUnsubscribe) => resolvedUnsubscribe())
+      }
+    },
+  }
+}
+
+export function withDefault<T>(source: Stream<T>, defaultValue: T, timeout = 0): Stream<T> {
+  const { stream, emit } = createStream<T>()
+
+  void source.subscribe((value) => emit(value))
+
+  return {
+    subscribe: (observer: Observer<T>): Unsubscribe => {
+      let emitted = false
+      const unsubscribe = stream.subscribe((value) => {
+        emitted = true
+        observer(value)
+      })
+      // If no value is emitted within the timeout, emit the default
+      if (timeout >= 0) {
+        setTimeout(() => {
+          if (!emitted) observer(defaultValue)
+        }, timeout)
+      }
+      return unsubscribe
+    },
+  }
+}
