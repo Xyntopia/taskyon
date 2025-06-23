@@ -7,7 +7,7 @@ import {
   generateRandomEncryptionKey,
 } from './crypto_webcrypto'
 import type { Stream } from './frpBus'
-import { createStream, filter } from './frpBus'
+import { createStream, filter, streamProcedureCall } from './frpBus'
 import type { PgLiteOptions } from './pglite.api'
 import { createVecPgLiteTable, type TyPGDB } from './pglite.api'
 import { useNlpWorker } from './taskyon/webWorkerApi'
@@ -422,7 +422,6 @@ export type EncryptedDataRow = {
 }
 
 type AskSession = () => Promise<CryptoKey>
-type AskNewSecret = (id: string | number, name: string) => Promise<string>
 
 /**
  * Wraps a CRUD interface to transparently encrypt and decrypt data rows.
@@ -505,28 +504,30 @@ export function withEncryption(
 export const withSecretStore = (
   base: CrudWrapper<EncryptedDataRow>,
   publicRecoveryKey: () => Promise<CryptoKey>,
-  getSessionKey: () => Promise<CryptoKey>,
 ) => {
-  // if we want an "unencrypted" db, simply assign a default session and random publicRecoveryKey
+  const { emitFunc: getSessionKey, stream: askSessionKeyStream } = streamProcedureCall<
+    [],
+    CryptoKey
+  >(1000)
+  const { emitFunc: getNewKey, stream: askNewKeyStream } = streamProcedureCall<
+    [{ id: string | number; secretName: string }],
+    string
+  >(1000)
+
   const encryptedCrud = withEncryption(base, publicRecoveryKey, getSessionKey)
   type SecretData = Record<string, string>
   return {
     /**
      * Stores or updates a secret for a given ID and secret name.
      */
-    async setSecret(
-      id: string | number,
-      secretName: string,
-      secretData: string,
-      askSession?: AskSession,
-    ): Promise<void> {
+    async setSecret(id: string | number, secretName: string, secretData: string): Promise<void> {
       // Get the existing secrets for the ID
       const existingSecrets: SecretData =
-        ((await encryptedCrud.get(id, askSession)) as SecretData) || {}
+        ((await encryptedCrud.get(id, getSessionKey)) as SecretData) || {}
       // Add or update the secret
       existingSecrets[secretName] = secretData
-      // Save the updated secrets
-      await encryptedCrud.set(id, existingSecrets, askSession)
+      // Save the updated secretss
+      await encryptedCrud.set(id, existingSecrets, getSessionKey)
     },
 
     /**
@@ -535,18 +536,17 @@ export const withSecretStore = (
     async getSecret(
       id: string | number,
       secretName: string,
-      askSession?: AskSession,
-      askNew?: AskNewSecret,
+      askNew: boolean,
     ): Promise<string | null> {
       // Get the existing secrets for the ID
-      const existingSecrets = (await encryptedCrud.get(id, askSession)) as SecretData
+      const existingSecrets = (await encryptedCrud.get(id, getSessionKey)) as SecretData
       // Return the specific secret if it exists
       let secret = existingSecrets ? existingSecrets[secretName] || null : null
 
       if (!secret && askNew) {
-        secret = await askNew(id, secretName)
+        secret = await getNewKey({ id, secretName })
         console.log('received new secret:', id, secretName)
-        await this.setSecret(id, secretName, secret, askSession)
+        await this.setSecret(id, secretName, secret)
       }
       return secret
     },
@@ -554,30 +554,23 @@ export const withSecretStore = (
     /**
      * Deletes a secret by ID and secret name.
      */
-    async deleteSecret(
-      id: string | number,
-      secretName: string,
-      askSession?: AskSession,
-    ): Promise<void> {
+    async deleteSecret(id: string | number, secretName: string): Promise<void> {
       // Get the existing secrets for the ID
-      const existingSecrets = (await encryptedCrud.get(id, askSession)) as SecretData
+      const existingSecrets = (await encryptedCrud.get(id, getSessionKey)) as SecretData
       if (existingSecrets && secretName in existingSecrets) {
         // Delete the specific secret
         delete existingSecrets[secretName]
         // Save the updated secrets
-        await encryptedCrud.set(id, existingSecrets, askSession)
+        await encryptedCrud.set(id, existingSecrets, getSessionKey)
       }
     },
 
     /**
      * Lists all secrets for a given ID.
      */
-    async listSecrets(
-      id: string | number,
-      askSession?: AskSession,
-    ): Promise<Record<string, string>> {
+    async listSecrets(id: string | number): Promise<Record<string, string>> {
       // Get all secrets for the ID
-      return ((await encryptedCrud.get(id, askSession)) as SecretData) || {}
+      return ((await encryptedCrud.get(id, getSessionKey)) as SecretData) || {}
     },
 
     /**
@@ -586,6 +579,9 @@ export const withSecretStore = (
     async clear(): Promise<void> {
       await encryptedCrud.clear()
     },
+
+    askSessionKeyStream,
+    askNewKeyStream,
   }
 }
 

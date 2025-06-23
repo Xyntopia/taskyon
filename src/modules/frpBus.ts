@@ -113,25 +113,38 @@ export function requireSubscribers<T>(
   }
 }
 
-export function withDefault<T>(source: Stream<T>, defaultValue: T, timeout = 0): Stream<T> {
-  const { stream, emit } = createStream<T>()
+export function streamProcedureCall<T extends unknown[], R>(timeoutMs?: number) {
+  const { stream, emit } = createStream<{
+    args: T
+    respond: (result: R) => void
+  }>()
 
-  void source.subscribe((value) => emit(value))
-
-  return {
-    subscribe: (observer: Observer<T>): Unsubscribe => {
-      let emitted = false
-      const unsubscribe = stream.subscribe((value) => {
-        emitted = true
-        observer(value)
-      })
-      // If no value is emitted within the timeout, emit the default
-      if (timeout >= 0) {
-        setTimeout(() => {
-          if (!emitted) observer(defaultValue)
-        }, timeout)
+  const emitFunc: (...args: T) => Promise<R> = (...args) => {
+    return new Promise<R>((resolve, reject) => {
+      let responded = false
+      let timeout: ReturnType<typeof setTimeout> | undefined
+      // Set up timeout for default or error
+      if (timeoutMs !== undefined) {
+        timeout = setTimeout(() => {
+          if (!responded) {
+            responded = true
+            // TODO: add default response here...
+            reject(new Error('No response within timeout'))
+          }
+        }, timeoutMs)
       }
-      return unsubscribe
-    },
+      emit({
+        args,
+        respond: (result: R) => {
+          if (!responded) {
+            responded = true
+            if (timeout) clearTimeout(timeout)
+            resolve(result)
+          }
+        },
+      })
+    })
   }
+
+  return { emitFunc, stream: requireSubscribers(stream, 1) }
 }
