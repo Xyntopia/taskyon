@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { watch, computed, ref } from 'vue'
-import type { Asyncify, TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
+import type { TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
 import {
   type Model,
   TaskNode,
@@ -52,23 +52,39 @@ import { onScopeDispose } from 'vue'
  * apiProxy.saveData("example").then(() => console.log("Saved!"));
  * ```
  */
-function asyncProxy<T extends Record<keyof T, (...args: Parameters<T[keyof T]>) => unknown>>(
-  initializer: () => Promise<T>,
-) {
-  const instance = initializer()
+// Utility type: For each function property, make it async; leave others as-is
+type Asyncify<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => infer R
+    ? (...args: A) => Promise<Awaited<R>>
+    : T[K]
+}
+
+// Helper: Await if value is a Promise, else return as-is
+function maybeAwait<T>(value: T | Promise<T>): Promise<T> {
+  return Promise.resolve(value)
+}
+
+export function asyncProxy<T extends object>(initializer: () => Promise<T>): Asyncify<T> {
+  const instancePromise = initializer()
 
   return new Proxy(
     {},
     {
-      get:
-        (_, prop) =>
-        (...args: Parameters<T[keyof T]>) =>
-          instance.then((obj) => {
-            const method = obj[prop as keyof T]
-            if (!method)
-              throw new Error(`Method ${String(prop)} does not exist on the target object`)
-            return method(...args)
-          }),
+      get(_, prop: string | symbol) {
+        // Return a function if the property is a function on the target
+        return (...args: unknown[]) =>
+          instancePromise.then((instance) => {
+            const value = instance[prop as keyof T]
+            if (typeof value === 'function') {
+              const result = value.apply(instance, args)
+              // Await if it's a promise, else just return
+              return maybeAwait(result)
+            } else {
+              // Non-function property: just return it
+              return value
+            }
+          })
+      },
     },
   ) as Asyncify<T>
 }
