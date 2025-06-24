@@ -140,8 +140,12 @@ export function createMultiButtonPlugin(
   buttons: {
     label: string
     languages: RegExp
-    // now receives full HTML, not just raw code
     callback: (html: string, lang: string, containerId: string) => void | Promise<void>
+    feedback?: {
+      successLabel: string
+      durationMs: number
+      failureLabel?: string
+    }
   }[],
 ) {
   // 1) Setup a single message listener
@@ -164,30 +168,32 @@ export function createMultiButtonPlugin(
   const plugin = createFenceTransformPlugin(langMatcher, (_token: Token, lang, content) => {
     const uid = `code-${Math.random().toString(36).slice(2)}`
     const blockId = `block-${Math.random().toString(36).slice(2)}`
-
-    const contentWithId = content.replace('<pre', `<pre id="${uid}"`)
+    const htmlWithId = content.replace('<pre', `<pre id="${uid}"`)
 
     const btnsHtml = buttons
       .filter((b) => b.languages.test(lang))
       .map((b) => {
+        // pull feedback values or defaults
+        const success = b.feedback?.successLabel ?? '✓'
+        const dur = b.feedback?.durationMs ?? 2000
         return `
           <button
+            id="btn-${uid}-${b.label.replace(/\s+/g, '-')}"
             class="btn-${b.label.replace(/\s+/g, '-').toLowerCase()}"
             onclick="
-              // grab the full HTML of the entire block
-              const html = document.getElementById('${blockId}').innerHTML;
+              // 1) immediate feedback
+              const orig = this.textContent;
+              this.textContent = orig+' ${success}';
+              setTimeout(() => { this.textContent = orig }, ${dur});
+              // 2) notify parent for the real work
               const msg = {
                 type: '${b.label}',
-                html,
+                html: document.getElementById('${blockId}').innerHTML,
                 lang: '${lang}',
                 containerId: '${blockId}'
               };
-              // post it upstream
-              if (window.parent !== window) {
-                window.parent.postMessage(msg, '*');
-              } else {
-                window.postMessage(msg, '*');
-              }
+              const tgt = window.parent !== window ? window.parent : window;
+              tgt.postMessage(msg, '*');
             "
           >${b.label}</button>
         `
@@ -196,7 +202,7 @@ export function createMultiButtonPlugin(
 
     return `
       <div class="code-block-with-btns" id="${blockId}">
-        ${contentWithId}
+        ${htmlWithId}
         <div class="code-buttons">
           ${btnsHtml}
           <span class="langlabel">${lang}</span>
