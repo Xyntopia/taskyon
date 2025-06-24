@@ -126,11 +126,17 @@
         <q-btn flat label="Close" @click="showPopupMessage = false" />
       </q-card>
     </q-dialog>
+    <!-- Ask for Passwords... -->
+    <password-request-dialog
+      v-model="showPassWordDialog"
+      :info-text="infoText"
+      @ok="resolveSecret"
+    />
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { ref, type UnwrapRef, computed, watch } from 'vue'
+import { ref, type UnwrapRef, computed, watch, onMounted } from 'vue'
 import { useQuasar, scroll } from 'quasar'
 import { useTaskyonStore } from 'stores/taskyonState'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
@@ -145,6 +151,7 @@ import LLMProviders from 'components/taskyon/LLMProviders.vue'
 import ToggleButton from 'src/components/ToggleButton.vue'
 import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import FileDropzone from 'src/components/FileDropzone.vue'
+import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 
 const props = defineProps<{ detailed?: boolean; treeBrowser?: boolean; rootTaskId?: string }>()
 const showAllTasks = ref<boolean>(props.detailed)
@@ -176,6 +183,17 @@ const fileAttachments = ref<File[]>([]) // holds all attached files as a "taskli
 const loadingFromGdrive = ref(false)
 const popupMessage = ref<string | undefined>(undefined)
 const showPopupMessage = ref(false)
+
+const showPassWordDialog = ref(false)
+const infoText = ref('get password')
+let resolveSecret: (secret: string) => void
+onMounted(() => {
+  void tystate.secretStore.onNewSecret(({ args: [{ id, secretName }], respond }) => {
+    showPassWordDialog.value = true
+    infoText.value = `Please enter the secret '${secretName}' for '${id}'`
+    resolveSecret = respond
+  })
+})
 
 const showIntroduction = computed(
   () => !(state.llmSettings.selectedApi && state.keys[state.llmSettings.selectedApi]),
