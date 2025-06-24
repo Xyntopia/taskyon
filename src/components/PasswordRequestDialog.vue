@@ -45,5 +45,6 @@ const emit = defineEmits<{
 const submit = () => {
   emit('ok', newSecret.value)
   show.value = false
+  newSecret.value = ''
 }
 </script>

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { watch, computed, ref } from 'vue'
-import type { TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
+import type { Asyncify, TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
 import {
   type Model,
   TaskNode,
@@ -51,13 +51,6 @@ import { onScopeDispose } from 'vue'
  * apiProxy.saveData("example").then(() => console.log("Saved!"));
  * ```
  */
-// Utility type: For each function property, make it async; leave others as-is
-type Asyncify<T> = {
-  [K in keyof T]: T[K] extends (...args: infer A) => infer R
-    ? (...args: A) => Promise<Awaited<R>>
-    : T[K]
-}
-
 // Helper: Await if value is a Promise, else return as-is
 function maybeAwait<T>(value: T | Promise<T>): Promise<T> {
   return Promise.resolve(value)
@@ -236,7 +229,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     27, 28, 29, 30, 31, 32,
   ]) // 32 bytes = 256 bits
 
-  secretStore.askSessionKeyStream.subscribe(async ({ respond }) => {
+  void secretStore.onSessionKey(async ({ respond }) => {
     // Import the fixed key as an AES-GCM CryptoKey
     // this means our secretStore is "de-facto" non encrypted
     // TODO: generate a good session key by either using passKey or a password.

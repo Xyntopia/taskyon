@@ -578,8 +578,10 @@ export const withSecretStore = (
       await encryptedCrud.clear()
     },
 
-    askSessionKeyStream,
-    askNewKeyStream,
+    onSessionKey: (...args: Parameters<typeof askSessionKeyStream.subscribe>) =>
+      askSessionKeyStream.subscribe(...args),
+    onNewSecret: (...args: Parameters<typeof askNewKeyStream.subscribe>) =>
+      askNewKeyStream.subscribe(...args),
   }
 }
 
