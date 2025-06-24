@@ -27,9 +27,9 @@ async function safeExecuteTask(
       const toolId = def?.id ?? tool.name + (await sha256UrlSafeHash(tool.code))
       const funcR = await handleFunctionExecution(func, tool, stopSignal, {
         taskChain,
-        getSecret: async (name) => {
+        getSecret: async (name, askNew) => {
           console.log('get secret name', name)
-          const secr = await secretStore.getSecret(toolId, name)
+          const secr = await secretStore.getSecret(toolId, name, askNew)
           return secr ?? undefined
         },
         setSecret: async (name, value) => {

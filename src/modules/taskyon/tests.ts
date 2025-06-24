@@ -24,15 +24,15 @@ export const testSecretStore = (secretStore: Asyncify<SecretStore>) => async () 
 
   const secretName = 'MYTESTTOKEN'
   await secretStore.deleteSecret('diagnostics', secretName)
-  const MYTESTTOKEN = await secretStore.getSecret('diagnostics', secretName)
+  const MYTESTTOKEN = await secretStore.getSecret('diagnostics', secretName, true)
 
   // Generate a random string as the test secret
   const test_secret = Math.random().toString(36).slice(2) + Date.now().toString()
   await secretStore.setSecret('diagnostics', secretName, test_secret)
-  const returned_secret = await secretStore.getSecret('diagnostics', secretName)
+  const returned_secret = await secretStore.getSecret('diagnostics', secretName, true)
 
   await secretStore.deleteSecret('diagnostics', 'unknown_secret')
-  const undefinedSecret = await secretStore.getSecret('diagnostics', 'unknown_secret')
+  const undefinedSecret = await secretStore.getSecret('diagnostics', 'unknown_secret', true)
 
   return {
     MYTESTTOKEN,

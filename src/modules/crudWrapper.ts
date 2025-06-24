@@ -504,7 +504,6 @@ export function withEncryption(
 export const withSecretStore = (
   base: CrudWrapper<EncryptedDataRow>,
   publicRecoveryKey: () => Promise<CryptoKey>,
-  askNew: boolean = false,
   askTimeoutMs = 100000,
 ) => {
   const { emitFunc: getSessionKey, stream: askSessionKeyStream } = streamProcedureCall<
@@ -535,7 +534,11 @@ export const withSecretStore = (
     /**
      * Retrieves a secret by ID and secret name. If not found, requests a new secret.
      */
-    async getSecret(id: string | number, secretName: string): Promise<string | null> {
+    async getSecret(
+      id: string | number,
+      secretName: string,
+      askNew: boolean,
+    ): Promise<string | null> {
       // Get the existing secrets for the ID
       const existingSecrets = (await encryptedCrud.get(id, getSessionKey)) as SecretData
       // Return the specific secret if it exists

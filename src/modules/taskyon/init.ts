@@ -71,7 +71,6 @@ export async function initTaskyon(
       }),
     ]),
     publicRecoveryKey,
-    true, // make sure, we always ask for new secrets, if they don't exist yet :)
   )
 
   console.log('finished taskManager initialization')

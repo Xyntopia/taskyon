@@ -220,7 +220,7 @@ export type FunctionCall = z.infer<typeof FunctionCall>
 
 export type toolContext = {
   taskChain: TaskNode[]
-  getSecret: (name: string) => Promise<string | undefined>
+  getSecret: (name: string, askNew: boolean) => Promise<string | undefined>
   setSecret: (name: string, value: string) => Promise<void>
   stopSignal: AbortSignal
   toolId: string
