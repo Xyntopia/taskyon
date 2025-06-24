@@ -57,6 +57,7 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
   .chat-drop-zone
     color: rgb($secondary)
 
+  // sizing of iframes etc...
   #chat-area
     display: flex
     flex-direction: column
@@ -119,6 +120,22 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
 
           .tyMarkdown
             align-self: auto
+
+  .task-container
+    position: relative
+
+    &:not(:has(.markdown-iframe))
+      .task-safety-icon
+        display: none
+
+    .task-safety-icon
+      position: absolute
+      top: -12px
+      right: 0px
+      width: 0.8em
+      height: 0.8em
+      color: rgba($primary,0.3)
+      z-index: 1000
 
   .task-display
     position: relative
@@ -239,6 +256,9 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
 
     .taskyon-control-button
       background-color: rgba($secondary,0.7)
+
+    .task-safety-icon
+      color: rgba($secondary,0.3)
 
     .task-buttons
       background: $dark

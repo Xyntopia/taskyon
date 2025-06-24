@@ -6,6 +6,7 @@
       {{ task.created_at ? new Date(task.created_at).toLocaleString() : '' }}
       <q-tooltip>{{ task.id }}</q-tooltip>
     </div>
+    <q-icon :name="matShield" class="task-safety-icon"></q-icon>
     <!--Message Display-->
     <div class="task-display">
       <!--task-header-->
@@ -96,7 +97,12 @@ import TokenUsage from 'components/taskyon/TokenUsage.vue'
 import type { TaskNode } from 'src/modules/taskyon/types'
 import { computed, defineAsyncComponent, ref } from 'vue'
 import TaskButtons from './TaskButtons.vue'
-import { matArrowDropDown, matArrowDropUp, matMonetizationOn } from '@quasar/extras/material-icons'
+import {
+  matArrowDropDown,
+  matArrowDropUp,
+  matMonetizationOn,
+  matShield,
+} from '@quasar/extras/material-icons'
 import { openrouterPricing } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useRouter } from 'vue-router'
