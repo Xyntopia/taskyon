@@ -255,4 +255,40 @@ export const windowManagerTool = createTool({
   },
 })
 
-export const appDevTools = [createNewWindowTool, windowManagerTool]
+export const createWaitForMessageTool = createTool({
+  name: 'waitForPostMessage',
+  description:
+    'Waits for and converts a specific window.postMessage event into structured data before continuing.',
+  parameters: {
+    type: 'object',
+    properties: {
+      messageId: { type: 'string', description: 'ID to listen for in event.data.messageId' },
+    },
+    required: ['messageId'],
+    additionalProperties: false,
+  } as const satisfies JSONSchema7,
+  async function({ messageId }) {
+    // pause here until the matching postMessage arrives
+    const data = await new Promise((resolve) => {
+      const listener = (event: MessageEvent) => {
+        if (event.data?.messageId === messageId) {
+          window.removeEventListener('message', listener)
+          resolve(event.data)
+        }
+      }
+      window.addEventListener('message', listener)
+    })
+
+    // once we have it, return it as a TaskResult
+    return makeTaskResult([
+      [
+        {
+          role: 'assistant',
+          content: { type: 'structured', data },
+        },
+      ],
+    ])
+  },
+})
+
+export const appDevTools = [createNewWindowTool, windowManagerTool, createWaitForMessageTool]

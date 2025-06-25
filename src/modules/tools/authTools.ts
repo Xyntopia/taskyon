@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, makeTaskResult } from '../taskyon/tools'
+import { createTool, createToolTask, makeTaskResult } from '../taskyon/tools'
 import type { SecretStore } from '../crudWrapper'
 
 declare global {
@@ -43,75 +43,55 @@ export function createLoginButton({
   return html
 }
 
+// Enhance createOAuthTool to wait for button press before opening popup
 export const createOAuthTool = (secretStore: SecretStore) => {
-  // Map to track open popups and their toolIds
   const openPopups = new Map<WindowProxy, string>()
+  const loginResolvers = new Map<string, (token: string) => void>()
 
-  // Function to open the OAuth popup and track it
-  function openAuthPopup({
-    oauthURL,
-    clientId,
-    scope,
-    toolId,
-  }: {
+  function openAuthPopup(params: {
     oauthURL: string
     clientId: string
     scope: string
     toolId: string
   }) {
+    const { oauthURL, clientId, scope, toolId } = params
     const startUrl = new URL(`${window.location.origin}/oauth/start`)
     startUrl.searchParams.set('svcUrl', oauthURL)
     startUrl.searchParams.set('cid', clientId)
     startUrl.searchParams.set('scope', scope)
 
     const popup = window.open(startUrl.toString(), `oauth:${oauthURL}`, `width=500,height=700`)
-    if (popup) {
-      openPopups.set(popup, toolId)
-    }
+    if (popup) openPopups.set(popup, toolId)
   }
 
-  // Listener for messages from popups
   function oauthPopupListener(event: MessageEvent) {
-    // Always check origin!
     if (event.origin !== window.location.origin) return
-
     const { type, accessToken } = event.data || {}
-    if (type !== 'oauth-access-token') return
+    if (type !== 'oauth-access-token' || !accessToken) return
 
-    // Find the toolId for this popup
     const toolId = openPopups.get(event.source as WindowProxy)
-    if (!toolId) return // Unknown popup
+    if (!toolId) return
 
-    // Handle the access token for this toolId
-    console.log(`🎉 Got token for tool: ${toolId}`, accessToken)
+    // prevent duplicate handling
+    event.stopImmediatePropagation()
+    event.stopPropagation()
 
-    // Clean up: close popup and remove from map
+    const resolver = loginResolvers.get(toolId)
+    if (resolver) {
+      resolver(accessToken)
+      loginResolvers.delete(toolId)
+    }
+
     try {
       ;(event.source as WindowProxy).close()
     } catch {
-      // Ignore errors when closing the popup
+      // Ignore errors when trying to close the popup
+      console.warn('Failed to close OAuth popup:', event.source)
     }
     openPopups.delete(event.source as WindowProxy)
-
-    void secretStore.setSecret(toolId, 'oauth-acces-token', accessToken)
   }
 
-  // Install the listener once
-  window.addEventListener('message', oauthPopupListener)
-
-  // --- Listener for button clicks from the iframe ---
-  function oauthButtonListener(event: MessageEvent) {
-    // The iframe's origin is likely "null", so we can't check origin here.
-    // If you want, you can check event.data for a known structure.
-    const { type, oauthURL, clientId, scope, toolId } = event.data || {}
-    if (type !== 'oauth-init') return
-    if (!oauthURL || !clientId || !toolId) return
-
-    openAuthPopup({ oauthURL, clientId, scope, toolId })
-  }
-
-  // Install the button listener once
-  window.addEventListener('message', oauthButtonListener)
+  window.addEventListener('message', oauthPopupListener, { capture: true })
 
   return createTool({
     name: 'ensureOauthLogin',
@@ -149,20 +129,51 @@ not working:
       required: ['oauthURL', 'clientId', 'toolId'],
       additionalProperties: false,
     } as const satisfies JSONSchema7,
-    function: ({ oauthURL, clientId, scope, toolId }) => {
-      // reuse your PKCE + iframe-ready login snippet
 
-      const buttonhtml = createLoginButton({ oauthURL, clientId, scope, toolId })
+    function: async ({ oauthURL, clientId, scope, toolId }, { taskChain }) => {
+      const prev = taskChain.at(-3)
+      const isReentry =
+        prev?.content.type === 'functioncall' && prev.content.data.name === 'ensureOauthLogin'
 
-      // TODO: return a siple "return" message, if the login was already succesful, otherwise
-      //       create the login button...
+      if (!isReentry) {
+        // FIRST CALL: render login button & requeue self
+        const html = createLoginButton({ oauthURL, clientId, scope, toolId })
+        return makeTaskResult([
+          [
+            { role: 'assistant', content: { type: 'message', data: html } },
+            createToolTask({
+              name: 'ensureOauthLogin',
+              arguments: { oauthURL, clientId, scope, toolId },
+            }),
+          ],
+        ])
+      }
+
+      // SECOND CALL: wait for button press message (oauth-init) then open popup
+      await new Promise<void>((resolve) => {
+        function handleInit(event: MessageEvent) {
+          const { type, oauthURL, clientId, toolId: tid } = event.data || {}
+          if (oauthURL && clientId && tid === toolId && type == 'oauth-init') {
+            window.removeEventListener('message', handleInit)
+            resolve()
+          }
+        }
+        window.addEventListener('message', handleInit)
+      })
+
+      // Now open the OAuth popup
+      openAuthPopup({ oauthURL, clientId, scope, toolId })
+
+      // await token
+      const token = await new Promise<string>((resolve) => {
+        loginResolvers.set(toolId, resolve)
+      })
+
+      // store secret and confirm
+      await secretStore.setSecret(toolId, 'oauth-access-token', token)
+
       return makeTaskResult([
-        [
-          {
-            role: 'assistant',
-            content: { type: 'message', data: buttonhtml },
-          },
-        ],
+        [{ role: 'assistant', content: { type: 'message', data: '🎉 Logged in successfully.' } }],
       ])
     },
   })

@@ -20,7 +20,7 @@ const getGitlabInfo = createTool({
   },
   function: async (_args, ctx) => {
     const GITLAB_BASE = 'https://gitlab.com/api/v4'
-    const TOKEN = await ctx.getSecret('oauth-acces-token')
+    const TOKEN = await ctx.getSecret('oauth-acces-token', false)
     if (!TOKEN) {
       return makeTaskResult([
         [
@@ -33,7 +33,7 @@ const getGitlabInfo = createTool({
               toolId: ctx.toolId,
             },
           }),
-          createToolTask({ name: 'getGitlabInfo', arguments: {} }),
+          //createToolTask({ name: 'getGitlabInfo', arguments: {} }),
         ],
       ])
     }
@@ -102,8 +102,9 @@ in gitlab. They should roughly follow the style of a "user story".`,
   function: async ({ issuelist, project }, ctx) => {
     const GITLAB_API_URL = await ctx.getSecret(
       `https://gitlab.com/api/v4/projects/${encodeURIComponent(project || '')}/issues`,
+      true,
     )
-    const GITLAB_ACCESS_TOKEN = await ctx.getSecret('oauth-acces-token') // Replace with actual project ID
+    const GITLAB_ACCESS_TOKEN = await ctx.getSecret('oauth-acces-token', false) // Replace with actual project ID
 
     if (!GITLAB_ACCESS_TOKEN) {
       // information needed to register with gitlab
@@ -118,10 +119,10 @@ in gitlab. They should roughly follow the style of a "user story".`,
               toolId: ctx.toolId,
             },
           }),
-          createToolTask({
+          /*createToolTask({
             name: 'issueListGenerator',
             arguments: { issuelist, project },
-          }),
+          }),*/
         ],
       ])
     }
