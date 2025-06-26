@@ -50,15 +50,17 @@
         class="col column justify-center items-center q-pa-sm welcome"
         style="max-width: 600px"
       >
-        <q-icon
-          class="q-pa-xl"
-          size="10rem"
-          name="svguse:/taskyon_logo_complex_animated.svg#taskyon"
+        <div
+          class="svg-container q-pa-xl"
           :style="{
             '--icon-primary': $q.dark.isActive ? 'white' : 'var(--q-primary)',
             '--icon-secondary': $q.dark.isActive ? 'var(--q-secondary)' : 'var(--q-primary)',
+            width: '20rem',
+            height: 'auto',
+            display: 'inline-block',
           }"
-        ></q-icon>
+          v-html="logoSvg"
+        />
         <component
           :is="ResetButton"
           v-if="ResetButton"
@@ -152,6 +154,7 @@ import ToggleButton from 'src/components/ToggleButton.vue'
 import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
+import logoSvg from '../../../public/taskyon_logo_complex_animated.svg?raw'
 
 const props = defineProps<{ detailed?: boolean; treeBrowser?: boolean; rootTaskId?: string }>()
 const showAllTasks = ref<boolean>(props.detailed)
