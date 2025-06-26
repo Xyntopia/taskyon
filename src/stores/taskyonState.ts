@@ -230,6 +230,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   ]) // 32 bytes = 256 bits
 
   void secretStore.onSessionKey(async ({ respond }) => {
+    console.log('importing fixed key for secretStore...')
     // Import the fixed key as an AES-GCM CryptoKey
     // this means our secretStore is "de-facto" non encrypted
     // TODO: generate a good session key by either using passKey or a password.

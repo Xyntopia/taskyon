@@ -118,6 +118,7 @@ export function streamProcedureCall<T extends unknown[], R>(timeoutMs?: number) 
           }
         }, timeoutMs)
       }
+      console.log('Emitting args:', args)
       emit({
         args,
         respond: (result: R) => {

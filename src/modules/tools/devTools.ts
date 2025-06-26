@@ -20,7 +20,9 @@ const getGitlabInfo = createTool({
   },
   function: async (_args, ctx) => {
     const GITLAB_BASE = 'https://gitlab.com/api/v4'
+    console.log('getGitlabInfo called', GITLAB_BASE)
     const TOKEN = await ctx.getSecret('oauth-acces-token', false)
+    console.log('getGitlabInfo oauth-access-token', TOKEN)
     if (!TOKEN) {
       return makeTaskResult([
         [
@@ -46,7 +48,8 @@ const getGitlabInfo = createTool({
     // 1) Profile
     const profileRes = await fetch(`${GITLAB_BASE}/user`, { headers })
     const profile = await profileRes.json()
-
+    console.log('getGitlabInfo profile', profile)
+    /*
     // 2) Projects you’re a member of
     const projectsRes = await fetch(`${GITLAB_BASE}/projects?membership=true&per_page=100`, {
       headers,
@@ -67,7 +70,7 @@ const getGitlabInfo = createTool({
           },
         },
       ],
-    ])
+    ])*/
   },
 })
 
@@ -270,4 +273,55 @@ const gitReader = createTool({
 }`,
 })
 
-export const devTools = [issueListGenerator, getGitlabInfo, gitReader]
+const testSecretStore = createTool({
+  name: 'testSecretStore',
+  description: 'Sets then gets a secret in the SecretStore to verify it works.',
+  parameters: {
+    type: 'object',
+    properties: {
+      key: {
+        type: 'string',
+        description: 'The secret key to test',
+        default: 'test-secret-key',
+      },
+      value: {
+        type: 'string',
+        description: 'The value to store under that key',
+        default: 'test-secret-value',
+      },
+    },
+    required: ['key', 'value'],
+    additionalProperties: false,
+  } as const satisfies JSONSchema7,
+  function: async ({ key, value }, ctx) => {
+    const TOKEN = await ctx.getSecret('oauth-access-token', false)
+    console.log('testSecretStore oauth-access-token', TOKEN)
+
+    // read it back (force unencrypted fetch)
+    const seeifitsthere = await ctx.getSecret(key, false)
+    console.log('seeifitsthere', seeifitsthere)
+
+    // store the secret
+    console.log('setting secret', key, value)
+    await ctx.setSecret(key, value)
+
+    console.log('retrieving secret', key, value)
+    // read it back (force unencrypted fetch)
+    const retrieved = await ctx.getSecret(key, false)
+
+    console.log('retrieved secret', retrieved)
+    return makeTaskResult([
+      [
+        {
+          role: 'assistant',
+          content: {
+            type: 'structured',
+            data: { key, setValue: value, retrievedValue: retrieved },
+          },
+        },
+      ],
+    ])
+  },
+})
+
+export const devTools = [issueListGenerator, getGitlabInfo, gitReader, testSecretStore]
