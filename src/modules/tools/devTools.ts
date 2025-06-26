@@ -21,7 +21,7 @@ const getGitlabInfo = createTool({
   function: async (_args, ctx) => {
     const GITLAB_BASE = 'https://gitlab.com/api/v4'
     console.log('getGitlabInfo called', GITLAB_BASE)
-    const TOKEN = await ctx.getSecret('oauth-acces-token', false)
+    const TOKEN = await ctx.getSecret('oauth-access-token', false)
     console.log('getGitlabInfo oauth-access-token', TOKEN)
     if (!TOKEN) {
       return makeTaskResult([
