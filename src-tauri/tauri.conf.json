@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../dist/spa",
     "devUrl": "http://localhost:9000",
-    "beforeDevCommand": "quasar dev",
-    "beforeBuildCommand": ""
+    "beforeDevCommand": "yarn dev",
+    "beforeBuildCommand": "yarn build"
   },
   "app": {
     "windows": [
