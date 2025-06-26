@@ -43,6 +43,17 @@ export function createLoginButton({
   return html
 }
 
+function withAbort<T>(signal: AbortSignal, p: Promise<T>) {
+  return Promise.race([
+    p,
+    new Promise<never>((_res, rej) =>
+      signal.addEventListener('abort', () => rej(new DOMException('Aborted', 'AbortError')), {
+        once: true,
+      }),
+    ),
+  ])
+}
+
 // Enhance createOAuthTool to wait for button press before opening popup
 export const createOAuthTool = (secretStore: SecretStore) => {
   const openPopups = new Map<WindowProxy, string>()
@@ -130,7 +141,7 @@ not working:
       additionalProperties: false,
     } as const satisfies JSONSchema7,
 
-    function: async ({ oauthURL, clientId, scope, toolId }, { taskChain }) => {
+    function: async ({ oauthURL, clientId, scope, toolId }, { taskChain, stopSignal }) => {
       // we need the 3rd last task, -1 is the current task and -2 is the button message UI
       const prev = taskChain.at(-3)
       const isReentry =
@@ -151,24 +162,34 @@ not working:
       }
 
       // SECOND CALL: wait for button press message (oauth-init) then open popup
-      await new Promise<void>((resolve) => {
-        function handleInit(event: MessageEvent) {
-          const { type, oauthURL, clientId, toolId: tid } = event.data || {}
-          if (oauthURL && clientId && tid === toolId && type == 'oauth-init') {
-            window.removeEventListener('message', handleInit)
-            resolve()
+      await withAbort(
+        stopSignal,
+        new Promise<void>((resolve) => {
+          function handleInit(event: MessageEvent) {
+            const { type, oauthURL, clientId, toolId: tid } = event.data || {}
+            if (type === 'oauth-init' && oauthURL && clientId && tid === toolId) {
+              window.removeEventListener('message', handleInit, { capture: true })
+              resolve()
+            }
           }
-        }
-        window.addEventListener('message', handleInit)
-      })
+          window.addEventListener('message', handleInit, { capture: true })
+        }),
+      )
 
       // Now open the OAuth popup
       openAuthPopup({ oauthURL, clientId, scope, toolId })
 
       // await token
-      const token = await new Promise<string>((resolve) => {
-        loginResolvers.set(toolId, resolve)
-      })
+      const token = await withAbort(
+        stopSignal,
+        new Promise<string>((resolve) => {
+          // install resolver; cleanup on abort happens in withAbort
+          loginResolvers.set(toolId, (tok) => {
+            stopSignal.removeEventListener('abort', () => {}) // no-op, since withAbort cleans this up
+            resolve(tok)
+          })
+        }),
+      )
 
       // store secret and confirm
       await secretStore.setSecret(toolId, 'oauth-access-token', token)
