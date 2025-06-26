@@ -50,6 +50,7 @@
         class="col column justify-center items-center q-pa-sm welcome"
         style="max-width: 600px"
       >
+        <!-- eslint-disable vue/no-v-html -->
         <div
           class="svg-container q-pa-xl"
           :style="{
@@ -61,6 +62,7 @@
           }"
           v-html="logoSvg"
         />
+        <!-- eslint-enable vue/no-v-html -->
         <component
           :is="ResetButton"
           v-if="ResetButton"
