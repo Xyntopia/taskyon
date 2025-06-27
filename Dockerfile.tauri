@@ -1,0 +1,57 @@
+# ───────────────────────────────────────────────────────
+# Stage 1: Build frontend (Vue/Quasar)
+# ───────────────────────────────────────────────────────
+FROM ubuntu:24.04 AS frontend-builder
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    YARN_CACHE_FOLDER=/tmp/.yarn-cache \
+    NODE_ENV=production
+
+# prerequisites: node, yarn, rustup dependencies
+RUN apt-get update && \
+    apt-get install -y curl gnupg build-essential libssl-dev pkg-config && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g yarn
+
+WORKDIR /app
+COPY package.json yarn.lock ./
+RUN --mount=type=cache,target=$YARN_CACHE_FOLDER yarn install --frozen-lockfile
+
+COPY . .
+# quasar build emits into src-tauri/target
+RUN yarn quasar prepare && yarn build
+
+# ───────────────────────────────────────────────────────
+# Stage 2: Install Rust + Tauri + bundle for Linux
+# ───────────────────────────────────────────────────────
+FROM ubuntu:24.04 AS tauri-builder
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH="/usr/local/cargo/bin:${PATH}"
+
+# Rust toolchain + Tauri prerequisites
+RUN apt-get update && \
+    apt-get install -y curl libwebkit2gtk-4.0-dev build-essential && \
+    curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal && \
+    rustup default stable && \
+    cargo install tauri-cli --version 2.0.0
+
+WORKDIR /app
+# bring in the already-built web assets + Tauri sources
+COPY --from=frontend-builder /app/dist/spa ./src-tauri/target/release/bundle/apt/
+COPY . .
+
+# build and bundle
+RUN cd src-tauri && \
+    cargo tauri build --release
+
+# ───────────────────────────────────────────────────────
+# Stage 3: Extract the .deb/AppImage back to host-mounted dir
+# ───────────────────────────────────────────────────────
+FROM busybox:stable AS extractor
+# copy the generated bundle artifacts
+COPY --from=tauri-builder /app/src-tauri/target/release/bundle/apt/ /out/
+

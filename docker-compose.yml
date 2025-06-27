@@ -68,3 +68,13 @@ services:
     #  - ~/.cache/yarn:/app/.yarn-cache
     #env_file:
     #  - .env.local # we can declare GOOGLE_API_KEY this way..
+
+  tauri:
+    build:
+      context: .
+      dockerfile: Dockerfile.tauri
+      target: extractor
+    volumes:
+      - ./dist-desktop:/out
+    # no ports needed; this just produces files
+    command: /bin/true
