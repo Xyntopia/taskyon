@@ -1,58 +1,55 @@
 # ───────────────────────────────────────────────────────
-# Stage 1: Build Quasar SPA with Node & Yarn
+# Stage 0: Install all JS deps once
 # ───────────────────────────────────────────────────────
-FROM ubuntu:24.04 AS frontend
+FROM node:22.10.0 AS deps
 
-ARG NODE_VERSION=22.x
-ENV DEBIAN_FRONTEND=noninteractive \
-    YARN_CACHE_FOLDER=/tmp/.yarn-cache \
+# Use a dedicated cache folder for Yarn
+ENV YARN_CACHE_FOLDER=/app/.yarn-cache \
     NODE_ENV=production
-
-# Step-by-step installation for easier caching
-RUN apt-get update
-RUN apt-get install -y curl gnupg build-essential ca-certificates
-RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash -
-RUN apt-get install -y nodejs
-RUN npm install -g yarn
-
 WORKDIR /app
-COPY package.json yarn.lock ./
-RUN --mount=type=cache,target=$YARN_CACHE_FOLDER yarn install --frozen-lockfile
 
+# Copy lockfiles and install dependencies
+COPY package.json yarn.lock /app/
+RUN --mount=type=cache,target=$YARN_CACHE_FOLDER yarn install
+
+# ───────────────────────────────────────────────────────
+# Stage 1: Build Quasar SPA
+# ───────────────────────────────────────────────────────
+FROM deps AS frontend
+# Copy everything and build
 COPY . .
-RUN yarn quasar prepare
-RUN yarn build
+RUN ls -la && yarn build
 
 # ───────────────────────────────────────────────────────
-# Stage 2: Bundle with Tauri v2 via Yarn (Linux deps per official prerequisites)
+# Stage 2: Bundle with Tauri
 # ───────────────────────────────────────────────────────
-FROM ubuntu:24.04 AS tauri
+FROM deps AS tauri
+ENV DEBIAN_FRONTEND=noninteractive
 
-ARG NODE_VERSION=22.x
-ENV DEBIAN_FRONTEND=noninteractive \
-    YARN_CACHE_FOLDER=/tmp/.yarn-cache
-
-# Step-by-step system deps
-RUN apt-get update
-RUN apt-get install -y curl gnupg wget file build-essential pkg-config ca-certificates
-RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash -
-RUN apt-get install -y nodejs
-RUN npm install -g yarn
-RUN apt-get install -y \
-    libwebkit2gtk-4.1-dev \
-    libgtk-3-dev \
-    libayatana-appindicator3-dev \
-    libxdo-dev \
-    librsvg2-dev \
-    libssl-dev
+# Install native build tools and Tauri prerequisites
+RUN apt-get update && \
+    apt-get install -y \
+      build-essential \
+      cmake \
+      python3 \
+      make \
+      g++ \
+      libwebkit2gtk-4.1-dev \
+      libgtk-3-dev \
+      libayatana-appindicator3-dev \
+      libxdo-dev \
+      librsvg2-dev \
+      libssl-dev && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY package.json yarn.lock ./
-RUN --mount=type=cache,target=$YARN_CACHE_FOLDER yarn install --frozen-lockfile
-
+# Bring in the built SPA and shared node_modules
 COPY --from=frontend /app/dist/spa ./src-tauri/target/release/bundle/
+COPY --from=deps /app/node_modules ./node_modules
+# Copy the rest of your Tauri sources
 COPY . .
 
+# Build the Tauri bundle
 RUN yarn tauri build --release --target linux
 
 # ───────────────────────────────────────────────────────
@@ -60,15 +57,3 @@ RUN yarn tauri build --release --target linux
 # ───────────────────────────────────────────────────────
 FROM busybox:stable AS artifacts
 COPY --from=tauri /app/src-tauri/target/release/bundle/ /out
-
-# Docker Compose (optional separate file):
-# version: '3.8'
-# services:
-#   tauri:
-#     build:
-#       context: .
-#       dockerfile: Dockerfile.tauri
-#       target: artifacts
-#     volumes:
-#       - ./dist-desktop:/out
-#     command: /bin/true
