@@ -4,8 +4,8 @@
 FROM node:22.10.0 AS deps
 
 # Use a dedicated cache folder for Yarn
-ENV YARN_CACHE_FOLDER=/app/.yarn-cache \
-    NODE_ENV=production
+ENV YARN_CACHE_FOLDER=/app/.yarn-cache
+    #NODE_ENV=production
 WORKDIR /app
 
 # Copy lockfiles and install dependencies
@@ -18,7 +18,8 @@ RUN --mount=type=cache,target=$YARN_CACHE_FOLDER yarn install
 FROM deps AS frontend
 # Copy everything and build
 COPY . .
-RUN ls -la && yarn build
+RUN ls node_modules/.bin
+RUN ls -la && yarn quasar prepare && yarn build
 
 # ───────────────────────────────────────────────────────
 # Stage 2: Bundle with Tauri
