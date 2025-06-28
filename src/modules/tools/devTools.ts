@@ -6,24 +6,47 @@ const OAUTH_URL = 'https://gitlab.com/oauth/authorize'
 
 const getGitlabInfo = createTool({
   name: 'getGitlabInfo',
-  description: 'Read-only fetch of your GitLab profile, projects, and groups.',
-  longDescription: `Calls the GitLab REST API with a read-only token to retrieve:
-  1) Your user profile (username, name, avatar_url, email, bio)
-  2) A list of your projects (id, name, web_url, visibility)
-  3) A list of your groups (id, name, web_url, access_level)
-  If you pass { forceLogin: true }, any cached token will be ignored and you'll be redirected to re-authenticate.`,
+  description: 'Fetch selected parts of your GitLab data (profile, projects, groups).',
+  longDescription: `Use boolean flags to choose which pieces to retrieve. If none are set, only your profile is returned.
+
+  Flags:
+  - includeProfile (default: true)
+  - includeProjects (default: false)
+  - includeGroups (default: false)
+
+  You can still pass { forceLogin: true } to drop the old token and re-authenticate.`,
   parameters: {
     type: 'object',
     properties: {
-      forceLogin: { type: 'boolean', description: 'If true, drop existing token and re-login' },
+      forceLogin: {
+        type: 'boolean',
+        description: 'If true, drop existing token and re-login',
+      },
+      includeProfile: {
+        type: 'boolean',
+        description: 'Whether to fetch your user profile',
+        default: true,
+      },
+      includeProjects: {
+        type: 'boolean',
+        description: 'Whether to fetch your projects',
+        default: false,
+      },
+      includeGroups: {
+        type: 'boolean',
+        description: 'Whether to fetch your groups',
+        default: false,
+      },
     },
     additionalProperties: false,
   },
-  function: async ({ forceLogin = false }, ctx) => {
+  function: async (
+    { forceLogin = false, includeProfile = true, includeProjects = false, includeGroups = false },
+    ctx,
+  ) => {
+    // 1) handle auth
     const GITLAB_BASE = 'https://gitlab.com/api/v4'
     const TOKEN = await ctx.getSecret('oauth-access-token', false)
-
-    // if no token or user asked to re-login, start OAuth dance
     if (!TOKEN || forceLogin) {
       return makeTaskResult([
         [
@@ -36,40 +59,33 @@ const getGitlabInfo = createTool({
               toolId: ctx.toolId,
             },
           }),
-          // after successful login, call ourselves again without forceLogin
           createToolTask({ name: 'getGitlabInfo', arguments: {} }),
         ],
       ])
     }
 
-    const headers = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${TOKEN}`,
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` }
+    const data: Record<string, unknown> = {}
+
+    // 2) conditional fetches
+    if (includeProfile) {
+      const res = await fetch(`${GITLAB_BASE}/user`, { headers })
+      data.profile = await res.json()
     }
-
-    // 1) Profile
-    const profileRes = await fetch(`${GITLAB_BASE}/user`, { headers })
-    const profile = await profileRes.json()
-    console.log('getGitlabInfo profile', profile)
-
-    // 2) Projects you’re a member of
-    const projectsRes = await fetch(`${GITLAB_BASE}/projects?membership=true&per_page=100`, {
-      headers,
-    })
-    const projects = await projectsRes.json()
-
-    // 3) Groups
-    const groupsRes = await fetch(`${GITLAB_BASE}/groups?per_page=100`, { headers })
-    const groups = await groupsRes.json()
+    if (includeProjects) {
+      const res = await fetch(`${GITLAB_BASE}/projects?membership=true&per_page=100`, { headers })
+      data.projects = await res.json()
+    }
+    if (includeGroups) {
+      const res = await fetch(`${GITLAB_BASE}/groups?per_page=100`, { headers })
+      data.groups = await res.json()
+    }
 
     return makeTaskResult([
       [
         {
           role: 'assistant',
-          content: {
-            type: 'structured',
-            data: { profile, projects, groups },
-          },
+          content: { type: 'structured', data },
         },
       ],
     ])
