@@ -10,20 +10,21 @@ const getGitlabInfo = createTool({
   longDescription: `Calls the GitLab REST API with a read-only token to retrieve:
   1) Your user profile (username, name, avatar_url, email, bio)
   2) A list of your projects (id, name, web_url, visibility)
-  3) A list of your groups (id, name, web_url, access_level)`,
+  3) A list of your groups (id, name, web_url, access_level)
+  If you pass { forceLogin: true }, any cached token will be ignored and you'll be redirected to re-authenticate.`,
   parameters: {
     type: 'object',
     properties: {
-      // No required inputs for profile/projects/groups
+      forceLogin: { type: 'boolean', description: 'If true, drop existing token and re-login' },
     },
     additionalProperties: false,
   },
-  function: async (_args, ctx) => {
+  function: async ({ forceLogin = false }, ctx) => {
     const GITLAB_BASE = 'https://gitlab.com/api/v4'
-    console.log('getGitlabInfo called', GITLAB_BASE)
     const TOKEN = await ctx.getSecret('oauth-access-token', false)
-    console.log('getGitlabInfo oauth-access-token', TOKEN)
-    if (!TOKEN) {
+
+    // if no token or user asked to re-login, start OAuth dance
+    if (!TOKEN || forceLogin) {
       return makeTaskResult([
         [
           createToolTask({
@@ -35,7 +36,8 @@ const getGitlabInfo = createTool({
               toolId: ctx.toolId,
             },
           }),
-          //createToolTask({ name: 'getGitlabInfo', arguments: {} }),
+          // after successful login, call ourselves again without forceLogin
+          createToolTask({ name: 'getGitlabInfo', arguments: {} }),
         ],
       ])
     }
@@ -49,14 +51,14 @@ const getGitlabInfo = createTool({
     const profileRes = await fetch(`${GITLAB_BASE}/user`, { headers })
     const profile = await profileRes.json()
     console.log('getGitlabInfo profile', profile)
-    /*
+
     // 2) Projects you’re a member of
     const projectsRes = await fetch(`${GITLAB_BASE}/projects?membership=true&per_page=100`, {
       headers,
     })
     const projects = await projectsRes.json()
 
-    // 3) Groups you belong to
+    // 3) Groups
     const groupsRes = await fetch(`${GITLAB_BASE}/groups?per_page=100`, { headers })
     const groups = await groupsRes.json()
 
@@ -70,7 +72,7 @@ const getGitlabInfo = createTool({
           },
         },
       ],
-    ])*/
+    ])
   },
 })
 
