@@ -28,6 +28,7 @@
             "
           >
           </SecretInput>
+          <q-btn flat color="negative" :icon="matDeleteForever"></q-btn>
         </q-item>
       </q-expansion-item>
     </q-item>
@@ -38,6 +39,7 @@
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import SecretInput from '../SecretInput.vue'
+import { matDeleteForever } from '@quasar/extras/material-icons'
 
 const tystate = useTaskyonStore()
 
