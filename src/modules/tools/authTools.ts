@@ -57,7 +57,7 @@ function withAbort<T>(signal: AbortSignal, p: Promise<T>) {
 // Enhance createOAuthTool to wait for button press before opening popup
 export const createOAuthTool = (secretStore: SecretStore) => {
   const openPopups = new Map<WindowProxy, string>()
-  const loginResolvers = new Map<string, (token: string) => void>()
+  const loginResolvers = new Map<string, (args: { at: string; rt: string }) => void>()
 
   function openAuthPopup(params: {
     oauthURL: string
@@ -77,8 +77,8 @@ export const createOAuthTool = (secretStore: SecretStore) => {
 
   function oauthPopupListener(event: MessageEvent) {
     if (event.origin !== window.location.origin) return
-    const { type, accessToken } = event.data || {}
-    if (type !== 'oauth-access-token' || !accessToken) return
+    const { type, accessToken, refreshToken } = event.data || {}
+    if (type !== 'oauth-credentials' || !accessToken) return
 
     const toolId = openPopups.get(event.source as WindowProxy)
     if (!toolId) return
@@ -89,7 +89,7 @@ export const createOAuthTool = (secretStore: SecretStore) => {
 
     const resolver = loginResolvers.get(toolId)
     if (resolver) {
-      resolver(accessToken)
+      resolver({ at: accessToken, rt: refreshToken })
       loginResolvers.delete(toolId)
     }
 
@@ -180,9 +180,9 @@ not working:
       openAuthPopup({ oauthURL, clientId, scope, toolId })
 
       // await token
-      const token = await withAbort(
+      const { at: token, rt } = await withAbort(
         stopSignal,
-        new Promise<string>((resolve) => {
+        new Promise<{ at: string; rt: string }>((resolve) => {
           // install resolver; cleanup on abort happens in withAbort
           loginResolvers.set(toolId, (tok) => {
             stopSignal.removeEventListener('abort', () => {}) // no-op, since withAbort cleans this up
@@ -193,6 +193,7 @@ not working:
 
       // store secret and confirm
       await secretStore.setSecret(toolId, 'oauth-access-token', token)
+      await secretStore.setSecret(toolId, 'oauth-refresh-token', rt)
 
       return makeTaskResult([
         [{ role: 'assistant', content: { type: 'message', data: '🎉 Logged in successfully.' } }],

@@ -137,12 +137,17 @@ onMounted(async () => {
     }
 
     const data = await res.json()
+    console.log('Token exchange response:', data)
     const accessToken = data.access_token
+    const refreshToken = data.refresh_token
 
-    console.log('recevied new accessToken:', accessToken)
+    console.log('recevied new accessToken:', accessToken, refreshToken)
 
     if (window.opener) {
-      window.opener.postMessage({ type: 'oauth-access-token', accessToken }, window.location.origin)
+      window.opener.postMessage(
+        { type: 'oauth-credentials', accessToken, refreshToken },
+        window.location.origin,
+      )
     }
 
     closeWindow()
