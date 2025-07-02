@@ -381,6 +381,10 @@ const createRxDBCrudWrapper = (db: TaskyonDatabase): CrudWrapper<TaskNode> => {
       }))
       return tasks
     },
+    listIds: async () => {
+      const result = await db.tasknodes.find().exec()
+      return result.map((rxdbtask) => rxdbtask.id)
+    },
     clear: async () => {
       console.log('delete the entire database!')
       await db.remove()

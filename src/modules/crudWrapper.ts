@@ -32,6 +32,7 @@ export interface CrudWrapper<T> {
     strategy?: 'shallow_merge' | 'replace' | 'deepmerge' | 'native_shallow',
   ) => Promise<T>
   delete: (id: string | number) => Promise<void>
+  listIds: () => Promise<(string | number)[]>
   list: () => Promise<Row<T>[]>
   listAll?: () => Promise<Row<T>[]>
   clear: () => Promise<void>
@@ -197,8 +198,15 @@ export const createPgLiteCrudWrapper = async <T>(
     },
     list: async (): Promise<Row<T>[]> => {
       await db.waitReady
-      const result = await db.sql<Row<T>>`SELECT ${idColumn}, ${dataColumn} FROM ${tableName};`
+      const result = await db.query<Row<T>>(`SELECT ${idColumn}, ${dataColumn} FROM ${tableName};`)
       return result.rows
+    },
+    listIds: async (): Promise<(string | number)[]> => {
+      await db.waitReady
+      const result = await db.query<{ id: string | number }>(
+        `SELECT ${idColumn} AS id FROM ${tableName};`,
+      )
+      return result.rows.map((row) => row.id)
     },
     clear: async (): Promise<void> => {
       await db.waitReady
@@ -349,6 +357,9 @@ export const createMapCrudWrapper = <T>(storage: Map<string | number, T>): CrudW
       })
       return Promise.resolve(rows)
     },
+    listIds: (): Promise<(string | number)[]> => {
+      return Promise.resolve(Array.from(storage.keys()))
+    },
     clear: (): Promise<void> => {
       storage.clear()
       return Promise.resolve()
@@ -406,6 +417,12 @@ export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWr
     })
 
     return Array.from(uniqueItems.values())
+  },
+  listIds: async (): Promise<(string | number)[]> => {
+    const allIdArrays = await Promise.all(wrappers.map((w) => w.listIds()))
+    const idSet = new Set<string | number>()
+    allIdArrays.flat().forEach((id) => idSet.add(id))
+    return Array.from(idSet)
   },
   async clear(): Promise<void> {
     await Promise.all(wrappers.map((w) => w.clear()))
@@ -572,6 +589,10 @@ export const withSecretStore = (
     async listSecrets(id: string | number): Promise<Record<string, string>> {
       // Get all secrets for the ID
       return ((await encryptedCrud.get(id, getSessionKey)) as SecretData) || {}
+    },
+
+    listSecretIds: async (): Promise<(string | number)[]> => {
+      return base.listIds()
     },
 
     /**
