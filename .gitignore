@@ -5,6 +5,7 @@ node_modules
 # Quasar core related directories
 .quasar
 /dist
+/dist-desktop
 /quasar.config.*.temporary.compiled*
 
 # Cordova related directories and files
