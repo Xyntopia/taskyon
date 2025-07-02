@@ -8,6 +8,7 @@
           name="aiserviceprovider"
         />
         <q-route-tab to="/settings/profile" label="Profile & Backup" name="profile" />
+        <q-route-tab to="/settings/secrets" label="Secrets" name="secrets" />
         <q-route-tab
           v-if="state.appConfiguration.expertMode || selectedTab == 'agent config'"
           to="/settings/agent config"
@@ -33,6 +34,9 @@
         </q-tab-panel>
         <q-tab-panel name="profile" :class="tabPanelClass">
           <SyncTaskyon style="max-width: 600px" />
+        </q-tab-panel>
+        <q-tab-panel name="secrets" :class="tabPanelClass">
+          <PasswordManager style="max-width: 600px" />
         </q-tab-panel>
         <q-tab-panel name="agent config" :class="tabPanelClass">
           <div>All of the Agent configuration</div>
@@ -65,6 +69,7 @@ import { useRoute } from 'vue-router'
 import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { convertZodToJsonSchemaCached, storedSettings } from 'src/modules/taskyon/types'
+import PasswordManager from 'src/components/taskyon/PasswordManager.vue'
 
 const route = useRoute()
 const state = useAppStateStore()
