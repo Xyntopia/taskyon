@@ -10,6 +10,7 @@
       >
         <q-item v-for="(secretValue, secretName) in secretId" :key="secretName">
           <SecretInput
+            color="secondary"
             class="fit"
             dense
             filled
