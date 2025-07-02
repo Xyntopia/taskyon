@@ -43,15 +43,33 @@ RUN apt-get update && \
       libssl-dev && \
     rm -rf /var/lib/apt/lists/*
 
+# Install Rust toolchain non‑interactively and source its env immediately
+# 1) Mount caches at /tmp/…  
+# 2) Install rustup into them  
+# 3) Copy into real home dirs
+RUN --mount=type=cache,target=/tmp/cargo-home \
+    --mount=type=cache,target=/tmp/rustup-home \
+    CARGO_HOME=/tmp/cargo-home RUSTUP_HOME=/tmp/rustup-home \
+      curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf \
+      | sh -s -- -y \
+    && cp -a /tmp/cargo-home /root/.cargo \
+    && cp -a /tmp/rustup-home /root/.rustup
+
+# Make sure cargo/bin stays on PATH for every subsequent RUN
+ENV PATH="/root/.cargo/bin:${PATH}"
+ENV HOME="/root"
+
 WORKDIR /app
 # Bring in the built SPA and shared node_modules
-COPY --from=frontend /app/dist/spa ./src-tauri/target/release/bundle/
-COPY --from=deps /app/node_modules ./node_modules
+
 # Copy the rest of your Tauri sources
 COPY . .
 
+# swhich oftena already contains the built SPA 
+COPY --from=frontend /app/dist/spa ./src-tauri/target/release/bundle/
+
 # Build the Tauri bundle
-RUN yarn tauri build --release --target linux
+RUN yarn tauri build
 
 # ───────────────────────────────────────────────────────
 # Stage 3: Extract artifacts

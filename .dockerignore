@@ -5,6 +5,7 @@ node_modules
 # Quasar core related directories
 .quasar
 /dist
+!/dist/spa
 /quasar.config.*.temporary.compiled*
 
 # Cordova related directories and files
@@ -55,5 +56,6 @@ cypress.env.json
 
 # files that we don't want to copy, because they would invalidate our docker cache
 Dockerfile
+Dockerfile.tauri
 docker-compose.yml
 buildcontainer.sh
