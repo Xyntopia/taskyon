@@ -6,7 +6,11 @@ node_modules
 .quasar
 /dist
 #!/dist/spa
+/dist-desktop
 /quasar.config.*.temporary.compiled*
+
+# ignore tauri build files
+/src-tauri/target
 
 # Cordova related directories and files
 /src-cordova/node_modules
