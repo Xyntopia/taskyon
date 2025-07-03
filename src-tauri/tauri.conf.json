@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "taskyon",
   "version": "0.1.0",
-  "identifier": "space.taskyon.app",
+  "identifier": "space.taskyon",
   "build": {
     "frontendDist": "../dist/spa",
     "devUrl": "http://localhost:9000",

@@ -62,7 +62,11 @@
           #mesa
           #libdrm
           cargo-tauri
-          rustup
+          # rustup
+          # add rust toolchain
+          rustc
+          cargo
+
 
           # for cypress e2e testing
           glib
