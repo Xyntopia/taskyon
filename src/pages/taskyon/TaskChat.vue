@@ -156,7 +156,7 @@ import ToggleButton from 'src/components/ToggleButton.vue'
 import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
-import logoSvg from '../../../public/taskyon_logo_complex_animated.svg?raw'
+import logoSvg from 'src/assets/taskyon_logo_complex_animated.svg?raw'
 
 const props = defineProps<{ detailed?: boolean; treeBrowser?: boolean; rootTaskId?: string }>()
 const showAllTasks = ref<boolean>(props.detailed)
