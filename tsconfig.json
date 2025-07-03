@@ -1,3 +1,4 @@
 {
   "extends": "./.quasar/tsconfig.json",
+  "exclude": ["src-tauri", "dist-desktop"]
 }
