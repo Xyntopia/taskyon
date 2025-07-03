@@ -74,5 +74,5 @@ RUN yarn tauri build
 # ───────────────────────────────────────────────────────
 # Stage 3: Extract artifacts
 # ───────────────────────────────────────────────────────
-FROM busybox:stable AS artifacts
-COPY --from=tauri /app/src-tauri/target/release/bundle/ /out
+FROM scratch AS export
+COPY --from=tauri /app/src-tauri/target/release/bundle/ /bundle

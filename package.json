@@ -9,6 +9,7 @@
     "build": "yarn build:lib && yarn build:app",
     "build:app": "yarn run quasar build",
     "build:lib": "yarn run vite build --config vite.lib.config.ts",
+    "build:desktop": "docker build --file Dockerfile.tauri --target export --output type=local,dest=./dist-desktop .",
     "dev": "yarn run quasar dev",
     "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .gitignore",
     "lint": "vue-tsc --noEmit && eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}'"
