@@ -41,9 +41,12 @@ RUN apt-get update && \
       libxdo-dev \
       librsvg2-dev \
       libssl-dev \
-      # ← newly added graphics/runtime deps ↓
+      # graphics/runtime libs:
       libgl1-mesa-dev \
       libegl1-mesa-dev \
+      libgl1-mesa-dri \
+      libdrm2 \
+      libgbm1 \
       libx11-dev \
       libxrandr-dev \
       libxss-dev \
