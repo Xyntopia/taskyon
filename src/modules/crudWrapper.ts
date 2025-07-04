@@ -580,6 +580,9 @@ export const withSecretStore = (
         delete existingSecrets[secretName]
         // Save the updated secrets
         await encryptedCrud.set(id, existingSecrets, getSessionKey)
+        if (Object.keys(existingSecrets).length == 0) {
+          await encryptedCrud.delete(id)
+        }
       }
     },
 

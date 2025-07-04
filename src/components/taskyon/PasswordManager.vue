@@ -1,14 +1,14 @@
 <template>
   <q-list dense>
-    <q-item v-for="(secretId, index) in secretList" :key="index">
+    <q-item v-for="(secretRow, secretId) in secretList" :key="secretId">
       <q-expansion-item
         dense
-        :label="String(index)"
+        :label="String(secretId)"
         default-opened
         header-class="text-h6"
         class="fit"
       >
-        <q-item v-for="(secretValue, secretName) in secretId" :key="secretName">
+        <q-item v-for="(secretValue, secretName) in secretRow" :key="secretName">
           <SecretInput
             color="secondary"
             class="fit"
@@ -28,7 +28,12 @@
             "
           >
           </SecretInput>
-          <q-btn flat color="negative" :icon="matDeleteForever"></q-btn>
+          <q-btn
+            flat
+            color="negative"
+            :icon="matDeleteForever"
+            @click="deleteSecrets(secretId, secretName)"
+          ></q-btn>
         </q-item>
       </q-expansion-item>
     </q-item>
@@ -36,23 +41,30 @@
 </template>
 
 <script setup lang="ts">
-import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import SecretInput from '../SecretInput.vue'
 import { matDeleteForever } from '@quasar/extras/material-icons'
+import { onMounted, ref } from 'vue'
 
 const tystate = useTaskyonStore()
 
-const secretIdList = asyncComputed(tystate.secretStore.listSecretIds, [])
+// make this a mutable ref
+const secretList = ref<Record<string, Record<string, string>>>({})
 
-const secretList = asyncComputed(async () => {
-  // gather [key, value] pairs in parallel
+// extract your loader into its own function
+async function loadSecrets() {
+  const ids = await tystate.secretStore.listSecretIds()
   const entries = await Promise.all(
-    secretIdList.value.map(
-      async (id) => [id.toString(), await tystate.secretStore.listSecrets(id)] as const,
-    ),
+    ids.map(async (id) => [id.toString(), await tystate.secretStore.listSecrets(id)] as const),
   )
-  // turn into a Record<string, string[]>
-  return Object.fromEntries(entries)
-}, {})
+  secretList.value = Object.fromEntries(entries)
+}
+
+onMounted(loadSecrets)
+
+const deleteSecrets = async (secretId: string, secretName: string) => {
+  await tystate.secretStore.deleteSecret(secretId, secretName)
+  // force re-render
+  await loadSecrets()
+}
 </script>
