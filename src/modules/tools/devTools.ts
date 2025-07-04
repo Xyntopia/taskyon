@@ -55,7 +55,7 @@ const getGitlabInfo = createTool({
             arguments: {
               oauthURL: OAUTH_URL,
               clientId: CLIENT_ID,
-              scope: 'read_user',
+              scope: 'read_user read_api',
               toolId: ctx.toolId,
             },
           }),
