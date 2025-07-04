@@ -10,24 +10,16 @@
       >
         <q-item v-for="(secretValue, secretName) in secretRow" :key="secretName">
           <SecretInput
+            v-model="secretList[secretId]![secretName]!"
             color="secondary"
             class="fit"
             dense
             filled
-            :model-value="secretValue"
             :label="`${secretName}`"
-            @keyup.enter="
-              () => {
-                console.log('pressed enter')
-              }
-            "
-            @update:model-value="
-              (value) => {
-                console.log('switch key', value)
-              }
-            "
+            @keyup.enter="saveSecret(secretId, secretName)"
           >
           </SecretInput>
+          <q-btn flat :icon="matSave" @click="saveSecret(secretId, secretName)" />
           <q-btn
             flat
             color="negative"
@@ -43,7 +35,7 @@
 <script setup lang="ts">
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import SecretInput from '../SecretInput.vue'
-import { matDeleteForever } from '@quasar/extras/material-icons'
+import { matDeleteForever, matSave } from '@quasar/extras/material-icons'
 import { onMounted, ref } from 'vue'
 
 const tystate = useTaskyonStore()
@@ -65,6 +57,14 @@ onMounted(loadSecrets)
 const deleteSecrets = async (secretId: string, secretName: string) => {
   await tystate.secretStore.deleteSecret(secretId, secretName)
   // force re-render
+  await loadSecrets()
+}
+
+// only called on Enter or Save‑button
+const saveSecret = async (secretId: string, secretName: string) => {
+  const newVal = secretList.value[secretId]![secretName]
+  if (newVal) await tystate.secretStore.setSecret(secretId, secretName, newVal)
+  // optional: refocus or toast here
   await loadSecrets()
 }
 </script>
