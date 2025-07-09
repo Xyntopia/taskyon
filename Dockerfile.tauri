@@ -1,7 +1,11 @@
 # ───────────────────────────────────────────────────────
 # Stage 0: Install all JS deps once
 # ───────────────────────────────────────────────────────
-FROM node:22.10.0 AS deps
+# we are using bullseye-slim so that we have access to old webkit2gtk-4.1-dev versions
+# and can pin it to the version that works with tauri/taskyon
+# otherwise we would use this image:
+# FROM node:22.10.0 AS deps
+FROM node:22.10.0-bullseye-slim AS deps
 
 # Use a dedicated cache folder for Yarn
 ENV YARN_CACHE_FOLDER=/app/.yarn-cache
@@ -35,8 +39,15 @@ RUN apt-get update && \
       python3 \
       make \
       g++ \
-      libwebkit2gtk-4.1-dev \
+      # TODO:  remove the old versions/pinning once the issue with the latest version is resolved
+      #        it was causing a blank screen of taskyon with the error:  
+      #        Could not create default EGL display: EGL_BAD_PARAMETER. Aborting... 
+      # libwebkit2gtk-4.1-dev=2.44.0-2 \
+      # libjavascriptcoregtk-4.1-dev=2.44.0-2 && \
+      libwebkit2gtk-4.0-dev \
+      libjavascriptcoregtk-4.0-dev \
       libgtk-3-dev \
+      libglib2.0-dev pkg-config \
       libayatana-appindicator3-dev \
       libxdo-dev \
       librsvg2-dev \
@@ -56,6 +67,11 @@ RUN apt-get update && \
       libxi-dev \
       libdbus-1-dev && \
     rm -rf /var/lib/apt/lists/*
+
+# this is only for debuggin to confirm we have the correct libraries...
+RUN find / -name glib-2.0.pc 2>/dev/null
+ENV PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+RUN pkg-config --libs --cflags glib-2.0
 
 # Install Rust toolchain non‑interactively and source its env immediately
 # 1) Mount caches at /tmp/…  
@@ -89,4 +105,4 @@ RUN yarn tauri build
 # Stage 3: Extract artifacts
 # ───────────────────────────────────────────────────────
 FROM scratch AS export
-COPY --from=tauri /app/src-tauri/target/release/bundle/ /bundle
+COPY --from=tauri /app/src-tauri/target/release/ /bundle
