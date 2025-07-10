@@ -87,7 +87,7 @@
       drop-zone-target="#chat-area"
       accept="*"
       @add-files="
-        (newFiles) => {
+        (newFiles: File[]) => {
           console.log('adding files!!', newFiles)
           fileAttachments.push(...newFiles)
         }

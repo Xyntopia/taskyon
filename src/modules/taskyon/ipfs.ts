@@ -12,7 +12,7 @@
 import { createHelia } from 'helia'
 import { strings } from '@helia/strings'
 import { unixfs } from '@helia/unixfs'
-import { LevelDatastore } from 'datastore-level'
+//import { LevelDatastore } from 'datastore-level'
 import { MemoryBlockstore } from 'blockstore-core'
 
 //const agentVersion = 'Taskyon - helia';
@@ -21,7 +21,7 @@ import { MemoryBlockstore } from 'blockstore-core'
 // in the helia library to get an idea about helia standard configuration...
 
 async function createHeliaInstance() {
-  const datastore = new LevelDatastore('helia-example')
+  //const datastore = new LevelDatastore('helia-example')
   const blockstore = new MemoryBlockstore()
 
   // libp2p is the networking layer that underpins Helia
@@ -30,7 +30,8 @@ async function createHeliaInstance() {
   //const libp2p = await createLibp2p({ ...libp2pDefaults, datastore });
 
   const heliaInstance = await createHelia({
-    datastore,
+    // TODO: repair all of this :)
+    //datastore,
     blockstore,
     //libp2p,
   })
