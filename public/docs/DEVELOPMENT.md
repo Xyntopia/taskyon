@@ -112,6 +112,25 @@ Documentation lives alongside the project code:
 
 ---
 
+### Taskyon Clients
+
+It is possible to include taskyon as an iframe and "talk" to it this way. This is a very easy
+way to enhance your app or webpage with AI functionality. For more information check out this doc:
+
+[taskyon integration](./docs/taskyon_integration)
+
+Aditionally, we encourage to write code examples for taskyon client susing typescript. Check out the
+"tyCientExamples" directory for this. It includes a taskyon client library in public/lib which
+you can build using
+
+```
+yarn build:lib
+```
+
+If you have a typescript project, you can include this library as well as we provide the necessary types for it!
+
+---
+
 ## Dependency Analysis
 
 Taskyon’s codebase is structured to maintain a clear separation between the **Quasar framework** and **Taskyon’s core logic**. This not only ensures modularity but also helps prevent circular dependencies within the project. Analyzing dependencies is crucial, and we provide two tools for this purpose:
