@@ -3,6 +3,47 @@ import { createTool, createToolTask, makeTaskResult } from '../taskyon/tools'
 
 const CLIENT_ID = '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b'
 const OAUTH_URL = 'https://gitlab.com/oauth/authorize'
+const GITLAB_TOKEN_URL = 'https://gitlab.com/oauth/token'
+
+async function refreshGitlabToken(refreshToken: string) {
+  if (!refreshToken || !CLIENT_ID) {
+    throw new Error('Missing refresh token or client ID in secret store')
+  }
+
+  const params = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+    client_id: CLIENT_ID,
+  })
+
+  const res = await fetch(GITLAB_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Token refresh failed (${res.status}): ${body}`)
+  }
+
+  const {
+    access_token: accessToken,
+    refresh_token: refreshToken2,
+    expires_in,
+    created_at,
+  } = (await res.json()) as {
+    access_token: string
+    refresh_token: string
+    expires_in: number
+    created_at: number
+  }
+
+  // optional: track expiry
+  // await ctx.setSecret('oauth-expires-at', String(Date.now() + expires_in * 1000))
+
+  return { accessToken, refreshToken: refreshToken2, expiresAt: created_at + expires_in }
+}
 
 const getGitlabInfo = createTool({
   name: 'getGitlabInfo',
@@ -46,7 +87,31 @@ const getGitlabInfo = createTool({
   ) => {
     // 1) handle auth
     const GITLAB_BASE = 'https://gitlab.com/api/v4'
-    const TOKEN = await ctx.getSecret('oauth-access-token', false)
+    const EXPIRES = await ctx.getSecret('oauth-expires-at', false)
+    let TOKEN: string | undefined
+    if (EXPIRES) {
+      const EXPIRESINT = parseInt(EXPIRES, 10)
+      if (isNaN(EXPIRESINT) || EXPIRESINT < Date.now()) {
+        console.warn('GitLab token expired, refreshing...')
+        try {
+          const refreshTOKEN = await ctx.getSecret('oauth-refresh-token', false)
+          if (!refreshTOKEN) {
+            throw new Error('No refresh token available in secret store')
+          }
+          const { accessToken, refreshToken, expiresAt } = await refreshGitlabToken(refreshTOKEN)
+          await ctx.setSecret('oauth-access-token', accessToken)
+          await ctx.setSecret('oauth-refresh-token', refreshToken)
+          await ctx.setSecret('oauth-expires-at', String(expiresAt))
+          TOKEN = accessToken
+        } catch (e) {
+          console.error('Failed to refresh GitLab token:', e)
+          TOKEN = undefined // force re-login
+        }
+      } else {
+        TOKEN = await ctx.getSecret('oauth-access-token', false)
+      }
+    }
+
     if (!TOKEN || forceLogin) {
       return makeTaskResult([
         [
@@ -74,7 +139,12 @@ const getGitlabInfo = createTool({
     }
     if (includeProjects) {
       const res = await fetch(`${GITLAB_BASE}/projects?membership=true&per_page=100`, { headers })
-      data.projects = await res.json()
+      const projInfo = (await res.json()) as Record<string, unknown>[]
+      data.projects = projInfo.map((proj) =>
+        Object.fromEntries(
+          ['id', 'name', 'description', 'web_url', 'star_count'].map((k) => [k, proj[k]]),
+        ),
+      )
     }
     if (includeGroups) {
       const res = await fetch(`${GITLAB_BASE}/groups?per_page=100`, { headers })
