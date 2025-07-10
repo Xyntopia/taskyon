@@ -1,6 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
 import { createTool, createToolTask, makeTaskResult } from '../taskyon/tools'
 import type { SecretStore } from '../crudWrapper'
+import { OAuthCredentials } from '../taskyon/types'
 
 declare global {
   interface Window {
@@ -57,7 +58,7 @@ function withAbort<T>(signal: AbortSignal, p: Promise<T>) {
 // Enhance createOAuthTool to wait for button press before opening popup
 export const createOAuthTool = (secretStore: SecretStore) => {
   const openPopups = new Map<WindowProxy, string>()
-  const loginResolvers = new Map<string, (args: { at: string; rt: string }) => void>()
+  const loginResolvers = new Map<string, (args: OAuthCredentials) => void>()
 
   function openAuthPopup(params: {
     oauthURL: string
@@ -77,8 +78,7 @@ export const createOAuthTool = (secretStore: SecretStore) => {
 
   function oauthPopupListener(event: MessageEvent) {
     if (event.origin !== window.location.origin) return
-    const { type, accessToken, refreshToken } = event.data || {}
-    if (type !== 'oauth-credentials' || !accessToken) return
+    const creds = OAuthCredentials.parse(event.data)
 
     const toolId = openPopups.get(event.source as WindowProxy)
     if (!toolId) return
@@ -89,7 +89,7 @@ export const createOAuthTool = (secretStore: SecretStore) => {
 
     const resolver = loginResolvers.get(toolId)
     if (resolver) {
-      resolver({ at: accessToken, rt: refreshToken })
+      resolver(creds)
       loginResolvers.delete(toolId)
     }
 
@@ -180,9 +180,9 @@ not working:
       openAuthPopup({ oauthURL, clientId, scope, toolId })
 
       // await token
-      const { at: token, rt } = await withAbort(
+      const creds = await withAbort(
         stopSignal,
-        new Promise<{ at: string; rt: string }>((resolve) => {
+        new Promise<OAuthCredentials>((resolve) => {
           // install resolver; cleanup on abort happens in withAbort
           loginResolvers.set(toolId, (tok) => {
             stopSignal.removeEventListener('abort', () => {}) // no-op, since withAbort cleans this up
@@ -192,8 +192,13 @@ not working:
       )
 
       // store secret and confirm
-      await secretStore.setSecret(toolId, 'oauth-access-token', token)
-      await secretStore.setSecret(toolId, 'oauth-refresh-token', rt)
+      await secretStore.setSecret(toolId, 'oauth-access-token', creds.access_token)
+      await secretStore.setSecret(toolId, 'oauth-refresh-token', creds.refresh_token)
+      await secretStore.setSecret(
+        toolId,
+        'oauth-expires-at',
+        (creds.created_at + creds.expires_in).toString(),
+      )
 
       return makeTaskResult([
         [{ role: 'assistant', content: { type: 'message', data: '🎉 Logged in successfully.' } }],

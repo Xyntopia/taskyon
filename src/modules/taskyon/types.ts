@@ -821,3 +821,15 @@ export type WithRequired<T, K extends keyof T> = Omit<T, K> & {
 export const taskMarker = '*TY_TASKRESULT*'
 //export const convertZodToJsonSchemaCached = lruCache(100)(zodToJsonSchema)
 export const convertZodToJsonSchemaCached = z.toJSONSchema
+
+export const OAuthCredentials = z.object({
+  type: z.literal('oauth-credentials'),
+  access_token: z.string(),
+  refresh_token: z.string(),
+  service: z.string(), // or z.string().url() if you want URL validation
+  token_type: z.string(),
+  expires_in: z.number(),
+  created_at: z.number(), // or z.date().transform(d => d.getTime()) if you parse a Date
+})
+
+export type OAuthCredentials = z.infer<typeof OAuthCredentials>

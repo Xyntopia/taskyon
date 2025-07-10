@@ -39,6 +39,7 @@
  */
 import { onMounted, ref } from 'vue'
 import { base64UrlDecode, base64UrlEncode } from '../../modules/utils'
+import type { OAuthCredentials } from 'src/modules/taskyon/types'
 
 const props = defineProps<{
   phase: 'start' | 'return'
@@ -145,7 +146,15 @@ onMounted(async () => {
 
     if (window.opener) {
       window.opener.postMessage(
-        { type: 'oauth-credentials', accessToken, refreshToken },
+        {
+          type: 'oauth-credentials',
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+          service: oauthURL,
+          token_type: data.token_type,
+          expires_in: data.expires_in,
+          created_at: data.created_at,
+        } as OAuthCredentials,
         window.location.origin,
       )
     }
