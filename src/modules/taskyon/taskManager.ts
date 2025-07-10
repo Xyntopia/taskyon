@@ -294,8 +294,13 @@ const createRxDBCrudWrapper = (db: TaskyonDatabase): CrudWrapper<TaskNode> => {
     // thats why w have the ?? '' here...
     const taskFromDb = await db.tasknodes.findOne(id?.toString() ?? '').exec()
     if (taskFromDb) {
-      const task = transformDocToTaskNode(taskFromDb)
-      return task
+      try {
+        const task = transformDocToTaskNode(taskFromDb)
+        return task
+      } catch (e) {
+        console.error(`Error transforming task ${id} from DB:`, taskFromDb, e)
+        return null
+      }
     }
     return null
   }
