@@ -41,7 +41,7 @@
     "core-js": "^3.6.5",
     "datastore-level": "^11.0.1",
     "fast-equals": "^5.0.1",
-    "helia": "^5.1.0",
+    "helia": "^5.4.2",
     "html-to-text": "^9.0.5",
     "js-tiktoken": "^1.0.7",
     "js-yaml": "^4.1.0",
