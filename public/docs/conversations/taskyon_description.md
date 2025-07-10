@@ -45,10 +45,10 @@ taskyon works. The relevant parts in the taskyon code representing
 this are the "runTaskWorker", "processTask" and "handleFunctionExecution" functions.
 
 ```mermaid
-%%{init: { "flowchart": { "curve": "cardinal", "wrappingWidth": 400 } } }%%
 ---
 title: Task Processor
 ---
+%%{init: { "flowchart": { "curve": "cardinal", "wrappingWidth": 400 } } }%%
 flowchart TB
     m_a[MessageContent_A]
     m_u[MessageContent_U]
@@ -88,6 +88,9 @@ We can see the transitions between different types of task in taskyons initial
 configuration:
 
 ```mermaid
+---
+title: chatCompletion Task Transitions
+---
 %%{init: { "flowchart": { "curve": "cardinal", "wrappingWidth": 400 } } }%%
 flowchart TD
   Message_U
@@ -224,3 +227,25 @@ The diagram below illustrates this hierarchical structure with clear branching:
 The chatCompletion tool flattens this hierarchical structure to capture the most crucial context for generating responses. This approach ensures that even with nested task chains, the system extracts and prioritizes the relevant information needed for coherent output.
 
 TODO: add a json-example for a tool that can do this..
+
+## Taskyon vs. Classical Programming
+
+To make the distinction crystal clear, think of Taskyon as a dynamic programming language tailored for AI‑driven workflows:
+
+1. **Sequential execution, familiar style**
+
+   - Like a traditional program, Taskyon processes one “line” (task) at a time (or a sequence of parallel chains), each waiting on its predecessor.
+   - You still get that clear, step‑by‑step flow—no magic black box.
+
+2. **Static vs. dynamic code**
+
+   - In classic languages your code is fixed at write‑time.
+   - In Taskyon, _each new task_ decides on the next function (tool) to call and with which parameters—_at runtime_.
+   - Your “program” (the task tree) literally grows and reshapes itself as it runs, adapting to evolving data and state.
+
+3. **Why this matters**
+   - **Flexibility:** You can inject specialized tools mid‑execution (e.g. a fast custom parser) without rewriting your entire chain.
+   - **Resilience:** Dynamic branching lets you handle errors or alternative flows in‑flight, rather than littering your code with if/else.
+   - **Maintainability:** By expressing tasks and tools as data, you can inspect, modify, or even generate your own tools programmatically.
+
+Once you’ve wrapped your head around “tasks as functions” and “the task tree as your program,” building and debugging Taskyon workflows becomes almost as intuitive as writing straight JavaScript—plus you get all the power of runtime adaptability.
