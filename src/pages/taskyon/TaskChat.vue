@@ -56,27 +56,24 @@
           :style="{
             '--icon-primary': $q.dark.isActive ? 'white' : 'var(--q-primary)',
             '--icon-secondary': $q.dark.isActive ? 'var(--q-secondary)' : 'var(--q-primary)',
-            width: '20rem',
+            width: '15rem',
             height: 'auto',
             display: 'inline-block',
           }"
           v-html="logoSvg"
         />
-        <!-- eslint-enable vue/no-v-html -->
-        <component
-          :is="ResetButton"
-          v-if="ResetButton"
-          color="secondary"
-          flat
-          mode="all"
-        ></component>
         <div class="welcome-message column items-center">
-          <LLMProviders
-            v-if="showIntroduction"
-            :expert-mode-on="state.appConfiguration.expertMode"
-          />
-          <GetStarted v-else />
+          <GetStarted />
         </div>
+        <CreateNewTask
+          style="max-width: 48rem"
+          :file-attachments="fileAttachments"
+          :force-task-props="state.llmSettings.taskTemplate"
+          class="q-pa-md"
+          :hide-task-info="state.minimalGui"
+          :expert-mode="state.appConfiguration.expertMode"
+        />
+        <component :is="ResetButton" v-if="ResetButton" color="secondary" flat mode="all" />
       </div>
     </div>
     <!--File Drop Zone Overlay-->
@@ -115,8 +112,7 @@
           class="q-pa-xs"
           :hide-task-info="state.minimalGui"
           :expert-mode="state.appConfiguration.expertMode"
-        >
-        </CreateNewTask>
+        />
       </div>
     </q-page-sticky>
     <!--Task Chat Control Buttons-->
@@ -151,7 +147,6 @@ import { fetchMarkdown, getTextFile } from 'src/modules/taskyon/taskUtils'
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStateStore } from 'src/stores/appState'
-import LLMProviders from 'components/taskyon/LLMProviders.vue'
 import ToggleButton from 'src/components/ToggleButton.vue'
 import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import FileDropzone from 'src/components/FileDropzone.vue'
