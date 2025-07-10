@@ -6,6 +6,7 @@ import { type TyTaskManager } from '../taskyon/taskManager'
 import { match, P } from 'ts-pattern'
 import { safeYamlDump } from '../yamlUtils'
 import type { JSONSchema7 } from 'json-schema'
+import type { JSONSchema } from 'json-schema-to-ts'
 
 export const createToolSearcher = (taskManager: TyTaskManager) =>
   createTool({
@@ -96,16 +97,16 @@ is now unreadable.
     },
   })
 
-export const createAddNewToolTool: () => ToolBase = () => {
+export const createAddNewToolTool = () => {
   const toolJsonSchema = craeteToolJsonSchema()
-  return {
+  return createTool({
     name: 'addNewTool',
     description: 'Validates and registers a new tool with taskyon.',
     longDescription: `This tool takes a tool definition, validates it and registers it with taskyon.
 If you need examples of how to create tools, you can use the toolSearcher to retrieve
 existing tool definitions, including their source code when available. Additionally, you can use the toolCreationWizard
 to get some more general information how to create tools.`,
-    parameters: toolJsonSchema,
+    parameters: toolJsonSchema as JSONSchema7 & Record<string, unknown> & Readonly<JSONSchema>,
     function: (toolDef: unknown) => {
       const toolDefinition = ToolBase.parse(toolDef)
       return makeTaskResult([
@@ -117,7 +118,7 @@ to get some more general information how to create tools.`,
         ],
       ])
     },
-  }
+  })
 }
 
 export const toolCreationWizard = createTool({

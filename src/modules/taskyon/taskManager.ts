@@ -402,6 +402,8 @@ export function createToolIndex(tyCrudVec: CrudWrapper<TaskNode>) {
       const toolDef = ToolBase.safeParse(tool)
       if (toolDef.success) {
         defaultToolMap[toolDef.data.name] = tool
+      } else {
+        console.warn(`Tool ${tool.name} is not a valid ToolBase!`, toolDef.error)
       }
     }
   }

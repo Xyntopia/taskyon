@@ -60,6 +60,15 @@ const JSONSchemaObjectRaw = z.strictObject({
       z.lazy(() => JSONSchema7Definition),
     )
     .optional(),
+  // support Draft‑2019+ $defs
+  // this is required, because the "json-schema-to-ts" library uses $defs and
+  // we can not validate those schemas without it.
+  $defs: z
+    .record(
+      z.string(),
+      z.lazy(() => JSONSchema7Definition),
+    )
+    .optional(),
   title: z.string().optional(),
   description: z.string().optional(),
   default: z.any().optional(),
