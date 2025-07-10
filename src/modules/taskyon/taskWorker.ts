@@ -389,6 +389,7 @@ const createTaskProcessor = (
         }
       } catch (error) {
         streamEmit({ stage: 'error', taskId: task.id, info: formatReadableError(error) })
+        console.error('Error processing task:', error, task)
         await handleError(
           error,
           task,
