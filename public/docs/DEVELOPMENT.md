@@ -1,63 +1,116 @@
 # Taskyon Development Guide
 
-Welcome to Taskyon development! This guide is designed to help you set up your environment and get started quickly. Taskyon is built on Vue 3 and Quasar, with a focus on clean architecture and ease of contribution. Even if you're new to the project, you'll find that adding features or working with Taskyon is simple and enjoyable.
+Welcome to Taskyon’s development guide. This document will walk you through setting up your environment, understanding key workflows, and contributing effectively to our codebase. Whether you’re exploring Taskyon for the first time or joining an ongoing project, these steps and explanations will help you make meaningful contributions faster.
 
-For more detailed information about Quasar, follow this link: [Quasar Documentation](https://quasar.dev/)
+---
+
+## Prerequisites & Versions
+
+Taskyon requires a development environment with **Node.js** and **Yarn** (and optionally Rust/Docker for desktop builds). Contributors are free to use any OS or setup they prefer:
+
+- If you use **Nix flakes**, versions are already pinned in `flake.nix`—you can run `nix develop` to enter the correct shell.
+- Otherwise, install Node.js (>=16.x) and Yarn (>=1.22.x) directly on your system. You can consult `flake.nix` for the exact versions we use if needed.
+- Quasar and Vue are pulled in via dev-dependencies—no global CLI install required; prefix commands with `yarn`.
+- For **Tauri** desktop builds, we recommend the Docker-based approach using `Dockerfile.tauri`.
+
+> _Note:_ The flake is there for those familiar with Nix; everyone else can just ensure they have Node/Yarn installed and proceed.
+
+---
 
 ## Install the Project
 
-To get started with Taskyon, follow these steps:
+Follow these steps to clone and prepare Taskyon on your local machine:
 
-```bash
-# download the project
-git clone https://github.com/Xyntopia/taskyon.git
+1. **Clone the repository**
 
-# install dependencies & development dependencies
-yarn install
+   ```bash
+   git clone https://github.com/Xyntopia/taskyon.git
+   cd taskyon
+   ```
 
-# prepare typescript
-yarn quasar prepare
+2. **Install JavaScript dependencies**
 
-# start development server
-yarn quasar dev
+   ```bash
+   yarn install
+   yarn quasar prepare   # sets up TypeScript definitions
+   ```
 
-# build static production webpage
-yarn quasar build
+3. **Run the dev server**
+
+   ```bash
+   yarn quasar dev
+   ```
+
+   The application will be available at `http://localhost:9000`.
+
+4. **Build for production**
+
+   ```bash
+   yarn quasar build
+   ```
+
+   Output is placed in the `dist/` directory.
+
+> _Tip:_ If you ever upgrade dependencies in `flake.nix`, run `nix flake update` to refresh pins.
+
+---
+
+## NPM / Yarn Scripts
+
+We expose common workflows as npm scripts. Below is each command with its purpose:
+
+```json
+{
+  "scripts": {
+    "build": "yarn build:lib && yarn build:app",
+    "build:lib": "yarn run vite build --config vite.lib.config.ts",
+    "build:app": "yarn run quasar build",
+    "build:desktop": "docker build --file Dockerfile.tauri --target export --output type=local,dest=./dist-desktop .",
+    "dev": "yarn run quasar dev",
+    "format": "prettier --write \"**/*.{js,ts,vue,html,md,json}\" --ignore-path .gitignore",
+    "lint": "vue-tsc --noEmit && eslint -c ./eslint.config.js './src*/**/*.{ts,js,vue}'"
+  }
+}
 ```
 
-That's it! You can immediately start developing with Quasar/Vue3 and explore Taskyon's chat interface and task management features.
+- **`build`**: Runs library bundling (for npm publication) and application packaging in sequence.
+- **`build:lib`**: Uses Vite to produce a standalone Taskyon core library (`esm` & `cjs`).
+- **`build:app`**: Invokes Quasar to compile the SPA for production.
+- **`build:desktop`**: Builds the Tauri desktop binary inside Docker; output lands in `./dist-desktop`.
+- **`dev`**: Launches Quasar’s hot-reload dev server.
+- **`format`**: Auto-formats all supported files via Prettier.
+- **`lint`**: Runs TypeScript type checks (no emit) and ESLint against your code.
 
-### Note about quasar cli
+> _Pro tip:_ Run `yarn lint:fix` to auto-fix ESLint errors (if enabled in your editor).
 
-Quasar will automatically get installed through yarn
-and you can use the quasar cli tool through yarn as well by prefixing it with yarn: `yarn quasar ...`.
-If you want to use quasar directly (e.g `quasar dev` without yarn) you will have to follow the instructions
-to install quasar from here: https://quasar.dev/start/quasar-cli
+---
 
-## Configuration and Local vs Production Setup
+## Configuration & Local‑First Architecture
 
-Taskyon allows for different configurations that can be saved and loaded for various environments. You can access Taskyon's settings and manage these configurations by navigating to:
+Taskyon is designed as a **local‑first** application: all data lives securely in the browser, eliminating the need for external API keys or environment variables.
 
-```
-http://localhost:9000/settings/sync
-```
+- **Settings UI**: Visit `http://localhost:9000/settings/sync` to create, save, and switch between named configurations (e.g., development, staging, production).
+- **Password Manager**: API credentials (if added in the future) are stored using the built‑in password manager, ensuring encryption at rest.
 
-Here, you can define and load both **local** (development) and **production** configurations, making it easy to switch between environments.
+> _Why local-first?_ You can prototype features offline, avoid backend dependencies, and protect sensitive data by default.
 
-## Building Documentation
+---
 
-Most docs should automatically appear inside the taskyon webpage when compiling the site with webpack. Taskyon
-makes use of all markdown files in the directory `src/public/doc` for documentation. Starting with index.md.
+## Building & Publishing Documentation
 
-Tasyon automatically compiles a reference for the [taskyon iframe API](https://rest.wiki/https://taskyon.space/docs/openapi-docs.yml) on every build.
+Documentation lives alongside the project code:
 
-Aditionally, we encourage to write code examples for taskyon using typescript
-and then compile them into javascript using a command like this ([swc](https://swc.rs/) comes pre-installed with the
-taskyon development environment):
+1. **Markdown docs**: Place guides or API references in `src/public/doc`. The build pipeline automatically inlines these under `/docs/`.
+2. **Iframe API Reference**: On each build, Taskyon fetches and compiles the OpenAPI spec at:
 
-```
-swc --config-file src/docs/examples/swcrc exampleToolDefinition.ts -o exampleToolDefinition.js
-```
+   ````
+   https://rest.wiki/https://taskyon.space/docs/openapi-docs.yml
+   ```s
+   ````
+
+> _Best practice:_ Keep documentation and examples updated whenever you change public APIs.
+
+---
 
 ## Dependency Analysis
 
@@ -109,63 +162,112 @@ madge --circular --image graph.svg ./src
 
 This analysis helps maintain a clean structure as Taskyon grows and evolves.
 
-## Testing
+---
 
-Taskyon uses Cypress for end-to-end testing. All tests are located in the `./test` directory. Before merging pull requests, all tests must pass successfully. Occasionally, tests may fail for unrelated reasons, in which case developers should be contacted for further troubleshooting.
+## Testing & Diagnostics
 
-To run the tests:
+### End-to-End (E2E) with Cypress
+
+- **Run headless**:
+
+  ```bash
+  cypress run --e2e
+  ```
+
+- **Open interactive UI**:
+
+  ```bash
+  yarn cypress open --e2e
+  ```
+
+- **Video recordings**: Stored in `test/cypress/videos/` for post-mortem.
+
+All E2E tests must pass before merging feature branches.
+
+### In‑Browser Unit Tests & Diagnostics
+
+Navigate to `http://localhost:9000/diagnostics` while the dev server is running. This page exposes unit tests and performance metrics in a live console.
+
+> _Tip:_ Write unit tests for core logic under `src/core/` and expose them via the diagnostics UI for quick feedback.
+
+---
+
+## Branching & Preview Deployments
+
+Our Git workflow follows a simple model:
+
+1. **Feature branches** off `dev` (e.g., `feature/task-sorting`).
+2. **Pull requests** merge back into `dev`.
+3. **Continuous preview**: Successful merges trigger an auto-deploy of `dev` to:
+
+   ```
+   https://dev.taskyon.space
+   ```
+
+4. **Stabilization branch** (optional) before cutting a formal release tag.
+
+> _Why this model?_ It keeps `main` or `dev` always deployable and supports rapid iteration.
+
+---
+
+## Desktop App with Tauri
+
+To build a cross-platform desktop binary:
+
+1. Ensure Docker is running.
+2. At the repo root, execute:
+
+   ```bash
+   yarn build:desktop
+   ```
+
+3. The built application bundle will be in `dist-desktop/`.
+
+This Docker-based approach abstracts away Rust toolchain setup, ensuring a reproducible build.
+
+---
+
+## Docker & Docker Compose
+
+At the project root you’ll find:
+
+- **`Dockerfile`**: Builds a containerized web server for Taskyon.
+- **`Dockerfile.tauri`**: Builds the Tauri desktop exporter.
+- **`docker-compose.yml`** (if present): Defines multi-container setups (e.g., with mock backends).
+
+To start via Docker Compose:
 
 ```bash
-cypress run --e2e
+docker-compose up --build
 ```
 
-For a more interactive debugging experience, you can also run Cypress in open mode:
+This spins up Taskyon and any auxiliary services defined in your compose file.
+
+---
+
+## Code Formatting & Linting
+
+Consistency is enforced through:
+
+- **Prettier** (configured in `prettier.config.js`)
+- **ESLint** (rules in `eslint.config.js`)
+- **TypeScript checks** (via `vue-tsc`)
+
+**Commands**:
 
 ```bash
-cypress open --e2e
+yarn format   # auto-formats code
+yarn lint     # type-checks & lints
 ```
 
-Select the tests you'd like to run, and view them live as they execute.
-
-Videos of the test runs are saved in `test/cypress/videos/` for later review.
-
-## Code Formatting and Linting
-
-Taskyon enforces consistent code formatting and linting across the project. Visual Studio Code should automatically apply ESLint rules when you format the document.
-
-To manually format the code:
-
-```bash
-yarn format
-# or
-npm run format
-```
+Format and lint before committing to keep PR diffs clean.
 
 Make sure your code is correctly formatted and linted before committing. The configuration for ESLint is integrated into the project, and Visual Studio Code will help ensure that your contributions align with the coding standards (e.g. you can press
 ctrl-shift-p then search for "format" and it will give formatting options).
 
 In VS Code, we use "prettier" for all formatting options...
 
-## Build GUI using tauri
-
-Taskyon can be build as a desktop application using [tauri](https://tauri.app/). This is a rust-based
-framework and requires the following steps:
-
-1. Build taskyon normally (explained in [Installation](#install-the-project))
-2. install rust using rustup (using the flake.nix everything should already be set up correctly)
-3. run `tauri dev` in order to start a dev server.
-4. run `quasar build && tauri build` to build the app.
-
-### Issues
-
-- There is still a problem right now [building Appimages](https://github.com/tauri-apps/tauri/issues/8535#issuecomment-2384561950
-- when using webpack, sometimes, javascript with node runs out of memory with an error similar to this:
-  `FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory`. You can try to get rid of it by increasing the memory allocated to nodejs: `export NODE_OPTIONS="--max-old-space-size=8192"`. You can get the current limit by running:
-  `node -e 'console.log(v8.getHeapStatistics().heap_size_limit/(1024*1024))'` in the commandline.
-
-## Docker
-
-Taskyon has a docker image available. Building the image will download taskyons dependencies and build them inside the docker image.
+---
 
 ## Nix Flake
 
@@ -175,16 +277,25 @@ Taskyon provides a Nix flake (flake.nix) as a development environment which can 
 
 To debug Taskyon, we recommend using **Vue DevTools**, which integrates seamlessly with the development environment. You can inspect components, monitor Vuex state, and track changes in real time, ensuring efficient debugging and development workflows.
 
-## Icons
-
-icons can be generated using quasars "icongenie" program. This is the commandline that we should use:
-
-```bash
-icongenie generate --skip-trim --theme-color 2A3548 --svg-color 2A3548 -i
-```
-
 ## Contribution Guidelines
 
-Taskyon is designed to be **developer-friendly**, and we encourage contributions, especially around building new GUI features using **Quasar** and **Vue3**. Taskyon’s architecture is modular, and you’ll find that adding new functionality, like UI components or task management enhancements, is both straightforward and rewarding.
+We welcome contributions of all sizes:
 
-Don’t hesitate to dive in and explore the codebase. Taskyon is "meant" to be integrated into a variety of use cases, and you'll quickly discover that it’s a great starting point for building powerful, local-first AI interactions.
+- **Reporting issues**: Use GitHub Issues at [https://github.com/Xyntopia/taskyon/issues](https://github.com/Xyntopia/taskyon/issues)
+- **Proposing changes**: Fork the repo, create a branch off `dev`, and open a PR. Include:
+
+  - A clear description of your change
+  - Screenshots or recordings (if UI-related)
+  - Passing lint and test checks
+
+Please adhere to our commit message format:
+
+```
+[type]: brief description
+
+More detailed context, if necessary.
+```
+
+Where `type` is one of `feat`, `fix`, `docs`, `chore`, or `test`.
+
+Thank you for helping make Taskyon better—your contributions drive our community forward!
