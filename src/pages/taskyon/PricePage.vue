@@ -3,6 +3,7 @@
     <q-card flat>
       <q-card-section>
         <ty-markdown
+          class="pricing-page-intro"
           :src="`
 ##  Infos and pricing for all available Models.
 
