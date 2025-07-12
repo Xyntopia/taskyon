@@ -3,188 +3,186 @@
   <div class="create-new-task">
     <!--Task Creation-->
     <div>
-      <!--Task Editing area-->
-      <div>
-        <!-- in case we simply want to send simple messages :)-->
-        <chatMessageEdit
-          v-if="!selectedTaskType"
-          v-model="state.messageDraft"
-          class="text-body1"
-          :use-enter-to-send="state.appConfiguration.useEnterToSend"
-          @execute-task="addNewTask"
+      <!-- in case we simply want to send simple messages :)-->
+      <chatMessageEdit
+        v-if="!selectedTaskType"
+        v-model="state.messageDraft"
+        class="text-body1 ty-msg-edit"
+        :use-enter-to-send="state.appConfiguration.useEnterToSend"
+        @execute-task="addNewTask"
+      />
+      <!--If we want to edit any pre-defined functions we can do that here...-->
+      <div v-else-if="selectedTaskType" class="row">
+        <ObjectTreeView
+          v-model="state.draftParameters[selectedTaskType]"
+          class="col"
+          input-field-behavior="auto"
+          :separate-labels="false"
+          :schema="functionSchema"
         />
-        <!--If we want to edit any pre-defined functions we can do that here...-->
-        <div v-else-if="selectedTaskType" class="row">
-          <ObjectTreeView
-            v-model="state.draftParameters[selectedTaskType]"
-            class="col"
-            input-field-behavior="auto"
-            :separate-labels="false"
-            :schema="functionSchema"
-          />
-          <q-btn
-            v-if="state.appConfiguration.expertMode"
-            flat
-            dense
-            size="sm"
-            :icon="matBuild"
-            :to="`/tool/${selectedTaskType}`"
-          />
+        <q-btn
+          v-if="state.appConfiguration.expertMode"
+          flat
+          dense
+          size="sm"
+          :icon="matBuild"
+          :to="`/tool/${selectedTaskType}`"
+        />
+      </div>
+    </div>
+    <!--show attached files-->
+    <div v-if="fileAttachments.length">
+      <q-chip
+        v-for="file in fileAttachments"
+        :key="file.name"
+        removable
+        :icon="matUploadFile"
+        @remove="removeFileFromDraft(file)"
+      >
+        <div class="ellipsis" style="max-width: 100px">
+          {{ `${file.name}` }}
         </div>
-      </div>
-      <!--show attached files-->
-      <div v-if="fileAttachments.length">
-        <q-chip
-          v-for="file in fileAttachments"
-          :key="file.name"
-          removable
-          :icon="matUploadFile"
-          @remove="removeFileFromDraft(file)"
-        >
-          <div class="ellipsis" style="max-width: 100px">
-            {{ `${file.name}` }}
-          </div>
-          <q-tooltip :delay="0.5">{{ `${file.name}` }}</q-tooltip>
-        </q-chip>
-      </div>
-      <!--Task Creation State-->
-      <div v-if="!hideTaskInfo" class="q-px-sm q-pt-xs">
-        <div class="row items-center">
-          <!--attach files...-->
-          <FileDropzone class="col-auto" accept="*" enable-paste @add-files="attachFileToDraft">
-            <q-btn dense class="fit" flat>
-              <q-icon :name="matAttachment" />
-              <q-tooltip>Attach file or image to message</q-tooltip>
-            </q-btn>
-          </FileDropzone>
-          <!--Taskyon features-->
-          <div class="col-auto row">
-            <div>
-              <q-tooltip>More AI Settings</q-tooltip>
-              <FormDialog
-                v-model="slimSettings.reactiveView"
-                title="AI Settings"
-                flat
-                dense
-                dense-options
-                :icon="matMoreHoriz"
-                :schema="slimSettings.jsonSchema"
-              >
-                <template #before>
-                  Change some settings for taskyon here. For a full list of settings, please check
-                  the <router-link to="/settings/agent%20config">settings page</router-link>.
-                </template>
-                <template #after>
-                  <q-item class="row items-center">
-                    <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
-                    <ModelSelection
-                      v-model:selected-api="selectedApi"
-                      class="col"
-                      :bot-name="tystate.currentModelId"
-                      :model-list="expertMode"
-                      :select-api="expertMode"
-                      @update-bot-name="tystate.handleBotNameUpdate"
-                      @click.stop
-                    ></ModelSelection>
-                  </q-item>
-                </template>
-              </FormDialog>
-            </div>
-          </div>
-          <!--Task type selection and execution-->
-          <div class="col-auto">
-            <q-btn
-              v-if="selectedTaskType"
+        <q-tooltip :delay="0.5">{{ `${file.name}` }}</q-tooltip>
+      </q-chip>
+    </div>
+    <!--Task Creation State-->
+    <div v-if="!hideTaskInfo" class="q-px-sm q-pt-xs">
+      <div class="row items-center">
+        <!--attach files...-->
+        <FileDropzone class="col-auto" accept="*" enable-paste @add-files="attachFileToDraft">
+          <q-btn dense class="fit" flat>
+            <q-icon :name="matAttachment" />
+            <q-tooltip>Attach file or image to message</q-tooltip>
+          </q-btn>
+        </FileDropzone>
+        <!--Taskyon features-->
+        <div class="col-auto row">
+          <div>
+            <q-tooltip>More AI Settings</q-tooltip>
+            <FormDialog
+              v-model="slimSettings.reactiveView"
+              title="AI Settings"
               flat
               dense
-              :icon="matChat"
-              @click="tystate.switchTaskType(undefined)"
-              ><q-tooltip>Select Simple Chat</q-tooltip>
-            </q-btn>
+              dense-options
+              :icon="matMoreHoriz"
+              :schema="slimSettings.jsonSchema"
+            >
+              <template #before>
+                Change some settings for taskyon here. For a full list of settings, please check the
+                <router-link to="/settings/agent%20config">settings page</router-link>.
+              </template>
+              <template #after>
+                <q-item class="row items-center">
+                  <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
+                  <ModelSelection
+                    v-model:selected-api="selectedApi"
+                    class="col"
+                    :bot-name="tystate.currentModelId"
+                    :model-list="expertMode"
+                    :select-api="expertMode"
+                    @update-bot-name="tystate.handleBotNameUpdate"
+                    @click.stop
+                  ></ModelSelection>
+                </q-item>
+              </template>
+            </FormDialog>
           </div>
-          <div v-if="expertMode" class="col-auto q-px-md">
-            <!--q-select
+        </div>
+        <!--Task type selection and execution-->
+        <div class="col-auto">
+          <q-btn
+            v-if="selectedTaskType"
+            flat
+            dense
+            :icon="matChat"
+            @click="tystate.switchTaskType(undefined)"
+            ><q-tooltip>Select Simple Chat</q-tooltip>
+          </q-btn>
+        </div>
+        <div v-if="expertMode" class="col-auto q-px-md">
+          <!--q-select
               :model-value="selectedTaskType || ''"
               :options="toolNames"
               @update:model-value="setTaskType"
               use-input
             /-->
-            <q-select
-              class="col"
-              use-input
-              dense
-              hide-selected
-              fill-input
-              options-dense
-              input-debounce="0"
-              borderless
-              color="secondary"
-              :model-value="selectedTaskType"
-              :options="filteredToolCollection"
-              :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
-              @filter="filterFn"
-              @update:model-value="tystate.switchTaskType"
-            />
-          </div>
-          <!--
+          <q-select
+            class="col"
+            use-input
+            dense
+            hide-selected
+            fill-input
+            options-dense
+            input-debounce="0"
+            borderless
+            color="secondary"
+            :model-value="selectedTaskType"
+            :options="filteredToolCollection"
+            :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
+            @filter="filterFn"
+            @update:model-value="tystate.switchTaskType"
+          />
+        </div>
+        <!--
           <div v-else-if="expertMode">
             <q-btn dense flat :icon="mdiFunctionVariant" @click="" />
           </div>
         -->
-          <!--Choose Model-->
-          <div class="col-auto row q-px-md">
-            <info-dialog
-              v-if="tystate.currentModelId && tystate.currentModel?.description"
-              size="xs"
-              :info-text="tystate.currentModel?.description || ''"
-            />
-            <q-btn flat dense size="sm" no-caps>
-              <q-icon :name="matSmartToy" class="q-px-xs" />
-              <div class="ellipsis">
-                {{ `${tystate.currentModelId}` }}
-              </div>
-              <div class="text-weight-thin gt-xs">/{{ state.llmSettings.selectedApi }}</div>
-              <q-tooltip>Select AI model (current model: {{ tystate.currentModelId }})</q-tooltip>
-              <q-menu color="secondary">
-                <q-list style="min-width: 100px">
-                  <q-item-label header>Previously selected AI models!</q-item-label>
-                  <q-item v-if="state.modelHistory.length === 0" v-close-popup>
-                    No other models were selected yet!
-                  </q-item>
-                  <q-item
-                    v-for="(m, idx) in state.modelHistory"
-                    :key="m"
-                    v-close-popup
-                    clickable
-                    @click="tystate.handleBotNameUpdate({ newName: m })"
-                  >
-                    <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
-                  </q-item>
-                  <q-item v-close-popup clickable to="/pricing">
-                    <q-item-section avatar>
-                      <q-icon :name="matSmartToy"></q-icon>
-                    </q-item-section>
-                    <q-item-section> All Models </q-item-section>
-                    <q-item-section side>
-                      <q-icon :name="matNavigateNext"></q-icon>
-                    </q-item-section>
-                  </q-item>
-                </q-list>
-              </q-menu>
-            </q-btn>
-          </div>
-          <div class="col-auto">
-            <q-btn
-              v-if="selectedTaskType"
-              class="q-ma-md"
-              flat
-              :icon-right="matSend"
-              @click="addNewTask()"
-            >
-              <q-tooltip>Execute Task</q-tooltip>
-            </q-btn>
-          </div>
-          <!-- deactivate token estimation for now, because
+        <!--Choose Model-->
+        <div class="col-auto row q-px-md">
+          <info-dialog
+            v-if="tystate.currentModelId && tystate.currentModel?.description"
+            size="xs"
+            :info-text="tystate.currentModel?.description || ''"
+          />
+          <q-btn flat dense size="sm" no-caps>
+            <q-icon :name="matSmartToy" class="q-px-xs" />
+            <div class="ellipsis">
+              {{ `${tystate.currentModelId}` }}
+            </div>
+            <div class="text-weight-thin gt-xs">/{{ state.llmSettings.selectedApi }}</div>
+            <q-tooltip>Select AI model (current model: {{ tystate.currentModelId }})</q-tooltip>
+            <q-menu color="secondary">
+              <q-list style="min-width: 100px">
+                <q-item-label header>Previously selected AI models!</q-item-label>
+                <q-item v-if="state.modelHistory.length === 0" v-close-popup>
+                  No other models were selected yet!
+                </q-item>
+                <q-item
+                  v-for="(m, idx) in state.modelHistory"
+                  :key="m"
+                  v-close-popup
+                  clickable
+                  @click="tystate.handleBotNameUpdate({ newName: m })"
+                >
+                  <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
+                </q-item>
+                <q-item v-close-popup clickable to="/pricing">
+                  <q-item-section avatar>
+                    <q-icon :name="matSmartToy"></q-icon>
+                  </q-item-section>
+                  <q-item-section> All Models </q-item-section>
+                  <q-item-section side>
+                    <q-icon :name="matNavigateNext"></q-icon>
+                  </q-item-section>
+                </q-item>
+              </q-list>
+            </q-menu>
+          </q-btn>
+        </div>
+        <div class="col-auto">
+          <q-btn
+            v-if="selectedTaskType"
+            class="q-ma-md"
+            flat
+            :icon-right="matSend"
+            @click="addNewTask()"
+          >
+            <q-tooltip>Execute Task</q-tooltip>
+          </q-btn>
+        </div>
+        <!-- deactivate token estimation for now, because
            when using agents this is way too hard to estimate.
           <template v-if="tystate.currentModelId && expertMode && false">
             <div class="gt-xs">
@@ -199,7 +197,6 @@
             </div>
             <div class="lt-sm">{{ `t/c: ${estimatedTokens}` }}</div>
           </template>-->
-        </div>
       </div>
     </div>
   </div>
