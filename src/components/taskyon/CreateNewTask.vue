@@ -59,34 +59,36 @@
         <div class="col-auto row">
           <q-btn dense flat :icon="matMoreHoriz">
             <q-tooltip>More AI Settings</q-tooltip>
-            <q-menu fit>
+            <q-menu fit class="q-pt-md">
               <div>
-                <q-card-section>
-                  <ObjectTreeView
-                    v-model="slimSettings.reactiveView"
-                    :schema="slimSettings.jsonSchema"
-                    dense
-                  />
-                </q-card-section>
-                <q-card-section>
-                  <q-item class="row items-center">
-                    <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
-                    <ModelSelection
-                      v-model:selected-api="selectedApi"
-                      class="col"
-                      :bot-name="tystate.currentModelId"
-                      :model-list="expertMode"
-                      :select-api="expertMode"
-                      @update-bot-name="tystate.handleBotNameUpdate"
-                      @click.stop
-                    ></ModelSelection>
-                  </q-item>
-                </q-card-section>
-                <q-card-actions class="float-right">
-                  <q-btn flat to="/settings/agent%20config" label="Full list of settings" />
-                  <q-btn v-close-popup flat label="Ok" />
-                </q-card-actions>
+                <ObjectTreeView
+                  v-model="slimSettings.reactiveView"
+                  :schema="slimSettings.jsonSchema"
+                  dense
+                />
               </div>
+              <div>
+                <q-item class="row items-center">
+                  <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
+                  <ModelSelection
+                    v-model:selected-api="selectedApi"
+                    class="col"
+                    :bot-name="tystate.currentModelId"
+                    :model-list="expertMode"
+                    :select-api="expertMode"
+                    @update-bot-name="tystate.handleBotNameUpdate"
+                  ></ModelSelection>
+                </q-item>
+              </div>
+              <q-card-actions class="float-right">
+                <q-btn
+                  v-if="expertMode"
+                  flat
+                  to="/settings/agent%20config"
+                  label="Full list of settings"
+                />
+                <q-btn v-close-popup flat label="Ok" />
+              </q-card-actions>
             </q-menu>
           </q-btn>
         </div>
