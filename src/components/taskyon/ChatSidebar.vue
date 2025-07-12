@@ -88,15 +88,6 @@
             to="/detailed"
           ></q-btn>
         </div>
-        <div>
-          <q-btn
-            flat
-            dense
-            :icon="matManageAccounts"
-            label="AI Service"
-            to="/settings/aiserviceprovider"
-          ></q-btn>
-        </div>
       </div>
     </q-item>
   </q-list>
@@ -106,7 +97,7 @@
 import { ref, watch } from 'vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import FileDropzone from 'components/FileDropzone.vue'
-import { matSearch, matManageAccounts, matFileUpload } from '@quasar/extras/material-icons'
+import { matSearch, matFileUpload } from '@quasar/extras/material-icons'
 import {
   mdiRobotConfusedOutline,
   mdiForumPlus,

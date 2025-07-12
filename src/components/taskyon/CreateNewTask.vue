@@ -147,7 +147,7 @@
             <div class="text-weight-thin gt-xs">/{{ state.llmSettings.selectedApi }}</div>
             <q-tooltip>Select AI model (current model: {{ tystate.currentModelId }})</q-tooltip>
             <q-menu color="secondary">
-              <q-list style="min-width: 100px">
+              <q-list dense style="min-width: 100px">
                 <q-item-label header>Previously selected AI models!</q-item-label>
                 <q-item v-if="state.modelHistory.length === 0" v-close-popup>
                   No other models were selected yet!
@@ -161,15 +161,17 @@
                 >
                   <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
                 </q-item>
-                <q-item v-close-popup clickable to="/pricing">
-                  <q-item-section avatar>
-                    <q-icon :name="matSmartToy"></q-icon>
-                  </q-item-section>
-                  <q-item-section> All Models </q-item-section>
-                  <q-item-section side>
-                    <q-icon :name="matNavigateNext"></q-icon>
-                  </q-item-section>
-                </q-item>
+                <q-separator />
+                <div class="row">
+                  <q-btn square flat :icon="matSmartToy" label="Model List" to="/pricing" />
+                  <q-btn
+                    square
+                    flat
+                    :icon="matManageAccounts"
+                    label="Select AI Service"
+                    to="/settings/aiserviceprovider"
+                  />
+                </div>
               </q-list>
             </q-menu>
           </q-btn>
@@ -220,11 +222,11 @@ import {
   matUploadFile,
   matChat,
   matSmartToy,
-  matNavigateNext,
   matMoreHoriz,
   matAttachment,
   matSend,
   matBuild,
+  matManageAccounts,
 } from '@quasar/extras/material-icons'
 import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
