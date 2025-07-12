@@ -1,5 +1,5 @@
 <template>
-  <div class="row items-start q-gutter-xs">
+  <div class="row items-start q-gutter-xs model-selection">
     <!--LLM Model selection-->
     <div class="col row items-center" style="min-width: 200px">
       <q-select
