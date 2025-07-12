@@ -45,12 +45,6 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%)
     mask-image: linear-gradient(to bottom, black 50%, transparent 100%)
 
-  .create-new-task-container
-    z-index: 21
-    border-top-left-radius: 5px
-    border-top-right-radius: 5px
-    box-shadow: 0 0 2px 1px rgba($primary,0.1) // Adds an outer border with the primary color
-
   .raw-markdown
     white-space: pre-wrap // This will display newlines and wrap text
 
@@ -174,6 +168,24 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
   .debug-container
     padding-top: 5px
 
+  .create-new-task-container
+    z-index: 21
+    border-top-left-radius: 5px
+    border-top-right-radius: 5px
+    box-shadow: 0 0 2px 1px rgba($primary,0.1) // Adds an outer border with the primary color
+    backdrop-filter: blur(40px) brightness(1.0)
+    background-color: rgba(white, 0.1) // Adjust transparency as needed
+    border: 0.5px solid rgba(white, 0.5)
+
+  .ty-msg-edit
+    border-radius: 10px
+    box-shadow: inset 0 0 10px white
+    padding-left: 15px
+    padding-right: 15px
+  // we use this as a workaround when the field is focused or contains text.
+  .ty-msg-edit.q-field--float
+    background-color: white
+
   // common settings for both:  dark & light  
   .body--light
     #q-app
@@ -222,11 +234,6 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       border: 1px solid rgb($primary) /* add white outline */
       border-radius: 5px /* optional, to match the rounded-borders class */
 
-    .create-new-task-container
-      backdrop-filter: blur(40px) brightness(1.0)
-      background-color: rgba(white, 0.1) // Adjust transparency as needed
-      border: 0.5px solid rgba(white, 0.5)
-
     .task-container
       background-color: white
       &.user
@@ -253,6 +260,13 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       backdrop-filter: blur(40px) brightness(0.6)
       border: 0.5px solid rgba(white, 0.1)
       border-bottom: none
+
+    .ty-msg-edit
+      box-shadow: inset 0 0 10px rgb($secondary)
+      text-color: rgb($secondary)
+    .ty-msg-edit.q-field--float
+      background-color: rgba($dark,1.0)
+      box-shadow: inset 0 0 5px rgb($primary)
 
     .taskyon-control-button
       background-color: rgba($secondary,0.7)
