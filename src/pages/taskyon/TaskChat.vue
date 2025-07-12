@@ -46,7 +46,7 @@
       />
       <!-- Welcome Message -->
       <div
-        v-if="tystate.selectedThread.value.length == 0 || showIntroduction"
+        v-if="tystate.selectedThread.value.length === 0"
         class="col column justify-center items-center q-pa-sm welcome"
         style="max-width: 600px"
       >
@@ -69,7 +69,7 @@
           style="max-width: 48rem"
           :file-attachments="fileAttachments"
           :force-task-props="state.llmSettings.taskTemplate"
-          class="q-pa-md"
+          class="q-pa-md col self-stretch"
           :hide-task-info="state.minimalGui"
           :expert-mode="state.appConfiguration.expertMode"
         />
@@ -106,7 +106,7 @@
       <q-resize-observer @resize="handleResize" />
       <div class="col create-new-task-container" style="max-width: 48rem">
         <CreateNewTask
-          v-if="!showIntroduction"
+          v-if="tystate.selectedThread.value.length > 0"
           :file-attachments="fileAttachments"
           :force-task-props="state.llmSettings.taskTemplate"
           class="q-pa-xs"

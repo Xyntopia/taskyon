@@ -176,9 +176,12 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     backdrop-filter: blur(40px) brightness(1.0)
     background-color: rgba(white, 0.1) // Adjust transparency as needed
     border: 0.5px solid rgba(white, 0.5)
+    .ty-msg-edit
+      box-shadow: none
+      background-color: rgba(white, 0.5)
 
   .ty-msg-edit
-    border-radius: 10px
+    border-radius: 5px
     box-shadow: inset 0 0 10px white
     padding-left: 15px
     padding-right: 15px
@@ -260,6 +263,9 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       backdrop-filter: blur(40px) brightness(0.6)
       border: 0.5px solid rgba(white, 0.1)
       border-bottom: none
+      .ty-msg-edit
+        box-shadow: none
+        background-color: rgba($dark, 0.5)
 
     .ty-msg-edit
       box-shadow: inset 0 0 10px rgb($secondary)

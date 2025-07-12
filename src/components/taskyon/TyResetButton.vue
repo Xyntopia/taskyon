@@ -6,7 +6,7 @@
     v-bind="$attrs"
     @click="showResetDialog = true"
   >
-    <q-tooltip :delay="1000">
+    <q-tooltip :delay="500">
       {{
         mode === 'all'
           ? 'Reset chat history & settings & cache. (Only appears in local development mode)'
