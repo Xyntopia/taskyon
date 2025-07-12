@@ -57,37 +57,38 @@
         </FileDropzone>
         <!--Taskyon features-->
         <div class="col-auto row">
-          <div>
+          <q-btn dense flat :icon="matMoreHoriz">
             <q-tooltip>More AI Settings</q-tooltip>
-            <FormDialog
-              v-model="slimSettings.reactiveView"
-              title="AI Settings"
-              flat
-              dense
-              dense-options
-              :icon="matMoreHoriz"
-              :schema="slimSettings.jsonSchema"
-            >
-              <template #before>
-                Change some settings for taskyon here. For a full list of settings, please check the
-                <router-link to="/settings/agent%20config">settings page</router-link>.
-              </template>
-              <template #after>
-                <q-item class="row items-center">
-                  <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
-                  <ModelSelection
-                    v-model:selected-api="selectedApi"
-                    class="col"
-                    :bot-name="tystate.currentModelId"
-                    :model-list="expertMode"
-                    :select-api="expertMode"
-                    @update-bot-name="tystate.handleBotNameUpdate"
-                    @click.stop
-                  ></ModelSelection>
-                </q-item>
-              </template>
-            </FormDialog>
-          </div>
+            <q-menu fit>
+              <div>
+                <q-card-section>
+                  <ObjectTreeView
+                    v-model="slimSettings.reactiveView"
+                    :schema="slimSettings.jsonSchema"
+                    dense
+                  />
+                </q-card-section>
+                <q-card-section>
+                  <q-item class="row items-center">
+                    <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
+                    <ModelSelection
+                      v-model:selected-api="selectedApi"
+                      class="col"
+                      :bot-name="tystate.currentModelId"
+                      :model-list="expertMode"
+                      :select-api="expertMode"
+                      @update-bot-name="tystate.handleBotNameUpdate"
+                      @click.stop
+                    ></ModelSelection>
+                  </q-item>
+                </q-card-section>
+                <q-card-actions class="float-right">
+                  <q-btn flat to="/settings/agent%20config" label="Full list of settings" />
+                  <q-btn v-close-popup flat label="Ok" />
+                </q-card-actions>
+              </div>
+            </q-menu>
+          </q-btn>
         </div>
         <!--Task type selection and execution-->
         <div class="col-auto">
@@ -226,7 +227,6 @@ import {
 import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { asyncComputed } from 'src/modules/vueUtils'
-import FormDialog from './FormDialog.vue'
 import { buildSlimView } from 'src/modules/vueUtils'
 import FileDropzone from '../FileDropzone.vue'
 import { QSelect } from 'quasar'
@@ -243,6 +243,7 @@ const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { selectedApi } = toRefs(state.llmSettings)
+
 //const selectedTaskTypeVar = ref<string>('testasdad')
 
 const em = computed(() => state.appConfiguration.expertMode)
