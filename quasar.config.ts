@@ -272,7 +272,7 @@ export default defineConfig((ctx) => {
         analyzer({
           openAnalyzer: true, // Automatically open the analyzer UI in your browser
           summary: true, // Set to true if you prefer just a summary
-          fileName: '../analyze_report.html',
+          fileName: '../analyze_report',
           analyzerMode: 'static', // we use static here so that it also works in a CI setting.
           // Other options can go here if needed.
         }),
