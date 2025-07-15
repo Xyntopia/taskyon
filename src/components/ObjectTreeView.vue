@@ -75,8 +75,15 @@
     </template>
     <template #body-boolean="prop">
       <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
+        <q-chip
+          v-if="readOnly"
+          :icon="prop.node.value ? prop.node.onIcon : prop.node.offIcon"
+          :color="prop.node.value ? 'positive' : 'negative'"
+          text-color="white"
+          :label="prop.node.value ? 'Yes' : 'No'"
+        />
         <q-toggle
-          :disable="readOnly"
+          v-else
           dense
           size="lg"
           left-label

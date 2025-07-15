@@ -302,7 +302,6 @@ We welcome contributions of all sizes:
 
 - **Reporting issues**: Use GitHub Issues at [https://github.com/Xyntopia/taskyon/issues](https://github.com/Xyntopia/taskyon/issues)
 - **Proposing changes**: Fork the repo, create a branch off `dev`, and open a PR. Include:
-
   - A clear description of your change
   - Screenshots or recordings (if UI-related)
   - Passing lint and test checks
