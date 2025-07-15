@@ -1,5 +1,5 @@
 <template>
-  <q-list dense>
+  <q-list dense separator>
     <q-item v-for="(secretRow, secretId) in secretList" :key="secretId">
       <q-expansion-item
         dense
