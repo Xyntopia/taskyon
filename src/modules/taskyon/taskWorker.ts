@@ -8,6 +8,13 @@ import type { CrudWrapper, SecretStore } from '../crudWrapper'
 import { createStream } from '../frpBus'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
 
+export async function generateSecretId(
+  taskId: string | undefined,
+  tool: { name: string; code?: unknown; function?: unknown },
+) {
+  return tool.name + ':' + (taskId ?? (await sha256UrlSafeHash(tool.code ?? tool.function)))
+}
+
 // TODO: how about we put this here into its own tool as well!
 //       its totally possible now... Would probably make the code cleaner...
 async function safeExecuteTask(
@@ -24,8 +31,7 @@ async function safeExecuteTask(
     if (tool && !stopSignal.aborted) {
       // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
       const taskChain = await taskManager.getTaskChain(task.id)
-      const toolId =
-        def?.id ?? tool.name + ':' + (await sha256UrlSafeHash(tool.code ?? tool.function))
+      const toolId = await generateSecretId(def?.id, tool)
       const funcR = await handleFunctionExecution(func, tool, stopSignal, {
         taskChain,
         getSecret: async (name, askNew) => {
