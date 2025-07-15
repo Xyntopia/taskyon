@@ -135,7 +135,9 @@ export function createOpenAPIDocs() {
 
   console.log('generate docs...')
 
-  const schemas = [ToolBase, TaskyonMessage].map((zType) => z.toJSONSchema(zType))
+  const schemas = [ToolBase, TaskyonMessage].map((zType) =>
+    z.toJSONSchema(zType, { unrepresentable: 'any' }),
+  )
 
   const openapiDoc = {
     openapi: '3.0.0',

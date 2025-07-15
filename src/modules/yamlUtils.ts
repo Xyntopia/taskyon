@@ -3,7 +3,7 @@ import { dump } from 'js-yaml'
 import type { JSONSchema7, JSONSchema7Definition } from 'json-schema'
 
 export function zodToYamlString(schema: z.ZodType): string {
-  const jsonSchema = z.toJSONSchema(schema) as JSONSchema7
+  const jsonSchema = z.toJSONSchema(schema, { unrepresentable: 'any' }) as JSONSchema7
   const yamlSchema = jsonSchemaToYamlString(jsonSchema)
   return yamlSchema
 }
@@ -139,7 +139,7 @@ export function jsonSchemaToYAMLObject(
     return 'string'
   }
   if (schema === false) {
-    return 'unsupported'
+    return 'unknown'
   }
 
   // primitives
@@ -174,7 +174,7 @@ export function jsonSchemaToYAMLObject(
     const items = Array.isArray(schema.items) ? schema.items[0] : schema.items
 
     if (!items) {
-      return { type: 'array', items: 'unsupported' }
+      return { type: 'array', items: 'unknown' }
     }
 
     return {
@@ -237,7 +237,7 @@ export function jsonSchemaToYAMLObject(
   }
 
   // fallback
-  return 'unsupported'
+  return 'unknown'
 }
 
 // Top‑level: from JSON Schema to YAML string with comments

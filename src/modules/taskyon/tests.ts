@@ -58,7 +58,7 @@ export function testJsonSchemas() {
 
   return {
     toolBaseJsonSchema: craeteToolJsonSchema(),
-    toolJsonSchema: z.toJSONSchema(ToolBase),
+    toolJsonSchema: z.toJSONSchema(ToolBase, { unrepresentable: 'any' }),
     yamlString: zodToYamlString(ToolBase),
   }
 }

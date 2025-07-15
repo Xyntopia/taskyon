@@ -431,7 +431,9 @@ export function craeteToolJsonSchema() {
       'A valid JSON Schema object defining the structure, types, and constraints for the tool parameters. Include properties, required fields, and any other validations as needed.',
   }
 
-  const toolBaseJsonSchema = convertZodToJsonSchemaCached(ToolBase) as JSONSchema7Object
+  const toolBaseJsonSchema = convertZodToJsonSchemaCached(ToolBase, {
+    unrepresentable: 'any',
+  }) as JSONSchema7Object
   if (
     toolBaseJsonSchema.properties &&
     typeof toolBaseJsonSchema.properties === 'object' &&

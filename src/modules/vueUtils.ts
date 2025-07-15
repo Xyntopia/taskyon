@@ -39,7 +39,7 @@ export function buildSlimView<O extends Record<string, unknown>, S extends Singl
     return z.object(pickedSchema)
   })
   const mergedSchema = pickedSchemas.reduce((a, b) => z.object({ ...a.shape, ...b.shape }))
-  const jsonSchema = convertZodToJsonSchemaCached(mergedSchema)
+  const jsonSchema = convertZodToJsonSchemaCached(mergedSchema, { unrepresentable: 'any' })
 
   const plainRefMap = sources.reduce(
     (acc, { obj, pickKeys }) => {
