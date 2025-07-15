@@ -42,7 +42,11 @@
           <div>All of the Agent configuration</div>
           <ObjectTreeView
             v-model="state.llmSettings"
-            :schema="convertZodToJsonSchemaCached(storedSettings.shape.llmSettings)"
+            :schema="
+              convertZodToJsonSchemaCached(storedSettings.shape.llmSettings, {
+                unrepresentable: 'any',
+              })
+            "
             class="fit"
           />
           <!--{{ state.llmSettings }}-->
@@ -51,7 +55,11 @@
           <div>All of the app configurations</div>
           <ObjectTreeView
             v-model="state.appConfiguration"
-            :schema="convertZodToJsonSchemaCached(storedSettings.shape.appConfiguration)"
+            :schema="
+              convertZodToJsonSchemaCached(storedSettings.shape.appConfiguration, {
+                unrepresentable: 'any',
+              })
+            "
             class="fit"
           />
         </q-tab-panel>
