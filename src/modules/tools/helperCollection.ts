@@ -1,3 +1,4 @@
+import { createTool } from '../taskyon/tools'
 import type { ToolBase } from '../taskyon/types'
 
 const jinaMarkdownReader = {
@@ -26,7 +27,8 @@ const jinaMarkdownReader = {
   }`,
 } as ToolBase
 
-const jinaSearch = {
+// TODO: add more functionality from here:   https://r.jina.ai/docs
+const jinaSearch = createTool({
   description: 'A tool that searches using the Jina AI search API.',
   longDescription:
     'This tool uses the Jina AI search API to perform searches and retrieve results.',
@@ -43,38 +45,31 @@ const jinaSearch = {
         type: 'string',
         description: 'The search query to use with the Jina AI search API.',
       },
-      apiKey: {
-        type: 'string',
-        description: 'The API key for authenticating with the Jina AI search API.',
-      },
     },
   },
-  function: async ({ query, apiKey }: { query: string; apiKey: string }) => {
-    return fetch(`https://s.jina.ai/?q=${encodeURIComponent(query)}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'X-Respond-With': 'no-content',
-      },
-    })
-      .then(async (response) => {
-        const text = await response.text()
-        console.log('Raw response:', text)
-        try {
-          return JSON.parse(text)
-        } catch (e) {
-          console.error('Failed to parse response:', e)
-          return { error: 'Invalid response format', raw: text }
-        }
+  function: async ({ query }: { query: string }, ctx) => {
+    // get key from here:  https://jina.ai/api-dashboard/key-manager
+    const apiKey = await ctx.getSecret(
+      'jina API key from https://jina.ai/api-dashboard/key-manager',
+      true,
+    )
+    try {
+      const response = await fetch(`https://s.jina.ai/?q=${encodeURIComponent(query)}`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'X-Respond-With': 'no-content',
+        },
       })
-      .catch((error) => {
-        console.error('Error searching with Jina AI:', error)
-        return {
-          error: 'Failed to search with Jina AI',
-        }
-      })
+      const text = await response.text()
+      console.log('Raw response:', text)
+      return text
+    } catch (error) {
+      console.error('Error searching with Jina AI:', error)
+      throw error
+    }
   },
-} as ToolBase
+})
 
 const clock = {
   description: 'A tool that provides the current time, date, and weekday.',

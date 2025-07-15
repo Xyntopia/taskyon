@@ -78,8 +78,6 @@ export const ragSearchTool = createTool({
         name: 'jinaSearch',
         arguments: {
           query: searchText,
-          apiKey: '[REDACTED]',
-          // apiKey: process.env.JINA_API_KEY || '',
         },
       })
 
