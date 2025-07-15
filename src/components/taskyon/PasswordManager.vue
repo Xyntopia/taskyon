@@ -3,7 +3,7 @@
     <q-item v-for="(secretRow, secretId) in secretList" :key="secretId">
       <q-expansion-item
         dense
-        :label="String(secretId)"
+        :label="secretId.split(':')[0]"
         default-opened
         header-class="text-h6"
         class="fit"
