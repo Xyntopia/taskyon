@@ -59,8 +59,9 @@ export async function initTaskyon(
     localVectorStore,
     executeJavaScript,
     toolCreationWizard,
-    ragSearchTool,
-    ragAddTool,
+    //ragSearchTool,
+    // TODO: finish the ragAddTool
+    //ragAddTool,
     ...EnvironmentTools,
   ]
 

@@ -74,38 +74,6 @@ const jinaSearch = {
         }
       })
   },
-  // code: `({query, apiKey}) => {
-  //   return new Promise((resolve, reject) => {
-  //     const https = require("https");
-  //     const data = JSON.stringify({ q: query, gl: "US", hl: "en", num: "10", page: "1" });
-  //     const options = {
-  //       hostname: "s.jina.ai",
-  //       path: "/",
-  //       method: "POST",
-  //       headers: {
-  //         Authorization: \`Bearer \${apiKey}\`,
-  //         "Content-Type": "application/json",
-  //         "X-Respond-With": "no-content",
-  //         "X-Retain-Images": "none",
-  //         "Content-Length": data.length,
-  //       },
-  //     };
-  //     const req = https.request(options, (res) => {
-  //       let responseData = "";
-  //       res.on("data", (chunk) => {
-  //         responseData += chunk;
-  //       });
-  //       res.on("end", () => {
-  //         resolve(JSON.parse(responseData));
-  //       });
-  //     });
-  //     req.on("error", (e) => {
-  //       reject(e);
-  //     });
-  //     req.write(data);
-  //     req.end();
-  //   });
-  // }`,
 } as ToolBase
 
 const clock = {

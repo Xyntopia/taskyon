@@ -132,7 +132,8 @@
           pkgs_unstable.deno
 
           python # this is needed for newer quasar versions apparently...
-
+          # not sure..  but if I use our git-filter repo form main nix store, it doesn't work.. maybe becuase of cinflicting python versions?
+          # git-filter-repo 
           kdiff3
         ];
       in {
