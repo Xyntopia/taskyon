@@ -188,10 +188,11 @@ const showPassWordDialog = ref(false)
 const infoText = ref('get password')
 let resolveSecret: (secret: string) => void
 onMounted(() => {
-  void tystate.secretStore.onNewSecret(({ args: [{ id, secretName }], respond }) => {
+  void tystate.secretStore.onNewSecret(({ args: [{ id, secretName, message }], respond }) => {
     console.log('new secret request window', id, secretName)
     showPassWordDialog.value = true
-    infoText.value = `Please enter the secret '${secretName}' for '${id}'`
+    infoText.value =
+      message ?? `Please enter the secret '${secretName}' for '${String(id).split(':')[0]}'`
     resolveSecret = respond
   })
 })

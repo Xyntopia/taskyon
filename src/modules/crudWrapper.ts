@@ -528,7 +528,7 @@ export const withSecretStore = (
     CryptoKey
   >(askTimeoutMs)
   const { emitFunc: getNewKey, stream: askNewKeyStream } = streamProcedureCall<
-    [{ id: string | number; secretName: string }],
+    [{ id: string | number; secretName: string; message?: string | undefined }],
     string
   >(askTimeoutMs)
 
@@ -554,7 +554,8 @@ export const withSecretStore = (
     async getSecret(
       id: string | number,
       secretName: string,
-      askNew: boolean,
+      // if we want to send a message along with asking for a new password, use a string!
+      askNew: boolean | string,
     ): Promise<string | null> {
       // Get the existing secrets for the ID
       const existingSecrets = (await encryptedCrud.get(id, getSessionKey)) as SecretData
@@ -562,7 +563,8 @@ export const withSecretStore = (
       let secret = existingSecrets ? existingSecrets[secretName] || null : null
 
       if (!secret && askNew) {
-        secret = await getNewKey({ id, secretName })
+        const message = typeof askNew === 'string' ? askNew : undefined
+        secret = await getNewKey({ id, secretName, message })
         console.log('received new secret:', id, secretName)
         await this.setSecret(id, secretName, secret)
       }
@@ -584,6 +586,11 @@ export const withSecretStore = (
           await encryptedCrud.delete(id)
         }
       }
+    },
+
+    // delete all secrets with id
+    async deleteAllFromId(id: string) {
+      await encryptedCrud.delete(id)
     },
 
     /**

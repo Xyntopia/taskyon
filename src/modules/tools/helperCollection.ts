@@ -50,8 +50,8 @@ const jinaSearch = createTool({
   function: async ({ query }: { query: string }, ctx) => {
     // get key from here:  https://jina.ai/api-dashboard/key-manager
     const apiKey = await ctx.getSecret(
-      'jina API key from https://jina.ai/api-dashboard/key-manager',
-      true,
+      'Search API key',
+      'Please enter the key for jina search api. You can create new keys here:  https://jina.ai/api-dashboard/key-manager',
     )
     try {
       const response = await fetch(`https://s.jina.ai/?q=${encodeURIComponent(query)}`, {

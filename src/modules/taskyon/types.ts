@@ -218,9 +218,26 @@ export const FunctionCall = z.object({
 })
 export type FunctionCall = z.infer<typeof FunctionCall>
 
+/**
+ * Represents the context passed to tools within the Taskyon system.
+ *
+ * @property taskChain - The sequence of TaskNode objects representing the current chain of tasks.
+ * @property getSecret - Retrieves a secret value by name. If `askNew` is `true`, prompts for a new secret if it doesn't exist.
+ *   If `askNew` is a string, uses the string as a custom message or hint when prompting for the secret.
+ * @param name - The name of the secret to retrieve.
+ * @param askNew - If `true`, prompts for a new secret if not found. If a string, uses it as a hint or message when prompting.
+ * @returns A promise resolving to the secret value, or `undefined` if not found.
+ *
+ * @property setSecret - Stores a secret value by name.
+ * @param name - The name of the secret to store.
+ * @param value - The secret value to store.
+ * @returns A promise that resolves when the secret is stored.
+ * @property stopSignal - An AbortSignal that can be used to detect if the tool should stop execution.
+ * @property toolId - The unique identifier for the tool instance.
+ */
 export type toolContext = {
   taskChain: TaskNode[]
-  getSecret: (name: string, askNew: boolean) => Promise<string | undefined>
+  getSecret: (name: string, askNew: boolean | string) => Promise<string | undefined>
   setSecret: (name: string, value: string) => Promise<void>
   stopSignal: AbortSignal
   toolId: string

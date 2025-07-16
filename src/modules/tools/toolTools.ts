@@ -219,7 +219,7 @@ It leverages examples from existing tools—including their source code when ava
 export const createChooseTool = (taskManager: TyTaskManager) =>
   createTool({
     name: 'chooseTool',
-    renderOptions: { hideChat: true, hideLlm: false },
+    renderOptions: { hideChat: true, hideLlm: true },
     description: 'Chooses and parameterizes a tool for execution based on provided context.',
     longDescription: `This tool first gathers a short list of all available tools (name and description only).
 It then selects one or more tools that seem relevant by checking if their names appear in the provided context.
