@@ -130,7 +130,11 @@
     short
   >
     <template #header>
-      Error: {{ task.content.data.split(' ').slice(0, 10).join(' ') }}...
+      <tyMarkdown
+        :src="`Error: ${task.content.data.split(' ').slice(0, 10).join(' ')}...`"
+        no-line-numbers
+        use-iframe
+      />
     </template>
     <div class="text-negative">
       <tyMarkdown :src="task.content.data" no-line-numbers use-iframe />
