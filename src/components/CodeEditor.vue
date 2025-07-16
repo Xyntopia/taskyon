@@ -3,7 +3,6 @@
     v-model="content"
     placeholder="Code goes here..."
     :style="{ height: '400px', overflow: 'hidden', background: 'white' }"
-    autofocus
     indent-with-tab
     :line-wrapping="true"
     :tab-size="2"

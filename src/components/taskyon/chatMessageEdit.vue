@@ -3,6 +3,7 @@
   <q-input
     v-model.trim="content"
     autogrow
+    autofocus
     borderless
     color="secondary"
     placeholder="Type your message or instruction..."
