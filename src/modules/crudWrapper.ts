@@ -556,6 +556,9 @@ export const withSecretStore = (
       secretName: string,
       // if we want to send a message along with asking for a new password, use a string!
       askNew: boolean | string,
+      saveNew = true,
+      // TODO: if we would like to ask for a new secret no matter what...
+      // forceNew: boolean,
     ): Promise<string | null> {
       // Get the existing secrets for the ID
       const existingSecrets = (await encryptedCrud.get(id, getSessionKey)) as SecretData
@@ -566,7 +569,7 @@ export const withSecretStore = (
         const message = typeof askNew === 'string' ? askNew : undefined
         secret = await getNewKey({ id, secretName, message })
         console.log('received new secret:', id, secretName)
-        await this.setSecret(id, secretName, secret)
+        if (saveNew) await this.setSecret(id, secretName, secret)
       }
       return secret
     },
