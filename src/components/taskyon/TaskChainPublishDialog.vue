@@ -6,10 +6,14 @@
       :icon="matCopyAll"
       @click="onExportChatMD(selectedTaskList, true)"
     >
-      <q-tooltip>Copy entire chat as markdown</q-tooltip>
+      <slot name="tt-cp-btn">
+        <q-tooltip>Copy entire chat as markdown</q-tooltip>
+      </slot>
     </q-btn>
     <q-btn v-bind="$attrs" :icon="matShare" aria-label="share content" @click="showDialog = true">
-      <q-tooltip>Share Content</q-tooltip>
+      <slot name="tt-share-btn">
+        <q-tooltip>Share Content</q-tooltip>
+      </slot>
     </q-btn>
   </template>
   <q-dialog v-model="showDialog">

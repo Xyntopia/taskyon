@@ -43,13 +43,17 @@
               share
               single
               :task-or-id="preliminaryTaskNode"
-            />
+            >
+              <template #tt-cp-btn> <div class="q-px-sm">Copy Tool as Markdown</div></template>
+              <template #tt-share-btn> <div class="q-px-sm">Share Tool Online</div></template>
+            </TaskChainPublishDialog>
             <q-btn
               flat
               :icon="matSearch"
               label="Search for similar tools"
               :to="`/taskmanager?k=10&ct=tooldefinition&q=${JSON.stringify(selectedTool)}`"
             />
+            <q-btn flat label="Secrets" :icon="mdiKeyChain" to="/settings/secrets" />
           </div>
           <q-input v-model="toolDraft.name" dense filled label="New Tool Name" />
           <div class="row">
@@ -151,6 +155,7 @@ import {
   mdiCodeJson,
   mdiFormTextbox,
   mdiFunctionVariant,
+  mdiKeyChain,
   mdiLanguageJavascript,
   mdiMagicStaff,
   mdiToolbox,
