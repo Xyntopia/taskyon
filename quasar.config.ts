@@ -336,6 +336,7 @@ export default defineConfig((ctx) => {
         'LocalStorage',
         'Notify',
         'Meta',
+        'Dialog',
         //'SessionStorage'
         // TODO: 'AddressbarColor'
       ],
