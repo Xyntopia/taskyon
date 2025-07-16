@@ -28,6 +28,7 @@ const jinaMarkdownReader = {
 } as ToolBase
 
 // TODO: add more functionality from here:   https://r.jina.ai/docs
+// TODO: add a state how many tokesn we have left over :)
 const jinaSearch = createTool({
   description: 'A tool that searches using the Jina AI search API.',
   longDescription:
@@ -39,7 +40,7 @@ const jinaSearch = createTool({
   },
   parameters: {
     type: 'object',
-    required: ['query', 'apiKey'],
+    required: ['query'],
     properties: {
       query: {
         type: 'string',
@@ -52,18 +53,52 @@ const jinaSearch = createTool({
     const apiKey = await ctx.getSecret(
       'Search API key',
       'Please enter the key for jina search api. You can create new keys here:  https://jina.ai/api-dashboard/key-manager',
+      true, // save new secret
     )
+    if (!apiKey) {
+      throw new Error(
+        'Provided API key for Jina web search is empty! (Please check [secretStore](/settings/secrets) to edit the key.)',
+      )
+    }
     try {
+      // TODO: add a preferred country and location and language with
+      //       &gl=US&location=san+diego&hl=en
+      //
+      // TODO:   enable searching in only specific sites:
+      //         "X-Site: https://jina.ai"
       const response = await fetch(`https://s.jina.ai/?q=${encodeURIComponent(query)}`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'X-Respond-With': 'no-content',
+          Accept: 'application/json',
+          'X-With-Favicons': 'true',
         },
       })
-      const text = await response.text()
-      console.log('Raw response:', text)
-      return text
+      const body = await response.json()
+      if (response.status === 401)
+        throw new Error(
+          'maybe the API key is wrong? Please check [secretStore](/settings/secrets)\n\n' +
+            body.toString(),
+        )
+      if (response.status != 200) throw new Error(body.toString())
+      console.log('Raw response:', body)
+
+      // data =
+      const search = (body.data as Record<string, string>[]).reduce(
+        (p, c: Record<string, string>, idx) => {
+          p[idx] = {
+            title: c.title,
+            description: c.description,
+            url: c.url,
+          }
+          return p
+        },
+        {} as Record<string, Record<string, unknown>>,
+      )
+
+      //return dump(search, { skipInvalid: true })
+      return search
     } catch (error) {
       console.error('Error searching with Jina AI:', error)
       throw error
