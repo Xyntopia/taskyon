@@ -69,7 +69,7 @@ const renderedHtml = asyncComputed(async () => {
       /(^|\n)\s*:::/, // custom containers (like :::note)
     ].some((pattern) => pattern.test(raw))
 
-  return isPureHtml ? raw : await md2Html(raw, $q.dark.isActive)
+  return isPureHtml ? raw : await md2Html(raw, $q.dark.isActive, true)
 }, 'rendering ...')
 
 // Only produce iFrame HTML once real content is ready

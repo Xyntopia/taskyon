@@ -417,7 +417,7 @@ const createMermaidSettings = (darkMode: boolean): MermaidConfig => ({
   suppressErrorRendering: true,
 })
 
-export const md2Html = async (src: string, darkMode = false) => {
+export const md2Html = async (src: string, darkMode = false, allowHtml = false) => {
   // 0) make a one-off random marker for this invocation
   const rand = Math.random().toString(36).slice(2, 20) // e.g. "x9fj3k2a"
   const wrap = `${rand}` // e.g. "HTMLBLOCK_x9fj3k2a..."
@@ -431,7 +431,7 @@ export const md2Html = async (src: string, darkMode = false) => {
     // useful for external highlighters.
     langPrefix: 'language-',
     //allow html
-    html: true,
+    html: allowHtml,
     // Autoconvert URL-like text to links
     linkify: true,
     // Enable some language-neutral replacement + quotes beautification
