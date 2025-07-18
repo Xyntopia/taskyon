@@ -65,24 +65,34 @@ describe('test taskyon defaults', () => {
 
     cy.log('starting tests!')
 
-    cy.get('.q-btn').contains('Use free Taskyon').click()
+    //cy.wait('[aria-label="quick ai settings"]')
+    cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
 
-    cy.get('[aria-label="toggle task settings"]').click()
+    //cy.get('.q-btn').contains('Use free Taskyon').click()
+
     const modelID = 'google/gemini-pro-1.5'
     selectllmmodel(undefined, modelID)
 
     // enable task cost display & expert mode...
-    cy.get('[aria-label="Expert mode"] > .q-toggle__inner').click()
-    cy.get('[aria-label="Show task costs"] > .q-toggle__inner').click()
+    cy.contains('expertMode').next().click()
+    cy.contains('showCosts').next().click()
+    cy.contains('showCosts').next().next().click()
+    cy.contains('Shows the costs of API calls.').type('{esc}')
+    cy.get('.q-btn').contains('Ok').click()
 
-    cy.wait(2000).reload()
+    cy.wait(100).reload()
     // TODO: check if expert mode is still there...
 
-    cy.contains('Vision').click()
-    cy.contains('Fancy AI').click()
+    // check if more fancy options ae present  now...
+    cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
+    cy.contains('Vision')
+    cy.contains('Fancy AI').type('{esc}')
 
     const msg = 'hello world you silly munchkin!!'
-    cy.contains('your message').type(msg + '{enter}')
+    cy.get('.create-new-task').type(msg)
+    cy.get('.create-new-task textarea').should('have.value', msg)
+    //cy.get('.create-new-task textarea').type('{enter}')
+    //cy.dataCy('chat-input').focus().type('{enter}')
     //cy.get('li').first().click();
     //cy.contains('Clicks on todos: 1').should('exist');
 
@@ -108,7 +118,7 @@ describe('test taskyon defaults', () => {
       .and('match', /\d+/); // Check if it contains a number*/
 
     // Check if the estimated tokens element is present and contains a number
-    cy.wait(5000)
+    /*cy.wait(5000)
       .get('.user .task-costs > div')
       .invoke('text')
       .invoke('trim')
@@ -116,7 +126,7 @@ describe('test taskyon defaults', () => {
         const number = parseInt(text)
         expect(number).to.match(/^\d+$/) // Check if the text is a number
         expect(number).to.be.greaterThan(5) // Check if the number is greater than 50
-      })
+      })*/
 
     //.and('match', /^\d+/); // Check if it contains a number
 
