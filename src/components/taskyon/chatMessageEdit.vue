@@ -2,6 +2,7 @@
   <!--edit chat messages-->
   <q-input
     v-model.trim="content"
+    data-cy="chat-input"
     autogrow
     autofocus
     borderless
@@ -45,6 +46,7 @@ const emit = defineEmits<{
 }>()
 
 const checkKeyboardEvents = (event: KeyboardEvent) => {
+  //console.log('pressed key in message edit...', event.key)
   if (props.useEnterToSend) {
     if (!event.shiftKey && event.key === 'Enter') {
       emit('execute-task')
