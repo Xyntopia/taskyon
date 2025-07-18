@@ -3,22 +3,22 @@ $primary: var(--q-primary-rgb)
 
 // BEGIN we do all of this to really make sure, that 
 // pasted html inside our markdown editor is not too wide
-.tyMarkdown *
+.ty-markdown *
   max-width: 100% !important
   max-height: 100% !important
   box-sizing: border-box
 
 /* 3) Clamp every descendant to that 100%-of-ancestor width */
-.tyMarkdown *,
-.tyMarkdown *::before,
-.tyMarkdown *::after
+.ty-markdown *,
+.ty-markdown *::before,
+.ty-markdown *::after
   max-width: 100% !important
   box-sizing: border-box
   overflow-wrap: anywhere
   word-break: break-word
 
 /* 4) Specific rules for any <pre> you might paste */
-.tyMarkdown pre
+.ty-markdown pre
   /* fill the container and never exceed it */
   width: 100% !important
   max-width: 100% !important
@@ -31,8 +31,8 @@ $primary: var(--q-primary-rgb)
 
 // END html width restrictions...
 
-/* under your .tyMarkdown (or .q-markdown) scope… */
-.tyMarkdown
+/* under your .ty-markdown (or .q-markdown) scope… */
+.ty-markdown
   // Let font and color inherit naturally
   line-height: 1.6
   width: 100%
@@ -203,7 +203,7 @@ $primary: var(--q-primary-rgb)
       font-size: 0.75rem
       padding: 0 0.5em
 
-.body--light .tyMarkdown
+.body--light .ty-markdown
   blockquote
     background: rgba(black, 0.1)
 
@@ -270,7 +270,7 @@ $primary: var(--q-primary-rgb)
     </svg>") no-repeat center
       -webkit-mask-size: contain
 
-.body--dark .tyMarkdown
+.body--dark .ty-markdown
   blockquote
     background: rgba(white, 0.05)
 

@@ -16,7 +16,7 @@
     sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"
     v-bind="$attrs"
   />
-  <div v-else v-bind="$attrs" class="tyMarkdown" v-html="renderedHtml" />
+  <div v-else v-bind="$attrs" class="ty-markdown" v-html="renderedHtml" />
 </template>
 
 <script setup lang="ts">
