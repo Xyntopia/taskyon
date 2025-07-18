@@ -79,10 +79,13 @@
     </q-page-sticky>
     <!-- Announcements -->
     <q-page-sticky position="top" :offset="[0, 0]" expand style="z-index: 20">
-      <div class="column items-center text-secondary announcements" style="max-width: 600px">
+      <div
+        class="column q-gutter-md items-center text-secondary announcements"
+        style="max-width: 600px"
+      >
         <transition-group
           appear
-          :duration="2000"
+          :duration="3000"
           enter-active-class="animated fadeIn"
           leave-active-class="animated slow fadeOut"
         >
@@ -133,7 +136,7 @@
             />
           </div>
           <!--gdrive loader-->
-          <div v-if="loadingFromGdrive" class="col q-pa-xl bg-primary">
+          <div v-if="loadingFromGdrive" class="col q-pa-sm bg-primary">
             <q-spinner-box color="secondary" size="3rem" class="q-mr-md" />
             <span class="text-subtitle2 text-secondary">
               Loading your shared conversation. Thank you for your patience...
