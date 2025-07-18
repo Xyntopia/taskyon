@@ -13,28 +13,30 @@
         :label="selectedTaskType ?? 'No tool selected, press here to select!'"
         content-class="text-caption"
       >
-        <q-menu fit class="q-pa-xs" anchor="top left" self="bottom left">
+        <q-menu class="q-pa-xs" anchor="top left" self="bottom left" auto-close>
           <q-icon class="q-px-sm" :name="mdiFunctionVariant" />
           Search for a tool you want to use..
           <InfoDialog
             info-text="You can use tools here directly and change their parameters to your liking"
           />
-          <q-select
-            class="col"
-            use-input
-            dense
-            hide-selected
-            fill-input
-            options-dense
-            filled
-            input-debounce="0"
-            color="secondary"
-            :model-value="selectedTaskType"
-            :options="filteredToolCollection"
-            @filter="filterFn"
-            @update:model-value="tystate.switchTaskType"
-          >
-          </q-select>
+          <div @click.stop>
+            <q-select
+              class="col"
+              use-input
+              dense
+              hide-selected
+              fill-input
+              options-dense
+              filled
+              input-debounce="0"
+              color="secondary"
+              :model-value="selectedTaskType"
+              :options="filteredToolCollection"
+              @filter="filterFn"
+              @update:model-value="tystate.switchTaskType"
+            />
+          </div>
+          <q-btn flat dense square class="fit">Ok</q-btn>
         </q-menu>
       </q-btn>
     </div>
