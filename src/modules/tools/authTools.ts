@@ -78,10 +78,10 @@ export const createOAuthTool = (secretStore: SecretStore) => {
 
   function oauthPopupListener(event: MessageEvent) {
     if (event.origin !== window.location.origin) return
-    const creds = OAuthCredentials.parse(event.data)
-
     const toolId = openPopups.get(event.source as WindowProxy)
     if (!toolId) return
+
+    const creds = OAuthCredentials.parse(event.data)
 
     // prevent duplicate handling
     event.stopImmediatePropagation()
