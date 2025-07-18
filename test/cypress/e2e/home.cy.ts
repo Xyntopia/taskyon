@@ -8,47 +8,12 @@ import { getLastAssistantMessage, selectllmmodel } from '../support/groups'
 // This test will pass when run against a clean Quasar project
 describe('test taskyon defaults', () => {
   beforeEach(() => {
-    /*if (!window.navigator || !navigator.serviceWorker) {
-      return null;
-    }
-    const cypressPromise = new Cypress.Promise((resolve, reject) => {
-      navigator.serviceWorker.getRegistrations().then((registrations) => {
-        if (!registrations.length) resolve();
-        Promise.all(registrations).then(() => {
-          resolve();
-        });
-      });
-    });
-    cy.wrap('Unregister service workers').then(() => cypressPromise);*/
-
-    cy.intercept('GET', '**/*.{png,jpg,jpeg,gif}', (req) => {
-      req.reply({
-        statusCode: 200,
-        body: '',
-        headers: {
-          'Content-Type': 'image/png',
-        },
-      })
-    }).as('stubImages')
-
-    cy.wrap(
-      Cypress.automation('remote:debugger:protocol', {
-        command: 'Network.clearBrowserCache',
-      }),
-    )
-
-    cy.intercept('**').as('requests')
-    //cy.visit('/');
-    //cy.intercept('**').as('requests');
     cy.visit('/')
-    //cy.get('@requests.all')meta-llama/llama-3-70b-instructmeta-llama/llama-3-70b-instruct.should('have.length', 10);
-    //cy.get('*/src_layouts_TaskyonLayout_vue.js')
-
     // Clear local storage
-    cy.clearLocalStorage()
+    //cy.clearLocalStorage()
 
     // Clear cookies
-    cy.clearCookies()
+    //cy.clearCookies()
 
     // Optionally, you can clear indexedDB if your app uses it
     // somehow we're getting a lot of errors here...
@@ -65,12 +30,13 @@ describe('test taskyon defaults', () => {
 
     cy.log('starting tests!')
 
+    cy.get('.q-btn').contains('AI service provider se', { matchCase: false }).click()
+    cy.get('.q-btn').contains('Use free Taskyon', { matchCase: false }).click()
+
     //cy.wait('[aria-label="quick ai settings"]')
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
 
-    //cy.get('.q-btn').contains('Use free Taskyon').click()
-
-    const modelID = 'google/gemini-pro-1.5'
+    const modelID = 'google/gemini-flash-1.5'
     selectllmmodel(undefined, modelID)
 
     // enable task cost display & expert mode...
@@ -91,7 +57,7 @@ describe('test taskyon defaults', () => {
     const msg = 'hello world you silly munchkin!!'
     cy.get('.create-new-task').type(msg)
     cy.get('.create-new-task textarea').should('have.value', msg)
-    //cy.get('.create-new-task textarea').type('{enter}')
+    cy.get('.create-new-task textarea').type('{enter}')
     //cy.dataCy('chat-input').focus().type('{enter}')
     //cy.get('li').first().click();
     //cy.contains('Clicks on todos: 1').should('exist');

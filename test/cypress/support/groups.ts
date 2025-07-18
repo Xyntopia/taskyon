@@ -1,20 +1,17 @@
 // list of re-usable command groups
 
-export function selectllmmodel(
-  provider: string | undefined,
-  modelId: string = '',
-) {
+export function selectllmmodel(provider: string | undefined, modelId: string = '') {
   if (provider) {
-    cy.contains('Provider').click();
-    cy.get('.q-menu').contains(provider).click();
+    cy.contains('Provider').click()
+    cy.get('.q-menu').contains(provider).click()
   }
   if (modelId) {
     cy.wait(100)
       .contains('Select LLM Model for answering/solving the task.')
       .click()
       .type(modelId)
-      .wait(200);
-    cy.get('.q-menu').contains(modelId).click();
+      .wait(200)
+    cy.get('.q-menu').contains(modelId).click()
   }
   //.type('{enter}{esc}');
   //cy.get('.q-menu').contains(modelId).click();
@@ -24,9 +21,7 @@ export function getLastAssistantMessage(
   selector: string = '.assistant.message',
   timeout: number = 100000,
 ) {
-  return cy
-    .get(`${selector} > .message-container .q-markdown`, { timeout })
-    .last();
+  return cy.get(`${selector} .ty-markdown`, { timeout }).last()
 }
 
 export function checkLastMessage(
@@ -37,13 +32,13 @@ export function checkLastMessage(
   return getLastAssistantMessage(selector, timeout)
     .invoke('text')
     .then((text) => text.toLowerCase())
-    .should('contain', teststr);
+    .should('contain', teststr)
 }
 
 export function startNewChat() {
-  cy.get('[aria-label="start new chat"]').click();
+  cy.get('[aria-label="start new chat"]').click()
 }
 
 export function writeMessage(message: string) {
-  cy.contains('your message').type(message);
+  cy.contains('your message').type(message)
 }
