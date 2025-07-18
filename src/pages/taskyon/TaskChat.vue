@@ -105,7 +105,7 @@
             <q-btn
               flat
               class="fit"
-              label="AI Servicer Provider Settings"
+              label="AI Service Provider Settings"
               to="/settings/aiserviceprovider"
             />
           </div>
