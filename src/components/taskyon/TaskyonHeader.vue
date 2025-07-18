@@ -86,7 +86,14 @@
         <q-tooltip> Open Taskyon Documentation </q-tooltip>
       </q-btn>
       <q-separator v-if="!minMode" class="desktop-only" vertical></q-separator>
-      <q-btn v-if="!minMode" round flat dense icon="svguse:/taskyon_mono_opt.svg#taskyon">
+      <q-btn
+        v-if="!minMode"
+        id="ty-space-menu"
+        round
+        flat
+        dense
+        icon="svguse:/taskyon_mono_opt.svg#taskyon"
+      >
         <q-menu>
           <q-list dense>
             <q-item :size="btnSize" to="/settings">

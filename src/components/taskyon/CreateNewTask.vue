@@ -49,7 +49,15 @@
     <div v-if="!hideTaskInfo" class="q-px-sm q-pt-xs">
       <div class="row items-center">
         <!--attach files...-->
-        <FileDropzone class="col-auto" accept="*" enable-paste @add-files="attachFileToDraft">
+        <FileDropzone
+          class="col-auto"
+          accept="*"
+          enable-paste
+          enable-menu
+          disable-dropzone-border
+          aria-label="attachFileToDraft"
+          @add-files="attachFileToDraft"
+        >
           <q-btn dense class="fit" flat>
             <q-icon :name="matAttachment" />
             <q-tooltip>Attach file or image to message</q-tooltip>
@@ -57,7 +65,7 @@
         </FileDropzone>
         <!--Taskyon features-->
         <div class="col-auto row">
-          <q-btn dense flat :icon="matMoreHoriz">
+          <q-btn dense flat :icon="matMoreHoriz" aria-label="quick ai settings">
             <q-tooltip>More AI Settings</q-tooltip>
             <q-menu fit class="q-pt-md">
               <div>
@@ -223,10 +231,10 @@ import {
   matChat,
   matSmartToy,
   matMoreHoriz,
-  matAttachment,
   matSend,
   matBuild,
   matManageAccounts,
+  matAttachment,
 } from '@quasar/extras/material-icons'
 import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
