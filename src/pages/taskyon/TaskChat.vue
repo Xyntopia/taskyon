@@ -79,12 +79,12 @@
     </q-page-sticky>
     <!-- Announcements -->
     <q-page-sticky position="top" :offset="[0, 0]" expand style="z-index: 20">
-      <div class="column items-center" style="max-width: 600px">
+      <div class="column items-center text-secondary announcements" style="max-width: 600px">
         <transition-group
           appear
           :duration="2000"
           enter-active-class="animated fadeIn"
-          leave-active-class="animated fadeOut"
+          leave-active-class="animated slow fadeOut"
         >
           <!--Need to install a chat service-->
           <div v-if="noAiService" class="col text-secondary bg-primary">
@@ -108,7 +108,6 @@
             />
           </div>
           <!--chat share welcome message-->
-
           <div
             v-if="tystate.selectedThread.value.length > 0 && invitedChat"
             class="col introduction-message bg-primary"
