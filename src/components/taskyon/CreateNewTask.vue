@@ -118,7 +118,6 @@
             {{ `${tystate.currentModelId}` }}
           </div>
           <div class="text-weight-thin gt-xs">/{{ state.llmSettings.selectedApi }}</div>
-          <q-tooltip>Select AI model (current model: {{ tystate.currentModelId }})</q-tooltip>
           <q-menu fit color="secondary">
             <q-list dense style="min-width: 100px">
               <div class="row">
@@ -146,7 +145,8 @@
                 <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
               </q-item>
               <q-separator />
-              <div>
+              <div class="text-info column items-center">
+                <div>{{ `${tystate.currentModelId}` }}</div>
                 <InfoDialog
                   v-if="tystate.currentModelId && tystate.currentModel?.description"
                   :round="false"
