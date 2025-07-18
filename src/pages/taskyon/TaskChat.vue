@@ -9,30 +9,6 @@
       :style="`padding-bottom: ${bottomPadding + 5}px;`"
     >
       <q-scroll-observer axis="vertical" :debounce="1000" @scroll="onScroll" />
-      <!--chat share welcome message-->
-      <div
-        v-if="tystate.selectedThread.value.length > 0 && showIntroduction"
-        class="row items-center q-pa-sm"
-        style="max-width: 600px"
-      >
-        <q-icon
-          class="col-auto q-pa-xl"
-          size="2rem"
-          name="svguse:/taskyon_mono_opt.svg#taskyon"
-          :color="$q.dark.isActive ? 'secondary' : 'primary'"
-        ></q-icon>
-        <div class="col text-subtitle2 text-center">
-          You've been invited to read this chat! Scroll down and start reading
-          <q-btn label="Or start using Taskyon" dense no-caps outline @click="scrollToThreadEnd" />
-        </div>
-      </div>
-      <!--gdrive loader-->
-      <div v-if="loadingFromGdrive" class="q-pa-xl">
-        <q-spinner-box color="secondary" size="2rem" class="q-mr-md" />
-        <span class="text-subtitle2">
-          Loading your shared conversation. Thank you for your patience...
-        </span>
-      </div>
       <!-- "Task" Display -->
       <TaskChainViewer
         v-if="tystate.selectedThread.value.length > 0 && tystate.currentTask.value"
@@ -101,6 +77,72 @@
         </ToggleButton>
       </div>
     </q-page-sticky>
+    <!-- Announcements -->
+    <q-page-sticky position="top" :offset="[0, 0]" expand style="z-index: 20">
+      <div class="column items-center" style="max-width: 600px">
+        <transition-group
+          appear
+          :duration="2000"
+          enter-active-class="animated fadeIn"
+          leave-active-class="animated fadeOut"
+        >
+          <!--Need to install a chat service-->
+          <div v-if="noAiService" class="col text-secondary bg-primary">
+            <div class="row items-center q-pa-sm">
+              <q-icon
+                class="col-auto q-pr-md"
+                size="2rem"
+                name="svguse:/taskyon_mono_opt.svg#taskyon"
+                :color="$q.dark.isActive ? 'secondary' : 'primary'"
+              ></q-icon>
+              <div class="col">
+                You currently have not activated any AI service provider with a chat completion API.
+                For full functionality you should do that here:
+              </div>
+            </div>
+            <q-btn
+              flat
+              class="fit"
+              label="AI Servicer Provider Settings"
+              to="/settings/aiserviceprovider"
+            />
+          </div>
+          <!--chat share welcome message-->
+
+          <div
+            v-if="tystate.selectedThread.value.length > 0 && invitedChat"
+            class="col introduction-message bg-primary"
+          >
+            <div class="row items-center q-pa-sm">
+              <q-icon
+                class="col-auto q-pr-md"
+                size="2rem"
+                name="svguse:/taskyon_mono_opt.svg#taskyon"
+                :color="$q.dark.isActive ? 'secondary' : 'primary'"
+              ></q-icon>
+              <div class="col">
+                You've been invited to read this chat! Scroll down and start reading
+              </div>
+            </div>
+            <q-btn
+              class="text-center fit"
+              square
+              flat
+              label="Ok"
+              color="secondary"
+              @click="invitedChat = false"
+            />
+          </div>
+          <!--gdrive loader-->
+          <div v-if="loadingFromGdrive" class="col q-pa-xl bg-primary">
+            <q-spinner-box color="secondary" size="3rem" class="q-mr-md" />
+            <span class="text-subtitle2 text-secondary">
+              Loading your shared conversation. Thank you for your patience...
+            </span>
+          </div>
+        </transition-group>
+      </div>
+    </q-page-sticky>
     <!--Create new task area-->
     <q-page-sticky position="bottom" :offset="[0, 0]" expand>
       <q-resize-observer @resize="handleResize" />
@@ -152,6 +194,7 @@ import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import logoSvg from 'src/assets/taskyon_logo_complex_animated.svg?raw'
+import { sleep } from 'src/modules/utils'
 
 const props = defineProps<{ detailed?: boolean; treeBrowser?: boolean; rootTaskId?: string }>()
 const showAllTasks = ref<boolean>(props.detailed)
@@ -181,6 +224,7 @@ const taskThreadContainer = ref<HTMLElement | undefined>()
 const folder = ''
 const fileAttachments = ref<File[]>([]) // holds all attached files as a "tasklist"
 const loadingFromGdrive = ref(false)
+const invitedChat = ref(false)
 const popupMessage = ref<string | undefined>(undefined)
 const showPopupMessage = ref(false)
 
@@ -197,7 +241,7 @@ onMounted(() => {
   })
 })
 
-const showIntroduction = computed(
+const noAiService = computed(
   () => !(state.llmSettings.selectedApi && state.keys[state.llmSettings.selectedApi]),
 )
 
@@ -214,6 +258,7 @@ async function updateChatThread() {
     const gdFileId = route.query.gd
     const markdownUrl = `https://share.taskyon.space/proxy/gdrive/${gdFileId}`
     loadingFromGdrive.value = true
+    invitedChat.value = true
     try {
       const markdownContent = await getTextFile(markdownUrl)
       const newTaskId = await tm.addMdTaskChain(markdownContent)
@@ -224,6 +269,7 @@ async function updateChatThread() {
         `Error loading from Google Drive: ${error instanceof Error ? error.message : String(error)}`,
       )
     } finally {
+      await sleep(2000)
       loadingFromGdrive.value = false
     }
   } else if (typeof route.query.url === 'string') {
