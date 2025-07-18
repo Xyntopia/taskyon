@@ -153,6 +153,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       description: 'We are testing taskyons client library here.',
     },
   },
+  {
+    path: '/opfs',
+    component: () => import('pages/FileManagerPage.vue'),
+    meta: {
+      title: 'Taskyon File Manager',
+      description: 'Manage files saved in Taskyon OPFS.',
+    },
+  },
 ]
 
 export const routes: RouteRecordRaw[] = [
