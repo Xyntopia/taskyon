@@ -46,8 +46,8 @@
       </q-chip>
     </div>
     <!--Task Creation State-->
-    <div v-if="!hideTaskInfo" class="q-px-sm q-pt-xs">
-      <div class="row items-center">
+    <div v-if="!hideTaskInfo" class="q-px-sm q-pt-xs row justify-between items-center">
+      <div class="col-auto row">
         <!--attach files...-->
         <FileDropzone
           class="col-auto"
@@ -64,138 +64,139 @@
           </q-btn>
         </FileDropzone>
         <!--Taskyon features-->
-        <div class="col-auto row">
-          <q-btn dense flat :icon="matMoreHoriz" aria-label="quick ai settings">
-            <q-tooltip>More AI Settings</q-tooltip>
-            <q-menu fit class="q-pt-md">
-              <div>
-                <ObjectTreeView
-                  v-model="slimSettings.reactiveView"
-                  :schema="slimSettings.jsonSchema"
-                  dense
-                />
-              </div>
-              <div>
-                <q-item class="row items-center">
-                  <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
-                  <ModelSelection
-                    v-model:selected-api="selectedApi"
-                    class="col"
-                    :bot-name="tystate.currentModelId"
-                    :model-list="expertMode"
-                    :select-api="expertMode"
-                    @update-bot-name="tystate.handleBotNameUpdate"
-                  ></ModelSelection>
-                </q-item>
-              </div>
-              <q-card-actions class="float-right">
-                <q-btn
-                  v-if="expertMode"
-                  flat
-                  to="/settings/agent%20config"
-                  label="Full list of settings"
-                />
-                <q-btn v-close-popup flat label="Ok" />
-              </q-card-actions>
-            </q-menu>
-          </q-btn>
-        </div>
-        <!--Task type selection and execution-->
-        <div class="col-auto">
-          <q-btn
-            v-if="selectedTaskType"
-            flat
-            dense
-            :icon="matChat"
-            @click="tystate.switchTaskType(undefined)"
+        <q-btn dense flat :icon="matMoreHoriz" aria-label="quick ai settings">
+          <q-tooltip>More AI Settings</q-tooltip>
+          <q-menu fit>
+            <div class="q-py-md">
+              <ObjectTreeView
+                v-model="slimSettings.reactiveView"
+                :schema="slimSettings.jsonSchema"
+                dense
+              />
+            </div>
+            <div>
+              <q-item class="row items-center">
+                <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
+                <ModelSelection
+                  v-model:selected-api="selectedApi"
+                  class="col"
+                  :bot-name="tystate.currentModelId"
+                  :model-list="expertMode"
+                  :select-api="expertMode"
+                  @update-bot-name="tystate.handleBotNameUpdate"
+                ></ModelSelection>
+              </q-item>
+            </div>
+            <q-card-actions class="float-right">
+              <q-btn
+                v-if="expertMode"
+                flat
+                to="/settings/agent%20config"
+                label="Full list of settings"
+              />
+              <q-btn v-close-popup flat label="Ok" />
+            </q-card-actions>
+          </q-menu>
+        </q-btn>
+        <!--Select Chat Task-->
+        <div v-if="selectedTaskType" class="col-auto" @click.stop>
+          <q-btn flat dense :icon="matChat" @click="tystate.switchTaskType(undefined)"
             ><q-tooltip>Select Simple Chat</q-tooltip>
           </q-btn>
         </div>
-        <div v-if="expertMode" class="col-auto q-px-md">
-          <!--q-select
+      </div>
+      <!--
+          <div v-else-if="expertMode">
+            <q-btn dense flat :icon="mdiFunctionVariant" @click="" />
+          </div>
+        -->
+      <!--Choose Model-->
+      <div class="col-auto model-history">
+        <q-btn flat dense size="sm" no-caps @click.stop>
+          <q-icon :name="matSmartToy" />
+          <div class="q-pl-xs ellipsis">
+            {{ `${tystate.currentModelId}` }}
+          </div>
+          <div class="text-weight-thin gt-xs">/{{ state.llmSettings.selectedApi }}</div>
+          <q-tooltip>Select AI model (current model: {{ tystate.currentModelId }})</q-tooltip>
+          <q-menu fit color="secondary">
+            <q-list dense style="min-width: 100px">
+              <div class="row">
+                <q-btn square flat :icon="matSmartToy" label="Model List" to="/pricing" />
+                <q-btn
+                  square
+                  flat
+                  :icon="matManageAccounts"
+                  label="Select AI Service"
+                  to="/settings/aiserviceprovider"
+                />
+              </div>
+              <q-separator />
+              <q-item-label header>Previously selected AI models!</q-item-label>
+              <q-item v-if="state.modelHistory.length === 0" v-close-popup>
+                No other models were selected yet!
+              </q-item>
+              <q-item
+                v-for="(m, idx) in state.modelHistory"
+                :key="m"
+                v-close-popup
+                clickable
+                @click="tystate.handleBotNameUpdate({ newName: m })"
+              >
+                <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
+              </q-item>
+              <q-separator />
+              <div>
+                <InfoDialog
+                  v-if="tystate.currentModelId && tystate.currentModel?.description"
+                  :round="false"
+                  class="fit"
+                  square
+                  :dense="false"
+                  label="Info about current model"
+                  no-caps
+                  :info-text="tystate.currentModel?.description || ''"
+                />
+              </div>
+            </q-list>
+          </q-menu>
+        </q-btn>
+      </div>
+      <!--Task type selection and execution-->
+      <div v-if="expertMode" class="col-auto q-px-md row no-wrap items-center" @click.stop>
+        <!--q-select
               :model-value="selectedTaskType || ''"
               :options="toolNames"
               @update:model-value="setTaskType"
               use-input
             /-->
-          <q-select
-            class="col"
-            use-input
-            dense
-            hide-selected
-            fill-input
-            options-dense
-            input-debounce="0"
-            borderless
-            color="secondary"
-            :model-value="selectedTaskType"
-            :options="filteredToolCollection"
-            :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
-            @filter="filterFn"
-            @update:model-value="tystate.switchTaskType"
-          />
-        </div>
-        <!--
-          <div v-else-if="expertMode">
-            <q-btn dense flat :icon="mdiFunctionVariant" @click="" />
-          </div>
-        -->
-        <!--Choose Model-->
-        <div class="col-auto row q-px-md">
-          <info-dialog
-            v-if="tystate.currentModelId && tystate.currentModel?.description"
-            size="xs"
-            :info-text="tystate.currentModel?.description || ''"
-          />
-          <q-btn flat dense size="sm" no-caps>
-            <q-icon :name="matSmartToy" class="q-px-xs" />
-            <div class="ellipsis">
-              {{ `${tystate.currentModelId}` }}
-            </div>
-            <div class="text-weight-thin gt-xs">/{{ state.llmSettings.selectedApi }}</div>
-            <q-tooltip>Select AI model (current model: {{ tystate.currentModelId }})</q-tooltip>
-            <q-menu color="secondary">
-              <q-list dense style="min-width: 100px">
-                <q-item-label header>Previously selected AI models!</q-item-label>
-                <q-item v-if="state.modelHistory.length === 0" v-close-popup>
-                  No other models were selected yet!
-                </q-item>
-                <q-item
-                  v-for="(m, idx) in state.modelHistory"
-                  :key="m"
-                  v-close-popup
-                  clickable
-                  @click="tystate.handleBotNameUpdate({ newName: m })"
-                >
-                  <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
-                </q-item>
-                <q-separator />
-                <div class="row">
-                  <q-btn square flat :icon="matSmartToy" label="Model List" to="/pricing" />
-                  <q-btn
-                    square
-                    flat
-                    :icon="matManageAccounts"
-                    label="Select AI Service"
-                    to="/settings/aiserviceprovider"
-                  />
-                </div>
-              </q-list>
-            </q-menu>
-          </q-btn>
-        </div>
-        <div class="col-auto">
-          <q-btn
-            v-if="selectedTaskType"
-            class="q-ma-md"
-            flat
-            :icon-right="matSend"
-            @click="addNewTask()"
-          >
-            <q-tooltip>Execute Task</q-tooltip>
-          </q-btn>
-        </div>
-        <!-- deactivate token estimation for now, because
+        <q-select
+          class="col"
+          use-input
+          dense
+          hide-selected
+          fill-input
+          options-dense
+          input-debounce="0"
+          borderless
+          color="secondary"
+          :model-value="selectedTaskType"
+          :options="filteredToolCollection"
+          :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
+          @filter="filterFn"
+          @update:model-value="tystate.switchTaskType"
+        />
+        <q-btn
+          v-if="selectedTaskType"
+          class="q-ma-md"
+          flat
+          :icon-right="matSend"
+          @click="addNewTask()"
+        >
+          <q-tooltip>Execute Task</q-tooltip>
+        </q-btn>
+      </div>
+      <!-- deactivate token estimation for now, because
            when using agents this is way too hard to estimate.
           <template v-if="tystate.currentModelId && expertMode && false">
             <div class="gt-xs">
@@ -210,7 +211,6 @@
             </div>
             <div class="lt-sm">{{ `t/c: ${estimatedTokens}` }}</div>
           </template>-->
-      </div>
     </div>
   </div>
 </template>
@@ -522,3 +522,16 @@ const removeFileFromDraft = (file: File) => {
   }
 }
 </script>
+
+<style>
+.model-history .ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  /* flex settings to allow proper truncation: */
+  flex: 1 1 0; /* grow:1, shrink:1, basis:0 */
+  min-width: 0; /* allow it to shrink below its content width */
+  width: 100%;
+}
+</style>

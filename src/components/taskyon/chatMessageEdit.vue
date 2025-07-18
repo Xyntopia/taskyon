@@ -7,7 +7,7 @@
     autofocus
     borderless
     color="secondary"
-    placeholder="Type your message or instruction..."
+    placeholder="Type your message..."
     clearable
     input-style="max-height: 300px"
     v-bind="$attrs"
