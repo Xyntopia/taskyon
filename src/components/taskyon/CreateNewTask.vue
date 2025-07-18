@@ -1,6 +1,43 @@
 <template>
   <!--Create new task area-->
   <div class="create-new-task">
+    <!--Function Control-->
+    <div v-if="selectedTaskType || functionSelection" class="text-caption text-center">
+      <q-btn
+        size="sm"
+        flat
+        dense
+        class="fit"
+        no-caps
+        :icon="mdiFunctionVariant"
+        :label="selectedTaskType ?? 'No tool selected, press here to select!'"
+        content-class="text-caption"
+      >
+        <q-menu fit class="q-pa-xs" anchor="top left" self="bottom left">
+          <q-icon class="q-px-sm" :name="mdiFunctionVariant" />
+          Search for a tool you want to use..
+          <InfoDialog
+            info-text="You can use tools here directly and change their parameters to your liking"
+          />
+          <q-select
+            class="col"
+            use-input
+            dense
+            hide-selected
+            fill-input
+            options-dense
+            filled
+            input-debounce="0"
+            color="secondary"
+            :model-value="selectedTaskType"
+            :options="filteredToolCollection"
+            @filter="filterFn"
+            @update:model-value="tystate.switchTaskType"
+          >
+          </q-select>
+        </q-menu>
+      </q-btn>
+    </div>
     <!--Task Creation-->
     <div>
       <!-- in case we simply want to send simple messages :)-->
@@ -99,10 +136,22 @@
           </q-menu>
         </q-btn>
         <!--Select Chat Task-->
-        <div v-if="selectedTaskType" class="col-auto" @click.stop>
-          <q-btn flat dense :icon="matChat" @click="tystate.switchTaskType(undefined)"
+        <div v-if="selectedTaskType || functionSelection" class="col-auto" @click.stop>
+          <q-btn
+            flat
+            dense
+            :icon="matChat"
+            @click="
+              () => {
+                tystate.switchTaskType(undefined)
+                functionSelection = false
+              }
+            "
             ><q-tooltip>Select Simple Chat</q-tooltip>
           </q-btn>
+        </div>
+        <div v-else-if="expertMode" @click.stop>
+          <q-btn flat dense :icon="mdiFunctionVariant" @click="functionSelection = true" />
         </div>
       </div>
       <!--
@@ -163,36 +212,12 @@
         </q-btn>
       </div>
       <!--Task type selection and execution-->
-      <div v-if="expertMode" class="col-auto q-px-md row no-wrap items-center" @click.stop>
-        <!--q-select
-              :model-value="selectedTaskType || ''"
-              :options="toolNames"
-              @update:model-value="setTaskType"
-              use-input
-            /-->
-        <q-select
-          class="col"
-          use-input
-          dense
-          hide-selected
-          fill-input
-          options-dense
-          input-debounce="0"
-          borderless
-          color="secondary"
-          :model-value="selectedTaskType"
-          :options="filteredToolCollection"
-          :label="selectedTaskType ? 'selected Tool' : 'Select Tool'"
-          @filter="filterFn"
-          @update:model-value="tystate.switchTaskType"
-        />
-        <q-btn
-          v-if="selectedTaskType"
-          class="q-ma-md"
-          flat
-          :icon-right="matSend"
-          @click="addNewTask()"
-        >
+      <div
+        v-if="expertMode && selectedTaskType"
+        class="col-auto q-px-md row no-wrap items-center"
+        @click.stop
+      >
+        <q-btn flat :icon-right="matSend" @click="addNewTask()">
           <q-tooltip>Execute Task</q-tooltip>
         </q-btn>
       </div>
@@ -243,6 +268,7 @@ import { buildSlimView } from 'src/modules/vueUtils'
 import FileDropzone from '../FileDropzone.vue'
 import { QSelect } from 'quasar'
 import { deepCopy } from 'src/modules/utils'
+import { mdiFunctionVariant } from '@quasar/extras/mdi-v6'
 
 const { expertMode = false, forceTaskProps } = defineProps<{
   forceTaskProps?: partialTaskDraft | undefined
@@ -255,6 +281,7 @@ const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { selectedApi } = toRefs(state.llmSettings)
+const functionSelection = ref(false)
 
 //const selectedTaskTypeVar = ref<string>('testasdad')
 
