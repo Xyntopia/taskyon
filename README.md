@@ -18,6 +18,7 @@ You can
 - use Taskyon here: [https://taskyon.space](https://taskyon.space)
 - or try out our newest version here: [https://dev.taskyon.space](https://dev.taskyon.space)
 - Or deploy it yourself!
+- Compare Taskyon to other AI agents: [taskyon_features.md](/docs/taskyon_features)
 
 ---
 
