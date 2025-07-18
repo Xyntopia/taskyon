@@ -1,16 +1,13 @@
 <template>
-  <div>
-    <q-btn flat round dense :icon="matHelpOutline" v-bind="$attrs" @click.stop="showInfo = true">
-      <q-dialog v-model="showInfo">
-        <q-card>
-          <q-card-section>
-            <TyMarkdown v-if="infoText" :src="infoText" />
-            <slot></slot>
-          </q-card-section>
-        </q-card>
-      </q-dialog>
-    </q-btn>
-  </div>
+  <q-btn flat dense round :icon="matHelpOutline" v-bind="$attrs" @click.stop="showInfo = true" />
+  <q-dialog v-model="showInfo">
+    <q-card>
+      <q-card-section>
+        <TyMarkdown v-if="infoText" :src="infoText" />
+        <slot></slot>
+      </q-card-section>
+    </q-card>
+  </q-dialog>
 </template>
 
 <script setup lang="ts">

@@ -64,7 +64,7 @@ selecting different models).
                 <q-icon v-if="props.row.id === tystate.currentModelId" :name="matCheck" />
                 {{ props.value }}
               </div>
-              <info-dialog>
+              <InfoDialog>
                 <ty-markdown
                   :src="
                     props.row.description ??
@@ -72,7 +72,7 @@ selecting different models).
                   "
                 />
                 <object-tree-view v-model="props.row" read-only />
-              </info-dialog>
+              </InfoDialog>
               <q-btn
                 v-if="props.row.id !== tystate.currentModelId"
                 flat

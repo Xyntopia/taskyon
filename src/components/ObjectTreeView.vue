@@ -17,14 +17,9 @@
     </template>
     <template #body-unknown="prop">
       <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
-        <info-dialog
-          label="This field can’t be changed right now."
-          flat
-          :round="false"
-          :icon="matInfo"
-        >
+        <InfoDialog label="This field can’t be changed right now." :round="false" :icon="matInfo">
           {{ prop.node }}
-        </info-dialog>
+        </InfoDialog>
       </FieldView>
     </template>
     <template #body-text="prop">
