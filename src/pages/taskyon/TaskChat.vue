@@ -55,7 +55,6 @@
     <!--File Drop Zone Overlay-->
     <FileDropzone
       class="chat-drop-zone"
-      disable-dropzone-border
       no-buttons
       drop-zone-target="#chat-area"
       accept="*"
