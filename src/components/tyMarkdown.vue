@@ -93,6 +93,7 @@ const iframeHtml = computed<string | undefined>(() => {
     `${linkTags}${inlineStyle}`,
     getCssVar('primary') ?? '#000000',
     getCssVar('secondary') ?? '#00ffff',
+    'ty-markdown',
   )
 })
 
@@ -101,7 +102,7 @@ watch(
   async (html) => {
     if (html && iframeRef.value) {
       await nextTick()
-      iframeRef.value.srcdoc = `<div class=tyMarkdown>${html}<div>`
+      iframeRef.value.srcdoc = html
     }
   },
   { flush: 'post' },

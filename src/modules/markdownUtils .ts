@@ -530,6 +530,7 @@ export const generateIframeSrc = (
   linkTags: string,
   primaryColorHex: string,
   secondaryColorHex: string,
+  mdContentClass: string,
 ) => {
   const primary = hexToRgb(primaryColorHex)
   const secondary = hexToRgb(secondaryColorHex)
@@ -562,7 +563,7 @@ export const generateIframeSrc = (
       </style>
     </head>
     <body>
-      <div class="content">
+      <div class="content ${mdContentClass}">
         ${renderedHtml}
       </div>
       <script>
