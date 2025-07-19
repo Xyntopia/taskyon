@@ -1,7 +1,7 @@
 // Use `cy.dataCy` custom command for more robust tests
 // See https://docs.cypress.io/guides/references/best-practices.html#Selecting-Elements
 
-import { checkLastMessage, selectllmmodel, writeMessage } from '../support/groups'
+import { addAIServices, checkLastMessage, selectllmmodel, writeMessage } from '../support/groups'
 
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
@@ -28,12 +28,7 @@ describe('taskyon API', () => {
   })
   it('should be able to interact with taskyon API', () => {
     // enable task cost display & expert mode...
-    cy.get('.q-btn').contains('AI service provider se', { matchCase: false }).click()
-
-    cy.contains('Add API keys').click()
-    // check in our keepass to get the relevant json.
-    cy.contains('openai API key').type(Cypress.env().openai_api_key)
-    cy.contains('openrouter.ai API key').type(Cypress.env().openrouter_api_key)
+    addAIServices()
 
     cy.screenshot('ai_services', { overwrite: true })
 

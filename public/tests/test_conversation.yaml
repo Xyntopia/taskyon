@@ -1,504 +1,257 @@
 - role: user
+  name: test
   content:
-    message: >-
-      Hi, can you write a test-conversation for me, which I can use for testing
-      the taskyon app?
-  configuration: &ref_0
-    model: meta-llama/llama-3.2-90b-vision-instruct
-    chatApi: taskyon
-  name: taskyon app
-  debugging:
-    taskPrompt:
-      - role: system
-        content: >-
-          You are a helpful assistant called *Taskyon*. In your markdown-based
-          responses, you can use the following features:
-
-
-          - **Mermaid charts**: Include diagrams, mindmaps, Gantt diagrams,
-          quadrants, and XY charts using the 'mermaid' keyword in fenced code
-          blocks. For example:
-
-          ```mermaid
-
-          ...
-
-          ```
-
-          - **SVG graphics**: Use HTML to embed SVG graphics.
-
-          - **HTML widgets**: Create interactive elements within the markdown
-          using HTML.
-
-          - **MathJax**: Write mathematical formulas using $$ ... $$ for block
-          formulas and $ ... $ for inline formulas. **Note:** Only `$` and `$$`
-          syntax is supported.
-    streamContent: >-
-      **Test Conversation for Taskyon App**
-
-      =====================================
-
-
-      ### Test Case 1: Basic Conversation
-
-
-      *   User: Hi, how are you?
-
-      *   Taskyon: I'm doing well, thank you for asking. How can I assist you
-      today?
-
-      *   User: I'm good, thanks. What can you do?
-
-      *   Taskyon: I can help with a wide range of tasks, from answering
-      questions to generating text and more. What's on your mind?
-
-
-      ### Test Case 2: MathJax Support
-
-
-      *   User: Can you render a mathematical formula using MathJax?
-
-      *   Taskyon: $$\frac{-b \pm \sqrt{b^2-4ac}}{2a}$$
-
-      *   User: How about an inline formula? $a^2 + b^2 = c^2$
-
-      *   Taskyon: $a^2 + b^2 = c^2$ is a well-known equation.
-
-
-      ### Test Case 3: Mermaid Chart
-
-
-      *   User: Can you create a simple flowchart using Mermaid?
-
-      *   Taskyon:
-          ```mermaid
-          graph LR
-              A[Start] --> B{Decision}
-              B -->|Yes| C[Action 1]
-              B -->|No| D[Action 2]
-              C --> E[End]
-              D --> E
-          ```
-      *   User: How about a sequence diagram?
-
-      *   Taskyon:
-          ```mermaid
-          sequenceDiagram
-              participant Alice
-              participant Bob
-              Alice->>Bob: Hello Bob, how are you?
-              Bob->>Alice: I am good thanks!
-          ```
-
-      ### Test Case 4: SVG Graphics
-
-
-      *   User: Can you embed an SVG graphic?
-
-      *   Taskyon:
-          ```html
-          <svg width="100" height="100">
-              <circle cx="50" cy="50" r="40" stroke="green" stroke-width="4" fill="yellow" />
-          </svg>
-          ```
-      *   User: How about a more complex graphic?
-
-      *   Taskyon:
-          ```html
-          <svg width="200" height="200">
-              <rect x="10" y="10" width="50" height="50" fill="blue" />
-              <rect x="70" y="10" width="50" height="50" fill="red" />
-              <rect x="130" y="10" width="50" height="50" fill="green" />
-          </svg>
-          ```
-
-      ### Test Case 5: HTML Widgets
-
-
-      *   User: Can you create a simple HTML button?
-
-      *   Taskyon:
-          ```html
-          <button onclick="alert('Button clicked!')">Click me</button>
-          ```
-      *   User: How about a text input field?
-
-      *   Taskyon:
-          ```html
-          <input type="text" placeholder="Enter your name" />
-          ```
-
-      ### Test Case 6: Conversation Flow
-
-
-      *   User: Can you help me with a task?
-
-      *   Taskyon: What task do you need help with?
-
-      *   User: I need help with writing a story.
-
-      *   Taskyon: What kind of story are you trying to write?
-
-      *   User: A science fiction story.
-
-      *   Taskyon: That sounds interesting. What's the plot of your story?
-
-
-      These test cases cover various features of the Taskyon app, including
-      basic conversation, MathJax support, Mermaid charts, SVG graphics, HTML
-      widgets, and conversation flow.
-    promptTokens: 189
-    resultTokens: 737
-    taskTokens: 926
-    estimatedTokens:
-      singlePromptTokens: 26
-      promptTokens: 177
-      functionTokens: 0
-      resultTokens: 953
-  state: Completed
-  id: EBStwKKsEe+IJ82q0JtcVg
-  created_at: 1731604535964
-  result:
-    chatResponse:
-      id: gen-1731604537-Y7gHm4BETYiAfRAyxKSQ
-      object: chat.completion.chunk
-      created: 1731604537
-      model: meta-llama/llama-3.2-90b-vision-instruct
-      choices:
-        - index: 0
-          message:
-            content: >-
-              **Test Conversation for Taskyon App**
-
-              =====================================
-
-
-              ### Test Case 1: Basic Conversation
-
-
-              *   User: Hi, how are you?
-
-              *   Taskyon: I'm doing well, thank you for asking. How can I
-              assist you today?
-
-              *   User: I'm good, thanks. What can you do?
-
-              *   Taskyon: I can help with a wide range of tasks, from answering
-              questions to generating text and more. What's on your mind?
-
-
-              ### Test Case 2: MathJax Support
-
-
-              *   User: Can you render a mathematical formula using MathJax?
-
-              *   Taskyon: $$\frac{-b \pm \sqrt{b^2-4ac}}{2a}$$
-
-              *   User: How about an inline formula? $a^2 + b^2 = c^2$
-
-              *   Taskyon: $a^2 + b^2 = c^2$ is a well-known equation.
-
-
-              ### Test Case 3: Mermaid Chart
-
-
-              *   User: Can you create a simple flowchart using Mermaid?
-
-              *   Taskyon:
-                  ```mermaid
-                  graph LR
-                      A[Start] --> B{Decision}
-                      B -->|Yes| C[Action 1]
-                      B -->|No| D[Action 2]
-                      C --> E[End]
-                      D --> E
-                  ```
-              *   User: How about a sequence diagram?
-
-              *   Taskyon:
-                  ```mermaid
-                  sequenceDiagram
-                      participant Alice
-                      participant Bob
-                      Alice->>Bob: Hello Bob, how are you?
-                      Bob->>Alice: I am good thanks!
-                  ```
-
-              ### Test Case 4: SVG Graphics
-
-
-              *   User: Can you embed an SVG graphic?
-
-              *   Taskyon:
-                  ```html
-                  <svg width="100" height="100">
-                      <circle cx="50" cy="50" r="40" stroke="green" stroke-width="4" fill="yellow" />
-                  </svg>
-                  ```
-              *   User: How about a more complex graphic?
-
-              *   Taskyon:
-                  ```html
-                  <svg width="200" height="200">
-                      <rect x="10" y="10" width="50" height="50" fill="blue" />
-                      <rect x="70" y="10" width="50" height="50" fill="red" />
-                      <rect x="130" y="10" width="50" height="50" fill="green" />
-                  </svg>
-                  ```
-
-              ### Test Case 5: HTML Widgets
-
-
-              *   User: Can you create a simple HTML button?
-
-              *   Taskyon:
-                  ```html
-                  <button onclick="alert('Button clicked!')">Click me</button>
-                  ```
-              *   User: How about a text input field?
-
-              *   Taskyon:
-                  ```html
-                  <input type="text" placeholder="Enter your name" />
-                  ```
-
-              ### Test Case 6: Conversation Flow
-
-
-              *   User: Can you help me with a task?
-
-              *   Taskyon: What task do you need help with?
-
-              *   User: I need help with writing a story.
-
-              *   Taskyon: What kind of story are you trying to write?
-
-              *   User: A science fiction story.
-
-              *   Taskyon: That sounds interesting. What's the plot of your
-              story?
-
-
-              These test cases cover various features of the Taskyon app,
-              including basic conversation, MathJax support, Mermaid charts, SVG
-              graphics, HTML widgets, and conversation flow.
-            role: assistant
-            tool_calls: []
-          finish_reason: stop
-      provider: Fireworks
-      usage:
-        prompt_tokens: 189
-        completion_tokens: 737
-        total_tokens: 926
-- configuration: *ref_0
-  role: assistant
+    type: message
+    data: test
+  id: 8teOhC9Rh4INJSg5lsJodpNsOU4NeMzuE6Y2t-sr8Eg
+  created_at: 1752878693862
+- role: function
+  name: chooseTool
   content:
-    message: >-
-      **Test Conversation for Taskyon App**
-
-      =====================================
-
-
-      ### Test Case 1: Basic Conversation
-
-
-      *   User: Hi, how are you?
-
-      *   Taskyon: I'm doing well, thank you for asking. How can I assist you
-      today?
-
-      *   User: I'm good, thanks. What can you do?
-
-      *   Taskyon: I can help with a wide range of tasks, from answering
-      questions to generating text and more. What's on your mind?
-
-
-      ### Test Case 2: MathJax Support
-
-
-      *   User: Can you render a mathematical formula using MathJax?
-
-      *   Taskyon: $$\frac{-b \pm \sqrt{b^2-4ac}}{2a}$$
-
-      *   User: How about an inline formula? $a^2 + b^2 = c^2$
-
-      *   Taskyon: $a^2 + b^2 = c^2$ is a well-known equation.
-
-
-      ### Test Case 3: Mermaid Chart
-
-
-      *   User: Can you create a simple flowchart using Mermaid?
-
-      *   Taskyon:
-          ```mermaid
-          graph LR
-              A[Start] --> B{Decision}
-              B -->|Yes| C[Action 1]
-              B -->|No| D[Action 2]
-              C --> E[End]
-              D --> E
-          ```
-      *   User: How about a sequence diagram?
-
-      *   Taskyon:
-          ```mermaid
-          sequenceDiagram
-              participant Alice
-              participant Bob
-              Alice->>Bob: Hello Bob, how are you?
-              Bob->>Alice: I am good thanks!
-          ```
-
-      ### Test Case 4: SVG Graphics
-
-
-      *   User: Can you embed an SVG graphic?
-
-      *   Taskyon:
-          ```html
-          <svg width="100" height="100">
-              <circle cx="50" cy="50" r="40" stroke="green" stroke-width="4" fill="yellow" />
-          </svg>
-          ```
-      *   User: How about a more complex graphic?
-
-      *   Taskyon:
-          ```html
-          <svg width="200" height="200">
-              <rect x="10" y="10" width="50" height="50" fill="blue" />
-              <rect x="70" y="10" width="50" height="50" fill="red" />
-              <rect x="130" y="10" width="50" height="50" fill="green" />
-          </svg>
-          ```
-
-      ### Test Case 5: HTML Widgets
-
-
-      *   User: Can you create a simple HTML button?
-
-      *   Taskyon:
-          ```html
-          <button onclick="alert('Button clicked!')">Click me</button>
-          ```
-      *   User: How about a text input field?
-
-      *   Taskyon:
-          ```html
-          <input type="text" placeholder="Enter your name" />
-          ```
-
-      ### Test Case 6: Conversation Flow
-
-
-      *   User: Can you help me with a task?
-
-      *   Taskyon: What task do you need help with?
-
-      *   User: I need help with writing a story.
-
-      *   Taskyon: What kind of story are you trying to write?
-
-      *   User: A science fiction story.
-
-      *   Taskyon: That sounds interesting. What's the plot of your story?
-
-
-      These test cases cover various features of the Taskyon app, including
-      basic conversation, MathJax support, Mermaid charts, SVG graphics, HTML
-      widgets, and conversation flow.
-  debugging:
-    promptTokens: 926
-    taskTokens: 926
-  state: Completed
-  parentID: EBStwKKsEe+IJ82q0JtcVg
-  id: GpxL4KKsEe+IJ82q0JtcVg
-  created_at: 1731604553631
-  name: User
-- role: user
+    type: functioncall
+    data:
+      name: chooseTool
+      arguments:
+        llmTools: false
+  priorID: 8teOhC9Rh4INJSg5lsJodpNsOU4NeMzuE6Y2t-sr8Eg
+  id: SXP4ey10f3ywd3Wjq-MMNDFUg_qTHehzZyjo3t150CE
+  created_at: 1752878693900
+- role: function
+  name: test
   content:
-    message: hey, that was cool! :)
-  configuration: &ref_1
-    model: meta-llama/llama-3.2-90b-vision-instruct
-    chatApi: taskyon
-  name: User
-  debugging:
-    taskPrompt:
-      - role: system
-        content: >-
-          You are a helpful assistant called *Taskyon*. In your markdown-based
-          responses, you can use the following features:
+    type: functioncall
+    data:
+      name: chatCompletion
+      arguments:
+        prompts:
+          - >-
+            Here is list of all the tools which are available to you:
 
 
-          - **Mermaid charts**: Include diagrams, mindmaps, Gantt diagrams,
-          quadrants, and XY charts using the 'mermaid' keyword in fenced code
-          blocks. For example:
+            - name: jinaMarkdownReader
+              description: A tool that reads websites as markdown using the jina ai reader.
+            - name: jinaSearch
+              description: A tool that searches using the Jina AI search API.
+            - name: clock
+              description: A tool that provides the current time, date, and weekday.
+            - name: location
+              description: A tool that provides the current browser location and IP address.
+            - name: delayedNotification
+              description: Displays a browser-native notification with an optional delay.
+            - name: newWindowOpener
+              description: Opens a new window with the provided HTML code.
+            - name: windowManager
+              description: Manages previously opened windows.
+            - name: waitForPostMessage
+              description: >-
+                Waits for and converts a specific window.postMessage event into structured
+                data before continuing.
+            - name: openMeteoWeatherTool
+              description: A tool that fetches weather data using the Open-Meteo API.
+            - name: animatedClock
+              description: A tool that generates an animated clock with the current time and date.
+            - name: issueListGenerator
+              description: >-
+                Converts a text message into a list of issues and then generates a UI for
+                review and GitLab submission.
+            - name: getGitlabInfo
+              description: Fetch selected parts of your GitLab data (profile, projects, groups).
+            - name: gitReader
+              description: >-
+                Extracts files from a Git repository using isomorphic-git with memfs and a
+                dynamically imported HTTP client.
+            - name: testSecretStore
+              description: Sets then gets a secret in the SecretStore to verify it works.
+            - name: opfsStorage
+              description: Save and load files using local Origin Private File System (OPFS) storage
+            - name: taskPlanner
+              description: >-
+                Organizes complex tasks into groups that can be worked on independently. Use
+                this tool only when breaking down a task into subtasks makes sense—not for
+                simple tasks.
+            - name: gDriveBrowser
+              description: Interact with Google Drive to save, load, and publish files
+            - name: proceduralTreeGenerator
+              description: >-
+                Generates an abstract procedural tree graphic in a new browser window using
+                Canvas and JavaScript.
+            - name: wfcGenerator
+              description: >-
+                Generates abstract line-art via Wave Function Collapse in a new browser
+                window.
+            - name: executePythonScript
+              description: Executes a Python script and returns the result.
+            - name: localVectorStore
+              description: >-
+                This tool can store Information and perform semantic search in a vector
+                database, ideal
+                  for retrieving documents or data segments with high relevance to natural language queries. You can use labels to
+                  make sure that the search is only performed in a specific segment of the database.
+            - name: executeJavaScript
+              description: Runs JavaScript code
+            - name: toolCreationWizard
+              description: Wizard for guiding LLMs in creating new tool definitions step-by-step.
+            - name: modifyPrompts
+              description: Modify the current prompts in llmSettings
+            - name: chatCompletion
+              description: >-
+                Generates a chat-based response using the OpenAI API for the previous
+                message.
+            - name: toolSearcher
+              description: >-
+                You can use this tool to do the following:
 
-          ```mermaid
+                - Get a list of all tool names.
 
-          ...
+                - Get the definition of a single tool including source code, if available.
+                (not case sensitive)
+            - name: chooseTool
+              description: Chooses and parameterizes a tool for execution based on provided context.
+            - name: taskSearcher
+              description: Search through available tasks using a search string
+            - name: addNewTool
+              description: Validates and registers a new tool with taskyon.
+            - name: ensureOauthLogin
+              description: Ensure, that we have an oauth token for the calling tool.
 
-          ```
 
-          - **SVG graphics**: Use HTML to embed SVG graphics.
+            Can you please choose 3 of these which you think might be relevant
+            for this
 
-          - **HTML widgets**: Create interactive elements within the markdown
-          using HTML.
+            task. Only choose one if you think it would help you to solve the
+            task.
 
-          - **MathJax**: Write mathematical formulas using $$ ... $$ for block
-          formulas and $ ... $ for inline formulas. **Note:** Only `$` and `$$`
-          syntax is supported.
-    streamContent: >-
-      I'm glad you enjoyed the test conversation for Taskyon. If you want to
-      simulate more conversations or try out different scenarios, feel free to
-      ask, and I can help you create more test cases.
-    promptTokens: 942
-    resultTokens: 41
-    taskTokens: 983
-    estimatedTokens:
-      singlePromptTokens: 9
-      promptTokens: 1137
-      functionTokens: 0
-      resultTokens: 40
-    taskCosts: 0.0008847
-  parentID: GpxL4KKsEe+IJ82q0JtcVg
-  state: Completed
-  id: IErOMKKtEe+IJ82q0JtcVg
-  created_at: 1731604992660
-  result:
-    chatResponse:
-      id: 228be3ff-7a2f-45a2-92a9-467c8f5e067f
-      object: chat.completion.chunk
-      created: 1731604994
-      model: meta-llama/llama-3.2-90b-vision-instruct
-      choices:
-        - index: 0
-          message:
-            content: >-
-              I'm glad you enjoyed the test conversation for Taskyon. If you
-              want to simulate more conversations or try out different
-              scenarios, feel free to ask, and I can help you create more test
-              cases.
-            role: assistant
-            tool_calls: []
-          finish_reason: stop
-      provider: Fireworks
-      usage:
-        prompt_tokens: 942
-        completion_tokens: 41
-        total_tokens: 983
-- configuration: *ref_1
-  role: assistant
+
+            Examples are:
+
+            - something that you can't answer with pure text
+
+            - a math problem
+
+            - something that requires an API call
+
+            - ... and more! make sure to think about it!
+
+
+            If you are sure that none of the tools are relevant, your choice
+            should be simple string "no".
+        llmTools: false
+        schema:
+          type: object
+          properties:
+            reasoning_steps:
+              type: array
+              items:
+                type: string
+              description: The reasoning steps leading to the final conclusion.
+            choice:
+              anyOf:
+                - enum:
+                    - 'no'
+                  description: >-
+                    If you are sure no tools are required for an answer, choose
+                    "no" as an answer instead of a list!
+                - type: array
+                  description: List of tool names you think might be relevant
+                  items:
+                    type: string
+          additionalProperties: false
+          required:
+            - reasoning_steps
+            - choice
+  parentID: SXP4ey10f3ywd3Wjq-MMNDFUg_qTHehzZyjo3t150CE
+  id: lZlxKURMTIXHR4O-fs7u6kn4aRCMetqTDhOE4Chx91M
+  created_at: 1752878694187
+- role: assistant
+  name: test
   content:
-    message: >-
-      I'm glad you enjoyed the test conversation for Taskyon. If you want to
-      simulate more conversations or try out different scenarios, feel free to
-      ask, and I can help you create more test cases.
-  debugging:
-    promptTokens: 983
-    taskTokens: 983
-  state: Completed
-  parentID: IErOMKKtEe+IJ82q0JtcVg
-  id: InC7cKKtEe+IJ82q0JtcVg
-  created_at: 1731604996264
-  name: User
+    type: structured
+    data:
+      reasoning_steps:
+        - >-
+          The task requires a visual representation of the current time and
+          date.
+        - An animated clock would be a suitable tool for this task.
+        - >-
+          The animated clock tool can generate an animated clock with the
+          current time and date.
+        - This would be a suitable solution for the task.
+      choice:
+        - animatedClock
+  parentID: lZlxKURMTIXHR4O-fs7u6kn4aRCMetqTDhOE4Chx91M
+  id: Upa4Wa3x1ZCMBG1XUrA3mlWyjtNziu6BP4l-1TFnSEc
+  created_at: 1752878699308
+- role: function
+  name: chooseTool
+  content:
+    type: functioncall
+    data:
+      name: chooseTool
+      arguments:
+        llmTools: false
+  parentID: SXP4ey10f3ywd3Wjq-MMNDFUg_qTHehzZyjo3t150CE
+  priorID: lZlxKURMTIXHR4O-fs7u6kn4aRCMetqTDhOE4Chx91M
+  id: CfdgMWP280lXM2MGXEETIcptWlxo9rJHNdmnrcXrt2k
+  created_at: 1752878694309
+- role: function
+  name: test
+  content:
+    type: functioncall
+    data:
+      name: chatCompletion
+      arguments:
+        goal: ChooseTool
+        prompts:
+          - Please use one of the tools you chose earlier
+        allowedTools:
+          - animatedClock
+        llmTools: false
+  parentID: CfdgMWP280lXM2MGXEETIcptWlxo9rJHNdmnrcXrt2k
+  id: 6_VdhaypvlCUP4SDQzxp0UCQXyPLJxhH7EcI8gzme5w
+  created_at: 1752878699605
+- role: assistant
+  name: test
+  content:
+    type: structured
+    data: |-
+      tool: null
+      use tool: false
+      which tool: null
+      command:
+        name: ''
+        arguments: {}
+  parentID: 6_VdhaypvlCUP4SDQzxp0UCQXyPLJxhH7EcI8gzme5w
+  id: CYbftmu--fv9X01lnlNxv3gQYb5AJ5hYpklO0Gw7dTY
+  created_at: 1752878702474
+- role: function
+  name: test
+  content:
+    type: functioncall
+    data:
+      name: chatCompletion
+      arguments:
+        model: meta-llama/llama-3.2-11b-vision-instruct
+        goal: SimpleCompletion
+  parentID: 6_VdhaypvlCUP4SDQzxp0UCQXyPLJxhH7EcI8gzme5w
+  priorID: CYbftmu--fv9X01lnlNxv3gQYb5AJ5hYpklO0Gw7dTY
+  id: SvH8R5YQ5kpLzhxdKDGLAwdYVaoNT9LZHBqIV08drrM
+  created_at: 1752878702489
+- role: assistant
+  name: Taskyon
+  content:
+    type: message
+    data: >-
+      **Taskyon** is ready to assist you. What task or question would you like
+      to tackle?
+  parentID: SvH8R5YQ5kpLzhxdKDGLAwdYVaoNT9LZHBqIV08drrM
+  id: VW4Rz_HkuhXAr7JnhM8O9qVkO_PQPVkI7FvLUCbOQ38
+  created_at: 1752878705233
+- role: system
+  name: Taskyon
+  content:
+    type: return
+    data: assistant answered
+  parentID: SvH8R5YQ5kpLzhxdKDGLAwdYVaoNT9LZHBqIV08drrM
+  priorID: VW4Rz_HkuhXAr7JnhM8O9qVkO_PQPVkI7FvLUCbOQ38
+  id: q2vJLLPVg4Kzqd15YCjheHr88ZDbV27tCWmyGdeK7-0
+  created_at: 1752878705242

@@ -152,7 +152,7 @@ export const testChatCompletion = async () => {
   if (chatCompletion && 'function' in chatCompletion && chatCompletion.function !== undefined) {
     structuredResponse = await chatCompletion.function(
       {
-        model: 'gpt-4.1-nano',
+        model: 'google/gemini-flash-1.5',
         prompts: [
           `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
         ],
@@ -351,7 +351,7 @@ export async function markdownGeneration() {
       markdown,
     }
   }
-  throw new Error('could not found the task we just loaded!!')
+  throw new Error('could not find the task we just loaded!!')
 }
 
 export function testJsonSchemaToYaml() {

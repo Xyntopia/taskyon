@@ -7,10 +7,15 @@
         <q-btn
           outline
           label="Generate Diagnostics Report"
-          @click="generateReport(detailed, false)"
+          @click="generateReport(detailed, noGui, false)"
         ></q-btn>
+        <q-toggle v-model="noGui" label="no GUI Input"></q-toggle>
         <q-btn outline label="open markdown test page" to="/docs/markdown_it_test_page" />
-        <q-btn outline label="Only run first test" @click="generateReport(detailed, true)"></q-btn>
+        <q-btn
+          outline
+          label="Only run first test"
+          @click="generateReport(detailed, false, true)"
+        ></q-btn>
         <q-btn outline label="IPFS status" to="ipfsmonitor"></q-btn>
         <q-btn v-if="diagnostics" outline label="download report" @click="downloadReport"></q-btn>
         <TyResetButton outline mode="all" />
@@ -19,7 +24,8 @@
         <q-btn outline label="test iframe API" to="/clienttest" />
         <q-card flat bordered>
           <q-btn flat :icon="matContentCopy" @click="copyToClipboard(diagnostics)"></q-btn>
-          <pre>{{ diagnostics }}</pre>
+          <pre data-cy="diagnostics-result">{{ diagnostics }}</pre>
+          <div v-if="testFinished" data-cy="test-finished">Test Finished</div>
         </q-card>
       </q-page>
     </q-page-container>
@@ -59,19 +65,26 @@ import { onMounted } from 'vue'
 import { testCreateDeepTansformer } from 'src/modules/taskyon/tests'
 import { testGdriveUpload } from 'src/modules/taskyon/tests'
 import { testBuildSlimView } from 'src/modules/vueUtils'
+import { randomString } from 'src/modules/crypto_js'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 const diagnostics = ref<string>('')
 const detailed = ref(false)
+const noGui = ref(true)
 const showPassWordDialog = ref(false)
+const testFinished = ref(false)
 
 const infoText = ref('get password')
 let resolveSecret: (secret: string) => void
 onMounted(() => {
   void tystate.secretStore.onNewSecret(({ args: [{ id, secretName }], respond }) => {
+    if (noGui.value) {
+      respond('randomKey' + randomString(5))
+      return
+    }
     showPassWordDialog.value = true
-    infoText.value = `Please enter the secret '${secretName}' for '${id}'`
+    infoText.value = `Please enter a test secret '${secretName}' for '${id}'`
     resolveSecret = respond
   })
 })
@@ -113,16 +126,18 @@ async function runTest(name: string, testFunc: () => unknown, details = false) {
       message: 'an error occured during this test...',
       error:
         error instanceof Error
-          ? { message: error.message, stack: error.stack }
+          ? { message: error.message, stack: error.stack, cause: error.cause, name: error.name }
           : JSON.parse(JSON.stringify(error)),
     }
   }
   return dump(result, { skipInvalid: true })
 }
 
-async function generateReport(details = false, onlyFirst = false) {
+async function generateReport(details = false, noGui = true, onlyFirst = false) {
   console.log('generating diagnostics report')
+  testFinished.value = false
 
+  const startTime = Date.now() // milliseconds since epoch
   diagnostics.value = `report_date: ${new Date().toISOString()}\n`
 
   diagnostics.value += await runTest(
@@ -138,7 +153,6 @@ async function generateReport(details = false, onlyFirst = false) {
   }
 
   diagnostics.value += await runTest('test build slim view', testJsonSchemaToYaml, details)
-
   diagnostics.value += await runTest('test build slim view', testBuildSlimView, details)
 
   diagnostics.value += await runTest(
@@ -175,9 +189,12 @@ async function generateReport(details = false, onlyFirst = false) {
   diagnostics.value += await runTest('test_vectorization', testVectorizeText, details)
   diagnostics.value += await runTest('taskyon_data', getData, details)
   // we run this test at the end, because sometimes it just keeps blocking?
-  diagnostics.value += await runTest('gdrive_upload', testGdriveUpload, details)
+  if (!noGui) diagnostics.value += await runTest('gdrive_upload', testGdriveUpload, details)
 
+  diagnostics.value += `\n\ntime to run tests: ${(startTime - Date.now()) / 1000}s`
+  diagnostics.value += '\nfinished all tests!'
   console.log('diagnostics:', diagnostics.value)
+  testFinished.value = true
 }
 
 async function getData() {

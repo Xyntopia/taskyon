@@ -162,7 +162,15 @@ export function generateSalt(): string {
 }
 
 // Generate a random key (256 bits) for HKDF
-export function generateRandomKey() {
-  const keyBytes = randomBytes(32)
+export function generateRandomKey(bytes = 32) {
+  const keyBytes = randomBytes(bytes)
   return hkdf(sha256, keyBytes, undefined, undefined, 32) // Derives a 256-bit key
+}
+
+export function randomString(
+  len = 32,
+  chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+) {
+  const charLen = chars.length
+  return [...crypto.getRandomValues(new Uint32Array(len))].map((n) => chars[n % charLen]).join('')
 }

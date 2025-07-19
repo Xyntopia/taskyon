@@ -43,3 +43,11 @@ export function writeMessage(msg: string) {
   cy.get('.create-new-task textarea').type(msg)
   cy.get('.create-new-task textarea').type('{enter}')
 }
+
+export function addAIServices() {
+  cy.get('.q-btn').contains('AI service provider se', { matchCase: false }).click()
+  cy.contains('Add API keys').click()
+  // check in our keepass to get the relevant json.
+  cy.contains('openai API key').type(Cypress.env().openai_api_key)
+  cy.contains('openrouter.ai API key').type(Cypress.env().openrouter_api_key)
+}
