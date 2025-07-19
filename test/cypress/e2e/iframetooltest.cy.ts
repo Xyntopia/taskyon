@@ -12,23 +12,6 @@ describe('iframe integration', () => {
       }),
     )
     cy.visit('/')
-
-    // Clear local storage
-    cy.clearLocalStorage()
-
-    // Clear cookies
-    cy.clearCookies()
-
-    // Optionally, you can clear indexedDB if your app uses it
-    // somehow we're getting a lot of errors here...
-    cy.window().then(async (win) => {
-      const databases = await win.indexedDB.databases()
-      databases.forEach((db) => {
-        win.indexedDB.deleteDatabase(db.name!)
-      })
-    })
-
-    cy.reload()
   })
 
   const getIframeBody = () => {

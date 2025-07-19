@@ -9,22 +9,6 @@ import { getLastAssistantMessage, useFreeTaskyon, writeMessage } from '../suppor
 describe('Landing', () => {
   beforeEach(() => {
     cy.visit('/')
-
-    // Clear local storage
-    cy.clearLocalStorage()
-
-    // Clear cookies
-    cy.clearCookies()
-
-    // Optionally, you can clear indexedDB if your app uses it
-    // somehow we're getting a lot of errors here...
-    /*cy.window().then((win) => {
-      void win.indexedDB.databases().then((databases) => {
-        databases.forEach((db) => {
-          win.indexedDB.deleteDatabase(db.name!);
-        });
-      });
-    });*/
   })
   it('should be able to share a message and open it afterwards', () => {
     cy.log('starting tests!')

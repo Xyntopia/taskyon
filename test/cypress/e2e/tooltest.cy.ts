@@ -9,23 +9,6 @@ import { selectllmmodel, startNewChat, writeMessage } from '../support/groups'
 describe('Tool Tests', () => {
   beforeEach(() => {
     cy.visit('/')
-
-    // Clear local storage
-    cy.clearLocalStorage()
-
-    // Clear cookies
-    cy.clearCookies()
-
-    // Optionally, you can clear indexedDB if your app uses it
-    // somehow we're getting a lot of errors here...
-    cy.window().then(async (win) => {
-      const databases = await win.indexedDB.databases()
-      databases.forEach((db) => {
-        win.indexedDB.deleteDatabase(db.name!)
-      })
-    })
-
-    cy.reload()
   })
   it('Should be able to create a tool and use it, also clean up after', () => {
     // cy.contains('your message').type('hello world!{enter}');
