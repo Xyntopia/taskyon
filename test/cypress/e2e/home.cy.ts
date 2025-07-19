@@ -1,7 +1,12 @@
 // Use `cy.dataCy` custom command for more robust tests
 // See https://docs.cypress.io/guides/references/best-practices.html#Selecting-Elements
 
-import { getLastAssistantMessage, selectllmmodel, writeMessage } from '../support/groups'
+import {
+  getLastAssistantMessage,
+  selectllmmodel,
+  useFreeTaskyon,
+  writeMessage,
+} from '../support/groups'
 
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
@@ -30,9 +35,7 @@ describe('test taskyon defaults', () => {
 
     cy.log('starting tests!')
 
-    cy.get('.q-btn').contains('AI service provider se', { matchCase: false }).click()
-    cy.get('.q-btn').contains('Use free Taskyon', { matchCase: false }).click()
-
+    useFreeTaskyon()
     //cy.wait('[aria-label="quick ai settings"]')
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
 
