@@ -10,6 +10,7 @@
   />
   <input
     ref="fileInput"
+    data-cy="file-input"
     type="file"
     :accept="accept"
     multiple

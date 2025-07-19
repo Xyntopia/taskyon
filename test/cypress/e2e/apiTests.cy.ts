@@ -1,20 +1,20 @@
 // Use `cy.dataCy` custom command for more robust tests
 // See https://docs.cypress.io/guides/references/best-practices.html#Selecting-Elements
 
-import { checkLastMessage, selectllmmodel } from '../support/groups';
+import { checkLastMessage, selectllmmodel, writeMessage } from '../support/groups'
 
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
 // This test will pass when run against a clean Quasar project
 describe('taskyon API', () => {
   beforeEach(() => {
-    cy.visit('/');
+    cy.visit('/')
 
     // Clear local storage
-    cy.clearLocalStorage();
+    //cy.clearLocalStorage();
 
     // Clear cookies
-    cy.clearCookies();
+    //cy.clearCookies();
 
     // Optionally, you can clear indexedDB if your app uses it
     // somehow we're getting a lot of errors here...
@@ -25,57 +25,48 @@ describe('taskyon API', () => {
         });
       });
     });*/
-  });
+  })
   it('should be able to interact with taskyon API', () => {
-    cy.get('.q-btn').contains('Use free Taskyon').click();
-
     // enable task cost display & expert mode...
-    cy.get('[aria-label="Expert mode"] > .q-toggle__inner').click();
-    cy.get('[aria-label="Show task costs"] > .q-toggle__inner').click();
+    cy.get('.q-btn').contains('AI service provider se', { matchCase: false }).click()
 
-    cy.reload().wait(1000);
+    cy.contains('Add API keys').click()
+    // check in our keepass to get the relevant json.
+    cy.contains('openai API key').type(Cypress.env().openai_api_key)
+    cy.contains('openrouter.ai API key').type(Cypress.env().openrouter_api_key)
 
-    cy.get('[aria-label="toggle task settings"]').click();
-    cy.get('[aria-label="ai service settings"]').click();
+    cy.screenshot('ai_services', { overwrite: true })
 
-    cy.contains('Add API keys').click();
-    cy.contains('openai API key').type(Cypress.env().openai_api_key);
-    cy.contains('openrouter.ai API key').type(Cypress.env().openrouter_api_key);
+    cy.visit('/')
 
-    cy.screenshot('ai_services', { overwrite: true });
-
-    cy.visit('/');
+    cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
+    cy.contains('expertMode').next().click()
+    cy.dataCy('ai-settings').scrollTo('bottom')
 
     // as of 20241007 this is the cheapest model which works with vision...
-    const visionModelID = 'google/gemini-flash-1.5-8b';
+    const visionModelID = 'google/gemini-flash-1.5-8b'
 
-    selectllmmodel('openai');
-    selectllmmodel('openrouter.ai', visionModelID);
+    selectllmmodel('openai')
+    selectllmmodel('openrouter.ai', visionModelID)
 
-    cy.wait(1000).reload();
+    cy.wait(1000).reload()
 
-    cy.log('checking if the correct llm was selected');
-    cy.contains('Select LLM Model for answering/solving the task.')
-      //  .parent()
-      .get('.q-field__input.q-placeholder.col')
-      .invoke('val')
-      .then((val) => {
-        cy.log(JSON.stringify(val));
-        expect(val).to.eq(visionModelID); // Check if the text is a number
-      });
+    cy.log('checking if the correct llm was selected')
+    cy.dataCy('model-id').contains(visionModelID)
     //.should('have.string', 'meta-llama/llama-3-70b-instruct');
     //.should('meta-llama/llama-3-70b-instruct');
 
-    cy.get('.create-new-task .dropzone > input').selectFile(
-      './public/taskyon_social_preview.png',
-      { force: true },
-    );
+    cy.get('.create-new-task')
+      .dataCy('file-input')
+      .selectFile('./public/taskyon_social_preview.png', {
+        force: true,
+      })
 
-    cy.contains('your message').type('Whats in the picture?{enter}');
+    writeMessage('Whats in the picture?{enter}')
 
-    checkLastMessage('taskyon.space').and('contain', 'logo');
+    checkLastMessage('taskyon.space').and('contain', 'logo')
 
-    cy.screenshot('Vision models', { overwrite: true });
+    cy.screenshot('Vision models', { overwrite: true })
 
     // Check if the task costs element is present and contains the expected text
     /*cy.get('.task-costs')
@@ -97,8 +88,8 @@ describe('taskyon API', () => {
     //.and('match', /^\d+/); // Check if it contains a number
 
     //cy.wa
-  });
-});
+  })
+})
 
 // ** The following code is an example to show you how to write some tests for your home page **
 //

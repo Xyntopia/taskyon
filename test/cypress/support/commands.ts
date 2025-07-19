@@ -26,15 +26,20 @@
 
 // DO NOT REMOVE
 // Imports Quasar Cypress AE predefined commands
-import { registerCommands } from '@quasar/quasar-app-extension-testing-e2e-cypress';
-registerCommands();
+import { registerCommands } from '@quasar/quasar-app-extension-testing-e2e-cypress'
+registerCommands()
 
 Cypress.Commands.add('selectllmmodel', (provider, modelId) => {
-  cy.contains('Provider').click();
-  cy.get('.q-menu').contains(provider).click();
+  cy.contains('Provider').click()
+  cy.get('.q-menu').contains(provider).click()
   cy.wait(100)
     .contains('Select LLM Model for answering/solving the task.')
     .click()
-    .type(modelId + '{enter}');
-  cy.get('.q-menu').contains(modelId).click();
-});
+    .type(modelId + '{enter}')
+  cy.get('.q-menu').contains(modelId).click()
+})
+
+Cypress.Commands.add('dataCy', { prevSubject: 'optional' }, (subject, value) => {
+  const selector = `[data-cy="${value}"]`
+  return subject ? cy.wrap(subject).find(selector) : cy.get(selector)
+})

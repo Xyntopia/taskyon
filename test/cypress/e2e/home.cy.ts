@@ -1,7 +1,7 @@
 // Use `cy.dataCy` custom command for more robust tests
 // See https://docs.cypress.io/guides/references/best-practices.html#Selecting-Elements
 
-import { getLastAssistantMessage, selectllmmodel } from '../support/groups'
+import { getLastAssistantMessage, selectllmmodel, writeMessage } from '../support/groups'
 
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
@@ -54,13 +54,12 @@ describe('test taskyon defaults', () => {
     cy.contains('Vision')
     cy.contains('Fancy AI').type('{esc}')
 
-    const msg = 'hello world you silly munchkin!!'
-    cy.get('.create-new-task').type(msg)
-    cy.get('.create-new-task textarea').should('have.value', msg)
-    cy.get('.create-new-task textarea').type('{enter}')
     //cy.dataCy('chat-input').focus().type('{enter}')
     //cy.get('li').first().click();
     //cy.contains('Clicks on todos: 1').should('exist');
+
+    const msg = 'hello world you silly munchkin!!'
+    writeMessage(msg)
 
     getLastAssistantMessage('.user.message')
       .invoke('text')

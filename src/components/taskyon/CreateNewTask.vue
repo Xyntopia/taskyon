@@ -105,7 +105,7 @@
         <!--Taskyon features-->
         <q-btn dense flat :icon="matMoreHoriz" aria-label="quick ai settings">
           <q-tooltip>More AI Settings</q-tooltip>
-          <q-menu fit>
+          <q-menu fit data-cy="ai-settings">
             <div class="q-py-md">
               <ObjectTreeView
                 v-model="slimSettings.reactiveView"
@@ -165,7 +165,7 @@
       <div class="col-auto model-history">
         <q-btn flat dense size="sm" no-caps @click.stop>
           <q-icon :name="matSmartToy" />
-          <div class="q-pl-xs ellipsis">
+          <div data-cy="model-id" class="q-pl-xs ellipsis">
             {{ `${tystate.currentModelId}` }}
           </div>
           <div class="text-weight-thin gt-xs">/{{ state.llmSettings.selectedApi }}</div>

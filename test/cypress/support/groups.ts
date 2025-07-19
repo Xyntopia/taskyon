@@ -2,8 +2,8 @@
 
 export function selectllmmodel(provider: string | undefined, modelId: string = '') {
   if (provider) {
-    cy.contains('Provider').click()
-    cy.get('.q-menu').contains(provider).click()
+    cy.dataCy('ai-settings').contains('Provider').click()
+    cy.dataCy('ai-settings').get('.q-menu').contains(provider).click()
   }
   if (modelId) {
     cy.wait(100)
@@ -39,6 +39,7 @@ export function startNewChat() {
   cy.get('[aria-label="start new chat"]').click()
 }
 
-export function writeMessage(message: string) {
-  cy.contains('your message').type(message)
+export function writeMessage(msg: string) {
+  cy.get('.create-new-task textarea').type(msg)
+  cy.get('.create-new-task textarea').type('{enter}')
 }
