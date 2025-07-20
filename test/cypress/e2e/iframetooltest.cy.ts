@@ -49,7 +49,7 @@ describe('iframe integration', () => {
   }
 
   it('Should be able to create a tool and use it through the iframe', { baseUrl: null }, () => {
-    cy.visit('./public/docs/examples/simpleExampleLocal.html') //.wait(10000);
+    cy.visit('/clienttest') //.wait(10000);
 
     clearIframeStorage()
 
