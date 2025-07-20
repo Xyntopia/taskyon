@@ -85,98 +85,215 @@ export const wfcGenerator = createTool({
             description: 'The number of tiles to generate vertically.',
           },
         },
+        default: {
+          width: 10,
+          height: 10,
+        },
       },
     },
   },
   function: ({ patterns, resolution = 4, tileSize = 16, colorMap, output }) => {
-    // Validate required parameters
-    if (!patterns || !Array.isArray(patterns)) {
-      throw new Error(
-        'Invalid or missing "patterns" parameter. It must be an array of character masks.',
-      )
-    }
-    if (!colorMap || typeof colorMap !== 'object') {
-      throw new Error(
-        'Invalid or missing "colorMap" parameter. It must be an object mapping characters to colors.',
-      )
-    }
-    if (!output || typeof output !== 'object' || !output.width || !output.height) {
-      throw new Error(
-        'Invalid or missing "output" parameter. It must be an object with "width" and "height" properties.',
-      )
-    }
+    if (!Array.isArray(patterns)) throw new Error('patterns must be an array')
+    if (!colorMap || typeof colorMap !== 'object') throw new Error('colorMap required')
+    if (!output || typeof output !== 'object' || !output.width || !output.height)
+      throw new Error('output {width,height} required')
 
-    // Build tile image data from character masks
+    const tilesize = resolution * tileSize // pixels per tile edge
+
     function buildTile(mask) {
-      const sizePx = resolution * tileSize
       const cvs = document.createElement('canvas')
-      cvs.width = cvs.height = sizePx
+      cvs.width = cvs.height = tilesize
       const ctx = cvs.getContext('2d')
-      if (!ctx) {
-        throw new Error('Failed to get 2D context for canvas')
-      }
-      // clear background
-      ctx.clearRect(0, 0, sizePx, sizePx)
+      if (!ctx) throw new Error('no 2d ctx')
+      ctx.clearRect(0, 0, tilesize, tilesize)
       for (let y = 0; y < resolution; y++) {
         for (let x = 0; x < resolution; x++) {
-          const ch = mask[y][x]
+          const ch = mask[y]?.[x]
           if (ch && colorMap[ch]) {
             ctx.fillStyle = colorMap[ch]
             ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize)
           }
         }
       }
-      return ctx.getImageData(0, 0, sizePx, sizePx).data
+      const imageData = ctx.getImageData(0, 0, tilesize, tilesize)
+      const bitmap = new Uint8Array(imageData.data) // library wants Uint8Array
+      const pngDataURL = cvs.toDataURL('image/png')
+      return { bitmap, pngDataURL }
     }
 
-    // Prepare WFC data
-    const tiles = patterns.map((m, i) => ({
-      name: `T${i}`,
-      data: buildTile(m),
-      width: resolution * tileSize,
-      height: resolution * tileSize,
-    }))
-    const dataObj = {
-      tiles: Object.fromEntries(
-        tiles.map((t) => [t.name, { data: t.data, width: t.width, height: t.height }]),
-      ),
+    // Build tile array in required shape
+    const tiles = patterns.map((m, i) => {
+      const { bitmap, pngDataURL } = buildTile(m)
+      return {
+        name: `T${i}`,
+        symmetry: 'X', // simplest: no rotations
+        weight: 1,
+        bitmap, // REQUIRED key name
+        _preview: pngDataURL,
+      }
+    })
+
+    // Naive neighbor set: allow any tile next to any tile (works; just unconstrained)
+    const neighbors = []
+    for (const a of tiles) {
+      for (const b of tiles) {
+        neighbors.push({ left: a.name, right: b.name })
+      }
+    }
+
+    const definition = {
+      tilesize,
+      unique: false, // we are not providing rotated variants
+      tiles: tiles.map((t) => ({
+        name: t.name,
+        symmetry: t.symmetry,
+        weight: t.weight,
+        bitmap: t.bitmap,
+      })),
       subsets: { default: tiles.map((t) => t.name) },
-      constraints: [],
+      neighbors,
     }
 
-    // Create model and generate
-    const model = new wfc.SimpleTiledModel(dataObj, 'default', output.width, output.height, false)
-    model.generate(Math.random)
+    // Construct model (note the second arg is subset name or null)
+    const model = new wfc.SimpleTiledModel(
+      definition,
+      'default',
+      output.width,
+      output.height,
+      false,
+    )
 
-    // Collect pixel buffer
-    const pxW = output.width * tileSize
-    const pxH = output.height * tileSize
-    const img = new ImageData(pxW, pxH)
-    model.graphics(img.data)
+    const finished = model.generate(Math.random)
+    if (!finished) {
+      // (Optional) retry / handle contradiction
+      throw new Error('Generation ended in a contradiction')
+    }
 
-    // Render in new window
-    const html = `<!DOCTYPE html>
-<html><body style="margin:0;overflow:hidden;">
-<canvas id="c"></canvas>
-<script>
-  const img = new ImageData(new Uint8ClampedArray(\${JSON.stringify(Array.from(img.data))}), \${pxW}, \${pxH});
-  const cvs = document.getElementById('c');
-  cvs.width = \${pxW}; cvs.height = \${pxH};
-  cvs.getContext('2d').putImageData(img,0,0);
+    // model.graphics(): this port commonly returns { buffer: Uint8Array, ... }
+    const result = model.graphics()
+    // Some versions accept an ImageData arg; this code path uses returned buffer:
+    const buffer = result && result.buffer ? result.buffer : result // fallback
+
+    const pxW = output.width * tilesize
+    const pxH = output.height * tilesize
+    // Create ImageData from raw buffer
+    const imgData = new ImageData(new Uint8ClampedArray(buffer), pxW, pxH)
+
+    // Serialize for client regeneration (we re-derive neighbors client side the same way)
+    const serialized = {
+      tilesize,
+      outputWidth: output.width,
+      outputHeight: output.height,
+      tiles: tiles.map((t) => ({
+        name: t.name,
+        symmetry: t.symmetry,
+        weight: t.weight,
+        png: t._preview,
+        bitmap: Array.from(t.bitmap), // numbers for JSON
+      })),
+    }
+
+    const html = `
+### Wave Function Collapse (Interactive)
+
+Input tiles (raw bitmaps) & generated output. Click **Regenerate Variation** to sample a fresh result.
+
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+  ${tiles
+    .map(
+      (t) => `<figure style="margin:0;">
+    <img src="${t._preview}" width="${tilesize}" height="${tilesize}"
+         alt="${t.name}" style="image-rendering:pixelated;border:1px solid #ccc;display:block;">
+    <figcaption style="text-align:center;font-size:0.7rem;">${t.name}</figcaption>
+  </figure>`,
+    )
+    .join('')}
+</div>
+
+<button id="wfc-regenerate" style="padding:4px 10px;cursor:pointer;margin:8px 0;">Regenerate Variation</button>
+<canvas id="wfc-canvas" width="${pxW}" height="${pxH}"
+        style="border:1px solid #999;image-rendering:pixelated;display:block;"></canvas>
+<div style="margin-top:6px;">
+  <img id="wfc-thumb" alt="output preview"
+       style="max-width:200px;border:1px solid #ccc;image-rendering:pixelated;">
+</div>
+
+<script type="module">
+(() => {
+  const serialized = ${JSON.stringify(serialized)}
+
+  async function getLib() {
+    if (window.wfc?.SimpleTiledModel) return window.wfc
+    if (window.wavefunctioncollapse?.SimpleTiledModel) return window.wavefunctioncollapse
+    return await import('wavefunctioncollapse')
+  }
+
+  function buildDefinition() {
+    const tiles = serialized.tiles.map(t => ({
+      name: t.name,
+      symmetry: t.symmetry,
+      weight: t.weight,
+      bitmap: new Uint8Array(t.bitmap)
+    }))
+    // allow-all neighbors again (mirror server)
+    const neighbors = []
+    for (const a of tiles) for (const b of tiles)
+      neighbors.push({ left: a.name, right: b.name })
+    return {
+      tilesize: serialized.tilesize,
+      unique: false,
+      tiles,
+      subsets: { default: tiles.map(t => t.name) },
+      neighbors
+    }
+  }
+
+  const cvs = document.getElementById('wfc-canvas')
+  const ctx = cvs.getContext('2d')
+  const thumb = document.getElementById('wfc-thumb')
+  const btn = document.getElementById('wfc-regenerate')
+
+  function putBuffer(buffer) {
+    const w = serialized.outputWidth * serialized.tilesize
+    const h = serialized.outputHeight * serialized.tilesize
+    const id = new ImageData(new Uint8ClampedArray(buffer), w, h)
+    ctx.putImageData(id, 0, 0)
+    thumb.src = cvs.toDataURL('image/png')
+  }
+
+  async function generate() {
+    const lib = await getLib()
+    const def = buildDefinition()
+    const model = new lib.SimpleTiledModel(
+      def,
+      'default',
+      serialized.outputWidth,
+      serialized.outputHeight,
+      false
+    )
+    const ok = model.generate(Math.random)
+    if (!ok) { console.warn('contradiction'); return }
+    const g = model.graphics()
+    const buffer = (g && g.buffer) ? g.buffer : g
+    putBuffer(buffer)
+  }
+
+  // initial draw (server sample)
+  putBuffer(${JSON.stringify(Array.from(buffer))})
+
+  btn.addEventListener('click', () => {
+    btn.disabled = true
+    generate().finally(() => btn.disabled = false)
+  })
+})()
 </script>
-</body></html>\`;
-  }`
+`
+
     return makeTaskResult([
       [
         {
           role: 'assistant',
-          content: {
-            type: 'functioncall',
-            data: {
-              name: 'newWindowOpener',
-              arguments: { html, windowFeatures: 'width=' + pxW + ',height=' + pxH },
-            },
-          },
+          content: { type: 'message', data: html },
         },
       ],
     ])
