@@ -52,7 +52,7 @@
         }
       },
       "local": {
-        "name": "openai",
+        "name": "local LLM server",
         "baseURL": "http://localhost:8080/v1",
         "defaultModel": "qwen3-4b",
         "streamSupport": true,

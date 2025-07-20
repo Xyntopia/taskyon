@@ -13,22 +13,36 @@
     <!--for all the component which explicitly want to remove the header...-->
     <template #default-header></template>
     <template #header-object="prop">
-      <FieldView :item="prop.node" />
+      <FieldView
+        :item="prop.node"
+        show-label
+        @reset="updateValue(prop.node.path, prop.node.default)"
+      />
     </template>
     <template #body-unknown="prop">
-      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
+      <FieldView
+        :show-label="separateLabels"
+        reset
+        :item="prop.node"
+        @reset="updateValue(prop.node.path, prop.node.default)"
+      >
         <InfoDialog label="This field can’t be changed right now." :round="false" :icon="matInfo">
           {{ prop.node }}
         </InfoDialog>
       </FieldView>
     </template>
     <template #body-text="prop">
-      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
+      <FieldView
+        :show-label="separateLabels"
+        :item="prop.node"
+        reset
+        @reset="updateValue(prop.node.path, prop.node.default)"
+      >
         <q-input
           :readonly="readOnly"
           class="col"
           filled
-          :label="prop.node.fieldHint"
+          :label="separateLabels ? '' : prop.node.label"
           input-style="max-height: 300px"
           type="textarea"
           :debounce="debounce"
@@ -38,13 +52,18 @@
       </FieldView>
     </template>
     <template #body-list="prop">
-      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
+      <FieldView
+        :show-label="separateLabels"
+        :item="prop.node"
+        reset
+        @reset="updateValue(prop.node.path, prop.node.default)"
+      >
         <json-input
           :readonly="readOnly"
           class="col"
           auto-save
           filled
-          :label="prop.node.fieldHint"
+          :label="separateLabels ? '' : prop.node.label"
           :model-value="prop.node.value"
           style="min-width: 200px"
           @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
@@ -52,12 +71,17 @@
       </FieldView>
     </template>
     <template #body-string="prop">
-      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
+      <FieldView
+        :show-label="separateLabels"
+        :item="prop.node"
+        reset
+        @reset="updateValue(prop.node.path, prop.node.default)"
+      >
         <q-input
           :readonly="readOnly"
           class="col"
           style="min-width: 200px"
-          :label="prop.node.fieldHint"
+          :label="separateLabels ? '' : prop.node.label"
           filled
           dense
           autogrow
@@ -69,7 +93,12 @@
       </FieldView>
     </template>
     <template #body-boolean="prop">
-      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
+      <FieldView
+        :show-label="separateLabels"
+        :item="prop.node"
+        reset
+        @reset="updateValue(prop.node.path, prop.node.default)"
+      >
         <q-chip
           v-if="readOnly"
           :icon="prop.node.value ? prop.node.onIcon : prop.node.offIcon"
@@ -82,7 +111,7 @@
           dense
           size="lg"
           left-label
-          :label="prop.node.fieldHint"
+          :label="separateLabels ? '' : prop.node.label"
           :checked-icon="prop.node.onIcon"
           :unchecked-icon="prop.node.offIcon"
           color="secondary"
@@ -92,12 +121,17 @@
       </FieldView>
     </template>
     <template #body-number="prop">
-      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
+      <FieldView
+        :show-label="separateLabels"
+        :item="prop.node"
+        reset
+        @reset="updateValue(prop.node.path, prop.node.default)"
+      >
         <q-input
           :readonly="readOnly"
           class="col"
           style="min-width: 200px"
-          :label="prop.node.fieldHint"
+          :label="separateLabels ? '' : prop.node.label"
           filled
           dense
           type="number"
@@ -108,13 +142,18 @@
       </FieldView>
     </template>
     <template #body-enum="prop">
-      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
+      <FieldView
+        :show-label="separateLabels"
+        :item="prop.node"
+        reset
+        @reset="updateValue(prop.node.path, prop.node.default)"
+      >
         <q-select
           :disable="readOnly"
           filled
           dense
           emit-value
-          :label="prop.node.fieldHint"
+          :label="separateLabels ? '' : prop.node.label"
           :options="prop.node.options.map((v: string) => ({ label: String(v), value: v }))"
           :model-value="prop.node.value"
           @update:model-value="(val) => updateValue(prop.node.path, val)"
@@ -122,7 +161,12 @@
       </FieldView>
     </template>
     <template #body-color="prop">
-      <FieldView :item="prop.node" @reset="updateValue(prop.node.path, prop.node.default)">
+      <FieldView
+        :show-label="separateLabels"
+        :item="prop.node"
+        reset
+        @reset="updateValue(prop.node.path, prop.node.default)"
+      >
         <q-input
           filled
           dense
@@ -226,8 +270,7 @@ const transformToTreeNodes = (
       (descriptionsAsLabels ? subschema?.description?.trim() : undefined) ?? subschema?.label ?? key
 
     const base: QTreeNode = {
-      ...(separateLabels ? { label } : {}),
-      ...(!separateLabels ? { fieldHint: label } : {}),
+      label,
       description: subschema?.description?.trim(),
       key: newPath.join('.'),
       path: newPath,
@@ -304,6 +347,14 @@ const transformToTreeNodes = (
           body: 'boolean',
         }
       case 'number': {
+        const numVal = isUndef ? undefined : (value as number)
+        return {
+          ...base,
+          value: numVal,
+          body: 'number',
+        }
+      }
+      case 'integer': {
         const numVal = isUndef ? undefined : (value as number)
         return {
           ...base,

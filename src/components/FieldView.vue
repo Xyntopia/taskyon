@@ -1,19 +1,25 @@
 <template>
+  <!--Field Wrapper-->
   <div class="row q-gutter-sm items-center">
     <q-icon v-if="item.icon" size="sm" :name="item.icon"></q-icon>
-    <div v-if="item.label" class="col-auto" style="min-width: 200px">
-      {{ item.label }}:
-      <q-btn
-        v-if="item.default"
-        color="grey-4"
-        dense
-        size="sm"
-        flat
-        :icon="matRestartAlt"
-        @click="emit('reset')"
-      >
-        <q-tooltip>Reset to default</q-tooltip>
-      </q-btn>
+    <div
+      v-if="(item.label && showLabel) || reset"
+      class="col-auto row items-center"
+      :style="item.label && showLabel ? 'min-width: 200px' : ''"
+    >
+      <template v-if="item.label && showLabel">{{ item.label }}:</template>
+      <template v-if="reset">
+        <q-btn
+          v-if="item.default"
+          dense
+          size="sm"
+          flat
+          :icon="matRestartAlt"
+          @click.stop="emit('reset')"
+        >
+          <q-tooltip>Reset to default</q-tooltip>
+        </q-btn>
+      </template>
     </div>
     <!--valueSlot-->
     <slot> </slot>
@@ -29,7 +35,9 @@ const emit = defineEmits<{
   (e: 'reset'): void
 }>()
 
-defineProps<{
+const { reset = true } = defineProps<{
+  showLabel?: boolean
+  reset?: boolean
   item: {
     icon?: string
     description?: string
