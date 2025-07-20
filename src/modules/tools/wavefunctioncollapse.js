@@ -93,6 +93,9 @@ export const wfcGenerator = createTool({
     },
   },
   function: ({ patterns, resolution = 4, tileSize = 16, colorMap, output }) => {
+    const DEBUG = true // flip to false to silence in-panel logs (console still logs)
+
+    // ---- Validation -----------------------------------------------------------
     if (!Array.isArray(patterns)) throw new Error('patterns must be an array')
     if (!colorMap || typeof colorMap !== 'object') throw new Error('colorMap required')
     if (!output || typeof output !== 'object' || !output.width || !output.height)
@@ -100,6 +103,7 @@ export const wfcGenerator = createTool({
 
     const tilesize = resolution * tileSize // pixels per tile edge
 
+    // ---- Tile Builder ---------------------------------------------------------
     function buildTile(mask) {
       const cvs = document.createElement('canvas')
       cvs.width = cvs.height = tilesize
@@ -108,7 +112,7 @@ export const wfcGenerator = createTool({
       ctx.clearRect(0, 0, tilesize, tilesize)
       for (let y = 0; y < resolution; y++) {
         for (let x = 0; x < resolution; x++) {
-          const ch = mask[y]?.[x]
+          const ch = mask[y] && mask[y][x]
           if (ch && colorMap[ch]) {
             ctx.fillStyle = colorMap[ch]
             ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize)
@@ -116,24 +120,24 @@ export const wfcGenerator = createTool({
         }
       }
       const imageData = ctx.getImageData(0, 0, tilesize, tilesize)
-      const bitmap = new Uint8Array(imageData.data) // library wants Uint8Array
+      const bitmap = new Uint8Array(imageData.data) // RGBA
       const pngDataURL = cvs.toDataURL('image/png')
       return { bitmap, pngDataURL }
     }
 
-    // Build tile array in required shape
+    // ---- Build Tiles Array ----------------------------------------------------
     const tiles = patterns.map((m, i) => {
       const { bitmap, pngDataURL } = buildTile(m)
       return {
         name: `T${i}`,
-        symmetry: 'X', // simplest: no rotations
+        symmetry: 'X',
         weight: 1,
-        bitmap, // REQUIRED key name
+        bitmap,
         _preview: pngDataURL,
       }
     })
 
-    // Naive neighbor set: allow any tile next to any tile (works; just unconstrained)
+    // ---- Neighbors (allow all) ------------------------------------------------
     const neighbors = []
     for (const a of tiles) {
       for (const b of tiles) {
@@ -141,9 +145,10 @@ export const wfcGenerator = createTool({
       }
     }
 
+    // ---- Definition Object ----------------------------------------------------
     const definition = {
       tilesize,
-      unique: false, // we are not providing rotated variants
+      unique: false,
       tiles: tiles.map((t) => ({
         name: t.name,
         symmetry: t.symmetry,
@@ -154,32 +159,40 @@ export const wfcGenerator = createTool({
       neighbors,
     }
 
-    // Construct model (note the second arg is subset name or null)
-    const model = new wfc.SimpleTiledModel(
-      definition,
-      'default',
-      output.width,
-      output.height,
-      false,
-    )
+    // ---- Initial Generation (Server) ------------------------------------------
+    let serverGenerationBuffer = null
+    let serverGenerationOK = false
+    let serverError = null
 
-    const finished = model.generate(Math.random)
-    if (!finished) {
-      // (Optional) retry / handle contradiction
-      throw new Error('Generation ended in a contradiction')
+    try {
+      const model = new wfc.SimpleTiledModel(
+        definition,
+        null, // subset (null matches example)
+        output.width,
+        output.height,
+        false,
+      )
+      serverGenerationOK = model.generate(Math.random)
+      if (serverGenerationOK) {
+        const g = model.graphics()
+        let buf
+        if (g && g.buffer instanceof Uint8Array) buf = g.buffer
+        else if (g instanceof Uint8Array) buf = g
+        else if (g && g.buffer instanceof ArrayBuffer) buf = new Uint8Array(g.buffer)
+        else if (g && g.buffer && g.buffer.buffer instanceof ArrayBuffer)
+          buf = new Uint8Array(g.buffer.buffer)
+        else if (g && Array.isArray(g.buffer)) buf = new Uint8Array(g.buffer)
+        else if (Array.isArray(g)) buf = new Uint8Array(g)
+        else buf = new Uint8Array((g && g.buffer) || [])
+        serverGenerationBuffer = Array.from(buf)
+      } else {
+        serverError = 'Contradiction on initial generation'
+      }
+    } catch (e) {
+      serverError = 'Exception during initial generation: ' + (e && e.message ? e.message : e)
     }
 
-    // model.graphics(): this port commonly returns { buffer: Uint8Array, ... }
-    const result = model.graphics()
-    // Some versions accept an ImageData arg; this code path uses returned buffer:
-    const buffer = result && result.buffer ? result.buffer : result // fallback
-
-    const pxW = output.width * tilesize
-    const pxH = output.height * tilesize
-    // Create ImageData from raw buffer
-    const imgData = new ImageData(new Uint8ClampedArray(buffer), pxW, pxH)
-
-    // Serialize for client regeneration (we re-derive neighbors client side the same way)
+    // ---- Serialize for Client -------------------------------------------------
     const serialized = {
       tilesize,
       outputWidth: output.width,
@@ -189,103 +202,209 @@ export const wfcGenerator = createTool({
         symmetry: t.symmetry,
         weight: t.weight,
         png: t._preview,
-        bitmap: Array.from(t.bitmap), // numbers for JSON
+        bitmap: Array.from(t.bitmap),
       })),
+      neighbors,
+      serverGenerationOK,
+      serverError,
+      serverBuffer: serverGenerationBuffer,
     }
 
+    // ---- Markdown + Embedded HTML/JS ------------------------------------------
     const html = `
-### Wave Function Collapse (Interactive)
+### Wave Function Collapse (Interactive / Debug)
 
-Input tiles (raw bitmaps) & generated output. Click **Regenerate Variation** to sample a fresh result.
+Tiles (from character masks) and output canvas.
+Click **Regenerate** to sample again.
 
-<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-  ${tiles
-    .map(
-      (t) => `<figure style="margin:0;">
-    <img src="${t._preview}" width="${tilesize}" height="${tilesize}"
-         alt="${t.name}" style="image-rendering:pixelated;border:1px solid #ccc;display:block;">
-    <figcaption style="text-align:center;font-size:0.7rem;">${t.name}</figcaption>
-  </figure>`,
-    )
-    .join('')}
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px 0;">
+${tiles
+  .map(
+    (t) => `<figure style="margin:0;">
+  <img src="${t._preview}" width="${tilesize}" height="${tilesize}"
+       alt="${t.name}" style="image-rendering:pixelated;border:1px solid #ccc;display:block;">
+  <figcaption style="text-align:center;font-size:0.65rem;">${t.name}</figcaption>
+</figure>`,
+  )
+  .join('')}
 </div>
 
-<button id="wfc-regenerate" style="padding:4px 10px;cursor:pointer;margin:8px 0;">Regenerate Variation</button>
-<canvas id="wfc-canvas" width="${pxW}" height="${pxH}"
-        style="border:1px solid #999;image-rendering:pixelated;display:block;"></canvas>
-<div style="margin-top:6px;">
-  <img id="wfc-thumb" alt="output preview"
-       style="max-width:200px;border:1px solid #ccc;image-rendering:pixelated;">
-</div>
+<button id="wfc-regenerate" style="padding:4px 10px;cursor:pointer;margin:6px 0;">Regenerate</button>
+<canvas id="wfc-canvas" width="${output.width * tilesize}" height="${output.height * tilesize}"
+        style="border:1px solid #999;image-rendering:pixelated;display:block;background:#fff;"></canvas>
+
+<details style="margin-top:10px;" open>
+  <summary style="cursor:pointer;font-weight:bold;">Debug Log</summary>
+  <pre id="wfc-log" style="max-height:280px;overflow:auto;background:#111;color:#0f0;padding:6px;font-size:11px;"></pre>
+</details>
 
 <script type="module">
 (() => {
-  const serialized = ${JSON.stringify(serialized)}
+  const serialized = ${JSON.stringify(serialized)};
+  const DEBUG = ${DEBUG ? 'true' : 'false'};
 
-  async function getLib() {
-    if (window.wfc?.SimpleTiledModel) return window.wfc
-    if (window.wavefunctioncollapse?.SimpleTiledModel) return window.wavefunctioncollapse
-    return await import('wavefunctioncollapse')
+  const logEl = document.getElementById('wfc-log');
+  function log() {
+    if (!DEBUG) return;
+    const line = Array.from(arguments).map(a => {
+      if (typeof a === 'object') {
+        try { return JSON.stringify(a); } catch { return String(a); }
+      }
+      return String(a);
+    }).join(' ');
+    if (logEl) {
+      logEl.textContent += line + "\\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    console.log('[WFC]', ...arguments);
   }
 
-  function buildDefinition() {
+  function assert(cond, msg) {
+    if (!cond) {
+      log('ASSERT FAIL:', msg);
+      throw new Error(msg);
+    }
+  }
+
+  async function getLib() {
+    const candidates = [];
+    if (window.wfc) candidates.push(window.wfc);
+    if (window.wavefunctioncollapse) candidates.push(window.wavefunctioncollapse);
+    let mod;
+    if (!candidates.length) {
+      try {
+        mod = await import('wavefunctioncollapse');
+        candidates.push(mod);
+        if (mod.default) candidates.push(mod.default);
+      } catch (e) {
+        log('Dynamic import failed:', e);
+      }
+    }
+    for (const c of candidates) {
+      if (c && c.SimpleTiledModel) {
+        log('Using module variant keys:', Object.keys(c));
+        return c;
+      }
+    }
+    log('No suitable module export shape found.');
+    throw new Error('SimpleTiledModel not found');
+  }
+
+  function rebuildDefinition() {
     const tiles = serialized.tiles.map(t => ({
       name: t.name,
       symmetry: t.symmetry,
       weight: t.weight,
       bitmap: new Uint8Array(t.bitmap)
-    }))
-    // allow-all neighbors again (mirror server)
-    const neighbors = []
-    for (const a of tiles) for (const b of tiles)
-      neighbors.push({ left: a.name, right: b.name })
+    }));
+    const neighbors = serialized.neighbors.map(n => ({ left: n.left, right: n.right }));
     return {
       tilesize: serialized.tilesize,
       unique: false,
       tiles,
       subsets: { default: tiles.map(t => t.name) },
       neighbors
-    }
+    };
   }
 
-  const cvs = document.getElementById('wfc-canvas')
-  const ctx = cvs.getContext('2d')
-  const thumb = document.getElementById('wfc-thumb')
-  const btn = document.getElementById('wfc-regenerate')
+  const cvs = document.getElementById('wfc-canvas');
+  const ctx = cvs.getContext('2d');
+  assert(ctx, '2D context unavailable');
 
-  function putBuffer(buffer) {
-    const w = serialized.outputWidth * serialized.tilesize
-    const h = serialized.outputHeight * serialized.tilesize
-    const id = new ImageData(new Uint8ClampedArray(buffer), w, h)
-    ctx.putImageData(id, 0, 0)
-    thumb.src = cvs.toDataURL('image/png')
+  function putBuffer(raw) {
+    const w = serialized.outputWidth * serialized.tilesize;
+    const h = serialized.outputHeight * serialized.tilesize;
+    let u8;
+    if (raw instanceof Uint8Array) u8 = raw;
+    else if (Array.isArray(raw)) u8 = new Uint8Array(raw);
+    else if (raw && raw.buffer instanceof ArrayBuffer) u8 = new Uint8Array(raw.buffer);
+    else if (raw && raw.buffer && raw.buffer.buffer instanceof ArrayBuffer) u8 = new Uint8Array(raw.buffer.buffer);
+    else u8 = new Uint8Array(raw || []);
+    if (u8.length !== w * h * 4) {
+      log('WARNING buffer size mismatch', u8.length, 'expected', w * h * 4);
+    }
+    const id = new ImageData(new Uint8ClampedArray(u8), w, h);
+    ctx.putImageData(id, 0, 0);
+    log('Rendered buffer. Bytes:', u8.length);
+  }
+
+  function extractBuffer(g) {
+    if (!g) { log('graphics() returned falsy'); return null; }
+    if (g.buffer instanceof Uint8Array) return g.buffer;
+    if (g instanceof Uint8Array) return g;
+    if (g.buffer instanceof ArrayBuffer) return new Uint8Array(g.buffer);
+    if (g.buffer && g.buffer.buffer instanceof ArrayBuffer) return new Uint8Array(g.buffer.buffer);
+    if (Array.isArray(g.buffer)) return new Uint8Array(g.buffer);
+    if (Array.isArray(g)) return new Uint8Array(g);
+    log('Unrecognized graphics() shape:', g);
+    return null;
   }
 
   async function generate() {
-    const lib = await getLib()
-    const def = buildDefinition()
-    const model = new lib.SimpleTiledModel(
-      def,
-      'default',
-      serialized.outputWidth,
-      serialized.outputHeight,
-      false
-    )
-    const ok = model.generate(Math.random)
-    if (!ok) { console.warn('contradiction'); return }
-    const g = model.graphics()
-    const buffer = (g && g.buffer) ? g.buffer : g
-    putBuffer(buffer)
+    log('Starting generation...');
+    const lib = await getLib();
+    const def = rebuildDefinition();
+    log('Definition tiles:', def.tiles.length, 'neighbors:', def.neighbors.length);
+    let model;
+    try {
+      model = new lib.SimpleTiledModel(
+        def,
+        null,
+        serialized.outputWidth,
+        serialized.outputHeight,
+        false
+      );
+    } catch (e) {
+      log('Constructor failed:', e);
+      throw e;
+    }
+    let ok = false;
+    try {
+      ok = model.generate(Math.random);
+      log('model.generate returned:', ok);
+    } catch (e) {
+      log('model.generate threw:', e);
+      throw e;
+    }
+    if (!ok) {
+      log('Contradiction (no output).');
+      return;
+    }
+    let g;
+    try {
+      g = model.graphics();
+    } catch (e) {
+      log('graphics() threw:', e);
+      return;
+    }
+    const buf = extractBuffer(g);
+    if (!buf) {
+      log('No buffer extracted.');
+      return;
+    }
+    putBuffer(buf);
   }
 
-  // initial draw (server sample)
-  putBuffer(${JSON.stringify(Array.from(buffer))})
+  // Initial (server) buffer if valid
+  if (serialized.serverGenerationOK && serialized.serverBuffer) {
+    log('Using server buffer bytes:', serialized.serverBuffer.length);
+    try {
+      putBuffer(serialized.serverBuffer);
+    } catch (e) {
+      log('Render server buffer failed:', e);
+      generate();
+    }
+  } else {
+    log('No valid server buffer (error: ', serialized.serverError, ') -> client generate');
+    generate();
+  }
 
+  const btn = document.getElementById('wfc-regenerate');
   btn.addEventListener('click', () => {
-    btn.disabled = true
-    generate().finally(() => btn.disabled = false)
-  })
-})()
+    btn.disabled = true;
+    generate().finally(() => { btn.disabled = false; });
+  });
+})();
 </script>
 `
 
