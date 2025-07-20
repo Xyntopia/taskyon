@@ -1,6 +1,6 @@
 <template>
   <q-btn flat unelevated round dense :icon="matMoreHoriz" @click.prevent.stop>
-    <q-menu class="column q-gutter-sm q-pa-xs" auto-close>
+    <q-menu auto-close>
       <q-list dense>
         <q-item clickable @click="onDownloadChat(conversationId)">
           <q-item-section> Download Chat </q-item-section>

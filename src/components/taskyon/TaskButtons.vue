@@ -116,7 +116,7 @@
       <q-tooltip :delay="0">Show similar tasks</q-tooltip>
     </q-btn>
     <q-btn flat dense size="sm" :icon="matMoreHoriz" @click.prevent.stop>
-      <q-menu class="column" auto-close>
+      <q-menu auto-close>
         <q-list dense>
           <q-item clickable @click="emit('download', task.id)">
             <q-item-section side>
