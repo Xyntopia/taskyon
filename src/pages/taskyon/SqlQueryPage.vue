@@ -9,6 +9,8 @@
 
           <div>all tables: {{ allTables }}</div>
 
+          <q-btn flat label="Add Sample Table" color="secondary" @click="addSampleTable" />
+
           <!-- SQL Query Input -->
           <q-card-section>
             <q-input
@@ -51,6 +53,29 @@ import { asyncComputed } from 'src/modules/vueUtils'
 const sqlQuery = ref('SELECT * FROM my_table;')
 const queryResult = ref<unknown>(null)
 const errorMessage = ref('')
+
+const addSampleTable = async () => {
+  try {
+    await db.value?.exec(`
+      -- 1. create the table
+      CREATE TABLE sample_table (
+        id         SERIAL PRIMARY KEY,     -- auto-incrementing int
+        username   VARCHAR(50)  NOT NULL,
+        email      VARCHAR(120) NOT NULL UNIQUE,
+        joined_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- 2. add a few rows of sample data
+      INSERT INTO sample_table (username, email)
+      VALUES
+        ('alice',   'alice@example.com'),
+        ('bob',     'bob@example.com'),
+        ('charlie', 'charlie@example.com');
+    `)
+  } catch (error) {
+    console.error('Error creating sample table:', error)
+  }
+}
 
 // Use shallowRef so that Vue doesn't deeply proxy the db instance
 const db = shallowRef<TyPGDB | undefined>()

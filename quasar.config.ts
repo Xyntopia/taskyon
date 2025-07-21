@@ -213,7 +213,6 @@ export default defineConfig((ctx) => {
       // polyfillModulePreload: true,
       // distDir
 
-      // extendViteConf (viteConf) {},
       extendViteConf(viteConf) {
         // *******  get rid of console.log in prod mode ****
         // Add this for dropping console and debugger in production:
