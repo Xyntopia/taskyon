@@ -294,7 +294,7 @@ const slimSettings = computed(() =>
     {
       obj: state.appConfiguration,
       schema: appConfiguration,
-      pickKeys: ['expertMode', ...(em.value ? ['showCosts'] : [])],
+      pickKeys: ['expertMode'],
     },
     {
       obj: state.llmSettings,
