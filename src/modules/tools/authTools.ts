@@ -116,6 +116,7 @@ working:
 not working:
 - github
 `,
+    renderOptions: { hideChat: true, hideInput: true },
     parameters: {
       type: 'object',
       properties: {
@@ -201,7 +202,7 @@ not working:
       )
 
       return makeTaskResult([
-        [{ role: 'assistant', content: { type: 'message', data: '🎉 Logged in successfully.' } }],
+        [{ role: 'assistant', content: { type: 'return', data: '🎉 Logged in successfully.' } }],
       ])
     },
   })
