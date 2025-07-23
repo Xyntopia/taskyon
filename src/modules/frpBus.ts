@@ -249,25 +249,32 @@ export function createIframeMux<I extends string | number | symbol = string>(swe
   }
   window.addEventListener('message', onMessage)
 
-  const attachIframe = (id: I, iframe: HTMLIFrameElement, origin: string | null = null) => {
+  const attachIframe = (id: I, iframe: HTMLIFrameElement, origin?: string) => {
     const win = iframe.contentWindow
     if (!win) throw new Error('iframe has no contentWindow')
 
     winToId.set(win, id)
 
-    const inferred = iframe.src ? new URL(iframe.src, window.location.href).origin : 'null'
-    const expected = origin === undefined ? inferred : origin
+    // Infer origin unless caller overrides. srcdoc/about:srcdoc => "null"
+    const inferred =
+      iframe.src && iframe.src !== 'about:srcdoc'
+        ? new URL(iframe.src, window.location.href).origin
+        : 'null'
 
-    const post = (msg: unknown) => {
-      const el = entry.ref.deref()
-      if (!el || el.contentWindow !== win) return // silently drop
-      win.postMessage(msg, expected ?? '*')
+    const expected = origin ?? inferred
+    const postTarget = expected === 'null' ? '*' : expected
+
+    const entry: Entry = {
+      ref: new WeakRef(iframe),
+      post: (msg: unknown) => {
+        const el = entry.ref.deref()
+        if (!el || el.contentWindow !== win) return // silently drop
+        win.postMessage(msg, postTarget)
+      },
     }
 
-    const entry: Entry = { ref: new WeakRef(iframe), post }
     idToEntry.set(id, entry)
 
-    // Opportunistic sweep
     if (++attachCountSinceSweep >= sweepEvery) {
       attachCountSinceSweep = 0
       scheduleSweep()
@@ -287,7 +294,7 @@ export function createIframeMux<I extends string | number | symbol = string>(swe
 
   const detachId = (id: I) => {
     idToEntry.delete(id)
-    // WeakMaps auto-GC (winToId)
+    // winToId is a WeakMap → GC will clean it up
   }
 
   const sweep = () => {
@@ -310,6 +317,7 @@ export function createIframeMux<I extends string | number | symbol = string>(swe
   const destroy = () => {
     window.removeEventListener('message', onMessage)
     idToEntry.clear()
+    // WeakMaps auto-GC
   }
 
   return { all$, send, attachIframe, detachId, gc, destroy }
