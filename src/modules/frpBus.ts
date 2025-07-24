@@ -1,7 +1,6 @@
 // frpBus.ts
 
 import type { ZodType } from 'zod'
-import type { Asyncify } from './taskyon/types'
 
 /**
  * Functional Reactive Programming (FRP) Bus
@@ -11,12 +10,21 @@ import type { Asyncify } from './taskyon/types'
 export type Observer<T> = (value: T) => void | Promise<void>
 export type Unsubscribe = () => void
 
-export interface Stream<T> {
+export interface syncStream<T> {
   subscribe(observer: Observer<T>): Unsubscribe
 }
 
+// we have a separate stream declaration here because we want to
+// add async streams later on. and we can do this here as a union.
+export type Stream<T> = syncStream<T>
+
+export type frpBus<T> = {
+  stream: Stream<T>
+  emit: (value: T) => void
+}
+
 // Creates a simple stream with an "emit" function
-export function createStream<T>(): { stream: Stream<T>; emit: (value: T) => void } {
+export function createStream<T>(): frpBus<T> {
   const observers: Observer<T>[] = []
   return {
     stream: {
@@ -36,17 +44,14 @@ export function createStream<T>(): { stream: Stream<T>; emit: (value: T) => void
 }
 
 // Operator: transform each value from the source stream
-export function map<A, B>(source: Stream<A> | Asyncify<Stream<A>>, fn: (value: A) => B): Stream<B> {
+export function map<A, B>(source: Stream<A>, fn: (value: A) => B): Stream<B> {
   const { stream, emit } = createStream<B>()
   void source.subscribe((value) => emit(fn(value)))
   return stream
 }
 
 // Operator: filter values based on a predicate
-export function filter<A>(
-  source: Stream<A> | Asyncify<Stream<A>>,
-  predicate: (value: A) => boolean,
-): Stream<A> {
+export function filter<A>(source: Stream<A>, predicate: (value: A) => boolean): Stream<A> {
   const { stream, emit } = createStream<A>()
   void source.subscribe((value) => {
     if (predicate(value)) {
@@ -57,10 +62,7 @@ export function filter<A>(
 }
 
 // make sure we filter for a specific type using Zod schema
-export const zodFilter = <T>(
-  source: Stream<unknown> | Asyncify<Stream<unknown>>,
-  schema: ZodType<T>,
-) =>
+export const zodFilter = <T>(source: Stream<unknown>, schema: ZodType<T>) =>
   filter(source as Stream<T>, (value): value is T => {
     const result = schema.safeParse(value)
     if (!result.success) {
@@ -74,7 +76,7 @@ export const zodFilter = <T>(
  * Usage: merge(streamA, streamB) → Stream<A | B>
  */
 export function merge<T extends unknown[]>(
-  ...sources: { [K in keyof T]: Stream<T[K]> | Asyncify<Stream<T[K]>> }
+  ...sources: { [K in keyof T]: Stream<T[K]> }
 ): Stream<T[number]> {
   const { stream, emit } = createStream<T[number]>()
 
@@ -85,10 +87,7 @@ export function merge<T extends unknown[]>(
   return stream
 }
 
-export function requireSubscribers<T>(
-  source: Stream<T> | Asyncify<Stream<T>>,
-  min: number = 1,
-): Stream<T> {
+export function requireSubscribers<T>(source: Stream<T>, min: number = 1): Stream<T> {
   const { stream, emit } = createStream<T>()
   let subscriberCount = 0
 
@@ -177,7 +176,7 @@ export function createMessagePortBridge<T>(): PortBridge<T> {
   port2.addEventListener('message', onMsg)
 
   // Forward stream values out to the external side
-  const unsub: Unsubscribe = stream.subscribe((v) => {
+  const unsub: Unsubscribe | Promise<Unsubscribe> = stream.subscribe((v) => {
     // Structured clone is required; assume T is cloneable.
     port2.postMessage(v)
   })
@@ -190,6 +189,26 @@ export function createMessagePortBridge<T>(): PortBridge<T> {
   }
 
   return { stream, emit, port: port1, destroy }
+}
+
+export function createMessagePortAdapter<T>(stream: Stream<T>) {
+  const { port1, port2 } = new MessageChannel()
+
+  // Internal (hidden) side
+  port2.start()
+  // Forward stream values out to the external side
+  const unsub: Unsubscribe = stream.subscribe((v) => {
+    // Structured clone is required; assume T is cloneable.
+    port2.postMessage(v)
+  })
+
+  const destroy = () => {
+    unsub()
+    port1.close()
+    port2.close()
+  }
+
+  return { port: port1, destroy }
 }
 
 // ---- Simple IFrame <-> FRP adapter ---------------------------------------
@@ -229,6 +248,8 @@ export function iframeBridge(
 // ---- IFrame Multiplexer --------------------------------------------------
 
 export type BusMsg<I extends string | number | symbol = string> = { id: I; payload: unknown }
+
+export type TaskMessageStream = Stream<BusMsg>
 
 interface Entry {
   ref: WeakRef<HTMLIFrameElement>

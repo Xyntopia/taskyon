@@ -1,11 +1,12 @@
-import type { TaskNodeMeta, TyTaskStreamData } from './types'
+import type { TaskNodeMeta, toolContext, TyTaskStreamData } from './types'
 import { type partialTaskDraft, type TaskNode, type llmSettings, getApiConfigCopy } from './types'
 import { type TyTaskManager } from './taskManager'
 import { handleFunctionExecution, taskResult } from './tools'
 import { createAsyncQueue, sleep } from '../utils'
 import { createChatCompletionTask } from '../tools/chatCompletionTool'
 import type { CrudWrapper, SecretStore } from '../crudWrapper'
-import { createStream } from '../frpBus'
+import type { TaskMessageStream } from '../frpBus'
+import { createMessagePortAdapter, createStream, filter } from '../frpBus'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
 
 export async function generateSecretId(
@@ -22,6 +23,7 @@ async function safeExecuteTask(
   taskManager: TyTaskManager,
   secretStore: SecretStore,
   stopSignal: AbortSignal,
+  taskMessageStream: TaskMessageStream,
 ): Promise<unknown> {
   if (task.content.type === 'functioncall') {
     // calculate function result
@@ -32,7 +34,12 @@ async function safeExecuteTask(
       // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
       const taskChain = await taskManager.getTaskChain(task.id)
       const toolId = await generateSecretId(def?.id, tool)
-      const funcR = await handleFunctionExecution(func, tool, stopSignal, {
+      // only allow immediate prior or parent tasks to send messages for now...
+      const filteredStream = filter(taskMessageStream, (msg) => {
+        return msg.id === task.parentID || msg.id === task.priorID
+      })
+      const msgPortAdapter = createMessagePortAdapter(filteredStream)
+      const context: toolContext = {
         taskChain,
         getSecret: async (name, askNew, saveNew = true) => {
           console.log('get secret name', name)
@@ -46,7 +53,9 @@ async function safeExecuteTask(
         stopSignal,
         // if w are dealing with a tool definition use that id. otherwise generate an id on the fly )
         toolId,
-      })
+        messagePort: msgPortAdapter.port,
+      }
+      const funcR = await handleFunctionExecution(func, tool, stopSignal, context)
 
       return funcR
     } else {
@@ -303,6 +312,7 @@ const createTaskProcessor = (
   taskOutOfLoop: (taskId: string) => void,
   stopAllTasks: (message: string) => void,
   secretStore: SecretStore,
+  taskMessageStream: TaskMessageStream,
 ) => {
   // this is uses to track how long a list of tasks has been processing
   const handleError = createHandleError(stopAllTasks, taskManager, currentTaskCtrl, queueTask)
@@ -348,7 +358,13 @@ const createTaskProcessor = (
       const selectedModel = getApiConfigCopy(llmSettings, llmSettings.selectedApi)?.selectedModel
       let newTasks: TaskNode[][] = []
       try {
-        const funcR = await safeExecuteTask(task, taskManager, secretStore, currentTaskCtrl.signal)
+        const funcR = await safeExecuteTask(
+          task,
+          taskManager,
+          secretStore,
+          currentTaskCtrl.signal,
+          taskMessageStream,
+        )
 
         // We check the result of the task here to see whether it contains
         // a lists of tasks. If thats the case we return
@@ -429,6 +445,7 @@ const setupRun = (
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
   secretStore: SecretStore,
+  taskMessageStream: TaskMessageStream,
 ) => {
   console.log('setting up task worker run...')
   const currentTaskCtrl: AbortController = new AbortController()
@@ -452,6 +469,7 @@ const setupRun = (
     taskOutOfLoop,
     stopAllTasks,
     secretStore,
+    taskMessageStream,
   )
 
   const run = async () => {
@@ -485,6 +503,9 @@ export function runTaskWorker(
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
   secretStore: SecretStore,
+  // task message stream is used in order to give message tasks the ability to communicate to
+  // tool call tasks (e.g. a button click)
+  taskMessageStream: TaskMessageStream,
 ) {
   console.log('starting task worker listener...')
 
@@ -512,7 +533,14 @@ export function runTaskWorker(
         run,
         queueTask: newQueueTask,
         currentTaskCtrl: newTaskCtrl,
-      } = setupRun(taskProcessingStream.emit, stopAllTasks, llmSettings, taskManager, secretStore)
+      } = setupRun(
+        taskProcessingStream.emit,
+        stopAllTasks,
+        llmSettings,
+        taskManager,
+        secretStore,
+        taskMessageStream,
+      )
       currentTaskCtrl = newTaskCtrl
       queueTask = newQueueTask
       console.log('restarting task worker run...')

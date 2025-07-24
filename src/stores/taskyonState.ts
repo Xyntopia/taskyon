@@ -223,6 +223,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return instance['secretStore']
   })
 
+  const connectMessageIframe = async (id: string, iframe: HTMLIFrameElement, origin?: string) => {
+    const instance = await initTaskyonPromise
+    return instance['connectMessageIframe'](id, iframe, origin)
+  }
+
   // Use a fixed key for demo purposes (not secure for production!)
   const fixedKeyBytes = new Uint8Array([
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
@@ -295,16 +300,18 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     }
   })
 
-  filter(
-    workerStream,
-    (data) =>
-      data.stage === 'processing' ||
-      data.stage === 'processed' ||
-      data.stage === 'error' ||
-      (data.stage === 'aborted' && !!(data.taskId || data.task?.id)),
-  ).subscribe((data) => {
-    // TODO: add last task to GUI by checking if our current selected task now has this child...
-    stateRefs.setSelectedTask(data.task?.id || data.taskId || null)
+  void initTaskyonPromise.then(({ workerStream }) => {
+    filter(
+      workerStream,
+      (data) =>
+        data.stage === 'processing' ||
+        data.stage === 'processed' ||
+        data.stage === 'error' ||
+        (data.stage === 'aborted' && !!(data.taskId || data.task?.id)),
+    ).subscribe((data) => {
+      // TODO: add last task to GUI by checking if our current selected task now has this child...
+      stateRefs.setSelectedTask(data.task?.id || data.taskId || null)
+    })
   })
 
   void workerStream.subscribe((data) => {
@@ -650,6 +657,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     currentModelId,
     currentModel,
     handleBotNameUpdate,
+    connectMessageIframe,
   }
 }) // this state stores all information which
 // should be stored e.g. in browser LocalStorage

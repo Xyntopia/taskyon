@@ -245,6 +245,7 @@ export type toolContext = {
   setSecret: (name: string, value: string) => Promise<void>
   stopSignal: AbortSignal
   toolId: string
+  messagePort?: MessagePort // optional message port for communication
 }
 
 const MessageContent = z.object({ type: z.literal('message'), data: z.string() })

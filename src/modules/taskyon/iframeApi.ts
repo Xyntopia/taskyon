@@ -14,6 +14,9 @@ import z from 'zod'
 
 type TyMessage = MessageEvent<TaskyonMessage>
 
+// TODO: instead of listening to messages through an event listener, we want
+// to use a stream, so that we can use the same API for different message sources:
+//  e.g. postMessage, websocket, REST API, p2p etc...
 export function setupIframeApi(
   taskManager: TyTaskManager,
   appConfiguration: Record<string, unknown>,

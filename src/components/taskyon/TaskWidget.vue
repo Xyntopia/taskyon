@@ -116,6 +116,7 @@
       no-line-numbers
       :src="task.content.data"
       :use-iframe="true"
+      @iframe-ready="(el: HTMLIFrameElement) => onIframeMessage(el, task.id)"
     />
     <div v-else class="raw-markdown q-mb-md">
       {{ task.content.data }}
@@ -172,6 +173,10 @@ const fileMappings = ref<FileMappingDocType[]>([])
 async function getFile(uuid: string) {
   console.log('load image', uuid)
   return (await tystate.getTaskManager()).getOpfsUploadedFile(uuid)
+}
+
+const onIframeMessage = (el: HTMLIFrameElement, id: string) => {
+  void tystate.connectMessageIframe(id, el)
 }
 
 if (props.task.content.type === 'files') {

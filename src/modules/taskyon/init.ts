@@ -14,7 +14,7 @@ import {
 } from '../tools/toolTools'
 import { smallHelperTools } from '../tools/helperCollection'
 import { useFullSmallTools } from '../tools/usefulSmallTools'
-import { devTools } from '../tools/devTools'
+import { devTools, testingTools } from '../tools/devTools'
 import { taskOrganizationTools, taskSearcher } from '../tools/TaskPlannerTool'
 import { storageTools } from '../tools/gdrive'
 import { appDevTools } from '../tools/webAppDev'
@@ -31,6 +31,7 @@ import {
   withSecretStore,
 } from '../crudWrapper'
 import { getDatabase } from '../pglite.api'
+import { createIframeMux } from '../frpBus'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -49,6 +50,7 @@ export async function initTaskyon(
     ...appDevTools,
     ...useFullSmallTools,
     ...devTools,
+    ...testingTools,
     ...fileTools,
     ...taskOrganizationTools,
     ...storageTools,
@@ -97,6 +99,10 @@ export async function initTaskyon(
   taskManagerInstance.addDefaultTools(ToolList)
   void taskManagerInstance.updateToolDefinitions()
 
+  // we use this as a global bus which make message iframes "postMessage" available
+  // to taskyon & tools
+  const iframeMultiPlexer = createIframeMux(5)
+
   // keys could porentially be reactive here, so in theory, when they change in the GUI,
   // taskyon should automatically pick up on this...
   console.log('starting taskyon worker')
@@ -104,9 +110,11 @@ export async function initTaskyon(
     llmSettings,
     taskManagerInstance,
     secretStore,
+    iframeMultiPlexer.all$,
   )
 
   return {
+    connectMessageIframe: iframeMultiPlexer.attachIframe,
     taskManagerInstance,
     workerStream,
     chatCompletionStream,

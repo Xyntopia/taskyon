@@ -37,6 +37,13 @@ import { asyncComputed } from 'src/modules/vueUtils'
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 
+// inside your <script setup>
+const emit = defineEmits<{ (e: 'iframe-ready', el: HTMLIFrameElement): void }>()
+
+watch(iframeRef, (el) => {
+  if (el) emit('iframe-ready', el)
+})
+
 defineOptions({
   inheritAttrs: false,
 })

@@ -195,9 +195,6 @@ export async function handleFunctionExecution(
   tool: InternalTool,
   stopSignal: AbortSignal,
   context: toolContext,
-  // TODO: add taskManager here, so we can use it in the function execution
-  //       we somehow also want to be able to do this with "dynamically" loaded tools
-  //       but only, if they're declared "trusted" or something like that...
 ): Promise<unknown> {
   // TODO: test here, if tool parameters are correct according to json schema
   //       if not, throw an error message...
