@@ -127,26 +127,29 @@
                   info-text="You can use tools here directly and change their parameters to your liking"
                 />
               </div>
-              <div @click.stop>
-                <q-select
-                  class="col"
-                  use-input
-                  dense
-                  hide-selected
-                  fill-input
-                  options-dense
-                  filled
-                  input-debounce="0"
-                  color="secondary"
-                  :model-value="selectedTaskType"
-                  :options="filteredToolCollection"
-                  @filter="filterFn"
-                  @update:model-value="tystate.switchTaskType"
-                >
-                  <template #prepend>
-                    <q-icon :name="mdiFunctionVariant" />
-                  </template>
-                </q-select>
+              <div class="row">
+                <div @click.stop>
+                  <q-select
+                    class="col"
+                    use-input
+                    dense
+                    hide-selected
+                    fill-input
+                    options-dense
+                    filled
+                    input-debounce="0"
+                    color="secondary"
+                    :model-value="selectedTaskType"
+                    :options="filteredToolCollection"
+                    @filter="filterFn"
+                    @update:model-value="tystate.switchTaskType"
+                  >
+                    <template #prepend>
+                      <q-icon :name="mdiFunctionVariant" />
+                    </template>
+                  </q-select>
+                </div>
+                <q-btn flat stretch>Ok</q-btn>
               </div>
               <q-btn
                 v-if="selectedTaskType"
@@ -158,7 +161,6 @@
                 label="Select Simple Chat"
                 @click="() => tystate.switchTaskType(undefined)"
               />
-              <q-btn flat dense square class="fit">Ok</q-btn>
             </q-menu>
           </q-btn>
         </div>
