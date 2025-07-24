@@ -149,6 +149,7 @@
                 </q-select>
               </div>
               <q-btn
+                v-if="selectedTaskType"
                 flat
                 dense
                 square
