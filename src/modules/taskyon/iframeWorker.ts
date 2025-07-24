@@ -92,7 +92,7 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
         const ctx = {
           ...context,
           ...rpcdefs,
-          messagePort
+          messagePort,
           // Placeholder for stop signal it isn't needed in the iframe worker as we
           // can simply destroy the iframe from the parent...
           stopSignal: new AbortController().signal,
