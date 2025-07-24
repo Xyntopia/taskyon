@@ -14,7 +14,7 @@ import {
 } from '../tools/toolTools'
 import { smallHelperTools } from '../tools/helperCollection'
 import { useFullSmallTools } from '../tools/usefulSmallTools'
-import { devTools, testingTools } from '../tools/devTools'
+import { devTools } from '../tools/devTools'
 import { taskOrganizationTools, taskSearcher } from '../tools/TaskPlannerTool'
 import { storageTools } from '../tools/gdrive'
 import { appDevTools } from '../tools/webAppDev'
@@ -32,6 +32,7 @@ import {
 } from '../crudWrapper'
 import { getDatabase } from '../pglite.api'
 import { createIframeMux } from '../frpBus'
+import { testingTools } from '../tools/testTools'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
