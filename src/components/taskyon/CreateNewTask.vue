@@ -2,43 +2,23 @@
   <!--Create new task area-->
   <div class="create-new-task">
     <!--Function Control-->
-    <div v-if="selectedTaskType || functionSelection" class="text-caption text-center">
-      <q-btn
+    <div v-if="selectedTaskType" class="text-caption text-center">
+      <InfoDialog
         size="sm"
         flat
-        dense
-        class="fit"
+        square
+        round="false"
         no-caps
         :icon="mdiFunctionVariant"
-        :label="selectedTaskType ?? 'No tool selected, press here to select!'"
+        :label="selectedTaskType"
         content-class="text-caption"
+        :info-text="
+          toolCollection[selectedTaskType]?.longDescription ??
+          toolCollection[selectedTaskType]?.description ??
+          'Error: no description available'
+        "
       >
-        <q-menu class="q-pa-xs" anchor="top left" self="bottom left" auto-close>
-          <q-icon class="q-px-sm" :name="mdiFunctionVariant" />
-          Search for a tool you want to use..
-          <InfoDialog
-            info-text="You can use tools here directly and change their parameters to your liking"
-          />
-          <div @click.stop>
-            <q-select
-              class="col"
-              use-input
-              dense
-              hide-selected
-              fill-input
-              options-dense
-              filled
-              input-debounce="0"
-              color="secondary"
-              :model-value="selectedTaskType"
-              :options="filteredToolCollection"
-              @filter="filterFn"
-              @update:model-value="tystate.switchTaskType"
-            />
-          </div>
-          <q-btn flat dense square class="fit">Ok</q-btn>
-        </q-menu>
-      </q-btn>
+      </InfoDialog>
     </div>
     <!--Task Creation-->
     <div>
@@ -138,22 +118,48 @@
           </q-menu>
         </q-btn>
         <!--Select Chat Task-->
-        <div v-if="selectedTaskType || functionSelection" class="col-auto" @click.stop>
-          <q-btn
-            flat
-            dense
-            :icon="matChat"
-            @click="
-              () => {
-                tystate.switchTaskType(undefined)
-                functionSelection = false
-              }
-            "
-            ><q-tooltip>Select Simple Chat</q-tooltip>
+        <div v-if="expertMode || selectedTaskType" @click.stop>
+          <q-btn flat dense :icon="mdiFunctionVariant">
+            <q-menu anchor="top left" self="bottom left" auto-close class="column items-center">
+              <div class="text-caption q-pa-xs">
+                Search for a tool you want to use..
+                <InfoDialog
+                  info-text="You can use tools here directly and change their parameters to your liking"
+                />
+              </div>
+              <div @click.stop>
+                <q-select
+                  class="col"
+                  use-input
+                  dense
+                  hide-selected
+                  fill-input
+                  options-dense
+                  filled
+                  input-debounce="0"
+                  color="secondary"
+                  :model-value="selectedTaskType"
+                  :options="filteredToolCollection"
+                  @filter="filterFn"
+                  @update:model-value="tystate.switchTaskType"
+                >
+                  <template #prepend>
+                    <q-icon :name="mdiFunctionVariant" />
+                  </template>
+                </q-select>
+              </div>
+              <q-btn
+                flat
+                dense
+                square
+                class="q-my-xs"
+                :icon="matChat"
+                label="Select Simple Chat"
+                @click="() => tystate.switchTaskType(undefined)"
+              />
+              <q-btn flat dense square class="fit">Ok</q-btn>
+            </q-menu>
           </q-btn>
-        </div>
-        <div v-else-if="expertMode" @click.stop>
-          <q-btn flat dense :icon="mdiFunctionVariant" @click="functionSelection = true" />
         </div>
       </div>
       <!--
@@ -283,7 +289,6 @@ const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { selectedApi } = toRefs(state.llmSettings)
-const functionSelection = ref(false)
 
 //const selectedTaskTypeVar = ref<string>('testasdad')
 
