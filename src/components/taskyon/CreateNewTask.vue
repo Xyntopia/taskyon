@@ -6,8 +6,7 @@
       <InfoDialog
         size="sm"
         flat
-        square
-        round="false"
+        :round="false"
         no-caps
         :icon="mdiFunctionVariant"
         :label="selectedTaskType"
@@ -253,7 +252,7 @@
 
 <script setup lang="ts">
 import { computed, ref, toRefs } from 'vue'
-import { createToolTask } from 'src/modules/taskyon/tools'
+import { toolCall } from 'src/modules/taskyon/tools'
 import { partialTaskDraft } from 'src/modules/taskyon/types'
 import { llmSettings, appConfiguration } from 'src/modules/taskyon/types'
 import { useTaskyonStore } from 'stores/taskyonState'
@@ -498,7 +497,7 @@ async function addNewTask(execute = true) {
 
   if (currentnewTask.value.content.type === 'message') {
     if (state.llmSettings.enableToolChooser) {
-      const chooseTask = createToolTask({
+      const chooseTask = toolCall({
         name: 'chooseTool',
         arguments: {
           llmTools: state.llmSettings.enableOpenAiTools,

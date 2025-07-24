@@ -1,5 +1,5 @@
 import type { taskResult } from '../taskyon/tools'
-import { craeteToolJsonSchema, createTool, createToolTask, makeTaskResult } from '../taskyon/tools'
+import { craeteToolJsonSchema, createTool, toolCall, makeTaskResult } from '../taskyon/tools'
 import { ToolBase } from '../taskyon/types'
 import { createChatCompletionTask } from './chatCompletionTool'
 import { type TyTaskManager } from '../taskyon/taskManager'
@@ -139,7 +139,7 @@ export const toolCreationWizard = createTool({
             data: 'I am gathering examples from tools with code for the tool requested by the user...',
           },
         },
-        createToolTask({
+        toolCall({
           name: 'toolSearcher',
           arguments: { withCode: true, analyze: false },
         }),
@@ -327,7 +327,7 @@ If you are sure that none of the tools are relevant, your choice should be simpl
                   required: ['reasoning_steps', 'choice'],
                 },
               }),
-              createToolTask({ name: 'chooseTool', arguments: { llmTools } }),
+              toolCall({ name: 'chooseTool', arguments: { llmTools } }),
             ],
           ])
         })

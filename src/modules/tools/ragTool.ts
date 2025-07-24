@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
 // import type { JSONSchema } from 'json-schema-to-ts'
 // import type { ToolBase } from '../taskyon/types'
-import { createTool, createToolTask, makeTaskResult } from '../taskyon/tools'
+import { createTool, toolCall, makeTaskResult } from '../taskyon/tools'
 import { sha256UrlSafeHash } from '../crypto'
 import { createVectorStore } from '../crudWrapper'
 import { getDatabase } from '../pglite.api'
@@ -59,7 +59,7 @@ export const ragSearchTool = createTool({
                 data: `Here are the search results for "${searchText}":\n${JSON.stringify(searchResults, null, 2)}`,
               },
             },
-            createToolTask({
+            toolCall({
               name: 'chatCompletion',
               arguments: {
                 prompts: [
@@ -74,7 +74,7 @@ export const ragSearchTool = createTool({
 
       throw new Error('searchText parameter must be provided')
     } else if (sourceType === 'web') {
-      const task = createToolTask({
+      const task = toolCall({
         name: 'jinaSearch',
         arguments: {
           query: searchText,
@@ -84,7 +84,7 @@ export const ragSearchTool = createTool({
       return makeTaskResult([
         [
           task,
-          createToolTask({
+          toolCall({
             name: 'chatCompletion',
             arguments: {
               prompts: [

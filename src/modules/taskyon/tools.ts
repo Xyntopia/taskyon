@@ -79,7 +79,7 @@ export function createTool<T, SCHEMA extends Readonly<JSONSchema>, PARAMS = From
 }
 // TODO: automatically type the FunctionCall correctly using the
 //       json definition from a tool :)
-export function createToolTask(f: FunctionCall): partialTaskDraft {
+export function toolCall(f: FunctionCall): partialTaskDraft {
   return {
     role: 'function',
     name: f.name,
@@ -218,11 +218,13 @@ export async function handleFunctionExecution(
   } else if (tool.code) {
     console.log('compile & execute function code in iframe', tool)
     try {
+      //const { messagePort, ...modContext } = context
+      //console.log('messagePort', messagePort)
       // TODO: add tool context to our "safe" functions as well..
       // Execute code in iframe with parameters (func.arguments)
       funcR = await executeCodeInIframe(
         tool.code,
-        { params: func.arguments, context },
+        { params: func.arguments, context: context },
         func.name + '.js',
         stopSignal,
       )

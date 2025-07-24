@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, createToolTask, makeTaskResult } from '../taskyon/tools'
+import { createTool, toolCall, makeTaskResult } from '../taskyon/tools'
 
 const CLIENT_ID = '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b'
 const OAUTH_URL = 'https://gitlab.com/oauth/authorize'
@@ -115,7 +115,7 @@ const getGitlabInfo = createTool({
     if (!TOKEN || forceLogin) {
       return makeTaskResult([
         [
-          createToolTask({
+          toolCall({
             name: 'ensureOauthLogin',
             arguments: {
               oauthURL: OAUTH_URL,
@@ -124,7 +124,7 @@ const getGitlabInfo = createTool({
               toolId: ctx.toolId,
             },
           }),
-          createToolTask({ name: 'getGitlabInfo', arguments: {} }),
+          toolCall({ name: 'getGitlabInfo', arguments: {} }),
         ],
       ])
     }
@@ -201,7 +201,7 @@ in gitlab. They should roughly follow the style of a "user story".`,
       // information needed to register with gitlab
       return makeTaskResult([
         [
-          createToolTask({
+          toolCall({
             name: 'ensureOauthLogin',
             arguments: {
               oauthURL: OAUTH_URL,
@@ -210,7 +210,7 @@ in gitlab. They should roughly follow the style of a "user story".`,
               toolId: ctx.toolId,
             },
           }),
-          /*createToolTask({
+          /*toolCall({
             name: 'issueListGenerator',
             arguments: { issuelist, project },
           }),*/
@@ -429,8 +429,7 @@ export const postMessageTester = createTool({
     type: 'object',
     additionalProperties: false,
   } as const satisfies JSONSchema7,
-
-  async function(_, ctx) {
+  code: `async (_, ctx) => {
     const previousCall = ctx.taskChain.at(-3)
     const thisMessage = ctx.taskChain.at(-1)
     // ────────────────────────────────────────────────────────────────────────────
@@ -442,8 +441,8 @@ export const postMessageTester = createTool({
       thisMessage?.parentID === previousCall.id
     ) {
       console.log('waiting for message from UI...')
-      const msg = await new Promise<string>((resolve) => {
-        const port: MessagePort = ctx.messagePort as MessagePort
+      const msg = await new Promise((resolve) => {
+        const port = ctx.messagePort
         port.onmessage = (ev) => {
           if (ev.data.payload.text === 'Button pressed!') resolve(JSON.stringify(ev.data))
           else console.log('Received message, still waiting for button press...:', ev.data)
@@ -455,7 +454,7 @@ export const postMessageTester = createTool({
             role: 'assistant',
             content: {
               type: 'message',
-              data: `Received message from UI: ${msg}`,
+              data: \`Received message from UI: \${msg}\`,
             },
           },
         ],
@@ -465,7 +464,7 @@ export const postMessageTester = createTool({
     // ────────────────────────────────────────────────────────────────────────────
     // FIRST CALL ─ render UI and schedule follow-up
     // ────────────────────────────────────────────────────────────────────────────
-    const uiHtml = /* html */ `
+    const uiHtml = /* html */ \`
   <div>
     <button id="demo-btn">Click to send message</button>
   </div>
@@ -476,7 +475,7 @@ export const postMessageTester = createTool({
     window.parent.postMessage({ clickedAt: Date.now(), text: 'Button pressed!' }, '*');
     });
   </script>
-  `
+  \`
 
     console.log('Rendering UI for postMessageTester...')
     // Return the UI now, and queue up a second call to this same tool.
@@ -486,10 +485,10 @@ export const postMessageTester = createTool({
           role: 'assistant',
           content: { type: 'message', data: uiHtml },
         },
-        createToolTask({ name: 'postMessageTester', arguments: {} }),
+        toolCall({ name: 'postMessageTester', arguments: {} }),
       ],
     ])
-  },
+  }`,
 })
 
 export const testingTools = [postMessageTester, testSecretStore]

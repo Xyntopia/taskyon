@@ -41,7 +41,18 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
     })
   }
 
-
+  // TODO: automatically add these functions from a central spot in
+  //       our codebase, so that we don't have to maintain them here...
+  function toolCall(f) {
+    return {
+      role: 'function',
+      name: f.name,
+      content: {
+        type: 'functioncall',
+        data: f,
+      },
+    }
+  }
 
   function makeTaskResult(tasks) {
     return {
@@ -67,6 +78,7 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
 
   window.addEventListener('message', async (e) => {
     const port = e.ports[0]
+    const messagePort = e.ports[1] || null
     const { code, args: { params, context }, rpcs, sourceURL } = e.data
 
     // we need to re-instantiate our rpcs on every function call
@@ -80,11 +92,14 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
         const ctx = {
           ...context,
           ...rpcdefs,
+          messagePort
           // Placeholder for stop signal it isn't needed in the iframe worker as we
           // can simply destroy the iframe from the parent...
           stopSignal: new AbortController().signal,
         }
         const func = new Function("params", "context", "return (" + code + ")(params, context)\\n//# sourceURL=" + sourceURL);
+        // TODO: add an optional debugger to the function itself
+        debugger;
         const result = await func(params, ctx)
         // Post the result back to the parent window
         port.postMessage({ result })
@@ -181,7 +196,10 @@ export async function executeCodeInIframe(
         const rpcPort = ev.ports && ev.ports[0]
         if (!rpcPort) {
           // Defensive: If no port, send error back on main port
-          port.postMessage({ type: `${msg.type}Error`, error: 'No response port provided for RPC' })
+          port.postMessage({
+            type: `${msg.type} Error`,
+            error: 'No response port provided for RPC',
+          })
           return
         }
         if (typeof fn === 'function') {
@@ -228,7 +246,10 @@ export async function executeCodeInIframe(
         rpcs,
       }),
     )
-    iframe.contentWindow!.postMessage(payload, '*', [channel.port2])
+    iframe.contentWindow!.postMessage(payload, '*', [
+      channel.port2,
+      ...(args.context.messagePort ? [args.context.messagePort] : []),
+    ])
 
     // 3) wire up abort
     stopSignal.addEventListener('abort', () => {

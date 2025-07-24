@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, createToolTask, makeTaskResult } from '../taskyon/tools'
+import { createTool, toolCall, makeTaskResult } from '../taskyon/tools'
 import type { SecretStore } from '../crudWrapper'
 import { OAuthCredentials } from '../taskyon/types'
 
@@ -154,7 +154,7 @@ not working:
         return makeTaskResult([
           [
             { role: 'assistant', content: { type: 'message', data: html } },
-            createToolTask({
+            toolCall({
               name: 'ensureOauthLogin',
               arguments: { oauthURL, clientId, scope, toolId },
             }),
