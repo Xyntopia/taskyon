@@ -99,7 +99,7 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
         }
         const func = new Function("params", "context", "return (" + code + ")(params, context)\\n//# sourceURL=" + sourceURL);
         // TODO: add an optional debugger to the function itself
-        debugger;
+        // debugger;
         const result = await func(params, ctx)
         // Post the result back to the parent window
         port.postMessage({ result })
@@ -110,7 +110,8 @@ async function createSandboxedIframe(id: string): Promise<HTMLIFrameElement> {
   })
   // signal readiness immediately
   window.parent.postMessage({ ready: true }, '*')
-  //# sourceURL=iframeWorker.js
+  // debugger;
+  //# sourceURL=iframeWorker${id.slice(0, 5)}.js
 
 </script>`
   } catch (error: unknown) {

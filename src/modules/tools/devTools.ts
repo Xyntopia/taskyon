@@ -162,122 +162,122 @@ const getGitlabInfo = createTool({
   },
 })
 
-const issueListGenerator = createTool({
+/**
+ * issueListGenerator (revamped)
+ * ---------------------------------
+ * First call: renders a checklist UI in an iframe. When the user clicks
+ * "Submit", the iframe posts a MessagePort message containing the selected
+ * issues.
+ * Second call: receives that message via `ctx.messagePort`, parses the
+ * payload, and returns a human‑readable summary of the issues that would be
+ * created in GitLab (publishing is commented‑out for now).
+ */
+export const issueListGenerator = createTool({
   name: 'issueListGenerator',
   description:
-    'Converts a text message into a list of issues and then generates a UI for review and GitLab submission.',
-  longDescription: `This tool takes a text input and extracts a structured list of issues,
-    formatted similarly to user stories. It then generates a simple HTML-based UI for reviewing
-    the issues, allowing users to check off items and submit them to GitLab. The UI
-    includes a checklist of extracted issues and a submission button. This tool is useful for
-    developers looking to streamline the process of converting brainstorming discussions or chat
-    messages into actionable development tasks.`,
+    'Converts a text message into a list of issues, shows a checklist UI, then waits for user confirmation via postMessage.',
+  longDescription: `Extract issues from chat, let the user confirm which ones should become GitLab issues, and (in a future revision) create them. This version only returns a summary string of the selected issues.`,
   parameters: {
     type: 'object',
     properties: {
       issuelist: {
         type: 'array',
-        items: {
-          type: 'string',
-        },
-        description: `Extract a list of issues from the text which we could use
-in gitlab. They should roughly follow the style of a "user story".`,
+        items: { type: 'string' },
+        description: 'The candidate issues (already extracted from text).',
       },
       project: {
         type: 'string',
-        description: 'The name of the GitLab project where issues will be submitted.',
+        description: 'GitLab project identifier (namespace/name).',
       },
     },
     required: ['issuelist'],
+    additionalProperties: false,
   } as const satisfies JSONSchema7,
   function: async ({ issuelist, project }, ctx) => {
-    const GITLAB_API_URL = await ctx.getSecret(
-      `https://gitlab.com/api/v4/projects/${encodeURIComponent(project || '')}/issues`,
-      true,
-    )
-    const GITLAB_ACCESS_TOKEN = await ctx.getSecret('oauth-acces-token', false) // Replace with actual project ID
+    /* ─────────────────────────────────────────────────────────────────────┐
+       SECOND CALL – handle MessagePort payload
+       ─────────────────────────────────────────────────────────────────────┘*/
+    const previousCall = ctx.taskChain.at(-3)
+    const thisMessage = ctx.taskChain.at(-1)
 
-    if (!GITLAB_ACCESS_TOKEN) {
-      // information needed to register with gitlab
+    if (
+      previousCall?.content.type === 'functioncall' &&
+      previousCall.content.data.name === 'issueListGenerator' &&
+      thisMessage?.parentID === previousCall.id
+    ) {
+      // Wait for the postMessage from the UI
+      const selectedIssues = await new Promise<string[]>((resolve) => {
+        const port = ctx.messagePort as MessagePort
+        port.onmessage = (ev) => {
+          if (ev.data.payload.selectedIssues) resolve(ev.data.payload.selectedIssues)
+        }
+      })
+
+      const summary = [
+        `📋 Ready to create ${selectedIssues.length} issue(s)` +
+          (project ? ` in “${project}”:\n\n` : ''),
+        ...selectedIssues.map((i) => `- ${i}`),
+      ].join('\n')
+
+      // TODO: actually POST to GitLab – code commented‑out for now
+      /*
+      const GITLAB_API_URL = `https://gitlab.com/api/v4/projects/${encodeURIComponent(project)}/issues`
+      const TOKEN = await ctx.getSecret('oauth-access-token', false)
+      if (TOKEN) {
+        for (const issue of selectedIssues) {
+          await fetch(GITLAB_API_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${TOKEN}`,
+            },
+            body: JSON.stringify({ title: issue, description: 'Auto‑generated from Taskyon' }),
+          })
+        }
+      }
+      */
+
       return makeTaskResult([
         [
-          toolCall({
-            name: 'ensureOauthLogin',
-            arguments: {
-              oauthURL: OAUTH_URL,
-              clientId: CLIENT_ID,
-              scope: 'read_user',
-              toolId: ctx.toolId,
-            },
-          }),
-          /*toolCall({
-            name: 'issueListGenerator',
-            arguments: { issuelist, project },
-          }),*/
+          {
+            role: 'assistant',
+            content: { type: 'message', data: summary },
+          },
         ],
       ])
     }
 
-    const uiHtml = `<div>
-    <ul id="issueList">
-      ${issuelist
-        .map(
-          (issue, index) =>
-            `<li>
-          <input type="checkbox" id="issue-${index}" value="${issue}" />
-          <label for="issue-${index}">${issue}</label>
-        </li>`,
-        )
-        .join('\n')}
-    </ul>
-    <button onclick="uploadIssues()">Submit</button>
-  </div>
-  <script>
-    function uploadIssues() {
-      const selectedIssues = [];
-      document.querySelectorAll('#issueList input:checked').forEach(el => {
-        selectedIssues.push(el.value);
-      });
+    /* ─────────────────────────────────────────────────────────────────────┐
+       FIRST CALL – render checklist UI & schedule follow‑up invocation
+       ─────────────────────────────────────────────────────────────────────┘*/
+    const uiHtml = /* html */ `
+      <div style="font-family: sans-serif; max-width: 400px;">
+        <h3>Select issues to submit${project ? ` to <em>${project}</em>` : ''}</h3>
+        <ul id="issueList" style="list-style: none; padding-left: 0;">
+          ${issuelist
+            .map(
+              (issue) =>
+                `<li><label><input type="checkbox" value="${issue.replace(/"/g, '&quot;')}"> ${issue}</label></li>`,
+            )
+            .join('\n')}
+        </ul>
+        <button id="submit-issues" style="margin-top: 0.5rem;">Submit</button>
+      </div>
+      <script>
+        document.getElementById('submit-issues').addEventListener('click', () => {
+          const selected = Array.from(document.querySelectorAll('#issueList input:checked')).map(el => el.value);
+          window.parent.postMessage({ selectedIssues: selected }, '*');
+        });
+      </script>
+    `
 
-      if (selectedIssues.length === 0) {
-        alert('No issues selected!');
-        return;
-      }
-
-      console.log('Submitting issues:', selectedIssues);
-
-      const GITLAB_ACCESS_TOKEN = 'YOUR_GITLAB_ACCESS_TOKEN'; // Replace with actual token
-      const GITLAB_API_URL = '${GITLAB_API_URL}';
-
-      selectedIssues.forEach(issue => {
-        fetch(GITLAB_API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + ${GITLAB_ACCESS_TOKEN}
-          },
-          body: JSON.stringify({
-            title: issue,
-            description: 'Auto-generated issue from AI chat tool',
-          })
-        })
-        .then(response => response.json())
-        .then(data => console.log('Issue created:', data))
-        .catch(error => console.error('Error submitting issue:', error));
-      });
-
-      alert('Issues submitted to GitLab!');
-    }
-  </script>`
     return makeTaskResult([
       [
         {
           role: 'assistant',
-          content: {
-            type: 'message',
-            data: `Check each issue you think is legitimate and want to upload!` + uiHtml,
-          },
+          content: { type: 'message', data: uiHtml },
         },
+        toolCall({ name: 'issueListGenerator', arguments: { issuelist, project } }),
       ],
     ])
   },
