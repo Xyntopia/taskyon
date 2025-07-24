@@ -6,7 +6,9 @@
       {{ task.created_at ? new Date(task.created_at).toLocaleString() : '' }}
       <q-tooltip>{{ task.id }}</q-tooltip>
     </div>
-    <q-icon :name="matShield" class="task-safety-icon"></q-icon>
+    <q-icon :name="matShield" class="task-safety-icon">
+      <q-tooltip>This message is displayed in a secure sandbox</q-tooltip>
+    </q-icon>
     <!--Message Display-->
     <div class="task-display">
       <!--task-header-->
