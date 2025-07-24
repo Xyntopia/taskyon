@@ -164,19 +164,18 @@ const getGitlabInfo = createTool({
 
 /**
  * issueListGenerator (revamped)
- * ---------------------------------
- * First call: renders a checklist UI in an iframe. When the user clicks
- * "Submit", the iframe posts a MessagePort message containing the selected
- * issues.
- * Second call: receives that message via `ctx.messagePort`, parses the
- * payload, and returns a human‑readable summary of the issues that would be
- * created in GitLab (publishing is commented‑out for now).
+ * ------------------------------------------------------------------
+ * First call :  ↳ (a) ensure we have an access‑token
+ *                    – if not, schedule ensureOauthLogin, then re‑run
+ *                ↳ (b) fetch projects and render checklist UI
+ * Second call:  waits for postMessage → summarises the chosen issues
  */
 export const issueListGenerator = createTool({
   name: 'issueListGenerator',
   description:
-    'Converts a text message into a list of issues, shows a checklist UI, then waits for user confirmation via postMessage.',
-  longDescription: `Extract issues from chat, let the user confirm which ones should become GitLab issues, and (in a future revision) create them. This version only returns a summary string of the selected issues.`,
+    'Turns chat text into a checklist UI, lets the user choose issues & target project, then summarises the selection.',
+  longDescription:
+    'Fetches the user’s GitLab projects, renders a checklist+dropdown in an iframe, waits for the UI’s postMessage, and (for now) only returns a summary string.',
   parameters: {
     type: 'object',
     properties: {
@@ -194,33 +193,36 @@ export const issueListGenerator = createTool({
     additionalProperties: false,
   } as const satisfies JSONSchema7,
   function: async ({ issuelist, project }, ctx) => {
-    /* ─────────────────────────────────────────────────────────────────────┐
-       SECOND CALL – handle MessagePort payload
-       ─────────────────────────────────────────────────────────────────────┘*/
-    const previousCall = ctx.taskChain.at(-3)
-    const thisMessage = ctx.taskChain.at(-1)
-
+    /*───────────────────────────────────────────────────────────
+      PHASE 2 — we’re being called from the iframe postMessage
+    ───────────────────────────────────────────────────────────*/
+    const prev = ctx.taskChain.at(-3)
+    const thisMsg = ctx.taskChain.at(-1)
     if (
-      previousCall?.content.type === 'functioncall' &&
-      previousCall.content.data.name === 'issueListGenerator' &&
-      thisMessage?.parentID === previousCall.id
+      prev?.content.type === 'functioncall' &&
+      prev.content.data.name === 'issueListGenerator' &&
+      thisMsg?.parentID === prev.id
     ) {
-      // Wait for the postMessage from the UI
-      const selectedIssues = await new Promise<string[]>((resolve) => {
-        const port = ctx.messagePort as MessagePort
-        port.onmessage = (ev) => {
-          if (ev.data.payload.selectedIssues) resolve(ev.data.payload.selectedIssues)
+      const chosen = await new Promise<{ issues: string[]; project: string }>((resolve) => {
+        ;(ctx.messagePort as MessagePort).onmessage = (ev) => {
+          if (ev.data.payload?.selectedIssues)
+            resolve({
+              issues: ev.data.payload.selectedIssues,
+              project: ev.data.payload.selectedProject,
+            })
         }
       })
 
-      const summary = [
-        `📋 Ready to create ${selectedIssues.length} issue(s)` +
-          (project ? ` in “${project}”:\n\n` : ''),
-        ...selectedIssues.map((i) => `- ${i}`),
-      ].join('\n')
+      const summary =
+        `📋 Ready to create ${chosen.issues.length} issue(s)` +
+        (chosen.project ? ` in “${chosen.project}”:\n\n` : ':\n\n') +
+        chosen.issues.map((i) => `- ${i}`).join('\n')
 
-      // TODO: actually POST to GitLab – code commented‑out for now
-      /*
+      return makeTaskResult([[{ role: 'assistant', content: { type: 'message', data: summary } }]])
+    }
+
+    // TODO: actually POST to GitLab – code commented‑out for now
+    /*
       const GITLAB_API_URL = `https://gitlab.com/api/v4/projects/${encodeURIComponent(project)}/issues`
       const TOKEN = await ctx.getSecret('oauth-access-token', false)
       if (TOKEN) {
@@ -237,46 +239,107 @@ export const issueListGenerator = createTool({
       }
       */
 
+    /*───────────────────────────────────────────────────────────
+    PHASE1 — ensure we’re authenticated
+    ───────────────────────────────────────────────────────────*/
+    const GITLAB_BASE = 'https://gitlab.com/api/v4'
+    const EXPIRES = await ctx.getSecret('oauth-expires-at', false)
+    let TOKEN: string | undefined
+
+    if (EXPIRES) {
+      const exp = Number(EXPIRES)
+      if (isNaN(exp) || exp < Date.now()) {
+        try {
+          const rt = await ctx.getSecret('oauth-refresh-token', false)
+          if (!rt) throw new Error('No refresh token')
+          const { accessToken, refreshToken, expiresAt } = await refreshGitlabToken(rt)
+          await ctx.setSecret('oauth-access-token', accessToken)
+          await ctx.setSecret('oauth-refresh-token', refreshToken)
+          await ctx.setSecret('oauth-expires-at', String(expiresAt))
+          TOKEN = accessToken
+        } catch (e) {
+          console.error('refresh failed → force re‑login', e)
+          TOKEN = undefined
+        }
+      } else {
+        TOKEN = await ctx.getSecret('oauth-access-token', false)
+      }
+    }
+
+    if (!TOKEN) {
       return makeTaskResult([
         [
-          {
-            role: 'assistant',
-            content: { type: 'message', data: summary },
-          },
+          toolCall({
+            name: 'ensureOauthLogin',
+            arguments: {
+              oauthURL: OAUTH_URL,
+              clientId: CLIENT_ID,
+              scope: 'read_user read_api',
+              toolId: ctx.toolId,
+            },
+          }),
+          toolCall({ name: 'issueListGenerator', arguments: { issuelist, project } }),
         ],
       ])
     }
 
-    /* ─────────────────────────────────────────────────────────────────────┐
-       FIRST CALL – render checklist UI & schedule follow‑up invocation
-       ─────────────────────────────────────────────────────────────────────┘*/
+    /*───────────────────────────────────────────────────────────
+      PHASE-1b — fetch projects & render UI
+    ───────────────────────────────────────────────────────────*/
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` }
+    const projRes = await fetch(`${GITLAB_BASE}/projects?membership=true&per_page=100`, { headers })
+    type GitlabProject = { id: number; path_with_namespace: string }
+    const projects = ((await projRes.json()) as GitlabProject[]).map((p) => ({
+      id: p.id,
+      path: p.path_with_namespace,
+    }))
+    const projOptions = projects
+      .map(
+        (p) =>
+          `<option value="${p.id}"${
+            project && (project === p.path || project === String(p.id)) ? ' selected' : ''
+          }>${p.path}</option>`,
+      )
+      .join('\n')
+
     const uiHtml = /* html */ `
-      <div style="font-family: sans-serif; max-width: 400px;">
-        <h3>Select issues to submit${project ? ` to <em>${project}</em>` : ''}</h3>
-        <ul id="issueList" style="list-style: none; padding-left: 0;">
+      <div style="font-family:sans-serif;max-width:420px">
+        <h3>Pick target project & issues</h3>
+        <label style="display:block;margin-bottom:.5rem">
+          Project:
+          <select id="project-select" style="margin-left:.5rem">
+            ${projOptions}
+          </select>
+        </label>
+        <ul id="issueList" style="list-style:none;padding-left:0">
           ${issuelist
             .map(
               (issue) =>
-                `<li><label><input type="checkbox" value="${issue.replace(/"/g, '&quot;')}"> ${issue}</label></li>`,
+                `<li><label><input type="checkbox" value="${issue.replace(
+                  /"/g,
+                  '&quot;',
+                )}"> ${issue}</label></li>`,
             )
             .join('\n')}
         </ul>
-        <button id="submit-issues" style="margin-top: 0.5rem;">Submit</button>
+        <button id="submit-issues" style="margin-top:.75rem">Submit</button>
       </div>
       <script>
         document.getElementById('submit-issues').addEventListener('click', () => {
-          const selected = Array.from(document.querySelectorAll('#issueList input:checked')).map(el => el.value);
-          window.parent.postMessage({ selectedIssues: selected }, '*');
+          const selectedIssues = Array.from(document.querySelectorAll('#issueList input:checked'))
+            .map(el => el.value);
+          const selectedProject = document.getElementById('project-select').value;
+          window.parent.postMessage(
+            { selectedIssues, selectedProject },
+            '*'
+          );
         });
       </script>
     `
 
     return makeTaskResult([
       [
-        {
-          role: 'assistant',
-          content: { type: 'message', data: uiHtml },
-        },
+        { role: 'assistant', content: { type: 'message', data: uiHtml } },
         toolCall({ name: 'issueListGenerator', arguments: { issuelist, project } }),
       ],
     ])
