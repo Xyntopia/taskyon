@@ -185,6 +185,8 @@ return makeTaskResult([[
   },
 ]])
 
+It is important to remove indentation from the HTML code so that markdown doesn't recognize it as a code block.
+
 Now, with the examples given to you, can you create a new tool using the "addNewTool" function?.
 Please make sure to give your response in {format} format.
 

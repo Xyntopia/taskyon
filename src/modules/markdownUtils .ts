@@ -506,7 +506,9 @@ export const md2Html = async (src: string, darkMode = false, allowHtml = false) 
   const htmlBlocks: string[] = []
   tokens.forEach((token) => {
     if (token.type === 'html_block') {
-      const i = htmlBlocks.push(token.content) - 1
+      // push ⟶ same content but with leading spaces removed on every line
+      const dedented = token.content.replace(/^[ \t]+/gm, '') // ← one‑liner
+      const i = htmlBlocks.push(dedented) - 1
       token.content = placeholder(i)
     }
   })

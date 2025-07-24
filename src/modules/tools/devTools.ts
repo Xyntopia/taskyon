@@ -302,40 +302,39 @@ export const issueListGenerator = createTool({
       )
       .join('\n')
 
-    const uiHtml = /* html */ `
-      <div style="font-family:sans-serif;max-width:420px">
-        <h3>Pick target project & issues</h3>
-        <label style="display:block;margin-bottom:.5rem">
-          Project:
-          <select id="project-select" style="margin-left:.5rem">
-            ${projOptions}
-          </select>
-        </label>
-        <ul id="issueList" style="list-style:none;padding-left:0">
-          ${issuelist
-            .map(
-              (issue) =>
-                `<li><label><input type="checkbox" value="${issue.replace(
-                  /"/g,
-                  '&quot;',
-                )}"> ${issue}</label></li>`,
-            )
-            .join('\n')}
-        </ul>
-        <button id="submit-issues" style="margin-top:.75rem">Submit</button>
-      </div>
-      <script>
-        document.getElementById('submit-issues').addEventListener('click', () => {
-          const selectedIssues = Array.from(document.querySelectorAll('#issueList input:checked'))
-            .map(el => el.value);
-          const selectedProject = document.getElementById('project-select').value;
-          window.parent.postMessage(
-            { selectedIssues, selectedProject },
-            '*'
-          );
-        });
-      </script>
-    `
+    // html without indentation to make markdown render it correctly
+    const uiHtml = `<div style="font-family:sans-serif;max-width:420px">
+  <h3>Pick target project & issues</h3>
+  <label style="display:block;margin-bottom:.5rem">
+    Project:
+    <select id="project-select" style="margin-left:.5rem">
+      ${projOptions}
+    </select>
+  </label>
+  <ul id="issueList" style="list-style:none;padding-left:0">
+    ${issuelist
+      .map(
+        (issue) =>
+          `<li><label><input type="checkbox" value="${issue.replace(
+            /"/g,
+            '&quot;',
+          )}"> ${issue}</label></li>`,
+      )
+      .join('\n')}
+  </ul>
+  <button id="submit-issues" style="margin-top:.75rem">Submit</button>
+</div>
+<script>
+  document.getElementById('submit-issues').addEventListener('click', () => {
+    const selectedIssues = Array.from(document.querySelectorAll('#issueList input:checked'))
+      .map(el => el.value);
+    const selectedProject = document.getElementById('project-select').value;
+    window.parent.postMessage(
+      { selectedIssues, selectedProject },
+      '*'
+    );
+  });
+</script>`
 
     return makeTaskResult([
       [
