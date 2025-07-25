@@ -218,6 +218,7 @@ The tool never stores content server-side; everything runs client-side in the Ta
     if (
       prev?.content.type === 'functioncall' &&
       prev.content.data.name === 'issueListGenerator' &&
+      prev.content.data.arguments.issuelist === issuelist &&
       thisMsg?.parentID === prev.id
     ) {
       const { projectId, projectName, issues } = await new Promise<{
