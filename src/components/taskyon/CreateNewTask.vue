@@ -116,50 +116,54 @@
             </q-card-actions>
           </q-menu>
         </q-btn>
-        <!--Select Chat Task-->
+        <!--Select Tools-->
         <div v-if="expertMode || selectedTaskType" @click.stop>
           <q-btn flat dense :icon="mdiFunctionVariant">
-            <q-menu anchor="top left" self="bottom left" auto-close class="column items-center">
-              <div class="text-caption q-pa-xs">
-                Search for a tool you want to use..
-                <InfoDialog
-                  info-text="You can use tools here directly and change their parameters to your liking"
+            <q-menu auto-close>
+              <div>
+                <div class="text-caption text-center">
+                  <div>
+                    Search for a tool you want to use..
+                    <InfoDialog
+                      info-text="You can use tools here directly and change their parameters to your liking"
+                    />
+                  </div>
+                </div>
+                <div class="row">
+                  <div @click.stop>
+                    <q-select
+                      class="col"
+                      use-input
+                      dense
+                      hide-selected
+                      fill-input
+                      options-dense
+                      filled
+                      input-debounce="0"
+                      color="secondary"
+                      :model-value="selectedTaskType"
+                      :options="filteredToolCollection"
+                      @filter="filterFn"
+                      @update:model-value="tystate.switchTaskType"
+                    >
+                      <template #prepend>
+                        <q-icon :name="mdiFunctionVariant" />
+                      </template>
+                    </q-select>
+                  </div>
+                  <q-btn flat stretch>Ok</q-btn>
+                </div>
+                <q-btn
+                  v-if="selectedTaskType"
+                  flat
+                  dense
+                  square
+                  class="q-my-xs"
+                  :icon="matChat"
+                  label="Select Simple Chat"
+                  @click="() => tystate.switchTaskType(undefined)"
                 />
               </div>
-              <div class="row">
-                <div @click.stop>
-                  <q-select
-                    class="col"
-                    use-input
-                    dense
-                    hide-selected
-                    fill-input
-                    options-dense
-                    filled
-                    input-debounce="0"
-                    color="secondary"
-                    :model-value="selectedTaskType"
-                    :options="filteredToolCollection"
-                    @filter="filterFn"
-                    @update:model-value="tystate.switchTaskType"
-                  >
-                    <template #prepend>
-                      <q-icon :name="mdiFunctionVariant" />
-                    </template>
-                  </q-select>
-                </div>
-                <q-btn flat stretch>Ok</q-btn>
-              </div>
-              <q-btn
-                v-if="selectedTaskType"
-                flat
-                dense
-                square
-                class="q-my-xs"
-                :icon="matChat"
-                label="Select Simple Chat"
-                @click="() => tystate.switchTaskType(undefined)"
-              />
             </q-menu>
           </q-btn>
         </div>
@@ -221,7 +225,7 @@
           </q-menu>
         </q-btn>
       </div>
-      <!--Task type selection and execution-->
+      <!--Tool task execution-->
       <div
         v-if="expertMode && selectedTaskType"
         class="col-auto q-px-md row no-wrap items-center"
