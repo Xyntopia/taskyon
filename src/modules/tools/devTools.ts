@@ -337,10 +337,12 @@ The tool never stores content server-side; everything runs client-side in the Ta
     const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` }
     const projRes = await fetch(`${GITLAB_BASE}/projects?membership=true&per_page=100`, { headers })
     type GitlabProject = { id: number; path_with_namespace: string }
-    const projects = ((await projRes.json()) as GitlabProject[]).map((p) => ({
-      id: p.id,
-      path: p.path_with_namespace,
-    }))
+    const projects = ((await projRes.json()) as GitlabProject[])
+      .map((p) => ({
+        id: p.id,
+        path: p.path_with_namespace,
+      }))
+      .sort((a, b) => a.path.localeCompare(b.path))
     const projOptions = projects
       .map(
         (p) =>
