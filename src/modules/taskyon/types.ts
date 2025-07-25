@@ -481,45 +481,82 @@ interface Permission {
   is_blocking: boolean
 }
 
-type modalities = 'text' | 'image'
+// ────────────────────────── leaf enums & helpers ──────────────────────────
+export type IOmodality = 'text' | 'image' | 'file'
 
+export type SupportedParameter =
+  | 'max_tokens'
+  | 'temperature'
+  | 'top_p'
+  | 'tools'
+  | 'tool_choice'
+  | 'reasoning'
+  | 'include_reasoning'
+  | 'stop'
+  | 'frequency_penalty'
+  | 'presence_penalty'
+  | 'repetition_penalty'
+  | 'response_format'
+  | 'top_k'
+  | 'top_a'
+  | 'top_logprobs'
+  | 'logprobs'
+  | 'logit_bias'
+  | 'seed'
+  | 'min_p'
+  | 'structured_outputs'
+  | 'web_search_options'
+
+/** pricing quoted as *USD per–token* strings to avoid FP rounding */
+export interface Pricing {
+  prompt: string
+  completion: string
+  image?: string
+  request?: string
+  web_search?: string
+  internal_reasoning?: string
+  input_cache_read?: string
+  input_cache_write?: string
+}
+
+export interface Architecture {
+  /** e.g. `"text->text"` or `"text+image->text"` */
+  modality?: string
+  input_modalities?: IOmodality[]
+  output_modalities?: IOmodality[]
+  tokenizer?: string
+  instruct_type?: string | null
+}
+
+export interface TopProvider {
+  context_length: number
+  max_completion_tokens: number | null
+  is_moderated: boolean
+}
+
+// ───────────────────────────────── Model ──────────────────────────────────
 export interface Model {
-  id: string
+  /** primary identifier */ id: string
+  /** canonical OpenRouter slug */ canonical_slug?: string // ← new :contentReference[oaicite:2]{index=2}
+  hugging_face_id?: string | null
   name?: string
   description?: string
   context_length?: number
-  object?: string
   created?: number
+
+  architecture?: Architecture
+  pricing?: Pricing
+  top_provider?: TopProvider
+
+  per_request_limits?: { prompt_tokens: string; completion_tokens: string } | null
+  supported_parameters?: SupportedParameter[] // ← new :contentReference[oaicite:3]{index=3}
+
+  // ── legacy OpenAI‑style fields (present in older APIs, harmless here) ──
+  object?: string
   owned_by?: string
   permission?: Permission[]
   root?: string
-  parent?: null | string
-  pricing?: {
-    prompt: string
-    completion: string
-    image?: string
-    request?: string
-    web_search?: string
-    internal_reasoning?: string
-    input_cache_read?: string
-    input_cache_write?: string
-  }
-  top_provider?: {
-    max_completion_tokens: number | null
-    context_length: number
-    is_moderated: boolean
-  }
-  architecture?: {
-    modality?: string
-    input_modalities?: modalities[]
-    output_modalities?: modalities[]
-    tokenizer?: string
-    instruct_type?: string | null
-  }
-  per_request_limits?: {
-    prompt_tokens: string
-    completion_tokens: string
-  } | null
+  parent?: string | null
 }
 
 const apiConfig = z
