@@ -172,21 +172,38 @@ const getGitlabInfo = createTool({
  */
 export const issueListGenerator = createTool({
   name: 'issueListGenerator',
+  // ── SHORT DESCRIPTION ─────────────────────────────────────────
   description:
-    'Turns chat text into a checklist UI, lets the user choose issues & target project, then creates the issues and returns a summary with links.',
-  longDescription:
-    'Fetches the user’s GitLab projects, renders a checklist+dropdown in an iframe, waits for the UI’s postMessage, then POSTs the chosen issues to GitLab and returns links to the project issue list and the newly created issues.',
+    'Generate a checklist UI from candidate issue titles, let the user pick the target GitLab project, then create the issues on GitLab.',
+
+  // ── LONG DESCRIPTION ──────────────────────────────────────────
+  longDescription: `Workflow
+1. Ensures the user is logged in with “api” scope (read + write).
+2. Retrieves all projects the user is a member of and embeds an iframe UI
+    (dropdown for project, checkbox list for issues, “Submit” button).
+3. Waits for a postMessage containing { selectedProjectId, selectedProjectName, selectedIssues }.
+4. Creates each selected issue via POST /v4/projects/:id/issues, recording success
+    or the exact HTTP / network error for every title.
+5. Responds with a markdown summary that:
+   - shows ✓ or ❌ per issue together with any error text
+   - links to the project's complete issue list
+   - links directly to the newly created issues.
+
+The tool never stores content server-side; everything runs client-side in the Taskyon iframe.`,
+
+  // ── PARAMETERS ────────────────────────────────────────────────
   parameters: {
     type: 'object',
     properties: {
       issuelist: {
         type: 'array',
         items: { type: 'string' },
-        description: 'The candidate issues (already extracted from text).',
+        description:
+          'Array of *candidate issue titles*.  **Titles should be concise, precise and rich in keywords** so they are easy to find via GitLab`s issue search. The model may (and should) freely re-phrase raw user text to achieve this without losing information. It is also OK to split large issues into smaller ones (only if this is better).',
       },
       project: {
         type: 'string',
-        description: 'Optional GitLab project identifier (namespace/name).',
+        description: 'Optional GitLab project identifier to pre‑select.',
       },
     },
     required: ['issuelist'],
@@ -346,7 +363,7 @@ export const issueListGenerator = createTool({
     ${issuelist
       .map(
         (issue) =>
-          `<li><label><input type="checkbox" value="${issue.replace(/"/g, '&quot;')}"> ${issue}</label></li>`,
+          `<li><label><input type="checkbox" value="${String(issue).replace(/"/g, '&quot;')}"> ${issue}</label></li>`,
       )
       .join('\n')}
   </ul>
