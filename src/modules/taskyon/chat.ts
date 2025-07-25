@@ -375,21 +375,21 @@ export async function createOpenAIRequest(
     // the following comes from openrouter
   }
   if (api.name == 'taskyon' || api.name == 'openrouter.ai') {
-    const models = await availableModels(api.baseURL, apiKey, headers, false)
-    if (models[api.selectedModel]?.supported_parameters?.includes('reasoning')) {
-      // we can use reasoning with this model
-      payload.reasoning = {
-        // One of the following (not both):
-        // Can be "high", "medium", or "low" (OpenAI-style)
-        // for other APIs, we use max_tokens
-        effort: 'low',
-        // max tokens can only be used if we don't use "effort"
-        // max_tokens: 2000, // Specific token limit (Anthropic-style)
-        // Optional: Default is false. All models support this.
-        exclude: false, // Set to true to exclude reasoning tokens from response
-        // Or enable reasoning with the default parameters:
-        enabled: true, // Default: inferred from `effort` or `max_tokens`
-      }
+    // TODO: check models capabilities...  problem right now is that we don't have the correct basURL
+    //const models = await availableModels(api.baseURL, apiKey, headers, false)
+    //if (models[api.selectedModel]?.supported_parameters?.includes('reasoning')) {
+    // we can use reasoning with this model
+    payload.reasoning = {
+      // One of the following (not both):
+      // Can be "high", "medium", or "low" (OpenAI-style)
+      // for other APIs, we use max_tokens
+      effort: 'low',
+      // max tokens can only be used if we don't use "effort"
+      // max_tokens: 2000, // Specific token limit (Anthropic-style)
+      // Optional: Default is false. All models support this.
+      exclude: false, // Set to true to exclude reasoning tokens from response
+      // Or enable reasoning with the default parameters:
+      enabled: true, // Default: inferred from `effort` or `max_tokens`
     }
   }
   return { headers, payload, url: `${api.baseURL}/chat/completions` }
