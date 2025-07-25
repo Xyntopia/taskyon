@@ -173,9 +173,9 @@ const getGitlabInfo = createTool({
 export const issueListGenerator = createTool({
   name: 'issueListGenerator',
   description:
-    'Turns chat text into a checklist UI, lets the user choose issues & target project, then creates the issues and returns a summary.',
+    'Turns chat text into a checklist UI, lets the user choose issues & target project, then creates the issues and returns a summary with links.',
   longDescription:
-    'Fetches the user’s GitLab projects, renders a checklist+dropdown in an iframe, waits for the UI’s postMessage, then POSTs the chosen issues to GitLab.',
+    'Fetches the user’s GitLab projects, renders a checklist+dropdown in an iframe, waits for the UI’s postMessage, then POSTs the chosen issues to GitLab and returns links to the project issue list and the newly created issues.',
   parameters: {
     type: 'object',
     properties: {
@@ -194,7 +194,7 @@ export const issueListGenerator = createTool({
   } as const satisfies JSONSchema7,
   function: async ({ issuelist, project }, ctx) => {
     /*───────────────────────────────────────────────────────────
-      PHASE 2 — we’re being called from the iframe postMessage
+      PHASE 2 — called from the iframe postMessage
     ───────────────────────────────────────────────────────────*/
     const prev = ctx.taskChain.at(-3)
     const thisMsg = ctx.taskChain.at(-1)
@@ -221,32 +221,57 @@ export const issueListGenerator = createTool({
 
       const GITLAB_BASE = 'https://gitlab.com/api/v4'
       const TOKEN = await ctx.getSecret('oauth-access-token', false)
+      const createdUrls: string[] = []
+      const results: { title: string; ok: boolean; error?: string }[] = []
+
       if (TOKEN && projectId) {
         const headers = {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${TOKEN}`,
         }
         const base = `${GITLAB_BASE}/projects/${encodeURIComponent(projectId)}/issues`
+
         for (const title of issues) {
-          console.log('posting issue:', title, base, headers)
-          /*await fetch(base, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ title, description: 'Auto‑generated from Taskyon' }),
-          })*/
+          try {
+            const res = await fetch(base, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ title, description: 'Auto‑generated from Taskyon' }),
+            })
+            if (res.ok) {
+              const json = await res.json()
+              createdUrls.push(json.web_url as string)
+              results.push({ title, ok: true })
+            } else {
+              const text = await res.text()
+              results.push({ title, ok: false, error: `HTTP ${res.status}: ${text}` })
+            }
+          } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : String(err)
+            results.push({ title, ok: false, error: errorMsg })
+          }
+        }
+      } else {
+        for (const title of issues) {
+          results.push({ title, ok: false, error: 'No token / project ID' })
         }
       }
 
+      const allIssuesUrl = `https://gitlab.com/${projectName}/-/issues`
+      const newIssuesLinks = createdUrls.join(', ')
+
       const summary =
-        `📋 Created ${issues.length} issue(s)` +
+        `📋 Attempted ${issues.length} issue(s)` +
         (projectName ? ` in “${projectName}”:\n\n` : ':\n\n') +
-        issues.map((i) => `- ${i}`).join('\n')
+        results.map((r) => `- ${r.title} ${r.ok ? '✓' : `❌ ${r.error}`}`).join('\n') +
+        `\n\n🔗 All issues: ${allIssuesUrl}` +
+        (createdUrls.length ? `\n🔗 Newly created: ${newIssuesLinks}` : '')
 
       return makeTaskResult([[{ role: 'assistant', content: { type: 'message', data: summary } }]])
     }
 
     /*───────────────────────────────────────────────────────────
-     PHASE 1 — ensure we’re authenticated
+      PHASE 1 — auth & UI
     ───────────────────────────────────────────────────────────*/
     const GITLAB_BASE = 'https://gitlab.com/api/v4'
     const EXPIRES = await ctx.getSecret('oauth-expires-at', false)
