@@ -137,7 +137,7 @@ export async function processChatTask(
   }
 
   const streamTask = true
-  const { headers, payload, url } = await createOpenAIRequest(
+  const request = await createOpenAIRequest(
     apiKey,
     llmSettings.siteUrl,
     // we do the following, because "api" is required by our callLLM function.
@@ -149,7 +149,7 @@ export async function processChatTask(
     tools,
   )
   const chatCompletion = await callLLM(
-    { headers, payload, url },
+    request,
     streamTask,
     streamTracker, // track incoming streams...
     stopSignal,
