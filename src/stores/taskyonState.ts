@@ -110,10 +110,10 @@ async function updateLlmModels(
       return res
     } catch {
       console.log("couldn't download models from", baseURL)
-      return []
+      return {}
     }
   } else {
-    return []
+    return {}
   }
 }
 
@@ -412,7 +412,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     stateRefs.modelHistory.push(model)
   }
 
-  const llmModelsInternal = ref<Model[]>([])
+  const llmModelsInternal = ref<Record<string, Model>>({})
   void updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then(
     (m) => (llmModelsInternal.value = m),
   )
@@ -435,15 +435,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     },
   )
 
-  const modelLookUp = computed(() =>
-    llmModelsInternal.value.reduce(
-      (acc, m) => {
-        acc[m.id] = m
-        return acc
-      },
-      {} as Record<string, Model>,
-    ),
-  )
+  const modelLookUp = llmModelsInternal
 
   // set up iframe API
   if ($q.platform.within.iframe) {

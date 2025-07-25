@@ -25,8 +25,8 @@ selecting different models).
         row-key="id"
         :filter="state.modelFilter"
         :pagination="{
-          sortBy: 'prompt_price',
-          descending: false,
+          sortBy: 'created',
+          descending: true,
           page: 0,
           rowsPerPage: 0,
           // rowsNumber: xx if getting data from a server
@@ -174,7 +174,7 @@ const priceDisplay = ref<(typeof pricingOptions)[number]>(pricingOptions[2])
 type rowType = (typeof tystate.llmModels)[0]
 
 const filteredTableData = computed(() => {
-  return tystate.llmModels.filter((model) => {
+  return Object.values(tystate.llmModels).filter((model) => {
     if (model.name || model.id) {
       return true
     }

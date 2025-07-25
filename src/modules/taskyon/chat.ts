@@ -118,9 +118,8 @@ export function accumulateStep(
 }
 
 async function getClearErrorMessage(response: Response): Promise<string> {
-  const statusCode = response.status
-  let statusText = response.statusText || ''
-  const defaultPhrases: Record<number, string> = {
+  const httpCode = response.status // 400
+  const defaultReasons: Record<number, string> = {
     400: 'Bad Request',
     401: 'Unauthorized',
     403: 'Forbidden',
@@ -128,46 +127,54 @@ async function getClearErrorMessage(response: Response): Promise<string> {
     500: 'Internal Server Error',
     502: 'Bad Gateway',
     503: 'Service Unavailable',
-    // …add others as needed…
   }
 
-  // Formatter: fill in default statusText if empty, then prepend "<code> <statusText>: "
-  const fmt = (msg: string) => {
-    if (!statusText && defaultPhrases[statusCode]) {
-      statusText = defaultPhrases[statusCode]
-    }
-    const prefix = `${statusCode}${statusText ? ` ${statusText}` : ''}`
-    return `${prefix}: ${msg}`
-  }
-
-  // 1) Try JSON { error, message } but only accept non-empty strings
+  // ── read body once, regardless of content‑type ─────────────
+  let raw = ''
   try {
-    const body = await response.clone().json()
-    const errField = body.error
-    const msgField = body.message
-
-    if (typeof errField === 'string' && errField.trim()) {
-      return fmt(errField.trim())
-    }
-    if (typeof msgField === 'string' && msgField.trim()) {
-      return fmt(msgField.trim())
-    }
+    raw = (await response.clone().text()).trim()
   } catch {
-    // non-JSON or parse failure → ignore
+    /* swallow */
   }
 
-  // 2) Fallback to plain text, but skip if it looks like JSON
-  try {
-    const text = (await response.text()).trim()
-    if (text && !text.startsWith('{') && !text.startsWith('[')) {
-      return fmt(text)
+  // ── Try JSON first ─────────────────────────────────────────
+  if (raw.startsWith('{') || raw.startsWith('[')) {
+    try {
+      const obj = JSON.parse(raw)
+
+      /* possible structures and where the human message hides:
+
+         { message: "…", code:400 }
+         { error:  "…" }
+         { error: { message:"…", type:"invalid_request_error", code:"400" } }
+         { detail:"…" }   // Supabase
+      */
+      const msg =
+        (typeof obj.message === 'string' && obj.message.trim()) ||
+        (typeof obj.error === 'string' && obj.error.trim()) ||
+        (typeof obj.error?.message === 'string' && obj.error.message.trim()) ||
+        (typeof obj.detail === 'string' && obj.detail.trim()) ||
+        ''
+
+      if (msg) {
+        const statusText = response.statusText || defaultReasons[httpCode] || ''
+        return `${httpCode}${statusText ? ` ${statusText}` : ''}: ${msg}`
+      }
+      // fall‑through to plain‑text handling if JSON but no useful field
+    } catch {
+      /* JSON.parse failed ⇒ treat as plain text below */
     }
-  } catch {
-    // ignore read errors
   }
 
-  // 3) No useful JSON/text → “No additional information available.”
-  return fmt('No additional information available.')
+  // ── Plain‑text body (includes XML / HTML etc.) ─────────────
+  if (raw) {
+    const statusText = response.statusText || defaultReasons[httpCode] || ''
+    return `${httpCode}${statusText ? ` ${statusText}` : ''}: ${raw}`
+  }
+
+  // ── No body worth showing ──────────────────────────────────
+  const statusText = response.statusText || defaultReasons[httpCode] || 'Unknown Error'
+  return `${httpCode} ${statusText}: No additional information available.`
 }
 
 // calls OpenAI API compatible chatmodels
@@ -218,11 +225,17 @@ export async function callLLM(
     }
 
     if (!response) {
+      console.error(`Attempt ${attempt} failed: No response received.`)
       accumulatedErrors.add('Not able to get a response from AI!')
       continue
     } else if (!response.ok) {
       // Check for non-OK status codes and throw error
       const clearMsg = await getClearErrorMessage(response)
+      console.error(
+        `Attempt ${attempt} failed with status`,
+        clearMsg,
+        await response.clone().text(),
+      )
       accumulatedErrors.add(clearMsg)
       continue
     }
@@ -330,7 +343,14 @@ export async function createOpenAIRequest(
     throw new Error('No AI model was selected for chat completion!')
   }
 
-  const payload: OpenAI.ChatCompletionCreateParams = {
+  const payload: OpenAI.ChatCompletionCreateParams & {
+    reasoning?: {
+      effort?: 'high' | 'medium' | 'low'
+      max_tokens?: number
+      exclude?: boolean
+      enabled?: boolean
+    }
+  } = {
     model: api.selectedModel,
     messages: chatMessages,
     response_format: schema
@@ -352,6 +372,25 @@ export async function createOpenAIRequest(
     stream_options: { include_usage: true },
     n: 1,
     ...(functions.length > 0 && { tools: functions, tool_choice: 'auto' }),
+    // the following comes from openrouter
+  }
+  if (api.name == 'taskyon' || api.name == 'openrouter.ai') {
+    const models = await availableModels(api.baseURL, apiKey, headers, false)
+    if (models[api.selectedModel]?.supported_parameters?.includes('reasoning')) {
+      // we can use reasoning with this model
+      payload.reasoning = {
+        // One of the following (not both):
+        // Can be "high", "medium", or "low" (OpenAI-style)
+        // for other APIs, we use max_tokens
+        effort: 'low',
+        // max tokens can only be used if we don't use "effort"
+        // max_tokens: 2000, // Specific token limit (Anthropic-style)
+        // Optional: Default is false. All models support this.
+        exclude: false, // Set to true to exclude reasoning tokens from response
+        // Or enable reasoning with the default parameters:
+        enabled: true, // Default: inferred from `effort` or `max_tokens`
+      }
+    }
   }
   return { headers, payload, url: `${api.baseURL}/chat/completions` }
 }
@@ -418,7 +457,7 @@ const availableModelsTmp = async (
   apiKey: string,
   headers: Record<string, string>,
   invalidateCache = false,
-): Promise<Model[]> => {
+): Promise<Record<string, Model>> => {
   try {
     // Construct the URL with an optional cache-busting query parameter
     const url = invalidateCache ? `${modelsUrl}?_=${new Date().getTime()}` : modelsUrl
@@ -443,7 +482,11 @@ const availableModelsTmp = async (
     const data = (await response.json()) as { data: Model[] }
 
     // Return the list of models directly
-    return data.data
+    const models = data.data.reduce<Record<string, Model>>((acc, m) => {
+      acc[m.id] = m
+      return acc
+    }, {})
+    return models
   } catch (error) {
     console.error('Error fetching models:', error)
     throw error // re-throwing the error to be handled by the calling code

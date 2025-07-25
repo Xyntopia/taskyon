@@ -99,29 +99,11 @@ const state = useAppStateStore()
 
 const selectModelInput = ref()
 
-const llmModelsSelection = computed(() => {
-  if (selectedApi.value === 'taskyon') {
-    // if we have a taskyon key defined only display the models allowed for that key...
-    if (state.tyPublicKey?.model && state.tyPublicKey.model.length > 0) {
-      if (state.tyPublicKey.model.includes('*')) {
-        return tystate.llmModels
-      } else {
-        const models = state.tyPublicKey.model
-        return models.map((m) => {
-          console.log('only models from our key are available:', models)
-          return { id: m, description: 'Model defined in ty public key.' }
-        })
-      }
-    }
-  }
-  return tystate.llmModels
-})
-
 const modelOptions = computed(() => {
   // openai has no pricing information attached, so we sort it in different ways...
   console.log('calculate model options!')
   if (selectedApi.value === 'openai') {
-    const options = [...tystate.llmModels]
+    const options = Object.values(tystate.llmModels)
       .sort((m1, m2) => m1.id.localeCompare(m2.id))
       .map((m) => ({
         label: `${m.id}`,
@@ -129,9 +111,11 @@ const modelOptions = computed(() => {
       }))
     return options
   } else {
-    let llmModels: typeof tystate.llmModels = llmModelsSelection.value
+    let llmModels = Object.values(tystate.llmModels)
     if (showVisionModels.value) {
-      llmModels = llmModels.filter((m) => m.architecture?.modality === 'text+image->text')
+      llmModels = Object.values(tystate.llmModels).filter(
+        (m) => m.architecture?.modality === 'text+image->text',
+      )
     }
     const options = llmModels
       .map((m) => {
