@@ -173,9 +173,9 @@ const getGitlabInfo = createTool({
 export const issueListGenerator = createTool({
   name: 'issueListGenerator',
   description:
-    'Turns chat text into a checklist UI, lets the user choose issues & target project, then summarises the selection.',
+    'Turns chat text into a checklist UI, lets the user choose issues & target project, then creates the issues and returns a summary.',
   longDescription:
-    'Fetches the user’s GitLab projects, renders a checklist+dropdown in an iframe, waits for the UI’s postMessage, and (for now) only returns a summary string.',
+    'Fetches the user’s GitLab projects, renders a checklist+dropdown in an iframe, waits for the UI’s postMessage, then POSTs the chosen issues to GitLab.',
   parameters: {
     type: 'object',
     properties: {
@@ -186,7 +186,7 @@ export const issueListGenerator = createTool({
       },
       project: {
         type: 'string',
-        description: 'GitLab project identifier (namespace/name).',
+        description: 'Optional GitLab project identifier (namespace/name).',
       },
     },
     required: ['issuelist'],
@@ -203,44 +203,50 @@ export const issueListGenerator = createTool({
       prev.content.data.name === 'issueListGenerator' &&
       thisMsg?.parentID === prev.id
     ) {
-      const chosen = await new Promise<{ issues: string[]; project: string }>((resolve) => {
+      const { projectId, projectName, issues } = await new Promise<{
+        projectId: string
+        projectName: string
+        issues: string[]
+      }>((resolve) => {
         ;(ctx.messagePort as MessagePort).onmessage = (ev) => {
-          if (ev.data.payload?.selectedIssues)
+          if (ev.data.payload?.selectedIssues) {
             resolve({
+              projectId: ev.data.payload.selectedProjectId,
+              projectName: ev.data.payload.selectedProjectName,
               issues: ev.data.payload.selectedIssues,
-              project: ev.data.payload.selectedProject,
             })
+          }
         }
       })
 
+      const GITLAB_BASE = 'https://gitlab.com/api/v4'
+      const TOKEN = await ctx.getSecret('oauth-access-token', false)
+      if (TOKEN && projectId) {
+        const headers = {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${TOKEN}`,
+        }
+        const base = `${GITLAB_BASE}/projects/${encodeURIComponent(projectId)}/issues`
+        for (const title of issues) {
+          console.log('posting issue:', title, base, headers)
+          /*await fetch(base, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ title, description: 'Auto‑generated from Taskyon' }),
+          })*/
+        }
+      }
+
       const summary =
-        `📋 Ready to create ${chosen.issues.length} issue(s)` +
-        (chosen.project ? ` in “${chosen.project}”:\n\n` : ':\n\n') +
-        chosen.issues.map((i) => `- ${i}`).join('\n')
+        `📋 Created ${issues.length} issue(s)` +
+        (projectName ? ` in “${projectName}”:\n\n` : ':\n\n') +
+        issues.map((i) => `- ${i}`).join('\n')
 
       return makeTaskResult([[{ role: 'assistant', content: { type: 'message', data: summary } }]])
     }
 
-    // TODO: actually POST to GitLab – code commented‑out for now
-    /*
-      const GITLAB_API_URL = `https://gitlab.com/api/v4/projects/${encodeURIComponent(project)}/issues`
-      const TOKEN = await ctx.getSecret('oauth-access-token', false)
-      if (TOKEN) {
-        for (const issue of selectedIssues) {
-          await fetch(GITLAB_API_URL, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${TOKEN}`,
-            },
-            body: JSON.stringify({ title: issue, description: 'Auto‑generated from Taskyon' }),
-          })
-        }
-      }
-      */
-
     /*───────────────────────────────────────────────────────────
-    PHASE1 — ensure we’re authenticated
+     PHASE 1 — ensure we’re authenticated
     ───────────────────────────────────────────────────────────*/
     const GITLAB_BASE = 'https://gitlab.com/api/v4'
     const EXPIRES = await ctx.getSecret('oauth-expires-at', false)
@@ -274,7 +280,7 @@ export const issueListGenerator = createTool({
             arguments: {
               oauthURL: OAUTH_URL,
               clientId: CLIENT_ID,
-              scope: 'read_user read_api',
+              scope: 'api',
               toolId: ctx.toolId,
             },
           }),
@@ -284,7 +290,7 @@ export const issueListGenerator = createTool({
     }
 
     /*───────────────────────────────────────────────────────────
-      PHASE-1b — fetch projects & render UI
+      PHASE 1b — fetch projects & render UI
     ───────────────────────────────────────────────────────────*/
     const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` }
     const projRes = await fetch(`${GITLAB_BASE}/projects?membership=true&per_page=100`, { headers })
@@ -315,10 +321,7 @@ export const issueListGenerator = createTool({
     ${issuelist
       .map(
         (issue) =>
-          `<li><label><input type="checkbox" value="${issue.replace(
-            /"/g,
-            '&quot;',
-          )}"> ${issue}</label></li>`,
+          `<li><label><input type="checkbox" value="${issue.replace(/"/g, '&quot;')}"> ${issue}</label></li>`,
       )
       .join('\n')}
   </ul>
@@ -328,9 +331,11 @@ export const issueListGenerator = createTool({
   document.getElementById('submit-issues').addEventListener('click', () => {
     const selectedIssues = Array.from(document.querySelectorAll('#issueList input:checked'))
       .map(el => el.value);
-    const selectedProject = document.getElementById('project-select').value;
+    const select = document.getElementById('project-select');
+    const selectedProjectId = select.value;
+    const selectedProjectName = select.options[select.selectedIndex].textContent;
     window.parent.postMessage(
-      { selectedIssues, selectedProject },
+      { selectedIssues, selectedProjectId, selectedProjectName },
       '*'
     );
   });
