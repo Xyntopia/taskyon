@@ -3,6 +3,7 @@ import { createTool } from '../taskyon/tools'
 import { taskTypeOptions } from '../taskyon/types'
 import type { TyTaskManager } from '../taskyon/taskManager'
 
+// TODO: provide a link to the search page from the result!
 export const taskSearcher = (taskManager: TyTaskManager) =>
   createTool({
     name: 'taskSearcher',
