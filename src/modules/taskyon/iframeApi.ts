@@ -29,48 +29,46 @@ export function setupIframeApi(
     'message',
     function (event: TyMessage) {
       // Check if the iframe is not the top-level window
-      if (window !== window.top) {
-        // Check if the message is from the parent window
-        if (event.source === window.parent) {
-          // Optionally, check the origin if you know what it should be
-          // For example, if you expect messages only from 'https://example.com'
-          /*if (event.origin === 'https://example.com') {
+      // we are not using this currently, because its possible that the iframe is
+      // embedded in another iframe, so we want to accept messages from the parent in any case.
+      // if (window !== window.top) {
+      // Check if the message is from the parent window
+      if (event.source === window.parent) {
+        // Optionally, check the origin if you know what it should be
+        // For example, if you expect messages only from 'https://example.com'
+        /*if (event.origin === 'https://example.com') {
             console.log('Request from parent:', event.data);
           } else {
             console.error('Message from unknown origin:', event.origin);
           }*/
-          console.log('Message from unknown origin:', event.origin, event)
-          // we wrap every call to the API in a try clause in order to make sure it doesn't blow up ;)
-          try {
-            // make sure, our message conforms to ty
-            const res = TaskyonMessage.safeParse(event.data)
-            if (res.success) {
-              match(res.data)
-                .with({ type: 'task' }, addNewTask(event, taskManager))
-                .with(
-                  { type: 'functionDescription' },
-                  addNewFunctionDescription(event, taskManager),
-                )
-                .with(
-                  { type: 'configurationMessage' },
-                  setConfiguration(llmSettings, appConfiguration, keys),
-                )
-              // we don't need "otherwise" here, because the other messages are currently handled by our
-              // remotefunctionhandler
-              // TODO:  BUT we want to chane this, and integrate the remote function handler with this API here as well...
-            } else {
-              console.error('could not convert message to task:', {
-                res,
-                event,
-              })
-            }
-          } catch (err) {
-            // TODO: return this to the parent, in order to indicate any errors..
-            console.error(err)
+        console.log('Message from unknown origin:', event.origin, event)
+        // we wrap every call to the API in a try clause in order to make sure it doesn't blow up ;)
+        try {
+          // make sure, our message conforms to ty
+          const res = TaskyonMessage.safeParse(event.data)
+          if (res.success) {
+            match(res.data)
+              .with({ type: 'task' }, addNewTask(event, taskManager))
+              .with({ type: 'functionDescription' }, addNewFunctionDescription(event, taskManager))
+              .with(
+                { type: 'configurationMessage' },
+                setConfiguration(llmSettings, appConfiguration, keys),
+              )
+            // we don't need "otherwise" here, because the other messages are currently handled by our
+            // remotefunctionhandler
+            // TODO:  BUT we want to chane this, and integrate the remote function handler with this API here as well...
+          } else {
+            console.error('could not convert message to task:', {
+              res,
+              event,
+            })
           }
-        } else {
-          console.error('Message not from parent window.')
+        } catch (err) {
+          // TODO: return this to the parent, in order to indicate any errors..
+          console.error(err)
         }
+      } else {
+        console.error('Message not from parent window.')
       }
     },
     false,
