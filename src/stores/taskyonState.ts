@@ -15,7 +15,7 @@ import { getApiConfig } from 'src/modules/taskyon/types'
 import { initTaskyon } from 'src/modules/taskyon/init'
 import { availableModels } from 'src/modules/taskyon/chat'
 import { setupIframeApi } from 'src/modules/taskyon/iframeApi'
-import { getDefaultParametersForTool, type InternalTool } from 'src/modules/taskyon/tools'
+import { getDefaultParametersForTool, toolCall, type InternalTool } from 'src/modules/taskyon/tools'
 import { useAppStateStore } from './appState'
 import { filter } from 'src/modules/frpBus'
 import { generateRsaOaepPair } from 'src/modules/crypto_webcrypto'
@@ -204,6 +204,20 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // callin ExecutionContext.interrupt();  cancels processing of current task
   console.log('initialize taskyon')
+
+  // TODO: move this into our taskyon library...
+  const entryNode = computed(() => {
+    return (
+      stateRefs.llmSettings.entryNode ??
+      toolCall({
+        name: 'chooseTool',
+        arguments: {
+          llmTools: stateRefs.llmSettings.enableOpenAiTools,
+        },
+      })
+    )
+  })
+
   const initTaskyonPromise = (async () =>
     await initTaskyon(
       stateRefs.llmSettings,
@@ -650,6 +664,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     currentModel,
     handleBotNameUpdate,
     connectMessageIframe,
+    entryNode,
   }
 }) // this state stores all information which
 // should be stored e.g. in browser LocalStorage

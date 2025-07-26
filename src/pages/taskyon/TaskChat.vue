@@ -44,7 +44,7 @@
         <CreateNewTask
           style="max-width: 48rem"
           :file-attachments="fileAttachments"
-          :force-task-props="state.llmSettings.taskTemplate"
+          :entry-node="tystate.entryNode"
           class="q-pa-md col self-stretch"
           :hide-task-info="state.minimalGui"
           :expert-mode="state.appConfiguration.expertMode"
@@ -151,7 +151,7 @@
         <CreateNewTask
           v-if="tystate.selectedThread.value.length > 0"
           :file-attachments="fileAttachments"
-          :force-task-props="state.llmSettings.taskTemplate"
+          :entry-node="tystate.entryNode"
           class="q-pa-xs"
           :hide-task-info="state.minimalGui"
           :expert-mode="state.appConfiguration.expertMode"

@@ -256,7 +256,6 @@
 
 <script setup lang="ts">
 import { computed, ref, toRefs } from 'vue'
-import { toolCall } from 'src/modules/taskyon/tools'
 import { partialTaskDraft } from 'src/modules/taskyon/types'
 import { llmSettings, appConfiguration } from 'src/modules/taskyon/types'
 import { useTaskyonStore } from 'stores/taskyonState'
@@ -284,8 +283,8 @@ import { QSelect } from 'quasar'
 import { deepCopy } from 'src/modules/utils'
 import { mdiFunctionVariant } from '@quasar/extras/mdi-v6'
 
-const { expertMode = false, forceTaskProps } = defineProps<{
-  forceTaskProps?: partialTaskDraft | undefined
+const { expertMode = false, entryNode } = defineProps<{
+  entryNode: partialTaskDraft
   hideTaskInfo?: boolean
   expertMode?: boolean
 }>()
@@ -364,7 +363,7 @@ const functionSchema = computed(() => {
 })
 
 const currentnewTask = computed(() => {
-  const task = deepCopy(forceTaskProps || ({} as partialTaskDraft))
+  const task = {} as partialTaskDraft
   if (tystate.currentModelId) {
     task.name = undefined
     if (state.createTaskType.type === 'functioncall') {
@@ -501,12 +500,7 @@ async function addNewTask(execute = true) {
 
   if (currentnewTask.value.content.type === 'message') {
     if (state.llmSettings.enableToolChooser) {
-      const chooseTask = toolCall({
-        name: 'chooseTool',
-        arguments: {
-          llmTools: state.llmSettings.enableOpenAiTools,
-        },
-      })
+      const chooseTask = deepCopy(entryNode)
       newTaskChain.push(chooseTask)
       console.log('adding message completion task:', currentnewTask.value.content.data)
     } else {

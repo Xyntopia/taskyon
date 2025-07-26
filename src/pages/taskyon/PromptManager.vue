@@ -46,7 +46,7 @@
           </q-scroll-area>
         </div>
         <q-card class="col-auto q-pa-xs" flat>
-          <CreateNewTask />
+          <CreateNewTask :entry-node="tystate.entryNode" />
         </q-card>
       </div>
     </div>

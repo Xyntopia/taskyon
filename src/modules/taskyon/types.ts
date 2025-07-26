@@ -654,9 +654,13 @@ For more information check this link: https://platform.openai.com/docs/guides/fu
     description:
       'Maximum number of tasks which are allowed to be performed autonomously before stopping.',
   }),
-  taskTemplate: partialTaskDraft.optional().meta({
-    description:
-      'A task template which can be provided for new tasks (E.g. which model to use). This is important when embedding tasyon in another webpage.',
+  entryNode: partialTaskDraft.optional().meta({
+    description: `A task template which is used as an entry node for taskyon.
+When a user starts a conversation, this is always the first task that is called.
+
+If none is specified, the "chooseTool" tool is used for tool calls and
+simple chatCompletion for non-tool calls.
+`,
   }),
   enableToolChooser: z.boolean().default(true).meta({
     description:
