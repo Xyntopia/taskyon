@@ -435,6 +435,7 @@ function generateFollowUpTasksFromResult(
   chatModel: string,
   llmTools: boolean,
   allTools: Record<string, ToolBase>,
+  prompts: string[] | undefined,
 ): partialTaskDraft[] {
   console.log('generate follow up task')
 
@@ -496,6 +497,7 @@ function generateFollowUpTasksFromResult(
       console.log('no more tools to call, finalize the result :)')
       newTasks.push(
         createChatCompletionTask({
+          prompts: prompts || [],
           model: chatModel,
           goal: 'SimpleCompletion',
         }),
@@ -847,6 +849,7 @@ export async function createChatCompletionTool(
         selectedModel,
         !!llmTools,
         toolDefs,
+        prompts,
       )
 
       return makeTaskResult([newTaskChain])
