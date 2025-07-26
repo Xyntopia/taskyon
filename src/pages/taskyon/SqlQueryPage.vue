@@ -4,7 +4,7 @@
     <q-page-container>
       <q-page class="row">
         <!-- SQL Card -->
-        <q-card class="col">
+        <q-card class="col q-ma-md">
           <q-card-section>
             <div class="text-h6">SQL Queries</div>
             <div class="text-subtitle2">Tables in DB: {{ allTables }}</div>
@@ -29,11 +29,6 @@
             <div class="text-h6 q-mb-sm">Results</div>
             <pre style="max-height: 300px; overflow: auto">{{ formattedResult }}</pre>
           </q-card-section>
-
-          <q-card-section v-if="errorMessage" class="text-negative">
-            <div class="text-h6 q-mb-sm">Error</div>
-            <pre>{{ errorMessage }}</pre>
-          </q-card-section>
         </q-card>
 
         <!-- Taskyon iframe -->
@@ -43,7 +38,7 @@
             title="Taskyon agent"
             frameborder="0"
             src="http://localhost:9000"
-            style="width: 100%; height: 100%; border: 1px solid #ccc"
+            style="width: 100%; height: 100%; border: 1px solid transparent"
           ></iframe>
         </div>
       </q-page>
@@ -58,10 +53,11 @@ import { asyncComputed } from 'src/modules/vueUtils'
 
 // Taskyon
 import type { partialTyConfiguration } from 'src/modules/taskyon/iframeApiTypes'
-import type { ClientTool } from 'src/modules/taskyon/tools'
-import { createTool } from 'src/modules/taskyon/tools'
+import { createTool, makeTaskResult, toolCall } from 'src/modules/taskyon/tools'
 import { initializeTaskyon } from 'src/modules/client/tyClient'
 import { dump } from 'js-yaml'
+import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
+import type { JSONSchema7 } from 'json-schema'
 
 // Row interfaces (no `any`)
 interface TableNameRow {
@@ -108,36 +104,10 @@ async function executeQuery() {
   try {
     const res = await db.value?.query(sqlQuery.value)
     queryResult.value = res?.rows ?? null
-    return queryResult.value
   } catch (err) {
-    errorMessage.value = err instanceof Error ? err.message : String(err)
-    return { error: errorMessage.value }
+    queryResult.value = err instanceof Error ? err.message : String(err)
   }
 }
-
-// Taskyon tools
-const tools: ClientTool[] = [
-  createTool({
-    name: 'setSql',
-    description: 'Replace the current SQL query in the editor with the provided string.',
-    parameters: {
-      type: 'object',
-      properties: { sql: { type: 'string', description: 'SQL to place in the editor' } },
-      required: ['sql'],
-      additionalProperties: false,
-    } as const,
-    function: ({ sql }) => {
-      sqlQuery.value = sql
-      return 'ok'
-    },
-  }),
-  createTool({
-    name: 'runSql',
-    description: 'Execute the SQL currently in the editor and return result rows.',
-    parameters: { type: 'object', properties: {}, additionalProperties: false } as const,
-    function: async () => executeQuery(),
-  }),
-]
 
 const sqlschemaquery = `
 -- Postgres ≥ 9.4 (jsonb_build_object / jsonb_agg)
@@ -166,37 +136,84 @@ FROM (
 ) t;
 `
 
-const schema = asyncComputed<Record<string, unknown>>(async () => {
-  if (db.value) {
-    const res = await db.value.query(sqlschemaquery)
-    return res
-  }
-  return {}
-}, {})
+onMounted(async () => {
+  db.value = await getDatabase('taskyon')
 
-// Taskyon configuration
-const configuration: partialTyConfiguration = {
-  llmSettings: {
-    selectedApi: 'taskyon',
-    enableOpenAiTools: false,
-    enableToolChooser: true,
-    taskChatTemplates: {
-      basePrompt: `
-You are a SQL assistant helping users write and execute SQL queries against a PostgreSQL database.
-You can use the tools provided to set the SQL query, run it, and describe the database schema.
+  // Taskyon tools
+  const tools = [
+    createTool({
+      name: 'setSqlQuery',
+      description: 'Replace the current SQL query in the editor with the provided string',
+      parameters: {
+        type: 'object',
+        properties: { sql: { type: 'string', description: 'SQL to place in the editor' } },
+        required: [],
+        additionalProperties: false,
+      } as const satisfies JSONSchema7,
+      function: async ({ sql }) => {
+        if (!sql) {
+          const schema = await db.value!.query(sqlschemaquery)
+          const toolPrompt = `
+You are are the taskyon SQL assistant helping users write and execute SQL queries against the local
+in-browser pglite PostgreSQL database.
+
+You can use the tools provided to set the SQL query.
 Always ensure that the SQL you generate is syntactically correct and safe to run.
 
 The database has the following tables and columns:
 
-    ${dump(schema.value)}
-`,
-    },
-  },
-  appConfiguration: { guiMode: 'default' },
-}
+    ${dump(schema)}
 
-onMounted(async () => {
-  db.value = await getDatabase('taskyon')
+The current SQL query in the editor is:
+
+    ${sqlQuery.value}
+
+The current results of the last executed query are:
+
+    ${dump(queryResult.value)}
+
+Only use the tool 'setSqlQuery' Tool if you think the user wants to change the SQL query.
+`
+
+          return makeTaskResult([
+            createChatCompletionTask({
+              prompts: [toolPrompt],
+              goal: 'ChooseTool',
+              allowedTools: ['setSqlQuery'],
+            }),
+          ])
+        }
+
+        sqlQuery.value = sql
+        return makeTaskResult([
+          {
+            role: 'assistant',
+            content: {
+              type: 'message',
+              data: `The SQL query has been updated to:\n\`\`\`sql\n${sql}\n\`\`\``,
+            },
+          },
+          {
+            role: 'system',
+            content: {
+              type: 'return',
+              data: 'OK',
+            },
+          },
+        ])
+      },
+    }),
+  ]
+
+  const configuration: partialTyConfiguration = {
+    llmSettings: {
+      selectedApi: 'taskyon',
+      enableOpenAiTools: false,
+      enableToolChooser: true,
+      entryNode: toolCall({ name: 'setSqlQuery', arguments: {} }),
+    },
+    appConfiguration: { guiMode: 'default' },
+  }
   void initializeTaskyon(tools, configuration)
 })
 
