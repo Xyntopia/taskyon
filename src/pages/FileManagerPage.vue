@@ -1,3 +1,4 @@
+<!-- FileManagerPage.vue – DEBUG INSTRUMENTED -->
 <template>
   <q-layout>
     <q-page-container>
@@ -6,7 +7,9 @@
 
         <q-card>
           <q-card-section>
-            <div class="text-h6">Taskyon OPFS Browser</div>
+            <div class="text-h6">
+              Taskyon OPFS Browser <span class="text-caption text-grey">(debug build)</span>
+            </div>
           </q-card-section>
           <q-separator />
 
@@ -28,39 +31,46 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { uid } from 'quasar'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import type { QTreeNode } from 'quasar'
 import { matFolder } from '@quasar/extras/material-icons'
 import { mdiFile } from '@quasar/extras/mdi-v6'
 
-/** Helper for browsers that haven’t shipped full typing for .entries() */
+/* ---------- helpers ---------- */
+
+/** Pretty-print file sizes for the UI */
+function formatSize(size?: number) {
+  if (size == null) return ''
+  if (size >= 1_048_576) return `${(size / 1_048_576).toFixed(2)} MB`
+  if (size >= 1_024) return `${(size / 1_024).toFixed(2)} KB`
+  return `${size} B`
+}
+
+/** OPFS directory handle with typed .entries() (just for TS) */
 type DirHandle = FileSystemDirectoryHandle & {
   entries(): AsyncIterableIterator<[string, FileSystemHandle]>
 }
 
 /** Our node extends Quasar’s, keeps TypeScript happy */
 interface TreeNode extends QTreeNode {
-  /** Quasar’s QTreeNode already has id/label/icon/children */
   handle: FileSystemHandle
   kind: 'file' | 'directory'
-  size?: number // for files
+  size?: number
 }
 
-const treeData = ref<TreeNode[]>([]) // QTreeNode compatible
+/* ---------- state ---------- */
 
-function formatSize(s?: number) {
-  if (s == null) return ''
-  if (s >= 1_048_576) return `${(s / 1_048_576).toFixed(2)} MB`
-  if (s >= 1_024) return `${(s / 1_024).toFixed(2)} KB`
-  return `${s} B`
-}
+const treeData = ref<TreeNode[]>([])
 
-// ---------- directory → nodes ----------
+/* ---------- directory → nodes ---------- */
+
 async function dirHandleToNodes(dir: DirHandle): Promise<TreeNode[]> {
+  console.log('[dirHandleToNodes] Reading directory', dir)
   const out: TreeNode[] = []
   for await (const [name, handle] of dir.entries()) {
+    console.log('  ├─ found', name, 'kind=', handle.kind)
     if (handle.kind === 'file') {
       const file = await handle.getFile()
       out.push({
@@ -78,28 +88,34 @@ async function dirHandleToNodes(dir: DirHandle): Promise<TreeNode[]> {
         icon: matFolder,
         kind: 'directory',
         handle,
-        lazy: true, // omit `children` → optional stays absent
+        lazy: true, // let QTree know it should invoke @lazy-load
       })
     }
   }
-  return out.sort((a, b) =>
+  const sorted = out.sort((a, b) =>
     a.kind === b.kind
       ? (a.label ?? '').localeCompare(b.label ?? '')
       : a.kind === 'directory'
         ? -1
         : 1,
   )
+  console.log('[dirHandleToNodes] → returning', sorted.length, 'nodes')
+  return sorted
 }
 
-// ---------- initial root ----------
+/* ---------- initial root ---------- */
+
 async function buildRoot() {
+  console.log('[buildRoot] Fetching OPFS root')
   const root: DirHandle = await navigator.storage.getDirectory()
   treeData.value = await dirHandleToNodes(root)
+  /* Force refresh in case Quasar cached the array reference */
+  await nextTick()
+  console.log('[buildRoot] Root built; nodes =', treeData.value.length)
 }
 
-// ---------- lazy loader (adapter to Quasar signature) ----------
-/* Quasar emits { node, key, done, fail }.  Cast `children` so
-   the callback sees the plain QTreeNode[] it expects. */
+/* ---------- lazy loader ---------- */
+
 async function handleLazyLoad({
   node,
   done,
@@ -108,27 +124,41 @@ async function handleLazyLoad({
   key: string
   done: (c?: QTreeNode[]) => void
 }) {
-  if (node.kind === 'directory' && node.children === undefined) {
-    const children = await dirHandleToNodes(node.handle as DirHandle)
-    node.children = children
-    done(children as QTreeNode[]) // cast → type matches Quasar
+  // 1️⃣  use node.lazy as the decisive flag
+  if (node.kind === 'directory' && node.lazy) {
+    try {
+      const children = await dirHandleToNodes(node.handle as DirHandle)
+
+      // update the node so later clicks can find the files
+      node.children = children
+      node.lazy = false // Quasar will also flip this, but safe to do
+
+      done(children as QTreeNode[])
+    } catch (err) {
+      console.error('[handleLazyLoad] failed:', err)
+      done() // prevent spinner from hanging
+    }
   } else {
     done((node.children ?? []) as QTreeNode[])
   }
 }
 
-// ---------- click selection ----------
+/* ---------- click selection ---------- */
+
 async function onSelect(ids: string[]) {
   const id = ids[0]
   if (!id) return
-  // depth-first search for clicked node
+  console.log('[onSelect] Clicked node id=', id)
+
+  // depth-first search for the clicked node
   const stack: TreeNode[] = [...treeData.value]
   while (stack.length) {
     const n = stack.pop()!
     if (n.id === id) {
+      console.log('  ├─ Node found:', n)
       if (n.kind === 'file') {
         const file = await (n.handle as FileSystemFileHandle).getFile()
-        console.log(`▼ ${n.label}\n${await file.text()}`)
+        console.log(`▼ FILE CONTENT (${n.label}) ▼\n${await file.text()}\n▲ END FILE ▲`)
       }
       break
     }
@@ -136,16 +166,21 @@ async function onSelect(ids: string[]) {
   }
 }
 
-// ---------- uploads ----------
-async function addFiles(list: File[]) {
+/* ---------- uploads ---------- */
+
+async function addFiles(files: File[]) {
   const root: DirHandle = await navigator.storage.getDirectory()
-  for (const f of list) {
+  console.log('[addFiles] Adding', files.length, 'file(s) to root')
+  for (const f of files) {
     const h = await root.getFileHandle(f.name, { create: true })
     const w = await h.createWritable()
     await f.stream().pipeTo(w)
+    console.log('  └─ Added', f.name)
   }
   await buildRoot()
 }
+
+/* ---------- bootstrap ---------- */
 
 onMounted(buildRoot)
 </script>
