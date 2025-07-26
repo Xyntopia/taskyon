@@ -130,6 +130,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/fm',
+    component: () => import('pages/FileManagerPage.vue'),
+    meta: {
+      title: 'File Manager',
+      description: 'Manage files saved in Taskyon OPFS.',
+    },
+  },
+  {
     path: '/sql',
     component: () => import('pages/taskyon/SqlQueryPage.vue'),
     meta: {
