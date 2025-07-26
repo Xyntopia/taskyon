@@ -32,13 +32,13 @@
         </q-card>
 
         <!-- Taskyon iframe -->
-        <div class="col">
+        <div class="col" style="min-height: 0">
           <iframe
             id="taskyon"
             title="Taskyon agent"
             frameborder="0"
             src="http://localhost:9000"
-            style="width: 100%; height: 100%; border: 1px solid transparent"
+            style="width: 100%; height: 99%"
           ></iframe>
         </div>
       </q-page>
