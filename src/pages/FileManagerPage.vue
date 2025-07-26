@@ -8,7 +8,10 @@
         <q-card>
           <q-card-section>
             <div class="text-h6">
-              Taskyon OPFS Browser <span class="text-caption text-grey">(debug build)</span>
+              Taskyon File Browser
+              <InfoDialog
+                info-text="This browser shows all files that taskyon saved in its OPFS file system and can interact with!"
+              />
             </div>
           </q-card-section>
           <q-separator />
@@ -37,6 +40,7 @@ import FileDropzone from 'src/components/FileDropzone.vue'
 import type { QTreeNode } from 'quasar'
 import { matFolder } from '@quasar/extras/material-icons'
 import { mdiFile } from '@quasar/extras/mdi-v6'
+import InfoDialog from 'src/components/InfoDialog.vue'
 
 /* ---------- helpers ---------- */
 
