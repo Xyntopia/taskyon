@@ -23,7 +23,23 @@ export const taskResult = z.object({
 })
 export type taskResult = z.infer<typeof taskResult>
 
-export function makeTaskResult(tasks: partialTaskDraft[][]): taskResult {
+export function makeTaskResult(
+  tasks: partialTaskDraft | partialTaskDraft[] | partialTaskDraft[][],
+): taskResult {
+  let tasksArray: partialTaskDraft[][]
+  if (Array.isArray(tasks)) {
+    if (Array.isArray(tasks[0])) {
+      // Already a 2D array
+      tasksArray = tasks as partialTaskDraft[][]
+    } else {
+      // 1D array, wrap in another array
+      tasksArray = [tasks as partialTaskDraft[]]
+    }
+  } else {
+    // 0D, wrap in 2D array
+    tasksArray = [[tasks]]
+  }
+  tasks = tasksArray
   return {
     taskResultMarker: taskMarker,
     taskChainList: tasks,
@@ -79,7 +95,9 @@ export function createTool<T, SCHEMA extends Readonly<JSONSchema>, PARAMS = From
 }
 // TODO: automatically type the FunctionCall correctly using the
 //       json definition from a tool :)
-export function toolCall(f: FunctionCall): partialTaskDraft {
+export function toolCall(
+  f: FunctionCall,
+): partialTaskDraft & { content: { type: 'functioncall'; data: FunctionCall } } {
   return {
     role: 'function',
     name: f.name,
