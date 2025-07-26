@@ -67,9 +67,11 @@ export function setupIframeApi(
           // TODO: return this to the parent, in order to indicate any errors..
           console.error(err)
         }
-      } else {
-        console.error('Message not from parent window.')
       }
+      // we only use this for debugging purposes, so we can see if any messages
+      /*else {
+        console.error('Message not from parent window.')
+      }*/
     },
     false,
   )
