@@ -192,8 +192,8 @@ export function createMultiButtonPlugin(
                 lang: '${lang}',
                 containerId: '${blockId}'
               };
-              const tgt = window.parent !== window ? window.parent : window;
-              tgt.postMessage(msg, '*');
+              if(window.parent !== window) window.parent.postMessage(msg, '*');
+              window.postMessage(msg, '*'); // also post to self for local handling
             "
           >${b.label}</button>
         `
