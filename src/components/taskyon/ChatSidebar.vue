@@ -73,16 +73,6 @@
             v-if="state.appConfiguration.expertMode"
             dense
             flat
-            :icon="mdiRobotConfusedOutline"
-            label="Customize"
-            to="/prompts"
-          ></q-btn>
-        </div>
-        <div>
-          <q-btn
-            v-if="state.appConfiguration.expertMode"
-            dense
-            flat
             :icon="mdiSubdirectoryArrowRight"
             label="Detailed Task View"
             to="/detailed"
@@ -98,11 +88,7 @@ import { ref, watch } from 'vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import FileDropzone from 'components/FileDropzone.vue'
 import { matSearch, matFileUpload } from '@quasar/extras/material-icons'
-import {
-  mdiRobotConfusedOutline,
-  mdiForumPlus,
-  mdiSubdirectoryArrowRight,
-} from '@quasar/extras/mdi-v6'
+import { mdiForumPlus, mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import TaskChainMenu from './TaskChainMenu.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { useQuasar } from 'quasar'
