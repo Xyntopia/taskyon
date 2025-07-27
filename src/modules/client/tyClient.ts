@@ -1,6 +1,6 @@
 // we can compile this file to js to js using "yarn build:lib"
 
-import type { partialTyConfiguration, TaskyonMessage } from '../taskyon/iframeApiTypes'
+import type { partialTyConfiguration, TaskyonMessage } from '../taskyon/apiTypes'
 import type { ClientTool } from '../taskyon/tools'
 
 const createTySend =

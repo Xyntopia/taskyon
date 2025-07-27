@@ -17,7 +17,7 @@
 </template>
 
 <script setup lang="ts">
-import type { partialTyConfiguration } from 'src/modules/taskyon/iframeApiTypes'
+import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import type { ClientTool } from 'src/modules/taskyon/tools'
 import { createTool } from 'src/modules/taskyon/tools'
 import { initializeTaskyon } from 'src/modules/client/tyClient'

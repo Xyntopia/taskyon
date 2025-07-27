@@ -1,7 +1,7 @@
 import { ToolBase } from './types'
 import type { llmSettings } from './types'
 import { deepMergeReactive } from '../utils'
-import { TaskyonMessage } from './iframeApiTypes'
+import { TaskyonMessage } from './apiTypes'
 import type { TyTaskManager } from './taskManager'
 import { match } from 'ts-pattern'
 import { dump } from 'js-yaml'
@@ -43,30 +43,7 @@ export function setupIframeApi(
           }*/
         console.log('Message from unknown origin:', event.origin, event)
         // we wrap every call to the API in a try clause in order to make sure it doesn't blow up ;)
-        try {
-          // make sure, our message conforms to ty
-          const res = TaskyonMessage.safeParse(event.data)
-          if (res.success) {
-            match(res.data)
-              .with({ type: 'task' }, addNewTask(event, taskManager))
-              .with({ type: 'functionDescription' }, addNewFunctionDescription(event, taskManager))
-              .with(
-                { type: 'configurationMessage' },
-                setConfiguration(llmSettings, appConfiguration, keys),
-              )
-            // we don't need "otherwise" here, because the other messages are currently handled by our
-            // remotefunctionhandler
-            // TODO:  BUT we want to chane this, and integrate the remote function handler with this API here as well...
-          } else {
-            console.error('could not convert message to task:', {
-              res,
-              event,
-            })
-          }
-        } catch (err) {
-          // TODO: return this to the parent, in order to indicate any errors..
-          console.error(err)
-        }
+        taskyonApi(event, taskManager, llmSettings, appConfiguration, keys)
       }
       // we only use this for debugging purposes, so we can see if any messages
       /*else {
@@ -78,6 +55,38 @@ export function setupIframeApi(
 
   const readyMessage: TaskyonMessage = { type: 'taskyonReady' }
   window.parent.postMessage(readyMessage, '*')
+}
+
+function taskyonApi(
+  event: TyMessage,
+  taskManager: TyTaskManager,
+  llmSettings: llmSettings,
+  appConfiguration: Record<string, unknown>,
+  keys: Record<string, string>,
+) {
+  try {
+    const res = TaskyonMessage.safeParse(event.data)
+    if (res.success) {
+      match(res.data)
+        .with({ type: 'task' }, addNewTask(event, taskManager))
+        .with({ type: 'functionDescription' }, addNewFunctionDescription(event, taskManager))
+        .with(
+          { type: 'configurationMessage' },
+          setConfiguration(llmSettings, appConfiguration, keys),
+        )
+      // we don't need "otherwise" here, because the other messages are currently handled by our
+      // remotefunctionhandler
+      // TODO:  BUT we want to chane this, and integrate the remote function handler with this API here as well...
+    } else {
+      console.error('could not convert message to task:', {
+        res,
+        event,
+      })
+    }
+  } catch (err) {
+    // TODO: return this to the parent, in order to indicate any errors..
+    console.error(err)
+  }
 }
 
 function addNewTask(event: TyMessage, taskManager: TyTaskManager) {

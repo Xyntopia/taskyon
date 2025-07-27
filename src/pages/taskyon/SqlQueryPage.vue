@@ -52,7 +52,7 @@ import { getDatabase, type TyPGDB } from 'src/modules/pglite.api'
 import { asyncComputed } from 'src/modules/vueUtils'
 
 // Taskyon
-import type { partialTyConfiguration } from 'src/modules/taskyon/iframeApiTypes'
+import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { createTool, makeTaskResult, toolCall } from 'src/modules/taskyon/tools'
 import { initializeTaskyon } from 'src/modules/client/tyClient'
 import { dump } from 'js-yaml'
