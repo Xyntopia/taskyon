@@ -11,7 +11,7 @@ export type Observer<T> = (value: T) => void | Promise<void>
 export type Unsubscribe = () => void
 
 export interface syncStream<T> {
-  subscribe(observer: Observer<T>): Unsubscribe
+  subscribe: (observer: Observer<T>) => Unsubscribe
 }
 
 // we have a separate stream declaration here because we want to
@@ -28,19 +28,64 @@ export function createStream<T>(): frpBus<T> {
   const observers: Observer<T>[] = []
   return {
     stream: {
-      subscribe(observer: Observer<T>): Unsubscribe {
+      subscribe: (observer: Observer<T>) => {
         observers.push(observer)
-        return () => {
+        return (() => {
           const index = observers.indexOf(observer)
           if (index > -1) observers.splice(index, 1)
-        }
+        }) as Unsubscribe
       },
     },
-    emit(value: T) {
+    emit: (value: T) => {
       // Create a copy to avoid issues if observers unsubscribe during iteration
       ;[...observers].forEach((observer) => void observer(value))
     },
   }
+}
+
+export function createDuplexChannel<T>() {
+  //export function createStream
+  const outS = createStream<T>()
+  const inS = createStream<T>()
+
+  const a = {
+    send: outS.emit,
+    receive: inS.stream.subscribe,
+  }
+
+  const b = {
+    send: inS.emit,
+    receive: outS.stream.subscribe,
+  }
+
+  return { a, b }
+}
+
+export type DuplexChannel<T> = ReturnType<typeof createDuplexChannel<T>>
+export type Port<T> = DuplexChannel<T>['a']
+
+export function MessageChannelBridge<T>(dport: Port<T>, mport: MessagePort) {
+  const unsub = dport.receive((msg) => mport.postMessage(msg))
+  mport.onmessage = (msg) => dport.send(msg.data)
+
+  const destroy = () => {
+    unsub()
+    mport.close()
+  }
+
+  return { destroy }
+}
+
+export function MessageChannelAdapter<T>(port: Port<T>) {
+  // we choose port2 as the "outside" port
+  const { port1, port2 } = new MessageChannel()
+
+  // incoming message from outside
+  port1.onmessage = (msg) => {
+    port.send(msg.data)
+  }
+  port.receive((msg) => port1.postMessage(msg))
+  return port2
 }
 
 // Operator: transform each value from the source stream
