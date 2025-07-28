@@ -71,6 +71,9 @@ export async function initTaskyon(
   // these stream defines that clients can use to communicate with taskyon
   // (e.g. iframes which are connected to taskyon)
   // we want full duplex communication here. And define two streams for this.
+  // "outPort" is the outwards port which is used by 3rd party apps
+  // to communicate with taskyon.
+  // "inPort" is the other side of the channel and is used by taskyon itself
   const { a: outPort, b: inPort } = createDuplexChannel<TaskyonMessage>()
 
   const taskManagerInstance = await useTyTaskManager(llmSettings.vectorizationModel)
