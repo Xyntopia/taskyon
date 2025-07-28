@@ -58,6 +58,7 @@ export async function initTaskyon(
     ...taskOrganizationTools,
     ...storageTools,
     ...proceduralTools,
+    createAddNewToolTool(),
     wfcGenerator,
     executePythonScript,
     localVectorStore,
@@ -68,17 +69,8 @@ export async function initTaskyon(
     //ragAddTool,
     ...EnvironmentTools,
   ]
-  // these stream defines that clients can use to communicate with taskyon
-  // (e.g. iframes which are connected to taskyon)
-  // we want full duplex communication here. And define two streams for this.
-  // "outPort" is the outwards port which is used by 3rd party apps
-  // to communicate with taskyon.
-  // "inPort" is the other side of the channel and is used by taskyon itself
-  const { a: outPort, b: inPort } = createDuplexChannel<TaskyonMessage>()
 
   const taskManagerInstance = await useTyTaskManager(llmSettings.vectorizationModel)
-
-  taskyonApi(inPort, taskManagerInstance, llmSettings, apiKeys)
 
   const secretStore = withSecretStore(
     createCombinedCrudWrapper([
@@ -105,7 +97,6 @@ export async function initTaskyon(
     createToolSearcher(taskManagerInstance),
     createChooseTool(taskManagerInstance),
     taskSearcher(taskManagerInstance),
-    createAddNewToolTool(),
     createOAuthTool(secretStore),
   )
   taskManagerInstance.addDefaultTools(ToolList)
@@ -125,14 +116,27 @@ export async function initTaskyon(
     iframeMultiPlexer.all$,
   )
 
+  // these stream defines that clients can use to communicate with taskyon
+  // (e.g. iframes which are connected to taskyon)
+  // we want full duplex communication here. And define two streams for this.
+  // "outPort" is the outwards port which is used by 3rd party apps
+  // to communicate with taskyon.
+  // "inPort" is the other side of the channel and is used by taskyon itself
+  const { a: outPort, b: inPort } = createDuplexChannel<TaskyonMessage>()
+
+  taskyonApi(inPort, taskManagerInstance, llmSettings, apiKeys)
+
   return {
+    // TODO: not sure, if the iframeMultiPlexer should be a taskyon functionality?
+    //       it seems very "GUI"-oriented... maybe simply sending a message on "outPort"
+    //       would be sufficient?
     connectMessageIframe: iframeMultiPlexer.attachIframe,
     taskManagerInstance,
-    workerStream,
-    chatCompletionStream,
-    workerStop,
-    queueTask,
-    secretStore,
+    workerStream, // TODO: integrate with outPort
+    chatCompletionStream, // TODO: integrate with outPort
+    workerStop, // TODO: integrate with outPort
+    queueTask, // TODO: integrate with outPort!
+    secretStore, // TODO: integrate with outPort!
     outPort,
   }
 }
