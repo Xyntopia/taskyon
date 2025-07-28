@@ -260,3 +260,21 @@ export async function executeCodeInIframe(
     })
   })
 }
+
+export async function waitForMessagePort(
+  filter: (ev: MessageEvent) => boolean,
+): Promise<MessagePort> {
+  return new Promise<MessagePort>((resolve) => {
+    const handler = (ev: MessageEvent) => {
+      console.log('got message from', ev)
+      if (!ev.ports?.[0] || !filter(ev)) return
+      console.log('Got MessagePort from', ev.origin)
+      const nativePort = ev.ports[0]
+      nativePort.start()
+      window.removeEventListener('message', handler)
+      resolve(nativePort)
+    }
+
+    window.addEventListener('message', handler)
+  })
+}
