@@ -14,14 +14,14 @@ import { useQuasar } from 'quasar'
 import { getApiConfig } from 'src/modules/taskyon/types'
 import { initTaskyon } from 'src/modules/taskyon/init'
 import { availableModels } from 'src/modules/taskyon/chat'
-import { setupIframeApi } from 'src/modules/taskyon/api'
 import { getDefaultParametersForTool, toolCall, type InternalTool } from 'src/modules/taskyon/tools'
 import { useAppStateStore } from './appState'
-import { filter } from 'src/modules/frpBus'
+import { filter, MessageChannelBridge } from 'src/modules/frpBus'
 import { generateRsaOaepPair } from 'src/modules/crypto_webcrypto'
 import { setColors } from 'src/boot/brand-colors'
 import { setPrismTheme } from 'src/modules/markdownUtils '
 import { onScopeDispose } from 'vue'
+import { waitForMessagePort } from 'src/modules/taskyon/iframeWorker'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -218,8 +218,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     )
   })
 
-  const initTaskyonPromise = (async () =>
-    await initTaskyon(
+  const initTaskyonPromise = (async () => {
+    const tyInit = await initTaskyon(
       stateRefs.llmSettings,
       stateRefs.keys,
       defineTyGuiTools(),
@@ -227,7 +227,39 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       //       so recovery is currenty impossible. We would like to give te user the ability
       //       to save this recovery key somewhere else in order to be able to recover their passwords.
       async () => (await generateRsaOaepPair()).publicKey,
-    ))()
+    )
+    // TODO:
+    // deepMergeReactive(appConfiguration, newConfig.appConfiguration, 'overwrite')
+
+    // set up iframe API and hook it up to our taskyon api
+    if ($q.platform.within.iframe) {
+      const mport = await waitForMessagePort((ev) => {
+        // Check if the iframe is not the top-level window
+        // we are not using this currently, because its possible that the iframe is
+        // embedded in another iframe, so we want to accept messages from the parent in any case.
+        // if (window !== window.top) {
+        // Check if the message is from the parent window
+        return ev.source === window.parent && ev.data?.type === 'initPort'
+        // Optionally, check the origin if you know what it should be
+        // For example, if you expect messages only from 'https://example.com'
+        /*if (event.origin === 'https://example.com') {
+                  console.log('Request from parent:', event.data);
+                } else {
+                  console.error('Message from unknown origin:', event.origin);
+                }*/
+        //console.log('Message from unknown origin:', event.origin, event)
+        // we wrap every call to the API in a try clause in order to make sure it doesn't blow up ;)
+        // we only use this for debugging purposes, so we can see if any messages
+        /*else {
+              console.error('Message not from parent window.')
+            }*/
+      })
+      // connect the iframe parent to our API through a message channel port that we received...
+      MessageChannelBridge(tyInit.outPort, mport)
+      mport.postMessage('taskyon connected!')
+    }
+    return tyInit
+  })()
 
   // Access taskManagerInstance and addTask2Tree without redundant awaits
   const getTaskManager = async () => (await initTaskyonPromise)['taskManagerInstance']
@@ -450,19 +482,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   )
 
   const modelLookUp = llmModelsInternal
-
-  // set up iframe API
-  if ($q.platform.within.iframe) {
-    void (async () => {
-      const taskManager = await getTaskManager()
-      void setupIframeApi(
-        taskManager,
-        stateRefs.appConfiguration,
-        stateRefs.llmSettings,
-        stateRefs.keys,
-      )
-    })()
-  }
 
   watch(
     [

@@ -3,23 +3,29 @@
 import type { partialTyConfiguration, TaskyonMessage } from '../taskyon/apiTypes'
 import type { ClientTool } from '../taskyon/tools'
 
-const createTySend =
-  (taskyon: HTMLIFrameElement, iframeTarget: string) => (message: TaskyonMessage) =>
-    taskyon.contentWindow?.postMessage(message, iframeTarget)
+const waitForApiChannel = (iframe: HTMLIFrameElement) => {
+  return new Promise<MessagePort>((resolve) => {
+    let stop = false
 
-const waitForTaskyonReady = (iframeTarget: string) => {
-  return new Promise((resolve /*reject*/) => {
-    const handleMessage = function (event: MessageEvent<{ type: string }>) {
-      const eventOrigin = new URL(event.origin).origin
-      if (eventOrigin === iframeTarget && event.data.type === 'taskyonReady') {
-        window.removeEventListener('message', handleMessage)
-        console.log('Received message that taskyon is ready!', event)
-        resolve(event)
+    function tryConnect() {
+      if (stop) return
+
+      const channel = new MessageChannel()
+      channel.port1.onmessage = (ev) => {
+        console.log('received first message from taskyon!', ev)
+        stop = true
+        resolve(channel.port1)
       }
+      try {
+        iframe.contentWindow?.postMessage({ type: 'initPort' }, origin, [channel.port2])
+      } catch {
+        // ignore DataCloneError, not relevant with new channel
+      }
+      // Try again in 200ms if not resolved yet
+      if (!stop) setTimeout(tryConnect, 200)
     }
 
-    console.log('waiting for taskyon to be ready....')
-    window.addEventListener('message', handleMessage)
+    tryConnect()
   })
 }
 
@@ -89,11 +95,11 @@ export async function initializeTaskyon(
   if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
     const iframeTarget = new URL(taskyon.src).origin
 
-    const sendTyMessage = createTySend(taskyon, iframeTarget)
+    const tyApi = await waitForApiChannel(taskyon)
+    const send = (msg: TaskyonMessage) => tyApi.postMessage(msg)
 
-    await waitForTaskyonReady(iframeTarget)
     console.log('send our configuration!')
-    sendTyMessage({
+    send({
       type: 'configurationMessage',
       conf: configuration,
     })
@@ -101,18 +107,13 @@ export async function initializeTaskyon(
     tools.forEach((t) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { function: _toolfunc, ...fdescr } = t
-      sendTyMessage({
+      send({
         type: 'functionDescription',
         ...fdescr,
       })
       console.log('set up function listener!')
       window.addEventListener('message', (event) => {
-        void handleFunctionExecutionRequest(
-          iframeTarget,
-          tools,
-          sendTyMessage,
-          controller.signal,
-        )(event)
+        void handleFunctionExecutionRequest(iframeTarget, tools, send, controller.signal)(event)
       })
     })
   }

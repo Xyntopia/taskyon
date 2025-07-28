@@ -79,12 +79,15 @@ const TyReadyMessage = z.object({ type: z.literal('taskyonReady') }).meta({
   description: 'simple message which signals, that our API is ready!',
 })
 
+export const BaseMessage = z.object({ origin: z.string().optional() })
+
 export const TaskyonMessage = z.discriminatedUnion('type', [
-  RemoteFunctionCall,
-  RemoteFunctionResponse,
-  TaskMessage,
-  FunctionDescriptionMessage,
-  TyReadyMessage,
-  tyConfigurationMessage,
+  z.object({ ...BaseMessage.shape, ...RemoteFunctionCall.shape }),
+  z.object({ ...BaseMessage.shape, ...RemoteFunctionResponse.shape }),
+  z.object({ ...BaseMessage.shape, ...TaskMessage.shape }),
+  z.object({ ...BaseMessage.shape, ...FunctionDescriptionMessage.shape }),
+  z.object({ ...BaseMessage.shape, ...TyReadyMessage.shape }),
+  z.object({ ...BaseMessage.shape, ...tyConfigurationMessage.shape }),
 ])
+
 export type TaskyonMessage = z.infer<typeof TaskyonMessage>

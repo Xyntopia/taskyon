@@ -31,8 +31,10 @@ import {
   withSecretStore,
 } from '../crudWrapper'
 import { getDatabase } from '../pglite.api'
-import { createIframeMux } from '../frpBus'
+import { createDuplexChannel, createIframeMux } from '../frpBus'
 import { testingTools } from '../tools/testTools'
+import type { TaskyonMessage } from './apiTypes'
+import { taskyonApi } from './api'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -66,8 +68,14 @@ export async function initTaskyon(
     //ragAddTool,
     ...EnvironmentTools,
   ]
+  // these stream defines that clients can use to communicate with taskyon
+  // (e.g. iframes which are connected to taskyon)
+  // we want full duplex communication here. And define two streams for this.
+  const { a: outPort, b: inPort } = createDuplexChannel<TaskyonMessage>()
 
   const taskManagerInstance = await useTyTaskManager(llmSettings.vectorizationModel)
+
+  taskyonApi(inPort, taskManagerInstance, llmSettings, apiKeys)
 
   const secretStore = withSecretStore(
     createCombinedCrudWrapper([
@@ -122,5 +130,6 @@ export async function initTaskyon(
     workerStop,
     queueTask,
     secretStore,
+    outPort,
   }
 }
