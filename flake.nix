@@ -119,6 +119,8 @@
 
           # node
           yarn
+          # TODO: enable new yarn:
+          # yarn-berry
           nodejs_22
 
           # helpers
