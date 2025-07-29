@@ -1,7 +1,7 @@
+import type { JSONSchema7 } from 'json-schema'
 import { createTool } from '../taskyon/tools'
-import type { ToolBase } from '../taskyon/types'
 
-const jinaMarkdownReader = {
+const jinaMarkdownReader = createTool({
   description: 'A tool that reads websites as markdown using the jina ai reader.',
   longDescription:
     'This tool uses the jina ai reader to fetch webpages via https://r.jina.ai/ and converts them to markdown format.',
@@ -25,7 +25,7 @@ const jinaMarkdownReader = {
       .then(response => response.text())
       .then(data => data);
   }`,
-} as ToolBase
+})
 
 // TODO: add more functionality from here:   https://r.jina.ai/docs
 // TODO: add a state how many tokesn we have left over :)
@@ -47,8 +47,8 @@ const jinaSearch = createTool({
         description: 'The search query to use with the Jina AI search API.',
       },
     },
-  },
-  function: async ({ query }: { query: string }, ctx) => {
+  } as const satisfies JSONSchema7,
+  function: async ({ query }, ctx) => {
     // get key from here:  https://jina.ai/api-dashboard/key-manager
     const apiKey = await ctx.getSecret(
       'Search API key',
@@ -106,7 +106,7 @@ const jinaSearch = createTool({
   },
 })
 
-const clock = {
+const clock = createTool({
   description: 'A tool that provides the current time, date, and weekday.',
   longDescription:
     'This tool returns the current time, date, and weekday when no arguments are provided. If a Unix timestamp is provided as an argument, it returns the corresponding time, date, and weekday.',
@@ -134,9 +134,9 @@ const clock = {
       seconds: date.getSeconds(),
     };
   }`,
-} as ToolBase
+})
 
-const location = {
+const location = createTool({
   description: 'A tool that provides the current browser location and IP address.',
   longDescription:
     'This tool retrieves the current browser location using the Geolocation API and the IP address using an external service. It also estimates the location based on the IP address.',
@@ -184,9 +184,9 @@ const location = {
       }
     });
   }`,
-} as ToolBase
+})
 
-const notification = {
+const notification = createTool({
   description: 'Displays a browser-native notification with an optional delay.',
   longDescription:
     'This tool allows users to display a browser-native notification with a custom message. Optionally, users can specify a specific time or number of seconds to wait before displaying the notification.',
@@ -225,6 +225,6 @@ const notification = {
       })
     }
   }`,
-} as ToolBase
+})
 
 export const smallHelperTools = [jinaMarkdownReader, jinaSearch, clock, location, notification]
