@@ -3,26 +3,42 @@
 import type { partialTyConfiguration, TaskyonMessage } from '../taskyon/apiTypes'
 import type { ClientTool } from '../taskyon/tools'
 
-const waitForApiChannel = (iframe: HTMLIFrameElement) => {
+const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
   return new Promise<MessagePort>((resolve) => {
-    let stop = false
+    let stopped = false
 
-    function tryConnect() {
-      if (stop) return
+    const tryConnect = () => {
+      if (stopped) return
 
       const channel = new MessageChannel()
-      channel.port1.onmessage = (ev) => {
+
+      // self‑destructing listener – removed automatically after it fires once
+      const handleFirst: (ev: MessageEvent) => void = (ev) => {
         console.log('received first message from taskyon!', ev)
-        stop = true
-        resolve(channel.port1)
+        stopped = true
+
+        channel.port1.removeEventListener('message', handleFirst) // ⬅️ unsubscribe
+        clearTimeout(retryTimer) // stop retry loop
+        resolve(channel.port1) // hand over the port
       }
+
+      channel.port1.addEventListener('message', handleFirst, { once: true })
+      channel.port1.start() // ← wake the port so it can receive
+
       try {
         iframe.contentWindow?.postMessage({ type: 'initPort' }, origin, [channel.port2])
       } catch {
-        // ignore DataCloneError, not relevant with new channel
+        /* DataCloneError can happen on FF if the iframe isn’t ready yet; ignore */
       }
-      // Try again in 200ms if not resolved yet
-      if (!stop) setTimeout(tryConnect, 200)
+
+      // retry after 200 ms if handshake hasn’t happened
+      const retryTimer = setTimeout(() => {
+        if (!stopped) {
+          channel.port1.close() // avoid leaking unused ports
+          channel.port2.close()
+          tryConnect()
+        }
+      }, 200)
     }
 
     tryConnect()
