@@ -3,8 +3,8 @@ import { bigIntToString } from '../utils'
 import type { FunctionArguments, FunctionCall, ParamType, WithRequired, toolContext } from './types'
 import { convertZodToJsonSchemaCached, partialTaskDraft, taskMarker } from './types'
 import { ToolBase } from './types'
-import type { RemoteFunctionResponse } from './apiTypes'
-import { RemoteFunctionCall, TaskyonMessage } from './apiTypes'
+import type { TaskWorkerMessage } from './apiTypes'
+import { RemoteFunctionResponse, RemoteFunctionCall } from './apiTypes'
 import { z } from 'zod'
 import type { YamlRepresentation } from '../yamlUtils'
 import { convertToYamlWComments } from '../yamlUtils'
@@ -13,6 +13,7 @@ import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
 import type { JSONSchema7, JSONSchema7Object } from 'json-schema'
 import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
 import Ajv from 'ajv'
+import type { Port } from '../frpBus'
 
 export const taskResult = z.object({
   taskResultMarker: z.literal(taskMarker).default(taskMarker).meta({
@@ -111,26 +112,23 @@ export function toolCall(
 // This function executes code in a different browser context. E.g. executing a
 // function in the context of the parent of an iframe!
 // TODO: move this into our iframe API?
-async function handleRemoteFunction(name: string, args: FunctionArguments) {
-  // set up listener to listen for function call result.
+async function handleRemoteFunction(
+  name: string,
+  args: FunctionArguments,
+  duplexPort: Port<TaskWorkerMessage>,
+) {
   const funcRP: Promise<RemoteFunctionResponse> = new Promise((resolve, reject) => {
-    const listener = (event: MessageEvent) => {
-      console.log('remoteHandler received message', event)
-      // TODO: Add security checks here, e.g., verify event.origin
-      if (event.source === window.parent && event.data) {
-        const response = TaskyonMessage.safeParse(event.data)
-        if (response.success) {
-          if (response.data.type == 'functionResponse' && response.data.functionName === name) {
-            window.removeEventListener('message', listener) // remove listener
-            resolve(response.data)
-          }
-        } else {
-          reject(
-            new Error('The message had the wrong format for taskyon!', {
-              cause: response.error,
-            }),
-          )
+    const listener = (msg: RemoteFunctionCall | RemoteFunctionResponse) => {
+      console.log('remote function handler received message', msg)
+      const response = RemoteFunctionResponse.safeParse(msg)
+      if (response.success) {
+        if (response.data.functionName === name) {
+          unsub()
+          if (response.data.error) reject(new Error('Remote function error:', response.data.error))
+          resolve(response.data)
         }
+      } else {
+        console.warn('Not a valid remote function message', response.error, msg)
       }
     }
 
@@ -142,11 +140,9 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
           `Response timeout (${timeoutSeconds}). Waiting for function ${name} more than ${timeoutSeconds}s`,
         ),
       )
-      window.removeEventListener('message', listener) // remove listener on timeout
+      unsub()
     }, timeoutSeconds * 1000) // 100 seconds timeout for example
-
-    // TODO: make timeout configurable
-    window.addEventListener('message', listener)
+    const unsub = duplexPort.receive(listener)
   })
 
   // we do this also in order to make sure we have a defined object
@@ -157,8 +153,9 @@ async function handleRemoteFunction(name: string, args: FunctionArguments) {
     arguments: args,
   })
   console.log('no tool code found, posting a function message to', message)
+
   // after we've set up the listener, initiate the function call
-  window.parent.postMessage(message, '*') // TODO. Specify the exact origin instead of '*'
+  duplexPort.send(message)
 
   const funcR = await funcRP
   return funcR.response
@@ -211,8 +208,9 @@ export async function createWithDefaults<T>(schema: JSONSchemaType<T> | JSONSche
 export async function handleFunctionExecution(
   func: FunctionCall,
   tool: InternalTool,
-  stopSignal: AbortSignal,
+  stopSignal: AbortSignal, // add this to our duplexPort!!
   context: toolContext,
+  duplexPort: Port<TaskWorkerMessage>,
 ): Promise<unknown> {
   // TODO: test here, if tool parameters are correct according to json schema
   //       if not, throw an error message...
@@ -228,18 +226,14 @@ export async function handleFunctionExecution(
   console.log(toolDefaultParams)
   if (tool.function) {
     console.log('using tool!', tool)
-    // TODO: try longterm, to also execute the "internal" functions in iframe..
-    //       maybe by being able to remove all dependencies to taskyon lib? maybe by
-    //       using the taskyon iframe api also inside iframe towards the parent?
+    // TODO: try longterm, to get rid of "internal" functions.. not yet sure how to do this..
+    //       maybe have tools with privileged access?
     funcR = await tool.function(func.arguments, context)
-    // TODO: what do we do for tools which have "code" but no id??,
   } else if (tool.code) {
     console.log('compile & execute function code in iframe', tool)
     try {
       //const { messagePort, ...modContext } = context
       //console.log('messagePort', messagePort)
-      // TODO: add tool context to our "safe" functions as well..
-      // Execute code in iframe with parameters (func.arguments)
       funcR = await executeCodeInIframe(
         tool.code,
         { params: func.arguments, context: context },
@@ -254,9 +248,7 @@ export async function handleFunctionExecution(
     // and want to make sure its serializable for a postMessage function.
     // TODO: use our "onInterrupt" here somehow ;)
     // TODO: pass tool context here as well :)
-    // TODO: right now, this also serves as a fallback for any tool whch doesn't define
-    //       code or function..  this works even, if the tool isn't defined in our tool list!
-    funcR = await handleRemoteFunction(func.name, func.arguments)
+    funcR = await handleRemoteFunction(func.name, func.arguments, duplexPort)
   }
   funcR = bigIntToString(funcR) // Optionally convert bigInt
 

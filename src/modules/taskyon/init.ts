@@ -31,9 +31,9 @@ import {
   withSecretStore,
 } from '../crudWrapper'
 import { getDatabase } from '../pglite.api'
-import { createDuplexChannel, createIframeMux } from '../frpBus'
+import { createDuplexChannel, createIframeMux, createZodPort } from '../frpBus'
 import { testingTools } from '../tools/testTools'
-import type { TaskyonMessage } from './apiTypes'
+import { TaskWorkerMessage, type TaskyonMessage } from './apiTypes'
 import { taskyonApi } from './api'
 
 export async function initTaskyon(
@@ -106,6 +106,16 @@ export async function initTaskyon(
   // to taskyon & tools
   const iframeMultiPlexer = createIframeMux(5)
 
+  // these stream defines that clients can use to communicate with taskyon
+  // (e.g. iframes which are connected to taskyon)
+  // we want full duplex communication here. And define two streams for this.
+  // "outPort" is the outwards port which is used by 3rd party apps
+  // to communicate with taskyon.
+  // "inPort" is the other side of the channel and is used by taskyon itself
+  const { a: outPort, b: inPort } = createDuplexChannel<TaskyonMessage>()
+
+  const { port: taskPort } = createZodPort(inPort, TaskWorkerMessage)
+
   // keys could porentially be reactive here, so in theory, when they change in the GUI,
   // taskyon should automatically pick up on this...
   console.log('starting taskyon worker')
@@ -114,15 +124,8 @@ export async function initTaskyon(
     taskManagerInstance,
     secretStore,
     iframeMultiPlexer.all$,
+    taskPort,
   )
-
-  // these stream defines that clients can use to communicate with taskyon
-  // (e.g. iframes which are connected to taskyon)
-  // we want full duplex communication here. And define two streams for this.
-  // "outPort" is the outwards port which is used by 3rd party apps
-  // to communicate with taskyon.
-  // "inPort" is the other side of the channel and is used by taskyon itself
-  const { a: outPort, b: inPort } = createDuplexChannel<TaskyonMessage>()
 
   taskyonApi(inPort, taskManagerInstance, llmSettings, apiKeys)
 

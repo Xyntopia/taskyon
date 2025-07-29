@@ -29,6 +29,10 @@ export const RemoteFunctionResponse = RemoteFunctionBase.extend({
   response: z.unknown().optional().meta({
     description: 'response of a FunctionCall, e.g. through postMessage with iframes.',
   }),
+  error: z
+    .unknown()
+    .optional()
+    .meta({ description: 'if an error occurs in the remote function, we can use this property' }),
 }).meta({
   description:
     'This type is used for sending messages with the result of a remote function call between windows. E.g. from parent to taskyon iframe',
@@ -80,6 +84,13 @@ const TyReadyMessage = z.object({ type: z.literal('taskyonReady') }).meta({
 })
 
 export const BaseMessage = z.object({ origin: z.string().optional() })
+
+export const TaskWorkerMessage = z.discriminatedUnion('type', [
+  z.object({ ...BaseMessage.shape, ...RemoteFunctionCall.shape }),
+  z.object({ ...BaseMessage.shape, ...RemoteFunctionResponse.shape }),
+])
+
+export type TaskWorkerMessage = z.infer<typeof TaskWorkerMessage>
 
 export const TaskyonMessage = z.discriminatedUnion('type', [
   z.object({ ...BaseMessage.shape, ...RemoteFunctionCall.shape }),

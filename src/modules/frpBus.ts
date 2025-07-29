@@ -88,6 +88,72 @@ export function MessageChannelAdapter<T>(port: Port<T>) {
   return port2
 }
 
+export function portMap<A, B>(
+  source: Port<A>,
+  fnIn: (value: A) => B,
+  fnOut: (value: B) => A,
+): { port: Port<B>; destroy: () => void } {
+  const { a: inner, b: outer } = createDuplexChannel<B>()
+
+  // Upstream ➜ child (apply the filter)
+  const unsubUp = source.receive((m) => {
+    inner.send(fnIn(m)) // safe: guard proved it’s TChild
+  })
+
+  // Child ➜ upstream (no filtering needed)
+  const unsubDown = inner.receive((m) => source.send(fnOut(m)))
+
+  const destroy = () => {
+    unsubUp()
+    unsubDown()
+  }
+
+  return { port: outer, destroy }
+}
+
+/**
+ * Derive a child Port that only passes messages satisfying `guard`.
+ *
+ * • Incoming messages from `parent` are forwarded to the child *only* when the
+ *   type-guard returns true.
+ * • Anything the child sends is forwarded upstream unchanged.
+ * • `destroy()` tears everything down (both directions).
+ */
+export function createFilteredPort<TParent, TChild extends TParent>(
+  parent: Port<TParent>,
+  guard: (msg: TParent) => msg is TChild,
+): { port: Port<TChild>; destroy: () => void } {
+  const { a: inner, b: outer } = createDuplexChannel<TChild>()
+
+  // Upstream ➜ child (apply the filter)
+  const unsubUp = parent.receive((m) => {
+    if (guard(m)) inner.send(m) // safe: guard proved it’s TChild
+  })
+
+  // Child ➜ upstream (no filtering needed)
+  const unsubDown = inner.receive((m) => parent.send(m))
+
+  const destroy = () => {
+    unsubUp()
+    unsubDown()
+  }
+
+  return { port: outer, destroy }
+}
+
+/**
+ * Narrow an existing Port with a Zod schema.
+ * - `P`  … message type already travelling on the parent port
+ * - `T`  … narrower message type described by the schema (T ⊆ P)
+ */
+export function createZodPort<P, T extends P>(
+  parent: Port<P>,
+  schema: ZodType<T>,
+): { port: Port<T>; destroy: () => void } {
+  /* reuse the generic filtered-port helper */
+  return createFilteredPort(parent, (m): m is T => schema.safeParse(m).success)
+}
+
 // Operator: transform each value from the source stream
 export function map<A, B>(source: Stream<A>, fn: (value: A) => B): Stream<B> {
   const { stream, emit } = createStream<B>()

@@ -5,9 +5,10 @@ import { handleFunctionExecution, taskResult } from './tools'
 import { createAsyncQueue, sleep } from '../utils'
 import { createChatCompletionTask } from '../tools/chatCompletionTool'
 import type { CrudWrapper, SecretStore } from '../crudWrapper'
-import type { TaskMessageStream } from '../frpBus'
+import type { Port, TaskMessageStream } from '../frpBus'
 import { createMessagePortAdapter, createStream, filter } from '../frpBus'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
+import type { TaskWorkerMessage } from './apiTypes'
 
 export async function generateSecretId(
   taskId: string | undefined,
@@ -24,6 +25,7 @@ async function safeExecuteTask(
   secretStore: SecretStore,
   stopSignal: AbortSignal,
   taskMessageStream: TaskMessageStream,
+  duplexPort: Port<TaskWorkerMessage>,
 ): Promise<unknown> {
   if (task.content.type === 'functioncall') {
     // calculate function result
@@ -55,7 +57,7 @@ async function safeExecuteTask(
         toolId,
         messagePort: msgPortAdapter.port,
       }
-      const funcR = await handleFunctionExecution(func, tool, stopSignal, context)
+      const funcR = await handleFunctionExecution(func, tool, stopSignal, context, duplexPort)
 
       return funcR
     } else {
@@ -313,6 +315,7 @@ const createTaskProcessor = (
   stopAllTasks: (message: string) => void,
   secretStore: SecretStore,
   taskMessageStream: TaskMessageStream,
+  duplexPort: Port<TaskWorkerMessage>,
 ) => {
   // this is uses to track how long a list of tasks has been processing
   const handleError = createHandleError(stopAllTasks, taskManager, currentTaskCtrl, queueTask)
@@ -364,6 +367,7 @@ const createTaskProcessor = (
           secretStore,
           currentTaskCtrl.signal,
           taskMessageStream,
+          duplexPort,
         )
 
         // We check the result of the task here to see whether it contains
@@ -446,6 +450,7 @@ const setupRun = (
   taskManager: TyTaskManager,
   secretStore: SecretStore,
   taskMessageStream: TaskMessageStream,
+  duplexPort: Port<TaskWorkerMessage>,
 ) => {
   console.log('setting up task worker run...')
   const currentTaskCtrl: AbortController = new AbortController()
@@ -470,6 +475,7 @@ const setupRun = (
     stopAllTasks,
     secretStore,
     taskMessageStream,
+    duplexPort,
   )
 
   const run = async () => {
@@ -506,6 +512,7 @@ export function runTaskWorker(
   // task message stream is used in order to give message tasks the ability to communicate to
   // tool call tasks (e.g. a button click)
   taskMessageStream: TaskMessageStream,
+  duplexPort: Port<TaskWorkerMessage>,
 ) {
   console.log('starting task worker listener...')
 
@@ -540,6 +547,7 @@ export function runTaskWorker(
         taskManager,
         secretStore,
         taskMessageStream,
+        duplexPort,
       )
       currentTaskCtrl = newTaskCtrl
       queueTask = newQueueTask
