@@ -114,6 +114,14 @@ export async function initTaskyon(
   // "inPort" is the other side of the channel and is used by taskyon itself
   const { a: outPort, b: inPort } = createDuplexChannel<TaskyonMessage>()
 
+  // logging
+  outPort.receive((msg) => {
+    console.log('taskyon sending a request:', msg)
+  })
+  inPort.receive((msg) => {
+    console.log('taskyon receiving a request:', msg)
+  })
+
   const { port: taskPort } = createZodPort(inPort, TaskWorkerMessage)
 
   // keys could porentially be reactive here, so in theory, when they change in the GUI,

@@ -21,7 +21,6 @@ export const taskyonApi = (
 ) => {
   inPort.receive((msg) => {
     try {
-      console.log('taskyon API received request:', msg)
       // here we safe-guard against accidental messages on this bus...
       const res = TaskyonMessage.safeParse(msg)
       if (res.success) {
