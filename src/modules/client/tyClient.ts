@@ -52,12 +52,6 @@ const handleFunctionExecutionRequest = (
   stopSignal: AbortSignal,
 ) =>
   async function (event: MessageEvent<{ type: string; arguments: unknown }>): Promise<void> {
-    // Check the origin to ensure security
-    if (event.origin !== iframeTarget) {
-      console.log('Received message from unauthorized origin')
-      return
-    }
-
     console.log('received message:', event)
     // Handle function call
     const tool = tools[0]
@@ -128,9 +122,9 @@ export async function initializeTaskyon(
         ...fdescr,
       })
       console.log('set up function listener!')
-      window.addEventListener('message', (event) => {
+      tyApi.onmessage = (event) => {
         void handleFunctionExecutionRequest(iframeTarget, tools, send, controller.signal)(event)
-      })
+      }
     })
   }
 }
