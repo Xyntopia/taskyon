@@ -22,6 +22,7 @@ import { setColors } from 'src/boot/brand-colors'
 import { setPrismTheme } from 'src/modules/markdownUtils '
 import { onScopeDispose } from 'vue'
 import { waitForMessagePort } from 'src/modules/taskyon/iframeWorker'
+import { guiTools } from 'src/modules/tools/GuiTools'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -165,6 +166,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   function defineTyGuiTools(): InternalTool[] {
     return [
+      ...guiTools,
       {
         function: ({ newPrompts }: { newPrompts: { [key: string]: string } }) => {
           console.log('Modifying prompts in llmSettings...')
