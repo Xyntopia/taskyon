@@ -184,7 +184,13 @@
           <q-menu fit color="secondary">
             <q-list dense style="min-width: 100px">
               <div class="row">
-                <q-btn square flat :icon="matSmartToy" label="Model List" to="/pricing" />
+                <q-btn
+                  square
+                  flat
+                  :icon="matSmartToy"
+                  label="Model List"
+                  to="/pricing?onlyAllowed=true"
+                />
                 <q-btn
                   square
                   flat

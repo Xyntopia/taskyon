@@ -132,13 +132,13 @@
   >
     <template #header>
       <tyMarkdown
-        :src="`Error: ${task.content.data.split(' ').slice(0, 10).join(' ')}...`"
+        :src="`Error: ${humanizeError(task.content.data).split(' ').slice(0, 10).join(' ')}...`"
         no-line-numbers
         use-iframe
       />
     </template>
     <div class="text-negative">
-      <tyMarkdown :src="task.content.data" no-line-numbers use-iframe />
+      <tyMarkdown :src="humanizeError(task.content.data)" no-line-numbers use-iframe />
     </div>
   </TaskField>
 </template>
@@ -156,6 +156,7 @@ import { useAppStateStore } from 'src/stores/appState'
 import { safeYamlDump } from 'src/modules/yamlUtils'
 import TaskField from './TaskField.vue'
 import { dump } from 'js-yaml'
+import { humanizeError } from 'src/modules/utils'
 
 const props = defineProps<{
   task: TaskNode

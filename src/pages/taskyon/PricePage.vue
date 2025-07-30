@@ -15,6 +15,11 @@ selecting different models).
         />
         <api-select v-model="state.llmSettings.selectedApi" />
       </q-card-section>
+      <q-toggle
+        v-model="onlyAllowed"
+        color="secondary"
+        label="Only show available models (included in taskyon kee or free version)"
+      />
       <q-table
         class="q-card"
         flat
@@ -22,6 +27,7 @@ selecting different models).
         no-results-label="Could not find this model!"
         :rows="filteredTableData"
         :columns="columns"
+        :table-row-class-fn="rowClassFn"
         row-key="id"
         :filter="state.modelFilter"
         :pagination="{
@@ -44,7 +50,12 @@ selecting different models).
               <q-icon :name="matFilterList" />
             </template>
           </q-input>
-          <q-btn label="Download Model file as JSON" outline @click="downloadModels"></q-btn>
+          <q-btn
+            class="q-mx-sm"
+            label="Download Model file as JSON"
+            outline
+            @click="downloadModels"
+          ></q-btn>
         </template>
         <template #top-right>
           <q-select
@@ -163,24 +174,54 @@ import tyMarkdown from 'components/tyMarkdown.vue'
 import ApiSelect from 'components/taskyon/ApiSelect.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import ObjectTreeView from 'src/components/ObjectTreeView.vue'
+import type { Model } from 'src/modules/taskyon/types'
+import { useRoute, useRouter } from 'vue-router'
 
 const pricingOptions = ['$/token', 'pages/0.01$', '$/million tokens'] as const
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 const priceDisplay = ref<(typeof pricingOptions)[number]>(pricingOptions[2])
+
+const route = useRoute()
+const router = useRouter()
+
+/** two‑way binding to ?onlyAllowed in the URL */
+const onlyAllowed = computed<boolean>({
+  get: () => route.query.onlyAllowed !== undefined, // treat mere presence as “true”
+  /* or === 'true' if you prefer */
+  set: (v) => {
+    const q = { ...route.query }
+    if (v) q.onlyAllowed = 'true'
+    else delete q.onlyAllowed
+    void router.replace({ query: q }) // shallow‑history update
+  },
+})
+
 //const { llmModels: tableData } = storeToRefs(state);
 
 type rowType = (typeof tystate.llmModels)[0]
 
 const filteredTableData = computed(() => {
-  return Object.values(tystate.llmModels).filter((model) => {
-    if (model.name || model.id) {
-      return true
-    }
-    return false
-  })
+  const allModelsAllowed =
+    tystate.allowedLLMModels === undefined || tystate.allowedLLMModels?.includes('*')
+  return Object.values(tystate.llmModels)
+    .filter((model) => {
+      if (model.name || model.id) {
+        return true
+      }
+      return false
+    })
+    .map((x) => ({
+      ...x,
+      inKey: allModelsAllowed ? undefined : tystate.allowedLLMModels?.includes(x.id) ? true : false,
+    }))
+    .filter((x) => !onlyAllowed.value || (x.inKey ?? x.inKey === undefined))
 })
+
+function rowClassFn(row: Model & { inKey: undefined | boolean }) {
+  return row.inKey === undefined || row.inKey === true ? '' : 'not-in-key'
+}
 
 function floatSorter(a: string, b: string) {
   const numA = parseFloat(a)
