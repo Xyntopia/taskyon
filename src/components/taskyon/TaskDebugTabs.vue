@@ -43,15 +43,19 @@
         </textarea>
       </q-tab-panel>
       <q-tab-panel v-if="taskMeta?.taskPrompt" name="TASKPROMPT">
-        <textarea
+        <template
           v-for="(tp, idx) in taskMeta.taskPrompt.openAIConversationThread as OpenAIMessage[]"
           :key="idx"
-          :value="typeof tp.content === 'string' ? tp.content : ''"
-          readonly
-          wrap="soft"
-          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
         >
-        </textarea>
+          <div class="text-caption q-pt-sm">{{ tp.role }}</div>
+          <textarea
+            :value="typeof tp.content === 'string' ? tp.content : ''"
+            readonly
+            wrap="soft"
+            style="width: 100%; height: 200px; background-color: inherit; color: inherit"
+          >
+          </textarea>
+        </template>
         <div class="text-caption">finished completion:</div>
         <textarea
           :value="taskChoice || null"
