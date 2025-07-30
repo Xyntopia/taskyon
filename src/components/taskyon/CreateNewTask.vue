@@ -92,19 +92,6 @@
                 dense
               />
             </div>
-            <div>
-              <q-item class="row items-center">
-                <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
-                <ModelSelection
-                  v-model:selected-api="selectedApi"
-                  class="col"
-                  :bot-name="tystate.currentModelId"
-                  :model-list="expertMode"
-                  :select-api="expertMode"
-                  @update-bot-name="tystate.handleBotNameUpdate"
-                ></ModelSelection>
-              </q-item>
-            </div>
             <q-card-actions class="float-right">
               <q-btn
                 v-if="expertMode"
@@ -185,13 +172,7 @@
             <q-list dense style="min-width: 100px">
               <div class="row">
                 <q-btn square flat :icon="matSmartToy" label="Model List" to="/pricing" />
-                <q-btn
-                  square
-                  flat
-                  :icon="matManageAccounts"
-                  label="Select AI Service"
-                  to="/settings/aiserviceprovider"
-                />
+                <ApiSelect v-model="state.llmSettings.selectedApi" more-settings />
               </div>
               <q-separator />
               <q-item-label header>Previously selected AI models!</q-item-label>
@@ -209,7 +190,19 @@
               </q-item>
               <q-separator />
               <div class="text-info column items-center">
-                <div>{{ `${tystate.currentModelId}` }}</div>
+                <div>
+                  <q-item class="row items-center">
+                    <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
+                    <ModelSelection
+                      v-model:selected-api="selectedApi"
+                      class="col"
+                      :bot-name="tystate.currentModelId"
+                      :model-list="expertMode"
+                      :select-api="expertMode"
+                      @update-bot-name="tystate.handleBotNameUpdate"
+                    ></ModelSelection>
+                  </q-item>
+                </div>
                 <InfoDialog
                   v-if="tystate.currentModelId && tystate.currentModel?.description"
                   :round="false"
@@ -282,6 +275,7 @@ import FileDropzone from '../FileDropzone.vue'
 import { QSelect } from 'quasar'
 import { deepCopy } from 'src/modules/utils'
 import { mdiFunctionVariant } from '@quasar/extras/mdi-v6'
+import ApiSelect from './ApiSelect.vue'
 
 const { expertMode = false, entryNode } = defineProps<{
   entryNode: partialTaskDraft

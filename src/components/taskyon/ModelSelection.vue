@@ -47,26 +47,14 @@
       >
         <q-tooltip :delay="200"> Only Show Models which support vision. </q-tooltip>
       </ToggleButton>
-      <div v-if="modelList" style="font-size: 0.5em">
-        <q-btn :icon-right="matList" flat to="/pricing">
-          <q-tooltip>List of models</q-tooltip>
-        </q-btn>
-      </div>
     </div>
-    <ApiSelect
-      v-if="selectApi"
-      :model-value="state.llmSettings.selectedApi"
-      more-settings
-      @update:model-value="onApiSelect"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useTaskyonStore } from 'stores/taskyonState'
-import { matSmartToy, matList, matVisibility } from '@quasar/extras/material-icons'
-import ApiSelect from './ApiSelect.vue'
+import { matSmartToy, matVisibility } from '@quasar/extras/material-icons'
 import { mdiKeyLink } from '@quasar/extras/mdi-v6'
 import { levenshteinDistance } from 'src/modules/string_utils'
 import ToggleButton from '../ToggleButton.vue'
@@ -139,16 +127,6 @@ function onModelSelect(value: string) {
     newName: value,
     newService: selectedApi.value,
   })
-}
-
-function onApiSelect(modelValue: string | null | undefined) {
-  if (modelValue) {
-    const newBotName = state.llmSettings.llmApis[modelValue]?.selectedModel
-    emit('updateBotName', {
-      newName: newBotName,
-      newService: modelValue,
-    })
-  }
 }
 
 const filteredOptions = ref<{ label: string; value: string }[]>([])

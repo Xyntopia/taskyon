@@ -3,7 +3,7 @@
     <q-select
       v-model="model"
       emit-value
-      outlined
+      borderless
       color="secondary"
       dense
       label="Provider"
@@ -16,7 +16,7 @@
       flat
       aria-label="ai service settings"
     >
-      ><q-icon :name="matSettings"></q-icon>
+      <q-icon :name="matSettings"></q-icon>
       <q-icon :name="matElectricalServices"></q-icon>
       <q-tooltip>
         You can add more api Keys in settings if you want to activate additional backends.

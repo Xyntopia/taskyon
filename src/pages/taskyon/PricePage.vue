@@ -14,7 +14,7 @@ on this list. *Dynamic* means that the backend changes the prices based on the i
 selecting different models).
 `"
         />
-        <api-select v-model="state.llmSettings.selectedApi" />
+        <ApiSelect v-model="state.llmSettings.selectedApi" />
       </q-card-section>
 
       <!-- ───────── Toggles ───────── -->
