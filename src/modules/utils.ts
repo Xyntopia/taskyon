@@ -15,61 +15,83 @@ export function copyToClipboard(text: string) {
 }
 
 /**
- * Turn any thrown value into a tidy, human‑readable summary.
+ * Convert any thrown value into a short, customer‑friendly string.
  *
- * Order of precedence:
- *   1. `cause`            (recurses once)
- *   2. `message|msg`      (string or object → YAML)
- *   3. HTTP / Axios hints (status, data, url…)
- *   4. non‑verbose stack  (first useful frame only)
- *
- * Everything else is ignored unless it adds new information.
+ * Priority: message → HTTP hints → meta fields → one‑level cause.
+ * Designed for production UI logs (no stack traces, YAML only).
  */
 export function humanizeError(err: unknown): string {
+  const seen = new WeakSet<object>()
   const out: string[] = []
-  const seen = new Set<unknown>()
 
-  const walk = (e: unknown, depth = 0) => {
-    if (!e || seen.has(e)) return
-    seen.add(e)
+  /* helpers -------------------------------------------------------------- */
+  const dump = (v: unknown): string => (typeof v === 'string' ? v : safeYamlDump(v).trim())
 
-    // plain string / number / boolean
-    if (typeof e !== 'object') {
-      out.push(safeYamlDump(e))
+  const add = (line: unknown): void => {
+    if (typeof line === 'string' && line.trim() && !out.includes(line)) out.push(line.trim())
+  }
+
+  /* main walker ---------------------------------------------------------- */
+  const walk = (e: unknown, depth = 0): void => {
+    if (e == null) return
+
+    const t = typeof e
+    if (t !== 'object' && t !== 'function') {
+      add(dump(e))
       return
     }
 
-    const any = e as Record<string, unknown>
+    if (seen.has(e as object)) return
+    seen.add(e as object)
 
-    // --- main line ---------------------------------------------------------
-    if (any.message ?? any.msg) out.push(safeYamlDump(any.message ?? any.msg))
+    const o = e as Record<string, unknown>
 
-    // HTTP / Axios shortcuts
-    if (any.status) {
-      const statusLine = `${safeYamlDump(any.status)} ${safeYamlDump(any.statusText) ?? ''}`.trim()
-      out.push(statusLine)
+    /* message / msg */
+    const msg = o.message ?? o.msg
+    if (msg !== undefined) add(dump(msg))
+
+    /* HTTP hints */
+    if (typeof o.status === 'number') {
+      const text = typeof o.statusText === 'string' && o.statusText ? ` ${o.statusText}` : ''
+      add(`${o.status}${text}`)
     }
-    if (any.url) out.push(`URL: ${safeYamlDump(any.url)}`)
-    if (any.response && typeof any.response === 'object' && 'data' in any.response) {
-      out.push(`Response: ${safeYamlDump((any.response as { data?: unknown }).data)}`)
-    }
-    if (any.data && !any.response) out.push(`Data: ${safeYamlDump(any.data)}`)
+    if (typeof o.url === 'string' && o.url) add(`URL: ${o.url}`)
 
-    // include *first* stack frame that comes after this util – keeps it short
-    if (any.stack && typeof any.stack === 'string') {
-      const frame = any.stack.split('\n').find((l) => !l.includes('humanizeError'))
-      if (frame) out.push(frame.trim())
-    }
+    const data =
+      (typeof o.response === 'object' && o.response
+        ? (o.response as Record<string, unknown>).data
+        : undefined) ??
+      o.data ??
+      (o as { body?: unknown }).body ??
+      (o as { responseBody?: unknown }).responseBody
+    if (data !== undefined)
+      add(`Data: ${dump(data)}`)
 
-    // recurse into cause once
-    if (depth === 0 && any.cause) {
-      out.push('\nCaused by →')
-      walk(any.cause, depth + 1)
+      /* meta */
+    ;(['code', 'errno', 'name'] as const).forEach((k) => {
+      const v = o[k]
+      if (typeof v === 'string' && v) add(`${k}=${v}`)
+    })
+
+    /* cause – recurse once */
+    if (
+      depth === 0 &&
+      (['cause', 'originalError', 'inner', 'error'] as const).some((k) => {
+        const c = o[k]
+        if (c !== undefined) {
+          add('Caused by →')
+          walk(c, depth + 1)
+          return true
+        }
+        return false
+      })
+    ) {
+      /* handled */
     }
   }
 
   walk(err)
-  return out.filter(Boolean).join('\n')
+  return out.join('\n')
 }
 
 export async function copyPngToClipboard(pngBuffer: Uint8Array) {
