@@ -1,6 +1,7 @@
 <template>
   <q-page padding>
     <q-card flat>
+      <!-- ───────── Intro ───────── -->
       <q-card-section>
         <ty-markdown
           class="pricing-page-intro"
@@ -15,11 +16,21 @@ selecting different models).
         />
         <api-select v-model="state.llmSettings.selectedApi" />
       </q-card-section>
+
+      <!-- ───────── Toggles ───────── -->
       <q-toggle
         v-model="onlyAllowed"
         color="secondary"
-        label="Only show available models (included in taskyon kee or free version)"
+        label="Only show available models (included in Taskyon key or free version)"
       />
+      <q-toggle
+        v-model="sortAllowedFirst"
+        color="primary"
+        class="q-ml-md"
+        label="Sort allowed models first"
+      />
+
+      <!-- ───────── Table ───────── -->
       <q-table
         class="q-card"
         flat
@@ -28,6 +39,7 @@ selecting different models).
         :rows="filteredTableData"
         :columns="columns"
         :table-row-class-fn="rowClassFn"
+        :sort-method="customSortMethod"
         row-key="id"
         :filter="state.modelFilter"
         :visible-columns="[
@@ -44,9 +56,9 @@ selecting different models).
           descending: true,
           page: 0,
           rowsPerPage: 0,
-          // rowsNumber: xx if getting data from a server
         }"
       >
+        <!-- top‑left slot -->
         <template #top-left>
           <q-input
             v-model="state.modelFilter"
@@ -59,13 +71,16 @@ selecting different models).
               <q-icon :name="matFilterList" />
             </template>
           </q-input>
+
           <q-btn
             class="q-mx-sm"
             label="Download Model file as JSON"
             outline
             @click="downloadModels"
-          ></q-btn>
+          />
         </template>
+
+        <!-- top‑right slot -->
         <template #top-right>
           <q-select
             v-model="priceDisplay"
@@ -75,6 +90,8 @@ selecting different models).
             class="q-mr-md"
           />
         </template>
+
+        <!-- name column (body) -->
         <template #body-cell-name="props">
           <q-td :props="props">
             <div class="row items-center">
@@ -103,6 +120,8 @@ selecting different models).
             </div>
           </q-td>
         </template>
+
+        <!-- prompt_price header + body -->
         <template #header-cell-prompt_price="props">
           <q-th :props="props">
             <div>prompt</div>
@@ -127,6 +146,8 @@ selecting different models).
             </q-tooltip>
           </q-td>
         </template>
+
+        <!-- completion_price header + body -->
         <template #header-cell-completion_price="props">
           <q-th :props="props">
             <div>completion</div>
@@ -151,17 +172,17 @@ selecting different models).
             </q-tooltip>
           </q-td>
         </template>
+
+        <!-- request_price header + body -->
         <template #header-cell-request_price="props">
           <q-th :props="props">
             <div>request</div>
-            {{ '$ / request' }}
+            $ / request
           </q-th>
         </template>
         <template #body-cell-request_price="props">
           <q-td :props="props">
-            <div>
-              {{ humanReadablePrice(props.value, 0) }}
-            </div>
+            <div>{{ humanReadablePrice(props.value, 0) }}</div>
             <q-tooltip :delay="500">
               exact price: {{ props.value }}$/request or {{ 1 / props.value }} requests per $
             </q-tooltip>
@@ -173,120 +194,128 @@ selecting different models).
 </template>
 
 <script setup lang="ts">
-import { useTaskyonStore } from 'src/stores/taskyonState'
-import { type QTableProps, exportFile } from 'quasar'
-import { humanReadablePrice, openrouterPricing } from 'src/modules/utils'
-import InfoDialog from 'components/InfoDialog.vue'
 import { ref, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { type QTableProps, exportFile } from 'quasar'
 import { matCheck, matFilterList } from '@quasar/extras/material-icons'
+
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import { useAppStateStore } from 'src/stores/appState'
+
+import InfoDialog from 'components/InfoDialog.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import ApiSelect from 'components/taskyon/ApiSelect.vue'
-import { useAppStateStore } from 'src/stores/appState'
 import ObjectTreeView from 'src/components/ObjectTreeView.vue'
-import type { Model } from 'src/modules/taskyon/types'
-import { useRoute, useRouter } from 'vue-router'
 
+import { humanReadablePrice, openrouterPricing } from 'src/modules/utils'
+import type { Model } from 'src/modules/taskyon/types'
+
+/* ─────────── Local constants ─────────── */
 const pricingOptions = ['$/token', 'pages/0.01$', '$/million tokens'] as const
 
+/* ─────────── Stores & router ─────────── */
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
-const priceDisplay = ref<(typeof pricingOptions)[number]>(pricingOptions[2])
 
 const route = useRoute()
 const router = useRouter()
 
-/** two‑way binding to ?onlyAllowed in the URL */
+/* ─────────── UI state ─────────── */
+const priceDisplay = ref<(typeof pricingOptions)[number]>(pricingOptions[2])
+
+/** two‑way bind to ?onlyAllowed query param */
 const onlyAllowed = computed<boolean>({
-  get: () => route.query.onlyAllowed !== undefined, // treat mere presence as “true”
-  /* or === 'true' if you prefer */
+  get: () => route.query.onlyAllowed !== undefined,
   set: (v) => {
     const q = { ...route.query }
     if (v) q.onlyAllowed = 'true'
     else delete q.onlyAllowed
-    void router.replace({ query: q }) // shallow‑history update
+    void router.replace({ query: q })
   },
 })
 
-//const { llmModels: tableData } = storeToRefs(state);
-
-type rowType = (typeof tystate.llmModels)[0]
-
-const filteredTableData = computed(() => {
-  const allModelsAllowed =
-    tystate.allowedLLMModels === undefined || tystate.allowedLLMModels?.includes('*')
-  return Object.values(tystate.llmModels)
-    .filter((model) => {
-      if (model.name || model.id) {
-        return true
-      }
-      return false
-    })
-    .map((x) => ({
-      ...x,
-      inKey: allModelsAllowed ? undefined : tystate.allowedLLMModels?.includes(x.id) ? true : false,
-    }))
-    .filter((x) => !onlyAllowed.value || (x.inKey ?? x.inKey === undefined))
+/** two‑way bind to ?sortAllowedFirst query param */
+const sortAllowedFirst = computed<boolean>({
+  get: () => route.query.allowedFirst === 'true' || route.query.allowedFirst === undefined,
+  set: (v) => {
+    const q = { ...route.query }
+    if (!v) q.allowedFirst = 'false'
+    else delete q.allowedFirst
+    void router.replace({ query: q })
+  },
 })
 
-function rowClassFn(row: Model & { inKey: undefined | boolean }) {
+/* ─────────── Helpers ─────────── */
+type Row = Model & { inKey?: boolean }
+
+function rowClassFn(row: Row) {
   return row.inKey === undefined || row.inKey === true ? '' : 'not-in-key'
 }
 
 function floatSorter(a: string, b: string) {
   const numA = parseFloat(a)
   const numB = parseFloat(b)
-
-  const validA = isNaN(numA) ? -1 : numA
-  const validB = isNaN(numB) ? -1 : numB
-
-  const comparison = validA - validB
-  return comparison
+  return (isNaN(numA) ? -1 : numA) - (isNaN(numB) ? -1 : numB)
 }
 
-const downloadModels = () => {
-  console.log('download models')
-  // Use Quasar's exportFile function for download
+function calculatePricePerPage(value: string | undefined) {
+  if (!value) return 'N/A'
+  const price = parseFloat(value)
+  if (price < 0) return 'dynamic'
+  if (isNaN(price)) return 'N/A'
+  if (price === 0) return 'free'
+  return (0.01 / (price * 500)).toFixed(1)
+}
+
+function calculatePricePerMillion(value: string | undefined) {
+  if (!value) return 'N/A'
+  const price = parseFloat(value)
+  if (price < 0) return 'dynamic'
+  if (isNaN(price)) return 'N/A'
+  if (price === 0) return 'free'
+  return `$${(price * 1_000_000).toFixed(2)}`
+}
+
+const downloadModels = () =>
   exportFile('models.json', JSON.stringify(tystate.llmModels, null, 2), 'application/json')
-}
 
+/* ─────────── Data preparation ─────────── */
+const filteredTableData = computed(() => {
+  const allAllowed =
+    tystate.allowedLLMModels === undefined || tystate.allowedLLMModels.includes('*')
+
+  return Object.values(tystate.llmModels)
+    .filter((m) => m.name || m.id)
+    .map((m) => ({
+      ...m,
+      inKey: allAllowed ? undefined : (tystate.allowedLLMModels?.includes(m.id) ?? false),
+    }))
+    .filter((m) => !onlyAllowed.value || (m.inKey ?? true))
+})
+
+/* ─────────── Column defs ─────────── */
 const columns: QTableProps['columns'] = [
   {
     name: 'name',
     label: 'Name',
     align: 'left',
-    // we are always filtering for one of those two values, so this is definitly available
-    field: (row: rowType) => row.name ?? row.id,
+    field: (row: Row) => row.name ?? row.id,
     sortable: true,
   },
   {
     name: 'created',
     label: 'creation date',
     align: 'right',
-    field: (row: rowType) => row.created,
+    field: (row: Row) => row.created,
     sortable: true,
     sort: floatSorter,
-    format: (value: number) => {
-      // Format the date string to a more readable format
-      const date = new Date(value * 1000)
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      return `${year}-${month}-${day}`
-      //return value
-    },
+    format: (v: number) => new Date(v * 1000).toISOString().slice(0, 10), // yyyy-mm-dd
   },
-  /*{
-    name: 'description',
-    label: 'Description',
-    align: 'left',
-    field: (row: rowType) => row.description || '',
-    sortable: false,
-  },*/
   {
     name: 'prompt_price',
     label: 'pages/0.01$',
     align: 'center',
-    field: (row: rowType) => row.pricing?.prompt,
+    field: (row: Row) => row.pricing?.prompt,
     sortable: true,
     sort: floatSorter,
   },
@@ -294,7 +323,7 @@ const columns: QTableProps['columns'] = [
     name: 'completion_price',
     label: 'Completion Price',
     align: 'center',
-    field: (row: rowType) => row.pricing?.completion,
+    field: (row: Row) => row.pricing?.completion,
     sortable: true,
     sort: floatSorter,
   },
@@ -302,7 +331,7 @@ const columns: QTableProps['columns'] = [
     name: 'request_price',
     label: 'Request Price',
     align: 'center',
-    field: (row: rowType) => row.pricing?.request,
+    field: (row: Row) => row.pricing?.request,
     sortable: true,
     sort: floatSorter,
   },
@@ -310,71 +339,79 @@ const columns: QTableProps['columns'] = [
     name: 'modality',
     label: 'Modality',
     align: 'center',
-    field: (row: rowType) => row.architecture?.modality || 'N/A',
-    //format: (value) => value.architecture?.modality || 'N/A',
+    field: (row: Row) => row.architecture?.modality ?? 'N/A',
     sortable: true,
   },
   {
     name: 'context_length',
     label: 'Context Length',
     align: 'center',
-    field: (row: rowType) => row.context_length || 'N/A',
+    field: (row: Row) => row.context_length ?? 'N/A',
     sortable: true,
   },
   {
     name: 'allowed',
     label: 'allowed',
-    field: (row) => row.inKey,
+    field: (row: Row) => row.inKey,
     sortable: true,
   },
-  /*{
-    name: 'tokenizer',
-    label: 'Tokenizer',
-    align: 'center',
-    field: (row: rowType) => row.architecture?.tokenizer,
-    sortable: true,
-  },
-  {
-    name: 'instruct_type',
-    label: 'Instruct Type',
-    align: 'center',
-    field: (row: rowType) => row.architecture?.instruct_type,
-    sortable: true,
-  },*/
 ]
 
-function calculatePricePerPage(value: string | undefined) {
-  if (value) {
-    const price = parseFloat(value)
-    if (price < 0) {
-      return 'dynamic'
-    } else if (isNaN(price)) {
-      return 'N/A'
-    } else if (price === 0) {
-      return 'free'
-    } else {
-      const ppt = 0.01 / (price * 500)
-      return ppt.toFixed(1)
-    }
-  } else {
-    return 'N/A'
-  }
+/* ─────────── Custom sort‑method ─────────── */
+const defaultCompare = (a: unknown, b: unknown): number => {
+  if (a == null && b == null) return 0
+  if (a == null) return -1
+  if (b == null) return 1
+  if (typeof a === 'number' && typeof b === 'number') return a - b
+  // eslint-disable-next-line @typescript-eslint/no-base-to-string
+  return String(a).localeCompare(String(b))
 }
 
-function calculatePricePerMillion(value: string | undefined) {
-  if (value) {
-    const price = parseFloat(value)
-    if (price < 0) {
-      return 'dynamic'
-    } else if (isNaN(price)) {
-      return 'N/A'
-    } else if (price === 0) {
-      return 'free'
-    } else {
-      return `$${(price * 1000000).toFixed(2)}`
+const customSortMethod: QTableProps['sortMethod'] = (rows, sortBy, descending) => {
+  const col = columns.find((c) => c.name === sortBy)
+  if (!col) return rows
+
+  /* helper: 0 = allowed (true|undefined) → top, 1 = not‑allowed → bottom */
+  const allowedRank = (r: Row) => (r.inKey === false ? 1 : 0)
+
+  /* helper: retrieve the cell value regardless of field‑type */
+  const getValue = (row: Row) => {
+    if (typeof col.field === 'function') {
+      return col.field(row) // already typed by Quasar
     }
-  } else {
-    return 'N/A'
+    // col.field is a string → cast to keyof Row so TS knows it exists
+    const key = col.field as keyof Row
+    return row[key]
   }
+  const data = [...rows] as Row[]
+  data.sort((rowA, rowB) => {
+    /* 1️⃣ allowed‑first layer (if enabled) */
+    if (sortAllowedFirst.value) {
+      const diff = allowedRank(rowA) - allowedRank(rowB)
+      if (diff !== 0) return diff
+    }
+
+    /* 2️⃣ column sort */
+    const valA = getValue(rowA)
+    const valB = getValue(rowB)
+
+    let cmp: number
+    if (typeof col.sort === 'function') {
+      // column custom sort: (valA, valB, rowA, rowB)
+      cmp = col.sort(valA as never, valB as never, rowA, rowB)
+    } else {
+      cmp = defaultCompare(valA, valB)
+    }
+
+    return descending ? -cmp : cmp
+  })
+
+  return data
 }
 </script>
+
+<style scoped>
+.not-in-key {
+  opacity: 0.4;
+}
+</style>
