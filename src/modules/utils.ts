@@ -1,6 +1,7 @@
 //import equal from 'fast-deep-equal/es6';
 import { deepEqual } from 'fast-equals'
 import { Buffer } from 'buffer'
+import { safeYamlDump } from './yamlUtils'
 
 export function copyToClipboard(text: string) {
   navigator.clipboard
@@ -11,6 +12,64 @@ export function copyToClipboard(text: string) {
     .catch((err) => {
       console.error('Error in copying text: ', err)
     })
+}
+
+/**
+ * Turn any thrown value into a tidy, human‑readable summary.
+ *
+ * Order of precedence:
+ *   1. `cause`            (recurses once)
+ *   2. `message|msg`      (string or object → YAML)
+ *   3. HTTP / Axios hints (status, data, url…)
+ *   4. non‑verbose stack  (first useful frame only)
+ *
+ * Everything else is ignored unless it adds new information.
+ */
+export function humanizeError(err: unknown): string {
+  const out: string[] = []
+  const seen = new Set<unknown>()
+
+  const walk = (e: unknown, depth = 0) => {
+    if (!e || seen.has(e)) return
+    seen.add(e)
+
+    // plain string / number / boolean
+    if (typeof e !== 'object') {
+      out.push(safeYamlDump(e))
+      return
+    }
+
+    const any = e as Record<string, unknown>
+
+    // --- main line ---------------------------------------------------------
+    if (any.message ?? any.msg) out.push(safeYamlDump(any.message ?? any.msg))
+
+    // HTTP / Axios shortcuts
+    if (any.status) {
+      const statusLine = `${safeYamlDump(any.status)} ${safeYamlDump(any.statusText) ?? ''}`.trim()
+      out.push(statusLine)
+    }
+    if (any.url) out.push(`URL: ${safeYamlDump(any.url)}`)
+    if (any.response && typeof any.response === 'object' && 'data' in any.response) {
+      out.push(`Response: ${safeYamlDump((any.response as { data?: unknown }).data)}`)
+    }
+    if (any.data && !any.response) out.push(`Data: ${safeYamlDump(any.data)}`)
+
+    // include *first* stack frame that comes after this util – keeps it short
+    if (any.stack && typeof any.stack === 'string') {
+      const frame = any.stack.split('\n').find((l) => !l.includes('humanizeError'))
+      if (frame) out.push(frame.trim())
+    }
+
+    // recurse into cause once
+    if (depth === 0 && any.cause) {
+      out.push('\nCaused by →')
+      walk(any.cause, depth + 1)
+    }
+  }
+
+  walk(err)
+  return out.filter(Boolean).join('\n')
 }
 
 export async function copyPngToClipboard(pngBuffer: Uint8Array) {
@@ -1047,3 +1106,24 @@ export function hexToRgb(hex: string): string {
   const b = bigint & 255
   return `${r}, ${g}, ${b}`
 }
+
+export type DeepPartial<T> =
+  // primitives & functions ─ leave as‑is
+  T extends
+    | string
+    | number
+    | boolean
+    | bigint
+    | symbol
+    | null
+    | undefined
+    | ((...args: unknown[]) => unknown)
+    ? T
+    : // arrays / tuples
+      T extends ReadonlyArray<infer U>
+      ? ReadonlyArray<DeepPartial<U>>
+      : // objects
+        T extends object
+        ? { [P in keyof T]?: DeepPartial<T[P]> }
+        : // everything else
+          T
