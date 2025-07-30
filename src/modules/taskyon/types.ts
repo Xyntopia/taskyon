@@ -260,7 +260,7 @@ const UploadedFilesContent = z.object({
 })
 const ToolResultContent = z.object({ type: z.literal('toolresult'), data: z.unknown() })
 const ToolDefinition = z.object({ type: z.literal('tooldefinition'), data: ToolBase })
-const ErrorContent = z.object({ type: z.literal('error'), data: z.string() }).meta({
+const ErrorContent = z.object({ type: z.literal('error'), data: z.unknown() }).meta({
   description: 'Gets created if any error occurs during task processing.',
 })
 const Return = z.object({ type: z.literal('return'), data: z.string() }).describe(
