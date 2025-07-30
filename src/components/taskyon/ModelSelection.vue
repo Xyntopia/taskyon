@@ -112,10 +112,11 @@ const modelOptions = computed(() => {
     return options
   } else {
     let llmModels = Object.values(tystate.llmModels)
+    if (tystate.allowedLLMModels) {
+      llmModels = llmModels.filter((m) => (m.id ? tystate.allowedLLMModels?.includes(m.id) : false))
+    }
     if (showVisionModels.value) {
-      llmModels = Object.values(tystate.llmModels).filter(
-        (m) => m.architecture?.modality === 'text+image->text',
-      )
+      llmModels = llmModels.filter((m) => m.architecture?.modality === 'text+image->text')
     }
     const options = llmModels
       .map((m) => {

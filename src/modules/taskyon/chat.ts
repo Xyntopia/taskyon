@@ -462,6 +462,7 @@ const availableModelsTmp = async (
     // Construct the URL with an optional cache-busting query parameter
     const url = invalidateCache ? `${modelsUrl}?_=${new Date().getTime()}` : modelsUrl
 
+    console.log('downloading model list')
     // Setting up the Fetch request
     const response = await fetch(url, {
       method: 'GET',

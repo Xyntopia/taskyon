@@ -461,16 +461,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   }
 
   const llmModelsInternal = ref<Record<string, Model>>({})
-  void updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then(
-    (m) => (llmModelsInternal.value = m),
-  )
   // make sure we update our model list whenever anything changes for our
   // endpoints...
   watch(
     [() => stateRefs.llmSettings.selectedApi, stateRefs.keys, stateRefs.llmSettings.llmApis],
     () => {
       const api = getApiConfig(stateRefs.llmSettings)
-      // try to set our recommended models if ther isn't any default or anything!
+      // try to set our recommended models if there isn't any default or anything!
       if (api && !api.selectedModel) {
         stateRefs.llmSettings.llmApis['taskyon']!.selectedModel = api.models?.free
       }
@@ -483,7 +480,18 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     },
   )
 
-  const modelLookUp = llmModelsInternal
+  const allowedLLMModels = computed<string[] | undefined>(() => {
+    if (stateRefs.llmSettings.selectedApi === 'taskyon') {
+      // if we have a taskyon key defined only display the models allowed for that key...
+      if (stateRefs.tyPublicKey?.model && stateRefs.tyPublicKey.model.length > 0) {
+        if (!stateRefs.tyPublicKey.model.includes('*')) {
+          const models = stateRefs.tyPublicKey.model
+          return models
+        }
+      }
+    }
+    return undefined
+  })
 
   watch(
     [
@@ -544,7 +552,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   })
 
   const currentModel = computed(() => {
-    return modelLookUp.value[currentModelId.value]
+    return llmModelsInternal.value[currentModelId.value]
   })
 
   // Method to handle the updateBotName event
@@ -678,9 +686,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     lastTaskState,
     workerStreamLogs,
     addToProcessQueue,
-    modelLookUp,
     chatCompletionStream,
     llmModels: computed(() => llmModelsInternal.value),
+    allowedLLMModels,
     currentModelId,
     currentModel,
     handleBotNameUpdate,
