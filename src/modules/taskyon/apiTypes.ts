@@ -1,4 +1,4 @@
-import type { DeepPartial } from 'quasar'
+import type { DeepPartial } from '../utils'
 import type { storedSettings } from './types'
 import { FunctionArguments, ToolBase, partialTaskDraft } from './types'
 import { z } from 'zod'
