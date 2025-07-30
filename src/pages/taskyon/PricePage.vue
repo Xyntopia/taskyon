@@ -30,6 +30,15 @@ selecting different models).
         :table-row-class-fn="rowClassFn"
         row-key="id"
         :filter="state.modelFilter"
+        :visible-columns="[
+          'name',
+          'created',
+          'prompt_price',
+          'completion_price',
+          'request_price',
+          'modality',
+          'context_length',
+        ]"
         :pagination="{
           sortBy: 'created',
           descending: true,
@@ -310,6 +319,12 @@ const columns: QTableProps['columns'] = [
     label: 'Context Length',
     align: 'center',
     field: (row: rowType) => row.context_length || 'N/A',
+    sortable: true,
+  },
+  {
+    name: 'allowed',
+    label: 'allowed',
+    field: (row) => row.inKey,
     sortable: true,
   },
   /*{
