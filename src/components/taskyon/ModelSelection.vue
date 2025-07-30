@@ -48,7 +48,7 @@
         <q-tooltip :delay="200"> Only Show Models which support vision. </q-tooltip>
       </ToggleButton>
       <div v-if="modelList" style="font-size: 0.5em">
-        <q-btn :icon-right="matList" flat to="/pricing?onlyAllowed=true">
+        <q-btn :icon-right="matList" flat to="/pricing">
           <q-tooltip>List of models</q-tooltip>
         </q-btn>
       </div>

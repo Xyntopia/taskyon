@@ -586,7 +586,7 @@ async function convertTaskNodeToOpenAIMessage(
           role: 'system',
           // and the result of the function
           content:
-            `You just used the following tool: ${functionCallName}.` +
+            `The following tool was used: ${functionCallName}.` +
             (!isEmpty(task.content.data.arguments)
               ? ` The function arguments were: ${JSON.stringify(task.content.data.arguments)}`
               : ''),
@@ -756,8 +756,21 @@ export async function createChatCompletionTool(
       // refactor this below and make it all explicit, without passing llmSettings...
       // now add goal-specific prompts...
       const lastTaskBeforeChatCompletion = context.taskChain.at(-2)
+      // in case there was an error, we want to make sure, that we allow using the same tool(s)
+      // that were in use when the error was created...
+      const lastTaskBeforeError = context.taskChain.at(-3)
+      let allowedToolsFromError: string[] = []
+      if (goal === 'AnalyzeError' && lastTaskBeforeError?.content.type === 'functioncall') {
+        if (lastTaskBeforeError.content.data.name === 'chatCompletion') {
+          allowedToolsFromError = lastTaskBeforeError.content.data.arguments
+            .allowedTools as string[]
+        } else {
+          // otherwise we might want to repeat the actual tool call with different parameters!
+          allowedToolsFromError = [lastTaskBeforeError.content.data.name]
+        }
+      }
       const { chatCompletion, metaInfo: chatInfo } = await processChatTask(
-        allowedTools ?? [],
+        allowedTools ?? allowedToolsFromError,
         toolDefs,
         !!llmTools,
         { model: selectedModel, chatApi: llmSettings.selectedApi },
