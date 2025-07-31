@@ -123,26 +123,28 @@
                     />
                   </q-item-section>
                 </q-item>
-                <div class="row" @click.stop>
-                  <q-select
-                    class="col"
-                    use-input
-                    dense
-                    hide-selected
-                    fill-input
-                    options-dense
-                    filled
-                    input-debounce="0"
-                    color="secondary"
-                    :model-value="selectedTaskType"
-                    :options="filteredToolCollection"
-                    @filter="filterFn"
-                    @update:model-value="tystate.switchTaskType"
-                  >
-                    <template #prepend>
-                      <q-icon :name="mdiFunctionVariant" />
-                    </template>
-                  </q-select>
+                <div class="row">
+                  <div @click.stop>
+                    <q-select
+                      class="col"
+                      use-input
+                      dense
+                      hide-selected
+                      fill-input
+                      options-dense
+                      filled
+                      input-debounce="0"
+                      color="secondary"
+                      :model-value="selectedTaskType"
+                      :options="filteredToolCollection"
+                      @filter="filterFn"
+                      @update:model-value="tystate.switchTaskType"
+                    >
+                      <template #prepend>
+                        <q-icon :name="mdiFunctionVariant" />
+                      </template>
+                    </q-select>
+                  </div>
                   <q-btn flat stretch label="Ok" />
                 </div>
                 <q-item
