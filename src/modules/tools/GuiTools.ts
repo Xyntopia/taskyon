@@ -146,6 +146,7 @@ export const quasarDialogTool = createTool({
       html: false,
       position: 'standard',
 
+      color: 'secondary',
       ...rest, // title, message, …
       ...(dialogPrompt ? { prompt: dialogPrompt } : {}),
       ...(selectionPrompt ? { options: selectionPrompt } : {}),
