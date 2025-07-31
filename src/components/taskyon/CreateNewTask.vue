@@ -264,7 +264,6 @@ import {
   matMoreHoriz,
   matSend,
   matBuild,
-  matManageAccounts,
   matAttachment,
 } from '@quasar/extras/material-icons'
 import { useAppStateStore } from 'src/stores/appState'
