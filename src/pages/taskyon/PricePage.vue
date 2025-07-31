@@ -95,6 +95,11 @@ selecting different models).
         <template #body-cell-name="props">
           <q-td :props="props">
             <div class="row items-center">
+              <q-icon v-if="!props.row.inKey" class="q-pr-xs" :name="matBlock">
+                <q-tooltip>
+                  This model is not available for this kee (are you using the free key?)
+                </q-tooltip>
+              </q-icon>
               <div
                 :class="props.row.id === tystate.currentModelId ? 'text-positive text-bold' : ''"
               >
@@ -111,7 +116,7 @@ selecting different models).
                 <object-tree-view v-model="props.row" read-only />
               </InfoDialog>
               <q-btn
-                v-if="props.row.id !== tystate.currentModelId"
+                v-if="props.row.id !== tystate.currentModelId && props.row.inKey"
                 flat
                 label="select this model"
                 @click="tystate.handleBotNameUpdate({ newName: props.row.id })"
@@ -197,7 +202,7 @@ selecting different models).
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { type QTableProps, exportFile } from 'quasar'
-import { matCheck, matFilterList } from '@quasar/extras/material-icons'
+import { matBlock, matCheck, matFilterList } from '@quasar/extras/material-icons'
 
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { useAppStateStore } from 'src/stores/appState'
