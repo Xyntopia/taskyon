@@ -107,50 +107,55 @@
         <div v-if="expertMode || selectedTaskType" @click.stop>
           <q-btn flat dense :icon="mdiFunctionVariant">
             <q-menu auto-close>
-              <div>
-                <div class="text-caption text-center">
-                  <div>
-                    Search for a tool you want to use..
+              <q-list dense>
+                <q-item clickable to="/tool">
+                  <q-item-section> Open Tool Manager </q-item-section>
+                  <q-item-section side>
+                    <q-icon :name="mdiToolbox"></q-icon>
+                  </q-item-section>
+                </q-item>
+                <q-separator />
+                <q-item>
+                  <q-item-section> Search for a tool you want to use..</q-item-section>
+                  <q-item-section side>
                     <InfoDialog
                       info-text="You can use tools here directly and change their parameters to your liking"
                     />
-                  </div>
+                  </q-item-section>
+                </q-item>
+                <div class="row" @click.stop>
+                  <q-select
+                    class="col"
+                    use-input
+                    dense
+                    hide-selected
+                    fill-input
+                    options-dense
+                    filled
+                    input-debounce="0"
+                    color="secondary"
+                    :model-value="selectedTaskType"
+                    :options="filteredToolCollection"
+                    @filter="filterFn"
+                    @update:model-value="tystate.switchTaskType"
+                  >
+                    <template #prepend>
+                      <q-icon :name="mdiFunctionVariant" />
+                    </template>
+                  </q-select>
+                  <q-btn flat stretch label="Ok" />
                 </div>
-                <div class="row">
-                  <div @click.stop>
-                    <q-select
-                      class="col"
-                      use-input
-                      dense
-                      hide-selected
-                      fill-input
-                      options-dense
-                      filled
-                      input-debounce="0"
-                      color="secondary"
-                      :model-value="selectedTaskType"
-                      :options="filteredToolCollection"
-                      @filter="filterFn"
-                      @update:model-value="tystate.switchTaskType"
-                    >
-                      <template #prepend>
-                        <q-icon :name="mdiFunctionVariant" />
-                      </template>
-                    </q-select>
-                  </div>
-                  <q-btn flat stretch>Ok</q-btn>
-                </div>
-                <q-btn
+                <q-item
                   v-if="selectedTaskType"
-                  flat
-                  dense
-                  square
-                  class="q-my-xs"
-                  :icon="matChat"
-                  label="Select Simple Chat"
+                  clickable
                   @click="() => tystate.switchTaskType(undefined)"
-                />
-              </div>
+                >
+                  <q-item-section> Select Simple Chat </q-item-section>
+                  <q-item-section side>
+                    <q-icon :name="matChat"></q-icon>
+                  </q-item-section>
+                </q-item>
+              </q-list>
             </q-menu>
           </q-btn>
         </div>
@@ -168,7 +173,7 @@
             {{ `${tystate.currentModelId}` }}
           </div>
           <div class="text-weight-thin gt-xs">/{{ state.llmSettings.selectedApi }}</div>
-          <q-menu fit color="secondary">
+          <q-menu data-cy="model-selection" fit color="secondary">
             <q-list dense style="min-width: 100px">
               <div class="row">
                 <q-btn square flat :icon="matSmartToy" label="Model List" to="/pricing" />
@@ -273,7 +278,7 @@ import { buildSlimView } from 'src/modules/vueUtils'
 import FileDropzone from '../FileDropzone.vue'
 import { QSelect } from 'quasar'
 import { deepCopy } from 'src/modules/utils'
-import { mdiFunctionVariant } from '@quasar/extras/mdi-v6'
+import { mdiFunctionVariant, mdiToolbox } from '@quasar/extras/mdi-v6'
 import ApiSelect from './ApiSelect.vue'
 
 const { expertMode = false, entryNode } = defineProps<{
