@@ -74,8 +74,8 @@ const prismId = 'prism-theme'
  * @param opts    override paths or link id
  */
 export function initPrismTheme(isDark: boolean) {
-  console.log('init prism theme')
   if (linkEl) return
+  console.log('init prism theme')
   linkEl = document.createElement('link')
   linkEl.rel = 'stylesheet'
   linkEl.id = prismId
