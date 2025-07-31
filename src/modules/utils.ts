@@ -15,83 +15,110 @@ export function copyToClipboard(text: string) {
 }
 
 /**
- * Convert any thrown value into a short, customer‑friendly string.
+ * Convert any thrown value into a short, customer-friendly string.
  *
- * Priority: message → HTTP hints → meta fields → one‑level cause.
+ * Priority: message → HTTP hints → meta fields → one-level cause.
+ * Handles Array-style causes (e.g. ["403 Forbidden: …"]) by promoting
+ * them to the top of the output.
  * Designed for production UI logs (no stack traces, YAML only).
  */
-export function humanizeError(err: unknown): string {
-  const seen = new WeakSet<object>()
-  const out: string[] = []
+export function humanizeError(errorInput: unknown): string {
+  const seenObjects = new WeakSet<object>()
+  const lines: string[] = []
 
-  /* helpers -------------------------------------------------------------- */
-  const dump = (v: unknown): string => (typeof v === 'string' ? v : safeYamlDump(v).trim())
+  /* ---------- helpers --------------------------------------------------- */
+  const toYaml = (val: unknown): string =>
+    typeof val === 'string' ? val : safeYamlDump(val).trim()
 
-  const add = (line: unknown): void => {
-    if (typeof line === 'string' && line.trim() && !out.includes(line)) out.push(line.trim())
+  const append = (line: unknown): void => {
+    if (typeof line === 'string' && line.trim() && !lines.includes(line.trim())) {
+      lines.push(line.trim())
+    }
   }
 
-  /* main walker ---------------------------------------------------------- */
-  const walk = (e: unknown, depth = 0): void => {
-    if (e == null) return
+  const appendArray = (arr: unknown[]): void => {
+    for (const element of arr) append(element)
+  }
 
-    const t = typeof e
-    if (t !== 'object' && t !== 'function') {
-      add(dump(e))
+  /* ---------- main walker ----------------------------------------------- */
+  const traverse = (value: unknown, level = 0): void => {
+    if (value == null) return
+
+    const valueType = typeof value
+
+    // primitives (string | number | boolean | bigint | symbol)
+    if (valueType !== 'object' && valueType !== 'function') {
+      append(toYaml(value))
       return
     }
 
-    if (seen.has(e as object)) return
-    seen.add(e as object)
+    // avoid infinite recursion
+    if (seenObjects.has(value as object)) return
+    seenObjects.add(value as object)
 
-    const o = e as Record<string, unknown>
-
-    /* message / msg */
-    const msg = o.message ?? o.msg
-    if (msg !== undefined) add(dump(msg))
-
-    /* HTTP hints */
-    if (typeof o.status === 'number') {
-      const text = typeof o.statusText === 'string' && o.statusText ? ` ${o.statusText}` : ''
-      add(`${o.status}${text}`)
+    // arrays: treat each entry as its own message
+    if (Array.isArray(value)) {
+      appendArray(value)
+      return
     }
-    if (typeof o.url === 'string' && o.url) add(`URL: ${o.url}`)
 
-    const data =
-      (typeof o.response === 'object' && o.response
-        ? (o.response as Record<string, unknown>).data
+    const obj = value as Record<string, unknown>
+
+    /* #1 message fields */
+    const message =
+      typeof obj.message === 'string'
+        ? obj.message
+        : typeof obj.msg === 'string'
+          ? obj.msg
+          : undefined
+    if (message) append(message)
+
+    /* #2 HTTP hints */
+    if (typeof obj.status === 'number') {
+      const statusText =
+        typeof obj.statusText === 'string' && obj.statusText ? ` ${obj.statusText}` : ''
+      append(`${obj.status}${statusText}`)
+    }
+    if (typeof obj.url === 'string' && obj.url) append(`URL: ${obj.url}`)
+
+    /* #3 data/body helpers */
+    const dataCandidate =
+      (typeof obj.response === 'object' && obj.response
+        ? (obj.response as Record<string, unknown>).data
         : undefined) ??
-      o.data ??
-      (o as { body?: unknown }).body ??
-      (o as { responseBody?: unknown }).responseBody
-    if (data !== undefined)
-      add(`Data: ${dump(data)}`)
+      obj.data ??
+      (obj as { body?: unknown }).body ??
+      (obj as { responseBody?: unknown }).responseBody
+    if (dataCandidate !== undefined)
+      append(`Data: ${toYaml(dataCandidate)}`)
 
-      /* meta */
-    ;(['code', 'errno', 'name'] as const).forEach((k) => {
-      const v = o[k]
-      if (typeof v === 'string' && v) add(`${k}=${v}`)
+      /* #4 meta fields */
+    ;(['code', 'errno', 'name'] as const).forEach((key) => {
+      const val = obj[key]
+      if (typeof val === 'string' && val) append(`${key}=${val}`)
     })
 
-    /* cause – recurse once */
-    if (
-      depth === 0 &&
-      (['cause', 'originalError', 'inner', 'error'] as const).some((k) => {
-        const c = o[k]
-        if (c !== undefined) {
-          add('Caused by →')
-          walk(c, depth + 1)
-          return true
+    /* #5 cause (descend one level) */
+    if (level === 0) {
+      const causeKeys = ['cause', 'originalError', 'inner', 'error'] as const
+      for (const key of causeKeys) {
+        const causeVal = obj[key]
+        if (causeVal === undefined) continue
+
+        // Promote array causes so they’re shown first
+        if (Array.isArray(causeVal)) {
+          appendArray(causeVal)
+        } else {
+          append('Caused by →')
+          traverse(causeVal, level + 1)
         }
-        return false
-      })
-    ) {
-      /* handled */
+        break // handle only the first found cause
+      }
     }
   }
 
-  walk(err)
-  return out.join('\n')
+  traverse(errorInput)
+  return lines.join('\n')
 }
 
 export async function copyPngToClipboard(pngBuffer: Uint8Array) {
@@ -270,6 +297,45 @@ const createMemoryStorage = () => {
     setItem: memoryStorage.set.bind(memoryStorage),
     getItem: (key: string) => memoryStorage.get(key) || null,
   }
+}
+
+/**
+ * Make anything JSON-serialisable.
+ * – Preserves Error details (name, message, stack, cause, enumerables)
+ * – Breaks cycles (→ "[Circular]")
+ * – Stringifies BigInt / functions / symbols
+ * – Returns a *plain* value, not a string.
+ *
+ * Drop-in replacement for the longer `serializeForJson`.
+ */
+export function serializeForJson(value: unknown): unknown {
+  const seen = new WeakSet<object>()
+
+  const replacer = (_key: string, val: unknown): unknown => {
+    /* BigInt → string ---------------------------------------------------- */
+    if (typeof val === 'bigint') return val.toString()
+
+    /* Functions / symbols ---------------------------------------------- */
+    if (typeof val === 'function') return `[Function ${val.name || 'anonymous'}]`
+    if (typeof val === 'symbol') return val.toString()
+
+    /* Error objects ----------------------------------------------------- */
+    if (val instanceof Error) {
+      const { name, message, stack, cause, ...rest } = val
+      return { name, message, stack, cause, ...rest }
+    }
+
+    /* Circular refs ----------------------------------------------------- */
+    if (typeof val === 'object' && val !== null) {
+      if (seen.has(val)) return '[Circular]'
+      seen.add(val)
+    }
+
+    return val // leave everything else as-is
+  }
+
+  // stringify → parse to end up with plain JSON-safe data
+  return JSON.parse(JSON.stringify(value, replacer))
 }
 
 // Dynamically assign the storage methods
