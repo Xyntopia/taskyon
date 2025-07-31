@@ -1,4 +1,3 @@
-import { dump } from 'js-yaml'
 import { bigIntToString } from '../utils'
 import type { FunctionArguments, FunctionCall, ParamType, WithRequired, toolContext } from './types'
 import { convertZodToJsonSchemaCached, partialTaskDraft, taskMarker } from './types'
@@ -6,8 +5,7 @@ import { ToolBase } from './types'
 import type { TaskWorkerMessage } from './apiTypes'
 import { RemoteFunctionResponse, RemoteFunctionCall } from './apiTypes'
 import { z } from 'zod'
-import type { YamlRepresentation } from '../yamlUtils'
-import { convertToYamlWComments } from '../yamlUtils'
+import { jsonSchemaToYamlString } from '../yamlUtils'
 import { executeCodeInIframe } from './iframeWorker'
 import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
 import type { JSONSchema7, JSONSchema7Object } from 'json-schema'
@@ -294,90 +292,14 @@ export interface WorkerMessage {
 }
 
 function convertToToolCommandString(tool: ToolBase, longDescription = false): string {
-  // convert a tool into a schema which is compatible with toolCommandChat
-  const args: YamlRepresentation = {}
-
-  const requiredProperties = new Set(tool.parameters.required || [])
-
-  // Loop over each property in the tool's parameters
-  if (tool.parameters.properties) {
-    Object.entries(tool.parameters.properties).forEach(([key, param]) => {
-      // Check if the key is in the list of required properties
-      // const isRequired = requiredProperties.has(key);
-      // If the property is required, use the key as is, otherwise add a "?" to the key
-      if (param && typeof param !== 'boolean' && 'description' in param) {
-        const descriptionKey = `# ${key} description`
-        args[descriptionKey] = param.description?.replace(/\n/g, ' ') ?? ''
-      }
-
-      if (param && typeof param === 'object' && 'type' in param) {
-        const argKey = key
-
-        // Handle enum types
-        if (param.enum) {
-          args[argKey] = `enum: ${(param.enum as string[]).join(', ')}`
-        } else {
-          // Handle other types
-          args[argKey] = Array.isArray(param.type)
-            ? param.type.map(String).join(', ')
-            : String(param.type)
-        }
-
-        // Handle default values
-        if ('default' in param) {
-          args[`${argKey} default`] =
-            typeof param.default === 'object'
-              ? JSON.stringify(param.default)
-              : String(param.default)
-        }
-
-        // Handle additional properties
-        if ('minimum' in param) {
-          args[`${argKey} minimum`] = String(param.minimum)
-        }
-        if ('maximum' in param) {
-          args[`${argKey} maximum`] = String(param.maximum)
-        }
-        if ('pattern' in param) {
-          args[`${argKey} pattern`] = String(param.pattern)
-        }
-
-        // Handle nested objects
-        if (param.type === 'object' && param.properties) {
-          Object.entries(param.properties).forEach(([nestedKey, nestedParam]) => {
-            if (nestedParam && typeof nestedParam !== 'boolean' && 'type' in nestedParam) {
-              const nestedArgKey = `${argKey}.${nestedKey}`
-              args[nestedArgKey] = Array.isArray(nestedParam.type)
-                ? nestedParam.type.map(String).join(', ')
-                : String(nestedParam.type)
-            }
-          })
-        }
-
-        // Handle array items
-        if (param.type === 'array' && param.items) {
-          const itemsType =
-            param.items && typeof param.items === 'object' && 'type' in param.items
-              ? Array.isArray(param.items.type)
-                ? param.items.type.map(String).join(', ')
-                : String(param.items.type)
-              : 'unknown'
-          args[`${argKey} items`] = itemsType
-        }
-      }
-    })
-  }
-
-  const argStrRaw = dump({
-    'FUNCTION ARGUMENTS': args,
-  })
-  const argStr = convertToYamlWComments(argStrRaw)
+  const args = jsonSchemaToYamlString(tool.parameters)
   const toolDescription =
     longDescription && tool.longDescription ? tool.longDescription : tool.description
   const cmdString = `NAME: ${tool.name}
 DESCRIPTION: ${toolDescription.replace(/\n/g, ' ')}
-${argStr}
-${requiredProperties.size > 0 ? `REQUIRED: ${[...requiredProperties].join(', ')}` : ''}`
+PARAMETERS:
+${args}
+`
   return cmdString
 }
 
