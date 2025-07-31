@@ -26,6 +26,7 @@ import {
   createDeepTransformer,
   deepCopy,
   fileToBase64,
+  humanizeError,
   isEmpty,
   normalizeFalsyValues,
   pickProperties,
@@ -42,6 +43,7 @@ import type { AnySchema } from 'ajv'
 import { createStream } from '../frpBus'
 import type { FromSchema } from 'json-schema-to-ts'
 import { charHash } from '../crypto_webcrypto'
+import { z } from 'zod'
 
 function generateOpenAIToolDeclarations(
   allowedTools: string[],
@@ -617,6 +619,13 @@ async function convertTaskNodeToOpenAIMessage(
       content: task.content.data,
     }
     return [message]
+  } else if (task.content.type === 'error') {
+    const message: OpenAI.ChatCompletionMessageParam = {
+      // TODO: we need to dynamically generate task roles here!! and move it into the task type,  if its a message!
+      role: 'system',
+      content: humanizeError(task.content.data),
+    }
+    return [message]
   } else if (task.content.type === 'files') {
     const fileMappings = await Promise.all(task.content.data.map((uuid) => getFileMapping(uuid)))
     const fileNames = fileMappings
@@ -743,6 +752,7 @@ export async function createChatCompletionTool(
       { model, goal, llmTools, allowedTools, prompts, schema },
       context: toolContext,
     ) => {
+      const tools = allowedTools ?? []
       const selectedModel = model ?? getCurrentModel(llmSettings)
       console.log('calling chat completion tool...', selectedModel, goal, llmTools)
       // the current task doesn't *have* to exist. We can also works solely with prompts...
@@ -762,15 +772,19 @@ export async function createChatCompletionTool(
       let allowedToolsFromError: string[] = []
       if (goal === 'AnalyzeError' && lastTaskBeforeError?.content.type === 'functioncall') {
         if (lastTaskBeforeError.content.data.name === 'chatCompletion') {
-          allowedToolsFromError = lastTaskBeforeError.content.data.arguments
-            .allowedTools as string[]
+          // Check if allowedTools is an array of strings using zod
+          const AllowedToolsSchema = z.array(z.string())
+          const res = AllowedToolsSchema.safeParse(
+            lastTaskBeforeError.content.data.arguments.allowedTools,
+          )
+          if (res.success) allowedToolsFromError = res.data
         } else {
           // otherwise we might want to repeat the actual tool call with different parameters!
           allowedToolsFromError = [lastTaskBeforeError.content.data.name]
         }
       }
       const { chatCompletion, metaInfo: chatInfo } = await processChatTask(
-        allowedTools ?? allowedToolsFromError,
+        [...tools, ...allowedToolsFromError],
         toolDefs,
         !!llmTools,
         { model: selectedModel, chatApi: llmSettings.selectedApi },
