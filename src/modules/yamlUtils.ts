@@ -20,18 +20,9 @@ export const safeYamlDump = (data: unknown) => {
     const res = dump(data, {
       replacer: defaultYamlReplacer,
     })
-    /*const res = dump(data, {
-      skipInvalid: true,
-    })*/
     return res
   } catch (error) {
-    if (error instanceof Error) {
-      console.warn(
-        `Error converting tool result to YAML: ${error.message}. Retrying with skipInvalid option.`,
-      )
-    } else {
-      console.warn('Error converting tool result to YAML. Retrying with skipInvalid option.')
-    }
+    console.warn(`Error converting value to YAML. Retrying with skipInvalid option.`, error)
     const res = dump(data, { skipInvalid: true })
     return res
   }
