@@ -1,73 +1,62 @@
-import type { QDialogOptions, QDialogSelectionPrompt } from 'quasar'
+import type { QDialogInputPrompt, QDialogOptions, QDialogSelectionPrompt } from 'quasar'
 import { Dialog } from 'quasar'
 import { createTool } from '../taskyon/tools'
 import type { JSONSchema7 } from 'json-schema'
 
 export const simpleDialogSchema = {
-  /* Keep schema self‑contained so Taskyon can inline‑generate types */
   $id: 'SimpleQDialogOptions',
   type: 'object',
   additionalProperties: false,
 
   /* --- REQUIRED --------------------------------------------------- */
-  required: ['message'],
+  required: ['variant', 'message'],
 
   /* --- MAIN PROPS ------------------------------------------------- */
   properties: {
-    /* Text shown in the card header (optional). */
-    title: { type: 'string' },
+    /* Explicit selector so even “tiny” models know what to build */
+    variant: {
+      enum: ['prompt', 'options'],
+      description:
+        'variant - Specifies the dialog type to render. This property is required and determines which additional properties are expected. ',
+    },
 
-    /* Main body text.  Required so the dialog is never empty. */
+    /* Common fields */
+    title: { type: 'string' },
     message: { type: 'string' },
 
-    /* ---- Interaction variants ----------------------------------- */
-    /* Exactly ONE of prompt / options may be supplied.              */
-
-    /* Free‑form input (text / number) ----------------------------- */
+    /* Prompt variant ---------------------------------------------- */
     prompt: {
       type: 'object',
+      additionalProperties: true,
       required: ['model'],
-      additionalProperties: true, // allow QInputProps passthrough
       properties: {
-        /* Initial value for the input.  The AI can pre‑fill hints. */
         model: { type: 'string' },
-
-        /* Only expose two field types that actually change UX.
-           Others (email, date…) become plain text inputs anyway.   */
         type: { enum: ['text', 'number'] },
-
-        /* Optional numeric boundaries when type === 'number' */
         min: { type: 'number' },
         max: { type: 'number' },
         step: { type: 'number' },
       },
     },
 
-    /* Pre‑defined choices ----------------------------------------- */
+    /* Options variant --------------------------------------------- */
     options: {
       type: 'object',
+      additionalProperties: true,
       required: ['model', 'items'],
-      additionalProperties: true, // allow QOptionGroupProps
       properties: {
-        /* radio  -> string   | checkbox -> array */
-        model: {}, // keep loose; see read‑only note
-
-        /* Only radio / checkbox are useful for chat UX. */
-        // we are leaving out toggle buttons..
-        type: { enum: ['radio', 'checkbox'] },
-
-        /* Label/value pairs for the selection widget. */
+        model: {}, // radio → string, checkbox → array
+        type: { enum: ['radio', 'checkbox', 'toggle'] }, // ''
         items: {
           type: 'array',
           items: {
             type: 'object',
+            additionalProperties: true,
             required: ['label', 'value'],
             properties: {
               label: { type: 'string' },
               value: { anyOf: [{ type: 'string' }, { type: 'number' }] },
               //color: { type: 'string' },
             },
-            additionalProperties: true, // user can pass QOption syntax
           },
         },
       },
@@ -78,24 +67,38 @@ export const simpleDialogSchema = {
        We DON’T expose the full QBtn prop object: the AI won’t style. */
     ok: { anyOf: [{ type: 'boolean' }, { type: 'string' }] },
     cancel: { anyOf: [{ type: 'boolean' }, { type: 'string' }] },
+  },
 
-    /* ---- Behaviour toggles -------------------------------------- */
-    // persistent: { type: 'boolean' }, // AI may need modal locks
-    // noEscDismiss: { type: 'boolean' },
-    // noBackdropDismiss: { type: 'boolean' },
+  /* Enforce one-of without deleting props so schema stays simple */
+  oneOf: [
+    {
+      properties: { variant: { const: 'prompt' } },
+      required: ['prompt'],
+      not: { required: ['options'] },
+    },
+    {
+      properties: { variant: { const: 'options' } },
+      required: ['options'],
+      not: { required: ['prompt'] },
+    },
+  ],
 
-    /* --------------------------------------------------------------
+  /* ---- Behaviour toggles -------------------------------------- */
+  // persistent: { type: 'boolean' }, // AI may need modal locks
+  // noEscDismiss: { type: 'boolean' },
+  // noBackdropDismiss: { type: 'boolean' },
+
+  /* --------------------------------------------------------------
        # Commented‑out fields the AI won’t need *
        * keep them so you can uncomment later
     */
 
-    // position : { enum: ['top','right','bottom','left','standard'] },
-    // html     : { type: 'boolean', default: false }, // always false → omit
-    // progress : { anyOf:[{type:'boolean'}] },        // spinner UX too fancy
-    // options  : { type:'object' },                   // handled above
-    // prompt   : { type:'object' },                   // handled above
-    // dark/seamless/fullWidth/fullHeight…            // visual sugar
-  },
+  // position : { enum: ['top','right','bottom','left','standard'] },
+  // html     : { type: 'boolean', default: false }, // always false → omit
+  // progress : { anyOf:[{type:'boolean'}] },        // spinner UX too fancy
+  // options  : { type:'object' },                   // handled above
+  // prompt   : { type:'object' },                   // handled above
+  // dark/seamless/fullWidth/fullHeight…
 } as const satisfies JSONSchema7
 
 type DialogResult = { action: 'ok'; data: unknown } | { action: 'cancel' } | { action: 'dismiss' }
@@ -112,42 +115,48 @@ export const quasarDialogTool = createTool({
   renderOptions: { hideChat: false, hideLlm: false },
 
   async function(opts): Promise<DialogResult> {
-    /* ------------------------------------------------------------------ *
-     * 1.  Destructure opts to strip the raw .options
-     * ------------------------------------------------------------------ */
-    const { options: rawOptions, ...rest } = opts
+    /* ----- 1. destructure + runtime guard -------------------------- */
+    const {
+      variant,
+      prompt,
+      options: rawOptions,
+      ...rest
+    } = opts as {
+      variant: 'prompt' | 'options'
+      prompt?: unknown
+      options?: unknown
+    } & Record<string, unknown>
 
-    /* Build a strongly‑typed replacement only when needed */
-    const selectionPrompt: QDialogSelectionPrompt | undefined = rawOptions
-      ? {
-          ...rawOptions,
-          model: rawOptions.model as string | readonly unknown[],
-        }
-      : undefined
+    if (variant === 'prompt' && !prompt) {
+      throw new Error('variant "prompt" requires a prompt block')
+    }
+    if (variant === 'options' && !rawOptions) {
+      throw new Error('variant "options" requires an options block')
+    }
 
-    /* ------------------------------------------------------------------ *
-     * 2.  Assemble the final payload
-     * ------------------------------------------------------------------ */
+    /* ----- 2. cast blocks after guarding --------------------------- */
+    const dialogPrompt: QDialogInputPrompt | undefined =
+      variant === 'prompt' ? (prompt as QDialogInputPrompt) : undefined
+
+    const selectionPrompt: QDialogSelectionPrompt | undefined =
+      variant === 'options' ? (rawOptions as QDialogSelectionPrompt) : undefined
+
+    /* ----- 3. assemble final payload ------------------------------- */
     const normalized: QDialogOptions = {
       html: false,
       position: 'standard',
 
-      /* caller’s props except the (now removed) .options */
-      ...rest,
-
-      /* ensure an OK button exists */
-      ok: opts.ok ?? true,
-
-      /* auto‑add Cancel for interactive dialogs */
-      cancel: opts.cancel ?? (opts.prompt || rawOptions ? true : false),
-
-      /* add the strongly‑typed options block back in */
+      ...rest, // title, message, …
+      ...(dialogPrompt ? { prompt: dialogPrompt } : {}),
       ...(selectionPrompt ? { options: selectionPrompt } : {}),
+
+      ok: (opts as { ok?: string | boolean }).ok ?? true,
+      cancel:
+        (opts as { cancel?: string | boolean }).cancel ??
+        (variant === 'prompt' || variant === 'options'),
     }
 
-    /* ------------------------------------------------------------
-     * 3.  Show dialog and wrap callbacks in a promise
-     * ---------------------------------------------------------- */
+    /* ----- 4. open dialog ------------------------------------------ */
     return new Promise<DialogResult>((resolve) => {
       Dialog.create(normalized)
         .onOk((data) => resolve({ action: 'ok', data }))
