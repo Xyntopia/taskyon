@@ -2,7 +2,7 @@ import type { TaskNodeMeta, toolContext, TyTaskStreamData } from './types'
 import { type partialTaskDraft, type TaskNode, type llmSettings, getApiConfigCopy } from './types'
 import { type TyTaskManager } from './taskManager'
 import { handleFunctionExecution, taskResult } from './tools'
-import { createAsyncQueue, sleep } from '../utils'
+import { createAsyncQueue, humanizeError, serializeForJson, sleep } from '../utils'
 import { createChatCompletionTask } from '../tools/chatCompletionTool'
 import type { CrudWrapper, SecretStore } from '../crudWrapper'
 import type { Port, TaskMessageStream } from '../frpBus'
@@ -415,7 +415,7 @@ const createTaskProcessor = (
           setTaskFinished(task.id)
         }
       } catch (error) {
-        streamEmit({ stage: 'error', taskId: task.id, info: formatReadableError(error) })
+        streamEmit({ stage: 'error', taskId: task.id, info: humanizeError(error) })
         console.error('Error processing task:', error, task)
         await handleError(
           error,
@@ -564,16 +564,6 @@ export function runTaskWorker(
   }
 }
 
-function formatReadableError(err: unknown): string {
-  if (!(err instanceof Error)) return String(err)
-
-  let current: unknown = err
-  while (current instanceof Error && current.cause) {
-    current = current.cause
-  }
-  return current instanceof Error ? current.message : String(current)
-}
-
 function createErrorTaskChain(
   error: unknown,
   task: TaskNode | null,
@@ -581,13 +571,11 @@ function createErrorTaskChain(
   llmTools: boolean,
   debugDb: CrudWrapper<TaskNodeMeta>,
 ) {
-  const humanMsg = formatReadableError(error)
-
   const errorTask: partialTaskDraft = {
     role: 'system',
     content: {
       type: 'error',
-      data: humanMsg,
+      data: serializeForJson(error),
     },
   }
 
