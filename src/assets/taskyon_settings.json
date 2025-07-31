@@ -1,5 +1,5 @@
 {
-  "version": 14,
+  "version": 15,
   "appConfiguration": {
     "appConfigurationUrl": "/taskyon_settings.json",
     "gdriveConfigurationFile": "taskyon_settings.json",
@@ -18,7 +18,7 @@
         "baseURL": "https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/api",
         "defaultModel": "meta-llama/llama-3.2-90b-vision-instruct",
         "models": {
-          "free": "meta-llama/llama-3.2-11b-vision-instruct",
+          "free": "meta-llama/llama-3.3-70b-instruct",
           "chat": "meta-llama/llama-3.2-90b-vision-instruct",
           "instruction": "meta-llama/llama-3.2-90b-vision-instruct"
         },
