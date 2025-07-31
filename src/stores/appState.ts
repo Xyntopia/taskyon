@@ -32,8 +32,6 @@ function clearBrowserStorage() {
   clearCookies()
 }
 
-// TODO: make sure, we save/load our store state from inside the below store function!
-//       and get rid of automatically saving it in our stores/index.ts
 const storeName = 'taskyonState'
 
 // this is where we save all of our app settings.
@@ -61,7 +59,6 @@ export const useAppStateStore = defineStore(storeName, () => {
     newToolDraftCode: '' as string,
     configurationDraft: '' as string,
     // remembers how tasks are display in the chatwindow in task widgets...
-    // TODO: rename this to "taskWidgetState"
     taskWidgetState: {} as Record<string, TaskWidgetStateType>,
     darkTheme: 'auto' as boolean | 'auto',
     createTaskType: {
