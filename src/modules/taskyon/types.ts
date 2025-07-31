@@ -6,9 +6,15 @@ import {
   mdiAlphabeticalVariant,
   mdiAutoFix,
   mdiFunctionVariant,
+  mdiProfessionalHexagon,
   mdiTools,
 } from '@quasar/extras/mdi-v6'
-import { matSmartToy, matVisibility, matVisibilityOff } from '@quasar/extras/material-icons'
+import {
+  matKeyboardReturn,
+  matSmartToy,
+  matVisibility,
+  matVisibilityOff,
+} from '@quasar/extras/material-icons'
 
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type RequireSome<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
@@ -745,6 +751,8 @@ export const appConfiguration = z.object({
     description: 'gDrive fileid of the configuration',
   }),
   expertMode: z.boolean().default(false).meta({
+    icon: mdiProfessionalHexagon,
+    label: 'Expert Mode',
     description:
       'Turn on additional settings and configurations and debugging tools for advanced users.',
   }),
@@ -755,6 +763,8 @@ export const appConfiguration = z.object({
     description: 'The default directory in gdrive, where taskyon saves its configuration.',
   }), // not sure, if we need this here?
   useEnterToSend: z.boolean().default(true).meta({
+    icon: matKeyboardReturn,
+    label: 'Use Enter to Send',
     description: 'Determines, if enter will automatically send a message or rather shift-enter',
   }),
   guiMode: z.enum(['auto', 'iframe', 'default']).default('auto').meta({
