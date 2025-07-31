@@ -4,7 +4,7 @@
 import { defineStore } from 'pinia'
 import { computed, reactive, toRefs, type Reactive, watch } from 'vue'
 import type { FunctionCall } from 'src/modules/taskyon/types'
-import { type tyPublicKeyDraft, storedSettings } from 'src/modules/taskyon/types'
+import { type tyPublicKeyDraft, profile } from 'src/modules/taskyon/types'
 import axios from 'axios'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
 import {
@@ -39,7 +39,7 @@ const storeName = 'taskyonState'
 // because we want to this to also work on tyServer and in a "minimal gui" setting.
 // So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
 export const useAppStateStore = defineStore(storeName, () => {
-  const defaultStorableSettings = storedSettings.parse(defaultSettings)
+  const defaultStorableSettings = profile.parse(defaultSettings)
   // llmSettings & appConfiguration define the state of our app!
   // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
   const initialState = {
@@ -94,7 +94,6 @@ export const useAppStateStore = defineStore(storeName, () => {
     | Partial<typeof initialState>
     | undefined
   let stateRefs: Reactive<typeof initialState>
-  //let overRideSettings: Reactive<>
   if (
     initialStoredStateObj &&
     initialStoredStateObj.version &&
@@ -113,6 +112,10 @@ export const useAppStateStore = defineStore(storeName, () => {
     clearBrowserStorage()
     stateRefs = reactive(initialState)
   }
+
+  // we use "overRideSettings" to do temporar settings overrides for taskyon.
+  // e.g. if taskyon was called from an iframe.
+  const overrideSettings: Reactive<typeof initialState> = stateRefs
 
   // store the state on every change!! :)
   watch(stateRefs, (newState) => {
@@ -219,6 +222,7 @@ export const useAppStateStore = defineStore(storeName, () => {
       stateRefs.llmSettings.selectedTaskId = taskId || undefined
     },
     ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
+    overRideSettings: overrideSettings,
     getStateValues: () => unref(allRefs),
     getStoredStateString,
     $reset,

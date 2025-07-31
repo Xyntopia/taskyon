@@ -6,7 +6,7 @@ import {
   TaskNode,
   getCurrentModel,
   llmSettings,
-  type storedSettings,
+  type profile,
 } from 'src/modules/taskyon/types'
 import axios from 'axios' // TODO: replace with fetch
 import { Notify } from 'quasar' // load dynamically! :)
@@ -89,10 +89,7 @@ function removeCodeFromUrl() {
   }
 }
 
-async function updateLlmModels(
-  llmSettings: storedSettings['llmSettings'],
-  keys: Record<string, string>,
-) {
+async function updateLlmModels(llmSettings: profile['llmSettings'], keys: Record<string, string>) {
   console.log('downloading models...')
   const api = getApiConfig(llmSettings)
   if (api) {

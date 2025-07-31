@@ -43,7 +43,7 @@
           <ObjectTreeView
             v-model="state.llmSettings"
             :schema="
-              convertZodToJsonSchemaCached(storedSettings.shape.llmSettings, {
+              convertZodToJsonSchemaCached(profile.shape.llmSettings, {
                 unrepresentable: 'any',
               })
             "
@@ -56,7 +56,7 @@
           <ObjectTreeView
             v-model="state.appConfiguration"
             :schema="
-              convertZodToJsonSchemaCached(storedSettings.shape.appConfiguration, {
+              convertZodToJsonSchemaCached(profile.shape.appConfiguration, {
                 unrepresentable: 'any',
               })
             "
@@ -76,7 +76,7 @@ import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'
 import { useRoute } from 'vue-router'
 import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
 import { useAppStateStore } from 'src/stores/appState'
-import { convertZodToJsonSchemaCached, storedSettings } from 'src/modules/taskyon/types'
+import { convertZodToJsonSchemaCached, profile } from 'src/modules/taskyon/types'
 import PasswordManager from 'src/components/taskyon/PasswordManager.vue'
 
 const route = useRoute()
