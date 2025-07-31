@@ -28,7 +28,6 @@ export const simpleDialogSchema = {
     prompt: {
       type: 'object',
       additionalProperties: true,
-      required: ['model'],
       properties: {
         model: { type: 'string' },
         type: { enum: ['text', 'number'] },
@@ -42,9 +41,8 @@ export const simpleDialogSchema = {
     options: {
       type: 'object',
       additionalProperties: true,
-      required: ['model', 'items'],
+      required: ['items'],
       properties: {
-        model: {}, // radio → string, checkbox → array
         type: { enum: ['radio', 'checkbox', 'toggle'] }, // ''
         items: {
           type: 'array',
@@ -136,10 +134,29 @@ export const quasarDialogTool = createTool({
 
     /* ----- 2. cast blocks after guarding --------------------------- */
     const dialogPrompt: QDialogInputPrompt | undefined =
-      variant === 'prompt' ? (prompt as QDialogInputPrompt) : undefined
+      variant === 'prompt'
+        ? (() => {
+            const p = prompt as NonNullable<QDialogOptions['prompt']> // <- alias
+            return {
+              ...p,
+              model: p.model ?? (p.type === 'number' ? 0 : ''),
+            }
+          })()
+        : undefined
 
     const selectionPrompt: QDialogSelectionPrompt | undefined =
-      variant === 'options' ? (rawOptions as QDialogSelectionPrompt) : undefined
+      variant === 'options'
+        ? {
+            ...(rawOptions as QDialogSelectionPrompt),
+
+            // auto-initialise model if caller omitted it
+            model:
+              (rawOptions as QDialogSelectionPrompt).model ??
+              ((rawOptions as QDialogSelectionPrompt).type === 'radio'
+                ? ((rawOptions as QDialogSelectionPrompt).items?.[0]?.value ?? null) // first value
+                : []), // empty array for checkbox
+          }
+        : undefined
 
     /* ----- 3. assemble final payload ------------------------------- */
     const normalized: QDialogOptions = {
