@@ -53,6 +53,7 @@ export const simpleDialogSchema = {
         model: {}, // keep loose; see read‑only note
 
         /* Only radio / checkbox are useful for chat UX. */
+        // we are leaving out toggle buttons..
         type: { enum: ['radio', 'checkbox'] },
 
         /* Label/value pairs for the selection widget. */
@@ -60,6 +61,12 @@ export const simpleDialogSchema = {
           type: 'array',
           items: {
             type: 'object',
+            required: ['label', 'value'],
+            properties: {
+              label: { type: 'string' },
+              value: { anyOf: [{ type: 'string' }, { type: 'number' }] },
+              //color: { type: 'string' },
+            },
             additionalProperties: true, // user can pass QOption syntax
           },
         },
@@ -73,9 +80,9 @@ export const simpleDialogSchema = {
     cancel: { anyOf: [{ type: 'boolean' }, { type: 'string' }] },
 
     /* ---- Behaviour toggles -------------------------------------- */
-    persistent: { type: 'boolean' }, // AI may need modal locks
-    noEscDismiss: { type: 'boolean' },
-    noBackdropDismiss: { type: 'boolean' },
+    // persistent: { type: 'boolean' }, // AI may need modal locks
+    // noEscDismiss: { type: 'boolean' },
+    // noBackdropDismiss: { type: 'boolean' },
 
     /* --------------------------------------------------------------
        # Commented‑out fields the AI won’t need *
@@ -97,10 +104,9 @@ type DialogResult = { action: 'ok'; data: unknown } | { action: 'cancel' } | { a
  * 3.  Taskyon tool wrapper
  * ------------------------------------------------------------------ */
 export const quasarDialogTool = createTool({
-  name: 'quasarDialog',
-  description: 'Display a Quasar dialog to collect user input/confirmation.',
-  longDescription:
-    'Builds alert, confirm, prompt or option dialogs and returns ' + '{ action, data }.',
+  name: 'userdialog',
+  description: 'Display a Dialog to collect user input/confirmation.',
+  longDescription: 'Builds alert, confirm, prompt or option dialogs and returns { action, data }.',
 
   parameters: simpleDialogSchema,
   renderOptions: { hideChat: false, hideLlm: false },
