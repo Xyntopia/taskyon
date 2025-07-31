@@ -20,7 +20,7 @@ import defaultSettings from 'src/assets/taskyon_settings.json'
 import { generateAssymetricRandomNewKey } from 'src/modules/crypto_js'
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 
-interface TaskStateType {
+interface TaskWidgetStateType {
   markdownEnabled: boolean
 }
 
@@ -62,7 +62,7 @@ export const useAppStateStore = defineStore(storeName, () => {
     configurationDraft: '' as string,
     // remembers how tasks are display in the chatwindow in task widgets...
     // TODO: rename this to "taskWidgetState"
-    taskState: {} as Record<string, TaskStateType>,
+    taskWidgetState: {} as Record<string, TaskWidgetStateType>,
     darkTheme: 'auto' as boolean | 'auto',
     createTaskType: {
       type: 'message',
@@ -97,6 +97,7 @@ export const useAppStateStore = defineStore(storeName, () => {
     | Partial<typeof initialState>
     | undefined
   let stateRefs: Reactive<typeof initialState>
+  //let overRideSettings: Reactive<>
   if (
     initialStoredStateObj &&
     initialStoredStateObj.version &&

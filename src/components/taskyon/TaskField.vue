@@ -191,14 +191,14 @@ function toggleMessageDebug(id: string) {
 }
 
 function toggleMarkdown(id: string) {
-  if (state.taskState[id] === undefined) {
+  if (state.taskWidgetState[id] === undefined) {
     // If the message ID doesn't exist, default to true since we're opening it.
-    state.taskState[id] = {
+    state.taskWidgetState[id] = {
       markdownEnabled: true,
     }
   }
   // If it does exist, toggle the boolean.
-  state.taskState[id].markdownEnabled = !state.taskState[id].markdownEnabled
-  console.log(`markdown for ${id}`, state.taskState[id].markdownEnabled)
+  state.taskWidgetState[id].markdownEnabled = !state.taskWidgetState[id].markdownEnabled
+  console.log(`markdown for ${id}`, state.taskWidgetState[id].markdownEnabled)
 }
 </script>

@@ -22,7 +22,9 @@
     <q-btn
       v-if="task.content.type === 'message' && state.appConfiguration.expertMode"
       class="col-auto"
-      :icon="state.taskState[task.id]?.markdownEnabled != false ? mdiLanguageMarkdown : matRawOn"
+      :icon="
+        state.taskWidgetState[task.id]?.markdownEnabled != false ? mdiLanguageMarkdown : matRawOn
+      "
       dense
       flat
       size="sm"

@@ -112,7 +112,7 @@
   >
     <template #header> {{ task.content.data.split(' ').slice(0, 10).join(' ') }}... </template>
     <tyMarkdown
-      v-if="state.taskState[task.id]?.markdownEnabled != false"
+      v-if="state.taskWidgetState[task.id]?.markdownEnabled != false"
       no-line-numbers
       :src="task.content.data"
       :use-iframe="true"
