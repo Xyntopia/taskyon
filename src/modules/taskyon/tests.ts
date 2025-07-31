@@ -152,7 +152,7 @@ export const testChatCompletion = async () => {
   if (chatCompletion && 'function' in chatCompletion && chatCompletion.function !== undefined) {
     structuredResponse = await chatCompletion.function(
       {
-        model: 'google/gemini-flash-1.5',
+        model: 'google/gemini-2.5-flash-lite',
         prompts: [
           `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
         ],

@@ -105,7 +105,7 @@
         </q-btn>
         <!--Select Tools-->
         <div v-if="expertMode || selectedTaskType" @click.stop>
-          <q-btn flat dense :icon="mdiFunctionVariant">
+          <q-btn data-cy="tool-btn" flat dense :icon="mdiFunctionVariant">
             <q-menu auto-close>
               <q-list dense>
                 <q-item clickable to="/tool">

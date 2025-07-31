@@ -4,6 +4,7 @@
 import {
   getLastAssistantMessage,
   selectllmmodel,
+  testModelId,
   useFreeTaskyon,
   writeMessage,
 } from '../support/groups'
@@ -39,15 +40,14 @@ describe('test taskyon defaults', () => {
     //cy.wait('[aria-label="quick ai settings"]')
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
 
-    const modelID = 'google/gemini-flash-1.5'
-    selectllmmodel(undefined, modelID)
-
     // enable task cost display & expert mode...
-    cy.contains('expertMode').next().click()
-    cy.contains('showCosts').next().click()
-    cy.contains('showCosts').next().next().click()
-    cy.contains('Shows the costs of API calls.').type('{esc}')
+    cy.contains('Expert Mode').next().click()
+    cy.contains('Use Tools').next().click()
+    cy.contains('Use Tools').next().next().click()
+    cy.contains('Enable the standard tool chooser.').type('{esc}')
     cy.get('.q-btn').contains('Ok').click()
+
+    selectllmmodel(undefined, testModelId)
 
     cy.wait(100).reload()
     // TODO: check if expert mode is still there...

@@ -54,6 +54,29 @@
               :to="`/taskmanager?k=10&ct=tooldefinition&q=${JSON.stringify(selectedTool)}`"
             />
             <q-btn flat label="Secrets" :icon="mdiKeyChain" to="/settings/secrets" />
+            <div class="row items-center">
+              <q-btn
+                class="col-auto"
+                :disable="!isValidTool"
+                :color="isValidTool ? 'positive' : 'negative'"
+                :icon="matSave"
+                label="save tool"
+                @click="
+                  () => {
+                    if (preliminaryTaskNode) addNewTask(preliminaryTaskNode)
+                  }
+                "
+                ><q-tooltip>{{
+                  isValidTool
+                    ? 'Save tool inside our tasktree.'
+                    : 'Only Valid tools can be saved, check the definition for errors!'
+                }}</q-tooltip></q-btn
+              >
+              <div v-if="!isValidTool" class="col">
+                The tool definition contains errors:
+                <div class="q-pa-sm text-negative">{{ toolParser }}</div>
+              </div>
+            </div>
           </div>
           <q-input v-model="toolDraft.name" dense filled label="New Tool Name" />
           <div class="row">
@@ -89,7 +112,6 @@
                     @click="() => (toolDraft.code = freshTool.code)"
                   />
                 </div>
-                {{ toolParser }}
               </q-tab-panel>
               <q-tab-panel name="configure">
                 <ObjectTreeView :model-value="toolDraft" :schema="toolJsonSchema" />
@@ -99,16 +121,6 @@
               </q-tab-panel>
             </q-tab-panels>
           </div>
-          <q-btn
-            v-if="preliminaryTaskNode"
-            class="q-mt-md"
-            :disable="!isValidTool"
-            :color="isValidTool ? 'positive' : 'negative'"
-            :icon="matSave"
-            label="save tool"
-            @click="addNewTask(preliminaryTaskNode)"
-            ><q-tooltip>Save tool inside our tasktree.</q-tooltip></q-btn
-          >
         </div>
         <div v-else>
           The selected tool "{{ name }}" is not available for editing. Please select one of the
@@ -144,7 +156,7 @@ import ObjectTreeView from 'src/components/ObjectTreeView.vue'
 import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
 import { matAdd, matContentCopy, matSave, matSearch } from '@quasar/extras/material-icons'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import type { partialTaskDraft } from 'src/modules/taskyon/types'
+import type { partialTaskDraft, TaskNode } from 'src/modules/taskyon/types'
 import { ToolBase } from 'src/modules/taskyon/types'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
@@ -283,18 +295,20 @@ const toolParser = computed(() => {
 
 const isValidTool = computed(() => toolParser.value === true)
 
-const preliminaryTaskNode = asyncComputed(
-  () =>
-    createTaskNode({
+const preliminaryTaskNode = asyncComputed<TaskNode | undefined>(async () => {
+  try {
+    return await createTaskNode({
       role: 'user',
       content: {
         type: 'tooldefinition',
         // we are doing this to 1. make sure its json parsable and 2. create a copy of the current tool...
         data: JSON.parse(JSON.stringify(toolDraft.value)),
       },
-    }),
-  undefined,
-)
+    })
+  } catch (error) {
+    console.log('could not create tasknode:', error)
+  }
+}, undefined)
 
 async function addNewTask(task: partialTaskDraft) {
   const tm = await tystate.getTaskManager()

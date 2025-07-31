@@ -35,8 +35,9 @@ describe('taskyon API', () => {
     cy.visit('/')
 
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
-    cy.contains('expertMode').next().click()
-    cy.dataCy('ai-settings').scrollTo('bottom')
+    cy.contains('Expert Mode').next().click()
+    //cy.dataCy('ai-settings').scrollTo('bottom').type('{esc}')
+    cy.dataCy('ai-settings').type('{esc}')
 
     // as of 20241007 this is the cheapest model which works with vision...
     const visionModelID = 'google/gemini-flash-1.5-8b'

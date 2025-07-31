@@ -1,9 +1,12 @@
 // list of re-usable command groups
 
+export const testModelId = 'google/gemini-2.5-flash-lite'
+
 export function selectllmmodel(provider: string | undefined, modelId: string = '') {
+  cy.dataCy('model-id').click() // open the menu
   if (provider) {
-    cy.dataCy('ai-settings').contains('Provider').click()
-    cy.dataCy('ai-settings').get('.q-menu').contains(provider).click()
+    cy.dataCy('model-selection').contains('Provider').click()
+    cy.dataCy('model-selection').get('.q-menu').contains(provider).click()
   }
   if (modelId) {
     cy.wait(100)
@@ -13,6 +16,9 @@ export function selectllmmodel(provider: string | undefined, modelId: string = '
       .wait(200)
     cy.get('.q-menu').contains(modelId).click()
   }
+  // close the menu
+  cy.dataCy('model-selection').type('{esc}')
+
   //.type('{enter}{esc}');
   //cy.get('.q-menu').contains(modelId).click();
 }

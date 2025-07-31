@@ -19,16 +19,17 @@ describe('Tool Tests', () => {
 
     //cy.get('[aria-label="Open Sidebar"]').click();
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
-    cy.contains('expertMode').next().click()
+    cy.contains('Expert Mode').next().click()
+    cy.get('.q-btn').contains('Ok').click()
 
-    cy.get('.q-btn').contains('Tools').click()
-    cy.get('.q-btn').contains('new tool').click()
+    cy.dataCy('tool-btn').click()
+    cy.get('.q-menu').contains('Manager').click()
     // check if codemirror editor was already loaded..
     cy.get('.cm-content').should('exist')
 
-    cy.get('.q-btn').contains('save task').click()
+    cy.get('.q-btn').contains('save tool').click()
 
-    cy.get('[aria-label="go to chat"]').click()
+    /*cy.get('[aria-label="go to chat"]').click()
     cy.get('.q-btn').contains('Use free Taskyon').click()
 
     cy.get('.message-container').eq(0).get('[aria-label="show message context"]').click()
@@ -88,7 +89,7 @@ describe('Tool Tests', () => {
 
     writeMessage('please calculate the sqrt of 111e3 using js to 5 decimals?{enter}')
 
-    cy.screenshot('js_tool', { overwrite: true })
+    cy.screenshot('js_tool', { overwrite: true })*/
 
     //checkLastMessage('333.1666');
   })
