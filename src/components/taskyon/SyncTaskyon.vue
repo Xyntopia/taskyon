@@ -1,103 +1,113 @@
 <template>
   <q-list dense>
-    <q-item-label v-if="state.appConfiguration.expertMode" header>User ID Management</q-item-label>
-    <q-item v-if="state.appConfiguration.expertMode" class="items-center">
-      <q-item-section avatar>
-        <q-icon :name="mdiAccountKey" size="md" />
-        User ID (beta)
-      </q-item-section>
-      <q-item-section side>
-        <q-dialog v-model="showSeedPhrase" no-backdrop-dismiss>
-          <q-card>
-            <q-card-section class="text-warning">
-              This is the seed phrase for your new cryptographic user ID. Store it securely and
-              never share it with anyone. You can use it to recover your ID if needed, but losing or
-              exposing it could compromise your access and security for taskyon.
-            </q-card-section>
-            <q-card-section class="row">
-              <div class="rounded-borders text-bold col text-info">
-                {{ seedPhrase }}
-              </div>
-              <q-btn
-                class="col-auto"
-                flat
-                dense
-                :icon="matContentCopy"
-                @click="
-                  () => {
-                    console.log('copied seed phrase to clipboard...')
-                    copyToClipboard(seedPhrase)
-                    pressedSeedPhraseCopyButton = true
-                  }
-                "
-              ></q-btn>
-            </q-card-section>
-            <q-card-section class="row justify-around">
-              <q-btn
-                :disable="!pressedSeedPhraseCopyButton"
-                flat
-                :color="pressedSeedPhraseCopyButton ? 'positive' : undefined"
-                label="Accept"
-                @click="
-                  () => {
-                    onAcceptSeedPhrase(seedPhrase)
-                    showSeedPhrase = false
-                  }
-                "
-                ><q-tooltip v-if="!pressedSeedPhraseCopyButton" class="bg-warning">
-                  Press the copy button next to the seedphrase first in order to be able to accept!
-                </q-tooltip>
-              </q-btn>
-              <q-btn flat label="Cancel" @click="showSeedPhrase = false"></q-btn>
-            </q-card-section>
-          </q-card>
-        </q-dialog>
-        <q-btn
-          v-if="state.llmSettings.userId"
-          class="col-auto"
-          flat
-          dense
-          :icon="matContentCopy"
-          @click="copyToClipboard(state.llmSettings.userId)"
-        >
-          <q-tooltip> Copy User ID to Clipboard </q-tooltip>
-        </q-btn>
-      </q-item-section>
-      <q-item-section v-if="state.llmSettings.userId" class="ellipsis text-bold">
-        {{ state.llmSettings.userId.slice(0, 5) }} ...
-        {{ state.llmSettings.userId.slice(-10) }}
-      </q-item-section>
-      <q-item-section side>
-        <div class="row">
-          <q-btn
-            class="col-auto"
-            dense
-            :label="state.llmSettings.userId ? 'Regenerate' : 'New'"
-            flat
-            @click="onGenerateSeedPhrase"
-          >
-            <q-tooltip> Generate a new User ID & Seedphrease. </q-tooltip>
-          </q-btn>
+    <template v-if="state.appConfiguration.expertMode">
+      <div class="row">
+        <q-item-label header> Decentralized Taskyon ID </q-item-label>
+        <q-item-section side>
+          <InfoDialog
+            info-text="Generate a decentralized, cryptographic user ID which can be used to interact with \
+other taskyon users in a secure way. You can protect messages by encrypting them \
+and verify the authenticity of messages sent by other users."
+        /></q-item-section>
+      </div>
+
+      <q-item class="items-center">
+        <q-item-section avatar>
+          <q-icon :name="mdiAccountKey" size="md" />
+          User ID (beta)
+        </q-item-section>
+        <q-item-section side>
+          <q-dialog v-model="showSeedPhrase" no-backdrop-dismiss>
+            <q-card>
+              <q-card-section class="text-warning">
+                This is the seed phrase for your new cryptographic user ID. This ID is only known to
+                you. Store the phrase securely and never share it with anyone. You can use it to
+                recover your ID if needed, but losing or exposing it could compromise your access
+                and security for taskyon.
+              </q-card-section>
+              <q-card-section class="row">
+                <div class="rounded-borders text-bold col text-info">
+                  {{ seedPhrase }}
+                </div>
+                <q-btn
+                  class="col-auto"
+                  flat
+                  dense
+                  :icon="matContentCopy"
+                  @click="
+                    () => {
+                      console.log('copied seed phrase to clipboard...')
+                      copyToClipboard(seedPhrase)
+                      pressedSeedPhraseCopyButton = true
+                    }
+                  "
+                ></q-btn>
+              </q-card-section>
+              <q-card-section class="row justify-around">
+                <q-btn
+                  :disable="!pressedSeedPhraseCopyButton"
+                  flat
+                  :color="pressedSeedPhraseCopyButton ? 'positive' : undefined"
+                  label="Accept"
+                  @click="
+                    () => {
+                      onAcceptSeedPhrase(seedPhrase)
+                      showSeedPhrase = false
+                    }
+                  "
+                  ><q-tooltip v-if="!pressedSeedPhraseCopyButton" class="bg-warning">
+                    Press the copy button next to the seedphrase first in order to be able to
+                    accept!
+                  </q-tooltip>
+                </q-btn>
+                <q-btn flat label="Cancel" @click="showSeedPhrase = false"></q-btn>
+              </q-card-section>
+            </q-card>
+          </q-dialog>
           <q-btn
             v-if="state.llmSettings.userId"
             class="col-auto"
-            :icon="matDeleteForever"
-            dense
             flat
-            @click="state.llmSettings.userId = undefined"
+            dense
+            :icon="matContentCopy"
+            @click="copyToClipboard(state.llmSettings.userId)"
           >
-            <q-tooltip> Delete User ID. </q-tooltip>
+            <q-tooltip> Copy User ID to Clipboard </q-tooltip>
           </q-btn>
-        </div>
-      </q-item-section>
-      <q-item-section side>
-        <InfoDialog
-          info-text="Generate a decentralized, cryptographic user ID which can be used to interact with \
-other taskyon users in a secure way. You can protect messages by encrypting them \
-and verify the authenticity of messages sent by other users."
-      /></q-item-section>
-    </q-item>
-    <q-separator v-if="state.appConfiguration.expertMode" spaced />
+        </q-item-section>
+        <q-item-section v-if="state.llmSettings.userId" class="ellipsis text-bold">
+          {{ state.llmSettings.userId.slice(0, 5) }} ...
+          {{ state.llmSettings.userId.slice(-10) }}
+        </q-item-section>
+        <q-item-section side>
+          <div class="row">
+            <q-btn
+              class="col-auto"
+              dense
+              :label="state.llmSettings.userId ? 'Regenerate' : 'New'"
+              flat
+              @click="onGenerateSeedPhrase"
+            >
+              <q-tooltip> Generate a new User ID & Seedphrease. </q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="state.llmSettings.userId"
+              class="col-auto"
+              :icon="matDeleteForever"
+              dense
+              flat
+              @click="state.llmSettings.userId = undefined"
+            >
+              <q-tooltip> Delete User ID. </q-tooltip>
+            </q-btn>
+          </div>
+        </q-item-section>
+      </q-item>
+      <q-separator spaced />
+      <q-item-label header> Profiles </q-item-label>
+      <q-item> </q-item>
+      <q-separator spaced />
+    </template>
     <q-item-label header>Task Backup and Synchronization</q-item-label>
     <q-item class="q-pa-md q-gutter-sm">
       <q-item-section>
