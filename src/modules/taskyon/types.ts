@@ -728,6 +728,23 @@ simple chatCompletion for non-tool calls.
 })
 export type llmSettings = z.infer<typeof llmSettings>
 
+/* ───────────────────────────────
+   Tool-chain level configuration
+   ─────────────────────────────── */
+export const TyToolchainConfig = z.object({
+  tools: z
+    .record(z.string(), z.json())
+    .default({})
+    .describe(
+      'Settings for a single tool. The tool ID is the ID of the tasknode where the tool is defined.',
+    ),
+}).describe(`All tool parameters can be turned into settings as well. This makes taskyons
+configuration very adaptable to new tools.
+Taskyon lets you configure each tool with optional defaut values.
+Taskyon provides the option of letting profiles partially be overriden by each other.`)
+
+export type TyToolchainConfig = z.infer<typeof TyToolchainConfig>
+
 const hexColorRegex = /^#([A-Fa-f0-9]{6})$/
 const HexColor = z
   .string()
@@ -791,6 +808,7 @@ export const TyProfile = z.object({
   }),
   appConfiguration,
   llmSettings,
+  TyToolchainConfig,
   signatureOrKey: z.string().optional()
     .describe(`By specifying a signature it is possible to circumvent
 usage of an API key. This way you can give your users access to taskyon with your own restrictions.`),
@@ -798,11 +816,6 @@ usage of an API key. This way you can give your users access to taskyon with you
 
 This could for example mean to provide different service providers or different default
 LLM models and other settings for tools.
-
-All tool parameters can be turned into settings as well. This makes taskyons
-configuration very adaptable to new tools.
-Taskyon lets you configure each tool with optional defaut values.
-Taskyon provides the option of letting profiles partially be overriden by each other.
 `)
 export type TyProfile = z.infer<typeof TyProfile>
 
