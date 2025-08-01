@@ -784,7 +784,7 @@ export const appConfiguration = z.object({
 })
 export type appConfiguration = z.infer<typeof appConfiguration>
 
-export const profile = z.object({
+export const TyProfile = z.object({
   version: z.literal(15).meta({
     description:
       'whenever the schema of the settings change, this number will get changed as well...',
@@ -794,8 +794,17 @@ export const profile = z.object({
   signatureOrKey: z.string().optional()
     .describe(`By specifying a signature it is possible to circumvent
 usage of an API key. This way you can give your users access to taskyon with your own restrictions.`),
-})
-export type profile = z.infer<typeof profile>
+}).describe(`This is a taskyon profile which can be used to configure taskyon for different tasks.
+
+This could for example mean to provide different service providers or different default
+LLM models and other settings for tools.
+
+All tool parameters can be turned into settings as well. This makes taskyons
+configuration very adaptable to new tools.
+Taskyon lets you configure each tool with optional defaut values.
+Taskyon provides the option of letting profiles partially be overriden by each other.
+`)
+export type TyProfile = z.infer<typeof TyProfile>
 
 export const tyPublicKeyDraft = z.object({
   name: z
