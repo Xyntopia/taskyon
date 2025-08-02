@@ -115,7 +115,7 @@ export async function initTaskyon(
   // "outPort" is the outwards port which is used by 3rd party apps
   // to communicate with taskyon.
   // "inPort" is the other side of the channel and is used by taskyon itself
-  const { a: outPort, b: inPort } = createDuplexChannel<TaskyonMessage>()
+  const { a: outPort, b: inPort } = createDuplexChannel<unknown>()
 
   // logging
   outPort.receive((msg) => {

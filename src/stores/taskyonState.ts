@@ -16,13 +16,20 @@ import { initTaskyon } from 'src/modules/taskyon/init'
 import { availableModels } from 'src/modules/taskyon/chat'
 import { getDefaultParametersForTool, toolCall, type InternalTool } from 'src/modules/taskyon/tools'
 import { useAppStateStore } from './appState'
-import { filter, MessageChannelBridge } from 'src/modules/frpBus'
+import {
+  createDuplexChannel,
+  createPortApi,
+  filter,
+  MessageChannelBridge,
+} from 'src/modules/frpBus'
 import { generateRsaOaepPair } from 'src/modules/crypto_webcrypto'
 import { setColors } from 'src/boot/brand-colors'
 import { setPrismTheme } from 'src/modules/markdownUtils '
 import { onScopeDispose } from 'vue'
 import { waitForMessagePort } from 'src/modules/taskyon/iframeWorker'
 import { guiTools } from 'src/modules/tools/GuiTools'
+import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
+import { deepMergeReactive } from 'src/modules/utils'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -230,16 +237,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       //       to save this recovery key somewhere else in order to be able to recover their passwords.
       async () => (await generateRsaOaepPair()).publicKey,
     )
-    // TODO:
-    // deepMergeReactive(appConfiguration, newConfig.appConfiguration, 'overwrite')
 
     // set up iframe API and hook it up to our taskyon api
     if ($q.platform.within.iframe) {
       const mport = await waitForMessagePort((ev) => {
-        // Check if the iframe is not the top-level window
-        // we are not using this currently, because its possible that the iframe is
-        // embedded in another iframe, so we want to accept messages from the parent in any case.
-        // if (window !== window.top) {
         // Check if the message is from the parent window
         return ev.source === window.parent && ev.data?.type === 'initPort'
         // Optionally, check the origin if you know what it should be
@@ -250,14 +251,38 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
                   console.error('Message from unknown origin:', event.origin);
                 }*/
         //console.log('Message from unknown origin:', event.origin, event)
-        // we wrap every call to the API in a try clause in order to make sure it doesn't blow up ;)
-        // we only use this for debugging purposes, so we can see if any messages
-        /*else {
-              console.error('Message not from parent window.')
-            }*/
       })
+      // create a channel from the mport:
+      const iframeChannel = createDuplexChannel()
+      // connect the MessageChannel to our UI API
+      MessageChannelBridge(iframeChannel.b, mport)
+
+      iframeChannel.a.connect(tyInit.outPort)
       // connect the iframe parent to our API through a message channel port that we received...
-      MessageChannelBridge(tyInit.outPort, mport)
+      createPortApi(iframeChannel.a, TaskyonMessage, {
+        configurationMessage: (msg) => {
+          const newConfig = msg.conf
+          console.log('setting our configuration')
+          if (newConfig.llmSettings) {
+            // TODO: make sure, this function is only temporary and doesn't overwrite our actual llmSettings...
+            deepMergeReactive(stateRefs.llmSettings, newConfig.llmSettings, 'overwrite')
+          }
+          if (newConfig.appConfiguration) {
+            deepMergeReactive(stateRefs.appConfiguration, newConfig.appConfiguration, 'overwrite')
+          }
+          // and also set a possible signature as the api key!
+          if (stateRefs.llmSettings.selectedApi && newConfig.signatureOrKey) {
+            // we only set the API key, if it was provided by the
+            // parent app.
+            const newKey = newConfig.signatureOrKey
+            if (typeof newKey === 'string') {
+              stateRefs.keys[stateRefs.llmSettings.selectedApi] = newKey
+            } else {
+              console.warn('Provided signatureOrKey is not a string:', newKey)
+            }
+          }
+        },
+      })
       mport.postMessage('taskyon connected!')
     }
     return tyInit
