@@ -43,26 +43,42 @@ export function createStream<T>(): frpBus<T> {
   }
 }
 
-export function createDuplexChannel<T>() {
-  //export function createStream
-  const outS = createStream<T>()
-  const inS = createStream<T>()
+export type Port<T> = {
+  send: frpBus<T>['emit']
+  receive: frpBus<T>['stream']['subscribe']
+  connect: (b: Port<T>) => void
+}
+export type DuplexChannel<T> = { a: Port<T>; b: Port<T> }
 
-  const a = {
-    send: outS.emit,
-    receive: inS.stream.subscribe,
+export const connectChannels =
+  <T>(x: Port<T>) =>
+  (y: Port<T>) => {
+    x.receive((msg) => y.send(msg))
+    y.receive((msg) => x.send(msg))
   }
 
-  const b = {
-    send: inS.emit,
-    receive: outS.stream.subscribe,
+const makePort = <T>(
+  send: frpBus<T>['emit'],
+  receive: frpBus<T>['stream']['subscribe'],
+): Port<T> => {
+  const self: Port<T> = {
+    send,
+    receive,
+    connect: (other: Port<T>) => connectChannels(self)(other),
   }
-
-  return { a, b }
+  return self
 }
 
-export type DuplexChannel<T> = ReturnType<typeof createDuplexChannel<T>>
-export type Port<T> = DuplexChannel<T>['a']
+export const createChannelsFromStreams = <T>(
+  outS: frpBus<T>,
+  inS: frpBus<T>,
+): DuplexChannel<T> => ({
+  a: makePort(outS.emit, inS.stream.subscribe),
+  b: makePort(inS.emit, outS.stream.subscribe),
+})
+
+export const createDuplexChannel = <T>(): DuplexChannel<T> =>
+  createChannelsFromStreams(createStream<T>(), createStream<T>())
 
 export function MessageChannelBridge<T>(dport: Port<T>, mport: MessagePort) {
   const unsub = dport.receive((msg) => mport.postMessage(msg))
@@ -74,18 +90,6 @@ export function MessageChannelBridge<T>(dport: Port<T>, mport: MessagePort) {
   }
 
   return { destroy }
-}
-
-export function MessageChannelAdapter<T>(port: Port<T>) {
-  // we choose port2 as the "outside" port
-  const { port1, port2 } = new MessageChannel()
-
-  // incoming message from outside
-  port1.onmessage = (msg) => {
-    port.send(msg.data)
-  }
-  port.receive((msg) => port1.postMessage(msg))
-  return port2
 }
 
 export function portMap<A, B>(
@@ -165,6 +169,7 @@ export function createPortApi<
   handlers: {
     [K in Msg['type']]?: (m: Extract<Msg, { type: K }>) => R | Promise<R>
   },
+  defaultHandler?: (m: unknown) => void,
 ) {
   port.receive((raw) => {
     const parsed = schema.safeParse(raw)
@@ -176,7 +181,7 @@ export function createPortApi<
     const msg = parsed.data as Msg
     const handle = handlers[msg.type as Msg['type']]
     if (!handle) {
-      console.warn('No handler for type:', msg.type)
+      if (defaultHandler) defaultHandler(msg)
       return
     }
 
