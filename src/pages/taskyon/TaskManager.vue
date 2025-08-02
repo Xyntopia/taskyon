@@ -1,9 +1,16 @@
 <template>
   <q-page class="q-gutter-xs q-pa-xs">
-    <q-btn :percentage="syncProgress" :icon="mdiRefresh" @click="onUpdateSearchIndex">
-      update search index {{ syncProgressString }}</q-btn
-    >
-    <q-btn :icon="mdiDatabaseRemove" @click="onResetSearchIndex"> clear search index </q-btn>
+    <q-btn flat :percentage="syncProgress" :icon="mdiRefresh" @click="onUpdateSearchIndex">
+      update search index {{ syncProgressString }}
+      <q-tooltip>Re-index all taskyon nodes! (Depending on size this mght take a while)</q-tooltip>
+    </q-btn>
+    <q-btn flat :icon="mdiDatabaseRemove" @click="onResetSearchIndex">
+      clear search index
+      <q-tooltip>This will delete the search index completly</q-tooltip>
+    </q-btn>
+    <q-btn flat :icon="mdiDatabase" label="Open SQL Search" to="/sql">
+      <q-tooltip>Expert users can use SQL queries on all taskyon data!</q-tooltip>
+    </q-btn>
     <q-table
       style="font-size: 0.8em"
       wrap-cells
@@ -99,6 +106,7 @@ import Task from 'components/taskyon/TaskWidget.vue'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import {
   mdiApproximatelyEqual,
+  mdiDatabase,
   mdiDatabaseRemove,
   mdiForum,
   mdiRefresh,
