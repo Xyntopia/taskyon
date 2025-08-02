@@ -1,6 +1,6 @@
 // frpBus.ts
 
-import type { ZodType } from 'zod'
+import type { z, ZodType } from 'zod'
 
 /**
  * Functional Reactive Programming (FRP) Bus
@@ -152,6 +152,38 @@ export function createZodPort<P, T extends P>(
 ): { port: Port<T>; destroy: () => void } {
   /* reuse the generic filtered-port helper */
   return createFilteredPort(parent, (m): m is T => schema.safeParse(m).success)
+}
+
+/** Generic message → handler router (sync or async) */
+export function createPortApi<
+  R,
+  Schema extends z.ZodType<{ type: string }>, // your Zod schema
+  Msg extends z.infer<Schema>, // union type + discriminator
+  Handlers extends {
+    // map "type" → handler
+    [K in Msg['type']]?: (m: Extract<Msg, { type: K }>) => R | Promise<R>
+  },
+>(port: { receive: (fn: (m: unknown) => void) => void }, schema: Schema, handlers: Handlers) {
+  port.receive((raw) => {
+    const parsed = schema.safeParse(raw)
+    if (!parsed.success) {
+      console.error('Invalid message:', parsed.error, raw)
+      return
+    }
+
+    const msg = parsed.data as Msg
+    const handle = handlers[msg.type as Msg['type']]
+    if (!handle) {
+      console.warn('No handler for type:', msg.type)
+      return
+    }
+
+    // 1️⃣ Re-narrow the union to the specific variant for this handler
+    type Specific = Extract<Msg, { type: typeof msg.type }>
+
+    // 2️⃣ Call the handler; Promise.resolve normalises sync/async, catch logs errors
+    void Promise.resolve(handle(msg as Specific)).catch(console.error)
+  })
 }
 
 // Operator: transform each value from the source stream
