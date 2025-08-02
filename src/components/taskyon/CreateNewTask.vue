@@ -1,6 +1,6 @@
 <template>
   <!--Create new task area-->
-  <div class="create-new-task">
+  <div class="create-new-task message-area-parent" style="position: relative">
     <!--Function Control-->
     <div v-if="selectedTaskType" class="text-caption text-center">
       <InfoDialog
@@ -63,8 +63,27 @@
         <q-tooltip :delay="0.5">{{ `${file.name}` }}</q-tooltip>
       </q-chip>
     </div>
+    <!--Minimal Mode Buttons-->
+    <div
+      v-if="minMode"
+      class="sticky-dropzone"
+      style="position: absolute; top: 0; left: 0px; transform: translateY(-110%); z-index: 100"
+    >
+      <FileDropzone
+        class="col-auto"
+        accept="*"
+        disable-dropzone-border
+        aria-label="attachFileToDraft"
+        @add-files="attachFileToDraft"
+      >
+        <q-btn dense round size="md" class="fit taskyon-control-button" flat>
+          <q-icon :name="matAttachment" />
+          <q-tooltip>Attach file or image to message</q-tooltip>
+        </q-btn>
+      </FileDropzone>
+    </div>
     <!--Task Creation State-->
-    <div v-if="!hideTaskInfo" class="q-px-sm q-pt-xs row justify-between items-center">
+    <div v-else class="q-px-sm q-pt-xs row justify-between items-center">
       <div class="col-auto row">
         <!--attach files...-->
         <FileDropzone
@@ -285,7 +304,7 @@ import ApiSelect from './ApiSelect.vue'
 
 const { expertMode = false, entryNode } = defineProps<{
   entryNode: partialTaskDraft
-  hideTaskInfo?: boolean
+  minMode?: boolean
   expertMode?: boolean
 }>()
 
@@ -567,5 +586,19 @@ const removeFileFromDraft = (file: File) => {
   flex: 1 1 0; /* grow:1, shrink:1, basis:0 */
   min-width: 0; /* allow it to shrink below its content width */
   width: 100%;
+}
+
+.sticky-dropzone {
+  position: absolute;
+  top: 0;
+  left: 8px;
+  transform: translateY(-100%);
+  z-index: 100;
+  display: none;
+}
+
+/* Show dropzone if *any* child inside .message-area-parent is focused */
+.message-area-parent:focus-within .sticky-dropzone {
+  display: block;
 }
 </style>
