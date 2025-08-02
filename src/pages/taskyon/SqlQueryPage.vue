@@ -26,7 +26,33 @@
           </q-card-section>
 
           <q-card-section v-if="queryResult !== null">
-            <div class="text-h6 q-mb-sm">Results</div>
+            <div class="row items-center justify-between">
+              <div class="text-h6 q-mb-sm">Results</div>
+              <q-btn-dropdown
+                color="primary"
+                size="sm"
+                :icon="matContentCopy"
+                label="Copy"
+                flat
+                dense
+                :dropdown-icon="matArrowDropDown"
+                class="q-mb-sm"
+              >
+                <q-list>
+                  <q-item v-close-popup clickable @click="copyJson">
+                    <q-item-section>Copy as JSON</q-item-section>
+                  </q-item>
+                  <q-item
+                    v-close-popup
+                    clickable
+                    :disable="!isTabularResult || !tableRows.length"
+                    @click="copyCsv"
+                  >
+                    <q-item-section>Copy as CSV</q-item-section>
+                  </q-item>
+                </q-list>
+              </q-btn-dropdown>
+            </div>
             <q-tabs v-model="activeTab" dense class="q-mb-md">
               <q-tab name="table" label="Table" :disable="!isTabularResult" />
               <q-tab name="json" label="JSON" />
@@ -78,6 +104,27 @@ import { initializeTaskyon } from 'src/modules/client/tyClient'
 import { dump } from 'js-yaml'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import type { JSONSchema7 } from 'json-schema'
+
+import { copyToClipboard, Notify } from 'quasar'
+import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
+
+function copyJson() {
+  copyToClipboard(formattedResult.value)
+    .then(() => Notify.create({ message: 'Copied as JSON', color: 'primary' }))
+    .catch(() => Notify.create({ message: 'Copy failed', color: 'negative' }))
+}
+
+function copyCsv() {
+  if (!isTabularResult.value || tableRows.value.length === 0) return
+  const cols = tableColumns.value.map((col) => col.name)
+  const csvRows = [
+    cols.join(','), // header
+    ...tableRows.value.map((row) => cols.map((k) => JSON.stringify(row[k] ?? '')).join(',')),
+  ]
+  copyToClipboard(csvRows.join('\n'))
+    .then(() => Notify.create({ message: 'Copied as CSV', color: 'primary' }))
+    .catch(() => Notify.create({ message: 'Copy failed', color: 'negative' }))
+}
 
 // Row interfaces (no `any`)
 interface TableNameRow {
