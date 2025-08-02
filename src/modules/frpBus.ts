@@ -159,11 +159,13 @@ export function createPortApi<
   R,
   Schema extends z.ZodType<{ type: string }>, // your Zod schema
   Msg extends z.infer<Schema>, // union type + discriminator
-  Handlers extends {
-    // map "type" → handler
+>(
+  port: { receive: (fn: (m: unknown) => void) => void },
+  schema: Schema,
+  handlers: {
     [K in Msg['type']]?: (m: Extract<Msg, { type: K }>) => R | Promise<R>
   },
->(port: { receive: (fn: (m: unknown) => void) => void }, schema: Schema, handlers: Handlers) {
+) {
   port.receive((raw) => {
     const parsed = schema.safeParse(raw)
     if (!parsed.success) {

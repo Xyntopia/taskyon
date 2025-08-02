@@ -31,16 +31,13 @@ import {
   withSecretStore,
 } from '../crudWrapper'
 import { getDatabase } from '../pglite.api'
-import { createDuplexChannel, createIframeMux, createZodPort } from '../frpBus'
+import { createDuplexChannel, createIframeMux, createPortApi, createZodPort } from '../frpBus'
 import { testingTools } from '../tools/testTools'
 import { TaskWorkerMessage, TaskyonMessage } from './apiTypes'
 import { ToolBase } from './types'
 import { deepMergeReactive } from '../utils'
-import type { TyTaskManager } from './taskManager'
-import { match } from 'ts-pattern'
 import { dump } from 'js-yaml'
 import z from 'zod'
-import type { Port } from '../frpBus'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
@@ -141,7 +138,42 @@ export async function initTaskyon(
     taskPort,
   )
 
-  taskyonApi(inPort, taskManagerInstance, llmSettings, apiKeys)
+  createPortApi(inPort, TaskyonMessage, {
+    task: (msg) => {
+      void taskManagerInstance
+        .addPartialTask2Tree(
+          { ...msg.task, label: msg.origin ? [msg.origin] : undefined },
+          undefined,
+          undefined,
+          false,
+        )
+        .catch((err: unknown) => console.warn(err))
+    },
+    functionDescription: (msg) => {
+      const newFunc: ToolBase = msg
+      console.log(`functionDescription was sent by ${msg.origin}`, newFunc)
+      void taskManagerInstance.addDefaultTools([newFunc])
+    },
+    configurationMessage: (msg) => {
+      const newConfig = msg.conf
+      console.log('setting our configuration')
+      if (newConfig.llmSettings) {
+        // TODO: make sure, this function is only temporary and doesn't overwrite our actualy llmSettings...
+        deepMergeReactive(llmSettings, newConfig.llmSettings, 'overwrite')
+      }
+      // and also set a possible signature as the api key!
+      if (llmSettings.selectedApi && newConfig.signatureOrKey) {
+        // we only set the API key, if it was provided by the
+        // parent app.
+        const newKey = newConfig.signatureOrKey
+        if (typeof newKey === 'string') {
+          apiKeys[llmSettings.selectedApi] = newKey
+        } else {
+          console.warn('Provided signatureOrKey is not a string:', newKey)
+        }
+      }
+    },
+  })
 
   return {
     // TODO: not sure, if the iframeMultiPlexer should be a taskyon functionality?
@@ -162,68 +194,6 @@ export async function initTaskyon(
     if (typeof obj === 'undefined') return undefined;
     return typeof obj === 'string' ? obj : JSON.stringify(obj);
   }*/
-
-export const taskyonApi = (
-  inPort: Port<TaskyonMessage>,
-  taskManager: TyTaskManager,
-  llmSettings: llmSettings,
-  keys: Record<string, string>,
-) => {
-  inPort.receive((msg) => {
-    try {
-      // here we safe-guard against accidental messages on this bus...
-      const res = TaskyonMessage.safeParse(msg)
-      if (res.success) {
-        match(res.data)
-          .with({ type: 'task' }, (msg) => {
-            void taskManager
-              .addPartialTask2Tree(
-                { ...msg.task, label: msg.origin ? [msg.origin] : undefined },
-                undefined,
-                undefined,
-                false,
-              )
-              .catch((err: unknown) => console.warn(err))
-          })
-          .with({ type: 'functionDescription' }, (msg) => {
-            const newFunc: ToolBase = msg
-            console.log(`functionDescription was sent by ${msg.origin}`, newFunc)
-            void taskManager.addDefaultTools([newFunc])
-          })
-          .with({ type: 'configurationMessage' }, (msg) => {
-            const newConfig = msg.conf
-            console.log('setting our configuration')
-            if (newConfig.llmSettings) {
-              // TODO: make sure, this function is only temporary and doesn't overwrite our actualy llmSettings...
-              deepMergeReactive(llmSettings, newConfig.llmSettings, 'overwrite')
-            }
-            // and also set a possible signature as the api key!
-            if (llmSettings.selectedApi && newConfig.signatureOrKey) {
-              // we only set the API key, if it was provided by the
-              // parent app.
-              const newKey = newConfig.signatureOrKey
-              if (typeof newKey === 'string') {
-                keys[llmSettings.selectedApi] = newKey
-              } else {
-                console.warn('Provided signatureOrKey is not a string:', newKey)
-              }
-            }
-          })
-        // we don't need "otherwise" here, because the other messages are currently handled by our
-        // remotefunctionhandler
-        // TODO:  BUT we want to chane this, and integrate the remote function handler with this API here as well...
-      } else {
-        console.error('could not convert message to task:', {
-          res,
-          event: msg,
-        })
-      }
-    } catch (err) {
-      // TODO: return this to the parent, in order to indicate any errors..
-      console.error(err)
-    }
-  })
-}
 
 export function createOpenAPIDocs() {
   /** This function creates openAPI docs for taskyon and saves them inside the public folder.
