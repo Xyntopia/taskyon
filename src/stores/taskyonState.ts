@@ -29,7 +29,6 @@ import { onScopeDispose } from 'vue'
 import { waitForMessagePort } from 'src/modules/taskyon/iframeWorker'
 import { guiTools } from 'src/modules/tools/GuiTools'
 import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
-import { deepMergeReactive } from 'src/modules/utils'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -263,24 +262,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         configurationMessage: (msg) => {
           const newConfig = msg.conf
           console.log('setting our configuration')
-          if (newConfig.llmSettings) {
-            // TODO: make sure, this function is only temporary and doesn't overwrite our actual llmSettings...
-            deepMergeReactive(stateRefs.llmSettings, newConfig.llmSettings, 'overwrite')
-          }
-          if (newConfig.appConfiguration) {
-            deepMergeReactive(stateRefs.appConfiguration, newConfig.appConfiguration, 'overwrite')
-          }
-          // and also set a possible signature as the api key!
-          if (stateRefs.llmSettings.selectedApi && newConfig.signatureOrKey) {
-            // we only set the API key, if it was provided by the
-            // parent app.
-            const newKey = newConfig.signatureOrKey
-            if (typeof newKey === 'string') {
-              stateRefs.keys[stateRefs.llmSettings.selectedApi] = newKey
-            } else {
-              console.warn('Provided signatureOrKey is not a string:', newKey)
-            }
-          }
+          stateRefs.overRideSettings(newConfig)
         },
       })
       mport.postMessage('taskyon connected!')

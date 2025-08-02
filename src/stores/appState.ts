@@ -7,6 +7,7 @@ import type { FunctionCall } from 'src/modules/taskyon/types'
 import { type tyPublicKeyDraft, TyProfile } from 'src/modules/taskyon/types'
 import axios from 'axios'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
+import type { DeepPartial } from 'src/modules/utils'
 import {
   clearBrowserCaches,
   clearCookies,
@@ -39,7 +40,11 @@ const storeName = 'taskyonState'
 // because we want to this to also work on tyServer and in a "minimal gui" setting.
 // So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
 export const useAppStateStore = defineStore(storeName, () => {
-  const defaultStorableSettings = TyProfile.parse(defaultSettings)
+  const res = TyProfile.safeParse(defaultSettings)
+  if (!res.success) {
+    throw new Error('The default settings provided do not work!', { cause: res.error.message })
+  }
+  const defaultStorableSettings = res.data
   // llmSettings & appConfiguration define the state of our app!
   // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
   const initialState = {
@@ -113,18 +118,44 @@ export const useAppStateStore = defineStore(storeName, () => {
     stateRefs = reactive(initialState)
   }
 
-  // we use "overRideSettings" to do temporar settings overrides for taskyon.
-  // e.g. if taskyon was called from an iframe.
-  const overrideSettings: Reactive<TyProfile> = stateRefs
+  // Flag that tells the persister to skip the next change
+  let saveToLocalStorage = true
 
   // store the state on every change!! :)
   watch(stateRefs, (newState) => {
     //console.log('saved store!!');
-    LocalStorage.set(storeName, JSON.stringify(newState))
+    if (saveToLocalStorage) {
+      LocalStorage.set(storeName, JSON.stringify(newState))
+    }
   })
 
   if (stateRefs.initialLoad) {
     void generateAssymetricRandomNewKey().then((r) => (stateRefs.llmSettings.userId = r.publicKey))
+  }
+
+  function overrideSettings(newConfig: DeepPartial<TyProfile>) {
+    saveToLocalStorage = false
+    if (newConfig.llmSettings) {
+      // TODO: make sure, this function is only temporary and doesn't overwrite our actual llmSettings...
+      deepMergeReactive(stateRefs.llmSettings, newConfig.llmSettings, 'overwrite')
+    }
+    if (newConfig.appConfiguration) {
+      deepMergeReactive(stateRefs.appConfiguration, newConfig.appConfiguration, 'overwrite')
+    }
+    if (newConfig.toolchainConfig) {
+      deepMergeReactive(stateRefs.toolchainConfig, newConfig.toolchainConfig, 'overwrite')
+    }
+    // and also set a possible signature as the api key!
+    if (stateRefs.llmSettings.selectedApi && newConfig.signatureOrKey) {
+      // we only set the API key, if it was provided by the
+      // parent app.
+      const newKey = newConfig.signatureOrKey
+      if (typeof newKey === 'string') {
+        stateRefs.keys[stateRefs.llmSettings.selectedApi] = newKey
+      } else {
+        console.warn('Provided signatureOrKey is not a string:', newKey)
+      }
+    }
   }
 
   // this file could potentially be replaced in kubernetes or docker using a configmap!

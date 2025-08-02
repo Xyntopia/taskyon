@@ -1,5 +1,5 @@
 {
-  "version": 17,
+  "version": 18,
   "appConfiguration": {
     "appConfigurationUrl": "/taskyon_settings.json",
     "gdriveConfigurationFile": "taskyon_settings.json",
@@ -11,7 +11,7 @@
     "primaryColor": "#2A3548",
     "secondaryColor": "#F78F3B"
   },
-  "TyToolchainConfig": {},
+  "toolchainConfig": {},
   "llmSettings": {
     "llmApis": {
       "taskyon": {
