@@ -1,5 +1,5 @@
 import type { DeepPartial } from '../utils'
-import type { TyProfile } from './types'
+import { TyProfile } from './types'
 import { FunctionArguments, ToolBase, partialTaskDraft } from './types'
 import { z } from 'zod'
 
@@ -76,7 +76,7 @@ const tyConfigurationMessage = z.object({
   type: z.literal('configurationMessage').meta({
     description: 'Field to indicate that this is a function description message.',
   }),
-  conf: z.record(z.string(), z.unknown()),
+  conf: z.union([z.record(z.string(), z.unknown()), TyProfile]),
 })
 
 const TyReadyMessage = z.object({ type: z.literal('taskyonReady') }).meta({
