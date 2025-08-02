@@ -12,9 +12,10 @@
         :size="btnSize"
         :icon="matMenu"
         aria-label="Open Sidebar"
+        class="q-mr-lg"
         @click="drawerOpen = !drawerOpen"
       />
-      <div v-if="state" :class="['q-ml-lg', minMode ? '' : 'button-group']">
+      <div v-if="state" :class="[minMode ? '' : 'button-group']">
         <q-btn
           v-if="!minMode"
           flat
@@ -220,6 +221,7 @@ defineProps<{
 }>()
 const drawerOpen = defineModel<boolean | undefined>('drawerOpen', {
   required: false,
+  default: undefined,
 })
 
 const ShareDialogBtn = defineAsyncComponent(
