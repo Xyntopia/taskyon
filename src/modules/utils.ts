@@ -121,25 +121,23 @@ export function humanizeError(errorInput: unknown): string {
   return lines.join('\n')
 }
 
-export async function copyPngToClipboard(pngBuffer: Uint8Array) {
-  const blob = new Blob([pngBuffer], { type: 'image/png' })
-  //const url = URL.createObjectURL(blob);
+export async function copyPngToClipboard(png: Uint8Array) {
+  // 1. Narrow to plain ArrayBuffer first
+  const viewStart = png.byteOffset
+  const viewEnd = viewStart + png.byteLength
 
-  if (typeof ClipboardItem !== 'undefined') {
-    try {
-      const clipboardItem = new ClipboardItem({ 'image/png': blob })
-      await navigator.clipboard.write([clipboardItem])
-      console.log('Image copied to clipboard successfully!')
-      //URL.revokeObjectURL(url); // revoke the URL to free up memory
-    } catch (err) {
-      console.error('Failed to copy image to clipboard:', err)
-    }
+  const ab: ArrayBuffer = // <- 👈 explicit type
+    (png.buffer as ArrayBuffer) //      remove SAB from union
+      .slice(viewStart, viewEnd) //      now ab is only ArrayBuffer
+
+  // 2. Build the Blob
+  const blob = new Blob([ab], { type: 'image/png' })
+
+  // 3. Copy to clipboard
+  if ('ClipboardItem' in globalThis) {
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
   } else {
-    console.warn('ClipboardItem is not supported in this browser. Using fallback method.')
-
-    alert(
-      'Your browser is too old to support image copying with "ClipboardItem", please upgrade your browser!',
-    )
+    alert('ClipboardItem not supported in this browser')
   }
 }
 

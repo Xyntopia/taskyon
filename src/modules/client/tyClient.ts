@@ -1,7 +1,6 @@
 // we can compile this file to js to js using "yarn build:lib"
 
-import type { partialTyConfiguration, TaskyonMessage } from '../taskyon/apiTypes'
-import type { ClientTool } from '../taskyon/tools'
+import type { partialTyConfiguration, TaskyonMessage, ClientTool } from './tyClient.types'
 
 const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
   return new Promise<MessagePort>((resolve) => {
