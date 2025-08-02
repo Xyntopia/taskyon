@@ -32,11 +32,11 @@ const configuration: partialTyConfiguration = {
     selectedApi: 'taskyon',
     enableOpenAiTools: false,
     enableToolChooser: true,
-    llmApis: {
+    /*llmApis: {
       taskyon: {
         selectedModel: 'meta-llama/llama-3.1-8b-instruct',
       },
-    },
+    },*/
   },
   appConfiguration: {
     expertMode: true,

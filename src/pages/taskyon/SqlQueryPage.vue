@@ -1,4 +1,4 @@
-<!-- SqlQueryPage.vue (eslint‑safe, no `any`) -->
+<!-- SqlQueryPage.vue -->
 <template>
   <q-layout view="lHh LpR lfr">
     <q-page-container>
@@ -25,9 +25,29 @@
             </div>
           </q-card-section>
 
-          <q-card-section v-if="queryResult">
+          <q-card-section v-if="queryResult !== null">
             <div class="text-h6 q-mb-sm">Results</div>
-            <pre style="max-height: 300px; overflow: auto">{{ formattedResult }}</pre>
+            <q-tabs v-model="activeTab" dense class="q-mb-md">
+              <q-tab name="table" label="Table" :disable="!isTabularResult" />
+              <q-tab name="json" label="JSON" />
+            </q-tabs>
+
+            <div v-if="activeTab === 'table' && isTabularResult">
+              <q-table
+                :rows="tableRows"
+                :columns="tableColumns"
+                row-key="id"
+                dense
+                flat
+                bordered
+                :pagination="{ rowsPerPage: 10 }"
+                style="max-height: 300px"
+              />
+            </div>
+
+            <div v-else>
+              <pre style="max-height: 300px; overflow: auto">{{ formattedResult }}</pre>
+            </div>
           </q-card-section>
         </q-card>
 
@@ -70,7 +90,13 @@ const queryResult = ref<unknown>(null)
 const errorMessage = ref('')
 const db = shallowRef<TyPGDB>()
 
-// add sample table
+// Table view state
+const isTabularResult = ref(false)
+const tableRows = ref<Record<string, unknown>[]>([])
+const tableColumns = ref<{ name: string; label: string; field: string; sortable: boolean }[]>([])
+const activeTab = ref<'table' | 'json'>('json')
+
+// Add sample table
 async function addSampleTable() {
   try {
     await db.value?.exec(`
@@ -88,7 +114,7 @@ async function addSampleTable() {
   }
 }
 
-// list tables
+// List tables
 const allTables = asyncComputed(async () => {
   if (!db.value) return [] as string[]
   const res = await db.value.query(
@@ -97,18 +123,54 @@ const allTables = asyncComputed(async () => {
   return res.rows.map((r) => (r as TableNameRow).table_name)
 }, [] as string[])
 
-// execute query
+// Execute query and prepare tabular state
 async function executeQuery() {
   errorMessage.value = ''
   queryResult.value = null
+  isTabularResult.value = false
+  tableRows.value = []
+  tableColumns.value = []
   try {
     const res = await db.value?.query(sqlQuery.value)
     queryResult.value = res?.rows ?? null
+
+    // Tabular check: non-empty array of plain objects with same keys
+    if (
+      Array.isArray(res?.rows) &&
+      res.rows.length > 0 &&
+      res.rows.every((r) => typeof r === 'object' && r !== null && !Array.isArray(r))
+    ) {
+      const firstRow = res.rows[0] as Record<string, unknown>
+      const keys = Object.keys(firstRow)
+      if (
+        keys.length > 0 &&
+        res.rows.every((r) => Object.keys(r as Record<string, unknown>).join() === keys.join())
+      ) {
+        tableRows.value = res.rows as Record<string, unknown>[]
+        tableColumns.value = keys.map((k) => ({
+          name: k,
+          label: k,
+          field: k,
+          sortable: true,
+        }))
+        isTabularResult.value = true
+        activeTab.value = 'table'
+      } else {
+        isTabularResult.value = false
+        activeTab.value = 'json'
+      }
+    } else {
+      isTabularResult.value = false
+      activeTab.value = 'json'
+    }
   } catch (err) {
     queryResult.value = err instanceof Error ? err.message : String(err)
+    isTabularResult.value = false
+    activeTab.value = 'json'
   }
 }
 
+// SQL schema query (for AI, unchanged)
 const sqlschemaquery = `
 -- Postgres ≥ 9.4 (jsonb_build_object / jsonb_agg)
 SELECT jsonb_agg(
@@ -130,12 +192,13 @@ FROM (
       ORDER BY ordinal_position
     ) AS cols
   FROM information_schema.columns
-  WHERE table_schema = 'public'       -- change if you need another schema
+  WHERE table_schema = 'public'
   GROUP BY table_name
   ORDER BY table_name
 ) t;
 `
 
+// Mount: init DB and Taskyon tools (unchanged)
 onMounted(async () => {
   db.value = await getDatabase('taskyon')
 
@@ -217,6 +280,6 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
   void initializeTaskyon(tools, configuration)
 })
 
-// formatted result
+// Formatted JSON result for JSON view
 const formattedResult = computed(() => JSON.stringify(queryResult.value, null, 2))
 </script>
