@@ -95,7 +95,11 @@ selecting different models).
         <template #body-cell-name="props">
           <q-td :props="props">
             <div class="row items-center">
-              <q-icon v-if="!props.row.inKey" class="q-pr-xs" :name="matBlock">
+              <q-icon
+                v-if="!(props.row.inKey === undefined || props.row.inKey)"
+                class="q-pr-xs"
+                :name="matBlock"
+              >
                 <q-tooltip>
                   This model is not available for this kee (are you using the free key?)
                 </q-tooltip>
@@ -116,7 +120,10 @@ selecting different models).
                 <object-tree-view v-model="props.row" read-only />
               </InfoDialog>
               <q-btn
-                v-if="props.row.id !== tystate.currentModelId && props.row.inKey"
+                v-if="
+                  props.row.id !== tystate.currentModelId &&
+                  (props.row.inKey || props.row.inKey === undefined)
+                "
                 flat
                 label="select this model"
                 @click="tystate.handleBotNameUpdate({ newName: props.row.id })"
