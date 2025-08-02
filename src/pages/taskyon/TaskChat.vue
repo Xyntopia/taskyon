@@ -42,15 +42,14 @@
           <GetStarted />
         </div>
         <CreateNewTask
-          style="max-width: 48rem"
           :file-attachments="fileAttachments"
           :entry-node="tystate.entryNode"
           class="q-pa-md col self-stretch"
-          :hide-task-info="state.minimalGui"
+          :min-mode="state.minimalGui"
           :expert-mode="state.appConfiguration.expertMode"
         />
-        <component :is="ResetButton" v-if="ResetButton" color="secondary" flat mode="all" />
       </div>
+      <component :is="ResetButton" v-if="ResetButton" color="secondary" flat mode="all" />
     </div>
     <!--File Drop Zone Overlay-->
     <FileDropzone
@@ -153,7 +152,7 @@
           :file-attachments="fileAttachments"
           :entry-node="tystate.entryNode"
           class="q-pa-xs"
-          :hide-task-info="state.minimalGui"
+          :min-mode="state.minimalGui"
           :expert-mode="state.appConfiguration.expertMode"
         />
       </div>

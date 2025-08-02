@@ -1,6 +1,7 @@
 <!-- SqlQueryPage.vue -->
 <template>
   <q-layout view="lHh LpR lfr">
+    <TaskyonHeader btn-size="md" />
     <q-page-container>
       <q-page class="row">
         <!-- SQL Card -->
@@ -107,6 +108,7 @@ import type { JSONSchema7 } from 'json-schema'
 
 import { copyToClipboard, Notify } from 'quasar'
 import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
+import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 
 function copyJson() {
   copyToClipboard(formattedResult.value)
@@ -322,7 +324,7 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
       enableToolChooser: true,
       entryNode: toolCall({ name: 'setSqlQuery', arguments: {} }),
     },
-    appConfiguration: { guiMode: 'default' },
+    appConfiguration: { guiMode: 'auto' },
   }
   void initializeTaskyon(tools, configuration)
 })

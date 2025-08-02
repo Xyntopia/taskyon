@@ -216,7 +216,7 @@ const showAboutDialog = ref(false)
 
 defineProps<{
   minMode?: boolean
-  btnSize: 'xs' | 'md'
+  btnSize: 'xs' | 'md' | 'sm' | 'lg' | 'xl'
 }>()
 const drawerOpen = defineModel<boolean | undefined>('drawerOpen', {
   required: false,
