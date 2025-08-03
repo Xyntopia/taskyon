@@ -222,12 +222,18 @@ The tool never stores content server-side; everything runs client-side in the Ta
       prev?.content.data.arguments.issuelist.length === issuelist.length &&
       thisMsg?.parentID === prev.id
     ) {
-      const { projectId, projectName, issues } = await new Promise<{
-        projectId: string
-        projectName: string
-        issues: string[]
-      }>((resolve) => {
+      const res = await new Promise<
+        | {
+            projectId: string
+            projectName: string
+            issues: string[]
+          }
+        | 'cancelled'
+      >((resolve) => {
         ;(ctx.messagePort as MessagePort).onmessage = (ev) => {
+          if (ev.data.payload === 'cancelled') {
+            resolve('cancelled')
+          }
           if (ev.data.payload?.selectedIssues) {
             resolve({
               projectId: ev.data.payload.selectedProjectId,
@@ -238,6 +244,20 @@ The tool never stores content server-side; everything runs client-side in the Ta
         }
       })
 
+      if (res === 'cancelled')
+        return makeTaskResult([
+          [
+            {
+              role: 'assistant',
+              content: {
+                type: 'message',
+                data: 'You cancelled the send dialog. Would you like to change anything?',
+              },
+            },
+          ],
+        ])
+
+      const { projectId, projectName, issues } = res
       const GITLAB_BASE = 'https://gitlab.com/api/v4'
       const TOKEN = await ctx.getSecret('oauth-access-token', false)
       const createdUrls: string[] = []
@@ -372,7 +392,10 @@ The tool never stores content server-side; everything runs client-side in the Ta
       )
       .join('\n')}
   </ul>
-  <button id="submit-issues" style="margin-top:.75rem">Submit</button>
+  <div style="margin-top:.75rem;display:flex;gap:0.5rem">
+    <button id="submit-issues">Submit</button>
+    <button id="cancel-issues" style="background:#eee;color:#444">Cancel</button>
+  </div>
 </div>
 <script>
   document.getElementById('submit-issues').addEventListener('click', () => {
@@ -385,6 +408,9 @@ The tool never stores content server-side; everything runs client-side in the Ta
       { selectedIssues, selectedProjectId, selectedProjectName },
       '*'
     );
+  });
+  document.getElementById('cancel-issues').addEventListener('click', () => {
+    window.parent.postMessage("cancelled", '*');
   });
 </script>`
 
