@@ -77,3 +77,8 @@ const tools: ClientTool[] = [
 
 onMounted(() => void initializeTaskyon(tools, configuration))
 </script>
+
+<style lang="sass">
+body
+  background: grey !important
+</style>
