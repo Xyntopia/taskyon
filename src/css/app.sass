@@ -197,15 +197,14 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     opacity: 0.5
 
   // common settings for both:  dark & light  
-  .body--light
-    #q-app
-      //background-color: white
-      background: $app-bg-light
-      // TODO: the following is duplicated in .body--dark:
-      background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
-      background-size: cover // make sure we always cover entire viewport even if content is smaller
-      background-attachment: fixed // fix background to viewport
-      text-color: black
+  body.body--light
+    //background-color: white
+    background: $app-bg-light
+    // TODO: the following is duplicated in .body--dark:
+    background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
+    background-size: cover // make sure we always cover entire viewport even if content is smaller
+    background-attachment: fixed // fix background to viewport
+    text-color: black
 
     .fade-top-overlay
       // **exact same** gradient
@@ -249,13 +248,12 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       &.user
         border: 1px solid rgba($primary,0.8)
 
-  .body--dark
-    #q-app
-      background-color: black
-      background: $app-bg-dark
-      background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
-      background-size: cover // make sure we always cover entire viewport even if content is smaller
-      background-attachment: fixed // fix background to viewport
+  body.body--dark
+    background-color: black
+    background: $app-bg-dark
+    background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
+    background-size: cover // make sure we always cover entire viewport even if content is smaller
+    background-attachment: fixed // fix background to viewport
 
     .fade-top-overlay
       // **exact same** gradient
@@ -306,10 +304,9 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
       border-radius: 5px
       border: 1px solid rgb($secondary)
 
-  .within-iframe
-    #q-app
-      background-color: white
-      background: transparent
+body.within-iframe
+  background-color: white !important
+  background: transparent !important
 
 @media print
   /* Hide everything initially */
