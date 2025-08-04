@@ -45,9 +45,11 @@ export function startNewChat() {
   cy.get('[aria-label="start new chat"]').click()
 }
 
-export function writeMessage(msg: string) {
-  cy.get('.create-new-task textarea').type(msg)
-  cy.get('.create-new-task textarea').type('{enter}')
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function writeMessage(msg: string, cyc: Cypress.Chainable<any> | undefined = undefined) {
+  const cyc2 = cyc ?? cy
+  cyc2.get('.create-new-task textarea').type(msg)
+  cyc2.get('.create-new-task textarea').type('{enter}')
 }
 
 export function addAIServices() {

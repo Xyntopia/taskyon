@@ -1,17 +1,18 @@
 <template>
   <div class="column">
     <div class="col-6">
+      <!--We load the iframe here with the iframe=true parameter to make test in cypress work!-->
       <iframe
         id="taskyon"
         frameborder="0"
-        src="http://localhost:9000"
+        src="http://localhost:9000?iframe=true"
         width="100%"
         height="500px"
       ></iframe>
     </div>
     <div class="col-6">
-      <h2>Function Call Output</h2>
-      <div>{{ functionResult }}</div>
+      <div>Function Call Output</div>
+      <div id="output">{{ functionResult }}</div>
     </div>
   </div>
 </template>

@@ -48,7 +48,7 @@ describe('iframe integration', () => {
     })
   }
 
-  it('Should be able to create a tool and use it through the iframe', { baseUrl: null }, () => {
+  it('Should be able to create a tool and use it through the iframe', () => {
     cy.visit('/clienttest') //.wait(10000);
 
     clearIframeStorage()
@@ -58,7 +58,8 @@ describe('iframe integration', () => {
     getIframeBody().should('exist')
     //getIframeBody().find('#q-app').should('exist');
     //getIframeBody().get('.q-btn').should('exist');
-    getIframeBody().contains('Use free Taskyon').click()
+    // don't need this for our taskyon.space version...
+    // getIframeBody().contains('Use free Taskyon').click()
     getIframeBody().find('button[aria-label="Open Sidebar"]').should('exist').click()
 
     /* TODO test "development" mode for iframe.. :)
@@ -73,19 +74,18 @@ describe('iframe integration', () => {
     //getIframeBody().find('button[aria-label="Open Sidebar"]').click();
     getIframeBody().click()
 
-    getIframeBody().contains('your message').type(
-      'Can you add the two strings: “cypress” and “test function” for me using \
-the myExampleStringAdderAlone tool? make sure, you display the exact string how it is displayed (with/without whitespace etc…)\
-{enter}',
-    )
+    // our string here looks a little funny, because we want to make sure, to prevent newlines!!
+    const msg = `Can you add the two strings: “cypress” and “test function” for me using \
+the clientTest function? make sure, you display the exact string how it is displayed \
+(with/without whitespace etc…). Please use the exact tool I specified... \
+{enter}`
+    getIframeBody().dataCy('chat-input').type(msg)
+    getIframeBody().dataCy('chat-input').type('{enter}')
 
-    cy.get('#output').contains('cypresstest function')
+    cy.get('#output').contains('cypresstest function', { timeout: 60000 })
 
-    getIframeBody().wait(5000).contains('myExampleStringAdderAlone').click()
-    getIframeBody()
-      .wait(10000)
-      .contains(/^result:[|\s]*cypresstest function/)
-      .should('exist')
+    getIframeBody().contains('Result').click()
+    getIframeBody().find('.toolresult').contains('cypresstest functio').should('exist')
 
     cy.screenshot('iframe_integration', { overwrite: true })
 

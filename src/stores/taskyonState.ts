@@ -236,9 +236,18 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       //       to save this recovery key somewhere else in order to be able to recover their passwords.
       async () => (await generateRsaOaepPair()).publicKey,
     )
+    console.log('checking if we are in an iframe!')
 
+    // We load the iframe here with the iframe=true parameter to make test in cypress work!
+    const searchParams = new URLSearchParams(window.location.search)
+    const isIframeParam = searchParams.get('iframe') === 'true'
+    console.log('we are in an iframe via param:', isIframeParam)
+    const isInIframe = window.self !== window.top || isIframeParam
+    console.log('we are in an iframe:', window.self !== window.top, isInIframe)
     // set up iframe API and hook it up to our taskyon api
-    if ($q.platform.within.iframe) {
+    //if ($q.platform.within.iframe) {
+    if (isInIframe) {
+      console.log('taskon is in iframe!, waiting for message port!')
       const mport = await waitForMessagePort((ev) => {
         // Check if the message is from the parent window
         return ev.source === window.parent && ev.data?.type === 'initPort'
