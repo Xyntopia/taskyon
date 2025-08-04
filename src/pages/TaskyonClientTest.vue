@@ -5,7 +5,7 @@
       <iframe
         id="taskyon"
         frameborder="0"
-        src="http://localhost:9000?iframe=true"
+        :src="`${taskyonUrl}?iframe=true`"
         width="100%"
         height="500px"
       ></iframe>
@@ -24,6 +24,8 @@ import { createTool } from 'src/modules/taskyon/tools'
 import { initializeTaskyon } from 'src/modules/client/tyClient'
 import { ref } from 'vue'
 import { onMounted } from 'vue'
+
+const taskyonUrl = window.location.origin
 
 const functionResult = ref<string>()
 

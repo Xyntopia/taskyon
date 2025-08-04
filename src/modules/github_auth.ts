@@ -1,6 +1,6 @@
 export const config = {
   clientId: 'dde1b4f838875dba5671',
-  redirectUri: `${window.origin}/auth/github`, // Dynamically use current origin
+  redirectUri: `${window.location.origin}/auth/github`, // Dynamically use current origin
   scope: 'gist',
 }
 
@@ -9,7 +9,7 @@ export async function openOAuthPopup() {
 
   const popup = window.open(authUrl, 'githubOAuth', 'width=600,height=700')
 
-  const currentOrigin = window.origin
+  const currentOrigin = window.location.origin
 
   return new Promise((resolve, reject) => {
     // Listen for messages from the popup

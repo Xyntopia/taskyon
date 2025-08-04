@@ -84,7 +84,7 @@
             id="taskyon"
             title="Taskyon agent"
             frameborder="0"
-            src="http://localhost:9000"
+            :src="`${taskyonUrl}?iframe=true`"
             style="width: 100%; height: 99%"
           ></iframe>
         </div>
@@ -109,6 +109,8 @@ import type { JSONSchema7 } from 'json-schema'
 import { copyToClipboard, Notify } from 'quasar'
 import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
 import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
+
+const taskyonUrl = window.location.origin
 
 function copyJson() {
   copyToClipboard(formattedResult.value)
