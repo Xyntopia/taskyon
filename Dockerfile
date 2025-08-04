@@ -1,5 +1,5 @@
 # Stage 1: Build the Quasar application
-FROM node:22.10.0 as prepare
+FROM node:22.14.0 as prepare
 
 # Set up Yarn cache directory
 ENV YARN_CACHE_FOLDER=/app/.yarn-cache
