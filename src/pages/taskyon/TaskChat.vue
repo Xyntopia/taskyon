@@ -293,7 +293,7 @@ async function updateChatThread() {
         await tm.addPartialTask2Tree(
           {
             content: {
-              type: 'message',
+              type: 'error',
               data: `# 404 - Markdown Not Found
 
 The markdown file \`${filePath}\` does not exist.
