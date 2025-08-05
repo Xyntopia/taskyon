@@ -248,7 +248,6 @@ async function initializeTaskyon(tools, configuration) {
       const { function: _toolfunc, ...fdescr } = toolDescription
       const fdMessage = {
         type: 'functionDescription',
-        duplicateTaskName: false,
         ...fdescr,
       }
       taskyon.contentWindow.postMessage(fdMessage, iframeTarget)
