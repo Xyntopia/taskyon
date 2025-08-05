@@ -171,7 +171,7 @@
                   flat
                   label="Change Theme"
                   :size="btnSize"
-                  @theme-changed="(newMode) => (state!.darkTheme = newMode)"
+                  @theme-changed="(newMode) => (state.appConfiguration.darkTheme = newMode)"
                 />
               </q-item-section>
             </q-item>

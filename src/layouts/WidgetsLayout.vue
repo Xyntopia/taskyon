@@ -14,7 +14,10 @@
         ><q-tooltip>Create New Chat</q-tooltip>
       </q-btn>
       <q-space />
-      <dark-mode-button :size="btnsize" @theme-changed="(newMode) => (state.darkTheme = newMode)" />
+      <dark-mode-button
+        :size="btnsize"
+        @theme-changed="(newMode) => (state.appConfiguration.darkTheme = newMode)"
+      />
 
       <q-btn
         flat

@@ -65,7 +65,6 @@ export const useAppStateStore = defineStore(storeName, () => {
     configurationDraft: '' as string,
     // remembers how tasks are display in the chatwindow in task widgets...
     taskWidgetState: {} as Record<string, TaskWidgetStateType>,
-    darkTheme: 'auto' as boolean | 'auto',
     createTaskType: {
       type: 'message',
     } as { type: 'message' } | { type: 'functioncall'; name: FunctionCall['name'] }, // the type of task we are currently working on
@@ -218,7 +217,7 @@ export const useAppStateStore = defineStore(storeName, () => {
 
   const $q = useQuasar()
 
-  $q.dark.set(stateRefs.darkTheme)
+  $q.dark.set(stateRefs.appConfiguration.darkTheme)
 
   const minimalGui = computed(() => {
     let mode = false

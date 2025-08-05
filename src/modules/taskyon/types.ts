@@ -759,6 +759,9 @@ type HexColor = z.infer<typeof HexColor>
 
 // rename to TyAppConfig
 export const appConfiguration = z.object({
+  darkTheme: z
+    .union([z.literal('auto'), z.boolean()])
+    .meta({ description: 'Explicitly set the taskyon dark mode' }),
   appConfigurationUrl: z.string().default('/taskyon_settings.json').meta({
     description: 'URL from which to load the initial app configuration',
   }),
@@ -800,7 +803,7 @@ export const appConfiguration = z.object({
 export type appConfiguration = z.infer<typeof appConfiguration>
 
 export const TyProfile = z.object({
-  version: z.literal(18).meta({
+  version: z.literal(19).meta({
     description:
       'whenever the schema of the settings change, this number will get changed as well...',
   }),
