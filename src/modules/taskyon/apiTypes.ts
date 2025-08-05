@@ -53,6 +53,13 @@ const TaskMessage = z
     execute: z.boolean().default(false).meta({
       description: 'should the task be queued for execution?',
     }),
+    /* TODO: this needs to be captured in the frontend somehow!
+    // but we first add it to the tasks and get back a content ID in the backend.
+    // so not sure yet how to do this...The backend soehow would have to communicate this to the frontend..
+    // maybe we could do this through teh "back-channel?"
+    show: z.boolean().default(false).meta({
+      description: 'select the task in the GUI',
+    }),*/
     duplicateTaskName: z
       .boolean()
       .default(true)
