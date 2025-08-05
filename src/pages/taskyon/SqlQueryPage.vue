@@ -138,6 +138,7 @@ interface TableNameRow {
 // Reactive state
 const sqlQuery = ref('SELECT * FROM sample_table;')
 const queryResult = ref<unknown>(null)
+let lastQuery: string | null = null
 const errorMessage = ref('')
 const db = shallowRef<TyPGDB>()
 
@@ -181,6 +182,7 @@ async function executeQuery() {
   isTabularResult.value = false
   tableRows.value = []
   tableColumns.value = []
+  lastQuery = sqlQuery.value
   try {
     const res = await db.value?.query(sqlQuery.value)
     queryResult.value = res?.rows ?? null
@@ -282,9 +284,15 @@ The current SQL query in the editor is:
 
     ${sqlQuery.value}
 
-The current results of the last executed query are:
+The last executed query and its results are:
 
+\`\`\`sql
+${lastQuery}
+\`\`\`
+
+\`\`\`json
     ${dump(queryResult.value)}
+\`\`\`
 
 Only use the tool 'setSqlQuery' Tool if you think the user wants to change the SQL query.
 `
@@ -321,7 +329,7 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
 
   const configuration: partialTyConfiguration = {
     llmSettings: {
-      selectedApi: 'taskyon',
+      //selectedApi: 'taskyon',
       enableOpenAiTools: false,
       enableToolChooser: true,
       entryNode: toolCall({ name: 'setSqlQuery', arguments: {} }),
