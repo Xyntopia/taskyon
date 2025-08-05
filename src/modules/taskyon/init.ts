@@ -115,7 +115,7 @@ export async function initTaskyon(
   // "outPort" is the outwards port which is used by 3rd party apps
   // to communicate with taskyon.
   // "inPort" is the other side of the channel and is used by taskyon itself
-  const { a: outPort, b: inPort } = createDuplexChannel<unknown>()
+  const { x: outPort, y: inPort } = createDuplexChannel<unknown, TaskyonMessage>()
 
   // logging
   outPort.receive((msg) => {
@@ -138,42 +138,50 @@ export async function initTaskyon(
     taskPort,
   )
 
-  createPortApi(inPort, TaskyonMessage, {
-    task: (msg) => {
-      void taskManagerInstance
-        .addPartialTask2Tree(
+  createPortApi(
+    inPort,
+    TaskyonMessage,
+    {
+      task: async (msg) => {
+        const tn = await taskManagerInstance.addPartialTask2Tree(
           { ...msg.task, label: msg.origin ? [msg.origin] : undefined },
           undefined,
           undefined,
           false,
         )
-        .catch((err: unknown) => console.warn(err))
-    },
-    functionDescription: (msg) => {
-      const newFunc: ToolBase = msg
-      console.log(`functionDescription was sent by ${msg.origin}`, newFunc)
-      void taskManagerInstance.addDefaultTools([newFunc])
-    },
-    configurationMessage: (msg) => {
-      const newConfig = msg.conf
-      console.log('setting our configuration')
-      if (newConfig.llmSettings) {
-        // TODO: make sure, this function is only temporary and doesn't overwrite our actualy llmSettings...
-        deepMergeReactive(llmSettings, newConfig.llmSettings, 'overwrite')
-      }
-      // and also set a possible signature as the api key!
-      if (llmSettings.selectedApi && newConfig.signatureOrKey) {
-        // we only set the API key, if it was provided by the
-        // parent app.
-        const newKey = newConfig.signatureOrKey
-        if (typeof newKey === 'string') {
-          apiKeys[llmSettings.selectedApi] = newKey
-        } else {
-          console.warn('Provided signatureOrKey is not a string:', newKey)
+        // push the last task to execution queue right away...
+        if (msg.execute) {
+          queueTask(tn.id)
         }
-      }
+      },
+      functionDescription: (msg) => {
+        const newFunc: ToolBase = msg
+        console.log(`functionDescription was sent by ${msg.origin}`, newFunc)
+        void taskManagerInstance.addDefaultTools([newFunc])
+      },
+      configurationMessage: (msg) => {
+        const newConfig = msg.conf
+        console.log('setting our configuration')
+        if (newConfig.llmSettings) {
+          // TODO: make sure, this function is only temporary and doesn't overwrite our actualy llmSettings...
+          deepMergeReactive(llmSettings, newConfig.llmSettings, 'overwrite')
+        }
+        // and also set a possible signature as the api key!
+        if (llmSettings.selectedApi && newConfig.signatureOrKey) {
+          // we only set the API key, if it was provided by the
+          // parent app.
+          const newKey = newConfig.signatureOrKey
+          if (typeof newKey === 'string') {
+            apiKeys[llmSettings.selectedApi] = newKey
+          } else {
+            console.warn('Provided signatureOrKey is not a string:', newKey)
+          }
+        }
+      },
     },
-  })
+    console.warn,
+    console.error,
+  )
 
   return {
     // TODO: not sure, if the iframeMultiPlexer should be a taskyon functionality?

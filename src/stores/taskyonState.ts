@@ -226,6 +226,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     )
   })
 
+  const { x: iApiIn, y: iApiOut } = createDuplexChannel<TaskyonMessage, unknown>()
+
   const initTaskyonPromise = (async () => {
     const tyInit = await initTaskyon(
       stateRefs.llmSettings,
@@ -236,6 +238,42 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       //       to save this recovery key somewhere else in order to be able to recover their passwords.
       async () => (await generateRsaOaepPair()).publicKey,
     )
+
+    // add an API for taskyon GUI and make sure "unused" messages are routed through to the
+    // taskyon engine!
+    createPortApi(
+      iApiOut,
+      TaskyonMessage,
+      {
+        configurationMessage: (msg) => {
+          const newConfig = msg.conf
+          console.log('setting our configuration')
+          stateRefs.overRideSettings(newConfig)
+          // let taskyon do more configurations
+          tyInit.outPort.send(msg)
+        },
+        task: async (msg) => {
+          // TODO: replace by rpc call to outPort
+          const tn = await tyInit.taskManagerInstance.addPartialTask2Tree(
+            { ...msg.task, label: msg.origin ? [msg.origin] : undefined },
+            undefined,
+            undefined,
+            false,
+          )
+          // push the last task to execution queue right away...
+          if (msg.execute) {
+            tyInit.queueTask(tn.id)
+          }
+          if (msg.show) {
+            stateRefs.setSelectedTask(tn.id)
+          }
+          // we don't forward this message to outPort, because we 've already processed everything relevant here..
+        },
+      },
+      // simply send all other messages to our backend...
+      (msg) => tyInit.outPort.send(msg),
+    )
+
     console.log('checking if we are in an iframe!')
 
     // We load the iframe here with the iframe=true parameter to make test in cypress work!
@@ -261,19 +299,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         //console.log('Message from unknown origin:', event.origin, event)
       })
       // create a channel from the mport:
-      const iframeChannel = createDuplexChannel()
+      const iframeChannel = createDuplexChannel<TaskyonMessage, unknown>()
       // connect the MessageChannel to our UI API
-      MessageChannelBridge(iframeChannel.b, mport)
+      MessageChannelBridge(iframeChannel.x, mport)
 
-      iframeChannel.a.connect(tyInit.outPort)
-      // connect the iframe parent to our API through a message channel port that we received...
-      createPortApi(iframeChannel.a, TaskyonMessage, {
-        configurationMessage: (msg) => {
-          const newConfig = msg.conf
-          console.log('setting our configuration')
-          stateRefs.overRideSettings(newConfig)
-        },
-      })
+      // connect iframe API to internal GUI API which also connects to taskyon engine automatically.
+      iframeChannel.y.connect(iApiIn)
       mport.postMessage('taskyon connected!')
     }
     return tyInit
@@ -710,6 +741,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     handleBotNameUpdate,
     connectMessageIframe,
     entryNode,
+    api: iApiIn,
   }
 }) // this state stores all information which
 // should be stored e.g. in browser LocalStorage

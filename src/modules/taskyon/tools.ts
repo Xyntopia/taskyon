@@ -2,7 +2,7 @@ import { bigIntToString } from '../utils'
 import type { FunctionArguments, FunctionCall, ParamType, WithRequired, toolContext } from './types'
 import { convertZodToJsonSchemaCached, partialTaskDraft, taskMarker } from './types'
 import { ToolBase } from './types'
-import type { TaskWorkerMessage } from './apiTypes'
+import type { TaskWorkerMessage, TaskyonMessage } from './apiTypes'
 import { RemoteFunctionResponse, RemoteFunctionCall } from './apiTypes'
 import { z } from 'zod'
 import { jsonSchemaToYamlString } from '../yamlUtils'
@@ -113,7 +113,7 @@ export function toolCall(
 async function handleRemoteFunction(
   name: string,
   args: FunctionArguments,
-  duplexPort: Port<TaskWorkerMessage>,
+  duplexPort: Port<TaskyonMessage, TaskWorkerMessage>,
 ) {
   const funcRP: Promise<RemoteFunctionResponse> = new Promise((resolve, reject) => {
     const listener = (msg: RemoteFunctionCall | RemoteFunctionResponse) => {
@@ -208,7 +208,7 @@ export async function handleFunctionExecution(
   tool: InternalTool,
   stopSignal: AbortSignal, // add this to our duplexPort!!
   context: toolContext,
-  duplexPort: Port<TaskWorkerMessage>,
+  duplexPort: Port<TaskyonMessage, TaskWorkerMessage>,
 ): Promise<unknown> {
   // TODO: test here, if tool parameters are correct according to json schema
   //       if not, throw an error message...

@@ -20,7 +20,7 @@ export type Stream<T> = syncStream<T>
 
 export type frpBus<T> = {
   stream: Stream<T>
-  emit: (value: T) => void
+  emit: <U extends T>(value: U) => void
 }
 
 // Creates a simple stream with an "emit" function
@@ -28,59 +28,61 @@ export function createStream<T>(): frpBus<T> {
   const observers: Observer<T>[] = []
   return {
     stream: {
-      subscribe: (observer: Observer<T>) => {
+      subscribe: (observer) => {
         observers.push(observer)
-        return (() => {
+        return () => {
           const index = observers.indexOf(observer)
           if (index > -1) observers.splice(index, 1)
-        }) as Unsubscribe
+        }
       },
     },
-    emit: (value: T) => {
+    emit: (value) => {
       // Create a copy to avoid issues if observers unsubscribe during iteration
       ;[...observers].forEach((observer) => void observer(value))
     },
   }
 }
 
-export type Port<T> = {
-  send: frpBus<T>['emit']
-  receive: frpBus<T>['stream']['subscribe']
-  connect: (b: Port<T>) => void
+export type Port<Tx, Rx = Tx> = {
+  send: frpBus<Tx>['emit']
+  receive: frpBus<Rx>['stream']['subscribe']
+  connect: <oTx, oRx>(
+    other: Rx extends oTx ? (oRx extends Tx ? Port<oTx, oRx> : never) : never,
+  ) => void
 }
-export type DuplexChannel<T> = { a: Port<T>; b: Port<T> }
+export type DuplexChannel<Tx, Rx> = { x: Port<Tx, Rx>; y: Port<Rx, Tx> }
 
 export const connectChannels =
-  <T>(x: Port<T>) =>
-  (y: Port<T>) => {
-    x.receive((msg) => y.send(msg))
-    y.receive((msg) => x.send(msg))
+  <Tx, Rx>(x: Port<Tx, Rx>) =>
+  <oTx, oRx>(y: Port<oTx, oRx>) => {
+    x.receive((msg) => y.send(msg as unknown as oTx))
+    y.receive((msg) => x.send(msg as unknown as Tx))
   }
 
-const makePort = <T>(
-  send: frpBus<T>['emit'],
-  receive: frpBus<T>['stream']['subscribe'],
-): Port<T> => {
-  const self: Port<T> = {
+const makePort = <Tx, Rx = Tx>(
+  send: frpBus<Tx>['emit'],
+  receive: frpBus<Rx>['stream']['subscribe'],
+): Port<Tx, Rx> => {
+  const self: Port<Tx, Rx> = {
     send,
     receive,
-    connect: (other: Port<T>) => connectChannels(self)(other),
+    connect: (other) => connectChannels(self)(other),
   }
   return self
 }
 
-export const createChannelsFromStreams = <T>(
-  outS: frpBus<T>,
-  inS: frpBus<T>,
-): DuplexChannel<T> => ({
-  a: makePort(outS.emit, inS.stream.subscribe),
-  b: makePort(inS.emit, outS.stream.subscribe),
+export const createChannelsFromStreams = <Str1, Str2 = Str1>(
+  outS: frpBus<Str1>,
+  inS: frpBus<Str2>,
+): DuplexChannel<Str1, Str2> => ({
+  x: makePort(outS.emit, inS.stream.subscribe),
+  y: makePort(inS.emit, outS.stream.subscribe),
 })
 
-export const createDuplexChannel = <T>(): DuplexChannel<T> =>
-  createChannelsFromStreams(createStream<T>(), createStream<T>())
+export const createDuplexChannel = <Str1, Str2 = Str1>(): DuplexChannel<Str1, Str2> =>
+  createChannelsFromStreams(createStream<Str1>(), createStream<Str2>())
 
-export function MessageChannelBridge<T>(dport: Port<T>, mport: MessagePort) {
+export function MessageChannelBridge<Tx, Rx = Tx>(dport: Port<Tx, Rx>, mport: MessagePort) {
   const unsub = dport.receive((msg) => mport.postMessage(msg))
   mport.onmessage = (msg) => dport.send(msg.data)
 
@@ -92,6 +94,7 @@ export function MessageChannelBridge<T>(dport: Port<T>, mport: MessagePort) {
   return { destroy }
 }
 
+/* TODO: adapt this by createing a port which
 export function portMap<A, B>(
   source: Port<A>,
   fnIn: (value: A) => B,
@@ -113,7 +116,7 @@ export function portMap<A, B>(
   }
 
   return { port: outer, destroy }
-}
+}*/
 
 /**
  * Derive a child Port that only passes messages satisfying `guard`.
@@ -123,26 +126,26 @@ export function portMap<A, B>(
  * • Anything the child sends is forwarded upstream unchanged.
  * • `destroy()` tears everything down (both directions).
  */
-export function createFilteredPort<TParent, TChild extends TParent>(
-  parent: Port<TParent>,
-  guard: (msg: TParent) => msg is TChild,
-): { port: Port<TChild>; destroy: () => void } {
-  const { a: inner, b: outer } = createDuplexChannel<TChild>()
+export function createFilteredPort<pTx, pRx, cTx extends pRx>(
+  parent: Port<pTx, pRx>,
+  guard: (msg: pRx) => msg is cTx,
+): { port: Port<pTx, cTx>; destroy: () => void } {
+  const { x, y } = createDuplexChannel<cTx, pTx>()
 
   // Upstream ➜ child (apply the filter)
   const unsubUp = parent.receive((m) => {
-    if (guard(m)) inner.send(m) // safe: guard proved it’s TChild
+    if (guard(m)) x.send(m) // safe: guard proved it’s TChild
   })
 
   // Child ➜ upstream (no filtering needed)
-  const unsubDown = inner.receive((m) => parent.send(m))
+  const unsubDown = x.receive((m) => parent.send(m))
 
   const destroy = () => {
     unsubUp()
     unsubDown()
   }
 
-  return { port: outer, destroy }
+  return { port: y, destroy }
 }
 
 /**
@@ -150,10 +153,10 @@ export function createFilteredPort<TParent, TChild extends TParent>(
  * - `P`  … message type already travelling on the parent port
  * - `T`  … narrower message type described by the schema (T ⊆ P)
  */
-export function createZodPort<P, T extends P>(
-  parent: Port<P>,
+export function createZodPort<Tx, Rx, T extends Rx>(
+  parent: Port<Tx, Rx>,
   schema: ZodType<T>,
-): { port: Port<T>; destroy: () => void } {
+): { port: Port<Tx, T>; destroy: () => void } {
   /* reuse the generic filtered-port helper */
   return createFilteredPort(parent, (m): m is T => schema.safeParse(m).success)
 }
@@ -163,13 +166,16 @@ export function createPortApi<
   R,
   Schema extends z.ZodType<{ type: string }>, // your Zod schema
   Msg extends z.infer<Schema>, // union type + discriminator
+  Tx,
+  Rx = Tx,
 >(
-  port: { receive: (fn: (m: unknown) => void) => void },
+  port: Port<Tx, Rx>,
   schema: Schema,
   handlers: {
     [K in Msg['type']]?: (m: Extract<Msg, { type: K }>) => R | Promise<R>
   },
   defaultHandler?: (m: unknown) => void,
+  errorHandler?: (m: unknown) => void,
 ) {
   port.receive((raw) => {
     const parsed = schema.safeParse(raw)
@@ -189,7 +195,9 @@ export function createPortApi<
     type Specific = Extract<Msg, { type: typeof msg.type }>
 
     // 2️⃣ Call the handler; Promise.resolve normalises sync/async, catch logs errors
-    void Promise.resolve(handle(msg as Specific)).catch(console.error)
+    void Promise.resolve(handle(msg as Specific)).catch((error) => {
+      if (errorHandler) errorHandler(error)
+    })
   })
 }
 
