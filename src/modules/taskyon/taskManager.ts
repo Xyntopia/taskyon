@@ -973,32 +973,6 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     return dbobject
   }
 
-  async function loadYamlConversation(input: File | string): Promise<string | undefined> {
-    console.log('adding tasknodes & conversations from yaml input!')
-
-    let last_task_id: string | undefined = undefined
-
-    let taskListRaw: unknown
-    if (typeof input === 'string') {
-      taskListRaw = load(input)
-    } else {
-      const fileStr = await input.text()
-      taskListRaw = load(fileStr)
-    }
-
-    const result = await TaskListType.safeParseAsync(taskListRaw)
-
-    if (result.success) {
-      const taskList = result.data
-      taskList.forEach((t) => {
-        void tyCrudVec.set(t.id, t)
-        last_task_id = t.id
-      })
-    }
-
-    return last_task_id
-  }
-
   const fm = useFileManager(taskyonDB?.filemappings)
 
   async function updateTaskNameWKeywords(newTask: TaskNode) {
@@ -1088,6 +1062,22 @@ export async function useTyTaskManager(vectorizerModel?: string) {
       addedTaskList.push(addedTask)
     }
     return addedTaskList
+  }
+
+  async function loadYamlConversation(input: File | string): Promise<string | undefined> {
+    console.log('adding tasknodes & conversations from yaml input!')
+
+    let taskListRaw: unknown
+    if (typeof input === 'string') {
+      taskListRaw = load(input)
+    } else {
+      const fileStr = await input.text()
+      taskListRaw = load(fileStr)
+    }
+
+    const taskList = await TaskListType.parseAsync(taskListRaw)
+    const newTaskList = await addTaskChain(taskList)
+    return newTaskList.at(-1)?.id
   }
 
   async function addMdTaskChain(markdown?: string) {
