@@ -45,7 +45,6 @@ const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
 }
 
 const handleFunctionExecutionRequest = (
-  iframeTarget: string,
   tools: ClientTool[],
   sendTyMessage: (message: TaskyonMessage) => void | undefined,
   stopSignal: AbortSignal,
@@ -102,8 +101,6 @@ export async function initializeTaskyon(
   const controller = new AbortController()
 
   if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
-    const iframeTarget = new URL(taskyon.src).origin
-
     const tyApi = await waitForApiChannel(taskyon)
     const send = (msg: TaskyonMessage) => tyApi.postMessage(msg)
 
@@ -122,7 +119,7 @@ export async function initializeTaskyon(
       })
       console.log('set up function listener!')
       tyApi.onmessage = (event) => {
-        void handleFunctionExecutionRequest(iframeTarget, tools, send, controller.signal)(event)
+        void handleFunctionExecutionRequest(tools, send, controller.signal)(event)
       }
     })
   }
