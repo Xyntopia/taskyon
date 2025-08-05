@@ -70,15 +70,10 @@ export function processMarkdown(markdown: string) {
   const tasks = parsedData.map((x): partialTaskDraft => {
     if (x.success) {
       return x.data
-    } else {
-      return {
-        role: 'system',
-        content: {
-          type: 'error',
-          data: `We were not able to convert ${x.data} to a task node: \n\n${JSON.stringify(x.error)}`,
-        },
-      }
-    }
+    } else
+      throw new Error(
+        `We were not able to convert ${x.data} to a task node: \n\n${JSON.stringify(x.error)}`,
+      )
   })
 
   return tasks
