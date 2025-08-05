@@ -49,10 +49,16 @@
           </q-item>
         </q-list>
         <div class="row justify-around items-center">
-          <FileDropzone accept="*" disable-dropzone-border @add-files="loadYamlConversation">
+          <FileDropzone
+            accept="text/markdown,application/x-yaml,text/yaml,.md,.markdown,.yaml,.yml"
+            disable-dropzone-border
+            @add-files="loadConversations"
+          >
             <q-btn dense class="fit" flat>
               <q-icon :name="matFileUpload" />
-              <q-tooltip>Upload Chat</q-tooltip>
+              <q-tooltip>
+                Upload a Taskyon chat exported as **Markdown (`.md`)** or **YAML (`.yaml`)**.
+              </q-tooltip>
             </q-btn>
           </FileDropzone>
           <q-btn dense flat to="/" :icon="mdiForumPlus" @click="state.setSelectedTask(null)">
@@ -142,11 +148,30 @@ watch(
   },
 )
 
-async function loadYamlConversation(files: File[]) {
+const q = useQuasar()
+
+async function loadConversations(files: File[]) {
+  console.log('load conversation from file', files)
   const tm = await tystate.getTaskManager()
   let last_loaded_id = undefined
   for (const file of files) {
-    last_loaded_id = await tm.loadYamlConversation(file)
+    try {
+      if (file.type === 'text/markdown') {
+        last_loaded_id = await tm.addMdTaskChain(await file.text())
+      } else if (file.type === 'application/yaml') {
+        last_loaded_id = await tm.loadYamlConversation(file)
+      } else {
+        throw new Error(`wrong file type: ${file.type}`)
+      }
+    } catch (error) {
+      console.log(error)
+      q.notify({
+        color: 'negative',
+        position: 'top',
+        message: `Invalid chat format (must be yaml or markdown and fulfill taskyon chat specification)`,
+        icon: 'report_problem',
+      })
+    }
   }
   state.setSelectedTask(last_loaded_id || null)
 }
