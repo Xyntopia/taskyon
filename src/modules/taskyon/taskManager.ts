@@ -1,5 +1,5 @@
 import type { TaskNodeMeta, TaskNodeType } from './types'
-import { TaskNode, ToolBase, TaskListType, type partialTaskDraft } from './types'
+import { partialTaskDraft, TaskNode, ToolBase } from './types'
 import {
   type TaskyonDatabase,
   type FileMappingDocType,
@@ -27,6 +27,7 @@ import { sha256UrlSafeHash } from '../crypto_webcrypto'
 import { urlSafeBase64Uuid } from '../crypto'
 import type { TyPGDB } from '../pglite.api'
 import { getDatabase } from '../pglite.api'
+import z from 'zod'
 
 /**
  *
@@ -998,6 +999,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     task: partialTaskDraft,
     priorID: string | undefined,
     parentID: string | undefined,
+    // TODO: remove duplicateTaskName
     duplicateTaskName = true,
   ): Promise<TaskNode> => {
     if (!duplicateTaskName && task.name) {
@@ -1075,11 +1077,12 @@ export async function useTyTaskManager(vectorizerModel?: string) {
       taskListRaw = load(fileStr)
     }
 
-    const taskList = await TaskListType.parseAsync(taskListRaw)
+    const taskList = await z.array(partialTaskDraft).parseAsync(taskListRaw)
     const newTaskList = await addTaskChain(taskList)
     return newTaskList.at(-1)?.id
   }
 
+  // TODO: move outside taskmanager as a separate function which returns partialTaskNodes
   async function addMdTaskChain(markdown?: string) {
     console.log('adding new Markdown tasks!!')
     if (markdown) {

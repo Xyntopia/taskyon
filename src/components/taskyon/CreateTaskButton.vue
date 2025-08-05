@@ -16,8 +16,25 @@ const props = defineProps<{
 
 const onAddTasks = async () => {
   const tm = await tystate.getTaskManager()
-  const newTaskId = await tm.addMdTaskChain(props.markdown)
-  state.setSelectedTask(newTaskId)
+  try {
+    const newTaskId = await tm.addMdTaskChain(props.markdown)
+    state.setSelectedTask(newTaskId)
+  } catch (error) {
+    console.log('could not create taskchain from markdown!', error)
+    tystate.api.send({
+      type: 'task',
+      task: {
+        role: 'system',
+        content: {
+          type: 'message',
+          data: 'testestest  haha!!',
+        },
+      },
+      execute: false,
+      show: true,
+      origin: window.location.origin,
+    })
+  }
   state.lockBottomScroll = props.scrollToBottom
 }
 </script>

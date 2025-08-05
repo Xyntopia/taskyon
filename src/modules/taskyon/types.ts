@@ -411,9 +411,6 @@ type MessageNode    = TaskNodeType<"message">
 type ToolResultNode = TaskNodeType<"toolresult">
 */
 
-export const TaskListType = z.array(TaskNode)
-export type TaskListType = z.infer<typeof TaskListType>
-
 export type TaskGetter = (input: string) => Promise<TaskNode | null>
 
 // TODO: get rid of taskDraft once we have immutable tasks with content addressing
