@@ -85,6 +85,16 @@ const TyReadyMessage = z.object({ type: z.literal('taskyonReady') }).meta({
 
 export const BaseMessage = z.object({ origin: z.string().optional() })
 
+const TyStatusMessage = z
+  .object({
+    type: z.literal('status'),
+    data: z.object({
+      type: z.literal('newtool'),
+      id: z.string().meta({ description: 'id of new tool' }),
+    }),
+  })
+  .meta({ description: 'A list of status message for taskyon' })
+
 export const TaskWorkerMessage = z.discriminatedUnion('type', [
   z.object({ ...BaseMessage.shape, ...RemoteFunctionCall.shape }),
   z.object({ ...BaseMessage.shape, ...RemoteFunctionResponse.shape }),
@@ -93,6 +103,7 @@ export const TaskWorkerMessage = z.discriminatedUnion('type', [
 export type TaskWorkerMessage = z.infer<typeof TaskWorkerMessage>
 
 export const TaskyonMessage = z.discriminatedUnion('type', [
+  z.object({ ...BaseMessage.shape, ...TyStatusMessage.shape }),
   z.object({ ...BaseMessage.shape, ...RemoteFunctionCall.shape }),
   z.object({ ...BaseMessage.shape, ...RemoteFunctionResponse.shape }),
   z.object({ ...BaseMessage.shape, ...TaskMessage.shape }),

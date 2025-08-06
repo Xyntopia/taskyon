@@ -326,22 +326,22 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     void updateTools()
 
     // if a new "default" tool was created update UI
-    /*iApiOut.receive(
-      (msg) =>
-        void match(msg).with(
-          {
-            type: 'status',
-            data: {
-              type: 'newTool',
-              id: P.select(),
-            },
+    iApiIn.receive((msg) => {
+      console.log('api Aout message!', msg)
+      void match(msg).with(
+        {
+          type: 'status',
+          data: {
+            type: 'newtool',
+            id: P.select(),
           },
-          (id) => {
-            console.log('Default Tool definition was added to taskyon!', id)
-            void updateTools()
-          },
-        ),
-    )*/
+        },
+        (id) => {
+          console.log('Default Tool definition was added to taskyon!', id)
+          void updateTools()
+        },
+      )
+    })
     // if a new tool was created as a tasknode, update UI
     tm.taskStream.subscribe(
       (msg) =>

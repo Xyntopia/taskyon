@@ -158,6 +158,13 @@ export async function initTaskyon(
         const newFunc: ToolBase = msg
         console.log(`functionDescription was sent by ${msg.origin}`, newFunc)
         void taskManagerInstance.addDefaultTools([newFunc])
+        inPort.send({
+          type: 'status',
+          data: {
+            type: 'newtool',
+            id: msg.name,
+          },
+        })
       },
       configurationMessage: (msg) => {
         const newConfig = msg.conf
