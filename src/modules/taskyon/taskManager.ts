@@ -1091,7 +1091,6 @@ export async function useTyTaskManager(vectorizerModel?: string) {
       return newTaskList.at(-1)?.id
     }
     return undefined
-    // TODO: optionally execute the last task...
   }
 
   const defaultMode = {
