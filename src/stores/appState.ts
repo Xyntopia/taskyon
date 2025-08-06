@@ -217,7 +217,9 @@ export const useAppStateStore = defineStore(storeName, () => {
 
   const $q = useQuasar()
 
-  $q.dark.set(stateRefs.appConfiguration.darkTheme)
+  watch(() => stateRefs.appConfiguration.darkTheme, $q.dark.set, {
+    immediate: true,
+  })
 
   const minimalGui = computed(() => {
     let mode = false
