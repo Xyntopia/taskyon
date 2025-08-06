@@ -29,6 +29,7 @@ import { onScopeDispose } from 'vue'
 import { waitForMessagePort } from 'src/modules/taskyon/iframeWorker'
 import { guiTools } from 'src/modules/tools/GuiTools'
 import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
+import { match, P } from 'ts-pattern'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -273,9 +274,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       // simply send all other messages to our backend...
       (msg) => tyInit.outPort.send(msg),
     )
-
+    // we manually connect our send port to the api here, because
+    // we are already intercepting incoming messages with the API above
+    tyInit.outPort.receive(iApiOut.send)
     console.log('checking if we are in an iframe!')
 
+    /// -------   iframe operations --------
     // We load the iframe here with the iframe=true parameter to make test in cypress work!
     const searchParams = new URLSearchParams(window.location.search)
     const isIframeParam = searchParams.get('iframe') === 'true'
@@ -312,6 +316,55 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // Access taskManagerInstance and addTask2Tree without redundant awaits
   const getTaskManager = async () => (await initTaskyonPromise)['taskManagerInstance']
+
+  // make sure we always have an up-to-date list of tools
+  const allTools = ref<Record<string, InternalTool>>({})
+  void getTaskManager().then((tm) => {
+    const updateTools = async () => {
+      allTools.value = await (await getTaskManager()).updateToolDefinitions(true)
+    }
+    void updateTools()
+
+    // if a new "default" tool was created update UI
+    /*iApiOut.receive(
+      (msg) =>
+        void match(msg).with(
+          {
+            type: 'status',
+            data: {
+              type: 'newTool',
+              id: P.select(),
+            },
+          },
+          (id) => {
+            console.log('Default Tool definition was added to taskyon!', id)
+            void updateTools()
+          },
+        ),
+    )*/
+    // if a new tool was created as a tasknode, update UI
+    tm.taskStream.subscribe(
+      (msg) =>
+        void match(msg)
+          .returnType<void>()
+          .with(
+            {
+              data: {
+                content: {
+                  type: 'tooldefinition',
+                  data: {
+                    id: P.select(),
+                  },
+                },
+              },
+            },
+            (id) => {
+              console.log('Tool definition was added to taskyon!', id)
+              void updateTools()
+            },
+          ),
+    )
+  })
 
   const secretStore = asyncProxy(async () => {
     const instance = await initTaskyonPromise
@@ -666,16 +719,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return undefined
   })
 
-  async function getAllTools() {
-    const foundTools = await (await getTaskManager()).updateToolDefinitions(true)
-    return foundTools
-  }
-
-  async function switchTaskType(tasktype: string | undefined | null) {
+  function switchTaskType(tasktype: string | undefined | null) {
     console.log('change tasktype to:', tasktype)
     if (tasktype) {
       const toolName = tasktype
-      const tool = (await getAllTools())[tasktype]
+      const tool = allTools.value[tasktype]
       if (!tool) {
         console.log(`Tool ${toolName} not found.`)
         return null
@@ -720,7 +768,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     getTaskMetaRef,
     setNewContentDraft,
     setContentDraftFromTask,
-    getAllTools,
+    allTools: computed(() => allTools.value),
     switchTaskType,
     taskContentDraft,
     selectedThread: computed(() => selectedThread),

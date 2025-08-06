@@ -193,8 +193,7 @@ const CodeEditor = defineAsyncComponent(
 const selectedTab = ref('code')
 const tystate = useTaskyonStore()
 const router = useRouter()
-const toolCollection = asyncComputed(tystate.getAllTools, {})
-const toolNames = computed(() => Object.keys(toolCollection.value))
+const toolNames = computed(() => Object.keys(tystate.allTools))
 const freshTool = {
   name: '',
   description: '',

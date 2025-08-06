@@ -80,10 +80,6 @@ const handleReady = (payload) => {
 };
 */
 
-async function getAllTools() {
-  return (await tystate.getTaskManager()).updateToolDefinitions(true)
-}
-
 const currentPromptYaml = computed(() => {
   return `
 
@@ -139,18 +135,12 @@ How would you like to change the prompt?
 `
 })
 
-const toolCollection = ref<Awaited<ReturnType<typeof getAllTools>>>({})
-void getAllTools().then((tools) => {
-  console.log('tools:', tools)
-  toolCollection.value = tools
-})
-
 const structuredResponsePrompt = computed(() => {
   if (tystate.taskContentDraft) {
-    console.log('create structured example', toolCollection.value)
-    if (Object.keys(toolCollection.value).length !== 0) {
+    console.log('create structured example', tystate.allTools)
+    if (Object.keys(tystate.allTools).length !== 0) {
       const rp = addPrompts(
-        toolCollection.value,
+        tystate.allTools,
         state.llmSettings.enableOpenAiTools,
         state.llmSettings.enableOpenAiTools,
         state.llmSettings,

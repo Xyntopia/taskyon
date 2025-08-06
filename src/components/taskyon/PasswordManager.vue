@@ -80,19 +80,15 @@ const saveSecret = async (secretId: string, secretName: string) => {
 }
 
 const toolMap = asyncComputed(async () => {
-  const allTools = await tystate.getAllTools()
-  if (allTools) {
-    const tm = await tystate.getTaskManager()
-    const tools: Record<string, string> = {}
-    for (const c of Object.values(allTools)) {
-      const { tool, def } = await tm.getToolDefinition(c.name)
-      if (tool) {
-        const id = await generateSecretId(def?.id, tool)
-        tools[id] = def?.id ?? c.name
-      }
+  const tm = await tystate.getTaskManager()
+  const tools: Record<string, string> = {}
+  for (const c of Object.values(tystate.allTools)) {
+    const { tool, def } = await tm.getToolDefinition(c.name)
+    if (tool) {
+      const id = await generateSecretId(def?.id, tool)
+      tools[id] = def?.id ?? c.name
     }
-    return tools
   }
-  return {}
+  return tools
 }, {})
 </script>

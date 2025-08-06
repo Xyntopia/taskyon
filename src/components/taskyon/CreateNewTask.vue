@@ -12,8 +12,8 @@
         :label="selectedTaskType"
         content-class="text-caption"
         :info-text="
-          toolCollection[selectedTaskType]?.longDescription ??
-          toolCollection[selectedTaskType]?.description ??
+          tystate.allTools[selectedTaskType]?.longDescription ??
+          tystate.allTools[selectedTaskType]?.description ??
           'Error: no description available'
         "
       >
@@ -294,7 +294,6 @@ import {
 } from '@quasar/extras/material-icons'
 import { useAppStateStore } from 'src/stores/appState'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
-import { asyncComputed } from 'src/modules/vueUtils'
 import { buildSlimView } from 'src/modules/vueUtils'
 import FileDropzone from '../FileDropzone.vue'
 import { QSelect } from 'quasar'
@@ -346,8 +345,7 @@ const slimSettings = computed(() =>
 
 //const funcArgs = computed(() => );
 
-const toolCollection = asyncComputed(tystate.getAllTools, {})
-const toolNames = computed(() => Object.keys(toolCollection.value))
+const toolNames = computed(() => Object.keys(tystate.allTools))
 const filteredToolCollection = ref<string[]>([])
 
 const selectedTaskType = computed(() => {
@@ -372,7 +370,7 @@ const filterFn = (inputValue: string, doneFn: (callbackFn: () => void) => void) 
 
 const functionSchema = computed(() => {
   if (selectedTaskType.value) {
-    const tool = toolCollection.value[selectedTaskType.value]
+    const tool = tystate.allTools[selectedTaskType.value]
     if (!tool || !tool.parameters) {
       return undefined
     }
