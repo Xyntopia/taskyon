@@ -43,6 +43,9 @@ const configuration: partialTyConfiguration = {
   },
   appConfiguration: {
     expertMode: true,
+    darkTheme: true,
+    primaryColor: '#f00',
+    secondaryColor: '#0ff',
     // we are using "default" GUI mode for debugging purposes!, in production, change this to "iframe"
     // or leave it out :)
     guiMode: 'default',
