@@ -13,7 +13,7 @@
     "build:app": "yarn run quasar build",
     "build:desktop": "docker build --file Dockerfile.tauri --target export --output type=local,dest=./dist-desktop .",
     "build:tyclient": "yarn workspace tyclient run build # build client library",
-    "pack:tyclient": "mkdir -p public/lib && yarn workspace tyclient pack --filename ../../public/lib/tyclient-$npm_package_version.tgz",
+    "pack:tyclient": "mkdir -p public/lib && yarn workspace tyclient pack --filename ../../public/lib/tyclient-$npm_package_version.tgz && cp packages/tyclient/dist/tyclient.* public/lib/",
     "dev": "yarn run quasar dev",
     "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .gitignore",
     "lint": "vue-tsc --noEmit && eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}'"
