@@ -4,7 +4,7 @@
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
 // This test will pass when run against a clean Quasar project
-describe('test taskyon defaults', () => {
+describe('test minimal side load', () => {
   beforeEach(() => {
     cy.log('simply loading the app...')
     cy.visit('/')

@@ -6,7 +6,7 @@ import { addAIServices } from '../support/groups'
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
 // This test will pass when run against a clean Quasar project
-describe('test taskyon defaults', () => {
+describe('run diagnostics', () => {
   beforeEach(() => {
     cy.visit('/')
     // Clear local storage
@@ -25,7 +25,7 @@ describe('test taskyon defaults', () => {
       });
     });*/
   })
-  it('should be able to send a free message and  get a response', () => {
+  it('fast testing of a few taskyon operations', () => {
     addAIServices()
     cy.get('.q-btn').contains('Use free Taskyon', { matchCase: false }).click()
 

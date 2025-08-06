@@ -12,7 +12,7 @@ import {
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
 // This test will pass when run against a clean Quasar project
-describe('test taskyon defaults', () => {
+describe('test taskyon startpage', () => {
   beforeEach(() => {
     cy.visit('/')
     // Clear local storage
