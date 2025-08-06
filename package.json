@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "yarn build:lib && yarn build:app",
+    "build": "yarn pack:tyclient && yarn build:app",
     "build:app": "yarn run quasar build",
     "build:desktop": "docker build --file Dockerfile.tauri --target export --output type=local,dest=./dist-desktop .",
     "build:tyclient": "yarn workspace tyclient run build # build client library",
