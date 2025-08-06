@@ -5,11 +5,15 @@
   "description": "Taskyon App",
   "author": "thomas meschede / yeus <thomas.meschede@web.de>",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "build": "yarn build:lib && yarn build:app",
     "build:app": "yarn run quasar build",
-    "build:lib": "yarn run vite build --config vite.lib.config.ts",
     "build:desktop": "docker build --file Dockerfile.tauri --target export --output type=local,dest=./dist-desktop .",
+    "build:tyclient": "yarn workspace tyclient run build # build client library",
+    "pack:tyclient": "mkdir -p public/lib && yarn workspace tyclient pack --filename ../../public/lib/tyclient-$npm_package_version.tgz",
     "dev": "yarn run quasar dev",
     "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .gitignore",
     "lint": "vue-tsc --noEmit && eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}'"

@@ -101,7 +101,7 @@ import { asyncComputed } from 'src/modules/vueUtils'
 // Taskyon
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { createTool, makeTaskResult, toolCall } from 'src/modules/taskyon/tools'
-import { initializeTaskyon } from 'src/modules/client/tyClient'
+import { initializeTaskyon } from 'app/packages/tyclient/src/tyClient'
 import { dump } from 'js-yaml'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import type { JSONSchema7 } from 'json-schema'

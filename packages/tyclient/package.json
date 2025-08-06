@@ -1,0 +1,15 @@
+{
+  "name": "tyclient",
+  "version": "0.4.0",
+  "license": "MIT",
+  "main": "dist/tyclient.umd.js",
+  "types": "dist/tyclient.d.ts",
+  "files": [
+    "dist/**/*"
+  ],
+  "peerDependencies": {},
+  "scripts": {
+    "build": "vite build --config vite.lib.config.ts",
+    "prepack": "yarn run build"
+  }
+}

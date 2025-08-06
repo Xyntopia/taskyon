@@ -21,7 +21,7 @@
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import type { ClientTool } from 'src/modules/taskyon/tools'
 import { createTool } from 'src/modules/taskyon/tools'
-import { initializeTaskyon } from 'src/modules/client/tyClient'
+import { initializeTaskyon } from 'app/packages/tyclient/src/tyClient'
 import { ref } from 'vue'
 import { onMounted } from 'vue'
 

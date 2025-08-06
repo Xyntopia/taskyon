@@ -1,3 +1,4 @@
+// vite.lib.config.ts
 import { defineConfig } from 'vite'
 import path from 'path'
 import esbuild from 'esbuild'
@@ -5,7 +6,7 @@ import esbuild from 'esbuild'
 import dtsBundleGenerator from 'unplugin-dts-bundle-generator/vite'
 // import dts from 'vite-plugin-dts'
 
-const libPath = path.resolve(__dirname, './src/modules/client/tyClient.ts')
+const libPath = path.resolve(__dirname, './src/tyClient.ts')
 console.log('building', libPath)
 
 export default defineConfig({
@@ -28,7 +29,7 @@ export default defineConfig({
 
       // ► 3.  Compilation (optional but faster)
       compilation: {
-        preferredConfigPath: path.resolve(__dirname, 'tsconfig.json'),
+        preferredConfigPath: path.resolve(__dirname, '../../tsconfig.json'),
         // skipTypeCheck: true, // uncomment if you already run `tsc --noEmit`
       },
     }),
@@ -63,7 +64,8 @@ export default defineConfig({
       //formats: ['cjs', 'es', 'umd'], // we only need this, if we don't have multiple output in rollupOptions
       fileName: (format) => `tyclient.${format}.js`,
     },
-    outDir: 'public/lib', // This ensures the output goes into public/
+    // This ensures the output goes into public/
+    outDir: 'dist',
     emptyOutDir: true, // Cleans old files before build
     rollupOptions: {
       external: ['vue'], // externalize dependencies
