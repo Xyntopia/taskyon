@@ -6,6 +6,7 @@
   "module": "dist/tyclient.es.js",
   "types": "dist/tyclient.d.ts",
   "exports": {
+    "types": "./dist/tyclient.d.ts",
     "import": "./dist/tyclient.es.js",
     "require": "./dist/tyclient.umd.js"
   },
