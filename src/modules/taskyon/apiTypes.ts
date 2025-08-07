@@ -76,6 +76,10 @@ const tyConfigurationMessage = z.object({
   type: z.literal('configurationMessage').meta({
     description: 'Field to indicate that this is a function description message.',
   }),
+  persist: z.boolean().optional().meta({
+    description:
+      'persist the configuration on the disk, so that it is loaded faster on subsequent sessions.',
+  }),
   conf: z.union([z.record(z.string(), z.unknown()), TyProfile]),
 })
 

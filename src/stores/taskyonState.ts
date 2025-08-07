@@ -249,7 +249,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         configurationMessage: (msg) => {
           const newConfig = msg.conf
           console.log('setting our configuration')
-          stateRefs.overRideSettings(newConfig)
+          stateRefs.overRideSettings(newConfig, !!msg.persist)
           // let taskyon do more configurations
           tyInit.outPort.send(msg)
         },

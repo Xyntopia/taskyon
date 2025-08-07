@@ -132,8 +132,8 @@ export const useAppStateStore = defineStore(storeName, () => {
     void generateAssymetricRandomNewKey().then((r) => (stateRefs.llmSettings.userId = r.publicKey))
   }
 
-  function overrideSettings(newConfig: PartialDeep<TyProfile>) {
-    saveToLocalStorage = false
+  function overrideSettings(newConfig: PartialDeep<TyProfile>, persist: boolean = false) {
+    saveToLocalStorage = persist
     if (newConfig.llmSettings) {
       // TODO: make sure, this function is only temporary and doesn't overwrite our actual llmSettings...
       deepMergeReactive(stateRefs.llmSettings, newConfig.llmSettings, 'overwrite')
