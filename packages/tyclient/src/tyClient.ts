@@ -10,6 +10,8 @@ const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
       if (stopped) return
 
       const channel = new MessageChannel()
+      const targetOrigin = new URL(iframe.src, location.href).origin || '*' // '' for about:blank/file:
+      console.log('establish iframe communication to', targetOrigin)
 
       // self‑destructing listener – removed automatically after it fires once
       const handleFirst: (ev: MessageEvent) => void = (ev) => {
@@ -25,7 +27,7 @@ const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
       channel.port1.start() // ← wake the port so it can receive
 
       try {
-        iframe.contentWindow?.postMessage({ type: 'initPort' }, origin, [channel.port2])
+        iframe.contentWindow?.postMessage({ type: 'initPort' }, targetOrigin, [channel.port2])
       } catch {
         /* DataCloneError can happen on FF if the iframe isn’t ready yet; ignore */
       }
@@ -101,6 +103,7 @@ export async function initializeTaskyon(
   const controller = new AbortController()
 
   if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
+    console.log('make sure, we can ')
     const tyApi = await waitForApiChannel(taskyon)
     const send = (msg: TaskyonMessage) => tyApi.postMessage(msg)
 

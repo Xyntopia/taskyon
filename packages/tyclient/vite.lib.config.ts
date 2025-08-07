@@ -16,9 +16,9 @@ export default defineConfig({
 
       // ► 1.  Libraries – inline Zod, leave Vue as import
       libraries: {
-        inlinedLibraries: ['json-schema', 'type-fest', 'zod'],
+        //inlinedLibraries: ['json-schema', 'type-fest', 'zod'],
         // If you also want to *keep* other libs external, list them here:
-        // importedLibraries: ['vue', 'zod'],
+        importedLibraries: ['json-schema', 'type-fest', 'zod'],
       },
 
       // ► 2.  Output tweaks
@@ -61,6 +61,7 @@ export default defineConfig({
     lib: {
       entry: libPath, // Adjust this to your actual library entry file
       name: 'tyclient',
+      //formats: ['es'],
       //formats: ['cjs', 'es', 'umd'], // we only need this, if we don't have multiple output in rollupOptions
       fileName: (format) => `tyclient.${format}.js`,
     },
@@ -71,14 +72,19 @@ export default defineConfig({
       external: ['vue'], // externalize dependencies
       output: [
         {
+          format: 'es',
+          entryFileNames: 'tyclient.es.js', // Non-minified version
+          preserveModules: false,
+        },
+        {
           format: 'umd',
           entryFileNames: 'tyclient.umd.js', // Non-minified version
-          name: 'TyClient', // Global variable name for minified
+          name: 'tyclient', // Global variable name for minified
         },
         {
           format: 'umd',
           entryFileNames: 'tyclient.umd.min.js', // Minified version
-          name: 'TyClient', // Global variable name for minified
+          name: 'tyclient', // Global variable name for minified
           plugins: [
             {
               name: 'minify',

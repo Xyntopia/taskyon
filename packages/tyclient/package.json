@@ -3,7 +3,12 @@
   "version": "0.4.1",
   "license": "MIT",
   "main": "dist/tyclient.umd.js",
+  "module": "dist/tyclient.es.js",
   "types": "dist/tyclient.d.ts",
+  "exports": {
+    "import": "./dist/tyclient.es.js",
+    "require": "./dist/tyclient.umd.js"
+  },
   "files": [
     "dist/**/*"
   ],
