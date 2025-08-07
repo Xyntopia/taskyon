@@ -251,7 +251,21 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           console.log('setting our configuration')
           stateRefs.overRideSettings(newConfig, !!msg.persist)
           // let taskyon do more configurations
-          tyInit.outPort.send(msg)
+
+          // and also set a possible signature as the api key!
+          if (stateRefs.llmSettings.selectedApi && newConfig.signatureOrKey) {
+            // we only set the API key, if it was provided by the
+            // parent app.
+            const newKey = newConfig.signatureOrKey
+            if (typeof newKey === 'string') {
+              stateRefs.keys[stateRefs.llmSettings.selectedApi] = newKey
+            } else {
+              console.warn('Provided signatureOrKey is not a string:', newKey)
+            }
+          }
+
+          // TODO:  set taskyon-relevant settings in the "backend"
+          //tyInit.outPort.send(msg)
         },
         task: async (msg) => {
           // TODO: replace by rpc call to outPort

@@ -35,7 +35,6 @@ import { createDuplexChannel, createIframeMux, createPortApi, createZodPort } fr
 import { testingTools } from '../tools/testTools'
 import { TaskWorkerMessage, TaskyonMessage } from './apiTypes'
 import { ToolBase } from './types'
-import { deepMergeReactive } from '../utils'
 import { dump } from 'js-yaml'
 import z from 'zod'
 
@@ -166,25 +165,14 @@ export async function initTaskyon(
           },
         })
       },
-      configurationMessage: (msg) => {
+      /*configurationMessage: (msg) => {
         const newConfig = msg.conf
         console.log('setting our configuration')
         if (newConfig.llmSettings) {
           // TODO: make sure, this function is only temporary and doesn't overwrite our actualy llmSettings...
           deepMergeReactive(llmSettings, newConfig.llmSettings, 'overwrite')
         }
-        // and also set a possible signature as the api key!
-        if (llmSettings.selectedApi && newConfig.signatureOrKey) {
-          // we only set the API key, if it was provided by the
-          // parent app.
-          const newKey = newConfig.signatureOrKey
-          if (typeof newKey === 'string') {
-            apiKeys[llmSettings.selectedApi] = newKey
-          } else {
-            console.warn('Provided signatureOrKey is not a string:', newKey)
-          }
-        }
-      },
+      },*/
     },
     console.warn,
     console.error,
