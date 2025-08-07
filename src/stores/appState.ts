@@ -20,6 +20,7 @@ import defaultSettings from 'src/assets/taskyon_settings.json'
 import { generateAssymetricRandomNewKey } from 'src/modules/crypto_js'
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 import type { PartialDeep } from 'type-fest'
+import { initialStoredStateObj, storeName } from 'src/modules/ui/initialState'
 
 interface TaskWidgetStateType {
   markdownEnabled: boolean
@@ -32,8 +33,6 @@ function clearBrowserStorage() {
   clearServiceWorkers()
   clearCookies()
 }
-
-const storeName = 'taskyonState'
 
 // this is where we save all of our app settings.
 // its important to keep this simple and don't incude 3rd party libraries and othe things
@@ -90,27 +89,24 @@ export const useAppStateStore = defineStore(storeName, () => {
     modelFilter: '' as string | null,
   }
 
-  // overwrite with saved configuration:
-  console.log('load saved app state!')
-  const getStoredStateString = () => LocalStorage.getItem(storeName) as string
-  const initialStoredStateString = getStoredStateString()
-  const initialStoredStateObj = JSON.parse(initialStoredStateString) as
+  const initialStoredStateObjTyped = initialStoredStateObj as
     | Partial<typeof initialState>
     | undefined
+
   let stateRefs: Reactive<typeof initialState>
   if (
-    initialStoredStateObj &&
-    initialStoredStateObj.version &&
-    initialStoredStateObj.version === initialState.version
+    initialStoredStateObjTyped &&
+    initialStoredStateObjTyped.version &&
+    initialStoredStateObjTyped.version === initialState.version
   ) {
     console.log(`load saved ${storeName} state!`)
-    const storedInitialState = deepMerge(initialState, initialStoredStateObj, 'overwrite')
+    const storedInitialState = deepMerge(initialState, initialStoredStateObjTyped, 'overwrite')
     stateRefs = reactive(storedInitialState)
   } else {
     // TODO: pop up a dialog where we inform the user about this!!
     console.warn(
       `Stored settings version (${
-        initialStoredStateObj?.version || 'undefined'
+        initialStoredStateObjTyped?.version || 'undefined'
       }) is not compatible with current version (${initialState.version}). Using default settings.`,
     )
     clearBrowserStorage()
@@ -256,7 +252,6 @@ export const useAppStateStore = defineStore(storeName, () => {
     ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
     overRideSettings: overrideSettings,
     getStateValues: () => unref(allRefs),
-    getStoredStateString,
     $reset,
     minimalGui,
     tyPublicKey: computed(() => {

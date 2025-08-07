@@ -66,6 +66,7 @@ import { testCreateDeepTansformer } from 'src/modules/taskyon/tests'
 import { testGdriveUpload } from 'src/modules/taskyon/tests'
 import { testBuildSlimView } from 'src/modules/vueUtils'
 import { randomString } from 'src/modules/crypto_js'
+import { getStoredStateString } from 'src/modules/ui/initialState'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -220,7 +221,7 @@ async function getData() {
         appConfiguration: state.appConfiguration,
       },
       taskyonStoreDiagnostics: {
-        SavedState: state.getStoredStateString(),
+        SavedState: getStoredStateString(),
         CurrentState: state.getStateValues(),
       },
       CurrentChat: await completionMessage(),

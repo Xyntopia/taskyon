@@ -2,6 +2,7 @@
 import { defineBoot } from '#q-app/wrappers'
 import { setCssVar } from 'quasar'
 import { hexToRgb } from 'src/modules/utils'
+import { initialStoredStateObj } from '../modules/ui/initialState'
 
 export function setColors(primary: string | undefined, secondary: string | undefined) {
   if (primary) {
@@ -16,10 +17,11 @@ export function setColors(primary: string | undefined, secondary: string | undef
 
 export default defineBoot(() => {
   console.log('set colors! :)')
+
   // 42, 53, 72
-  const primary = '#2A3548'
+  const primary = initialStoredStateObj.appConfiguration.primaryColor ?? '#2A3548'
   // 247, 143, 59
-  const secondary = '#F78F3B'
+  const secondary = initialStoredStateObj.appConfiguration.secondaryColor ?? '#F78F3B'
   //setCssVar('primary', primary)
   //setCssVar('secondary', secondary)
   // we have to use "rgb" colors, in order to make them usbale in sass :)

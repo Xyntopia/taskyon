@@ -616,9 +616,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       console.log('Set new brand colors!!', primary, secondary)
       setColors(primary, secondary)
     },
-    {
-      immediate: true,
-    },
   )
 
   // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
