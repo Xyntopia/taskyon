@@ -2,6 +2,14 @@
 
 import type { partialTyConfiguration, TaskyonMessage, ClientTool } from './tyClient.types'
 
+function safeClone<T>(data: T): T {
+  try {
+    return structuredClone(data)
+  } catch {
+    return JSON.parse(JSON.stringify(data))
+  }
+}
+
 const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
   return new Promise<MessagePort>((resolve) => {
     let stopped = false
@@ -105,7 +113,7 @@ export async function initializeTaskyon(
   if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
     console.log('make sure, we can ')
     const tyApi = await waitForApiChannel(taskyon)
-    const send = (msg: TaskyonMessage) => tyApi.postMessage(msg)
+    const send = (msg: TaskyonMessage) => tyApi.postMessage(safeClone(msg))
 
     console.log('send our configuration!')
     send({
