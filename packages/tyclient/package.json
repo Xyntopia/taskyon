@@ -1,6 +1,6 @@
 {
   "name": "tyclient",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "license": "MIT",
   "main": "dist/tyclient.umd.js",
   "types": "dist/tyclient.d.ts",
