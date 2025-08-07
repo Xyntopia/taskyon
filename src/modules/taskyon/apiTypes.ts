@@ -1,4 +1,4 @@
-import type { DeepPartial } from '../utils'
+import type { PartialDeep } from 'type-fest'
 import { TyProfile } from './types'
 import { FunctionArguments, ToolBase, partialTaskDraft } from './types'
 import { z } from 'zod'
@@ -40,7 +40,7 @@ export const RemoteFunctionResponse = RemoteFunctionBase.extend({
 export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>
 
 //export type partialTyConfiguration = PartialDeep<storedSettings>
-export type partialTyConfiguration = DeepPartial<TyProfile>
+export type partialTyConfiguration = PartialDeep<TyProfile>
 //export type partialTyConfiguration = PartialDeep<storedSettings>
 
 const TaskMessage = z

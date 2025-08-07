@@ -7,7 +7,6 @@ import type { FunctionCall } from 'src/modules/taskyon/types'
 import { type tyPublicKeyDraft, TyProfile } from 'src/modules/taskyon/types'
 import axios from 'axios'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
-import type { DeepPartial } from 'src/modules/utils'
 import {
   clearBrowserCaches,
   clearCookies,
@@ -20,6 +19,7 @@ import { unref } from 'vue'
 import defaultSettings from 'src/assets/taskyon_settings.json'
 import { generateAssymetricRandomNewKey } from 'src/modules/crypto_js'
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
+import type { PartialDeep } from 'type-fest'
 
 interface TaskWidgetStateType {
   markdownEnabled: boolean
@@ -132,7 +132,7 @@ export const useAppStateStore = defineStore(storeName, () => {
     void generateAssymetricRandomNewKey().then((r) => (stateRefs.llmSettings.userId = r.publicKey))
   }
 
-  function overrideSettings(newConfig: DeepPartial<TyProfile>) {
+  function overrideSettings(newConfig: PartialDeep<TyProfile>) {
     saveToLocalStorage = false
     if (newConfig.llmSettings) {
       // TODO: make sure, this function is only temporary and doesn't overwrite our actual llmSettings...

@@ -1192,24 +1192,3 @@ export function hexToRgb(hex: string): string {
   const b = bigint & 255
   return `${r}, ${g}, ${b}`
 }
-
-export type DeepPartial<T> =
-  // primitives & functions ─ leave as‑is
-  T extends
-    | string
-    | number
-    | boolean
-    | bigint
-    | symbol
-    | null
-    | undefined
-    | ((...args: unknown[]) => unknown)
-    ? T
-    : // arrays / tuples
-      T extends ReadonlyArray<infer U>
-      ? ReadonlyArray<DeepPartial<U>>
-      : // objects
-        T extends object
-        ? { [P in keyof T]?: DeepPartial<T[P]> }
-        : // everything else
-          T

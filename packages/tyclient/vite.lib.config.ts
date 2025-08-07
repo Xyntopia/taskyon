@@ -16,9 +16,9 @@ export default defineConfig({
 
       // ► 1.  Libraries – inline Zod, leave Vue as import
       libraries: {
-        // inlinedLibraries: ['zod'],
+        inlinedLibraries: ['json-schema', 'type-fest', 'zod'],
         // If you also want to *keep* other libs external, list them here:
-        importedLibraries: ['vue', 'zod'],
+        // importedLibraries: ['vue', 'zod'],
       },
 
       // ► 2.  Output tweaks
