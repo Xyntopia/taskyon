@@ -1,5 +1,8 @@
 # Taskyon Integration Guide
 
+TODO: add new client tool versions
+TODO: add example with, "page awareness tool" and a "wizard" and show our sql page as an example...
+
 ## Introduction
 
 Taskyon is a versatile AI assistant designed for seamless integration into your webpage or application. This guide will walk you through the process of incorporating Taskyon into your project, explaining key concepts and providing step-by-step instructions.
@@ -57,13 +60,11 @@ Taskyon requires access to an AI server that runs Large Language Models and Mult
 Normally, this involves API keys which give you access to this service. As Taskyons _local first_ model doesn't require a backend on your side (which makes it easy to integrate, cheaper and improves data protection compliance) you somehow have to share this API key with your users. As you probably don't want them to login to taskyon in addition to your own services.
 
 1. **Use Taskyon's API Keys With Configuration Enforcement**
-
    - Visit [https://taskyon.space/account](https://taskyon.space/account) to obtain a rate-limited API key.
    - This option allows you to cap monthly costs and use the keys publicly on your webpage.
    - You can restrict which AI models and configurations your users can access.
 
 2. **Provide Your Own OpenAI-Compatible Backend**
-
    - Set up your own backend with an LLM model that's compatible with the OpenAI API.
    - You can restrict access to your backend using an API gateway like Kong.
 
