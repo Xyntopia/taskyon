@@ -19,9 +19,9 @@ export default defineBoot(() => {
   console.log('set colors! :)')
 
   // 42, 53, 72
-  const primary = initialStoredStateObj.appConfiguration.primaryColor ?? '#2A3548'
+  const primary = initialStoredStateObj?.appConfiguration?.primaryColor ?? '#2A3548'
   // 247, 143, 59
-  const secondary = initialStoredStateObj.appConfiguration.secondaryColor ?? '#F78F3B'
+  const secondary = initialStoredStateObj?.appConfiguration?.secondaryColor ?? '#F78F3B'
   //setCssVar('primary', primary)
   //setCssVar('secondary', secondary)
   // we have to use "rgb" colors, in order to make them usbale in sass :)
