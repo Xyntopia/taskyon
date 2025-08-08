@@ -3,11 +3,7 @@
 $secondary: var(--q-secondary-rgb)
 $primary: var(--q-primary-rgb)
 
-$app-bg-light: linear-gradient(
-  to bottom,
-  color-mix(in srgb, white, rgb(var(--q-primary-rgb)) 20%) 20%,
-  color-mix(in srgb, white, rgb(var(--q-secondary-rgb)) 20%) 100%
-)
+$app-bg-light: radial-gradient(ellipse at bottom right, rgba($secondary, 0.1) 0%, transparent 80%), radial-gradient(ellipse at bottom left, rgba($primary, 0.2), white 80%)
 
 $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%, transparent 80%), radial-gradient(ellipse at bottom left, rgb($primary), black 80%)
 
