@@ -999,31 +999,10 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     task: partialTaskDraft,
     priorID: string | undefined,
     parentID: string | undefined,
-    // TODO: remove duplicateTaskName
-    duplicateTaskName = true,
   ): Promise<TaskNode> => {
-    if (!duplicateTaskName && task.name) {
-      // check if a task with this name already exists and throw an error, if it does, because
-      // we are not supposed to create it in that case ;)
-      // this is specifically used in the case of repeated task
-      // declarations which come for example from a webapge which integrates the tasks
-      // TODO: instead of giving the webpage the option to "disallow" duplicate
-      //       tasks, make sure, the tasks don't get saved in the db
-      //       as they get declared every single time anyways when the webpage loads...,
-      //       we don't *need* to store them! we can use the "persist" argument for this.
-      const tasks = await searchTasks({
-        selector: { name: task.name },
-      })
-      if (tasks.length > 0) {
-        throw new Error(`The task ${task.name} already exists!`)
-      }
-    }
-
     const newTask = await createTaskNode(task, priorID, parentID)
 
     // task was already added at a previous point...
-    // TODO: can we get rid of "setTask"? because we can generate task IDs now independently
-    //       from whichever database we're using...
     if (await tyCrudVec.get(newTask.id)) return newTask
 
     console.log('create new Task:', newTask.id)
@@ -1031,6 +1010,8 @@ export async function useTyTaskManager(vectorizerModel?: string) {
 
     // extract keywordsfrom entire chat and use it to name the task...
     // but only if a taskname doesn't exist yet.
+    // TODO: make sure, we update keywords somwhere else e.g.in "debugdb" we
+    //       really would like to have immutable tasks...
     // TODO: how can we do this much faster, so that we don't have to update our task and
     //       keep it immutable?  We should probably await keywords, but also keep a
     //       separate index with keywords for tasks...
@@ -1049,7 +1030,6 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     taskList: partialTaskDraft[],
     priorID: string | undefined = undefined,
     parentID: string | undefined = undefined,
-    duplicateTaskName = true,
   ) {
     let lastTaskId = priorID
     const addedTaskList: TaskNode[] = []
@@ -1058,7 +1038,6 @@ export async function useTyTaskManager(vectorizerModel?: string) {
         { ...task },
         lastTaskId, //previous
         parentID,
-        duplicateTaskName,
       )
       lastTaskId = addedTask.id
       addedTaskList.push(addedTask)
