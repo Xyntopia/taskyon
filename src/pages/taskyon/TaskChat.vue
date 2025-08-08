@@ -94,7 +94,7 @@
                 class="col-auto q-pr-md"
                 size="2rem"
                 name="svguse:/taskyon_mono_opt.svg#taskyon"
-                :color="$q.dark.isActive ? 'secondary' : 'primary'"
+                :color="$q.dark.isActive ? 'primary' : 'secondary'"
               ></q-icon>
               <div class="col">
                 You currently have not activated any AI service provider with a chat completion API.
@@ -111,18 +111,16 @@
           <!--chat share welcome message-->
           <div
             v-if="tystate.selectedThread.value.length > 0 && invitedChat"
-            class="col introduction-message bg-primary"
+            class="col introduction-message bg-primary column"
           >
             <div class="row items-center q-pa-sm">
               <q-icon
                 class="col-auto q-pr-md"
                 size="2rem"
                 name="svguse:/taskyon_mono_opt.svg#taskyon"
-                :color="$q.dark.isActive ? 'secondary' : 'primary'"
+                :color="$q.dark.isActive ? 'primary' : 'secondary'"
               ></q-icon>
-              <div class="col">
-                You've been invited to read this chat! Scroll down and start reading
-              </div>
+              <div class="col">You've been invited to read this chat!</div>
             </div>
             <q-btn
               class="text-center fit"
