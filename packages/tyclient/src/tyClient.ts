@@ -103,6 +103,7 @@ async function handleFunctionExecution(
 export async function initializeTaskyon(
   tools: ClientTool[],
   configuration: partialTyConfiguration,
+  persist?: boolean,
 ) {
   console.log('initialize taskyon client...')
 
@@ -119,6 +120,7 @@ export async function initializeTaskyon(
     send({
       type: 'configurationMessage',
       conf: configuration,
+      persist,
     })
     console.log('sending our functions!')
     tools.forEach((t) => {
