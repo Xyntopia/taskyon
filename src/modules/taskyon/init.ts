@@ -146,7 +146,6 @@ export async function initTaskyon(
           { ...msg.task, label: msg.origin ? [msg.origin] : undefined },
           undefined,
           undefined,
-          false,
         )
         // push the last task to execution queue right away...
         if (msg.execute) {
