@@ -12,6 +12,7 @@ import {
 } from '@taskyon/taskyon/tools/clarificationTool'
 import { tauriLocalTools } from './TauriLocalTools'
 import ClarificationQuestionsDialog from 'components/taskyon/ClarificationQuestionsDialog.vue'
+import { makePageIOTool } from './PageIOTool'
 
 export const simpleDialogSchema = {
   $id: 'SimpleQDialogOptions',
@@ -96,10 +97,6 @@ export const simpleDialogSchema = {
 } as const satisfies JSONSchema7
 
 type DialogResult = { action: 'ok'; data: unknown } | { action: 'cancel' } | { action: 'dismiss' }
-
-/* ------------------------------------------------------------------ *
- * 3.  Taskyon tool wrapper
- * ------------------------------------------------------------------ */
 export const quasarDialogTool = createClientTool({
   name: 'userdialog',
   description: 'Display a Dialog to collect user input/confirmation.',
@@ -202,4 +199,9 @@ export const clarificationQuestionsTool = createClientTool({
   },
 })
 
-export const guiTools = [quasarDialogTool, clarificationQuestionsTool, ...tauriLocalTools]
+export const guiTools = [
+  quasarDialogTool,
+  clarificationQuestionsTool,
+  makePageIOTool(),
+  ...tauriLocalTools,
+]

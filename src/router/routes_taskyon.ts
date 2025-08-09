@@ -303,6 +303,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/pageio-test',
+    component: () => import('pages/PageIOTestPage.vue'),
+    meta: {
+      title: 'PageIO Test',
+      description: 'Browser page interaction tool test harness.',
+    },
+  },
+  {
     path: '/spaceships',
     component: () => import('@taskyon/spaceships/ProceduralSpaceshipLabPage.vue'),
     meta: {
