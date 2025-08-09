@@ -7,7 +7,6 @@ import { RemoteFunctionResponse, RemoteFunctionCall } from './apiTypes'
 import { z } from 'zod'
 import { jsonSchemaToYamlString } from '../yamlUtils'
 import { executeCodeInIframe } from './iframeWorker'
-import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
 import type { JSONSchema7, JSONSchema7Object } from 'json-schema'
 import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
 import Ajv from 'ajv'
@@ -81,31 +80,6 @@ const InternalTool = ToolBase.extend({
 export type InternalTool = z.infer<typeof InternalTool>
 
 export type ClientTool = WithRequired<InternalTool, 'function'>
-
-// Create a helper function to preserve schema types
-export function createTool<T, SCHEMA extends Readonly<JSONSchema>, PARAMS = FromSchema<SCHEMA>>(
-  tool: T & {
-    parameters: SCHEMA
-    function?: (params: PARAMS, context: toolContext) => unknown
-  } & Omit<InternalTool, 'function' | 'parameters'>,
-): T {
-  console.log('create tool', tool.name)
-  return tool
-}
-// TODO: automatically type the FunctionCall correctly using the
-//       json definition from a tool :)
-export function toolCall(
-  f: FunctionCall,
-): partialTaskDraft & { content: { type: 'functioncall'; data: FunctionCall } } {
-  return {
-    role: 'function',
-    name: f.name,
-    content: {
-      type: 'functioncall',
-      data: f,
-    },
-  }
-}
 
 // This function executes code in a different browser context. E.g. executing a
 // function in the context of the parent of an iframe!
@@ -333,27 +307,6 @@ export function summarizeTools(
 export function mapFunctionNames(toolNames: string[], tools: Record<string, ToolBase>): ToolBase[] {
   return toolNames?.map((t) => tools[t] as ToolBase).filter((t) => t)
 }
-
-export const exampleTool = createTool({
-  name: 'myExampleStringAdderAlone',
-  description: 'provide a short description which an AI can understand',
-  longDescription: 'provide a long description if the AI/Human needs more details',
-  parameters: {
-    type: 'object',
-    properties: {
-      parameter1: {
-        type: 'string',
-        description: 'This is an example parameter!',
-      },
-      parameter2: {
-        type: 'string',
-        description: 'This is another example parameter, but not required!',
-      },
-    },
-    required: ['parameter1'],
-  },
-  code: "({parameter1, parameter2 = 'default parameter :)'}) => {return parameter1 + ' ' + parameter2;}",
-})
 
 export function craeteToolJsonSchema() {
   const JSON_SCHEMA_PLACEHOLDER = {
