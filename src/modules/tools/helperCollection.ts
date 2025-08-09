@@ -215,6 +215,7 @@ const notification = createTool({
       setTimeout(() => {
         new Notification(message)
       }, delay)
+      return "notificaton was set successfuly"
     } else if (Notification.permission !== 'denied') {
       Notification.requestPermission().then((permission) => {
         if (permission === 'granted') {
@@ -223,6 +224,9 @@ const notification = createTool({
           }, delay)
         }
       })
+      return "notificaton was set successfuly"
+    } else {
+      return "we did not get permission to set notifications!"
     }
   }`,
 })
