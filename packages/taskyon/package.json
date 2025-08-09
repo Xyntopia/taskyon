@@ -1,0 +1,12 @@
+{
+    "name": "@taskyon/taskyon",
+    "private": true,
+    "type": "module",
+    "sideEffects": false,
+    "exports": {
+        ".": {
+            "import": "./src/index.ts",
+            "types": "./src/index.ts"
+        }
+    }
+}
