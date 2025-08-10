@@ -148,7 +148,6 @@ import { useTaskyonStore } from 'stores/taskyonState'
 import type { TaskNode } from 'src/modules/taskyon/types'
 import tyMarkdown from '../tyMarkdown.vue'
 import { ref } from 'vue'
-import { type FileMappingDocType } from 'src/modules/taskyon/rxdb'
 import { mdiDesktopTower, mdiFileDocument, mdiTools, mdiHeadCog } from '@quasar/extras/mdi-v6'
 import { matBuild, matCalculate, matPause, matWarning } from '@quasar/extras/material-icons'
 import FileBrowser from './FileBrowser.vue'
@@ -157,6 +156,7 @@ import { safeYamlDump } from 'src/modules/yamlUtils'
 import TaskField from './TaskField.vue'
 import { dump } from 'js-yaml'
 import { humanizeError } from 'src/modules/utils'
+import type { FileMapping } from 'src/modules/taskyon/taskManager'
 
 const props = defineProps<{
   task: TaskNode
@@ -170,7 +170,7 @@ const props = defineProps<{
 const tystate = useTaskyonStore()
 
 const state = useAppStateStore()
-const fileMappings = ref<FileMappingDocType[]>([])
+const fileMappings = ref<FileMapping[]>([])
 async function getFile(uuid: string) {
   console.log('load image', uuid)
   return (await tystate.getTaskManager()).getOpfsUploadedFile(uuid)

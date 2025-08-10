@@ -279,7 +279,6 @@ import { partialTaskDraft } from 'src/modules/taskyon/types'
 import { llmSettings, appConfiguration } from 'src/modules/taskyon/types'
 import { useTaskyonStore } from 'stores/taskyonState'
 import ModelSelection from 'components/taskyon/ModelSelection.vue'
-import { saveUserUploadedFileToOpfs } from 'src/modules/OPFS'
 import ObjectTreeView from '../ObjectTreeView.vue'
 import chatMessageEdit from './chatMessageEdit.vue'
 import InfoDialog from '../InfoDialog.vue'
@@ -454,31 +453,12 @@ watchDebounced(
   { debounce: 3000, maxWait: 5000, immediate: true },
 )*/
 
-async function addFiles2Taskyon(newFiles: File[]) {
-  console.log('add files to our chat!')
-  //first, upload file into our OPFS file system:
-  const opfsMapping = await saveUserUploadedFileToOpfs(newFiles)
-
-  // Collect UUIDs from added files
-  const uuids = []
-  const tm = await tystate.getTaskManager()
-  for (const [fileIdx, file] of newFiles.entries()) {
-    const uuid = await tm.addFile({
-      ...(opfsMapping[fileIdx] ? { opfs: opfsMapping[fileIdx] } : {}),
-      name: file.name,
-      fileType: file.type,
-    })
-    if (uuid) {
-      uuids.push(uuid)
-    }
-  }
-  return uuids
-}
-
 // all our files are added to a "file task"
 async function createFileTask(files: File[]) {
+  const tm = await tystate.getTaskManager()
+
   // first add files to our DB & save them, then get uuids for each file.
-  const fileUuids = await addFiles2Taskyon(files)
+  const fileUuids = await tm.addFiles(files)
 
   if (fileUuids.length) {
     const task: partialTaskDraft = {

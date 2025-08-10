@@ -27,13 +27,13 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { FileMappingDocType } from 'src/modules/taskyon/rxdb'
 import { dump } from 'js-yaml'
 import { watch } from 'vue'
+import type { FileMapping } from 'src/modules/taskyon/taskManager'
 
 // Store the props in a variable for easy access
 const props = defineProps<{
-  fileMappings: FileMappingDocType[]
+  fileMappings: FileMapping[]
   expertMode: boolean
   preview: boolean
   previewSize: number // New prop for configurable preview size

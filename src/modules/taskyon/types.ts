@@ -16,8 +16,11 @@ import {
   matVisibilityOff,
 } from '@quasar/extras/material-icons'
 
+// TODO: move the following ts helpers into a separate file
 //type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type RequireSome<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
+
+export type OptionalSome<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
 export type RequireDefined<T, K extends keyof T> = Omit<T, K> & {
   [P in K]-?: Exclude<T[P], undefined>
