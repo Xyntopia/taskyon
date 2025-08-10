@@ -1,5 +1,5 @@
 import { bigIntToString } from '../utils'
-import type { FunctionArguments, FunctionCall, ParamType, WithRequired, toolContext } from './types'
+import type { FunctionArguments, FunctionCall, ParamType, toolContext } from './types'
 import { convertZodToJsonSchemaCached, partialTaskDraft, taskMarker } from './types'
 import { ToolBase } from './types'
 import type { TaskWorkerMessage, TaskyonMessage } from './apiTypes'
@@ -12,6 +12,7 @@ import type { JSONSchema7, JSONSchema7Object } from 'json-schema'
 import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
 import Ajv from 'ajv'
 import type { Port } from '../frpBus'
+import type { WithRequired } from './tsHelpers'
 
 export const taskResult = z.object({
   taskResultMarker: z.literal(taskMarker).default(taskMarker).meta({

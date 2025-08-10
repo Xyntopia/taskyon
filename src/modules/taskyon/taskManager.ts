@@ -1,4 +1,4 @@
-import type { OptionalSome, TaskNodeMeta, TaskNodeType } from './types'
+import type { TaskNodeMeta, TaskNodeType } from './types'
 import { partialTaskDraft, TaskNode, ToolBase } from './types'
 import { openUserUploadedFile, saveUserUploadedFileToOpfs } from '../OPFS'
 import { usePyodideWebworker } from './webWorkerApi'
@@ -21,6 +21,7 @@ import type { TyPGDB } from '../pglite.api'
 import { getDatabase } from '../pglite.api'
 import type { PartialDeep } from 'type-fest'
 import z from 'zod'
+import type { OptionalSome } from './tsHelpers'
 
 /**
  *

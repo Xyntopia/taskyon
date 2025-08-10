@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { watch, computed, ref } from 'vue'
-import type { Asyncify, TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
+import type { TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
 import {
   type Model,
   TaskNode,
@@ -30,6 +30,7 @@ import { waitForMessagePort } from 'src/modules/taskyon/iframeWorker'
 import { guiTools } from 'src/modules/tools/GuiTools'
 import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
 import { match, P } from 'ts-pattern'
+import type { Asyncify } from 'src/modules/taskyon/tsHelpers'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
