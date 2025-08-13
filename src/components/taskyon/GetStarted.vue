@@ -2,6 +2,7 @@
   <div class="text-h6 col-auto column items-center">
     <!-- eslint-disable vue/no-v-html -->
     <div
+      v-if="state.appConfiguration.showLogo"
       class="svg-container q-pa-lg"
       :style="{
         '--icon-primary': $q.dark.isActive ? 'white' : 'var(--q-primary)',

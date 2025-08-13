@@ -469,6 +469,7 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
     },
     appConfiguration: {
       guiMode: 'auto',
+      showLogo: false,
       chatSuggestions: [gettingStarted],
       welcomeMsg: 'Ask taskyon for help on querying your database!',
     },
