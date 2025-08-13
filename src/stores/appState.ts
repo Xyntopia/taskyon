@@ -68,7 +68,7 @@ export const useAppStateStore = defineStore(storeName, () => {
     createTaskType: {
       type: 'message',
     } as { type: 'message' } | { type: 'functioncall'; name: FunctionCall['name'] }, // the type of task we are currently working on
-    messageDraft: '' as string,
+    messageDraft: '' as string | undefined,
     // we use this here to store the different types of task drafts that we were working on.
     draftParameters: {} as Record<FunctionCall['name'], FunctionCall['arguments']>,
     // can be used to exchange certain keys and make taskyon
