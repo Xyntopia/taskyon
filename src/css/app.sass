@@ -192,6 +192,13 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
   .not-in-key
     opacity: 0.5
 
+  // the buttons with chat suggestions:
+  .task-button
+    color: rgb($primary)
+
+  .body--dark .task-button
+    color: rgb($secondary)
+
   // common settings for both:  dark & light  
   body.body--light
     //background-color: white
@@ -200,7 +207,7 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
     background-size: cover // make sure we always cover entire viewport even if content is smaller
     background-attachment: fixed // fix background to viewport
-    text-color: black
+    color: black
 
     .fade-top-overlay
       // **exact same** gradient
@@ -270,7 +277,7 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
 
     .ty-msg-edit
       box-shadow: inset 0 0 10px rgb($secondary)
-      text-color: rgb($secondary)
+      color: rgb($secondary)
 
     .ty-msg-edit.q-field--float
       background-color: rgba($dark,1.0)

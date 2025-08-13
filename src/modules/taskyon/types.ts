@@ -780,6 +780,24 @@ export const appConfiguration = z.object({
   gdriveDir: z.string().default('taskyon').meta({
     description: 'The default directory in gdrive, where taskyon saves its configuration.',
   }), // not sure, if we need this here?
+  chatSuggestions: z
+    .array(
+      z.union([
+        z.object({ url: z.string(), label: z.string() }).meta({
+          description:
+            'Use url and label which point toa  markdown file which you want to use as a chat template!',
+        }),
+        z
+          .object({ md: z.string(), label: z.string() })
+          .meta({ description: 'Use a markdown string which will be used as a chat template.' }),
+      ]),
+    )
+    .default([])
+    .optional()
+    .meta({
+      description:
+        'A list of getting started templates which appear as buttons when no chat is selected.',
+    }),
   useEnterToSend: z.boolean().default(true).meta({
     icon: matKeyboardReturn,
     label: 'Use Enter to Send',
