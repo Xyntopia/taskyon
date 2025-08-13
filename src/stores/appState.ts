@@ -7,6 +7,7 @@ import type { FunctionCall } from 'src/modules/taskyon/types'
 import { type tyPublicKeyDraft, TyProfile } from 'src/modules/taskyon/types'
 import axios from 'axios'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
+import type { MergeOptions } from 'src/modules/utils'
 import {
   clearBrowserCaches,
   clearCookies,
@@ -132,13 +133,13 @@ export const useAppStateStore = defineStore(storeName, () => {
     saveToLocalStorage = persist
     if (newConfig.llmSettings) {
       // TODO: make sure, this function is only temporary and doesn't overwrite our actual llmSettings...
-      deepMergeReactive(stateRefs.llmSettings, newConfig.llmSettings, 'overwrite')
+      deepMergeReactive(stateRefs.llmSettings, newConfig.llmSettings)
     }
     if (newConfig.appConfiguration) {
-      deepMergeReactive(stateRefs.appConfiguration, newConfig.appConfiguration, 'overwrite')
+      deepMergeReactive(stateRefs.appConfiguration, newConfig.appConfiguration)
     }
     if (newConfig.toolchainConfig) {
-      deepMergeReactive(stateRefs.toolchainConfig, newConfig.toolchainConfig, 'overwrite')
+      deepMergeReactive(stateRefs.toolchainConfig, newConfig.toolchainConfig)
     }
     // and also set a possible signature as the api key!
     if (stateRefs.llmSettings.selectedApi && newConfig.signatureOrKey) {
@@ -178,7 +179,13 @@ export const useAppStateStore = defineStore(storeName, () => {
           console.log('merge dynamic app config', jsonconfig.data)
 
           // if this is *not* an initial load, we only add "new" values that can be found in the configuration.
-          const mergeStrategy = stateRefs.initialLoad ? 'overwrite' : 'additive'
+          const mergeStrategy: MergeOptions = stateRefs.initialLoad
+            ? {
+                arrays: 'overwrite',
+                objects: 'overwrite',
+                primitives: 'preserve',
+              }
+            : { arrays: 'concat', objects: 'merge', typeMismatch: 'target', primitives: 'preserve' }
           deepMergeReactive(stateRefs.appConfiguration, config.appConfiguration, mergeStrategy)
           deepMergeReactive(stateRefs.llmSettings, config.llmSettings, mergeStrategy)
         } else {

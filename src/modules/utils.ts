@@ -616,77 +616,246 @@ export function deepMerge<A, B>(
   return output as A & B
 }
 
-/**
- * Deeply merges two objects reactively.
- * Unlike `deepMerge`, this function modifies `obj1` directly, providing a reactive merge.
- * Supports 'overwrite' and 'additive' strategies for non-object properties.
- *
- * @param obj1 - The first object to merge (will be modified).
- * @param obj2 - The second object to merge.
- * @param mergeStrategy - The strategy for merging: 'overwrite' or 'additive'.
- * @returns The deeply merged object.
- * @throws If either argument is not an object.
- */
-export function deepMergeReactive<A, B>(
-  obj1: A,
-  obj2: B,
-  mergeStrategy: 'overwrite' | 'additive',
-): A & B {
-  if (!isObject(obj1) || !isObject(obj2)) {
-    throw new Error('Both arguments must be objects.')
-  }
+// Deep, in-place, strategy-driven merge for Vue3-style reactive objects.
+// Focus: readability & control with a small option surface.
 
-  const obj1AsRecord = obj1 as unknown as Record<string, unknown>
+type ArrayStrategy =
+  | 'overwrite'
+  | 'byIndex'
+  | 'concat'
+  | 'prepend'
+  | { kind: 'unionBy'; key: string }
+  | { kind: 'mergeBy'; key: string }
 
-  for (const [key, obj2Value] of Object.entries(obj2)) {
-    const obj1Value = obj1AsRecord[key]
-    if (!(key in obj1AsRecord)) {
-      obj1AsRecord[key] = obj2Value
-    } else if (isObject(obj2Value) && isObject(obj1Value)) {
-      deepMergeReactive(obj1Value, obj2Value, mergeStrategy)
-    } else if (Array.isArray(obj2Value) && Array.isArray(obj1Value)) {
-      obj1AsRecord[key] = mergeArraysReactive(obj1Value, obj2Value, mergeStrategy)
-    } else if (mergeStrategy === 'overwrite') {
-      // if the key exists, and one of the objects isn't an array or object
-      // In 'overwrite' mode, assign non-object values directly
-      // as we iterate through obj2, we know this value always exists...
-      obj1AsRecord[key] = obj2Value
-    }
-  }
+type ObjectStrategy = 'merge' | 'overwrite'
+type PrimitiveStrategy = 'overwrite' | 'preserve' | 'preferDefined'
+type TypeMismatch = 'source' | 'target' | 'error'
 
-  return obj1AsRecord as A & B
+export type MergeOptions = {
+  arrays?: ArrayStrategy
+  objects?: ObjectStrategy
+  primitives?: PrimitiveStrategy
+  typeMismatch?: TypeMismatch
+  cloneOnOverwrite?: boolean
+  resolveConflict?: (ctx: {
+    path: string
+    key: string
+    targetVal: unknown
+    sourceVal: unknown
+  }) => unknown
+}
+
+const DEFAULTS: Required<
+  Pick<MergeOptions, 'arrays' | 'objects' | 'primitives' | 'typeMismatch' | 'cloneOnOverwrite'>
+> = {
+  arrays: 'overwrite',
+  objects: 'merge',
+  primitives: 'overwrite',
+  typeMismatch: 'source',
+  cloneOnOverwrite: true,
+}
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+
+const cloneShallow = <T>(v: T, enable: boolean): T => {
+  if (!enable) return v
+  if (Array.isArray(v)) return v.slice() as T
+  if (isPlainObject(v)) return { ...v }
+  return v
 }
 
 /**
- * Merges two reactive arrays based on the specified strategy.
- * Elements are merged element-wise with support for 'overwrite' and 'additive' strategies.
+ * Deeply merges two plain objects in-place, with fine-grained control over how arrays,
+ * objects, and primitives are combined.
  *
- * @param arr1 - The first array.
- * @param arr2 - The second array.
- * @param mergeStrategy - The strategy for merging: 'overwrite' or 'additive'.
- * @returns The merged array.
+ * This function mutates `target` reactively (safe for Vue 3 proxies) and supports
+ * multiple merge strategies for different value types. Useful when you need
+ * predictable merging rules instead of generic "deep merge everything" behavior.
+ *
+ * ## Strategies
+ * - **Arrays** (`arrays`):
+ *    - `'overwrite'` — replace the entire array reference  (default).
+ *    - `'byIndex'`   — merge arrays index-by-index.
+ *    - `'concat'`    — append all items from source to target.
+ *    - `'prepend'`   — prepend all items from source to target.
+ *    - `{ kind: 'unionBy', key }` — concatenate arrays and deduplicate by object property `key`.
+ *    - `{ kind: 'mergeBy', key }` — merge objects in arrays matching on property `key`.
+ *
+ * - **Objects** (`objects`):
+ *    - `'merge'` — recursively merge properties (default).
+ *    - `'overwrite'` — replace object reference entirely.
+ *
+ * - **Primitives** (`primitives`):
+ *    - `'overwrite'` — replace value from source (default).
+ *    - `'preserve'` — keep target value, ignore source.
+ *    - `'preferDefined'` — replace only if source is not `undefined`.
+ *
+ * - **Type Mismatches** (`typeMismatch`):
+ *    - `'source'` — replace with source value (default).
+ *    - `'target'` — keep target value.
+ *    - `'error'`  — throw on mismatched types.
+ *
+ * - **Cloning** (`cloneOnOverwrite`):
+ *    - `true` — shallow-clone arrays/objects when overwriting (default).
+ *    - `false` — re-use references directly.
+ *
+ * - **Conflict Hook** (`resolveConflict`):
+ *    - `(ctx) => unknown` — custom resolution for specific keys/paths; return `undefined`
+ *      to fall back to strategy logic.
+ *
+ * @template A - Type of target object
+ * @template B - Type of source object
+ * @param target - The object to merge into (will be mutated).
+ * @param source - The object to merge from.
+ * @param opts - MergeOptions controlling per-type merge behavior.
+ * @returns The merged `target` object (typed as `A & B`).
+ * @throws If either argument is not a plain object, or on type mismatch when `typeMismatch` is `'error'`.
+ *
+ * @example
+ * // Overwrite arrays, merge objects, overwrite primitives
+ * deepMergeReactive(a, b, { arrays: 'overwrite', objects: 'merge', primitives: 'overwrite' })
+ *
+ * @example
+ * // Merge arrays by 'id', keep target value on mismatches
+ * deepMergeReactive(a, b, { arrays: { kind: 'mergeBy', key: 'id' }, typeMismatch: 'target' })
  */
-function mergeArraysReactive(
-  arr1: unknown[],
-  arr2: unknown[],
-  mergeStrategy: 'overwrite' | 'additive',
-): unknown[] {
-  for (let i = 0; i < arr1.length || i < arr2.length; i++) {
-    const element1 = arr1[i]
-    const element2 = arr2[i]
+export function deepMergeReactive<
+  A extends Record<string, unknown>,
+  B extends Record<string, unknown>,
+>(target: A, source: B, opts: MergeOptions = {}): A & B {
+  if (!isPlainObject(target) || !isPlainObject(source)) {
+    throw new Error('Both arguments must be plain objects.')
+  }
+  mergeObject(target, source, { ...DEFAULTS, ...opts }, '')
+  return target as A & B
+}
 
-    if (isObject(element1) && isObject(element2)) {
-      arr1[i] = deepMergeReactive(element1, element2, mergeStrategy)
-    } else if (Array.isArray(element1) && Array.isArray(element2)) {
-      arr1[i] = mergeArraysReactive(element1 as unknown[], element2 as unknown[], mergeStrategy)
-    } else if (element1 === undefined && element2 !== undefined) {
-      arr1.push(element2)
-    } else if (element2 !== undefined && mergeStrategy === 'overwrite') {
-      arr1[i] = element2
+function mergeObject(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+  o: Required<typeof DEFAULTS> & MergeOptions,
+  path: string,
+) {
+  for (const [key, sVal] of Object.entries(source)) {
+    const tVal = target[key]
+    const here = path ? `${path}.${key}` : key
+
+    // Custom resolver first
+    if (o.resolveConflict) {
+      const decided = o.resolveConflict({ path: here, key, targetVal: tVal, sourceVal: sVal })
+      if (decided !== undefined) {
+        target[key] = decided
+        continue
+      }
     }
+
+    const tArr = Array.isArray(tVal),
+      sArr = Array.isArray(sVal)
+    const tObj = isPlainObject(tVal),
+      sObj = isPlainObject(sVal)
+
+    if (tVal === undefined) {
+      target[key] = cloneShallow(sVal, o.cloneOnOverwrite)
+      continue
+    }
+
+    // Arrays first
+    if (tArr && sArr) {
+      target[key] = mergeArrays(tVal as unknown[], sVal as unknown[], o, here)
+      continue
+    }
+
+    // Plain objects next
+    if (tObj && sObj) {
+      if ((o.objects ?? DEFAULTS.objects) === 'merge') {
+        mergeObject(tVal, sVal, o, here)
+      } else {
+        target[key] = cloneShallow(sVal, o.cloneOnOverwrite)
+      }
+      continue
+    }
+
+    // Both primitives
+    if (!tArr && !sArr && !tObj && !sObj) {
+      const p = o.primitives ?? DEFAULTS.primitives
+      target[key] =
+        p === 'preserve' ? tVal : p === 'preferDefined' ? (sVal === undefined ? tVal : sVal) : sVal // overwrite
+      continue
+    }
+
+    // Type mismatch
+    const mm = o.typeMismatch ?? DEFAULTS.typeMismatch
+    if (mm === 'source') target[key] = cloneShallow(sVal, o.cloneOnOverwrite)
+    else if (mm === 'target') {
+      /* keep tVal */
+    } else throw new Error(`Type mismatch at ${here}`)
+  }
+}
+
+function mergeArrays(
+  a: unknown[],
+  b: unknown[],
+  o: Required<typeof DEFAULTS> & MergeOptions,
+  path: string,
+): unknown[] {
+  const strat = o.arrays ?? DEFAULTS.arrays
+
+  if (strat === 'overwrite') return o.cloneOnOverwrite ? b.slice() : b
+  if (strat === 'concat') return a.concat(b)
+  if (strat === 'prepend') return b.concat(a)
+
+  if (typeof strat === 'object' && strat.kind === 'unionBy') {
+    const seen = new Set<unknown>()
+    const out: unknown[] = []
+    for (const it of a.concat(b)) {
+      const id = isPlainObject(it) ? it[strat.key] : it
+      if (!seen.has(id)) {
+        seen.add(id)
+        out.push(it)
+      }
+    }
+    a.splice(0, a.length, ...out)
+    return a
   }
 
-  return arr1
+  if (typeof strat === 'object' && strat.kind === 'mergeBy') {
+    const idx = new Map<unknown, number>()
+    for (let i = 0; i < a.length; i++) {
+      const it = a[i]
+      if (isPlainObject(it)) idx.set(it[strat.key], i)
+    }
+    for (const s of b) {
+      if (isPlainObject(s)) {
+        const k = s[strat.key]
+        const pos = idx.get(k)
+        if (pos != null && isPlainObject(a[pos])) {
+          mergeObject(a[pos], s, o, `${path}[${pos}]`)
+        } else {
+          a.push(cloneShallow(s, o.cloneOnOverwrite))
+        }
+      } else {
+        a.push(cloneShallow(s, o.cloneOnOverwrite))
+      }
+    }
+    return a
+  }
+
+  // byIndex (default)
+  const max = Math.max(a.length, b.length)
+  for (let i = 0; i < max; i++) {
+    const v1 = a[i],
+      v2 = b[i]
+    if (v2 === undefined) continue
+    const tArr = Array.isArray(v1),
+      sArr = Array.isArray(v2)
+    const tObj = isPlainObject(v1),
+      sObj = isPlainObject(v2)
+    if (tArr && sArr) a[i] = mergeArrays(v1 as unknown[], v2 as unknown[], o, `${path}[${i}]`)
+    else if (tObj && sObj) mergeObject(v1, v2, o, `${path}[${i}]`)
+    else a[i] = v2
+  }
+  return a
 }
 
 export function deepCopy<T>(item: T): T {
