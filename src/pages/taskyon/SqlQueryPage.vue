@@ -5,7 +5,7 @@
     <q-page-container>
       <q-page class="row">
         <!-- SQL Card -->
-        <q-card class="col q-ma-md">
+        <q-card class="col q-ma-md" style="min-width: 200px">
           <q-card-section>
             <div class="text-h6">SQL Queries</div>
             <div class="text-subtitle2">Tables in DB: {{ allTables }}</div>
@@ -79,7 +79,7 @@
         </q-card>
 
         <!-- Taskyon iframe -->
-        <div class="col" style="min-height: 0">
+        <div class="col" style="min-height: 0; min-width: 200px">
           <iframe
             id="taskyon"
             title="Taskyon agent"
