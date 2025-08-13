@@ -1,12 +1,13 @@
 <template>
   <!--Task Page-->
-  <q-page>
+  <q-page class="column">
     <q-resize-observer :debounce="500" @resize="onResize" />
     <!--Chat Area-->
     <div
       id="chat-area"
       ref="taskThreadContainer"
       :style="`padding-bottom: ${bottomPadding + 5}px;`"
+      class="col full-height column justify-center"
     >
       <q-scroll-observer axis="vertical" :debounce="1000" @scroll="onScroll" />
       <!-- "Task" Display -->
@@ -22,8 +23,8 @@
       />
       <!-- Welcome Message -->
       <div
-        v-if="tystate.selectedThread.value.length === 0"
-        class="col column justify-center items-center q-pa-sm welcome"
+        v-else
+        class="column justify-center items-center q-pa-sm welcome"
         style="max-width: 600px"
       >
         <div class="welcome-message column items-center">
