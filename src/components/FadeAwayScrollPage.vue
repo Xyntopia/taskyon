@@ -20,7 +20,7 @@ const props = withDefaults(
     smoothMs?: number
   }>(),
   {
-    fadeHeight: 64,
+    fadeHeight: 32,
     topOffset: 0,
     enabled: true,
     smooth: true,
@@ -62,7 +62,7 @@ function handleResize() {
   transition: --fade-off var(--fade-off-transition) linear;
 
   /* defaults; can be overridden via inline vars */
-  --fade-h: 64px;
+  --fade-h: 32px;
   --fade-off: 0px;
 
   /* True transparency at viewport top, opaque after --fade-h */
