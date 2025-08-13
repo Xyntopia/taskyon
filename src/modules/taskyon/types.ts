@@ -780,6 +780,11 @@ export const appConfiguration = z.object({
   gdriveDir: z.string().default('taskyon').meta({
     description: 'The default directory in gdrive, where taskyon saves its configuration.',
   }), // not sure, if we need this here?
+  welcomeMsg: z
+    .string()
+    .default('')
+    .meta({ description: 'A little message displayed when no chat is selected' })
+    .optional(),
   chatSuggestions: z
     .array(
       z.union([
