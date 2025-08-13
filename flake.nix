@@ -65,6 +65,7 @@
           # rustup
           # add rust toolchain
           rustc
+          rustfmt # needed in order to compile rumoca 
           cargo
 
 
