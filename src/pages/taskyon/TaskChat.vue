@@ -1,6 +1,6 @@
 <template>
   <!--Task Page-->
-  <q-page class="column">
+  <FadeAwayScrollPage class="column">
     <q-resize-observer :debounce="500" @resize="onResize" />
     <!--Chat Area-->
     <div
@@ -161,7 +161,7 @@
       :info-text="infoText"
       @ok="resolveSecret"
     />
-  </q-page>
+  </FadeAwayScrollPage>
 </template>
 
 <script setup lang="ts">
@@ -181,6 +181,7 @@ import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import { sleep } from 'src/modules/utils'
+import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 
 const props = defineProps<{ detailed?: boolean; treeBrowser?: boolean; rootTaskId?: string }>()
 const showAllTasks = ref<boolean>(props.detailed)

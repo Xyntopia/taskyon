@@ -24,23 +24,6 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
   .object-tree-view
     color: inherit
 
-  .fade-top-overlay
-    position: fixed
-    left: 0
-    right: 0
-    height: 4rem
-    pointer-events: none
-    z-index: 19
-
-    //background-color: red
-    background-repeat: no-repeat
-    background-size: cover
-    background-attachment: fixed
-
-    // fade to transparent
-    -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%)
-    mask-image: linear-gradient(to bottom, black 50%, transparent 100%)
-
   .raw-markdown
     white-space: pre-wrap // This will display newlines and wrap text
 
@@ -209,14 +192,6 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     background-attachment: fixed // fix background to viewport
     color: black
 
-    .fade-top-overlay
-      // **exact same** gradient
-      background: $app-bg-light
-      //background-color: red
-      background-repeat: no-repeat
-      background-size: cover
-      background-attachment: fixed
-
     .welcome-message-text
       filter: drop-shadow(0 0 5px white) drop-shadow(0 0 20px white)
 
@@ -257,14 +232,6 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
     background-size: cover // make sure we always cover entire viewport even if content is smaller
     background-attachment: fixed // fix background to viewport
-
-    .fade-top-overlay
-      // **exact same** gradient
-      background: $app-bg-dark
-      //background-color: red
-      background-repeat: no-repeat
-      background-size: cover
-      background-attachment: fixed
 
     .create-new-task-container
       background-color: rgba($primary, 0.3) // Adjust transparency as needed
