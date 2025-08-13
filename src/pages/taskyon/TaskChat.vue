@@ -26,18 +26,6 @@
         class="col column justify-center items-center q-pa-sm welcome"
         style="max-width: 600px"
       >
-        <!-- eslint-disable vue/no-v-html -->
-        <div
-          class="svg-container q-pa-xl"
-          :style="{
-            '--icon-primary': $q.dark.isActive ? 'white' : 'var(--q-primary)',
-            '--icon-secondary': $q.dark.isActive ? 'var(--q-secondary)' : 'var(--q-primary)',
-            width: '15rem',
-            height: 'auto',
-            display: 'inline-block',
-          }"
-          v-html="logoSvg"
-        />
         <div class="welcome-message column items-center">
           <GetStarted />
         </div>
@@ -191,7 +179,6 @@ import ToggleButton from 'src/components/ToggleButton.vue'
 import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
-import logoSvg from 'src/assets/taskyon_logo_complex_animated.svg?raw'
 import { sleep } from 'src/modules/utils'
 
 const props = defineProps<{ detailed?: boolean; treeBrowser?: boolean; rootTaskId?: string }>()
