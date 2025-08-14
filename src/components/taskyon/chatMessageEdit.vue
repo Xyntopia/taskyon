@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-wrap">
+  <div class="chat-wrap rounded-borders">
     <!-- Edit chat messages -->
     <q-input
       v-model.trim="content"
@@ -15,13 +15,14 @@
     />
 
     <!-- One positioned container that holds both toolbars -->
-    <div class="chat-toolbars column justify-between">
-      <div class="chat-toolbar-top">
+    <div class="chat-toolbars column justify-between border-radius-inherit">
+      <div class="bar top border-radius-inherit">
         <slot name="top" />
       </div>
-      <div class="chat-toolbar-bottom">
+      <div class="col"></div>
+      <div class="bar bottom border-radius-inherit q-pl-md">
         <slot name="bottom">
-          <q-btn flat dense round :icon="matSend" @click="$emit('execute-task')">
+          <q-btn flat :icon="matSend" @click="$emit('execute-task')">
             <q-tooltip>Send ({{ props.useEnterToSend ? 'Enter' : 'Shift+Enter' }})</q-tooltip>
           </q-btn>
         </slot>
@@ -60,22 +61,44 @@ const checkKeyboardEvents = (event: KeyboardEvent) => {
 }
 </script>
 
-<style scoped>
-.chat-wrap {
-  position: relative;
-}
+<style lang="sass">
+.chat-wrap
+  position: relative
+
 
 /* Floating toolbar in the top-right corner */
-.chat-toolbars {
-  position: absolute;
-  top: 8px;
-  bottom: 0;
-  right: 8px;
-}
+.chat-toolbars
+  position: absolute
+  top: 0
+  bottom: 0
+  right: 0
+
+  // so it doesn't block input */
+  pointer-events: none
+  /*padding: 4px;*/
+
+
+.chat-toolbars > div.bar
+  background-color: rgba(white, 0.5)
+  opacity: 1
+  backdrop-filter: blur(1px)
+  // Safari support
+  -webkit-backdrop-filter: blur(6px)
+
+.body--dark .chat-toolbars > div.bar
+  background-color: rgba($dark, 0.5)
+
+.chat-toolbars > *
+  /* restore click for inner elements */
+  pointer-events: auto
+
 
 /* Optional: only show when focused or has content */
-/*
-.chat-toolbar { opacity: 0.75; transition: opacity .15s ease; }
-.chat-wrap:focus-within .chat-toolbar { opacity: 1; }
-*/
+/*.chat-toolbars {
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+  }
+
+/*.chat-wrap:focus-within .chat-toolbars
+  opacity: 1
 </style>

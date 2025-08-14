@@ -55,7 +55,6 @@
             v-if="(state.messageDraft?.length ?? 0) > 0"
             flat
             dense
-            round
             :icon="symOutlinedCancel"
             @click="state.messageDraft = ''"
           ></q-btn>
