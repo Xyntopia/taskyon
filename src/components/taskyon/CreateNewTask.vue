@@ -24,12 +24,12 @@
       <!-- in case we simply want to send simple messages :)-->
       <chatMessageEdit
         v-if="!selectedTaskType"
-        v-model="state.messageDraft"
+        v-model.trim="state.messageDraft"
         :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
         @execute-task="addNewTask"
       >
-        <template #left>
+        <template #left="{ btnSize }">
           <div v-if="minMode">
             <FileDropzone
               class="col fit row items-center q-px-xs"
@@ -40,18 +40,19 @@
               aria-label="attachFileToDraft"
               @add-files="attachFileToDraft"
             >
-              <q-btn dense flat>
+              <q-btn dense flat :size="btnSize">
                 <q-icon :name="matAttachment" />
                 <q-tooltip>Attach file or image to message</q-tooltip>
               </q-btn>
             </FileDropzone>
           </div>
         </template>
-        <template #top>
+        <template #top="{ btnSize }">
           <q-btn
             v-if="(state.messageDraft?.length ?? 0) > 0"
             flat
             dense
+            :size="btnSize"
             :icon="symOutlinedCancel"
             @click="state.messageDraft = ''"
           ></q-btn>

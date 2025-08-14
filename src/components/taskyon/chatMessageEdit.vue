@@ -1,44 +1,58 @@
 <template>
   <div class="msg-edit rounded-borders">
+    <!--{{ smallMode }} {{ h }}-->
     <div>
       <!-- Edit chat messages -->
       <q-input
-        v-model.trim="content"
+        v-if="smallMode"
+        v-model="content"
         data-cy="chat-input"
         autogrow
         autofocus
         borderless
         placeholder="Type your message..."
         :input-style="{ maxHeight: '300px' }"
-        class="q-px-sm"
+        :class="['q-px-sm', content?.length ? 'q-pt-sm' : '']"
         v-bind="$attrs"
         @keyup="checkKeyboardEvents"
       >
         <template #before>
-          <template v-if="smallMode">
-            <slot name="left" />
-          </template>
+          <slot name="left" btn-size="md" />
         </template>
-      </q-input>
+        <template #after>
+          <slot name="bottom" btn-size="md">
+            <q-btn flat :icon="matSend" @click="$emit('execute-task')">
+              <q-tooltip>Send ({{ props.useEnterToSend ? 'Enter' : 'Shift+Enter' }})</q-tooltip>
+            </q-btn>
+          </slot>
+        </template> </q-input
+      ><q-input
+        v-else
+        v-model="content"
+        autogrow
+        autofocus
+        borderless
+        placeholder="Type your message..."
+        :input-style="{ maxHeight: '300px' }"
+        :class="['q-px-sm', content?.length ? 'q-pt-sm' : '', 'q-pb-md']"
+        v-bind="$attrs"
+        @keyup="checkKeyboardEvents"
+      />
       <q-resize-observer @resize="onResize" />
     </div>
-    <div v-if="!smallMode" class="toolbar-left border-radius-inherit">
-      <div class="bar border-radius-inherit">
-        <slot name="left" />
-      </div>
+    <div v-if="!smallMode" class="left bar border-radius-inherit">
+      <slot name="left" btn-size="sm"> </slot>
     </div>
     <!-- One positioned container that holds both toolbars -->
-    <div class="toolbars border-radius-inherit">
-      <div class="bar top border-radius-inherit">
-        <slot name="top" />
-      </div>
-      <div class="bar bottom border-radius-inherit">
-        <slot name="bottom">
-          <q-btn flat :icon="matSend" @click="$emit('execute-task')">
-            <q-tooltip>Send ({{ props.useEnterToSend ? 'Enter' : 'Shift+Enter' }})</q-tooltip>
-          </q-btn>
-        </slot>
-      </div>
+    <div class="bar top border-radius-inherit">
+      <slot name="top" btn-size="sm" />
+    </div>
+    <div v-if="!smallMode" class="bar bottom border-radius-inherit">
+      <slot name="bottom" btn-size="sm">
+        <q-btn flat size="sm" :icon="matSend" @click="$emit('execute-task')">
+          <q-tooltip>Send ({{ props.useEnterToSend ? 'Enter' : 'Shift+Enter' }})</q-tooltip>
+        </q-btn>
+      </slot>
     </div>
   </div>
 </template>
@@ -50,7 +64,8 @@ import { ref } from 'vue'
 
 const h = ref(0)
 const w = ref(0)
-const heightLimit = 60
+const heightLimitup = 65
+const heightLimitdown = 75
 
 const content = defineModel<string | null | undefined>({
   required: true,
@@ -83,8 +98,11 @@ const onResize = ({ height, width }: { height: number; width: number }) => {
   w.value = width
 }
 
-const smallMode = computed(() => {
-  return h.value < heightLimit
+const smallMode = computed<boolean>((previousSmall) => {
+  if (previousSmall) {
+    return h.value < heightLimitup
+  }
+  return h.value < heightLimitdown
 })
 </script>
 
@@ -94,38 +112,28 @@ const smallMode = computed(() => {
   position: relative;
 }
 
-.toolbar-left {
+.left {
   position: absolute;
-  top: 0;
   bottom: 0;
   left: 0;
 
   pointer-events: none; // don't block typing
 }
 
-.toolbars {
+.bottom {
   position: absolute;
-  top: 0;
   bottom: 0;
   right: 0;
 
   pointer-events: none; // don't block typing
 }
 
-.toolbars {
-  display: flex;
-  flex-flow: column wrap;
-  align-items: flex-end; /* right-align items in each column */
-  align-content: flex-end; /* pack columns to the right when wrapping */
-}
+.top {
+  position: absolute;
+  top: 0;
+  right: 0;
 
-.toolbars > .bottom {
-  margin-block-start: auto; /* sit at bottom of its column (also in single-column) */
-}
-
-.bottom {
-  margin-block-start: auto; /* sit at bottom of its column (also in single-column) */
-  margin: 0 10px 10px 0;
+  pointer-events: none; // don't block typing
 }
 
 div.bar {
@@ -139,11 +147,7 @@ div.bar {
   -webkit-backdrop-filter: blur(1px);
 }
 
-.toolbars > div.bar {
-  display: inline-flex; /* size to content; keeps right alignment tidy */
-}
-
-.body--dark .toolbars > div.bar {
+.body--dark div.bar {
   background-color: rgba($dark, 0);
 }
 </style>
