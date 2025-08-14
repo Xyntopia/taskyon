@@ -17,7 +17,6 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     box-shadow: 1px 0 1px rgba($secondary, 0.5)
 
   .q-header
-    z-index: 20
     background: inherit
 
   .object-tree-view
@@ -193,14 +192,15 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
   .body--dark .task-button
     color: rgb($secondary)
 
+  body
+    background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
+    background-size: cover // make sure we always cover entire viewport even if content is smaller
+    background-attachment: fixed // fix background to viewport
+
   // common settings for both:  dark & light  
   body.body--light
     //background-color: white
     background: $app-bg-light
-    // TODO: the following is duplicated in .body--dark:
-    background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
-    background-size: cover // make sure we always cover entire viewport even if content is smaller
-    background-attachment: fixed // fix background to viewport
     color: black
 
     .welcome-message-text
