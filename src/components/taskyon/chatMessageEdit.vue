@@ -60,7 +60,7 @@ const checkKeyboardEvents = (event: KeyboardEvent) => {
 }
 </script>
 
-<style lang="scss">
+<style scoped lang="scss">
 /* container */
 .msg-edit {
   position: relative;
@@ -85,6 +85,11 @@ const checkKeyboardEvents = (event: KeyboardEvent) => {
 
 .toolbars > .bottom {
   margin-block-start: auto; /* sit at bottom of its column (also in single-column) */
+}
+
+.bottom {
+  margin-block-start: auto; /* sit at bottom of its column (also in single-column) */
+  margin: 0 10px 10px 0;
 }
 
 /* restore clicks for inner controls */
