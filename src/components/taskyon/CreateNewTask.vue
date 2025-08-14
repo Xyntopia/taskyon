@@ -38,14 +38,6 @@
           </q-btn>
         </FileDropzone>
       </div>
-      <q-btn
-        v-if="minMode && (state.messageDraft?.length ?? 0) > 0"
-        flat
-        dense
-        round
-        :icon="symOutlinedCancel"
-        @click="state.messageDraft = ''"
-      ></q-btn>
       <!-- in case we simply want to send simple messages :)-->
       <chatMessageEdit
         v-if="!selectedTaskType"
@@ -53,7 +45,18 @@
         :class="[!state.messageDraft?.length ? 'col' : 'col-auto fit', 'text-body1 ty-msg-edit']"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
         @execute-task="addNewTask"
-      />
+      >
+        <template #top>
+          <q-btn
+            v-if="(state.messageDraft?.length ?? 0) > 0"
+            flat
+            dense
+            round
+            :icon="symOutlinedCancel"
+            @click="state.messageDraft = ''"
+          ></q-btn>
+        </template>
+      </chatMessageEdit>
       <!--If we want to edit any pre-defined functions we can do that here...-->
       <div v-else-if="selectedTaskType" class="row">
         <ObjectTreeView
