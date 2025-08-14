@@ -19,7 +19,7 @@
       <div class="bar top border-radius-inherit">
         <slot name="top" />
       </div>
-      <div class="bar bottom border-radius-inherit q-ml-md">
+      <div class="bar bottom border-radius-inherit">
         <slot name="bottom">
           <q-btn flat :icon="matSend" @click="$emit('execute-task')">
             <q-tooltip>Send ({{ props.useEnterToSend ? 'Enter' : 'Shift+Enter' }})</q-tooltip>
@@ -66,13 +66,25 @@ const checkKeyboardEvents = (event: KeyboardEvent) => {
   position: relative;
 }
 
-/* floating toolbar column */
 .toolbars {
   position: absolute;
   top: 0;
   bottom: 0;
   right: 0;
-  pointer-events: none; /* don't block typing */
+
+  pointer-events: none; // don't block typing
+  gap: 4px;
+}
+
+.toolbars {
+  display: flex;
+  flex-flow: column wrap;
+  align-items: flex-end; /* right-align items in each column */
+  align-content: flex-end; /* pack columns to the right when wrapping */
+}
+
+.toolbars > .bottom {
+  margin-block-start: auto; /* sit at bottom of its column (also in single-column) */
 }
 
 /* restore clicks for inner controls */
@@ -81,6 +93,7 @@ const checkKeyboardEvents = (event: KeyboardEvent) => {
 }
 
 .toolbars > div.bar {
+  display: inline-flex; /* size to content; keeps right alignment tidy */
   background-color: rgba(white, 0);
   opacity: 1;
   backdrop-filter: blur(1px);
