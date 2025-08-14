@@ -15,12 +15,11 @@
     />
 
     <!-- One positioned container that holds both toolbars -->
-    <div class="chat-toolbars column justify-between border-radius-inherit">
-      <div class="bar top border-radius-inherit">
+    <div class="toolbars column justify-between items-end border-radius-inherit">
+      <div class="col-auto bar top border-radius-inherit">
         <slot name="top" />
       </div>
-      <div class="col"></div>
-      <div class="bar bottom border-radius-inherit q-ml-md">
+      <div class="col-auto bar bottom border-radius-inherit q-ml-md">
         <slot name="bottom">
           <q-btn flat :icon="matSend" @click="$emit('execute-task')">
             <q-tooltip>Send ({{ props.useEnterToSend ? 'Enter' : 'Shift+Enter' }})</q-tooltip>
@@ -67,7 +66,7 @@ const checkKeyboardEvents = (event: KeyboardEvent) => {
 
 
 /* Floating toolbar in the top-right corner */
-.chat-toolbars
+.toolbars
   position: absolute
   top: 0
   bottom: 0
@@ -78,17 +77,17 @@ const checkKeyboardEvents = (event: KeyboardEvent) => {
   /*padding: 4px;*/
 
 
-.chat-toolbars > div.bar
+.toolbars > div.bar
   background-color: rgba(white, 0.5)
   opacity: 1
   backdrop-filter: blur(1px)
   // Safari support
   -webkit-backdrop-filter: blur(6px)
 
-.body--dark .chat-toolbars > div.bar
+.body--dark .toolbars > div.bar
   background-color: rgba($dark, 0.5)
 
-.chat-toolbars > *
+.toolbars > *
   /* restore click for inner elements */
   pointer-events: auto
 
