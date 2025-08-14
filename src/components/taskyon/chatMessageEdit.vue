@@ -9,7 +9,7 @@
       borderless
       placeholder="Type your message..."
       :input-style="{ maxHeight: '300px' }"
-      class="q-px-xs"
+      class="q-px-sm"
       v-bind="$attrs"
       @keyup="checkKeyboardEvents"
     />
@@ -78,14 +78,14 @@ const checkKeyboardEvents = (event: KeyboardEvent) => {
 
 
 .toolbars > div.bar
-  background-color: rgba(white, 0.5)
+  background-color: rgba(white, 0.0)
   opacity: 1
-  backdrop-filter: blur(1px)
+  backdrop-filter: blur(1.0px)
   // Safari support
   -webkit-backdrop-filter: blur(6px)
 
 .body--dark .toolbars > div.bar
-  background-color: rgba($dark, 0.5)
+  background-color: rgba($dark, 0.0)
 
 .toolbars > *
   /* restore click for inner elements */
