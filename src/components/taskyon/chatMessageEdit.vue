@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-wrap rounded-borders">
+  <div class="msg-edit rounded-borders">
     <!-- Edit chat messages -->
     <q-input
       v-model.trim="content"
@@ -15,11 +15,11 @@
     />
 
     <!-- One positioned container that holds both toolbars -->
-    <div class="toolbars column justify-between items-end border-radius-inherit">
-      <div class="col-auto bar top border-radius-inherit">
+    <div class="toolbars border-radius-inherit">
+      <div class="bar top border-radius-inherit">
         <slot name="top" />
       </div>
-      <div class="col-auto bar bottom border-radius-inherit q-ml-md">
+      <div class="bar bottom border-radius-inherit q-ml-md">
         <slot name="bottom">
           <q-btn flat :icon="matSend" @click="$emit('execute-task')">
             <q-tooltip>Send ({{ props.useEnterToSend ? 'Enter' : 'Shift+Enter' }})</q-tooltip>
@@ -60,44 +60,35 @@ const checkKeyboardEvents = (event: KeyboardEvent) => {
 }
 </script>
 
-<style lang="sass">
-.chat-wrap
-  position: relative
+<style lang="scss">
+/* container */
+.msg-edit {
+  position: relative;
+}
 
+/* floating toolbar column */
+.toolbars {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  pointer-events: none; /* don't block typing */
+}
 
-/* Floating toolbar in the top-right corner */
-.toolbars
-  position: absolute
-  top: 0
-  bottom: 0
-  right: 0
+/* restore clicks for inner controls */
+.toolbars > * {
+  pointer-events: auto;
+}
 
-  // so it doesn't block input */
-  pointer-events: none
-  /*padding: 4px;*/
-
-
-.toolbars > div.bar
-  background-color: rgba(white, 0.0)
-  opacity: 1
-  backdrop-filter: blur(1.0px)
+.toolbars > div.bar {
+  background-color: rgba(white, 0);
+  opacity: 1;
+  backdrop-filter: blur(1px);
   // Safari support
-  -webkit-backdrop-filter: blur(6px)
+  -webkit-backdrop-filter: blur(6px);
+}
 
-.body--dark .toolbars > div.bar
-  background-color: rgba($dark, 0.0)
-
-.toolbars > *
-  /* restore click for inner elements */
-  pointer-events: auto
-
-
-/* Optional: only show when focused or has content */
-/*.chat-toolbars {
-  opacity: 0.5;
-  transition: opacity 0.15s ease;
-  }
-
-/*.chat-wrap:focus-within .chat-toolbars
-  opacity: 1
+.body--dark .toolbars > div.bar {
+  background-color: rgba($dark, 0);
+}
 </style>
