@@ -1,5 +1,4 @@
 // app global css in Sass form
-
 $secondary: var(--q-secondary-rgb)
 $primary: var(--q-primary-rgb)
 
@@ -29,6 +28,19 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
 
   .chat-drop-zone
     color: rgb($secondary)
+
+  ::-webkit-scrollbar
+    width: 2px
+    //color: red
+    background-color: dark
+
+  ::-webkit-scrollbar-track
+    background: inherit
+
+  ::-webkit-scrollbar-thumb
+    background-color: rgb($secondary)
+    border-radius: 20px
+    border: transparent
 
   // sizing of iframes etc...
   #chat-area
