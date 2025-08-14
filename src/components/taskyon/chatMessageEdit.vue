@@ -9,21 +9,23 @@
       borderless
       placeholder="Type your message..."
       :input-style="{ maxHeight: '300px' }"
-      class="chat-input pr-reserved"
+      class="q-px-xs"
       v-bind="$attrs"
       @keyup="checkKeyboardEvents"
     />
 
-    <!-- Overlay toolbar (out of the typing flow) -->
-    <div class="chat-toolbar-top">
-      <slot name="top"> </slot>
-    </div>
-    <div class="chat-toolbar-bottom">
-      <slot name="bottom">
-        <q-btn flat dense round :icon="matSend" @click="$emit('execute-task')">
-          <q-tooltip>Send ({{ props.useEnterToSend ? 'Enter' : 'Shift+Enter' }})</q-tooltip>
-        </q-btn>
-      </slot>
+    <!-- One positioned container that holds both toolbars -->
+    <div class="chat-toolbars column justify-between">
+      <div class="chat-toolbar-top">
+        <slot name="top" />
+      </div>
+      <div class="chat-toolbar-bottom">
+        <slot name="bottom">
+          <q-btn flat dense round :icon="matSend" @click="$emit('execute-task')">
+            <q-tooltip>Send ({{ props.useEnterToSend ? 'Enter' : 'Shift+Enter' }})</q-tooltip>
+          </q-btn>
+        </slot>
+      </div>
     </div>
   </div>
 </template>
@@ -64,21 +66,11 @@ const checkKeyboardEvents = (event: KeyboardEvent) => {
 }
 
 /* Floating toolbar in the top-right corner */
-.chat-toolbar-top {
+.chat-toolbars {
   position: absolute;
-  top: 6px;
+  top: 8px;
+  bottom: 0;
   right: 8px;
-  display: flex;
-  gap: 6px;
-  pointer-events: auto;
-}
-
-.chat-toolbar-bottom {
-  position: absolute;
-  bottom: 6px; /* positive value keeps it inside */
-  right: 8px;
-  display: flex;
-  pointer-events: auto;
 }
 
 /* Optional: only show when focused or has content */
