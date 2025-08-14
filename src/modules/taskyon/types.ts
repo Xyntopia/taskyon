@@ -813,7 +813,7 @@ export const appConfiguration = z.object({
     label: 'Use Enter to Send',
     description: 'Determines, if enter will automatically send a message or rather shift-enter',
   }),
-  guiMode: z.enum(['auto', 'iframe', 'default']).default('auto').meta({
+  guiMode: z.enum(['auto', 'iframe', 'default', 'minChat']).default('auto').meta({
     description: 'Sets whether we want to have a minimalist chat or the full app',
   }),
   primaryColor: HexColor.meta({

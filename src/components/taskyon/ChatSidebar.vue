@@ -9,10 +9,14 @@
         </q-expansion-item>
       </div-->
       <div class="q-pa-xs text-caption row justify-center items-center q-gutter-md">
-        <q-icon name="svguse:/taskyon_mono_opt.svg#taskyon" size="sm" />
+        <q-icon
+          v-if="state.minimalGui === 'default'"
+          name="svguse:/taskyon_mono_opt.svg#taskyon"
+          size="sm"
+        />
         <div>Conversations</div>
       </div>
-      <q-separator v-if="!state.minimalGui" spaced />
+      <q-separator v-if="state.minimalGui === 'default'" spaced />
       <div class="column items-stretch">
         <q-list dense>
           <q-item
@@ -70,13 +74,12 @@
         </div>
       </div>
     </div>
-    <q-separator v-if="!state.minimalGui" spaced />
+    <q-separator v-if="state.minimalGui === 'default'" spaced />
     <!-- Settings Area -->
-    <q-item v-if="!state.minimalGui" class="fit">
+    <q-item v-if="state.appConfiguration.expertMode && state.minimalGui === 'default'" class="fit">
       <div class="row">
         <div>
           <q-btn
-            v-if="state.appConfiguration.expertMode"
             dense
             flat
             :icon="mdiSubdirectoryArrowRight"

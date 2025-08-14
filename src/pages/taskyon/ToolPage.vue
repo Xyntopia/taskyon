@@ -1,6 +1,6 @@
 <template>
   <q-layout view="hHh lpR lFr">
-    <TaskyonHeader :min-mode="false" btn-size="md" />
+    <TaskyonHeader btn-size="md" />
     <!--<q-drawer v-model="drawerOpen" show-if-above persistent behaviour="desktop" :width="250">
       <CreateNewTask class="q-pa-xs" expert-mode />
       <ObjectTreeView :model-value="functionArgs" />

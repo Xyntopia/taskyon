@@ -20,7 +20,7 @@
       <div
         v-for="s in state.appConfiguration.chatSuggestions"
         :key="s.label"
-        class="col-auto task-button"
+        class="col task-button"
         style="max-width: 200px"
       >
         <CreateTaskButton

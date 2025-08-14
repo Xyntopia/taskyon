@@ -34,7 +34,7 @@
           :file-attachments="fileAttachments"
           :entry-node="tystate.entryNode"
           class="q-pa-md col self-stretch"
-          :min-mode="state.minimalGui"
+          :min-mode="state.minimalGui !== 'default'"
           :expert-mode="state.appConfiguration.expertMode"
         />
       </div>
@@ -139,7 +139,7 @@
           :file-attachments="fileAttachments"
           :entry-node="tystate.entryNode"
           class="q-pa-xs"
-          :min-mode="state.minimalGui"
+          :min-mode="state.minimalGui !== 'default'"
           :expert-mode="state.appConfiguration.expertMode"
         />
       </div>

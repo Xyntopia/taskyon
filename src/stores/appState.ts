@@ -224,20 +224,11 @@ export const useAppStateStore = defineStore(storeName, () => {
     immediate: true,
   })
 
-  const minimalGui = computed(() => {
-    let mode = false
-    switch (stateRefs.appConfiguration.guiMode) {
-      case 'default':
-        mode = false
-        break
-      case 'iframe':
-        mode = true
-        break
-      case 'auto':
-        mode = $q.platform.within.iframe
-        break
+  const minimalGui = computed<Exclude<typeof stateRefs.appConfiguration.guiMode, 'auto'>>(() => {
+    if (stateRefs.appConfiguration.guiMode === 'auto') {
+      return $q.platform.within.iframe ? 'iframe' : 'default'
     }
-    return mode
+    return stateRefs.appConfiguration.guiMode
   })
 
   // we do this funny next line, because our store is currently "reactive" which means

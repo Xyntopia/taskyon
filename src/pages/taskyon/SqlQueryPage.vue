@@ -468,7 +468,7 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
       entryNode: toolCall({ name: 'setSqlQuery', arguments: {} }),
     },
     appConfiguration: {
-      guiMode: 'auto',
+      guiMode: 'minChat',
       showLogo: false,
       chatSuggestions: [gettingStarted],
       welcomeMsg: 'Ask taskyon for help on querying your database!',
