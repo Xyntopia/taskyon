@@ -20,7 +20,7 @@
         <slot name="top" />
       </div>
       <div class="col"></div>
-      <div class="bar bottom border-radius-inherit q-pl-md">
+      <div class="bar bottom border-radius-inherit q-ml-md">
         <slot name="bottom">
           <q-btn flat :icon="matSend" @click="$emit('execute-task')">
             <q-tooltip>Send ({{ props.useEnterToSend ? 'Enter' : 'Shift+Enter' }})</q-tooltip>
