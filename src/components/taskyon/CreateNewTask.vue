@@ -20,36 +20,33 @@
       </InfoDialog>
     </div>
     <!--Task Creation-->
-    <div class="row justify-between">
-      <!--Minimal Mode Buttons-->
-      <div v-if="minMode">
-        <FileDropzone
-          class="col fit row items-center q-px-xs"
-          accept="*"
-          enable-menu
-          enable-paste
-          disable-dropzone-border
-          aria-label="attachFileToDraft"
-          @add-files="attachFileToDraft"
-        >
-          <q-btn dense flat round>
-            <q-icon :name="matAttachment" />
-            <q-tooltip>Attach file or image to message</q-tooltip>
-          </q-btn>
-        </FileDropzone>
-      </div>
+    <div>
       <!-- in case we simply want to send simple messages :)-->
       <chatMessageEdit
         v-if="!selectedTaskType"
         v-model="state.messageDraft"
-        :class="[
-          !state.messageDraft?.length ? 'col' : 'col-auto fit',
-          'text-body1 ty-msg-edit',
-          $q.dark.isActive ? 'text-white' : 'text-primary',
-        ]"
+        :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
         @execute-task="addNewTask"
       >
+        <template #left>
+          <div v-if="minMode">
+            <FileDropzone
+              class="col fit row items-center q-px-xs"
+              accept="*"
+              enable-menu
+              enable-paste
+              disable-dropzone-border
+              aria-label="attachFileToDraft"
+              @add-files="attachFileToDraft"
+            >
+              <q-btn dense flat>
+                <q-icon :name="matAttachment" />
+                <q-tooltip>Attach file or image to message</q-tooltip>
+              </q-btn>
+            </FileDropzone>
+          </div>
+        </template>
         <template #top>
           <q-btn
             v-if="(state.messageDraft?.length ?? 0) > 0"
