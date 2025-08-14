@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="chat-wrap">
     <!-- Edit chat messages -->
     <q-input
       v-model.trim="content"
@@ -7,7 +7,6 @@
       autogrow
       autofocus
       borderless
-      color="secondary"
       placeholder="Type your message..."
       :input-style="{ maxHeight: '300px' }"
       class="chat-input pr-reserved"
@@ -17,29 +16,11 @@
 
     <!-- Overlay toolbar (out of the typing flow) -->
     <div class="chat-toolbar-top">
-      <slot name="top">
-        <q-btn
-          flat
-          dense
-          round
-          :icon="symOutlinedCancel"
-          :color="$q.dark.isActive ? 'white' : 'dark'"
-          @click="content = ''"
-        >
-          <q-tooltip>Clear</q-tooltip>
-        </q-btn>
-      </slot>
+      <slot name="top"> </slot>
     </div>
     <div class="chat-toolbar-bottom">
       <slot name="bottom">
-        <q-btn
-          flat
-          dense
-          round
-          :icon="matSend"
-          :color="$q.dark.isActive ? 'white' : 'dark'"
-          @click="$emit('execute-task')"
-        >
+        <q-btn flat dense round :icon="matSend" @click="$emit('execute-task')">
           <q-tooltip>Send ({{ props.useEnterToSend ? 'Enter' : 'Shift+Enter' }})</q-tooltip>
         </q-btn>
       </slot>
@@ -49,7 +30,6 @@
 
 <script setup lang="ts">
 import { matSend } from '@quasar/extras/material-icons'
-import { symOutlinedCancel } from '@quasar/extras/material-symbols-outlined'
 
 const content = defineModel<string | null | undefined>({
   required: true,
@@ -95,7 +75,7 @@ const checkKeyboardEvents = (event: KeyboardEvent) => {
 
 .chat-toolbar-bottom {
   position: absolute;
-  bottom: -6px;
+  bottom: 6px; /* positive value keeps it inside */
   right: 8px;
   display: flex;
   pointer-events: auto;

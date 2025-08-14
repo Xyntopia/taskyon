@@ -42,7 +42,11 @@
       <chatMessageEdit
         v-if="!selectedTaskType"
         v-model="state.messageDraft"
-        :class="[!state.messageDraft?.length ? 'col' : 'col-auto fit', 'text-body1 ty-msg-edit']"
+        :class="[
+          !state.messageDraft?.length ? 'col' : 'col-auto fit',
+          'text-body1 ty-msg-edit',
+          $q.dark.isActive ? 'text-white' : 'text-primary',
+        ]"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
         @execute-task="addNewTask"
       >
