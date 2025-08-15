@@ -1,2 +1,2 @@
-export type { partialTyConfiguration, TaskyonMessage } from '../../../src/modules/taskyon/apiTypes'
-export type { ClientTool } from '../../../src/modules/taskyon/tools'
+export type { partialTyConfiguration, TaskyonMessage } from '@taskyon/taskyon'
+export type { ClientTool } from '@taskyon/taskyon'

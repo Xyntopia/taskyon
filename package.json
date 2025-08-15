@@ -87,7 +87,7 @@
     "wavefunctioncollapse": "^2.1.0",
     "xlsx": "^0.18.2",
     "zod": "^4.0.0-beta.20250505T195954",
-    "@taskyon/taskyon": "workspace:*"
+    "@taskyon/taskyon": "^0.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
