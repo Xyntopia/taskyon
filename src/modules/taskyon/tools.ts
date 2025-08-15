@@ -62,25 +62,6 @@ export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSche
       description: 'Simple function definition for internal tools',
     }),*/
 
-// TODO: make all of this generic functions in order to get better typescript checking
-const internalToolFunctionSchema = z.custom<
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (params: any, context: toolContext) => unknown // unknown also includes Promise<unknown>
->((val) => typeof val === 'function', {
-  message: 'Expected a function that accepts any arguments and returns unknown or Promise<unknown>',
-})
-export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSchema>
-
-const InternalTool = ToolBase.extend({
-  // TODO: take away he "optional" from this type here...
-  function: internalToolFunctionSchema.optional(),
-}).meta({
-  description: 'Internal tool definition, which has access to the taskyon system',
-})
-export type InternalTool = z.infer<typeof InternalTool>
-
-export type ClientTool = WithRequired<InternalTool, 'function'>
-
 // This function executes code in a different browser context. E.g. executing a
 // function in the context of the parent of an iframe!
 // TODO: move this into our iframe API?
