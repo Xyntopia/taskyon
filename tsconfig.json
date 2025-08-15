@@ -1,13 +1,6 @@
 {
   "extends": "./.quasar/tsconfig.json",
   "exclude": ["src-tauri", "dist-desktop"],
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@taskyon/taskyon": ["packages/taskyon/src/index.ts"],
-      "@taskyon/taskyon/*": ["packages/taskyon/src/*"],
-      "@taskyon/client": ["packages/tyclient/src/tyClient.ts"],
-      "@taskyon/client/*": ["packages/tyclient/src/*"]
-    }
-  }
+  "files": [],
+  "references": [{ "path": "./packages/taskyon" }, { "path": "./packages/tyclient" }]
 }
