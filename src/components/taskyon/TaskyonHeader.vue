@@ -179,7 +179,7 @@
         </q-menu>
       </q-btn>
       <q-btn
-        v-else
+        v-else-if="mode !== 'minChat'"
         flat
         dense
         size="xs"
@@ -197,7 +197,7 @@
 
 <script setup lang="ts">
 import DarkModeButton from 'components/DarkModeButton.vue'
-import { defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import { matHelpOutline, matMenu, matSearch, matSettings } from '@quasar/extras/material-icons'
 import {
   mdiForum,
@@ -215,10 +215,13 @@ import { getEnvironmentInfo } from 'src/modules/utils'
 const state = useAppStateStore()
 const showAboutDialog = ref(false)
 
-defineProps<{
-  minMode?: boolean
+const { mode } = defineProps<{
+  mode?: 'minimal' | 'minChat' | undefined
   btnSize: 'xs' | 'md' | 'sm' | 'lg' | 'xl'
 }>()
+
+const minMode = computed(() => mode != undefined)
+
 const drawerOpen = defineModel<boolean | undefined>('drawerOpen', {
   required: false,
   default: undefined,

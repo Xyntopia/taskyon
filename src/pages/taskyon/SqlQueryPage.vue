@@ -5,7 +5,7 @@
     <q-page-container>
       <q-page class="row">
         <!-- SQL Card -->
-        <q-card class="col q-ma-md">
+        <q-card class="col q-ma-md" style="min-width: 200px">
           <q-card-section>
             <div class="text-h6">SQL Queries</div>
             <div class="text-subtitle2">Tables in DB: {{ allTables }}</div>
@@ -79,7 +79,7 @@
         </q-card>
 
         <!-- Taskyon iframe -->
-        <div class="col" style="min-height: 0">
+        <div class="col" style="min-height: 0; min-width: 200px">
           <iframe
             id="taskyon"
             title="Taskyon agent"
@@ -251,6 +251,139 @@ FROM (
 ) t;
 `
 
+const gettingStarted = {
+  label: 'Example: Ask for stored data in debug table',
+  md: `
+<!--taskyon
+role: user
+name: debug table
+
+-->
+
+What data is stored in our debug table? can you get the keys from the json in the data column?
+
+---
+
+<!--taskyon
+role: assistant
+name: debug table
+content:
+  type: structured
+  data: >
+    Do we have to use a tool?: true
+
+    describe your thoughts: The user wants to retrieve nested keys from the JSON
+    data in the 'debugdb' table. To do this, I need to use a recursive CTE
+    (Common Table Expression) to traverse the JSON structure. The \`jsonb_each\`
+    function can be used to extract key-value pairs from a JSON object, and
+    \`jsonb_object_keys\` can extract keys. I will use a recursive CTE to iterate
+    through the JSON and extract all keys, including nested ones.
+
+    use tool: true
+
+    which tool: setSqlQuery
+
+    command:
+      name: setSqlQuery
+      arguments:
+        sql: |-
+          WITH RECURSIVE extract_keys AS (
+              SELECT
+                  key,
+                  value
+              FROM
+                  debugdb,
+                  jsonb_each(data) AS kv
+              UNION ALL
+              SELECT
+                  (k.key || '.' || nk.key)::text,
+                  nk.value
+              FROM
+                  extract_keys AS k,
+                  jsonb_each(k.value) AS nk
+              WHERE
+                  jsonb_typeof(k.value) = 'object'
+          )
+          SELECT DISTINCT
+              key
+          FROM
+              extract_keys;
+parentID: aL0p70ca71SxefZethav_udZV__5d7TQqhymj7bcVrM
+
+-->
+
+---
+
+<!--taskyon
+role: function
+name: debug table
+content:
+  type: functioncall
+  data:
+    name: setSqlQuery
+    arguments:
+      sql: |-
+        WITH RECURSIVE extract_keys AS (
+            SELECT
+                key,
+                value
+            FROM
+                debugdb,
+                jsonb_each(data) AS kv
+            UNION ALL
+            SELECT
+                (k.key || '.' || nk.key)::text,
+                nk.value
+            FROM
+                extract_keys AS k,
+                jsonb_each(k.value) AS nk
+            WHERE
+                jsonb_typeof(k.value) = 'object'
+        )
+        SELECT DISTINCT
+            key
+        FROM
+            extract_keys;
+parentID: aL0p70ca71SxefZethav_udZV__5d7TQqhymj7bcVrM
+
+-->
+
+---
+
+<!--taskyon
+role: assistant
+name: SELECT DISTINCT key
+parentID: GliNrcck0EvDEHOq_5KO8LU1X0gt6Bpf3xVWiI-v4X4
+
+-->
+
+The SQL query has been updated to:
+\`\`\`sql
+WITH RECURSIVE extract_keys AS (
+    SELECT
+        key,
+        value
+    FROM
+        debugdb,
+        jsonb_each(data) AS kv
+    UNION ALL
+    SELECT
+        (k.key || '.' || nk.key)::text,
+        nk.value
+    FROM
+        extract_keys AS k,
+        jsonb_each(k.value) AS nk
+    WHERE
+        jsonb_typeof(k.value) = 'object'
+)
+SELECT DISTINCT
+    key
+FROM
+    extract_keys;
+\`\`\`
+        `,
+}
+
 // Mount: init DB and Taskyon tools (unchanged)
 onMounted(async () => {
   db.value = await getDatabase('taskyon')
@@ -334,7 +467,12 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
       enableToolChooser: true,
       entryNode: toolCall({ name: 'setSqlQuery', arguments: {} }),
     },
-    appConfiguration: { guiMode: 'auto' },
+    appConfiguration: {
+      guiMode: 'minChat',
+      showLogo: false,
+      chatSuggestions: [gettingStarted],
+      welcomeMsg: 'Ask taskyon for help on querying your database!',
+    },
   }
   void initializeTaskyon(tools, configuration)
 })

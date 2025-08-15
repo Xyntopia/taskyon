@@ -24,11 +24,40 @@
       <!-- in case we simply want to send simple messages :)-->
       <chatMessageEdit
         v-if="!selectedTaskType"
-        v-model="state.messageDraft"
-        class="text-body1 ty-msg-edit"
+        v-model.trim="state.messageDraft"
+        :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
         @execute-task="addNewTask"
-      />
+      >
+        <template #left="{ btnSize }">
+          <div v-if="minMode">
+            <FileDropzone
+              class="col fit row items-center q-px-xs"
+              accept="*"
+              enable-menu
+              enable-paste
+              disable-dropzone-border
+              aria-label="attachFileToDraft"
+              @add-files="attachFileToDraft"
+            >
+              <q-btn dense flat :size="btnSize">
+                <q-icon :name="matAttachment" />
+                <q-tooltip>Attach file or image to message</q-tooltip>
+              </q-btn>
+            </FileDropzone>
+          </div>
+        </template>
+        <template #top="{ btnSize }">
+          <q-btn
+            v-if="(state.messageDraft?.length ?? 0) > 0"
+            flat
+            dense
+            :size="btnSize"
+            :icon="symOutlinedCancel"
+            @click="state.messageDraft = ''"
+          ></q-btn>
+        </template>
+      </chatMessageEdit>
       <!--If we want to edit any pre-defined functions we can do that here...-->
       <div v-else-if="selectedTaskType" class="row">
         <ObjectTreeView
@@ -63,27 +92,8 @@
         <q-tooltip :delay="0.5">{{ `${file.name}` }}</q-tooltip>
       </q-chip>
     </div>
-    <!--Minimal Mode Buttons-->
-    <div
-      v-if="minMode"
-      class="sticky-dropzone"
-      style="position: absolute; top: 0; left: 0px; transform: translateY(-110%); z-index: 100"
-    >
-      <FileDropzone
-        class="col-auto"
-        accept="*"
-        disable-dropzone-border
-        aria-label="attachFileToDraft"
-        @add-files="attachFileToDraft"
-      >
-        <q-btn dense round size="md" class="fit taskyon-control-button" flat>
-          <q-icon :name="matAttachment" />
-          <q-tooltip>Attach file or image to message</q-tooltip>
-        </q-btn>
-      </FileDropzone>
-    </div>
     <!--Task Creation State-->
-    <div v-else class="q-px-sm q-pt-xs row justify-between items-center">
+    <div v-if="!minMode" class="q-px-sm q-pt-xs row justify-between items-center">
       <div class="col-auto row">
         <!--attach files...-->
         <FileDropzone
@@ -253,7 +263,7 @@
         class="col-auto q-px-md row no-wrap items-center"
         @click.stop
       >
-        <q-btn flat :icon-right="matSend" @click="addNewTask()">
+        <q-btn flat :icon-right="matSend" @click="addNewTask">
           <q-tooltip>Execute Task</q-tooltip>
         </q-btn>
       </div>
@@ -302,6 +312,7 @@ import { QSelect } from 'quasar'
 import { deepCopy } from 'src/modules/utils'
 import { mdiFunctionVariant, mdiToolbox } from '@quasar/extras/mdi-v6'
 import ApiSelect from './ApiSelect.vue'
+import { symOutlinedCancel } from '@quasar/extras/material-symbols-outlined'
 
 const { expertMode = false, entryNode } = defineProps<{
   entryNode: partialTaskDraft
@@ -402,7 +413,7 @@ const currentnewTask = computed(() => {
       task.role = 'user'
       task.content = {
         type: 'message',
-        data: state.messageDraft.trim(),
+        data: state.messageDraft?.trim() ?? '',
       }
     } else {
       console.error('we currently only support function calls and messages as task types!')
@@ -477,7 +488,7 @@ async function createFileTask(files: File[]) {
   return undefined
 }
 
-async function addNewTask(execute = true) {
+async function addNewTask() {
   const tm = await tystate.getTaskManager()
   const fileTaskObj = await createFileTask(fileAttachments.value)
 
@@ -493,7 +504,7 @@ async function addNewTask(execute = true) {
 
   // execute: if true, we immediatly queue the task for execution in the taskManager
   //          otherwise, it won't get executed but simply saved into the tree
-  console.log('adding new task, execute?', execute)
+  console.log('adding new task...')
   if (!currentnewTask.value) throw new Error('No task to add!')
 
   // we are doing the ... to make sure we don't change the original, reactive object
@@ -533,7 +544,7 @@ async function addNewTask(execute = true) {
   const newTaskId = (await tm.addTaskChain(newTaskChain, state.llmSettings.selectedTaskId)).at(-1)
 
   // push the last task to execution queue right away...
-  if (execute && newTaskId) {
+  if (newTaskId) {
     void tystate.addToProcessQueue(newTaskId.id)
   }
 
@@ -568,19 +579,5 @@ const removeFileFromDraft = (file: File) => {
   flex: 1 1 0; /* grow:1, shrink:1, basis:0 */
   min-width: 0; /* allow it to shrink below its content width */
   width: 100%;
-}
-
-.sticky-dropzone {
-  position: absolute;
-  top: 0;
-  left: 8px;
-  transform: translateY(-100%);
-  z-index: 100;
-  display: none;
-}
-
-/* Show dropzone if *any* child inside .message-area-parent is focused */
-.message-area-parent:focus-within .sticky-dropzone {
-  display: block;
 }
 </style>

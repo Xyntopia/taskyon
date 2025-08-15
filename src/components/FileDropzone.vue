@@ -1,4 +1,5 @@
 <template>
+  <!-- FileDropZone -->
   <!-- hidden inputs -->
   <input
     ref="cameraInput"

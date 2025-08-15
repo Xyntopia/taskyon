@@ -1,17 +1,34 @@
 <template>
-  <div class="text-h6 col-auto">
-    <p class="text-center welcome-message-text">
-      Welcome! Just type a message below to start using Taskyon!
+  <div class="text-h6 col-auto column items-center">
+    <!-- eslint-disable vue/no-v-html -->
+    <div
+      v-if="state.appConfiguration.showLogo"
+      class="svg-container q-pa-lg"
+      :style="{
+        '--icon-primary': $q.dark.isActive ? 'white' : 'var(--q-primary)',
+        '--icon-secondary': $q.dark.isActive ? 'var(--q-secondary)' : 'var(--q-primary)',
+        width: '10rem',
+        height: 'auto',
+        display: 'inline-block',
+      }"
+      v-html="logoSvg"
+    />
+    <p v-if="state.appConfiguration.welcomeMsg" class="welcome-message-text text-center">
+      {{ state.appConfiguration.welcomeMsg }}
     </p>
-    <div class="row q-gutter-xs justify-about">
-      <div v-for="(s, idx) in starters" :key="idx" class="col">
+    <div class="row q-gutter-xs justify-center">
+      <div
+        v-for="s in state.appConfiguration.chatSuggestions"
+        :key="s.label"
+        class="col task-button"
+        style="max-width: 200px"
+      >
         <CreateTaskButton
-          v-if="s.md"
+          v-if="'md' in s"
           :markdown="s.md"
           :label="s.label"
           outline
           no-caps
-          :color="$q.dark.isActive ? 'secondary' : 'primary'"
           style="height: 100%"
         />
         <q-btn
@@ -20,7 +37,6 @@
           :label="s.label"
           outline
           no-caps
-          :color="$q.dark.isActive ? 'secondary' : 'primary'"
           style="height: 100%"
         />
       </div>
@@ -29,55 +45,9 @@
 </template>
 
 <script setup lang="ts">
+import { useAppStateStore } from 'src/stores/appState'
 import CreateTaskButton from './CreateTaskButton.vue'
-import { computed } from 'vue'
-import { useQuasar } from 'quasar'
+import logoSvg from 'src/assets/taskyon_logo_complex_animated.svg?raw'
 
-const $q = useQuasar()
-
-const starters = computed(() => {
-  return [
-    {
-      url: '/chat/docs/conversations/features_intro',
-      label: 'Showcase Taskyons features',
-    },
-    {
-      url: '/chat/tyClientExamples/simpleExampleTutorial',
-      label: 'How do I integrate taskyon into my own webpage?',
-    },
-    {
-      md: `
-<!--taskyon
-name: Currently recommended models
-role: "user"
-label: ["discard"]
--->
-
-Which models do you currently recommend?
-
----
-<!--taskyon
-name: Currently recommended models
-role: "assistant"
-label: ["discard"]
--->
-
-Some AI models to get you started with:
-
-  - meta-llama/llama-3.2-90b-vision-instruct: much cheaper than GPT4o and best for most tasks (including coding) and if you want to use "tools"
-  - openai/gpt-4o: visual tasks and if you need to work in languages other than english
-  - meta-llama/llama-3.2-11b-vision-instruct:  a very good "free" model
-  - checkout the entire list of models and descriptions [here](https://taskyon.space/pricing)!
-
-You can select them in the "Chat Settings" section in the message input window.
-`,
-      label: 'Show currently recommend models',
-    },
-    // TODO:
-    //'How do I execute python code?',
-    //'how about testing out javascript? e.g. create some widgets on the fly...',
-    //'What are AI tools?',
-    //'How do I integrate Taskyon into my webpage?',
-  ]
-})
+const state = useAppStateStore()
 </script>

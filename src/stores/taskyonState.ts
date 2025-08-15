@@ -131,9 +131,55 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   const $q = useQuasar()
 
+  const ChatSuggestions = [
+    {
+      url: '/chat/docs/conversations/features_intro',
+      label: 'Showcase Taskyons features',
+    },
+    {
+      url: '/chat/tyClientExamples/simpleExampleTutorial',
+      label: 'How do I integrate taskyon into my own webpage?',
+    },
+    {
+      md: `
+<!--taskyon
+name: Currently recommended models
+role: "user"
+label: ["discard"]
+-->
+
+Which models do you currently recommend?
+
+---
+<!--taskyon
+name: Currently recommended models
+role: "assistant"
+label: ["discard"]
+-->
+
+Some AI models to get you started with:
+
+  - meta-llama/llama-3.2-90b-vision-instruct: much cheaper than GPT4o and best for most tasks (including coding) and if you want to use "tools"
+  - openai/gpt-4o: visual tasks and if you need to work in languages other than english
+  - meta-llama/llama-3.2-11b-vision-instruct:  a very good "free" model
+  - checkout the entire list of models and descriptions [here](https://taskyon.space/pricing)!
+
+You can select them in the "Chat Settings" section in the message input window.
+`,
+      label: 'Show currently recommend models',
+    },
+    // TODO:
+    //'How do I execute python code?',
+    //'how about testing out javascript? e.g. create some widgets on the fly...',
+    //'What are AI tools?',
+    //'How do I integrate Taskyon into my webpage?',
+  ]
+
   // load our store with all the settings
   // we use this here to confgure out taskyon logic
   const stateRefs = useAppStateStore()
+
+  stateRefs.appConfiguration.chatSuggestions = ChatSuggestions
 
   watch(
     () => stateRefs.llmSettings.selectedApi,
