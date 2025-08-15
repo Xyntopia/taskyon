@@ -1,5 +1,5 @@
 <template>
-  <q-page>
+  <FadeAwayScrollPage>
     <q-toolbar>
       <q-tabs v-model="selectedTab" class="col-auto" dense no-caps>
         <q-route-tab
@@ -65,7 +65,7 @@
         </q-tab-panel>
       </q-tab-panels>
     </q-card>
-  </q-page>
+  </FadeAwayScrollPage>
 </template>
 
 <script setup lang="ts">
@@ -78,6 +78,7 @@ import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { convertZodToJsonSchemaCached, TyProfile } from 'src/modules/taskyon/types'
 import PasswordManager from 'src/components/taskyon/PasswordManager.vue'
+import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 
 const route = useRoute()
 const state = useAppStateStore()

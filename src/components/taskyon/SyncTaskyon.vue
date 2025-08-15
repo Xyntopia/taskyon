@@ -219,6 +219,7 @@ import InfoDialog from '../InfoDialog.vue'
 import { base64UrlEd25519Keys, generateAssymetricRandomNewKey } from 'src/modules/crypto_js'
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from './TyResetButton.vue'
+import { TyProfile } from 'src/modules/taskyon/types'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -250,12 +251,10 @@ async function onUpdateAppConfiguration() {
     deepMergeReactive(
       state.appConfiguration,
       (loadedConfig.appConfiguration || {}) as Record<string, unknown>,
-      'overwrite',
     )
     deepMergeReactive(
       state.llmSettings,
       (loadedConfig.llmSettings || {}) as Record<string, unknown>,
-      'overwrite',
     )
   }
 }
@@ -283,12 +282,13 @@ async function loadSettingsFromFile(newFiles: File[], parseFunction: (content: s
   try {
     const fileContent = await file.text()
     const loadedData = parseFunction(fileContent) as Record<string, unknown>
+    const loadedProfile = TyProfile.partial().parse(loadedData)
 
-    if (loadedData?.llmSettings) {
-      deepMergeReactive(state.llmSettings, loadedData.llmSettings, 'overwrite')
+    if (loadedProfile?.llmSettings) {
+      deepMergeReactive(state.llmSettings, loadedProfile.llmSettings)
     }
-    if (loadedData?.appConfiguration) {
-      deepMergeReactive(state.appConfiguration, loadedData.appConfiguration, 'overwrite')
+    if (loadedProfile?.appConfiguration) {
+      deepMergeReactive(state.appConfiguration, loadedProfile.appConfiguration)
     }
   } catch (error) {
     console.error('Error processing file', error)

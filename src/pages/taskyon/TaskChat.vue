@@ -1,12 +1,13 @@
 <template>
   <!--Task Page-->
-  <q-page>
+  <FadeAwayScrollPage class="column">
     <q-resize-observer :debounce="500" @resize="onResize" />
     <!--Chat Area-->
     <div
       id="chat-area"
       ref="taskThreadContainer"
       :style="`padding-bottom: ${bottomPadding + 5}px;`"
+      class="col full-height column justify-center"
     >
       <q-scroll-observer axis="vertical" :debounce="1000" @scroll="onScroll" />
       <!-- "Task" Display -->
@@ -22,22 +23,10 @@
       />
       <!-- Welcome Message -->
       <div
-        v-if="tystate.selectedThread.value.length === 0"
-        class="col column justify-center items-center q-pa-sm welcome"
+        v-else
+        class="column justify-center items-center q-pa-sm welcome"
         style="max-width: 600px"
       >
-        <!-- eslint-disable vue/no-v-html -->
-        <div
-          class="svg-container q-pa-xl"
-          :style="{
-            '--icon-primary': $q.dark.isActive ? 'white' : 'var(--q-primary)',
-            '--icon-secondary': $q.dark.isActive ? 'var(--q-secondary)' : 'var(--q-primary)',
-            width: '15rem',
-            height: 'auto',
-            display: 'inline-block',
-          }"
-          v-html="logoSvg"
-        />
         <div class="welcome-message column items-center">
           <GetStarted />
         </div>
@@ -45,7 +34,7 @@
           :file-attachments="fileAttachments"
           :entry-node="tystate.entryNode"
           class="q-pa-md col self-stretch"
-          :min-mode="state.minimalGui"
+          :min-mode="state.minimalGui !== 'default'"
           :expert-mode="state.appConfiguration.expertMode"
         />
       </div>
@@ -150,7 +139,7 @@
           :file-attachments="fileAttachments"
           :entry-node="tystate.entryNode"
           class="q-pa-xs"
-          :min-mode="state.minimalGui"
+          :min-mode="state.minimalGui !== 'default'"
           :expert-mode="state.appConfiguration.expertMode"
         />
       </div>
@@ -172,7 +161,7 @@
       :info-text="infoText"
       @ok="resolveSecret"
     />
-  </q-page>
+  </FadeAwayScrollPage>
 </template>
 
 <script setup lang="ts">
@@ -191,8 +180,8 @@ import ToggleButton from 'src/components/ToggleButton.vue'
 import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
-import logoSvg from 'src/assets/taskyon_logo_complex_animated.svg?raw'
 import { sleep } from 'src/modules/utils'
+import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 
 const props = defineProps<{ detailed?: boolean; treeBrowser?: boolean; rootTaskId?: string }>()
 const showAllTasks = ref<boolean>(props.detailed)

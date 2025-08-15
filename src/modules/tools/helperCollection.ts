@@ -187,42 +187,154 @@ const location = createTool({
 })
 
 const notification = createTool({
-  description: 'Displays a browser-native notification with an optional delay.',
+  description:
+    'Schedule OS-level browser notifications (appearing in the system tray/notification center if supported). Accepts a single notification or a list. Supports delay (ms), exact date/time, or time-only (e.g. "1pm", local today; rolls to tomorrow if passed).',
   longDescription:
-    'This tool allows users to display a browser-native notification with a custom message. Optionally, users can specify a specific time or number of seconds to wait before displaying the notification.',
-  name: 'delayedNotification',
-  renderOptions: {
-    hideChat: false,
-    hideLlm: false,
-  },
+    'Schedules browser-native notifications that appear in the operating system’s notification area (if the browser supports it and permission is granted). ' +
+    'Input can be either a single notification `{ message, time?, delay? }` or `{ list: [...] }`. ' +
+    'Each item supports: delay in ms, a specific date/time (ISO or epoch ms/s), or a time-only string like "1pm"/"13:00" interpreted in LOCAL time for today (rolled to tomorrow if already passed).',
+  name: 'notification',
+  renderOptions: { hideChat: false, hideLlm: false },
   parameters: {
-    type: 'object',
-    required: ['message'],
-    properties: {
-      message: {
-        type: 'string',
-        description: 'The message to be displayed in the notification.',
+    // Accept EITHER a single item or a list
+    anyOf: [
+      {
+        type: 'object',
+        required: ['message'],
+        properties: {
+          message: { type: 'string', description: 'Notification text.' },
+          delay: {
+            type: 'number',
+            description: 'Delay in milliseconds before showing. Ignored if `time` is provided.',
+          },
+          time: {
+            anyOf: [{ type: 'string' }, { type: 'number' }],
+            description:
+              'When to show: ISO string, epoch (ms or s), or time-only (e.g. "1pm", "13:00", "13:00:30"). Time-only uses LOCAL today (rolls to tomorrow if already passed).',
+          },
+        },
       },
-      delay: {
-        type: 'number',
-        description:
-          'The time in milliseconds to wait before displaying the notification. If not provided, the notification will be displayed immediately.',
+      {
+        type: 'object',
+        required: ['list'],
+        properties: {
+          list: {
+            type: 'array',
+            description: 'List of notifications to schedule.',
+            items: {
+              type: 'object',
+              required: ['message'],
+              properties: {
+                message: { type: 'string', description: 'Notification text.' },
+                delay: {
+                  type: 'number',
+                  description:
+                    'Delay in milliseconds before showing. Ignored if `time` is provided.',
+                },
+                time: {
+                  anyOf: [{ type: 'string' }, { type: 'number' }],
+                  description:
+                    'When to show: ISO string, epoch (ms or s), or time-only (e.g. "1pm", "13:00", "13:00:30"). Time-only uses LOCAL today (rolls to tomorrow if already passed).',
+                },
+              },
+            },
+          },
+        },
       },
-    },
+    ],
   },
-  code: `({ message, delay = 0 }) => {
-    if (Notification.permission === 'granted') {
-      setTimeout(() => {
-        new Notification(message)
-      }, delay)
-    } else if (Notification.permission !== 'denied') {
-      Notification.requestPermission().then((permission) => {
-        if (permission === 'granted') {
-          setTimeout(() => {
-            new Notification(message)
-          }, delay)
+  code: `({ list, message, time, delay }) => {
+    const log = (...args) => console.log("[NotificationTool]", ...args);
+
+    // ---- normalize input to a list ----
+    const items = Array.isArray(list) ? list : (
+      typeof message === 'string' ? [{ message, time, delay }] : []
+    );
+    if (!items.length) return "No notifications provided.";
+
+    const isEpochSeconds = (n) => Number.isFinite(n) && n < 1e12;
+    const timeOnlyRe = /^\\s*(\\d{1,2})(?::(\\d{2}))?(?::(\\d{2}))?\\s*(am|pm)?\\s*$/i;
+
+    const parseWhen = (input) => {
+      if (input == null) return null;
+
+      if (typeof input === 'number') {
+        const ms = isEpochSeconds(input) ? input * 1000 : input;
+        log("Parsed numeric epoch", { input, ms });
+        return ms;
+      }
+
+      if (typeof input === 'string') {
+        const m = input.match(timeOnlyRe);
+        if (m) {
+          let [_, hh, mm = "0", ss = "0", ap] = m;
+          let H = parseInt(hh, 10);
+          const M = parseInt(mm, 10);
+          const S = parseInt(ss, 10);
+          if (ap) {
+            const isPM = ap.toLowerCase() === 'pm';
+            if (H === 12) H = isPM ? 12 : 0; else H = isPM ? H + 12 : H;
+          }
+          const now = new Date();
+          const target = new Date(
+            now.getFullYear(), now.getMonth(), now.getDate(),
+            H, M, S, 0
+          ).getTime();
+          const final = (target <= Date.now()) ? target + 86400000 : target;
+          log("Parsed time-only ->", { input, todayTarget: target, rolledTo: final, localNow: new Date() });
+          return final;
         }
-      })
+        const t = Date.parse(input);
+        if (!Number.isNaN(t)) {
+          log("Parsed date string", { input, parsed: t, as: new Date(t) });
+          return t;
+        }
+        log("Unrecognized time format", { input });
+        return null;
+      }
+      return null;
+    };
+
+    const schedule = (msg, delayMs) => {
+      log("Scheduling", { msg, delayMs });
+      setTimeout(() => {
+        try {
+          log("Triggering", { msg, at: new Date() });
+          new Notification(msg);
+        } catch (e) {
+          console.error("[NotificationTool] Notification error:", e);
+        }
+      }, Math.max(0, delayMs || 0));
+    };
+
+    const init = () => {
+      items.forEach(({ message: msg, delay = 0, time }) => {
+        log("Input", { msg, delay, time });
+        let delayMs = delay;
+        if (time != null) {
+          const target = parseWhen(time);
+          if (target != null) {
+            delayMs = target - Date.now();
+            if (!Number.isFinite(delayMs) || delayMs < 0) delayMs = 0;
+          } else {
+            console.warn("[NotificationTool] Could not parse 'time'; using delay.", { msg, time, delay });
+          }
+        }
+        schedule(msg, delayMs);
+      });
+      return "Notifications were successfully scheduled.";
+    };
+
+    if (Notification.permission === 'granted') {
+      return init();
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission().then((perm) => {
+        log("Permission result", perm);
+        if (perm === 'granted') init();
+      });
+      return "Notifications were successfully scheduled (pending permission).";
+    } else {
+      return "Permission denied for notifications tool.";
     }
   }`,
 })

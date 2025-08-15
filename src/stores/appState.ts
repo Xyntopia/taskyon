@@ -7,6 +7,7 @@ import type { FunctionCall } from 'src/modules/taskyon/types'
 import { type tyPublicKeyDraft, TyProfile } from 'src/modules/taskyon/types'
 import axios from 'axios'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
+import type { MergeOptions } from 'src/modules/utils'
 import {
   clearBrowserCaches,
   clearCookies,
@@ -67,7 +68,7 @@ export const useAppStateStore = defineStore(storeName, () => {
     createTaskType: {
       type: 'message',
     } as { type: 'message' } | { type: 'functioncall'; name: FunctionCall['name'] }, // the type of task we are currently working on
-    messageDraft: '' as string,
+    messageDraft: '' as string | undefined,
     // we use this here to store the different types of task drafts that we were working on.
     draftParameters: {} as Record<FunctionCall['name'], FunctionCall['arguments']>,
     // can be used to exchange certain keys and make taskyon
@@ -132,13 +133,13 @@ export const useAppStateStore = defineStore(storeName, () => {
     saveToLocalStorage = persist
     if (newConfig.llmSettings) {
       // TODO: make sure, this function is only temporary and doesn't overwrite our actual llmSettings...
-      deepMergeReactive(stateRefs.llmSettings, newConfig.llmSettings, 'overwrite')
+      deepMergeReactive(stateRefs.llmSettings, newConfig.llmSettings)
     }
     if (newConfig.appConfiguration) {
-      deepMergeReactive(stateRefs.appConfiguration, newConfig.appConfiguration, 'overwrite')
+      deepMergeReactive(stateRefs.appConfiguration, newConfig.appConfiguration)
     }
     if (newConfig.toolchainConfig) {
-      deepMergeReactive(stateRefs.toolchainConfig, newConfig.toolchainConfig, 'overwrite')
+      deepMergeReactive(stateRefs.toolchainConfig, newConfig.toolchainConfig)
     }
     // and also set a possible signature as the api key!
     if (stateRefs.llmSettings.selectedApi && newConfig.signatureOrKey) {
@@ -178,7 +179,13 @@ export const useAppStateStore = defineStore(storeName, () => {
           console.log('merge dynamic app config', jsonconfig.data)
 
           // if this is *not* an initial load, we only add "new" values that can be found in the configuration.
-          const mergeStrategy = stateRefs.initialLoad ? 'overwrite' : 'additive'
+          const mergeStrategy: MergeOptions = stateRefs.initialLoad
+            ? {
+                arrays: 'overwrite',
+                objects: 'overwrite',
+                primitives: 'preserve',
+              }
+            : { arrays: 'concat', objects: 'merge', typeMismatch: 'target', primitives: 'preserve' }
           deepMergeReactive(stateRefs.appConfiguration, config.appConfiguration, mergeStrategy)
           deepMergeReactive(stateRefs.llmSettings, config.llmSettings, mergeStrategy)
         } else {
@@ -217,20 +224,11 @@ export const useAppStateStore = defineStore(storeName, () => {
     immediate: true,
   })
 
-  const minimalGui = computed(() => {
-    let mode = false
-    switch (stateRefs.appConfiguration.guiMode) {
-      case 'default':
-        mode = false
-        break
-      case 'iframe':
-        mode = true
-        break
-      case 'auto':
-        mode = $q.platform.within.iframe
-        break
+  const minimalGui = computed<Exclude<typeof stateRefs.appConfiguration.guiMode, 'auto'>>(() => {
+    if (stateRefs.appConfiguration.guiMode === 'auto') {
+      return $q.platform.within.iframe ? 'iframe' : 'default'
     }
-    return mode
+    return stateRefs.appConfiguration.guiMode
   })
 
   // we do this funny next line, because our store is currently "reactive" which means

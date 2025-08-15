@@ -1,6 +1,6 @@
 <template>
   <q-layout view="lHh LpR lfr">
-    <TaskyonHeader v-model:drawer-open="drawerOpen" :min-mode="minMode" :btn-size="btnSize" />
+    <TaskyonHeader v-model:drawer-open="drawerOpen" :mode="minMode" :btn-size="btnSize" />
 
     <div class="fade-top-overlay" />
 
@@ -59,8 +59,12 @@ const ChatSidebar = defineAsyncComponent(
 
 const state = useAppStateStore()
 
-const minMode = computed(() => {
-  return state.minimalGui
+const minMode = computed<'minChat' | 'minimal' | undefined>(() => {
+  return state.minimalGui === 'default'
+    ? undefined
+    : state.minimalGui === 'iframe'
+      ? 'minimal'
+      : 'minChat'
 })
 const btnSize = computed(() => {
   return minMode.value ? 'xs' : 'md'

@@ -1,9 +1,8 @@
 // app global css in Sass form
-
 $secondary: var(--q-secondary-rgb)
 $primary: var(--q-primary-rgb)
 
-$app-bg-light: radial-gradient(ellipse at bottom right, rgba($secondary, 0.1) 0%, transparent 80%), radial-gradient(ellipse at bottom left, rgba($primary, 0.2), white 80%)
+$app-bg-light: radial-gradient(ellipse at bottom right, rgba($secondary, 0.2) 0%, transparent 80%), radial-gradient(ellipse at bottom left, rgba($primary, 0.4), white 70%)
 
 $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%, transparent 80%), radial-gradient(ellipse at bottom left, rgb($primary), black 80%)
 
@@ -18,34 +17,29 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     box-shadow: 1px 0 1px rgba($secondary, 0.5)
 
   .q-header
-    z-index: 20
     background: inherit
 
   .object-tree-view
     color: inherit
-
-  .fade-top-overlay
-    position: fixed
-    left: 0
-    right: 0
-    height: 4rem
-    pointer-events: none
-    z-index: 19
-
-    //background-color: red
-    background-repeat: no-repeat
-    background-size: cover
-    background-attachment: fixed
-
-    // fade to transparent
-    -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%)
-    mask-image: linear-gradient(to bottom, black 50%, transparent 100%)
 
   .raw-markdown
     white-space: pre-wrap // This will display newlines and wrap text
 
   .chat-drop-zone
     color: rgb($secondary)
+
+  ::-webkit-scrollbar
+    width: 4px
+    //color: red
+    background-color: dark
+
+  ::-webkit-scrollbar-track
+    background: inherit
+
+  ::-webkit-scrollbar-thumb
+    background-color: rgb($secondary)
+    border-radius: 20px
+    border: transparent
 
   // sizing of iframes etc...
   #chat-area
@@ -180,8 +174,7 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
   .ty-msg-edit
     border-radius: 5px
     box-shadow: inset 0 0 10px white
-    padding-left: 15px
-    padding-right: 15px
+
   // we use this as a workaround when the field is focused or contains text.
   .ty-msg-edit.q-field--float
     background-color: white
@@ -192,23 +185,23 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
   .not-in-key
     opacity: 0.5
 
+  // the buttons with chat suggestions:
+  .task-button
+    color: rgb($primary)
+
+  .body--dark .task-button
+    color: rgb($secondary)
+
+  body
+    background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
+    background-size: cover // make sure we always cover entire viewport even if content is smaller
+    background-attachment: fixed // fix background to viewport
+
   // common settings for both:  dark & light  
   body.body--light
     //background-color: white
     background: $app-bg-light
-    // TODO: the following is duplicated in .body--dark:
-    background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
-    background-size: cover // make sure we always cover entire viewport even if content is smaller
-    background-attachment: fixed // fix background to viewport
-    text-color: black
-
-    .fade-top-overlay
-      // **exact same** gradient
-      background: $app-bg-light
-      //background-color: red
-      background-repeat: no-repeat
-      background-size: cover
-      background-attachment: fixed
+    color: black
 
     .welcome-message-text
       filter: drop-shadow(0 0 5px white) drop-shadow(0 0 20px white)
@@ -251,14 +244,6 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
     background-size: cover // make sure we always cover entire viewport even if content is smaller
     background-attachment: fixed // fix background to viewport
 
-    .fade-top-overlay
-      // **exact same** gradient
-      background: $app-bg-dark
-      //background-color: red
-      background-repeat: no-repeat
-      background-size: cover
-      background-attachment: fixed
-
     .create-new-task-container
       background-color: rgba($primary, 0.3) // Adjust transparency as needed
       backdrop-filter: blur(40px) brightness(0.6)
@@ -270,7 +255,7 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
 
     .ty-msg-edit
       box-shadow: inset 0 0 10px rgb($secondary)
-      text-color: rgb($secondary)
+      color: rgb($secondary)
 
     .ty-msg-edit.q-field--float
       background-color: rgba($dark,1.0)
