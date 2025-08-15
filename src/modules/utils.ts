@@ -2,6 +2,7 @@
 import { deepEqual } from 'fast-equals'
 import { Buffer } from 'buffer'
 import { safeYamlDump } from './yamlUtils'
+import type { AnyFunction } from './taskyon/tsHelpers'
 
 export function copyToClipboard(text: string) {
   navigator.clipboard
@@ -170,12 +171,6 @@ export function humanReadablePrice(price: number | string | undefined, digits: n
     return 'N/A'
   }
 }
-
-/**
- * Type describing a generic function.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyFunction<ReturnType> = (...args: any[]) => ReturnType
 
 // Async sleep function
 export function sleep(ms: number) {

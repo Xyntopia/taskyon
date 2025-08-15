@@ -1,3 +1,4 @@
+import type { PartialDeep } from 'type-fest'
 import {
   decryptData,
   decryptWithSessionKey,
@@ -134,10 +135,100 @@ export const withLocking = <T, U>(base: CrudWrapper<U> & T, namespace: string = 
   }
 }
 
+type JsonFindOptions<T> = {
+  allowedIDs?: (string | number)[]
+  limit?: number
+  offset?: number
+  // order by table id or by a top-level key in data
+  orderBy?: { kind: 'id' } | { kind: 'dataKey'; key: keyof T & string }
+  orderDir?: 'asc' | 'desc'
+}
+
+const createFind = <T>(db: TyPGDB, dataColumn: string, idColumn: string, tableName: string) => {
+  const find = async (
+    where: PartialDeep<T>,
+    opts: JsonFindOptions<T> = {},
+  ): Promise<Record<string, T>> => {
+    await db.waitReady
+    const params: unknown[] = []
+    const clauses: string[] = []
+
+    // JSONB subset containment: matches when all keys/values in `where` are present in data
+    if (where && Object.keys(where).length) {
+      params.push(JSON.stringify(where))
+      clauses.push(`${dataColumn} @> $${params.length}`)
+    }
+
+    if (opts.allowedIDs?.length) {
+      params.push(opts.allowedIDs)
+      clauses.push(`${idColumn} = ANY($${params.length})`)
+    }
+
+    let sql = `SELECT ${idColumn}, ${dataColumn} FROM ${tableName}`
+    if (clauses.length) sql += ` WHERE ${clauses.join(' AND ')}`
+
+    // ordering
+    if (opts.orderBy) {
+      if (opts.orderBy.kind === 'id') {
+        sql += ` ORDER BY ${idColumn} ${opts.orderDir ?? 'asc'}`
+      } else {
+        // order by top-level JSON key as text for deterministic ordering
+        params.push(opts.orderBy.key)
+        sql += ` ORDER BY (${dataColumn} ->> $${params.length}) ${opts.orderDir ?? 'asc'}`
+      }
+    }
+
+    if (opts.limit != null) {
+      params.push(opts.limit)
+      sql += ` LIMIT $${params.length}`
+    }
+    if (opts.offset != null) {
+      params.push(opts.offset)
+      sql += ` OFFSET $${params.length}`
+    }
+
+    const res = await db.query<Row<T>>(sql + ';', params)
+    return res.rows.reduce<Record<string, T>>((p, c) => {
+      p[c.id] = c.data
+      return p
+    }, {})
+  }
+
+  const findOne = async (where: PartialDeep<T>): Promise<T | null> => {
+    const rows = await find(where, { limit: 1 })
+    return Object.values(rows)[0] ?? null
+  }
+
+  return {
+    find,
+    findOne,
+    callDb: async <RT>(
+      caller: (db: TyPGDB, idColumn: string, dataColumn: string, tableName: string) => RT,
+    ) => {
+      return await caller(db, idColumn, dataColumn, tableName)
+    },
+  }
+}
+
 export const createPgLiteCrudWrapper = async <T>(
   db: TyPGDB,
   options: PgLiteOptions,
-): Promise<CrudWrapper<T>> => {
+): Promise<
+  CrudWrapper<T> & {
+    batchInsert: (
+      items: {
+        id: string | number
+        data: T
+      }[],
+      mode?: 'overwrite' | 'skip',
+    ) => Promise<void>
+    find: (where: PartialDeep<T>, opts?: JsonFindOptions<T>) => Promise<Record<string, T>>
+    findOne: (where: PartialDeep<T>) => Promise<T | null>
+    callDb: <RT>(
+      caller: (db: TyPGDB, idColumn: string, dataColumn: string, tableName: string) => RT,
+    ) => Promise<RT>
+  }
+> => {
   const { dataColumn, tableName, idColumn } = await createVecPgLiteTable(db, options)
 
   const get = async (id: string | number): Promise<T | null> => {
@@ -212,6 +303,29 @@ export const createPgLiteCrudWrapper = async <T>(
       await db.waitReady
       await db.query(`DELETE FROM ${tableName};`)
     },
+    batchInsert: async (
+      items: { id: string | number; data: T }[],
+      mode: 'overwrite' | 'skip' = 'overwrite',
+    ): Promise<void> => {
+      if (!items.length) return
+      await db.waitReady
+
+      const payload = JSON.stringify(items)
+      const conflict =
+        mode === 'skip' ? 'DO NOTHING' : `DO UPDATE SET ${dataColumn} = EXCLUDED.${dataColumn}`
+
+      const sql = `
+        WITH src AS (
+          SELECT * FROM jsonb_to_recordset($1::jsonb)
+            AS t(id ${tableName}.${idColumn}%TYPE, ${dataColumn} jsonb)
+        )
+        INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
+        SELECT id, ${dataColumn} FROM src
+        ON CONFLICT (${idColumn}) ${conflict};
+      `
+      await db.query(sql, [payload])
+    },
+    ...createFind<T>(db, dataColumn, idColumn, tableName),
   }
 }
 

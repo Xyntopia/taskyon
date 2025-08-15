@@ -15,17 +15,8 @@ import {
   matVisibility,
   matVisibilityOff,
 } from '@quasar/extras/material-icons'
-
-//type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
-export type RequireSome<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
-
-export type RequireDefined<T, K extends keyof T> = Omit<T, K> & {
-  [P in K]-?: Exclude<T[P], undefined>
-}
-
-export type RemoveUndefined<T, K extends keyof T> = Omit<T, K> & {
-  [P in K]: Exclude<T[P], undefined>
-}
+import type { Expand } from './tsHelpers'
+import { assertType, type RemoveUndefined } from './tsHelpers'
 
 export const removeKeys = <T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> => {
   return Object.fromEntries(
@@ -123,10 +114,7 @@ export const ChatResponseType = z.object({
     .optional(),
 })
 export type ChatResponseType = z.infer<typeof ChatResponseType>
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function assertType<T>(value: T): void {
-  // This function does nothing at runtime, but it enforces type checking at compile time.
-}
+
 // Use the function to trigger type checking
 // This will cause TypeScript to report an error if the types don't match
 //assertType<ChatResponseType>({} as SimplifyDeep<OpenAI.ChatCompletion>)
@@ -375,13 +363,6 @@ TODO: define onwership types..`),
   }),
 })
 export type TaskNode = z.infer<typeof TaskNode>
-
-// Recursively expand every object level
-export type ExpandRecursively<T> = T extends object
-  ? { [K in keyof T]: ExpandRecursively<T[K]> }
-  : T
-
-export type Expand<T> = T extends infer U ? { [K in keyof U]: U[K] } : never
 
 // Now pull out the tooldefinition variant and fully expand it:
 /*type ToolDefinitionNode = ExpandRecursively<
@@ -932,16 +913,6 @@ export interface TyTaskStreamData {
     | 'queued'
 }
 
-// takes an object and turns all of its functions into async...
-export type Asyncify<T> = {
-  [K in keyof T]: T[K] extends (...args: infer A) => infer R
-    ? (...args: A) => Promise<Awaited<R>>
-    : T[K]
-}
-//export type WithRequired<T, K extends keyof T> = T & { [P in K]-?: T[P] }
-export type WithRequired<T, K extends keyof T> = Omit<T, K> & {
-  [P in K]-?: Exclude<T[P], undefined>
-}
 export const taskMarker = '*TY_TASKRESULT*'
 //export const convertZodToJsonSchemaCached = lruCache(100)(zodToJsonSchema)
 export const convertZodToJsonSchemaCached = z.toJSONSchema

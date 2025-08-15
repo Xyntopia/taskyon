@@ -1,23 +1,15 @@
 import type { TaskNodeMeta, TaskNodeType } from './types'
 import { partialTaskDraft, TaskNode, ToolBase } from './types'
-import {
-  type TaskyonDatabase,
-  type FileMappingDocType,
-  transformTaskNodeToDocType,
-  transformDocToTaskNode,
-  createTaskyonDatabase,
-} from './rxdb'
-import { openUserUploadedFile } from '../OPFS'
-import { deepMerge } from '../utils'
+import { openUserUploadedFile, saveUserUploadedFileToOpfs } from '../OPFS'
 import { usePyodideWebworker } from './webWorkerApi'
 import { type InternalTool } from './tools'
-import { type MangoQuery } from 'rxdb'
 import { load } from 'js-yaml'
 import { processMarkdown } from 'src/modules/taskyon/taskUtils'
 import {
   createCombinedCrudWrapper,
   createEnhancedCrudWrapper,
   createMapCrudWrapper,
+  createPgLiteCrudWrapper,
   createVectorStore,
   withLiveStreams,
   withLocking,
@@ -27,7 +19,9 @@ import { sha256UrlSafeHash } from '../crypto_webcrypto'
 import { urlSafeBase64Uuid } from '../crypto'
 import type { TyPGDB } from '../pglite.api'
 import { getDatabase } from '../pglite.api'
+import type { PartialDeep } from 'type-fest'
 import z from 'zod'
+import type { OptionalSome } from './tsHelpers'
 
 /**
  *
@@ -102,32 +96,68 @@ export async function createTaskNode(task: partialTaskDraft, priorID?: string, p
 
 const { extractKeywords } = usePyodideWebworker('task manager keywords')
 
-function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
+export type FileMapping = {
+  uuid: string
+  name?: string
+  // filename in opfs
+  opfs?: string
+  openAIFileId?: string
+  // we can give each file several labels which helps has to put them into different categories
+  // such as tools, different projects, etc...
+  labels?: string[]
+  // TODO: we're not sure if we need a file path?
+  fileType: string
+  fileData?: string
+}
+
+async function useFileManager(db: TyPGDB) {
+  const fileTable = await createPgLiteCrudWrapper<FileMapping>(db, {
+    tableName: 'filemapping',
+  })
+
+  async function addFiles(newFiles: File[]) {
+    console.log('add files to our chat!')
+
+    //first, upload file into our OPFS file system:
+    const opfsMapping = await saveUserUploadedFileToOpfs(newFiles)
+
+    // Collect UUIDs from added files
+    const uuids = []
+    for (const [fileIdx, file] of newFiles.entries()) {
+      const uuid = await addFileToDb({
+        ...(opfsMapping[fileIdx] ? { opfs: opfsMapping[fileIdx] } : {}),
+        name: file.name,
+        fileType: file.type,
+      })
+      if (uuid) {
+        uuids.push(uuid)
+      }
+    }
+    return uuids
+  }
+
   // TODO: make sure, we add the correct file type here!
-  async function addFile(fileMapping: Partial<FileMappingDocType>) {
-    const uuidFileMapping: FileMappingDocType = {
+  async function addFileToDb(fileMapping: OptionalSome<FileMapping, 'uuid'>) {
+    const uuidFileMapping: FileMapping = {
       // TODO: replace this with a content Hash as well!
       uuid: urlSafeBase64Uuid(),
       ...fileMapping,
     }
 
-    const fileMappingDoc = await fileMappingDb?.insert(uuidFileMapping)
-    return fileMappingDoc?.uuid
+    await fileTable.set(uuidFileMapping.uuid, uuidFileMapping)
+    return uuidFileMapping.uuid
   }
 
-  async function bulkUpsertFiles(filemappings: FileMappingDocType[]) {
-    await fileMappingDb?.bulkUpsert(filemappings)
+  async function bulkUpsertFiles(filemappings: OptionalSome<FileMapping, 'uuid'>[]) {
+    return await Promise.all(filemappings.map(async (fm) => addFileToDb(fm)))
   }
 
-  async function getFileMappingByUuid(uuid: string): Promise<FileMappingDocType | null> {
+  async function getFileMappingByUuid(uuid: string): Promise<FileMapping | null> {
     // Find the document with the matching UUID
-    const fileMappingDoc = await fileMappingDb?.findOne(uuid).exec()
+    const fileMappingDoc = await fileTable.get(uuid)
 
     // Check if the document exists
-    if (!fileMappingDoc) {
-      console.log(`No file mapping found for UUID: ${uuid}`)
-      return null
-    }
+    if (!fileMappingDoc) console.log(`No file mapping found for UUID: ${uuid}`)
 
     // Return the found document
     return fileMappingDoc
@@ -135,13 +165,7 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
 
   // we can search tasks here using a mongo-db query object
   // find out more here:  https://rxdb.info/rx-query.html
-  async function searchFiles(query: MangoQuery): Promise<FileMappingDocType[]> {
-    if (fileMappingDb) {
-      const fileMappingList = await fileMappingDb.find(query).exec()
-      return fileMappingList
-    }
-    return []
-  }
+  const searchFiles = fileTable.find
 
   async function getOpfsUploadedFile(uuid: string): Promise<File | undefined> {
     const fileMap = await getFileMappingByUuid(uuid)
@@ -153,15 +177,12 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
 
   // TODO: this function needs to be changes to search for names, instead of UUIDs
   async function getFileByName(name: string): Promise<File> {
-    const fileMaps = await searchFiles({
-      selector: {
-        name: name,
-      },
-    })
-    if (fileMaps.length) {
+    const fileMaps = await searchFiles({ name })
+    if (fileMaps) {
       // TODO: what do we do if we have multiple files with the same name?
       // TODO: try to load files form other sources as well :)
-      const fileName = fileMaps[0]?.opfs
+      const firstFile = Object.values(fileMaps)[0]
+      const fileName = firstFile?.opfs
       if (fileName) {
         const file = await openUserUploadedFile(fileName)
         if (file) {
@@ -171,9 +192,9 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
             const newfile = new File(
               [file],
               file.name,
-              fileMaps[0]?.fileType
+              firstFile.fileType
                 ? {
-                    type: fileMaps[0]?.fileType,
+                    type: firstFile.fileType,
                   }
                 : {},
             )
@@ -190,7 +211,8 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
   }
 
   return {
-    addFile,
+    addFiles,
+    addFile: addFileToDb,
     searchFiles,
     bulkUpsertFiles,
     getFileMappingByUuid,
@@ -202,7 +224,7 @@ function useFileManager(fileMappingDb?: TaskyonDatabase['filemappings']) {
 // TODO: replace this with pglite vector search :)
 async function useTaskVectors(
   db: TyPGDB,
-  getAllTaskIds: () => Promise<string[]>,
+  getAllTaskIds: () => Promise<(string | number)[]>,
   getTask: (taskId: string) => Promise<TaskNode | null>,
   vectorizerModel?: string,
 ) {
@@ -213,7 +235,7 @@ async function useTaskVectors(
     //taskyonDB.vectormappings.exportJSON()
     const taskIDs = await getAllTaskIds()
     for (const taskId of taskIDs) {
-      const task = await getTask(taskId)
+      const task = await getTask(String(taskId))
       progressCallback(counter, taskIDs.length)
       // addtovectorDB checks if a task already exists...
       if (task) await addtoVectorDB(task)
@@ -283,118 +305,6 @@ async function useTaskVectors(
     resetTaskVectors: vecDb.clear,
     count: vecDb.count,
     searchSimilarTasks,
-  }
-}
-
-// TODO: maybe generalize this into a "RxDB Crud?"
-const createRxDBCrudWrapper = (db: TaskyonDatabase): CrudWrapper<TaskNode> => {
-  // TODO: move this CRUD wrapper into our RXDB file and also add the database creation itself to it :)
-
-  const get = async (id: string | number) => {
-    // we haven't found the bug yet..   but sometimes, this function seems to be called with an "undefined" id...
-    // thats why w have the ?? '' here...
-    const taskFromDb = await db.tasknodes.findOne(id?.toString() ?? '').exec()
-    if (taskFromDb) {
-      try {
-        const task = transformDocToTaskNode(taskFromDb)
-        return task
-      } catch (e) {
-        console.error(`Error transforming task ${id} from DB:`, taskFromDb, e)
-        return null
-      }
-    }
-    return null
-  }
-
-  // TODO: we need to add siblings /children functionality to our CRUD wrapper..
-  /*        // Update parent-child cache
-    set:
-      if (data.priorID) {
-        const siblings = await searchNextSibling(data.priorID)
-        siblings.add(data.id)
-        nextSiblingMap.set(data.priorID, siblings)
-      }
-  delete:
-                // Delete from local record/memorydb
-      const task = get(taskId)
-      if (task && task.priorID) {
-        // deleting the task from our children map...
-        const children = await searchNextSibling(task.priorID)
-        if (children) children.delete(taskId)
-      }
-
-*/
-
-  const set = async (id: string | number, data: TaskNode) => {
-    // TODO: throw an error, if we save an already existing task!
-    //       because we want to make sure, that tasks in the db are immutable.
-    //       so we can never update a task with an already existing id...
-    if (id !== data.id) throw new Error('storage ID has to be the same as task ID!!')
-    console.log('save task: ', data)
-    const newDBTask = transformTaskNodeToDocType(data)
-    await db.tasknodes.upsert(newDBTask)
-  }
-
-  return {
-    get,
-    set,
-    // TODO: in order to make our database and all task objects pure,
-    // we have to re-model trees when using this function.
-    // so whenever we update a task, we recreate the tree path
-    // updating all childen/parent properties in the path.
-    // we do *not* need to edit any branches, as long as
-    // they only have chilren properties and no parent properties...
-    // if we only have parent properties, we can update
-    // maybe also give an option to delete previous trees...
-    // we should only really try to update tasks for very specific use
-    // cases, such as the debug data..   otherwise things will simply get a lot
-    // more difficult
-    // TODO: when changing the updateTask to injecting a task with a different
-    //       ID, what we can do is to have our update task point to its "parent" hash
-    //       AND also advertise the update for the parent task! It is also important
-    //       that we return the new id...
-    upsert: async (id, data, strategy) => {
-      const oldData = await get(id)
-      let newData: TaskNode
-      if ((oldData && strategy === 'shallow_merge') || strategy === 'native_shallow') {
-        newData = { ...oldData, ...data }
-        await set(id, newData)
-      } else if (oldData && strategy === 'deepmerge') {
-        newData = deepMerge(oldData, data, 'overwrite')
-        await set(id, newData)
-      }
-      await set(id, data)
-      newData = data
-      return newData
-    },
-    delete: async (id) => {
-      // also delete from vectordb!
-      console.log('deleting task:', id)
-
-      if (db) {
-        const taskDoc = await db.tasknodes.findOne(id.toString()).exec()
-        if (taskDoc) {
-          await taskDoc.remove()
-        }
-      }
-      console.log('done deleting task:', id)
-    },
-    list: async () => {
-      const result = await db.tasknodes.find().exec()
-      const tasks = result.map((rxdbtask) => ({
-        id: rxdbtask.id,
-        data: transformDocToTaskNode(rxdbtask),
-      }))
-      return tasks
-    },
-    listIds: async () => {
-      const result = await db.tasknodes.find().exec()
-      return result.map((rxdbtask) => rxdbtask.id)
-    },
-    clear: async () => {
-      console.log('delete the entire database!')
-      await db.remove()
-    },
   }
 }
 
@@ -492,18 +402,7 @@ export interface TaskTreeNode {
 export async function useTyTaskManager(vectorizerModel?: string) {
   console.log('Initialize task manager.')
 
-  console.log('initializing taskyondb')
-  const taskyonDB: TaskyonDatabase = await createTaskyonDatabase()
-  console.log('initializing task manager')
-
-  // uses RxDB as a DB backend..
-  // Usage example:
-  // const taskManager = new TaskManager(initialTasks, taskyonDBInstance);
-
-  // TODO: replace this next expression with something less memory intensive which
-  //       simply selects all tasks
-  const getAllTaskIds = async () =>
-    taskyonDB ? (await taskyonDB.tasknodes.find().exec()).map((x) => x.id) : []
+  const taskyonDb = await getDatabase('taskyon')
 
   // because our tasks only have parent IDs defined, we keep a cache of
   // child IDs in order to be able to do faster tree traversals...
@@ -559,14 +458,14 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     }
   }
 
+  const tySqlCrud = await createPgLiteCrudWrapper<TaskNode>(taskyonDb, {
+    tableName: 'taskyonNodes',
+  })
   const tyCrud = withLiveStreams(
-    createCombinedCrudWrapper([
-      createMapCrudWrapper(new Map<string, TaskNode>()),
-      createRxDBCrudWrapper(taskyonDB),
-    ]),
+    createCombinedCrudWrapper([createMapCrudWrapper(new Map<string, TaskNode>()), tySqlCrud]),
   )
 
-  const tySqlDb = await getDatabase('taskyon')
+  const getAllTaskIds = tyCrud.listIds
 
   // TODO: unify our tyCrudVec and useTaskVectors in one db...
   const {
@@ -577,7 +476,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     resetTaskVectors,
     searchSimilarTasks,
     count: countVecs,
-  } = await useTaskVectors(tySqlDb, getAllTaskIds, tyCrud.get, vectorizerModel)
+  } = await useTaskVectors(taskyonDb, getAllTaskIds, tyCrud.get, vectorizerModel)
 
   const { toolIndex, defaultToolMap, addDefaultTools, getToolDefinition, updateToolIndex } =
     createToolIndex(tyCrud)
@@ -614,8 +513,9 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     },
   })
 
+  // TODO: unify this with our other tables?
   const debugDb = await createEnhancedCrudWrapper<TaskNodeMeta>(
-    tySqlDb,
+    taskyonDb,
     {
       tableName: 'debugDb',
     },
@@ -623,43 +523,79 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   )
 
   async function countTasks() {
-    return await taskyonDB.tasknodes.count().exec()
+    return (await tyCrud.listIds()).length
   }
 
-  function createCachedSearch(
+  function createCachedIdSearch(
     cache: Map<string, Set<string>>,
-    buildSelector: (key: string) => object,
+    buildSelector: (
+      key: string,
+    ) => (
+      db: TyPGDB,
+      idColumn: string,
+      dataColumn: string,
+      tableName: string,
+    ) => Promise<Set<string>>,
   ) {
     return async (key: string): Promise<Set<string>> => {
-      let cached = cache.get(key)
+      const cached = cache.get(key)
       if (!cached) {
-        const dbResults = await taskyonDB.tasknodes
-          .find({
-            selector: buildSelector(key),
-          })
-          .exec()
-        cached = new Set(dbResults.map((t) => t.id))
-        cache.set(key, cached)
-        return cached
+        const dbResults = await tySqlCrud.callDb(buildSelector(key))
+        cache.set(key, dbResults)
+        return dbResults
       } else {
         return cached
       }
     }
   }
 
-  const searchNextSibling = createCachedSearch(nextSiblingMap, (priorID: string) => ({
-    priorID,
-  }))
+  const searchNextSibling = createCachedIdSearch(
+    nextSiblingMap,
+    (priorID) => async (db, idColumn, dataColumn, tableName) => {
+      const res = await db.query<{ id: string }>(
+        `
+        SELECT ${idColumn} AS id
+        FROM ${tableName}
+        WHERE ${dataColumn} @> $1
+      `,
+        [JSON.stringify({ priorID })],
+      )
+      return new Set(res.rows.map((r) => r.id))
+    },
+  )
 
-  const searchAllDirectChildren = createCachedSearch(immediateChildrenMap, (parentID: string) => ({
-    parentID,
-    $or: [{ priorID: { $exists: false } }, { priorID: null }],
-  }))
+  // direct children: parentID match AND (no priorID key OR priorID is null)
+  const searchAllDirectChildren = createCachedIdSearch(
+    immediateChildrenMap,
+    (parentID: string) => async (db, idColumn, dataColumn, tableName) => {
+      const { rows } = await db.query<{ id: string }>(
+        `
+        SELECT ${idColumn}::text AS id
+        FROM ${tableName}
+        WHERE ${dataColumn} @> $1
+          AND (NOT (${dataColumn} ? $2) OR (${dataColumn} -> $2) IS NULL)
+      `,
+        [JSON.stringify({ parentID }), 'priorID'],
+      )
+      return new Set(rows.map((r) => r.id))
+    },
+  )
 
-  // Fetch **all** children (ignoring priorID) based on parentID.
-  const searchAllChildren = createCachedSearch(parentToChildMap, (parentID: string) => ({
-    parentID,
-  }))
+  // all children: just parentID match
+  const searchAllChildren = createCachedIdSearch(
+    parentToChildMap,
+    (parentID: string) => async (db, idColumn, dataColumn, tableName) => {
+      const { rows } = await db.query<{ id: string }>(
+        `
+        SELECT ${idColumn}::text AS id
+        FROM ${tableName}
+        WHERE ${dataColumn} @> $1
+      `,
+        [JSON.stringify({ parentID })],
+      )
+      return new Set(rows.map((r) => r.id))
+    },
+  )
 
   async function convertTaskIDs(taskIds: string[]) {
     const taskList = await Promise.all(taskIds.map((tid) => tyCrudVec.get(tid)))
@@ -850,17 +786,8 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     }
   }
 
-  // we can search tasks here using a mongo-db query object
-  // find out more here:  https://rxdb.info/rx-query.html
-  async function searchTasks(query: MangoQuery): Promise<TaskNode[]> {
-    const taskList = await taskyonDB.tasknodes.find(query).exec()
-
-    const llmtasks = taskList.map((taskDoc) => {
-      const task = transformDocToTaskNode(taskDoc)
-      return task
-    })
-    return llmtasks
-  }
+  const searchTasks: (where: PartialDeep<TaskNode>) => Promise<Record<string, TaskNode>> =
+    tySqlCrud.find
 
   /**
    * removeFunction will remove all "internal" functions from the returned tool list...
@@ -869,11 +796,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     removeFunctionProperty: T = false as T,
   ): Promise<T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>> {
     // first we simply search for all tool definitions in the db
-    const tasks = await searchTasks({
-      selector: {
-        type: 'tooldefinition',
-      },
-    })
+    const tasks = await searchTasks({ content: { type: 'tooldefinition' } })
 
     // then update our tool index...
     // and filter out non-valid tasks
@@ -881,7 +804,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     const toolTasks: Record<string, ToolBase> = Object.fromEntries(
       (
         await Promise.all(
-          tasks.map(async (task) => {
+          Object.values(tasks).map(async (task) => {
             if (task.content?.type === 'tooldefinition') {
               // Update toolIndex with the latest tool definition
               const { current: newTool } = await updateToolIndex(task)
@@ -892,7 +815,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
               }
             }
             return undefined
-          }, {}),
+          }),
         )
       ).filter((x) => x !== undefined),
     )
@@ -953,12 +876,8 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   async function getJsonTaskBackup() {
     // TODO: give this a callback so that we can save it in "chunks"
     console.log('exporting json backup db!')
-    const dbobject = await taskyonDB.exportJSON([
-      'filemappings',
-      'tasknodes',
-      //'vectormappings'
-    ])
-    return dbobject
+    const allNodes = await tySqlCrud.list()
+    return JSON.stringify(allNodes.map((r) => r.data))
   }
 
   // import tasks from json! :)
@@ -966,15 +885,22 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   //       we want to get rid of our rxdb dependency here... we could even backup tass as markdown!  that might be even better :)
   async function addTaskBackup(jsonObjString: string) {
     // TODO: add some zod validation here!
-    type ImportJSONFunction = typeof taskyonDB.importJSON
-    type FirstArgumentType = Parameters<ImportJSONFunction>[0]
-    const jsonObj = JSON.parse(jsonObjString) as FirstArgumentType
-    console.log('importing json backup to db!')
-    const dbobject = await taskyonDB.importJSON(jsonObj)
-    return dbobject
+    const jsonObj = JSON.parse(jsonObjString)
+    if (Array.isArray(jsonObj)) {
+      await Promise.all(
+        jsonObj.map(async (obj) => {
+          const res = TaskNode.safeParse(obj.data)
+          if (res.success) {
+            await tySqlCrud.set(res.data.id, res.data)
+          } else {
+            console.warn('Could not add data:', res.data, res.error)
+          }
+        }),
+      )
+    }
   }
 
-  const fm = useFileManager(taskyonDB?.filemappings)
+  const fm = await useFileManager(taskyonDb)
 
   async function updateTaskNameWKeywords(newTask: TaskNode) {
     const chat = getTaskChain(newTask.id)

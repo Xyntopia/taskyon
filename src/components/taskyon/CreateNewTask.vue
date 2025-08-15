@@ -135,56 +135,59 @@
         <!--Select Tools-->
         <div v-if="expertMode || selectedTaskType" @click.stop>
           <q-btn data-cy="tool-btn" flat dense :icon="mdiFunctionVariant">
-            <q-menu auto-close>
+            <q-menu ref="toolMenu" auto-close>
               <q-list dense>
-                <q-item clickable to="/tool">
-                  <q-item-section> Open Tool Manager </q-item-section>
-                  <q-item-section side>
+                <q-item v-if="!selectedTaskType" clickable to="/tool" class="q-mb-md">
+                  <q-item-section avatar>
                     <q-icon :name="mdiToolbox"></q-icon>
                   </q-item-section>
+                  <q-item-section> Open Tool Manager </q-item-section>
                 </q-item>
-                <q-separator />
                 <q-item>
-                  <q-item-section> Search for a tool you want to use..</q-item-section>
+                  <q-item-section class="text-caption">
+                    Search for a tool you want to use..</q-item-section
+                  >
                   <q-item-section side>
                     <InfoDialog
                       info-text="You can use tools here directly and change their parameters to your liking"
                     />
                   </q-item-section>
                 </q-item>
-                <div class="row">
-                  <div @click.stop>
+                <q-item class="row">
+                  <q-item-section @click.stop>
                     <q-select
                       class="col"
                       use-input
                       dense
+                      standout
                       hide-selected
                       fill-input
                       options-dense
-                      filled
                       input-debounce="0"
                       color="secondary"
                       :model-value="selectedTaskType"
                       :options="filteredToolCollection"
                       @filter="filterFn"
-                      @update:model-value="tystate.switchTaskType"
+                      @update:model-value="
+                        (val) => {
+                          tystate.switchTaskType(val)
+                          toolMenu?.hide()
+                        }
+                      "
                     >
-                      <template #prepend>
-                        <q-icon :name="mdiFunctionVariant" />
-                      </template>
                     </q-select>
-                  </div>
-                  <q-btn flat stretch label="Ok" />
-                </div>
+                  </q-item-section>
+                </q-item>
                 <q-item
                   v-if="selectedTaskType"
+                  class="q-mt-md"
                   clickable
                   @click="() => tystate.switchTaskType(undefined)"
                 >
-                  <q-item-section> Select Simple Chat </q-item-section>
-                  <q-item-section side>
+                  <q-item-section avatar>
                     <q-icon :name="matChat"></q-icon>
                   </q-item-section>
+                  <q-item-section> Select Simple Chat </q-item-section>
                 </q-item>
               </q-list>
             </q-menu>
@@ -289,7 +292,6 @@ import { partialTaskDraft } from 'src/modules/taskyon/types'
 import { llmSettings, appConfiguration } from 'src/modules/taskyon/types'
 import { useTaskyonStore } from 'stores/taskyonState'
 import ModelSelection from 'components/taskyon/ModelSelection.vue'
-import { saveUserUploadedFileToOpfs } from 'src/modules/OPFS'
 import ObjectTreeView from '../ObjectTreeView.vue'
 import chatMessageEdit from './chatMessageEdit.vue'
 import InfoDialog from '../InfoDialog.vue'
@@ -320,6 +322,7 @@ const { expertMode = false, entryNode } = defineProps<{
 
 const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
 
+const toolMenu = ref()
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { selectedApi } = toRefs(state.llmSettings)
@@ -465,31 +468,12 @@ watchDebounced(
   { debounce: 3000, maxWait: 5000, immediate: true },
 )*/
 
-async function addFiles2Taskyon(newFiles: File[]) {
-  console.log('add files to our chat!')
-  //first, upload file into our OPFS file system:
-  const opfsMapping = await saveUserUploadedFileToOpfs(newFiles)
-
-  // Collect UUIDs from added files
-  const uuids = []
-  const tm = await tystate.getTaskManager()
-  for (const [fileIdx, file] of newFiles.entries()) {
-    const uuid = await tm.addFile({
-      ...(opfsMapping[fileIdx] ? { opfs: opfsMapping[fileIdx] } : {}),
-      name: file.name,
-      fileType: file.type,
-    })
-    if (uuid) {
-      uuids.push(uuid)
-    }
-  }
-  return uuids
-}
-
 // all our files are added to a "file task"
 async function createFileTask(files: File[]) {
+  const tm = await tystate.getTaskManager()
+
   // first add files to our DB & save them, then get uuids for each file.
-  const fileUuids = await addFiles2Taskyon(files)
+  const fileUuids = await tm.addFiles(files)
 
   if (fileUuids.length) {
     const task: partialTaskDraft = {

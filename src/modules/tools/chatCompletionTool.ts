@@ -8,7 +8,7 @@ import {
 } from '../taskyon/chat'
 import type { Goals } from '../taskyon/promptCreation'
 import { addPrompts } from '../taskyon/promptCreation'
-import type { TyTaskManager } from '../taskyon/taskManager'
+import type { FileMapping, TyTaskManager } from '../taskyon/taskManager'
 import type {
   partialTaskDraft,
   ToolBase,
@@ -34,7 +34,6 @@ import {
 } from '../utils'
 import { isTaskyonKey } from '../taskyon/tyCrypto'
 import { useNlpWorker } from '../taskyon/webWorkerApi'
-import type { FileMappingDocType } from '../taskyon/rxdb'
 import { load } from 'js-yaml'
 //import type { JSONSchema7Type as JsonSchema } from 'json-schema'
 import type { JSONSchema7 } from 'json-schema'
@@ -553,7 +552,7 @@ ${toolCall.function.arguments}`,
 async function convertTaskNodeToOpenAIMessage(
   task: TaskNode,
   useVisionModels: boolean,
-  getFileMapping: (uuid: string) => Promise<FileMappingDocType | null>,
+  getFileMapping: (uuid: string) => Promise<FileMapping | null>,
   getUploadedFile: (uuid: string) => Promise<File | undefined>,
   useOpenAITools: boolean,
   toolCollection: Record<string, ToolBase>,
@@ -652,7 +651,7 @@ async function convertTaskNodeToOpenAIMessage(
 }
 
 async function convertFilesToOpenAIImageContent(
-  fileMappings: (FileMappingDocType | null)[],
+  fileMappings: (FileMapping | null)[],
   getFile: (uuid: string) => Promise<File | undefined>,
 ) {
   const imageContent: OpenAI.ChatCompletionUserMessageParam['content'] = []
