@@ -156,12 +156,9 @@ import ObjectTreeView from 'src/components/ObjectTreeView.vue'
 import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
 import { matAdd, matContentCopy, matSave, matSearch } from '@quasar/extras/material-icons'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import type { partialTaskDraft, TaskNode } from 'src/modules/taskyon/types'
-import { ToolBase } from 'src/modules/taskyon/types'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { asyncComputed } from 'src/modules/vueUtils'
-import type { InternalTool } from 'src/modules/taskyon/tools'
 import { craeteToolJsonSchema } from 'src/modules/taskyon/tools'
 import {
   mdiCodeJson,
@@ -176,6 +173,9 @@ import JsonInput from 'src/components/JsonInput.vue'
 import { copyToClipboard } from 'quasar'
 import TaskChainPublishDialog from 'src/components/taskyon/TaskChainPublishDialog.vue'
 import { createTaskNode } from 'src/modules/taskyon/taskManager'
+import { ToolBase } from '@taskyon/taskyon/types/tools'
+import type { InternalTool } from '@taskyon/taskyon'
+import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon/types/node'
 
 const { name } = defineProps<{ name?: string }>()
 

@@ -3,7 +3,6 @@
 
 import { defineStore } from 'pinia'
 import { computed, reactive, toRefs, type Reactive, watch } from 'vue'
-import type { FunctionCall } from 'src/modules/taskyon/types'
 import { type tyPublicKeyDraft, TyProfile } from 'src/modules/taskyon/types'
 import axios from 'axios'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
@@ -22,6 +21,7 @@ import { generateAssymetricRandomNewKey } from 'src/modules/crypto_js'
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 import type { PartialDeep } from 'type-fest'
 import { initialStoredStateObj, storeName } from 'src/modules/ui/initialState'
+import type { FunctionCall } from '@taskyon/taskyon/types/tools'
 
 interface TaskWidgetStateType {
   markdownEnabled: boolean

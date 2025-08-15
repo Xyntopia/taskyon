@@ -1,20 +1,14 @@
 import { defineStore } from 'pinia'
 import { watch, computed, ref } from 'vue'
 import type { TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
-import {
-  type Model,
-  TaskNode,
-  getCurrentModel,
-  llmSettings,
-  type TyProfile,
-} from 'src/modules/taskyon/types'
+import { type Model, getCurrentModel, llmSettings, type TyProfile } from 'src/modules/taskyon/types'
 import axios from 'axios' // TODO: replace with fetch
 import { Notify } from 'quasar' // load dynamically! :)
 import { useQuasar } from 'quasar'
 import { getApiConfig } from 'src/modules/taskyon/types'
 import { initTaskyon } from 'src/modules/taskyon/init'
 import { availableModels } from 'src/modules/taskyon/chat'
-import { getDefaultParametersForTool, toolCall, type InternalTool } from 'src/modules/taskyon/tools'
+import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
 import { useAppStateStore } from './appState'
 import {
   createDuplexChannel,
@@ -31,6 +25,9 @@ import { guiTools } from 'src/modules/tools/GuiTools'
 import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
 import { match, P } from 'ts-pattern'
 import type { Asyncify } from '@taskyon/taskyon/utils/tsHelpers'
+import type { InternalTool } from '@taskyon/taskyon'
+import { toolCall } from '@taskyon/taskyon'
+import { TaskNode } from '@taskyon/taskyon/types/node'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods

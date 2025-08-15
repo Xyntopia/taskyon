@@ -100,8 +100,8 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import Search from 'components/SearchInput.vue'
-import type { TaskNode } from 'src/modules/taskyon/types'
-import { TaskContent } from 'src/modules/taskyon/types'
+import type { TaskNode } from '@taskyon/taskyon/types/node'
+import { TaskContent } from '@taskyon/taskyon/types/node'
 import Task from 'components/taskyon/TaskWidget.vue'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import {
