@@ -1,12 +1,12 @@
-import type { taskResult } from '../taskyon/tools'
-import { craeteToolJsonSchema, createTool, toolCall, makeTaskResult } from '../taskyon/tools'
-import { ToolBase } from '../taskyon/types'
+import { createTool, makeTaskResult, toolCall, type taskResult } from '@taskyon/taskyon'
+import { craeteToolJsonSchema } from '../taskyon/tools'
 import { createChatCompletionTask } from './chatCompletionTool'
 import { type TyTaskManager } from '../taskyon/taskManager'
 import { match, P } from 'ts-pattern'
 import { safeYamlDump } from '../yamlUtils'
 import type { JSONSchema7 } from 'json-schema'
 import type { JSONSchema } from 'json-schema-to-ts'
+import { ToolBase } from '@taskyon/taskyon/types/tools'
 
 export const createToolSearcher = (taskManager: TyTaskManager) =>
   createTool({

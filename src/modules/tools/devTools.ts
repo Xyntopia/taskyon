@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, toolCall, makeTaskResult } from '../taskyon/tools'
+import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 
 const CLIENT_ID = '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b'
 const OAUTH_URL = 'https://gitlab.com/oauth/authorize'

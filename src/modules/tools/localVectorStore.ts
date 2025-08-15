@@ -2,7 +2,7 @@ import type { JSONSchema7 } from 'json-schema'
 import { createVectorStore } from '../crudWrapper'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
 import { getDatabase } from '../pglite.api'
-import { createTool } from '../taskyon/tools'
+import { createTool } from '@taskyon/taskyon'
 
 // TODO: make it possible to add "unique" identifiers as labels, so that
 //       we can save text which was add from a task and use the task id as the UID

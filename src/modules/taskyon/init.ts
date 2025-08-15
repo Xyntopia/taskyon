@@ -1,7 +1,7 @@
 import { useTyTaskManager } from './taskManager'
 import type { llmSettings } from './types'
 import { runTaskWorker } from './taskWorker'
-import type { InternalTool } from './tools'
+import type { InternalTool } from '@taskyon/taskyon'
 // TODO: make webpack automatically add all tool files from /tools/*
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
@@ -34,9 +34,9 @@ import { getDatabase } from '../pglite.api'
 import { createDuplexChannel, createIframeMux, createPortApi, createZodPort } from '../frpBus'
 import { testingTools } from '../tools/testTools'
 import { TaskWorkerMessage, TaskyonMessage } from './apiTypes'
-import { ToolBase } from './types'
 import { dump } from 'js-yaml'
 import z from 'zod'
+import { ToolBase } from '@taskyon/taskyon/types/tools'
 
 export async function initTaskyon(
   llmSettings: llmSettings,

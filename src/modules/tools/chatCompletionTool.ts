@@ -9,19 +9,6 @@ import {
 import type { Goals } from '../taskyon/promptCreation'
 import { addPrompts } from '../taskyon/promptCreation'
 import type { FileMapping, TyTaskManager } from '../taskyon/taskManager'
-import type {
-  partialTaskDraft,
-  ToolBase,
-  TaskNode,
-  TaskNodeMeta,
-  OpenRouterGenerationInfo,
-  ChatResponseType,
-  FunctionArguments,
-  llmSettings,
-  toolContext,
-} from '../taskyon/types'
-import { FunctionCall, getCurrentModel, getApiConfigCopy } from '../taskyon/types'
-import { makeTaskResult, createTool, mapFunctionNames } from '../taskyon/tools'
 import {
   createDeepTransformer,
   deepCopy,
@@ -43,6 +30,14 @@ import { createStream } from '../frpBus'
 import type { FromSchema } from 'json-schema-to-ts'
 import { charHash } from '../crypto_webcrypto'
 import { z } from 'zod'
+import type { FunctionArguments, ToolBase } from '@taskyon/taskyon/types/tools'
+import { FunctionCall } from '@taskyon/taskyon/types/tools'
+import { mapFunctionNames } from '../taskyon/tools'
+import type { ChatResponseType, OpenRouterGenerationInfo, TaskNodeMeta } from '../taskyon/types'
+import { getApiConfigCopy, getCurrentModel, type llmSettings } from '../taskyon/types'
+import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon/types/node'
+import type { toolContext } from '@taskyon/taskyon'
+import { createTool, makeTaskResult } from '@taskyon/taskyon'
 
 function generateOpenAIToolDeclarations(
   allowedTools: string[],

@@ -1,4 +1,4 @@
-import { createTool, makeTaskResult } from '../taskyon/tools'
+import { createTool, makeTaskResult } from '@taskyon/taskyon'
 import { openedWindows } from './webAppDev'
 
 export const openThirdPartyUrlTool = createTool({

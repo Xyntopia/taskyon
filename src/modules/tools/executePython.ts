@@ -1,4 +1,4 @@
-import { createTool } from '../taskyon/tools'
+import { createTool } from '@taskyon/taskyon'
 import type { PythonScriptResult } from '../pyodide'
 import { usePyodideWebworker } from '../taskyon/webWorkerApi'
 import type { JSONSchema7 } from 'json-schema'

@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, makeTaskResult } from '../taskyon/tools'
+import { createTool, makeTaskResult } from '@taskyon/taskyon'
 import { convertFileToText } from 'src/modules/loadFiles'
 
 /**

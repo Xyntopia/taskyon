@@ -1,6 +1,6 @@
 // type_tests.ts
-import { createDuplexChannel } from '../frpBus'
-import type { TaskyonMessage } from '../taskyon/apiTypes'
+import { createDuplexChannel } from '../../../../src/modules/frpBus'
+import type { TaskyonMessage } from '../../../../src/modules/taskyon/apiTypes'
 
 /* ───────────────── SET-UP SOME PORTS ────────────────── */
 

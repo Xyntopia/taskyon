@@ -1,5 +1,6 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, type WorkerMessage } from '../taskyon/tools'
+import { type WorkerMessage } from '../taskyon/tools'
+import { createTool } from '@taskyon/taskyon'
 
 // Function to execute JavaScript in a dynamically created Web Worker
 export function executeInDynamicWorker(javascriptCode: string, workerName: string = 'js-worker') {

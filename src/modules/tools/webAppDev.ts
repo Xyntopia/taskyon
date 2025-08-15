@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, makeTaskResult } from '../taskyon/tools'
+import { createTool, makeTaskResult } from '@taskyon/taskyon'
 
 // Global store for all opened windows
 export const openedWindows = new Map()

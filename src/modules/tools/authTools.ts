@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, toolCall, makeTaskResult } from '../taskyon/tools'
 import type { SecretStore } from '../crudWrapper'
 import { OAuthCredentials } from '../taskyon/types'
+import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 
 declare global {
   interface Window {

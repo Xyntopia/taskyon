@@ -21,7 +21,7 @@ import type { TyPGDB } from '../pglite.api'
 import { getDatabase } from '../pglite.api'
 import type { PartialDeep } from 'type-fest'
 import z from 'zod'
-import type { OptionalSome } from './tsHelpers'
+import type { OptionalSome } from '../../../packages/taskyon/src/utils/tsHelpers'
 
 /**
  *

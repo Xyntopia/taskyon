@@ -1,7 +1,8 @@
 import type { PartialDeep } from 'type-fest'
 import { TyProfile } from './types'
-import { FunctionArguments, ToolBase, partialTaskDraft } from './types'
 import { z } from 'zod'
+import { FunctionArguments, ToolBase } from '@taskyon/taskyon/types/tools'
+import { partialTaskDraft } from '@taskyon/taskyon/types/node'
 
 const RemoteFunctionBase = z.object({
   functionName: z.string().meta({

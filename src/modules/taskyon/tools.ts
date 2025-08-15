@@ -1,49 +1,16 @@
 import { bigIntToString } from '../utils'
-import type { FunctionArguments, FunctionCall, ParamType, toolContext } from './types'
-import { convertZodToJsonSchemaCached, partialTaskDraft, taskMarker } from './types'
-import { ToolBase } from './types'
 import type { TaskWorkerMessage, TaskyonMessage } from './apiTypes'
 import { RemoteFunctionResponse, RemoteFunctionCall } from './apiTypes'
-import { z } from 'zod'
 import { jsonSchemaToYamlString } from '../yamlUtils'
 import { executeCodeInIframe } from './iframeWorker'
 import type { JSONSchema7, JSONSchema7Object } from 'json-schema'
 import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
 import Ajv from 'ajv'
 import type { Port } from '../frpBus'
-import type { WithRequired } from './tsHelpers'
-
-export const taskResult = z.object({
-  taskResultMarker: z.literal(taskMarker).default(taskMarker).meta({
-    description:
-      'we use this marker in order to indicate that the result should be added as new tasks!',
-  }),
-  taskChainList: z.array(z.array(partialTaskDraft)),
-})
-export type taskResult = z.infer<typeof taskResult>
-
-export function makeTaskResult(
-  tasks: partialTaskDraft | partialTaskDraft[] | partialTaskDraft[][],
-): taskResult {
-  let tasksArray: partialTaskDraft[][]
-  if (Array.isArray(tasks)) {
-    if (Array.isArray(tasks[0])) {
-      // Already a 2D array
-      tasksArray = tasks as partialTaskDraft[][]
-    } else {
-      // 1D array, wrap in another array
-      tasksArray = [tasks as partialTaskDraft[]]
-    }
-  } else {
-    // 0D, wrap in 2D array
-    tasksArray = [[tasks]]
-  }
-  tasks = tasksArray
-  return {
-    taskResultMarker: taskMarker,
-    taskChainList: tasks,
-  }
-}
+import type { InternalTool, toolContext } from '@taskyon/taskyon'
+import type { FunctionArguments, FunctionCall, ParamType } from '@taskyon/taskyon/types/tools'
+import { ToolBase } from '@taskyon/taskyon/types/tools'
+import { convertZodToJsonSchemaCached } from './types'
 
 // the following doesn't really work ;) thats why we're doing the custom schema above..
 /*const internalToolFunctionSchema = z

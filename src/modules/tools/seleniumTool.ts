@@ -1,5 +1,5 @@
+import type { InternalTool } from '@taskyon/taskyon'
 import axios from 'axios'
-import type { InternalTool } from '../taskyon/tools'
 
 type SeleniumState = {
   value: {

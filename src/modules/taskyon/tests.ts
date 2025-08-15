@@ -15,7 +15,7 @@ import z from 'zod'
 import type { JSONSchema7 } from 'json-schema'
 import { jsonSchemaToYamlString } from '../yamlUtils'
 import type { SecretStore } from '../crudWrapper'
-import type { Asyncify } from './tsHelpers'
+import type { Asyncify } from '../../../packages/taskyon/src/utils/tsHelpers'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()

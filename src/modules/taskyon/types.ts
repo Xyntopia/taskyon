@@ -1,7 +1,6 @@
 import type OpenAI from 'openai'
 import { z } from 'zod'
 import { deepCopy } from '../utils'
-import { JSONSchema7 } from '../jsonSchema'
 import {
   mdiAlphabeticalVariant,
   mdiAutoFix,
@@ -15,26 +14,8 @@ import {
   matVisibility,
   matVisibilityOff,
 } from '@quasar/extras/material-icons'
-import type { Expand } from './tsHelpers'
-import { assertType, type RemoveUndefined } from './tsHelpers'
-
-export const removeKeys = <T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> => {
-  return Object.fromEntries(
-    Object.entries(obj).filter(([key]) => !keys.includes(key as K)),
-  ) as Omit<T, K>
-}
-
-export function removeUndefinedProperties<T extends object>(obj: T): RemoveUndefined<T, keyof T> {
-  return Object.entries(obj).reduce(
-    (acc, [key, value]) => {
-      if (value !== undefined) {
-        ;(acc as Record<string, unknown>)[key] = value
-      }
-      return acc
-    },
-    {} as Record<keyof T, unknown>,
-  ) as RemoveUndefined<T, keyof T>
-}
+import { assertType, type Expand } from '@taskyon/taskyon/utils/tsHelpers'
+import { partialTaskDraft, type TaskNode } from '@taskyon/taskyon/types/node'
 
 // TODO: the goal should be to slowly replace this state by the "result of the task"
 //       E.g. when a task had an error, this would be represented in the task result as an "error"
@@ -143,153 +124,6 @@ export interface OpenRouterGenerationInfo {
   usage: number
 }
 
-const FunctionName = z.string().refine((val) => /^[a-zA-Z0-9_-]+$/.test(val), {
-  error: ({ input }) => {
-    const msg = typeof input === 'string' ? input : JSON.stringify(input)
-    return `The function/tool name ${msg} contains illegal characters. It has to fulfill '^[a-zA-Z0-9_-]+$'`
-  },
-})
-type FunctionName = z.infer<typeof FunctionName>
-
-export const ToolBase = z.object({
-  description: z.string().meta({
-    description: 'A short description about the tool so that an LLM knows when to use it.',
-  }),
-  longDescription: z.string().optional().meta({
-    description: 'An optional longer description for more complicated operations with this tool.',
-  }),
-  name: FunctionName.meta({
-    description: 'Name of the tool. Has to fulfill: /^[a-zA-Z0-9_-]+$/',
-  }),
-  renderOptions: z
-    .object({
-      hideChat: z
-        .boolean()
-        .describe(
-          "hide the tool in the UI chat. Useful if the function is used very often and we don't want it to clutter the chatWindow",
-        ),
-      hideLlm: z.boolean(
-        'HideLlm will hide the  tool from an LLM inside chatCompletion. This is mainly useful for tools like "chatCompletion" which the llm doesn\'t need to see in the chatCompletion.',
-      ),
-    })
-    .partial()
-    .optional(),
-  parameters: JSONSchema7.meta({
-    description: 'A JSON schema object describing the parameters of the function.',
-  }).readonly(),
-  code: z
-    .string()
-    .optional()
-    .describe(
-      `The functionality of the tool as javascript code. If a function description doesn't include any code,
-Taskyon will automatically call a postMessage event with the parameters to the parent window
-with the function name.`,
-    ),
-})
-export type ToolBase = z.infer<typeof ToolBase> // this reflects json schema:  https://json-schema.org/specification-links
-
-export const ParamType = z.union([
-  z.string(),
-  z.number(),
-  z.boolean(),
-  z.record(z.string(), z.unknown()),
-  z.array(z.unknown()),
-  z.null(),
-  // We are also allowing undefined calls to the functions, even though this is not allowed in jsonschema.
-  // But we are sometimes calling our functions manually and this way we can also call them without parameters.
-  z.undefined(),
-])
-export type ParamType = z.infer<typeof ParamType>
-export const FunctionArguments = z.record(z.string(), ParamType).meta({
-  description: 'arguments of the function',
-})
-export type FunctionArguments = z.infer<typeof FunctionArguments>
-
-/* here we are essentiall declaring the taskyon API */
-export const FunctionCall = z.object({
-  name: FunctionName,
-  arguments: FunctionArguments,
-})
-export type FunctionCall = z.infer<typeof FunctionCall>
-
-/**
- * Represents the context passed to tools within the Taskyon system.
- *
- * @property taskChain - The sequence of TaskNode objects representing the current chain of tasks.
- * @property getSecret - Retrieves a secret value by name. If `askNew` is `true`, prompts for a new secret if it doesn't exist.
- *   If `askNew` is a string, uses the string as a custom message or hint when prompting for the secret.
- * @param name - The name of the secret to retrieve.
- * @param askNew - If `true`, prompts for a new secret if not found. If a string, uses it as a hint or message when prompting.
- * @returns A promise resolving to the secret value, or `undefined` if not found.
- *
- * @property setSecret - Stores a secret value by name.
- * @param name - The name of the secret to store.
- * @param value - The secret value to store.
- * @returns A promise that resolves when the secret is stored.
- * @property stopSignal - An AbortSignal that can be used to detect if the tool should stop execution.
- * @property toolId - The unique identifier for the tool instance.
- */
-export type toolContext = {
-  taskChain: TaskNode[]
-  getSecret: (
-    name: string,
-    askNew: boolean | string,
-    saveNew?: boolean,
-  ) => Promise<string | undefined>
-  setSecret: (name: string, value: string) => Promise<void>
-  stopSignal: AbortSignal
-  toolId: string
-  messagePort?: MessagePort // optional message port for communication
-}
-
-const MessageContent = z.object({ type: z.literal('message'), data: z.string() })
-const StructuredContent = z.object({
-  type: z.literal('structured'),
-  data: z.unknown(),
-})
-const ToolCallContent = z.object({ type: z.literal('functioncall'), data: FunctionCall })
-const UploadedFilesContent = z.object({
-  type: z.literal('files'),
-  data: z.array(z.string()),
-})
-const ToolResultContent = z.object({ type: z.literal('toolresult'), data: z.unknown() })
-const ToolDefinition = z.object({ type: z.literal('tooldefinition'), data: ToolBase })
-const ErrorContent = z.object({ type: z.literal('error'), data: z.unknown() }).meta({
-  description: 'Gets created if any error occurs during task processing.',
-})
-const Return = z.object({ type: z.literal('return'), data: z.string() }).describe(
-  `A Termination task always indicates the end of an autonomous task chat execution.
-Every Leaf task which is not a Termination task can potentially continue to be executed...
-
-We can indicate the reason for termination here as well...`,
-)
-
-// TODO: I am not sure, if we need this here...
-const ChatCompletionContent = z.union([MessageContent, ToolResultContent, ErrorContent])
-export type ChatCompletionContent = z.infer<typeof ChatCompletionContent>
-
-export const TaskContent = z.union([
-  MessageContent.strict(),
-  ToolResultContent.strict(),
-  ToolDefinition.strict(),
-  ErrorContent.strict(),
-  StructuredContent.strict(),
-  ToolCallContent.strict(),
-  // TODO: replace with a "context" function which can also be a link to a URL for example or maybe a search string for other tasks...
-  //       we can declare function for a lot of these things this way :)
-  UploadedFilesContent.strict(),
-  Return.strict(),
-])
-
-export type TaskContent = z.infer<typeof TaskContent>
-
-// If you want to map them to { label, value } for q-select:
-export const taskTypeOptions = TaskContent.options.map((opt) => {
-  // each option is a ZodObject with a `type` literal
-  const typeLiteral = opt.shape.type._zod.def.values[0]
-  return typeLiteral as TaskContent['type']
-})
-
 export const TaskNodeMeta = z
   .object({
     threadMessage: z.any().optional(), // Replace with the correct Zod schema if available
@@ -321,49 +155,6 @@ export const TaskNodeMeta = z
 
 export type TaskNodeMeta = z.infer<typeof TaskNodeMeta>
 
-export const TaskNode = z.object({
-  // TODO: get rid of "role"  and put it into chatCompletion only...
-  // we don't need it in the rest of the app, I think.. we might be able to indicate that a task was
-  // "automatically" created by using a notation in "authorID" e.g. something like.
-  // "pubKey:gen" if the task was automatically generated && pubKey if it wasn't
-  // OR: we could simply check the parents & priors of tasks. if tasks have a parent, they were generated
-  // by a function. user-generated message should not have a parent...
-  role: z.enum(['system', 'user', 'assistant', 'function']),
-  name: z.string().optional().meta({
-    description: 'An optional name for the task',
-  }),
-  content: TaskContent.describe(
-    `This is the actual content of the task. This is the actual content which is process at each step.
-For example this is, what an LLM would actually get to see. There are only a few different ways
-of how content can be structured. `,
-  ),
-  label: z.array(z.string()).optional(),
-  parentID: z.string().optional().meta({
-    description: 'The ID of the parent task which created this subtask on a lower stack level',
-  }),
-  priorID: z.string().optional().meta({
-    description: 'The ID of the previous task in the same stack level.',
-  }),
-  // TODO: validate this ID using our content address creation functions
-  id: z.string(),
-  authorId: z.string().optional(),
-  created_at: z.number().optional(),
-  acl: z.string().array().optional()
-    .describe(`A number of public keys which act as access control lists (ACL).
-They are given certain as a list of public keys + type of ownership.
- ["pubkey:owner", "pubkey:editor1", "pubkey:editor2"]
-
- The value is optional. If no ACL is specified, the task is "public" and
- can for example be freely exchange in p2p settings.
-
-TODO: define onwership types..`),
-  sig: z.string().optional().meta({
-    description:
-      'A signature from the author of the Task. It is created from the entire content of the tasj except for the signature itself.',
-  }),
-})
-export type TaskNode = z.infer<typeof TaskNode>
-
 // Now pull out the tooldefinition variant and fully expand it:
 /*type ToolDefinitionNode = ExpandRecursively<
   Omit<TaskNode, 'content'> & {
@@ -393,22 +184,6 @@ type ToolResultNode = TaskNodeType<"toolresult">
 */
 
 export type TaskGetter = (input: string) => Promise<TaskNode | null>
-
-// TODO: get rid of taskDraft once we have immutable tasks with content addressing
-//       once we have that, we can simply create tasks immediatly with the correct content address as an ID,
-export const partialTaskDraft = TaskNode.omit({
-  id: true,
-  created_at: true,
-  priorID: true,
-  parentID: true,
-})
-  .partial()
-  .required({ role: true, content: true })
-  .meta({
-    description:
-      'This is just a subset of the task properties which can be used to define new tasks in various places.',
-  })
-export type partialTaskDraft = z.infer<typeof partialTaskDraft>
 
 export const taskTemplateTypes = {
   toolDescription: partialTaskDraft
@@ -913,7 +688,6 @@ export interface TyTaskStreamData {
     | 'queued'
 }
 
-export const taskMarker = '*TY_TASKRESULT*'
 //export const convertZodToJsonSchemaCached = lruCache(100)(zodToJsonSchema)
 export const convertZodToJsonSchemaCached = z.toJSONSchema
 
