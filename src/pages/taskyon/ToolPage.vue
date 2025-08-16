@@ -173,9 +173,9 @@ import JsonInput from 'src/components/JsonInput.vue'
 import { copyToClipboard } from 'quasar'
 import TaskChainPublishDialog from 'src/components/taskyon/TaskChainPublishDialog.vue'
 import { createTaskNode } from 'src/modules/taskyon/taskManager'
-import { ToolBase } from '@taskyon/taskyon/types/tools'
+import { ToolBase } from '@taskyon/taskyon'
 import type { InternalTool } from '@taskyon/taskyon'
-import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon/types/node'
+import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 
 const { name } = defineProps<{ name?: string }>()
 

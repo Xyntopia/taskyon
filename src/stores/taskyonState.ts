@@ -24,10 +24,9 @@ import { waitForMessagePort } from 'src/modules/taskyon/iframeWorker'
 import { guiTools } from 'src/modules/tools/GuiTools'
 import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
 import { match, P } from 'ts-pattern'
-import type { Asyncify } from '@taskyon/taskyon/utils/tsHelpers'
-import type { InternalTool } from '@taskyon/taskyon'
+import type { InternalTool, Asyncify } from '@taskyon/taskyon'
+import { TaskNode } from '@taskyon/taskyon'
 import { toolCall } from '@taskyon/taskyon'
-import { TaskNode } from '@taskyon/taskyon/types/node'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods

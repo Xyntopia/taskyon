@@ -5,6 +5,11 @@ import type { TaskNode } from './types/node'
 import { partialTaskDraft } from './types/node'
 import { taskMarker, ToolBase, type FunctionCall } from './types/tools'
 
+// types exports
+export * from './types/node'
+export * from './types/tools'
+export * from './utils/tsHelpers'
+
 /**
  * Represents the context passed to tools within the Taskyon system.
  *

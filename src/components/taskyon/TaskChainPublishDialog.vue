@@ -124,7 +124,7 @@ import {
 import { getFileId, useGdrive } from 'src/modules/gdrive'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import type { TaskNode } from '@taskyon/taskyon/types/node'
+import type { TaskNode } from '@taskyon/taskyon'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { chat2Md, chatToYaml } from 'src/modules/taskyon/taskUtils'
 

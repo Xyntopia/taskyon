@@ -312,7 +312,7 @@ import { deepCopy } from 'src/modules/utils'
 import { mdiFunctionVariant, mdiToolbox } from '@quasar/extras/mdi-v6'
 import ApiSelect from './ApiSelect.vue'
 import { symOutlinedCancel } from '@quasar/extras/material-symbols-outlined'
-import { partialTaskDraft } from '@taskyon/taskyon/types/node'
+import { partialTaskDraft } from '@taskyon/taskyon'
 
 const { expertMode = false, entryNode } = defineProps<{
   entryNode: partialTaskDraft

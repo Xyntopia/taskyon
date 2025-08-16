@@ -6,7 +6,7 @@ import { match, P } from 'ts-pattern'
 import { safeYamlDump } from '../yamlUtils'
 import type { JSONSchema7 } from 'json-schema'
 import type { JSONSchema } from 'json-schema-to-ts'
-import { ToolBase } from '@taskyon/taskyon/types/tools'
+import { ToolBase } from '@taskyon/taskyon'
 
 export const createToolSearcher = (taskManager: TyTaskManager) =>
   createTool({

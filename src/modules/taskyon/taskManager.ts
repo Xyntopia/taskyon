@@ -1,5 +1,5 @@
 import type { TaskNodeMeta, TaskNodeType } from './types'
-import { partialTaskDraft, TaskNode } from '@taskyon/taskyon/types/node'
+import { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { openUserUploadedFile, saveUserUploadedFileToOpfs } from '../OPFS'
 import { usePyodideWebworker } from './webWorkerApi'
 import { load } from 'js-yaml'
@@ -20,9 +20,9 @@ import type { TyPGDB } from '../pglite.api'
 import { getDatabase } from '../pglite.api'
 import type { PartialDeep } from 'type-fest'
 import z from 'zod'
-import type { OptionalSome } from '@taskyon/taskyon/utils/tsHelpers'
+import type { OptionalSome } from '@taskyon/taskyon'
 import type { InternalTool } from '@taskyon/taskyon'
-import { ToolBase } from '@taskyon/taskyon/types/tools'
+import { ToolBase } from '@taskyon/taskyon'
 
 /**
  *

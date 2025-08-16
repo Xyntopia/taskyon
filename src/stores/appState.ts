@@ -21,7 +21,7 @@ import { generateAssymetricRandomNewKey } from 'src/modules/crypto_js'
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 import type { PartialDeep } from 'type-fest'
 import { initialStoredStateObj, storeName } from 'src/modules/ui/initialState'
-import type { FunctionCall } from '@taskyon/taskyon/types/tools'
+import type { FunctionCall } from '@taskyon/taskyon'
 
 interface TaskWidgetStateType {
   markdownEnabled: boolean

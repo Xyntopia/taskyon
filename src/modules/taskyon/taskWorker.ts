@@ -9,7 +9,7 @@ import type { Port, TaskMessageStream } from '../frpBus'
 import { createMessagePortAdapter, createStream, filter } from '../frpBus'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
 import type { TaskWorkerMessage, TaskyonMessage } from './apiTypes'
-import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon/types/node'
+import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { taskResult, type toolContext } from '@taskyon/taskyon'
 
 export async function generateSecretId(

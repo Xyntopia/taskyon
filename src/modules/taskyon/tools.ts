@@ -8,8 +8,8 @@ import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
 import Ajv from 'ajv'
 import type { Port } from '../frpBus'
 import type { InternalTool, toolContext } from '@taskyon/taskyon'
-import type { FunctionArguments, FunctionCall, ParamType } from '@taskyon/taskyon/types/tools'
-import { ToolBase } from '@taskyon/taskyon/types/tools'
+import type { FunctionArguments, FunctionCall, ParamType } from '@taskyon/taskyon'
+import { ToolBase } from '@taskyon/taskyon'
 import { convertZodToJsonSchemaCached } from './types'
 
 // the following doesn't really work ;) thats why we're doing the custom schema above..

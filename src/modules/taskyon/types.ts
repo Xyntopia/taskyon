@@ -14,8 +14,8 @@ import {
   matVisibility,
   matVisibilityOff,
 } from '@quasar/extras/material-icons'
-import { assertType, type Expand } from '@taskyon/taskyon/utils/tsHelpers'
-import { partialTaskDraft, type TaskNode } from '@taskyon/taskyon/types/node'
+import { assertType, type Expand } from '@taskyon/taskyon'
+import { partialTaskDraft, type TaskNode } from '@taskyon/taskyon'
 
 // TODO: the goal should be to slowly replace this state by the "result of the task"
 //       E.g. when a task had an error, this would be represented in the task result as an "error"

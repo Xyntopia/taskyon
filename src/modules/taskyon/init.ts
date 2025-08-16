@@ -36,7 +36,7 @@ import { testingTools } from '../tools/testTools'
 import { TaskWorkerMessage, TaskyonMessage } from './apiTypes'
 import { dump } from 'js-yaml'
 import z from 'zod'
-import { ToolBase } from '@taskyon/taskyon/types/tools'
+import { ToolBase } from '@taskyon/taskyon'
 
 export async function initTaskyon(
   llmSettings: llmSettings,
