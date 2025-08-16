@@ -158,7 +158,7 @@ import {
   matShare,
 } from '@quasar/extras/material-icons'
 import { mdiFileTree, mdiForumPlus, mdiLanguageMarkdown } from '@quasar/extras/mdi-v6'
-import type { TaskNode } from 'src/modules/taskyon/types'
+import type { TaskNode } from '@taskyon/taskyon/types/node'
 import { copyToClipboard } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 
