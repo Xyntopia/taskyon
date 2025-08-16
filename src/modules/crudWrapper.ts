@@ -23,6 +23,11 @@ type Row<T> = {
 export interface CrudWrapper<T> {
   set: (id: string | number, data: T) => Promise<void>
   get: (id: string | number) => Promise<T | null>
+  delete: (id: string | number) => Promise<void>
+  listIds: () => Promise<(string | number)[]>
+  list: () => Promise<Row<T>[]>
+  listAll?: () => Promise<Row<T>[]>
+  clear: () => Promise<void>
   // TODO: the "upsert" strategy is potentially problematic, because
   //       it leads to inconsistent results across different storages.
   //       so it would probably be a good idea to only use this in the "combined"
@@ -32,11 +37,50 @@ export interface CrudWrapper<T> {
     data: T,
     strategy?: 'shallow_merge' | 'replace' | 'deepmerge' | 'native_shallow',
   ) => Promise<T>
-  delete: (id: string | number) => Promise<void>
-  listIds: () => Promise<(string | number)[]>
-  list: () => Promise<Row<T>[]>
-  listAll?: () => Promise<Row<T>[]>
-  clear: () => Promise<void>
+}
+
+export type ImmutableCrudWrapper<T> = Omit<CrudWrapper<T>, 'upsert' | 'set'> & {
+  add: (data: T) => Promise<string | number>
+  // hard-ban these at the type level if someone widens:
+  set?: never
+  upsert?: never
+}
+
+export function withImmutable<T>(
+  base: CrudWrapper<T>,
+  opts?: {
+    hash?: (data: T) => string | number
+    onDuplicate?: 'ignore' | 'error'
+  },
+): ImmutableCrudWrapper<T> {
+  const hash = opts?.hash
+  const onDuplicate = opts?.onDuplicate ?? 'ignore'
+
+  const insertIfAbsent = async (id: string | number, data: T) => {
+    const existing = await base.get(id)
+    if (existing !== null) {
+      if (onDuplicate === 'ignore') return
+      throw new Error('Duplicate (immutable) id')
+    }
+    await base.set(id, data)
+  }
+
+  return {
+    async add(data: T): Promise<string | number> {
+      if (!hash) throw new Error('withImmutable.add requires a hash function')
+      const id = hash(data)
+      await insertIfAbsent(id, data)
+      return id
+    },
+
+    // passthroughs (read / housekeeping only)
+    get: base.get,
+    delete: base.delete, // keep if you want physical deletes; otherwise drop or tombstone upstream
+    list: base.list,
+    ...(base.listAll ? { listAll: base.listAll } : {}),
+    listIds: base.listIds,
+    clear: base.clear,
+  }
 }
 
 export const withLiveStreams = <T>(
