@@ -1,6 +1,8 @@
 // Use `cy.dataCy` custom command for more robust tests
 // See https://docs.cypress.io/guides/references/best-practices.html#Selecting-Elements
 
+import { useFreeTaskyon } from '../support/groups'
+
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
 // This test will pass when run against a clean Quasar project
@@ -49,9 +51,12 @@ describe('iframe integration', () => {
   }
 
   it('Should be able to create a tool and use it through the iframe', () => {
-    cy.visit('/clienttest') //.wait(10000);
-
+    cy.visit('/clienttest')
     clearIframeStorage()
+
+    // choose free model in iframe
+    getIframeBody().find('.q-btn').contains('AI service provider se', { matchCase: false }).click()
+    getIframeBody().find('.q-btn').contains('Use free Taskyon', { matchCase: false }).click()
 
     cy.reload()
 

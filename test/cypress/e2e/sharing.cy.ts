@@ -15,7 +15,7 @@ describe('Sharing functionality', () => {
 
     useFreeTaskyon()
 
-    writeMessage('Hello world! I want to share this with everyone!')
+    writeMessage('Hello world! how are you?')
 
     getLastAssistantMessage().should('exist')
 
