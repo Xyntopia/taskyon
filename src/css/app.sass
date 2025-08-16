@@ -192,16 +192,15 @@ $app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%,
   .body--dark .task-button
     color: rgb($secondary)
 
-  body
-    background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
-    background-size: cover // make sure we always cover entire viewport even if content is smaller
-    background-attachment: fixed // fix background to viewport
-
   // common settings for both:  dark & light  
   body.body--light
     //background-color: white
     background: $app-bg-light
     color: black
+    //  somehow we have to explicitly include this here with "body--light" otherwise it won't get recongized..
+    background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
+    background-size: cover // make sure we always cover entire viewport even if content is smaller
+    background-attachment: fixed // fix background to viewport
 
     .welcome-message-text
       filter: drop-shadow(0 0 5px white) drop-shadow(0 0 20px white)

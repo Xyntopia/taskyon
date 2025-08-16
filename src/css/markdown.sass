@@ -55,23 +55,23 @@ $primary: var(--q-primary-rgb)
       overflow-x: auto // optional: scroll when it still overflows */
 
   .code-block-with-btns
-    position: relative
-
     .langlabel
       font-size: .75em
       opacity: .6
-      display: flex
-      align-items: center
 
-    div.code-buttons
-      position: absolute
-      top: -5px
-      transform: translateY(-100%)
-      right: 8px
+    .code-buttons
       display: flex
       align-items: center
-      background: inherit
-      gap: 4px
+      flex-wrap: nowrap; /* keep in one row */
+      gap: .5rem; /* spacing between buttons */
+      //padding: .25rem .5rem
+
+      & .langlabel
+        margin-right: auto; /* push the buttons to the right */
+
+      & button
+        margin-left: .25rem; /* buttons sit next to each other */
+        white-space: nowrap
 
   button
     text-transform: uppercase
