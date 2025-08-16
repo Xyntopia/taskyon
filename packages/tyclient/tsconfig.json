@@ -1,17 +1,3 @@
-// packages/tyclient/tsconfig.json
 {
-  "compilerOptions": {
-    "composite": true,
-    "declaration": true,
-    "declarationMap": true,
-    "emitDeclarationOnly": false,
-    "module": "preserve",
-    "moduleResolution": "bundler",
-    "target": "ES2022",
-    "lib": ["ES2022", "DOM"],
-    "strict": true,
-    "skipLibCheck": true,
-    "noEmit": false
-  },
-  "include": ["src"]
+  "extends": "../../tsconfig.json"
 }

@@ -1,4 +1,3 @@
-// packages/taskyon/tsconfig.json
 {
   "extends": "../../tsconfig.json",
   "include": ["src"]

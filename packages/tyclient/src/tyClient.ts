@@ -1,7 +1,8 @@
 // we can compile this file to js to js using "yarn build:lib"
 
-export { createTool } from '@taskyon/taskyon'
-import type { partialTyConfiguration, TaskyonMessage, ClientTool } from './tyClient.types'
+import type { ClientTool } from '@taskyon/taskyon'
+export { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
+import type { partialTyConfiguration, TaskyonMessage } from 'src/modules/taskyon/apiTypes'
 
 function safeClone<T>(data: T): T {
   try {
