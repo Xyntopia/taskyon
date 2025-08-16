@@ -45,6 +45,18 @@ export default defineConfigWithVueTs(
   vueTsConfigs.recommendedTypeChecked,
 
   {
+    files: ['**/*.{ts,tsx,vue}'],
+    languageOptions: {
+      parserOptions: {
+        // <-- key bit: let ESLint piggy-back on TS Project Service
+        projectService: true,
+        tsconfigRootDir: process.cwd(),
+        extraFileExtensions: ['.vue'],
+      },
+    },
+  },
+
+  {
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
