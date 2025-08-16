@@ -44,6 +44,16 @@ export default defineConfigWithVueTs(
   // https://github.com/vuejs/eslint-config-typescript
   vueTsConfigs.recommendedTypeChecked,
 
+  // added my @yeus 20250815
+  // Use TypeScript *Project Service* for type-aware rules.
+  // Why: in a monorepo with TS project references + Quasar’s generated tsconfigs/paths,
+  // building a single Program via `parserOptions.project` often mis-resolves workspace
+  // imports and turns unresolved symbols into “error” types (acting like `any`), which
+  // trips rules like `@typescript-eslint/no-redundant-type-constituents`.
+  // `projectService: true` makes @typescript-eslint reuse the same multi-project graph
+  // as VS Code (understands references, per-folder tsconfigs, and .vue files) without
+  // maintaining a project list. `tsconfigRootDir` anchors resolution; `extraFileExtensions`
+  // lets it parse SFCs. Requires @typescript-eslint v7+.
   {
     files: ['**/*.{ts,tsx,vue}'],
     languageOptions: {
