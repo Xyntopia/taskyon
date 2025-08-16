@@ -202,11 +202,11 @@ export function createMultiButtonPlugin(
 
     return `
       <div class="code-block-with-btns" id="${blockId}">
-        ${htmlWithId}
         <div class="code-buttons">
-          ${btnsHtml}
           <span class="langlabel">${lang}</span>
+          ${btnsHtml}
         </div>
+        ${htmlWithId}
       </div>
     `
   })
