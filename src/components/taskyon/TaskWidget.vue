@@ -145,7 +145,7 @@
 
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState'
-import type { TaskNode } from 'src/modules/taskyon/types'
+import type { TaskNode } from '@taskyon/taskyon/types/node'
 import tyMarkdown from '../tyMarkdown.vue'
 import { ref } from 'vue'
 import { mdiDesktopTower, mdiFileDocument, mdiTools, mdiHeadCog } from '@quasar/extras/mdi-v6'

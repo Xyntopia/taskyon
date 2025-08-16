@@ -288,7 +288,6 @@
 
 <script setup lang="ts">
 import { computed, ref, toRefs } from 'vue'
-import { partialTaskDraft } from 'src/modules/taskyon/types'
 import { llmSettings, appConfiguration } from 'src/modules/taskyon/types'
 import { useTaskyonStore } from 'stores/taskyonState'
 import ModelSelection from 'components/taskyon/ModelSelection.vue'
@@ -313,6 +312,7 @@ import { deepCopy } from 'src/modules/utils'
 import { mdiFunctionVariant, mdiToolbox } from '@quasar/extras/mdi-v6'
 import ApiSelect from './ApiSelect.vue'
 import { symOutlinedCancel } from '@quasar/extras/material-symbols-outlined'
+import { partialTaskDraft } from '@taskyon/taskyon/types/node'
 
 const { expertMode = false, entryNode } = defineProps<{
   entryNode: partialTaskDraft
