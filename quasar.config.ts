@@ -149,11 +149,44 @@ export default defineConfig((ctx) => {
       },
 
       typescript: {
-        strict: true, // (recommended) enables strict settings for TypeScript
-        vueShim: true, // required when using ESLint with type-checked rules, will generate a shim file for `*.vue` files
-        extendTsConfig(/*tsConfig*/) {
-          // You can use this hook to extend tsConfig dynamically
-          // For basic use cases, you can still update the usual tsconfig.json file to override some settings
+        strict: true,
+        vueShim: true,
+        extendTsConfig(ts) {
+          // 1) Narrow Quasar's very broad include so vue-tsc doesn't crawl packages/**
+          // ts.include = [
+          //   './**/*.d.ts',
+          //   '../src',
+          //   '../src/**/*.vue',
+          //   '../env.d.ts',
+          //   '../.quasar/**/*.d.ts',
+          // ]
+
+          // for some reason, adding references here doesn't work very well...
+          //ts.files = []
+          //ts.references = [{ path: './packages/taskyon' }, { path: './packages/tyclient' }]
+
+          // // Be explicit about exclusions (prevents TS6305 looking into dist or packages)
+          ts.exclude = [
+            ...(ts.exclude ?? []),
+            './../dist-desktop',
+            './../src-tauri',
+            //'./../packages/**', // <- key bit: keep workspace packages out
+          ]
+
+          // // 2) Keep the 'app' alias but scope it to the app, not the entire repo
+          // // (prevents auto-imports like 'app/packages/taskyon/...'; still allows 'app/src/...').
+          // ts.compilerOptions ??= {}
+          // ts.compilerOptions.moduleResolution = 'bundler' // good with Vite + ESM
+          // ts.compilerOptions.paths ??= {}
+
+          // // leave 'app' (root) if you use it; just tighten the wildcard
+          // if (ts.compilerOptions.paths['app/*']) {
+          //   ts.compilerOptions.paths['app/*'] = ['../src/*']
+          // }
+          // // (optional) you can also remove it completely:
+          delete ts.compilerOptions?.paths['app/*']
+
+          return ts
         },
       },
 

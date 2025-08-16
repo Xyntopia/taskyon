@@ -1,6 +1,3 @@
 {
-  "extends": "./.quasar/tsconfig.json",
-  "exclude": ["src-tauri", "dist-desktop"],
-  "files": [],
-  "references": [{ "path": "./packages/taskyon" }, { "path": "./packages/tyclient" }]
+  "extends": "./.quasar/tsconfig.json"
 }

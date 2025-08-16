@@ -104,5 +104,5 @@ export type partialTaskDraft = z.infer<typeof partialTaskDraft>
 // If you want to map them to { label, value } for q-select:
 export const taskTypeOptions = TaskContent.options.map((opt) => {
   // each option is a ZodObject with a `type` literal
-  return opt.shape.type._zod.def.values[0]
-}) satisfies TaskContent['type'][]
+  return opt.shape.type._zod.def.values[0]!
+})
