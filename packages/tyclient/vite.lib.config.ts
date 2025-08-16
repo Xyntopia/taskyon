@@ -6,7 +6,7 @@ import esbuild from 'esbuild'
 import dtsBundleGenerator from 'unplugin-dts-bundle-generator/vite'
 // import dts from 'vite-plugin-dts'
 
-const libPath = path.resolve(__dirname, './src/tyClient.ts')
+const libPath = path.resolve(__dirname, './src/index.ts')
 console.log('building', libPath)
 
 export default defineConfig({
@@ -16,9 +16,9 @@ export default defineConfig({
 
       // ► 1.  Libraries – inline Zod, leave Vue as import
       libraries: {
-        //inlinedLibraries: ['json-schema', 'type-fest', 'zod'],
+        //inlinedLibraries: ['json-schema', 'type-fest', 'zod', '@taskyon/taskyon'],
         // If you also want to *keep* other libs external, list them here:
-        importedLibraries: ['json-schema', 'type-fest', 'zod'],
+        importedLibraries: ['json-schema', 'type-fest', 'zod', '@taskyon/taskyon'],
       },
 
       // ► 2.  Output tweaks
@@ -29,7 +29,7 @@ export default defineConfig({
 
       // ► 3.  Compilation (optional but faster)
       compilation: {
-        preferredConfigPath: path.resolve(__dirname, '../../tsconfig.json'),
+        preferredConfigPath: path.resolve(__dirname, './tsconfig.dts.json'),
         // skipTypeCheck: true, // uncomment if you already run `tsc --noEmit`
       },
     }),

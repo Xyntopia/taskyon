@@ -23,7 +23,7 @@ import { createTool } from '@taskyon/taskyon'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { ref } from 'vue'
 import { onMounted } from 'vue'
-import { initializeTaskyon } from '../../packages/tyclient/src/tyClient'
+import { initializeTaskyon } from '../../packages/tyclient/src'
 
 const taskyonUrl = window.location.origin
 

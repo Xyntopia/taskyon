@@ -108,7 +108,7 @@ import { copyToClipboard, Notify } from 'quasar'
 import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
 import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
-import { initializeTaskyon } from '../../../packages/tyclient/src/tyClient'
+import { initializeTaskyon } from '../../../packages/tyclient/src'
 
 const taskyonUrl = window.location.origin
 

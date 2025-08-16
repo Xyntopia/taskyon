@@ -1,10 +1,10 @@
 {
   "name": "tyclient",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "license": "MIT",
   "main": "dist/tyclient.umd.js",
   "module": "dist/tyclient.es.js",
-  "types": ".dist/tyclient.d.ts",
+  "types": "dist/tyclient.d.ts",
   "exports": {
     ".": {
       "types": "./dist/tyclient.d.ts",
@@ -16,6 +16,9 @@
     "dist/**/*"
   ],
   "peerDependencies": {},
+  "dependencies": {
+    "@taskyon/taskyon": "^0.0.1"
+  },
   "scripts": {
     "build": "vite build --config vite.lib.config.ts",
     "prepack": "yarn run build"
