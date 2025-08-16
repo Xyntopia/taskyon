@@ -1,5 +1,3 @@
-import type { TaskNode } from './types'
-import { ToolBase } from './types'
 import type OpenAI from 'openai'
 import { useNlpWorker } from './webWorkerApi'
 import { useTaskyonStore } from 'src/stores/taskyonState'
@@ -16,6 +14,8 @@ import type { JSONSchema7 } from 'json-schema'
 import { jsonSchemaToYamlString } from '../yamlUtils'
 import type { SecretStore } from '../crudWrapper'
 import type { Asyncify } from '../../../packages/taskyon/src/utils/tsHelpers'
+import type { TaskNode } from '@taskyon/taskyon'
+import { ToolBase } from '@taskyon/taskyon'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()

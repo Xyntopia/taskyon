@@ -1,6 +1,7 @@
+import type { TaskNode } from '@taskyon/taskyon'
+import { partialTaskDraft } from '@taskyon/taskyon'
 import { deepCopy } from '../utils'
 import { safeYamlDump } from '../yamlUtils'
-import { type TaskNode, partialTaskDraft } from './types'
 import { load } from 'js-yaml'
 
 export function findAllFilesInTasks(taskList: TaskNode[]): string[] {

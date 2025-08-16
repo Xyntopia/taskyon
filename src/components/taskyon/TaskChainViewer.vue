@@ -117,7 +117,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ChatResponseType, TaskNode } from 'src/modules/taskyon/types'
+import type { ChatResponseType } from 'src/modules/taskyon/types'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
@@ -129,6 +129,7 @@ import type { Unsubscribe } from 'src/modules/frpBus'
 import { matArrowDropDown } from '@quasar/extras/material-icons'
 import { accumulateStep } from 'src/modules/taskyon/chat'
 import { safeYamlDump } from 'src/modules/yamlUtils'
+import type { TaskNode } from '@taskyon/taskyon'
 
 const tystate = useTaskyonStore()
 const showLogs = ref(false)

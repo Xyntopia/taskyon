@@ -18,12 +18,12 @@
 </template>
 
 <script setup lang="ts">
+import type { ClientTool } from '@taskyon/taskyon'
+import { createTool } from '@taskyon/taskyon'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
-import type { ClientTool } from 'src/modules/taskyon/tools'
-import { createTool } from 'src/modules/taskyon/tools'
-import { initializeTaskyon } from 'app/packages/tyclient/src/tyClient'
 import { ref } from 'vue'
 import { onMounted } from 'vue'
+import { initializeTaskyon } from '../../packages/tyclient/src/tyClient'
 
 const taskyonUrl = window.location.origin
 

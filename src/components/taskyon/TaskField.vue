@@ -96,7 +96,6 @@
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
-import type { TaskNode } from 'src/modules/taskyon/types'
 import { computed, defineAsyncComponent, ref } from 'vue'
 import TaskButtons from './TaskButtons.vue'
 import {
@@ -109,6 +108,7 @@ import { openrouterPricing } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useRouter } from 'vue-router'
 import TaskDebugTabs from './TaskDebugTabs.vue'
+import type { TaskNode } from '@taskyon/taskyon'
 
 const props = defineProps<{
   task: TaskNode
