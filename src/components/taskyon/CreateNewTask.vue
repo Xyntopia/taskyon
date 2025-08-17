@@ -560,6 +560,7 @@ async function addNewTask() {
   }
 
   // add taskchain to taskManager
+  newTaskChain.forEach((t) => (t.name = currentKeywords.value))
   const newTaskId = (await tm.addTaskChain(newTaskChain, state.llmSettings.selectedTaskId)).at(-1)
 
   // push the last task to execution queue right away...

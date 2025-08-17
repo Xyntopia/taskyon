@@ -940,6 +940,11 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     priorID: string | undefined,
     parentID: string | undefined,
   ): Promise<TaskNode> => {
+    // we simply select the parents name in this case
+    if (!task.name && (priorID || parentID)) {
+      const oldName = (await tyCrudVec.get((priorID ?? parentID)!))?.name
+      task.name = oldName
+    }
     const newTask = await createTaskNode(task, priorID, parentID)
 
     // task was already added at a previous point...

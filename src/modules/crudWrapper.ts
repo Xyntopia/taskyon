@@ -65,13 +65,17 @@ export function withImmutable<T, B extends CrudWrapper<T>>(
     await base.set(id, data)
   }
 
+  // sortout set & upsert
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { set, upsert, ...passthrough } = base
+
   const out = {
+    ...passthrough,
     async add(data: T): Promise<string | number> {
       const id = hash(data)
       await insertIfAbsent(id, data)
       return id
     },
-
     // passthroughs (read / housekeeping only)
     get: base.get,
     delete: base.delete, // keep if you want physical deletes; otherwise drop or tombstone upstream

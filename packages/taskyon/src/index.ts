@@ -77,7 +77,6 @@ export function toolCall(
 ): partialTaskDraft & { content: { type: 'functioncall'; data: FunctionCall } } {
   return {
     role: 'function',
-    name: f.name,
     content: {
       type: 'functioncall',
       data: f,
