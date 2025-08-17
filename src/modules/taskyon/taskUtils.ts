@@ -145,12 +145,18 @@ export async function generateTaskKeyWords(
           },
           (data) => safeYamlDump(data),
         )
-        .with(
+        // TODO: analyze tools for keywords..
+        // main issue here is, that we have some tools that are very repetitive. e.g.
+        // the choosetool tool so we are leacing this out for now until we have found a better solution
+        // e.g. we should probably not use chatCOmpletion and tooltool and similar ones for
+        // keyword extraction.  probably use the "display" property in order to choose which ones to use
+        // and which ones not...
+        /*.with(
           {
             content: { type: 'functioncall', data: P.select() },
           },
           (data) => safeYamlDump(data.arguments),
-        )
+        )*/
         .otherwise(() => ''),
 
     '',
