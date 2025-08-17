@@ -3,6 +3,7 @@ import { partialTaskDraft } from '@taskyon/taskyon'
 import { deepCopy } from '../utils'
 import { safeYamlDump } from '../yamlUtils'
 import { load } from 'js-yaml'
+import { usePyodideWebworker } from './webWorkerApi'
 
 export function findAllFilesInTasks(taskList: TaskNode[]): string[] {
   const fileSet = new Set<string>()
@@ -113,4 +114,21 @@ export function chat2Md(taskList: TaskNode[], fullMeta = false) {
   const messageStrings = taskList.map((t) => task2Md(t, fullMeta))
 
   return messageStrings.join('\n\n---\n\n')
+}
+
+const { extractKeywords } = usePyodideWebworker('task manager keywords')
+
+// TODO: this should be moved into its own "NLP" tool
+export async function generateTaskKeyWords(
+  newTask: partialTaskDraft | undefined,
+  taskChain: TaskNode[],
+) {
+  const chatString = [...taskChain, newTask].reduce((p, n) => {
+    if (n?.content.type === 'message') {
+      return p + '\n\n' + n.content.data
+    }
+    return p
+  }, '')
+  const kws = await extractKeywords(chatString, 5)
+  return kws
 }

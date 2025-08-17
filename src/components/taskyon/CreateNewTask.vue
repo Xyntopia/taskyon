@@ -24,7 +24,7 @@
       <!-- in case we simply want to send simple messages :)-->
       <chatMessageEdit
         v-if="!selectedTaskType"
-        v-model.trim="state.messageDraft"
+        v-model="state.messageDraft"
         :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
         @execute-task="addNewTask"
@@ -312,7 +312,10 @@ import { deepCopy } from 'src/modules/utils'
 import { mdiFunctionVariant, mdiToolbox } from '@quasar/extras/mdi-v6'
 import ApiSelect from './ApiSelect.vue'
 import { symOutlinedCancel } from '@quasar/extras/material-symbols-outlined'
+import type { TaskNode } from '@taskyon/taskyon'
 import { partialTaskDraft } from '@taskyon/taskyon'
+import { generateTaskKeyWords } from 'src/modules/taskyon/taskUtils'
+import { watchThrottled } from '@vueuse/core'
 
 const { expertMode = false, entryNode } = defineProps<{
   entryNode: partialTaskDraft
@@ -422,6 +425,22 @@ const currentnewTask = computed(() => {
   }
   return partialTaskDraft.parse(task) // we can do this, because we defined the "role"
 })
+
+const currentKeywords = ref<string>()
+watchThrottled(
+  [currentnewTask, () => state.llmSettings.selectedTaskId],
+  async () => {
+    const tm = await tystate.getTaskManager()
+    let taskChain: TaskNode[] = []
+    if (state.llmSettings.selectedTaskId) {
+      taskChain = await tm.getTaskChain(state.llmSettings.selectedTaskId)
+    }
+    console.log('generating new keywords:', currentKeywords.value)
+
+    currentKeywords.value = (await generateTaskKeyWords(currentnewTask.value, taskChain))[0]
+  },
+  { immediate: true, throttle: 2000 },
+)
 
 //const { estimateChatTokens } = useNlpWorker()
 
