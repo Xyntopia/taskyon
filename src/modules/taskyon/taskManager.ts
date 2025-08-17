@@ -6,13 +6,11 @@ import { load } from 'js-yaml'
 import { processMarkdown } from 'src/modules/taskyon/taskUtils'
 import {
   createCombinedCrudWrapper,
-  createEnhancedCrudWrapper,
   createMapCrudWrapper,
   createPgLiteCrudWrapper,
   createVectorStore,
   withImmutable,
   withLiveStreams,
-  withLocking,
 } from '../crudWrapper'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
 import { urlSafeBase64Uuid } from '../crypto'
@@ -23,6 +21,7 @@ import z from 'zod'
 import type { OptionalSome } from '@taskyon/taskyon'
 import type { InternalTool } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
+import { lockMap } from '../utils'
 
 /**
  *
@@ -388,6 +387,23 @@ export interface TaskTreeNode {
   children: TaskTreeNode[][]
 }
 
+// we use this in order to lock tasks!
+type LockItem = (id: string | number) => Promise<() => void>
+
+const withLock =
+  (lockItem: LockItem) =>
+  async <F extends () => unknown>(
+    func: F,
+    id: string | number,
+  ): Promise<Awaited<ReturnType<F>>> => {
+    const unlock = await lockItem(id)
+    try {
+      return Promise.resolve(func() as ReturnType<F>)
+    } finally {
+      unlock()
+    }
+  }
+
 // TODO:  break down  the individual parts of TaskManager this way into smaller parts:
 //        - on top of that build a function which encapsulates all the "high-level  function such as getting files etc..."
 //        - the vector store part
@@ -491,40 +507,50 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   const { toolIndex, defaultToolMap, addDefaultTools, getToolDefinition, updateToolIndex } =
     createToolIndex(tyCrud.get)
 
+  // taskLocks
+  const { lockItem, clearLocks } = lockMap('TaskLocks')
+  const createLockedFunction = withLock(lockItem)
   // add more enhanced, ty-specific functionality to our CRUD
-  const tyCrudVec = withLocking({
-    ...tyCrud,
-    get: async (id: string | number) => {
-      const task = await tyCrud.get(id)
-      if (task) updateChildAndSiblingMap(task)
-      return task
+  const tyCrudVec = {
+    get: async (id: string | number) =>
+      await createLockedFunction(async () => {
+        const task = await tyCrud.get(id)
+        if (task) updateChildAndSiblingMap(task)
+        return task
+      }, id),
+    add: async (id: string | number, task: TaskNode, vectors = false) =>
+      await createLockedFunction(async () => {
+        await tyCrud.add(task)
+        await tyCrud.get(task.id)
+        if (vectors) void addtoVectorDB(task)
+        // Update parent-child cache
+        updateChildAndSiblingMap(task)
+        // update our toolIndex with the new toolname :)
+        void updateToolIndex(task)
+      }, id),
+    delete: async (id: string | number) =>
+      await createLockedFunction(async () => {
+        // Delete from local record/memorydb
+        const task = await tyCrud.get(id)
+        if (task) void deleteFromChildAndSiblings(task)
+        void tyCrud.delete(id)
+        void deleteTaskFromVectorStore(id.toString())
+        if (task?.content.type === 'tooldefinition') toolIndex.delete(task.content.data.name)
+      }, id),
+    clear: async () => {
+      await tyCrud.clear()
+      clearLocks()
     },
-    set: async (id: string | number, task: TaskNode, vectors = false) => {
-      await tyCrud.add(task)
-      await tyCrud.get(task.id)
-      if (vectors) void addtoVectorDB(task)
-      // Update parent-child cache
-      updateChildAndSiblingMap(task)
-      // update our toolIndex with the new toolname :)
-      void updateToolIndex(task)
-    },
-    delete: async (id: string | number) => {
-      // Delete from local record/memorydb
-      const task = await tyCrud.get(id)
-      if (task) void deleteFromChildAndSiblings(task)
-      void tyCrud.delete(id)
-      void deleteTaskFromVectorStore(id.toString())
-      if (task?.content.type === 'tooldefinition') toolIndex.delete(task.content.data.name)
-    },
-  })
+  }
 
-  // TODO: unify this with our other tables?
-  const debugDb = await createEnhancedCrudWrapper<TaskNodeMeta>(
-    taskyonDb,
-    {
-      tableName: 'debugDb',
-    },
-    new Map<string, TaskNodeMeta>(),
+  // we are using mapWrapper first, because it is the fastest
+  const debugDb = withLiveStreams(
+    createCombinedCrudWrapper([
+      createMapCrudWrapper(new Map<string, TaskNodeMeta>()),
+      await createPgLiteCrudWrapper<TaskNodeMeta>(taskyonDb, {
+        tableName: 'debugDb',
+      }),
+    ]),
   )
 
   async function countTasks() {

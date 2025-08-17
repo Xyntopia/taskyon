@@ -12,7 +12,7 @@ import { createStream, filter, streamProcedureCall } from './frpBus'
 import type { PgLiteOptions } from './pglite.api'
 import { createVecPgLiteTable, type TyPGDB } from './pglite.api'
 import { useNlpWorker } from './taskyon/webWorkerApi'
-import { deepMerge, lockMap } from './utils'
+import { deepMerge } from './utils'
 
 type Row<T> = {
   [key: string]: unknown
@@ -142,45 +142,6 @@ export const withLiveStreams = <T>(
       return liveForId
     },
     liveStream,
-  }
-}
-
-const withLock =
-  (lockItem: ReturnType<typeof lockMap>['lockItem']) =>
-  async <T extends (...args: Parameters<T>) => ReturnType<T>>(
-    func: T,
-    id: string | number,
-    args: Parameters<T>,
-  ) => {
-    const unlock = await lockItem(id)
-    let result: ReturnType<T> | undefined
-    try {
-      result = func(...args)
-    } finally {
-      unlock()
-    }
-    return result
-  }
-
-export const withLocking = <T, U>(base: CrudWrapper<U> & T, namespace: string = 'task') => {
-  const { lockItem, clearLocks } = lockMap(namespace)
-
-  const locking = withLock(lockItem)
-
-  return {
-    ...base,
-    set: async (...args: Parameters<CrudWrapper<U>['set']>) =>
-      await locking(base.set, args[0], args),
-    delete: async (...args: Parameters<CrudWrapper<U>['delete']>) =>
-      await locking(base.delete, args[0], args),
-    get: async (...args: Parameters<CrudWrapper<U>['get']>) =>
-      await locking(base.get, args[0], args),
-    upsert: async (...args: Parameters<CrudWrapper<U>['upsert']>) =>
-      await locking(base.upsert, args[0], args),
-    clear: async () => {
-      await base.clear()
-      clearLocks()
-    },
   }
 }
 
@@ -786,20 +747,3 @@ export const withSecretStore = (
 }
 
 export type SecretStore = ReturnType<typeof withSecretStore>
-
-export const createEnhancedCrudWrapper = async <T>(
-  db: TyPGDB,
-  options: PgLiteOptions,
-  storage: Map<string | number, T>,
-) => {
-  const dbWrapper = await createPgLiteCrudWrapper<T>(db, options)
-  const mapWrapper = createMapCrudWrapper<T>(storage)
-  // we are using mapWrapper first, because it is the fastest
-  const combinedWrapper = createCombinedCrudWrapper([mapWrapper, dbWrapper])
-  const lockedWrapper = withLocking(combinedWrapper)
-  const liveWrapper = withLiveStreams<T>(lockedWrapper)
-
-  return liveWrapper
-}
-
-export type EnhancedCrudWrapper<T> = Awaited<ReturnType<typeof createEnhancedCrudWrapper<T>>>
