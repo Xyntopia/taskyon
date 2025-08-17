@@ -139,12 +139,6 @@ export async function generateTaskKeyWords(
           },
           (data) => data,
         )
-        .with(
-          {
-            content: { type: P.union('toolresult', 'structured'), data: P.select() },
-          },
-          (data) => safeYamlDump(data),
-        )
         // TODO: analyze tools for keywords..
         // main issue here is, that we have some tools that are very repetitive. e.g.
         // the choosetool tool so we are leacing this out for now until we have found a better solution
@@ -156,7 +150,13 @@ export async function generateTaskKeyWords(
             content: { type: 'functioncall', data: P.select() },
           },
           (data) => safeYamlDump(data.arguments),
-        )*/
+        ).with(
+          {
+            content: { type: P.union('structured'), data: P.select() },
+          },
+          (data) => safeYamlDump(data),
+        )
+          */
         .otherwise(() => ''),
 
     '',
