@@ -544,7 +544,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   }
 
   // we are using mapWrapper first, because it is the fastest
-  const debugDb = withLiveStreams(
+  const metaDb = withLiveStreams(
     createCombinedCrudWrapper([
       createMapCrudWrapper(new Map<string, TaskNodeMeta>()),
       await createPgLiteCrudWrapper<TaskNodeMeta>(taskyonDb, {
@@ -783,7 +783,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     // TODO: manually re-initiailized taskyondb after remove...
     await resetTaskVectors()
     await tyCrudVec.clear()
-    await debugDb.clear()
+    await metaDb.clear()
   }
 
   // deletes tasks from the supplied leaf up to the first branch
@@ -1065,7 +1065,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     addPartialTask2Tree,
     addTaskChain,
     addMdTaskChain,
-    debugDb,
+    metaDb,
   }
 }
 export type TyTaskManager = Awaited<ReturnType<typeof useTyTaskManager>>

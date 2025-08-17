@@ -288,7 +288,7 @@ function createHandleError(
       task,
       selectedModel,
       enableOpenAiTools,
-      taskManager.debugDb,
+      taskManager.metaDb,
     )
 
     // we are adding the error task chain as a subtaskchain with the parentID of this

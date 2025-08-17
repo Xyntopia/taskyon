@@ -805,7 +805,7 @@ You can select them in the "Chat Settings" section in the message input window.
     let subscriptionUnsub: (() => void) | null = null
     if (taskId) {
       void getTaskManager().then((tm) => {
-        subscriptionUnsub = tm.debugDb.readLive(taskId).subscribe(({ data }) => {
+        subscriptionUnsub = tm.metaDb.readLive(taskId).subscribe(({ data }) => {
           taskMetaRef.value = data || undefined
         })
       })
