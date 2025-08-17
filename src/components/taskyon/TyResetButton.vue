@@ -26,11 +26,11 @@
           </div>
         </q-card-section>
         <q-card-section class="q-pt-none">
-          <p v-if="mode === 'settings'">
+          <p v-if="mode === 'tasks'">
             <strong>Warning:</strong> This operation will permanently delete all Taskyon chat data.
             This action cannot be undone.
           </p>
-          <p v-else-if="mode === 'tasks'">
+          <p v-else-if="mode === 'settings'">
             <strong>Warning:</strong> This operation will reset all taskyon settings. It will *not*
             delete any of your chats.
           </p>
