@@ -49,7 +49,7 @@ export type ImmutableOf<T, C extends CrudWrapper<T>> = Omit<C, 'set' | 'upsert'>
 export function withImmutable<T, B extends CrudWrapper<T>>(
   base: B,
   opts: {
-    hash: (data: T) => string | number
+    hash: (data: T) => Promise<string> | string
     onDuplicate?: 'ignore' | 'error'
   },
 ): ImmutableOf<T, B> {
@@ -72,7 +72,7 @@ export function withImmutable<T, B extends CrudWrapper<T>>(
   const out = {
     ...passthrough,
     async add(data: T): Promise<string | number> {
-      const id = hash(data)
+      const id = await hash(data)
       await insertIfAbsent(id, data)
       return id
     },

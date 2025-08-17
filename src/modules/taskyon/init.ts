@@ -142,11 +142,10 @@ export async function initTaskyon(
     TaskyonMessage,
     {
       task: async (msg) => {
-        const tn = await taskManagerInstance.addPartialTask2Tree(
-          { ...msg.task, label: msg.origin ? [msg.origin] : undefined },
-          undefined,
-          undefined,
-        )
+        const tn = await taskManagerInstance.addPartialTask2Tree({
+          ...msg.task,
+          label: msg.origin ? [msg.origin] : undefined,
+        })
         // push the last task to execution queue right away...
         if (msg.execute) {
           queueTask(tn.id)

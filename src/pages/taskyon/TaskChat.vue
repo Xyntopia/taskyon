@@ -277,11 +277,10 @@ async function updateChatThread() {
       newTaskId = await tm.addMdTaskChain(markdownContent)
     } catch {
       newTaskId = (
-        await tm.addPartialTask2Tree(
-          {
-            content: {
-              type: 'error',
-              data: `# 404 - Markdown Not Found
+        await tm.addPartialTask2Tree({
+          content: {
+            type: 'error',
+            data: `# 404 - Markdown Not Found
 
 The markdown file \`${filePath}\` does not exist.
 
@@ -293,12 +292,9 @@ The markdown file \`${filePath}\` does not exist.
 
 Please check the path and try again.
 `,
-            },
-            role: 'system',
           },
-          undefined,
-          undefined,
-        )
+          role: 'system',
+        })
       ).id
     }
 

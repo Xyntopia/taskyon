@@ -312,11 +312,10 @@ You can select them in the "Chat Settings" section in the message input window.
         },
         task: async (msg) => {
           // TODO: replace by rpc call to outPort
-          const tn = await tyInit.taskManagerInstance.addPartialTask2Tree(
-            { ...msg.task, label: msg.origin ? [msg.origin] : undefined },
-            undefined,
-            undefined,
-          )
+          const tn = await tyInit.taskManagerInstance.addPartialTask2Tree({
+            ...msg.task,
+            label: msg.origin ? [msg.origin] : undefined,
+          })
           // push the last task to execution queue right away...
           if (msg.execute) {
             tyInit.queueTask(tn.id)

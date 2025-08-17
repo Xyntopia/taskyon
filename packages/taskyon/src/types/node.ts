@@ -85,20 +85,10 @@ TODO: define onwership types..`),
 })
 export type TaskNode = z.infer<typeof TaskNode>
 
-// TODO: get rid of taskDraft once we have immutable tasks with content addressing
-//       once we have that, we can simply create tasks immediatly with the correct content address as an ID,
-export const partialTaskDraft = TaskNode.omit({
-  id: true,
-  created_at: true,
-  priorID: true,
-  parentID: true,
+export const partialTaskDraft = TaskNode.partial().required({ role: true, content: true }).meta({
+  description:
+    'This is just a subset of the task properties which can be used to define new tasks in various places.',
 })
-  .partial()
-  .required({ role: true, content: true })
-  .meta({
-    description:
-      'This is just a subset of the task properties which can be used to define new tasks in various places.',
-  })
 export type partialTaskDraft = z.infer<typeof partialTaskDraft>
 
 // If you want to map them to { label, value } for q-select:

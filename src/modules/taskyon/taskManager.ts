@@ -48,7 +48,13 @@ export async function findRootTask(taskId: string, getTask: TyTaskManager['getTa
 
 const TaskWithoutId = TaskNode.omit({ id: true }).strip()
 
-async function taskContentHash(task: Partial<TaskNode>) {
+async function taskContentHash(task: partialTaskDraft) {
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    throw new Error(
+      'crypto.subtle is not available in this environment, We can currently not generate task IDs!!',
+    )
+  }
+
   console.log('generating new hash ID for task')
   // we need to verify that our task is of type TaskNode without ID and we do this using Zod :)
   // we also want to make sure, that we only strip away anything which isn't official
@@ -59,38 +65,29 @@ async function taskContentHash(task: Partial<TaskNode>) {
   return hashId
 }
 
-/**
- * Creates a new content addressable task here.
- *
- * This function creates a taskyon TaskNode where the ID is  SHA-256 hash of the
- * content of the task.
- *
- */
-export async function createTaskNode(task: partialTaskDraft, priorID?: string, parentID?: string) {
-  if (typeof crypto === 'undefined' || !crypto.subtle) {
-    throw new Error(
-      'crypto.subtle is not available in this environment, can not generate task IDs!!',
-    )
+export const createTaskNode = async (
+  task: partialTaskDraft,
+  options: {
+    createMeta?: 'missing' | 'overwrite' | undefined
+  } = { createMeta: 'missing' },
+  parent?: TaskNode, // can be used to "pass on" some metadata to the next task...
+) => {
+  // TODO: add task signature and other metadata here as well
+  if (options.createMeta == 'overwrite') {
+    task.created_at = Date.now()
+  } else if (options.createMeta == 'missing') {
+    if (!task.created_at) task.created_at = Date.now()
+    if (!task.name && parent?.name) {
+      // we simply select the parents name in this case, this can actually change our tasks names!
+      task.name = parent.name
+    }
   }
-
-  // TODO: add a signature as well! maybe by simply signing the task and adding it to the ID?
-  //       or should we add a special signature property? Or can we do this only by encoding a task into
-  //       a bytestream, similar to JWTs?
-  // TODO: right now we are not using the "name" for the content hash because we update it through
-  //       our keyword generation algorithm...
-  const taskContent = {
+  const newId = await taskContentHash(task)
+  const completeTask: TaskNode = {
     ...task,
-    priorID,
-    parentID,
-    created_at: Date.now(),
-  }
-
-  const newId = await taskContentHash(taskContent)
-  const newTask: TaskNode = {
-    ...taskContent,
     id: newId,
   }
-  return newTask
+  return completeTask
 }
 
 export type FileMapping = {
@@ -482,7 +479,6 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   )
   const tyCrud = withImmutable(mod, {
     hash: (data: TaskNode) => {
-      // TODO: add the rest of our "addPartialTask" to this....
       return data.id
     },
   })
@@ -506,28 +502,50 @@ export async function useTyTaskManager(vectorizerModel?: string) {
 
   // taskLocks
   const { lockItem, clearLocks } = lockMap('TaskLocks')
-  const createLockedFunction = withLock(lockItem)
+  const execWLock = withLock(lockItem)
   // add more enhanced, ty-specific functionality to our CRUD
   const tyCrudVec = {
     ...tyCrud,
     get: async (id: string | number) =>
-      await createLockedFunction(async () => {
+      await execWLock(async () => {
         const task = await tyCrud.get(id)
         if (task) updateChildAndSiblingMap(task)
         return task
       }, id),
-    add: async (task: TaskNode, vectors = false) =>
-      await createLockedFunction(async () => {
-        await tyCrud.add(task)
-        await tyCrud.get(task.id)
-        if (vectors) void addtoVectorDB(task)
+    add: async (
+      task: partialTaskDraft,
+      options: {
+        createMeta?: 'missing' | 'overwrite'
+        vectors?: boolean
+      } = { createMeta: 'missing', vectors: false },
+    ) => {
+      const parentID = task.priorID ?? task.parentID
+      const parentTask = (parentID ? await tyCrudVec.get(parentID) : undefined) || undefined
+      const completeTask: TaskNode = await createTaskNode(
+        task,
+        { createMeta: options.createMeta },
+        parentTask,
+      )
+
+      if (task.id && completeTask.id != task.id) {
+        throw new Error(
+          `Not able to create new task as id doesn't match content. Expected: ${completeTask.id} got: ${task.id}. Adding task with expted Id.`,
+        )
+      }
+
+      console.log('create new Task:', completeTask)
+      await execWLock(async () => {
+        await tyCrud.add(completeTask)
+        if (options.vectors) void addtoVectorDB(completeTask)
         // Update parent-child cache
-        updateChildAndSiblingMap(task)
+        updateChildAndSiblingMap(completeTask)
         // update our toolIndex with the new toolname :)
-        void updateToolIndex(task)
-      }, task.id),
+        void updateToolIndex(completeTask)
+      }, completeTask.id)
+      return completeTask
+    },
     delete: async (id: string | number) =>
-      await createLockedFunction(async () => {
+      await execWLock(async () => {
         // Delete from local record/memorydb
         const task = await tyCrud.get(id)
         if (task) void deleteFromChildAndSiblings(task)
@@ -915,10 +933,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   }
 
   // import tasks from json! :)
-  // TODO: remove this function and replace this with a list of tasnode json functions!!
-  //       we want to get rid of our rxdb dependency here... we could even backup tass as markdown!  that might be even better :)
   async function addTaskBackup(jsonObjString: string) {
-    // TODO: add some zod validation here!
     const jsonObj = JSON.parse(jsonObjString)
     if (Array.isArray(jsonObj)) {
       await Promise.all(
@@ -940,26 +955,8 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   // whats important here is that the TaskNode can only have one type of content
   // so when calling the function, we need to pre-select which type of task
   // we want to have.
-  const addPartialTask2Tree = async (
-    task: partialTaskDraft,
-    priorID: string | undefined,
-    parentID: string | undefined,
-  ): Promise<TaskNode> => {
-    // we simply select the parents name in this case
-    if (!task.name && (priorID || parentID)) {
-      const oldName = (await tyCrudVec.get((priorID ?? parentID)!))?.name
-      task.name = oldName
-    }
-    const newTask = await createTaskNode(task, priorID, parentID)
-
-    // task was already added at a previous point...
-    if (await tyCrudVec.get(newTask.id)) return newTask
-
-    console.log('create new Task:', newTask.id)
-    await tyCrudVec.add(newTask, true)
-
-    return newTask
-  }
+  const addPartialTask2Tree = (task: partialTaskDraft) =>
+    tyCrudVec.add(task, { createMeta: 'overwrite', vectors: true })
 
   async function addTaskChain(
     taskList: partialTaskDraft[],
@@ -969,11 +966,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     let lastTaskId = priorID
     const addedTaskList: TaskNode[] = []
     for (const task of taskList) {
-      const addedTask = await addPartialTask2Tree(
-        { ...task },
-        lastTaskId, //previous
-        parentID,
-      )
+      const addedTask = await addPartialTask2Tree({ ...task, priorID: lastTaskId, parentID })
       lastTaskId = addedTask.id
       addedTaskList.push(addedTask)
     }
