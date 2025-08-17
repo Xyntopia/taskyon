@@ -4,6 +4,7 @@ import { deepCopy } from '../utils'
 import { safeYamlDump } from '../yamlUtils'
 import { load } from 'js-yaml'
 import { usePyodideWebworker } from './webWorkerApi'
+import { match, P } from 'ts-pattern'
 
 export function findAllFilesInTasks(taskList: TaskNode[]): string[] {
   const fileSet = new Set<string>()
@@ -123,12 +124,37 @@ export async function generateTaskKeyWords(
   newTask: partialTaskDraft | undefined,
   taskChain: TaskNode[],
 ) {
-  const chatString = [...taskChain, newTask].reduce((p, n) => {
-    if (n?.content.type === 'message') {
-      return p + '\n\n' + n.content.data
-    }
-    return p
-  }, '')
+  const chatString = [...taskChain, newTask].reduce(
+    (p, n) =>
+      p +
+      '\n\n' +
+      match(n)
+        .returnType<string>()
+        .with(
+          {
+            content: {
+              type: P.union('message', 'return'),
+              data: P.select(),
+            },
+          },
+          (data) => data,
+        )
+        .with(
+          {
+            content: { type: P.union('toolresult', 'structured'), data: P.select() },
+          },
+          (data) => safeYamlDump(data),
+        )
+        .with(
+          {
+            content: { type: 'functioncall', data: P.select() },
+          },
+          (data) => safeYamlDump(data.arguments),
+        )
+        .otherwise(() => ''),
+
+    '',
+  )
   const kws = await extractKeywords(chatString, 5)
   return kws
 }
