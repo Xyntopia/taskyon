@@ -24,7 +24,7 @@
       <!-- in case we simply want to send simple messages :)-->
       <chatMessageEdit
         v-if="!selectedTaskType"
-        v-model.trim="state.messageDraft"
+        v-model="state.messageDraft"
         :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
         @execute-task="addNewTask"
