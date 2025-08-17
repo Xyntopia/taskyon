@@ -1,7 +1,6 @@
 import type { TaskNodeMeta, TaskNodeType } from './types'
 import { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { openUserUploadedFile, saveUserUploadedFileToOpfs } from '../OPFS'
-import { usePyodideWebworker } from './webWorkerApi'
 import { load } from 'js-yaml'
 import { processMarkdown } from 'src/modules/taskyon/taskUtils'
 import {
@@ -93,8 +92,6 @@ export async function createTaskNode(task: partialTaskDraft, priorID?: string, p
   }
   return newTask
 }
-
-const { extractKeywords } = usePyodideWebworker('task manager keywords')
 
 export type FileMapping = {
   uuid: string
@@ -512,6 +509,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   const createLockedFunction = withLock(lockItem)
   // add more enhanced, ty-specific functionality to our CRUD
   const tyCrudVec = {
+    ...tyCrud,
     get: async (id: string | number) =>
       await createLockedFunction(async () => {
         const task = await tyCrud.get(id)
@@ -933,21 +931,6 @@ export async function useTyTaskManager(vectorizerModel?: string) {
 
   const fm = await useFileManager(taskyonDb)
 
-  async function updateTaskNameWKeywords(newTask: TaskNode) {
-    const chat = getTaskChain(newTask.id)
-    const chatString = (await chat).reduce((p, n) => {
-      if (n?.content.type === 'message') {
-        return p + '\n\n' + n.content.data
-      }
-      return p
-    }, '')
-    void extractKeywords(chatString, 5).then((kws) => {
-      console.log('update task with kw: ', kws)
-      newTask.name = kws[0]
-      void tyCrudVec.upsert(newTask.id, newTask)
-    })
-  }
-
   // add a task to the db. Adding some default information such as timestamps etc...
   // whats important here is that the TaskNode can only have one type of content
   // so when calling the function, we need to pre-select which type of task
@@ -963,22 +946,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     if (await tyCrudVec.get(newTask.id)) return newTask
 
     console.log('create new Task:', newTask.id)
-    await tyCrudVec.set(newTask.id, newTask, true)
-
-    // extract keywordsfrom entire chat and use it to name the task...
-    // but only if a taskname doesn't exist yet.
-    // TODO: make sure, we update keywords somwhere else e.g.in "debugdb" we
-    //       really would like to have immutable tasks...
-    // TODO: how can we do this much faster, so that we don't have to update our task and
-    //       keep it immutable?  We should probably await keywords, but also keep a
-    //       separate index with keywords for tasks...
-    // TODO: we can get rid of the "discard" lavels, things that should be "discarded" can be part of
-    //       a lower-level function or stay inside a tool etc...
-    if (!newTask.name && task.content && !task.label?.includes('discard')) {
-      await updateTaskNameWKeywords(newTask)
-    } else if (newTask.name) {
-      console.log('task already has a name:', newTask.name)
-    }
+    await tyCrudVec.add(newTask.id, newTask, true)
 
     return newTask
   }
