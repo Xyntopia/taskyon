@@ -20,7 +20,7 @@ import z from 'zod'
 import type { OptionalSome } from '@taskyon/taskyon'
 import type { InternalTool } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
-import { lockMap } from '../utils'
+import { lockMap, sleep } from '../utils'
 
 /**
  *
@@ -783,6 +783,10 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     await resetTaskVectors()
     await tyCrudVec.clear()
     await metaDb.clear()
+    // we are doing the sleep here because some parts
+    // of our app re-load the browser and that prevents the
+    // deletion from happening..
+    await sleep(500)
   }
 
   // deletes tasks from the supplied leaf up to the first branch

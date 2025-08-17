@@ -95,10 +95,7 @@ async function onResetTaskyon() {
     const names = await caches.keys()
     await Promise.all(names.map((n) => caches.delete(n)))
     console.log('CacheStorage cleared:', names)
+    location.reload() // reload browser window to reinitialize the db...
   }
-
-  // TODO: this is a superdirty version..  it would be much better to manually reinit the taskyondb in the deleteAllTasks function
-  location.reload() // reload browser window to reinitialize the db...
-  //location.reload(); // reload browser window to reinitialize the db...
 }
 </script>
