@@ -1,6 +1,6 @@
 <template>
   <FadeAwayScrollPage>
-    <q-toolbar>
+    <q-toolbar class="q-pt-md">
       <q-tabs v-model="selectedTab" class="col-auto" dense no-caps>
         <q-route-tab
           to="/settings/aiserviceprovider"
