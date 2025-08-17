@@ -39,21 +39,21 @@ export interface CrudWrapper<T> {
   ) => Promise<T>
 }
 
-export type ImmutableCrudWrapper<T> = Omit<CrudWrapper<T>, 'upsert' | 'set'> & {
-  add: (data: T) => Promise<string | number>
+export type ImmutableOf<T, C extends CrudWrapper<T>> = Omit<C, 'set' | 'upsert'> & {
+  add(data: T): Promise<number | string>
   // hard-ban these at the type level if someone widens:
   set?: never
   upsert?: never
 }
 
-export function withImmutable<T>(
-  base: CrudWrapper<T>,
-  opts?: {
-    hash?: (data: T) => string | number
+export function withImmutable<T, B extends CrudWrapper<T>>(
+  base: B,
+  opts: {
+    hash: (data: T) => string | number
     onDuplicate?: 'ignore' | 'error'
   },
-): ImmutableCrudWrapper<T> {
-  const hash = opts?.hash
+): ImmutableOf<T, B> {
+  const hash = opts.hash
   const onDuplicate = opts?.onDuplicate ?? 'ignore'
 
   const insertIfAbsent = async (id: string | number, data: T) => {
@@ -65,9 +65,8 @@ export function withImmutable<T>(
     await base.set(id, data)
   }
 
-  return {
+  const out = {
     async add(data: T): Promise<string | number> {
-      if (!hash) throw new Error('withImmutable.add requires a hash function')
       const id = hash(data)
       await insertIfAbsent(id, data)
       return id
@@ -77,10 +76,16 @@ export function withImmutable<T>(
     get: base.get,
     delete: base.delete, // keep if you want physical deletes; otherwise drop or tombstone upstream
     list: base.list,
-    ...(base.listAll ? { listAll: base.listAll } : {}),
     listIds: base.listIds,
     clear: base.clear,
+  } as ImmutableOf<T, B>
+
+  if (base.listAll) {
+    // TS is fine with assigning an optional key here
+    out.listAll = base.listAll
   }
+
+  return out
 }
 
 export const withLiveStreams = <T>(
@@ -108,6 +113,10 @@ export const withLiveStreams = <T>(
       // Optionally, you might emit a deletion event if needed.
       emit({ id, data: null })
     },
+    async clear() {
+      await base.clear()
+      // Optionally, you could notify subscribers here if desired.
+    },
     readLive: (id: string | number, emitCurrent: boolean = true) => {
       const liveForId = filter(liveStream, (event) => event.id === id)
       if (emitCurrent) {
@@ -131,10 +140,6 @@ export const withLiveStreams = <T>(
         }
       }
       return liveForId
-    },
-    async clear() {
-      await base.clear()
-      // Optionally, you could notify subscribers here if desired.
     },
     liveStream,
   }
@@ -791,10 +796,10 @@ export const createEnhancedCrudWrapper = async <T>(
   const mapWrapper = createMapCrudWrapper<T>(storage)
   // we are using mapWrapper first, because it is the fastest
   const combinedWrapper = createCombinedCrudWrapper([mapWrapper, dbWrapper])
-  const liveWrapper = withLiveStreams<T>(combinedWrapper)
-  const lockedWrapper = withLocking(liveWrapper)
+  const lockedWrapper = withLocking(combinedWrapper)
+  const liveWrapper = withLiveStreams<T>(lockedWrapper)
 
-  return lockedWrapper
+  return liveWrapper
 }
 
 export type EnhancedCrudWrapper<T> = Awaited<ReturnType<typeof createEnhancedCrudWrapper<T>>>

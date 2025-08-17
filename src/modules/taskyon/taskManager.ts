@@ -10,9 +10,9 @@ import {
   createMapCrudWrapper,
   createPgLiteCrudWrapper,
   createVectorStore,
+  withImmutable,
   withLiveStreams,
   withLocking,
-  type CrudWrapper,
 } from '../crudWrapper'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
 import { urlSafeBase64Uuid } from '../crypto'
@@ -309,7 +309,7 @@ async function useTaskVectors(
   }
 }
 
-export function createToolIndex(tyCrudVec: CrudWrapper<TaskNode>) {
+export function createToolIndex(getTask: (id: string | number) => Promise<TaskNode | null>) {
   // we use this index to quickly look up tools from our database!
   // We require that the toolIndex should contain only the latest version of a tool
   const toolIndex = new Map<string, string>()
@@ -331,7 +331,7 @@ export function createToolIndex(tyCrudVec: CrudWrapper<TaskNode>) {
   ): Promise<{ def?: TaskNodeType<'tooldefinition'> | undefined; tool?: InternalTool }> {
     const toolTaskId = toolIndex.get(name)
     if (toolTaskId) {
-      const toolTask = await tyCrudVec.get(toolTaskId)
+      const toolTask = await getTask(toolTaskId)
       if (toolTask?.content.type === 'tooldefinition') {
         return {
           def: toolTask as TaskNodeType<'tooldefinition'>,
@@ -356,7 +356,7 @@ export function createToolIndex(tyCrudVec: CrudWrapper<TaskNode>) {
         // of old tool already exists, we need tocheck which one is newer
         // and only update if the new one is newer than the old one
         if (oldToolId) {
-          const oldTool = await tyCrudVec.get(oldToolId)
+          const oldTool = await getTask(oldToolId)
           if (
             (oldTool?.created_at ?? 0) >= (task?.created_at ?? 0) &&
             oldTool?.content.type === 'tooldefinition'
@@ -462,9 +462,17 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   const tySqlCrud = await createPgLiteCrudWrapper<TaskNode>(taskyonDb, {
     tableName: 'taskyonNodes',
   })
-  const tyCrud = withLiveStreams(
+  // make sure that we remove the "upsert" function for tyCrud in order
+  // to make sure the data inside stays immutable...
+  const mod = withLiveStreams(
     createCombinedCrudWrapper([createMapCrudWrapper(new Map<string, TaskNode>()), tySqlCrud]),
   )
+  const tyCrud = withImmutable(mod, {
+    hash: (data: TaskNode) => {
+      // TODO: add the rest of our "addPartialTask" to this....
+      return data.id
+    },
+  })
 
   const getAllTaskIds = tyCrud.listIds
 
@@ -479,8 +487,9 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     count: countVecs,
   } = await useTaskVectors(taskyonDb, getAllTaskIds, tyCrud.get, vectorizerModel)
 
+  // TODO: updateToolIndex should work through streams!
   const { toolIndex, defaultToolMap, addDefaultTools, getToolDefinition, updateToolIndex } =
-    createToolIndex(tyCrud)
+    createToolIndex(tyCrud.get)
 
   // add more enhanced, ty-specific functionality to our CRUD
   const tyCrudVec = withLocking({
@@ -491,7 +500,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
       return task
     },
     set: async (id: string | number, task: TaskNode, vectors = false) => {
-      await tyCrud.set(id, task)
+      await tyCrud.add(task)
       await tyCrud.get(task.id)
       if (vectors) void addtoVectorDB(task)
       // Update parent-child cache
@@ -506,11 +515,6 @@ export async function useTyTaskManager(vectorizerModel?: string) {
       void tyCrud.delete(id)
       void deleteTaskFromVectorStore(id.toString())
       if (task?.content.type === 'tooldefinition') toolIndex.delete(task.content.data.name)
-    },
-    upsert: async (id: string | number, data: TaskNode) => {
-      // TODO: make sure, we never call this on tasks!
-      const newData = await tyCrud.upsert(id, data)
-      return newData
     },
   })
 
