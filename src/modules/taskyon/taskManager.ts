@@ -516,7 +516,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
         if (task) updateChildAndSiblingMap(task)
         return task
       }, id),
-    add: async (id: string | number, task: TaskNode, vectors = false) =>
+    add: async (task: TaskNode, vectors = false) =>
       await createLockedFunction(async () => {
         await tyCrud.add(task)
         await tyCrud.get(task.id)
@@ -525,7 +525,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
         updateChildAndSiblingMap(task)
         // update our toolIndex with the new toolname :)
         void updateToolIndex(task)
-      }, id),
+      }, task.id),
     delete: async (id: string | number) =>
       await createLockedFunction(async () => {
         // Delete from local record/memorydb
@@ -536,6 +536,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
         if (task?.content.type === 'tooldefinition') toolIndex.delete(task.content.data.name)
       }, id),
     clear: async () => {
+      clearLocks()
       await tyCrud.clear()
       clearLocks()
     },
@@ -552,7 +553,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   )
 
   async function countTasks() {
-    return (await tyCrud.listIds()).length
+    return (await tyCrudVec.listIds()).length
   }
 
   function createCachedIdSearch(
@@ -905,7 +906,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   async function getJsonTaskBackup() {
     // TODO: give this a callback so that we can save it in "chunks"
     console.log('exporting json backup db!')
-    const allNodes = await tySqlCrud.list()
+    const allNodes = await tyCrudVec.listAll()
     return JSON.stringify(allNodes.map((r) => r.data))
   }
 
@@ -918,9 +919,9 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     if (Array.isArray(jsonObj)) {
       await Promise.all(
         jsonObj.map(async (obj) => {
-          const res = TaskNode.safeParse(obj.data)
+          const res = TaskNode.safeParse(obj)
           if (res.success) {
-            await tySqlCrud.set(res.data.id, res.data)
+            await tyCrudVec.add(res.data)
           } else {
             console.warn('Could not add data:', res.data, res.error)
           }
@@ -951,7 +952,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     if (await tyCrudVec.get(newTask.id)) return newTask
 
     console.log('create new Task:', newTask.id)
-    await tyCrudVec.add(newTask.id, newTask, true)
+    await tyCrudVec.add(newTask, true)
 
     return newTask
   }

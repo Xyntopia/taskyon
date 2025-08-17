@@ -26,7 +26,7 @@ export interface CrudWrapper<T> {
   delete: (id: string | number) => Promise<void>
   listIds: () => Promise<(string | number)[]>
   list: () => Promise<Row<T>[]>
-  listAll?: () => Promise<Row<T>[]>
+  listAll: () => Promise<Row<T>[]>
   clear: () => Promise<void>
   // TODO: the "upsert" strategy is potentially problematic, because
   //       it leads to inconsistent results across different storages.
@@ -255,6 +255,12 @@ export const createPgLiteCrudWrapper = async <T>(
     return result.rows.length ? result.rows[0]!.data : null
   }
 
+  const list = async (): Promise<Row<T>[]> => {
+    await db.waitReady
+    const result = await db.query<Row<T>>(`SELECT ${idColumn}, ${dataColumn} FROM ${tableName};`)
+    return result.rows
+  }
+
   return {
     set: async (id: string | number, data: T) => {
       await db.waitReady
@@ -301,11 +307,8 @@ export const createPgLiteCrudWrapper = async <T>(
       await db.waitReady
       await db.query(`DELETE FROM ${tableName} WHERE ${idColumn} = $1;`, [id])
     },
-    list: async (): Promise<Row<T>[]> => {
-      await db.waitReady
-      const result = await db.query<Row<T>>(`SELECT ${idColumn}, ${dataColumn} FROM ${tableName};`)
-      return result.rows
-    },
+    list,
+    listAll: list,
     listIds: async (): Promise<(string | number)[]> => {
       await db.waitReady
       const result = await db.query<{ id: string | number }>(
@@ -448,6 +451,13 @@ export const createMapCrudWrapper = <T>(storage: Map<string | number, T>): CrudW
   const get = (id: string | number): Promise<T | null> => {
     return Promise.resolve(storage.has(id) ? storage.get(id)! : null)
   }
+  const list = (): Promise<Row<T>[]> => {
+    const rows: Row<T>[] = []
+    storage.forEach((value, key) => {
+      rows.push({ id: key, data: value })
+    })
+    return Promise.resolve(rows)
+  }
   return {
     get,
     set: (id: string | number, data: T): Promise<void> => {
@@ -478,13 +488,8 @@ export const createMapCrudWrapper = <T>(storage: Map<string | number, T>): CrudW
       storage.delete(id)
       return Promise.resolve()
     },
-    list: (): Promise<Row<T>[]> => {
-      const rows: Row<T>[] = []
-      storage.forEach((value, key) => {
-        rows.push({ id: key, data: value })
-      })
-      return Promise.resolve(rows)
-    },
+    list,
+    listAll: list,
     listIds: (): Promise<(string | number)[]> => {
       return Promise.resolve(Array.from(storage.keys()))
     },

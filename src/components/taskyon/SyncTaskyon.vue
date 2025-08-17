@@ -332,10 +332,9 @@ const downloadSettings = (format: string) => {
 async function onDownloadTaskyonData() {
   const tm = await tystate.getTaskManager()
   const jsonBackup = await tm.getJsonTaskBackup()
-  const fileContent = JSON.stringify(jsonBackup)
   console.log('downloading tasks in json format')
   const timestamp = new Date().toISOString()
-  exportFile(`${timestamp}_taskyon_data.json`, fileContent, 'application/json')
+  exportFile(`${timestamp}_taskyon_data.json`, jsonBackup, 'application/json')
 }
 
 async function onUploadTaskyonData(newFiles: File[]) {
