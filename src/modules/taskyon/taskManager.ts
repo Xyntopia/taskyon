@@ -75,7 +75,8 @@ export const createTaskNode = async (
   // TODO: add task signature and other metadata here as well
   if (options.createMeta == 'overwrite') {
     task.created_at = Date.now()
-  } else if (options.createMeta == 'missing') {
+  }
+  if (options.createMeta !== undefined) {
     if (!task.created_at) task.created_at = Date.now()
     if (!task.name && parent?.name) {
       // we simply select the parents name in this case, this can actually change our tasks names!
