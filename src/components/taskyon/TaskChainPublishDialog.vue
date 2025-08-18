@@ -202,7 +202,7 @@ async function onExportPublicGdrive(taskList: TaskNode[]) {
 
         const gdriveFile = await publishMarkdown(
           taskThreadMd,
-          state.appConfiguration.gdriveDir,
+          state.appConfiguration.gdriveDir + '/share',
           `ty-${task.name || ''}.${task.id}.md`,
           true,
         )
