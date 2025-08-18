@@ -2,9 +2,12 @@
 $secondary: var(--q-secondary-rgb)
 $primary: var(--q-primary-rgb)
 
-$app-bg-light: radial-gradient(ellipse at bottom right, rgba($secondary, 0.2) 0%, transparent 80%), radial-gradient(ellipse at bottom left, rgba($primary, 0.4), white 70%)
+//$app-bg-light: radial-gradient(ellipse at bottom right, rgba($secondary, 0.2) 0%, transparent 80%), radial-gradient(ellipse at bottom left, rgba($primary, 0.4), white 70%)
+//$app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%, transparent 80%), radial-gradient(ellipse at bottom left, rgb($primary), black 80%)
 
-$app-bg-dark: radial-gradient(ellipse at bottom right, rgba($secondary, 0.3) 0%, transparent 80%), radial-gradient(ellipse at bottom left, rgb($primary), black 80%)
+// gradients (solid color stop -> transparent)
+$app-bg-light: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(--q-secondary) 50%, white) 0% 0%, transparent 80% ), radial-gradient( ellipse at bottom left, color-mix(in oklch, var(--q-primary) 30%, white) 0%, transparent 70% )
+$app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(--q-secondary) 50%, black) 0%, transparent 80% ), radial-gradient( ellipse at bottom left, color-mix(in oklch, var(--q-primary) 100%, black) 0%, black 80% )
 
 @media screen
   .q-layout
