@@ -22,17 +22,27 @@ type gDriveFile = {
 export const clientId = '14927198496-jaadcashh91s9gue7uicf3datk79tohc.apps.googleusercontent.com'
 export const scope = 'https://www.googleapis.com/auth/drive.file'
 
+// we can use this function to pack multiple files into a single file
+// in gdrive and mark them using the hashprops! so that we know
+// where individual files are!
+const MAX_APP_PROPS = 30
+const MAX_PUB_PROPS = 30
+export function buildHashProps(hashes: string[]) {
+  const appProps: Record<string, string> = {}
+  const pubProps: Record<string, string> = {}
+  let i = 0
+  for (; i < hashes.length && i < MAX_APP_PROPS; i++) appProps[`h:${hashes[i]}`] = '1'
+  for (; i < hashes.length && i < MAX_APP_PROPS + MAX_PUB_PROPS; i++)
+    pubProps[`h:${hashes[i]}  `] = '1'
+  return { appProps, pubProps, overflow: hashes.slice(i) } // overflow => put in sidecar .idx.json
+}
+
 export const useGdrive = () => {
   const maxTokenAgeMinutes = 55
   const tyGdAccessStorageName = 'tygd'
   const savedToken = String(LocalStorage.getItem(tyGdAccessStorageName))
   const gdriveAccessToken = ref<string>(savedToken) // Store the access token
-  watch(
-    () => gdriveAccessToken,
-    (p, n) => {
-      LocalStorage.set(tyGdAccessStorageName, n)
-    },
-  )
+  watch(gdriveAccessToken, (n) => LocalStorage.set(tyGdAccessStorageName, n ?? ''))
 
   const tokenReceivedTime = ref(0) // Unix timestamp of when the token was received
 
@@ -245,7 +255,7 @@ async function updateFile(fileId: string, file: Blob, mimeType: string, accessTo
 
   const formData = new FormData()
   formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
-  formData.append('file', new Blob([file], { type: mimeType }))
+  formData.append('file', file)
 
   const headers = {
     Authorization: `Bearer ${accessToken}`,
@@ -263,35 +273,28 @@ async function pushFile(
   directoryId: string | undefined,
   file: Blob | undefined,
   accessToken: string,
+  opts?: {
+    appProperties?: Record<string, string>
+    properties?: Record<string, string>
+  },
 ) {
   const url = `https://www.googleapis.com/upload/drive/v3/files?${fieldsParam}&uploadType=multipart`
-  // Now, modify the metadata to include the parent directory
+
   const metadata: Record<string, unknown> = {
     name: fileName,
-    mimeType: mimeType,
-  }
-
-  if (directoryId) {
-    metadata.parents = [directoryId] // Set the parent directory
+    mimeType,
+    ...(directoryId ? { parents: [directoryId] } : {}),
+    ...(opts?.appProperties ? { appProperties: opts.appProperties } : {}),
+    ...(opts?.properties ? { properties: opts.properties } : {}),
   }
 
   const formData = new FormData()
   formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
-  if (file) {
-    formData.append('file', new Blob([file], { type: mimeType }))
-  }
+  if (file) formData.append('file', file)
 
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    'Content-Type': 'multipart/related',
-  }
-
-  let uploadedfileData: gDriveFile | undefined = undefined
+  const headers = { Authorization: `Bearer ${accessToken}` }
   const response = await axios.post<gDriveFile>(url, formData, { headers })
-  uploadedfileData = response.data
-  console.log('File uploaded, response:', response)
-
-  return uploadedfileData
+  return response.data
 }
 
 async function ensureDirectoryExists(
@@ -311,6 +314,30 @@ async function ensureDirectoryExists(
   }
 
   return directoryId
+}
+
+export async function findFilesByHash(folderId: string, hash: string, accessToken: string) {
+  const q =
+    `'${folderId}' in parents and trashed = false and ` +
+    `(` +
+    `appProperties has { key='h:${hash}' and value='1' } or ` +
+    `properties has { key='h:${hash}' and value='1' }` +
+    `)`
+
+  const params = {
+    q,
+    pageSize: 10,
+    orderBy: 'createdTime desc',
+    fields: 'files(id,name,appProperties,properties,createdTime)',
+  }
+  const headers = { Authorization: `Bearer ${accessToken}` }
+  const { data } = await axios.get('https://www.googleapis.com/drive/v3/files', { headers, params })
+  return data.files as Array<{
+    id: string
+    name: string
+    appProperties?: unknown
+    properties?: unknown
+  }>
 }
 
 async function gdrivefindFileOrDirectoryId({
