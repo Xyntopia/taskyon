@@ -7,20 +7,20 @@
         <q-btn
           outline
           label="Generate Diagnostics Report"
-          @click="generateReport(detailed, noGui, false)"
+          @click="generateReport(state.detailedTests, state.noGuiTests, false)"
         ></q-btn>
-        <q-toggle v-model="noGui" label="no GUI Input"></q-toggle>
+        <q-toggle v-model="state.noGuiTests" label="no GUI Input"></q-toggle>
+        <q-toggle v-model="state.detailedTests" label="detailed"></q-toggle>
         <q-btn outline label="open markdown test page" to="/docs/markdown_it_test_page" />
         <q-btn
           outline
           label="Only run first test"
-          @click="generateReport(detailed, false, true)"
+          @click="generateReport(state.detailedTests, false, true)"
         ></q-btn>
         <q-btn outline label="IPFS status" to="ipfsmonitor"></q-btn>
         <q-btn v-if="diagnostics" outline label="download report" @click="downloadReport"></q-btn>
         <TyResetButton outline mode="all" />
         <TyResetButton outline mode="settings" />
-        <q-toggle v-model="detailed" label="detailed"></q-toggle>
         <q-btn outline label="test iframe API" to="/clienttest" />
         <q-card flat bordered>
           <q-btn flat :icon="matContentCopy" @click="copyToClipboard(diagnostics)"></q-btn>
@@ -72,8 +72,6 @@ import { getStoredStateString } from 'src/modules/ui/initialState'
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 const diagnostics = ref<string>('')
-const detailed = ref(false)
-const noGui = ref(true)
 const showPassWordDialog = ref(false)
 const testFinished = ref(false)
 
@@ -81,7 +79,7 @@ const infoText = ref('get password')
 let resolveSecret: (secret: string) => void
 onMounted(() => {
   void tystate.secretStore.onNewSecret(({ args: [{ id, secretName }], respond }) => {
-    if (noGui.value) {
+    if (state.noGuiTests) {
       respond('randomKey' + randomString(5))
       return
     }
