@@ -35,6 +35,7 @@
     "@scure/bip39": "^1.5.0",
     "@sqlite.org/sqlite-wasm": "^3.44.0-build1",
     "@supabase/supabase-js": "^2.39.0",
+    "@taskyon/taskyon": "^0.0.1",
     "@tauri-apps/api": "^2.6.0",
     "@vueuse/core": "^10.10.0",
     "axios": "^0.21.1",
@@ -45,6 +46,7 @@
     "core-js": "^3.6.5",
     "datastore-level": "^11.0.1",
     "fast-equals": "^5.0.1",
+    "fflate": "^0.8.2",
     "helia": "^5.4.2",
     "html-to-text": "^9.0.5",
     "js-tiktoken": "^1.0.7",
@@ -84,8 +86,7 @@
     "vue3-google-login": "^2.0.25",
     "wavefunctioncollapse": "^2.1.0",
     "xlsx": "^0.18.2",
-    "zod": "^4.0.0-beta.20250505T195954",
-    "@taskyon/taskyon": "^0.0.1"
+    "zod": "^4.0.0-beta.20250505T195954"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

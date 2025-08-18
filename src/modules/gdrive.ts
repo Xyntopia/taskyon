@@ -10,6 +10,7 @@ import { googleSdkLoaded } from 'vue3-google-login'
 import { sleep } from 'src/modules/utils'
 import { asyncLruCache } from 'src/modules/utils'
 import { LocalStorage } from 'quasar'
+import { zipSync } from 'fflate'
 
 type gDriveFile = {
   kind: string //"drive#file",
@@ -27,14 +28,28 @@ export const scope = 'https://www.googleapis.com/auth/drive.file'
 // where individual files are!
 const MAX_APP_PROPS = 30
 const MAX_PUB_PROPS = 30
-export function buildHashProps(hashes: string[]) {
+const MAX_TOTAL_PROPS = MAX_APP_PROPS + MAX_PUB_PROPS
+
+function buildNameProps(names: string[]) {
   const appProps: Record<string, string> = {}
   const pubProps: Record<string, string> = {}
   let i = 0
-  for (; i < hashes.length && i < MAX_APP_PROPS; i++) appProps[`h:${hashes[i]}`] = '1'
-  for (; i < hashes.length && i < MAX_APP_PROPS + MAX_PUB_PROPS; i++)
-    pubProps[`h:${hashes[i]}  `] = '1'
-  return { appProps, pubProps, overflow: hashes.slice(i) } // overflow => put in sidecar .idx.json
+  for (; i < names.length && i < MAX_APP_PROPS; i++) appProps[`f:${names[i]}`] = '1'
+  for (; i < names.length && i < MAX_TOTAL_PROPS; i++) pubProps[`f:${names[i]}`] = '1'
+  return { appProps, pubProps }
+}
+
+async function blobsToZip(files: Array<{ name: string; blob: Blob }>): Promise<Blob> {
+  const entries: Record<string, Uint8Array> = {}
+  for (const f of files) entries[f.name] = new Uint8Array(await f.blob.arrayBuffer())
+  const zipped = zipSync(entries, { level: 6 }) // balanced speed/ratio
+  return new Blob([zipped], { type: 'application/zip' })
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
 }
 
 export const useGdrive = () => {
@@ -195,12 +210,103 @@ export const useGdrive = () => {
     return obj // Return the parsed object
   }
 
+  async function zipAndUpload(
+    files: Array<{ name: string; blob: Blob }>,
+    directory: string,
+    zipBaseName: string,
+    share = false,
+  ) {
+    if (!files.length) throw new Error('zipAndUpload: no files provided')
+    const validAccessToken = await getValidAccessToken()
+
+    // ensure target directory
+    const directoryId = await ensureDirectoryExists(directory, validAccessToken)
+    if (!directoryId) throw new Error('Failed to create/find directory')
+
+    // split so every chunk’s filenames fit into 60 props
+    const parts = chunk(files, MAX_TOTAL_PROPS)
+
+    const results: gDriveFile[] = []
+    for (let idx = 0; idx < parts.length; idx++) {
+      const part = parts[idx]!
+      const zipName = parts.length === 1 ? `${zipBaseName}.zip` : `${zipBaseName}.${idx + 1}.zip`
+
+      // zip
+      const zipBlob = await blobsToZip(part)
+
+      // properties (store keys for all names in this zip)
+      const names = part.map((f) => f.name)
+      const { appProps, pubProps } = buildNameProps(names)
+
+      const fileRec = await pushFile(
+        zipName,
+        'application/zip',
+        directoryId,
+        zipBlob,
+        validAccessToken,
+        { appProperties: appProps, properties: pubProps },
+      )
+
+      if (share) {
+        await makeFilePublic(fileRec.id, validAccessToken)
+        const withLink = await getFileMetaData(fileRec.id, validAccessToken)
+        results.push({
+          ...fileRec,
+          ...(withLink.webViewLink ? { webViewLink: withLink.webViewLink } : {}),
+        })
+      } else {
+        results.push(fileRec)
+      }
+    }
+    return results
+  }
+
+  async function downloadZipContaining(directory: string, filename: string) {
+    const validAccessToken = await getValidAccessToken()
+    if (!validAccessToken) throw new Error('Failed to obtain a valid access token.')
+
+    const directoryId = await gdrivefindFileOrDirectoryId({
+      accessToken: validAccessToken,
+      directory,
+    })
+    if (!directoryId) throw new Error(`Directory "${directory}" not found`)
+
+    const key = `f:${filename}`
+
+    const q =
+      `'${directoryId}' in parents and trashed = false and ` +
+      `mimeType != 'application/vnd.google-apps.folder' and (` +
+      `appProperties has { key='${key}' } or properties has { key='${key}' }` +
+      `)`
+
+    const params = {
+      q,
+      pageSize: 1,
+      orderBy: 'createdTime desc',
+      fields: 'files(id,name,createdTime)',
+    }
+    const headers = { Authorization: `Bearer ${validAccessToken}` }
+    const { data } = await axios.get('https://www.googleapis.com/drive/v3/files', {
+      headers,
+      params,
+    })
+
+    const hit = data.files?.[0]
+    if (!hit) return null
+
+    // download the zip
+    return await downloadFileFromDrive(hit.id, validAccessToken) // Blob
+  }
+
   return {
     saveObjToGdrive,
     loadObjFromGdrive,
     saveFileToGdrive,
     loadFileFromGdrive,
     publishMarkdown,
+
+    zipAndUpload,
+    downloadZipContaining,
   }
 }
 
