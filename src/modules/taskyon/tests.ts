@@ -20,6 +20,102 @@ import { ToolBase } from '@taskyon/taskyon'
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 
+export async function testGdriveZipRoundtrip() {
+  const t0 = Date.now()
+  const logs: string[] = []
+  const steps: Array<{ step: string; ok: boolean; detail?: unknown }> = []
+
+  function log(step: string, detail?: unknown, ok = true) {
+    const msg = `[${new Date().toISOString()}] ${step}${detail ? `: ${JSON.stringify(detail)}` : ''}`
+    console.log(msg)
+    logs.push(msg)
+    steps.push({ step, ok, detail })
+  }
+
+  try {
+    const { zipAndUpload, downloadZipContaining } = useGdrive()
+
+    // 1) make a couple tiny test files (names look like hashes you’d use in prod)
+    const files = [
+      { name: 'a1f2c3d4e5.txt', blob: new Blob(['hello A'], { type: 'text/plain' }) },
+      {
+        name: 'b6c7d8e9f0.json',
+        blob: new Blob([JSON.stringify({ k: 1 })], { type: 'application/json' }),
+      },
+      { name: 'deadbeefcaf0.md', blob: new Blob(['# hi'], { type: 'text/markdown' }) },
+    ]
+    log(
+      'prepared test files',
+      files.map((f) => ({ name: f.name, size: f.blob.size })),
+    )
+
+    // 2) pick a fresh directory so tests don’t clash
+    const directory = `taskyon-tests/${new Date().toISOString().replace(/[:.]/g, '-')}`
+    const zipBaseName = 'roundtrip'
+    log('target directory chosen', directory)
+
+    // 3) zip & upload (will chunk if >60 names; here, it’s a single zip)
+    const created = await zipAndUpload(files, directory, zipBaseName, /*share*/ false)
+    log(
+      'uploaded zip(s)',
+      created.map((f) => ({ id: f.id, name: f.name, mimeType: f.mimeType })),
+    )
+
+    // 4) for each filename, locate its zip via properties and download it
+    const fileChecks: Array<{
+      filename: string
+      found: boolean
+      blobSize?: number
+      blobType?: string
+      error?: string
+    }> = []
+
+    for (const f of files) {
+      try {
+        const zipBlob = await downloadZipContaining(directory, f.name)
+        if (!zipBlob) {
+          fileChecks.push({ filename: f.name, found: false })
+          log(`download miss for ${f.name}`, undefined, /*ok*/ false)
+        } else {
+          const info = {
+            filename: f.name,
+            found: true,
+            blobSize: zipBlob.size,
+            blobType: (zipBlob as Blob).type,
+          }
+          fileChecks.push(info)
+          log(`download hit for ${f.name}`, info)
+        }
+      } catch (e: unknown) {
+        const err = e instanceof Error ? e.message : String(e)
+        fileChecks.push({ filename: f.name, found: false, error: err })
+        log(`download error for ${f.name}`, err, /*ok*/ false)
+      }
+    }
+
+    const allFound = fileChecks.every((fc) => fc.found)
+    return {
+      ok: allFound,
+      directory,
+      createdZips: created.map((f) => ({ id: f.id, name: f.name })),
+      fileChecks,
+      steps,
+      logs,
+      durationMs: Date.now() - t0,
+    }
+  } catch (e: unknown) {
+    const err = e instanceof Error ? { message: e.message, stack: e.stack } : { message: String(e) }
+    log('fatal error', err, /*ok*/ false)
+    return {
+      ok: false,
+      error: err,
+      steps,
+      logs,
+      durationMs: Date.now() - t0,
+    }
+  }
+}
+
 export const testSecretStore = (secretStore: Asyncify<SecretStore>) => async () => {
   console.log('request a random secret from the store')
 
