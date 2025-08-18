@@ -2,26 +2,30 @@
   <q-layout view="lHh LpR lfr">
     <q-page-container>
       <q-page class="q-pa-md q-gutter-md">
-        <div class="text-h5">Taskyon Diagnostics</div>
-        <q-btn flat label="Return to App" to="/"></q-btn>
-        <q-btn
-          outline
-          label="Generate Diagnostics Report"
-          @click="generateReport(state.detailedTests, state.noGuiTests, false)"
-        ></q-btn>
-        <q-toggle v-model="state.noGuiTests" label="no GUI Input"></q-toggle>
-        <q-toggle v-model="state.detailedTests" label="detailed"></q-toggle>
-        <q-btn outline label="open markdown test page" to="/docs/markdown_it_test_page" />
+        <div class="row">
+          <div class="text-h5">Taskyon Diagnostics</div>
+          <q-btn flat label="Return to App" to="/"></q-btn>
+        </div>
         <q-btn
           outline
           label="Only run first test"
           @click="generateReport(state.detailedTests, false, true)"
         ></q-btn>
-        <q-btn outline label="IPFS status" to="ipfsmonitor"></q-btn>
+        <q-btn
+          outline
+          label="Generate Diagnostics Report"
+          @click="generateReport(state.detailedTests, state.noGuiTests, false)"
+        ></q-btn>
+        <div>
+          <q-toggle v-model="state.noGuiTests" label="no GUI Input"></q-toggle>
+          <q-toggle v-model="state.detailedTests" label="detailed"></q-toggle>
+        </div>
+        <q-btn flat label="open markdown test page" to="/docs/markdown_it_test_page" />
+        <q-btn flat label="IPFS status" to="ipfsmonitor"></q-btn>
         <q-btn v-if="diagnostics" outline label="download report" @click="downloadReport"></q-btn>
-        <TyResetButton outline mode="all" />
-        <TyResetButton outline mode="settings" />
-        <q-btn outline label="test iframe API" to="/clienttest" />
+        <TyResetButton flat mode="all" />
+        <TyResetButton flat mode="settings" />
+        <q-btn flat label="test iframe API" to="/clienttest" />
         <q-card flat bordered>
           <q-btn flat :icon="matContentCopy" @click="copyToClipboard(diagnostics)"></q-btn>
           <pre data-cy="diagnostics-result">{{ diagnostics }}</pre>
@@ -149,12 +153,16 @@ async function generateReport(details = false, noGui = true, onlyFirst = false) 
   }
 
   diagnostics.value += await runTest(
-    'Test Secret Store',
+    'Test Gdrive zip file packets',
     testSecretStore(tystate.secretStore),
     details,
   )
 
-  diagnostics.value += await runTest('test build slim view', testJsonSchemaToYaml, details)
+  diagnostics.value += await runTest(
+    'test json schema to yam conversion',
+    testJsonSchemaToYaml,
+    details,
+  )
   diagnostics.value += await runTest('test build slim view', testBuildSlimView, details)
 
   diagnostics.value += await runTest(
