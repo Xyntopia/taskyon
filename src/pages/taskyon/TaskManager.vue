@@ -114,6 +114,7 @@ import {
 import { useRouter, useRoute } from 'vue-router'
 import { onMounted } from 'vue'
 import { type QTableProps } from 'quasar'
+import type { PartialDeep } from 'type-fest'
 
 // TODO:  do some search caching ;) so that we can move faster back & forth between
 //        pages in the browser...
@@ -209,24 +210,27 @@ async function searchTasks(params: searchParams & { k: string }) {
   if (taskManager) {
     console.log('search for', params.q)
     isSearching.value = true
+    const jsonfilter = params.ct
+      ? ({
+          content: {
+            type: params.ct,
+          },
+        } as PartialDeep<TaskNode>)
+      : undefined
+
     let result: {
       taskId: string
       distance: number
     }[] = []
     if (params.q) {
-      const jsonfilter = params.ct
-        ? {
-            content: {
-              type: params.ct,
-            },
-          }
-        : undefined
       result = await taskManager.filteredVectorSearch(params.q, parseInt(params.k), jsonfilter)
     } else if (params.t) {
       const task = await taskManager.getTask(params.t)
       if (task) {
         result = await taskManager.searchSimilarTasks(task, parseInt(params.k))
       }
+    } else {
+      result = await taskManager.filterSearch(parseInt(params.k), jsonfilter)
     }
     // Add score to each task
     searchResults.value = result

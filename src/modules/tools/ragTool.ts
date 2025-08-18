@@ -49,7 +49,16 @@ export const ragSearchTool = createTool({
       const { search } = await createVectorStore(await getDatabase('taskyon'), 'vectorStoreTool')
 
       if (searchText) {
-        const searchResults = await search(searchText, k, [], { label })
+        const searchResults = await search(
+          searchText,
+          k,
+          [],
+          label
+            ? {
+                label: [label],
+              }
+            : undefined,
+        )
         return makeTaskResult([
           [
             {

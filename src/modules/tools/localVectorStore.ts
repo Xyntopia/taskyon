@@ -41,7 +41,7 @@ export const localVectorStore = createTool({
     )
 
     if (searchText) {
-      return await search(searchText, k, [], { label })
+      return await search(searchText, k, [], { label: label ? [label] : undefined })
     } else if (saveText) {
       const id = await sha256UrlSafeHash(saveText)
       await upsert(id, saveText, { label })

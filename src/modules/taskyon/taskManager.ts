@@ -222,7 +222,7 @@ async function useTaskVectors(
   getTask: (taskId: string) => Promise<TaskNode | null>,
   vectorizerModel?: string,
 ) {
-  const vecDb = await createVectorStore(db, 'tyTaskVectors')
+  const vecDb = await createVectorStore<TaskNode>(db, 'tyTaskVectors')
 
   async function syncVectorIndexWithTasks(progressCallback: (done: number, total: number) => void) {
     let counter = 0
@@ -270,8 +270,6 @@ async function useTaskVectors(
   /**
    * So here we use q ManogQuery "query", which we can use to pre-filter our vector search.
    *
-   *
-   *
    * @param searchTerm
    * @param query
    * @param k
@@ -280,10 +278,21 @@ async function useTaskVectors(
   async function filteredVectorSearch(
     searchTerm: string,
     k = 10,
-    taskTemplate?: Partial<TaskNode> | Record<string, unknown>,
+    taskTemplate?: PartialDeep<TaskNode>,
   ): Promise<{ taskId: string; distance: number }[]> {
     const result = await vecDb.search(searchTerm, k, undefined, taskTemplate)
     return result.map((r) => ({ taskId: r.id, distance: r.distance }))
+  }
+
+  async function filterSearch(
+    k = 10,
+    taskTemplate?: PartialDeep<TaskNode>,
+  ): Promise<{ taskId: string; distance: 0 }[]> {
+    const res = await vecDb.find(taskTemplate, {
+      limit: k,
+      orderBy: { kind: 'dataKey', key: 'created_at' },
+    })
+    return Object.values(res).map((t) => ({ taskId: t.id, distance: 0 }))
   }
 
   async function searchSimilarTasks(task: Partial<TaskNode>, k = 10) {
@@ -292,6 +301,7 @@ async function useTaskVectors(
   }
 
   return {
+    filterSearch,
     syncVectorIndexWithTasks,
     deleteTaskFromVectorStore: vecDb.delete,
     addtoVectorDB,
@@ -494,6 +504,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     resetTaskVectors,
     searchSimilarTasks,
     count: countVecs,
+    filterSearch,
   } = await useTaskVectors(taskyonDb, getAllTaskIds, tyCrud.get, vectorizerModel)
 
   // TODO: updateToolIndex should work through streams!
@@ -1022,6 +1033,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     searchAllDirectChildren,
     searchAllChildren,
     searchSimilarTasks,
+    filterSearch,
     loadYamlConversation,
   }
 

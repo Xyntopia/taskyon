@@ -13,6 +13,7 @@ import type { PgLiteOptions } from './pglite.api'
 import { createVecPgLiteTable, type TyPGDB } from './pglite.api'
 import { useNlpWorker } from './taskyon/webWorkerApi'
 import { deepMerge } from './utils'
+import type { TaskNode } from '@taskyon/taskyon'
 
 type Row<T> = {
   [key: string]: unknown
@@ -160,7 +161,7 @@ type JsonFindOptions<T> = {
 
 const createFind = <T>(db: TyPGDB, dataColumn: string, idColumn: string, tableName: string) => {
   const find = async (
-    where: PartialDeep<T>,
+    where?: PartialDeep<T>,
     opts: JsonFindOptions<T> = {},
   ): Promise<Record<string, T>> => {
     await db.waitReady
@@ -201,6 +202,7 @@ const createFind = <T>(db: TyPGDB, dataColumn: string, idColumn: string, tableNa
       sql += ` OFFSET $${params.length}`
     }
 
+    console.log('search find:', sql, params)
     const res = await db.query<Row<T>>(sql + ';', params)
     return res.rows.reduce<Record<string, T>>((p, c) => {
       p[c.id] = c.data
@@ -216,11 +218,6 @@ const createFind = <T>(db: TyPGDB, dataColumn: string, idColumn: string, tableNa
   return {
     find,
     findOne,
-    callDb: async <RT>(
-      caller: (db: TyPGDB, idColumn: string, dataColumn: string, tableName: string) => RT,
-    ) => {
-      return await caller(db, idColumn, dataColumn, tableName)
-    },
   }
 }
 
@@ -342,19 +339,30 @@ export const createPgLiteCrudWrapper = async <T>(
       `
       await db.query(sql, [payload])
     },
+    callDb: async <RT>(
+      caller: (db: TyPGDB, idColumn: string, dataColumn: string, tableName: string) => RT,
+    ) => {
+      return await caller(db, idColumn, dataColumn, tableName)
+    },
     ...createFind<T>(db, dataColumn, idColumn, tableName),
   }
 }
 
 // TODO: option to create indices on specific data properties to speed up filtering...
-export const createVectorStore = async (db: TyPGDB, name: string, additionalColumns?: string[]) => {
+export const createVectorStore = async <T>(
+  db: TyPGDB,
+  name: string,
+  additionalColumns?: string[],
+) => {
   const { vectorizeText } = useNlpWorker()
   const numDimensions = 384
   const maxStrLength = 10000 // only vectorize approx. the first page.
-  const crudTable = await createPgLiteCrudWrapper<string>(db, {
+  const dataColumn = 'data'
+  const idColumn = 'id'
+  const crudTable = await createPgLiteCrudWrapper<T>(db, {
     tableName: name,
-    idColumn: 'id',
-    dataColumn: 'data',
+    idColumn,
+    dataColumn,
     additionalColumns: additionalColumns ?? [],
     pgvector: true,
     vectorDims: numDimensions,
@@ -383,7 +391,7 @@ export const createVectorStore = async (db: TyPGDB, name: string, additionalColu
     searchText: string,
     k: number,
     allowedIDs?: string[],
-    filters?: Record<string, unknown>,
+    filters?: PartialDeep<TaskNode>,
   ) => {
     console.log(`Searching for ${searchText.slice(0, maxStrLength)}`)
     const searchVector = await vectorizeText(searchText.slice(0, maxStrLength), modelName)
@@ -444,7 +452,13 @@ export const createVectorStore = async (db: TyPGDB, name: string, additionalColu
   }
 
   // we are overwriting the crudTables upsert operation hre...
-  return { ...crudTable, search, upsert, count }
+  return {
+    ...crudTable,
+    search,
+    upsert,
+    count,
+    ...createFind<T>(db, dataColumn, idColumn, name),
+  }
 }
 
 export const createMapCrudWrapper = <T>(storage: Map<string | number, T>): CrudWrapper<T> => {
