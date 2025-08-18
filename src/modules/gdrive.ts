@@ -30,12 +30,28 @@ const MAX_APP_PROPS = 30
 const MAX_PUB_PROPS = 30
 const MAX_TOTAL_PROPS = MAX_APP_PROPS + MAX_PUB_PROPS
 
+// choose a safe prefix:
+const PROP_PREFIX = 'f.' // instead of 'f:'
+
+// optional: assert the filename itself is Drive-key safe
+const DRIVE_KEY_SAFE = /^[A-Za-z0-9.!@$%^&*()_/ -]+$/
+
+function assertDriveKeySafeFilename(name: string) {
+  if (!DRIVE_KEY_SAFE.test(name)) {
+    // your filenames are hashes, so this should never trigger.
+    // if it does, either sanitize or bail loudly:
+    throw new Error(`Filename contains chars not allowed in Drive property keys: ${name}`)
+  }
+}
+
 function buildNameProps(names: string[]) {
   const appProps: Record<string, string> = {}
   const pubProps: Record<string, string> = {}
   let i = 0
-  for (; i < names.length && i < MAX_APP_PROPS; i++) appProps[`f:${names[i]}`] = '1'
-  for (; i < names.length && i < MAX_TOTAL_PROPS; i++) pubProps[`f:${names[i]}`] = '1'
+  for (const n of names) assertDriveKeySafeFilename(n)
+  for (; i < names.length && i < MAX_APP_PROPS; i++) appProps[`${PROP_PREFIX}${names[i]}`] = '1'
+  for (; i < names.length && i < MAX_APP_PROPS + MAX_PUB_PROPS; i++)
+    pubProps[`${PROP_PREFIX}${names[i]}`] = '1'
   return { appProps, pubProps }
 }
 
@@ -261,6 +277,7 @@ export const useGdrive = () => {
     return results
   }
 
+  // downloadZipContaining: same key construction
   async function downloadZipContaining(directory: string, filename: string) {
     const validAccessToken = await getValidAccessToken()
     if (!validAccessToken) throw new Error('Failed to obtain a valid access token.')
@@ -271,7 +288,8 @@ export const useGdrive = () => {
     })
     if (!directoryId) throw new Error(`Directory "${directory}" not found`)
 
-    const key = `f:${filename}`
+    assertDriveKeySafeFilename(filename)
+    const key = `${PROP_PREFIX}${filename}`
 
     const q =
       `'${directoryId}' in parents and trashed = false and ` +
@@ -293,9 +311,7 @@ export const useGdrive = () => {
 
     const hit = data.files?.[0]
     if (!hit) return null
-
-    // download the zip
-    return await downloadFileFromDrive(hit.id, validAccessToken) // Blob
+    return await downloadFileFromDrive(hit.id, validAccessToken)
   }
 
   return {
