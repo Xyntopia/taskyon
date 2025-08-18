@@ -50,7 +50,7 @@ export async function testGdriveZipRoundtrip() {
     )
 
     // 2) pick a fresh directory so tests don’t clash
-    const directory = `taskyon-tests/${new Date().toISOString().replace(/[:.]/g, '-')}`
+    const directory = `taskyon/taskyon-tests/${new Date().toISOString().replace(/[:.]/g, '-')}`
     const zipBaseName = 'roundtrip'
     log('target directory chosen', directory)
 
