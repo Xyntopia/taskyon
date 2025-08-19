@@ -66,6 +66,7 @@ export const ChatResponseType = z.object({
           'cancelled',
         ]),
         logprobs: z.unknown().optional(),
+        reasoning: z.string().optional(),
       }),
     )
     .default([]),

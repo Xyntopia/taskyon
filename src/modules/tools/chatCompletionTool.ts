@@ -1,4 +1,5 @@
 import type OpenAI from 'openai'
+import type { ChatCompletionChunk } from '../taskyon/chat'
 import {
   callLLM,
   createOpenAIRequest,
@@ -75,7 +76,7 @@ export async function processChatTask(
   stopSignal: AbortSignal,
   apiKeys: { [key: string]: string },
   lastTaskBeforeChatCompletion: TaskNode | undefined,
-  streamTracker: (chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => void,
+  streamTracker: (chunk: ChatCompletionChunk | undefined) => void,
   prompts: string[],
   goal?: Goals,
   schema?: Record<string, unknown>,
@@ -689,7 +690,7 @@ export async function createChatCompletionTool(
 
   const chatCompletionStream = createStream<{
     taskId: string
-    chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined
+    chunk: ChatCompletionChunk | undefined
   }>()
 
   const chatCompletion = createTool({
