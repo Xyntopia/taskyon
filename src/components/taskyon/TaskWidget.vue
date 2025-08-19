@@ -158,9 +158,8 @@ import { dump } from 'js-yaml'
 import { humanizeError } from 'src/modules/utils'
 import type { FileMapping } from 'src/modules/taskyon/taskManager'
 
-const props = defineProps<{
+const { task } = defineProps<{
   task: TaskNode
-  previousTask?: TaskNode | undefined
   nextTask?: TaskNode | undefined
   isWorking?: boolean
   short?: boolean
@@ -180,7 +179,7 @@ const onIframeMessage = (el: HTMLIFrameElement, id: string) => {
   void tystate.connectMessageIframe(id, el)
 }
 
-if (props.task.content.type === 'files') {
+if (task.content.type === 'files') {
   console.log('get uploaded files')
   void (async (fileUuids: string[]) => {
     const tm = await tystate.getTaskManager()
@@ -190,6 +189,6 @@ if (props.task.content.type === 'files') {
       const newfm = { ...x, xinfo: { uuid: x?.uuid } };
       return newfm;
     });*/
-  })(props.task.content.data)
+  })(task.content.data)
 }
 </script>
