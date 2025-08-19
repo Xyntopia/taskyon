@@ -315,7 +315,9 @@ import { symOutlinedCancel } from '@quasar/extras/material-symbols-outlined'
 import type { TaskNode } from '@taskyon/taskyon'
 import { partialTaskDraft } from '@taskyon/taskyon'
 import { generateTaskKeyWords } from 'src/modules/taskyon/taskUtils'
-import { watchThrottled } from '@vueuse/core'
+// import { watchThrottled } from '@vueuse/core'
+// use idel mechanism to calculate all kinds of stuff here :=)
+//import { useIdle } from '@vueuse/core'
 
 const { expertMode = false, entryNode } = defineProps<{
   entryNode: partialTaskDraft
@@ -426,21 +428,24 @@ const currentnewTask = computed(() => {
   return partialTaskDraft.parse(task) // we can do this, because we defined the "role"
 })
 
-const currentKeywords = ref<string>()
+const getCurrentKeywords = async () => {
+  const tm = await tystate.getTaskManager()
+  let taskChain: TaskNode[] = []
+  if (state.llmSettings.selectedTaskId) {
+    taskChain = await tm.getTaskChain(state.llmSettings.selectedTaskId)
+  }
+  return (await generateTaskKeyWords(currentnewTask.value, taskChain))[0]
+}
+
+// TODO: only watch if idle...
+/*const currentKeywords = ref<string>()
 watchThrottled(
   [currentnewTask, () => state.llmSettings.selectedTaskId],
   async () => {
-    const tm = await tystate.getTaskManager()
-    let taskChain: TaskNode[] = []
-    if (state.llmSettings.selectedTaskId) {
-      taskChain = await tm.getTaskChain(state.llmSettings.selectedTaskId)
-    }
-    console.log('generating new keywords:', currentKeywords.value)
 
-    currentKeywords.value = (await generateTaskKeyWords(currentnewTask.value, taskChain))[0]
   },
   { immediate: true, throttle: 2000 },
-)
+)*/
 
 //const { estimateChatTokens } = useNlpWorker()
 
@@ -560,7 +565,8 @@ async function addNewTask() {
   }
 
   // add taskchain to taskManager
-  newTaskChain.forEach((t) => (t.name = currentKeywords.value))
+  const kwds = await getCurrentKeywords()
+  newTaskChain.forEach((t) => (t.name = kwds))
   const newTaskId = (await tm.addTaskChain(newTaskChain, state.llmSettings.selectedTaskId)).at(-1)
 
   // push the last task to execution queue right away...

@@ -27,6 +27,7 @@ import { match, P } from 'ts-pattern'
 import type { InternalTool, Asyncify } from '@taskyon/taskyon'
 import { TaskNode } from '@taskyon/taskyon'
 import { toolCall } from '@taskyon/taskyon'
+import { usePyodideWebworker } from 'src/modules/taskyon/webWorkerApi'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -256,6 +257,9 @@ You can select them in the "Chat Settings" section in the message input window.
 
   // callin ExecutionContext.interrupt();  cancels processing of current task
   console.log('initialize taskyon')
+
+  // pre-initialize our python webworker, because its very slow to startup :)
+  void usePyodideWebworker().preInit()
 
   // TODO: move this into our taskyon library...
   const entryNode = computed(() => {

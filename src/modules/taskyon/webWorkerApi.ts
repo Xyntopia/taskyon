@@ -31,10 +31,10 @@ export const useNlpWorker = () => {
 
 let pythonWorker: pythonWorker | null = null
 
-export function usePyodideWebworker(name: string) {
+export function usePyodideWebworker() {
   const getPythonWorker = () => {
     if (!pythonWorker) {
-      console.log(`create pyodide webworker ${name}`)
+      console.log(`create pyodide webworker`)
 
       pythonWorker = wrap<pythonWorker>(
         new Worker(
@@ -54,6 +54,13 @@ export function usePyodideWebworker(name: string) {
     console.log('calling python webworker')
     const pythonWorker = getPythonWorker()
     return await pythonWorker.runPythonScript(script, params)
+  }
+
+  const preInit = async () => {
+    console.log('pre-initialized pytho web worker')
+    const pythonWorker = getPythonWorker()
+    await pythonWorker.runPythonScript("print('initializing...')")
+    console.log('python worker is ready...')
   }
 
   // TODO: somehow initialize functions like this on webworker-side
@@ -89,5 +96,6 @@ keywordsFunc
   return {
     asyncRunPython,
     extractKeywords,
+    preInit,
   }
 }

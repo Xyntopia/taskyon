@@ -117,7 +117,7 @@ export function chat2Md(taskList: TaskNode[], fullMeta = false) {
   return messageStrings.join('\n\n---\n\n')
 }
 
-const { extractKeywords } = usePyodideWebworker('task manager keywords')
+const { extractKeywords } = usePyodideWebworker()
 
 // TODO: this should be moved into its own "NLP" tool
 export async function generateTaskKeyWords(
