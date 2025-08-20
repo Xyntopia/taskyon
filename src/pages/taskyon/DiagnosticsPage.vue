@@ -37,7 +37,7 @@
             <div>
               <q-list dense :padding="false">
                 <q-item
-                  v-for="(val, name) in tests"
+                  v-for="(val, name) in { ...tests, ...guiTests }"
                   :key="name"
                   clickable
                   @click="runTests({ name: val }, true)"
@@ -203,7 +203,7 @@ async function runTests(tests: Record<string, () => unknown>, details = false) {
   ).join('\n')
 
   testFinished.value = true
-  diagnostics.value += `\n\ntime to run tests: ${(startTime - Date.now()) / 1000}s`
+  diagnostics.value += `\n\ntime to run tests: ${(Date.now() - startTime) / 1000}s`
   diagnostics.value += '\nfinished all tests!'
   console.log('diagnostics:', diagnostics.value)
   testFinished.value = true
