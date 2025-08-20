@@ -76,6 +76,7 @@ const renderedHtml = asyncComputed(async () => {
       /(^|\n)\s*:::/, // custom containers (like :::note)
     ].some((pattern) => pattern.test(raw))
 
+  if (!useIframe) return await md2Html(raw, $q.dark.isActive, false)
   return isPureHtml ? raw : await md2Html(raw, $q.dark.isActive, true)
 }, 'rendering ...')
 

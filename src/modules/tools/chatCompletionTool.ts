@@ -1,4 +1,5 @@
 import type OpenAI from 'openai'
+import type { ChatCompletionChunk } from '../taskyon/chat'
 import {
   callLLM,
   createOpenAIRequest,
@@ -75,7 +76,7 @@ export async function processChatTask(
   stopSignal: AbortSignal,
   apiKeys: { [key: string]: string },
   lastTaskBeforeChatCompletion: TaskNode | undefined,
-  streamTracker: (chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined) => void,
+  streamTracker: (chunk: ChatCompletionChunk | undefined) => void,
   prompts: string[],
   goal?: Goals,
   schema?: Record<string, unknown>,
@@ -689,7 +690,7 @@ export async function createChatCompletionTool(
 
   const chatCompletionStream = createStream<{
     taskId: string
-    chunk: OpenAI.Chat.Completions.ChatCompletionChunk | undefined
+    chunk: ChatCompletionChunk | undefined
   }>()
 
   const chatCompletion = createTool({
@@ -798,12 +799,15 @@ export async function createChatCompletionTool(
       // parse the response into our own type ...
       const choice = chatCompletion?.choices[0]
 
-      let metaInfo: TaskNodeMeta = { taskPrompt: chatInfo, rawOutput: chatCompletion }
+      let metaInfo: TaskNodeMeta = {
+        taskPrompt: chatInfo,
+        rawOutput: chatCompletion,
+      }
       // get token usage for this task..
       if (currentTask && lastTaskBeforeChatCompletion) {
         if (chatCompletion) {
           console.log('save token usage...')
-          // openai & openrouter sends back the exact number of prompt tokens :)
+          // openai & openrouter  sends back the exact number of prompt tokens :)
           metaInfo = {
             ...metaInfo,
             ...(await saveTokenUsage(
@@ -819,7 +823,8 @@ export async function createChatCompletionTool(
 
           void addTaskCostInformation(chatCompletion, currentTask?.id, llmSettings, apiKeys).then(
             (newMeta) => {
-              void taskManager.metaDb.upsert(currentTask.id, newMeta, 'shallow_merge')
+              console.log('found new task costs:', newMeta)
+              void taskManager.debugDb.upsert(currentTask.id, newMeta, 'shallow_merge')
             },
           )
         }

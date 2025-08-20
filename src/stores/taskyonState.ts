@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { watch, computed, ref } from 'vue'
-import type { TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
+import type { ChatResponseType, TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
 import { type Model, getCurrentModel, llmSettings, type TyProfile } from 'src/modules/taskyon/types'
 import axios from 'axios' // TODO: replace with fetch
 import { Notify } from 'quasar' // load dynamically! :)
@@ -60,6 +60,14 @@ import { usePyodideWebworker } from 'src/modules/taskyon/webWorkerApi'
 // Helper: Await if value is a Promise, else return as-is
 function maybeAwait<T>(value: T | Promise<T>): Promise<T> {
   return Promise.resolve(value)
+}
+
+export function getReasoning(meta: TaskNodeMeta | undefined) {
+  return (
+    meta?.rawOutput as {
+      choice?: ChatResponseType['choices'][0]
+    }
+  )?.choice?.reasoning
 }
 
 export function asyncProxy<T extends object>(initializer: () => Promise<T>): Asyncify<T> {
@@ -803,6 +811,12 @@ You can select them in the "Chat Settings" section in the message input window.
     }
   }
 
+  const getMeta = async (id: string) => {
+    const tm = await getTaskManager()
+    const meta = tm.debugDb.get(id)
+    return meta
+  }
+
   function getTaskMetaRef(taskId: string | undefined) {
     const taskMetaRef = ref<TaskNodeMeta>()
     let subscriptionUnsub: (() => void) | null = null
@@ -822,11 +836,13 @@ You can select them in the "Chat Settings" section in the message input window.
   return {
     secretStore,
     getTaskMetaRef,
+    getMeta,
     setNewContentDraft,
     setContentDraftFromTask,
     allTools: computed(() => allTools.value),
     switchTaskType,
     taskContentDraft,
+    // TODO: add "value" just like with the other computed properties...
     selectedThread: computed(() => selectedThread),
     taskWorkerWaiting: computed(() => taskWorkerWaiting.value),
     currentTask: computed(() => currentTask),

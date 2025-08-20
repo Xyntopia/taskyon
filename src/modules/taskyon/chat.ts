@@ -24,9 +24,59 @@ export function generateHeaders(apiSecret: string, siteUrl: string, selectedApi:
   return headers
 }
 
+export type ChatCompletionChunk = {
+  id: string
+  object: 'chat.completion.chunk'
+  created: number
+  model: string
+  system_fingerprint?: string
+
+  // Non-standard vendor additions
+  provider?: string
+
+  choices: Array<{
+    index: number
+    delta: {
+      role?: 'system' | 'user' | 'assistant' | 'tool' | 'developer'
+      content?: string | null
+      refusal?: string | null
+      tool_calls?: Array<{
+        index: number
+        id?: string
+        // ✅ CHANGE: Made the 'type' property optional
+        type?: 'function'
+        function?: {
+          name?: string
+          arguments?: string
+        }
+      }>
+
+      // Vendor extensions
+      reasoning?: string
+      reasoning_details?: Array<{
+        type: string
+        text: string
+        format?: string
+        index?: number
+      }>
+    }
+    finish_reason?: 'stop' | 'length' | 'content_filter' | 'tool_calls' | 'function_call' | null
+    native_finish_reason?: string | null // vendor-specific
+    logprobs?: unknown
+  }>
+}
+
+// Compile-time check: OpenAI.ChatCompletionChunk must be assignable to ChatCompletionChunk
+export declare const _check: ChatCompletionChunk
+
+// ❌ If not assignable, TS will error with full details:
+// "Type 'OpenAI.ChatCompletionChunk' is not assignable to type 'ChatCompletionChunk'…"
+export const _openaiChunk: typeof _check = {} as OpenAI.ChatCompletionChunk
+
+// TODO: can we use this:  https://github.com/rexxars/eventsource-parser?
 export function accumulateStep(
   existing: OpenAI.ChatCompletion | ChatResponseType | undefined,
-  chunk: OpenAI.ChatCompletionChunk,
+  chunk: ChatCompletionChunk,
 ): ChatResponseType {
   // ─── 1) init or clone ───────────────────────────────────
   const response: ChatResponseType = existing
@@ -73,6 +123,9 @@ export function accumulateStep(
     }
     if (delta.role) {
       choice.message.role = delta.role
+    }
+    if (delta.reasoning) {
+      choice.reasoning = (choice.reasoning || '') + delta.reasoning
     }
 
     if (chunkChoice0.finish_reason) {
@@ -177,6 +230,7 @@ async function getClearErrorMessage(response: Response): Promise<string> {
   return `${httpCode} ${statusText}: No additional information available.`
 }
 
+// TODO: can we use this:  https://github.com/rexxars/eventsource-parser?
 // calls OpenAI API compatible chatmodels
 export async function callLLM(
   request: {
@@ -185,7 +239,7 @@ export async function callLLM(
     url: string
   },
   stream: boolean | undefined = false,
-  contentCallBack: (chunk?: OpenAI.Chat.Completions.ChatCompletionChunk) => void,
+  contentCallBack: (chunk: ChatCompletionChunk | undefined) => void,
   stopSignal: AbortSignal,
   timeoutMs: number = 10000, // Timeout in milliseconds for waiting for first streamed response
   maxRetries: number = 3, // Maximum number of retry attempts
@@ -244,7 +298,7 @@ export async function callLLM(
     if (stream && response.body) {
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
-      const chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = []
+      const chunks: ChatCompletionChunk[] = []
       let bufferedData = '' // Buffer to hold partial JSON chunks
       let receivedFirstChunk = false
 
@@ -280,7 +334,7 @@ export async function callLLM(
             const jsonString = line.replace(/^data: /, '').trim()
 
             if (jsonString && jsonString !== '[DONE]') {
-              let jsonChunk: OpenAI.Chat.Completions.ChatCompletionChunk
+              let jsonChunk: ChatCompletionChunk
               try {
                 // Parse the current line into a JSON object
                 jsonChunk = JSON.parse(jsonString)
@@ -307,8 +361,7 @@ export async function callLLM(
 
       // After finishing, accumulate the full chat completion
       chatCompletion = chunks.reduce<ChatResponseType | undefined>(
-        (existing, chunk) =>
-          accumulateStep(existing, chunk as unknown as OpenAI.ChatCompletionChunk),
+        (existing, chunk) => accumulateStep(existing, chunk as unknown as ChatCompletionChunk),
         chatCompletion,
       )!
     } else {

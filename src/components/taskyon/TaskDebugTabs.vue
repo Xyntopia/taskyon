@@ -56,6 +56,14 @@
           >
           </textarea>
         </template>
+        <div></div>
+        <div class="text-caption">reasoning:</div>
+        <textarea
+          :value="taskReason"
+          readonly
+          wrap="soft"
+          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
+        />
         <div class="text-caption">finished completion:</div>
         <textarea
           :value="taskChoice || null"
@@ -108,6 +116,17 @@ const taskChoice = computed(() => {
       .content
   } catch {
     return '<no chatcompletion output avaailable>'
+  }
+})
+
+const taskReason = computed(() => {
+  try {
+    return (
+      (taskMeta.value?.rawOutput as { choice: ChatResponseType['choices'][0] }).choice?.reasoning ||
+      '<no reasoning output available>'
+    )
+  } catch {
+    return '<no reasoning output available>'
   }
 })
 </script>

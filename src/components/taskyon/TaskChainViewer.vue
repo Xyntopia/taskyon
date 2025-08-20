@@ -51,6 +51,14 @@
     </q-tree>
     <template v-else>
       <template v-for="(task, idx) in props.selectedThread" :key="task.id">
+        <q-expansion-item
+          v-if="reasoning.get(task.id)"
+          label="reasoning"
+          dense
+          class="text-caption"
+        >
+          <tyMarkdown :src="reasoning.get(task.id)!" />
+        </q-expansion-item>
         <Task
           v-if="showAllTasks || showTask(task)"
           :id="task.id"
@@ -68,6 +76,19 @@
     </template>
     <!--Render tasks which are in progress-->
     <div class="task-logs q-py-sm">
+      <tyMarkdown
+        v-if="
+          currentMessageStream?.length === 0 &&
+          currentThinkingStream &&
+          currentThinkingStream.length > 0
+        "
+        no-line-numbers
+        no-mermaid
+        :src="'THINKING:\n' + currentThinkingStream?.split('\n').slice(-20).join('\n')"
+        class="text-caption"
+        style="font-size: 0.8rem"
+      >
+      </tyMarkdown>
       <q-card
         v-if="
           !!tystate.lastTaskState.get(currentTask.id) &&
@@ -81,7 +102,6 @@
             v-if="currentMessageStream"
             no-line-numbers
             no-mermaid
-            :use-iframe="false"
             :src="currentMessageStream || ''"
           />
           <div>
@@ -121,8 +141,8 @@ import type { ChatResponseType } from 'src/modules/taskyon/types'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
-import { useTaskyonStore } from 'src/stores/taskyonState'
-import { computed, onBeforeUnmount } from 'vue'
+import { getReasoning, useTaskyonStore } from 'src/stores/taskyonState'
+import { computed, onBeforeUnmount, watch } from 'vue'
 import { ref } from 'vue'
 import { type TaskTreeNode } from 'src/modules/taskyon/taskManager'
 import type { Unsubscribe } from 'src/modules/frpBus'
@@ -147,6 +167,25 @@ const props = defineProps<{
   showIds?: boolean
   expertMode?: boolean
 }>()
+
+const reasoning = ref(new Map<string, string>())
+watch(
+  () => props.currentTask.id,
+  () => {
+    console.log('re-calculate reason lists!')
+    reasoning.value.clear()
+    void Promise.all(
+      props.selectedThread.map(async (t) => {
+        const meta = await tystate.getMeta(t.id)
+        if (meta) {
+          const reason = getReasoning(meta)
+          if (reason) reasoning.value.set(t.id, reason)
+        }
+      }),
+    )
+  },
+  { immediate: true },
+)
 
 const streamingTracker = ref<Map<string, ChatResponseType>>(new Map())
 
@@ -195,6 +234,12 @@ const currentMessageStream = computed(() => {
   if (props.currentTask)
     return streamingTracker.value.get(props.currentTask.id)?.choices?.[0]?.message?.content || ''
   else return undefined
+})
+
+const currentThinkingStream = computed(() => {
+  if (props.currentTask) {
+    return streamingTracker.value.get(props.currentTask.id)?.choices?.[0]?.reasoning || ''
+  } else return undefined
 })
 
 const currentFunctionStream = computed(() => {
@@ -317,23 +362,15 @@ async function onLazyLoad({
   done(subTaskTree)
 }
 
-// TODO: move this "one layer up" :)
-const toolList = asyncComputed(async () => {
-  const tm = await tystate.getTaskManager()
-  const toolList = await tm.updateToolDefinitions()
-  return toolList
-}, undefined)
-
 function showTask(t: TaskNode) {
   //console.log('showTask')
-  const noHideLabel = !(t.label ? t.label.includes('hide') : false) // TODO: hide tasks based on level as well :)
+  // in our settings we should be able to specify which tasktypes to hide!
   let showInChat = true
   if (t.content.type === 'functioncall') {
-    if (toolList.value) showInChat = !toolList.value[t.content.data.name]?.renderOptions?.hideChat
-    else if (t.content.data.name === 'chatCompletion') showInChat = false
+    showInChat = !tystate.allTools[t.content.data.name]?.renderOptions?.hideChat
   }
   const showType = !['return'].includes(t.content.type)
   const showExpert = t.content.type === 'structured' ? props.expertMode : true
-  return showExpert && showType && showInChat && noHideLabel
+  return showExpert && showType && showInChat
 }
 </script>

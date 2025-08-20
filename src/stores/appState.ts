@@ -36,7 +36,7 @@ function clearBrowserStorage() {
 }
 
 // this is where we save all of our app settings.
-// its important to keep this simple and don't incude 3rd party libraries and othe things
+// its important to keep this simple and don't incude 3rd party libraries and other things
 // because we want to this to also work on tyServer and in a "minimal gui" setting.
 // So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
 export const useAppStateStore = defineStore(storeName, () => {

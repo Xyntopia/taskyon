@@ -504,14 +504,17 @@ export const md2Html = async (src: string, darkMode = false, allowHtml = false) 
   const env = {}
   const tokens = md.parse(src, env)
   const htmlBlocks: string[] = []
-  tokens.forEach((token) => {
-    if (token.type === 'html_block') {
-      // push ⟶ same content but with leading spaces removed on every line
-      const dedented = token.content.replace(/^[ \t]+/gm, '') // ← one‑liner
-      const i = htmlBlocks.push(dedented) - 1
-      token.content = placeholder(i)
-    }
-  })
+
+  if (allowHtml) {
+    tokens.forEach((token) => {
+      if (token.type === 'html_block') {
+        // push ⟶ same content but with leading spaces removed on every line
+        const dedented = token.content.replace(/^[ \t]+/gm, '') // ← one‑liner
+        const i = htmlBlocks.push(dedented) - 1
+        token.content = placeholder(i)
+      }
+    })
+  }
 
   // 3) Render tokens back to HTML
   const interim = md.renderer.render(tokens, md.options, env)
