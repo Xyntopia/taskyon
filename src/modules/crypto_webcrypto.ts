@@ -58,8 +58,17 @@ export async function deriveKey(
   )
 }
 
+// Define a type for the encrypted data structure
+export type EncryptedDataRow = {
+  iv: string
+  ciphertext: string
+  salt: string
+  encryptedToolKey: string
+  recoveryEncryptedToolKey: string
+}
+
 // Encrypt object with key derived from rowKey + salt + id
-export async function encryptObject<T>(
+async function encryptObject<T>(
   rowKey: CryptoKey,
   data: T,
   id: string | number,
@@ -95,6 +104,54 @@ export async function encryptObject<T>(
     ciphertext: uint8ArrayToBase64Url(encrypted),
     salt: uint8ArrayToBase64Url(salt.buffer),
   }
+}
+
+export type AskSession = () => Promise<CryptoKey>
+
+export const encryptDataFile = async (
+  data: unknown,
+  info: string | number, // we need the info in order to derive the key with some additional noise
+  publicRecoveryKey: AskSession,
+  getSessionKey: AskSession,
+) => {
+  // Generate a new random tool key for each set operation
+  // we need the key to be extractable, so that we can encrypt it !
+  const rowKey = await generateRandomEncryptionKey(true)
+
+  // Encrypt the data using the tool key
+  const { iv, ciphertext, salt } = await encryptObject(rowKey, data, info)
+
+  // Encrypt the tool key using the recovery public key
+  const recoveryEncryptedToolKey = await wrapKeyWithPublicKey(await publicRecoveryKey(), rowKey)
+
+  const sessionKey = await getSessionKey() // Encrypt the tool key using the symmetric session key
+  const encryptedToolKey = await encryptWithSessionKey(sessionKey, rowKey)
+
+  // Create the encrypted data row
+  const encData: EncryptedDataRow = {
+    iv,
+    ciphertext,
+    salt,
+    encryptedToolKey,
+    recoveryEncryptedToolKey,
+  }
+  return encData
+}
+
+export const decryptDataFile = async (
+  encData: EncryptedDataRow,
+  // the info is used to derive the key with some additional noise
+  // this is usually the record ID or some other identifier which is unique for the record
+  // and not encrypted...
+  info: string | number,
+  getSessionKey: AskSession,
+) => {
+  // Decrypt the tool key using the symmetric session key
+  const rowKey = await decryptWithSessionKey(await getSessionKey(), encData.encryptedToolKey)
+
+  // Decrypt the data using the tool key
+  const data = await decryptData(rowKey, encData.iv, encData.ciphertext, encData.salt, info)
+  return data
 }
 
 export async function importEd25519PublicKeyFromBase64(base64Key: string): Promise<CryptoKey> {

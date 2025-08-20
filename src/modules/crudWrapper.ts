@@ -1,12 +1,6 @@
 import type { PartialDeep } from 'type-fest'
-import {
-  decryptData,
-  decryptWithSessionKey,
-  encryptObject,
-  wrapKeyWithPublicKey,
-  encryptWithSessionKey,
-  generateRandomEncryptionKey,
-} from './crypto_webcrypto'
+import type { AskSession, EncryptedDataRow } from './crypto_webcrypto'
+import { decryptDataFile, encryptDataFile } from './crypto_webcrypto'
 import type { Stream } from './frpBus'
 import { createStream, filter, streamProcedureCall } from './frpBus'
 import type { PgLiteOptions } from './pglite.api'
@@ -576,17 +570,6 @@ export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWr
   },
 })
 
-// Define a type for the encrypted data structure
-export type EncryptedDataRow = {
-  iv: string
-  ciphertext: string
-  salt: string
-  encryptedToolKey: string
-  recoveryEncryptedToolKey: string
-}
-
-type AskSession = () => Promise<CryptoKey>
-
 /**
  * Wraps a CRUD interface to transparently encrypt and decrypt data rows.
  *
@@ -600,38 +583,22 @@ type AskSession = () => Promise<CryptoKey>
 
 export function withEncryption(
   base: CrudWrapper<EncryptedDataRow>,
-  publicRecoveryKey: () => Promise<CryptoKey>,
-  getSessionKey?: () => Promise<CryptoKey>,
+  publicRecoveryKey: AskSession,
+  getSessionKey?: AskSession,
 ) {
   return {
     ...base,
     async set(id: string | number, data: unknown, askSession?: AskSession): Promise<void> {
-      // Generate a new random tool key for each set operation
-      // we need the key to be extractable, so that we can encrypt it !
-      const rowKey = await generateRandomEncryptionKey(true)
-
-      // Encrypt the data using the tool key
-      const { iv, ciphertext, salt } = await encryptObject(rowKey, data, id)
-
-      // Encrypt the tool key using the recovery public key
-      const recoveryEncryptedToolKey = await wrapKeyWithPublicKey(await publicRecoveryKey(), rowKey)
-
       if (!askSession && !getSessionKey) {
         throw new Error('No session key provider (askSession or getSessionKey) was provided.')
       }
-      const sessionKey = await (askSession ?? getSessionKey!)()
-      // Encrypt the tool key using the symmetric session key
-      const encryptedToolKey = await encryptWithSessionKey(sessionKey, rowKey)
 
-      // Create the encrypted data row
-      const encData: EncryptedDataRow = {
-        iv,
-        ciphertext,
-        salt,
-        encryptedToolKey,
-        recoveryEncryptedToolKey,
-      }
-
+      const encData = await encryptDataFile(
+        data,
+        id, // we need the id in order to derive the key
+        publicRecoveryKey,
+        askSession ?? getSessionKey!, // we can do this, because we chec this earlier...
+      )
       // Store the encrypted data row
       await base.set(id, encData)
     },
@@ -644,12 +611,8 @@ export function withEncryption(
       if (!askSession && !getSessionKey) {
         throw new Error('No session key provider (askSession or getSessionKey) was provided.')
       }
-      const sessionKey = await (askSession ?? getSessionKey!)()
-      // Decrypt the tool key using the symmetric session key
-      const rowKey = await decryptWithSessionKey(sessionKey, encData.encryptedToolKey)
 
-      // Decrypt the data using the tool key
-      const data = await decryptData(rowKey, encData.iv, encData.ciphertext, encData.salt, id)
+      const data = decryptDataFile(encData, id, askSession ?? getSessionKey!)
 
       return data
     },
