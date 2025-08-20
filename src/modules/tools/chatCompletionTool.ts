@@ -824,7 +824,7 @@ export async function createChatCompletionTool(
           void addTaskCostInformation(chatCompletion, currentTask?.id, llmSettings, apiKeys).then(
             (newMeta) => {
               console.log('found new task costs:', newMeta)
-              void taskManager.debugDb.upsert(currentTask.id, newMeta, 'shallow_merge')
+              void taskManager.metaDb.upsert(currentTask.id, newMeta, 'shallow_merge')
             },
           )
         }
