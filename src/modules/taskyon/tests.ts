@@ -37,16 +37,13 @@ export async function testGdriveZipRoundtrip() {
 
     // 1) make a couple tiny test files (names look like hashes you’d use in prod)
     const files = [
-      { name: 'a1f2c3d4e5.txt', blob: new Blob(['hello A'], { type: 'text/plain' }) },
-      {
-        name: 'b6c7d8e9f0.json',
-        blob: new Blob([JSON.stringify({ k: 1 })], { type: 'application/json' }),
-      },
-      { name: 'deadbeefcaf0.md', blob: new Blob(['# hi'], { type: 'text/markdown' }) },
+      new File(['hello A'], 'a1f2c3d4e5.txt', { type: 'text/plain' }),
+      new File([JSON.stringify({ k: 1 })], 'b6c7d8e9f0.json', { type: 'application/json' }),
+      new File(['# hi'], 'deadbeefcaf0.md', { type: 'text/markdown' }),
     ]
     log(
       'prepared test files',
-      files.map((f) => ({ name: f.name, size: f.blob.size })),
+      files.map((f) => ({ name: f.name, size: f.size })),
     )
 
     // 2) pick a fresh directory so tests don’t clash

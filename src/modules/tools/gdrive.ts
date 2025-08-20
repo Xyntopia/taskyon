@@ -197,9 +197,9 @@ Files can be organized in directories and optionally made public with sharable l
           for (let i = 0; i < len; i++) {
             bytes[i] = binaryString.charCodeAt(i)
           }
-          const blob = new Blob([bytes], { type: mimeType })
+          const blob = new File([bytes], filename, { type: mimeType })
 
-          const gdriveFile = await gdrive.saveFileToGdrive(blob, directory, filename, share)
+          const gdriveFile = await gdrive.saveFileToGdrive(blob, directory, share)
           result = {
             success: true,
             message: `File saved to ${directory}/${filename}`,

@@ -7,10 +7,10 @@
 import { ref, computed, watch } from 'vue'
 import axios from 'axios'
 import { googleSdkLoaded } from 'vue3-google-login'
-import { sleep } from 'src/modules/utils'
+import { chunk, sleep } from 'src/modules/utils'
 import { asyncLruCache } from 'src/modules/utils'
 import { LocalStorage } from 'quasar'
-import { zipSync } from 'fflate'
+import { filesToZip } from './fileUtils'
 
 type gDriveFile = {
   kind: string //"drive#file",
@@ -53,19 +53,6 @@ function buildNameProps(names: string[]) {
   for (; i < names.length && i < MAX_APP_PROPS + MAX_PUB_PROPS; i++)
     pubProps[`${PROP_PREFIX}${names[i]}`] = '1'
   return { appProps, pubProps }
-}
-
-async function blobsToZip(files: Array<{ name: string; blob: Blob }>): Promise<Blob> {
-  const entries: Record<string, Uint8Array> = {}
-  for (const f of files) entries[f.name] = new Uint8Array(await f.blob.arrayBuffer())
-  const zipped = zipSync(entries, { level: 6 }) // balanced speed/ratio
-  return new Blob([zipped], { type: 'application/zip' })
-}
-
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
-  return out
 }
 
 export const useGdrive = () => {
@@ -137,16 +124,10 @@ export const useGdrive = () => {
     return gdriveAccessToken.value // Return the valid access token
   }
 
-  async function saveFileToGdrive(file: Blob, directory: string, filename: string, share = false) {
+  async function saveFileToGdrive(file: File, directory: string, share = false) {
     const validAccessToken = await getValidAccessToken()
     if (validAccessToken) {
-      const gdriveFile = await uploadFileToDrive(
-        file,
-        directory,
-        filename,
-        file.type,
-        validAccessToken,
-      )
+      const gdriveFile = await uploadFileToDrive(file, directory, validAccessToken)
       console.log('trying to make file public!')
       if (gdriveFile && share) {
         const response = await makeFilePublic(gdriveFile.id, validAccessToken)
@@ -160,38 +141,31 @@ export const useGdrive = () => {
     }
   }
 
-  async function publishMarkdown(
+  const publishMarkdown = (
     markdownContent: string,
     directory: string,
     filename: string,
     share = false,
-  ) {
-    const markdownFile = new File(
-      [markdownContent], // Content as an array (required by File constructor)
-      filename, // Filename
-      { type: 'text/markdown; charset=UTF-8' }, // MIME type
-    )
-
-    const gdriveFile = await saveFileToGdrive(
-      markdownFile,
+  ) =>
+    saveFileToGdrive(
+      new File(
+        [markdownContent], // Content as an array (required by File constructor)
+        filename, // Filename
+        { type: 'text/markdown; charset=UTF-8' }, // MIME type
+      ),
       directory,
-      markdownFile.name,
       share, //share
     )
 
-    return gdriveFile
-  }
-
-  async function saveObjToGdrive(
-    obj: Record<string, unknown>,
-    directory: string,
-    filename: string,
-  ) {
-    const jsonString = JSON.stringify(obj)
-    const fileBlob = new Blob([jsonString], { type: 'application/json' })
-
-    await saveFileToGdrive(fileBlob, directory, filename)
-  }
+  const saveObjToGdrive = (obj: Record<string, unknown>, directory: string, filename: string) =>
+    saveFileToGdrive(
+      new File(
+        [JSON.stringify(obj)], // data chunks (same as Blob)
+        filename,
+        { type: 'application/json' }, // MIME type
+      ),
+      directory,
+    )
 
   async function loadFileFromGdrive(directory: string, fileName: string) {
     const validAccessToken = await getValidAccessToken()
@@ -227,7 +201,7 @@ export const useGdrive = () => {
   }
 
   async function zipAndUpload(
-    files: Array<{ name: string; blob: Blob }>,
+    files: File[],
     directory: string,
     zipBaseName: string,
     share = false,
@@ -248,20 +222,16 @@ export const useGdrive = () => {
       const zipName = parts.length === 1 ? `${zipBaseName}.zip` : `${zipBaseName}.${idx + 1}.zip`
 
       // zip
-      const zipBlob = await blobsToZip(part)
+      const zipBlob = await filesToZip(part, zipName)
 
       // properties (store keys for all names in this zip)
       const names = part.map((f) => f.name)
       const { appProps, pubProps } = buildNameProps(names)
 
-      const fileRec = await pushFile(
-        zipName,
-        'application/zip',
-        directoryId,
-        zipBlob,
-        validAccessToken,
-        { appProperties: appProps, properties: pubProps },
-      )
+      const fileRec = await pushFile(directoryId, zipBlob, validAccessToken, {
+        appProperties: appProps,
+        properties: pubProps,
+      })
 
       if (share) {
         await makeFilePublic(fileRec.id, validAccessToken)
@@ -344,16 +314,8 @@ async function findFolderInParent(name: string, parentId: string, accessToken: s
   return data.files?.[0]?.id ?? null
 }
 
-async function createFolderInParent(name: string, parentId: string, accessToken: string) {
-  const rec = await pushFile(
-    name,
-    'application/vnd.google-apps.folder',
-    parentId, // <- parent set!
-    undefined,
-    accessToken,
-  )
-  return rec.id
-}
+const createFolderInParent = async (name: string, parentId: string, accessToken: string) =>
+  (await pushFile(parentId, { foldername: name }, accessToken)).id
 
 async function ensurePathExists(path: string, accessToken: string): Promise<string> {
   const parts = path.split('/').filter(Boolean)
@@ -388,13 +350,7 @@ async function getFileMetaData(fileId: string, accessToken: string) {
   return fileMetadata
 }
 
-async function uploadFileToDrive(
-  file: Blob,
-  directory: string,
-  fileName: string,
-  mimeType: string,
-  accessToken: string,
-) {
+async function uploadFileToDrive(file: File, directory: string, accessToken: string) {
   console.log('Uploading or updating file')
 
   // Check if the directory exists, if not, create it
@@ -405,7 +361,7 @@ async function uploadFileToDrive(
 
   // Check if the file already exists
   const existingFileId = await findFileOrDirectoryId({
-    fileName,
+    fileName: file.name,
     directory, // <- pass directory so we search within it
     accessToken,
   })
@@ -413,18 +369,18 @@ async function uploadFileToDrive(
   // Update or create the file
   if (existingFileId) {
     console.log('File exists, updating it')
-    return await updateFile(existingFileId, file, mimeType, accessToken)
+    return await updateFile(existingFileId, file, accessToken)
   } else {
     console.log('File does not exist, creating new file')
-    return await pushFile(fileName, mimeType, directoryId, file, accessToken)
+    return await pushFile(directoryId, file, accessToken)
   }
 }
 
 const fieldsParam = 'fields=webViewLink,id,name,mimeType'
 
-async function updateFile(fileId: string, file: Blob, mimeType: string, accessToken: string) {
+async function updateFile(fileId: string, file: File, accessToken: string) {
   const url = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?${fieldsParam}&uploadType=multipart`
-  const metadata = { mimeType: mimeType }
+  const metadata = { mimeType: file.type }
 
   const formData = new FormData()
   formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
@@ -441,10 +397,8 @@ async function updateFile(fileId: string, file: Blob, mimeType: string, accessTo
 }
 
 async function pushFile(
-  fileName: string,
-  mimeType: string,
   directoryId: string | undefined,
-  file: Blob | undefined,
+  file: File | { foldername: string }, // if undefined, creates an empty folder
   accessToken: string,
   opts?: {
     appProperties?: Record<string, string>
@@ -454,8 +408,8 @@ async function pushFile(
   const url = `https://www.googleapis.com/upload/drive/v3/files?${fieldsParam}&uploadType=multipart`
 
   const metadata: Record<string, unknown> = {
-    name: fileName,
-    mimeType,
+    name: 'foldername' in file ? file.foldername : file.name,
+    mimeType: 'foldername' in file ? 'application/vnd.google-apps.folder' : file.type,
     ...(directoryId ? { parents: [directoryId] } : {}),
     ...(opts?.appProperties ? { appProperties: opts.appProperties } : {}),
     ...(opts?.properties ? { properties: opts.properties } : {}),
@@ -463,7 +417,7 @@ async function pushFile(
 
   const formData = new FormData()
   formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
-  if (file) formData.append('file', file)
+  if (file instanceof File) formData.append('file', file)
 
   const headers = { Authorization: `Bearer ${accessToken}` }
   const response = await axios.post<gDriveFile>(url, formData, { headers })
