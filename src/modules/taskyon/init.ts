@@ -23,7 +23,6 @@ import { localVectorStore } from '../tools/localVectorStore'
 import { proceduralTools } from '../tools/proceduralGraphics'
 import { wfcGenerator } from '../tools/wavefunctioncollapse'
 import { createOAuthTool } from '../tools/authTools'
-import type { EncryptedDataRow } from '../crudWrapper'
 import {
   createCombinedCrudWrapper,
   createMapCrudWrapper,
@@ -37,6 +36,7 @@ import { TaskWorkerMessage, TaskyonMessage } from './apiTypes'
 import { dump } from 'js-yaml'
 import z from 'zod'
 import { ToolBase } from '@taskyon/taskyon'
+import type { EncryptedDataRow } from '../crypto_webcrypto'
 
 export async function initTaskyon(
   llmSettings: llmSettings,

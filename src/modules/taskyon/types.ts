@@ -522,6 +522,9 @@ export const appConfiguration = z.object({
   appConfigurationUrl: z.string().default('/taskyon_settings.json').meta({
     description: 'URL from which to load the initial app configuration',
   }),
+  sync: z.boolean().default(false).meta({
+    description: 'Enable gDrive sync for taskyon configuration.',
+  }),
   gdriveConfigurationFile: z.string().default('taskyon_settings.json').meta({
     description: 'gDrive fileid of the configuration',
   }),
