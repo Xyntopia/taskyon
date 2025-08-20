@@ -6,30 +6,53 @@
           <div class="text-h5">Taskyon Diagnostics</div>
           <q-btn flat label="Return to App" to="/"></q-btn>
         </div>
-        <q-btn
-          outline
-          label="Only run first test"
-          @click="generateReport(state.detailedTests, false, true)"
-        ></q-btn>
-        <q-btn
-          outline
-          label="Generate Diagnostics Report"
-          @click="generateReport(state.detailedTests, state.noGuiTests, false)"
-        ></q-btn>
-        <div>
-          <q-toggle v-model="state.noGuiTests" label="no GUI Input"></q-toggle>
-          <q-toggle v-model="state.detailedTests" label="detailed"></q-toggle>
+        <div class="row">
+          <q-btn
+            outline
+            label="Run all tests"
+            @click="generateReport(state.detailedTests, state.noGuiTests)"
+          ></q-btn>
+          <div>
+            <q-toggle v-model="state.noGuiTests" label="no GUI Input"></q-toggle>
+            <q-toggle v-model="state.detailedTests" label="detailed"></q-toggle>
+          </div>
+          <div>
+            <q-btn flat label="open markdown test page" to="/docs/markdown_it_test_page" />
+            <q-btn flat label="IPFS status" to="ipfsmonitor"></q-btn>
+            <q-btn
+              v-if="diagnostics"
+              outline
+              label="download report"
+              @click="downloadReport"
+            ></q-btn>
+            <TyResetButton flat mode="all" />
+            <TyResetButton flat mode="settings" />
+            <q-btn flat label="test iframe API" to="/clienttest" />
+          </div>
         </div>
-        <q-btn flat label="open markdown test page" to="/docs/markdown_it_test_page" />
-        <q-btn flat label="IPFS status" to="ipfsmonitor"></q-btn>
-        <q-btn v-if="diagnostics" outline label="download report" @click="downloadReport"></q-btn>
-        <TyResetButton flat mode="all" />
-        <TyResetButton flat mode="settings" />
-        <q-btn flat label="test iframe API" to="/clienttest" />
-        <q-card flat bordered>
-          <q-btn flat :icon="matContentCopy" @click="copyToClipboard(diagnostics)"></q-btn>
-          <pre data-cy="diagnostics-result">{{ diagnostics }}</pre>
-          <div v-if="testFinished" data-cy="test-finished">Test Finished</div>
+        <q-card flat bordered class="row items-top">
+          <div>
+            <div class="text-caption">Available Tests:</div>
+            <q-separator />
+            <div>
+              <q-list dense :padding="false">
+                <q-item
+                  v-for="(val, name) in tests"
+                  :key="name"
+                  clickable
+                  @click="runTests({ name: val }, true)"
+                >
+                  <q-item-section>{{ name }}</q-item-section>
+                </q-item>
+              </q-list>
+            </div>
+          </div>
+          <q-separator vertical />
+          <div v-if="diagnostics">
+            <q-btn flat :icon="matContentCopy" @click="copyToClipboard(diagnostics)"></q-btn>
+            <pre data-cy="diagnostics-result">{{ diagnostics }}</pre>
+            <div v-if="testFinished" data-cy="test-finished">Test Finished</div>
+          </div>
         </q-card>
       </q-page>
     </q-page-container>
@@ -137,74 +160,62 @@ async function runTest(name: string, testFunc: () => unknown, details = false) {
   return dump(result, { skipInvalid: true })
 }
 
-async function generateReport(details = false, noGui = true, onlyFirst = false) {
-  console.log('generating diagnostics report')
-  testFinished.value = false
+const tests = {
+  'Test Gdrive zip file packets': testGdriveZipRoundtrip,
+  'Test Secret Store': testSecretStore(tystate.secretStore),
+  'test json schema to yam conversion': testJsonSchemaToYaml,
+  'test build slim view': testBuildSlimView,
+  'test openrouter websearch chatCompletion': testChatCompletion,
+  'test createDeeptransformer': testCreateDeepTansformer,
+  'test chatCompletion tool': testChatCompletion,
+  'environment info': getEnvironmentInfo,
+  'list of Tools': testToolLista,
+  'json schemas': testJsonSchemas,
+  'pg lite': testPGLite,
+  testTransformersPipeline: testTransformersPipeline,
 
-  const startTime = Date.now() // milliseconds since epoch
-  diagnostics.value = `report_date: ${new Date().toISOString()}\n`
+  load_vecorization_initialization: testVectorizerInitialization,
 
-  diagnostics.value += await runTest('Test Secret Store', testGdriveZipRoundtrip, details)
-
-  // move this line behind the "first test"  in order to be able to test only the first test :)
-  if (onlyFirst) {
-    console.log('diagnostics:', diagnostics.value)
-    return
-  }
-
-  diagnostics.value += await runTest(
-    'Test Gdrive zip file packets',
-    testSecretStore(tystate.secretStore),
-    details,
-  )
-
-  diagnostics.value += await runTest(
-    'test json schema to yam conversion',
-    testJsonSchemaToYaml,
-    details,
-  )
-  diagnostics.value += await runTest('test build slim view', testBuildSlimView, details)
-
-  diagnostics.value += await runTest(
-    'test openrouter websearch chatCompletion',
-    testChatCompletion,
-    details,
-  )
-
-  diagnostics.value += await runTest(
-    'test createDeeptransformer',
-    testCreateDeepTansformer,
-    details,
-  )
-  diagnostics.value += await runTest('test chatCompletion tool', testChatCompletion, details)
-  diagnostics.value += await runTest('environment info', getEnvironmentInfo)
-  diagnostics.value += await runTest('list of Tools', testToolLista, details)
-  diagnostics.value += await runTest('json schemas', testJsonSchemas, details)
-  diagnostics.value += await runTest('pg lite', testPGLite, details)
-
+  markdown_generation: markdownGeneration,
+  test_token_counter: testEstimateChatTokens,
+  test_vectorization: testVectorizeText,
+  taskyon_data: getData,
   /*diagnostics.value += await runTest(
     'ipfs_helia_upload',
     testIPFS,
     details,
   );*/
+}
 
-  diagnostics.value += await runTest('testTransformersPipeline', testTransformersPipeline, details)
-  diagnostics.value += await runTest(
-    'load_vecorization_initialization',
-    testVectorizerInitialization,
-    details,
-  )
-  diagnostics.value += await runTest('markdown_generation', markdownGeneration, details)
-  diagnostics.value += await runTest('test_token_counter', testEstimateChatTokens, details)
-  diagnostics.value += await runTest('test_vectorization', testVectorizeText, details)
-  diagnostics.value += await runTest('taskyon_data', getData, details)
-  // we run this test at the end, because sometimes it just keeps blocking?
-  if (!noGui) diagnostics.value += await runTest('gdrive_upload', testGdriveUpload, details)
+const guiTests = {
+  gdrive_upload: testGdriveUpload,
+}
 
+async function runTests(tests: Record<string, () => unknown>, details = false) {
+  testFinished.value = false
+
+  diagnostics.value = ''
+  const startTime = Date.now() // milliseconds since epoch
+  diagnostics.value = `report_date: ${new Date().toISOString()}\n`
+
+  diagnostics.value += (
+    await Promise.all(Object.entries(tests).map(([name, f]) => runTest(name, f, details)))
+  ).join('\n')
+
+  testFinished.value = true
   diagnostics.value += `\n\ntime to run tests: ${(startTime - Date.now()) / 1000}s`
   diagnostics.value += '\nfinished all tests!'
   console.log('diagnostics:', diagnostics.value)
   testFinished.value = true
+}
+
+async function generateReport(details = false, noGui = true) {
+  console.log('generating diagnostics report')
+
+  void runTests({ ...tests, ...guiTests }, details)
+
+  // we run this test at the end, because sometimes it just keeps blocking?
+  if (!noGui) await runTests(tests, details)
 }
 
 async function getData() {
