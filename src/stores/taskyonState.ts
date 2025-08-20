@@ -813,7 +813,7 @@ You can select them in the "Chat Settings" section in the message input window.
 
   const getMeta = async (id: string) => {
     const tm = await getTaskManager()
-    const meta = tm.debugDb.get(id)
+    const meta = tm.metaDb.get(id)
     return meta
   }
 
