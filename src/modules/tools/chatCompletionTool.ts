@@ -799,12 +799,15 @@ export async function createChatCompletionTool(
       // parse the response into our own type ...
       const choice = chatCompletion?.choices[0]
 
-      let metaInfo: TaskNodeMeta = { taskPrompt: chatInfo, rawOutput: chatCompletion }
+      let metaInfo: TaskNodeMeta = {
+        taskPrompt: chatInfo,
+        rawOutput: chatCompletion,
+      }
       // get token usage for this task..
       if (currentTask && lastTaskBeforeChatCompletion) {
         if (chatCompletion) {
           console.log('save token usage...')
-          // openai & openrouter sends back the exact number of prompt tokens :)
+          // openai & openrouter  sends back the exact number of prompt tokens :)
           metaInfo = {
             ...metaInfo,
             ...(await saveTokenUsage(
@@ -820,6 +823,7 @@ export async function createChatCompletionTool(
 
           void addTaskCostInformation(chatCompletion, currentTask?.id, llmSettings, apiKeys).then(
             (newMeta) => {
+              console.log('found new task costs:', newMeta)
               void taskManager.debugDb.upsert(currentTask.id, newMeta, 'shallow_merge')
             },
           )

@@ -51,7 +51,12 @@
     </q-tree>
     <template v-else>
       <template v-for="(task, idx) in props.selectedThread" :key="task.id">
-        <q-expansion-item v-if="reasoning.get(task.id)" label="thoughts:" dense>
+        <q-expansion-item
+          v-if="reasoning.get(task.id)"
+          label="reasoning"
+          dense
+          class="text-caption"
+        >
           <tyMarkdown :src="reasoning.get(task.id)!" />
         </q-expansion-item>
         <Task
@@ -71,6 +76,19 @@
     </template>
     <!--Render tasks which are in progress-->
     <div class="task-logs q-py-sm">
+      <tyMarkdown
+        v-if="
+          currentMessageStream?.length === 0 &&
+          currentThinkingStream &&
+          currentThinkingStream.length > 0
+        "
+        no-line-numbers
+        no-mermaid
+        :src="'THINKING:\n' + currentThinkingStream?.split('\n').slice(-20).join('\n')"
+        class="text-caption"
+        style="font-size: 0.8rem"
+      >
+      </tyMarkdown>
       <q-card
         v-if="
           !!tystate.lastTaskState.get(currentTask.id) &&
@@ -80,14 +98,10 @@
         flat
       >
         <div class="col">
-          <tyMarkdown v-if="!currentMessageStream && currentThinkingStream">
-            {{ currentThinkingStream?.slice(-200) }}
-          </tyMarkdown>
           <tyMarkdown
             v-if="currentMessageStream"
             no-line-numbers
             no-mermaid
-            :use-iframe="false"
             :src="currentMessageStream || ''"
           />
           <div>
@@ -156,11 +170,12 @@ const props = defineProps<{
 
 const reasoning = ref(new Map<string, string>())
 watch(
-  props.selectedThread,
-  (thread) => {
+  () => props.currentTask.id,
+  () => {
+    console.log('re-calculate reason lists!')
     reasoning.value.clear()
     void Promise.all(
-      thread.map(async (t) => {
+      props.selectedThread.map(async (t) => {
         const meta = await tystate.getMeta(t.id)
         if (meta) {
           const reason = getReasoning(meta)
@@ -222,9 +237,9 @@ const currentMessageStream = computed(() => {
 })
 
 const currentThinkingStream = computed(() => {
-  if (props.currentTask)
+  if (props.currentTask) {
     return streamingTracker.value.get(props.currentTask.id)?.choices?.[0]?.reasoning || ''
-  else return undefined
+  } else return undefined
 })
 
 const currentFunctionStream = computed(() => {
