@@ -594,7 +594,8 @@ export function withEncryption(
       }
 
       const encData = await encryptDataFile(
-        data,
+        // we need to make this more efficient!   JSON.stringify is not always the best option...
+        new TextEncoder().encode(JSON.stringify(data)),
         id, // we need the id in order to derive the key
         publicRecoveryKey,
         askSession ?? getSessionKey!, // we can do this, because we chec this earlier...
@@ -612,9 +613,11 @@ export function withEncryption(
         throw new Error('No session key provider (askSession or getSessionKey) was provided.')
       }
 
-      const data = decryptDataFile(encData, id, askSession ?? getSessionKey!)
+      const data = await decryptDataFile(encData, id, askSession ?? getSessionKey!)
 
-      return data
+      const result = JSON.parse(new TextDecoder().decode(data))
+
+      return result
     },
   }
 }
