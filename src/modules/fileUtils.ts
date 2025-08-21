@@ -1,5 +1,6 @@
 // fileUtils.ts
 import { chunk } from 'src/modules/utils'
+import type { AskSession } from './crypto_webcrypto'
 import {
   decryptDataFile,
   encryptDataFile,
@@ -23,26 +24,23 @@ export function compressObjects(objs: unknown): Uint8Array {
 
 export async function encryptCompressObject(
   objs: Record<string, unknown>,
-  archiveName: string,
-  recoveryKey: CryptoKey,
-  sessionKey: CryptoKey,
+  info: string,
+  recoveryKey: AskSession,
+  sessionKey: AskSession,
 ) {
   const compressed = compressObjects(objs)
-  const encrypted = await encryptDataFile(
-    compressed,
-    archiveName,
-    () => recoveryKey,
-    () => sessionKey,
-    false,
-  )
+  const encrypted = await encryptDataFile(compressed, info, recoveryKey, sessionKey, false)
   const packed = encode(encrypted)
   return packed
 }
 
-export async function decompressEncryptedObject(file: File, sessionKey: CryptoKey) {
-  const buffer = await file.arrayBuffer()
+export async function decompressEncryptedObject(
+  buffer: Uint8Array,
+  info: string,
+  sessionKey: AskSession,
+) {
   const encrypted = EncryptedDataRowMixed.parse(decode(buffer))
-  const decrypted = await decryptDataFile(encrypted, file.name, () => sessionKey)
+  const decrypted = await decryptDataFile(encrypted, info, sessionKey)
   const decompressed = uncompressObjects(decrypted) as Record<string, unknown>
   return decompressed
 }
