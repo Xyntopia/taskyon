@@ -31,7 +31,7 @@
           </div>
         </div>
         <q-card flat bordered class="row items-top">
-          <div>
+          <div class="col-auto">
             <div class="text-caption">Available Tests:</div>
             <q-separator />
             <div>
@@ -48,9 +48,11 @@
             </div>
           </div>
           <q-separator vertical />
-          <div v-if="diagnostics">
+          <div v-if="diagnostics" class="col" style="min-width: 300px; min-height: 500px">
             <q-btn flat :icon="matContentCopy" @click="copyToClipboard(diagnostics)"></q-btn>
-            <pre data-cy="diagnostics-result">{{ diagnostics }}</pre>
+            <q-scroll-area class="fit" style="max-height: 90%">
+              <pre data-cy="diagnostics-result">{{ diagnostics }}</pre>
+            </q-scroll-area>
             <div v-if="testFinished" data-cy="test-finished">Test Finished</div>
           </div>
         </q-card>
@@ -198,9 +200,13 @@ async function runTests(tests: Record<string, () => unknown>, details = false) {
   const startTime = Date.now() // milliseconds since epoch
   diagnostics.value = `report_date: ${new Date().toISOString()}\n`
 
-  diagnostics.value += (
+  /*diagnostics.value += (
     await Promise.all(Object.entries(tests).map(([name, f]) => runTest(name, f, details)))
-  ).join('\n')
+  ).join('\n')*/
+  for (const [name, f] of Object.entries(tests)) {
+    diagnostics.value += await runTest(name, f, details)
+    console.log('running test:', name)
+  }
 
   testFinished.value = true
   diagnostics.value += `\n\ntime to run tests: ${(Date.now() - startTime) / 1000}s`
