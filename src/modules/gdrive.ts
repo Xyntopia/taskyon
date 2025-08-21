@@ -7,10 +7,9 @@
 import { ref, computed, watch } from 'vue'
 import axios from 'axios'
 import { googleSdkLoaded } from 'vue3-google-login'
-import { chunk, sleep } from 'src/modules/utils'
+import { sleep } from 'src/modules/utils'
 import { asyncLruCache } from 'src/modules/utils'
 import { LocalStorage } from 'quasar'
-import { filesToZip } from './fileUtils'
 
 type gDriveFile = {
   kind: string //"drive#file",
@@ -28,7 +27,7 @@ export const scope = 'https://www.googleapis.com/auth/drive.file'
 // where individual files are!
 const MAX_APP_PROPS = 30
 const MAX_PUB_PROPS = 30
-const MAX_TOTAL_PROPS = MAX_APP_PROPS + MAX_PUB_PROPS
+export const MAX_TOTAL_PROPS = MAX_APP_PROPS + MAX_PUB_PROPS
 
 // choose a safe prefix:
 const PROP_PREFIX = 'f.' // instead of 'f:'
@@ -200,55 +199,46 @@ export const useGdrive = () => {
     return obj // Return the parsed object
   }
 
-  async function zipAndUpload(
-    files: File[],
+  // NEW: Upload a file archive with inividual files in metata
+  // this helps to circumvent request limits of the Drive API
+  async function uploadFileArchiveWMeta(
     directory: string,
-    zipBaseName: string,
+    zipFile: File,
+    filenames: string[],
     share = false,
   ) {
-    if (!files.length) throw new Error('zipAndUpload: no files provided')
     const validAccessToken = await getValidAccessToken()
-
-    // ensure target directory
-    const directoryId = await ensureDirectoryExists(directory, validAccessToken)
-    if (!directoryId) throw new Error('Failed to create/find directory')
-
-    // split so every chunk’s filenames fit into 60 props
-    const parts = chunk(files, MAX_TOTAL_PROPS)
-
-    const results: gDriveFile[] = []
-    for (let idx = 0; idx < parts.length; idx++) {
-      const part = parts[idx]!
-      const zipName = parts.length === 1 ? `${zipBaseName}.zip` : `${zipBaseName}.${idx + 1}.zip`
-
-      // zip
-      const zipBlob = await filesToZip(part, zipName)
-
-      // properties (store keys for all names in this zip)
-      const names = part.map((f) => f.name)
-      const { appProps, pubProps } = buildNameProps(names)
-
-      const fileRec = await pushFile(directoryId, zipBlob, validAccessToken, {
-        appProperties: appProps,
-        properties: pubProps,
-      })
-
-      if (share) {
-        await makeFilePublic(fileRec.id, validAccessToken)
-        const withLink = await getFileMetaData(fileRec.id, validAccessToken)
-        results.push({
-          ...fileRec,
-          ...(withLink.webViewLink ? { webViewLink: withLink.webViewLink } : {}),
-        })
-      } else {
-        results.push(fileRec)
-      }
+    if (!validAccessToken) {
+      throw new Error('Failed to obtain a valid access token.')
     }
-    return results
+
+    const directoryId = await ensureDirectoryExists(directory, validAccessToken)
+    if (!directoryId) {
+      throw new Error('Failed to create/find directory')
+    }
+
+    const { appProps, pubProps } = buildNameProps(filenames)
+
+    const fileRec = await pushFile(directoryId, zipFile, validAccessToken, {
+      appProperties: appProps,
+      properties: pubProps,
+    })
+
+    if (share) {
+      await makeFilePublic(fileRec.id, validAccessToken)
+      const withLink = await getFileMetaData(fileRec.id, validAccessToken)
+      return {
+        ...fileRec,
+        ...(withLink.webViewLink ? { webViewLink: withLink.webViewLink } : {}),
+      }
+    } else {
+      return fileRec
+    }
   }
 
-  // downloadZipContaining: same key construction
-  async function downloadZipContaining(directory: string, filename: string) {
+  // downloadZipContaining: based on the name of a file that was archived in it
+  // and stored in the metadata.
+  async function downloadArchiveFile(directory: string, archivedFilename: string) {
     const validAccessToken = await getValidAccessToken()
     if (!validAccessToken) throw new Error('Failed to obtain a valid access token.')
 
@@ -258,8 +248,8 @@ export const useGdrive = () => {
     })
     if (!directoryId) throw new Error(`Directory "${directory}" not found`)
 
-    assertDriveKeySafeFilename(filename)
-    const key = `${PROP_PREFIX}${filename}`
+    assertDriveKeySafeFilename(archivedFilename)
+    const key = `${PROP_PREFIX}${archivedFilename}`
 
     const q =
       `'${directoryId}' in parents and trashed = false and ` +
@@ -291,9 +281,8 @@ export const useGdrive = () => {
     saveFileToGdrive,
     loadFileFromGdrive,
     publishMarkdown,
-
-    zipAndUpload,
-    downloadZipContaining,
+    uploadFileArchiveWMeta, // NEW: Replaces zipAndUpload
+    downloadArchiveFile,
   }
 }
 

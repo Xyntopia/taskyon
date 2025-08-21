@@ -16,6 +16,9 @@ import type { SecretStore } from '../crudWrapper'
 import type { Asyncify } from '../../../packages/taskyon/src/utils/tsHelpers'
 import type { TaskNode } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
+import { compressObjects } from '../fileUtils'
+import { encryptDataFile } from '../crypto_webcrypto'
+import { decode, encode } from '@msgpack/msgpack'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -33,30 +36,72 @@ export async function testGdriveZipRoundtrip() {
   }
 
   try {
-    const { zipAndUpload, downloadZipContaining } = useGdrive()
+    const { uploadFileArchiveWMeta, downloadArchiveFile } = useGdrive()
 
     // 1) make a couple tiny test files (names look like hashes you’d use in prod)
-    const files = [
+    /*const files = [
       new File(['hello A'], 'a1f2c3d4e5.txt', { type: 'text/plain' }),
       new File([JSON.stringify({ k: 1 })], 'b6c7d8e9f0.json', { type: 'application/json' }),
       new File(['# hi'], 'deadbeefcaf0.md', { type: 'text/markdown' }),
+    ]*/
+    const objs: [unknown, string][] = [
+      ['hello A', 'a1f2c3d4e5.txt'],
+      [{ k: 1 }, 'b6c7d8e9f0.json'],
+      [['# hi'], 'deadbeefcaf0.md'],
     ]
-    log(
-      'prepared test files',
-      files.map((f) => ({ name: f.name, size: f.size })),
+    log('prepared test data', objs)
+
+    const filenames = objs.map((o) => o[1])
+
+    // compress objects
+    const compressed = compressObjects(objs)
+    // encrypt after compression
+
+    const zipBaseName = 'roundtrip'
+
+    const recoveryKey = (
+      await window.crypto.subtle.generateKey(
+        {
+          name: 'RSA-OAEP',
+          modulusLength: 2048,
+          publicExponent: new Uint8Array([1, 0, 1]),
+          hash: 'SHA-256',
+        },
+        true,
+        ['encrypt', 'decrypt'],
+      )
+    ).publicKey
+
+    // Generate a symmetric key (AES-GCM)
+    const sessionKey = await window.crypto.subtle.generateKey(
+      {
+        name: 'AES-GCM',
+        length: 256,
+      },
+      true,
+      ['encrypt', 'decrypt'],
     )
+
+    const encrypted = await encryptDataFile(
+      compressed,
+      zipBaseName,
+      () => recoveryKey,
+      () => sessionKey,
+      false,
+    )
+
+    const msgpackFile = new File([encode(encrypted)], zipBaseName + '.tyt', {
+      type: 'application/octet-stream',
+    })
+    log('created msgpack file', { name: msgpackFile.name, size: msgpackFile.size })
 
     // 2) pick a fresh directory so tests don’t clash
     const directory = `taskyon/taskyon-tests/${new Date().toISOString().replace(/[:.]/g, '-')}`
-    const zipBaseName = 'roundtrip'
     log('target directory chosen', directory)
 
     // 3) zip & upload (will chunk if >60 names; here, it’s a single zip)
-    const created = await zipAndUpload(files, directory, zipBaseName, /*share*/ false)
-    log(
-      'uploaded zip(s)',
-      created.map((f) => ({ id: f.id, name: f.name, mimeType: f.mimeType })),
-    )
+    const created = await uploadFileArchiveWMeta(directory, msgpackFile, filenames, /*share*/ false)
+    log('uploaded zip(s)', created)
 
     // 4) for each filename, locate its zip via properties and download it
     const fileChecks: Array<{
@@ -67,26 +112,31 @@ export async function testGdriveZipRoundtrip() {
       error?: string
     }> = []
 
-    for (const f of files) {
+    for (const name of filenames) {
       try {
-        const zipBlob = await downloadZipContaining(directory, f.name)
-        if (!zipBlob) {
-          fileChecks.push({ filename: f.name, found: false })
-          log(`download miss for ${f.name}`, undefined, /*ok*/ false)
+        const file = await downloadArchiveFile(directory, name)
+        if (file) {
+          const buffer = await file.arrayBuffer() // Step 1
+          const encrypted = decode(buffer)
+        }
+
+        if (!file) {
+          fileChecks.push({ filename: name, found: false })
+          log(`download miss for ${name}`, undefined, /*ok*/ false)
         } else {
           const info = {
-            filename: f.name,
+            filename: name,
             found: true,
-            blobSize: zipBlob.size,
-            blobType: (zipBlob as Blob).type,
+            blobSize: file.size,
+            blobType: (file as Blob).type,
           }
           fileChecks.push(info)
-          log(`download hit for ${f.name}`, info)
+          log(`download hit for ${name}`, info)
         }
       } catch (e: unknown) {
         const err = e instanceof Error ? e.message : String(e)
-        fileChecks.push({ filename: f.name, found: false, error: err })
-        log(`download error for ${f.name}`, err, /*ok*/ false)
+        fileChecks.push({ filename: name, found: false, error: err })
+        log(`download error for ${name}`, err, /*ok*/ false)
       }
     }
 
@@ -94,7 +144,7 @@ export async function testGdriveZipRoundtrip() {
     return {
       ok: allFound,
       directory,
-      createdZips: created.map((f) => ({ id: f.id, name: f.name })),
+      createdZip: created,
       fileChecks,
       steps,
       logs,

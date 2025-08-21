@@ -1,8 +1,56 @@
-import { zipSync } from 'fflate'
+// fileUtils.ts
+import { chunk } from 'src/modules/utils'
+import type { EncryptedDataRow } from './crypto_webcrypto'
+import { deflateSync, zipSync } from 'fflate'
+
+export function compressObjects(objs: unknown[]): Uint8Array {
+  const jsonStr = JSON.stringify(objs)
+  const data = new TextEncoder().encode(jsonStr)
+
+  // using messagepack consistently gives us slightly larger files than JSON.stringify
+  // probably because of repeated keys...
+  // Option B: MessagePack (skip JSON.stringify)
+  // const data = msgpack.encode(objs)
+
+  return deflateSync(data)
+}
 
 export async function filesToZip(files: File[], name: string): Promise<File> {
   const entries: Record<string, Uint8Array> = {}
   for (const f of files) entries[f.name] = new Uint8Array(await f.arrayBuffer())
   const zipped = zipSync(entries, { level: 6 }) // balanced speed/ratio
   return new File([zipped], name, { type: 'application/zip' })
+}
+
+export async function createZipFiles(
+  files: File[],
+  zipBaseName: string,
+  max_files_per_chunk = 60, // 30 app + 30 public properties
+): Promise<{ zipFile: File; filenames: string[] }[]> {
+  if (!files.length) throw new Error('createZipFiles: no files provided')
+
+  const parts = chunk(files, max_files_per_chunk)
+  const results = []
+
+  for (let idx = 0; idx < parts.length; idx++) {
+    const part = parts[idx]!
+    const zipName = parts.length === 1 ? `${zipBaseName}.zip` : `${zipBaseName}.${idx + 1}.zip`
+
+    const zipBlob = await filesToZip(part, zipName)
+    const zipFile = new File([zipBlob], zipName, { type: 'application/zip' })
+
+    results.push({
+      zipFile,
+      filenames: part.map((f) => f.name),
+    })
+  }
+
+  return results
+}
+
+export function saveEncryptedDataRow(encData: EncryptedDataRow, filename: string) {
+  const json = JSON.stringify(encData)
+  const blob = new Blob([json], { type: 'application/json' })
+  const file = new File([blob], filename + '.enc.json')
+  return file
 }
