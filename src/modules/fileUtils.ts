@@ -1,7 +1,13 @@
 // fileUtils.ts
 import { chunk } from 'src/modules/utils'
-import type { EncryptedDataRow } from './crypto_webcrypto'
+import {
+  decryptDataFile,
+  encryptDataFile,
+  EncryptedDataRowMixed,
+  type EncryptedDataRow,
+} from './crypto_webcrypto'
 import { deflateSync, inflateSync, zipSync } from 'fflate'
+import { decode, encode } from '@msgpack/msgpack'
 
 export function compressObjects(objs: unknown): Uint8Array {
   const jsonStr = JSON.stringify(objs)
@@ -13,6 +19,32 @@ export function compressObjects(objs: unknown): Uint8Array {
   // const data = msgpack.encode(objs)
 
   return deflateSync(data)
+}
+
+export async function encryptCompressObject(
+  objs: Record<string, unknown>,
+  archiveName: string,
+  recoveryKey: CryptoKey,
+  sessionKey: CryptoKey,
+) {
+  const compressed = compressObjects(objs)
+  const encrypted = await encryptDataFile(
+    compressed,
+    archiveName,
+    () => recoveryKey,
+    () => sessionKey,
+    false,
+  )
+  const packed = encode(encrypted)
+  return packed
+}
+
+export async function decompressEncryptedObject(file: File, sessionKey: CryptoKey) {
+  const buffer = await file.arrayBuffer()
+  const encrypted = EncryptedDataRowMixed.parse(decode(buffer))
+  const decrypted = await decryptDataFile(encrypted, file.name, () => sessionKey)
+  const decompressed = uncompressObjects(decrypted) as Record<string, unknown>
+  return decompressed
 }
 
 export function uncompressObjects(data: Uint8Array): unknown {

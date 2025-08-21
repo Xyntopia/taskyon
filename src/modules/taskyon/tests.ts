@@ -16,12 +16,36 @@ import type { SecretStore } from '../crudWrapper'
 import type { Asyncify } from '../../../packages/taskyon/src/utils/tsHelpers'
 import type { TaskNode } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
-import { compressObjects, uncompressObjects } from '../fileUtils'
-import { decryptDataFile, encryptDataFile, EncryptedDataRowMixed } from '../crypto_webcrypto'
-import { decode, encode } from '@msgpack/msgpack'
+import { decompressEncryptedObject, encryptCompressObject } from '../fileUtils'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
+
+async function createTestKeys() {
+  const recoveryKey = (
+    await window.crypto.subtle.generateKey(
+      {
+        name: 'RSA-OAEP',
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: 'SHA-256',
+      },
+      true,
+      ['encrypt', 'decrypt'],
+    )
+  ).publicKey
+
+  // Generate a symmetric key (AES-GCM)
+  const sessionKey = await window.crypto.subtle.generateKey(
+    {
+      name: 'AES-GCM',
+      length: 256,
+    },
+    true,
+    ['encrypt', 'decrypt'],
+  )
+  return { recoveryKey, sessionKey }
+}
 
 export async function testGdriveZipRoundtrip() {
   const t0 = Date.now()
@@ -38,12 +62,6 @@ export async function testGdriveZipRoundtrip() {
   try {
     const { uploadFileArchiveWMeta, downloadArchiveFile } = useGdrive()
 
-    // 1) make a couple tiny test files (names look like hashes you’d use in prod)
-    /*const files = [
-      new File(['hello A'], 'a1f2c3d4e5.txt', { type: 'text/plain' }),
-      new File([JSON.stringify({ k: 1 })], 'b6c7d8e9f0.json', { type: 'application/json' }),
-      new File(['# hi'], 'deadbeefcaf0.md', { type: 'text/markdown' }),
-    ]*/
     const objs: Record<string, unknown> = {
       'a1f2c3d4e5.txt': 'hello A',
       'b6c7d8e9f0.json': { k: 1 },
@@ -52,51 +70,16 @@ export async function testGdriveZipRoundtrip() {
     log('prepared test data', objs)
 
     const filenames = Object.keys(objs)
-
-    // compress objects
-    const compressed = compressObjects(objs)
-    // encrypt after compression
-    const decompressed = uncompressObjects(compressed)
-    log('compressed and decompressed objects', { compressed, decompressed })
-
     const archiveName = 'roundtrip.tyt'
 
-    const recoveryKey = (
-      await window.crypto.subtle.generateKey(
-        {
-          name: 'RSA-OAEP',
-          modulusLength: 2048,
-          publicExponent: new Uint8Array([1, 0, 1]),
-          hash: 'SHA-256',
-        },
-        true,
-        ['encrypt', 'decrypt'],
-      )
-    ).publicKey
+    const { recoveryKey, sessionKey } = await createTestKeys()
+    log('created keys', { recoveryKey, sessionKey })
 
-    // Generate a symmetric key (AES-GCM)
-    const sessionKey = await window.crypto.subtle.generateKey(
-      {
-        name: 'AES-GCM',
-        length: 256,
-      },
-      true,
-      ['encrypt', 'decrypt'],
-    )
+    // compress objects
+    const packed = await encryptCompressObject(objs, archiveName, recoveryKey, sessionKey)
+    log('created encrypted msgpack file', packed)
 
-    const encrypted = await encryptDataFile(
-      compressed,
-      archiveName,
-      () => recoveryKey,
-      () => sessionKey,
-      false,
-    )
-    log('created encrypted msgpack file', encrypted)
-
-    const msgpacktest = decode(encode(encrypted)) // ensure it’s valid msgpack
-    log('msgpack test successful', msgpacktest)
-
-    const msgpackFile = new File([encode(encrypted)], archiveName, {
+    const msgpackFile = new File([packed], archiveName, {
       type: 'application/octet-stream',
     })
     log('created msgpack file', { name: msgpackFile.name, size: msgpackFile.size })
@@ -125,10 +108,7 @@ export async function testGdriveZipRoundtrip() {
           fileChecks.push({ filename: name, found: false })
           log(`download miss for ${name}`, undefined, /*ok*/ false)
         } else {
-          const buffer = await file.arrayBuffer() // Step 1
-          const encrypted = EncryptedDataRowMixed.parse(decode(buffer))
-          const decrypted = await decryptDataFile(encrypted, file.name, () => sessionKey)
-          const decompressed = uncompressObjects(decrypted) as Record<string, unknown>
+          const decompressed = await decompressEncryptedObject(file, sessionKey)
           const data = decompressed[name]
           log('decompressed and decrypted file', { name, decompressed })
           const info = {
