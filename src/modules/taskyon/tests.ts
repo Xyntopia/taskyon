@@ -16,8 +16,8 @@ import type { SecretStore } from '../crudWrapper'
 import type { Asyncify } from '../../../packages/taskyon/src/utils/tsHelpers'
 import type { TaskNode } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
-import { compressObjects } from '../fileUtils'
-import { encryptDataFile } from '../crypto_webcrypto'
+import { compressObjects, uncompressObjects } from '../fileUtils'
+import { decryptDataFile, encryptDataFile, EncryptedDataRowMixed } from '../crypto_webcrypto'
 import { decode, encode } from '@msgpack/msgpack'
 
 const tystate = useTaskyonStore()
@@ -44,20 +44,22 @@ export async function testGdriveZipRoundtrip() {
       new File([JSON.stringify({ k: 1 })], 'b6c7d8e9f0.json', { type: 'application/json' }),
       new File(['# hi'], 'deadbeefcaf0.md', { type: 'text/markdown' }),
     ]*/
-    const objs: [unknown, string][] = [
-      ['hello A', 'a1f2c3d4e5.txt'],
-      [{ k: 1 }, 'b6c7d8e9f0.json'],
-      [['# hi'], 'deadbeefcaf0.md'],
-    ]
+    const objs: Record<string, unknown> = {
+      'a1f2c3d4e5.txt': 'hello A',
+      'b6c7d8e9f0.json': { k: 1 },
+      'deadbeefcaf0.md': ['# hi'],
+    }
     log('prepared test data', objs)
 
-    const filenames = objs.map((o) => o[1])
+    const filenames = Object.keys(objs)
 
     // compress objects
     const compressed = compressObjects(objs)
     // encrypt after compression
+    const decompressed = uncompressObjects(compressed)
+    log('compressed and decompressed objects', { compressed, decompressed })
 
-    const zipBaseName = 'roundtrip'
+    const archiveName = 'roundtrip.tyt'
 
     const recoveryKey = (
       await window.crypto.subtle.generateKey(
@@ -84,13 +86,17 @@ export async function testGdriveZipRoundtrip() {
 
     const encrypted = await encryptDataFile(
       compressed,
-      zipBaseName,
+      archiveName,
       () => recoveryKey,
       () => sessionKey,
       false,
     )
+    log('created encrypted msgpack file', encrypted)
 
-    const msgpackFile = new File([encode(encrypted)], zipBaseName + '.tyt', {
+    const msgpacktest = decode(encode(encrypted)) // ensure it’s valid msgpack
+    log('msgpack test successful', msgpacktest)
+
+    const msgpackFile = new File([encode(encrypted)], archiveName, {
       type: 'application/octet-stream',
     })
     log('created msgpack file', { name: msgpackFile.name, size: msgpackFile.size })
@@ -115,20 +121,23 @@ export async function testGdriveZipRoundtrip() {
     for (const name of filenames) {
       try {
         const file = await downloadArchiveFile(directory, name)
-        if (file) {
-          const buffer = await file.arrayBuffer() // Step 1
-          const encrypted = decode(buffer)
-        }
-
         if (!file) {
           fileChecks.push({ filename: name, found: false })
           log(`download miss for ${name}`, undefined, /*ok*/ false)
         } else {
+          const buffer = await file.arrayBuffer() // Step 1
+          const encrypted = EncryptedDataRowMixed.parse(decode(buffer))
+          const decrypted = await decryptDataFile(encrypted, file.name, () => sessionKey)
+          const decompressed = uncompressObjects(decrypted) as Record<string, unknown>
+          const data = decompressed[name]
+          log('decompressed and decrypted file', { name, decompressed })
           const info = {
-            filename: name,
+            filename: file.name,
             found: true,
             blobSize: file.size,
-            blobType: (file as Blob).type,
+            blobType: file.type,
+            originalData: objs[name],
+            data: data,
           }
           fileChecks.push(info)
           log(`download hit for ${name}`, info)

@@ -1,9 +1,9 @@
 // fileUtils.ts
 import { chunk } from 'src/modules/utils'
 import type { EncryptedDataRow } from './crypto_webcrypto'
-import { deflateSync, zipSync } from 'fflate'
+import { deflateSync, inflateSync, zipSync } from 'fflate'
 
-export function compressObjects(objs: unknown[]): Uint8Array {
+export function compressObjects(objs: unknown): Uint8Array {
   const jsonStr = JSON.stringify(objs)
   const data = new TextEncoder().encode(jsonStr)
 
@@ -13,6 +13,13 @@ export function compressObjects(objs: unknown[]): Uint8Array {
   // const data = msgpack.encode(objs)
 
   return deflateSync(data)
+}
+
+export function uncompressObjects(data: Uint8Array): unknown {
+  const jsonStr = new TextDecoder().decode(inflateSync(data))
+
+  // if you were using msgpack: return msgpack.decode(inflateSync(data)) as unknown[]
+  return JSON.parse(jsonStr)
 }
 
 export async function filesToZip(files: File[], name: string): Promise<File> {

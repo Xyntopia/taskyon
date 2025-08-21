@@ -236,8 +236,6 @@ export const useGdrive = () => {
     }
   }
 
-  // downloadZipContaining: based on the name of a file that was archived in it
-  // and stored in the metadata.
   async function downloadArchiveFile(directory: string, archivedFilename: string) {
     const validAccessToken = await getValidAccessToken()
     if (!validAccessToken) throw new Error('Failed to obtain a valid access token.')
@@ -262,7 +260,7 @@ export const useGdrive = () => {
       q,
       pageSize: 1,
       orderBy: 'createdTime desc',
-      fields: 'files(id,name,createdTime)',
+      fields: 'files(id,name,createdTime,mimeType)',
     }
     const headers = { Authorization: `Bearer ${validAccessToken}` }
     const { data } = await axios.get('https://www.googleapis.com/drive/v3/files', {
@@ -272,7 +270,9 @@ export const useGdrive = () => {
 
     const hit = data.files?.[0]
     if (!hit) return null
-    return await downloadFileFromDrive(hit.id, validAccessToken)
+    const blob = await downloadFileFromDrive(hit.id, validAccessToken)
+
+    return new File([blob], hit.name, { type: hit.mimeType })
   }
 
   return {
@@ -521,7 +521,7 @@ async function downloadFileFromDrive(fileId: string, accessToken: string) {
   }
   const response = await axios.get(url, { headers, responseType: 'blob' })
   console.log('File downloaded successfully.')
-  return response.data as File // The file data
+  return response.data
 }
 
 export function getFileId(originalLink: string) {

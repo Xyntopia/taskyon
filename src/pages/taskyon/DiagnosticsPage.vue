@@ -157,7 +157,7 @@ async function runTest(name: string, testFunc: () => unknown, details = false) {
           : JSON.parse(JSON.stringify(error)),
     }
   }
-  return dump(result, { skipInvalid: true })
+  return dump(result, { skipInvalid: true, noRefs: true })
 }
 
 const tests = {
