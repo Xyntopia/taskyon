@@ -282,7 +282,12 @@ You can select them in the "Chat Settings" section in the message input window.
     )
   })
 
-  const { x: iApiIn, y: iApiOut } = createDuplexChannel<TaskyonMessage, unknown>()
+  // iApiOutside is the port to the "outside" of taskyon. It is the port used to
+  // communicate towards the taskyon engine. iApiInside communicates to the outside of taskyon.
+  // For example the iframe is connected to iApiOutside because
+  // it lives outside the taskyon logic. iApiInside is used by our internal
+  // services e.g. the engine to communicate to the outside.
+  const { x: iApiOutside, y: iApiInside } = createDuplexChannel<TaskyonMessage, unknown>()
 
   const initTaskyonPromise = (async () => {
     const tyInit = await initTaskyon(
@@ -295,10 +300,13 @@ You can select them in the "Chat Settings" section in the message input window.
       async () => (await generateRsaOaepPair()).publicKey,
     )
 
+    //const taskStream = tyInit.taskManagerInstance.taskStream
+    //syncToGdrive(taskStream, stateRefs.appConfiguration.gdriveDir)
+
     // add an API for taskyon GUI and make sure "unused" messages are routed through to the
     // taskyon engine!
     createPortApi(
-      iApiOut,
+      iApiInside,
       TaskyonMessage,
       {
         configurationMessage: (msg) => {
@@ -343,7 +351,7 @@ You can select them in the "Chat Settings" section in the message input window.
     )
     // we manually connect our send port to the api here, because
     // we are already intercepting incoming messages with the API above
-    tyInit.outPort.receive(iApiOut.send)
+    tyInit.outPort.receive(iApiInside.send)
     console.log('checking if we are in an iframe!')
 
     /// -------   iframe operations --------
@@ -375,7 +383,7 @@ You can select them in the "Chat Settings" section in the message input window.
       MessageChannelBridge(iframeChannel.x, mport)
 
       // connect iframe API to internal GUI API which also connects to taskyon engine automatically.
-      iframeChannel.y.connect(iApiIn)
+      iframeChannel.y.connect(iApiOutside)
       mport.postMessage('taskyon connected!')
     }
     return tyInit
@@ -393,7 +401,7 @@ You can select them in the "Chat Settings" section in the message input window.
     void updateTools()
 
     // if a new "default" tool was created update UI
-    iApiIn.receive((msg) => {
+    iApiOutside.receive((msg) => {
       console.log('api Aout message!', msg)
       void match(msg).with(
         {
@@ -861,7 +869,7 @@ You can select them in the "Chat Settings" section in the message input window.
     handleBotNameUpdate,
     connectMessageIframe,
     entryNode,
-    api: iApiIn,
+    api: iApiOutside,
   }
 }) // this state stores all information which
 // should be stored e.g. in browser LocalStorage
