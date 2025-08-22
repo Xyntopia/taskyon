@@ -17,7 +17,7 @@ import type { Asyncify } from '../../../packages/taskyon/src/utils/tsHelpers'
 import type { TaskNode } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
 import { decompressEncryptedObject, encryptCompressObject } from '../fileUtils'
-import { GdriveSyncPort } from '../tools/sync'
+import { GdriveSyncPort } from './sync'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
