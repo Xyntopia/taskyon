@@ -38,7 +38,7 @@ import z from 'zod'
 import { ToolBase } from '@taskyon/taskyon'
 import type { EncryptedDataRow } from '../crypto_webcrypto'
 
-export async function initTaskyon(
+export async function tyCore(
   llmSettings: llmSettings,
   apiKeys: { [key: string]: string },
   // with the Environment Tools we can provide a list of tools as closures which have access
@@ -191,6 +191,8 @@ export async function initTaskyon(
     outPort,
   }
 }
+
+export type Taskyon = Awaited<ReturnType<typeof tyCore>>
 
 /*function stringifyIfNotString(obj: unknown): string | undefined {
     if (typeof obj === 'undefined') return undefined;

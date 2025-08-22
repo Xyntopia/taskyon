@@ -1,12 +1,13 @@
 import { defineStore } from 'pinia'
-import { watch, computed, ref } from 'vue'
+import { watch, computed, ref, readonly } from 'vue'
 import type { ChatResponseType, TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
 import { type Model, getCurrentModel, llmSettings, type TyProfile } from 'src/modules/taskyon/types'
 import axios from 'axios' // TODO: replace with fetch
 import { Notify } from 'quasar' // load dynamically! :)
 import { useQuasar } from 'quasar'
 import { getApiConfig } from 'src/modules/taskyon/types'
-import { initTaskyon } from 'src/modules/taskyon/init'
+import type { Taskyon } from 'src/modules/taskyon/init'
+import { tyCore } from 'src/modules/taskyon/init'
 import { availableModels } from 'src/modules/taskyon/chat'
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
 import { useAppStateStore } from './appState'
@@ -123,6 +124,62 @@ async function updateLlmModels(
     }
   } else {
     return {}
+  }
+}
+
+function connectWorkerStream(taskyon: Promise<Taskyon>) {
+  const taskWorkerWaiting = ref(true)
+  const workerStreamLogs = ref<(TyTaskStreamData & { timestamp: Date })[]>([])
+  const maxLogRows = 50
+  const lastActiveTaskId = ref<string | null>(null)
+  const lastTaskState = ref(new Map<string, TyTaskStreamData['stage']>())
+
+  void taskyon.then(({ workerStream }) => {
+    void workerStream.subscribe((data) => {
+      if (data.stage === 'all finished') taskWorkerWaiting.value = true
+      else if (data.stage === 'processing') taskWorkerWaiting.value = false
+    })
+
+    void workerStream.subscribe((data) => {
+      console.log(`worker: ${data.stage}, ${data.taskId || data.task?.id}`)
+      if (['all finished', 'processing', 'processed', 'error'].includes(data.stage)) {
+        workerStreamLogs.value.push({ ...data, timestamp: new Date() })
+        // Ensure the log doesn't exceed the maximum number of rows
+        if (workerStreamLogs.value.length > maxLogRows) {
+          workerStreamLogs.value.shift() // Remove the oldest entry
+        }
+      }
+    })
+
+    void workerStream.subscribe((data) => {
+      const id = data.task?.id || data.taskId
+      if (id) {
+        lastTaskState.value.set(id, data.stage)
+        if (data.stage === 'processed') {
+          // we don't need the task anymore once we're done processing with it :)
+          lastTaskState.value.delete(id)
+        }
+      }
+    })
+
+    filter(
+      workerStream,
+      (data) =>
+        data.stage === 'processing' ||
+        data.stage === 'processed' ||
+        data.stage === 'error' ||
+        (data.stage === 'aborted' && !!(data.taskId || data.task?.id)),
+    ).subscribe((data) => {
+      // TODO: add last task to GUI by checking if our current selected task now has this child...
+      lastActiveTaskId.value = data.task?.id || data.taskId || null
+    })
+  })
+
+  return {
+    taskWorkerWaiting: readonly(taskWorkerWaiting),
+    lastActiveTaskId: readonly(lastActiveTaskId),
+    workerStreamLogs: readonly(workerStreamLogs),
+    lastTaskState: readonly(lastTaskState),
   }
 }
 
@@ -278,7 +335,7 @@ You can select them in the "Chat Settings" section in the message input window.
   })
 
   const taskyon = (async () =>
-    await initTaskyon(
+    await tyCore(
       stateRefs.llmSettings,
       stateRefs.keys,
       defineTyGuiTools(),
@@ -460,10 +517,8 @@ You can select them in the "Chat Settings" section in the message input window.
     ;(await taskyon).queueTask(taskId)
   }
 
-  const workerStream = asyncProxy(async () => {
-    const instance = await taskyon
-    return instance['workerStream']
-  })
+  const { taskWorkerWaiting, lastActiveTaskId, lastTaskState, workerStreamLogs } =
+    connectWorkerStream(taskyon)
 
   const stopWorker = async (reason: string) => {
     console.log('stopping worker with reason:', reason)
@@ -474,50 +529,6 @@ You can select them in the "Chat Settings" section in the message input window.
   const chatCompletionStream = asyncProxy(async () => {
     const instance = await taskyon
     return instance['chatCompletionStream']
-  })
-
-  const workerStreamLogs = ref<(TyTaskStreamData & { timestamp: Date })[]>([])
-  const maxLogRows = 50
-  void workerStream.subscribe((data) => {
-    console.log(`worker: ${data.stage}, ${data.taskId || data.task?.id}`)
-    if (['all finished', 'processing', 'processed', 'error'].includes(data.stage)) {
-      workerStreamLogs.value.push({ ...data, timestamp: new Date() })
-      // Ensure the log doesn't exceed the maximum number of rows
-      if (workerStreamLogs.value.length > maxLogRows) {
-        workerStreamLogs.value.shift() // Remove the oldest entry
-      }
-    }
-  })
-
-  const lastTaskState = ref(new Map<string, TyTaskStreamData['stage']>())
-  void workerStream.subscribe((data) => {
-    const id = data.task?.id || data.taskId
-    if (id) {
-      lastTaskState.value.set(id, data.stage)
-      if (data.stage === 'processed') {
-        // we don't need the task anymore once we're done processing with it :)
-        lastTaskState.value.delete(id)
-      }
-    }
-  })
-
-  void taskyon.then(({ workerStream }) => {
-    filter(
-      workerStream,
-      (data) =>
-        data.stage === 'processing' ||
-        data.stage === 'processed' ||
-        data.stage === 'error' ||
-        (data.stage === 'aborted' && !!(data.taskId || data.task?.id)),
-    ).subscribe((data) => {
-      // TODO: add last task to GUI by checking if our current selected task now has this child...
-      stateRefs.setSelectedTask(data.task?.id || data.taskId || null)
-    })
-  })
-
-  void workerStream.subscribe((data) => {
-    if (data.stage === 'all finished') taskWorkerWaiting.value = true
-    else if (data.stage === 'processing') taskWorkerWaiting.value = false
   })
 
   void getTaskManager().then((tm) => {
@@ -650,7 +661,6 @@ You can select them in the "Chat Settings" section in the message input window.
 
   // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
   // we want to oad them gradually into our UI
-  const taskWorkerWaiting = ref(true)
   const currentTask = ref<TaskNode | null>(null)
   const selectedThread = ref<TaskNode[]>([])
   const selectedThreadIDs = ref<string[]>([])
@@ -821,12 +831,13 @@ You can select them in the "Chat Settings" section in the message input window.
     taskContentDraft,
     // TODO: add "value" just like with the other computed properties...
     selectedThread: computed(() => selectedThread),
-    taskWorkerWaiting: computed(() => taskWorkerWaiting.value),
     currentTask: computed(() => currentTask),
     getOpenRouterPKCEKey,
     addModelToHistory,
     stopWorker,
     getTaskManager,
+    taskWorkerWaiting,
+    lastActiveTaskId,
     lastTaskState,
     workerStreamLogs,
     addToProcessQueue,
