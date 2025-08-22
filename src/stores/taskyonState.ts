@@ -520,6 +520,12 @@ You can select them in the "Chat Settings" section in the message input window.
   const { taskWorkerWaiting, lastActiveTaskId, lastTaskState, workerStreamLogs } =
     connectWorkerStream(taskyon)
 
+  watch(lastActiveTaskId, (newTaskId) => {
+    if (newTaskId) {
+      stateRefs.setSelectedTask(newTaskId)
+    }
+  })
+
   const stopWorker = async (reason: string) => {
     console.log('stopping worker with reason:', reason)
     const instance = await taskyon
@@ -829,7 +835,7 @@ You can select them in the "Chat Settings" section in the message input window.
     allTools: computed(() => allTools.value),
     switchTaskType,
     taskContentDraft,
-    // TODO: add "value" just like with the other computed properties...
+    // TODO: make all computed values readonly
     selectedThread: computed(() => selectedThread),
     currentTask: computed(() => currentTask),
     getOpenRouterPKCEKey,
