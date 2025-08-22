@@ -79,9 +79,21 @@ $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(
           width: calc(100% - 20px)
 
         &.user
+          position: relative // anchor for ::before
           align-self: flex-end
-          margin-left: 20px
-          border: 1px solid rgba($primary,0.8)
+          margin-left: 20px // reserve space for glow
+          padding-left: 10px
+
+          &::before
+            content: ""
+            position: absolute
+            left: -10px // move into the margin area
+            top: 2px
+            bottom: 2px
+            width: 3px
+            border-radius: 2px
+            //background: rgb($primary)
+            //box-shadow: 0 0 3px 3px rgba($primary, 0.6)
 
         &:not(.user)
           align-self: flex-start
@@ -237,7 +249,8 @@ $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(
     .task-container
       background-color: white
       &.user
-        border: 1px solid rgba($primary,0.8)
+        &::before
+          background: rgb($primary)
 
   body.body--dark
     background-color: black
@@ -280,8 +293,10 @@ $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(
 
     .task-container
       background-color: rgba($dark,1.0)
+
       &.user
-        border: 1px solid rgba($secondary,0.3)
+        &::before
+          background: rgb($secondary)
 
     .task-buttons
       border-radius: 5px
