@@ -277,15 +277,8 @@ You can select them in the "Chat Settings" section in the message input window.
     )
   })
 
-  // iApiOutside is the port to the "outside" of taskyon. It is the port used to
-  // communicate towards the taskyon engine. iApiInside communicates to the outside of taskyon.
-  // For example the iframe is connected to iApiOutside because
-  // it lives outside the taskyon logic. iApiInside is used by our internal
-  // services e.g. the engine to communicate to the outside.
-  const { x: iApiOutside, y: iApiInside } = createDuplexChannel<TaskyonMessage, unknown>()
-
-  const initTaskyonPromise = (async () => {
-    const tyInit = await initTaskyon(
+  const taskyon = (async () =>
+    await initTaskyon(
       stateRefs.llmSettings,
       stateRefs.keys,
       defineTyGuiTools(),
@@ -293,8 +286,18 @@ You can select them in the "Chat Settings" section in the message input window.
       //       so recovery is currenty impossible. We would like to give te user the ability
       //       to save this recovery key somewhere else in order to be able to recover their passwords.
       async () => (await generateRsaOaepPair()).publicKey,
-    )
+    ))()
 
+  // make sure we always have an up-to-date list of tools
+  const allTools = ref<Record<string, InternalTool>>({})
+  // iApiOutside is the port to the "outside" of taskyon. It is the port used to
+  // communicate towards the taskyon engine. iApiInside communicates to the outside of taskyon.
+  // For example the iframe is connected to iApiOutside because
+  // it lives outside the taskyon logic. iApiInside is used by our internal
+  // services e.g. the engine to communicate to the outside.
+  const { x: iApiOutside, y: iApiInside } = createDuplexChannel<TaskyonMessage, unknown>()
+
+  void taskyon.then(async (TY) => {
     //const taskStream = tyInit.taskManagerInstance.taskStream
     //syncToGdrive(taskStream, stateRefs.appConfiguration.gdriveDir)
 
@@ -327,13 +330,13 @@ You can select them in the "Chat Settings" section in the message input window.
         },
         task: async (msg) => {
           // TODO: replace by rpc call to outPort
-          const tn = await tyInit.taskManagerInstance.addPartialTask2Tree({
+          const tn = await TY.taskManagerInstance.addPartialTask2Tree({
             ...msg.task,
             label: msg.origin ? [msg.origin] : undefined,
           })
           // push the last task to execution queue right away...
           if (msg.execute) {
-            tyInit.queueTask(tn.id)
+            TY.queueTask(tn.id)
           }
           if (msg.show) {
             stateRefs.setSelectedTask(tn.id)
@@ -342,34 +345,27 @@ You can select them in the "Chat Settings" section in the message input window.
         },
       },
       // simply send all other messages to our backend...
-      (msg) => tyInit.outPort.send(msg),
+      (msg) => TY.outPort.send(msg),
     )
     // we manually connect our send port to the api here, because
     // we are already intercepting incoming messages with the API above
-    tyInit.outPort.receive(iApiInside.send)
+    TY.outPort.receive(iApiInside.send)
     console.log('checking if we are in an iframe!')
 
-    /// -------   iframe operations --------
+    /// -------   IFRAME operations --------
     // We load the iframe here with the iframe=true parameter to make test in cypress work!
     const isInIframe = areWeInIframe()
     // set up iframe API and hook it up to our taskyon api
     //if ($q.platform.within.iframe) {
     if (isInIframe) {
       console.log('taskon is in iframe!, waiting for message port!')
-      const iframeChannel = await waitForIframeDuplexChannel()
+      const iframePort = await waitForIframeDuplexChannel()
       // connect iframe API to internal GUI API which also connects to taskyon engine automatically.
-      iframeChannel.y.connect(iApiOutside)
-      iframeChannel.y.send('taskyon connected!')
+      iframePort.connect(iApiOutside)
+      iframePort.send('taskyon connected!')
     }
-    return tyInit
-  })()
+    // ------------end of IFRAME operations-------
 
-  // Access taskManagerInstance and addTask2Tree without redundant awaits
-  const getTaskManager = async () => (await initTaskyonPromise)['taskManagerInstance']
-
-  // make sure we always have an up-to-date list of tools
-  const allTools = ref<Record<string, InternalTool>>({})
-  void getTaskManager().then((tm) => {
     const updateTools = async () => {
       allTools.value = await (await getTaskManager()).updateToolDefinitions(true)
     }
@@ -392,8 +388,9 @@ You can select them in the "Chat Settings" section in the message input window.
         },
       )
     })
+
     // if a new tool was created as a tasknode, update UI
-    tm.taskStream.subscribe(
+    TY.taskManagerInstance.taskStream.subscribe(
       (msg) =>
         void match(msg)
           .returnType<void>()
@@ -414,15 +411,20 @@ You can select them in the "Chat Settings" section in the message input window.
             },
           ),
     )
+
+    return TY
   })
 
+  // Access taskManagerInstance and addTask2Tree without redundant awaits
+  const getTaskManager = async () => (await taskyon)['taskManagerInstance']
+
   const secretStore = asyncProxy(async () => {
-    const instance = await initTaskyonPromise
+    const instance = await taskyon
     return instance['secretStore']
   })
 
   const connectMessageIframe = async (id: string, iframe: HTMLIFrameElement, origin?: string) => {
-    const instance = await initTaskyonPromise
+    const instance = await taskyon
     return instance['connectMessageIframe'](id, iframe, origin)
   }
 
@@ -454,22 +456,22 @@ You can select them in the "Chat Settings" section in the message input window.
   })*/
 
   async function addToProcessQueue(taskId: string) {
-    ;(await initTaskyonPromise).queueTask(taskId)
+    ;(await taskyon).queueTask(taskId)
   }
 
   const workerStream = asyncProxy(async () => {
-    const instance = await initTaskyonPromise
+    const instance = await taskyon
     return instance['workerStream']
   })
 
   const stopWorker = async (reason: string) => {
     console.log('stopping worker with reason:', reason)
-    const instance = await initTaskyonPromise
+    const instance = await taskyon
     instance.workerStop(reason)
   }
 
   const chatCompletionStream = asyncProxy(async () => {
-    const instance = await initTaskyonPromise
+    const instance = await taskyon
     return instance['chatCompletionStream']
   })
 
@@ -498,7 +500,7 @@ You can select them in the "Chat Settings" section in the message input window.
     }
   })
 
-  void initTaskyonPromise.then(({ workerStream }) => {
+  void taskyon.then(({ workerStream }) => {
     filter(
       workerStream,
       (data) =>
@@ -643,16 +645,7 @@ You can select them in the "Chat Settings" section in the message input window.
     return undefined
   })
 
-  watch(
-    [
-      () => stateRefs.appConfiguration.primaryColor,
-      () => stateRefs.appConfiguration.secondaryColor,
-    ],
-    ([primary, secondary]) => {
-      console.log('Set new brand colors!!', primary, secondary)
-      setColors(primary, secondary)
-    },
-  )
+  watchAndSetColors(stateRefs)
 
   // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
   // we want to oad them gradually into our UI
@@ -848,4 +841,16 @@ You can select them in the "Chat Settings" section in the message input window.
   }
 }) // this state stores all information which
 
+function watchAndSetColors(stateRefs: ReturnType<typeof useAppStateStore>) {
+  watch(
+    [
+      () => stateRefs.appConfiguration.primaryColor,
+      () => stateRefs.appConfiguration.secondaryColor,
+    ],
+    ([primary, secondary]) => {
+      console.log('Set new brand colors!!', primary, secondary)
+      setColors(primary, secondary)
+    },
+  )
+}
 // should be stored e.g. in browser LocalStorage
