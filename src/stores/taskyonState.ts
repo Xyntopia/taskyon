@@ -183,22 +183,36 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
   }
 }
 
-export const useTaskyonStore = defineStore('taskyonControl', () => {
-  console.log('loading taskyon store!')
-
+function dynamicQuasarTheming(stateRefs: ReturnType<typeof useAppStateStore>) {
   const $q = useQuasar()
+  watch(
+    () => $q.dark.isActive,
+    (newState) => setPrismTheme(newState),
+  )
 
-  const ChatSuggestions = [
-    {
-      url: '/chat/docs/conversations/features_intro',
-      label: 'Showcase Taskyons features',
+  watch(
+    [
+      () => stateRefs.appConfiguration.primaryColor,
+      () => stateRefs.appConfiguration.secondaryColor,
+    ],
+    ([primary, secondary]) => {
+      console.log('Set new brand colors!!', primary, secondary)
+      setColors(primary, secondary)
     },
-    {
-      url: '/chat/tyClientExamples/simpleExampleTutorial',
-      label: 'How do I integrate taskyon into my own webpage?',
-    },
-    {
-      md: `
+  )
+}
+
+const ChatSuggestions = [
+  {
+    url: '/chat/docs/conversations/features_intro',
+    label: 'Showcase Taskyons features',
+  },
+  {
+    url: '/chat/tyClientExamples/simpleExampleTutorial',
+    label: 'How do I integrate taskyon into my own webpage?',
+  },
+  {
+    md: `
 <!--taskyon
 name: Currently recommended models
 role: "user"
@@ -223,27 +237,189 @@ Some AI models to get you started with:
 
 You can select them in the "Chat Settings" section in the message input window.
 `,
-      label: 'Show currently recommend models',
+    label: 'Show currently recommend models',
+  },
+  // TODO:
+  //'How do I execute python code?',
+  //'how about testing out javascript? e.g. create some widgets on the fly...',
+  //'What are AI tools?',
+  //'How do I integrate Taskyon into my webpage?',
+]
+
+function defineTyGuiTools(stateRefs: ReturnType<typeof useAppStateStore>): InternalTool[] {
+  return [
+    ...guiTools,
+    {
+      function: ({ newPrompts }: { newPrompts: { [key: string]: string } }) => {
+        console.log('Modifying prompts in llmSettings...')
+        const newPromptsMerged = {
+          ...stateRefs.llmSettings.taskChatTemplates,
+          ...newPrompts,
+        }
+        const result = llmSettings.shape.taskChatTemplates.strict().safeParse(newPromptsMerged)
+        if (result.success) {
+          stateRefs.llmSettings.taskChatTemplates = result.data
+          console.log('Prompts modified:', stateRefs.llmSettings.taskChatTemplates)
+        } else {
+          return `It was not possible to add prompts for ${JSON.stringify(Object.keys(newPrompts))} to
+  ${JSON.stringify(Object.keys(stateRefs.llmSettings.taskChatTemplates))}. Did you use the wrong
+  keys and are they all defined as string?`
+        }
+      },
+      description: 'Modify the current prompts in llmSettings',
+      longDescription:
+        'This tool allows you to modify the current prompts in llmSettings. You can provide a new set of prompts as an object, where each key is the prompt name and the value is the new prompt content.',
+      name: 'modifyPrompts',
+      parameters: {
+        type: 'object',
+        properties: {
+          newPrompts: {
+            type: 'object',
+            description:
+              'An object containing the new prompts, where each key is the prompt name and the value is the new prompt content.',
+            default: '',
+          },
+        },
+        required: ['newPrompts'],
+      },
     },
-    // TODO:
-    //'How do I execute python code?',
-    //'how about testing out javascript? e.g. create some widgets on the fly...',
-    //'What are AI tools?',
-    //'How do I integrate Taskyon into my webpage?',
   ]
+}
+
+function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof useAppStateStore>) {
+  // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
+  // we want to oad them gradually into our UI
+  const currentTask = ref<TaskNode | null>(null)
+  const selectedThread = ref<TaskNode[]>([])
+
+  void taskyon.then(({ taskManagerInstance: tm }) => {
+    const add2ChatHistory = async (
+      task: TaskNode | null,
+      id: string,
+      msg: 'existing' | 'update' | 'delete' | 'deleteAll',
+    ) => {
+      console.log('update task history!!', id, msg)
+      if (id === stateRefs.chatHistory[0]) {
+        return
+      }
+
+      if (msg === 'update') {
+        // we need to make sure, that our task is not already
+        // the "parent" of another task in that case we only want the leaf task which is already present...
+        for (const taskId of stateRefs.chatHistory) {
+          const otherTask = await tm.getTask(taskId)
+          if (otherTask?.priorID === id || otherTask?.parentID === id) return
+        }
+      } else if (msg === 'delete') {
+        // Filter out the deleted task ID
+        stateRefs.chatHistory = stateRefs.chatHistory.filter((t) => t !== id)
+        return
+      } else if (msg === 'deleteAll') {
+        // Clear history
+        stateRefs.chatHistory = []
+        return
+      }
+
+      // Check if the task already exists in the history
+      if (!stateRefs.chatHistory.includes(id)) {
+        // Add the task to the front of the list if it doesn't exist
+        stateRefs.chatHistory.unshift(id)
+      }
+
+      // Remove task.id if it exists, then unshift to front (avoids duplication)
+      // we do this every time something gets added to the history
+      // we are not doin this anymore, because it gets too confusing for poeple ;)
+      /*stateRefs.chatHistory = [
+      task.id,
+      ...stateRefs.chatHistory.filter((t) => t !== task.id),
+    ];*/
+
+      if (!task) return
+
+      // Remove any entries which are a parent of the current task (keeping only leaf IDs)
+      const currentTaskChain = (await tm.getTaskIdChain(task.id, 50)).slice(0, -1)
+      stateRefs.chatHistory = stateRefs.chatHistory.filter(
+        (t) => t !== task.priorID && t !== task.parentID && !currentTaskChain.includes(t),
+        //(t) => t !== task.priorID && t !== task.parentID,
+      )
+
+      // Enforce a maximum size of 50
+      if (stateRefs.chatHistory.length > 50) {
+        stateRefs.chatHistory.length = 50 // Trims excess elements from the end
+      }
+
+      // and sort all tasks according to their timestamp :)
+      // TODO: we can't do this right now, because the task timestamp is optional
+      //       and we want to make sure to really include all tasks in the chathistory...
+    }
+
+    tm.taskStream.subscribe(({ id, data: task }) => {
+      if (!task) {
+        void add2ChatHistory(task, id.toString(), 'delete')
+      }
+      if (currentTask.value?.id === id) {
+        // console.log('update current task...', task)
+        currentTask.value = task
+      }
+    })
+
+    // this needs to be a watch, because we're updating this variable from other sources as well...
+    // TODO: make this a readonly property...
+    watch(
+      () => stateRefs.llmSettings.selectedTaskId,
+      async (newSelectedTask) => {
+        // TODO: I don't remember why we need this delay here....
+        if (newSelectedTask) {
+          currentTask.value = await tm.getTask(newSelectedTask)
+          const selectedThreadIDs = await tm.getTaskIdChain(newSelectedTask)
+          selectedThread.value = await tm.convertTaskIDs(selectedThreadIDs)
+        } else {
+          currentTask.value = null
+          selectedThread.value = []
+        }
+      },
+      {
+        immediate: true,
+      },
+    )
+
+    // also make sure, that we update the history with the currently selected chat when initializing...
+    // TODO: this here is a porblem, because "currentTask" gets updated asynchrouously..
+    watch(
+      currentTask,
+      (newValue) => {
+        if (newValue) void add2ChatHistory(newValue, newValue.id, 'update')
+      },
+      { once: true },
+    )
+
+    // also update chat history if we switch between tasks...
+    watch(
+      () => stateRefs.llmSettings.selectedTaskId,
+      async (selectedTask) => {
+        if (selectedTask) {
+          const taskNode = await tm.getTask(selectedTask)
+          if (taskNode) void add2ChatHistory(taskNode, taskNode.id, 'existing')
+        }
+      },
+      { immediate: true },
+    )
+  })
+
+  return {
+    selectedThread: computed(() => selectedThread),
+    currentTask: computed(() => currentTask),
+  }
+}
+
+export const useTaskyonStore = defineStore('taskyonControl', () => {
+  console.log('loading taskyon store!')
 
   // load our store with all the settings
   // we use this here to confgure out taskyon logic
   const stateRefs = useAppStateStore()
 
   stateRefs.appConfiguration.chatSuggestions = ChatSuggestions
-
-  watch(
-    () => stateRefs.llmSettings.selectedApi,
-    (newValue) => {
-      console.log('api switch detected', newValue)
-    },
-  )
 
   let loadingKey = false
   async function getOpenRouterPKCEKey(code: string) {
@@ -275,46 +451,6 @@ You can select them in the "Chat Settings" section in the message input window.
     }
   }
 
-  function defineTyGuiTools(): InternalTool[] {
-    return [
-      ...guiTools,
-      {
-        function: ({ newPrompts }: { newPrompts: { [key: string]: string } }) => {
-          console.log('Modifying prompts in llmSettings...')
-          const newPromptsMerged = {
-            ...stateRefs.llmSettings.taskChatTemplates,
-            ...newPrompts,
-          }
-          const result = llmSettings.shape.taskChatTemplates.strict().safeParse(newPromptsMerged)
-          if (result.success) {
-            stateRefs.llmSettings.taskChatTemplates = result.data
-            console.log('Prompts modified:', stateRefs.llmSettings.taskChatTemplates)
-          } else {
-            return `It was not possible to add prompts for ${JSON.stringify(Object.keys(newPrompts))} to
-  ${JSON.stringify(Object.keys(stateRefs.llmSettings.taskChatTemplates))}. Did you use the wrong
-  keys and are they all defined as string?`
-          }
-        },
-        description: 'Modify the current prompts in llmSettings',
-        longDescription:
-          'This tool allows you to modify the current prompts in llmSettings. You can provide a new set of prompts as an object, where each key is the prompt name and the value is the new prompt content.',
-        name: 'modifyPrompts',
-        parameters: {
-          type: 'object',
-          properties: {
-            newPrompts: {
-              type: 'object',
-              description:
-                'An object containing the new prompts, where each key is the prompt name and the value is the new prompt content.',
-              default: '',
-            },
-          },
-          required: ['newPrompts'],
-        },
-      },
-    ]
-  }
-
   // callin ExecutionContext.interrupt();  cancels processing of current task
   console.log('initialize taskyon')
 
@@ -338,12 +474,40 @@ You can select them in the "Chat Settings" section in the message input window.
     await tyCore(
       stateRefs.llmSettings,
       stateRefs.keys,
-      defineTyGuiTools(),
+      defineTyGuiTools(stateRefs),
       // TODO: right now, we're simply generating a reandom keypair for every launch
       //       so recovery is currenty impossible. We would like to give te user the ability
       //       to save this recovery key somewhere else in order to be able to recover their passwords.
       async () => (await generateRsaOaepPair()).publicKey,
     ))()
+
+  const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
+
+  function addModelToHistory(model: string) {
+    if (stateRefs.modelHistory.length >= 5) {
+      stateRefs.modelHistory.shift() // remove oldest element
+    }
+    stateRefs.modelHistory.push(model)
+  }
+
+  // Method to handle the updateBotName event
+  const handleBotNameUpdate = ({
+    newName,
+    newService,
+  }: {
+    newName: string
+    newService?: string
+  }) => {
+    console.log('getting an api & bot update :)', newName, newService)
+    if (newService) {
+      stateRefs.llmSettings.selectedApi = newService
+    }
+    const api = getApiConfig(stateRefs.llmSettings)
+    if (api) {
+      api.selectedModel = newName
+    }
+    addModelToHistory(newName)
+  }
 
   // make sure we always have an up-to-date list of tools
   const allTools = ref<Record<string, InternalTool>>({})
@@ -537,99 +701,6 @@ You can select them in the "Chat Settings" section in the message input window.
     return instance['chatCompletionStream']
   })
 
-  void getTaskManager().then((tm) => {
-    tm.taskStream.subscribe(({ id, data: task }) => {
-      if (!task) {
-        void add2ChatHistory(task, id.toString(), 'delete')
-      }
-      if (currentTask.value?.id === id) {
-        // console.log('update current task...', task)
-        currentTask.value = task
-      }
-    })
-  })
-
-  const add2ChatHistory = async (
-    task: TaskNode | null,
-    id: string,
-    msg: 'existing' | 'update' | 'delete' | 'deleteAll',
-  ) => {
-    console.log('update task history!!', id, msg)
-    if (id === stateRefs.chatHistory[0]) {
-      return
-    }
-    const tm = await getTaskManager()
-
-    if (msg === 'update') {
-      // we need to make sure, that our task is not already
-      // the "parent" of another task in that case we only want the leaf task which is already present...
-      for (const taskId of stateRefs.chatHistory) {
-        const otherTask = await tm.getTask(taskId)
-        if (otherTask?.priorID === id || otherTask?.parentID === id) return
-      }
-    } else if (msg === 'delete') {
-      // Filter out the deleted task ID
-      stateRefs.chatHistory = stateRefs.chatHistory.filter((t) => t !== id)
-      return
-    } else if (msg === 'deleteAll') {
-      // Clear history
-      stateRefs.chatHistory = []
-      return
-    }
-
-    // Check if the task already exists in the history
-    if (!stateRefs.chatHistory.includes(id)) {
-      // Add the task to the front of the list if it doesn't exist
-      stateRefs.chatHistory.unshift(id)
-    }
-
-    // Remove task.id if it exists, then unshift to front (avoids duplication)
-    // we do this every time something gets added to the history
-    // we are not doin this anymore, because it gets too confusing for poeple ;)
-    /*stateRefs.chatHistory = [
-      task.id,
-      ...stateRefs.chatHistory.filter((t) => t !== task.id),
-    ];*/
-
-    if (!task) return
-
-    // Remove any entries which are a parent of the current task (keeping only leaf IDs)
-    const currentTaskChain = (await tm.getTaskIdChain(task.id, 50)).slice(0, -1)
-    stateRefs.chatHistory = stateRefs.chatHistory.filter(
-      (t) => t !== task.priorID && t !== task.parentID && !currentTaskChain.includes(t),
-      //(t) => t !== task.priorID && t !== task.parentID,
-    )
-
-    // Enforce a maximum size of 50
-    if (stateRefs.chatHistory.length > 50) {
-      stateRefs.chatHistory.length = 50 // Trims excess elements from the end
-    }
-
-    // and sort all tasks according to their timestamp :)
-    // TODO: we can't do this right now, because the task timestamp is optional
-    //       and we want to make sure to really include all tasks in the chathistory...
-  }
-
-  // also update chat history if we switch between tasks...
-  watch(
-    () => stateRefs.llmSettings.selectedTaskId,
-    async (selectedTask) => {
-      const tm = await getTaskManager()
-      if (selectedTask) {
-        const taskNode = await tm.getTask(selectedTask)
-        if (taskNode) void add2ChatHistory(taskNode, taskNode.id, 'existing')
-      }
-    },
-    { immediate: true },
-  )
-
-  function addModelToHistory(model: string) {
-    if (stateRefs.modelHistory.length >= 5) {
-      stateRefs.modelHistory.shift() // remove oldest element
-    }
-    stateRefs.modelHistory.push(model)
-  }
-
   const llmModelsInternal = ref<Record<string, Model>>({})
   // make sure we update our model list whenever anything changes for our
   // endpoints...
@@ -663,46 +734,6 @@ You can select them in the "Chat Settings" section in the message input window.
     return undefined
   })
 
-  watchAndSetColors(stateRefs)
-
-  // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
-  // we want to oad them gradually into our UI
-  const currentTask = ref<TaskNode | null>(null)
-  const selectedThread = ref<TaskNode[]>([])
-  const selectedThreadIDs = ref<string[]>([])
-
-  // this needs to be a watch, because we're updating this variable from other sources as well...
-  // TODO: make this a readonly property...
-  watch(
-    () => stateRefs.llmSettings.selectedTaskId,
-    async (newSelectedTask) => {
-      // TODO: I don't remember why we need this delay here....
-      if (newSelectedTask) {
-        const TM = await getTaskManager()
-        currentTask.value = await TM.getTask(newSelectedTask)
-        selectedThreadIDs.value = await TM.getTaskIdChain(newSelectedTask)
-        selectedThread.value = await TM.convertTaskIDs(selectedThreadIDs.value)
-      } else {
-        currentTask.value = null
-        selectedThread.value = []
-        selectedThreadIDs.value = []
-      }
-    },
-    {
-      immediate: true,
-    },
-  )
-
-  // also make sure, that we update the history with the currently selected chat when initializing...
-  // TODO: this here is a porblem, because "currentTask" gets updated asynchrouously..
-  watch(
-    currentTask,
-    (newValue) => {
-      if (newValue) void add2ChatHistory(newValue, newValue.id, 'update')
-    },
-    { once: true },
-  )
-
   // Computed property to determine the currently selected bot name
   const currentModelId = computed(() => {
     return getCurrentModel(stateRefs.llmSettings)
@@ -711,30 +742,6 @@ You can select them in the "Chat Settings" section in the message input window.
   const currentModel = computed(() => {
     return llmModelsInternal.value[currentModelId.value]
   })
-
-  // Method to handle the updateBotName event
-  const handleBotNameUpdate = ({
-    newName,
-    newService,
-  }: {
-    newName: string
-    newService?: string
-  }) => {
-    console.log('getting an api & bot update :)', newName, newService)
-    if (newService) {
-      stateRefs.llmSettings.selectedApi = newService
-    }
-    const api = getApiConfig(stateRefs.llmSettings)
-    if (api) {
-      api.selectedModel = newName
-    }
-    addModelToHistory(newName)
-  }
-
-  watch(
-    () => $q.dark.isActive,
-    (newState) => setPrismTheme(newState),
-  )
 
   function setNewContentDraft(content: TaskNode['content'] | undefined) {
     if (content?.type === 'message') {
@@ -826,6 +833,8 @@ You can select them in the "Chat Settings" section in the message input window.
     return computed(() => taskMetaRef.value)
   }
 
+  dynamicQuasarTheming(stateRefs)
+
   return {
     secretStore,
     getTaskMetaRef,
@@ -836,8 +845,8 @@ You can select them in the "Chat Settings" section in the message input window.
     switchTaskType,
     taskContentDraft,
     // TODO: make all computed values readonly
-    selectedThread: computed(() => selectedThread),
-    currentTask: computed(() => currentTask),
+    selectedThread,
+    currentTask,
     getOpenRouterPKCEKey,
     addModelToHistory,
     stopWorker,
@@ -859,16 +868,4 @@ You can select them in the "Chat Settings" section in the message input window.
   }
 }) // this state stores all information which
 
-function watchAndSetColors(stateRefs: ReturnType<typeof useAppStateStore>) {
-  watch(
-    [
-      () => stateRefs.appConfiguration.primaryColor,
-      () => stateRefs.appConfiguration.secondaryColor,
-    ],
-    ([primary, secondary]) => {
-      console.log('Set new brand colors!!', primary, secondary)
-      setColors(primary, secondary)
-    },
-  )
-}
 // should be stored e.g. in browser LocalStorage
