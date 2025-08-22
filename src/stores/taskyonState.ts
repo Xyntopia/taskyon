@@ -10,17 +10,11 @@ import { initTaskyon } from 'src/modules/taskyon/init'
 import { availableModels } from 'src/modules/taskyon/chat'
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
 import { useAppStateStore } from './appState'
-import {
-  createDuplexChannel,
-  createPortApi,
-  filter,
-  MessageChannelBridge,
-} from 'src/modules/frpBus'
+import { createDuplexChannel, createPortApi, filter } from 'src/modules/frpBus'
 import { generateRsaOaepPair } from 'src/modules/crypto_webcrypto'
 import { setColors } from 'src/boot/brand-colors'
 import { setPrismTheme } from 'src/modules/markdownUtils '
 import { onScopeDispose } from 'vue'
-import { waitForMessagePort } from 'src/modules/taskyon/iframeWorker'
 import { guiTools } from 'src/modules/tools/GuiTools'
 import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
 import { match, P } from 'ts-pattern'
@@ -28,6 +22,7 @@ import type { InternalTool, Asyncify } from '@taskyon/taskyon'
 import { TaskNode } from '@taskyon/taskyon'
 import { toolCall } from '@taskyon/taskyon'
 import { usePyodideWebworker } from 'src/modules/taskyon/webWorkerApi'
+import { areWeInIframe, waitForIframeDuplexChannel } from './iframeClient'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -356,35 +351,15 @@ You can select them in the "Chat Settings" section in the message input window.
 
     /// -------   iframe operations --------
     // We load the iframe here with the iframe=true parameter to make test in cypress work!
-    const searchParams = new URLSearchParams(window.location.search)
-    const isIframeParam = searchParams.get('iframe') === 'true'
-    console.log('we are in an iframe via param:', isIframeParam)
-    const isInIframe = window.self !== window.top || isIframeParam
-    console.log('we are in an iframe:', window.self !== window.top, isInIframe)
+    const isInIframe = areWeInIframe()
     // set up iframe API and hook it up to our taskyon api
     //if ($q.platform.within.iframe) {
     if (isInIframe) {
       console.log('taskon is in iframe!, waiting for message port!')
-      const mport = await waitForMessagePort((ev) => {
-        // Check if the message is from the parent window
-        return ev.source === window.parent && ev.data?.type === 'initPort'
-        // Optionally, check the origin if you know what it should be
-        // For example, if you expect messages only from 'https://example.com'
-        /*if (event.origin === 'https://example.com') {
-                  console.log('Request from parent:', event.data);
-                } else {
-                  console.error('Message from unknown origin:', event.origin);
-                }*/
-        //console.log('Message from unknown origin:', event.origin, event)
-      })
-      // create a channel from the mport:
-      const iframeChannel = createDuplexChannel<TaskyonMessage, unknown>()
-      // connect the MessageChannel to our UI API
-      MessageChannelBridge(iframeChannel.x, mport)
-
+      const iframeChannel = await waitForIframeDuplexChannel()
       // connect iframe API to internal GUI API which also connects to taskyon engine automatically.
       iframeChannel.y.connect(iApiOutside)
-      mport.postMessage('taskyon connected!')
+      iframeChannel.y.send('taskyon connected!')
     }
     return tyInit
   })()
@@ -872,4 +847,5 @@ You can select them in the "Chat Settings" section in the message input window.
     api: iApiOutside,
   }
 }) // this state stores all information which
+
 // should be stored e.g. in browser LocalStorage
