@@ -61,10 +61,7 @@ import { matDeleteForever, matSave } from '@quasar/extras/material-icons'
 import { onMounted, ref } from 'vue'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { generateSecretId } from 'src/modules/taskyon/taskWorker'
-import TyMarkdown from '../tyMarkdown.vue'
 import InfoDialog from '../InfoDialog.vue'
-import { round } from 'lodash'
-import { roundedRect } from 'mermaid/dist/rendering-util/rendering-elements/shapes/labelRect.js'
 
 const tystate = useTaskyonStore()
 
