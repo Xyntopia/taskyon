@@ -414,6 +414,36 @@ interface Entry {
   post: (m: unknown) => void
 }
 
+// TODO: add a "bus" to the iframe...
+/**
+ * Create a multiplexer for bidirectional messaging between the host window
+ * and multiple managed iframes. Each iframe is registered under an identifier,
+ * and incoming `postMessage` events are routed to a typed stream keyed by id.
+ *
+ * Features:
+ * - `attachIframe(id, iframe, origin?)`: register an iframe with a unique id.
+ *   - Tracks the iframe with a `WeakRef`, cleaned up automatically if removed.
+ *   - Determines expected origin from the iframe's `src` unless overridden.
+ * - `send(id, msg)`: post a message to the iframe associated with `id`.
+ *   - Messages are dropped if the iframe is disconnected or garbage collected.
+ * - `all$`: a reactive stream of all incoming messages of the form `{ id, payload }`.
+ * - Automatic garbage collection:
+ *   - Uses `WeakRef` + `WeakMap` to avoid leaks.
+ *   - Periodically sweeps stale entries after `sweepEvery` attaches.
+ *   - Falls back to manual `gc()` to force a sweep.
+ * - `detachId(id)`: manually detach an iframe by id.
+ * - `destroy()`: stop listening to window `message` events and clear state.
+ *
+ * Notes:
+ * - `winToId` is a `WeakMap` → iframe window references do not prevent GC.
+ * - Origins:
+ *   - If the iframe has `srcdoc` or `about:srcdoc`, origin is `"null"` and messages
+ *     are sent with target `"*"`.
+ *   - Otherwise the origin is inferred from the iframe `src` or overridden via `origin`.
+ *
+ * @param sweepEvery number of iframe attaches before scheduling a GC sweep (default: 5).
+ * @returns API object: `{ all$, send, attachIframe, detachId, gc, destroy }`.
+ */
 export function createIframeMux<I extends string | number | symbol = string>(sweepEvery = 5) {
   const { stream: all$, emit } = createStream<BusMsg<I>>()
 
