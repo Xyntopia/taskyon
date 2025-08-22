@@ -17,6 +17,7 @@ import type { Asyncify } from '../../../packages/taskyon/src/utils/tsHelpers'
 import type { TaskNode } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
 import { decompressEncryptedObject, encryptCompressObject } from '../fileUtils'
+import { GdriveSyncPort } from '../tools/sync'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -60,7 +61,11 @@ export async function testGdriveZipRoundtrip() {
   }
 
   try {
-    const { uploadFileArchiveWMeta, downloadArchiveFile } = useGdrive()
+    // 2) pick a fresh directory so tests don’t clash
+    const directory = `taskyon/taskyon-tests/${new Date().toISOString().replace(/[:.]/g, '-')}`
+    log('target directory chosen', directory)
+
+    const gdport = GdriveSyncPort(directory)
 
     const objs: Record<string, unknown> = {
       'a1f2c3d4e5.txt': 'hello A',
@@ -75,22 +80,27 @@ export async function testGdriveZipRoundtrip() {
     const { recoveryKey, sessionKey } = await createTestKeys()
     log('created keys', { recoveryKey, sessionKey })
 
-    // compress objects
-    const packed = await encryptCompressObject(objs, archiveName, recoveryKey, sessionKey)
-    log('created encrypted msgpack file', packed)
+    // compress objects "locally" (for the test)
+    const packed = await encryptCompressObject(
+      objs,
+      archiveName,
+      () => recoveryKey,
+      () => sessionKey,
+    )
+    log('created encrypted msgpack file...')
 
-    const msgpackFile = new File([packed], archiveName, {
-      type: 'application/octet-stream',
+    // we want to allow additional data to be send, for "upwards" compatibility
+    // e.g. in the future we might want to add public keys and other things. Maybe we want to
+    // encrypt tasks with synchronized session keys and similar things...
+    gdport.send({
+      type: 'addTasks',
+      data: packed,
+      info: archiveName,
+      ids: filenames,
+      additionalDataTest: 'hello!   we are simply testing additional keys',
     })
-    log('created msgpack file', { name: msgpackFile.name, size: msgpackFile.size })
-
-    // 2) pick a fresh directory so tests don’t clash
-    const directory = `taskyon/taskyon-tests/${new Date().toISOString().replace(/[:.]/g, '-')}`
-    log('target directory chosen', directory)
-
-    // 3) zip & upload (will chunk if >60 names; here, it’s a single zip)
-    const created = await uploadFileArchiveWMeta(directory, msgpackFile, filenames, /*share*/ false)
-    log('uploaded zip(s)', created)
+    // and send them of to gdrive...
+    log('sent data to gdrive', { archiveName, filenames })
 
     // 4) for each filename, locate its zip via properties and download it
     const fileChecks: Array<{
@@ -101,27 +111,51 @@ export async function testGdriveZipRoundtrip() {
       error?: string
     }> = []
 
+    await new Promise((resolve) => {
+      const unsub = gdport.receive((msg) => {
+        if (msg.type === 'taskCreated') {
+          log('received taskCreated message', msg)
+          resolve(true)
+          unsub()
+        }
+      })
+    })
+
     for (const name of filenames) {
       try {
-        const file = await downloadArchiveFile(directory, name)
-        if (!file) {
-          fileChecks.push({ filename: name, found: false })
-          log(`download miss for ${name}`, undefined, /*ok*/ false)
-        } else {
-          const decompressed = await decompressEncryptedObject(file, sessionKey)
-          const data = decompressed[name]
-          log('decompressed and decrypted file', { name, decompressed })
-          const info = {
-            filename: file.name,
-            found: true,
-            blobSize: file.size,
-            blobType: file.type,
-            originalData: objs[name],
-            data: data,
-          }
-          fileChecks.push(info)
-          log(`download hit for ${name}`, info)
-        }
+        gdport.send({ type: 'requestTask', id: name })
+        await new Promise<boolean>((resolve) => {
+          const unsub = gdport.receive(async (msg) => {
+            if (msg.type === 'addTasks') {
+              const decompressed = await decompressEncryptedObject(
+                msg.data,
+                msg.info,
+                () => sessionKey,
+              )
+              const data = decompressed[name]
+              log('decompressed and decrypted file', { name, decompressed })
+              const info = {
+                filename: name,
+                found: true,
+                blobSize: msg.data.length,
+                ids: msg.ids,
+                originalData: objs[name],
+                data: data,
+              }
+              fileChecks.push(info)
+              log(`download hit for ${name}`, info)
+
+              resolve(true)
+              unsub()
+            } else if (msg.type === 'taskCreated') {
+              log('received taskCreated message', msg)
+              resolve(true)
+            } else {
+              fileChecks.push({ filename: name, found: false })
+              log(`download miss for ${name}`, undefined, /*ok*/ false)
+            }
+          })
+        })
       } catch (e: unknown) {
         const err = e instanceof Error ? e.message : String(e)
         fileChecks.push({ filename: name, found: false, error: err })
@@ -133,7 +167,6 @@ export async function testGdriveZipRoundtrip() {
     return {
       ok: allFound,
       directory,
-      createdZip: created,
       fileChecks,
       steps,
       logs,
