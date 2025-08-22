@@ -188,7 +188,7 @@ export async function tyCore(
     workerStop, // TODO: integrate with outPort
     queueTask, // TODO: integrate with outPort!
     secretStore, // TODO: integrate with outPort!
-    outPort,
+    port: outPort,
   }
 }
 

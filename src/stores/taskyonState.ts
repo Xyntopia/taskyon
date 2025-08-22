@@ -511,12 +511,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // make sure we always have an up-to-date list of tools
   const allTools = ref<Record<string, InternalTool>>({})
-  // iApiOutside is the port to the "outside" of taskyon. It is the port used to
+  // iApiOutside is the port to the "outside" of taskyon UI. It is the port used to
   // communicate towards the taskyon engine. iApiInside communicates to the outside of taskyon.
   // For example the iframe is connected to iApiOutside because
   // it lives outside the taskyon logic. iApiInside is used by our internal
   // services e.g. the engine to communicate to the outside.
-  const { x: iApiOutside, y: iApiInside } = createDuplexChannel<TaskyonMessage, unknown>()
+  const { x: uiApiOutside, y: uiApiInside } = createDuplexChannel<TaskyonMessage, unknown>()
 
   void taskyon.then(async (TY) => {
     //const taskStream = tyInit.taskManagerInstance.taskStream
@@ -525,7 +525,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // add an API for taskyon GUI and make sure "unused" messages are routed through to the
     // taskyon engine!
     createPortApi(
-      iApiInside,
+      uiApiInside,
       TaskyonMessage,
       {
         configurationMessage: (msg) => {
@@ -566,11 +566,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         },
       },
       // simply send all other messages to our backend...
-      (msg) => TY.outPort.send(msg),
+      (msg) => TY.port.send(msg),
     )
     // we manually connect our send port to the api here, because
     // we are already intercepting incoming messages with the API above
-    TY.outPort.receive(iApiInside.send)
+    TY.port.receive(uiApiInside.send)
     console.log('checking if we are in an iframe!')
 
     /// -------   IFRAME operations --------
@@ -582,7 +582,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       console.log('taskon is in iframe!, waiting for message port!')
       const iframePort = await waitForIframeDuplexChannel()
       // connect iframe API to internal GUI API which also connects to taskyon engine automatically.
-      iframePort.connect(iApiOutside)
+      iframePort.connect(uiApiOutside)
       iframePort.send('taskyon connected!')
     }
     // ------------end of IFRAME operations-------
@@ -593,7 +593,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     void updateTools()
 
     // if a new "default" tool was created update UI
-    iApiOutside.receive((msg) => {
+    TY.port.receive((msg) => {
       console.log('api Aout message!', msg)
       void match(msg).with(
         {
@@ -864,7 +864,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     handleBotNameUpdate,
     connectMessageIframe,
     entryNode,
-    api: iApiOutside,
+    api: uiApiOutside,
   }
 }) // this state stores all information which
 
