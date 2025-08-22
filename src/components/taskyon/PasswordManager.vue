@@ -1,39 +1,57 @@
 <template>
-  <q-list dense separator>
-    <q-item v-for="(secretRow, secretId) in secretList" :key="secretId">
-      <q-expansion-item
-        dense
-        :label="toolMap[secretId] ?? secretId.split(':')[0]"
-        default-opened
-        header-class="text-h6"
-        class="fit"
-      >
-        <q-item v-for="(secretValue, secretName) in secretRow" :key="secretName">
-          <SecretInput
-            v-model="secretList[secretId]![secretName]!"
-            color="secondary"
-            class="fit"
-            dense
-            filled
-            :label="`${secretName}`"
-            @keyup.enter="saveSecret(secretId, secretName)"
-          >
-          </SecretInput>
-          <q-btn flat :icon="matSave" @click="saveSecret(secretId, secretName)" />
+  <div class="text-center">
+    <InfoDialog
+      label="Taskyon Password Manager"
+      :round="false"
+      class="q-mb-lg"
+      :info-text="`
+- Passwords are encrypted at all times except when needed for a tool.
+- Tools can only see and modify the passwords created by themselves.
+- Passwords will not leave your device unless you explicitly share them.
+`"
+    />
+    <q-list dense separato>
+      <q-item v-for="(secretRow, secretId) in secretList" :key="secretId">
+        <q-expansion-item
+          dense
+          :label="toolMap[secretId] ?? secretId.split(':')[0]"
+          default-opened
+          header-class="text-h6"
+          class="fit"
+        >
+          <q-item v-for="(secretValue, secretName) in secretRow" :key="secretName">
+            <SecretInput
+              v-model="secretList[secretId]![secretName]!"
+              color="secondary"
+              class="fit"
+              dense
+              filled
+              :label="`${secretName}`"
+              style="min-width: 200px"
+              @keyup.enter="saveSecret(secretId, secretName)"
+            >
+            </SecretInput>
+            <q-btn flat :icon="matSave" @click="saveSecret(secretId, secretName)" />
+            <q-btn
+              flat
+              color="negative"
+              :icon="matDeleteForever"
+              @click="deleteSecrets(secretId, secretName)"
+            ></q-btn>
+          </q-item>
+        </q-expansion-item>
+        <q-item-section side top>
+          <q-btn flat label="Tool Manager" :to="'/tool/' + toolMap[secretId]" />
           <q-btn
             flat
             color="negative"
-            :icon="matDeleteForever"
-            @click="deleteSecrets(secretId, secretName)"
+            label="delete all"
+            @click="deleteAllSecrets(secretId)"
           ></q-btn>
-        </q-item>
-      </q-expansion-item>
-      <q-item-section side top>
-        <q-btn flat label="Tool Manager" :to="'/tool/' + toolMap[secretId]" />
-        <q-btn flat color="negative" label="delete all" @click="deleteAllSecrets(secretId)"></q-btn>
-      </q-item-section>
-    </q-item>
-  </q-list>
+        </q-item-section>
+      </q-item>
+    </q-list>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -43,6 +61,10 @@ import { matDeleteForever, matSave } from '@quasar/extras/material-icons'
 import { onMounted, ref } from 'vue'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { generateSecretId } from 'src/modules/taskyon/taskWorker'
+import TyMarkdown from '../tyMarkdown.vue'
+import InfoDialog from '../InfoDialog.vue'
+import { round } from 'lodash'
+import { roundedRect } from 'mermaid/dist/rendering-util/rendering-elements/shapes/labelRect.js'
 
 const tystate = useTaskyonStore()
 
