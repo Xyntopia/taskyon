@@ -180,6 +180,7 @@ export async function initTaskyon(
     // TODO: not sure, if the iframeMultiPlexer should be a taskyon functionality?
     //       it seems very "GUI"-oriented... maybe simply sending a message on "outPort"
     //       would be sufficient?
+    //       eah iframeMultiplexer should be replaced with something that uses ports...
     connectMessageIframe: iframeMultiPlexer.attachIframe,
     taskManagerInstance,
     workerStream, // TODO: integrate with outPort

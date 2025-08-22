@@ -47,5 +47,5 @@ export async function waitForIframeDuplexChannel() {
   const iframeChannel = createDuplexChannel<TaskyonMessage, unknown>()
   // connect the MessageChannel to our UI API
   MessageChannelBridge(iframeChannel.x, mport)
-  return iframeChannel
+  return iframeChannel.y
 }

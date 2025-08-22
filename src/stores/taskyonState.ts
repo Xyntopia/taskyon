@@ -423,6 +423,7 @@ You can select them in the "Chat Settings" section in the message input window.
     return instance['secretStore']
   })
 
+  // TODO: this is soo  ugly..  we need to do something about this...
   const connectMessageIframe = async (id: string, iframe: HTMLIFrameElement, origin?: string) => {
     const instance = await taskyon
     return instance['connectMessageIframe'](id, iframe, origin)
