@@ -422,34 +422,51 @@ export function asyncTimeLruCache(
   }
 }
 
+// TODO: add a small test to this :)
 export function asyncLruCache(size: number, ignoreIndices: number[] = []) {
-  return <TArgs extends unknown[], R>(
-    fn: (...args: TArgs) => R | Promise<R>,
-  ): ((...args: TArgs) => Promise<R>) => {
+  return <TArgs extends unknown[], R>(fn: (...args: TArgs) => R | Promise<R>) => {
     const cache = new Map<string, R>()
+    const inFlight = new Map<string, Promise<R>>()
 
-    return async (...args: TArgs): Promise<R> => {
-      // build a key, skipping any ignored positions
+    const wrapper = async (...args: TArgs): Promise<R> => {
       const keyArgs = args.filter((_, i) => !ignoreIndices.includes(i))
       const key = JSON.stringify(keyArgs)
 
       if (cache.has(key)) {
-        console.log('Cache hit:', key)
-        return cache.get(key)! // R
+        return cache.get(key)!
       }
 
-      // await will normalize Promise<R> → R or just give you R if it's sync
-      const result = (await fn(...args)) as R
-      cache.set(key, result)
-
-      if (cache.size > size) {
-        const oldestKey = cache.keys().next().value!
-        cache.delete(oldestKey)
-        console.log('Evicted:', oldestKey)
+      if (inFlight.has(key)) {
+        return inFlight.get(key)!
       }
 
-      return result
+      const promise = (async () => {
+        try {
+          const result = (await fn(...args)) as R
+          cache.set(key, result)
+
+          if (cache.size > size) {
+            const oldestKey = cache.keys().next().value!
+            cache.delete(oldestKey)
+          }
+
+          return result
+        } finally {
+          inFlight.delete(key)
+        }
+      })()
+
+      inFlight.set(key, promise)
+      return promise
     }
+
+    // helper: clear both caches
+    wrapper.clearCache = () => {
+      cache.clear()
+      inFlight.clear()
+    }
+
+    return wrapper
   }
 }
 
