@@ -19,9 +19,9 @@
   <q-dialog v-model="showDialog">
     <q-card>
       <q-card-section>
-        <div class="text-h5 row items-center">
+        <div class="text-h5 row items-center no-wrap">
           <q-icon class="q-pr-md" :name="matShare" />
-          <div>Choose how to share or export your {{ single ? 'task' : 'chat' }}</div>
+          <div>Choose sharing method</div>
         </div>
         <div class="column q-gutter-sm q-pt-md">
           <template v-if="share">
@@ -41,7 +41,7 @@
               :loading="loadingGdrive"
               @click="onExportPublicGdrive(selectedTaskList)"
             />
-            <div v-else class="text-caption">Gdrive Store & Share:</div>
+            <div v-else class="text-caption text-center">Gdrive Store & Share:</div>
             <q-slide-transition v-if="gdriveLink">
               <div v-show="gdriveLink" class="column items-center">
                 <q-btn
@@ -52,7 +52,8 @@
                   label="Share via Social Apps"
                   @click="shareViaSocialApps"
                 />
-                <div
+                <QrCode />
+                <template
                   v-for="[link, label] in [
                     [taskyonShareLink, 'Copy taskyon.space link (stored in gdrive)'],
                     [gdriveLink, 'Copy markdown link'],
@@ -74,7 +75,7 @@
                       />
                     </div>
                   </div>
-                </div>
+                </template>
               </div>
             </q-slide-transition>
           </template>
@@ -127,6 +128,7 @@ import { useTaskyonStore } from 'src/stores/taskyonState'
 import type { TaskNode } from '@taskyon/taskyon'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { chat2Md, chatToYaml } from 'src/modules/taskyon/taskUtils'
+import QrCode from '../QrCode.vue'
 
 const showDialog = defineModel({ type: Boolean, default: false })
 
