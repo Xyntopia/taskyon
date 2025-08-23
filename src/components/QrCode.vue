@@ -215,7 +215,7 @@ const printQR = () => {
           }
         </style>
       </head>
-      <body>
+      <body onload="window.print(); setTimeout(function(){ window.close(); }, 100);">
         <div class="print-container">
           <div class="qr-section">
             <img src="${qrCodeData.value}" alt="Taskyon QR Code" />
@@ -228,7 +228,6 @@ const printQR = () => {
     </html>
   `)
   printWindow.document.close()
-  printWindow.print()
 }
 
 // Toggle fullscreen mode
@@ -320,7 +319,7 @@ const printFullscreen = () => {
           }
         </style>
       </head>
-      <body>
+      <body onload="window.print(); setTimeout(function(){ window.close(); }, 100);">
         <div class="print-container">
           <div class="qr-section">
             <img src="${fullscreenCanvas.value?.toDataURL() || qrCodeData.value}" alt="Taskyon QR Code" />
@@ -333,7 +332,6 @@ const printFullscreen = () => {
     </html>
   `)
   printWindow.document.close()
-  printWindow.print()
 }
 
 // Generate initial QR on mount
@@ -435,7 +433,7 @@ onMounted(generateQR)
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.95);
+  background: white;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -444,16 +442,17 @@ onMounted(generateQR)
 }
 
 .fullscreen-content {
-  background: white;
-  border-radius: 12px;
+  width: 100%;
+  height: 100%;
   padding: 30px;
-  max-width: 90vw;
-  max-height: 90vh;
+  max-width: 100vw;
+  max-height: 100vh;
   overflow-y: auto;
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 30px;
 }
 
@@ -480,6 +479,10 @@ onMounted(generateQR)
 }
 
 .fullscreen-qr canvas {
+  max-width: 90vw;
+  max-height: 50vh;
+  width: auto;
+  height: auto;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
