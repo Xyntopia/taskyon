@@ -125,10 +125,10 @@ export async function tyCore(
 
   // logging
   outsidePort.receive((msg) => {
-    console.log('taskyon receiving a message:', msg)
+    console.log('taskyon sending a message:', msg)
   })
   insidePort.receive((msg) => {
-    console.log('taskyon sending a message:', msg)
+    console.log('taskyon receiving a message:', msg)
   })
 
   const { port: wport } = createTypeFilteredPort(insidePort, ['functionResponse'])
@@ -181,8 +181,8 @@ export async function tyCore(
         }
       },*/
     },
-    console.warn,
-    console.error,
+    (msg) => console.warn('taskyon receiving unknown message', msg),
+    (msg) => console.error('an error occured during handling of the message', msg),
   )
 
   taskManagerInstance.taskStream.subscribe(async ({ data: task, id }) => {

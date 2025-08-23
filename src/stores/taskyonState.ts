@@ -646,8 +646,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     void updateTools()
 
     // if a new "default" tool was created update UI
+    // TODO: can we move this into our init.ts? or does it make sense here?
     TY.port.receive((msg) => {
-      console.log('api Aout message!', msg)
+      console.log('api out message!', msg)
       void match(msg).with(
         {
           type: 'status',
