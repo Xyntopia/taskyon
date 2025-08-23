@@ -18,8 +18,10 @@ import type { TaskyonMessage } from '../../../../src/modules/taskyon/apiTypes'
  *
  * So each duplex channel has two ports:   x: Port<a,b>,   y: Port<b,a>
  * /
+ */
 
-*/
+type Big = 'a' | 'b' | 'c'
+type Small = 'a' | 'b'
 
 /**
  *                   x: Port1 |  y: Port2
@@ -39,6 +41,48 @@ const us = createDuplexChannel<unknown, string>()
  * Stream "Rx":   receive <- unknown  <- send
  */
 const uu = createDuplexChannel<unknown, unknown>()
+/**
+ *                   x: Port1 |  y: Port2
+ * Stream "Tx":   send ->    Big  -> receive
+ * Stream "Rx":   receive <- Small  <- send
+ */
+const l1 = createDuplexChannel<Big, Small>()
+/**
+ *                   x: Port1 |  y: Port2
+ * Stream "Tx":   send ->    Small  -> receive
+ * Stream "Rx":   receive <- Small  <- send
+ */
+const l2 = createDuplexChannel<Small, Small>()
+
+// should work
+// small -> small
+// big <- small
+l1.x.connect(l2.x)
+// should work
+// big -> small
+// small <- big
+l1.x.connect(l1.y)
+// should not work
+// big -> small
+// small <- big
+l1.x.connect(l1.x)
+// should not work
+// small -> small
+// big <- small
+l1.y.connect(l2.y)
+
+const big = createDuplexChannel<Big, Big>()
+const small = createDuplexChannel<Small, Small>()
+
+//should not work
+// small -> big
+// small <- big
+small.y.connect(big.x)
+
+// should not work
+// big -> small
+// big <- small
+big.y.connect(small.x) // should error
 
 /* ────────────── SHOULD COMPILE (✓) ──────────────── */
 // string -> string
@@ -60,11 +104,13 @@ uu.y.connect(us.x)
 /* ───────────── SHOULD FAIL (✗) ─────────────*/
 /* un-comment to check if there is an error!
 // string -> unknown
-// string <- unknown
-//ss.y.connect(uu.x)
+// string <- unknown*/
+ss.y.connect(uu.x)
+
+/*
 // unknown -> string
-// string <- string
-//us.y.connect(ss.x) // would try to send unknown into string receiver - should fail
+// string <- string*/
+us.y.connect(ss.x) // would try to send unknown into string receiver - should fail
 
 /* ───────────── RUNTIME DEMO ───────────── */
 ss.y.receive((m) => console.log('ab.b got', m))
