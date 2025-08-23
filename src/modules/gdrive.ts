@@ -240,7 +240,7 @@ export const useGdrive = () => {
     const validAccessToken = await getValidAccessToken()
     if (!validAccessToken) throw new Error('Failed to obtain a valid access token.')
 
-    const directoryId = await gdrivefindFileOrDirectoryId({
+    const directoryId = await findFileOrDirectoryId({
       accessToken: validAccessToken,
       directory,
     })
@@ -418,30 +418,6 @@ async function ensureDirectoryExists(directoryPath: string, accessToken: string)
   return ensurePathExists(directoryPath, accessToken)
 }
 
-export async function findFilesByHash(folderId: string, hash: string, accessToken: string) {
-  const q =
-    `'${folderId}' in parents and trashed = false and ` +
-    `(` +
-    `appProperties has { key='h:${hash}' and value='1' } or ` +
-    `properties has { key='h:${hash}' and value='1' }` +
-    `)`
-
-  const params = {
-    q,
-    pageSize: 10,
-    orderBy: 'createdTime desc',
-    fields: 'files(id,name,appProperties,properties,createdTime)',
-  }
-  const headers = { Authorization: `Bearer ${accessToken}` }
-  const { data } = await axios.get('https://www.googleapis.com/drive/v3/files', { headers, params })
-  return data.files as Array<{
-    id: string
-    name: string
-    appProperties?: unknown
-    properties?: unknown
-  }>
-}
-
 // if you only want to *find* (no create):
 const gdrivefindFileOrDirectoryId = async ({
   accessToken,
@@ -482,7 +458,7 @@ const gdrivefindFileOrDirectoryId = async ({
   return data.files?.[0]?.id ?? null
 }
 
-const findFileOrDirectoryId = asyncLruCache(10)(gdrivefindFileOrDirectoryId)
+const findFileOrDirectoryId = asyncLruCache(200)(gdrivefindFileOrDirectoryId)
 
 /**
  * Check out this link here for all options:  https://developers.google.com/drive/api/reference/rest/v3/permissions?authuser=2
