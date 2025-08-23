@@ -7,7 +7,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -24,21 +24,59 @@ const props = withDefaults(
     topOffset: 0,
     enabled: true,
     smooth: true,
-    smoothMs: 5,
+    smoothMs: 3,
   },
 )
 
 const fadeOff = ref(0)
+const lastScrollTop = ref(0)
+const isScrollingUp = ref(false)
+const scrollTimeout = ref<NodeJS.Timeout | null>(null)
+
+function handleScroll(info: { position: { top: number } }) {
+  const currentScrollTop = info.position.top
+
+  // Detect scroll direction
+  isScrollingUp.value = currentScrollTop < lastScrollTop.value
+  lastScrollTop.value = currentScrollTop
+
+  // Clear any existing timeout
+  if (scrollTimeout.value) {
+    clearTimeout(scrollTimeout.value)
+    scrollTimeout.value = null
+  }
+
+  // Apply fade logic based on scroll direction
+  if (isScrollingUp.value) {
+    // When scrolling up, remove or reduce the fade
+    fadeOff.value = 0 // or Math.max(0, currentScrollTop * 0.1) for partial fade
+  } else {
+    // When scrolling down, apply normal fade
+    fadeOff.value = Math.max(0, currentScrollTop)
+  }
+
+  // Set timeout to restore fade when scrolling stops
+  scrollTimeout.value = setTimeout(() => {
+    // Only restore if we were scrolling up and now stopped
+    if (isScrollingUp.value) {
+      fadeOff.value = Math.max(0, currentScrollTop)
+    }
+    scrollTimeout.value = null
+  }, 150) // Adjust delay as needed (150ms seems good)
+}
+
+// Clean up timeout on component unmount
+onBeforeUnmount(() => {
+  if (scrollTimeout.value) {
+    clearTimeout(scrollTimeout.value)
+  }
+})
 
 const cssVars = computed(() => ({
   '--fade-h': `${props.fadeHeight}px`,
   '--fade-off': `${fadeOff.value + props.topOffset}px`,
   '--fade-off-transition': props.smooth ? `${props.smoothMs}ms` : '0ms',
 }))
-
-function handleScroll(info: { position: { top: number } }) {
-  fadeOff.value = Math.max(0, info.position.top)
-}
 
 function handleResize() {
   // nothing special; var recomputes on next scroll or keep last value

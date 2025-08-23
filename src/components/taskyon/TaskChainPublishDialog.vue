@@ -19,10 +19,33 @@
   <q-dialog v-model="showDialog">
     <q-card>
       <q-card-section>
-        <div class="text-h5 row items-center">
+        <div class="text-h5 row items-center justify-center no-wrap">
           <q-icon class="q-pr-md" :name="matShare" />
-          <div>Choose how to share or export your {{ single ? 'task' : 'chat' }}</div>
+          <div>Choose sharing method</div>
         </div>
+
+        <!-- Task Change Notification Banner -->
+        <q-banner v-if="hasTaskChanged && gdriveLink" class="q-mt-md" dense rounded>
+          <template #avatar>
+            <q-icon :name="matWarning" color="secondary" />
+          </template>
+          <template #action>
+            <q-btn
+              flat
+              dense
+              label="Regenerate"
+              color="orange"
+              :loading="loadingGdrive"
+              @click="regenerateGdriveLink"
+            />
+            <q-btn flat dense :icon="matClose" color="orange" @click="dismissTaskChangeWarning" />
+          </template>
+          <div class="text-body2">
+            The task has changed since the last link was generated.
+            <strong>Consider regenerating</strong> to share the latest version.
+          </div>
+        </q-banner>
+
         <div class="column q-gutter-sm q-pt-md">
           <template v-if="share">
             <q-btn v-if="false" outline :icon="matLink" label="Create Public Link" />
@@ -41,9 +64,21 @@
               :loading="loadingGdrive"
               @click="onExportPublicGdrive(selectedTaskList)"
             />
-            <div v-else class="text-caption">Gdrive Store & Share:</div>
+            <div v-else class="text-overline text-center q-pb-md">
+              Gdrive Store & Share:
+              <InfoDialog
+                :info-text="`*Taskyon shares files using your Google Drive.*
+
+You can always find and manage these files in your own Google Drive folder.
+You have full control: if you delete a shared file from your Drive,
+the sharing link will stop working.
+
+This means only you decide what is shared and for how long.
+No one else can access or remove your files without your permission.`"
+              />
+            </div>
             <q-slide-transition v-if="gdriveLink">
-              <div v-show="gdriveLink" class="column items-center">
+              <div v-show="gdriveLink" class="row q-gutter-md items-center justify-center">
                 <q-btn
                   v-if="canShare"
                   class="q-mb-md"
@@ -52,28 +87,33 @@
                   label="Share via Social Apps"
                   @click="shareViaSocialApps"
                 />
-                <div
-                  v-for="[link, label] in [
-                    [taskyonShareLink, 'Copy taskyon.space link (stored in gdrive)'],
-                    [gdriveLink, 'Copy markdown link'],
-                  ] as Array<[string, string]>"
-                  :key="link"
-                >
-                  <div class="text-caption">OR {{ label }}</div>
-                  <div class="row q-gutter-sm q-py-sm items-center">
-                    <div class="col-auto ellipsis text-weight-medium" style="max-width: 15rem">
-                      {{ link }}
-                      <q-tooltip>{{ link }}</q-tooltip>
+                <div class="column items-center">
+                  <QrCode :data="taskyonShareLink" />
+                </div>
+                <div>
+                  <template
+                    v-for="[link, label] in [
+                      [taskyonShareLink, 'Copy taskyon.space link (stored in gdrive)'],
+                      [gdriveLink, 'Copy markdown link'],
+                    ] as Array<[string, string]>"
+                    :key="link"
+                  >
+                    <div class="text-caption">OR {{ label }}</div>
+                    <div class="row q-gutter-sm q-py-sm items-center">
+                      <div class="col-auto ellipsis text-weight-medium" style="max-width: 15rem">
+                        {{ link }}
+                        <q-tooltip>{{ link }}</q-tooltip>
+                      </div>
+                      <div class="col-auto">
+                        <q-btn
+                          flat
+                          dense
+                          :icon="matContentCopy"
+                          @click="copyToClipboard(link || '')"
+                        />
+                      </div>
                     </div>
-                    <div class="col-auto">
-                      <q-btn
-                        flat
-                        dense
-                        :icon="matContentCopy"
-                        @click="copyToClipboard(link || '')"
-                      />
-                    </div>
-                  </div>
+                  </template>
                 </div>
               </div>
             </q-slide-transition>
@@ -83,12 +123,11 @@
             class="lt-sm"
             outline
             :icon="matCopyAll"
-            label="Copy chat as markdown"
+            label="Copy to clipboard"
             @click="onExportChatMD(selectedTaskList, true)"
           >
           </q-btn>
           <template v-if="download">
-            <div class="text-caption col">or download as:</div>
             <q-btn
               outline
               :icon="symOutlinedMarkdown"
@@ -112,7 +151,14 @@
 </template>
 
 <script setup lang="ts">
-import { matShare, matLink, matCopyAll, matContentCopy } from '@quasar/extras/material-icons'
+import {
+  matShare,
+  matLink,
+  matCopyAll,
+  matContentCopy,
+  matWarning,
+  matClose,
+} from '@quasar/extras/material-icons'
 import { copyToClipboard, exportFile } from 'quasar'
 import { ref, computed, watch } from 'vue'
 import {
@@ -127,6 +173,8 @@ import { useTaskyonStore } from 'src/stores/taskyonState'
 import type { TaskNode } from '@taskyon/taskyon'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { chat2Md, chatToYaml } from 'src/modules/taskyon/taskUtils'
+import QrCode from '../QrCode.vue'
+import InfoDialog from '../InfoDialog.vue'
 
 const showDialog = defineModel({ type: Boolean, default: false })
 
@@ -159,7 +207,24 @@ const {
 
 const gdriveLink = ref<string>()
 const loadingGdrive = ref(false)
+
+// New state for tracking task changes
+const lastGeneratedTaskId = ref<string>()
+const linkGeneratedAt = ref<Date>()
+const hasTaskChangeWarningDismissed = ref(false)
+
 const taskId = computed(() => (typeof taskOrId === 'string' ? taskOrId : taskOrId.id))
+
+// Computed property to check if task has changed since last link generation
+const hasTaskChanged = computed(() => {
+  return (
+    gdriveLink.value &&
+    lastGeneratedTaskId.value &&
+    taskId.value !== lastGeneratedTaskId.value &&
+    !hasTaskChangeWarningDismissed.value
+  )
+})
+
 const selectedTaskList = asyncComputed(
   async () => {
     const tm = await tystate.getTaskManager()
@@ -177,9 +242,17 @@ const selectedTaskList = asyncComputed(
   [taskId],
 )
 
+// Watch for taskId changes and reset warning dismissal
 watch(
-  () => taskId,
-  () => (gdriveLink.value = undefined),
+  () => taskId.value,
+  (newTaskId, oldTaskId) => {
+    if (newTaskId !== oldTaskId) {
+      hasTaskChangeWarningDismissed.value = false
+      // Only reset gdriveLink if we want to force regeneration
+      // Comment out the line below if you want to keep the old link until manually regenerated
+      // gdriveLink.value = undefined
+    }
+  },
 )
 
 const taskyonShareLink = computed(() => {
@@ -209,12 +282,24 @@ async function onExportPublicGdrive(taskList: TaskNode[]) {
 
         if (gdriveFile.webViewLink) {
           gdriveLink.value = gdriveFile.webViewLink
+          lastGeneratedTaskId.value = taskId.value
+          linkGeneratedAt.value = new Date()
+          hasTaskChangeWarningDismissed.value = false
         }
       }
     }
   } finally {
     loadingGdrive.value = false
   }
+}
+
+async function regenerateGdriveLink() {
+  hasTaskChangeWarningDismissed.value = false
+  await onExportPublicGdrive(selectedTaskList.value)
+}
+
+function dismissTaskChangeWarning() {
+  hasTaskChangeWarningDismissed.value = true
 }
 
 function onExportIpfs(taskId: string) {

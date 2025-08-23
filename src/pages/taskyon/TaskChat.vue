@@ -67,7 +67,7 @@
     <!-- Announcements -->
     <q-page-sticky position="top" :offset="[0, 0]" expand style="z-index: 20">
       <div
-        class="column q-gutter-md items-center text-secondary announcements"
+        class="column q-gutter-md q-mt-lg items-center text-secondary announcements"
         style="max-width: 600px"
       >
         <transition-group
