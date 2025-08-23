@@ -492,15 +492,37 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     )
   })
 
+  // TODO: right now, we're simply generating a reandom keypair for every launch
+  //       so recovery is currenty impossible. We would like to give te user the ability
+  //       to save this recovery key somewhere else in order to be able to recover their passwords.
+  const getPublicRecoveryKey = async () => (await generateRsaOaepPair()).publicKey
+  // Use a fixed key for demo purposes (not secure for production!)
+  const fixedKeyBytes = new Uint8Array([
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+    27, 28, 29, 30, 31, 32,
+  ]) // 32 bytes = 256 bits
+
+  async function getSessionKey() {
+    // Import the fixed key as an AES-GCM CryptoKey
+    // this means our secretStore is "de-facto" non encrypted
+    // TODO: generate a good session key by either using passKey or a password.
+    const key = await window.crypto.subtle.importKey(
+      'raw',
+      fixedKeyBytes,
+      { name: 'AES-GCM' },
+      true,
+      ['encrypt', 'decrypt'],
+    )
+    return key
+  }
+
   const taskyon = (async () =>
     await tyCore(
       stateRefs.llmSettings,
       stateRefs.keys,
       defineTyGuiTools(stateRefs),
-      // TODO: right now, we're simply generating a reandom keypair for every launch
-      //       so recovery is currenty impossible. We would like to give te user the ability
-      //       to save this recovery key somewhere else in order to be able to recover their passwords.
-      async () => (await generateRsaOaepPair()).publicKey,
+      getPublicRecoveryKey,
+      getSessionKey,
     ))()
 
   const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
@@ -681,24 +703,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return instance['connectMessageIframe'](id, iframe, origin)
   }
 
-  // Use a fixed key for demo purposes (not secure for production!)
-  const fixedKeyBytes = new Uint8Array([
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-    27, 28, 29, 30, 31, 32,
-  ]) // 32 bytes = 256 bits
-
   void secretStore.onSessionKey(async ({ respond }) => {
     console.log('importing fixed key for secretStore...')
-    // Import the fixed key as an AES-GCM CryptoKey
-    // this means our secretStore is "de-facto" non encrypted
-    // TODO: generate a good session key by either using passKey or a password.
-    const key = await window.crypto.subtle.importKey(
-      'raw',
-      fixedKeyBytes,
-      { name: 'AES-GCM' },
-      true,
-      ['encrypt', 'decrypt'],
-    )
+    const key = await getSessionKey()
     respond(key)
   })
 

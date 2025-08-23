@@ -87,6 +87,21 @@ export function withImmutable<T, B extends CrudWrapper<T>>(
   return out
 }
 
+/**
+ * Enhances a CrudWrapper with live streaming capabilities for CRUD events.
+ *
+ * This wrapper emits live updates via streams whenever data is set, upserted, or deleted.
+ *
+ * Streaming data format:
+ * - On `set` or `upsert`: emits `{ id, data }` where `data` is the new or updated value.
+ * - On `delete`: emits `{ id, data: null }` to indicate removal.
+ *
+ * @template T - The type of data managed by the CRUD wrapper.
+ * @param base - The base CrudWrapper to enhance.
+ * @returns The enhanced CrudWrapper with:
+ *   - `readLive(id, emitCurrent?)`: Subscribes to live updates for a specific item. Optionally emits the current value immediately.
+ *   - `liveStream`: Subscribes to all live CRUD events as `{ id, data }` objects.
+ */
 export const withLiveStreams = <T>(
   base: CrudWrapper<T>,
 ): CrudWrapper<T> & {

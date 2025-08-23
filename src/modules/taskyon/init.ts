@@ -42,6 +42,7 @@ import { dump } from 'js-yaml'
 import z from 'zod'
 import { ToolBase } from '@taskyon/taskyon'
 import type { EncryptedDataRow } from '../crypto_webcrypto'
+import { encryptCompressObject } from '../fileUtils'
 
 export async function tyCore(
   llmSettings: llmSettings,
@@ -53,7 +54,8 @@ export async function tyCore(
   // this way we can give taskyon access and the ability to read & change the environment
   // it is running in.
   EnvironmentTools: InternalTool[],
-  publicRecoveryKey: () => Promise<CryptoKey>,
+  getPublicRecoveryKey: () => Promise<CryptoKey>,
+  getSessionKey: () => Promise<CryptoKey>,
 ) {
   const ToolList: InternalTool[] = [
     ...smallHelperTools,
@@ -86,7 +88,7 @@ export async function tyCore(
         tableName: 'vault',
       }),
     ]),
-    publicRecoveryKey,
+    getPublicRecoveryKey,
   )
 
   console.log('finished taskManager initialization')
@@ -182,6 +184,30 @@ export async function tyCore(
     console.warn,
     console.error,
   )
+
+  taskManagerInstance.taskStream.subscribe(async ({ data: task, id }) => {
+    // if tasks is not null, it was freshly created
+    // TODO: only trigger upload on certain task events...
+    if (task) {
+      const archiveName = `${id}.tyt`
+
+      // compress objects "locally" (for the test)
+      const packed = await encryptCompressObject(
+        task,
+        archiveName,
+        getPublicRecoveryKey,
+        getSessionKey,
+      )
+      console.log('created encrypted task file...', id)
+
+      insidePort.send({
+        type: 'addTasks',
+        data: packed,
+        info: archiveName,
+        ids: [String(id)],
+      })
+    }
+  })
 
   return {
     // TODO: not sure, if the iframeMultiPlexer should be a taskyon functionality?
