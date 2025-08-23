@@ -11,7 +11,7 @@ export type Observer<T> = (value: T) => void | Promise<void>
 export type Unsubscribe = () => void
 
 export interface syncStream<T> {
-  subscribe: (observer: Observer<T>) => Unsubscribe
+  subscribe(this: void, observer: Observer<T>): Unsubscribe
 }
 
 // we have a separate stream declaration here because we want to
@@ -75,8 +75,8 @@ export const createChannelsFromStreams = <Str1, Str2 = Str1>(
   outS: frpBus<Str1>,
   inS: frpBus<Str2>,
 ): DuplexChannel<Str1, Str2> => ({
-  x: makePort(outS.emit, inS.stream.subscribe),
-  y: makePort(inS.emit, outS.stream.subscribe),
+  x: makePort(outS.emit, (o) => inS.stream.subscribe(o)),
+  y: makePort(inS.emit, (o) => outS.stream.subscribe(o)),
 })
 
 export const createDuplexChannel = <Str1, Str2 = Str1>(): DuplexChannel<Str1, Str2> =>
@@ -118,47 +118,79 @@ export function portMap<A, B>(
   return { port: outer, destroy }
 }*/
 
-/**
- * Derive a child Port that only passes messages satisfying `guard`.
- *
- * • Incoming messages from `parent` are forwarded to the child *only* when the
- *   type-guard returns true.
- * • Anything the child sends is forwarded upstream unchanged.
- * • `destroy()` tears everything down (both directions).
- */
-export function createFilteredPort<pTx, pRx, cTx extends pRx>(
-  parent: Port<pTx, pRx>,
-  guard: (msg: pRx) => msg is cTx,
-): { port: Port<pTx, cTx>; destroy: () => void } {
-  const { x, y } = createDuplexChannel<cTx, pTx>()
+export function mapPort<pTx, pRx, cTx extends pTx, cRx extends pRx>(
+  port: Port<pTx, pRx>,
+  transformTx: (msg: pTx) => cTx,
+  transformRx: (msg: pRx) => cRx,
+): { port: Port<cTx, cRx>; destroy: () => void } {
+  const { x: filtered, y: internal } = createDuplexChannel<cTx, cRx>()
 
   // Upstream ➜ child (apply the filter)
-  const unsubUp = parent.receive((m) => {
-    if (guard(m)) x.send(m) // safe: guard proved it’s TChild
+  const unsubUp = port.receive((m) => {
+    internal.send(transformRx(m)) // safe: guard proved it’s TChild
   })
 
   // Child ➜ upstream (no filtering needed)
-  const unsubDown = x.receive((m) => parent.send(m))
+  const unsubDown = internal.receive((m) => {
+    port.send(transformTx(m)) // safe: guard proved it’s TChild
+  })
 
   const destroy = () => {
     unsubUp()
     unsubDown()
   }
 
-  return { port: y, destroy }
+  return { port: filtered, destroy }
 }
 
-/**
- * Narrow an existing Port with a Zod schema.
- * - `P`  … message type already travelling on the parent port
- * - `T`  … narrower message type described by the schema (T ⊆ P)
- */
-export function createZodPort<Tx, Rx, T extends Rx>(
-  parent: Port<Tx, Rx>,
-  schema: ZodType<T>,
-): { port: Port<Tx, T>; destroy: () => void } {
-  /* reuse the generic filtered-port helper */
-  return createFilteredPort(parent, (m): m is T => schema.safeParse(m).success)
+export function createPortFilter<pTx, pRx, cTx extends pTx, cRx extends pRx>(
+  port: Port<pTx, pRx>,
+  filterTx: (msg: pTx) => msg is cTx,
+  filterRx: (msg: pRx) => msg is cRx,
+): { port: Port<cTx, cRx>; destroy: () => void } {
+  const { x: filtered, y: internal } = createDuplexChannel<cTx, cRx>()
+
+  // Upstream ➜ child (apply the filter)
+  const unsubUp = port.receive((m) => {
+    if (filterRx(m)) internal.send(m) // safe: guard proved it’s TChild
+  })
+
+  // Child ➜ upstream (no filtering needed)
+  const unsubDown = internal.receive((m) => {
+    if (filterTx(m)) port.send(m) // safe: guard proved it’s TChild
+  })
+
+  const destroy = () => {
+    unsubUp()
+    unsubDown()
+  }
+
+  return { port: filtered, destroy }
+}
+
+// lets through messages which are ina  list of types...
+export function createTypeFilteredPort<
+  pTx, // Parent Transmit type
+  pRx extends { type: string }, // Parent Receive type (the superset union)
+  T extends readonly pRx['type'][], // An array of keys from the union's 'type' property
+>(
+  parent: Port<pTx, pRx>,
+  allowedTypes: T,
+): { port: Port<pTx, Extract<pRx, { type: T[number] }>>; destroy: () => void } {
+  // Use a Set for efficient O(1) lookups inside the guard.
+  const typeSet = new Set(allowedTypes)
+
+  // Define the new, narrower child message type using TypeScript's Extract utility.
+  // This extracts all members from the `pRx` union whose `type` property matches one
+  // of the strings in the `allowedTypes` array (`T[number]`).
+  type cRx = Extract<pRx, { type: T[number] }>
+
+  // Reuse the generic filtered-port helper with a custom type guard.
+  return createPortFilter(
+    parent,
+    (msg): msg is pTx => true,
+    (msg): msg is cRx => typeSet.has(msg.type),
+  )
 }
 
 /** Generic message → handler router (sync or async) */
