@@ -1,16 +1,17 @@
 import { bigIntToString } from '../utils'
-import type { TaskWorkerMessage, TaskyonMessage } from './apiTypes'
 import { RemoteFunctionResponse, RemoteFunctionCall } from './apiTypes'
 import { jsonSchemaToYamlString } from '../yamlUtils'
 import { executeCodeInIframe } from './iframeWorker'
 import type { JSONSchema7, JSONSchema7Object } from 'json-schema'
 import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
 import Ajv from 'ajv'
-import type { Port } from '../frpBus'
 import type { InternalTool, toolContext } from '@taskyon/taskyon'
 import type { FunctionArguments, FunctionCall, ParamType } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
 import { convertZodToJsonSchemaCached } from './types'
+import type { Port } from '../frpBus'
+
+export type RemoteFunctionPort = Port<RemoteFunctionCall, RemoteFunctionResponse>
 
 // the following doesn't really work ;) thats why we're doing the custom schema above..
 /*const internalToolFunctionSchema = z
@@ -36,10 +37,10 @@ export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSche
 async function handleRemoteFunction(
   name: string,
   args: FunctionArguments,
-  duplexPort: Port<TaskyonMessage, TaskWorkerMessage>,
+  duplexPort: RemoteFunctionPort,
 ) {
   const funcRP: Promise<RemoteFunctionResponse> = new Promise((resolve, reject) => {
-    const listener = (msg: RemoteFunctionCall | RemoteFunctionResponse) => {
+    const listener = (msg: RemoteFunctionResponse) => {
       console.log('remote function handler received message', msg)
       const response = RemoteFunctionResponse.safeParse(msg)
       if (response.success) {
@@ -131,7 +132,7 @@ export async function handleFunctionExecution(
   tool: InternalTool,
   stopSignal: AbortSignal, // add this to our duplexPort!!
   context: toolContext,
-  duplexPort: Port<TaskyonMessage, TaskWorkerMessage>,
+  duplexPort: RemoteFunctionPort,
 ): Promise<unknown> {
   // TODO: test here, if tool parameters are correct according to json schema
   //       if not, throw an error message...

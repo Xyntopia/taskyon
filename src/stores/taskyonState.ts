@@ -11,7 +11,13 @@ import { tyCore } from 'src/modules/taskyon/init'
 import { availableModels } from 'src/modules/taskyon/chat'
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
 import { useAppStateStore } from './appState'
-import { createDuplexChannel, createPortApi, filter } from 'src/modules/frpBus'
+import type { Port } from 'src/modules/frpBus'
+import {
+  createDuplexChannel,
+  createPortApi,
+  createTypeFilteredPort,
+  filter,
+} from 'src/modules/frpBus'
 import { generateRsaOaepPair } from 'src/modules/crypto_webcrypto'
 import { setColors } from 'src/boot/brand-colors'
 import { setPrismTheme } from 'src/modules/markdownUtils '
@@ -24,6 +30,7 @@ import { TaskNode } from '@taskyon/taskyon'
 import { toolCall } from '@taskyon/taskyon'
 import { usePyodideWebworker } from 'src/modules/taskyon/webWorkerApi'
 import { areWeInIframe, waitForIframeDuplexChannel } from './iframeClient'
+import { gDriveSyncPort } from 'src/modules/taskyon/sync'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -245,6 +252,21 @@ You can select them in the "Chat Settings" section in the message input window.
   //'What are AI tools?',
   //'How do I integrate Taskyon into my webpage?',
 ]
+
+function connectGdriveSync(directory: string, tyPort: Port<TaskyonMessage, TaskyonMessage>) {
+  const gds = gDriveSyncPort(directory + '/taskyon_sync')
+  //gds.connect(TY.port)
+  //gds.receive(tyPort.send)
+
+  const { port: subset } = createTypeFilteredPort(tyPort, [
+    'taskCreated',
+    'addTasks',
+    'requestTask',
+  ] as const)
+  gds.connect(subset)
+
+  //tyPort.receive((msg) => console.log(msg))
+}
 
 function defineTyGuiTools(stateRefs: ReturnType<typeof useAppStateStore>): InternalTool[] {
   return [
@@ -516,7 +538,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // For example the iframe is connected to iApiOutside because
   // it lives outside the taskyon logic. iApiInside is used by our internal
   // services e.g. the engine to communicate to the outside.
-  const { x: uiApiOutside, y: uiApiInside } = createDuplexChannel<TaskyonMessage, unknown>()
+  const { x: uiApiOutside, y: uiApiInside } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()
 
   void taskyon.then(async (TY) => {
     //const taskStream = tyInit.taskManagerInstance.taskStream
@@ -524,6 +546,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
     // add an API for taskyon GUI and make sure "unused" messages are routed through to the
     // taskyon engine!
+    // TODO: red-define this as a middleware where we can intercept certain messages
+    //       and also change the types of inside/outside ports...
     createPortApi(
       uiApiInside,
       TaskyonMessage,
@@ -566,11 +590,15 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         },
       },
       // simply send all other messages to our backend...
-      (msg) => TY.port.send(msg),
+      //(msg) => TY.port.send(msg),
     )
     // we manually connect our send port to the api here, because
     // we are already intercepting incoming messages with the API above
+    // TODO: we have to change this! we would like to
     TY.port.receive(uiApiInside.send)
+
+    connectGdriveSync(stateRefs.appConfiguration.gdriveDir, TY.port)
+
     console.log('checking if we are in an iframe!')
 
     /// -------   IFRAME operations --------

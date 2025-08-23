@@ -30,9 +30,14 @@ import {
   withSecretStore,
 } from '../crudWrapper'
 import { getDatabase } from '../pglite.api'
-import { createDuplexChannel, createIframeMux, createPortApi, createZodPort } from '../frpBus'
+import {
+  createDuplexChannel,
+  createIframeMux,
+  createPortApi,
+  createTypeFilteredPort,
+} from '../frpBus'
 import { testingTools } from '../tools/testTools'
-import { TaskWorkerMessage, TaskyonMessage } from './apiTypes'
+import { TaskyonMessage } from './apiTypes'
 import { dump } from 'js-yaml'
 import z from 'zod'
 import { ToolBase } from '@taskyon/taskyon'
@@ -114,17 +119,19 @@ export async function tyCore(
   // "outPort" is the outwards port which is used by 3rd party apps
   // to communicate with taskyon.
   // "inPort" is the other side of the channel and is used by taskyon itself
-  const { x: outPort, y: inPort } = createDuplexChannel<unknown, TaskyonMessage>()
+  const { x: outsidePort, y: insidePort } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()
 
   // logging
-  outPort.receive((msg) => {
-    console.log('taskyon sending a request:', msg)
+  outsidePort.receive((msg) => {
+    console.log('taskyon receiving a message:', msg)
   })
-  inPort.receive((msg) => {
-    console.log('taskyon receiving a request:', msg)
+  insidePort.receive((msg) => {
+    console.log('taskyon sending a message:', msg)
   })
 
-  const { port: taskPort } = createZodPort(inPort, TaskWorkerMessage)
+  const { port: wport } = createTypeFilteredPort(insidePort, ['functionResponse'])
+
+  //const { port: taskPort } = createZodPort(inPort, TaskWorkerMessage)
 
   // keys could porentially be reactive here, so in theory, when they change in the GUI,
   // taskyon should automatically pick up on this...
@@ -134,11 +141,11 @@ export async function tyCore(
     taskManagerInstance,
     secretStore,
     iframeMultiPlexer.all$,
-    taskPort,
+    wport,
   )
 
   createPortApi(
-    inPort,
+    insidePort,
     TaskyonMessage,
     {
       task: async (msg) => {
@@ -155,7 +162,7 @@ export async function tyCore(
         const newFunc: ToolBase = msg
         console.log(`functionDescription was sent by ${msg.origin}`, newFunc)
         void taskManagerInstance.addDefaultTools([newFunc])
-        inPort.send({
+        insidePort.send({
           type: 'status',
           data: {
             type: 'newtool',
@@ -188,7 +195,7 @@ export async function tyCore(
     workerStop, // TODO: integrate with outPort
     queueTask, // TODO: integrate with outPort!
     secretStore, // TODO: integrate with outPort!
-    port: outPort,
+    port: outsidePort,
   }
 }
 

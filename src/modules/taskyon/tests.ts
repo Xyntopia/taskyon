@@ -17,7 +17,7 @@ import type { Asyncify } from '../../../packages/taskyon/src/utils/tsHelpers'
 import type { TaskNode } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
 import { decompressEncryptedObject, encryptCompressObject } from '../fileUtils'
-import { GdriveSyncPort } from './sync'
+import { gDriveSyncPort } from './sync'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -65,7 +65,7 @@ export async function testGdriveZipRoundtrip() {
     const directory = `taskyon/taskyon-tests/${new Date().toISOString().replace(/[:.]/g, '-')}`
     log('target directory chosen', directory)
 
-    const gdport = GdriveSyncPort(directory)
+    const gdport = gDriveSyncPort(directory)
 
     const objs: Record<string, unknown> = {
       'a1f2c3d4e5.txt': 'hello A',
