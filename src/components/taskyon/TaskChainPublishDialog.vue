@@ -41,7 +41,19 @@
               :loading="loadingGdrive"
               @click="onExportPublicGdrive(selectedTaskList)"
             />
-            <div v-else class="text-overline text-center q-pb-md">Gdrive Store & Share:</div>
+            <div v-else class="text-overline text-center q-pb-md">
+              Gdrive Store & Share:
+              <InfoDialog
+                :info-text="`*Taskyon shares files using your Google Drive.*
+
+You can always find and manage these files in your own Google Drive folder.
+You have full control: if you delete a shared file from your Drive,
+the sharing link will stop working.
+
+This means only you decide what is shared and for how long.
+No one else can access or remove your files without your permission.`"
+              />
+            </div>
             <q-slide-transition v-if="gdriveLink">
               <div v-show="gdriveLink" class="row q-gutter-md items-center justify-center">
                 <q-btn
@@ -131,6 +143,7 @@ import type { TaskNode } from '@taskyon/taskyon'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { chat2Md, chatToYaml } from 'src/modules/taskyon/taskUtils'
 import QrCode from '../QrCode.vue'
+import InfoDialog from '../InfoDialog.vue'
 
 const showDialog = defineModel({ type: Boolean, default: false })
 
