@@ -56,5 +56,6 @@ describe('run diagnostics', () => {
         expect(okCount, 'OKs > min').to.be.greaterThan(minOk)
         expect(/error/i.test(txt), 'no “Error” present').to.be.false
       })
+    cy.screenshot('diagnostics report', { overwrite: true })
   })
 })
