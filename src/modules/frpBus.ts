@@ -43,21 +43,22 @@ export function createStream<T>(): frpBus<T> {
   }
 }
 
-export type Port<Tx, Rx = Tx> = {
+export type Port<Tx, Rx> = {
   send: frpBus<Tx>['emit']
   receive: frpBus<Rx>['stream']['subscribe']
-  connect: <oTx, oRx>(
-    other: Rx extends oTx ? (oRx extends Tx ? Port<oTx, oRx> : never) : never,
+  // stricter connect signature: intersection forces compile-time failure when constraints don't hold
+  connect: <Tx, Rx extends oTx, oTx, oRx extends Tx>(
+    this: Port<Tx, Rx>,
+    other: Port<oTx, oRx>,
   ) => void
 }
+
 export type DuplexChannel<Tx, Rx> = { x: Port<Tx, Rx>; y: Port<Rx, Tx> }
 
-export const connectChannels =
-  <Tx, Rx>(x: Port<Tx, Rx>) =>
-  <oTx, oRx>(y: Port<oTx, oRx>) => {
-    x.receive((msg) => y.send(msg as unknown as oTx))
-    y.receive((msg) => x.send(msg as unknown as Tx))
-  }
+const connectChannels = <Tx, Rx, oTx, oRx>(x: Port<Tx, Rx>, y: Port<oTx, oRx>) => {
+  x.receive((msg) => y.send(msg as unknown as oTx))
+  y.receive((msg) => x.send(msg as unknown as Tx))
+}
 
 const makePort = <Tx, Rx = Tx>(
   send: frpBus<Tx>['emit'],
@@ -66,7 +67,7 @@ const makePort = <Tx, Rx = Tx>(
   const self: Port<Tx, Rx> = {
     send,
     receive,
-    connect: (other) => connectChannels(self)(other),
+    connect: (other) => connectChannels(self, other),
   }
   return self
 }

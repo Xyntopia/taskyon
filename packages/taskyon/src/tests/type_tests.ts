@@ -20,7 +20,7 @@ import type { TaskyonMessage } from '../../../../src/modules/taskyon/apiTypes'
  * /
  */
 
-type Big = 'a' | 'b' | 'c'
+type Big = 'a' | 'b' | 'c' | 'd'
 type Small = 'a' | 'b'
 
 /**
@@ -46,43 +46,73 @@ const uu = createDuplexChannel<unknown, unknown>()
  * Stream "Tx":   send ->    Big  -> receive
  * Stream "Rx":   receive <- Small  <- send
  */
-const l1 = createDuplexChannel<Big, Small>()
-/**
- *                   x: Port1 |  y: Port2
- * Stream "Tx":   send ->    Small  -> receive
- * Stream "Rx":   receive <- Small  <- send
- */
-const l2 = createDuplexChannel<Small, Small>()
+const bs = createDuplexChannel<Big, Small>()
+const SS = createDuplexChannel<Small, Small>()
+const bb = createDuplexChannel<Big, Big>()
+
+/**************TESTING EXPLANATION */
+// "connect" works by doing this:
+//
+//  A.receive(B.send)
+//  B.receive(A.send)
+//
+// - type flow is from "receive" to "send"
+// - this means ports "receivers" have to by compatible with port "send"
+// OR:   "aRx extends bTx" in ts terms.
+//
+// this means, our information flow, when connection ports goes from "receive" to "send"
+
+///////////////  TESTING SUBSETS///////////////
+// two of the following for should have worked!
+// should work (sending port is "Big")
+// big <- small
+// small -> small
+bs.x.connect(SS.x)
+bs.x.connect(SS.y)
+SS.x.connect(bs.x)
+SS.y.connect(bs.x)
+// should not work (sending port is "small")
+// small <- small
+// big -> small
+/*
+bs.y.connect(SS.x)
+bs.y.connect(SS.y)
+SS.x.connect(bs.y)
+SS.y.connect(bs.y)*/
 
 // should work
-// small -> small
-// big <- small
-l1.x.connect(l2.x)
+// small -> big
+// small <- small
+SS.x.connect(SS.y)
 // should work
 // big -> small
 // small <- big
-l1.x.connect(l1.y)
+bs.x.connect(bs.y)
 // should not work
-// big -> small
-// small <- big
-l1.x.connect(l1.x)
-// should not work
-// small -> small
 // big <- small
-l1.y.connect(l2.y)
-
-const big = createDuplexChannel<Big, Big>()
-const small = createDuplexChannel<Small, Small>()
+// small -> big
+bs.x.connect(bs.x)
+// should not work
+// small <- small
+// big -> small
+//bs.y.connect(bs.y)
 
 //should not work
 // small -> big
 // small <- big
-small.y.connect(big.x)
+//SS.y.connect(bb.x)
 
 // should not work
 // big -> small
 // big <- small
-big.y.connect(small.x) // should error
+//bb.y.connect(SS.x) // should error
+
+// should work
+// big <- big
+// big -> small
+bb.x.connect(bs.x)
+
+///////////////  END TESTING SUBSETS///////////////
 
 /* ────────────── SHOULD COMPILE (✓) ──────────────── */
 // string -> string
@@ -105,12 +135,12 @@ uu.y.connect(us.x)
 /* un-comment to check if there is an error!
 // string -> unknown
 // string <- unknown*/
-ss.y.connect(uu.x)
+//ss.y.connect(uu.x)
 
 /*
 // unknown -> string
 // string <- string*/
-us.y.connect(ss.x) // would try to send unknown into string receiver - should fail
+//us.y.connect(ss.x) // would try to send unknown into string receiver - should fail
 
 /* ───────────── RUNTIME DEMO ───────────── */
 ss.y.receive((m) => console.log('ab.b got', m))
