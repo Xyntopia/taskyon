@@ -146,6 +146,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/editor',
+    component: () => import('pages/taskyon/CodingPage.vue'),
+    meta: {
+      title: 'Taskyon Code Editor',
+      description: 'Edit code together with AI',
+    },
+  },
+  {
     path: '/p2pmonitor',
     component: () => import('pages/taskyon/Libp2pStatusPage.vue'),
     meta: {
