@@ -126,7 +126,7 @@ const generateQR = async () => {
 
     void nextTick(() => {
       if (!qrCanvas.value || !qrCodeData.value) return
-      drawQROnCanvas(qrCanvas.value, qrCodeData.value)
+      drawQRWithLogo(qrCanvas.value, qrCodeData.value, size.value)
     })
   } catch (err) {
     console.error('QR generation failed:', err)
@@ -134,18 +134,126 @@ const generateQR = async () => {
   }
 }
 
-// Helper function to draw QR on canvas
-const drawQROnCanvas = (canvas: HTMLCanvasElement, dataUrl: string) => {
+// Helper function to draw QR with logo overlay
+const drawQRWithLogo = (canvas: HTMLCanvasElement, qrDataUrl: string, qrSize: number) => {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
-  const img = new Image()
-  img.onload = () => {
-    canvas.width = img.width
-    canvas.height = img.height
-    ctx.drawImage(img, 0, 0)
+  const qrImg = new Image()
+  qrImg.onload = () => {
+    canvas.width = qrImg.width
+    canvas.height = qrImg.height
+    ctx.drawImage(qrImg, 0, 0)
+
+    // Create logo overlay
+    const logoSize = Math.floor(qrSize * 0.18) // Slightly smaller logo
+    const logoX = (canvas.width - logoSize) / 2
+    const logoY = (canvas.height - logoSize) / 2
+
+    // Draw white background circle for logo (reduced padding)
+    const padding = 4 // Reduced from 8 to 4
+    const bgRadius = (logoSize + padding * 2) / 2
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.arc(canvas.width / 2, canvas.height / 2, bgRadius, 0, 2 * Math.PI)
+    ctx.fill()
+
+    // Draw subtle border around logo background
+    ctx.strokeStyle = '#e5e7eb'
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    // Load and draw the SVG logo
+    loadSVGLogo((logoDataUrl) => {
+      if (logoDataUrl) {
+        const logoImg = new Image()
+        logoImg.onload = () => {
+          // Save the canvas state
+          ctx.save()
+
+          // Create circular clipping path for the logo
+          ctx.beginPath()
+          ctx.arc(canvas.width / 2, canvas.height / 2, logoSize / 2, 0, 2 * Math.PI)
+          ctx.clip()
+
+          // Draw logo maintaining aspect ratio
+          ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize)
+
+          // Restore canvas state
+          ctx.restore()
+        }
+        logoImg.src = logoDataUrl
+      } else {
+        // Fallback: draw a simple "T" for Taskyon
+        drawFallbackLogo(ctx, logoX, logoY, logoSize)
+      }
+    })
   }
-  img.src = dataUrl
+  qrImg.src = qrDataUrl
+}
+
+// Function to load SVG logo and convert to data URL
+const loadSVGLogo = (callback: (dataUrl: string | null) => void) => {
+  // Try to load the SVG logo
+  fetch('/taskyon_mono_opt.svg')
+    .then((response) => {
+      if (!response.ok) throw new Error('SVG not found')
+      return response.text()
+    })
+    .then((svgText) => {
+      // Create a data URL from the SVG
+      const svgBlob = new Blob([svgText], { type: 'image/svg+xml' })
+      const url = URL.createObjectURL(svgBlob)
+
+      const img = new Image()
+      img.onload = () => {
+        const tempCanvas = document.createElement('canvas')
+        const tempCtx = tempCanvas.getContext('2d')
+        if (tempCtx) {
+          // Set canvas size to maintain aspect ratio
+          const aspectRatio = img.width / img.height
+          const canvasSize = 200
+
+          if (aspectRatio > 1) {
+            // Wider than tall
+            tempCanvas.width = canvasSize
+            tempCanvas.height = canvasSize / aspectRatio
+          } else {
+            // Taller than wide
+            tempCanvas.width = canvasSize * aspectRatio
+            tempCanvas.height = canvasSize
+          }
+
+          // Fill with transparent background
+          tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
+
+          // Draw the SVG maintaining its aspect ratio
+          tempCtx.drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height)
+          callback(tempCanvas.toDataURL('image/png'))
+        } else {
+          callback(null)
+        }
+        URL.revokeObjectURL(url)
+      }
+      img.onerror = () => {
+        URL.revokeObjectURL(url)
+        callback(null)
+      }
+      img.src = url
+    })
+    .catch(() => {
+      // If SVG loading fails, use fallback
+      callback(null)
+    })
+}
+
+// Fallback logo drawing function
+const drawFallbackLogo = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
+  ctx.fillStyle = '#4f46e5'
+  ctx.font = `bold ${size * 0.6}px Arial, sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('T', x + size / 2, y + size / 2)
 }
 
 // Toggle action buttons visibility
@@ -155,10 +263,13 @@ const toggleButtons = () => {
 
 // Print QR code
 const printQR = () => {
-  if (!qrCodeData.value) return
+  if (!qrCanvas.value) return
 
   const printWindow = window.open('', '_blank')
   if (!printWindow) return
+
+  // Get the canvas with logo as data URL
+  const canvasDataUrl = qrCanvas.value.toDataURL('image/png')
 
   printWindow.document.write(`
     <html>
@@ -218,7 +329,7 @@ const printQR = () => {
       <body onload="window.print(); setTimeout(function(){ window.close(); }, 100);">
         <div class="print-container">
           <div class="qr-section">
-            <img src="${qrCodeData.value}" alt="Taskyon QR Code" />
+            <img src="${canvasDataUrl}" alt="Taskyon QR Code" />
           </div>
           <div class="text-section">
             <p class="text-content">${displayText.value}</p>
@@ -248,7 +359,7 @@ const toggleFullscreen = async () => {
         light: '#ffffff',
       },
     })
-    drawQROnCanvas(fullscreenCanvas.value, fullscreenQR)
+    drawQRWithLogo(fullscreenCanvas.value, fullscreenQR, 400)
   }
 }
 
@@ -259,10 +370,13 @@ const exitFullscreen = () => {
 
 // Print fullscreen with display text
 const printFullscreen = () => {
-  if (!qrCodeData.value) return
+  if (!fullscreenCanvas.value) return
 
   const printWindow = window.open('', '_blank')
   if (!printWindow) return
+
+  // Get the fullscreen canvas with logo as data URL
+  const canvasDataUrl = fullscreenCanvas.value.toDataURL('image/png')
 
   printWindow.document.write(`
     <html>
@@ -322,7 +436,7 @@ const printFullscreen = () => {
       <body onload="window.print(); setTimeout(function(){ window.close(); }, 100);">
         <div class="print-container">
           <div class="qr-section">
-            <img src="${fullscreenCanvas.value?.toDataURL() || qrCodeData.value}" alt="Taskyon QR Code" />
+            <img src="${canvasDataUrl}" alt="Taskyon QR Code" />
           </div>
           <div class="text-section">
             <p class="text-content">${displayText.value}</p>
