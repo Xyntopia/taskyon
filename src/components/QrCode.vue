@@ -145,13 +145,13 @@ const drawQRWithLogo = (canvas: HTMLCanvasElement, qrDataUrl: string, qrSize: nu
     canvas.height = qrImg.height
     ctx.drawImage(qrImg, 0, 0)
 
-    // Create logo overlay
-    const logoSize = Math.floor(qrSize * 0.18) // Slightly smaller logo
+    // Create logo overlay - much smaller circle
+    const logoSize = Math.floor(qrSize * 0.12) // Reduced from 0.18 to 0.15
     const logoX = (canvas.width - logoSize) / 2
     const logoY = (canvas.height - logoSize) / 2
 
-    // Draw white background circle for logo (reduced padding)
-    const padding = 4 // Reduced from 8 to 4
+    // Draw white background circle for logo (minimal padding)
+    const padding = 2 // Reduced from 4 to 2
     const bgRadius = (logoSize + padding * 2) / 2
     ctx.fillStyle = '#ffffff'
     ctx.beginPath()
@@ -164,25 +164,39 @@ const drawQRWithLogo = (canvas: HTMLCanvasElement, qrDataUrl: string, qrSize: nu
     ctx.stroke()
 
     // Load and draw the SVG logo
-    loadSVGLogo((logoDataUrl) => {
-      if (logoDataUrl) {
-        const logoImg = new Image()
-        logoImg.onload = () => {
-          // Save the canvas state
-          ctx.save()
+    loadSVGLogo((logoImg) => {
+      if (logoImg) {
+        // Save the canvas state
+        ctx.save()
 
-          // Create circular clipping path for the logo
-          ctx.beginPath()
-          ctx.arc(canvas.width / 2, canvas.height / 2, logoSize / 2, 0, 2 * Math.PI)
-          ctx.clip()
+        // Create circular clipping path for the logo
+        ctx.beginPath()
+        ctx.arc(canvas.width / 2, canvas.height / 2, logoSize / 2, 0, 2 * Math.PI)
+        ctx.clip()
 
-          // Draw logo maintaining aspect ratio
-          ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize)
+        // Calculate proper dimensions maintaining aspect ratio
+        const aspectRatio = 1.0
+        let drawWidth, drawHeight, drawX, drawY
 
-          // Restore canvas state
-          ctx.restore()
+        if (aspectRatio > 1) {
+          // Logo is wider than tall
+          drawWidth = logoSize
+          drawHeight = logoSize / aspectRatio
+          drawX = logoX
+          drawY = logoY + (logoSize - drawHeight) / 2
+        } else {
+          // Logo is taller than wide
+          drawWidth = logoSize * aspectRatio
+          drawHeight = logoSize
+          drawX = logoX + (logoSize - drawWidth) / 2
+          drawY = logoY
         }
-        logoImg.src = logoDataUrl
+
+        // Draw logo maintaining aspect ratio
+        ctx.drawImage(logoImg, drawX, drawY, drawWidth, drawHeight)
+
+        // Restore canvas state
+        ctx.restore()
       } else {
         // Fallback: draw a simple "T" for Taskyon
         drawFallbackLogo(ctx, logoX, logoY, logoSize)
@@ -193,7 +207,7 @@ const drawQRWithLogo = (canvas: HTMLCanvasElement, qrDataUrl: string, qrSize: nu
 }
 
 // Function to load SVG logo and convert to data URL
-const loadSVGLogo = (callback: (dataUrl: string | null) => void) => {
+const loadSVGLogo = (callback: (img: HTMLImageElement | null) => void) => {
   // Try to load the SVG logo
   fetch('/taskyon_mono_opt.svg')
     .then((response) => {
@@ -207,32 +221,8 @@ const loadSVGLogo = (callback: (dataUrl: string | null) => void) => {
 
       const img = new Image()
       img.onload = () => {
-        const tempCanvas = document.createElement('canvas')
-        const tempCtx = tempCanvas.getContext('2d')
-        if (tempCtx) {
-          // Set canvas size to maintain aspect ratio
-          const aspectRatio = img.width / img.height
-          const canvasSize = 200
-
-          if (aspectRatio > 1) {
-            // Wider than tall
-            tempCanvas.width = canvasSize
-            tempCanvas.height = canvasSize / aspectRatio
-          } else {
-            // Taller than wide
-            tempCanvas.width = canvasSize * aspectRatio
-            tempCanvas.height = canvasSize
-          }
-
-          // Fill with transparent background
-          tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
-
-          // Draw the SVG maintaining its aspect ratio
-          tempCtx.drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height)
-          callback(tempCanvas.toDataURL('image/png'))
-        } else {
-          callback(null)
-        }
+        // Return the image and its original dimensions
+        callback(img)
         URL.revokeObjectURL(url)
       }
       img.onerror = () => {
