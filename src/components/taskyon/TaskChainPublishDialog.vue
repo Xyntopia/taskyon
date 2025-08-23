@@ -19,7 +19,7 @@
   <q-dialog v-model="showDialog">
     <q-card>
       <q-card-section>
-        <div class="text-h5 row items-center no-wrap">
+        <div class="text-h5 row items-center justify-center no-wrap">
           <q-icon class="q-pr-md" :name="matShare" />
           <div>Choose sharing method</div>
         </div>
@@ -41,9 +41,9 @@
               :loading="loadingGdrive"
               @click="onExportPublicGdrive(selectedTaskList)"
             />
-            <div v-else class="text-caption text-center">Gdrive Store & Share:</div>
+            <div v-else class="text-overline text-center q-pb-md">Gdrive Store & Share:</div>
             <q-slide-transition v-if="gdriveLink">
-              <div v-show="gdriveLink" class="column items-center">
+              <div v-show="gdriveLink" class="row q-gutter-md items-center justify-center">
                 <q-btn
                   v-if="canShare"
                   class="q-mb-md"
@@ -52,30 +52,32 @@
                   label="Share via Social Apps"
                   @click="shareViaSocialApps"
                 />
-                <QrCode />
-                <template
-                  v-for="[link, label] in [
-                    [taskyonShareLink, 'Copy taskyon.space link (stored in gdrive)'],
-                    [gdriveLink, 'Copy markdown link'],
-                  ] as Array<[string, string]>"
-                  :key="link"
-                >
-                  <div class="text-caption">OR {{ label }}</div>
-                  <div class="row q-gutter-sm q-py-sm items-center">
-                    <div class="col-auto ellipsis text-weight-medium" style="max-width: 15rem">
-                      {{ link }}
-                      <q-tooltip>{{ link }}</q-tooltip>
+                <QrCode :data="taskyonShareLink" />
+                <div>
+                  <template
+                    v-for="[link, label] in [
+                      [taskyonShareLink, 'Copy taskyon.space link (stored in gdrive)'],
+                      [gdriveLink, 'Copy markdown link'],
+                    ] as Array<[string, string]>"
+                    :key="link"
+                  >
+                    <div class="text-caption">OR {{ label }}</div>
+                    <div class="row q-gutter-sm q-py-sm items-center">
+                      <div class="col-auto ellipsis text-weight-medium" style="max-width: 15rem">
+                        {{ link }}
+                        <q-tooltip>{{ link }}</q-tooltip>
+                      </div>
+                      <div class="col-auto">
+                        <q-btn
+                          flat
+                          dense
+                          :icon="matContentCopy"
+                          @click="copyToClipboard(link || '')"
+                        />
+                      </div>
                     </div>
-                    <div class="col-auto">
-                      <q-btn
-                        flat
-                        dense
-                        :icon="matContentCopy"
-                        @click="copyToClipboard(link || '')"
-                      />
-                    </div>
-                  </div>
-                </template>
+                  </template>
+                </div>
               </div>
             </q-slide-transition>
           </template>
@@ -89,7 +91,7 @@
           >
           </q-btn>
           <template v-if="download">
-            <div class="text-caption col">or download as:</div>
+            <div class="text-overline col text-center">or download as:</div>
             <q-btn
               outline
               :icon="symOutlinedMarkdown"

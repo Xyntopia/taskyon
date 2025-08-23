@@ -35,6 +35,7 @@
     "@scure/bip39": "^1.5.0",
     "@sqlite.org/sqlite-wasm": "^3.44.0-build1",
     "@supabase/supabase-js": "^2.39.0",
+    "@taskyon/taskyon": "^0.0.1",
     "@tauri-apps/api": "^2.6.0",
     "@vueuse/core": "^10.10.0",
     "axios": "^0.21.1",
@@ -71,6 +72,7 @@
     "prettier": "^3.5.3",
     "prismjs": "^1.30.0",
     "pyodide": "^0.24.1",
+    "qrcode": "^1.5.4",
     "quasar": "^2.17.0",
     "sqlocal": "^0.6.2",
     "stopword": "^2.0.8",
@@ -84,8 +86,7 @@
     "vue3-google-login": "^2.0.25",
     "wavefunctioncollapse": "^2.1.0",
     "xlsx": "^0.18.2",
-    "zod": "^4.0.0-beta.20250505T195954",
-    "@taskyon/taskyon": "^0.0.1"
+    "zod": "^4.0.0-beta.20250505T195954"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
@@ -104,6 +105,7 @@
     "@types/markdown-it": "^13.0.7",
     "@types/node": "^20.5.9",
     "@types/prismjs": "^1.26.5",
+    "@types/qrcode": "^1.5.5",
     "@types/stopword": "^2.0.3",
     "@types/uuid": "^10.0.0",
     "@types/wicg-file-system-access": "^2023.10.3",
