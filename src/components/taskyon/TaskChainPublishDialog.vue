@@ -23,6 +23,29 @@
           <q-icon class="q-pr-md" :name="matShare" />
           <div>Choose sharing method</div>
         </div>
+
+        <!-- Task Change Notification Banner -->
+        <q-banner v-if="hasTaskChanged && gdriveLink" class="q-mt-md" dense rounded>
+          <template #avatar>
+            <q-icon :name="matWarning" color="secondary" />
+          </template>
+          <template #action>
+            <q-btn
+              flat
+              dense
+              label="Regenerate"
+              color="orange"
+              :loading="loadingGdrive"
+              @click="regenerateGdriveLink"
+            />
+            <q-btn flat dense :icon="matClose" color="orange" @click="dismissTaskChangeWarning" />
+          </template>
+          <div class="text-body2">
+            The task has changed since the last link was generated.
+            <strong>Consider regenerating</strong> to share the latest version.
+          </div>
+        </q-banner>
+
         <div class="column q-gutter-sm q-pt-md">
           <template v-if="share">
             <q-btn v-if="false" outline :icon="matLink" label="Create Public Link" />
@@ -64,7 +87,9 @@ No one else can access or remove your files without your permission.`"
                   label="Share via Social Apps"
                   @click="shareViaSocialApps"
                 />
-                <QrCode :data="taskyonShareLink" />
+                <div class="column items-center">
+                  <QrCode :data="taskyonShareLink" />
+                </div>
                 <div>
                   <template
                     v-for="[link, label] in [
@@ -98,12 +123,11 @@ No one else can access or remove your files without your permission.`"
             class="lt-sm"
             outline
             :icon="matCopyAll"
-            label="Copy chat as markdown"
+            label="Copy to clipboard"
             @click="onExportChatMD(selectedTaskList, true)"
           >
           </q-btn>
           <template v-if="download">
-            <div class="text-overline col text-center">or download as:</div>
             <q-btn
               outline
               :icon="symOutlinedMarkdown"
@@ -127,7 +151,14 @@ No one else can access or remove your files without your permission.`"
 </template>
 
 <script setup lang="ts">
-import { matShare, matLink, matCopyAll, matContentCopy } from '@quasar/extras/material-icons'
+import {
+  matShare,
+  matLink,
+  matCopyAll,
+  matContentCopy,
+  matWarning,
+  matClose,
+} from '@quasar/extras/material-icons'
 import { copyToClipboard, exportFile } from 'quasar'
 import { ref, computed, watch } from 'vue'
 import {
@@ -176,7 +207,24 @@ const {
 
 const gdriveLink = ref<string>()
 const loadingGdrive = ref(false)
+
+// New state for tracking task changes
+const lastGeneratedTaskId = ref<string>()
+const linkGeneratedAt = ref<Date>()
+const hasTaskChangeWarningDismissed = ref(false)
+
 const taskId = computed(() => (typeof taskOrId === 'string' ? taskOrId : taskOrId.id))
+
+// Computed property to check if task has changed since last link generation
+const hasTaskChanged = computed(() => {
+  return (
+    gdriveLink.value &&
+    lastGeneratedTaskId.value &&
+    taskId.value !== lastGeneratedTaskId.value &&
+    !hasTaskChangeWarningDismissed.value
+  )
+})
+
 const selectedTaskList = asyncComputed(
   async () => {
     const tm = await tystate.getTaskManager()
@@ -194,9 +242,17 @@ const selectedTaskList = asyncComputed(
   [taskId],
 )
 
+// Watch for taskId changes and reset warning dismissal
 watch(
-  () => taskId,
-  () => (gdriveLink.value = undefined),
+  () => taskId.value,
+  (newTaskId, oldTaskId) => {
+    if (newTaskId !== oldTaskId) {
+      hasTaskChangeWarningDismissed.value = false
+      // Only reset gdriveLink if we want to force regeneration
+      // Comment out the line below if you want to keep the old link until manually regenerated
+      // gdriveLink.value = undefined
+    }
+  },
 )
 
 const taskyonShareLink = computed(() => {
@@ -226,12 +282,24 @@ async function onExportPublicGdrive(taskList: TaskNode[]) {
 
         if (gdriveFile.webViewLink) {
           gdriveLink.value = gdriveFile.webViewLink
+          lastGeneratedTaskId.value = taskId.value
+          linkGeneratedAt.value = new Date()
+          hasTaskChangeWarningDismissed.value = false
         }
       }
     }
   } finally {
     loadingGdrive.value = false
   }
+}
+
+async function regenerateGdriveLink() {
+  hasTaskChangeWarningDismissed.value = false
+  await onExportPublicGdrive(selectedTaskList.value)
+}
+
+function dismissTaskChangeWarning() {
+  hasTaskChangeWarningDismissed.value = true
 }
 
 function onExportIpfs(taskId: string) {
