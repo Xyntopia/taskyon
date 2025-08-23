@@ -597,6 +597,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // TODO: we have to change this! we would like to
     TY.port.receive(uiApiInside.send)
 
+    // in GUI applications we can connect gdrive for synchronization purposes!
+    // we don't need any password or anything here, because
+    // gdrive receives already encrypted tasks from our taskyon engine...
     connectGdriveSync(stateRefs.appConfiguration.gdriveDir, TY.port)
 
     console.log('checking if we are in an iframe!')
