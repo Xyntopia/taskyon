@@ -316,7 +316,7 @@ Open the `simpleExample.html` file in your browser. You should see the Taskyon A
 
 ## Additional Information
 
-For more information about Taskyon tools, visit [Taskyon Tools](https://taskyon.space/tools).
+For more information about Taskyon tools, visit [Taskyon Tools](https://taskyon.space/tool).
 
 ## Complete Code Files
 

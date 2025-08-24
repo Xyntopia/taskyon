@@ -80,7 +80,7 @@ describe('taskyon API', () => {
       .should('exist')
       .and('match', /\d+/); // Check if it contains a number*/
 
-    // Check Tool Testsif the estimated tokens element is present and contains a number
+    // Check Tool Tests if the estimated tokens element is present and contains a number
 
     //.and('match', /^\d+/); // Check if it contains a number
 

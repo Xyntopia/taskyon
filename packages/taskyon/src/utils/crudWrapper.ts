@@ -692,7 +692,7 @@ export const withSecretStore = (
     const existingSecrets: SecretData = ((await encryptedCrud.get(id)) as SecretData) || {}
     // Add or update the secret
     existingSecrets[secretName] = secretData
-    // Save the updated secretss
+    // Save the updated secrets
     await encryptedCrud.set(id, existingSecrets)
   }
 

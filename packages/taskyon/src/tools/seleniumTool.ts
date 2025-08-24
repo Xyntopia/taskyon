@@ -129,7 +129,7 @@ export const seleniumBrowser = createTool({
       await closeSession(sessionId);
     }*/
   }) as (arg: Record<string, unknown>) => Promise<unknown>,
-  description: `Webbrowser tool to access and retrieve content from specified webpages, supporting formats such as
+  description: `Web browser tool to access and retrieve content from specified webpages, supporting formats such as
 HTML, PDF, TXT, and JSON.`,
   longDescription: `Uses Selenium WebDriver REST API to browse to a specified webpage and fetch the document content.
 Supports various document formats including HTML, PDF, TXT, JSON, etc.

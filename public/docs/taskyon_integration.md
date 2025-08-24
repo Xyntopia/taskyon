@@ -29,7 +29,7 @@ We provide solutions to handle this securely, which we'll explore in the followi
 
 ### Useful Hints
 
-- You can make use ofthe "appConfiguration" settings for debugging purpose.
+- You can make use of the "appConfiguration" settings for debugging purpose.
   When taskyon is loaded i an iframe, it displays in a "minimal" mode tailored
   for webpage integration. By setting `guiMode: 'default'` you can prevent this.
   You can also automatically turn on "expert mode" in order to be able to debug prompts.
@@ -94,7 +94,7 @@ And connect taskyon to your app using minimal provided boilerplate code.
 
 Check the example below for how to do this.
 
-<!--TODO: provide a link to where you can download that bilerplate code from taskyon itself..  prefilled with the correct cofiguration...-->
+<!--TODO: provide a link to where you can download that boilerplate code from taskyon itself..  prefilled with the correct configuration...-->
 
 ### Examples and Use Cases
 

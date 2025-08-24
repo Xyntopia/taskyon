@@ -60,7 +60,7 @@
         accept="image/*,text/*,.pdf,application/*" capture="environment" />
       <div class="row items-stretch q-gutter-x-xs">
         <q-btn class="col-3" color="primary" text-color="white" stack @click="filePicker?.pickFiles()">
-          <div clas="row">
+          <div class="row">
             <q-icon :name="matUploadFile" />
             <q-icon :name="matAddAPhoto" />
           </div>
@@ -210,7 +210,7 @@ function onInputChange(e: Event) {
 
 // paste listener
 const handlePaste = (e: ClipboardEvent) => {
-  console.log('paste event occured!! :)', e)
+  console.log('paste event occurred!! :)', e)
   if (!props.enablePaste) return
   const items = e.clipboardData?.items
   if (!items) return

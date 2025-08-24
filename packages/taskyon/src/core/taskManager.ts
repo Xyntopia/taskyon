@@ -174,7 +174,7 @@ async function useTaskVectors(
   }
 
   // TODO: make sure, we also stringify tool calls etc...
-  // TODO: tryto get rid of unnecessary characters in the string...
+  // TODO: try to get rid of unnecessary characters in the string...
   //       e.g. remove parenthesis from json etc..
   const task2Str = (t: Partial<TaskNode>) => JSON.stringify(t.content)
 
@@ -198,7 +198,9 @@ async function useTaskVectors(
   }
 
   /**
-   * So here we use q ManogQuery "query", which we can use to pre-filter our vector search.
+   * So here we use q MangoQuery "query", which we can use to pre-filter our vector search.
+   *
+   *
    *
    * @param searchTerm
    * @param query
@@ -287,7 +289,7 @@ export function createToolIndex(getTask: (id: string | number) => Promise<TaskNo
       const toolDef = ToolBase.safeParse(task.content.data)
       if (toolDef.success) {
         const oldToolId = toolIndex.get(toolDef.data.name)
-        // of old tool already exists, we need tocheck which one is newer
+        // of old tool already exists, we need to check which one is newer
         // and only update if the new one is newer than the old one
         if (oldToolId) {
           const oldTool = await getTask(oldToolId)
@@ -670,7 +672,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
     isLastTask: boolean,
   ): Promise<string[]> {
     if (maxFollow <= 0) return []
-    // get all leaf children from prior task but onyl if we are not the last task..:
+    // get all leaf children from prior task but only if we are not the last task..:
     const taskAndChildren: string[] = [taskId]
     if (!isLastTask) {
       const leafs = await getTaskResults(taskId)
@@ -678,14 +680,14 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
         const childChain = await getFlattenedChain(leafs[0], maxFollow - 1, taskId, true, false)
         taskAndChildren.push(...childChain)
       } else if (!onlyFirstChild) {
-        // TODO: enable some method how we can merge multiple parellel subtask chains. E.g. only take the last message
-        // results or someting like that. Or assume, that we hade a "merger"
+        // TODO: enable some method how we can merge multiple parallel subtask chains. E.g. only take the last message
+        // results or something like that. Or assume, that we hade a "merger"
         // task which summarizes the results of some sort...
         throw new Error('we can not use multi task results yet!')
       }
     }
 
-    // newMaxFollow will always be at max `maxFollow-1` because taskAnscDhilren includes the current TaskId.
+    // newMaxFollow will always be at max `maxFollow-1` because taskAndChildren includes the current TaskId.
     const newMaxFollow = maxFollow - taskAndChildren.length
 
     // we don't get children from this task, only from prior ones...
@@ -731,7 +733,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
 
   async function deleteAllTasks() {
     // TODO: also delete vectordb! (will be done automatically, once we transition to pglite)
-    // TODO: manually re-initiailized taskyondb after remove...
+    // TODO: manually re-initialized taskyondb after remove...
     await resetTaskVectors()
     await taskDb.clear()
     await metaDb.clear()
@@ -867,6 +869,8 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
   }
 
   // import tasks from json! :)
+  // TODO: remove this function and replace this with a list of tasknode json functions!!
+  //       we want to get rid of our rxdb dependency here... we could even backup tass as markdown!  that might be even better :)
   async function addTaskBackup(jsonObjString: string) {
     const jsonObj = JSON.parse(jsonObjString)
     if (Array.isArray(jsonObj)) {

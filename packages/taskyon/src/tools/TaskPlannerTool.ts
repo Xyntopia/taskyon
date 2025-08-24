@@ -15,7 +15,7 @@ export const taskSearcher = (taskManager: TyTaskManager) =>
         searchString: {
           type: 'string',
           default: undefined,
-          description: `Use a searchstring which is similar to the task you want to find.`,
+          description: `Use a search string which is similar to the task you want to find.`,
         },
         k: {
           type: 'number',

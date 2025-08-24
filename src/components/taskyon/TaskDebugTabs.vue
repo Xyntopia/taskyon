@@ -70,7 +70,7 @@ const taskChoice = computed(() => {
     return (taskMeta.value?.rawOutput as { choice: ChatResponseType['choices'][0] }).choice?.message
       .content
   } catch {
-    return '<no chatcompletion output avaailable>'
+    return '<no chatcompletion output available>'
   }
 })
 

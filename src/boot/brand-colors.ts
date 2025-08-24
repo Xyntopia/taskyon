@@ -68,7 +68,7 @@ export default defineBoot(() => {
   })
   //setCssVar('primary', primary)
   //setCssVar('secondary', secondary)
-  // we have to use "rgb" colors, in order to make them usbale in sass :)
+  // we have to use "rgb" colors, in order to make them usable in sass :)
   setColors(primary, secondary)
   //setCssVar('dark-shadow-color', '#FF0000')
   //setCssVar('primary', '#00fff0', document.body);

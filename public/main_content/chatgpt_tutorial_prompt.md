@@ -11,7 +11,7 @@ browser-based vector store. makes vector stores for giving  generative AI/LLMs a
 - easy compliance due to data stored client-side, in browser
 - scalable
 - no installation, works out of the box.
-- large amounts of data (essentially unlimited. chrome & firefox typicall 80% of available disk space)
+- large amounts of data (essentially unlimited. chrome & firefox typically 80% of available disk space)
 - document upload (pdf/txt/md/docx are already supported, and more to come)
 - protects your data
 - 0 costs.
@@ -33,6 +33,6 @@ split the documentation in:
 - a longer section with more details, and explanations which is more meant to be understood by experts
 
 ### subtask:
-- Before writing the documentation, infer several cool features of this database from the given bulletpoints Write this down as a list forst, before writing the documentation
+- Before writing the documentation, infer several cool features of this database from the given bulletpoints Write this down as a list first, before writing the documentation
 - Before starting the documentation come up with some use-cases (include giving ChatGPT LLM context by creating context from chatprompts)
-- Be concise, but include all points mentioned above, can be shortened if somthing is duplicate information. Don't leave out details.
+- Be concise, but include all points mentioned above, can be shortened if something is duplicate information. Don't leave out details.

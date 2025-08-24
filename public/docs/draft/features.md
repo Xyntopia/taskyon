@@ -3,7 +3,7 @@
 - load markdown content
 - export markdown content
 - mathjax
-- mermaid graphcs
+- mermaid graphics
 - javascript code execution
 - python code execution
 - open pdf, text and word files
@@ -17,7 +17,7 @@
 
 ## settings:
 
-TOOD: generate using ZoD
+TODO: generate using ZoD
 
 ## integration features
 

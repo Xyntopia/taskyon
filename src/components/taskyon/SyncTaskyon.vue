@@ -243,8 +243,8 @@ and verify the authenticity of messages sent by other users."
             @click="onRequestTauriStorageReset"
           >
             <q-tooltip>
-              Clears Tauri WebView storage (IndexedDB, LocalStorage, CacheStorage, WebKitCache)
-              and exits the app. Cleanup is applied on next launch.
+              Clears Tauri WebView storage (IndexedDB, LocalStorage, CacheStorage, WebKitCache) and
+              exits the app. Cleanup is applied on next launch.
             </q-tooltip>
           </q-btn>
         </q-item-section>

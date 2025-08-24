@@ -22,7 +22,7 @@
           <q-icon :name="matWarning" size="md" />
           <p v-if="mode === 'settings'">Warning: Reset all Taskyon Settings</p>
           <p v-else-if="mode === 'tasks'">Warning: Delete Taskyon Chat Data</p>
-          <p v-else>Warning: Completly Wipe out all Taskyon Data</p>
+          <p v-else>Warning: Completely Wipe out all Taskyon Data</p>
         </div>
       </q-card-section>
       <q-card-section class="q-pt-none">

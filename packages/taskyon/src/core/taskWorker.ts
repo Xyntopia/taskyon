@@ -195,7 +195,7 @@ function createTaskTracker(tm: TyTaskManager) {
   }*/
 
   // TODO: speed up this function by tracking the unfinished subtasks...
-  //       every time a subtask finished, we should activly decrease the number of of unfinished
+  //       every time a subtask finished, we should actively decrease the number of of unfinished
   //       subtasks that its parent has.
   //       so basically, whenever some subtask chain finishes, it should propagate this information
   //       to its parent task somehow..
@@ -227,7 +227,7 @@ function createTaskTracker(tm: TyTaskManager) {
         await Promise.all(Array.from(childrenIDs, async (id) => await tm.findSiblingLeafTasks(id)))
       ).flat()
 
-      // now iterativly check again starting from each leaf task, if they're finished...
+      // now iteratively check again starting from each leaf task, if they're finished...
       const leafTasksFinished = await Promise.all(
         leafTasks.map((id) =>
           isTaskFinishedCached(id).then((finished) => {
@@ -248,7 +248,7 @@ function createTaskTracker(tm: TyTaskManager) {
     }
   }
 
-  // this function recursivly checks if a task is finished
+  // this function recursively checks if a task is finished
   async function isTaskFinished(taskId: string): Promise<boolean> {
     const task = await tm.getTask(taskId)
     if (!task) throw new Error('Task not found!')
@@ -323,7 +323,7 @@ function createHandleError(
     if (errorCount >= maxAutonomousTasks) {
       // TODO: somehow put this into an error tasknode...
       // TODO: also add any taskWorkerController interrupt in an error tasknode..
-      stopAllTasks(`Too many errors occured, interrupting execution after ${errorCount} errors!`)
+      stopAllTasks(`Too many errors occurred, interrupting execution after ${errorCount} errors!`)
     }
 
     const debugInfo = createDebugInfoFromError(error)
@@ -406,7 +406,7 @@ const createTaskProcessor = (
       }
 
       // we don't need to process tasks which aren't a function...
-      // we also don'tasksInProgresst need to push them back in the queue...
+      // we also don't need tasksInProgress to push them back in the queue...
       // we also don't need to add the task as the "last" task in the GUI
       // because they will automatically be called as soon as the
       if (task.content.type !== 'functioncall') {
@@ -414,8 +414,8 @@ const createTaskProcessor = (
         return // early return, because this task is not a functioncall task
       }
 
-      // signal to the outside world that we sare processing a task
-      // this signals to the GUI that this task is activly being processes.
+      // signal to the outside world that we are processing a task
+      // this signals to the GUI that this task is actively being processes.
       // this is for example important to signal which stream should be displayed and
       // which task to choose as the "leaf" of a chain.
       streamEmit({ stage: 'processing', task })
@@ -441,7 +441,7 @@ const createTaskProcessor = (
           ],
         ]
 
-        // we can immediatly persist all of our tasks here to the taskManager, as
+        // we can immediately persist all of our tasks here to the taskManager, as
         // they're immutable and won't change anymore..
         newTasks = await Promise.all(
           partialTasks.map((taskChain) => taskManager.addTaskChain(taskChain, undefined, task.id)),
@@ -641,12 +641,12 @@ export function runTaskWorker(
     currentTaskCtrl?.abort(message)
     // in case of any errors, especially if its an interrupt event we simply want to cancel everything :P
     // empty our task queue :)
-    // TODO:  not sure, if we need this here, becaise we are already giving the "currentTaskCtrl" a rason
+    // TODO:  not sure, if we need this here, because we are already giving the "currentTaskCtrl" a reason
     // which gets streamed at a later stage...
     taskProcessingStream.emit({ stage: 'aborted', info: message })
   }
 
-  // we have put all our dependencies in re-startable workers.
+  // we have put all our dependencies in restartable workers.
   // if anyone calls the "workerStop" the function wil simply re-start the worker
   // as soon as a new task was added....
   const externalQueueTask = (id: string) => {

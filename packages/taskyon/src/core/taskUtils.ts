@@ -82,7 +82,7 @@ export function processMarkdown(markdown: string) {
   return tasks
 }
 
-// converts an antire taskchain (thread) into yaml
+// converts an entire taskchain (thread) into yaml
 export function chatToYaml(taskList: TaskNode[]) {
   const fileContent = safeYamlDump(taskList)
   return fileContent
@@ -108,7 +108,7 @@ export const task2Md = (t: TaskNode, fullMeta = false) => {
   return yamlMeta + message
 }
 
-// converts an antire taskchain (thread) into markdown
+// converts an entire taskchain (thread) into markdown
 export function chat2Md(taskList: TaskNode[], fullMeta = false) {
   console.log('convert Chat to markdown!')
   //convert into a list of markdown strings

@@ -294,7 +294,7 @@ export async function extractKeywords(
 
   // Filter out stopwords and select top N keywords
   const keywords = wordSimilarities
-    //TODO: renable: .filter(({ word }) => !sw.eng[word])
+    //TODO: reenable: .filter(({ word }) => !sw.eng[word])
     .slice(0, numKeywords)
     .map(({ word }) => word)
 

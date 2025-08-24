@@ -57,7 +57,7 @@ Taskyon is actively developed with a commitment to open-source principles, ensur
 
 **Can you elaborate on the types of function tasks that can be executed? Are there predefined templates or examples?**
 
-Function tasks are frontend-driven, facilitating scalability and security. Tasks range from simple JSON configuration to complex tool generation. Templates can be found here: [https://taskyon.space/tools](https://taskyon.space/tools).
+Function tasks are frontend-driven, facilitating scalability and security. Tasks range from simple JSON configuration to complex tool generation. Templates can be found here: [https://taskyon.space/tool](https://taskyon.space/tool).
 
 **How flexible is the interface for creating and managing custom function tasks?**
 
@@ -111,11 +111,11 @@ Taskyon supports dynamic tool generation primarily in JavaScript:
 
 **How can webpage owners integrate Taskyon into their sites? Are there specific scripts or APIs provided for this integration?**
 
-- By including taskyon as an iframe. Taskyon does NOT require you to run any backend for AI! It can be _completly_ configured from the html code of your app (E.g. pure js, ts, vue/react/svelte/angular there are no restrictions on frameworks ).
-- example code is given here: [https://taskyon.space/tools](https://taskyon.space/tools).
+- By including taskyon as an iframe. Taskyon does NOT require you to run any backend for AI! It can be _completely_ configured from the html code of your app (E.g. pure js, ts, vue/react/svelte/angular there are no restrictions on frameworks ).
+- example code is given here: [https://taskyon.space/tool](https://taskyon.space/tool).
 - A webpage configures taskyon through the iframe. E.g. configure rate limits, and restrictions on which LLM to use.
 - A webpage declares functions/tools to taskyon which taskyon can then call when users interact with it. Through this
-  mechamism taskyon can essentially interact with any part of the webpage.
+  mechanism taskyon can essentially interact with any part of the webpage.
 - Security is maintained through the browsers sandboxing mechanisms. Taskyon wil be run in its own context for every webpage which calls it in an iframe. This prevents X-site attacks.
 - taskyon only has access to the functions it was explicitly given access to.
 
@@ -123,7 +123,7 @@ Taskyon supports dynamic tool generation primarily in JavaScript:
 
 Taskyon integration adheres to standard iframe security practices:
 
-- Check [https://taskyon.space/tools](https://taskyon.space/tools)
+- Check [https://taskyon.space/tool](https://taskyon.space/tool)
 - Embedded Taskyon instances operate within isolated iframes, preventing cross-site scripting and maintaining data security.
 - Taskyon interacts solely with functions explicitly granted access by the hosting webpage.
 

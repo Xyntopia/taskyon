@@ -38,13 +38,13 @@ export async function executeScript(
     let stdout_content = ''
 
     // wait for pyodide to unlock and then acquire the lock
-    // the lock will automatically get destroyed once the funciton runs out of scope & is destroyed...
+    // the lock will automatically get destroyed once the function runs out of scope & is destroyed...
     // the reason why we need to do this, is because we are using the same PyodideInterface for
     // all executed code and they would otherwise share stdout. So in order to make sure the
     // stdout lands in the "right place" we need to lock it as we are using async code....
     // TODO:   the only way how we can handle this might be by declaring different stdout contexts
     //         within each python script.... Because it would be great to be able to run
-    //         multiple pyhton functions in parallel...
+    //         multiple python functions in parallel...
     const unlock = await stdOutLock.lock()
     pyodide.setStdout({
       batched: (str: string) => {
@@ -123,4 +123,4 @@ function convertRes2Js(result: unknown) {
 
 // you can download the releases from here:
 // url: https://github.com/pyodide/pyodide/releases
-// this gives us the chnce to package packages our own way :)
+// this gives us the chance to package packages our own way :)

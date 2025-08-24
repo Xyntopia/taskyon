@@ -181,7 +181,7 @@ export async function handleFunctionExecution(
   console.log(toolDefaultParams)
   if (tool.function) {
     console.log('using tool!', tool)
-    // TODO: try longterm, to get rid of "internal" functions.. not yet sure how to do this..
+    // TODO: try long-term, to get rid of "internal" functions.. not yet sure how to do this..
     //       maybe have tools with privileged access?
     funcR = await tool.function(execFunc.arguments, context)
   } else if (tool.code) {

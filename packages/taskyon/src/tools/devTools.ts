@@ -113,7 +113,7 @@ const getGitlabInfo = createTool({
  * First call :  ↳ (a) ensure we have an access‑token
  *                    – if not, schedule ensureOauthLogin, then re‑run
  *                ↳ (b) fetch projects and render checklist UI
- * Second call:  waits for postMessage → summarises the chosen issues
+ * Second call:  waits for postMessage → summarizes the chosen issues
  */
 export const issueListGenerator = createTool({
   name: 'issueListGenerator',

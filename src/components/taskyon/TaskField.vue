@@ -42,7 +42,7 @@
           @click="expandMessageContent = !expandMessageContent"
         >
           <!--task header-->
-          <!--we need "col" here in roder to make sure, the div stretches..-->
+          <!--we need "col" here in order to make sure, the div stretches..-->
           <div class="text-caption col">
             <slot name="header"></slot>
           </div>

@@ -53,8 +53,12 @@ test/cypress/screenshots
 cypress.env.json
 .aider*
 
-# here we compile public libraries that other poeple might want to use for taskyon:
+# here we compile public libraries that other people might want to use for taskyon:
 public/lib
+
+# these files hold settings and configurations
+.history/
+
 public/msl
 public/modelica-libraries
 public/modelica-compare

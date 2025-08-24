@@ -2,7 +2,7 @@
 import { defineConfig } from 'vite'
 import path from 'path'
 import esbuild from 'esbuild'
-//import dts from 'unplugin-dts/vite' // no advatnage currently over the native vite-plugin-dts
+//import dts from 'unplugin-dts/vite' // no advantage currently over the native vite-plugin-dts
 //import dtsBundleGenerator from 'unplugin-dts-bundle-generator/vite'
 //import dts from 'vite-plugin-dts'
 //import dts from 'rollup-plugin-dts'
@@ -42,7 +42,7 @@ export default defineConfig({
       declarationOnly: false, // only the d.ts. file.
       clearPureImport: true, // removes unused pure imports
     }),*/
-    /* use the following to inclde "everything :)"
+    /* use the following to include "everything :)"
       insertTypesEntry: true,
       rollupTypes: true,
       copyDtsFiles: false, // Important for single file output

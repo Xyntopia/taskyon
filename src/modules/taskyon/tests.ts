@@ -2019,7 +2019,7 @@ export async function testTaskIdHashing() {
 
 export async function markdownGeneration() {
   const ty = await tystate.taskyon
-  // first load the chat as mardown
+  // first load the chat as markdown
   const yamlContent = await getTextFile('/tests/test_conversation.yaml')
   const lastLoadedTaskId = await ty.loadYamlConversation(yamlContent)
   //const newTaskId = await state.addMdTasks(markdownContent, undefined);

@@ -135,7 +135,7 @@ export const quasarDialogTool = createTool({
         ? {
             ...(rawOptions as QDialogSelectionPrompt),
 
-            // auto-initialise model if caller omitted it
+            // auto-initialize model if caller omitted it
             model:
               (rawOptions as QDialogSelectionPrompt).model ??
               ((rawOptions as QDialogSelectionPrompt).type === 'radio'

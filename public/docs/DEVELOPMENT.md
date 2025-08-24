@@ -119,8 +119,8 @@ way to enhance your app or webpage with AI functionality. For more information c
 
 [taskyon integration](./docs/taskyon_integration)
 
-Aditionally, we encourage to write code examples for taskyon client susing typescript. Check out the
-"tyCientExamples" directory for this. It includes a taskyon client library in public/lib which
+Additionally, we encourage to write code examples for taskyon client using typescript. Check out the
+"tyClientExamples" directory for this. It includes a taskyon client library in public/lib which
 you can build using
 
 ```
@@ -392,7 +392,7 @@ In VS Code, we use "prettier" for all formatting options...
 
 ## Nix Flake
 
-Taskyon provides a Nix flake (flake.nix) as a development environment which can be used to provide a consistent deveopment environment for taskyon.
+Taskyon provides a Nix flake (flake.nix) as a development environment which can be used to provide a consistent development environment for taskyon.
 
 ## Debugging
 

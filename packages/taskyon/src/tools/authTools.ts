@@ -61,8 +61,8 @@ export const createOAuthTool = (
   return createTool({
     name: 'ensureOauthLogin',
     description: `Ensure, that we have an oauth token for the calling tool.`,
-    longDescription: `Checks if we have an OAuth token available for spcified service. Otherwise
-display a login button in order to get an access token. Currently tested sevices are:
+    longDescription: `Checks if we have an OAuth token available for specified service. Otherwise
+display a login button in order to get an access token. Currently tested services are:
 
 working:
 - gitlab

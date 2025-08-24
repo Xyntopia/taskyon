@@ -1,6 +1,6 @@
 # Taskyon
 
-<img align="left" src="/public/taskyon_fancy_logo.png" onerror="this.onerror=null; this.src='/taskyon_fancy_logo.png';" alt="Taskyon Fancy Logo" width="200" style="padding-right: 50px;"/>
+<img align="left" src="/taskyon_fancy_logo.png" onerror="this.onerror=null; this.src='/taskyon_fancy_logo.png';" alt="Taskyon Fancy Logo" width="100" style="padding-right: 30px;width: 175px;padding-left: 20px;height: 125px;">
 
 - 🌳✅ Task Trees
 - 🌐🔗 Seamless Web Integration
@@ -44,7 +44,7 @@ You can find an alternative documentation here: [![Ask DeepWiki](https://deepwik
 
 🤖 **Individualized AI Bots:** Every user deserves a personal AI that learns from direct, human-centric interaction and evolves to become an expert assistant for their specific context.
 
-👥🛠️ **User-Driven Evolution:** Users often have more task-specific insights and drive the AI's development through feedback and real-world expertise. This democratisation of capability ensures tools and workflows mirror actual needs, not developer assumptions.
+👥🛠️ **User-Driven Evolution:** Users often have more task-specific insights and drive the AI's development through feedback and real-world expertise. This democratization of capability ensures tools and workflows mirror actual needs, not developer assumptions.
 
 🚫📱 **Apps Aren't Needed Anymore:** By viewing tasks —not apps— as the core unit:
 
@@ -118,7 +118,7 @@ Local processing inherently reduces exposure:
 
 - _P2P Task Synchronization:_ Collaborate peer-to-peer on shared task trees.
 - _Desktop App:_ Nearly ready for cross-platform installation.
-- _Taskyon Server:_ Run tasks completly autonomous in the background.
+- _Taskyon Server:_ Run tasks completely autonomous in the background.
 
 ## Contributing
 

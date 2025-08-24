@@ -50,7 +50,7 @@ const ToolResultBase = z
   .object({
     'describe your thoughts': answer,
     'was there an error?': yesno,
-    'was the tool call successfull?': answer.or(yesno),
+    'was the tool call successful?': answer.or(yesno),
     'should we use a different tool?': answer.or(yesno),
     'should we use different parameters': yesno,
     'try again': yesno,

@@ -2,11 +2,11 @@
   <FadeAwayScrollPage class="q-gutter-xs q-pa-xs">
     <q-btn flat :percentage="syncProgress" :icon="mdiRefresh" @click="onUpdateSearchIndex">
       update search index {{ syncProgressString }}
-      <q-tooltip>Re-index all taskyon nodes! (Depending on size this mght take a while)</q-tooltip>
+      <q-tooltip>Re-index all taskyon nodes! (Depending on size this might take a while)</q-tooltip>
     </q-btn>
     <q-btn flat :icon="mdiDatabaseRemove" @click="onResetSearchIndex">
       clear search index
-      <q-tooltip>This will delete the search index completly</q-tooltip>
+      <q-tooltip>This will delete the search index completely</q-tooltip>
     </q-btn>
     <q-btn
       v-if="state.appConfiguration.expertMode"

@@ -9,7 +9,7 @@ For end-to-end workflow patterns (entry nodes, tool chains, return tasks), see:
 
 ## Built-In tools
 
-- **chatCompletion**: This function automatically takes the previous task chain as an input, converts it into a list of messages which an LLM can understand and returns new tasks for further processing of the result. It connects to chat completion APIs in the background and can handle all the relevant things: upload of files/images, function excution, structured data response etc..
+- **chatCompletion**: This function automatically takes the previous task chain as an input, converts it into a list of messages which an LLM can understand and returns new tasks for further processing of the result. It connects to chat completion APIs in the background and can handle all the relevant things: upload of files/images, function execution, structured data response etc..
 - **toolSearcher**
 - **toolCreationWizard**
 - **executePython**
@@ -19,7 +19,7 @@ For end-to-end workflow patterns (entry nodes, tool chains, return tasks), see:
 ### Context
 
 All taskyon functions have access to the _tree context_ of the node that is currently processed.
-This means, they will get a list of the predecessing chain of tasknodes. Taskyon extracts this chain from the tree by walking through priorIDs/parent IDs upwards. Siblings which are linked through their priorIDs can have their own subchains and we are using a recursive flatmap operation to flatten them in order to create the context for the current taskNode.
+This means, they will get a list of the preceding chain of tasknodes. Taskyon extracts this chain from the tree by walking through priorIDs/parent IDs upwards. Siblings which are linked through their priorIDs can have their own subchains and we are using a recursive flatmap operation to flatten them in order to create the context for the current taskNode.
 
 ## Tool Categories
 
@@ -30,19 +30,19 @@ Taskyon tools are modular components that perform specific tasks or functions, c
 3. **Sandboxed Tools**: User-created or external tools executed in a secure iframe sandbox.
 4. **Out-of-the-Box Tools**: Pre-defined tools ready for immediate use.
 
-### Context awarenewss
+### Context awareness
 
 ## Tool Management
 
 ### Adding New Tools
 
-Users can add custom tools through the [Tools Manager](/tools), where they can create, edit, and delete tools.
+Users can add custom tools through the [Tools Manager](/tool), where they can create, edit, and delete tools.
 
 Check here for more examples: [Tool Examples](/tool_examples.md)
 
 #### Best Practice
 
-- Tools should try to always return a value. This give taskyon the feedback whether a tool was succesful or not.
+- Tools should try to always return a value. This give taskyon the feedback whether a tool was successful or not.
   for example in the function below instead of simply zooming in to the location, we return a string
   based on the success of the function.
 
@@ -104,7 +104,7 @@ Here we address the AI directly and also describe the context of this function i
 #### Tool Errors
 
 Taskyon can correct errors made in the tool parameters (e.g. buggy python code, or something else...).
-In order for this to work well it is activly envcouraged to throw "expressive" error messages in your code wherever possible. Always keep in mind that taskyon will use the error message in order to correct
+In order for this to work well it is actively encouraged to throw "expressive" error messages in your code wherever possible. Always keep in mind that taskyon will use the error message in order to correct
 itself. So it makes sense to describe exactly and precisely what happened.
 
 ### AI-Assisted Tool Creation
@@ -234,4 +234,4 @@ This code dynamically loads Lodash and uses its `chunk` method.
 
 ---
 
-Taskyon’s sandbox ensures that using third-party libraries is both secure and straightforward. For more information and to start creating your own tools, visit the [Tools Manager](/tools).
+Taskyon’s sandbox ensures that using third-party libraries is both secure and straightforward. For more information and to start creating your own tools, visit the [Tools Manager](/tool).

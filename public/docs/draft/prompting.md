@@ -18,7 +18,7 @@ User profile:
 - most of my apps are based on vue3/quasar with typescript and webpack.
 - in quasar use "setup" option-components with typescript!
 - assume I know how to do installation of js packages etc...  concentrate on the code itself
-- I am a pro progammer with 20+ years of exprience in c++, python, js, nix, linux, 3d stuff and many more things..   don't show me the basics of a lot of stuff unless I explicitly ask for it...```
+- I am a pro programmer with 20+ years of experience in c++, python, js, nix, linux, 3d stuff and many more things..   don't show me the basics of a lot of stuff unless I explicitly ask for it...```
 The user provided the additional info about how they would like you to respond:
 ```- try to keep it short
 - I want to know if something is a bad idea...

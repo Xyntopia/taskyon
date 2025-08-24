@@ -19,7 +19,7 @@ To integrate Taskyon into your webpage, you will need to create an iframe elemen
 
 ### Example Configuration
 
-CHeck out this link for taskyons default confguration on this server: [/taskyon_settings.json](/taskyon_settings.json)
+CHeck out this link for taskyons default configuration on this server: [/taskyon_settings.json](/taskyon_settings.json)
 
 ### Conclusion
 

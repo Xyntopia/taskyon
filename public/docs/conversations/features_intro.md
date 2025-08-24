@@ -1,18 +1,18 @@
 <!--taskyon
-name: Showcase Taskyons features
+name: Showcase Taskyon's features
 role: "user"
 label: ["discard", "docs"]
 
 -->
 
-Can you showcase some of Taskyons features?
+Can you showcase some of Taskyon's features?
 
 ---
 
 <!--taskyon
 role: assistant
 label: ["discard", "docs"]
-name: Showcase Taskyons features
+name: Showcase Taskyon's features
 -->
 
 I'd be happy to showcase some of my features.

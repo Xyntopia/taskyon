@@ -322,7 +322,7 @@ const currentnewTask = computed(() => {
     if (state.createTaskType.type === 'functioncall') {
       // here we have a function task ;)
       task.role = 'function'
-      // we do this to make suere we *only* have a functionCall and not a message
+      // we do this to make sure we *only* have a functionCall and not a message
       // or other things as well...
       task.content = {
         type: 'functioncall',
@@ -414,7 +414,7 @@ async function addNewTask(p2pTopic?: string, webSearch?: boolean) {
 
   const fileTaskObj = await createFileTask(fileAttachments.value)
 
-  // we are creating new taskchain accordig to what the user wants ;)
+  // we are creating new taskchain according to what the user wants ;)
   // sometimes its several tasks in one go...
   const newTaskChain: partialTaskDraft[] = []
 
@@ -423,7 +423,7 @@ async function addNewTask(p2pTopic?: string, webSearch?: boolean) {
     newTaskChain.push(fileTaskObj)
   }
 
-  // execute: if true, we immediatly queue the task for execution in the taskManager
+  // execute: if true, we immediately queue the task for execution in the taskManager
   //          otherwise, it won't get executed but simply saved into the tree
   console.log('adding new task...')
   if (!currentnewTask.value) throw new Error('No task to add!')
