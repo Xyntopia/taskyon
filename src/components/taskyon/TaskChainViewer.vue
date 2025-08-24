@@ -76,19 +76,22 @@
     </template>
     <!--Render tasks which are in progress-->
     <div class="task-logs q-py-sm">
-      <tyMarkdown
+      <template
         v-if="
           currentMessageStream?.length === 0 &&
           currentThinkingStream &&
           currentThinkingStream.length > 0
         "
-        no-line-numbers
-        no-mermaid
-        :src="'THINKING:\n' + currentThinkingStream?.split('\n').slice(-20).join('\n')"
-        class="text-caption"
-        style="font-size: 0.8rem"
       >
-      </tyMarkdown>
+        <div class="text-caption">THINKING:</div>
+        <tyMarkdown
+          no-line-numbers
+          no-mermaid
+          :src="currentThinkingStream?.split('\n').slice(-20).join('\n')"
+          class="text-caption"
+          style="font-size: 0.8rem; max-height: 300px"
+        />
+      </template>
       <q-card
         v-if="
           !!tystate.lastTaskState.get(currentTask.id) &&
