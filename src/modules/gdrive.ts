@@ -303,19 +303,6 @@ async function findFolderInParent(name: string, parentId: string, accessToken: s
   return data.files?.[0]?.id ?? null
 }
 
-const createFolderInParent = async (name: string, parentId: string, accessToken: string) =>
-  (await pushFile(parentId, { foldername: name }, accessToken)).id
-
-async function ensurePathExists(path: string, accessToken: string): Promise<string> {
-  const parts = path.split('/').filter(Boolean)
-  let parentId = 'root'
-  for (const part of parts) {
-    const existing = await findFolderInParent(part, parentId, accessToken)
-    parentId = existing ?? (await createFolderInParent(part, parentId, accessToken))
-  }
-  return parentId
-}
-
 async function findPathId(path: string, accessToken: string): Promise<string | null> {
   const parts = path.split('/').filter(Boolean)
   let parentId = 'root'
@@ -415,7 +402,13 @@ async function pushFile(
 
 // use this everywhere you need to *create or get* a nested folder id
 async function ensureDirectoryExists(directoryPath: string, accessToken: string) {
-  return ensurePathExists(directoryPath, accessToken)
+  const parts = directoryPath.split('/').filter(Boolean)
+  let parentId = 'root'
+  for (const part of parts) {
+    const existing = await findFolderInParent(part, parentId, accessToken)
+    parentId = existing ?? (await pushFile(parentId, { foldername: part }, accessToken)).id
+  }
+  return parentId
 }
 
 // if you only want to *find* (no create):
@@ -462,10 +455,6 @@ const findFileOrDirectoryId = asyncLruCache(200)(gdrivefindFileOrDirectoryId)
 
 /**
  * Check out this link here for all options:  https://developers.google.com/drive/api/reference/rest/v3/permissions?authuser=2
- *
- * @param fileId
- * @param accessToken
- * @returns
  */
 async function makeFilePublic(fileId: string, accessToken: string) {
   const url = `https://www.googleapis.com/drive/v3/files/${fileId}/permissions`
