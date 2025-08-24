@@ -146,7 +146,10 @@
     </q-page-sticky>
     <!--Task Chat Control Buttons-->
     <q-page-sticky position="bottom-right" :offset="[10, bottomPadding + 5]">
-      <TaskControlButtons @scroll-to-thread-end="scrollToThreadEnd" />
+      <TaskControlButtons
+        :show-bottom-scroll-lock="!state.lockBottomScroll"
+        @scroll-to-thread-end="scrollToThreadEnd"
+      />
     </q-page-sticky>
     <!-- Popup Messages -->
     <q-dialog v-model="showPopupMessage" persistent>
@@ -305,7 +308,6 @@ Please check the path and try again.
     state.setSelectedTask(newTaskId)
   } else if (typeof route.query.t === 'string') {
     state.setSelectedTask(route.query.t)
-    state.lockBottomScroll = true
   }
 }
 
