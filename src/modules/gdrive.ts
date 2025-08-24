@@ -377,7 +377,11 @@ function escapeForQ(s: string) {
   return s.replaceAll("'", "\\'")
 }
 
-async function findFolderInParent(name: string, parentId: string, accessToken: string) {
+const findFolderInParent = asyncLruCache(200)(async (
+  name: string,
+  parentId: string,
+  accessToken: string,
+) => {
   const q =
     `name='${escapeForQ(name)}' and ` +
     `mimeType='application/vnd.google-apps.folder' and ` +
@@ -387,7 +391,7 @@ async function findFolderInParent(name: string, parentId: string, accessToken: s
     params: { q, fields: 'files(id,name)', pageSize: 1 },
   })
   return data.files?.[0]?.id ?? null
-}
+})
 
 async function findPathId(
   path: string,
