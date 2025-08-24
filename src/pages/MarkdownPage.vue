@@ -1,5 +1,5 @@
 <template>
-  <q-page class="q-pa-xs">
+  <FadeAwayScrollPage class="q-pa-xs">
     <div v-if="route.query.debug !== undefined">
       <div>Folder: {{ folder }}</div>
       <div>Path: {{ filePath }}</div>
@@ -7,11 +7,12 @@
     <q-card flat class="q-pa-sm">
       <ty-markdown v-if="markdownContent" :src="markdownContent" no-line-numbers />
     </q-card>
-  </q-page>
+  </FadeAwayScrollPage>
 </template>
 
 <script setup lang="ts">
 import TyMarkdown from 'components/tyMarkdown.vue'
+import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 import { fetchMarkdown } from 'src/modules/taskyon/taskUtils'
 import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
