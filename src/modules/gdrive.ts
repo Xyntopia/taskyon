@@ -212,7 +212,7 @@ export const useGdrive = () => {
       throw new Error('Failed to obtain a valid access token.')
     }
 
-    const directoryId = await ensureDirectoryExists(directory, validAccessToken)
+    const directoryId = await findPathId(directory, validAccessToken, true)
     if (!directoryId) {
       throw new Error('Failed to create/find directory')
     }
@@ -286,34 +286,6 @@ export const useGdrive = () => {
   }
 }
 
-function escapeForQ(s: string) {
-  // escape single quotes for drive q syntax
-  return s.replaceAll("'", "\\'")
-}
-
-async function findFolderInParent(name: string, parentId: string, accessToken: string) {
-  const q =
-    `name='${escapeForQ(name)}' and ` +
-    `mimeType='application/vnd.google-apps.folder' and ` +
-    `'${parentId}' in parents and trashed=false`
-  const { data } = await axios.get('https://www.googleapis.com/drive/v3/files', {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    params: { q, fields: 'files(id,name)', pageSize: 1 },
-  })
-  return data.files?.[0]?.id ?? null
-}
-
-async function findPathId(path: string, accessToken: string): Promise<string | null> {
-  const parts = path.split('/').filter(Boolean)
-  let parentId = 'root'
-  for (const part of parts) {
-    const next = await findFolderInParent(part, parentId, accessToken)
-    if (!next) return null
-    parentId = next
-  }
-  return parentId
-}
-
 // using this mainly to get the sharable link for a file...
 async function getFileMetaData(fileId: string, accessToken: string) {
   // Retrieve the file's metadata to get the webViewLink
@@ -330,7 +302,7 @@ async function uploadFileToDrive(file: File, directory: string, accessToken: str
   console.log('Uploading or updating file')
 
   // Check if the directory exists, if not, create it
-  const directoryId = await ensureDirectoryExists(directory, accessToken)
+  const directoryId = await findPathId(directory, accessToken, true)
   if (!directoryId) {
     throw new Error('Error in creating or finding directory.')
   }
@@ -400,19 +372,41 @@ async function pushFile(
   return response.data
 }
 
-// use this everywhere you need to *create or get* a nested folder id
-async function ensureDirectoryExists(directoryPath: string, accessToken: string) {
-  const parts = directoryPath.split('/').filter(Boolean)
+function escapeForQ(s: string) {
+  // escape single quotes for drive q syntax
+  return s.replaceAll("'", "\\'")
+}
+
+async function findFolderInParent(name: string, parentId: string, accessToken: string) {
+  const q =
+    `name='${escapeForQ(name)}' and ` +
+    `mimeType='application/vnd.google-apps.folder' and ` +
+    `'${parentId}' in parents and trashed=false`
+  const { data } = await axios.get('https://www.googleapis.com/drive/v3/files', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    params: { q, fields: 'files(id,name)', pageSize: 1 },
+  })
+  return data.files?.[0]?.id ?? null
+}
+
+async function findPathId(
+  path: string,
+  accessToken: string,
+  create = false,
+): Promise<string | null> {
+  const parts = path.split('/').filter(Boolean)
   let parentId = 'root'
   for (const part of parts) {
-    const existing = await findFolderInParent(part, parentId, accessToken)
-    parentId = existing ?? (await pushFile(parentId, { foldername: part }, accessToken)).id
+    const next = await findFolderInParent(part, parentId, accessToken)
+    if (create) {
+      parentId = next ?? (await pushFile(parentId, { foldername: part }, accessToken)).id
+    } else if (!next) return null
+    else parentId = next
   }
   return parentId
 }
 
-// if you only want to *find* (no create):
-const gdrivefindFileOrDirectoryId = async ({
+const findFileOrDirectoryId = asyncLruCache(200)(async ({
   accessToken,
   fileName,
   directory,
@@ -428,7 +422,6 @@ const gdrivefindFileOrDirectoryId = async ({
   }
 
   if (fileName && !directory) {
-    // global by-name (beware collisions)
     const q = `name='${escapeForQ(fileName)}' and mimeType!='application/vnd.google-apps.folder' and trashed=false`
     const { data } = await axios.get('https://www.googleapis.com/drive/v3/files', {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -449,9 +442,7 @@ const gdrivefindFileOrDirectoryId = async ({
     params: { q, fields: 'files(id,name)', pageSize: 1 },
   })
   return data.files?.[0]?.id ?? null
-}
-
-const findFileOrDirectoryId = asyncLruCache(200)(gdrivefindFileOrDirectoryId)
+})
 
 /**
  * Check out this link here for all options:  https://developers.google.com/drive/api/reference/rest/v3/permissions?authuser=2
