@@ -69,12 +69,20 @@ server {
     add_header X-XSS-Protection "1; mode=block";
     add_header X-Content-Type-Options "nosniff";
 
+    # Cache-Control header (1 hour minimum for all assets)
+    add_header Cache-Control "public, max-age=3600, immutable" always;
+
     index index.html;
 
     charset utf-8;
 
     location / {
         try_files $uri $uri/ /index.html;
+
+        # Optional: Longer caching for versioned static assets
+        # location ~* \.\w{8}\.(css|js)$ {
+        #     add_header Cache-Control "public, max-age=31536000, immutable" always;
+        # }
     }
 
     location = /robots.txt  { access_log off; log_not_found off; }
