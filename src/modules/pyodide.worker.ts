@@ -1,4 +1,3 @@
-import type { PyProxy } from 'pyodide'
 import { loadPyodide, type PyodideInterface } from 'pyodide'
 import type { PythonScriptResult } from './pyodide'
 import { executeScript } from './pyodide'
@@ -20,12 +19,13 @@ async function getPyodide() {
 
   console.log('load Pyodide')
   pyodideInitPromise = loadPyodide({
-    indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
+    // load from internal...
+    indexURL: '/assets/pyodide',
+    // load pyodide from external url...
+    //indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
   }).then(async (pyodide) => {
     await pyodide.loadPackage(['micropip'])
-    const micropip = pyodide.pyimport('micropip') as PyProxy & {
-      install: (txt: string) => Promise<void>
-    }
+    const micropip = pyodide.pyimport('micropip')
     await micropip.install('yake')
     pyodideEnv = pyodide
     pyodideInitPromise = null // Clear the promise after successful load

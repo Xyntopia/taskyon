@@ -8,6 +8,20 @@ import path from 'path'
 import fs from 'fs'
 import { execSync } from 'child_process'
 import { analyzer } from 'vite-bundle-analyzer'
+import { dirname, join } from 'path'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
+// --- helper to copy pyodide runtime ---
+function viteStaticCopyPyodide() {
+  const pyodideDir = dirname(fileURLToPath(import.meta.resolve('pyodide')))
+  return viteStaticCopy({
+    targets: [
+      {
+        src: [join(pyodideDir, '*')],
+        dest: 'assets/pyodide',
+      },
+    ],
+  })
+}
 
 function getGitCommitHash() {
   try {
@@ -258,8 +272,10 @@ export default defineConfig((ctx) => {
         // Extend the Vite configuration to exclude dependencies from optimization
         viteConf.optimizeDeps = {
           ...viteConf.optimizeDeps,
-          exclude: ['@electric-sql/pglite'], // replace 'some-library' with the module you want to exclude
+          exclude: [...(viteConf.optimizeDeps?.exclude ?? []), '@electric-sql/pglite', 'pyodide'],
         }
+
+        viteConf.plugins = [viteConf.plugins, ...viteStaticCopyPyodide()]
 
         // Optional: Exclude from Rollup build as well
         viteConf.build = {

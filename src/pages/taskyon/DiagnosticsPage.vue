@@ -56,6 +56,7 @@ import {
   testToolLista,
   testJsonSchemaToYaml,
   testSecretStore,
+  testPyodide,
 } from 'src/modules/taskyon/tests'
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
@@ -141,17 +142,19 @@ async function generateReport(details = false, noGui = true, onlyFirst = false) 
   const startTime = Date.now() // milliseconds since epoch
   diagnostics.value = `report_date: ${new Date().toISOString()}\n`
 
-  diagnostics.value += await runTest(
-    'Test Secret Store',
-    testSecretStore(tystate.secretStore),
-    details,
-  )
+  diagnostics.value += await runTest('test Pyodide', testPyodide, details)
 
   // move this line behind the "first test"  in order to be able to test only the first test :)
   if (onlyFirst) {
     console.log('diagnostics:', diagnostics.value)
     return
   }
+
+  diagnostics.value += await runTest(
+    'Test Secret Store',
+    testSecretStore(tystate.secretStore),
+    details,
+  )
 
   diagnostics.value += await runTest('test build slim view', testJsonSchemaToYaml, details)
   diagnostics.value += await runTest('test build slim view', testBuildSlimView, details)
