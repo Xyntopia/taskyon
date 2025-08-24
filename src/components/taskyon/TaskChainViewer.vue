@@ -84,13 +84,18 @@
         "
       >
         <div class="text-caption">THINKING:</div>
-        <tyMarkdown
-          no-line-numbers
-          no-mermaid
-          :src="currentThinkingStream?.split('\n').slice(-20).join('\n')"
-          class="text-caption"
-          style="font-size: 0.8rem; max-height: 300px"
-        />
+        <div
+          ref="thinkingContainer"
+          style="font-size: 0.8rem; max-height: 300px; overflow-y: auto"
+          @scroll="handleUserScroll"
+        >
+          <tyMarkdown
+            no-line-numbers
+            no-mermaid
+            :src="currentThinkingStream /*?.split('\n').slice(-30).join('\n')*/"
+            class="text-caption"
+          />
+        </div>
       </template>
       <q-card
         v-if="
@@ -145,7 +150,7 @@ import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { getReasoning, useTaskyonStore } from 'src/stores/taskyonState'
-import { computed, onBeforeUnmount, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, watch } from 'vue'
 import { ref } from 'vue'
 import { type TaskTreeNode } from 'src/modules/taskyon/taskManager'
 import type { Unsubscribe } from 'src/modules/frpBus'
@@ -244,6 +249,33 @@ const currentThinkingStream = computed(() => {
     return streamingTracker.value.get(props.currentTask.id)?.choices?.[0]?.reasoning || ''
   } else return undefined
 })
+
+const thinkingContainer = ref<HTMLElement>()
+const shouldAutoScroll = ref(true)
+const handleUserScroll = () => {
+  if (!thinkingContainer.value) return
+
+  const { scrollTop, scrollHeight, clientHeight } = thinkingContainer.value
+  const isAtBottom = scrollTop + clientHeight >= scrollHeight - 5 // 5px tolerance
+
+  // If user scrolled away from bottom, disable auto-scroll
+  // If user scrolled back to bottom, re-enable auto-scroll
+  shouldAutoScroll.value = isAtBottom
+}
+
+watch(
+  () => currentThinkingStream.value,
+  async () => {
+    // This will run whenever currentThinkingStream changes
+    if (currentThinkingStream.value && shouldAutoScroll.value) {
+      await nextTick()
+      if (thinkingContainer.value) {
+        //console.log('scrolling!!', thinkingContainer.value.scrollHeight)
+        thinkingContainer.value.scrollTop = thinkingContainer.value.scrollHeight
+      }
+    }
+  },
+)
 
 const currentFunctionStream = computed(() => {
   if (props.currentTask)
