@@ -52,6 +52,7 @@ export async function executeScript(
       },
     })
 
+    // this only loads packages which are included in the default distribution!
     await pyodide.loadPackagesFromImports(python_script)
 
     // result is the direct result of the execution of the python script

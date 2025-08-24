@@ -8,15 +8,28 @@ import { execSync } from 'child_process'
 import { analyzer } from 'vite-bundle-analyzer'
 import { dirname, join } from 'path'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
+import { readFileSync } from 'node:fs'
 // --- helper to copy pyodide runtime ---
 function viteStaticCopyPyodide() {
   const pyodideDir = dirname(fileURLToPath(import.meta.resolve('pyodide')))
+  const pyodidePkg = JSON.parse(readFileSync(join(pyodideDir, 'package.json'), 'utf-8'))
+  const pyodideVersion = pyodidePkg.version
+  console.log('Detected Pyodide version:', pyodideVersion)
+
+  /*const micropipDir = fileURLToPath(
+    new URL('./vendor/pyodide-wheels/micropip-*.whl', import.meta.url),
+  )*/
+
   return viteStaticCopy({
     targets: [
       {
         src: [join(pyodideDir, '*')],
         dest: 'assets/pyodide',
       },
+      /*{
+        src: [micropipDir],
+        dest: 'assets/pyodide',
+      },*/
     ],
   })
 }
