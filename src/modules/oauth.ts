@@ -1,4 +1,6 @@
-const OAUTH_PROVIDERS = {
+import { OAuthCredentials } from './taskyon/types'
+
+export const OAUTH_PROVIDERS = {
   google: {
     authUrl: 'https://accounts.google.com/o/oauth2/auth',
     tokenUrl: 'https://oauth2.googleapis.com/token',
@@ -17,28 +19,68 @@ const OAUTH_PROVIDERS = {
   },
 } as const
 
-export async function getOAuthAccessToken(
-  provider: keyof typeof OAUTH_PROVIDERS,
-  authCode: string,
-) {
-  const config = OAUTH_PROVIDERS[provider]
+export async function authenticateWithPopup(
+  params: {
+    oauthURL: string
+    clientId: string
+    scope: string
+  },
+  signal?: AbortSignal,
+): Promise<OAuthCredentials> {
+  const { oauthURL, clientId, scope } = params
 
-  const response = await fetch(config.tokenUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Authorization: `Basic ${btoa(`${config.clientId}:${config.clientSecret}`)}`,
-    },
-    body: new URLSearchParams({
-      code: authCode,
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      redirect_uri: config.redirectUri,
-      grant_type: 'authorization_code',
-    }),
+  // Check if already aborted
+  if (signal?.aborted) {
+    throw new DOMException('Operation was aborted', 'AbortError')
+  }
+
+  const startUrl = new URL(`${window.location.origin}/oauth/start`)
+  startUrl.searchParams.set('svcUrl', oauthURL)
+  startUrl.searchParams.set('cid', clientId)
+  startUrl.searchParams.set('scope', scope)
+
+  const popup = window.open(startUrl.toString(), `oauth:${oauthURL}`, `width=500,height=700`)
+
+  if (!popup) {
+    throw new Error('Failed to open OAuth popup')
+  }
+
+  return new Promise<OAuthCredentials>((resolve, reject) => {
+    const cleanup = () => {
+      window.removeEventListener('message', messageListener, { capture: true })
+      signal?.removeEventListener('abort', abortListener)
+      try {
+        popup.close()
+      } catch {
+        console.warn('Failed to close OAuth popup:', popup)
+      }
+    }
+
+    const messageListener = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
+      if (event.source !== popup) return
+
+      try {
+        const creds = OAuthCredentials.parse(event.data)
+
+        // prevent duplicate handling
+        event.stopImmediatePropagation()
+        event.stopPropagation()
+
+        cleanup()
+        resolve(creds)
+      } catch (error) {
+        cleanup()
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
+    }
+
+    const abortListener = () => {
+      cleanup()
+      reject(new DOMException('Operation was aborted', 'AbortError'))
+    }
+
+    window.addEventListener('message', messageListener, { capture: true })
+    signal?.addEventListener('abort', abortListener)
   })
-
-  if (!response.ok) throw new Error(`OAuth failed for ${provider}`)
-
-  return response.json() // Contains access_token, refresh_token, etc.
 }

@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
 import type { SecretStore } from '../crudWrapper'
-import { OAuthCredentials } from '../taskyon/types'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
+import { authenticateWithPopup } from '../oauth'
 
 declare global {
   interface Window {
@@ -53,72 +53,6 @@ function withAbort<T>(signal: AbortSignal, p: Promise<T>) {
       }),
     ),
   ])
-}
-
-async function authenticateWithPopup(
-  params: {
-    oauthURL: string
-    clientId: string
-    scope: string
-  },
-  signal?: AbortSignal,
-): Promise<OAuthCredentials> {
-  const { oauthURL, clientId, scope } = params
-
-  // Check if already aborted
-  if (signal?.aborted) {
-    throw new DOMException('Operation was aborted', 'AbortError')
-  }
-
-  const startUrl = new URL(`${window.location.origin}/oauth/start`)
-  startUrl.searchParams.set('svcUrl', oauthURL)
-  startUrl.searchParams.set('cid', clientId)
-  startUrl.searchParams.set('scope', scope)
-
-  const popup = window.open(startUrl.toString(), `oauth:${oauthURL}`, `width=500,height=700`)
-
-  if (!popup) {
-    throw new Error('Failed to open OAuth popup')
-  }
-
-  return new Promise<OAuthCredentials>((resolve, reject) => {
-    const cleanup = () => {
-      window.removeEventListener('message', messageListener, { capture: true })
-      signal?.removeEventListener('abort', abortListener)
-      try {
-        popup.close()
-      } catch {
-        console.warn('Failed to close OAuth popup:', popup)
-      }
-    }
-
-    const messageListener = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return
-      if (event.source !== popup) return
-
-      try {
-        const creds = OAuthCredentials.parse(event.data)
-
-        // prevent duplicate handling
-        event.stopImmediatePropagation()
-        event.stopPropagation()
-
-        cleanup()
-        resolve(creds)
-      } catch (error) {
-        cleanup()
-        reject(error instanceof Error ? error : new Error(String(error)))
-      }
-    }
-
-    const abortListener = () => {
-      cleanup()
-      reject(new DOMException('Operation was aborted', 'AbortError'))
-    }
-
-    window.addEventListener('message', messageListener, { capture: true })
-    signal?.addEventListener('abort', abortListener)
-  })
 }
 
 // Enhance createOAuthTool to wait for button press before opening popup
