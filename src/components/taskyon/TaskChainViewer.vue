@@ -66,10 +66,7 @@
           :task="task"
           :previous-task="props.selectedThread[idx - 1]"
           :next-task="props.selectedThread[idx + 1]"
-          :is-working="
-            !!tystate.lastTaskState.get(task.id) &&
-            tystate.lastTaskState.get(task.id) !== 'processed'
-          "
+          :is-working="isProcessing(task.id)"
           :show-id="!!showIds"
         />
       </template>
@@ -97,14 +94,7 @@
           />
         </div>
       </template>
-      <q-card
-        v-if="
-          !!tystate.lastTaskState.get(currentTask.id) &&
-          tystate.lastTaskState.get(currentTask.id) !== 'processed'
-        "
-        class="row"
-        flat
-      >
+      <q-card v-if="isProcessing(currentTask.id)" class="row" flat>
         <div class="col">
           <tyMarkdown
             v-if="currentMessageStream"
@@ -194,6 +184,12 @@ watch(
   },
   { immediate: true },
 )
+
+const isProcessing = (id: string) => {
+  const lts = tystate.lastTaskState.get(id)
+  if (lts) return lts !== 'processed' && lts !== 'all finished' && lts !== 'aborted'
+  else return false
+}
 
 const streamingTracker = ref<Map<string, ChatResponseType>>(new Map())
 
