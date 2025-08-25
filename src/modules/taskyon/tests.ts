@@ -62,11 +62,14 @@ async function createTestKeys() {
 }
 
 export async function oauthTests() {
-  const creds = await authenticateWithPopup({
-    oauthURL: OAUTH_PROVIDERS.google.authUrl,
-    clientId: OAUTH_PROVIDERS.google.clientId,
-    scope: OAUTH_PROVIDERS.google.scope,
-  })
+  const creds = await authenticateWithPopup(
+    {
+      oauthURL: OAUTH_PROVIDERS.google.authUrl,
+      clientId: OAUTH_PROVIDERS.google.clientId,
+      scope: OAUTH_PROVIDERS.google.scope,
+    },
+    undefined,
+  )
 
   return creds
 }

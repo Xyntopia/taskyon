@@ -77,6 +77,10 @@ not working:
           type: 'string',
           description: 'The OAuth authorization URL',
         },
+        tokenUrl: {
+          type: 'string',
+          description: 'The OAuth authorization URL',
+        },
         clientId: {
           type: 'string',
           description: 'The OAuth client ID.',
@@ -91,11 +95,14 @@ not working:
           description: 'This is a unique ID that every tool has',
         },
       },
-      required: ['oauthURL', 'clientId', 'toolId'],
+      required: ['oauthURL', 'clientId', 'toolId', 'tokenUrl'],
       additionalProperties: false,
     } as const satisfies JSONSchema7,
 
-    function: async ({ oauthURL, clientId, scope, toolId }, { taskChain, stopSignal }) => {
+    function: async (
+      { oauthURL, clientId, scope, toolId, tokenUrl },
+      { taskChain, stopSignal },
+    ) => {
       // we need the 3rd last task, -1 is the current task and -2 is the button message UI
       const prev = taskChain.at(-3)
       const isReentry =
@@ -131,16 +138,18 @@ not working:
       )
 
       // Now open the OAuth popup
-      const creds = await authenticateWithPopup({ oauthURL, clientId, scope }, stopSignal)
+      const creds = await authenticateWithPopup({ oauthURL, clientId, scope, tokenUrl }, stopSignal)
 
       // store secret and confirm
       await secretStore.setSecret(toolId, 'oauth-access-token', creds.access_token)
-      await secretStore.setSecret(toolId, 'oauth-refresh-token', creds.refresh_token)
-      await secretStore.setSecret(
-        toolId,
-        'oauth-expires-at',
-        (creds.created_at + creds.expires_in).toString(),
-      )
+      if (creds.refresh_token)
+        await secretStore.setSecret(toolId, 'oauth-refresh-token', creds.refresh_token)
+      if (creds.expires_in)
+        await secretStore.setSecret(
+          toolId,
+          'oauth-expires-at',
+          (creds.created_at + creds.expires_in).toString(),
+        )
 
       return makeTaskResult([
         [{ role: 'assistant', content: { type: 'return', data: '🎉 Logged in successfully.' } }],

@@ -1,6 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 
+// move these into our oauth file...
 const CLIENT_ID = '56a06d49cd5ed412d47ced662b9e6ae297aecadf25cae9f0e036ca0ef299444b'
 const OAUTH_URL = 'https://gitlab.com/oauth/authorize'
 const GITLAB_TOKEN_URL = 'https://gitlab.com/oauth/token'

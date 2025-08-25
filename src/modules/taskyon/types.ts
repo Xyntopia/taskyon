@@ -696,12 +696,12 @@ export interface TyTaskStreamData {
 export const convertZodToJsonSchemaCached = z.toJSONSchema
 
 export const OAuthCredentials = z.object({
-  type: z.literal('oauth-credentials'),
+  type: z.enum(['oauth-credentials', 'implicit']),
   access_token: z.string(),
-  refresh_token: z.string(),
+  refresh_token: z.string().optional(),
   service: z.string(), // or z.string().url() if you want URL validation
-  token_type: z.string(),
-  expires_in: z.number(),
+  token_type: z.string().optional(),
+  expires_in: z.number().optional(),
   created_at: z.number(), // or z.date().transform(d => d.getTime()) if you parse a Date
 })
 
