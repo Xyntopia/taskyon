@@ -382,6 +382,7 @@ const findFolderInParent = asyncLruCache(200)(async (
   parentId: string,
   accessToken: string,
 ) => {
+  console.log('find folder in parent', name, parentId, accessToken)
   const q =
     `name='${escapeForQ(name)}' and ` +
     `mimeType='application/vnd.google-apps.folder' and ` +
@@ -393,11 +394,11 @@ const findFolderInParent = asyncLruCache(200)(async (
   return data.files?.[0]?.id ?? null
 })
 
-async function findPathId(
+const findPathId = asyncLruCache(200)(async (
   path: string,
   accessToken: string,
   create = false,
-): Promise<string | null> {
+): Promise<string | null> => {
   const parts = path.split('/').filter(Boolean)
   let parentId = 'root'
   for (const part of parts) {
@@ -408,7 +409,7 @@ async function findPathId(
     else parentId = next
   }
   return parentId
-}
+})
 
 const findFileOrDirectoryId = asyncLruCache(200)(async ({
   accessToken,
