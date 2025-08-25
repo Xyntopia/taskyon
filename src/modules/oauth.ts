@@ -1,21 +1,13 @@
+//oauth.ts
 import { OAuthCredentials } from './taskyon/types'
 
 export const OAUTH_PROVIDERS = {
   google: {
-    authUrl: 'https://accounts.google.com/o/oauth2/auth',
+    authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
     tokenUrl: 'https://oauth2.googleapis.com/token',
-    clientId: 'YOUR_GOOGLE_CLIENT_ID',
-    clientSecret: 'YOUR_GOOGLE_CLIENT_SECRET',
-    redirectUri: 'YOUR_REDIRECT_URI',
-    scope: 'openid email profile',
-  },
-  reddit: {
-    authUrl: 'https://www.reddit.com/api/v1/authorize',
-    tokenUrl: 'https://www.reddit.com/api/v1/access_token',
-    clientId: 'YOUR_REDDIT_CLIENT_ID',
-    clientSecret: 'YOUR_REDDIT_CLIENT_SECRET',
-    redirectUri: 'YOUR_REDIRECT_URI',
-    scope: 'identity',
+    clientId: '14927198496-jaadcashh91s9gue7uicf3datk79tohc.apps.googleusercontent.com',
+    //clientSecret: 'YOUR_GOOGLE_CLIENT_SECRET',
+    scope: 'https://www.googleapis.com/auth/drive.file',
   },
 } as const
 

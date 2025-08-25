@@ -18,6 +18,7 @@ import type { TaskNode } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
 import { decompressEncryptedObject, encryptCompressObject } from '../fileUtils'
 import { gDriveSyncPort } from './sync'
+import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -58,6 +59,16 @@ async function createTestKeys() {
     ['encrypt', 'decrypt'],
   )
   return { recoveryKey, sessionKey }
+}
+
+export async function oauthTests() {
+  const creds = await authenticateWithPopup({
+    oauthURL: OAUTH_PROVIDERS.google.authUrl,
+    clientId: OAUTH_PROVIDERS.google.clientId,
+    scope: OAUTH_PROVIDERS.google.scope,
+  })
+
+  return creds
 }
 
 export async function testGdriveZipRoundtrip() {

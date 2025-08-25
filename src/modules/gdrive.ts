@@ -4,12 +4,11 @@
  * check out this URL for documentation:  https://developers.google.com/drive/api/reference/rest/v3?authuser=1
  */
 
-import { ref, computed, watch } from 'vue'
+import { ref, watch } from 'vue'
 import axios from 'axios'
-import { googleSdkLoaded } from 'vue3-google-login'
-import { sleep } from 'src/modules/utils'
 import { asyncLruCache } from 'src/modules/utils'
 import { LocalStorage } from 'quasar'
+import { authenticateWithPopup, OAUTH_PROVIDERS } from './oauth'
 
 type gDriveFile = {
   kind: string //"drive#file",
@@ -18,9 +17,6 @@ type gDriveFile = {
   mimeType: string //"application/json"
   webViewLink?: string // optionally a pulic link of the file
 }
-
-export const clientId = '14927198496-jaadcashh91s9gue7uicf3datk79tohc.apps.googleusercontent.com'
-export const scope = 'https://www.googleapis.com/auth/drive.file'
 
 // we can use this function to pack multiple files into a single file
 // in gdrive and mark them using the hashprops! so that we know
@@ -55,72 +51,26 @@ function buildNameProps(names: string[]) {
 }
 
 export const useGdrive = () => {
-  const maxTokenAgeMinutes = 55
   const tyGdAccessStorageName = 'tygd'
   const savedToken = String(LocalStorage.getItem(tyGdAccessStorageName))
   const gdriveAccessToken = ref<string>(savedToken) // Store the access token
   watch(gdriveAccessToken, (n) => LocalStorage.set(tyGdAccessStorageName, n ?? ''))
 
-  const tokenReceivedTime = ref(0) // Unix timestamp of when the token was received
+  async function getValidAccessToken(signal?: AbortSignal) {
+    const creds = await authenticateWithPopup(
+      {
+        oauthURL: OAUTH_PROVIDERS.google.authUrl,
+        clientId: OAUTH_PROVIDERS.google.clientId,
+        scope: OAUTH_PROVIDERS.google.scope,
+      },
+      signal,
+    )
 
-  const isTokenExpired = computed(() => {
-    const currentTime = Math.floor(Date.now() / 1000) // Current Unix timestamp in seconds
-    const tokenAgeSeconds = currentTime - tokenReceivedTime.value
-    return tokenAgeSeconds > maxTokenAgeMinutes * 60 // Convert minutes to seconds
-  })
-
-  function setTokenReceivedTime() {
-    tokenReceivedTime.value = Math.floor(Date.now() / 1000) // Set to current Unix timestamp
-  }
-
-  type TokenClient = {
-    requestAccessToken: (overridableClientConfig?: Record<string, unknown>) => void
-  }
-
-  function initializeTokenClient(): Promise<TokenClient> {
-    return new Promise((resolve) => {
-      googleSdkLoaded((google) => {
-        const tokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: clientId,
-          scope: scope,
-        })
-        console.log('initialized gdrive token client')
-        resolve(tokenClient)
-      })
-    })
-  }
-
-  // TODO: save the access token for a longer time! :)
-  //       maybe just cache it?
-  async function getValidAccessToken() {
-    if (!gdriveAccessToken.value || isTokenExpired.value) {
-      const tokenClient = (await initializeTokenClient()) as unknown as TokenClient & {
-        callback: (response: { error: unknown; access_token: string }) => void
-      }
-
-      // Request a new token
-      tokenClient.callback = (response) => {
-        if (response.error) {
-          throw new Error('Error refreshing token:', response.error)
-        }
-        gdriveAccessToken.value = response.access_token // Update the access token
-        setTokenReceivedTime() // Update the token received time
-      }
-
-      // 'prompt' options for tokenClient.requestAccessToken:
-      // 'none' - silent token refresh, fails if user is logged out.
-      // 'consent' - forces consent screen, useful for new permissions.
-      // 'select_account' - shows account picker if user has multiple Google accounts.
-      // '' (default) - lets Google decide based on user session.
-      tokenClient.requestAccessToken({ prompt: '' })
-
-      // Wait for the token to be refreshed
-      while (isTokenExpired.value) {
-        await sleep(1000) // Wait for 1 second before checking again
-      }
+    gdriveAccessToken.value = creds.access_token
+    if (creds.refresh_token) {
+      LocalStorage.set('gdrive_refresh', creds.refresh_token)
     }
-
-    return gdriveAccessToken.value // Return the valid access token
+    return creds.access_token
   }
 
   async function saveFileToGdrive(file: File, directory: string, share = false) {
