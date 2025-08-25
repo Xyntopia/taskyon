@@ -55,55 +55,74 @@ function withAbort<T>(signal: AbortSignal, p: Promise<T>) {
   ])
 }
 
-// Enhance createOAuthTool to wait for button press before opening popup
-export const createOAuthTool = (secretStore: SecretStore) => {
-  const openPopups = new Map<WindowProxy, string>()
-  const loginResolvers = new Map<string, (args: OAuthCredentials) => void>()
-
-  function openAuthPopup(params: {
+async function authenticateWithPopup(
+  params: {
     oauthURL: string
     clientId: string
     scope: string
-    toolId: string
-  }) {
-    const { oauthURL, clientId, scope, toolId } = params
-    const startUrl = new URL(`${window.location.origin}/oauth/start`)
-    startUrl.searchParams.set('svcUrl', oauthURL)
-    startUrl.searchParams.set('cid', clientId)
-    startUrl.searchParams.set('scope', scope)
+  },
+  signal?: AbortSignal,
+): Promise<OAuthCredentials> {
+  const { oauthURL, clientId, scope } = params
 
-    const popup = window.open(startUrl.toString(), `oauth:${oauthURL}`, `width=500,height=700`)
-    if (popup) openPopups.set(popup, toolId)
+  // Check if already aborted
+  if (signal?.aborted) {
+    throw new DOMException('Operation was aborted', 'AbortError')
   }
 
-  function oauthPopupListener(event: MessageEvent) {
-    if (event.origin !== window.location.origin) return
-    const toolId = openPopups.get(event.source as WindowProxy)
-    if (!toolId) return
+  const startUrl = new URL(`${window.location.origin}/oauth/start`)
+  startUrl.searchParams.set('svcUrl', oauthURL)
+  startUrl.searchParams.set('cid', clientId)
+  startUrl.searchParams.set('scope', scope)
 
-    const creds = OAuthCredentials.parse(event.data)
+  const popup = window.open(startUrl.toString(), `oauth:${oauthURL}`, `width=500,height=700`)
 
-    // prevent duplicate handling
-    event.stopImmediatePropagation()
-    event.stopPropagation()
-
-    const resolver = loginResolvers.get(toolId)
-    if (resolver) {
-      resolver(creds)
-      loginResolvers.delete(toolId)
-    }
-
-    try {
-      ;(event.source as WindowProxy).close()
-    } catch {
-      // Ignore errors when trying to close the popup
-      console.warn('Failed to close OAuth popup:', event.source)
-    }
-    openPopups.delete(event.source as WindowProxy)
+  if (!popup) {
+    throw new Error('Failed to open OAuth popup')
   }
 
-  window.addEventListener('message', oauthPopupListener, { capture: true })
+  return new Promise<OAuthCredentials>((resolve, reject) => {
+    const cleanup = () => {
+      window.removeEventListener('message', messageListener, { capture: true })
+      signal?.removeEventListener('abort', abortListener)
+      try {
+        popup.close()
+      } catch {
+        console.warn('Failed to close OAuth popup:', popup)
+      }
+    }
 
+    const messageListener = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
+      if (event.source !== popup) return
+
+      try {
+        const creds = OAuthCredentials.parse(event.data)
+
+        // prevent duplicate handling
+        event.stopImmediatePropagation()
+        event.stopPropagation()
+
+        cleanup()
+        resolve(creds)
+      } catch (error) {
+        cleanup()
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
+    }
+
+    const abortListener = () => {
+      cleanup()
+      reject(new DOMException('Operation was aborted', 'AbortError'))
+    }
+
+    window.addEventListener('message', messageListener, { capture: true })
+    signal?.addEventListener('abort', abortListener)
+  })
+}
+
+// Enhance createOAuthTool to wait for button press before opening popup
+export const createOAuthTool = (secretStore: SecretStore) => {
   return createTool({
     name: 'ensureOauthLogin',
     description: `Ensure, that we have an oauth token for the calling tool.`,
@@ -178,19 +197,7 @@ not working:
       )
 
       // Now open the OAuth popup
-      openAuthPopup({ oauthURL, clientId, scope, toolId })
-
-      // await token
-      const creds = await withAbort(
-        stopSignal,
-        new Promise<OAuthCredentials>((resolve) => {
-          // install resolver; cleanup on abort happens in withAbort
-          loginResolvers.set(toolId, (tok) => {
-            stopSignal.removeEventListener('abort', () => {}) // no-op, since withAbort cleans this up
-            resolve(tok)
-          })
-        }),
-      )
+      const creds = await authenticateWithPopup({ oauthURL, clientId, scope }, stopSignal)
 
       // store secret and confirm
       await secretStore.setSecret(toolId, 'oauth-access-token', creds.access_token)
