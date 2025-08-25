@@ -20,7 +20,7 @@
             prop.node.task.role,
             Object.keys(prop.node.task.content)[0],
           ]"
-          :show-id="!!showIds"
+          :show-meta="!!showIds"
           @click.stop
         />
         <div v-else class="text-bold">{{ prop.node.taskid.slice(0, 12) }}</div>
@@ -44,7 +44,7 @@
             prop.node.task.role,
             Object.keys(prop.node.task.content)[0],
           ]"
-          :show-id="!!showIds"
+          :show-meta="!!showIds"
           @click.stop
         />
       </template>
@@ -67,7 +67,7 @@
           :previous-task="props.selectedThread[idx - 1]"
           :next-task="props.selectedThread[idx + 1]"
           :is-working="isProcessing(task.id)"
-          :show-id="!!showIds"
+          :show-meta="!!showIds"
         />
       </template>
     </template>
