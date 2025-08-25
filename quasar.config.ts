@@ -4,10 +4,35 @@
 import { defineConfig } from '#q-app/wrappers'
 import { fileURLToPath } from 'node:url'
 import type { NormalizedOutputOptions, OutputBundle } from 'rollup'
-import path from 'path'
-import fs from 'fs'
 import { execSync } from 'child_process'
 import { analyzer } from 'vite-bundle-analyzer'
+import { dirname, join } from 'path'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
+import { readFileSync } from 'node:fs'
+// --- helper to copy pyodide runtime ---
+function viteStaticCopyPyodide() {
+  const pyodideDir = dirname(fileURLToPath(import.meta.resolve('pyodide')))
+  const pyodidePkg = JSON.parse(readFileSync(join(pyodideDir, 'package.json'), 'utf-8'))
+  const pyodideVersion = pyodidePkg.version
+  console.log('Detected Pyodide version:', pyodideVersion)
+
+  /*const micropipDir = fileURLToPath(
+    new URL('./vendor/pyodide-wheels/micropip-*.whl', import.meta.url),
+  )*/
+
+  return viteStaticCopy({
+    targets: [
+      {
+        src: [join(pyodideDir, '*')],
+        dest: 'assets/pyodide',
+      },
+      /*{
+        src: [micropipDir],
+        dest: 'assets/pyodide',
+      },*/
+    ],
+  })
+}
 
 function getGitCommitHash() {
   try {
@@ -36,32 +61,6 @@ const APPNAME = 'taskyon'
 const DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid'
 
 console.log('compile app: ', APPNAME, DESCRIPTION)
-
-// Function to copy multiple files
-function copyFiles(fileList: { src: string; dest: string }[]) {
-  fileList.forEach((file) => {
-    const srcPath = path.resolve(__dirname, file.src)
-    const destPath = path.resolve(__dirname, file.dest)
-
-    if (fs.existsSync(srcPath)) {
-      fs.copyFileSync(srcPath, destPath)
-      console.log(`Copied ${file.src} to ${file.dest}`)
-    } else {
-      console.error(`${file.src} not found`)
-    }
-  })
-}
-
-const filesToCopy = [
-  {
-    src: 'src/assets/taskyon_settings.json',
-    dest: 'public/taskyon_settings.json',
-  },
-  {
-    src: 'README.md',
-    dest: 'public/docs/README.md',
-  },
-]
 
 // Custom plugin to adjust sourcemaps and add banner comment
 function sourcemapBannerPlugin() {
@@ -97,9 +96,9 @@ function sourcemapBannerPlugin() {
 }
 
 export default defineConfig((ctx) => {
-  if (ctx.prod) {
+  /*if (ctx.prod) {
     copyFiles(filesToCopy)
-  }
+  }*/
 
   const droplogging = ctx.prod && process.env.LOGGING !== 'true'
   console.log('drop logging:', droplogging)
@@ -258,8 +257,25 @@ export default defineConfig((ctx) => {
         // Extend the Vite configuration to exclude dependencies from optimization
         viteConf.optimizeDeps = {
           ...viteConf.optimizeDeps,
-          exclude: ['@electric-sql/pglite'], // replace 'some-library' with the module you want to exclude
+          exclude: [...(viteConf.optimizeDeps?.exclude ?? []), '@electric-sql/pglite', 'pyodide'],
         }
+
+        viteConf.plugins = [
+          viteConf.plugins,
+          ...viteStaticCopyPyodide(),
+          viteStaticCopy({
+            targets: [
+              {
+                src: 'src/assets/taskyon_settings.json',
+                dest: '.', // Will be placed in the root of the output dir ('public')
+              },
+              {
+                src: 'README.md',
+                dest: 'docs', // Will be placed in 'public/docs'
+              },
+            ],
+          }),
+        ]
 
         // Optional: Exclude from Rollup build as well
         viteConf.build = {
@@ -299,7 +315,15 @@ export default defineConfig((ctx) => {
       vitePlugins: [
         // Only apply this plugin in production when sourcemaps are enabled
         ...(ctx.prod ? [sourcemapBannerPlugin()] : []),
-
+        {
+          name: 'disable-sri-for-pyodide',
+          transformIndexHtml(html) {
+            return html.replace(
+              /(<script[^>]+src="[^"]*pyodide[^"]*"[^>]+)integrity="[^"]+"([^>]*>)/g,
+              '$1$2',
+            )
+          },
+        },
         // https://www.npmjs.com/package/vite-bundle-analyzer
         analyzer({
           openAnalyzer: true, // Automatically open the analyzer UI in your browser

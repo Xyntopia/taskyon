@@ -1,5 +1,4 @@
-import type { PyProxy } from 'pyodide'
-import { loadPyodide, type PyodideInterface } from 'pyodide'
+import { loadPyodide, type PyodideInterface, version } from 'pyodide'
 import type { PythonScriptResult } from './pyodide'
 import { executeScript } from './pyodide'
 import { expose } from 'comlink'
@@ -14,25 +13,30 @@ import { expose } from 'comlink'
 let pyodideEnv: PyodideInterface | undefined = undefined
 let pyodideInitPromise: Promise<PyodideInterface> | null = null
 
-async function getPyodide() {
+async function getPyodide(useLocal = true) {
   if (pyodideEnv) return pyodideEnv
   if (pyodideInitPromise) return pyodideInitPromise // Return ongoing initialization promise
 
-  console.log('load Pyodide')
-  pyodideInitPromise = loadPyodide({
-    indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
-  }).then(async (pyodide) => {
-    await pyodide.loadPackage(['micropip'])
-    const micropip = pyodide.pyimport('micropip') as PyProxy & {
-      install: (txt: string) => Promise<void>
-    }
-    await micropip.install('yake')
-    pyodideEnv = pyodide
-    pyodideInitPromise = null // Clear the promise after successful load
-    return pyodide
+  const startTime = performance.now()
+  const cdnUrl = `https://cdn.jsdelivr.net/pyodide/v${version}/full/`
+  const pyodideUrl = useLocal ? '/assets/pyodide' : cdnUrl
+  console.log('load Pyodide', version)
+  const pyodide = await loadPyodide({
+    // load pyodide from the specified URL here:
+    // we currently copy pyodide into the assets/pyodide directory on vite build...
+    indexURL: pyodideUrl,
+    // we still use this here for "outside" packages...
+    packageBaseUrl: cdnUrl,
   })
 
-  return pyodideInitPromise
+  console.log(`Pyodide code loaded after ${(performance.now() - startTime).toFixed(2)} ms`)
+  await pyodide.loadPackage(['micropip'])
+  const micropip = pyodide.pyimport('micropip')
+  await micropip.install('yake')
+  pyodideEnv = pyodide
+  pyodideInitPromise = null // Clear the promise after successful load
+  console.log(`Pyodide initialization took ${(performance.now() - startTime).toFixed(2)} ms`)
+  return pyodide
 }
 
 const pythonWorker = {

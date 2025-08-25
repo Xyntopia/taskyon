@@ -149,7 +149,7 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
 
     void workerStream.subscribe((data) => {
       console.log(`worker: ${data.stage}, ${data.taskId || data.task?.id}`)
-      if (['all finished', 'processing', 'processed', 'error'].includes(data.stage)) {
+      if (['all finished', 'processing', 'processed', 'error', 'aborted'].includes(data.stage)) {
         workerStreamLogs.value.push({ ...data, timestamp: new Date() })
         // Ensure the log doesn't exceed the maximum number of rows
         if (workerStreamLogs.value.length > maxLogRows) {

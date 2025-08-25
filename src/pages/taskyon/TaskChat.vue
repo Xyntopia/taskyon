@@ -146,7 +146,10 @@
     </q-page-sticky>
     <!--Task Chat Control Buttons-->
     <q-page-sticky position="bottom-right" :offset="[10, bottomPadding + 5]">
-      <TaskControlButtons @scroll-to-thread-end="scrollToThreadEnd" />
+      <TaskControlButtons
+        :show-bottom-scroll-lock="!state.lockBottomScroll"
+        @scroll-to-thread-end="scrollToThreadEnd"
+      />
     </q-page-sticky>
     <!-- Popup Messages -->
     <q-dialog v-model="showPopupMessage" persistent>
@@ -174,7 +177,7 @@ import TaskChainViewer from 'components/taskyon/TaskChainViewer.vue'
 import { defineAsyncComponent } from 'vue'
 import { fetchMarkdown, getTextFile } from 'src/modules/taskyon/taskUtils'
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useAppStateStore } from 'src/stores/appState'
 import ToggleButton from 'src/components/ToggleButton.vue'
 import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
@@ -203,7 +206,6 @@ const ResetButton = process.env.DEV
 const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll
 const bottomPadding = ref(100)
 const $q = useQuasar()
-const router = useRouter()
 const route = useRoute()
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -301,7 +303,6 @@ Please check the path and try again.
     state.setSelectedTask(newTaskId)
   } else if (typeof route.query.t === 'string') {
     state.setSelectedTask(route.query.t)
-    state.lockBottomScroll = true
   }
 }
 
@@ -328,7 +329,7 @@ function onScroll(
       //console.log('lock bottom scroll!', lockBottomScroll.value);
     } else if (
       details.direction === 'up' &&
-      scrollEnd - details.position.top > bottomTolerance + 20
+      scrollEnd - details.position.top > bottomTolerance + 10
     ) {
       //console.log('release bottom lock!');
       state.lockBottomScroll = false
@@ -361,10 +362,17 @@ watch(
   (newTaskId) => {
     console.log('set new task', newTaskId)
     if (!route.params.filePath && !route.query.gd) {
-      // we are only doing this if there is no filepath, because filepaths have priority ;)
-      void router.push({
-        query: { ...route.query, t: newTaskId || undefined },
-      })
+      // we are using window.history here and NOT vue router
+      // itself, because we dn't want to trigger any updates!
+      if (newTaskId) {
+        const url = new URL(window.location.href)
+        url.searchParams.set('t', newTaskId)
+        window.history.replaceState({}, '', url.toString())
+      } else {
+        const url = new URL(window.location.href)
+        url.searchParams.delete('t')
+        window.history.replaceState({}, '', url.toString())
+      }
     }
   },
   { immediate: true },
@@ -373,7 +381,9 @@ watch(
 watch(
   () => route.query,
   () => {
-    void updateChatThread()
+    if (route.query.t !== state.llmSettings.selectedTaskId) {
+      void updateChatThread()
+    }
   },
   { immediate: true },
 )

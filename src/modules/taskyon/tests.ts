@@ -1,5 +1,5 @@
 import type OpenAI from 'openai'
-import { useNlpWorker } from './webWorkerApi'
+import { useNlpWorker, usePyodideWebworker } from './webWorkerApi'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { chat2Md, getTextFile } from './taskUtils'
 import { useAppStateStore } from 'src/stores/appState'
@@ -21,6 +21,18 @@ import { gDriveSyncPort } from './sync'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
+
+export const testPyodide = async () => {
+  const python = usePyodideWebworker()
+
+  const sampleText =
+    'Taskyon is an open-source platform for managing tasks, projects, and workflows efficiently.'
+  const kws = await python.extractKeywords(sampleText, 5)
+
+  return {
+    kws,
+  }
+}
 
 async function createTestKeys() {
   const recoveryKey = (
