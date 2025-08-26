@@ -104,17 +104,20 @@ and verify the authenticity of messages sent by other users."
         </q-item-section>
       </q-item>
       <q-separator spaced />
-      <q-item-label header> Profiles </q-item-label>
+      <!--load profiles..-->
+      <!--TODO: <q-item-label header> Profiles </q-item-label>
       <q-item> </q-item>
-      <q-separator spaced />
+      <q-separator spaced />-->
     </template>
     <q-item-label header>Task Backup and Synchronization</q-item-label>
+    <q-item>
+      <SyncAskDialog />
+    </q-item>
     <q-item class="q-pa-md q-gutter-sm">
       <q-item-section>
         <q-btn
           :icon="matDownload"
-          color="secondary"
-          unelevated
+          flat
           label="Save all Chats & Tasks"
           @click="onDownloadTaskyonData"
         >
@@ -122,7 +125,7 @@ and verify the authenticity of messages sent by other users."
       </q-item-section>
       <q-item-section>
         <FileDropzone disable-dropzone-border accept="*" @add-files="onUploadTaskyonData">
-          <q-btn :icon="matUpload" label="Upload Tasks from file" color="secondary" unelevated />
+          <q-btn :icon="matUpload" label="Upload Tasks from file" flat />
         </FileDropzone>
       </q-item-section>
       <q-item-section>
@@ -220,6 +223,7 @@ import { base64UrlEd25519Keys, generateAssymetricRandomNewKey } from 'src/module
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from './TyResetButton.vue'
 import { TyProfile } from 'src/modules/taskyon/types'
+import SyncAskDialog from './SyncAskDialog.vue'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
