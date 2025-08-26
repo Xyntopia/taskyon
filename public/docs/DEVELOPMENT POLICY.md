@@ -1,22 +1,41 @@
-# DEVELOPMENT POLICY
+# **Development Policy**
 
-Everytime a choice has to be made, how to implement a new feature, we usually have several options how would approach the challenge. Which one of these options we choose depends on the greater context of
-the codebase and one can often come to different conclusions about the _best_ option based on the scope of the context. Sometimes one option that looks like a bad choice in a narrow context turns out
-to be the best by a large margin when looking at the bigger picture.
+When implementing a new feature or refactoring existing code, there are often multiple possible approaches. The “best” option is not always obvious: a solution that looks suboptimal in a narrow context may prove to be the most effective when viewed from the broader perspective of the entire system.
 
-Because of this, in taskyon we are following a policy which tries to take the bigger picture into
-account and whenever we make those choices, we should adhere to this policy. Our policy has several rules which are sorted in descending order. Rules which are higher up have priority over lwer ones.
-Occasionally we will change our policy when we realize something works better one or another way.
+At **Taskyon**, we follow a set of guiding principles to help us make consistent decisions that prioritize long-term maintainability, flexibility, and developer experience. These principles are listed in descending order of importance. Higher-level rules take precedence over lower-level ones. The policy itself is a living document and will evolve as we learn what works best in practice.
 
-We would like all developers to try to keep this policy in mind whenever we implement a new feature or
-correct bugs or do some refactoring:
+All contributors are encouraged to keep these principles in mind when developing new features, fixing bugs, or performing refactors.
 
-In Taskon...
+---
 
-- we are local first
-- ... "Everything is a tool". If its possible to implement something as a tool, then we should do this.
-- communication across system boundaries (e.g. GUI <-> taskyon, client <-> gui) etc.. we should make use of our DuplexMessagePort framework.
-- offer new functionality over ports
-- only add additional dependencies, if an AI can't write a functionality within a day.
-- write functions, not classes
-- functional style programming
+### **Core Policies**
+
+- **Local first**
+  Favor designs that work offline and synchronize later. Server-based workflows are possible, but in Taskyon we deliberately choose local-first as the default.
+
+- **“Everything is a tool”**
+  If a feature can reasonably be expressed as an **AI tool**, we should implement it that way. This makes features composable and reusable, while still allowing exceptions when it would be overkill.
+
+- **AI first, deps second**
+  Before introducing external dependencies, evaluate whether AI-assisted development can produce a working in-house solution quickly. Dependencies should only be added when an AI-based approach is clearly insufficient or too costly.
+
+- **Ports are power**
+  Cross-boundary communication (e.g., GUI ↔ Taskyon core, client ↔ GUI) must use our **DuplexMessagePort** framework. New functionality should always be offered through ports to maximize composability.
+
+- **P2P, not lock-in**
+  Taskyon is one network. There is only one “service” in the p2p world: **Taskyon**. Nodes are peers, not clients. Each instance can contribute its own tools and even offer them to the network, but the interface always stays consistent. Synchronization flows through the p2p network, not centralized services.
+
+- **Diagnostics are part of the product**
+  Every feature should provide at least one simple diagnostic function. This ensures the system can test and validate itself incrementally.
+
+- **Secure by default**
+  Always use Taskyon’s built-in facilities for security and privacy, such as the encrypted secret store and permission-aware ports. No ad-hoc solutions.
+
+- **Consistency over novelty**
+  Prefer patterns and structures that match existing code, even if another option looks “cleverer.”
+
+- **Functions over classes**
+  Favor pure functions and composition over object-oriented abstractions. Use classes only when they provide clear, unavoidable advantages.
+
+- **Functional style**
+  Prefer immutability, declarative patterns, and isolated side-effects.
