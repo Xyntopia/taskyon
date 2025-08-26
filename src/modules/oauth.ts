@@ -73,26 +73,32 @@ export async function authenticateWithPopup(
     throw new Error('Failed to open OAuth popup')
   }
 
-  const returnQuery = await waitForCode(popup, signal)
-  console.log('oauth: received return query', returnQuery)
+  const msg = await waitForPopupReturn(popup, signal)
+  console.log('oauth: received return query', msg)
 
-  if (typeof returnQuery.access_token === 'string') {
-    return {
-      access_token: returnQuery.access_token,
-      service: oauthURL,
-      created_at: Date.now(),
-      type: 'implicit',
+  // check if msg contains an access_token
+  // this is used for the google implicit workflow...
+  if (msg.hash) {
+    const params = Object.fromEntries(new URLSearchParams(msg.hash.slice(1)))
+    if (typeof params.access_token === 'string') {
+      return {
+        access_token: params.access_token,
+        service: oauthURL,
+        created_at: Date.now(),
+        type: 'implicit',
+      }
     }
   }
   if (!tokenUrl) {
     throw new Error('no token URL to get access token!')
   }
-  if (!('code' in returnQuery) || typeof returnQuery.code !== 'string')
-    throw new Error('no return code!')
+  if (!msg.query) throw new Error('now attached message query!')
+  const qparams = Object.fromEntries(new URLSearchParams(msg.hash.slice(1)))
+  if (!qparams.code || typeof qparams.code !== 'string') throw new Error('no return code!')
   const creds = await getAccessTokenFromCode({
     verifier,
     clientId,
-    code: returnQuery.code,
+    code: qparams.code,
     tokenUrl,
   })
   console.log('recevied credentials', creds)
@@ -114,13 +120,15 @@ async function generatePKCE() {
   return { challenge, verifier }
 }
 
-async function waitForCode(popup: Window, signal?: AbortSignal) {
-  return new Promise<Record<string, unknown> & { code: string }>((resolve, reject) => {
+export type authReturn = { status: 'return'; query: string; hash: string }
+
+async function waitForPopupReturn(popup: Window, signal?: AbortSignal) {
+  return new Promise<authReturn>((resolve, reject) => {
     const cleanup = () => {
       window.removeEventListener('message', messageListener, { capture: true })
       signal?.removeEventListener('abort', abortListener)
       try {
-        //popup.close()
+        popup.close()
       } catch {
         console.warn('Failed to close OAuth popup:', popup)
       }
@@ -129,20 +137,17 @@ async function waitForCode(popup: Window, signal?: AbortSignal) {
     const messageListener = (event: MessageEvent) => {
       console.log('received event', event)
       //if (event.origin !== window.location.origin) return
-      if (event.source !== popup) return
+      if (event.source !== popup || event.data.status !== 'return') return
 
       console.log('received event from oauth popup...', event)
 
       try {
-        // the returned query should contain a "code"
-        const returnQuery = event.data
-
         // prevent duplicate handling
         event.stopImmediatePropagation()
         event.stopPropagation()
 
         cleanup()
-        resolve(returnQuery)
+        resolve(event.data)
       } catch (error) {
         cleanup()
         reject(error instanceof Error ? error : new Error(String(error)))

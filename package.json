@@ -85,7 +85,6 @@
     "vue-i18n": "^11.0.0",
     "vue-json-pretty": "^2.2.4",
     "vue-router": "^4.0.12",
-    "vue3-google-login": "^2.0.25",
     "wavefunctioncollapse": "^2.1.0",
     "xlsx": "^0.18.2",
     "zod": "^4.0.0-beta.20250505T195954"

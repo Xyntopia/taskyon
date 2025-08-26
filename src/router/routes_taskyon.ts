@@ -177,9 +177,6 @@ export const routes: RouteRecordRaw[] = [
     // we are making sure to only load urls without any extensions here...
     path: '/oauth/return',
     component: () => import('pages/auth/AuthFlow.vue'),
-    props: (route) => ({
-      query: route.query,
-    }),
   },
   // Always leave this as last one,
   // but you can also remove it
