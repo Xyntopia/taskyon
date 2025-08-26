@@ -31,6 +31,8 @@ import { toolCall } from '@taskyon/taskyon'
 import { usePyodideWebworker } from 'src/modules/taskyon/webWorkerApi'
 import { areWeInIframe, waitForIframeDuplexChannel } from './iframeClient'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
+import type { TokenGetter } from 'src/modules/oauth'
+import { usePersistentOauth } from 'src/modules/oauth'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -253,8 +255,12 @@ You can select them in the "Chat Settings" section in the message input window.
   //'How do I integrate Taskyon into my webpage?',
 ]
 
-function connectGdriveSync(directory: string, tyPort: Port<TaskyonMessage, TaskyonMessage>) {
-  const gds = gDriveSyncPort(directory + '/taskyon_sync')
+function connectGdriveSync(
+  directory: string,
+  tyPort: Port<TaskyonMessage, TaskyonMessage>,
+  tokenGetter: TokenGetter,
+) {
+  const gds = gDriveSyncPort(directory + '/taskyon_sync', tokenGetter)
   //gds.connect(TY.port)
   //gds.receive(tyPort.send)
 
@@ -510,6 +516,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       'raw',
       fixedKeyBytes,
       { name: 'AES-GCM' },
+      // TODO:  make this FALSE..   we do not ever want to extract the key :)
       true,
       ['encrypt', 'decrypt'],
     )
@@ -619,11 +626,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // TODO: we have to change this! we would like to
     TY.port.receive(uiApiInside.send)
 
-    // in GUI applications we can connect gdrive for synchronization purposes!
-    // we don't need any password or anything here, because
-    // gdrive receives already encrypted tasks from our taskyon engine...
-    connectGdriveSync(stateRefs.appConfiguration.gdriveDir, TY.port)
-
     console.log('checking if we are in an iframe!')
 
     /// -------   IFRAME operations --------
@@ -641,7 +643,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // ------------end of IFRAME operations-------
 
     const updateTools = async () => {
-      allTools.value = await (await getTaskManager()).updateToolDefinitions(true)
+      allTools.value = await TY.taskManagerInstance.updateToolDefinitions(true)
     }
     void updateTools()
 
@@ -693,9 +695,38 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // Access taskManagerInstance and addTask2Tree without redundant awaits
   const getTaskManager = async () => (await taskyon)['taskManagerInstance']
 
-  const secretStore = asyncProxy(async () => {
+  const getSecretStore = async () => {
     const instance = await taskyon
     return instance['secretStore']
+  }
+
+  // connect secretStore...
+  // TODO: we can probably move this into our tasyon init function!
+  //       we would like to have the session key in there anyways!
+  void getSecretStore().then((ss) => {
+    ss.onSessionKey(async ({ respond }) => {
+      console.log('importing fixed key for secretStore...')
+      const key = await getSessionKey()
+      respond(key)
+    })
+  })
+
+  // an oauth token getter function which persists secrets in our local secretstore!
+  const getToken: TokenGetter = async (...args) => {
+    const STORAGE_PREFIX = 'oauth:credentials:'
+    const sst = await getSecretStore()
+    const tg = usePersistentOauth({
+      getSecret: async (name) => await sst.getSecret(STORAGE_PREFIX, name, false),
+      setSecret: async (name, data) => await sst.setSecret(STORAGE_PREFIX, name, data),
+    })
+    return await tg(...args)
+  }
+
+  void taskyon.then((ty) => {
+    // in GUI applications we can connect gdrive for synchronization purposes!
+    // we don't need any password or anything here, because
+    // gdrive receives already encrypted tasks from our taskyon engine...
+    connectGdriveSync(stateRefs.appConfiguration.gdriveDir, ty.port, getToken)
   })
 
   // TODO: this is soo  ugly..  we need to do something about this...
@@ -703,12 +734,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     const instance = await taskyon
     return instance['connectMessageIframe'](id, iframe, origin)
   }
-
-  void secretStore.onSessionKey(async ({ respond }) => {
-    console.log('importing fixed key for secretStore...')
-    const key = await getSessionKey()
-    respond(key)
-  })
 
   // TODO: use the proxies below to replae the "getTaskmanager" and all of that..
   /*const taskManager = asyncProxy(async () => {
@@ -875,7 +900,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   dynamicQuasarTheming(stateRefs)
 
   return {
-    secretStore,
+    getToken,
+    getSecretStore,
     getTaskMetaRef,
     getMeta,
     setNewContentDraft,

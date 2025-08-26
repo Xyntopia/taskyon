@@ -1,6 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
 import { createTool, makeTaskResult } from '@taskyon/taskyon'
 import { useGdrive } from 'src/modules/gdrive' // Import the gdrive module
+import { usePersistentOauth } from '../oauth'
 
 /*const googleDriveTool = createTool({
   description: 'A tool that saves/loads files from Google Drive using OAuth2 within the iframe',
@@ -166,9 +167,18 @@ Files can be organized in directories and optionally made public with sharable l
     },
     required: ['action', 'directory', 'filename'],
   } as const satisfies JSONSchema7,
-  function: async ({ action, directory, filename, content, mimeType, share }) => {
+  function: async (
+    { action, directory, filename, content, mimeType, share },
+    { getSecret, setSecret },
+  ) => {
     try {
-      const gdrive = useGdrive()
+      // TODO: give gdrivetool its own ability to authenticate through oauth.
+      //       do this through ctx
+      const getToken = usePersistentOauth({
+        getSecret: async (name) => await getSecret(name, false),
+        setSecret: setSecret,
+      })
+      const gdrive = useGdrive(getToken)
       let result
 
       switch (action) {
@@ -283,5 +293,3 @@ Files can be organized in directories and optionally made public with sharable l
     }
   },
 })
-
-export const storageTools = [gDriveTool]

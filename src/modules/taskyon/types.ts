@@ -528,6 +528,7 @@ export const appConfiguration = z.object({
   gdriveConfigurationFile: z.string().default('taskyon_settings.json').meta({
     description: 'gDrive fileid of the configuration',
   }),
+  enableGdriveSync: z.boolean().default(false).optional(),
   expertMode: z.boolean().default(false).meta({
     icon: mdiProfessionalHexagon,
     label: 'Expert Mode',

@@ -70,9 +70,10 @@ const secretList = ref<Record<string, Record<string, string>>>({})
 
 // extract your loader into its own function
 async function loadSecrets() {
-  const ids = await tystate.secretStore.listSecretIds()
+  const sst = await tystate.getSecretStore()
+  const ids = await sst.listSecretIds()
   const entries = await Promise.all(
-    ids.map(async (id) => [id.toString(), await tystate.secretStore.listSecrets(id)] as const),
+    ids.map(async (id) => [id.toString(), await sst.listSecrets(id)] as const),
   )
   secretList.value = Object.fromEntries(entries)
 }
@@ -80,20 +81,23 @@ async function loadSecrets() {
 onMounted(loadSecrets)
 
 const deleteSecrets = async (secretId: string, secretName: string) => {
-  await tystate.secretStore.deleteSecret(secretId, secretName)
+  const sst = await tystate.getSecretStore()
+  await sst.deleteSecret(secretId, secretName)
   // force re-render
   await loadSecrets()
 }
 
 const deleteAllSecrets = async (secretId: string) => {
-  await tystate.secretStore.deleteAllFromId(secretId)
+  const sst = await tystate.getSecretStore()
+  await sst.deleteAllFromId(secretId)
   await loadSecrets()
 }
 
 // only called on Enter or Save‑button
 const saveSecret = async (secretId: string, secretName: string) => {
   const newVal = secretList.value[secretId]![secretName]
-  if (newVal) await tystate.secretStore.setSecret(secretId, secretName, newVal)
+  const sst = await tystate.getSecretStore()
+  if (newVal) await sst.setSecret(secretId, secretName, newVal)
   // optional: refocus or toast here
   await loadSecrets()
 }

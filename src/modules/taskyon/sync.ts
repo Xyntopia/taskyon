@@ -1,16 +1,17 @@
 import { useGdrive } from '../gdrive'
 import { createDuplexChannel, createPortApi } from '../frpBus'
 import { TyP2P } from './apiTypes'
+import type { TokenGetter } from '../oauth'
 
 // TODO: generalize this to all kinds of cloud storages / peers
 // TODO: add some kind of way how to identify gdrive and other things as "clients" in the system
-export const gDriveSyncPort = (directory: string) => {
+export const gDriveSyncPort = (directory: string, tokenGetter: TokenGetter) => {
   const {
     x: insideGdrive, // used to receive messages and send messages away from drive
     // this port is needed for monitoring gdrive and if we find new tasks, we'll send it back to taskyon.
     y: outsideGdrive, // used to send & receive messages from gdrive itself...
   } = createDuplexChannel<TyP2P, TyP2P>()
-  const { uploadFileArchiveWMeta, downloadArchiveFile } = useGdrive()
+  const { uploadFileArchiveWMeta, downloadArchiveFile } = useGdrive(tokenGetter)
   createPortApi(
     insideGdrive,
     TyP2P,

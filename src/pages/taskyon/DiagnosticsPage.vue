@@ -109,8 +109,9 @@ const testFinished = ref(false)
 
 const infoText = ref('get password')
 let resolveSecret: (secret: string) => void
-onMounted(() => {
-  void tystate.secretStore.onNewSecret(({ args: [{ id, secretName }], respond }) => {
+onMounted(async () => {
+  const sst = await tystate.getSecretStore()
+  void sst.onNewSecret(({ args: [{ id, secretName }], respond }) => {
     if (state.noGuiTests) {
       respond('randomKey' + randomString(5))
       return
@@ -169,7 +170,7 @@ const tests = {
   'test archive upload gdrive': testArchiveUploadDownload,
   'test Pyodide': testPyodide,
   'Test Gdrive zip file packets': testGdriveZipRoundtrip,
-  'Test Secret Store': testSecretStore(tystate.secretStore),
+  'Test Secret Store': async () => testSecretStore(await tystate.getSecretStore()),
   'test json schema to yam conversion': testJsonSchemaToYaml,
   'test build slim view': testBuildSlimView,
   'test openrouter websearch chatCompletion': testChatCompletion,

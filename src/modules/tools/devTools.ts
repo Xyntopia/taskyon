@@ -89,7 +89,7 @@ const getGitlabInfo = createTool({
     // 1) handle auth
     const GITLAB_BASE = 'https://gitlab.com/api/v4'
     const EXPIRES = await ctx.getSecret('oauth-expires-at', false)
-    let TOKEN: string | undefined
+    let TOKEN: string | null = null
     if (EXPIRES) {
       const EXPIRESINT = parseInt(EXPIRES, 10)
       if (isNaN(EXPIRESINT) || EXPIRESINT < Date.now()) {
@@ -106,7 +106,7 @@ const getGitlabInfo = createTool({
           TOKEN = accessToken
         } catch (e) {
           console.error('Failed to refresh GitLab token:', e)
-          TOKEN = undefined // force re-login
+          TOKEN = null // force re-login
         }
       } else {
         TOKEN = await ctx.getSecret('oauth-access-token', false)
@@ -316,7 +316,7 @@ The tool never stores content server-side; everything runs client-side in the Ta
     ───────────────────────────────────────────────────────────*/
     const GITLAB_BASE = 'https://gitlab.com/api/v4'
     const EXPIRES = await ctx.getSecret('oauth-expires-at', false)
-    let TOKEN: string | undefined
+    let TOKEN: string | null = null
 
     if (EXPIRES) {
       const exp = Number(EXPIRES)
@@ -331,7 +331,7 @@ The tool never stores content server-side; everything runs client-side in the Ta
           TOKEN = accessToken
         } catch (e) {
           console.error('refresh failed → force re‑login', e)
-          TOKEN = undefined
+          TOKEN = null
         }
       } else {
         TOKEN = await ctx.getSecret('oauth-access-token', false)

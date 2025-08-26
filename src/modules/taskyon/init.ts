@@ -16,7 +16,6 @@ import { smallHelperTools } from '../tools/helperCollection'
 import { useFullSmallTools } from '../tools/usefulSmallTools'
 import { devTools } from '../tools/devTools'
 import { taskOrganizationTools, taskSearcher } from '../tools/TaskPlannerTool'
-import { storageTools } from '../tools/gdrive'
 import { appDevTools } from '../tools/webAppDev'
 import { fileTools } from '../tools/fileTools'
 import { localVectorStore } from '../tools/localVectorStore'
@@ -65,7 +64,6 @@ export async function tyCore(
     ...testingTools,
     ...fileTools,
     ...taskOrganizationTools,
-    ...storageTools,
     ...proceduralTools,
     createAddNewToolTool(),
     wfcGenerator,

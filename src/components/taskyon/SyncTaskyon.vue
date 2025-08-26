@@ -232,7 +232,7 @@ import SyncAskDialog from './SyncAskDialog.vue'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
-const { saveObjToGdrive, loadObjFromGdrive } = useGdrive()
+const { saveObjToGdrive, loadObjFromGdrive } = useGdrive(tystate.getToken)
 
 const showSeedPhrase = ref(false)
 const pressedSeedPhraseCopyButton = ref(false)

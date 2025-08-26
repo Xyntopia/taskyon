@@ -271,7 +271,7 @@ async function onExportPublicGdrive(taskList: TaskNode[]) {
       const taskThreadMd = chat2Md(taskList)
       const task = taskList.at(-1)!
       if (taskThreadMd) {
-        const { publishMarkdown } = useGdrive()
+        const { publishMarkdown } = useGdrive(tystate.getToken)
 
         const gdriveFile = await publishMarkdown(
           taskThreadMd,

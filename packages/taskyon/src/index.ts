@@ -29,11 +29,7 @@ export * from './utils/tsHelpers'
  */
 export type toolContext = {
   taskChain: TaskNode[]
-  getSecret: (
-    name: string,
-    askNew: boolean | string,
-    saveNew?: boolean,
-  ) => Promise<string | undefined>
+  getSecret: (name: string, askNew: boolean | string, saveNew?: boolean) => Promise<string | null>
   setSecret: (name: string, value: string) => Promise<void>
   stopSignal: AbortSignal
   toolId: string

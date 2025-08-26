@@ -48,7 +48,7 @@ async function safeExecuteTask(
         getSecret: async (name, askNew, saveNew = true) => {
           console.log('get secret name', name)
           const secr = await secretStore.getSecret(toolId, name, askNew, saveNew)
-          return secr ?? undefined
+          return secr ?? null
         },
         setSecret: async (name, value) => {
           console.log('set secret name', name)
