@@ -4,11 +4,9 @@
  * check out this URL for documentation:  https://developers.google.com/drive/api/reference/rest/v3?authuser=1
  */
 
-import { ref, watch } from 'vue'
 import axios from 'axios'
 import { asyncLruCache } from 'src/modules/utils'
-import { LocalStorage } from 'quasar'
-import { authenticateWithPopup, OAUTH_PROVIDERS } from './oauth'
+import { getOrAuthenticateWithPopup, OAUTH_PROVIDERS } from './oauth'
 
 type gDriveFile = {
   kind: string //"drive#file",
@@ -51,13 +49,9 @@ function buildNameProps(names: string[]) {
 }
 
 export const useGdrive = () => {
-  const tyGdAccessStorageName = 'tygd'
-  const savedToken = String(LocalStorage.getItem(tyGdAccessStorageName))
-  const gdriveAccessToken = ref<string>(savedToken) // Store the access token
-  watch(gdriveAccessToken, (n) => LocalStorage.set(tyGdAccessStorageName, n ?? ''))
-
   async function getValidAccessToken(signal?: AbortSignal) {
-    const creds = await authenticateWithPopup(
+    const creds = await getOrAuthenticateWithPopup(
+      'google',
       {
         oauthURL: OAUTH_PROVIDERS.google.authUrl,
         clientId: OAUTH_PROVIDERS.google.clientId,
@@ -65,11 +59,6 @@ export const useGdrive = () => {
       },
       signal,
     )
-
-    gdriveAccessToken.value = creds.access_token
-    if (creds.refresh_token) {
-      LocalStorage.set('gdrive_refresh', creds.refresh_token)
-    }
     return creds.access_token
   }
 

@@ -200,3 +200,56 @@ async function getAccessTokenFromCode({
   const creds = OAuthCredentials.parse(data)
   return creds
 }
+
+const STORAGE_PREFIX = 'oauth:credentials:'
+const sessionCache = new Map<string, OAuthCredentials>()
+
+function storageKey(provider: string) {
+  return `${STORAGE_PREFIX}${provider}`
+}
+
+function saveCredentials(provider: string, creds: OAuthCredentials) {
+  sessionCache.set(provider, creds)
+  localStorage.setItem(storageKey(provider), JSON.stringify(creds))
+}
+
+function loadCredentials(provider: string): OAuthCredentials | null {
+  const cached = sessionCache.get(provider)
+  if (cached) {
+    // quick expiry check
+    if (cached.expires_in && Date.now() >= cached.created_at + cached.expires_in * 1000) {
+      sessionCache.delete(provider)
+      localStorage.removeItem(storageKey(provider))
+      return null
+    }
+    return cached
+  }
+
+  const raw = localStorage.getItem(storageKey(provider))
+  if (!raw) return null
+
+  try {
+    const creds = JSON.parse(raw) as OAuthCredentials
+    if (creds.expires_in && Date.now() >= creds.created_at + creds.expires_in * 1000) {
+      localStorage.removeItem(storageKey(provider))
+      return null
+    }
+    sessionCache.set(provider, creds)
+    return creds
+  } catch {
+    return null
+  }
+}
+
+export async function getOrAuthenticateWithPopup(
+  provider: string,
+  params: { oauthURL: string; clientId: string; scope: string; tokenUrl?: string },
+  signal?: AbortSignal,
+): Promise<OAuthCredentials> {
+  const cached = loadCredentials(provider)
+  if (cached) return cached
+
+  const creds = await authenticateWithPopup(params, signal)
+  saveCredentials(provider, creds)
+  return creds
+}
