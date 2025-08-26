@@ -4,7 +4,7 @@
  */
 
 import axios from 'axios'
-import { asyncLruCache } from 'src/modules/utils'
+import { asyncLruCache, lockMap } from 'src/modules/utils'
 import type { TokenGetter } from './oauth'
 import { OAUTH_PROVIDERS } from './oauth'
 
@@ -76,40 +76,65 @@ export const resolveDriveId = asyncLruCache(200, [2])(async (
   return parentId
 })
 
-// mkdir -p helper; invalidates cache when creating
+// Create a lock map specifically for directory creation
+const directoryLocks = lockMap('gdrive-directory')
+
+// Alternative: If you want more granular locking per directory segment
 export async function ensurePathId(path: string[], accessToken: string): Promise<string> {
   let parentId = 'root'
 
   for (let i = 0; i < path.length; i++) {
-    const currentPath = path.slice(0, i + 1) // full path up to current segment
-    let dirId = await resolveDriveId(currentPath, 'directory', accessToken)
-    if (!dirId) {
-      // create folder
-      const res = await fetch('https://www.googleapis.com/drive/v3/files', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: path[i],
-          mimeType: 'application/vnd.google-apps.folder',
-          parents: [parentId],
-        }),
-      })
-      if (!res.ok) throw new Error(`mkdir failed: ${await res.text()}`)
-      const data = await res.json()
-      dirId = data.id
+    const currentPath = path.slice(0, i + 1)
+    const currentPathKey = currentPath.join('/')
 
-      // invalidate cache for this full path
-      resolveDriveId.invalidate(currentPath, 'directory', accessToken)
+    // Lock each directory segment individually
+    const unlock = await directoryLocks.lockItem(currentPathKey)
+
+    try {
+      let dirId = await resolveDriveId(currentPath, 'directory', accessToken)
+
+      if (!dirId) {
+        // Create folder - only one call per directory segment
+        const res = await fetch('https://www.googleapis.com/drive/v3/files', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: path[i],
+            mimeType: 'application/vnd.google-apps.folder',
+            parents: [parentId],
+          }),
+        })
+
+        if (!res.ok) {
+          const errorText = await res.text()
+          throw new Error(`mkdir failed for ${currentPath.join('/')}: ${errorText}`)
+        }
+
+        const data = await res.json()
+        dirId = data.id
+
+        resolveDriveId.invalidate(currentPath, 'directory', accessToken)
+      }
+
+      if (!dirId) {
+        throw new Error(`Failed to create/find directory: ${currentPath.join('/')}`)
+      }
+
+      parentId = dirId
+    } finally {
+      unlock()
     }
-
-    if (!dirId) throw new Error(`Failed to create/find directory: ${path.join('/')}`)
-    parentId = dirId
   }
 
   return parentId
+}
+
+// For debugging: add a function to check active locks
+export function getActiveDirectoryLocks() {
+  return directoryLocks
 }
 
 // ergonomic wrapper
