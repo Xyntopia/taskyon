@@ -696,7 +696,7 @@ export interface TyTaskStreamData {
 export const convertZodToJsonSchemaCached = z.toJSONSchema
 
 export const OAuthCredentials = z.object({
-  type: z.enum(['oauth-credentials', 'implicit']),
+  type: z.enum(['oauth-credentials']),
   access_token: z.string(),
   refresh_token: z.string().optional(),
   service: z.string(), // or z.string().url() if you want URL validation

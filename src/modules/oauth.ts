@@ -79,13 +79,15 @@ export async function authenticateWithPopup(
   // check if msg contains an access_token
   // this is used for the google implicit workflow...
   if (msg.hash) {
-    const params = Object.fromEntries(new URLSearchParams(msg.hash.slice(1)))
-    if (typeof params.access_token === 'string') {
+    const iparams = Object.fromEntries(new URLSearchParams(msg.hash.slice(1)))
+    if (typeof iparams.access_token === 'string') {
       return {
-        access_token: params.access_token,
+        type: 'oauth-credentials',
+        access_token: iparams.access_token,
         service: oauthURL,
+        ...(iparams.expires_in ? { expires_in: parseInt(iparams.expires_in) } : {}),
         created_at: Date.now(),
-        type: 'implicit',
+        ...(iparams.token_type ? { token_type: iparams.token_type } : { token_type: 'implicit' }),
       }
     }
   }
