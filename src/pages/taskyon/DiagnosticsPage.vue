@@ -88,6 +88,7 @@ import {
   testGdriveZipRoundtrip,
   testPyodide,
   oauthTests,
+  testArchiveUploadDownload,
 } from 'src/modules/taskyon/tests'
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
@@ -165,6 +166,7 @@ async function runTest(name: string, testFunc: () => unknown, details = false) {
 }
 
 const tests = {
+  'test archive upload gdrive': testArchiveUploadDownload,
   'test Pyodide': testPyodide,
   'Test Gdrive zip file packets': testGdriveZipRoundtrip,
   'Test Secret Store': testSecretStore(tystate.secretStore),

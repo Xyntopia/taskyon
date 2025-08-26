@@ -23,6 +23,41 @@ import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 
+// quick-n-dirty integration test
+export async function testArchiveUploadDownload() {
+  const results: Record<string, unknown> = {}
+
+  const dir = 'taskyon/test-archive-dir'
+  const logicalFilenames = ['foo.txt', 'bar.json']
+  const uploadedContent = 'Hello from archive!'
+
+  // create a zip archive? nah: keep it simple → just one text file
+  const fakeZipFile = new File([uploadedContent], 'archive.zip', { type: 'application/zip' })
+
+  console.log('Uploading archive with meta for:', logicalFilenames)
+  const uploaded = await useGdrive().uploadFileArchiveWMeta(
+    dir,
+    fakeZipFile,
+    logicalFilenames,
+    true,
+  )
+  results.uploaded = uploaded
+
+  // now retrieve by meta name (search for foo.txt inside archive props)
+  console.log('Trying to download archive by logical filename "foo.txt"')
+  const downloaded = await useGdrive().downloadArchiveFile(dir, 'foo.txt')
+  results.downloaded = {
+    ok: !!downloaded,
+    name: downloaded?.name,
+    type: downloaded?.type,
+    size: downloaded?.size,
+    text: downloaded ? await downloaded.text() : null,
+  }
+
+  console.log('Test completed', results)
+  return results
+}
+
 export const testPyodide = async () => {
   const python = usePyodideWebworker()
 

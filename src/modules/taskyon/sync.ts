@@ -24,6 +24,7 @@ export const gDriveSyncPort = (directory: string) => {
         console.log('created file on gdrive:', created.webViewLink)
       },
       requestTask: async ({ id }) => {
+        console.log('task requested with id:', id)
         const file = await downloadArchiveFile(directory, id)
         if (file) {
           const buffer = await file.arrayBuffer()
