@@ -1,43 +1,50 @@
 <template>
-  <div class="q-pa-md">
-    <q-card-section class="row items-center q-pb-none">
-      <div class="text-h6">{{ title }}</div>
-      <q-space />
-      <q-btn v-close-popup icon="close" flat round dense />
-    </q-card-section>
-
-    <q-card-section class="text-center">
-      <div class="text-h4 q-mb-md">☁️</div>
-      <div class="text-subtitle1 q-mb-sm">Keep your data synced across devices</div>
-      <div class="text-body2 text-grey-6">
-        Connect Google Drive for automatic backup? (Optional)
-      </div>
-    </q-card-section>
-
-    <q-card-actions align="center" class="q-pt-none">
-      <q-btn color="primary" label="Connect Google Drive" class="q-mr-sm" @click="handleConnect" />
-      <q-btn flat label="Later" @click="handleDismiss" />
-    </q-card-actions>
-
-    <q-card-section v-if="showDontAskOption" class="q-pt-none">
-      <q-checkbox v-model="dontAskAgain" label="Don't ask again" size="sm" />
-    </q-card-section>
-  </div>
+  <q-card-section v-if="title" class="row items-center q-pb-none">
+    <div class="text-h6">{{ title }}</div>
+    <q-space />
+    <q-btn v-close-popup icon="close" flat round dense />
+  </q-card-section>
+  <q-list>
+    <div class="text-info">Keep task data synced across devices</div>
+    <q-item>
+      <q-item-section avatar>
+        <q-icon size="md" :name="mdiGoogleDrive" />
+      </q-item-section>
+      <q-item-section>
+        <div class="row q-gutter-sm no-wrap">
+          <InfoDialog>
+            <p>
+              You can optionally use your Google Drive to sync your task nodes across devices. This
+              makes it easy to access your tasks from anywhere.
+            </p>
+            <p>
+              For your privacy, all tasks are always encrypted before being saved in Google Drive.
+              Only you can access your task data. Google will not able to read your data.
+            </p>
+          </InfoDialog>
+          <div>Connect Google Drive for automatic backup?</div>
+        </div>
+      </q-item-section>
+      <q-item-section>
+        <q-btn color="primary" label="Connect Google Drive" @click="handleConnect" />
+      </q-item-section>
+    </q-item>
+  </q-list>
+  <q-card-actions v-if="showDontAskOption">
+    <q-btn flat label="Later" @click="handleDismiss" />
+    <q-checkbox v-model="dontAskAgain" label="Don't ask again" size="sm" />
+  </q-card-actions>
 </template>
 
 <script setup lang="ts">
+import { mdiGoogleDrive } from '@quasar/extras/mdi-v6'
 import { ref } from 'vue'
+import InfoDialog from '../InfoDialog.vue'
 
-interface Props {
-  show?: boolean
+const { title, showDontAskOption = false } = defineProps<{
   title?: string
   showDontAskOption?: boolean
-}
-
-withDefaults(defineProps<Props>(), {
-  title: 'Backup Your Data',
-  showDontAskOption: true,
-})
+}>()
 
 const emit = defineEmits<{
   connect: [dontAskAgain: boolean]

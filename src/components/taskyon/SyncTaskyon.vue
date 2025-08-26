@@ -109,10 +109,15 @@ and verify the authenticity of messages sent by other users."
       <q-item> </q-item>
       <q-separator spaced />-->
     </template>
-    <q-item-label header>Task Backup and Synchronization</q-item-label>
+    <q-item-label header>
+      <q-icon :name="matSync" size="xs" />
+      Task Synchronization
+    </q-item-label>
     <q-item>
       <SyncAskDialog />
     </q-item>
+    <q-separator spaced />
+    <q-item-label header>Task Backup</q-item-label>
     <q-item class="q-pa-md q-gutter-sm">
       <q-item-section>
         <q-btn
