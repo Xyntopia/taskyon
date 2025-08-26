@@ -423,47 +423,46 @@ export function asyncTimeLruCache(
 }
 
 // TODO: add a small test to this :)
+// asyncLruCache.ts
 export function asyncLruCache(size: number, ignoreIndices: number[] = []) {
   return <TArgs extends unknown[], R>(fn: (...args: TArgs) => R | Promise<R>) => {
     const cache = new Map<string, R>()
     const inFlight = new Map<string, Promise<R>>()
 
-    const wrapper = async (...args: TArgs): Promise<R> => {
+    const makeKey = (args: TArgs) => {
       const keyArgs = args.filter((_, i) => !ignoreIndices.includes(i))
-      const key = JSON.stringify(keyArgs)
+      return JSON.stringify(keyArgs)
+    }
 
-      if (cache.has(key)) {
-        return cache.get(key)!
-      }
-
-      if (inFlight.has(key)) {
-        return inFlight.get(key)!
-      }
-
-      const promise = (async () => {
+    const wrapper = async (...args: TArgs): Promise<R> => {
+      const key = makeKey(args)
+      if (cache.has(key)) return cache.get(key)!
+      if (inFlight.has(key)) return inFlight.get(key)!
+      const p = (async () => {
         try {
-          const result = (await fn(...args)) as R
-          cache.set(key, result)
-
+          const v = (await fn(...args)) as R
+          cache.set(key, v)
           if (cache.size > size) {
             const oldestKey = cache.keys().next().value!
             cache.delete(oldestKey)
           }
-
-          return result
+          return v
         } finally {
           inFlight.delete(key)
         }
       })()
-
-      inFlight.set(key, promise)
-      return promise
+      inFlight.set(key, p)
+      return p
     }
 
-    // helper: clear both caches
     wrapper.clearCache = () => {
       cache.clear()
       inFlight.clear()
+    }
+    wrapper.invalidate = (...args: TArgs) => {
+      const key = makeKey(args)
+      cache.delete(key)
+      inFlight.delete(key)
     }
 
     return wrapper

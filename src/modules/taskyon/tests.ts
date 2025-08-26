@@ -32,7 +32,9 @@ export async function testArchiveUploadDownload() {
   const uploadedContent = 'Hello from archive!'
 
   // create a zip archive? nah: keep it simple → just one text file
-  const fakeZipFile = new File([uploadedContent], 'archive.zip', { type: 'application/zip' })
+  const fakeZipFile = new File([uploadedContent], `archive${new Date().toISOString()}.zip`, {
+    type: 'application/zip',
+  })
 
   console.log('Uploading archive with meta for:', logicalFilenames)
   const uploaded = await useGdrive().uploadFileArchiveWMeta(
