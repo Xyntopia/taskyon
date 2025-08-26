@@ -22,6 +22,211 @@ import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 
+// Enhanced integration test for concurrent uploads
+export async function testMultipleArchiveUploadDownload() {
+  const results: Record<string, unknown> = {}
+
+  type DriveFile = {
+    id: string
+    name: string
+    parents?: string[]
+  }
+
+  type DirectoryCheck = {
+    directoryId: string
+    filesFound: number
+    expectedFiles: number
+    filesInDirectory: { id: string; name: string }[]
+    allFilesInSameDirectory: boolean
+    allUploadedFilesFound: boolean
+  }
+
+  // Create unique directory name with timestamp
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const dir = `taskyon/tests/random_dir${timestamp}`
+
+  // Create multiple "archive" files with different logical filenames
+  const archives = [
+    {
+      logicalFilenames: ['foo.txt', 'bar.json'],
+      content: 'Archive 1 content',
+      filename: `archive1-${timestamp}.zip`,
+    },
+    {
+      logicalFilenames: ['baz.md', 'qux.xml'],
+      content: 'Archive 2 content',
+      filename: `archive2-${timestamp}.zip`,
+    },
+    {
+      logicalFilenames: ['test.js', 'config.yaml'],
+      content: 'Archive 3 content',
+      filename: `archive3-${timestamp}.zip`,
+    },
+  ]
+
+  // Create File objects
+  const zipFiles = archives.map(
+    (archive) => new File([archive.content], archive.filename, { type: 'application/zip' }),
+  )
+
+  console.log(`Uploading ${archives.length} archives concurrently to directory: ${dir}`)
+  console.log(
+    'Logical filenames per archive:',
+    archives.map((a) => a.logicalFilenames),
+  )
+
+  // Upload all archives concurrently - this is where the race condition might occur
+  const uploadPromises = archives.map((archive, index) => {
+    const zipFile = zipFiles[index]
+    if (!zipFile) throw new Error(`Missing zip file for archive ${index}`)
+    return useGdrive(tystate.getToken)
+      .uploadFileArchiveWMeta(
+        dir,
+        zipFile,
+        archive.logicalFilenames,
+        true, // share publicly
+      )
+      .then((result) => ({
+        index,
+        result,
+        logicalFilenames: archive.logicalFilenames,
+      }))
+  })
+
+  const uploadResults = await Promise.all(uploadPromises)
+  results.uploadResults = uploadResults.map((ur) => ({
+    index: ur.index,
+    fileId: ur.result.id,
+    fileName: ur.result.name,
+    webViewLink: ur.result.webViewLink,
+  }))
+  console.log('All uploads completed successfully')
+
+  // Now let's check if all files are in the same directory
+  console.log('Checking if all files landed in the same directory...')
+
+  // Get access token by calling the oauth provider directly
+  const creds = await tystate.getToken('google', {
+    oauthURL: 'https://accounts.google.com/o/oauth2/v2/auth',
+    clientId: 'your-client-id', // You'll need to import OAUTH_PROVIDERS.google.clientId
+    scope: 'https://www.googleapis.com/auth/drive.file',
+  })
+  const token = creds.access_token
+
+  // Use the resolveId helper from gdrive module instead of the cached version
+  const gdrive = useGdrive(tystate.getToken)
+
+  // Since we can't access resolveDriveId directly, let's verify by listing files in the directory
+  // First, try to load a file to verify the directory exists and get its ID implicitly
+  try {
+    // Try to resolve the directory by attempting to find any file we just uploaded
+    const firstUploadedFile = uploadResults[0]
+    if (!firstUploadedFile) throw new Error('No files were uploaded')
+
+    // Get file metadata to check its parent directory
+    const fileMetaRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${firstUploadedFile.result.id}?fields=parents`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+
+    if (!fileMetaRes.ok) {
+      throw new Error(
+        `Failed to get file metadata for directory check: ${await fileMetaRes.text()}`,
+      )
+    }
+
+    const fileMeta = await fileMetaRes.json()
+    const parentId = fileMeta.parents?.[0]
+    if (!parentId) {
+      throw new Error('Uploaded file has no parent directory')
+    }
+
+    // List all files in this parent directory
+    const listRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q='${parentId}' in parents and trashed=false&fields=files(id,name,parents)`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+
+    if (!listRes.ok) {
+      throw new Error(`Failed to list files in directory: ${await listRes.text()}`)
+    }
+
+    const listData = await listRes.json()
+    const filesInDirectory = (listData.files as DriveFile[]) || []
+
+    const directoryCheck: DirectoryCheck = {
+      directoryId: parentId,
+      filesFound: filesInDirectory.length,
+      expectedFiles: archives.length,
+      filesInDirectory: filesInDirectory.map((f: DriveFile) => ({ id: f.id, name: f.name })),
+      allFilesInSameDirectory: filesInDirectory.length === archives.length,
+      allUploadedFilesFound: false,
+    }
+
+    // Check if all uploaded files are in this directory
+    const uploadedFileIds = uploadResults.map((ur) => ur.result.id)
+    const foundFileIds = filesInDirectory.map((f: DriveFile) => f.id)
+    const allFilesFound = uploadedFileIds.every((id) => foundFileIds.includes(id))
+
+    directoryCheck.allUploadedFilesFound = allFilesFound
+    results.directoryCheck = directoryCheck
+
+    if (!allFilesFound) {
+      const missingFiles = uploadedFileIds.filter((id) => !foundFileIds.includes(id))
+      throw new Error(
+        `Race condition detected: Not all uploaded files found in target directory. Missing file IDs: ${missingFiles.join(', ')}`,
+      )
+    }
+
+    console.log(
+      `Directory check: Found ${filesInDirectory.length} files, expected ${archives.length}`,
+    )
+    console.log('All uploaded files found in directory:', allFilesFound)
+  } catch (error) {
+    throw new Error(
+      `Directory verification failed: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+
+  // Test downloading by logical filename
+  console.log('Testing download by logical filename...')
+  const downloadTests = []
+
+  for (const archive of archives) {
+    for (const logicalFilename of archive.logicalFilenames) {
+      console.log(`Trying to download archive by logical filename "${logicalFilename}"`)
+      const downloaded = await gdrive.downloadArchiveFile(dir, logicalFilename)
+
+      if (!downloaded) {
+        throw new Error(
+          `Failed to download archive by logical filename "${logicalFilename}" from directory "${dir}"`,
+        )
+      }
+
+      const text = await downloaded.text()
+      downloadTests.push({
+        logicalFilename,
+        success: true,
+        fileName: downloaded.name,
+        type: downloaded.type,
+        size: downloaded.size,
+        contentPreview: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
+      })
+    }
+  }
+
+  results.downloadTests = downloadTests
+
+  const directoryCheck = results.directoryCheck as DirectoryCheck
+  console.log('Test completed', {
+    uploadsSuccessful: uploadResults.length,
+    directoryIssues: !directoryCheck.allUploadedFilesFound,
+    downloadTestsRun: downloadTests.length,
+  })
+
+  return results
+}
+
 // quick-n-dirty integration test
 export async function testArchiveUploadDownload() {
   const results: Record<string, unknown> = {}
