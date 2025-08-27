@@ -30,13 +30,24 @@ export const useNlpWorker = () => {
 }
 
 let pythonWorker: pythonWorker | null = null
+let pythonWorkerPromise: Promise<pythonWorker> | null = null
 
 export function usePyodideWebworker() {
-  const getPythonWorker = () => {
-    if (!pythonWorker) {
-      console.log(`create pyodide webworker`)
+  const getPythonWorker = (): Promise<pythonWorker> => {
+    if (pythonWorker) {
+      return Promise.resolve(pythonWorker)
+    }
 
-      pythonWorker = wrap<pythonWorker>(
+    // If initialization is already in progress, return the existing promise
+    if (pythonWorkerPromise) {
+      return pythonWorkerPromise
+    }
+
+    console.log(`create pyodide webworker`)
+
+    // Create the initialization promise
+    pythonWorkerPromise = (async () => {
+      const worker = wrap<pythonWorker>(
         new Worker(
           /* webpackChunkName: "pyodide-worker" */
           /* webpackMode: "lazy" */
@@ -46,13 +57,22 @@ export function usePyodideWebworker() {
           { type: 'module' },
         ),
       )
-    }
-    return pythonWorker
+
+      // Wait for the worker to be fully initialized by running a simple script
+      // This ensures Pyodide is loaded before we consider the worker ready
+      await worker.runPythonScript("print('worker ready')")
+
+      pythonWorker = worker
+      pythonWorkerPromise = null // Clear the promise after successful creation
+      return worker
+    })()
+
+    return pythonWorkerPromise
   }
 
   const asyncRunPython = async (script: string, params?: unknown[]) => {
     console.log('calling python webworker')
-    const pythonWorker = getPythonWorker()
+    const pythonWorker = await getPythonWorker()
     return await pythonWorker.runPythonScript(script, params)
   }
 
@@ -87,8 +107,8 @@ keywordsFunc
   }
 
   const preInit = async () => {
-    console.log('pre-initialized pytho web worker')
-    const pythonWorker = getPythonWorker()
+    console.log('pre-initialized python web worker')
+    const pythonWorker = await getPythonWorker()
     await pythonWorker.runPythonScript("print('initializing...')")
     console.log('python worker is ready...')
   }
