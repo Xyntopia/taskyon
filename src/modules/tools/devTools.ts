@@ -121,6 +121,7 @@ const getGitlabInfo = createTool({
             arguments: {
               oauthURL: OAUTH_URL,
               clientId: CLIENT_ID,
+              tokenUrl: GITLAB_TOKEN_URL,
               scope: 'read_user read_api',
               toolId: ctx.toolId,
             },
@@ -346,6 +347,7 @@ The tool never stores content server-side; everything runs client-side in the Ta
             arguments: {
               oauthURL: OAUTH_URL,
               clientId: CLIENT_ID,
+              tokenUrl: GITLAB_TOKEN_URL,
               scope: 'api',
               toolId: ctx.toolId,
             },

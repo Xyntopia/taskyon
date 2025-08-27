@@ -116,7 +116,7 @@ not working:
             { role: 'assistant', content: { type: 'message', data: html } },
             toolCall({
               name: 'ensureOauthLogin',
-              arguments: { oauthURL, clientId, scope, toolId },
+              arguments: { oauthURL, clientId, scope, tokenUrl, toolId },
             }),
           ],
         ])

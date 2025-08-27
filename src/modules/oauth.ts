@@ -346,7 +346,7 @@ async function getAccessTokenFromCode({
       )
     }
 
-    const creds = OAuthCredentials.parse(data)
+    const creds = OAuthCredentials.parse({ ...data, service: tokenUrl, type: 'oauth-credentials' })
     return creds
   } catch (error) {
     if (error instanceof OAuthError) {
