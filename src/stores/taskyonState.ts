@@ -269,9 +269,10 @@ function connectGdriveSync(
     'addTasks',
     'requestTask',
   ] as const)
-  gds.connect(subset)
+  const disconnect = gds.connect(subset)
 
   //tyPort.receive((msg) => console.log(msg))
+  return disconnect
 }
 
 function defineTyGuiTools(stateRefs: ReturnType<typeof useAppStateStore>): InternalTool[] {
@@ -726,7 +727,20 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // in GUI applications we can connect gdrive for synchronization purposes!
     // we don't need any password or anything here, because
     // gdrive receives already encrypted tasks from our taskyon engine...
-    connectGdriveSync(stateRefs.appConfiguration.gdriveDir, ty.port, getToken)
+    let disconnect: (() => void) | undefined = undefined
+    watch(
+      () => stateRefs.appConfiguration.enableGdriveSync,
+      (enable) => {
+        if (enable && !disconnect) {
+          console.log('connect gdrive!')
+          disconnect = connectGdriveSync(stateRefs.appConfiguration.gdriveDir, ty.port, getToken)
+        } else if (disconnect) {
+          console.log('disconnect drive!')
+          disconnect()
+          disconnect = undefined
+        }
+      },
+    )
   })
 
   // TODO: this is soo  ugly..  we need to do something about this...

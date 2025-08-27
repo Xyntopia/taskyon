@@ -50,14 +50,20 @@ export type Port<Tx, Rx> = {
   connect: <Tx, Rx extends oTx, oTx, oRx extends Tx>(
     this: Port<Tx, Rx>,
     other: Port<oTx, oRx>,
-  ) => void
+  ) => Unsubscribe
 }
 
 export type DuplexChannel<Tx, Rx> = { x: Port<Tx, Rx>; y: Port<Rx, Tx> }
 
-const connectChannels = <Tx, Rx, oTx, oRx>(x: Port<Tx, Rx>, y: Port<oTx, oRx>) => {
-  x.receive((msg) => y.send(msg as unknown as oTx))
-  y.receive((msg) => x.send(msg as unknown as Tx))
+const connectChannels = <Tx, Rx, oTx, oRx>(x: Port<Tx, Rx>, y: Port<oTx, oRx>): Unsubscribe => {
+  const unsubX = x.receive((msg) => y.send(msg as unknown as oTx))
+  const unsubY = y.receive((msg) => x.send(msg as unknown as Tx))
+
+  // Return a function that disconnects both subscriptions
+  return () => {
+    unsubX()
+    unsubY()
+  }
 }
 
 const makePort = <Tx, Rx = Tx>(
