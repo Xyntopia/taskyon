@@ -141,15 +141,7 @@ not working:
       const creds = await authenticateWithPopup({ oauthURL, clientId, scope, tokenUrl }, stopSignal)
 
       // store secret and confirm
-      await secretStore.setSecret(toolId, 'oauth-access-token', creds.access_token)
-      if (creds.refresh_token)
-        await secretStore.setSecret(toolId, 'oauth-refresh-token', creds.refresh_token)
-      if (creds.expires_in)
-        await secretStore.setSecret(
-          toolId,
-          'oauth-expires-at',
-          (creds.created_at + creds.expires_in).toString(),
-        )
+      await secretStore.setSecret(toolId, 'oauth-creds', JSON.stringify(creds))
 
       return makeTaskResult([
         [{ role: 'assistant', content: { type: 'return', data: '🎉 Logged in successfully.' } }],

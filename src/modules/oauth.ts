@@ -458,6 +458,30 @@ async function getAccessTokenFromCode({
   }
 }
 
+/**
+ * Attempts to refresh the token if expired, otherwise returns the cached credentials.
+ * Returns null if refresh fails or no refresh token is available.
+ */
+export async function useRefreshTokenIfExpired(
+  cached: OAuthCredentials,
+  params: { tokenUrl: string; clientId: string },
+): Promise<OAuthCredentials | null> {
+  if (isTokenExpired(cached)) {
+    if (cached.refresh_token) {
+      try {
+        console.log('Token expired, attempting refresh...')
+        const refreshed = await refreshAccessToken(cached, params.tokenUrl, params.clientId)
+        return refreshed
+      } catch (error) {
+        console.warn('Token refresh failed, will re-authenticate:', error)
+      }
+    } else {
+      console.log('Token expired but no refresh token available, re-authenticating')
+    }
+  } else return cached
+  return null
+}
+
 export type TokenGetter = (
   provider: string,
   params: {
@@ -516,22 +540,11 @@ export const usePersistentOauth = (secretStore: {
           }
         } else {
           // For authorization code flow, try to refresh if expired
-          if (isTokenExpired(cached)) {
-            if (cached.refresh_token) {
-              try {
-                console.log('Token expired, attempting refresh...')
-                const refreshed = await refreshAccessToken(cached, params.tokenUrl, params.clientId)
-                await saveCredentials(provider, refreshed)
-                return refreshed
-              } catch (error) {
-                console.warn('Token refresh failed, will re-authenticate:', error)
-                cached = null // Force new authentication
-              }
-            } else {
-              console.log('Token expired but no refresh token available, re-authenticating')
-              cached = null // Force new authentication
-            }
-          }
+          const refreshed = await useRefreshTokenIfExpired(cached, {
+            clientId: params.clientId,
+            tokenUrl: params.tokenUrl,
+          })
+          if (refreshed) await saveCredentials(provider, refreshed)
         }
       }
 
