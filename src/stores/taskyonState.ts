@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { watch, computed, ref, readonly } from 'vue'
+import { watch, computed, ref, readonly, watchEffect } from 'vue'
 import type { ChatResponseType, TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
 import { type Model, getCurrentModel, llmSettings, type TyProfile } from 'src/modules/taskyon/types'
 import axios from 'axios' // TODO: replace with fetch
@@ -32,7 +32,7 @@ import { usePyodideWebworker } from 'src/modules/taskyon/webWorkerApi'
 import { areWeInIframe, waitForIframeDuplexChannel } from './iframeClient'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
 import type { TokenGetter } from 'src/modules/oauth'
-import { usePersistentOauth } from 'src/modules/oauth'
+import { OAUTH_PROVIDERS, usePersistentOauth } from 'src/modules/oauth'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -258,9 +258,13 @@ You can select them in the "Chat Settings" section in the message input window.
 function connectGdriveSync(
   directory: string,
   tyPort: Port<TaskyonMessage, TaskyonMessage>,
-  tokenGetter: TokenGetter,
+  getGdriveToken: () => Promise<string>,
 ) {
-  const gds = gDriveSyncPort(directory + '/taskyon_sync', tokenGetter)
+  const gdriveErrors = ref<unknown[]>([])
+  const gds = gDriveSyncPort(directory + '/taskyon_sync', getGdriveToken, (error) => {
+    console.error('gdrive error:', error)
+    gdriveErrors.value.push(error)
+  })
   //gds.connect(TY.port)
   //gds.receive(tyPort.send)
 
@@ -269,10 +273,34 @@ function connectGdriveSync(
     'addTasks',
     'requestTask',
   ] as const)
-  const disconnect = gds.connect(subset)
 
-  //tyPort.receive((msg) => console.log(msg))
-  return disconnect
+  const portDisconnect = ref<(() => void) | false>(false)
+
+  async function attemptConnect() {
+    if (portDisconnect.value) throw new Error('Port is already connected...')
+    console.log('connect gdrive!')
+    // test if we can get a token
+    // make sure, we get a gdrive token! before trying to connect!
+    await getGdriveToken()
+    portDisconnect.value = gds.connect(subset)
+  }
+
+  function disconnect() {
+    if (!portDisconnect.value) {
+      console.log('port is already disconnected')
+      return
+    }
+    console.log('disconnect drive!')
+    portDisconnect.value()
+    portDisconnect.value = false
+  }
+
+  return {
+    gdriveConnected: computed(() => !!portDisconnect.value),
+    gdriveErrors: readonly(gdriveErrors),
+    attemptConnect,
+    disconnect,
+  }
 }
 
 function defineTyGuiTools(stateRefs: ReturnType<typeof useAppStateStore>): InternalTool[] {
@@ -723,25 +751,41 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return await tg(...args)
   }
 
-  void taskyon.then((ty) => {
+  const gdriveConnected = ref(false)
+  const gdriveErrors = ref<unknown[]>([])
+
+  async function getGdriveToken() {
+    const creds = await getToken('google', {
+      oauthURL: OAUTH_PROVIDERS.google.authUrl,
+      clientId: OAUTH_PROVIDERS.google.clientId,
+      scope: OAUTH_PROVIDERS.google.scope,
+    })
+    return creds.access_token
+  }
+
+  const gdp = taskyon.then((ty) => {
     // in GUI applications we can connect gdrive for synchronization purposes!
     // we don't need any password or anything here, because
     // gdrive receives already encrypted tasks from our taskyon engine...
-    let disconnect: (() => void) | undefined = undefined
+    const gdp = connectGdriveSync(stateRefs.appConfiguration.gdriveDir, ty.port, getGdriveToken)
+    // Update your reactive refs when the connection is established
+    watchEffect(() => {
+      console.log('gdrive connection state changed:', gdp.gdriveConnected.value)
+      gdriveConnected.value = gdp.gdriveConnected.value
+      gdriveErrors.value = [...gdp.gdriveErrors.value]
+    })
+
     watch(
       () => stateRefs.appConfiguration.enableGdriveSync,
-      (enable) => {
-        if (enable && !disconnect) {
-          console.log('connect gdrive!')
-          disconnect = connectGdriveSync(stateRefs.appConfiguration.gdriveDir, ty.port, getToken)
-        } else if (disconnect) {
-          console.log('disconnect drive!')
-          disconnect()
-          disconnect = undefined
-        }
+      async (enable) => {
+        if (enable) {
+          await gdp.attemptConnect()
+        } else gdp.disconnect()
       },
       { immediate: true },
     )
+
+    return gdp
   })
 
   // TODO: this is soo  ugly..  we need to do something about this...
@@ -945,6 +989,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     connectMessageIframe,
     entryNode,
     api: uiApiOutside,
+    gdp,
+    getGdriveToken,
   }
 }) // this state stores all information which
 

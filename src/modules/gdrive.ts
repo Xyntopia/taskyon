@@ -5,8 +5,6 @@
 
 import axios from 'axios'
 import { asyncLruCache, lockMap } from 'src/modules/utils'
-import type { TokenGetter } from './oauth'
-import { OAUTH_PROVIDERS } from './oauth'
 
 type gDriveFile = {
   id: string
@@ -154,21 +152,7 @@ async function resolveId(opts: {
 }
 
 // --- main API ---
-export const useGdrive = (getToken: TokenGetter) => {
-  // --- authentication ---
-  async function getValidAccessToken(signal?: AbortSignal) {
-    const creds = await getToken(
-      'google',
-      {
-        oauthURL: OAUTH_PROVIDERS.google.authUrl,
-        clientId: OAUTH_PROVIDERS.google.clientId,
-        scope: OAUTH_PROVIDERS.google.scope,
-      },
-      signal,
-    )
-    return creds.access_token
-  }
-
+export const useGdrive = (getValidAccessToken: () => Promise<string>) => {
   async function saveFileToGdrive(file: File, directory: string, share = false) {
     const token = await getValidAccessToken()
     const gdriveFile = await uploadFileToDrive(file, directory, token)

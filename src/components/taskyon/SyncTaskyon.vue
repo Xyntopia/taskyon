@@ -244,7 +244,7 @@ import SyncAskDialog from './SyncAskDialog.vue'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
-const { saveObjToGdrive, loadObjFromGdrive } = useGdrive(tystate.getToken)
+const { saveObjToGdrive, loadObjFromGdrive } = useGdrive(tystate.getGdriveToken)
 
 const showSeedPhrase = ref(false)
 const pressedSeedPhraseCopyButton = ref(false)

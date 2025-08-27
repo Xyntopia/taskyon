@@ -4,7 +4,7 @@
     <q-space />
     <q-btn v-close-popup icon="close" flat round dense />
   </q-card-section>
-  <q-list class="col">
+  <q-list dense class="col">
     <q-item>
       <q-item-section avatar>
         <div class="no-wrap">
@@ -13,7 +13,7 @@
         </div>
       </q-item-section>
       <q-item-section>
-        <div class="row q-gutter-sm no-wrap items-center">
+        <div class="row no-wrap items-center">
           <div>Connect Google Drive for automatic backup?</div>
           <InfoDialog>
             <p>
@@ -28,8 +28,12 @@
         </div>
       </q-item-section>
       <q-item-section side>
-        <q-toggle v-model="state.appConfiguration.enableGdriveSync" />
+        <q-toggle v-model="state.appConfiguration.enableGdriveSync" color="secondary" />
       </q-item-section>
+    </q-item>
+    <q-item>
+      <div v-if="gdp?.gdriveConnected.value">connected!</div>
+      <div v-else>disconnected!</div>
     </q-item>
   </q-list>
   <q-card-actions v-if="showDontAskOption">
@@ -44,8 +48,12 @@ import { ref } from 'vue'
 import InfoDialog from '../InfoDialog.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { matSync } from '@quasar/extras/material-icons'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import { computedAsync } from '@vueuse/core'
 
 const state = useAppStateStore()
+const tystate = useTaskyonStore()
+const gdp = computedAsync(async () => await tystate.gdp)
 
 const { title, showDontAskOption = false } = defineProps<{
   title?: string

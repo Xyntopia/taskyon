@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
 import { createTool, makeTaskResult } from '@taskyon/taskyon'
 import { useGdrive } from 'src/modules/gdrive' // Import the gdrive module
-import { usePersistentOauth } from '../oauth'
+import { OAUTH_PROVIDERS, usePersistentOauth } from '../oauth'
 
 /*const googleDriveTool = createTool({
   description: 'A tool that saves/loads files from Google Drive using OAuth2 within the iframe',
@@ -174,10 +174,20 @@ Files can be organized in directories and optionally made public with sharable l
     try {
       // TODO: give gdrivetool its own ability to authenticate through oauth.
       //       do this through ctx
-      const getToken = usePersistentOauth({
-        getSecret: async (name) => await getSecret(name, false),
-        setSecret: setSecret,
-      })
+      // an oauth token getter function which persists secrets in our local secretstore!
+      const getToken = async () => {
+        const tg = usePersistentOauth({
+          getSecret: async (name) => await getSecret(name, false),
+          setSecret,
+        })
+        return (
+          await tg('google', {
+            oauthURL: OAUTH_PROVIDERS.google.authUrl,
+            clientId: OAUTH_PROVIDERS.google.clientId,
+            scope: OAUTH_PROVIDERS.google.scope,
+          })
+        ).access_token
+      }
       const gdrive = useGdrive(getToken)
       let result
 
