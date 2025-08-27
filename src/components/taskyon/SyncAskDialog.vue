@@ -33,7 +33,15 @@
       <q-item-section side>
         <div class="column items-center">
           <q-toggle v-model="state.appConfiguration.enableGdriveSync" color="secondary" />
-          <div>state: {{ gdp?.gdriveConnected.value ? 'connected' : 'disconnected' }}</div>
+          <div
+            :class="
+              gdp?.gdriveConnected.value != !!state.appConfiguration.enableGdriveSync
+                ? 'text-negative'
+                : 'text-positive'
+            "
+          >
+            state: {{ gdp?.gdriveConnected.value ? 'connected' : 'disconnected' }}
+          </div>
         </div>
       </q-item-section>
     </q-item>
