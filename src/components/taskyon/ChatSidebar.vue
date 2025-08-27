@@ -44,8 +44,8 @@
                   nameMap[conversationId]
                 }}
               </template>
-              <div v-else class="no-wrap">
-                <q-spinner-dots />
+              <div v-else class="row no-wrap items-center">
+                <div class="gpu-spinner q-mr-sm" />
                 {{ `chat.${conversationId.slice(0, 3)}` }}
               </div>
               <q-tooltip>
@@ -108,6 +108,7 @@ import { useAppStateStore } from 'src/stores/appState'
 import { useQuasar } from 'quasar'
 import { useRoute } from 'vue-router'
 import { watchEffect } from 'vue'
+import { defineComponent } from 'vue'
 
 const $route = useRoute()
 const $q = useQuasar()
@@ -194,3 +195,21 @@ async function loadConversations(files: File[]) {
 //     ),
 // )
 </script>
+
+<style scoped>
+.gpu-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  animation: spin 3s linear infinite;
+  will-change: transform;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+</style>
