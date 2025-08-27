@@ -56,13 +56,6 @@ export function usePyodideWebworker() {
     return await pythonWorker.runPythonScript(script, params)
   }
 
-  const preInit = async () => {
-    console.log('pre-initialized pytho web worker')
-    const pythonWorker = getPythonWorker()
-    await pythonWorker.runPythonScript("print('initializing...')")
-    console.log('python worker is ready...')
-  }
-
   // TODO: somehow initialize functions like this on webworker-side
   //       that way we don't have to re-initialize them all the time...
   async function extractKeywords(text: string, num: number) {
@@ -91,6 +84,13 @@ keywordsFunc
       console.error('no keywords found!', error)
       return ['no keywords found']
     }
+  }
+
+  const preInit = async () => {
+    console.log('pre-initialized pytho web worker')
+    const pythonWorker = getPythonWorker()
+    await pythonWorker.runPythonScript("print('initializing...')")
+    console.log('python worker is ready...')
   }
 
   return {

@@ -287,7 +287,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRefs } from 'vue'
+import { computed, onMounted, ref, toRefs } from 'vue'
 import { llmSettings, appConfiguration } from 'src/modules/taskyon/types'
 import { useTaskyonStore } from 'stores/taskyonState'
 import ModelSelection from 'components/taskyon/ModelSelection.vue'
@@ -331,6 +331,19 @@ const toolMenu = ref()
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { selectedApi } = toRefs(state.llmSettings)
+
+const keywordExtractorReady = ref(false)
+
+onMounted(() => {
+  // pre-load our python-based keyword function!
+  void generateTaskKeyWords(
+    currentnewTask.value ?? {
+      role: 'system',
+      content: { type: 'message', data: 'test' },
+    },
+    [],
+  ).then(() => (keywordExtractorReady.value = true))
+})
 
 //const selectedTaskTypeVar = ref<string>('testasdad')
 
@@ -435,6 +448,13 @@ const getCurrentKeywords = async () => {
     taskChain = await tm.getTaskChain(state.llmSettings.selectedTaskId)
   }
   return (await generateTaskKeyWords(currentnewTask.value, taskChain))[0]
+}
+
+async function getCurrentKeywordsWithTimeout(timeoutMs = 200) {
+  return Promise.race([
+    getCurrentKeywords(),
+    new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
+  ])
 }
 
 // TODO: only watch if idle...
@@ -565,7 +585,7 @@ async function addNewTask() {
   }
 
   // add taskchain to taskManager
-  const kwds = await getCurrentKeywords()
+  const kwds = await getCurrentKeywordsWithTimeout(200)
   newTaskChain.forEach((t) => (t.name = kwds))
   const newTaskId = (await tm.addTaskChain(newTaskChain, state.llmSettings.selectedTaskId)).at(-1)
 
