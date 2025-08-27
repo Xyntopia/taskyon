@@ -4,14 +4,17 @@
     <q-space />
     <q-btn v-close-popup icon="close" flat round dense />
   </q-card-section>
-  <q-list>
-    <div class="text-info">Keep task data synced across devices</div>
+  <q-list class="col">
     <q-item>
       <q-item-section avatar>
-        <q-icon size="md" :name="mdiGoogleDrive" />
+        <div class="no-wrap">
+          <q-icon size="md" :name="mdiGoogleDrive" />
+          <q-icon size="md" :name="matSync" />
+        </div>
       </q-item-section>
       <q-item-section>
-        <div class="row q-gutter-sm no-wrap">
+        <div class="row q-gutter-sm no-wrap items-center">
+          <div>Connect Google Drive for automatic backup?</div>
           <InfoDialog>
             <p>
               You can optionally use your Google Drive to sync your task nodes across devices. This
@@ -22,11 +25,10 @@
               Only you can access your task data. Google will not able to read your data.
             </p>
           </InfoDialog>
-          <div>Connect Google Drive for automatic backup?</div>
         </div>
       </q-item-section>
-      <q-item-section>
-        <q-btn color="primary" label="Connect Google Drive" @click="handleConnect" />
+      <q-item-section side>
+        <q-toggle v-model="state.appConfiguration.enableGdriveSync" />
       </q-item-section>
     </q-item>
   </q-list>
@@ -40,6 +42,10 @@
 import { mdiGoogleDrive } from '@quasar/extras/mdi-v6'
 import { ref } from 'vue'
 import InfoDialog from '../InfoDialog.vue'
+import { useAppStateStore } from 'src/stores/appState'
+import { matSync } from '@quasar/extras/material-icons'
+
+const state = useAppStateStore()
 
 const { title, showDontAskOption = false } = defineProps<{
   title?: string
@@ -52,10 +58,6 @@ const emit = defineEmits<{
 }>()
 
 const dontAskAgain = ref(false)
-
-const handleConnect = () => {
-  emit('connect', dontAskAgain.value)
-}
 
 const handleDismiss = () => {
   emit('dismiss', dontAskAgain.value)

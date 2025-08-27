@@ -740,6 +740,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           disconnect = undefined
         }
       },
+      { immediate: true },
     )
   })
 

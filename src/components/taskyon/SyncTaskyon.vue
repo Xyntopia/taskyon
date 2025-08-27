@@ -1,16 +1,14 @@
 <template>
   <q-list dense>
     <template v-if="state.appConfiguration.expertMode">
-      <div class="row">
-        <q-item-label header> Decentralized Taskyon ID </q-item-label>
-        <q-item-section side>
-          <InfoDialog
-            info-text="Generate a decentralized, cryptographic user ID which can be used to interact with \
+      <q-item-label header>
+        Decentralized Taskyon ID
+        <InfoDialog
+          info-text="Generate a decentralized, cryptographic user ID which can be used to interact with \
 other taskyon users in a secure way. You can protect messages by encrypting them \
 and verify the authenticity of messages sent by other users."
-        /></q-item-section>
-      </div>
-
+        />
+      </q-item-label>
       <q-item class="items-center">
         <q-item-section avatar>
           <q-icon :name="mdiAccountKey" size="md" />
@@ -110,15 +108,27 @@ and verify the authenticity of messages sent by other users."
       <q-separator spaced />-->
     </template>
     <q-item-label header>
-      <q-icon :name="matSync" size="xs" />
       Task Synchronization
+      <InfoDialog
+        info-text="**Taskyon** makes it easy to **synchronize your tasks securely across all your devices**.
+In addition, you can choose to connect with third-party cloud storage providers—like Google Drive—for seamless access everywhere.
+
+---
+
+Your privacy and security are our top priority. Taskyon uses **end-to-end encryption** before any data is synchronized or stored outside the app. *(Learn more about end-to-end encryption [here](https://en.wikipedia.org/wiki/End-to-end_encryption).)*
+
+In practice, this means that **only you** can read your data—**not** Taskyon’s developers, **not** Google, and **not** any other storage provider. Every task you create is fully encrypted before it leaves your device, and only Taskyon can decrypt it for you.
+
+With Taskyon, your tasks are always **yours alone**.
+"
+      />
     </q-item-label>
     <q-item>
       <SyncAskDialog />
     </q-item>
     <q-separator spaced />
     <q-item-label header>Task Backup</q-item-label>
-    <q-item class="q-pa-md q-gutter-sm">
+    <q-item class="q-mb-lg">
       <q-item-section>
         <q-btn
           :icon="matDownload"
@@ -133,6 +143,8 @@ and verify the authenticity of messages sent by other users."
           <q-btn :icon="matUpload" label="Upload Tasks from file" flat />
         </FileDropzone>
       </q-item-section>
+    </q-item>
+    <q-item>
       <q-item-section>
         <TyResetButton
           :icon="matDeleteForever"
@@ -144,6 +156,7 @@ and verify the authenticity of messages sent by other users."
         </TyResetButton>
       </q-item-section>
     </q-item>
+    <q-separator spaced />
     <q-item-label header>Taskyon Configuration Backup</q-item-label>
     <q-item>
       <q-item-section avatar>
@@ -179,7 +192,6 @@ and verify the authenticity of messages sent by other users."
       <q-item-section avatar>
         <q-icon size="md" :name="mdiGoogleDrive" />
       </q-item-section>
-
       <q-item-section> Export app & settings to gdrive: </q-item-section>
       <div class="row q-gutter-xs">
         <q-btn :icon="matSave" outline @click="onSyncGdrive">
@@ -196,7 +208,7 @@ and verify the authenticity of messages sent by other users."
           :icon="matWarning"
           label="Reset Taskyon Settings"
           outline
-          class="q-ma-md"
+          class="q-my-md"
           text-color="red"
           mode="settings"
         />
