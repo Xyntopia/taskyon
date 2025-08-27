@@ -5,6 +5,9 @@
     <q-btn v-close-popup icon="close" flat round dense />
   </q-card-section>
   <q-list dense class="col">
+    <q-item class="text-center text-yellow">
+      <div class="col">Gdrive Sync is experimental!</div>
+    </q-item>
     <q-item>
       <q-item-section avatar>
         <div class="no-wrap">
@@ -28,12 +31,26 @@
         </div>
       </q-item-section>
       <q-item-section side>
-        <q-toggle v-model="state.appConfiguration.enableGdriveSync" color="secondary" />
+        <div class="column items-center">
+          <q-toggle v-model="state.appConfiguration.enableGdriveSync" color="secondary" />
+          <div>state: {{ gdp?.gdriveConnected.value ? 'connected' : 'disconnected' }}</div>
+        </div>
       </q-item-section>
     </q-item>
     <q-item>
-      <div v-if="gdp?.gdriveConnected.value">connected!</div>
-      <div v-else>disconnected!</div>
+      <q-item-section>
+        <q-btn
+          flat
+          label="Reconnect with a different Gdrive user"
+          :icon="mdiConnection"
+          @click="
+            tystate.getGdriveToken({
+              forceAccountSelection: true,
+              forceReauth: true,
+            })
+          "
+        />
+      </q-item-section>
     </q-item>
   </q-list>
   <q-card-actions v-if="showDontAskOption">
@@ -43,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { mdiGoogleDrive } from '@quasar/extras/mdi-v6'
+import { mdiConnection, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
 import { ref } from 'vue'
 import InfoDialog from '../InfoDialog.vue'
 import { useAppStateStore } from 'src/stores/appState'

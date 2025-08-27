@@ -31,7 +31,7 @@ import { toolCall } from '@taskyon/taskyon'
 import { usePyodideWebworker } from 'src/modules/taskyon/webWorkerApi'
 import { areWeInIframe, waitForIframeDuplexChannel } from './iframeClient'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
-import type { TokenGetter } from 'src/modules/oauth'
+import type { AuthenticationOptions, TokenGetter } from 'src/modules/oauth'
 import { OAUTH_PROVIDERS, usePersistentOauth } from 'src/modules/oauth'
 
 /**
@@ -754,12 +754,17 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const gdriveConnected = ref(false)
   const gdriveErrors = ref<unknown[]>([])
 
-  async function getGdriveToken() {
-    const creds = await getToken('google', {
-      oauthURL: OAUTH_PROVIDERS.google.authUrl,
-      clientId: OAUTH_PROVIDERS.google.clientId,
-      scope: OAUTH_PROVIDERS.google.scope,
-    })
+  async function getGdriveToken(options?: AuthenticationOptions) {
+    const creds = await getToken(
+      'google',
+      {
+        oauthURL: OAUTH_PROVIDERS.google.authUrl,
+        clientId: OAUTH_PROVIDERS.google.clientId,
+        scope: OAUTH_PROVIDERS.google.scope,
+      },
+      undefined,
+      options,
+    )
     return creds.access_token
   }
 

@@ -51,6 +51,13 @@ export class OAuthError extends Error {
   }
 }
 
+export interface AuthenticationOptions {
+  /** Force the user to re-authenticate, even if they have an active session */
+  forceReauth?: boolean
+  /** Prompt the user to select an account, even if they only have one */
+  forceAccountSelection?: boolean
+}
+
 export async function authenticateWithPopup(
   params: {
     oauthURL: string
@@ -60,8 +67,10 @@ export async function authenticateWithPopup(
   },
   signal?: AbortSignal,
   timeoutMs: number = OAUTH_TIMEOUT_MS,
+  options: AuthenticationOptions = {},
 ): Promise<OAuthCredentials> {
   const { oauthURL, clientId, scope, tokenUrl } = params
+  const { forceReauth = false, forceAccountSelection = false } = options
 
   // Check if already aborted
   if (signal?.aborted) {
@@ -80,6 +89,26 @@ export async function authenticateWithPopup(
         ? { code_challenge: challenge, code_challenge_method: 'S256', response_type: 'code' }
         : { response_type: 'token' }),
     })
+
+    // Add Google-specific parameters for forcing reconnection
+    if (oauthURL.includes('accounts.google.com')) {
+      const promptValues: string[] = []
+
+      if (forceReauth) {
+        // Forces the user to re-authenticate, ignoring any existing sessions
+        promptValues.push('consent')
+      }
+
+      if (forceAccountSelection) {
+        // Forces account selection screen, even with single account
+        promptValues.push('select_account')
+      }
+
+      if (promptValues.length > 0) {
+        // Combine multiple prompt values with space separation as per OAuth2 spec
+        urlParams.set('prompt', promptValues.join(' '))
+      }
+    }
 
     const popup = window.open(
       `${oauthURL}?${urlParams.toString()}`,
@@ -339,6 +368,7 @@ export type TokenGetter = (
     tokenUrl?: string
   },
   signal?: AbortSignal,
+  options?: AuthenticationOptions,
 ) => Promise<OAuthCredentials>
 
 export const usePersistentOauth = (secretStore: {
@@ -374,12 +404,14 @@ export const usePersistentOauth = (secretStore: {
     provider: string,
     params: { oauthURL: string; clientId: string; scope: string; tokenUrl?: string },
     signal?: AbortSignal,
+    options: AuthenticationOptions = {},
   ): Promise<OAuthCredentials> => {
     try {
-      const cached = await loadCredentials(provider)
+      // Skip loading cached credentials if forcing re-authentication
+      const cached = options.forceReauth ? null : await loadCredentials(provider)
       if (cached) return cached
 
-      const creds = await authenticateWithPopup(params, signal)
+      const creds = await authenticateWithPopup(params, signal, OAUTH_TIMEOUT_MS, options)
 
       try {
         await secretStore.setSecret(provider, JSON.stringify(creds))
