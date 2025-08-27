@@ -38,11 +38,16 @@
                   ? ['text-weight-bolder', $q.dark.isActive ? 'text-secondary' : 'text-primary']
                   : [$q.dark.isActive ? 'text-white' : 'text-primary']
               "
-            >
-              {{
-                (state.llmSettings.selectedTaskId == conversationId ? '> ' : '') +
-                  nameMap[conversationId] || `chat.${conversationId.slice(0, 3)}`
-              }}
+              ><template v-if="nameMap[conversationId]">
+                {{
+                  (state.llmSettings.selectedTaskId == conversationId ? '> ' : '') +
+                  nameMap[conversationId]
+                }}
+              </template>
+              <div v-else class="no-wrap">
+                <q-spinner-dots />
+                {{ `chat.${conversationId.slice(0, 3)}` }}
+              </div>
               <q-tooltip>
                 Select Conversation ( id: {{ conversationId.slice(0, 5) }} ...)</q-tooltip
               >
