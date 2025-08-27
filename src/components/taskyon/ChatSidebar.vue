@@ -45,12 +45,15 @@
                 }}
               </template>
               <div v-else class="row no-wrap items-center">
-                <div class="gpu-spinner q-mr-sm" />
+                <q-icon :name="matAutorenew" class="q-mr-sm" />
                 {{ `chat.${conversationId.slice(0, 3)}` }}
               </div>
               <q-tooltip>
-                Select Conversation ( id: {{ conversationId.slice(0, 5) }} ...)</q-tooltip
-              >
+                <div>Select Conversation ( id: {{ conversationId.slice(0, 5) }} ...)</div>
+                <div v-if="!nameMap[conversationId]" class="q-mt-sm">
+                  ... Conversation doesn't have a name, searching for keywords in conversation...
+                </div>
+              </q-tooltip>
             </q-item-section>
             <q-item-section side>
               <TaskChainMenu :conversation-id="conversationId" />
@@ -98,29 +101,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import FileDropzone from 'components/FileDropzone.vue'
-import { matSearch, matFileUpload } from '@quasar/extras/material-icons'
+import { matSearch, matFileUpload, matAutorenew } from '@quasar/extras/material-icons'
 import { mdiForumPlus, mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import TaskChainMenu from './TaskChainMenu.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { useQuasar } from 'quasar'
 import { useRoute } from 'vue-router'
-import { watchEffect } from 'vue'
+import { generateTaskKeyWords } from 'src/modules/taskyon/taskUtils'
+import { sleep } from 'src/modules/utils'
+import { watchThrottled } from '@vueuse/core'
 
 const $route = useRoute()
 const $q = useQuasar()
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
-
-watchEffect(() => {
-  console.log(
-    'currentTask changed in sidebar:',
-    tystate.currentTask.value,
-    tystate.currentTask.value?.name,
-  )
-})
 
 const conversationIDs = ref<string[]>([])
 const nameMap = ref<Record<string, string>>({})
@@ -129,30 +126,47 @@ void tystate.getTaskManager().then((tm) =>
   tm.taskStream.subscribe((data) => {
     // for every message from the stream, try to update our name map :)
     // console.log('update name', data.data)
-    nameMap.value[data.id] = data.data?.name || 'undefined'
+    if (data.data?.name) nameMap.value[data.id] = data.data?.name
   }),
 )
 
+let currentlyCalculating = false
+
 async function updateName(id: string) {
-  if (!(id in nameMap.value)) {
-    const tm = await tystate.getTaskManager()
-    const name = (await tm.getTask(id))?.name
-    if (name) {
-      nameMap.value[id] = name
-    }
+  console.log('update name...', id)
+  const displayName = nameMap.value[id]
+  if (displayName) return
+  const tm = await tystate.getTaskManager()
+  const task = await tm.getTask(id)
+  if (!task) return
+  const name = task?.name
+  if (name) {
+    nameMap.value[id] = name
+  } else {
+    currentlyCalculating = true
+    await sleep(1000) // we slow this calculation down artificially to not overwhelm CPU
+    const kws = await generateTaskKeyWords(task, [])
+    console.log('calculating new name', kws)
+    if (kws[0]) nameMap.value[id] = kws[0]
+    currentlyCalculating = false
   }
 }
 
-watch(
+watchThrottled(
   [() => state.llmSettings.selectedTaskId, () => state.chatHistory],
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   ([_, newChatHistory]) => {
     console.log('updating sidebar chat list')
     conversationIDs.value = newChatHistory.slice(0, 10)
-    conversationIDs.value.forEach((id) => void updateName(id))
+    if (!currentlyCalculating) {
+      for (const cid of conversationIDs.value) {
+        void updateName(cid)
+      }
+    }
   },
   {
     immediate: true,
+    throttle: 1000,
   },
 )
 
@@ -194,21 +208,3 @@ async function loadConversations(files: File[]) {
 //     ),
 // )
 </script>
-
-<style scoped>
-.gpu-spinner {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  border-top-color: currentColor;
-  animation: spin 3s linear infinite;
-  will-change: transform;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-</style>
