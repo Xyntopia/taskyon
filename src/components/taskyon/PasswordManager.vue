@@ -10,7 +10,7 @@
 - Passwords will not leave your device unless you explicitly share them.
 `"
     />
-    <q-list dense separato>
+    <q-list dense separator>
       <q-item v-for="(secretRow, secretId) in secretList" :key="secretId">
         <q-expansion-item
           dense
@@ -41,7 +41,12 @@
           </q-item>
         </q-expansion-item>
         <q-item-section side top>
-          <q-btn flat label="Tool Manager" :to="'/tool/' + toolMap[secretId]" />
+          <q-btn
+            v-if="toolMap[secretId]"
+            flat
+            label="Tool Manager"
+            :to="'/tool/' + toolMap[secretId]"
+          />
           <q-btn
             flat
             color="negative"
