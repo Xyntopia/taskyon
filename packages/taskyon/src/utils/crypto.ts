@@ -1,5 +1,12 @@
+import { randomBytes } from '@noble/ciphers/webcrypto'
+import { getPublicKeyAsync, signAsync, verifyAsync } from '@noble/ed25519'
+import { hkdf } from '@noble/hashes/hkdf'
+import { sha256 } from '@noble/hashes/sha256'
+import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39'
+import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english'
 import { base64UrlToUint8Array, uint8ArrayToBase64Url, urlSafe64BitString } from '@taskyon/taskyon'
 import { Buffer } from 'buffer'
+import { v1 as uuidv1 } from 'uuid'
 import { z } from 'zod'
 
 export function parseJwt(token: string | undefined): Record<string, unknown> | undefined {
@@ -371,6 +378,12 @@ export function detectCryptoBackend() {
   return typeof window !== 'undefined' && window.crypto && window.crypto.subtle ? 'web' : 'js'
 }
 
+export function sha256UrlSafeHashJs(obj: unknown) {
+  const json = JSON.stringify(obj)
+  const h1a = sha256(json)
+  return Promise.resolve(urlSafe64BitString(Buffer.from(h1a)))
+} // Generate a new seed phrase (mnemonic)
+
 export async function sha256UrlSafeHash(obj: unknown) {
   const json = JSON.stringify(obj)
   const encoder = new TextEncoder()
@@ -378,6 +391,20 @@ export async function sha256UrlSafeHash(obj: unknown) {
 
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
   return urlSafe64BitString(Buffer.from(hashBuffer))
+}
+
+// Generate a random key (256 bits) for HKDF
+export function generateRandomKey(bytes = 32) {
+  const keyBytes = randomBytes(bytes)
+  return hkdf(sha256, keyBytes, undefined, undefined, 32) // Derives a 256-bit key
+}
+
+export function randomString(
+  len = 32,
+  chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+) {
+  const charLen = chars.length
+  return [...crypto.getRandomValues(new Uint32Array(len))].map((n) => chars[n % charLen]).join('')
 }
 
 export async function charHash(
@@ -405,9 +432,96 @@ export async function charHash(
   return result.join('')
 }
 
+export function generateSaltJs(): string {
+  return uint8ArrayToBase64Url(randomBytes(16).buffer)
+}
+
 export function generateSalt(): string {
   const array = new Uint8Array(16)
   crypto.getRandomValues(array)
   return uint8ArrayToBase64Url(array.buffer)
 }
 // Example helper for generating a salt in both implementations.
+
+/**
+ * Generates a secure random recovery key.
+ * This key is our “master key” that can be used for recovery.
+ */
+export function generateRecoveryKey(): Uint8Array {
+  const key = new Uint8Array(32)
+  crypto.getRandomValues(key)
+  return key
+}
+
+// Generate a new seed phrase (mnemonic)
+export function generateSeedPhrase(): string {
+  return generateMnemonic(englishWordlist)
+}
+
+// Validate an existing seed phrase
+export function validateSeedPhrase(mnemonic: string): boolean {
+  return validateMnemonic(mnemonic, englishWordlist)
+}
+
+// Convert a mnemonic to a cryptographic seed
+export function mnemonicToSeed(mnemonic: string, password: string = ''): Uint8Array {
+  if (!validateSeedPhrase(mnemonic)) {
+    throw new Error('Invalid seed phrase')
+  }
+  return mnemonicToSeedSync(mnemonic, password)
+}
+
+// Generate Ed25519 key pair from seed
+export async function generateEd25519Keys(seed: Uint8Array) {
+  // Use the first 32 bytes of the seed for Ed25519
+  const privateKey = seed.slice(0, 32)
+
+  // Derive the public key
+  const publicKey = await getPublicKeyAsync(privateKey)
+
+  return { publicKey, privateKey }
+}
+
+export async function signData(data: Uint8Array, privateKey: string) {
+  const p = base64UrlToUint8Array(privateKey)
+  return uint8ArrayToBase64Url((await signAsync(data, p)).buffer)
+}
+
+export async function verifySignature(
+  signature: string,
+  data: Uint8Array,
+  publicKey: string,
+): Promise<boolean> {
+  const s = base64UrlToUint8Array(signature)
+  return await verifyAsync(s, data, base64UrlToUint8Array(publicKey))
+}
+
+export async function generateAssymetricRandomNewKey() {
+  const mnemonic = generateSeedPhrase()
+
+  return { mnemonic, ...(await base64UrlEd25519Keys(mnemonic)) }
+}
+
+export async function base64UrlEd25519Keys(mnemonic: string) {
+  const seed = mnemonicToSeed(mnemonic)
+  const { publicKey, privateKey } = await generateEd25519Keys(seed)
+  console.log('Public Key:', publicKey)
+  console.log('Private Key:', privateKey)
+  return {
+    publicKey: uint8ArrayToBase64Url(publicKey.buffer),
+    privateKey: uint8ArrayToBase64Url(privateKey.buffer),
+  }
+}
+
+export function urlSafeBase64Uuid() {
+  // Generate a UUID
+  const hexUuid = uuidv1()
+
+  // Convert the UUID from hex to a Buffer
+  const bufferUuid = Buffer.from(hexUuid.replace(/-/g, ''), 'hex')
+
+  // Convert the Buffer to anode  base64 string
+  const base64Uuid = urlSafe64BitString(bufferUuid)
+
+  return base64Uuid
+}
