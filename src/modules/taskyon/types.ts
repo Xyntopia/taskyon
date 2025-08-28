@@ -131,6 +131,8 @@ export const TaskNodeMeta = z
     promptTokens: z.number().optional(),
     resultTokens: z.number().optional(),
     taskTokens: z.number().optional(),
+    name: z.string().optional(),
+    summary: z.string().optional(),
     estimatedTokens: z
       .object({
         resultTokens: z.number().optional(),

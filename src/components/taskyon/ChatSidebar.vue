@@ -139,16 +139,23 @@ async function updateName(id: string) {
   const tm = await tystate.getTaskManager()
   const task = await tm.getTask(id)
   if (!task) return
-  const name = task?.name
-  if (name) {
-    nameMap.value[id] = name
-  } else {
+  let name = task?.name
+  if (!name?.trim()) {
+    const taskMeta = await tm.metaDb.get('id')
+    name = taskMeta?.name
+  }
+  if (!name?.trim()) {
     currentlyCalculating = true
     await sleep(1000) // we slow this calculation down artificially to not overwhelm CPU
-    const kws = await generateTaskKeyWords(task, [])
+    const taskChain = await tm.getTaskChain(id)
+    const kws = await generateTaskKeyWords(task, taskChain)
     console.log('calculating new name', kws)
-    if (kws[0]) nameMap.value[id] = kws[0]
+    if (kws[0]) name = kws[0]
     currentlyCalculating = false
+  }
+  if (name?.trim()) {
+    nameMap.value[id] = name.trim()
+    void tm.metaDb.upsert(id, { name })
   }
 }
 
