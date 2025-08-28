@@ -2,7 +2,7 @@ import type { OpenRouterGenerationInfo, Model, llmSettings, OpenAIMessage } from
 import type OpenAI from 'openai'
 import { sleep, asyncTimeLruCache } from '../utils'
 import { ChatResponseType } from './types'
-import { charHash } from '../@taskyon/taskyon'
+import { charHash } from '@taskyon/taskyon'
 
 export function generateHeaders(apiSecret: string, siteUrl: string, selectedApi: string) {
   let headers: Record<string, string> = {

@@ -1,6 +1,6 @@
 import type { PartialDeep } from 'type-fest'
-import type { AskSession, EncryptedDataRow } from './@taskyon/taskyon'
-import { decryptDataFile, encryptDataFile } from './@taskyon/taskyon'
+import type { AskSession, EncryptedDataRow } from '@taskyon/taskyon'
+import { decryptDataFile, encryptDataFile } from '@taskyon/taskyon'
 import type { Stream } from './frpBus'
 import { createStream, filter, streamProcedureCall } from './frpBus'
 import type { PgLiteOptions } from './pglite.api'

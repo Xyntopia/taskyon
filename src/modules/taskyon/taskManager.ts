@@ -11,7 +11,7 @@ import {
   withImmutable,
   withLiveStreams,
 } from '../crudWrapper'
-import { sha256UrlSafeHash } from '../@taskyon/taskyon'
+import { sha256UrlSafeHash } from '@taskyon/taskyon'
 import type { TyPGDB } from '../pglite.api'
 import { getDatabase } from '../pglite.api'
 import type { PartialDeep } from 'type-fest'

@@ -8,7 +8,7 @@ import { createChatCompletionTask } from '../tools/chatCompletionTool'
 import type { CrudWrapper, SecretStore } from '../crudWrapper'
 import type { TaskMessageStream } from '../frpBus'
 import { createMessagePortAdapter, createStream, filter } from '../frpBus'
-import { sha256UrlSafeHash } from '../@taskyon/taskyon'
+import { sha256UrlSafeHash } from '@taskyon/taskyon'
 import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { taskResult, type toolContext } from '@taskyon/taskyon'
 

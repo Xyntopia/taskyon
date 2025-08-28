@@ -1,6 +1,6 @@
 import type { JSONSchema7 } from 'json-schema'
 import { createVectorStore } from '../crudWrapper'
-import { sha256UrlSafeHash } from '../@taskyon/taskyon'
+import { sha256UrlSafeHash } from '@taskyon/taskyon'
 import { getDatabase } from '../pglite.api'
 import { createTool } from '@taskyon/taskyon'
 

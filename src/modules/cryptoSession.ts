@@ -1,4 +1,4 @@
-import { base64UrlToUint8Array, uint8ArrayToBase64Url } from '@ŧaskyon/taskyon'
+import { base64UrlToUint8Array, uint8ArrayToBase64Url } from '@taskyon/taskyon'
 
 /**
  * Registers a device-bound credential.
