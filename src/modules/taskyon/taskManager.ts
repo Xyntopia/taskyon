@@ -605,7 +605,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     createCombinedCrudWrapper([
       createMapCrudWrapper(new Map<string, TaskNodeMeta>()),
       await createPgLiteCrudWrapper<TaskNodeMeta>(taskyonDb, {
-        tableName: 'debugDb',
+        tableName: 'metaDb',
       }),
     ]),
   )
