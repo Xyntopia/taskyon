@@ -102,7 +102,7 @@
       >
         <q-menu>
           <q-list dense>
-            <q-item :size="btnSize" to="/settings">
+            <q-item :size="btnSize" to="/settings" data-cy="open-settings">
               <q-item-section avatar>
                 <q-icon :name="matSettings" />
               </q-item-section>

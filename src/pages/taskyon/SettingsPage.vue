@@ -6,6 +6,7 @@
           to="/settings/aiserviceprovider"
           label="AI Service Provider"
           name="aiserviceprovider"
+          data-cy="aiserviceprovider"
         />
         <q-route-tab to="/settings/profile" label="Profile & Backup" name="profile" />
         <q-route-tab to="/settings/secrets" label="Secrets" name="secrets" />
