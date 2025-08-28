@@ -2,11 +2,132 @@
   <q-list dense>
     <template v-if="state.appConfiguration.expertMode">
       <q-item-label header>
+        Task Synchronization
+        <InfoDialog
+          info-text="**Taskyon** makes it easy to **synchronize your tasks securely across all your devices**.
+In addition, you can choose to connect with third-party cloud storage providers—like Google Drive—for seamless access everywhere.
+
+---
+
+Your privacy and security are our top priority. Taskyon uses **end-to-end encryption** before any data is synchronized or stored outside the app. *(Learn more about end-to-end encryption [here](https://en.wikipedia.org/wiki/End-to-end_encryption).)*
+
+In practice, this means that **only you** can read your data—**not** Taskyon’s developers, **not** Google, and **not** any other storage provider. Every task you create is fully encrypted before it leaves your device, and only Taskyon can decrypt it for you.
+
+With Taskyon, your tasks are always **yours alone**.
+"
+        />
+      </q-item-label>
+      <q-item>
+        <SyncAskDialog />
+      </q-item>
+      <q-separator spaced />
+      <q-item-label header>
         Decentralized Taskyon ID
         <InfoDialog
           info-text="Generate a decentralized, cryptographic user ID which can be used to interact with \
 other taskyon users in a secure way. You can protect messages by encrypting them \
 and verify the authenticity of messages sent by other users."
+        />
+      </q-item-label>
+      <q-item class="items-center">
+        <q-item-section avatar>
+          <q-icon :name="mdiAccountKey" size="md" />
+          User ID (beta)
+        </q-item-section>
+        <q-item-section side>
+          <q-dialog v-model="showSeedPhrase" no-backdrop-dismiss>
+            <q-card>
+              <q-card-section class="text-warning">
+                This is the seed phrase for your new cryptographic user ID. This ID is only known to
+                you. Store the phrase securely and never share it with anyone. You can use it to
+                recover your ID if needed, but losing or exposing it could compromise your access
+                and security for taskyon.
+              </q-card-section>
+              <q-card-section class="row">
+                <div class="rounded-borders text-bold col text-info">
+                  {{ seedPhrase }}
+                </div>
+                <q-btn
+                  class="col-auto"
+                  flat
+                  dense
+                  :icon="matContentCopy"
+                  @click="
+                    () => {
+                      console.log('copied seed phrase to clipboard...')
+                      copyToClipboard(seedPhrase)
+                      pressedSeedPhraseCopyButton = true
+                    }
+                  "
+                ></q-btn>
+              </q-card-section>
+              <q-card-section class="row justify-around">
+                <q-btn
+                  :disable="!pressedSeedPhraseCopyButton"
+                  flat
+                  :color="pressedSeedPhraseCopyButton ? 'positive' : undefined"
+                  label="Accept"
+                  @click="
+                    () => {
+                      onAcceptSeedPhrase(seedPhrase)
+                      showSeedPhrase = false
+                    }
+                  "
+                  ><q-tooltip v-if="!pressedSeedPhraseCopyButton" class="bg-warning">
+                    Press the copy button next to the seedphrase first in order to be able to
+                    accept!
+                  </q-tooltip>
+                </q-btn>
+                <q-btn flat label="Cancel" @click="showSeedPhrase = false"></q-btn>
+              </q-card-section>
+            </q-card>
+          </q-dialog>
+          <q-btn
+            v-if="state.llmSettings.userId"
+            class="col-auto"
+            flat
+            dense
+            :icon="matContentCopy"
+            @click="copyToClipboard(state.llmSettings.userId)"
+          >
+            <q-tooltip> Copy User ID to Clipboard </q-tooltip>
+          </q-btn>
+        </q-item-section>
+        <q-item-section v-if="state.llmSettings.userId" class="ellipsis text-bold">
+          {{ state.llmSettings.userId.slice(0, 5) }} ...
+          {{ state.llmSettings.userId.slice(-10) }}
+        </q-item-section>
+        <q-item-section side>
+          <div class="row">
+            <q-btn
+              class="col-auto"
+              dense
+              :label="state.llmSettings.userId ? 'Regenerate' : 'New'"
+              flat
+              @click="onGenerateSeedPhrase"
+            >
+              <q-tooltip> Generate a new User ID & Seedphrease. </q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="state.llmSettings.userId"
+              class="col-auto"
+              :icon="matDeleteForever"
+              dense
+              flat
+              @click="state.llmSettings.userId = undefined"
+            >
+              <q-tooltip> Delete User ID. </q-tooltip>
+            </q-btn>
+          </div>
+        </q-item-section>
+      </q-item>
+      <q-item-label header>
+        Device ID
+        <InfoDialog
+          info-text="Your Device ID is a unique identifier for this specific device.
+It helps Taskyon distinguish between different devices you use, enabling secure
+synchronization and backup of your data. Device IDs are not shared with other
+users and are used only for internal management and security."
         />
       </q-item-label>
       <q-item class="items-center">
@@ -107,26 +228,6 @@ and verify the authenticity of messages sent by other users."
       <q-item> </q-item>
       <q-separator spaced />-->
     </template>
-    <q-item-label header>
-      Task Synchronization
-      <InfoDialog
-        info-text="**Taskyon** makes it easy to **synchronize your tasks securely across all your devices**.
-In addition, you can choose to connect with third-party cloud storage providers—like Google Drive—for seamless access everywhere.
-
----
-
-Your privacy and security are our top priority. Taskyon uses **end-to-end encryption** before any data is synchronized or stored outside the app. *(Learn more about end-to-end encryption [here](https://en.wikipedia.org/wiki/End-to-end_encryption).)*
-
-In practice, this means that **only you** can read your data—**not** Taskyon’s developers, **not** Google, and **not** any other storage provider. Every task you create is fully encrypted before it leaves your device, and only Taskyon can decrypt it for you.
-
-With Taskyon, your tasks are always **yours alone**.
-"
-      />
-    </q-item-label>
-    <q-item>
-      <SyncAskDialog />
-    </q-item>
-    <q-separator spaced />
     <q-item-label header>Task Backup</q-item-label>
     <q-item class="q-mb-lg">
       <q-item-section>
