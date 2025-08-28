@@ -648,7 +648,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         },
       },
       // simply send all other messages to our backend...
-      //(msg) => TY.port.send(msg),
+      (msg) => {
+        const m = TaskyonMessage.safeParse(msg)
+        if (m.success) TY.port.send(m.data)
+        else console.log('unknown message:', m.data)
+      },
     )
     // we manually connect our send port to the api here, because
     // we are already intercepting incoming messages with the API above
