@@ -101,7 +101,7 @@ import { onMounted } from 'vue'
 import { testCreateDeepTansformer } from 'src/modules/taskyon/tests'
 import { testGdriveUpload } from 'src/modules/taskyon/tests'
 import { testBuildSlimView } from 'src/modules/vueUtils'
-import { randomString } from 'src/modules/crypto_js'
+import { randomString } from '@taskyon/taskyon'
 import { getStoredStateString } from 'src/modules/ui/initialState'
 
 const tystate = useTaskyonStore()

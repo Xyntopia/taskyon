@@ -1,6 +1,6 @@
 import type { z } from 'zod'
 import { tyPublicApiKeyObject } from './types'
-import { parseJwt } from '../crypto_webcrypto'
+import { parseJwt } from '../@taskyon/taskyon'
 
 // This doesn't verify the key, only looks if its contents are valid!
 type tyPublicApiKeyObject = z.infer<typeof tyPublicApiKeyObject>

@@ -1,4 +1,4 @@
-import { base64UrlToUint8Array, uint8ArrayToBase64Url, urlSafe64BitString } from './encoding'
+import { base64UrlToUint8Array, uint8ArrayToBase64Url, urlSafe64BitString } from '@taskyon/taskyon'
 import { Buffer } from 'buffer'
 import { z } from 'zod'
 

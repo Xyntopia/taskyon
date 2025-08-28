@@ -1,4 +1,4 @@
-import { signData, verifySignature } from './crypto_js'
+import { signData, verifySignature } from '@taskyon/taskyon'
 import type { Request } from 'express'
 
 // Utility to serialize data for signing

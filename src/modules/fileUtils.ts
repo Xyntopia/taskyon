@@ -1,12 +1,12 @@
 // fileUtils.ts
 import { chunk } from 'src/modules/utils'
-import type { AskSession } from './crypto_webcrypto'
+import type { AskSession } from './@taskyon/taskyon'
 import {
   decryptDataFile,
   encryptDataFile,
   EncryptedDataRowMixed,
   type EncryptedDataRow,
-} from './crypto_webcrypto'
+} from './@taskyon/taskyon'
 import { deflateSync, inflateSync, zipSync } from 'fflate'
 import { decode, encode } from '@msgpack/msgpack'
 

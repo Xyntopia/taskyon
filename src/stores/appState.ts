@@ -17,7 +17,7 @@ import {
 } from 'src/modules/utils'
 import { unref } from 'vue'
 import defaultSettings from 'src/assets/taskyon_settings.json'
-import { generateAssymetricRandomNewKey } from 'src/modules/crypto_js'
+import { generateAssymetricRandomNewKey } from '@taskyon/taskyon'
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 import type { PartialDeep } from 'type-fest'
 import { initialStoredStateObj, storeName } from 'src/modules/ui/initialState'

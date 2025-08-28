@@ -40,7 +40,7 @@ import { TaskyonMessage } from './apiTypes'
 import { dump } from 'js-yaml'
 import z from 'zod'
 import { ToolBase } from '@taskyon/taskyon'
-import type { EncryptedDataRow } from '../crypto_webcrypto'
+import type { EncryptedDataRow } from '../@taskyon/taskyon'
 import { encryptCompressObject } from '../fileUtils'
 
 export async function tyCore(

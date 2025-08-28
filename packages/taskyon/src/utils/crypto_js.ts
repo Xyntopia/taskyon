@@ -3,7 +3,7 @@
 import { generateMnemonic, validateMnemonic, mnemonicToSeedSync } from '@scure/bip39'
 import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english'
 import { signAsync, getPublicKeyAsync, verifyAsync } from '@noble/ed25519'
-import { base64UrlToUint8Array, uint8ArrayToBase64Url, urlSafe64BitString } from './encoding'
+import { base64UrlToUint8Array, uint8ArrayToBase64Url, urlSafe64BitString } from '@ŧaskyon/taskyon'
 import { v1 as uuidv1 } from 'uuid'
 import { Buffer } from 'buffer'
 import { pbkdf2 } from '@noble/hashes/pbkdf2'

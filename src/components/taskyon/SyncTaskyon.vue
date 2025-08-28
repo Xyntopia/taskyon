@@ -337,7 +337,7 @@ import {
 } from '@quasar/extras/material-icons'
 import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
 import InfoDialog from '../InfoDialog.vue'
-import { base64UrlEd25519Keys, generateAssymetricRandomNewKey } from 'src/modules/crypto_js'
+import { base64UrlEd25519Keys, generateAssymetricRandomNewKey } from '@taskyon/taskyon'
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from './TyResetButton.vue'
 import { TyProfile } from 'src/modules/taskyon/types'

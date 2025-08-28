@@ -9,6 +9,8 @@ import { taskMarker, ToolBase, type FunctionCall } from './types/tools'
 export * from './types/node'
 export * from './types/tools'
 export * from './utils/tsHelpers'
+export * from './utils/crypto'
+export * from './utils/encoding'
 
 /**
  * Represents the context passed to tools within the Taskyon system.
