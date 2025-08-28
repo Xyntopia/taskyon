@@ -95,18 +95,14 @@ async function ensureValidTaskId(task: partialTaskDraft): Promise<TaskNode> {
 function addTaskNodeMeta(
   options: { createMeta?: 'missing' | 'overwrite' | undefined },
   task: partialTaskDraft,
-  newMeta: { name?: string | undefined },
 ) {
+  // TODO: add signatures, task ACL, etc here...
   const next = produce(task, (newTask) => {
     if (options.createMeta == 'overwrite') {
       newTask.created_at = Date.now()
     }
     if (options.createMeta !== undefined) {
       if (!newTask.created_at) newTask.created_at = Date.now()
-      if (!newTask.name && newMeta.name) {
-        // we simply select the parents name in this case, this can actually change our tasks names!
-        newTask.name = parent.name
-      }
     }
   })
   return next
@@ -117,10 +113,9 @@ export const createTaskNode = async (
   options: {
     createMeta?: 'missing' | 'overwrite' | undefined
   } = { createMeta: 'missing' },
-  parent?: TaskNode, // can be used to "pass on" some metadata to the next task...
 ): Promise<TaskNode> => {
   // TODO: add task signature and other metadata here as well
-  const newTask = addTaskNodeMeta(options, task, { name: parent?.name })
+  const newTask = addTaskNodeMeta(options, task)
   const nt = ensureValidTaskId(newTask)
   return nt
 }
@@ -565,13 +560,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
         vectors?: boolean
       } = { createMeta: 'missing', vectors: false },
     ) => {
-      const parentID = task.priorID ?? task.parentID
-      const parentTask = (parentID ? await tyCrudVec.get(parentID) : undefined) || undefined
-      const completeTask = await createTaskNode(
-        task,
-        { createMeta: options.createMeta },
-        parentTask,
-      )
+      const completeTask = await createTaskNode(task, { createMeta: options.createMeta })
 
       console.log('create new Task:', completeTask)
       await execWLock(async () => {

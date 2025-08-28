@@ -145,13 +145,24 @@ async function updateName(id: string) {
     name = taskMeta?.name
   }
   if (!name?.trim()) {
-    currentlyCalculating = true
-    await sleep(1000) // we slow this calculation down artificially to not overwhelm CPU
     const taskChain = await tm.getTaskChain(id)
-    const kws = await generateTaskKeyWords(task, taskChain)
-    console.log('calculating new name', kws)
-    if (kws[0]) name = kws[0]
-    currentlyCalculating = false
+
+    // search if a previous task already has a name first
+    for (let i = taskChain.length - 1; i >= 0; i--) {
+      if (taskChain[i]!.name?.trim()) {
+        name = taskChain[i]!.name!.trim()
+        break
+      }
+    }
+
+    if (!name?.trim()) {
+      currentlyCalculating = true
+      await sleep(1000) // we slow this calculation down artificially to not overwhelm CPU
+      const kws = await generateTaskKeyWords(task, taskChain)
+      console.log('calculating new name', kws)
+      if (kws[0]) name = kws[0]
+      currentlyCalculating = false
+    }
   }
   if (name?.trim()) {
     nameMap.value[id] = name.trim()
