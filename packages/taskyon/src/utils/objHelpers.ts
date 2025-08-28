@@ -17,3 +17,7 @@ export function removeUndefinedProperties<T extends object>(obj: T): RemoveUndef
     {} as Record<keyof T, unknown>,
   ) as RemoveUndefined<T, keyof T>
 }
+
+export function deepCloneWJson<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj))
+}

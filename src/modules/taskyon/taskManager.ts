@@ -21,6 +21,7 @@ import type { OptionalSome } from '@taskyon/taskyon'
 import type { InternalTool } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
 import { lockMap, sleep } from '../utils'
+import { produce } from 'immer'
 
 /**
  *
@@ -47,8 +48,20 @@ export async function findRootTask(taskId: string, getTask: TyTaskManager['getTa
 }
 
 const TaskWithoutId = TaskNode.omit({ id: true }).strip()
+export type TaskWithoutId = z.infer<typeof TaskWithoutId>
 
-async function taskContentHash(task: partialTaskDraft) {
+function normalizeObj<T>(task: T) {
+  const nt = produce(task, (newTask) => {
+    // this will usually remove "undefined" values..
+    return JSON.parse(JSON.stringify(newTask))
+  })
+  // TODO: ensure alphabetical order?
+  return nt
+}
+
+async function taskContentHash(
+  task: partialTaskDraft,
+): Promise<{ hash: string; normalized: TaskWithoutId }> {
   if (typeof crypto === 'undefined' || !crypto.subtle) {
     throw new Error(
       'crypto.subtle is not available in this environment, We can currently not generate task IDs!!',
@@ -60,9 +73,43 @@ async function taskContentHash(task: partialTaskDraft) {
   // we also want to make sure, that we only strip away anything which isn't official
   // part of our tasknode..
   const taskWithoutId = TaskWithoutId.parse(task)
+  const normalized = normalizeObj(taskWithoutId)
   // generate this hash ID to check of there are any duplicate tasks or anything like that...
-  const hashId = await sha256UrlSafeHash(taskWithoutId)
-  return hashId
+  const hash = await sha256UrlSafeHash(normalized)
+  return { hash, normalized }
+}
+
+async function ensureValidTaskId(task: partialTaskDraft): Promise<TaskNode> {
+  const { hash, normalized } = await taskContentHash(task)
+  if (task.id && hash != task.id) {
+    throw new Error(
+      `Not able to create new task as id doesn't match content. Expected: ${hash} got: ${task.id}.`,
+    )
+  }
+  const rt = produce(normalized as TaskNode, (t) => {
+    t.id = hash
+  })
+  return rt
+}
+
+function addTaskNodeMeta(
+  options: { createMeta?: 'missing' | 'overwrite' | undefined },
+  task: partialTaskDraft,
+  newMeta: { name?: string | undefined },
+) {
+  const next = produce(task, (newTask) => {
+    if (options.createMeta == 'overwrite') {
+      newTask.created_at = Date.now()
+    }
+    if (options.createMeta !== undefined) {
+      if (!newTask.created_at) newTask.created_at = Date.now()
+      if (!newTask.name && newMeta.name) {
+        // we simply select the parents name in this case, this can actually change our tasks names!
+        newTask.name = parent.name
+      }
+    }
+  })
+  return next
 }
 
 export const createTaskNode = async (
@@ -71,24 +118,11 @@ export const createTaskNode = async (
     createMeta?: 'missing' | 'overwrite' | undefined
   } = { createMeta: 'missing' },
   parent?: TaskNode, // can be used to "pass on" some metadata to the next task...
-) => {
+): Promise<TaskNode> => {
   // TODO: add task signature and other metadata here as well
-  if (options.createMeta == 'overwrite') {
-    task.created_at = Date.now()
-  }
-  if (options.createMeta !== undefined) {
-    if (!task.created_at) task.created_at = Date.now()
-    if (!task.name && parent?.name) {
-      // we simply select the parents name in this case, this can actually change our tasks names!
-      task.name = parent.name
-    }
-  }
-  const newId = await taskContentHash(task)
-  const completeTask: TaskNode = {
-    ...task,
-    id: newId,
-  }
-  return completeTask
+  const newTask = addTaskNodeMeta(options, task, { name: parent?.name })
+  const nt = ensureValidTaskId(newTask)
+  return nt
 }
 
 export type FileMapping = {
@@ -533,17 +567,11 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     ) => {
       const parentID = task.priorID ?? task.parentID
       const parentTask = (parentID ? await tyCrudVec.get(parentID) : undefined) || undefined
-      const completeTask: TaskNode = await createTaskNode(
+      const completeTask = await createTaskNode(
         task,
         { createMeta: options.createMeta },
         parentTask,
       )
-
-      if (task.id && completeTask.id != task.id) {
-        throw new Error(
-          `Not able to create new task as id doesn't match content. Expected: ${completeTask.id} got: ${task.id}. Adding task with expted Id.`,
-        )
-      }
 
       console.log('create new Task:', completeTask)
       await execWLock(async () => {
@@ -968,7 +996,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   // so when calling the function, we need to pre-select which type of task
   // we want to have.
   const addPartialTask2Tree = (task: partialTaskDraft) =>
-    tyCrudVec.add(task, { createMeta: 'overwrite', vectors: true })
+    tyCrudVec.add(task, { createMeta: 'missing', vectors: true })
 
   async function addTaskChain(
     taskList: partialTaskDraft[],
