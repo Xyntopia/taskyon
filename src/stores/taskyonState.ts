@@ -18,7 +18,7 @@ import {
   createTypeFilteredPort,
   filter,
 } from 'src/modules/frpBus'
-import { generateRsaOaepPair } from 'src/modules/@taskyon/taskyon'
+import { generateRsaOaepPair } from '@taskyon/taskyon'
 import { setColors } from 'src/boot/brand-colors'
 import { setPrismTheme } from 'src/modules/markdownUtils '
 import { onScopeDispose } from 'vue'
