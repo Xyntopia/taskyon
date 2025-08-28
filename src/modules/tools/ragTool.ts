@@ -1,10 +1,10 @@
 import type { JSONSchema7 } from 'json-schema'
 // import type { JSONSchema } from 'json-schema-to-ts'
 // import type { ToolBase } from '../taskyon/types'
-import { sha256UrlSafeHash } from '../crypto'
 import { createVectorStore } from '../crudWrapper'
 import { getDatabase } from '../pglite.api'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
+import { sha256UrlSafeHash } from '../crypto_js'
 // import { smallHelperTools } from './helperCollection'
 
 // const jinaTool = smallHelperTools.find(

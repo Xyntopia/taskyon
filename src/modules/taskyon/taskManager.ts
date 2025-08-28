@@ -12,7 +12,6 @@ import {
   withLiveStreams,
 } from '../crudWrapper'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
-import { urlSafeBase64Uuid } from '../crypto'
 import type { TyPGDB } from '../pglite.api'
 import { getDatabase } from '../pglite.api'
 import type { PartialDeep } from 'type-fest'
@@ -22,6 +21,7 @@ import type { InternalTool } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
 import { lockMap, sleep } from '../utils'
 import { produce } from 'immer'
+import { urlSafeBase64Uuid } from '../crypto_js'
 
 /**
  *
