@@ -8,6 +8,7 @@
         </div>
         <div class="row">
           <q-btn
+            data-cy="run-tests"
             outline
             label="Run all tests"
             @click="generateReport(state.detailedTests, state.noGuiTests)"
@@ -90,6 +91,7 @@ import {
   oauthTests,
   testArchiveUploadDownload,
   testMultipleArchiveUploadDownload,
+  testTaskIdHashing,
 } from 'src/modules/taskyon/tests'
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
@@ -168,10 +170,8 @@ async function runTest(name: string, testFunc: () => unknown, details = false) {
 }
 
 const tests = {
-  'test multiple archive upload gdrive': testMultipleArchiveUploadDownload,
-  'test archive upload gdrive': testArchiveUploadDownload,
+  'task hashing': testTaskIdHashing,
   'test Pyodide': testPyodide,
-  'Test Gdrive zip file packets': testGdriveZipRoundtrip,
   'Test Secret Store': async () => testSecretStore(await tystate.getSecretStore()),
   'test json schema to yam conversion': testJsonSchemaToYaml,
   'test build slim view': testBuildSlimView,
@@ -183,9 +183,7 @@ const tests = {
   'json schemas': testJsonSchemas,
   'pg lite': testPGLite,
   testTransformersPipeline: testTransformersPipeline,
-
   load_vecorization_initialization: testVectorizerInitialization,
-
   markdown_generation: markdownGeneration,
   test_token_counter: testEstimateChatTokens,
   test_vectorization: testVectorizeText,
@@ -198,6 +196,9 @@ const tests = {
 }
 
 const guiTests = {
+  'test multiple archive upload gdrive': testMultipleArchiveUploadDownload,
+  'test archive upload gdrive': testArchiveUploadDownload,
+  'Test Gdrive zip file packets': testGdriveZipRoundtrip,
   'oAuth Tests': oauthTests,
   gdrive_upload: testGdriveUpload,
 }
@@ -227,10 +228,9 @@ async function runTests(tests: Record<string, () => unknown>, details = false) {
 async function generateReport(details = false, noGui = true) {
   console.log('generating diagnostics report')
 
-  void runTests({ ...tests, ...guiTests }, details)
-
   // we run this test at the end, because sometimes it just keeps blocking?
-  if (!noGui) await runTests(tests, details)
+  if (noGui) await runTests(tests, details)
+  else await runTests({ ...tests, ...guiTests }, details)
 }
 
 async function getData() {

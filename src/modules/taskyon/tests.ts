@@ -5,7 +5,7 @@ import { chat2Md, getTextFile } from './taskUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useIpfs } from './ipfs'
 import { getDatabase } from '../pglite.api'
-import { createDeepTransformer, normalizeFalsyValues } from '../utils'
+import { createDeepTransformer, normalizeFalsyValues, sleep } from '../utils'
 import { useGdrive } from '../gdrive'
 import { craeteToolJsonSchema, summarizeTools } from './tools'
 import { zodToYamlString } from '../yamlUtils'
@@ -13,14 +13,22 @@ import z from 'zod'
 import type { JSONSchema7 } from 'json-schema'
 import { jsonSchemaToYamlString } from '../yamlUtils'
 import type { SecretStore } from '../crudWrapper'
-import type { TaskNode } from '@taskyon/taskyon'
+import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
 import { decompressEncryptedObject, encryptCompressObject } from '../fileUtils'
 import { gDriveSyncPort } from './sync'
 import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
+import { createTaskNode } from './taskManager'
+import { deepCloneWJson } from '../../../packages/taskyon/src/utils/objHelpers'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
+
+function assert(condition: boolean, msg?: string): asserts condition {
+  if (!condition) {
+    throw new Error(msg ?? 'Assertion failed')
+  }
+}
 
 // Enhanced integration test for concurrent uploads
 export async function testMultipleArchiveUploadDownload() {
@@ -769,6 +777,91 @@ export async function testEstimateChatTokens() {
   )
   console.log('Estimate Chat Tokens Result:', tokens)
   return tokens
+}
+
+function shuffleKeys<T>(obj: T): T {
+  const sobj = deepCloneWJson(obj)
+  if (Array.isArray(sobj) || sobj === null || typeof sobj !== 'object') {
+    return sobj
+  }
+
+  const entries = Object.entries(sobj)
+  for (let i = entries.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const tmp = entries[j]!
+    entries[j] = entries[i]!
+    entries[i] = tmp
+  }
+
+  const shuffled = Object.fromEntries(entries.map(([k, v]) => [k, shuffleKeys(v)]))
+
+  return shuffled as T
+}
+
+async function shouldProduceError(func: (...args: unknown[]) => unknown) {
+  let error: Error | undefined = undefined
+  try {
+    await func()
+  } catch (err) {
+    console.log('correctly produces error:', err)
+    error = err as Error
+  }
+  if (error) return error
+  else throw new Error(`Operation ${func.name} should produce an error!`)
+}
+
+export async function testTaskIdHashing() {
+  const testTask: partialTaskDraft = {
+    role: 'user',
+    name: 'test',
+    content: {
+      type: 'message',
+      data: 'test',
+    },
+    parentID: undefined, // should be stripped away
+  }
+
+  const fullTask = await createTaskNode(testTask, { createMeta: 'missing' })
+
+  const cloneTask = deepCloneWJson(testTask)
+  delete cloneTask.parentID
+  cloneTask.created_at = fullTask.created_at
+  const strippedTask = await createTaskNode(cloneTask, { createMeta: 'missing' })
+  assert(strippedTask.id === fullTask.id, 'strippedTask should be the same as "fullTask" !!!')
+
+  await sleep(10) // sleeping for ms to make sure we have different creation times
+  const ft2 = await createTaskNode(fullTask, { createMeta: 'missing' })
+  await sleep(10) // sleeping for ms to make sure we have different creation times
+  const ft3 = await createTaskNode(fullTask)
+  await sleep(10) // sleeping for ms to make sure we have different creation times
+  const err1 = await shouldProduceError(() => createTaskNode(fullTask, { createMeta: 'overwrite' }))
+  await sleep(10) // sleeping for ms to make sure we have different creation times
+  const ft4 = await createTaskNode(testTask, { createMeta: 'missing' })
+
+  assert(fullTask.id === ft2.id, 'ft2 should match fullTask')
+  assert(fullTask.id === ft3.id, 'ft3 should match fullTask')
+  assert(fullTask.id !== ft4.id, 'ft4 should not match fullTask')
+
+  // ---- Now shuffle key order ----
+  const shuffledTask = shuffleKeys(fullTask)
+  await sleep(10) // sleeping for ms to make sure we have different creation times
+  const sft2 = await createTaskNode(shuffledTask, { createMeta: 'missing' })
+  await sleep(10) // sleeping for ms to make sure we have different creation times
+  const sft3 = await createTaskNode(shuffledTask)
+  await sleep(10) // sleeping for ms to make sure we have different creation times
+  const err3 = await shouldProduceError(() =>
+    createTaskNode(shuffledTask, { createMeta: 'overwrite' }),
+  )
+
+  assert(fullTask.id === sft2.id, 'shuffled ft2 should match')
+  assert(fullTask.id === sft3.id, 'shuffled ft3 should match')
+
+  return {
+    expectedErrors: { err1: err1.message, err3: err3.message },
+    testTask,
+    fullTask,
+    shuffledTask,
+  }
 }
 
 export async function markdownGeneration() {
