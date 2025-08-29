@@ -1,7 +1,3 @@
-import { randomBytes } from '@noble/ciphers/webcrypto'
-import { getPublicKeyAsync, signAsync, verifyAsync } from '@noble/ed25519'
-import { hkdf } from '@noble/hashes/hkdf'
-import { sha256 } from '@noble/hashes/sha256'
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39'
 import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english'
 import { base64UrlToUint8Array, uint8ArrayToBase64Url, urlSafe64BitString } from '@taskyon/taskyon'
@@ -29,7 +25,7 @@ export function parseJwt(token: string | undefined): Record<string, unknown> | u
 }
 
 // Generate a random key (256 bits) for HKDF
-export async function generateRandomEncryptionKey(extractable = false): Promise<CryptoKey> {
+async function generateRandomEncryptionKey(extractable = false): Promise<CryptoKey> {
   const keyBytes = crypto.getRandomValues(new Uint8Array(32)) // 32 bytes = 256 bits
   // using random values like the following doesn't work for keys as
   // KDF derived keys are not allowed to be extracted by default browser policy
@@ -41,28 +37,6 @@ export async function generateRandomEncryptionKey(extractable = false): Promise<
     { name: 'AES-GCM', length: 256 },
     extractable,
     ['encrypt'], // Usage required for import, though not directly used
-  )
-}
-
-export async function deriveKey(
-  sessionKey: CryptoKey,
-  salt: string,
-  id: string,
-): Promise<CryptoKey> {
-  // Combine the salt and id to derive a per-record key.
-  const enc = new TextEncoder()
-  const combinedSalt = enc.encode(salt + id)
-  return crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: combinedSalt,
-      iterations: 100000,
-      hash: 'SHA-256',
-    },
-    sessionKey,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt'],
   )
 }
 
@@ -196,7 +170,7 @@ export async function encryptDataFile(
   const recoveryEncryptedToolKey = await wrapKeyWithPublicKey(await publicRecoveryKey(), rowKey)
 
   const sessionKey = await getSessionKey() // Encrypt the tool key using the symmetric session key
-  const encryptedToolKey = await encryptWithSessionKey(sessionKey, rowKey)
+  const encryptedToolKey = await wrapWithAssymetricKey(sessionKey, rowKey)
 
   // Encrypt the data using the tool key
   if (base64) {
@@ -229,7 +203,7 @@ export const decryptDataFile = async (
   getSessionKey: AskSession,
 ) => {
   // Decrypt the tool key using the symmetric session key (this is always a string)
-  const rowKey = await decryptWithSessionKey(await getSessionKey(), encData.encryptedToolKey)
+  const rowKey = await unwrapWithSymmetricKey(await getSessionKey(), encData.encryptedToolKey)
 
   // Decrypt the data using the tool key. The updated `decryptData` function
   // will handle the type detection internally. No `if` block needed here!
@@ -237,65 +211,13 @@ export const decryptDataFile = async (
   return data
 }
 
-export async function importEd25519PublicKeyFromBase64(base64Key: string): Promise<CryptoKey> {
-  const publicKey = base64UrlToUint8Array(base64Key)
-  return crypto.subtle.importKey('raw', publicKey, { name: 'Ed25519' }, true, ['verify'])
-}
-
-export async function generateECDSAKeyPair(): Promise<{
-  publicKey: CryptoKey
-  privateKey: CryptoKey
-}> {
-  const keyPair = await crypto.subtle.generateKey(
-    {
-      name: 'ECDSA',
-      namedCurve: 'P-256',
-    },
-    true, // extractable keys
-    ['sign', 'verify'],
-  )
-
-  return {
-    publicKey: keyPair.publicKey,
-    privateKey: keyPair.privateKey,
-  }
-}
-
-export async function generateRsaOaepPair(): Promise<{
-  publicKey: CryptoKey
-  privateKey: CryptoKey
-}> {
-  // Generate an RSA-OAEP key pair for encryption:
-  const keyPair = await crypto.subtle.generateKey(
-    {
-      name: 'RSA-OAEP',
-      modulusLength: 2048,
-      publicExponent: new Uint8Array([1, 0, 1]),
-      hash: 'SHA-256',
-    },
-    true, // extractable
-    ['encrypt', 'decrypt'],
-  )
-
-  return {
-    publicKey: keyPair.publicKey,
-    privateKey: keyPair.privateKey,
-  }
-}
-
-export async function wrapKeyWithPublicKey(
-  publicKey: CryptoKey,
-  dataKey: CryptoKey,
-): Promise<string> {
+async function wrapKeyWithPublicKey(publicKey: CryptoKey, dataKey: CryptoKey): Promise<string> {
   const rawKey = await crypto.subtle.exportKey('raw', dataKey)
   const encrypted = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, rawKey)
   return uint8ArrayToBase64Url(encrypted)
 }
 
-export async function encryptWithSessionKey(
-  sessionKey: CryptoKey,
-  dataKey: CryptoKey,
-): Promise<string> {
+async function wrapWithAssymetricKey(sessionKey: CryptoKey, dataKey: CryptoKey): Promise<string> {
   const rawKey = await crypto.subtle.exportKey('raw', dataKey)
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, sessionKey, rawKey)
@@ -304,7 +226,7 @@ export async function encryptWithSessionKey(
   return uint8ArrayToBase64Url(combined.buffer)
 }
 
-export async function decryptWithSessionKey(
+async function unwrapWithSymmetricKey(
   sessionKey: CryptoKey,
   encryptedData: string,
 ): Promise<CryptoKey> {
@@ -358,31 +280,10 @@ export async function decryptData(
   return new Uint8Array(decrypted)
 }
 
-export async function decryptObject(
-  { iv, ciphertext }: { iv: string; ciphertext: string },
-  key: CryptoKey,
-): Promise<unknown> {
-  const ivArray = base64UrlToUint8Array(iv)
-  const ctArray = base64UrlToUint8Array(ciphertext)
-  const decryptedBuffer = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: ivArray },
-    key,
-    ctArray,
-  )
-  const dec = new TextDecoder()
-  return JSON.parse(dec.decode(decryptedBuffer))
-}
-
 // Auto-detect the crypto backend
 export function detectCryptoBackend() {
   return typeof window !== 'undefined' && window.crypto && window.crypto.subtle ? 'web' : 'js'
 }
-
-export function sha256UrlSafeHashJs(obj: unknown) {
-  const json = JSON.stringify(obj)
-  const h1a = sha256(json)
-  return Promise.resolve(urlSafe64BitString(Buffer.from(h1a)))
-} // Generate a new seed phrase (mnemonic)
 
 export async function sha256UrlSafeHash(obj: unknown) {
   const json = JSON.stringify(obj)
@@ -391,12 +292,6 @@ export async function sha256UrlSafeHash(obj: unknown) {
 
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
   return urlSafe64BitString(Buffer.from(hashBuffer))
-}
-
-// Generate a random key (256 bits) for HKDF
-export function generateRandomKey(bytes = 32) {
-  const keyBytes = randomBytes(bytes)
-  return hkdf(sha256, keyBytes, undefined, undefined, 32) // Derives a 256-bit key
 }
 
 export function randomString(
@@ -432,27 +327,6 @@ export async function charHash(
   return result.join('')
 }
 
-export function generateSaltJs(): string {
-  return uint8ArrayToBase64Url(randomBytes(16).buffer)
-}
-
-export function generateSalt(): string {
-  const array = new Uint8Array(16)
-  crypto.getRandomValues(array)
-  return uint8ArrayToBase64Url(array.buffer)
-}
-// Example helper for generating a salt in both implementations.
-
-/**
- * Generates a secure random recovery key.
- * This key is our “master key” that can be used for recovery.
- */
-export function generateRecoveryKey(): Uint8Array {
-  const key = new Uint8Array(32)
-  crypto.getRandomValues(key)
-  return key
-}
-
 // Generate a new seed phrase (mnemonic)
 export function generateSeedPhrase(): string {
   return generateMnemonic(englishWordlist)
@@ -471,30 +345,34 @@ export function mnemonicToSeed(mnemonic: string, password: string = ''): Uint8Ar
   return mnemonicToSeedSync(mnemonic, password)
 }
 
-// Generate Ed25519 key pair from seed
-export async function generateEd25519Keys(seed: Uint8Array) {
-  // Use the first 32 bytes of the seed for Ed25519
-  const privateKey = seed.slice(0, 32)
+export async function generateKeyPairsFromSeed(seed: Uint8Array, algorithm: 'Ed25519' | 'X25519') {
+  // Import the seed as a CryptoKey
+  const key = await crypto.subtle.importKey('raw', seed, { name: 'HKDF' }, false, ['deriveKey'])
 
-  // Derive the public key
-  const publicKey = await getPublicKeyAsync(privateKey)
+  const derivedKey = await crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: new Uint8Array(),
+      info: new TextEncoder().encode(algorithm),
+    },
+    key,
+    { name: algorithm },
+    true,
+    algorithm === 'Ed25519' ? ['sign', 'verify'] : ['deriveKey'],
+  )
 
-  return { publicKey, privateKey }
+  return derivedKey
 }
 
-export async function signData(data: Uint8Array, privateKey: string) {
-  const p = base64UrlToUint8Array(privateKey)
-  return uint8ArrayToBase64Url((await signAsync(data, p)).buffer)
-}
+export const signData = (data: Uint8Array, privateKey: CryptoKey) =>
+  crypto.subtle.sign('Ed25519', privateKey, data)
 
-export async function verifySignature(
-  signature: string,
+export const verifySignature = (
+  signature: Uint8Array,
   data: Uint8Array,
-  publicKey: string,
-): Promise<boolean> {
-  const s = base64UrlToUint8Array(signature)
-  return await verifyAsync(s, data, base64UrlToUint8Array(publicKey))
-}
+  publicKey: CryptoKeyPair['publicKey'],
+) => crypto.subtle.verify('Ed25519', publicKey, signature, data)
 
 export async function generateAssymetricRandomNewKey() {
   const mnemonic = generateSeedPhrase()
@@ -504,13 +382,8 @@ export async function generateAssymetricRandomNewKey() {
 
 export async function base64UrlEd25519Keys(mnemonic: string) {
   const seed = mnemonicToSeed(mnemonic)
-  const { publicKey, privateKey } = await generateEd25519Keys(seed)
-  console.log('Public Key:', publicKey)
-  console.log('Private Key:', privateKey)
-  return {
-    publicKey: uint8ArrayToBase64Url(publicKey.buffer),
-    privateKey: uint8ArrayToBase64Url(privateKey.buffer),
-  }
+  const keyPair = await generateKeyPairsFromSeed(seed, 'Ed25519')
+  return keyPair
 }
 
 export function urlSafeBase64Uuid() {

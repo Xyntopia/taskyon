@@ -3,6 +3,8 @@
  * @description Complete crypto session management with key lifecycle, persistence, and sharing
  */
 
+import { urlSafeBase64Uuid } from './crypto'
+
 // ===================================================================================
 //  TYPE DEFINITIONS
 // ===================================================================================
@@ -53,7 +55,7 @@ function base64ToBuf(base64: string): ArrayBuffer {
 //  INDEXEDDB PERSISTENCE (FUNCTIONAL)
 // ===================================================================================
 
-function createStorage(namespace: string) {
+function createKeyStorage(namespace: string) {
   const dbName = `CryptoSession_${namespace}`
   let db: IDBDatabase | null = null
 
@@ -136,11 +138,11 @@ const CryptoUtils = {
   },
 
   async generateDeviceKeyPair(): Promise<CryptoKeyPair> {
-    return crypto.subtle.generateKey(
-      { name: 'ECDH', namedCurve: 'P-256' },
+    return (await crypto.subtle.generateKey(
+      { name: 'X25519' }, // Use X25519 for key generation
       false, // non-extractable private key
       ['deriveKey', 'deriveBits'],
-    )
+    )) as unknown as CryptoKeyPair
   },
 
   async generateUserKeyPair(): Promise<CryptoKeyPair> {
@@ -149,6 +151,7 @@ const CryptoUtils = {
       true, // extractable for memory management
       ['sign', 'verify'],
     )
+    // TODO: no idea, why we are having problems here?
     return keys as unknown as CryptoKeyPair
   },
 
@@ -192,10 +195,6 @@ const CryptoUtils = {
       ['encrypt', 'decrypt'],
     )
   },
-
-  generateDeviceId(): string {
-    return crypto.randomUUID()
-  },
 }
 
 // ===================================================================================
@@ -204,11 +203,11 @@ const CryptoUtils = {
 
 export async function createCryptoSession(options: CryptoSessionOptions = {}) {
   // Generate unique identifiers
-  const deviceId = options.deviceId || CryptoUtils.generateDeviceId()
+  const deviceId = options.deviceId || urlSafeBase64Uuid()
   const storageNamespace = options.accountId ? `${options.accountId}_${deviceId}` : deviceId
 
   // Initialize storage
-  const storage = createStorage(storageNamespace)
+  const storage = createKeyStorage(storageNamespace)
   await storage.init()
 
   // Internal state
@@ -223,26 +222,16 @@ export async function createCryptoSession(options: CryptoSessionOptions = {}) {
 
   // Initialize device key pair
   const initDeviceKey = async (): Promise<void> => {
-    try {
-      // Try to load existing device key pair from storage
-      const stored = await storage.get<CryptoKeyPair>(DEVICE_KEYPAIR_KEY)
-      if (stored && stored.privateKey && stored.publicKey) {
-        deviceKeyPair = stored
-        return
-      }
-    } catch {
-      // Fallback to generating new key pair
+    // Try to load existing device key pair from storage
+    const stored = await storage.get<CryptoKeyPair>(DEVICE_KEYPAIR_KEY)
+    if (stored && stored.privateKey && stored.publicKey) {
+      deviceKeyPair = stored
+      return
     }
 
     // Generate new device key pair
     deviceKeyPair = await CryptoUtils.generateDeviceKeyPair()
-
-    // Attempt to store (may fail if browser doesn't support storing CryptoKey)
-    try {
-      await storage.set(DEVICE_KEYPAIR_KEY, deviceKeyPair)
-    } catch {
-      console.warn('Failed to persist device key pair - will work in memory only')
-    }
+    await storage.set(DEVICE_KEYPAIR_KEY, deviceKeyPair)
   }
 
   // Initialize session key
@@ -344,7 +333,7 @@ export async function createCryptoSession(options: CryptoSessionOptions = {}) {
     const ephemeralPublic = await crypto.subtle.importKey(
       'jwk',
       envelope.epkJwk,
-      { name: 'ECDH', namedCurve: 'P-256' },
+      { name: 'X25519' },
       false,
       [],
     )
