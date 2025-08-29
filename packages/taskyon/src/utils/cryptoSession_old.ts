@@ -142,7 +142,3 @@ export async function initializeSessionWithPasskey(
   const unwrappedKey = await unwrapSessionToken(wrappedToken, deviceKey)
   return importSessionKey(unwrappedKey)
 }
-
-void useCryptoSession(){
-
-}
