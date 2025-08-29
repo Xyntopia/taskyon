@@ -1,25 +1,24 @@
+import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
+import { createCryptoSession, ToolBase } from '@taskyon/taskyon'
+import type { JSONSchema7 } from 'json-schema'
 import type OpenAI from 'openai'
-import { useNlpWorker, usePyodideWebworker } from './webWorkerApi'
-import { useTaskyonStore } from 'src/stores/taskyonState'
-import { chat2Md, getTextFile } from './taskUtils'
 import { useAppStateStore } from 'src/stores/appState'
-import { useIpfs } from './ipfs'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import z from 'zod'
+import { deepCloneWJson } from '../../../packages/taskyon/src/utils/objHelpers'
+import type { SecretStore } from '../crudWrapper'
+import { decompressEncryptedObject, encryptCompressObject } from '../fileUtils'
+import { useGdrive } from '../gdrive'
+import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
 import { getDatabase } from '../pglite.api'
 import { createDeepTransformer, normalizeFalsyValues, sleep } from '../utils'
-import { useGdrive } from '../gdrive'
-import { craeteToolJsonSchema, summarizeTools } from './tools'
-import { zodToYamlString } from '../yamlUtils'
-import z from 'zod'
-import type { JSONSchema7 } from 'json-schema'
-import { jsonSchemaToYamlString } from '../yamlUtils'
-import type { SecretStore } from '../crudWrapper'
-import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
-import { ToolBase } from '@taskyon/taskyon'
-import { decompressEncryptedObject, encryptCompressObject } from '../fileUtils'
+import { jsonSchemaToYamlString, zodToYamlString } from '../yamlUtils'
+import { useIpfs } from './ipfs'
 import { gDriveSyncPort } from './sync'
-import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
 import { createTaskNode } from './taskManager'
-import { deepCloneWJson } from '../../../packages/taskyon/src/utils/objHelpers'
+import { chat2Md, getTextFile } from './taskUtils'
+import { craeteToolJsonSchema, summarizeTools } from './tools'
+import { useNlpWorker, usePyodideWebworker } from './webWorkerApi'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -28,6 +27,49 @@ function assert(condition: boolean, msg?: string): asserts condition {
   if (!condition) {
     throw new Error(msg ?? 'Assertion failed')
   }
+}
+
+export async function testCryptoSession() {
+  const logs: Record<string, unknown> = {}
+
+  // === Init session A ===
+  const sessionA = await createCryptoSession({ accountId: 'acc1' })
+  logs.deviceIdA = sessionA.getDeviceId()
+  logs.devicePubA = await sessionA.exportDevicePublicKeyJwk()
+  logs.userPubA = Buffer.from(await sessionA.getUserPublicKeyBytes()).toString('hex')
+
+  // === Init session B ===
+  const sessionB = await createCryptoSession({ accountId: 'acc2' })
+  logs.deviceIdB = sessionB.getDeviceId()
+  logs.devicePubB = await sessionB.exportDevicePublicKeyJwk()
+  logs.userPubB = Buffer.from(await sessionB.getUserPublicKeyBytes()).toString('hex')
+
+  // === Wrap/unwrap session key (A → B) ===
+  const wrapped = await sessionA.wrapSessionKey(sessionB.getDevicePublicKey())
+  const unwrappedKey = await sessionB.unwrapSessionKey(wrapped)
+  logs.unwrapSuccess = unwrappedKey.algorithm.name
+
+  // === Regenerations ===
+  const oldUserPub = logs.userPubA
+  await sessionA.regenerateUserKey()
+  const newUserPub = Buffer.from(await sessionA.getUserPublicKeyBytes()).toString('hex')
+  logs.userKeyRotated = oldUserPub !== newUserPub
+
+  const oldDevicePub = logs.devicePubA
+  await sessionA.regenerateDeviceKey()
+  const newDevicePub = await sessionA.exportDevicePublicKeyJwk()
+  logs.deviceKeyRotated = JSON.stringify(oldDevicePub) !== JSON.stringify(newDevicePub)
+
+  const oldSessionKey = sessionA.getSessionKey()
+  await sessionA.regenerateSessionKey()
+  const newSessionKey = sessionA.getSessionKey()
+  logs.sessionKeyRotated = oldSessionKey !== newSessionKey
+
+  // === Logout ===
+  await sessionA.logout(true)
+  logs.logoutCleared = true
+
+  return logs
 }
 
 // Enhanced integration test for concurrent uploads

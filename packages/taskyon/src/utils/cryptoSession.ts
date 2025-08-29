@@ -144,11 +144,12 @@ const CryptoUtils = {
   },
 
   async generateUserKeyPair(): Promise<CryptoKeyPair> {
-    return crypto.subtle.generateKey(
+    const keys = await crypto.subtle.generateKey(
       { name: 'Ed25519' },
       true, // extractable for memory management
       ['sign', 'verify'],
     )
+    return keys as unknown as CryptoKeyPair
   },
 
   async deriveKek(privateKey: CryptoKey, publicKey: CryptoKey): Promise<CryptoKey> {
@@ -333,7 +334,7 @@ export async function createCryptoSession(options: CryptoSessionOptions = {}) {
     return enc.encode(JSON.stringify(envelope))
   }
 
-  const unwrapSessionKey = async (wrappedKey: ArrayBuffer): Promise<CryptoKey> => {
+  const unwrapSessionKey = async (wrappedKey: Uint8Array): Promise<CryptoKey> => {
     if (!deviceKeyPair) throw new Error('Device key pair not ready')
 
     const envelopeStr = dec.decode(wrappedKey)
