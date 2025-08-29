@@ -15,20 +15,6 @@ export interface CryptoSessionOptions {
   passphrase?: string
 }
 
-export interface CryptoSession {
-  getSessionKey: () => CryptoKey
-  getDevicePublicKey: () => CryptoKey
-  getUserPublicKeyBytes: () => Promise<Uint8Array>
-  wrapSessionKey: (targetPublicKey: CryptoKey) => Promise<ArrayBuffer>
-  unwrapSessionKey: (wrappedKey: ArrayBuffer, senderPublicKey: CryptoKey) => Promise<CryptoKey>
-  regenerateSessionKey: () => Promise<void>
-  regenerateDeviceKey: () => Promise<void>
-  regenerateUserKey: () => Promise<void>
-  logout: (clearPersistentStorage?: boolean) => Promise<void>
-  exportDevicePublicKeyJwk: () => Promise<JsonWebKey>
-  getDeviceId: () => string
-}
-
 interface WrappedEnvelope {
   v: number
   alg: string
@@ -215,9 +201,7 @@ const CryptoUtils = {
 //  MAIN IMPLEMENTATION
 // ===================================================================================
 
-export async function createCryptoSession(
-  options: CryptoSessionOptions = {},
-): Promise<CryptoSession> {
+export async function createCryptoSession(options: CryptoSessionOptions = {}) {
   // Generate unique identifiers
   const deviceId = options.deviceId || CryptoUtils.generateDeviceId()
   const storageNamespace = options.accountId ? `${options.accountId}_${deviceId}` : deviceId
@@ -322,7 +306,7 @@ export async function createCryptoSession(
     return new Uint8Array(exported)
   }
 
-  const wrapSessionKey = async (targetPublicKey: CryptoKey): Promise<ArrayBuffer> => {
+  const wrapSessionKey = async (targetPublicKey: CryptoKey): Promise<Uint8Array> => {
     if (!sessionKey || !deviceKeyPair) throw new Error('Session not ready')
 
     // Generate ephemeral key pair for this operation
@@ -343,7 +327,7 @@ export async function createCryptoSession(
       alg: 'ECDH-P256+AES-GCM',
       epkJwk: ephemeralPublicJwk,
       ct: bufToBase64(encrypted),
-      iv: bufToBase64(iv),
+      iv: bufToBase64(iv.buffer),
     }
 
     return enc.encode(JSON.stringify(envelope))
