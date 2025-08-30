@@ -144,7 +144,7 @@ export async function createCryptoSession(accountId: string) {
     return dkp
   }
 
-  const getWrappedSessionKey = async () => await storage.get<ArrayBuffer>(SESSION_KEY_WRAPPED)
+  const getWrappedSessionKey = async () => await storage.get<string>(SESSION_KEY_WRAPPED)
 
   // Initialize session key
   const initSessionKey = async (
@@ -152,7 +152,7 @@ export async function createCryptoSession(accountId: string) {
     options?: {
       renew?: boolean
       oldDeviceKeyPair?: CryptoKeyPair
-      externalWrappedSessionKey?: ArrayBuffer // if we want to add an external key
+      externalWrappedSessionKey?: string // if we want to add an external key
       persist?: boolean
     },
   ) => {
@@ -227,7 +227,7 @@ export async function createCryptoSession(accountId: string) {
 
   const regenerateSessionKey = () => initSessionKey(deviceKeyPair, { renew: true, persist: true })
 
-  const addWrappedSessionKey = async (exchangeKey: CryptoKeyPair, newKey: ArrayBuffer) =>
+  const addWrappedSessionKey = async (exchangeKey: CryptoKeyPair, newKey: string) =>
     await initSessionKey(deviceKeyPair, {
       renew: true,
       externalWrappedSessionKey: newKey,

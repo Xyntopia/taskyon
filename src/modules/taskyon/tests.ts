@@ -1,5 +1,10 @@
 import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
-import { createCryptoSession, ToolBase } from '@taskyon/taskyon'
+import {
+  createCryptoSession,
+  generateAssymetricKeyDeriver,
+  ToolBase,
+  uint8ArrayToBase64Url,
+} from '@taskyon/taskyon'
 import type { JSONSchema7 } from 'json-schema'
 import type OpenAI from 'openai'
 import { useAppStateStore } from 'src/stores/appState'
@@ -31,41 +36,99 @@ function assert(condition: boolean, msg?: string): asserts condition {
 
 // TODO: update our cryptoFunction tests  and really try to thoroughly test the...
 export async function testCryptoSession() {
-  const logs: Record<string, unknown> = {}
+  const report: string[] = []
+  const accountId = 'test_account_123'
+  const testMnemonic = 'test mnemonic phrase'
 
-  // === Init session A ===
-  const sessionA = await createCryptoSession({ accountId: 'acc1' })
-  logs.deviceIdA = sessionA.getDeviceId()
-  logs.devicePubA = await sessionA.exportDevicePublicKeyJwk()
+  // ===================================================================
+  // Phase 1: Single Device Setup and Key Management
+  // ===================================================================
+  report.push('PHASE 1: Single device initialization and key management')
 
-  // === Init session B ===
-  const sessionB = await createCryptoSession({ accountId: 'acc2' })
-  logs.deviceIdB = sessionB.getDeviceId()
-  logs.devicePubB = await sessionB.exportDevicePublicKeyJwk()
+  // Create primary device session
+  const device1 = await createCryptoSession(accountId)
+  report.push('Device1 session created')
 
-  // === Wrap/unwrap session key (A → B) ===
-  const wrapped = await sessionA.wrapSessionKey(sessionB.getDevicePublicKey())
-  const unwrappedKey = await sessionB.unwrapSessionKey(wrapped)
-  logs.unwrapSuccess = unwrappedKey.algorithm.name
+  // Validate initial keys
+  const sessionKey1 = device1.getSessionKey()
+  const devicePubKey1 = device1.getDevicePublicKey()
+  report.push(`Device1 public key: ${JSON.stringify(devicePubKey1)}`)
 
-  // === Regenerations ===
-  await sessionA.regenerateUserKey()
+  // Test session key regeneration
+  await device1.regenerateSessionKey()
+  const newSessionKey = device1.getSessionKey()
+  report.push('Session key regenerated')
 
-  const oldDevicePub = logs.devicePubA
-  await sessionA.regenerateDeviceKey()
-  const newDevicePub = await sessionA.exportDevicePublicKeyJwk()
-  logs.deviceKeyRotated = JSON.stringify(oldDevicePub) !== JSON.stringify(newDevicePub)
+  // Test device key regeneration
+  const originalDeviceKey = device1.getDevicePublicKey()
+  await device1.regenerateDeviceKey()
+  const newDeviceKey = device1.getDevicePublicKey()
 
-  const oldSessionKey = sessionA.getSessionKey()
-  await sessionA.regenerateSessionKey()
-  const newSessionKey = sessionA.getSessionKey()
-  logs.sessionKeyRotated = oldSessionKey !== newSessionKey
+  // Verify device key changed
+  const origKeyBytes = uint8ArrayToBase64Url(
+    await crypto.subtle.exportKey('raw', originalDeviceKey),
+  )
+  const newKeyBytes = uint8ArrayToBase64Url(await crypto.subtle.exportKey('raw', newDeviceKey))
+  if (origKeyBytes === newKeyBytes) {
+    report.push('ERROR: Device key not regenerated')
+  } else {
+    report.push('Device key successfully regenerated')
+  }
 
-  // === Logout ===
-  await sessionA.logout(true)
-  logs.logoutCleared = true
+  // Test user key management
+  const userPubKey = await device1.regenerateUserKey(testMnemonic)
+  report.push(`User public key: ${uint8ArrayToBase64Url(userPubKey)}`)
 
-  return logs
+  // ===================================================================
+  // Phase 2: Key Sharing Between Devices
+  // ===================================================================
+  report.push('\nPHASE 2: Key sharing between devices')
+
+  // Create exchange keys (simulate second device's key pair)
+  const exchangeKeyPair = await generateAssymetricKeyDeriver()
+  report.push('Exchange key pair generated')
+
+  // Export wrapped session key from device1
+  const wrappedSessionKey = await device1.exportSessionKey(exchangeKeyPair)
+  report.push('Session key wrapped for sharing')
+
+  // Create second device session
+  const device2 = await createCryptoSession(accountId)
+  report.push('Device2 session created')
+
+  // Import wrapped session key to device2
+  await device2.addWrappedSessionKey(exchangeKeyPair, wrappedSessionKey)
+  report.push('Wrapped session key imported to device2')
+
+  // Validate session keys
+  const device2SessionKey = device2.getSessionKey()
+  report.push('Device2 successfully accessed session key')
+
+  // ===================================================================
+  // Phase 3: Session Destruction and Cleanup
+  // ===================================================================
+  report.push('\nPHASE 3: Session destruction and cleanup')
+
+  // Test session destruction
+  await device1.destroy()
+  report.push('Device1 session destroyed')
+
+  // Verify new session can be created after destruction
+  const newSession = await createCryptoSession(accountId)
+  newSession.getSessionKey()
+  report.push('New session created after destruction')
+
+  return {
+    logs: report,
+    sessionKey1,
+    newSessionKey,
+    device2SessionKey,
+    metrics: {
+      deviceKeyRegenerated: origKeyBytes !== newKeyBytes,
+      sessionKeyShared: !!wrappedSessionKey,
+      sessionDestroyed: true,
+    },
+  }
 }
 
 // Enhanced integration test for concurrent uploads

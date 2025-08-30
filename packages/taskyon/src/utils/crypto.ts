@@ -36,13 +36,13 @@ export const wrapSessionKey = async (sk: CryptoKey, kek: CryptoKey) => {
     kek, //wrapper, //kek, // wrapping key
     { name: 'AES-KW', iv, length: 256 },
   )
-  return wrapped
+  return uint8ArrayToBase64Url(wrapped)
 }
 
-export const unwrapSessionKey = async (wrappedData: ArrayBuffer, unwrappingKey: CryptoKey) =>
+export const unwrapSessionKey = async (wrappedData: string, unwrappingKey: CryptoKey) =>
   crypto.subtle.unwrapKey(
     'raw',
-    wrappedData,
+    base64UrlToUint8Array(wrappedData),
     unwrappingKey,
     'AES-KW', // algorithm identifier for key encryption key
     'AES-KW', // algorithm identifier for key to unwrap
@@ -54,10 +54,11 @@ export const unwrapSessionKey = async (wrappedData: ArrayBuffer, unwrappingKey: 
 // because we want to export this key it only exports wrapped keys!!
 // do not ever export the unwrapped key from this function!!!
 export const reWrapSessionKey = async (
-  wrappedData: ArrayBuffer,
+  wrappedKeString: string,
   unwrappingKey: CryptoKey,
   newWrappingKey: CryptoKey,
 ) => {
+  const wrappedData = base64UrlToUint8Array(wrappedKeString)
   const sk = await crypto.subtle.unwrapKey(
     'raw',
     wrappedData,
