@@ -177,7 +177,7 @@ export async function createCryptoSession(accountId: string) {
   // Initialize user key pair
   const regenerateUserKey = async (mnemonic: string) => {
     // Generate user key pair (always new, in memory only)
-    const userKeyPair = (await keyPairFromMnemonic(mnemonic)) as unknown as CryptoKeyPair
+    userKeyPair = (await keyPairFromMnemonic(mnemonic)) as unknown as CryptoKeyPair
     // Store public key for reference
     const publicKeyBytes = await crypto.subtle.exportKey('raw', userKeyPair.publicKey)
     await storage.set(USER_PUBLIC_KEY, publicKeyBytes)
@@ -187,7 +187,7 @@ export async function createCryptoSession(accountId: string) {
   // Initialize all components
   let deviceKeyPair = await initDeviceKey()
   const sessionKey = await initSessionKey(deviceKeyPair, { persist: true })
-  const userKeyPair: ArrayBuffer | undefined = undefined
+  let userKeyPair: CryptoKeyPair | undefined = undefined
 
   // Public interface
   const getSessionKey = (): CryptoKey => {

@@ -531,11 +531,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   const getPublicRecoveryKey = async (
     ...args: Parameters<Awaited<ReturnType<typeof createCryptoSession>>['getUserPublicKey']>
-  ) => (await tyCrypto).getUserPublicKey(...args)
-
+  ) => (await tyCrypto).getUserPublicKey(...args).privateKey
   const getSessionKey = async (
     ...args: Parameters<Awaited<ReturnType<typeof createCryptoSession>>['getSessionKey']>
-  ) => (await tyCrypto).getUserPublicKey(...args)
+  ) => (await tyCrypto).getSessionKey(...args)
 
   const taskyon = (async () =>
     await tyCore(
