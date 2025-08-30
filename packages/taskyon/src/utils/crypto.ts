@@ -33,7 +33,7 @@ export const generateSessionKey = () =>
   crypto.subtle.generateKey(
     { name: 'AES-KW', length: 256 },
     false, // You'd likely set this to 'false' in production after storing it securely
-    ['wrapKey', 'unwrapKey', 'encrypt', 'decrypt'],
+    ['wrapKey', 'unwrapKey'],
   )
 
 export async function generateAssymetricRandomNewKey() {

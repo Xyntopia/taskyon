@@ -140,7 +140,7 @@ const CryptoUtils = {
 
   async deriveKek(privateKey: CryptoKey, publicKey: CryptoKey): Promise<CryptoKey> {
     return crypto.subtle.deriveKey(
-      { name: 'ECDH', public: publicKey },
+      { name: 'X25519', public: publicKey },
       privateKey,
       { name: 'AES-GCM', length: 256 },
       false,
@@ -221,16 +221,11 @@ export async function createCryptoSession(options: CryptoSessionOptions = {}) {
   const initSessionKey = async (): Promise<void> => {
     if (!deviceKeyPair) throw new Error('Device key pair must be initialized first')
 
-    // Try to load wrapped session key
-    try {
-      const wrapped = await storage.get<ArrayBuffer>(SESSION_KEY_WRAPPED)
-      if (wrapped) {
-        const kek = await CryptoUtils.deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
-        sessionKey = await CryptoUtils.unwrapSessionKey(wrapped, kek)
-        return
-      }
-    } catch {
-      // Fallback to generating new session key
+    let wrapped = await storage.get<ArrayBuffer>(SESSION_KEY_WRAPPED)
+    if (wrapped) {
+      const kek = await CryptoUtils.deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
+      sessionKey = await CryptoUtils.unwrapSessionKey(wrapped, kek)
+      return
     }
 
     // Generate new session key
@@ -238,7 +233,7 @@ export async function createCryptoSession(options: CryptoSessionOptions = {}) {
 
     // Wrap and store session key
     const kek = await CryptoUtils.deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
-    const wrapped = await CryptoUtils.wrapSessionKey(sessionKey, kek)
+    wrapped = await CryptoUtils.wrapSessionKey(sessionKey, kek)
     await storage.set(SESSION_KEY_WRAPPED, wrapped)
   }
 
