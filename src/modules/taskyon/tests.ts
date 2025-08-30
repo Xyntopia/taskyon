@@ -2,6 +2,7 @@ import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import {
   createCryptoSession,
   generateAssymetricKeyDeriver,
+  generateSeedPhrase,
   ToolBase,
   uint8ArrayToBase64Url,
 } from '@taskyon/taskyon'
@@ -38,7 +39,7 @@ function assert(condition: boolean, msg?: string): asserts condition {
 export async function testCryptoSession() {
   const report: string[] = []
   const accountId = 'test_account_123'
-  const testMnemonic = 'test mnemonic phrase'
+  const testMnemonic = generateSeedPhrase()
 
   // ===================================================================
   // Phase 1: Single Device Setup and Key Management
@@ -120,6 +121,7 @@ export async function testCryptoSession() {
 
   return {
     logs: report,
+    testMnemonic,
     sessionKey1,
     newSessionKey,
     device2SessionKey,

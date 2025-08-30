@@ -527,7 +527,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     )
   })
 
-  const tyCrypto = createCryptoSession()
+  const tyCrypto = createCryptoSession('default_account')
 
   const getPublicRecoveryKey = async (
     ...args: Parameters<Awaited<ReturnType<typeof createCryptoSession>>['getUserPublicKey']>
