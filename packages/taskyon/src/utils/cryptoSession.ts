@@ -16,11 +16,20 @@ import {
 //  INDEXEDDB PERSISTENCE (FUNCTIONAL)
 // ===================================================================================
 
+// Global registry to track database connections
+const dbConnections = new Map<string, { db: IDBDatabase; refCount: number }>()
+
 function createKeyStorage(namespace: string) {
   const dbName = `CryptoSession_${namespace}`
-  let db: IDBDatabase | null = null
 
   const init = async (): Promise<void> => {
+    // Check if we already have a connection
+    const existing = dbConnections.get(dbName)
+    if (existing) {
+      existing.refCount++
+      return
+    }
+
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(dbName, 1)
 
@@ -32,7 +41,8 @@ function createKeyStorage(namespace: string) {
       }
 
       request.onsuccess = () => {
-        db = request.result
+        const db = request.result
+        dbConnections.set(dbName, { db, refCount: 1 })
         resolve()
       }
 
@@ -41,11 +51,17 @@ function createKeyStorage(namespace: string) {
     })
   }
 
+  const getDb = (): IDBDatabase => {
+    const connection = dbConnections.get(dbName)
+    if (!connection) throw new Error('Database not initialized')
+    return connection.db
+  }
+
   const set = async <T>(key: string, value: T): Promise<void> => {
-    if (!db) throw new Error('Database not initialized')
+    const db = getDb()
 
     return new Promise((resolve, reject) => {
-      const tx = db!.transaction('keys', 'readwrite')
+      const tx = db.transaction('keys', 'readwrite')
       const store = tx.objectStore('keys')
       const request = store.put(value, key)
 
@@ -56,10 +72,10 @@ function createKeyStorage(namespace: string) {
   }
 
   const get = async <T>(key: string): Promise<T | undefined> => {
-    if (!db) throw new Error('Database not initialized')
+    const db = getDb()
 
     return new Promise((resolve, reject) => {
-      const tx = db!.transaction('keys', 'readonly')
+      const tx = db.transaction('keys', 'readonly')
       const store = tx.objectStore('keys')
       const request = store.get(key)
 
@@ -70,10 +86,10 @@ function createKeyStorage(namespace: string) {
   }
 
   const deleteKey = async (key: string): Promise<void> => {
-    if (!db) throw new Error('Database not initialized')
+    const db = getDb()
 
     return new Promise((resolve, reject) => {
-      const tx = db!.transaction('keys', 'readwrite')
+      const tx = db.transaction('keys', 'readwrite')
       const store = tx.objectStore('keys')
       const request = store.delete(key)
 
@@ -82,10 +98,29 @@ function createKeyStorage(namespace: string) {
     })
   }
 
+  const close = () => {
+    const connection = dbConnections.get(dbName)
+    if (!connection) return
+
+    connection.refCount--
+
+    // Only close the database when no more references exist
+    if (connection.refCount <= 0) {
+      connection.db.close()
+      dbConnections.delete(dbName)
+    }
+  }
+
   const destroy = async (): Promise<void> => {
-    if (db) {
-      db.close() // Close connection so deletion isn't blocked
-      db = null
+    // First close this connection
+    close()
+
+    // Check if there are still other connections
+    const connection = dbConnections.get(dbName)
+    if (connection && connection.refCount > 0) {
+      throw new Error(
+        `Cannot delete database: ${connection.refCount} connection(s) still open. Close all sessions first.`,
+      )
     }
 
     return new Promise((resolve, reject) => {
@@ -98,7 +133,7 @@ function createKeyStorage(namespace: string) {
     })
   }
 
-  return { init, set, get, delete: deleteKey, destroy }
+  return { init, set, get, delete: deleteKey, close, destroy }
 }
 
 // ===================================================================================
@@ -112,8 +147,16 @@ export async function createCryptoSession(accountId: string) {
   const storage = createKeyStorage(storageNamespace)
   await storage.init()
 
-  const destroy = async (): Promise<void> => {
-    await storage.destroy()
+  let isDestroyed = false
+
+  const checkNotDestroyed = () => {
+    if (isDestroyed) throw new Error('Session has been destroyed')
+  }
+
+  const destroy = () => {
+    if (isDestroyed) return
+    isDestroyed = true
+    storage.close() // Close connection, don't delete database
   }
 
   // Key identifiers
@@ -123,6 +166,7 @@ export async function createCryptoSession(accountId: string) {
 
   // Initialize device key pair
   const initDeviceKey = async () => {
+    checkNotDestroyed()
     // Try to load existing device key pair from storage
     const stored = await storage.get<CryptoKeyPair>(DEVICE_KEYPAIR_KEY)
     if (stored && stored.privateKey && stored.publicKey) {
@@ -135,7 +179,10 @@ export async function createCryptoSession(accountId: string) {
     return dkp
   }
 
-  const getWrappedSessionKey = async () => await storage.get<string>(SESSION_KEY_WRAPPED)
+  const getWrappedSessionKey = async () => {
+    checkNotDestroyed()
+    return await storage.get<string>(SESSION_KEY_WRAPPED)
+  }
 
   // Initialize session key
   const initSessionKey = async (
@@ -147,6 +194,7 @@ export async function createCryptoSession(accountId: string) {
       persist?: boolean
     },
   ) => {
+    checkNotDestroyed()
     const kek = await deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
 
     let wrappedSessionKey = options?.renew
@@ -176,6 +224,7 @@ export async function createCryptoSession(accountId: string) {
 
   // Initialize user key pair
   const regenerateUserKey = async (mnemonic: string) => {
+    checkNotDestroyed()
     // Generate user key pair (always new, in memory only)
     userKeyPair = (await keyPairFromMnemonic(mnemonic)) as unknown as CryptoKeyPair
     // Store public key for reference
@@ -191,11 +240,13 @@ export async function createCryptoSession(accountId: string) {
 
   // Public interface
   const getSessionKey = (): CryptoKey => {
+    checkNotDestroyed()
     if (!sessionKey) throw new Error('Session not initialized')
     return sessionKey
   }
 
   const exportSessionKey = async (shareKey: CryptoKeyPair) => {
+    checkNotDestroyed()
     const kek = await deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
     const shareKek = await deriveKek(shareKey.privateKey, shareKey.publicKey)
 
@@ -205,26 +256,34 @@ export async function createCryptoSession(accountId: string) {
   }
 
   const getDevicePublicKey = (): CryptoKey => {
+    checkNotDestroyed()
     if (!deviceKeyPair) throw new Error('Device key pair not initialized')
     return deviceKeyPair.publicKey
   }
 
   const getUserPublicKey = () => {
+    checkNotDestroyed()
     if (!userKeyPair) throw new Error('User key pair not initialized')
     return userKeyPair
   }
 
-  const regenerateSessionKey = () => initSessionKey(deviceKeyPair, { renew: true, persist: true })
+  const regenerateSessionKey = () => {
+    checkNotDestroyed()
+    return initSessionKey(deviceKeyPair, { renew: true, persist: true })
+  }
 
-  const addWrappedSessionKey = async (exchangeKey: CryptoKeyPair, newKey: string) =>
-    await initSessionKey(deviceKeyPair, {
+  const addWrappedSessionKey = async (exchangeKey: CryptoKeyPair, newKey: string) => {
+    checkNotDestroyed()
+    return await initSessionKey(deviceKeyPair, {
       renew: true,
       externalWrappedSessionKey: newKey,
       oldDeviceKeyPair: exchangeKey,
       persist: true,
     })
+  }
 
   const regenerateDeviceKey = async (): Promise<void> => {
+    checkNotDestroyed()
     const oldDeviceKeyPair = deviceKeyPair
     deviceKeyPair = await generateAssymetricKeyDeriver()
     await storage.set(DEVICE_KEYPAIR_KEY, deviceKeyPair)
@@ -232,7 +291,7 @@ export async function createCryptoSession(accountId: string) {
   }
 
   return {
-    getSessionKey, // this is OK, because the ke is non-exportable...
+    getSessionKey, // this is OK, because the key is non-exportable...
     regenerateSessionKey,
     addWrappedSessionKey,
     exportSessionKey,
@@ -244,4 +303,42 @@ export async function createCryptoSession(accountId: string) {
     regenerateUserKey,
     destroy,
   }
+}
+
+// ===================================================================================
+//  UTILITY FUNCTIONS FOR COMPLETE DATABASE CLEANUP
+// ===================================================================================
+
+/**
+ * Force closes all database connections and deletes the database
+ * Use this for testing cleanup or when you need to completely reset
+ */
+export async function forceDestroyCryptoSession(accountId: string): Promise<void> {
+  const storageNamespace = 'ty_ucs_' + accountId
+  const dbName = `CryptoSession_${storageNamespace}`
+
+  // Force close any existing connections
+  const connection = dbConnections.get(dbName)
+  if (connection) {
+    connection.db.close()
+    dbConnections.delete(dbName)
+  }
+
+  // Wait a bit for connections to close
+  await new Promise((resolve) => setTimeout(resolve, 10))
+
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(dbName)
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(new Error(request.error?.message || 'Database deletion failed'))
+    request.onblocked = () => {
+      // If still blocked, wait and try again
+      setTimeout(() => {
+        const retryRequest = indexedDB.deleteDatabase(dbName)
+        retryRequest.onsuccess = () => resolve()
+        retryRequest.onerror = () => reject(new Error('Database deletion failed on retry'))
+        retryRequest.onblocked = () => reject(new Error('Database deletion permanently blocked'))
+      }, 100)
+    }
+  })
 }

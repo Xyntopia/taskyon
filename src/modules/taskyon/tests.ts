@@ -1,6 +1,7 @@
 import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import {
   createCryptoSession,
+  forceDestroyCryptoSession,
   generateAssymetricKeyDeriver,
   generateSeedPhrase,
   ToolBase,
@@ -35,11 +36,13 @@ function assert(condition: boolean, msg?: string): asserts condition {
   }
 }
 
-// TODO: update our cryptoFunction tests  and really try to thoroughly test the...
 export async function testCryptoSession() {
   const report: string[] = []
   const accountId = 'test_account_123'
   const testMnemonic = generateSeedPhrase()
+
+  // Clean up any existing databases first
+  await forceDestroyCryptoSession(accountId)
 
   // ===================================================================
   // Phase 1: Single Device Setup and Key Management
@@ -110,14 +113,24 @@ export async function testCryptoSession() {
   // ===================================================================
   report.push('\nPHASE 3: Session destruction and cleanup')
 
-  // Test session destruction
-  await device1.destroy()
-  report.push('Device1 session destroyed')
+  // IMPORTANT: Close all sessions before attempting database deletion
+  device1.destroy()
+  report.push('Device1 session closed')
+
+  device2.destroy()
+  report.push('Device2 session closed')
+
+  // Now safely delete the database
+  await forceDestroyCryptoSession(accountId)
+  report.push('Database completely destroyed')
 
   // Verify new session can be created after destruction
   const newSession = await createCryptoSession(accountId)
   newSession.getSessionKey()
   report.push('New session created after destruction')
+
+  // Clean up the test session too
+  newSession.destroy()
 
   return {
     logs: report,
@@ -125,6 +138,9 @@ export async function testCryptoSession() {
     sessionKey1,
     newSessionKey,
     device2SessionKey,
+    origKeyBytes,
+    newKeyBytes,
+    wrappedSessionKey,
     metrics: {
       deviceKeyRegenerated: origKeyBytes !== newKeyBytes,
       sessionKeyShared: !!wrappedSessionKey,
