@@ -252,7 +252,7 @@ const handleUserScroll = () => {
   if (!thinkingContainer.value) return
 
   const { scrollTop, scrollHeight, clientHeight } = thinkingContainer.value
-  const isAtBottom = scrollTop + clientHeight >= scrollHeight - 5 // 5px tolerance
+  const isAtBottom = scrollTop + clientHeight >= scrollHeight - 20 // 20px tolerance
 
   // If user scrolled away from bottom, disable auto-scroll
   // If user scrolled back to bottom, re-enable auto-scroll
