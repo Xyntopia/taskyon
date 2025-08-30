@@ -17,7 +17,6 @@ import {
 } from 'src/modules/utils'
 import { unref } from 'vue'
 import defaultSettings from 'src/assets/taskyon_settings.json'
-import { generateAssymetricRandomNewKey } from '@taskyon/taskyon'
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 import type { PartialDeep } from 'type-fest'
 import { initialStoredStateObj, storeName } from 'src/modules/ui/initialState'
@@ -128,7 +127,7 @@ export const useAppStateStore = defineStore(storeName, () => {
   })
 
   if (stateRefs.initialLoad) {
-    void generateAssymetricRandomNewKey().then((r) => (stateRefs.llmSettings.userId = r.publicKey))
+    stateRefs.llmSettings.userId = 'unknown'
   }
 
   function overrideSettings(newConfig: PartialDeep<TyProfile>, persist: boolean = false) {

@@ -337,7 +337,7 @@ import {
 } from '@quasar/extras/material-icons'
 import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
 import InfoDialog from '../InfoDialog.vue'
-import { base64UrlEd25519Keys, generateAssymetricRandomNewKey } from '@taskyon/taskyon'
+import { keyPairFromMnemonic, generateSeedPhrase } from '@taskyon/taskyon'
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from './TyResetButton.vue'
 import { TyProfile } from 'src/modules/taskyon/types'
@@ -351,17 +351,18 @@ const showSeedPhrase = ref(false)
 const pressedSeedPhraseCopyButton = ref(false)
 const seedPhrase = ref('')
 
-async function onGenerateSeedPhrase() {
+function onGenerateSeedPhrase() {
   console.log('generate user id...')
   pressedSeedPhraseCopyButton.value = false
   showSeedPhrase.value = true
-  const { mnemonic } = await generateAssymetricRandomNewKey()
+  const mnemonic = generateSeedPhrase()
   seedPhrase.value = mnemonic
 }
 
 async function onAcceptSeedPhrase(seedPhrase: string) {
-  const { /*privateKey,*/ publicKey } = await base64UrlEd25519Keys(seedPhrase)
-  state.llmSettings.userId = publicKey
+  const key = await keyPairFromMnemonic(seedPhrase)
+  state.llmSettings.userId = 'N/A' + key.algorithm.name
+  throw new Error("doesn't work yet!")
 }
 
 async function onUpdateAppConfiguration() {

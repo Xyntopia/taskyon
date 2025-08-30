@@ -24,27 +24,40 @@ export function parseJwt(token: string | undefined): Record<string, unknown> | u
   }
 }
 
-// Generate a random key (256 bits) for HKDF
-async function generateRandomEncryptionKey(extractable = false): Promise<CryptoKey> {
-  const keyBytes = crypto.getRandomValues(new Uint8Array(32)) // 32 bytes = 256 bits
-  // using random values like the following doesn't work for keys as
-  // KDF derived keys are not allowed to be extracted by default browser policy
-  // thats why we are using the key generation function directly...
-  //return crypto.subtle.importKey('raw', keyBytes, { name: 'HKDF' }, extractable, ['deriveKey'])
-  return crypto.subtle.importKey(
-    'raw',
-    keyBytes,
-    { name: 'AES-GCM', length: 256 },
-    extractable,
-    ['encrypt'], // Usage required for import, though not directly used
+// used for encryption/decryption
+const generateRandomEncryptionKey = () =>
+  crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+
+// can be use to wrap our encryption keys!
+export const generateSessionKey = () =>
+  crypto.subtle.generateKey(
+    { name: 'AES-KW', length: 256 },
+    false, // You'd likely set this to 'false' in production after storing it securely
+    ['wrapKey', 'unwrapKey', 'encrypt', 'decrypt'],
   )
+
+export async function generateAssymetricRandomNewKey() {
+  const keyPair = await crypto.subtle.generateKey(
+    { name: 'Ed25519' },
+    false, // extractable for memory management
+    ['sign', 'verify'],
+  )
+  return keyPair
+}
+
+export const generateAssymetricKeyDeriver = async () => {
+  const keyPair = (await crypto.subtle.generateKey(
+    { name: 'X25519' }, // Use X25519 for key generation
+    false, // non-extractable private key
+    ['deriveKey', 'deriveBits'],
+  )) as unknown as CryptoKeyPair
+  return keyPair
 }
 
 // Define a type for the encrypted data structure
 export const EncryptedDataRow = z.object({
   iv: z.string(),
   ciphertext: z.string(),
-  salt: z.string(),
   encryptedToolKey: z.string(),
   recoveryEncryptedToolKey: z.string(),
 })
@@ -53,52 +66,50 @@ export type EncryptedDataRow = z.infer<typeof EncryptedDataRow>
 export const EncryptedDataRowMixed = z.object({
   iv: z.instanceof(Uint8Array),
   ciphertext: z.instanceof(Uint8Array),
-  salt: z.instanceof(Uint8Array),
   encryptedToolKey: z.string(),
   recoveryEncryptedToolKey: z.string(),
 })
 export type EncryptedDataRowMixed = z.infer<typeof EncryptedDataRowMixed>
 
-async function encryptObject<T>(
+async function encryptData<T>(
   rowKey: CryptoKey,
   data: T,
   id: string | number,
-): Promise<{ iv: string; ciphertext: string; salt: string }>
+): Promise<{ iv: string; ciphertext: string }>
 
-async function encryptObject<T>(
+async function encryptData<T>(
   rowKey: CryptoKey,
   data: T,
   id: string | number,
   base64: true,
-): Promise<{ iv: string; ciphertext: string; salt: string }>
+): Promise<{ iv: string; ciphertext: string }>
 
-async function encryptObject<T>(
+async function encryptData<T>(
   rowKey: CryptoKey,
   data: T,
   id: string | number,
   base64: false,
-): Promise<{ iv: Uint8Array; ciphertext: Uint8Array; salt: Uint8Array }>
+): Promise<{ iv: Uint8Array; ciphertext: Uint8Array }>
 
 // Encrypt object with key derived from rowKey + salt + id
-async function encryptObject(
+async function encryptData(
   rowKey: CryptoKey,
   data: BufferSource,
   id: string | number,
   base64: boolean = true,
 ) {
-  const salt = crypto.getRandomValues(new Uint8Array(16))
-  const info = new TextEncoder().encode(String(id))
-
-  // Export rowKey as raw bytes and import as HKDF key
-  const rawRowKey = await crypto.subtle.exportKey('raw', rowKey)
-  const hkdfKey = await crypto.subtle.importKey('raw', rawRowKey, { name: 'HKDF' }, false, [
-    'deriveKey',
-  ])
-
   // Derive AES-GCM key using HKDF
+  // we never share the derivedKey and rowKey is unique per encrypted object anyways
+  // so it effectivly acts as a salt ... this why we don't need a salt
+  // we don't want to use rowKey directly, because the iv would include only 12 bytes
+  // and the aad doesn't guarantee non-encrptability without the info
   const derivedKey = await crypto.subtle.deriveKey(
-    { name: 'HKDF', salt, info, hash: 'SHA-256' },
-    hkdfKey,
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      info: new TextEncoder().encode(String(id)),
+    },
+    rowKey, // non-extractable
     { name: 'AES-GCM', length: 256 },
     false,
     ['encrypt'],
@@ -114,14 +125,12 @@ async function encryptObject(
     return {
       iv: uint8ArrayToBase64Url(iv.buffer),
       ciphertext: uint8ArrayToBase64Url(encrypted.buffer),
-      salt: uint8ArrayToBase64Url(salt.buffer),
     }
   else
     return {
       iv: iv,
       ciphertext: encrypted,
-      salt: salt,
-    } as { iv: Uint8Array; ciphertext: Uint8Array; salt: Uint8Array }
+    } as { iv: Uint8Array; ciphertext: Uint8Array }
 }
 
 export type AskSession = () => Promise<CryptoKey> | CryptoKey
@@ -164,7 +173,7 @@ export async function encryptDataFile(
 ) {
   // Generate a new random tool key for each set operation
   // we need the key to be extractable, so that we can encrypt it !
-  const rowKey = await generateRandomEncryptionKey(true)
+  const rowKey = await generateRandomEncryptionKey()
 
   // Encrypt the tool key using the recovery public key
   const recoveryEncryptedToolKey = await wrapKeyWithPublicKey(await publicRecoveryKey(), rowKey)
@@ -174,20 +183,18 @@ export async function encryptDataFile(
 
   // Encrypt the data using the tool key
   if (base64) {
-    const { iv, ciphertext, salt } = await encryptObject(rowKey, data, info, base64)
+    const { iv, ciphertext } = await encryptData(rowKey, data, info, base64)
     return {
       iv,
       ciphertext,
-      salt,
       encryptedToolKey,
       recoveryEncryptedToolKey,
     } as EncryptedDataRow
   } else {
-    const { iv, ciphertext, salt } = await encryptObject(rowKey, data, info, base64)
+    const { iv, ciphertext } = await encryptData(rowKey, data, info, base64)
     return {
       iv,
       ciphertext,
-      salt,
       encryptedToolKey,
       recoveryEncryptedToolKey,
     } as EncryptedDataRowMixed
@@ -207,7 +214,7 @@ export const decryptDataFile = async (
 
   // Decrypt the data using the tool key. The updated `decryptData` function
   // will handle the type detection internally. No `if` block needed here!
-  const data = await decryptData(rowKey, encData.iv, encData.ciphertext, encData.salt, info)
+  const data = await decryptData(rowKey, encData.iv, encData.ciphertext, info)
   return data
 }
 
@@ -217,26 +224,38 @@ async function wrapKeyWithPublicKey(publicKey: CryptoKey, dataKey: CryptoKey): P
   return uint8ArrayToBase64Url(encrypted)
 }
 
-async function wrapWithAssymetricKey(sessionKey: CryptoKey, dataKey: CryptoKey): Promise<string> {
-  const rawKey = await crypto.subtle.exportKey('raw', dataKey)
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, sessionKey, rawKey)
-
-  const combined = new Uint8Array([...iv, ...new Uint8Array(encrypted)])
-  return uint8ArrayToBase64Url(combined.buffer)
+async function wrapWithAssymetricKey(
+  sessionKey: CryptoKey,
+  encryptionKey: CryptoKey,
+): Promise<string> {
+  const wrappedDekBuffer = await crypto.subtle.wrapKey(
+    'raw', // Format of the key to wrap
+    encryptionKey, // The key we are protecting
+    sessionKey, // The key used to perform the wrapping
+    { name: 'AES-KW' }, // The wrapping algorithm
+  )
+  const wrappedDekB64 = uint8ArrayToBase64Url(wrappedDekBuffer)
+  return wrappedDekB64
 }
 
-async function unwrapWithSymmetricKey(
-  sessionKey: CryptoKey,
-  encryptedData: string,
-): Promise<CryptoKey> {
-  const combined = base64UrlToUint8Array(encryptedData)
-  const iv = combined.slice(0, 12)
-  const ciphertext = combined.slice(12)
+async function unwrapWithSymmetricKey(sessionKey: CryptoKey, wrappedKeyB64: string) {
+  const wrappedKeyBuffer = base64UrlToUint8Array(wrappedKeyB64)
 
-  const rawKey = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, sessionKey, ciphertext)
-
-  return crypto.subtle.importKey('raw', rawKey, { name: 'HKDF' }, false, ['deriveKey'])
+  // Note: Here you tell unwrapKey what kind of key you EXPECT to get back.
+  // I've used your example of an HKDF key.
+  return crypto.subtle.unwrapKey(
+    'raw', // The format of the wrapped key
+    wrappedKeyBuffer,
+    sessionKey,
+    { name: 'AES-KW' },
+    {
+      // Algorithm for the unwrapped key
+      name: 'AES-GCM', // Matches original key type
+      length: 256, // Key length (bits)
+    },
+    false, // is the unwrapped key extractable?
+    ['deriveKey'], // Usages for the unwrapped key
+  )
 }
 
 // Decrypt data using derived key
@@ -244,7 +263,6 @@ export async function decryptData(
   rowKey: CryptoKey,
   iv: string | Uint8Array,
   ciphertext: string | Uint8Array,
-  salt: string | Uint8Array,
   id: string | number,
 ) {
   // --- START OF CHANGES ---
@@ -253,7 +271,6 @@ export async function decryptData(
   const ivBytes = typeof iv === 'string' ? base64UrlToUint8Array(iv) : iv
   const ciphertextBytes =
     typeof ciphertext === 'string' ? base64UrlToUint8Array(ciphertext) : ciphertext
-  const saltBytes = typeof salt === 'string' ? base64UrlToUint8Array(salt) : salt
   // --- END OF CHANGES ---
 
   const info = new TextEncoder().encode(String(id))
@@ -261,7 +278,6 @@ export async function decryptData(
   const derivedKey = await crypto.subtle.deriveKey(
     {
       name: 'HKDF',
-      salt: saltBytes, // Now correctly using a buffer
       info,
       hash: 'SHA-256',
     },
@@ -345,7 +361,7 @@ export function mnemonicToSeed(mnemonic: string, password: string = ''): Uint8Ar
   return mnemonicToSeedSync(mnemonic, password)
 }
 
-export async function generateKeyPairsFromSeed(seed: Uint8Array, algorithm: 'Ed25519' | 'X25519') {
+async function generateKeyPairsFromSeed(seed: Uint8Array, algorithm: 'Ed25519' | 'X25519') {
   // Import the seed as a CryptoKey
   const key = await crypto.subtle.importKey('raw', seed, { name: 'HKDF' }, false, ['deriveKey'])
 
@@ -374,13 +390,7 @@ export const verifySignature = (
   publicKey: CryptoKeyPair['publicKey'],
 ) => crypto.subtle.verify('Ed25519', publicKey, signature, data)
 
-export async function generateAssymetricRandomNewKey() {
-  const mnemonic = generateSeedPhrase()
-
-  return { mnemonic, ...(await base64UrlEd25519Keys(mnemonic)) }
-}
-
-export async function base64UrlEd25519Keys(mnemonic: string) {
+export async function keyPairFromMnemonic(mnemonic: string) {
   const seed = mnemonicToSeed(mnemonic)
   const keyPair = await generateKeyPairsFromSeed(seed, 'Ed25519')
   return keyPair
@@ -397,4 +407,43 @@ export function urlSafeBase64Uuid() {
   const base64Uuid = urlSafe64BitString(bufferUuid)
 
   return base64Uuid
+}
+
+// this is sort of a "symmetric wrapping without sending the key"
+// two poeple can both use public + private key to derive a new ke each for themselves
+// so basically to poeple derive the same key, but with two different methods that is
+// each only known to themselves and not ther other person.
+export async function wrapKeyWithECDH(
+  senderPrivateKey: CryptoKey,
+  recipientPublicKey: CryptoKey,
+  dataKeyToWrap: CryptoKey,
+) {
+  // 1. Derive the shared secret, which will be used as a wrapping key.
+  //    We are deriving an AES-KW key, which is a standard for key wrapping.
+  const sharedWrappingKey = await crypto.subtle.deriveKey(
+    {
+      name: 'ECDH',
+      public: recipientPublicKey, // The recipient's public key
+    },
+    senderPrivateKey, // The sender's private key
+    {
+      name: 'AES-KW', // Algorithm for the derived key
+      length: 256, // Key length in bits
+    },
+    true, // The key is extractable (this is not strictly necessary for wrapping)
+    ['wrapKey', 'unwrapKey'], // The derived key can be used for wrapping and unwrapping
+  )
+
+  // 2. Use the derived shared key to wrap the data key.
+  const wrappedKeyBuffer = await crypto.subtle.wrapKey(
+    'raw', // The format of the key to wrap
+    dataKeyToWrap,
+    sharedWrappingKey,
+    {
+      name: 'AES-KW', // The wrapping algorithm
+    },
+  )
+
+  // 3. Return the wrapped key as a Base64URL string.
+  return uint8ArrayToBase64Url(wrappedKeyBuffer)
 }

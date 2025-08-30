@@ -18,7 +18,7 @@ import {
   createTypeFilteredPort,
   filter,
 } from 'src/modules/frpBus'
-import { generateRsaOaepPair } from '@taskyon/taskyon'
+import { createCryptoSession } from '@taskyon/taskyon'
 import { setColors } from 'src/boot/brand-colors'
 import { setPrismTheme } from 'src/modules/markdownUtils '
 import { onScopeDispose } from 'vue'
@@ -527,10 +527,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     )
   })
 
-  // TODO: right now, we're simply generating a reandom keypair for every launch
-  //       so recovery is currenty impossible. We would like to give te user the ability
-  //       to save this recovery key somewhere else in order to be able to recover their passwords.
-  const getPublicRecoveryKey = async () => (await generateRsaOaepPair()).publicKey
+  const tyCrypto = createCryptoSession()
+
+  const getPublicRecoveryKey = async (
+    ...args: Parameters<Awaited<ReturnType<typeof createCryptoSession>>['getUserPublicKey']>
+  ) => (await tyCrypto).getUserPublicKey(...args)
+
   // Use a fixed key for demo purposes (not secure for production!)
   const fixedKeyBytes = new Uint8Array([
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,

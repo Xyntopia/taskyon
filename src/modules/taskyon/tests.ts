@@ -29,6 +29,7 @@ function assert(condition: boolean, msg?: string): asserts condition {
   }
 }
 
+// TODO: update our cryptoFunction tests  and really try to thoroughly test the...
 export async function testCryptoSession() {
   const logs: Record<string, unknown> = {}
 
@@ -36,13 +37,11 @@ export async function testCryptoSession() {
   const sessionA = await createCryptoSession({ accountId: 'acc1' })
   logs.deviceIdA = sessionA.getDeviceId()
   logs.devicePubA = await sessionA.exportDevicePublicKeyJwk()
-  logs.userPubA = Buffer.from(await sessionA.getUserPublicKeyBytes()).toString('hex')
 
   // === Init session B ===
   const sessionB = await createCryptoSession({ accountId: 'acc2' })
   logs.deviceIdB = sessionB.getDeviceId()
   logs.devicePubB = await sessionB.exportDevicePublicKeyJwk()
-  logs.userPubB = Buffer.from(await sessionB.getUserPublicKeyBytes()).toString('hex')
 
   // === Wrap/unwrap session key (A → B) ===
   const wrapped = await sessionA.wrapSessionKey(sessionB.getDevicePublicKey())
@@ -50,10 +49,7 @@ export async function testCryptoSession() {
   logs.unwrapSuccess = unwrappedKey.algorithm.name
 
   // === Regenerations ===
-  const oldUserPub = logs.userPubA
   await sessionA.regenerateUserKey()
-  const newUserPub = Buffer.from(await sessionA.getUserPublicKeyBytes()).toString('hex')
-  logs.userKeyRotated = oldUserPub !== newUserPub
 
   const oldDevicePub = logs.devicePubA
   await sessionA.regenerateDeviceKey()

@@ -3,7 +3,12 @@
  * @description Complete crypto session management with key lifecycle, persistence, and sharing
  */
 
-import { urlSafeBase64Uuid } from './crypto'
+import {
+  keyPairFromMnemonic,
+  generateAssymetricKeyDeriver,
+  generateSessionKey,
+  urlSafeBase64Uuid,
+} from './crypto'
 
 // ===================================================================================
 //  TYPE DEFINITIONS
@@ -129,31 +134,9 @@ function createKeyStorage(namespace: string) {
 // ===================================================================================
 
 const CryptoUtils = {
-  async generateSessionKey(): Promise<CryptoKey> {
-    return crypto.subtle.generateKey(
-      { name: 'AES-GCM', length: 256 },
-      false, // non-extractable
-      ['encrypt', 'decrypt'],
-    )
-  },
-
-  async generateDeviceKeyPair(): Promise<CryptoKeyPair> {
-    return (await crypto.subtle.generateKey(
-      { name: 'X25519' }, // Use X25519 for key generation
-      false, // non-extractable private key
-      ['deriveKey', 'deriveBits'],
-    )) as unknown as CryptoKeyPair
-  },
-
-  async generateUserKeyPair(): Promise<CryptoKeyPair> {
-    const keys = await crypto.subtle.generateKey(
-      { name: 'Ed25519' },
-      true, // extractable for memory management
-      ['sign', 'verify'],
-    )
-    // TODO: no idea, why we are having problems here?
-    return keys as unknown as CryptoKeyPair
-  },
+  generateSessionKey,
+  generateDeviceKeyPair: generateAssymetricKeyDeriver,
+  generateUserKeyPair: keyPairFromMnemonic,
 
   async deriveKek(privateKey: CryptoKey, publicKey: CryptoKey): Promise<CryptoKey> {
     return crypto.subtle.deriveKey(
@@ -260,24 +243,22 @@ export async function createCryptoSession(options: CryptoSessionOptions = {}) {
   }
 
   // Initialize user key pair
-  const initUserKey = async (): Promise<void> => {
-    if (options.mnemonic) {
-      // TODO: Implement mnemonic-based key derivation
-      console.warn('Mnemonic support not yet implemented, generating random key')
-    }
-
+  const regenerateUserKey = async (mnemonic?: string): Promise<void> => {
     // Generate user key pair (always new, in memory only)
-    userKeyPair = await CryptoUtils.generateUserKeyPair()
-
-    // Store public key for reference
-    const publicKeyBytes = await crypto.subtle.exportKey('raw', userKeyPair.publicKey)
-    await storage.set(USER_PUBLIC_KEY, publicKeyBytes)
+    if (mnemonic) {
+      const userKeyPair = (await CryptoUtils.generateUserKeyPair(
+        mnemonic,
+      )) as unknown as CryptoKeyPair
+      // Store public key for reference
+      const publicKeyBytes = await crypto.subtle.exportKey('raw', userKeyPair.publicKey)
+      await storage.set(USER_PUBLIC_KEY, publicKeyBytes)
+    }
   }
 
   // Initialize all components
   await initDeviceKey()
   await initSessionKey()
-  await initUserKey()
+  await regenerateUserKey(options.mnemonic)
 
   // Public interface
   const getSessionKey = (): CryptoKey => {
@@ -290,10 +271,9 @@ export async function createCryptoSession(options: CryptoSessionOptions = {}) {
     return deviceKeyPair.publicKey
   }
 
-  const getUserPublicKeyBytes = async (): Promise<Uint8Array> => {
+  const getUserPublicKey = () => {
     if (!userKeyPair) throw new Error('User key pair not initialized')
-    const exported = await crypto.subtle.exportKey('raw', userKeyPair.publicKey)
-    return new Uint8Array(exported)
+    return userKeyPair.publicKey
   }
 
   const wrapSessionKey = async (targetPublicKey: CryptoKey): Promise<Uint8Array> => {
@@ -397,13 +377,6 @@ export async function createCryptoSession(options: CryptoSessionOptions = {}) {
     }
   }
 
-  const regenerateUserKey = async (): Promise<void> => {
-    userKeyPair = await CryptoUtils.generateUserKeyPair()
-
-    const publicKeyBytes = await crypto.subtle.exportKey('raw', userKeyPair.publicKey)
-    await storage.set(USER_PUBLIC_KEY, publicKeyBytes)
-  }
-
   const logout = async (clearPersistentStorage = false): Promise<void> => {
     // Zeroize memory references
     sessionKey = null
@@ -429,7 +402,7 @@ export async function createCryptoSession(options: CryptoSessionOptions = {}) {
   return {
     getSessionKey,
     getDevicePublicKey,
-    getUserPublicKeyBytes,
+    getUserPublicKey,
     wrapSessionKey,
     unwrapSessionKey,
     regenerateSessionKey,
