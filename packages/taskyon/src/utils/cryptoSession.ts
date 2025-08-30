@@ -9,6 +9,7 @@ import {
   generateWrappedSessionKey,
   unwrapSessionKey,
   reWrapSessionKey,
+  deriveKek,
 } from './crypto'
 
 // ===================================================================================
@@ -107,16 +108,6 @@ function createKeyStorage(namespace: string) {
 const CryptoUtils = {
   generateDeviceKeyPair: generateAssymetricKeyDeriver,
   generateUserKeyPair: keyPairFromMnemonic,
-
-  async deriveKek(privateKey: CryptoKey, publicKey: CryptoKey): Promise<CryptoKey> {
-    return crypto.subtle.deriveKey(
-      { name: 'X25519', public: publicKey },
-      privateKey,
-      { name: 'AES-KW', length: 256 },
-      false,
-      ['wrapKey', 'unwrapKey'],
-    )
-  },
 }
 
 // ===================================================================================
@@ -153,26 +144,41 @@ export async function createCryptoSession(accountId: string) {
     return dkp
   }
 
+  const getWrappedSessionKey = async () => await storage.get<ArrayBuffer>(SESSION_KEY_WRAPPED)
+
   // Initialize session key
   const initSessionKey = async (
-    renew = false,
     deviceKeyPair: CryptoKeyPair,
-    oldDeviceKeyPair?: CryptoKeyPair,
+    options?: {
+      renew?: boolean
+      oldDeviceKeyPair?: CryptoKeyPair
+      externalWrappedSessionKey?: ArrayBuffer // if we want to add an external key
+      persist?: boolean
+    },
   ) => {
-    const kek = await CryptoUtils.deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
+    const kek = await deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
 
-    let wrappedSessionKey = undefined
-    wrappedSessionKey = renew ? undefined : await storage.get<ArrayBuffer>(SESSION_KEY_WRAPPED)
-    if (oldDeviceKeyPair) {
+    let wrappedSessionKey = options?.renew
+      ? options.externalWrappedSessionKey
+      : await getWrappedSessionKey()
+
+    if (options?.oldDeviceKeyPair) {
       if (!wrappedSessionKey) throw new Error('No existing session key that we can re-wrap')
-      const kekOld = await CryptoUtils.deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
+      const kekOld = await deriveKek(
+        options.oldDeviceKeyPair.privateKey,
+        options.oldDeviceKeyPair.publicKey,
+      )
       wrappedSessionKey = await reWrapSessionKey(wrappedSessionKey, kekOld, kek)
     }
 
     if (!wrappedSessionKey) {
       wrappedSessionKey = await generateWrappedSessionKey(kek)
+    }
+
+    if (options?.persist) {
       await storage.set(SESSION_KEY_WRAPPED, wrappedSessionKey)
     }
+
     const sk = await unwrapSessionKey(wrappedSessionKey, kek)
     return sk
   }
@@ -191,13 +197,22 @@ export async function createCryptoSession(accountId: string) {
 
   // Initialize all components
   let deviceKeyPair = await initDeviceKey()
-  const sessionKey = await initSessionKey(false, deviceKeyPair)
+  const sessionKey = await initSessionKey(deviceKeyPair, { persist: true })
   const userKeyPair: ArrayBuffer | undefined = undefined
 
   // Public interface
-  const getWrappedSessionKey = (): CryptoKey => {
+  const getSessionKey = (): CryptoKey => {
     if (!sessionKey) throw new Error('Session not initialized')
     return sessionKey
+  }
+
+  const exportSessionKey = async (shareKey: CryptoKeyPair) => {
+    const kek = await deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
+    const shareKek = await deriveKek(shareKey.privateKey, shareKey.publicKey)
+
+    const wrappedSessionKey = await getWrappedSessionKey()
+    if (!wrappedSessionKey) throw new Error('no wrappedSessionKey available to export!')
+    return await reWrapSessionKey(wrappedSessionKey, kek, shareKek)
   }
 
   const getDevicePublicKey = (): CryptoKey => {
@@ -210,21 +225,32 @@ export async function createCryptoSession(accountId: string) {
     return userKeyPair
   }
 
-  const regenerateSessionKey = () => initSessionKey(true, deviceKeyPair)
+  const regenerateSessionKey = () => initSessionKey(deviceKeyPair, { renew: true, persist: true })
+
+  const addWrappedSessionKey = async (exchangeKey: CryptoKeyPair, newKey: ArrayBuffer) =>
+    await initSessionKey(deviceKeyPair, {
+      renew: true,
+      externalWrappedSessionKey: newKey,
+      oldDeviceKeyPair: exchangeKey,
+      persist: true,
+    })
 
   const regenerateDeviceKey = async (): Promise<void> => {
     const oldDeviceKeyPair = deviceKeyPair
     deviceKeyPair = await CryptoUtils.generateDeviceKeyPair()
     await storage.set(DEVICE_KEYPAIR_KEY, deviceKeyPair)
-    await initSessionKey(false, oldDeviceKeyPair, deviceKeyPair)
+    await initSessionKey(deviceKeyPair, { oldDeviceKeyPair, persist: true })
   }
 
   return {
-    getWrappedSessionKey,
+    getSessionKey, // this is OK, because the ke is non-exportable...
+    regenerateSessionKey,
+    addWrappedSessionKey,
+    exportSessionKey,
+
     getDevicePublicKey,
     getDeviceId: getDevicePublicKey,
     getUserPublicKey,
-    regenerateSessionKey,
     regenerateDeviceKey,
     regenerateUserKey,
     destroy,

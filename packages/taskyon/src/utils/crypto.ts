@@ -105,6 +105,19 @@ export const generateAssymetricKeyDeriver = async () => {
   return keyPair
 }
 
+export const deriveKek = async (
+  privateKey: CryptoKey,
+  publicKey: CryptoKey,
+): Promise<CryptoKey> => {
+  return crypto.subtle.deriveKey(
+    { name: 'X25519', public: publicKey },
+    privateKey,
+    { name: 'AES-KW', length: 256 },
+    false,
+    ['wrapKey', 'unwrapKey'],
+  )
+}
+
 // Define a type for the encrypted data structure
 export const EncryptedDataRow = z.object({
   iv: z.string(),
