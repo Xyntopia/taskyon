@@ -102,15 +102,6 @@ function createKeyStorage(namespace: string) {
 }
 
 // ===================================================================================
-//  CRYPTO UTILITIES
-// ===================================================================================
-
-const CryptoUtils = {
-  generateDeviceKeyPair: generateAssymetricKeyDeriver,
-  generateUserKeyPair: keyPairFromMnemonic,
-}
-
-// ===================================================================================
 //  MAIN IMPLEMENTATION
 // ===================================================================================
 
@@ -139,8 +130,8 @@ export async function createCryptoSession(accountId: string) {
     }
 
     // Generate new device key pair
-    const dkp = await CryptoUtils.generateDeviceKeyPair()
-    await storage.set(DEVICE_KEYPAIR_KEY, deviceKeyPair)
+    const dkp = await generateAssymetricKeyDeriver()
+    await storage.set(DEVICE_KEYPAIR_KEY, dkp)
     return dkp
   }
 
@@ -186,9 +177,7 @@ export async function createCryptoSession(accountId: string) {
   // Initialize user key pair
   const regenerateUserKey = async (mnemonic: string) => {
     // Generate user key pair (always new, in memory only)
-    const userKeyPair = (await CryptoUtils.generateUserKeyPair(
-      mnemonic,
-    )) as unknown as CryptoKeyPair
+    const userKeyPair = (await keyPairFromMnemonic(mnemonic)) as unknown as CryptoKeyPair
     // Store public key for reference
     const publicKeyBytes = await crypto.subtle.exportKey('raw', userKeyPair.publicKey)
     await storage.set(USER_PUBLIC_KEY, publicKeyBytes)
@@ -237,7 +226,7 @@ export async function createCryptoSession(accountId: string) {
 
   const regenerateDeviceKey = async (): Promise<void> => {
     const oldDeviceKeyPair = deviceKeyPair
-    deviceKeyPair = await CryptoUtils.generateDeviceKeyPair()
+    deviceKeyPair = await generateAssymetricKeyDeriver()
     await storage.set(DEVICE_KEYPAIR_KEY, deviceKeyPair)
     await initSessionKey(deviceKeyPair, { oldDeviceKeyPair, persist: true })
   }
