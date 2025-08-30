@@ -439,7 +439,7 @@ async function generateKeyPairsFromSeed(seed: Uint8Array, algorithm: 'Ed25519' |
     },
     key,
     { name: algorithm },
-    true,
+    false,
     algorithm === 'Ed25519' ? ['sign', 'verify'] : ['deriveKey'],
   )
 
