@@ -361,7 +361,7 @@ function onGenerateSeedPhrase() {
 
 async function onAcceptSeedPhrase(seedPhrase: string) {
   const key = await keyPairFromMnemonic(seedPhrase)
-  state.llmSettings.userId = 'N/A' + key.algorithm.name
+  state.llmSettings.userId = key.pkb64
   throw new Error("doesn't work yet!")
 }
 

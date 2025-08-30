@@ -1,3 +1,4 @@
+import { getPublicKeyAsync } from '@noble/ed25519'
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39'
 import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english'
 import { base64UrlToUint8Array, uint8ArrayToBase64Url, urlSafe64BitString } from '@taskyon/taskyon'
@@ -426,24 +427,74 @@ export function mnemonicToSeed(mnemonic: string, password: string = ''): Uint8Ar
   return mnemonicToSeedSync(mnemonic, password)
 }
 
-async function generateKeyPairsFromSeed(seed: Uint8Array, algorithm: 'Ed25519' | 'X25519') {
-  // Import the seed as a CryptoKey
-  const key = await crypto.subtle.importKey('raw', seed, { name: 'HKDF' }, false, ['deriveKey'])
+function encodeEd25519Pkcs8(privateKey: Uint8Array): ArrayBuffer {
+  // PKCS#8 header for Ed25519 (RFC8410)
+  const pkcs8Header = Uint8Array.from([
+    0x30,
+    0x2e, // SEQUENCE, length 46
+    0x02,
+    0x01,
+    0x00, // version
+    0x30,
+    0x05, // AlgorithmIdentifier
+    0x06,
+    0x03,
+    0x2b,
+    0x65,
+    0x70, // OID 1.3.101.112 (Ed25519)
+    0x04,
+    0x22, // OCTET STRING, length 34
+    0x04,
+    0x20, // OCTET STRING, length 32
+  ])
+  const out = new Uint8Array(pkcs8Header.length + privateKey.length)
+  out.set(pkcs8Header, 0)
+  out.set(privateKey, pkcs8Header.length)
+  return out.buffer
+}
 
-  const derivedKey = await crypto.subtle.deriveKey(
-    {
-      name: 'HKDF',
-      hash: 'SHA-256',
-      salt: new Uint8Array(),
-      info: new TextEncoder().encode(algorithm),
-    },
-    key,
-    { name: algorithm },
-    false,
-    algorithm === 'Ed25519' ? ['sign', 'verify'] : ['deriveKey'],
+const deriveKey32 = async (seed64: Uint8Array, info: string = '') =>
+  new Uint8Array(
+    await crypto.subtle.deriveBits(
+      {
+        name: 'HKDF',
+        salt: new Uint8Array([]), // optional, can be empty
+        info: new TextEncoder().encode(info),
+        hash: 'SHA-256',
+      },
+      await crypto.subtle.importKey('raw', seed64, 'HKDF', false, ['deriveBits']),
+      32 * 8, // 32 bytes
+    ),
   )
 
-  return derivedKey
+async function generateKeyPairsFromSeed(seed: Uint8Array, extractablePublic = true) {
+  if (seed.length <= 32) throw new Error('Seed must be at least 32 bytes')
+
+  const keySeed = await deriveKey32(seed)
+  const publicRaw = await getPublicKeyAsync(keySeed)
+
+  // Build PKCS#8 from raw private key
+  const pkcs8 = encodeEd25519Pkcs8(keySeed)
+
+  const privateKey = await crypto.subtle.importKey(
+    'pkcs8',
+    pkcs8,
+    { name: 'Ed25519' },
+    false, // non-extractable
+    ['sign'],
+  )
+
+  const publicKey = await crypto.subtle.importKey(
+    'raw',
+    publicRaw,
+    { name: 'Ed25519' },
+    extractablePublic,
+    ['verify'],
+  )
+
+  const pkb64 = uint8ArrayToBase64Url(publicRaw.buffer)
+
+  return { privateKey, publicKey, pkb64 }
 }
 
 export const signData = (data: Uint8Array, privateKey: CryptoKey) =>
@@ -457,7 +508,7 @@ export const verifySignature = (
 
 export async function keyPairFromMnemonic(mnemonic: string) {
   const seed = mnemonicToSeed(mnemonic)
-  const keyPair = await generateKeyPairsFromSeed(seed, 'Ed25519')
+  const keyPair = await generateKeyPairsFromSeed(seed)
   return keyPair
 }
 
