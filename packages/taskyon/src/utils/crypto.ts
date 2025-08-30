@@ -28,13 +28,64 @@ export function parseJwt(token: string | undefined): Record<string, unknown> | u
 const generateRandomEncryptionKey = () =>
   crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
 
-// can be use to wrap our encryption keys!
-export const generateSessionKey = () =>
-  crypto.subtle.generateKey(
-    { name: 'AES-KW', length: 256 },
-    false, // You'd likely set this to 'false' in production after storing it securely
+export const wrapSessionKey = async (sk: CryptoKey, kek: CryptoKey) => {
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const wrapped = await crypto.subtle.wrapKey(
+    'raw', // format of sessionKey
+    sk, // non-extractable key
+    kek, //wrapper, //kek, // wrapping key
+    { name: 'AES-KW', iv, length: 256 },
+  )
+  return wrapped
+}
+
+export const unwrapSessionKey = async (wrappedData: ArrayBuffer, unwrappingKey: CryptoKey) =>
+  crypto.subtle.unwrapKey(
+    'raw',
+    wrappedData,
+    unwrappingKey,
+    'AES-KW', // algorithm identifier for key encryption key
+    'AES-KW', // algorithm identifier for key to unwrap
+    false, // non-extractable
     ['wrapKey', 'unwrapKey'],
   )
+
+// !!!IMPORTANT!!!!
+// because we want to export this key it only exports wrapped keys!!
+// do not ever export the unwrapped key from this function!!!
+export const reWrapSessionKey = async (
+  wrappedData: ArrayBuffer,
+  unwrappingKey: CryptoKey,
+  newWrappingKey: CryptoKey,
+) => {
+  const sk = await crypto.subtle.unwrapKey(
+    'raw',
+    wrappedData,
+    unwrappingKey,
+    'AES-KW', // algorithm identifier for key encryption key
+    'AES-KW', // algorithm identifier for key to unwrap
+    true, // extractable but only very short lived!!!
+    ['wrapKey', 'unwrapKey'],
+  )
+  return await wrapSessionKey(sk, newWrappingKey)
+}
+
+// !!!IMPORTANT!!!!
+// because we want to export this key it only exports wrapped keys!!
+// do not ever export the unwrapped key from this function!!!
+export const generateWrappedSessionKey = async (kek: CryptoKey) => {
+  //const wrapper = await generateSessionKey()
+  const sk = await crypto.subtle.generateKey(
+    { name: 'AES-KW', length: 256 },
+    // we only set the key as extractyble here, because we wrap the session key *immediatly* after
+    // creating it and then forget about it...
+    true,
+    ['wrapKey', 'unwrapKey'],
+  )
+
+  const wrapped = await wrapSessionKey(sk, kek)
+  return wrapped
+}
 
 export async function generateAssymetricRandomNewKey() {
   const keyPair = await crypto.subtle.generateKey(

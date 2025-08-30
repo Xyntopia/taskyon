@@ -6,55 +6,10 @@
 import {
   keyPairFromMnemonic,
   generateAssymetricKeyDeriver,
-  generateSessionKey,
-  urlSafeBase64Uuid,
+  generateWrappedSessionKey,
+  unwrapSessionKey,
+  reWrapSessionKey,
 } from './crypto'
-
-// ===================================================================================
-//  TYPE DEFINITIONS
-// ===================================================================================
-
-export interface CryptoSessionOptions {
-  deviceId?: string
-  accountId?: string
-  jwtPayload?: Record<string, unknown>
-  mnemonic?: string
-  passphrase?: string
-}
-
-interface WrappedEnvelope {
-  v: number
-  alg: string
-  epkJwk: JsonWebKey
-  ct: string
-  iv?: string
-  meta?: Record<string, unknown>
-}
-
-// ===================================================================================
-//  UTILITY FUNCTIONS
-// ===================================================================================
-
-const enc = new TextEncoder()
-const dec = new TextDecoder()
-
-function bufToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer)
-  let binary = ''
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode.apply(null, Array.from(bytes.slice(i, i + 0x8000)))
-  }
-  return btoa(binary)
-}
-
-function base64ToBuf(base64: string): ArrayBuffer {
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return bytes.buffer
-}
 
 // ===================================================================================
 //  INDEXEDDB PERSISTENCE (FUNCTIONAL)
@@ -126,7 +81,23 @@ function createKeyStorage(namespace: string) {
     })
   }
 
-  return { init, set, get, delete: deleteKey }
+  const destroy = async (): Promise<void> => {
+    if (db) {
+      db.close() // Close connection so deletion isn't blocked
+      db = null
+    }
+
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.deleteDatabase(dbName)
+      request.onsuccess = () => resolve()
+      request.onerror = () =>
+        reject(new Error(request.error?.message || 'Database deletion failed'))
+      request.onblocked = () =>
+        reject(new Error('Database deletion blocked (another connection is open)'))
+    })
+  }
+
+  return { init, set, get, delete: deleteKey, destroy }
 }
 
 // ===================================================================================
@@ -134,7 +105,6 @@ function createKeyStorage(namespace: string) {
 // ===================================================================================
 
 const CryptoUtils = {
-  generateSessionKey,
   generateDeviceKeyPair: generateAssymetricKeyDeriver,
   generateUserKeyPair: keyPairFromMnemonic,
 
@@ -142,40 +112,9 @@ const CryptoUtils = {
     return crypto.subtle.deriveKey(
       { name: 'X25519', public: publicKey },
       privateKey,
-      { name: 'AES-GCM', length: 256 },
+      { name: 'AES-KW', length: 256 },
       false,
-      ['encrypt', 'decrypt', 'wrapKey', 'unwrapKey'],
-    )
-  },
-
-  async wrapSessionKey(sessionKey: CryptoKey, kek: CryptoKey): Promise<ArrayBuffer> {
-    // First export session key to raw format
-    const sessionRaw = await crypto.subtle.exportKey('raw', sessionKey)
-
-    const iv = crypto.getRandomValues(new Uint8Array(12))
-    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, kek, sessionRaw)
-
-    // Prepend IV to encrypted data
-    const result = new Uint8Array(iv.length + encrypted.byteLength)
-    result.set(iv, 0)
-    result.set(new Uint8Array(encrypted), iv.length)
-
-    return result.buffer
-  },
-
-  async unwrapSessionKey(wrappedData: ArrayBuffer, kek: CryptoKey): Promise<CryptoKey> {
-    const data = new Uint8Array(wrappedData)
-    const iv = data.slice(0, 12)
-    const encrypted = data.slice(12)
-
-    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, kek, encrypted)
-
-    return crypto.subtle.importKey(
-      'raw',
-      decrypted,
-      { name: 'AES-GCM' },
-      false, // non-extractable
-      ['encrypt', 'decrypt'],
+      ['wrapKey', 'unwrapKey'],
     )
   },
 }
@@ -184,19 +123,16 @@ const CryptoUtils = {
 //  MAIN IMPLEMENTATION
 // ===================================================================================
 
-export async function createCryptoSession(options: CryptoSessionOptions = {}) {
-  // Generate unique identifiers
-  const deviceId = options.deviceId || urlSafeBase64Uuid()
-  const storageNamespace = options.accountId ? `${options.accountId}_${deviceId}` : deviceId
+export async function createCryptoSession(accountId: string) {
+  const storageNamespace = 'ty_ucs_' + accountId
 
   // Initialize storage
   const storage = createKeyStorage(storageNamespace)
   await storage.init()
 
-  // Internal state
-  let sessionKey: CryptoKey | null = null
-  let deviceKeyPair: CryptoKeyPair | null = null
-  let userKeyPair: CryptoKeyPair | null = null
+  const destroy = async (): Promise<void> => {
+    await storage.destroy()
+  }
 
   // Key identifiers
   const DEVICE_KEYPAIR_KEY = 'deviceKeyPair'
@@ -204,59 +140,62 @@ export async function createCryptoSession(options: CryptoSessionOptions = {}) {
   const USER_PUBLIC_KEY = 'userPublicKey'
 
   // Initialize device key pair
-  const initDeviceKey = async (): Promise<void> => {
+  const initDeviceKey = async () => {
     // Try to load existing device key pair from storage
     const stored = await storage.get<CryptoKeyPair>(DEVICE_KEYPAIR_KEY)
     if (stored && stored.privateKey && stored.publicKey) {
-      deviceKeyPair = stored
-      return
+      return stored
     }
 
     // Generate new device key pair
-    deviceKeyPair = await CryptoUtils.generateDeviceKeyPair()
+    const dkp = await CryptoUtils.generateDeviceKeyPair()
     await storage.set(DEVICE_KEYPAIR_KEY, deviceKeyPair)
+    return dkp
   }
 
   // Initialize session key
-  const initSessionKey = async (): Promise<void> => {
-    if (!deviceKeyPair) throw new Error('Device key pair must be initialized first')
+  const initSessionKey = async (
+    renew = false,
+    deviceKeyPair: CryptoKeyPair,
+    oldDeviceKeyPair?: CryptoKeyPair,
+  ) => {
+    const kek = await CryptoUtils.deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
 
-    let wrapped = await storage.get<ArrayBuffer>(SESSION_KEY_WRAPPED)
-    if (wrapped) {
-      const kek = await CryptoUtils.deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
-      sessionKey = await CryptoUtils.unwrapSessionKey(wrapped, kek)
-      return
+    let wrappedSessionKey = undefined
+    wrappedSessionKey = renew ? undefined : await storage.get<ArrayBuffer>(SESSION_KEY_WRAPPED)
+    if (oldDeviceKeyPair) {
+      if (!wrappedSessionKey) throw new Error('No existing session key that we can re-wrap')
+      const kekOld = await CryptoUtils.deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
+      wrappedSessionKey = await reWrapSessionKey(wrappedSessionKey, kekOld, kek)
     }
 
-    // Generate new session key
-    sessionKey = await CryptoUtils.generateSessionKey()
-
-    // Wrap and store session key
-    const kek = await CryptoUtils.deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
-    wrapped = await CryptoUtils.wrapSessionKey(sessionKey, kek)
-    await storage.set(SESSION_KEY_WRAPPED, wrapped)
+    if (!wrappedSessionKey) {
+      wrappedSessionKey = await generateWrappedSessionKey(kek)
+      await storage.set(SESSION_KEY_WRAPPED, wrappedSessionKey)
+    }
+    const sk = await unwrapSessionKey(wrappedSessionKey, kek)
+    return sk
   }
 
   // Initialize user key pair
-  const regenerateUserKey = async (mnemonic?: string): Promise<void> => {
+  const regenerateUserKey = async (mnemonic: string) => {
     // Generate user key pair (always new, in memory only)
-    if (mnemonic) {
-      const userKeyPair = (await CryptoUtils.generateUserKeyPair(
-        mnemonic,
-      )) as unknown as CryptoKeyPair
-      // Store public key for reference
-      const publicKeyBytes = await crypto.subtle.exportKey('raw', userKeyPair.publicKey)
-      await storage.set(USER_PUBLIC_KEY, publicKeyBytes)
-    }
+    const userKeyPair = (await CryptoUtils.generateUserKeyPair(
+      mnemonic,
+    )) as unknown as CryptoKeyPair
+    // Store public key for reference
+    const publicKeyBytes = await crypto.subtle.exportKey('raw', userKeyPair.publicKey)
+    await storage.set(USER_PUBLIC_KEY, publicKeyBytes)
+    return publicKeyBytes
   }
 
   // Initialize all components
-  await initDeviceKey()
-  await initSessionKey()
-  await regenerateUserKey(options.mnemonic)
+  let deviceKeyPair = await initDeviceKey()
+  const sessionKey = await initSessionKey(false, deviceKeyPair)
+  const userKeyPair: ArrayBuffer | undefined = undefined
 
   // Public interface
-  const getSessionKey = (): CryptoKey => {
+  const getWrappedSessionKey = (): CryptoKey => {
     if (!sessionKey) throw new Error('Session not initialized')
     return sessionKey
   }
@@ -268,143 +207,26 @@ export async function createCryptoSession(options: CryptoSessionOptions = {}) {
 
   const getUserPublicKey = () => {
     if (!userKeyPair) throw new Error('User key pair not initialized')
-    return userKeyPair.publicKey
+    return userKeyPair
   }
 
-  const wrapSessionKey = async (targetPublicKey: CryptoKey): Promise<Uint8Array> => {
-    if (!sessionKey || !deviceKeyPair) throw new Error('Session not ready')
-
-    // Generate ephemeral key pair for this operation
-    const ephemeral = await CryptoUtils.generateDeviceKeyPair()
-
-    // Derive KEK using ephemeral private and target public
-    const kek = await CryptoUtils.deriveKek(ephemeral.privateKey, targetPublicKey)
-
-    // Export session key and wrap it
-    const sessionRaw = await crypto.subtle.exportKey('raw', sessionKey)
-    const iv = crypto.getRandomValues(new Uint8Array(12))
-    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, kek, sessionRaw)
-
-    // Create envelope with ephemeral public key
-    const ephemeralPublicJwk = await crypto.subtle.exportKey('jwk', ephemeral.publicKey)
-    const envelope: WrappedEnvelope = {
-      v: 1,
-      alg: 'ECDH-P256+AES-GCM',
-      epkJwk: ephemeralPublicJwk,
-      ct: bufToBase64(encrypted),
-      iv: bufToBase64(iv.buffer),
-    }
-
-    return enc.encode(JSON.stringify(envelope))
-  }
-
-  const unwrapSessionKey = async (wrappedKey: Uint8Array): Promise<CryptoKey> => {
-    if (!deviceKeyPair) throw new Error('Device key pair not ready')
-
-    const envelopeStr = dec.decode(wrappedKey)
-    const envelope: WrappedEnvelope = JSON.parse(envelopeStr)
-
-    // Import ephemeral public key
-    const ephemeralPublic = await crypto.subtle.importKey(
-      'jwk',
-      envelope.epkJwk,
-      { name: 'X25519' },
-      false,
-      [],
-    )
-
-    // Derive same KEK using our private key and sender's ephemeral public
-    const kek = await CryptoUtils.deriveKek(deviceKeyPair.privateKey, ephemeralPublic)
-
-    // Decrypt session key
-    const iv = new Uint8Array(base64ToBuf(envelope.iv!))
-    const encrypted = base64ToBuf(envelope.ct)
-    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, kek, encrypted)
-
-    // Import as new session key
-    const newSessionKey = await crypto.subtle.importKey(
-      'raw',
-      decrypted,
-      { name: 'AES-GCM' },
-      false,
-      ['encrypt', 'decrypt'],
-    )
-
-    sessionKey = newSessionKey
-
-    // Persist the new session key
-    if (deviceKeyPair) {
-      const persistKek = await CryptoUtils.deriveKek(
-        deviceKeyPair.privateKey,
-        deviceKeyPair.publicKey,
-      )
-      const wrapped = await CryptoUtils.wrapSessionKey(sessionKey, persistKek)
-      await storage.set(SESSION_KEY_WRAPPED, wrapped)
-    }
-
-    return sessionKey
-  }
-
-  const regenerateSessionKey = async (): Promise<void> => {
-    sessionKey = await CryptoUtils.generateSessionKey()
-
-    if (deviceKeyPair) {
-      const kek = await CryptoUtils.deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
-      const wrapped = await CryptoUtils.wrapSessionKey(sessionKey, kek)
-      await storage.set(SESSION_KEY_WRAPPED, wrapped)
-    }
-  }
+  const regenerateSessionKey = () => initSessionKey(true, deviceKeyPair)
 
   const regenerateDeviceKey = async (): Promise<void> => {
+    const oldDeviceKeyPair = deviceKeyPair
     deviceKeyPair = await CryptoUtils.generateDeviceKeyPair()
-
-    try {
-      await storage.set(DEVICE_KEYPAIR_KEY, deviceKeyPair)
-    } catch {
-      console.warn('Failed to persist new device key pair - will work in memory only')
-    }
-
-    // Re-wrap session key with new device key
-    if (sessionKey) {
-      const kek = await CryptoUtils.deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
-      const wrapped = await CryptoUtils.wrapSessionKey(sessionKey, kek)
-      await storage.set(SESSION_KEY_WRAPPED, wrapped)
-    }
+    await storage.set(DEVICE_KEYPAIR_KEY, deviceKeyPair)
+    await initSessionKey(false, oldDeviceKeyPair, deviceKeyPair)
   }
-
-  const logout = async (clearPersistentStorage = false): Promise<void> => {
-    // Zeroize memory references
-    sessionKey = null
-    deviceKeyPair = null
-    userKeyPair = null
-
-    if (clearPersistentStorage) {
-      await Promise.allSettled([
-        storage.delete(DEVICE_KEYPAIR_KEY),
-        storage.delete(SESSION_KEY_WRAPPED),
-        storage.delete(USER_PUBLIC_KEY),
-      ])
-    }
-  }
-
-  const exportDevicePublicKeyJwk = async (): Promise<JsonWebKey> => {
-    if (!deviceKeyPair) throw new Error('Device key pair not initialized')
-    return crypto.subtle.exportKey('jwk', deviceKeyPair.publicKey)
-  }
-
-  const getDeviceId = (): string => deviceId
 
   return {
-    getSessionKey,
+    getWrappedSessionKey,
     getDevicePublicKey,
+    getDeviceId: getDevicePublicKey,
     getUserPublicKey,
-    wrapSessionKey,
-    unwrapSessionKey,
     regenerateSessionKey,
     regenerateDeviceKey,
     regenerateUserKey,
-    logout,
-    exportDevicePublicKeyJwk,
-    getDeviceId,
+    destroy,
   }
 }
