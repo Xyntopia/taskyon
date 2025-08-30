@@ -152,13 +152,14 @@ export default defineConfig((ctx) => {
         vueShim: true,
         extendTsConfig(ts) {
           // 1) Narrow Quasar's very broad include so vue-tsc doesn't crawl packages/**
-          // ts.include = [
-          //   './**/*.d.ts',
-          //   '../src',
-          //   '../src/**/*.vue',
-          //   '../env.d.ts',
-          //   '../.quasar/**/*.d.ts',
-          // ]
+          ts.include?.push(
+            './../packages/taskyon/src/**/*',
+            //'./**/*.d.ts',
+            //'../src',
+            //'../src/**/*.vue',
+            //'../env.d.ts',
+            //'../.quasar/**/*.d.ts',
+          )
 
           // for some reason, adding references here doesn't work very well...
           //ts.files = []
@@ -183,8 +184,15 @@ export default defineConfig((ctx) => {
           //   ts.compilerOptions.paths['app/*'] = ['../src/*']
           // }
           // // (optional) you can also remove it completely:
+          delete ts.compilerOptions?.paths['app']
           delete ts.compilerOptions?.paths['app/*']
 
+          // we can't do this, because we want everything to be under
+          // @ŧaskyon/taskyon package :)
+          /*if (ts.compilerOptions?.paths) {
+            ts.compilerOptions.paths.taskyon = ['./../packages/taskyon/src']
+            ts.compilerOptions.paths['taskyon/*'] = ['./../packages/taskyon/src/*']
+          }*/
           return ts
         },
       },
@@ -354,7 +362,12 @@ export default defineConfig((ctx) => {
           {
             vueTsc: true,
             eslint: {
-              lintCommand: 'eslint -c ./eslint.config.js "./src*/**/*.{ts,js,mjs,cjs,vue}"',
+              lintCommand: [
+                'eslint',
+                '-c ./eslint.config.js',
+                '"./src/**/*.{ts,js,mjs,cjs,vue}"',
+                '"./packages/*/src/**/*.{ts,js,mjs,cjs,vue}"',
+              ].join(' '),
               useFlatConfig: true,
             },
           },
