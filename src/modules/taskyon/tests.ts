@@ -5,7 +5,7 @@ import {
   generateAssymetricKeyDeriver,
   generateSeedPhrase,
   ToolBase,
-  uint8ArrayToBase64Url,
+  uint8ArrayToBase64UrlSafe,
 } from '@taskyon/taskyon'
 import type { JSONSchema7 } from 'json-schema'
 import type OpenAI from 'openai'
@@ -36,6 +36,8 @@ function assert(condition: boolean, msg?: string): asserts condition {
   }
 }
 
+// TODO: encrypt a file with device1 SK and decrypt with device2 SK
+//       both SK should work, but they look different as wrapped with different DKs
 export async function testCryptoSession() {
   const report: string[] = []
   const accountId = 'test_account_123'
@@ -65,16 +67,21 @@ export async function testCryptoSession() {
   const newSessionKey = device1_1.getSessionKey()
   report.push('Session key regenerated')
 
+  assert(
+    (await device1_1.id()) === (await device1.id()),
+    "device ids shouldn't haven't changed and should be the same!",
+  )
+
   // Test device key regeneration
   const originalDeviceKey = device1.getDevicePublicKey()
   const device1_2 = await device1_1.derive({ newDK: true })
   const newDeviceKey = device1_2.getDevicePublicKey()
 
   // Verify device key changed
-  const origKeyBytes = uint8ArrayToBase64Url(
+  const origKeyBytes = uint8ArrayToBase64UrlSafe(
     await crypto.subtle.exportKey('raw', originalDeviceKey),
   )
-  const newKeyBytes = uint8ArrayToBase64Url(await crypto.subtle.exportKey('raw', newDeviceKey))
+  const newKeyBytes = uint8ArrayToBase64UrlSafe(await crypto.subtle.exportKey('raw', newDeviceKey))
   if (origKeyBytes === newKeyBytes) {
     report.push('ERROR: Device key not regenerated')
   } else {
@@ -145,6 +152,10 @@ export async function testCryptoSession() {
     origKeyBytes,
     newKeyBytes,
     wrappedSessionKey,
+    id1: await device1.id(),
+    id1_1: await device1_1.id(),
+    id1_2: await device1_2.id(),
+    id2: await device2.id(),
     metrics: {
       deviceKeyRegenerated: origKeyBytes !== newKeyBytes,
       sessionKeyShared: !!wrappedSessionKey,

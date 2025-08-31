@@ -34,7 +34,7 @@ export function base64ToUuid(base64: string) {
   )}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
-export function uint8ArrayToBase64Url(buffer: ArrayBufferLike) {
+export function uint8ArrayToBase64UrlSafe(buffer: ArrayBufferLike) {
   const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)))
   return base64
     .replace(/\+/g, '-') // Convert '+' to '-'

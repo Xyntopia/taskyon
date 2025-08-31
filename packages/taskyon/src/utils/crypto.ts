@@ -1,7 +1,11 @@
 import { getPublicKeyAsync } from '@noble/ed25519'
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39'
 import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english'
-import { base64UrlToUint8Array, uint8ArrayToBase64Url, urlSafe64BitString } from '@taskyon/taskyon'
+import {
+  base64UrlToUint8Array,
+  uint8ArrayToBase64UrlSafe,
+  urlSafe64BitString,
+} from '@taskyon/taskyon'
 import { Buffer } from 'buffer'
 import { v1 as uuidv1 } from 'uuid'
 import { z } from 'zod'
@@ -37,7 +41,7 @@ export const wrapSessionKey = async (sk: CryptoKey, kek: CryptoKey) => {
     kek, //wrapper, //kek, // wrapping key
     { name: 'AES-KW', iv, length: 256 },
   )
-  return uint8ArrayToBase64Url(wrapped)
+  return uint8ArrayToBase64UrlSafe(wrapped)
 }
 
 export const unwrapSessionKey = async (wrappedData: string, unwrappingKey: CryptoKey) =>
@@ -189,8 +193,8 @@ async function encryptData(
 
   if (base64)
     return {
-      iv: uint8ArrayToBase64Url(iv.buffer),
-      ciphertext: uint8ArrayToBase64Url(encrypted.buffer),
+      iv: uint8ArrayToBase64UrlSafe(iv.buffer),
+      ciphertext: uint8ArrayToBase64UrlSafe(encrypted.buffer),
     }
   else
     return {
@@ -287,7 +291,7 @@ export const decryptDataFile = async (
 async function wrapKeyWithPublicKey(publicKey: CryptoKey, dataKey: CryptoKey): Promise<string> {
   const rawKey = await crypto.subtle.exportKey('raw', dataKey)
   const encrypted = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, rawKey)
-  return uint8ArrayToBase64Url(encrypted)
+  return uint8ArrayToBase64UrlSafe(encrypted)
 }
 
 async function wrapWithAssymetricKey(
@@ -300,7 +304,7 @@ async function wrapWithAssymetricKey(
     sessionKey, // The key used to perform the wrapping
     { name: 'AES-KW' }, // The wrapping algorithm
   )
-  const wrappedDekB64 = uint8ArrayToBase64Url(wrappedDekBuffer)
+  const wrappedDekB64 = uint8ArrayToBase64UrlSafe(wrappedDekBuffer)
   return wrappedDekB64
 }
 
@@ -322,6 +326,15 @@ async function unwrapWithSymmetricKey(sessionKey: CryptoKey, wrappedKeyB64: stri
     false, // is the unwrapped key extractable?
     ['deriveKey'], // Usages for the unwrapped key
   )
+}
+
+export async function cryptoKeyToBase64(publicKey: CryptoKey): Promise<string> {
+  const exported = await crypto.subtle.exportKey('raw', publicKey)
+
+  // exported is ArrayBuffer (except JWK, but we don’t use it here)
+  const bytes = new Uint8Array(exported)
+
+  return uint8ArrayToBase64UrlSafe(bytes.buffer) // your helper
 }
 
 // Decrypt data using derived key
@@ -492,7 +505,7 @@ async function generateKeyPairsFromSeed(seed: Uint8Array, extractablePublic = tr
     ['verify'],
   )
 
-  const pkb64 = uint8ArrayToBase64Url(publicRaw.buffer)
+  const pkb64 = uint8ArrayToBase64UrlSafe(publicRaw.buffer)
 
   return { privateKey, publicKey, pkb64 }
 }
@@ -561,5 +574,5 @@ export async function wrapKeyWithECDH(
   )
 
   // 3. Return the wrapped key as a Base64URL string.
-  return uint8ArrayToBase64Url(wrappedKeyBuffer)
+  return uint8ArrayToBase64UrlSafe(wrappedKeyBuffer)
 }

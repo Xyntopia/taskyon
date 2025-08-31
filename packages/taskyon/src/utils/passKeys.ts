@@ -1,4 +1,4 @@
-import { base64UrlToUint8Array, uint8ArrayToBase64Url } from '@taskyon/taskyon'
+import { base64UrlToUint8Array, uint8ArrayToBase64UrlSafe } from '@taskyon/taskyon'
 
 /**
  * Registers a device-bound credential.
@@ -68,8 +68,8 @@ async function wrapSessionToken(sessionToken: string, deviceKey: CryptoKey): Pro
     enc.encode(sessionToken),
   )
   return JSON.stringify({
-    iv: uint8ArrayToBase64Url(iv.buffer),
-    ciphertext: uint8ArrayToBase64Url(ciphertextBuffer),
+    iv: uint8ArrayToBase64UrlSafe(iv.buffer),
+    ciphertext: uint8ArrayToBase64UrlSafe(ciphertextBuffer),
   })
 }
 
@@ -114,7 +114,7 @@ async function ensurePasskey(STORAGE_CREDENTIAL_ID: string): Promise<Uint8Array>
   // Register new passkey
   const credential = await registerPasskey()
   const newId = new Uint8Array(credential.rawId)
-  localStorage.setItem(STORAGE_CREDENTIAL_ID, uint8ArrayToBase64Url(newId.buffer))
+  localStorage.setItem(STORAGE_CREDENTIAL_ID, uint8ArrayToBase64UrlSafe(newId.buffer))
 
   return newId
 }
@@ -130,7 +130,9 @@ export async function initializeSessionWithPasskey(
 
   // First-time unlock: generate a session token if missing
   if (!localStorage.getItem(STORAGE_SESSION_KEY)) {
-    const sessionToken = uint8ArrayToBase64Url(crypto.getRandomValues(new Uint8Array(32)).buffer) // Random token
+    const sessionToken = uint8ArrayToBase64UrlSafe(
+      crypto.getRandomValues(new Uint8Array(32)).buffer,
+    ) // Random token
     const deviceKey = await deriveDeviceKey(storedCredentialId)
     localStorage.setItem(STORAGE_SESSION_KEY, await wrapSessionToken(sessionToken, deviceKey))
     return importSessionKey(sessionToken)

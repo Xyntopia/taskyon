@@ -10,6 +10,7 @@ import {
   unwrapSessionKey,
   reWrapSessionKey,
   deriveKek,
+  cryptoKeyToBase64,
 } from './crypto'
 
 // ===================================================================================
@@ -140,7 +141,7 @@ export async function createCryptoSession(accountId: string, options?: CryptoSes
   return {
     getSessionKey: () => SK,
     getDevicePublicKey: () => deviceKeyPair.publicKey,
-    getDeviceId: () => deviceKeyPair.publicKey,
+    id: () => cryptoKeyToBase64(deviceKeyPair.publicKey),
     getUserPublicKey: (): UserKeyPair => {
       if (!userKeyPair) throw new Error('User key pair not initialized')
       return userKeyPair
@@ -148,7 +149,7 @@ export async function createCryptoSession(accountId: string, options?: CryptoSes
     exportSessionKey,
     destroy: async () => await deleteDatabase(storageNamespace),
     derive: (options?: { newSK?: boolean; newDK?: boolean; newMnemonic?: string }) => {
-      return createCryptoSession(storageNamespace, {
+      return createCryptoSession(accountId, {
         ...(options?.newSK ? {} : { wrapped: wrappedSK }),
         unwrapper: deviceKeyPair,
         newDK: !!options?.newDK,

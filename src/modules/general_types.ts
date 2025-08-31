@@ -1,4 +1,4 @@
-import { signData, uint8ArrayToBase64Url, verifySignature } from '@taskyon/taskyon'
+import { signData, uint8ArrayToBase64UrlSafe, verifySignature } from '@taskyon/taskyon'
 import type { Request } from 'express'
 
 // Utility to serialize data for signing
@@ -45,7 +45,7 @@ export async function createSignedFetchRequest(
     Authorization: `Bearer ${jwtToken}`,
     'content-type': 'application/json',
     'x-public-key': publicKey,
-    'x-signature': uint8ArrayToBase64Url(signature),
+    'x-signature': uint8ArrayToBase64UrlSafe(signature),
   }
 
   const init: Record<string, unknown> = {
