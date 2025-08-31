@@ -39,6 +39,8 @@ function assert(condition: boolean, msg?: string): asserts condition {
 export async function testCryptoSession() {
   const report: string[] = []
   const accountId = 'test_account_123'
+  const accountId2 = 'test_account_321'
+
   const testMnemonic = generateSeedPhrase()
 
   // Clean up any existing databases first
@@ -50,7 +52,7 @@ export async function testCryptoSession() {
   report.push('PHASE 1: Single device initialization and key management')
 
   // Create primary device session
-  const device1 = await createCryptoSession(accountId)
+  const device1 = await createCryptoSession(accountId, { mnemonic: testMnemonic })
   report.push('Device1 session created')
 
   // Validate initial keys
@@ -59,14 +61,14 @@ export async function testCryptoSession() {
   report.push(`Device1 public key: ${JSON.stringify(devicePubKey1)}`)
 
   // Test session key regeneration
-  await device1.regenerateSessionKey()
-  const newSessionKey = device1.getSessionKey()
+  const device1_1 = await device1.derive({ newSK: true })
+  const newSessionKey = device1_1.getSessionKey()
   report.push('Session key regenerated')
 
   // Test device key regeneration
   const originalDeviceKey = device1.getDevicePublicKey()
-  await device1.regenerateDeviceKey()
-  const newDeviceKey = device1.getDevicePublicKey()
+  const device1_2 = await device1_1.derive({ newDK: true })
+  const newDeviceKey = device1_2.getDevicePublicKey()
 
   // Verify device key changed
   const origKeyBytes = uint8ArrayToBase64Url(
@@ -80,8 +82,10 @@ export async function testCryptoSession() {
   }
 
   // Test user key management
-  const userPubKey = await device1.regenerateUserKey(testMnemonic)
-  report.push(`User public key: ${uint8ArrayToBase64Url(userPubKey)}`)
+  const userPubKey = (
+    await device1.derive({ newMnemonic: generateSeedPhrase() })
+  ).getUserPublicKey().pkb64
+  report.push(`User public key: ${userPubKey}`)
 
   // ===================================================================
   // Phase 2: Key Sharing Between Devices
@@ -97,11 +101,11 @@ export async function testCryptoSession() {
   report.push('Session key wrapped for sharing')
 
   // Create second device session
-  const device2 = await createCryptoSession(accountId)
+  const device2 = await createCryptoSession(accountId2, {
+    wrapped: wrappedSessionKey,
+    unwrapper: exchangeKeyPair,
+  })
   report.push('Device2 session created')
-
-  // Import wrapped session key to device2
-  await device2.addWrappedSessionKey(exchangeKeyPair, wrappedSessionKey)
   report.push('Wrapped session key imported to device2')
 
   // Validate session keys
@@ -114,10 +118,10 @@ export async function testCryptoSession() {
   report.push('\nPHASE 3: Session destruction and cleanup')
 
   // IMPORTANT: Close all sessions before attempting database deletion
-  device1.destroy()
+  await device1.destroy()
   report.push('Device1 session closed')
 
-  device2.destroy()
+  await device2.destroy()
   report.push('Device2 session closed')
 
   // Now safely delete the database
@@ -130,7 +134,7 @@ export async function testCryptoSession() {
   report.push('New session created after destruction')
 
   // Clean up the test session too
-  newSession.destroy()
+  await newSession.destroy()
 
   return {
     logs: report,
