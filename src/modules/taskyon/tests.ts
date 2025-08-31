@@ -46,10 +46,78 @@ type StoredCryptoKeyPair =
       public?: CryptoKey
     }
 
-export const restIndexedDBKeyStorage = async () => {
+type TestReport = {
+  success: boolean
+  logs: string[]
+  errors: string[]
+  keyGeneration: {
+    algorithm: string
+    originalPrivateExtractable: boolean
+    originalPublicExtractable: boolean
+  }
+  storage: {
+    storeSuccess: boolean
+    retrieveSuccess: boolean
+  }
+  postStorage: {
+    privateKeyFound: boolean
+    publicKeyFound: boolean
+    privateExtractable: boolean | null
+    publicExtractable: boolean | null
+  }
+  exportTests: {
+    privateExportSuccess: boolean
+    publicExportSuccess: boolean
+    privateExportError?: string
+    publicExportError?: string
+  }
+  securityValidation: {
+    privateKeySecurityMaintained: boolean
+    publicKeyAccessible: boolean
+  }
+}
+
+export const restIndexedDBKeyStorage = async (): Promise<TestReport> => {
   const DB = 'test_crypto_key_roundtrip'
   const STORE = 'keys'
   const KEY_NAME = 'deviceKeyPair'
+
+  const report: TestReport = {
+    success: false,
+    logs: [],
+    errors: [],
+    keyGeneration: {
+      algorithm: '',
+      originalPrivateExtractable: false,
+      originalPublicExtractable: false,
+    },
+    storage: {
+      storeSuccess: false,
+      retrieveSuccess: false,
+    },
+    postStorage: {
+      privateKeyFound: false,
+      publicKeyFound: false,
+      privateExtractable: null,
+      publicExtractable: null,
+    },
+    exportTests: {
+      privateExportSuccess: false,
+      publicExportSuccess: false,
+    },
+    securityValidation: {
+      privateKeySecurityMaintained: false,
+      publicKeyAccessible: false,
+    },
+  }
+
+  function log(message: string) {
+    report.logs.push(message)
+  }
+
+  function error(message: string) {
+    report.errors.push(message)
+  }
 
   // helpers
   function openDB(): Promise<IDBDatabase> {
@@ -99,34 +167,56 @@ export const restIndexedDBKeyStorage = async () => {
     }
   }
 
-  // Generate crypto key pair
+  // Generate crypto key pair (with non-extractable private key for security test)
   let kp: CryptoKeyPair
 
   try {
-    // try X25519 (modern)
-    // subtle.generateKey for X25519 in some browsers uses {name:'X25519'} only with no namedCurve
-    // We'll attempt and fall back gracefully.
+    // try X25519 (modern) - private key should be non-extractable
     kp = (await crypto.subtle.generateKey({ name: 'X25519' }, false, [
       'deriveKey',
       'deriveBits',
     ])) as CryptoKeyPair
-    console.log('generated X25519 pair')
+    report.keyGeneration.algorithm = 'X25519'
+    log('generated X25519 pair')
   } catch {
     kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, [
       'deriveKey',
       'deriveBits',
     ])
-    console.log('fallback to ECDH P-256 pair')
+    report.keyGeneration.algorithm = 'ECDH P-256'
+    log('fallback to ECDH P-256 pair')
   }
 
-  console.log('original private.extractable:', kp.privateKey.extractable)
-  console.log('original public.extractable:', kp.publicKey.extractable)
+  // Record original extractable properties
+  report.keyGeneration.originalPrivateExtractable = kp.privateKey.extractable
+  report.keyGeneration.originalPublicExtractable = kp.publicKey.extractable
+
+  log(`original private.extractable: ${kp.privateKey.extractable}`)
+  log(`original public.extractable: ${kp.publicKey.extractable}`)
+
+  // Security check: Verify the private key is non-extractable
+  if (kp.privateKey.extractable) {
+    const errorMsg = 'SECURITY VIOLATION: Private key should be non-extractable for this test!'
+    error(errorMsg)
+    throw new Error(errorMsg)
+  }
+
+  // Security check: Verify the public key IS extractable (public keys should always be extractable)
+  if (!kp.publicKey.extractable) {
+    const errorMsg = 'SECURITY VIOLATION: Public key should be extractable!'
+    error(errorMsg)
+    throw new Error(errorMsg)
+  }
 
   // store pair
-  await putValue(kp)
+  const storeSuccess = await putValue(kp)
+  report.storage.storeSuccess = storeSuccess
+  log('Successfully stored key pair in IndexedDB')
 
   // retrieve
   const loaded = await getValue()
+  report.storage.retrieveSuccess = true
+  log('Successfully retrieved key pair from IndexedDB')
 
   // Type guard to check if object has alternative key properties
   function hasAlternativeKeys(obj: unknown): obj is { private?: CryptoKey; public?: CryptoKey } {
@@ -138,36 +228,124 @@ export const restIndexedDBKeyStorage = async () => {
     loaded?.privateKey ?? (hasAlternativeKeys(loaded) ? loaded.private : undefined)
   const publicLoaded = loaded?.publicKey ?? (hasAlternativeKeys(loaded) ? loaded.public : undefined)
 
-  console.log('loaded.privateKey?.extractable =', privateLoaded?.extractable)
-  console.log('loaded.publicKey?.extractable  =', publicLoaded?.extractable)
+  // Check if keys were found
+  report.postStorage.privateKeyFound = !!privateLoaded
+  report.postStorage.publicKeyFound = !!publicLoaded
+
+  if (!privateLoaded) {
+    const errorMsg = 'CRITICAL: Private key not found after retrieval from IndexedDB'
+    error(errorMsg)
+    throw new Error(errorMsg)
+  }
+
+  if (!publicLoaded) {
+    const errorMsg = 'CRITICAL: Public key not found after retrieval from IndexedDB'
+    error(errorMsg)
+    throw new Error(errorMsg)
+  }
+
+  // Check extractable properties post-storage
+  report.postStorage.privateExtractable = privateLoaded.extractable
+  report.postStorage.publicExtractable = publicLoaded.extractable
+
+  log(`loaded.privateKey?.extractable = ${privateLoaded.extractable}`)
+  log(`loaded.publicKey?.extractable  = ${publicLoaded.extractable}`)
+
+  // CRITICAL SECURITY CHECK: Private key must remain non-extractable
+  if (privateLoaded.extractable) {
+    const errorMsg = 'SECURITY VIOLATION: Private key became extractable after storage/retrieval!'
+    error(errorMsg)
+    throw new Error(errorMsg)
+  }
+
+  // CRITICAL SECURITY CHECK: Public key should remain extractable
+  if (!publicLoaded.extractable) {
+    const errorMsg =
+      'SECURITY VIOLATION: Public key became non-extractable after storage/retrieval!'
+    error(errorMsg)
+    throw new Error(errorMsg)
+  }
 
   // try to export both keys (export should fail for non-extractable private)
-  async function tryExport(key: CryptoKey | undefined, label: string): Promise<void> {
+  async function tryExport(key: CryptoKey | undefined, label: string): Promise<boolean> {
     if (!key) {
-      console.log(label, 'missing')
-      return
+      log(`${label} key missing`)
+      return false
     }
     try {
       const jwk = await crypto.subtle.exportKey('jwk', key)
-      console.log(`${label} export OK — jwk:`, jwk)
+      log(`${label} export OK — jwk keys: ${Object.keys(jwk).join(', ')}`)
+
+      // SECURITY CHECK: If this was originally a non-extractable private key, this is a problem!
+      if (label === 'private' && !kp.privateKey.extractable) {
+        const errorMsg =
+          'SECURITY VIOLATION: Successfully extracted a non-extractable private key from IndexedDB!'
+        error(errorMsg)
+        throw new Error(errorMsg)
+      }
+
+      return true
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e)
-      console.warn(`${label} export FAILED:`, errorMessage)
+      log(`${label} export FAILED (expected for non-extractable): ${errorMessage}`)
+
+      // This is the expected behavior for non-extractable keys
+      if (label === 'private' && !kp.privateKey.extractable) {
+        log('✅ Security test PASSED: Non-extractable private key remained non-extractable')
+      }
+
+      // Store error details
+      if (label === 'private') {
+        report.exportTests.privateExportError = errorMessage
+      } else {
+        report.exportTests.publicExportError = errorMessage
+      }
+
+      return false
     }
   }
 
-  await tryExport(privateLoaded, 'private')
-  await tryExport(publicLoaded, 'public')
+  report.exportTests.privateExportSuccess = await tryExport(privateLoaded, 'private')
+  report.exportTests.publicExportSuccess = await tryExport(publicLoaded, 'public')
+
+  // Final security validation
+  report.securityValidation.privateKeySecurityMaintained = !report.exportTests.privateExportSuccess
+  report.securityValidation.publicKeyAccessible = report.exportTests.publicExportSuccess
+
+  // If private key export succeeded, that's a security violation
+  if (report.exportTests.privateExportSuccess) {
+    const errorMsg = 'SECURITY VIOLATION: Private key export should have failed!'
+    error(errorMsg)
+    throw new Error(errorMsg)
+  }
+
+  // If public key export failed, that's also a problem
+  if (!report.exportTests.publicExportSuccess) {
+    const errorMsg = 'SECURITY VIOLATION: Public key export should have succeeded!'
+    error(errorMsg)
+    throw new Error(errorMsg)
+  }
+
+  log('✅ All security tests PASSED')
+  report.success = true
 
   // cleanup
-  await new Promise<void>((res, rej) => {
-    const req = indexedDB.deleteDatabase(DB)
-    req.onsuccess = () => res()
-    req.onerror = () => rej(new Error(req.error?.message || 'delete failed'))
-    req.onblocked = () => rej(new Error('delete blocked'))
-  })
-}
+  try {
+    await new Promise<void>((res, rej) => {
+      const req = indexedDB.deleteDatabase(DB)
+      req.onsuccess = () => res()
+      req.onerror = () => rej(new Error(req.error?.message || 'delete failed'))
+      req.onblocked = () => rej(new Error('delete blocked'))
+    })
+    log('Database cleanup completed')
+  } catch (e) {
+    const errorMsg = `Database cleanup failed: ${e instanceof Error ? e.message : String(e)}`
+    error(errorMsg)
+    // Don't throw cleanup errors - just log them
+  }
 
+  return report
+}
 // TODO: encrypt a file with device1 SK and decrypt with device2 SK
 //       both SK should work, but they look different as wrapped with different DKs
 export async function testCryptoSession() {
