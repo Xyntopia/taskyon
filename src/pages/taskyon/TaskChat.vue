@@ -382,9 +382,9 @@ watch(
 watch(
   () => route.query,
   () => {
-    if (route.query.t !== state.llmSettings.selectedTaskId) {
-      void updateChatThread()
-    }
+    // don't update chat if the task is the same as we ahve alread selected...
+    if (route.query.t && route.query.t === state.llmSettings.selectedTaskId) return
+    void updateChatThread()
   },
   { immediate: true },
 )
