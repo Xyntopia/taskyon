@@ -36,6 +36,138 @@ function assert(condition: boolean, msg?: string): asserts condition {
   }
 }
 
+// Define types for the stored crypto key data
+type StoredCryptoKeyPair =
+  | CryptoKeyPair
+  | {
+      privateKey?: CryptoKey
+      publicKey?: CryptoKey
+      private?: CryptoKey
+      public?: CryptoKey
+    }
+
+export const restIndexedDBKeyStorage = async () => {
+  const DB = 'test_crypto_key_roundtrip'
+  const STORE = 'keys'
+  const KEY_NAME = 'deviceKeyPair'
+
+  // helpers
+  function openDB(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB, 1)
+      req.onupgradeneeded = () => {
+        const db = req.result
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE)
+      }
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(new Error(req.error?.message || 'DB open failed'))
+    })
+  }
+
+  async function putValue(val: CryptoKeyPair): Promise<boolean> {
+    const db = await openDB()
+    try {
+      return await new Promise<boolean>((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readwrite')
+        const store = tx.objectStore(STORE)
+        const r = store.put(val, KEY_NAME)
+        r.onsuccess = () => resolve(true)
+        r.onerror = () => reject(new Error(r.error?.message || 'put failed'))
+        tx.onabort = () => reject(new Error(tx.error?.message || 'tx aborted'))
+        tx.oncomplete = () => {
+          /* ok */
+        }
+      })
+    } finally {
+      db.close()
+    }
+  }
+
+  async function getValue(): Promise<StoredCryptoKeyPair> {
+    const db = await openDB()
+    try {
+      return await new Promise<StoredCryptoKeyPair>((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readonly')
+        const store = tx.objectStore(STORE)
+        const r = store.get(KEY_NAME)
+        r.onsuccess = () => resolve(r.result)
+        r.onerror = () => reject(new Error(r.error?.message || 'get failed'))
+        tx.onabort = () => reject(new Error(tx.error?.message || 'tx aborted'))
+      })
+    } finally {
+      db.close()
+    }
+  }
+
+  // Generate crypto key pair
+  let kp: CryptoKeyPair
+
+  try {
+    // try X25519 (modern)
+    // subtle.generateKey for X25519 in some browsers uses {name:'X25519'} only with no namedCurve
+    // We'll attempt and fall back gracefully.
+    kp = (await crypto.subtle.generateKey({ name: 'X25519' }, false, [
+      'deriveKey',
+      'deriveBits',
+    ])) as CryptoKeyPair
+    console.log('generated X25519 pair')
+  } catch {
+    kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, [
+      'deriveKey',
+      'deriveBits',
+    ])
+    console.log('fallback to ECDH P-256 pair')
+  }
+
+  console.log('original private.extractable:', kp.privateKey.extractable)
+  console.log('original public.extractable:', kp.publicKey.extractable)
+
+  // store pair
+  await putValue(kp)
+
+  // retrieve
+  const loaded = await getValue()
+
+  // Type guard to check if object has alternative key properties
+  function hasAlternativeKeys(obj: unknown): obj is { private?: CryptoKey; public?: CryptoKey } {
+    return typeof obj === 'object' && obj !== null && ('private' in obj || 'public' in obj)
+  }
+
+  // the loaded object may be a CryptoKeyPair or an object with keys; attempt to detect
+  const privateLoaded =
+    loaded?.privateKey ?? (hasAlternativeKeys(loaded) ? loaded.private : undefined)
+  const publicLoaded = loaded?.publicKey ?? (hasAlternativeKeys(loaded) ? loaded.public : undefined)
+
+  console.log('loaded.privateKey?.extractable =', privateLoaded?.extractable)
+  console.log('loaded.publicKey?.extractable  =', publicLoaded?.extractable)
+
+  // try to export both keys (export should fail for non-extractable private)
+  async function tryExport(key: CryptoKey | undefined, label: string): Promise<void> {
+    if (!key) {
+      console.log(label, 'missing')
+      return
+    }
+    try {
+      const jwk = await crypto.subtle.exportKey('jwk', key)
+      console.log(`${label} export OK — jwk:`, jwk)
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : String(e)
+      console.warn(`${label} export FAILED:`, errorMessage)
+    }
+  }
+
+  await tryExport(privateLoaded, 'private')
+  await tryExport(publicLoaded, 'public')
+
+  // cleanup
+  await new Promise<void>((res, rej) => {
+    const req = indexedDB.deleteDatabase(DB)
+    req.onsuccess = () => res()
+    req.onerror = () => rej(new Error(req.error?.message || 'delete failed'))
+    req.onblocked = () => rej(new Error('delete blocked'))
+  })
+}
+
 // TODO: encrypt a file with device1 SK and decrypt with device2 SK
 //       both SK should work, but they look different as wrapped with different DKs
 export async function testCryptoSession() {
