@@ -12,6 +12,7 @@ export * from './utils/tsHelpers'
 export * from './utils/crypto'
 export * from './utils/encoding'
 export * from './utils/cryptoSession'
+export * from './utils/encrypt'
 
 /**
  * Represents the context passed to tools within the Taskyon system.
