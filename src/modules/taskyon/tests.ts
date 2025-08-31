@@ -1,6 +1,7 @@
 import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import {
   createCryptoSession,
+  cryptoKeyToBase64,
   forceDestroyCryptoSession,
   generateAssymetricKeyDeriver,
   generateSeedPhrase,
@@ -14,7 +15,10 @@ import { useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
 import { deepCloneWJson } from '../../../packages/taskyon/src/utils/objHelpers'
 import type { SecretStore } from '../crudWrapper'
-import { decompressEncryptedObject, encryptCompressObject } from '../fileUtils'
+import {
+  decompressEncryptedObject,
+  encryptCompressObject,
+} from '../../../packages/taskyon/src/utils/fileUtils'
 import { useGdrive } from '../gdrive'
 import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
 import { getDatabase } from '../pglite.api'
@@ -401,8 +405,8 @@ export async function testCryptoSession() {
   // Test user key management
   const userPubKey = (
     await device1.derive({ newMnemonic: generateSeedPhrase() })
-  ).getUserPublicKey().pkb64
-  report.push(`User public key: ${userPubKey}`)
+  ).getUserPublicKey()
+  report.push(`User public key: ${await cryptoKeyToBase64(userPubKey)}`)
 
   // ===================================================================
   // Phase 2: Key Sharing Between Devices

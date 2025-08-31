@@ -119,7 +119,7 @@ export const deriveKek = async (
   )
 }
 
-export type AskSession = () => Promise<CryptoKey> | CryptoKey
+export type AskCryptoKey = () => Promise<CryptoKey> | CryptoKey
 
 export async function wrapKeyWithPublicKey(
   publicKey: CryptoKey,

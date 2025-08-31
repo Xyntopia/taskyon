@@ -4,12 +4,6 @@ import { Buffer } from 'buffer'
 import { safeYamlDump } from './yamlUtils'
 import type { AnyFunction } from '../../packages/taskyon/src/utils/tsHelpers'
 
-export function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
-  return out
-}
-
 export function copyToClipboard(text: string) {
   navigator.clipboard
     .writeText(text)

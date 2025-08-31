@@ -1,14 +1,10 @@
 // fileUtils.ts
-import { chunk } from 'src/modules/utils'
-import type { AskSession } from '@taskyon/taskyon'
-import {
-  decryptDataFile,
-  encryptDataFile,
-  EncryptedDataRowMixed,
-  type EncryptedDataRow,
-} from '@taskyon/taskyon'
-import { deflateSync, inflateSync, zipSync } from 'fflate'
 import { decode, encode } from '@msgpack/msgpack'
+import { deflateSync, inflateSync, zipSync } from 'fflate'
+import type { AskCryptoKey } from './crypto'
+import type { EncryptedDataRow } from './encrypt'
+import { decryptDataFile, encryptDataFile, EncryptedDataRowMixed } from './encrypt'
+import { chunk } from './objHelpers'
 
 export function compressObjects(objs: unknown): Uint8Array {
   const jsonStr = JSON.stringify(objs)
@@ -25,8 +21,8 @@ export function compressObjects(objs: unknown): Uint8Array {
 export async function encryptCompressObject(
   objs: Record<string, unknown>,
   info: string,
-  recoveryKey: AskSession,
-  sessionKey: AskSession,
+  recoveryKey: AskCryptoKey,
+  sessionKey: AskCryptoKey,
 ) {
   const compressed = compressObjects(objs)
   const encrypted = await encryptDataFile(compressed, info, recoveryKey, sessionKey, false)
@@ -37,7 +33,7 @@ export async function encryptCompressObject(
 export async function decompressEncryptedObject(
   buffer: Uint8Array,
   info: string,
-  sessionKey: AskSession,
+  sessionKey: AskCryptoKey,
 ) {
   const encrypted = EncryptedDataRowMixed.parse(decode(buffer))
   const decrypted = await decryptDataFile(encrypted, info, sessionKey)

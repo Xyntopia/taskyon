@@ -21,3 +21,9 @@ export function removeUndefinedProperties<T extends object>(obj: T): RemoveUndef
 export function deepCloneWJson<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj))
 }
+
+export function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}

@@ -39,9 +39,9 @@ import { testingTools } from '../tools/testTools'
 import { TaskyonMessage } from './apiTypes'
 import { dump } from 'js-yaml'
 import z from 'zod'
-import { ToolBase } from '@taskyon/taskyon'
+import { createCryptoSession, ToolBase } from '@taskyon/taskyon'
 import type { EncryptedDataRow } from '@taskyon/taskyon'
-import { encryptCompressObject } from '../fileUtils'
+import { encryptCompressObject } from '../../../packages/taskyon/src/utils/fileUtils'
 
 export async function tyCore(
   llmSettings: llmSettings,
@@ -53,9 +53,9 @@ export async function tyCore(
   // this way we can give taskyon access and the ability to read & change the environment
   // it is running in.
   EnvironmentTools: InternalTool[],
-  getPublicRecoveryKey: () => Promise<CryptoKey>,
-  getSessionKey: () => Promise<CryptoKey>,
 ) {
+  const cryptoSession = await createCryptoSession('defaultAccount')
+
   const ToolList: InternalTool[] = [
     ...smallHelperTools,
     ...appDevTools,
@@ -86,8 +86,15 @@ export async function tyCore(
         tableName: 'vault',
       }),
     ]),
-    getPublicRecoveryKey,
+    cryptoSession.getUserPublicKey,
   )
+
+  // connect secretStore to cryptoSession
+  secretStore.onSessionKey(({ respond }) => {
+    console.log('importing fixed key for secretStore...')
+    const key = cryptoSession.getSessionKey()
+    respond(key)
+  })
 
   console.log('finished taskManager initialization')
 
@@ -193,8 +200,8 @@ export async function tyCore(
       const packed = await encryptCompressObject(
         task,
         archiveName,
-        getPublicRecoveryKey,
-        getSessionKey,
+        cryptoSession.getUserPublicKey,
+        cryptoSession.getSessionKey,
       )
       console.log('created encrypted task file...', id)
 

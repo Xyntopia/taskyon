@@ -6,7 +6,7 @@ import {
   unwrapWithSymmetricKey,
   wrapKeyWithPublicKey,
   wrapWithAssymetricKey,
-  type AskSession,
+  type AskCryptoKey,
 } from './crypto'
 import { base64UrlToUint8Array, uint8ArrayToBase64UrlSafe } from './encoding'
 
@@ -92,23 +92,23 @@ async function encryptData(
 export async function encryptDataFile(
   data: BufferSource,
   info: string | number,
-  publicRecoveryKey: AskSession,
-  getSessionKey: AskSession,
+  publicRecoveryKey: AskCryptoKey,
+  getSessionKey: AskCryptoKey,
 ): Promise<EncryptedDataRow>
 
 export async function encryptDataFile(
   data: BufferSource,
   info: string | number,
-  publicRecoveryKey: AskSession,
-  getSessionKey: AskSession,
+  publicRecoveryKey: AskCryptoKey,
+  getSessionKey: AskCryptoKey,
   base64: true,
 ): Promise<EncryptedDataRow>
 
 export async function encryptDataFile(
   data: BufferSource,
   info: string | number,
-  publicRecoveryKey: AskSession,
-  getSessionKey: AskSession,
+  publicRecoveryKey: AskCryptoKey,
+  getSessionKey: AskCryptoKey,
   base64: false,
 ): Promise<EncryptedDataRowMixed>
 
@@ -116,13 +116,13 @@ export async function encryptDataFile(
   data: BufferSource,
   info: string | number, // we need the info in order to derive the key with some additional noise
   // this should be a public key that can be used to encrypt the tool key
-  publicRecoveryKey: AskSession,
+  publicRecoveryKey: AskCryptoKey,
   // and this is the session key provider. This is used to encryp the tool key
   // this way we never have to use the private recovery key anywhere. Except if we
   // want to recover the data...
   // The session key is a symmetric key. We usually save this key in the browser
   // in a secure storage.
-  getSessionKey: AskSession,
+  getSessionKey: AskCryptoKey,
   base64: boolean = true, // whether to return the data as base64 strings
 ) {
   // Generate a new random tool key for each set operation
@@ -199,7 +199,7 @@ export const decryptDataFile = async (
   // this is usually the record ID or some other identifier which is unique for the record
   // and not encrypted...
   info: string | number,
-  getSessionKey: AskSession,
+  getSessionKey: AskCryptoKey,
 ) => {
   // Decrypt the tool key using the symmetric session key (this is always a string)
   const rowKey = await unwrapWithSymmetricKey(await getSessionKey(), encData.encryptedToolKey)

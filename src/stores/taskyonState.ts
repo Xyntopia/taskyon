@@ -18,7 +18,6 @@ import {
   createTypeFilteredPort,
   filter,
 } from 'src/modules/frpBus'
-import { createCryptoSession } from '@taskyon/taskyon'
 import { setColors } from 'src/boot/brand-colors'
 import { setPrismTheme } from 'src/modules/markdownUtils '
 import { onScopeDispose } from 'vue'
@@ -527,23 +526,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     )
   })
 
-  const tyCrypto = createCryptoSession('default_account')
-
-  const getPublicRecoveryKey = async (
-    ...args: Parameters<Awaited<ReturnType<typeof createCryptoSession>>['getUserPublicKey']>
-  ) => (await tyCrypto).getUserPublicKey(...args).privateKey
-  const getSessionKey = async (
-    ...args: Parameters<Awaited<ReturnType<typeof createCryptoSession>>['getSessionKey']>
-  ) => (await tyCrypto).getSessionKey(...args)
-
-  const taskyon = (async () =>
-    await tyCore(
-      stateRefs.llmSettings,
-      stateRefs.keys,
-      defineTyGuiTools(stateRefs),
-      getPublicRecoveryKey,
-      getSessionKey,
-    ))()
+  const taskyon = (async () => {
+    return await tyCore(stateRefs.llmSettings, stateRefs.keys, defineTyGuiTools(stateRefs))
+  })()
 
   const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
 
@@ -716,17 +701,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     const instance = await taskyon
     return instance['secretStore']
   }
-
-  // connect secretStore...
-  // TODO: we can probably move this into our tasyon init function!
-  //       we would like to have the session key in there anyways!
-  void getSecretStore().then((ss) => {
-    ss.onSessionKey(async ({ respond }) => {
-      console.log('importing fixed key for secretStore...')
-      const key = await getSessionKey()
-      respond(key)
-    })
-  })
 
   // an oauth token getter function which persists secrets in our local secretstore!
   const getToken: TokenGetter = async (...args) => {

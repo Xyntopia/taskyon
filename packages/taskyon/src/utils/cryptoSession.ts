@@ -142,9 +142,9 @@ export async function createCryptoSession(accountId: string, options?: CryptoSes
     getSessionKey: () => SK,
     getDevicePublicKey: () => deviceKeyPair.publicKey,
     id: () => cryptoKeyToBase64(deviceKeyPair.publicKey),
-    getUserPublicKey: (): UserKeyPair => {
+    getUserPublicKey: (): CryptoKey => {
       if (!userKeyPair) throw new Error('User key pair not initialized')
-      return userKeyPair
+      return userKeyPair.publicKey
     },
     exportSessionKey,
     destroy: async () => await deleteDatabase(storageNamespace),
@@ -159,6 +159,8 @@ export async function createCryptoSession(accountId: string, options?: CryptoSes
     },
   }
 }
+
+export type CryptoSession = Awaited<ReturnType<typeof createCryptoSession>>
 
 /**
  * Completely deletes the crypto session database for an account

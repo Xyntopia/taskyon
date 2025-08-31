@@ -1,4 +1,4 @@
-import type { AskSession, EncryptedDataRow, TaskNode } from '@taskyon/taskyon'
+import type { AskCryptoKey, EncryptedDataRow, TaskNode } from '@taskyon/taskyon'
 import { decryptDataFile, encryptDataFile } from '@taskyon/taskyon'
 import type { PartialDeep } from 'type-fest'
 import type { Stream } from './frpBus'
@@ -597,12 +597,12 @@ export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWr
 
 export function withEncryption(
   base: CrudWrapper<EncryptedDataRow>,
-  publicRecoveryKey: AskSession,
-  getSessionKey?: AskSession,
+  publicRecoveryKey: AskCryptoKey,
+  getSessionKey?: AskCryptoKey,
 ) {
   return {
     ...base,
-    async set(id: string | number, data: unknown, askSession?: AskSession): Promise<void> {
+    async set(id: string | number, data: unknown, askSession?: AskCryptoKey): Promise<void> {
       if (!askSession && !getSessionKey) {
         throw new Error('No session key provider (askSession or getSessionKey) was provided.')
       }
@@ -618,7 +618,7 @@ export function withEncryption(
       await base.set(id, encData)
     },
 
-    async get(id: string | number, askSession?: AskSession): Promise<unknown> {
+    async get(id: string | number, askSession?: AskCryptoKey): Promise<unknown> {
       // Retrieve the encrypted data row
       const encData = await base.get(id)
       if (!encData) return null
@@ -647,7 +647,7 @@ export function withEncryption(
  */
 export const withSecretStore = (
   base: CrudWrapper<EncryptedDataRow>,
-  publicRecoveryKey: () => Promise<CryptoKey>,
+  publicRecoveryKey: () => Promise<CryptoKey> | CryptoKey,
   askTimeoutMs = 100000,
 ) => {
   const { emitFunc: getSessionKey, stream: askSessionKeyStream } = streamProcedureCall<
