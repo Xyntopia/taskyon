@@ -1,7 +1,7 @@
 import { getPublicKeyAsync } from '@noble/ed25519'
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39'
 import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english'
-import { base64UrlToUint8Array, uint8ArrayToBase64UrlSafe, urlSafe64BitString } from './encoding'
+import { base64UrlToUint8Array, uint8ArrayToBase64UrlSafe } from './encoding'
 import { Buffer } from 'buffer'
 import { v1 as uuidv1 } from 'uuid'
 
@@ -184,7 +184,7 @@ export async function sha256UrlSafeHash(obj: unknown) {
   const data = encoder.encode(json)
 
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  return urlSafe64BitString(Buffer.from(hashBuffer))
+  return uint8ArrayToBase64UrlSafe(hashBuffer)
 }
 
 export function randomString(
@@ -331,7 +331,7 @@ export function urlSafeBase64Uuid() {
   const bufferUuid = Buffer.from(hexUuid.replace(/-/g, ''), 'hex')
 
   // Convert the Buffer to anode  base64 string
-  const base64Uuid = urlSafe64BitString(bufferUuid)
+  const base64Uuid = uint8ArrayToBase64UrlSafe(bufferUuid.buffer)
 
   return base64Uuid
 }
