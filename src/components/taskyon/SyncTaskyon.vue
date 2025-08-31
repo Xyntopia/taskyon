@@ -22,11 +22,12 @@ With Taskyon, your tasks are always **yours alone**.
       </q-item>
       <q-separator spaced />
       <q-item-label header>
-        Decentralized Taskyon ID
+        Device ID
         <InfoDialog
-          info-text="Generate a decentralized, cryptographic user ID which can be used to interact with \
-other taskyon users in a secure way. You can protect messages by encrypting them \
-and verify the authenticity of messages sent by other users."
+          info-text="Your Device ID is a unique identifier for this specific device.
+It helps Taskyon distinguish between different devices you use, enabling secure
+synchronization and backup of your data. Device IDs are not shared with other
+users and are used only for internal management and security."
         />
       </q-item-label>
       <q-item class="items-center">
@@ -122,12 +123,11 @@ and verify the authenticity of messages sent by other users."
         </q-item-section>
       </q-item>
       <q-item-label header>
-        Device ID
+        Decentralized Taskyon ID
         <InfoDialog
-          info-text="Your Device ID is a unique identifier for this specific device.
-It helps Taskyon distinguish between different devices you use, enabling secure
-synchronization and backup of your data. Device IDs are not shared with other
-users and are used only for internal management and security."
+          info-text="Generate a decentralized, cryptographic user ID which can be used to interact with \
+other taskyon users in a secure way. You can protect messages by encrypting them \
+and verify the authenticity of messages sent by other users."
         />
       </q-item-label>
       <q-item class="items-center">
