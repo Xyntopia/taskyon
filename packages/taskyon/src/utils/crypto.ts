@@ -1,11 +1,7 @@
 import { getPublicKeyAsync } from '@noble/ed25519'
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39'
 import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english'
-import {
-  base64UrlToUint8Array,
-  uint8ArrayToBase64UrlSafe,
-  urlSafe64BitString,
-} from '@taskyon/taskyon'
+import { base64UrlToUint8Array, uint8ArrayToBase64UrlSafe, urlSafe64BitString } from './encoding'
 import { Buffer } from 'buffer'
 import { v1 as uuidv1 } from 'uuid'
 
