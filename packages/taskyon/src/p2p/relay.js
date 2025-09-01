@@ -7,7 +7,8 @@ import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { webSockets } from '@libp2p/websockets'
 import { tcp } from '@libp2p/tcp'
 import { circuitRelayServer } from '@libp2p/circuit-relay-v2'
-import { PUBSUB_PEER_DISCOVERY } from './p2p'
+
+const PUBSUB_PEER_DISCOVERY = 'browser-peer-discovery'
 
 async function main() {
   // enable('*')

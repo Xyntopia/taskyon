@@ -1,26 +1,29 @@
 <template>
-  <q-page class="q-pa-md">
-    <q-card class="q-ma-md">
-      <q-card-section>
-        <div class="text-h4 text-primary q-mb-md">WebRTC Connectivity with js-libp2p</div>
+  <q-layout view="hHh lpR lFr">
+    <TaskyonHeader btn-size="md" />
+    <q-page-container>
+      <q-page class="q-pa-md">
+        <q-card class="q-ma-md">
+          <q-card-section>
+            <div class="text-h4 text-primary q-mb-md">WebRTC Connectivity with js-libp2p</div>
 
-        <div class="q-gutter-sm">
-          <q-btn
-            color="primary"
-            size="sm"
-            label="Enable libp2p Logging"
-            @click="enableLogging(true)"
-          />
-          <q-btn
-            color="negative"
-            size="sm"
-            label="Disable libp2p Logging"
-            @click="enableLogging(false)"
-          />
-        </div>
+            <div class="q-gutter-sm">
+              <q-btn
+                color="primary"
+                size="sm"
+                label="Enable libp2p Logging"
+                @click="enableLogging(true)"
+              />
+              <q-btn
+                color="negative"
+                size="sm"
+                label="Disable libp2p Logging"
+                @click="enableLogging(false)"
+              />
+            </div>
 
-        <!-- Statistics Section -->
-        <!--TODO: <q-list dense class="q-mb-md">
+            <!-- Statistics Section -->
+            <!--TODO: <q-list dense class="q-mb-md">
           <q-item>
             <q-item-section>
               <q-item-label>
@@ -37,46 +40,49 @@
           </q-item>
         </q-list>-->
 
-        <!-- Node Section -->
-        <div class="q-mb-lg">
-          <div class="text-h5 text-primary q-mb-sm">Node Info</div>
-          <pre>
+            <!-- Node Section -->
+            <div class="q-mb-lg">
+              <div class="text-h5 text-primary q-mb-sm">Node Info</div>
+              <pre>
             {{ safeYamlDump(nodeInfo) }}
-          </pre>
-        </div>
-
-        <!-- Peers Section -->
-        <div class="q-mb-lg">
-          <div class="text-h5 text-primary q-mb-sm">Peers</div>
-          <div class="row q-gutter-md items-center q-mb-md">
-            <div class="col">
-              <q-input
-                v-model="multiaddrInput"
-                label="Multiaddr"
-                placeholder="/ip4/..."
-                outlined
-                dense
-              />
+          </pre
+              >
             </div>
-            <div class="col-auto">
-              <q-btn
-                color="positive"
-                label="Connect"
-                :loading="connecting"
-                @click="connectToPeer"
-              />
-            </div>
-          </div>
-        </div>
 
-        <!-- Output Section -->
-        <div class="text-h5 text-primary q-mb-sm">Output</div>
-        <q-scroll-area style="height: 300px">
-          <pre class="bg-grey-2 q-pa-md rounded-borders text-caption">{{ output }}</pre>
-        </q-scroll-area>
-      </q-card-section>
-    </q-card>
-  </q-page>
+            <!-- Peers Section -->
+            <div class="q-mb-lg">
+              <div class="text-h5 text-primary q-mb-sm">Peers</div>
+              <div class="row q-gutter-md items-center q-mb-md">
+                <div class="col">
+                  <q-input
+                    v-model="multiaddrInput"
+                    label="Multiaddr"
+                    placeholder="/ip4/..."
+                    outlined
+                    dense
+                  />
+                </div>
+                <div class="col-auto">
+                  <q-btn
+                    color="positive"
+                    label="Connect"
+                    :loading="connecting"
+                    @click="connectToPeer"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Output Section -->
+            <div class="text-h5 text-primary q-mb-sm">Output</div>
+            <q-scroll-area style="height: 300px">
+              <pre class="bg-grey-2 q-pa-md rounded-borders text-caption">{{ output }}</pre>
+            </q-scroll-area>
+          </q-card-section>
+        </q-card>
+      </q-page>
+    </q-page-container>
+  </q-layout>
 </template>
 
 <script setup lang="ts">

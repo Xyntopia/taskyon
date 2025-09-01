@@ -19,7 +19,7 @@ import { getPeerTypes, getAddresses, getPeerDetails } from './p2putils'
 import { bootstrap } from '@libp2p/bootstrap'
 import { circuitRelayTransport } from '@libp2p/circuit-relay-v2'
 
-export const PUBSUB_PEER_DISCOVERY = 'browser-peer-discovery'
+const PUBSUB_PEER_DISCOVERY = 'browser-peer-discovery'
 
 // Types
 type PeerNetwork = {

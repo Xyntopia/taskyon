@@ -13,7 +13,7 @@ export * from './utils/crypto'
 export * from './utils/encoding'
 export * from './utils/cryptoSession'
 export * from './utils/encrypt'
-export { createPeerNetwork } from './p2p/p2p'
+export { createPeerNetwork } from './p2p/libp2p'
 
 /**
  * Represents the context passed to tools within the Taskyon system.
