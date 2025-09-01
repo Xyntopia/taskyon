@@ -1851,21 +1851,7 @@
     it-pushable "^3.1.3"
     uint8arraylist "^2.4.3"
 
-"@libp2p/interface@^2.0.0", "@libp2p/interface@^2.10.5":
-  version "2.10.5"
-  resolved "https://registry.yarnpkg.com/@libp2p/interface/-/interface-2.10.5.tgz#c8f7990a19071488831ede202f37ae6c840f3b6b"
-  integrity sha512-Z52n04Mph/myGdwyExbFi5S/HqrmZ9JOmfLc2v4r2Cik3GRdw98vrGH19PFvvwjLwAjaqsweCtlGaBzAz09YDw==
-  dependencies:
-    "@multiformats/dns" "^1.0.6"
-    "@multiformats/multiaddr" "^12.4.4"
-    it-pushable "^3.2.3"
-    it-stream-types "^2.0.2"
-    main-event "^1.0.1"
-    multiformats "^13.3.6"
-    progress-events "^1.0.1"
-    uint8arraylist "^2.4.8"
-
-"@libp2p/interface@^2.11.0", "@libp2p/interface@^2.9.0":
+"@libp2p/interface@2.11.0", "@libp2p/interface@^2.0.0", "@libp2p/interface@^2.10.5", "@libp2p/interface@^2.11.0", "@libp2p/interface@^2.9.0":
   version "2.11.0"
   resolved "https://registry.yarnpkg.com/@libp2p/interface/-/interface-2.11.0.tgz#a1032271d6532e53989781bd25b24f158e900e27"
   integrity sha512-0MUFKoXWHTQW3oWIgSHApmYMUKWO/Y02+7Hpyp+n3z+geD4Xo2Rku2gYWmxcq+Pyjkz6Q9YjDWz3Yb2SoV2E8Q==

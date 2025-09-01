@@ -156,6 +156,7 @@
   },
   "productName": "Taskyon App",
   "resolutions": {
-    "**/form-data": "^4.0.4"
+    "**/form-data": "^4.0.4",
+    "@libp2p/interface": "2.11.0"
   }
 }

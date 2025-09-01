@@ -1,24 +1,35 @@
+import { createLibp2p } from 'libp2p'
+import { autoNAT } from '@libp2p/autonat'
+import { identify } from '@libp2p/identify'
 import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
-import { circuitRelayServer } from '@libp2p/circuit-relay-v2'
-import { identify } from '@libp2p/identify'
+import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { webSockets } from '@libp2p/websockets'
-import { createLibp2p } from 'libp2p'
+import { tcp } from '@libp2p/tcp'
+import { circuitRelayServer } from '@libp2p/circuit-relay-v2'
+import { PUBSUB_PEER_DISCOVERY } from './p2p'
 
-const node = await createLibp2p({
-  addresses: {
-    listen: ['/ip4/0.0.0.0/tcp/0/ws'],
-    // TODO check "What is next?" section
-  },
-  transports: [webSockets()],
-  connectionEncrypters: [noise()],
-  streamMuxers: [yamux()],
-  services: {
-    identify: identify(),
-    relay: circuitRelayServer(),
-  },
-})
+async function main() {
+  // enable('*')
+  const libp2p = await createLibp2p({
+    addresses: {
+      listen: ['/ip4/0.0.0.0/tcp/9001/ws', '/ip4/0.0.0.0/tcp/9002'],
+    },
+    transports: [webSockets(), tcp()],
+    connectionEncrypters: [noise()],
+    streamMuxers: [yamux()],
+    services: {
+      identify: identify(),
+      autoNat: autoNAT(),
+      relay: circuitRelayServer(),
+      pubsub: gossipsub(),
+    },
+  })
 
-console.log(`Node started with id ${node.peerId.toString()}`)
-console.log('Listening on:')
-node.getMultiaddrs().forEach((ma) => console.log(ma.toString()))
+  libp2p.services.pubsub.subscribe(PUBSUB_PEER_DISCOVERY)
+
+  console.log('PeerID: ', libp2p.peerId.toString())
+  console.log('Multiaddrs: ', libp2p.getMultiaddrs())
+}
+
+main()
