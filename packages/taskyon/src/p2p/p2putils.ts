@@ -9,6 +9,7 @@ import {
 import type { Libp2p } from 'libp2p'
 
 export const bootstrapPeers = [
+  '/ip4/127.0.0.1/tcp/9001/ws',
   'QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN',
   'QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa',
   'QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb',

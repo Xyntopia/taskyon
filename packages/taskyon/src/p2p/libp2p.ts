@@ -30,7 +30,7 @@ type PeerNetwork = {
 }
 
 interface libp2pNetwork extends PeerNetwork {
-  connectWith: (addr: string) => Promise<void>
+  connectWith: (addr: string) => Promise<unknown>
   info: () => Record<string, unknown>
   enableLogging: (enableLogging: boolean) => void
 }
@@ -64,7 +64,12 @@ const createNode = () =>
     },
     peerDiscovery: [
       bootstrap({
-        list: [''],
+        timeout: 1,
+        list: [
+          '/ip4/127.0.0.1/tcp/9111/ws/p2p/12D3KooWSW1HFrSd2kwPzXBvVth5NJ4s3Ydf6VQ5CugPxqZU5Fa3',
+          //'/ip4/127.0.0.1/tcp/9111/ws',
+          //'/ip4/127.0.0.1/tcp/9111/ws/p2p/12D3KooWALpzWi4e1mwFEYTGaSJPqjZLfCXohFVXadcFrsRNm95b',
+        ],
       }),
       pubsubPeerDiscovery({
         interval: 10_000,
@@ -111,11 +116,7 @@ export const createPeerNetwork = async (): Promise<libp2pNetwork> => {
     const maddr = multiaddr(addr)
 
     console.log(maddr)
-    try {
-      await node.dial(maddr)
-    } catch (e) {
-      console.log(e)
-    }
+    return await node.dial(maddr)
   }
 
   const enableLogging = (enableLogging: boolean) => {

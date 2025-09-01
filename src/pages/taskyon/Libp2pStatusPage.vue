@@ -67,7 +67,13 @@
                     color="positive"
                     label="Connect"
                     :loading="connecting"
-                    @click="connectToPeer"
+                    @click="connectToPeer(multiaddrInput)"
+                  />
+                  <q-btn
+                    color="positive"
+                    label="Connect To local relay"
+                    :loading="connecting"
+                    @click="connectToPeer('/ip4/127.0.0.1/tcp/9111/ws')"
                   />
                 </div>
               </div>
@@ -88,6 +94,7 @@
 <script setup lang="ts">
 import { createPeerNetwork } from '@taskyon/taskyon'
 import { useAsyncState, useIntervalFn } from '@vueuse/core'
+import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import { safeYamlDump } from 'src/modules/yamlUtils'
 import { ref, onMounted } from 'vue'
 
@@ -106,15 +113,21 @@ const enableLogging = (enable: boolean) => {
   addToOutput(`Logging enabled: ${enable}`)
 }
 
-const connectToPeer = async () => {
+const connectToPeer = async (addr: string) => {
   // Implement peer connection logic
-  addToOutput(`Attempting to connect to: ${multiaddrInput.value}`)
+  addToOutput(`Attempting to connect to: ${addr}`)
 
+  let connection
   connecting.value = true
-  await nw.state.value?.connectWith(multiaddrInput.value)
+  try {
+    connection = await nw.state.value?.connectWith(addr)
+  } catch (e) {
+    console.error(e)
+    connection = 'error on connection'
+  }
   connecting.value = false
 
-  addToOutput(`Connected to: ${multiaddrInput.value}`)
+  addToOutput(`Connected to: ${safeYamlDump(connection)}`)
 }
 
 const addToOutput = (message: string) => {

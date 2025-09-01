@@ -14,7 +14,7 @@ async function main() {
   // enable('*')
   const libp2p = await createLibp2p({
     addresses: {
-      listen: ['/ip4/0.0.0.0/tcp/9001/ws', '/ip4/0.0.0.0/tcp/9002'],
+      listen: ['/ip4/0.0.0.0/tcp/9111/ws', '/ip4/0.0.0.0/tcp/9112'],
     },
     transports: [webSockets(), tcp()],
     connectionEncrypters: [noise()],
