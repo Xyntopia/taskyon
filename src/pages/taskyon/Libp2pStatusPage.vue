@@ -6,7 +6,6 @@
         <q-card class="q-ma-md">
           <q-card-section>
             <div class="text-h4 text-primary q-mb-md">WebRTC Connectivity with js-libp2p</div>
-
             <div class="q-gutter-sm">
               <q-btn
                 color="primary"
@@ -43,6 +42,7 @@
             <!-- Node Section -->
             <div class="q-mb-lg">
               <div class="text-h5 text-primary q-mb-sm">Node Info</div>
+              Address: {{ nw.state.value?.getPeerId() }}
               <pre>
             {{ safeYamlDump(nodeInfo) }}
           </pre
