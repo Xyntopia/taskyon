@@ -1709,6 +1709,24 @@
     "@lezer/highlight" "^1.0.0"
     "@lezer/lr" "^1.0.0"
 
+"@libp2p/autonat@^2.0.38":
+  version "2.0.38"
+  resolved "https://registry.yarnpkg.com/@libp2p/autonat/-/autonat-2.0.38.tgz#38ab31e2ede7daaf38b8d4c971d7660903a87b17"
+  integrity sha512-SuJUbXsF0YQg926hxb6d/f7x4NEHqWHLSXnR6Og5fJSOv2A1i1xRUe8zXaCuxQkPa+CguH2tAPZ+l1A+NZlF5A==
+  dependencies:
+    "@libp2p/interface" "^2.11.0"
+    "@libp2p/interface-internal" "^2.3.19"
+    "@libp2p/peer-collections" "^6.0.35"
+    "@libp2p/peer-id" "^5.1.9"
+    "@libp2p/utils" "^6.7.2"
+    "@multiformats/multiaddr" "^12.4.4"
+    any-signal "^4.1.1"
+    it-protobuf-stream "^2.0.2"
+    main-event "^1.0.1"
+    multiformats "^13.3.6"
+    protons-runtime "^5.5.0"
+    uint8arraylist "^2.4.8"
+
 "@libp2p/bootstrap@^11.0.47":
   version "11.0.47"
   resolved "https://registry.yarnpkg.com/@libp2p/bootstrap/-/bootstrap-11.0.47.tgz#bac0e737888a537821f5a4ccef0ee68706b08a99"
@@ -1984,6 +2002,20 @@
     uint8arraylist "^2.4.8"
     uint8arrays "^5.1.0"
 
+"@libp2p/pubsub-peer-discovery@^11.0.2":
+  version "11.0.2"
+  resolved "https://registry.yarnpkg.com/@libp2p/pubsub-peer-discovery/-/pubsub-peer-discovery-11.0.2.tgz#a9e704d06bfe314d53d433e7a5e22f4d24704684"
+  integrity sha512-qN3bP7QX6KepuSBIqvbkoGnMJ6Oc5gV86+QXtNJh3T2lUV34kTsuIcROkMeBeYDOfzUi/99Y4LIOrtBOC3M3yA==
+  dependencies:
+    "@libp2p/crypto" "^5.0.0"
+    "@libp2p/interface" "^2.0.0"
+    "@libp2p/interface-internal" "^2.0.0"
+    "@libp2p/peer-id" "^5.0.0"
+    "@multiformats/multiaddr" "^12.0.0"
+    protons-runtime "^5.0.0"
+    uint8arraylist "^2.4.3"
+    uint8arrays "^5.0.2"
+
 "@libp2p/pubsub@^10.0.0":
   version "10.1.18"
   resolved "https://registry.yarnpkg.com/@libp2p/pubsub/-/pubsub-10.1.18.tgz#ba3b43d88d89356133fa58250cb7d8d35c27b675"
@@ -2003,6 +2035,23 @@
     p-queue "^8.1.0"
     uint8arraylist "^2.4.8"
     uint8arrays "^5.1.0"
+
+"@libp2p/tcp@^10.1.19":
+  version "10.1.19"
+  resolved "https://registry.yarnpkg.com/@libp2p/tcp/-/tcp-10.1.19.tgz#32e6304ca2d2cb1127a201aecb84c9faa82085c0"
+  integrity sha512-Z+s1n7gBexc32d+DUhOGgQpA8HVukubmNJHzolzZPqly5DYkG2f6SIelitp+M5tDYOPH/43EH9pPSSZ3vUuOwQ==
+  dependencies:
+    "@libp2p/interface" "^2.11.0"
+    "@libp2p/utils" "^6.7.2"
+    "@multiformats/multiaddr" "^12.4.4"
+    "@multiformats/multiaddr-matcher" "^2.0.0"
+    "@types/sinon" "^17.0.4"
+    main-event "^1.0.1"
+    p-defer "^4.0.1"
+    p-event "^6.0.1"
+    progress-events "^1.0.1"
+    race-event "^1.3.0"
+    stream-to-it "^1.0.1"
 
 "@libp2p/utils@^6.0.0", "@libp2p/utils@^6.7.2":
   version "6.7.2"
@@ -2091,6 +2140,24 @@
     progress-events "^1.0.1"
     race-signal "^1.1.3"
     ws "^8.18.2"
+
+"@libp2p/webtransport@^5.0.51":
+  version "5.0.51"
+  resolved "https://registry.yarnpkg.com/@libp2p/webtransport/-/webtransport-5.0.51.tgz#2ab08b09c9168b3071744cf7e7576bdb3038cc68"
+  integrity sha512-wiAUy5Z31TkoSGJ5DRF28J3F4V1drRUT4EACYUlA7w7Amx6dNoN+sblUPeYJDEp/Bd0o4bfa9WjGcFHH8QEwbA==
+  dependencies:
+    "@chainsafe/libp2p-noise" "^16.1.3"
+    "@libp2p/interface" "^2.11.0"
+    "@libp2p/peer-id" "^5.1.9"
+    "@libp2p/utils" "^6.7.2"
+    "@multiformats/multiaddr" "^12.4.4"
+    "@multiformats/multiaddr-matcher" "^2.0.0"
+    it-stream-types "^2.0.2"
+    multiformats "^13.3.6"
+    progress-events "^1.0.1"
+    race-signal "^1.1.3"
+    uint8arraylist "^2.4.8"
+    uint8arrays "^5.1.0"
 
 "@marijn/find-cluster-break@^1.0.0":
   version "1.0.2"
@@ -3650,6 +3717,18 @@
     "@types/http-errors" "*"
     "@types/node" "*"
     "@types/send" "*"
+
+"@types/sinon@^17.0.4":
+  version "17.0.4"
+  resolved "https://registry.yarnpkg.com/@types/sinon/-/sinon-17.0.4.tgz#fd9a3e8e07eea1a3f4a6f82a972c899e5778f369"
+  integrity sha512-RHnIrhfPO3+tJT0s7cFaXGZvsL4bbR3/k7z3P312qMS4JaS2Tk+KiwiLx1S0rQ56ERj00u1/BtdyVd0FY+Pdew==
+  dependencies:
+    "@types/sinonjs__fake-timers" "*"
+
+"@types/sinonjs__fake-timers@*":
+  version "8.1.5"
+  resolved "https://registry.yarnpkg.com/@types/sinonjs__fake-timers/-/sinonjs__fake-timers-8.1.5.tgz#5fd3592ff10c1e9695d377020c033116cc2889f2"
+  integrity sha512-mQkU2jY8jJEF7YHjHvsQO8+3ughTL1mcnn96igfhONmR+fUPSKIkefQYpSe8bsly2Ep7oQbn/6VG5/9/0qcArQ==
 
 "@types/sinonjs__fake-timers@8.1.1":
   version "8.1.1"
@@ -11999,7 +12078,7 @@ protobufjs@^7.2.4:
     "@types/node" ">=13.7.0"
     long "^5.0.0"
 
-protons-runtime@^5.5.0:
+protons-runtime@^5.0.0, protons-runtime@^5.5.0:
   version "5.6.0"
   resolved "https://registry.yarnpkg.com/protons-runtime/-/protons-runtime-5.6.0.tgz#df1ef57497d04529a23ee6020f1c24f1d15db141"
   integrity sha512-/Kde+sB9DsMFrddJT/UZWe6XqvL7SL5dbag/DBCElFKhkwDj7XKt53S+mzLyaDP5OqS0wXjV5SA572uWDaT0Hg==
@@ -13407,6 +13486,13 @@ stream-to-array@^2.3.0:
   integrity sha512-UsZtOYEn4tWU2RGLOXr/o/xjRBftZRlG3dEWoaHr8j4GuypJ3isitGbVyjQKAuMu+xbiop8q224TjiZWc4XTZA==
   dependencies:
     any-promise "^1.1.0"
+
+stream-to-it@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/stream-to-it/-/stream-to-it-1.0.1.tgz#7d5e1b04bab70facd48273279bfa49f0d0165950"
+  integrity sha512-AqHYAYPHcmvMrcLNgncE/q0Aj/ajP6A4qGhxP6EVn7K3YTNs0bJpJyk57wc2Heb7MUL64jurvmnmui8D9kjZgA==
+  dependencies:
+    it-stream-types "^2.0.1"
 
 streamx@^2.15.0, streamx@^2.21.0:
   version "2.22.1"
