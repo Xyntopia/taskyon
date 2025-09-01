@@ -1,17 +1,130 @@
 <template>
-  <q-layout view="lHh LpR lfr">
-    <q-page-container>
-      <q-page class="q-pa-md q-gutter-sm">
-        <div class="text-h5">IPFS Node Status</div>
-        <q-btn outline label="return to chat" to="/" />
-        <q-btn outline label="send message" @click="sendMessage()" />
-      </q-page>
-    </q-page-container>
-  </q-layout>
+  <q-page class="q-pa-md">
+    <q-card class="q-ma-md">
+      <q-card-section>
+        <div class="text-h4 text-primary q-mb-md">WebRTC Connectivity with js-libp2p</div>
+
+        <div class="q-gutter-sm">
+          <q-btn
+            color="primary"
+            size="sm"
+            label="Enable libp2p Logging"
+            @click="enableLogging(true)"
+          />
+          <q-btn
+            color="negative"
+            size="sm"
+            label="Disable libp2p Logging"
+            @click="enableLogging(false)"
+          />
+        </div>
+
+        <!-- Statistics Section -->
+        <!--TODO: <q-list dense class="q-mb-md">
+          <q-item>
+            <q-item-section>
+              <q-item-label>
+                Opened sessions in the last {{ openedPerUnit }}s: {{ openedPerMinute }}
+              </q-item-label>
+            </q-item-section>
+          </q-item>
+          <q-item>
+            <q-item-section>
+              <q-item-label>
+                Max opened connections per minute: {{ maxOpenedPerMinute }}
+              </q-item-label>
+            </q-item-section>
+          </q-item>
+        </q-list>-->
+
+        <!-- Node Section -->
+        <div class="q-mb-lg">
+          <div class="text-h5 text-primary q-mb-sm">Node Info</div>
+          <pre>
+            {{ safeYamlDump(nodeInfo) }}
+          </pre>
+        </div>
+
+        <!-- Peers Section -->
+        <div class="q-mb-lg">
+          <div class="text-h5 text-primary q-mb-sm">Peers</div>
+          <div class="row q-gutter-md items-center q-mb-md">
+            <div class="col">
+              <q-input
+                v-model="multiaddrInput"
+                label="Multiaddr"
+                placeholder="/ip4/..."
+                outlined
+                dense
+              />
+            </div>
+            <div class="col-auto">
+              <q-btn
+                color="positive"
+                label="Connect"
+                :loading="connecting"
+                @click="connectToPeer"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Output Section -->
+        <div class="text-h5 text-primary q-mb-sm">Output</div>
+        <q-scroll-area style="height: 300px">
+          <pre class="bg-grey-2 q-pa-md rounded-borders text-caption">{{ output }}</pre>
+        </q-scroll-area>
+      </q-card-section>
+    </q-card>
+  </q-page>
 </template>
 
 <script setup lang="ts">
-function sendMessage() {
-  console.log('send message to server....')
+import { createPeerNetwork } from '@taskyon/taskyon'
+import { useAsyncState, useIntervalFn } from '@vueuse/core'
+import { safeYamlDump } from 'src/modules/yamlUtils'
+import { ref, onMounted } from 'vue'
+
+const nw = useAsyncState(createPeerNetwork(), undefined)
+
+// Reactive data
+const multiaddrInput = ref('')
+const output = ref('')
+const nodeInfo = ref<Record<string, unknown>>({})
+const connecting = ref(false)
+
+// Methods
+const enableLogging = (enable: boolean) => {
+  // Implement libp2p logging enable logic
+  nw.state.value?.enableLogging(enable)
+  addToOutput(`Logging enabled: ${enable}`)
 }
+
+const connectToPeer = async () => {
+  // Implement peer connection logic
+  addToOutput(`Attempting to connect to: ${multiaddrInput.value}`)
+
+  connecting.value = true
+  await nw.state.value?.connectWith(multiaddrInput.value)
+  connecting.value = false
+
+  addToOutput(`Connected to: ${multiaddrInput.value}`)
+}
+
+const addToOutput = (message: string) => {
+  const timestamp = new Date().toISOString()
+  output.value += `[${timestamp}] ${message}\n`
+}
+
+// Lifecycle
+onMounted(async () => {
+  await nw.state.value?.start()
+
+  nodeInfo.value = { started: true }
+
+  useIntervalFn(() => {
+    nodeInfo.value = nw.state.value?.info() ?? {}
+    addToOutput('getting node info...')
+  }, 2000)
+})
 </script>

@@ -32,7 +32,7 @@ type PeerNetwork = {
 interface libp2pNetwork extends PeerNetwork {
   connectWith: (addr: string) => Promise<void>
   info: () => Record<string, unknown>
-  loggingCtl: (enableLogging: boolean) => void
+  enableLogging: (enableLogging: boolean) => void
 }
 
 type Subnet = {
@@ -118,7 +118,7 @@ export const createPeerNetwork = async (): Promise<libp2pNetwork> => {
     }
   }
 
-  const loggingCtl = (enableLogging: boolean) => {
+  const enableLogging = (enableLogging: boolean) => {
     if (enableLogging) enable('*,*:debug')
     else disable()
   }
@@ -154,7 +154,7 @@ export const createPeerNetwork = async (): Promise<libp2pNetwork> => {
     return subnets[topic]
   }*/
 
-  return { start, stop, getPeerId, connectWith, loggingCtl, info }
+  return { start, stop, getPeerId, connectWith, enableLogging, info }
 }
 
 // Factory function to create a Subnet
