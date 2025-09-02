@@ -12,9 +12,9 @@ import { circuitRelayServer } from '@libp2p/circuit-relay-v2'
 const createStdoutLogger = (name) => {
   const timestamp = () => new Date().toISOString()
   return {
-    info: (...args) => console.log(`${timestamp()} [${name}] [INFO]`, ...args),
-    warn: (...args) => console.log(`${timestamp()} [${name}] [WARN]`, ...args),
-    error: (...args) => console.log(`${timestamp()} [${name}] [ERROR]`, ...args),
+    info: (msg) => console.log(`${timestamp()} [${name}] [INFO] ${msg}`),
+    warn: (msg) => console.log(`${timestamp()} [${name}] [WARN] ${msg}`),
+    error: (msg) => console.log(`${timestamp()} [${name}] [ERROR] ${msg}`),
   }
 }
 
@@ -26,7 +26,7 @@ const bannedPeers = new Set()
 
 // Log startup
 log.info('=== RELAY SERVER STARTUP ===')
-log.info('Node.js version: %s', process.version)
+log.info(`Node.js version: ${process.version}`)
 log.info('Starting libp2p relay server...')
 
 async function main() {
@@ -78,8 +78,13 @@ async function main() {
   })
 
   log.info('=== RELAY SERVER READY ===')
-  log.info('PeerID: %s', libp2p.peerId.toString())
-  log.info('Multiaddrs: %j', libp2p.getMultiaddrs())
+  log.info(`PeerID: ${libp2p.peerId.toString()}`)
+  log.info(
+    `Multiaddrs:\n${libp2p
+      .getMultiaddrs()
+      .map((addr) => `  ${addr.toString()}`)
+      .join('\n')}`,
+  )
   log.info('Relay server listening and ready for connections')
   log.info('==============================')
 }
@@ -87,12 +92,12 @@ async function main() {
 main().catch((err) => {
   log.error('=== FATAL ERROR ===')
   log.error('Failed to start relay server:')
-  log.error('Error name: %s', err.name)
-  log.error('Error message: %s', err.message)
-  log.error('Error stack: %s', err.stack)
+  log.error(`Error name: ${err.name}`)
+  log.error(`Error message: ${err.message}`)
+  log.error(`Error stack: ${err.stack}`)
 
   if (err.code) {
-    log.error('Error code: %s', err.code)
+    log.error(`Error code: ${err.code}`)
   }
 
   // Check for common import/module errors
