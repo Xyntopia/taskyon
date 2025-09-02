@@ -2,7 +2,7 @@
 FROM node:22.14.0 AS prepare
 
 # Set up Yarn cache directory
-ENV YARN_CACHE_FOLDER=/app/.yarn-cache
+ENV YARN_CACHE_FOLDER=/tmp/.yarn-cache
 
 # it looks like after removing quasar postinstall we don't need this anymore??
 # we don't need to bust the cache here, because it  gets thrown away due to our staged build anyways...
