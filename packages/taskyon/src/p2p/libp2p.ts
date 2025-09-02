@@ -109,6 +109,8 @@ export const createPeerNetwork = async (): Promise<libp2pNetwork> => {
       })(evt),
   )
 
+  // libp2p list of events:
+  // https://libp2p.github.io/js-libp2p/interfaces/_libp2p_interface.Libp2pEvents.html
   node.addEventListener('peer:connect', (event) => console.log(event))
   node.addEventListener('peer:disconnect', (event) => console.log(event))
 
