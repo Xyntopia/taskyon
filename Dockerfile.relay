@@ -1,6 +1,5 @@
-# syntax=docker/dockerfile:1.4
+# ---- builder ----
 FROM node:22-slim AS builder
-
 WORKDIR /app
 
 # set a cache folder
@@ -17,9 +16,11 @@ RUN --mount=type=cache,target=$YARN_CACHE_FOLDER \
 
 # ---- runtime ----
 FROM node:22-slim
-
 WORKDIR /app
+
+# copy relay folder + node_modules
 COPY --from=builder /app/packages/relay ./packages/relay
+COPY --from=builder /app/node_modules ./node_modules
 
 WORKDIR /app/packages/relay
-CMD ["yarn", "start"]
+CMD ["node", "relay.js"]

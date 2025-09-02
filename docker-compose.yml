@@ -80,11 +80,12 @@ services:
     command: /bin/true
 
   relay:
+    image: xyntopia/taskyon-relay
     build:
       context: .
       dockerfile: Dockerfile.relay
     container_name: taskyon-relay
-    restart: unless-stopped
+    # restart: unless-stopped
     ports:
       - '9111:9111' # websockets
       - '9112:9112' # libp2p tcp
