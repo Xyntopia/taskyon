@@ -1,0 +1,21 @@
+{
+    "name": "@taskyon/relay",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "main": "relay.js",
+    "scripts": {
+        "start": "node relay.js"
+    },
+    "dependencies": {
+        "@libp2p/autonat": "*",
+        "@chainsafe/libp2p-gossipsub": "*",
+        "@libp2p/circuit-relay-v2": "*",
+        "@libp2p/identify": "*",
+        "@libp2p/tcp": "*",
+        "@libp2p/websockets": "*",
+        "libp2p": "*",
+        "@chainsafe/libp2p-noise": "*",
+        "@chainsafe/libp2p-yamux": "*"
+    }
+}
