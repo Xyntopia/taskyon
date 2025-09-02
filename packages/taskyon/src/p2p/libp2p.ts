@@ -2,6 +2,8 @@
 // check this link here for an example how to get this going:
 //  https://github.com/libp2p/libp2p-webrtc-guide
 //  https://github.com/libp2p/universal-connectivity
+//  https://github.com/libp2p/go-libp2p/tree/master/examples/chat-with-rendezvous
+//  https://github.com/libp2p/js-libp2p/
 
 import type { Libp2p } from 'libp2p'
 import { createLibp2p } from 'libp2p'

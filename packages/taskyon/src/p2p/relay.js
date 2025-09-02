@@ -7,11 +7,14 @@ import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { webSockets } from '@libp2p/websockets'
 import { tcp } from '@libp2p/tcp'
 import { circuitRelayServer } from '@libp2p/circuit-relay-v2'
-import { peerIdFromPrivateKey } from '@libp2p/peer-id'
-import { generateKeyPair } from '@libp2p/crypto/keys'
+import { createEd25519PeerId } from '@libp2p/peer-id-factory'
+import { peerIdFromBytes } from '@libp2p/peer-id'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+
+// https://docs.libp2p.io/concepts/security/dos-mitigation/
+// https://libp2p.github.io/js-libp2p/interfaces/_libp2p_circuit-relay-v2.CircuitRelayServerInit.html
 
 // Create logger that always outputs to stdout for Docker compatibility
 const createStdoutLogger = (name) => {
@@ -77,9 +80,9 @@ async function loadOrCreatePeerId() {
       Buffer.from(peerIdData.privateKey, 'base64').length,
     )
 
-    // Reconstruct peer ID from private key
-    const privateKey = Buffer.from(peerIdData.privateKey, 'base64')
-    const peerId = await peerIdFromPrivateKey(privateKey)
+    // Reconstruct peer ID from private key bytes
+    const privateKeyBytes = Buffer.from(peerIdData.privateKey, 'base64')
+    const peerId = await peerIdFromBytes(privateKeyBytes)
 
     log.info('✅ Successfully loaded peer ID from cache')
     log.info('  - Verified peer ID: %s', peerId.toString())
@@ -93,21 +96,19 @@ async function loadOrCreatePeerId() {
     }
 
     log.info('Creating new Ed25519 peer ID...')
-    // Create new peer ID using crypto keys
-    const keyPair = await generateKeyPair('Ed25519')
-    const peerId = await peerIdFromPrivateKey(keyPair.private.bytes)
+    // Create new peer ID using the factory function
+    const peerId = await createEd25519PeerId()
 
     log.info('✅ New peer ID generated')
     log.info('  - Peer ID: %s', peerId.toString())
     log.info('  - Type: Ed25519')
-    log.info('  - Private key length: %d bytes', keyPair.private.bytes.length)
-    log.info('  - Public key length: %d bytes', keyPair.public.bytes.length)
+    log.info('  - Private key length: %d bytes', peerId.privateKey.byteLength)
 
     // Save it to cache
     const peerIdData = {
       id: peerId.toString(),
-      privateKey: Buffer.from(keyPair.private.bytes).toString('base64'),
-      publicKey: Buffer.from(keyPair.public.bytes).toString('base64'),
+      privateKey: Buffer.from(peerId.privateKey).toString('base64'),
+      publicKey: Buffer.from(peerId.publicKey).toString('base64'),
       createdAt: new Date().toISOString(),
     }
 
@@ -205,7 +206,7 @@ main().catch((err) => {
 
   if (err.message.includes('Cannot resolve module')) {
     log.error('This appears to be a missing dependency.')
-    log.error('Try running: yarn add @libp2p/peer-id @libp2p/crypto')
+    log.error('Try running: yarn add @libp2p/peer-id-factory')
   }
 
   process.exit(1)
