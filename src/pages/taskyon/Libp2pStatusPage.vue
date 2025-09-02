@@ -82,7 +82,7 @@
             <!-- Output Section -->
             <div class="text-h5 text-primary q-mb-sm">Output</div>
             <q-scroll-area style="height: 300px">
-              <pre class="bg-grey-2 q-pa-md rounded-borders text-caption">{{ output }}</pre>
+              <pre class="q-pa-md rounded-borders text-caption">{{ output }}</pre>
             </q-scroll-area>
           </q-card-section>
         </q-card>
