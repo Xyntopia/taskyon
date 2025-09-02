@@ -1,19 +1,33 @@
-// vite.config.relay.ts
+import path from 'node:path'
 import { defineConfig } from 'vite'
-import path from 'path'
 
 export default defineConfig({
   build: {
-    target: 'node18', // match your Docker Node version
+    target: 'node18',
     outDir: 'dist',
     lib: {
-      entry: path.resolve(__dirname, 'packages/relay/relay.js'),
-      formats: ['cjs'], // Node.js CommonJS
+      entry: path.resolve(__dirname, 'relay.js'),
+      formats: ['cjs'],
       fileName: 'relay',
     },
-    rollupOptions: {
-      external: ['fs', 'path', 'os', 'util', 'stream', 'buffer', 'events'],
+    commonjsOptions: {
+      transformMixedEsModules: true,
     },
-    minify: false, // optional: can minify for smaller size
+    rollupOptions: {
+      external: [
+        'fs',
+        'path',
+        'os',
+        'util',
+        'stream',
+        'buffer',
+        'events',
+        '@libp2p/tcp',
+        '@libp2p/mplex', // or yamux if used
+        '@libp2p/noise', // etc
+        '@libp2p/websockets', // optional, if you mix
+      ],
+    },
+    minify: false,
   },
 })

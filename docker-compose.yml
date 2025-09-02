@@ -80,7 +80,7 @@ services:
     command: /bin/true
 
   relay:
-    image: xyntopia/taskyon-relay
+    image: xyntopia/taskyon-relay:latest
     build:
       context: .
       dockerfile: Dockerfile.relay

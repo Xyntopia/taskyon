@@ -68,8 +68,11 @@ const createNode = () =>
       bootstrap({
         timeout: 1,
         list: [
-          '/ip4/127.0.0.1/tcp/9111/ws/p2p/12D3KooWSW1HFrSd2kwPzXBvVth5NJ4s3Ydf6VQ5CugPxqZU5Fa3',
-          //'/ip4/127.0.0.1/tcp/9111/ws',
+          '/ip4/213.199.53.86/tcp/9111/ws/p2p/12D3KooWEa5Fxzb7jrCMTdt4UGycyrCoM2NHLhQCYR1odRzjAx2c',
+          //'/ip4/213.199.53.86/tcp/9111/ws/p2p/12D3KooWSW1HFrSd2kwPzXBvVth5NJ4s3Ydf6VQ5CugPxqZU5Fa3',
+          '/dnsaddr/share.taskyon.space/9111/ws/p2p/12D3KooWSW1HFrSd2kwPzXBvVth5NJ4s3Ydf6VQ5CugPxqZU5Fa3', //'/ip4/127.0.0.1/tcp/9111/ws',
+          //'/ip4/127.0.0.1/tcp/9111/ws/p2p/12D3KooWSW1HFrSd2kwPzXBvVth5NJ4s3Ydf6VQ5CugPxqZU5Fa3',
+          //'/ip4/127.0.0.1/tcp/9111/ws/p2p/12D3KooWSW1HFrSd2kwPzXBvVth5NJ4s3Ydf6VQ5CugPxqZU5Fa3',
           //'/ip4/127.0.0.1/tcp/9111/ws/p2p/12D3KooWALpzWi4e1mwFEYTGaSJPqjZLfCXohFVXadcFrsRNm95b',
         ],
       }),

@@ -5,7 +5,8 @@
     "type": "module",
     "main": "relay.js",
     "scripts": {
-        "start": "node relay.js"
+        "start": "node relay.js",
+        "build": "vite build --config vite.config.relay.ts"
     },
     "dependencies": {
         "@libp2p/autonat": "*",

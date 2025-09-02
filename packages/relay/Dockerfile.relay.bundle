@@ -12,17 +12,23 @@ COPY packages/relay/package.json ./packages/relay/package.json
 COPY packages/taskyon ./packages/taskyon
 
 # install dependencies with cache mount
+#RUN --mount=type=cache,target=$YARN_CACHE_FOLDER \
+#    yarn install --production --frozen-lockfile --ignore-workspace-root-check --cwd packages/relay
+
 RUN --mount=type=cache,target=$YARN_CACHE_FOLDER \
-    yarn install --production --frozen-lockfile --ignore-workspace-root-check --cwd packages/relay
+    yarn install --frozen-lockfile
 
 COPY packages/relay/ ./packages/relay/
+# WORKDIR /app/packages/relay
+RUN yarn --cwd packages/relay vite build --config vite.config.relay.js
+WORKDIR /app
 
 # ---- runtime ----
 FROM node:22-slim
 WORKDIR /app
 
 # copy only the built file
+COPY --from=builder /app/packages/relay/dist/relay.cjs ./relay.cjs
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/packages/relay/relay.js ./relay.js
 
-CMD ["node", "relay.js"]
+CMD ["node", "relay.cjs"]
