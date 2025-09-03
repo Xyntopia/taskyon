@@ -93,7 +93,7 @@
 
 <script setup lang="ts">
 import { createPeerNetwork } from '@taskyon/taskyon'
-import { useAsyncState } from '@vueuse/core'
+import { useAsyncState, useIntervalFn } from '@vueuse/core'
 import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import { safeYamlDump } from 'src/modules/yamlUtils'
 import { ref, onMounted } from 'vue'
@@ -149,9 +149,9 @@ onMounted(async () => {
     addToOutput(safeYamlDump(m))
   })
 
-  /*useIntervalFn(() => {
+  useIntervalFn(() => {
     nodeInfo.value = nw.state.value?.info() ?? {}
     //addToOutput('.$')
-  }, 2000)*/
+  }, 5000)
 })
 </script>

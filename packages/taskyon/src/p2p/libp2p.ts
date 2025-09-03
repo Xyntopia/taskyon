@@ -17,12 +17,10 @@ import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
 import type { DelegatedRoutingV1HttpApiClient } from '@helia/delegated-routing-v1-http-api-client'
 import { createDelegatedRoutingV1HttpApiClient } from '@helia/delegated-routing-v1-http-api-client'
-import { autoNAT } from '@libp2p/autonat'
-import { bootstrap } from '@libp2p/bootstrap'
 import { circuitRelayTransport } from '@libp2p/circuit-relay-v2'
 import { identify } from '@libp2p/identify'
 import type { Connection, Message, PeerId, SignedMessage, Libp2p } from '@libp2p/interface'
-import { disable, enable, prefixLogger } from '@libp2p/logger'
+import { enable, prefixLogger } from '@libp2p/logger'
 import { peerIdFromString } from '@libp2p/peer-id'
 import { ping } from '@libp2p/ping'
 import { pubsubPeerDiscovery } from '@libp2p/pubsub-peer-discovery'
@@ -34,7 +32,7 @@ import { multiaddr } from '@multiformats/multiaddr'
 import { createLibp2p } from 'libp2p'
 import type { Port } from 'src/modules/frpBus'
 import { createDuplexChannel } from 'src/modules/frpBus'
-import { BOOTSTRAP_PEER_IDS, CHAT_FILE_TOPIC, CHAT_TOPIC } from './constants'
+import { BOOTSTRAP_PEER_IDS, CHAT_FILE_TOPIC, CHAT_TOPIC, PUBSUB_PEER_DISCOVERY } from './constants'
 import { directMessage } from './direct-message'
 import { getAddresses, getPeerDetails, getPeerTypes } from './p2putils'
 import { sha256 } from 'multiformats/hashes/sha2'
@@ -44,9 +42,7 @@ const prefix = `ui`
 const logger = prefixLogger(prefix)
 const log = logger.forComponent('libp2p')
 
-const PUBSUB_PEER_DISCOVERY = 'browser-peer-discovery'
-
-const bootstrapList = [
+export const bootstrapList = [
   //'/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb',
   //'/ip4/192.168.188.111/tcp/9111/ws/p2p/12D3KooWKkVyefXaxbCkvQfxctMrQtBrnxrbmWYv6oyHn5ibSbTq',
   //'/ip4/213.199.53.86/tcp/9111/ws/p2p/12D3KooWEa5Fxzb7jrCMTdt4UGycyrCoM2NHLhQCYR1odRzjAx2c',
@@ -100,7 +96,7 @@ const createNode = async () => {
     addresses: {
       listen: [
         // 👇 Required to create circuit relay reservations in order to hole punch browser-to-browser WebRTC connections
-        '/p2p-circuit',
+        //'/p2p-circuit',
         // 👇 Listen for webRTC connection
         '/webrtc',
         ...relayListenAddrs,
@@ -112,7 +108,7 @@ const createNode = async () => {
       webTransport(),
       // 👇 Required to estalbish connections with peers supporting WebRTC-direct, e.g. the Rust-peer
       webRTCDirect(),
-      webRTC({
+      /*webRTC({
         rtcConfiguration: {
           iceServers: [
             {
@@ -120,7 +116,8 @@ const createNode = async () => {
             },
           ],
         },
-      }),
+      }),*/
+      webRTC(),
       circuitRelayTransport(),
     ],
     connectionEncrypters: [noise()],
@@ -133,10 +130,10 @@ const createNode = async () => {
       denyDialMultiaddr: () => false,
     },
     peerDiscovery: [
-      bootstrap({
+      /*bootstrap({
         timeout: 1,
         list: bootstrapList,
-      }),
+      }),*/
       pubsubPeerDiscovery({
         interval: 10_000,
         topics: [PUBSUB_PEER_DISCOVERY],
@@ -153,7 +150,7 @@ const createNode = async () => {
       // This relies on the public delegated routing endpoint https://docs.ipfs.tech/concepts/public-utilities/#delegated-routing
       delegatedRouting: () => delegatedClient,
       identify: identify(),
-      autoNat: autoNAT(),
+      //autoNat: autoNAT(),
       directMessage: directMessage(),
       ping: ping(),
     },
@@ -162,11 +159,14 @@ const createNode = async () => {
 
 // Factory function to create a PeerNetwork
 export const createPeerNetwork = async (): Promise<libp2pNetwork> => {
+  //enable('ui*,libp2p*,-libp2p:connection-manager*,-*:trace')
+  //enable('ui*,libp2p*')
   enable('ui*,libp2p*,-libp2p:connection-manager*,-*:trace')
 
   const enableLogging = (enableLogging: boolean) => {
-    if (enableLogging) enable('*,*:debug')
-    else disable()
+    log('enable logging', enableLogging)
+    //if (enableLogging) enable('*,*:debug')
+    //else disable()
   }
   // enable logging by default..
   enableLogging(true)
