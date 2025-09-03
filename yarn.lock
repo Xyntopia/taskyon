@@ -229,7 +229,7 @@
   resolved "https://registry.yarnpkg.com/@chainsafe/is-ip/-/is-ip-2.1.0.tgz#ba9ac32acd9027698e0b56b91c7af069d28d7931"
   integrity sha512-KIjt+6IfysQ4GCv66xihEitBjvhU/bixbbbFxdJ1sqCp4uJ0wuZiYBPhksZoy4lfaF0k9cwNzY5upEW/VWdw3w==
 
-"@chainsafe/libp2p-gossipsub@^14.1.1":
+"@chainsafe/libp2p-gossipsub@*", "@chainsafe/libp2p-gossipsub@^14.1.1":
   version "14.1.1"
   resolved "https://registry.yarnpkg.com/@chainsafe/libp2p-gossipsub/-/libp2p-gossipsub-14.1.1.tgz#d75e7c4369908321d7aef3aa7e84adb1795d5b32"
   integrity sha512-EUs2C+xHXXbw0pQQF2AN/ih4qB6BBWOGkDhvHz1VN52o2m/827IBEMT8RHdXMNZciQc90to1L57BKmhXkvztDw==
@@ -249,7 +249,7 @@
     uint8arraylist "^2.4.8"
     uint8arrays "^5.0.1"
 
-"@chainsafe/libp2p-noise@^16.0.1", "@chainsafe/libp2p-noise@^16.1.3", "@chainsafe/libp2p-noise@^16.1.4":
+"@chainsafe/libp2p-noise@*", "@chainsafe/libp2p-noise@^16.0.1", "@chainsafe/libp2p-noise@^16.1.3", "@chainsafe/libp2p-noise@^16.1.4":
   version "16.1.4"
   resolved "https://registry.yarnpkg.com/@chainsafe/libp2p-noise/-/libp2p-noise-16.1.4.tgz#6788c1ad3e2567f37189e552fc77e67c57f88505"
   integrity sha512-f4FlyRVndcs4PoioOIZWrFc6wfO/mrAj7H63o0+eA0O2xhcoRkxHh6zna4W+WtScaF/Ua/UULgiNGuKNpLvLlQ==
@@ -272,7 +272,7 @@
     uint8arrays "^5.0.0"
     wherearewe "^2.0.1"
 
-"@chainsafe/libp2p-yamux@^7.0.1", "@chainsafe/libp2p-yamux@^7.0.4":
+"@chainsafe/libp2p-yamux@*", "@chainsafe/libp2p-yamux@^7.0.1", "@chainsafe/libp2p-yamux@^7.0.4":
   version "7.0.4"
   resolved "https://registry.yarnpkg.com/@chainsafe/libp2p-yamux/-/libp2p-yamux-7.0.4.tgz#aae2e9ef3fa80e90b60d6aa69c554cd81f618a9c"
   integrity sha512-Qw+EB9ew/9hRCq9V702gkm5xXThFHQ3Bdvh01M+enI1RScriSDWFGod02dwNHUxsYRc743i49sLlHp0edC7hSQ==
@@ -823,7 +823,7 @@
     progress-events "^1.0.1"
     uint8arraylist "^2.4.8"
 
-"@helia/delegated-routing-v1-http-api-client@^4.2.1":
+"@helia/delegated-routing-v1-http-api-client@^4.2.1", "@helia/delegated-routing-v1-http-api-client@^4.2.5":
   version "4.2.5"
   resolved "https://registry.yarnpkg.com/@helia/delegated-routing-v1-http-api-client/-/delegated-routing-v1-http-api-client-4.2.5.tgz#a52c229b681ff8f66368306a20f027eb62a4648d"
   integrity sha512-fFqVhs7a4TnpKQ1cZ4im3tj53v+8UZLFkQo85otl/GpbIVBmBoGbjkDHGPv4UdjJ2lmYM/cRdnHsYbfjuc5pwA==
@@ -1959,7 +1959,7 @@
     "@lezer/highlight" "^1.0.0"
     "@lezer/lr" "^1.0.0"
 
-"@libp2p/autonat@^2.0.19", "@libp2p/autonat@^2.0.38":
+"@libp2p/autonat@*", "@libp2p/autonat@^2.0.19", "@libp2p/autonat@^2.0.38":
   version "2.0.38"
   resolved "https://registry.yarnpkg.com/@libp2p/autonat/-/autonat-2.0.38.tgz#38ab31e2ede7daaf38b8d4c971d7660903a87b17"
   integrity sha512-SuJUbXsF0YQg926hxb6d/f7x4NEHqWHLSXnR6Og5fJSOv2A1i1xRUe8zXaCuxQkPa+CguH2tAPZ+l1A+NZlF5A==
@@ -1989,7 +1989,7 @@
     "@multiformats/multiaddr" "^12.4.4"
     main-event "^1.0.1"
 
-"@libp2p/circuit-relay-v2@^3.1.10", "@libp2p/circuit-relay-v2@^3.2.24":
+"@libp2p/circuit-relay-v2@*", "@libp2p/circuit-relay-v2@^3.1.10", "@libp2p/circuit-relay-v2@^3.2.24":
   version "3.2.24"
   resolved "https://registry.yarnpkg.com/@libp2p/circuit-relay-v2/-/circuit-relay-v2-3.2.24.tgz#2bd568f2be46e813cd201b968590e8da38cfce95"
   integrity sha512-JXSm0dOOpPC+Yax0ngLYWqELHLFmaYPNZOhZkrr0iEtbiXwhDXuDuwT71pwmozp7h/rYd2YFoIk178AhZ4711Q==
@@ -2087,7 +2087,7 @@
     uint8arrays "^5.1.0"
     undici "^6.21.0"
 
-"@libp2p/identify@^3.0.18", "@libp2p/identify@^3.0.39":
+"@libp2p/identify@*", "@libp2p/identify@^3.0.18", "@libp2p/identify@^3.0.39":
   version "3.0.39"
   resolved "https://registry.yarnpkg.com/@libp2p/identify/-/identify-3.0.39.tgz#93cef746674fcdee8d60ba3decfeb62bab16bd38"
   integrity sha512-302y1LAGuPy8im+LUiB5+2sUOa/VZuAphOAKLsAQ/74EglWlSrw0Q7f09WUQvfNXmn7XpQnDh7GEI3NZBl54Jw==
@@ -2406,7 +2406,7 @@
     uint8arraylist "^2.4.8"
     uint8arrays "^5.1.0"
 
-"@libp2p/tcp@^10.0.18", "@libp2p/tcp@^10.1.19":
+"@libp2p/tcp@*", "@libp2p/tcp@^10.0.18", "@libp2p/tcp@^10.1.19":
   version "10.1.19"
   resolved "https://registry.yarnpkg.com/@libp2p/tcp/-/tcp-10.1.19.tgz#32e6304ca2d2cb1127a201aecb84c9faa82085c0"
   integrity sha512-Z+s1n7gBexc32d+DUhOGgQpA8HVukubmNJHzolzZPqly5DYkG2f6SIelitp+M5tDYOPH/43EH9pPSSZ3vUuOwQ==
@@ -2527,7 +2527,7 @@
     uint8arraylist "^2.4.8"
     uint8arrays "^5.1.0"
 
-"@libp2p/websockets@^9.1.5", "@libp2p/websockets@^9.2.19":
+"@libp2p/websockets@*", "@libp2p/websockets@^9.1.5", "@libp2p/websockets@^9.2.19":
   version "9.2.19"
   resolved "https://registry.yarnpkg.com/@libp2p/websockets/-/websockets-9.2.19.tgz#e680b896a803a6a9d1e4f2a0f62fc8f9f7d60a08"
   integrity sha512-+g2qI9Lgvyofoc6GFztPoPVZV+z/lg9pIUfneHht6j88Y7tH3NrAQ7Ki+9lqS5XBX2h1O1bHULWbCaVYCj9TZg==
@@ -10726,7 +10726,7 @@ levn@^0.4.1:
     prelude-ls "^1.2.1"
     type-check "~0.4.0"
 
-libp2p@^2.10.0, libp2p@^2.9.0:
+libp2p@*, libp2p@^2.10.0, libp2p@^2.9.0:
   version "2.10.0"
   resolved "https://registry.yarnpkg.com/libp2p/-/libp2p-2.10.0.tgz#8c69731e80b77e76c821a904b805c22b4448f92b"
   integrity sha512-tgDz7YuGg1XX7UfxebCUii+IGsly/8V0ZRZdFJSDySY2i3UuqpCTsEbRApH3cBKFhcAf00nx9xj8GL9zfo+XWw==

@@ -27,3 +27,10 @@ export function chunk<T>(arr: T[], size: number): T[][] {
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
   return out
 }
+
+export async function first<T>(source: AsyncIterable<T> | Iterable<T>): Promise<T | undefined> {
+  for await (const item of source) {
+    return item
+  }
+  return undefined
+}

@@ -93,12 +93,14 @@
 
 <script setup lang="ts">
 import { createPeerNetwork } from '@taskyon/taskyon'
-import { useAsyncState, useIntervalFn } from '@vueuse/core'
+import { useAsyncState } from '@vueuse/core'
 import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import { safeYamlDump } from 'src/modules/yamlUtils'
 import { ref, onMounted } from 'vue'
 
-const nw = useAsyncState(createPeerNetwork(), undefined)
+const nwpromise = createPeerNetwork()
+
+const nw = useAsyncState(nwpromise, undefined)
 
 // Reactive data
 const multiaddrInput = ref('')
@@ -137,13 +139,19 @@ const addToOutput = (message: string) => {
 
 // Lifecycle
 onMounted(async () => {
-  await nw.state.value?.start()
+  const n = await nwpromise
+  await n.start()
 
   nodeInfo.value = { started: true }
 
-  useIntervalFn(() => {
+  n.port.receive((m) => {
+    console.log(m)
+    addToOutput(safeYamlDump(m))
+  })
+
+  /*useIntervalFn(() => {
     nodeInfo.value = nw.state.value?.info() ?? {}
-    addToOutput('getting node info...')
-  }, 2000)
+    //addToOutput('.$')
+  }, 2000)*/
 })
 </script>

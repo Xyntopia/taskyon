@@ -17,7 +17,7 @@
     "dev": "yarn run quasar dev",
     "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .gitignore",
     "lint": "vue-tsc --noEmit && eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}'",
-    "relay": "yarn workspace @taskyon/taskyon relay"
+    "relay": "yarn workspace @taskyon/relay start"
   },
   "dependencies": {
     "@chainsafe/libp2p-gossipsub": "^14.1.1",
@@ -28,6 +28,7 @@
     "@codemirror/lang-python": "^6.1.5",
     "@codemirror/theme-one-dark": "^6.1.2",
     "@electric-sql/pglite": "^0.2.15",
+    "@helia/delegated-routing-v1-http-api-client": "^4.2.5",
     "@helia/strings": "^4.1.0",
     "@helia/unixfs": "^5.1.0",
     "@huggingface/transformers": "^3.1.2",
