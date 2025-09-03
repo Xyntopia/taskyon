@@ -26,7 +26,7 @@ async function registerPasskey(): Promise<PublicKeyCredential> {
  * Derives a device-bound key by initiating a WebAuthn authentication.
  * The returned key is derived from the signature of a random challenge.
  */
-async function deriveDeviceKey(storedCredentialId: Uint8Array): Promise<CryptoKey> {
+async function deriveDeviceKey(storedCredentialId: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   const challenge = crypto.getRandomValues(new Uint8Array(32))
   const publicKey: PublicKeyCredentialRequestOptions = {
     challenge,
@@ -104,7 +104,7 @@ async function importSessionKey(sessionToken: string): Promise<CryptoKey> {
 /**
  * Ensures a passkey exists. If not, registers a new one and stores its ID.
  */
-async function ensurePasskey(STORAGE_CREDENTIAL_ID: string): Promise<Uint8Array> {
+async function ensurePasskey(STORAGE_CREDENTIAL_ID: string): Promise<Uint8Array<ArrayBuffer>> {
   const storedId = localStorage.getItem(STORAGE_CREDENTIAL_ID)
 
   if (storedId) {

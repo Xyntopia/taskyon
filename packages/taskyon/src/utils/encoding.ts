@@ -1,30 +1,28 @@
-export function uint8ArrayToBase64UrlSafe(buffer: ArrayBufferLike) {
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)))
-  return base64
+export function uint8ArrayToBase64UrlSafe(data: Uint8Array | ArrayBuffer) {
+  const u8 = data instanceof Uint8Array ? data : new Uint8Array(data)
+  let binary = ''
+  for (let i = 0; i < u8.length; i++) {
+    binary += String.fromCharCode(u8[i]!)
+  }
+  return btoa(binary)
     .replace(/\+/g, '-') // Convert '+' to '-'
     .replace(/\//g, '_') // Convert '/' to '_'
     .replace(/=+$/, '') // Remove trailing '='
 }
 
-export function base64UrlToUint8Array(base64UrlString: unknown) {
+export function base64UrlToUint8Array(base64UrlString: unknown): Uint8Array<ArrayBuffer> {
   if (typeof base64UrlString !== 'string') {
     throw new TypeError('Expected base64UrlString to be a string')
   }
-  // Add padding '=' if necessary
   const padding = '='.repeat((4 - (base64UrlString.length % 4)) % 4)
-  const base64 =
-    base64UrlString
-      .replace(/-/g, '+') // Convert '-' to '+'
-      .replace(/_/g, '/') + // Convert '_' to '/'
-    padding
+  const base64 = base64UrlString.replace(/-/g, '+').replace(/_/g, '/') + padding
 
   const binaryString = atob(base64)
   const len = binaryString.length
-  const uint8Array = new Uint8Array(len)
-
+  const arr = new Uint8Array(len)
   for (let i = 0; i < len; i++) {
-    uint8Array[i] = binaryString.charCodeAt(i)
+    arr[i] = binaryString.charCodeAt(i)
   }
-
-  return uint8Array
+  // re-wrap ensures it's `ArrayBuffer`, not `ArrayBufferLike`
+  return new Uint8Array(arr)
 }

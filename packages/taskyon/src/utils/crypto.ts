@@ -231,11 +231,11 @@ export function validateSeedPhrase(mnemonic: string): boolean {
 }
 
 // Convert a mnemonic to a cryptographic seed
-export function mnemonicToSeed(mnemonic: string, password: string = ''): Uint8Array {
+export function mnemonicToSeed(mnemonic: string, password: string = '') {
   if (!validateSeedPhrase(mnemonic)) {
     throw new Error('Invalid seed phrase')
   }
-  return mnemonicToSeedSync(mnemonic, password)
+  return new Uint8Array(mnemonicToSeedSync(mnemonic, password))
 }
 
 function encodeEd25519Pkcs8(privateKey: Uint8Array): ArrayBuffer {
@@ -264,7 +264,7 @@ function encodeEd25519Pkcs8(privateKey: Uint8Array): ArrayBuffer {
   return out.buffer
 }
 
-const deriveKey32 = async (seed64: Uint8Array, info: string = '') =>
+const deriveKey32 = async (seed64: Uint8Array<ArrayBuffer>, info: string = '') =>
   new Uint8Array(
     await crypto.subtle.deriveBits(
       {
@@ -278,11 +278,11 @@ const deriveKey32 = async (seed64: Uint8Array, info: string = '') =>
     ),
   )
 
-async function generateKeyPairsFromSeed(seed: Uint8Array, extractablePublic = true) {
+async function generateKeyPairsFromSeed(seed: Uint8Array<ArrayBuffer>, extractablePublic = true) {
   if (seed.length <= 32) throw new Error('Seed must be at least 32 bytes')
 
   const keySeed = await deriveKey32(seed)
-  const publicRaw = await getPublicKeyAsync(keySeed)
+  const publicRaw = new Uint8Array(await getPublicKeyAsync(keySeed))
 
   // Build PKCS#8 from raw private key
   const pkcs8 = encodeEd25519Pkcs8(keySeed)
@@ -303,17 +303,17 @@ async function generateKeyPairsFromSeed(seed: Uint8Array, extractablePublic = tr
     ['verify'],
   )
 
-  const pkb64 = uint8ArrayToBase64UrlSafe(publicRaw.buffer)
+  const pkb64 = uint8ArrayToBase64UrlSafe(publicRaw)
 
   return { privateKey, publicKey, pkb64 }
 }
 
-export const signData = (data: Uint8Array, privateKey: CryptoKey) =>
+export const signData = (data: Uint8Array<ArrayBuffer>, privateKey: CryptoKey) =>
   crypto.subtle.sign('Ed25519', privateKey, data)
 
 export const verifySignature = (
-  signature: Uint8Array,
-  data: Uint8Array,
+  signature: Uint8Array<ArrayBuffer>,
+  data: Uint8Array<ArrayBuffer>,
   publicKey: CryptoKeyPair['publicKey'],
 ) => crypto.subtle.verify('Ed25519', publicKey, signature, data)
 
