@@ -43,12 +43,33 @@
             <div class="q-mb-lg">
               <div class="text-h5 text-primary q-mb-sm">Node Info</div>
               Address: {{ nw.state.value?.getPeerId() }}
-              <pre>
-            {{ safeYamlDump(nodeInfo) }}
-          </pre
-              >
+              <div>
+                peer types:
+                <pre>{{ safeYamlDump(nodeInfo?.peerTypes) }}</pre>
+              </div>
+              <q-expansion-item label="addresses of this node" expand-separator>
+                <div class="overflow-auto" style="max-height: 300px">
+                  <q-list>
+                    <q-item v-for="addr in nodeInfo?.nodeAddresses" :key="addr">
+                      {{ addr }}
+                    </q-item>
+                  </q-list>
+                </div>
+              </q-expansion-item>
+              <q-expansion-item label="peers" expand-separator>
+                <div class="overflow-auto">
+                  <q-list>
+                    <q-item
+                      v-for="peer in nodeInfo?.nodePeerDetails"
+                      :key="peer.peerConnections[0]!"
+                    >
+                      <q-item-section side>{{ peer.nodeType[0] }}</q-item-section>
+                      <q-item-section>{{ peer.peerConnections }}</q-item-section>
+                    </q-item>
+                  </q-list>
+                </div>
+              </q-expansion-item>
             </div>
-
             <!-- Peers Section -->
             <div class="q-mb-lg">
               <div class="text-h5 text-primary q-mb-sm">Peers</div>
@@ -97,6 +118,7 @@ import { useAsyncState, useIntervalFn } from '@vueuse/core'
 import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import { safeYamlDump } from 'src/modules/yamlUtils'
 import { ref, onMounted } from 'vue'
+import type { NodeInfo } from '../../../packages/taskyon/src/p2p/libp2p'
 
 const nwpromise = createPeerNetwork()
 
@@ -105,7 +127,7 @@ const nw = useAsyncState(nwpromise, undefined)
 // Reactive data
 const multiaddrInput = ref('')
 const output = ref('')
-const nodeInfo = ref<Record<string, unknown>>({})
+const nodeInfo = ref<NodeInfo>()
 const connecting = ref(false)
 
 // Methods
@@ -142,15 +164,13 @@ onMounted(async () => {
   const n = await nwpromise
   await n.start()
 
-  nodeInfo.value = { started: true }
-
   n.port.receive((m) => {
     console.log(m)
     addToOutput(safeYamlDump(m))
   })
 
   useIntervalFn(() => {
-    nodeInfo.value = nw.state.value?.info() ?? {}
+    nodeInfo.value = nw.state.value?.info()
     //addToOutput('.$')
   }, 5000)
 })

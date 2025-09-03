@@ -74,9 +74,28 @@ type PeerNetwork = {
   port: Port<P2PMessage, P2PMessage>
 }
 
+export type NodeInfo = {
+  peerCount: number
+  peerTypes: {
+    'Circuit Relay': number
+    WebRTC: number
+    'WebRTC Direct': number
+    WebSockets: number
+    'WebSockets (secure)': number
+    WebTransport: number
+    Other: number
+  }
+  nodeAddressCount: number
+  nodeAddresses: string[]
+  nodePeerDetails: {
+    nodeType: string[]
+    peerConnections: string[]
+  }[]
+}
+
 interface libp2pNetwork extends PeerNetwork {
   connectWith: (addr: string) => Promise<unknown>
-  info: () => Record<string, unknown>
+  info: () => NodeInfo
   enableLogging: (enableLogging: boolean) => void
 }
 
