@@ -7,6 +7,9 @@ import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { webSockets } from '@libp2p/websockets'
 import { tcp } from '@libp2p/tcp'
 import { circuitRelayServer } from '@libp2p/circuit-relay-v2'
+import { enable } from '@libp2p/logger'
+
+enable('libp2p:*')
 
 // Create logger that always outputs to stdout for Docker compatibility
 const createStdoutLogger = (name) => {
@@ -33,6 +36,11 @@ async function main() {
   const libp2p = await createLibp2p({
     addresses: {
       listen: ['/ip4/0.0.0.0/tcp/9111/ws', '/ip4/0.0.0.0/tcp/9112'],
+      /*announce: [
+        `/ip4/213.199.53.86/tcp/9111/ws/p2p/${YOUR_RELAY_ID}`,
+        `/ip4/213.199.53.86/tcp/9112/p2p/${YOUR_RELAY_ID}`,
+      ],*/
+      //TODO: announce: ['/ip4/213.199.53.86/tcp/9111/ws/p2p/YOUR_RELAY_ID']
     },
     transports: [webSockets(), tcp()],
     connectionEncrypters: [noise()],
@@ -76,6 +84,17 @@ async function main() {
   libp2p.addEventListener('peer:disconnect', (evt) => {
     log.info(`Peer disconnected: ${evt.detail.toString()}`)
   })
+
+  setInterval(async () => {
+    try {
+      const s = await libp2p.services.autoNat.getStatus()
+      log.info(
+        `[AutoNAT poll] reachability=${s.reachability} addr=${s.publicAddr?.toString() ?? '-'}`,
+      )
+    } catch (e) {
+      log.warn(`[AutoNAT poll] failed: ${e.message}`)
+    }
+  }, 30_000)
 
   log.info('=== RELAY SERVER READY ===')
   log.info(`PeerID: ${libp2p.peerId.toString()}`)
