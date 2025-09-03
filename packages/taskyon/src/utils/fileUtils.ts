@@ -6,7 +6,7 @@ import type { EncryptedDataRow } from './encrypt'
 import { decryptDataFile, encryptDataFile, EncryptedDataRowMixed } from './encrypt'
 import { chunk } from './objHelpers'
 
-export function compressObjects(objs: unknown): Uint8Array {
+export function compressObjects(objs: unknown): Uint8Array<ArrayBuffer> {
   const jsonStr = JSON.stringify(objs)
   const data = new TextEncoder().encode(jsonStr)
 
@@ -15,7 +15,7 @@ export function compressObjects(objs: unknown): Uint8Array {
   // Option B: MessagePack (skip JSON.stringify)
   // const data = msgpack.encode(objs)
 
-  return deflateSync(data)
+  return new Uint8Array(deflateSync(data))
 }
 
 export async function encryptCompressObject(
@@ -27,7 +27,7 @@ export async function encryptCompressObject(
   const compressed = compressObjects(objs)
   const encrypted = await encryptDataFile(compressed, info, recoveryKey, sessionKey, false)
   const packed = encode(encrypted)
-  return packed
+  return new Uint8Array(packed)
 }
 
 export async function decompressEncryptedObject(
@@ -52,7 +52,7 @@ export async function filesToZip(files: File[], name: string): Promise<File> {
   const entries: Record<string, Uint8Array> = {}
   for (const f of files) entries[f.name] = new Uint8Array(await f.arrayBuffer())
   const zipped = zipSync(entries, { level: 6 }) // balanced speed/ratio
-  return new File([zipped], name, { type: 'application/zip' })
+  return new File([new Uint8Array(zipped)], name, { type: 'application/zip' })
 }
 
 export async function createZipFiles(

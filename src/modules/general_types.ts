@@ -2,7 +2,7 @@ import { signData, uint8ArrayToBase64UrlSafe, verifySignature } from '@taskyon/t
 import type { Request } from 'express'
 
 // Utility to serialize data for signing
-function serializeForSigning(url: string, body?: unknown): Uint8Array {
+function serializeForSigning(url: string, body?: unknown): Uint8Array<ArrayBuffer> {
   const serialized = body ? JSON.stringify({ url, body }) : JSON.stringify({ url })
   return new TextEncoder().encode(serialized)
 }
@@ -19,7 +19,7 @@ export async function signRequest(
 
 // Verify a request signature (URL + optional body)
 export async function verifyRequest(
-  signature: Uint8Array,
+  signature: Uint8Array<ArrayBuffer>,
   publicKey: CryptoKeyPair['publicKey'],
   url: string,
   body?: unknown,

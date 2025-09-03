@@ -6,7 +6,7 @@ import { partialTaskDraft } from '@taskyon/taskyon'
 
 export const EncryptedTasks = z.object({
   type: z.literal('addTasks'),
-  data: z.instanceof(Uint8Array) as z.ZodType<Uint8Array>,
+  data: z.instanceof(Uint8Array<ArrayBuffer>) as z.ZodType<Uint8Array<ArrayBuffer>>,
   info: z.string(),
   ids: z.array(z.string()),
 })

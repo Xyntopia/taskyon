@@ -158,8 +158,8 @@ export async function encryptDataFile(
 // Decrypt data using derived key
 export async function decryptData(
   rowKey: CryptoKey,
-  iv: string | Uint8Array,
-  ciphertext: string | Uint8Array,
+  iv: string | Uint8Array<ArrayBuffer>,
+  ciphertext: string | Uint8Array<ArrayBuffer>,
   id: string | number,
 ) {
   // --- START OF CHANGES ---
