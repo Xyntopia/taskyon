@@ -13,6 +13,7 @@ export * from './utils/crypto'
 export * from './utils/encoding'
 export * from './utils/cryptoSession'
 export * from './utils/encrypt'
+export * from './utils/frpBus'
 export { createPeerNetwork } from './p2p/libp2p'
 
 /**

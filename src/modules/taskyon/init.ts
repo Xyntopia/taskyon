@@ -34,7 +34,7 @@ import {
   createIframeMux,
   createPortApi,
   createTypeFilteredPort,
-} from '../frpBus'
+} from '../../../packages/taskyon/src/utils/frpBus'
 import { testingTools } from '../tools/testTools'
 import { TaskyonMessage } from './apiTypes'
 import { dump } from 'js-yaml'

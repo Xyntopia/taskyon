@@ -1,6 +1,6 @@
 //iFrameClient.ts
 
-import { createDuplexChannel, MessageChannelBridge } from 'src/modules/frpBus'
+import { createDuplexChannel, MessageChannelBridge } from '@taskyon/taskyon'
 import type { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
 
 export async function waitForMessagePort(

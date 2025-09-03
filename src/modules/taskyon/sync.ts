@@ -1,6 +1,6 @@
 // sync.ts
+import { createDuplexChannel, createPortApi } from '@taskyon/taskyon'
 import { useGdrive } from '../gdrive'
-import { createDuplexChannel, createPortApi } from '../frpBus'
 import { TyP2P } from './apiTypes'
 
 // TODO: generalize this to all kinds of cloud storages / peers

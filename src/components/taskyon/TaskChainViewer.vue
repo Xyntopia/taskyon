@@ -135,19 +135,17 @@
 </template>
 
 <script setup lang="ts">
-import type { ChatResponseType } from 'src/modules/taskyon/types'
+import { matArrowDropDown } from '@quasar/extras/material-icons'
+import type { TaskNode, Unsubscribe } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
-import { asyncComputed } from 'src/modules/vueUtils'
-import { getReasoning, useTaskyonStore } from 'src/stores/taskyonState'
-import { computed, nextTick, onBeforeUnmount, watch } from 'vue'
-import { ref } from 'vue'
-import { type TaskTreeNode } from 'src/modules/taskyon/taskManager'
-import type { Unsubscribe } from 'src/modules/frpBus'
-import { matArrowDropDown } from '@quasar/extras/material-icons'
 import { accumulateStep } from 'src/modules/taskyon/chat'
+import { type TaskTreeNode } from 'src/modules/taskyon/taskManager'
+import type { ChatResponseType } from 'src/modules/taskyon/types'
+import { asyncComputed } from 'src/modules/vueUtils'
 import { safeYamlDump } from 'src/modules/yamlUtils'
-import type { TaskNode } from '@taskyon/taskyon'
+import { getReasoning, useTaskyonStore } from 'src/stores/taskyonState'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 const tystate = useTaskyonStore()
 const showLogs = ref(false)

@@ -1,37 +1,39 @@
-import { defineStore } from 'pinia'
-import { watch, computed, ref, readonly, watchEffect } from 'vue'
-import type { ChatResponseType, TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
-import { type Model, getCurrentModel, llmSettings, type TyProfile } from 'src/modules/taskyon/types'
-import axios from 'axios' // TODO: replace with fetch
-import { Notify } from 'quasar' // load dynamically! :)
-import { useQuasar } from 'quasar'
-import { getApiConfig } from 'src/modules/taskyon/types'
-import type { Taskyon } from 'src/modules/taskyon/init'
-import { tyCore } from 'src/modules/taskyon/init'
-import { availableModels } from 'src/modules/taskyon/chat'
-import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
-import { useAppStateStore } from './appState'
-import type { Port } from 'src/modules/frpBus'
+import type { Asyncify, InternalTool, Port } from '@taskyon/taskyon'
 import {
   createDuplexChannel,
   createPortApi,
   createTypeFilteredPort,
   filter,
-} from 'src/modules/frpBus'
+  TaskNode,
+  toolCall,
+} from '@taskyon/taskyon'
+import axios from 'axios' // TODO: replace with fetch
+import { defineStore } from 'pinia'
+import { Notify, useQuasar } from 'quasar' // load dynamically! :)
 import { setColors } from 'src/boot/brand-colors'
 import { setPrismTheme } from 'src/modules/markdownUtils '
-import { onScopeDispose } from 'vue'
-import { guiTools } from 'src/modules/tools/GuiTools'
-import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
-import { match, P } from 'ts-pattern'
-import type { InternalTool, Asyncify } from '@taskyon/taskyon'
-import { TaskNode } from '@taskyon/taskyon'
-import { toolCall } from '@taskyon/taskyon'
-import { usePyodideWebworker } from 'src/modules/taskyon/webWorkerApi'
-import { areWeInIframe, waitForIframeDuplexChannel } from './iframeClient'
-import { gDriveSyncPort } from 'src/modules/taskyon/sync'
 import type { AuthenticationOptions, TokenGetter } from 'src/modules/oauth'
 import { OAUTH_PROVIDERS, usePersistentOauth } from 'src/modules/oauth'
+import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
+import { availableModels } from 'src/modules/taskyon/chat'
+import type { Taskyon } from 'src/modules/taskyon/init'
+import { tyCore } from 'src/modules/taskyon/init'
+import { gDriveSyncPort } from 'src/modules/taskyon/sync'
+import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
+import type { ChatResponseType, TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
+import {
+  getApiConfig,
+  getCurrentModel,
+  llmSettings,
+  type Model,
+  type TyProfile,
+} from 'src/modules/taskyon/types'
+import { usePyodideWebworker } from 'src/modules/taskyon/webWorkerApi'
+import { guiTools } from 'src/modules/tools/GuiTools'
+import { match, P } from 'ts-pattern'
+import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
+import { useAppStateStore } from './appState'
+import { areWeInIframe, waitForIframeDuplexChannel } from './iframeClient'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
