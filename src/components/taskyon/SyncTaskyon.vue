@@ -1,10 +1,9 @@
 <template>
   <q-list dense>
-    <template v-if="state.appConfiguration.expertMode">
-      <q-item-label header>
-        Task Synchronization
-        <InfoDialog
-          info-text="**Taskyon** makes it easy to **synchronize your tasks securely across all your devices**.
+    <q-item-label header>
+      Task Device Synchronization
+      <InfoDialog
+        info-text="**Taskyon** makes it easy to **synchronize your tasks securely across all your devices**.
 In addition, you can choose to connect with third-party cloud storage providers—like Google Drive—for seamless access everywhere.
 
 ---
@@ -15,11 +14,12 @@ In practice, this means that **only you** can read your data—**not** Taskyon�
 
 With Taskyon, your tasks are always **yours alone**.
 "
-        />
-      </q-item-label>
-      <q-item>
-        <SyncAskDialog />
-      </q-item>
+      />
+    </q-item-label>
+    <q-item>
+      <SyncAskDialog />
+    </q-item>
+    <template v-if="state.appConfiguration.expertMode">
       <q-expansion-item label="ID Management" expand-separator default-opened class="q-py-sm">
         <q-item v-if="false">
           <q-item-label caption>
