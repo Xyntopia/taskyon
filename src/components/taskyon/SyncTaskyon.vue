@@ -20,7 +20,7 @@ With Taskyon, your tasks are always **yours alone**.
       <SyncAskDialog />
     </q-item>
     <template v-if="state.appConfiguration.expertMode">
-      <q-expansion-item label="ID Management" expand-separator default-opened class="q-py-sm">
+      <q-expansion-item label="ID Management" expand-separator class="q-py-sm">
         <q-item v-if="false">
           <q-item-label caption>
             Device ID
@@ -139,93 +139,94 @@ and verify the authenticity of messages sent by other users."
       <q-item> </q-item>
       <q-separator spaced />-->
     </template>
-    <q-item-label header>Task Backup</q-item-label>
-    <q-item class="q-mb-lg">
-      <q-item-section>
-        <q-btn
-          :icon="matDownload"
-          flat
-          label="Save all Chats & Tasks"
-          @click="onDownloadTaskyonData"
-        >
-        </q-btn>
-      </q-item-section>
-      <q-item-section>
-        <FileDropzone disable-dropzone-border accept="*" @add-files="onUploadTaskyonData">
-          <q-btn :icon="matUpload" label="Upload Tasks from file" flat />
-        </FileDropzone>
-      </q-item-section>
-    </q-item>
-    <q-item>
-      <q-item-section>
-        <TyResetButton
-          :icon="matDeleteForever"
-          label="Delete Taskyon Chat Data"
-          color="red"
-          outline
-          mode="tasks"
-        >
-        </TyResetButton>
-      </q-item-section>
-    </q-item>
-    <q-separator spaced />
-    <q-item-label header>Taskyon Configuration Backup</q-item-label>
-    <q-item>
-      <q-item-section avatar>
-        <q-icon :name="matSave" size="md" />
-      </q-item-section>
-      <q-item-section>Download Settings:</q-item-section>
-      <div class="row q-gutter-xs">
-        <q-btn label="JSON" outline @click="downloadSettings('json')"></q-btn>
-        <q-btn label="YAML" outline @click="downloadSettings('yaml')"></q-btn>
-      </div>
-    </q-item>
-    <q-item>
-      <q-item-section avatar>
-        <q-icon :name="matUpload" size="md" />
-      </q-item-section>
-      <q-item-section>Upload Settings:</q-item-section>
-      <div class="row q-gutter-xs">
-        <FileDropzone disable-dropzone-border accept="*" @add-files="loadSettingsJson">
-          <q-btn outline class="fit">
-            JSON
-            <q-tooltip>Select Json file for upload!</q-tooltip>
+    <q-expansion-item label="Task Backup" expand-separator class="q-py-sm">
+      <q-item class="q-mb-lg">
+        <q-item-section>
+          <q-btn
+            :icon="matDownload"
+            flat
+            label="Save all Chats & Tasks"
+            @click="onDownloadTaskyonData"
+          >
           </q-btn>
-        </FileDropzone>
-        <FileDropzone disable-dropzone-border accept="*" @add-files="loadSettingsYaml">
-          <q-btn outline class="fit">
-            YAML
-            <q-tooltip>Select YAML file for upload!</q-tooltip>
+        </q-item-section>
+        <q-item-section>
+          <FileDropzone disable-dropzone-border accept="*" @add-files="onUploadTaskyonData">
+            <q-btn :icon="matUpload" label="Upload Tasks from file" flat />
+          </FileDropzone>
+        </q-item-section>
+      </q-item>
+      <q-item>
+        <q-item-section>
+          <TyResetButton
+            :icon="matDeleteForever"
+            label="Delete Taskyon Chat Data"
+            color="red"
+            outline
+            mode="tasks"
+          >
+          </TyResetButton>
+        </q-item-section>
+      </q-item>
+    </q-expansion-item>
+    <q-expansion-item label="Taskyon Configuration Backup" expand-separator class="q-py-sm">
+      <q-item>
+        <q-item-section avatar>
+          <q-icon :name="matSave" size="md" />
+        </q-item-section>
+        <q-item-section>Download Settings:</q-item-section>
+        <div class="row q-gutter-xs">
+          <q-btn label="JSON" outline @click="downloadSettings('json')"></q-btn>
+          <q-btn label="YAML" outline @click="downloadSettings('yaml')"></q-btn>
+        </div>
+      </q-item>
+      <q-item>
+        <q-item-section avatar>
+          <q-icon :name="matUpload" size="md" />
+        </q-item-section>
+        <q-item-section>Upload Settings:</q-item-section>
+        <div class="row q-gutter-xs">
+          <FileDropzone disable-dropzone-border accept="*" @add-files="loadSettingsJson">
+            <q-btn outline class="fit">
+              JSON
+              <q-tooltip>Select Json file for upload!</q-tooltip>
+            </q-btn>
+          </FileDropzone>
+          <FileDropzone disable-dropzone-border accept="*" @add-files="loadSettingsYaml">
+            <q-btn outline class="fit">
+              YAML
+              <q-tooltip>Select YAML file for upload!</q-tooltip>
+            </q-btn>
+          </FileDropzone>
+        </div>
+      </q-item>
+      <q-item class="q-pa-md q-gutter-sm">
+        <q-item-section avatar>
+          <q-icon size="md" :name="mdiGoogleDrive" />
+        </q-item-section>
+        <q-item-section> Export app & settings to gdrive: </q-item-section>
+        <div class="row q-gutter-xs">
+          <q-btn :icon="matSave" outline @click="onSyncGdrive">
+            <q-tooltip> Save configuration to gdrive</q-tooltip>
           </q-btn>
-        </FileDropzone>
-      </div>
-    </q-item>
-    <q-item class="q-pa-md q-gutter-sm">
-      <q-item-section avatar>
-        <q-icon size="md" :name="mdiGoogleDrive" />
-      </q-item-section>
-      <q-item-section> Export app & settings to gdrive: </q-item-section>
-      <div class="row q-gutter-xs">
-        <q-btn :icon="matSave" outline @click="onSyncGdrive">
-          <q-tooltip> Save configuration to gdrive</q-tooltip>
-        </q-btn>
-        <q-btn :icon="matSync" outline @click="onUpdateAppConfiguration">
-          <q-tooltip> Restore app configuration from gdrive</q-tooltip>
-        </q-btn>
-      </div>
-    </q-item>
-    <q-item>
-      <q-item-section>
-        <TyResetButton
-          :icon="matWarning"
-          label="Reset Taskyon Settings"
-          outline
-          class="q-my-md"
-          text-color="red"
-          mode="settings"
-        />
-      </q-item-section>
-    </q-item>
+          <q-btn :icon="matSync" outline @click="onUpdateAppConfiguration">
+            <q-tooltip> Restore app configuration from gdrive</q-tooltip>
+          </q-btn>
+        </div>
+      </q-item>
+      <q-item>
+        <q-item-section>
+          <TyResetButton
+            :icon="matWarning"
+            label="Reset Taskyon Settings"
+            outline
+            class="q-my-md"
+            text-color="red"
+            mode="settings"
+          />
+        </q-item-section>
+      </q-item>
+    </q-expansion-item>
   </q-list>
 </template>
 
