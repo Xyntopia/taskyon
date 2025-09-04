@@ -97,12 +97,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         meta: { title: 'Documentation', description: 'Taskyon Documentation' },
       },
       {
-        path: 'connect',
-        component: () => import('pages/ConnectPage.vue'),
-        meta: { titel: 'Connect Taskyon', description: 'Connecting Taskyon to the network.' },
-      },
-      {
-        path: '/fm',
+        path: 'fm',
         component: () => import('pages/FileManagerPage.vue'),
         meta: {
           title: 'File Manager',
@@ -112,6 +107,18 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       // mdRoutes should have our normal taskyon layout thats why we put them in here :)
       ...mdRoutes,
       ...universalTyRoutes,
+    ],
+  },
+  {
+    path: '/',
+    component: () => import('layouts/EmptyLayout.vue'),
+    children: [
+      {
+        path: 'connect/:method',
+        component: () => import('pages/ConnectPage.vue'),
+        props: true,
+        meta: { titel: 'Connect Taskyon', description: 'Connecting Taskyon to the network.' },
+      },
     ],
   },
   {

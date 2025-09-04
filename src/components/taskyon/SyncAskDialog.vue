@@ -53,24 +53,22 @@
             <q-card>
               <q-card-section>
                 <div
-                  v-if="generatedSharingSecret"
+                  v-if="generatedSharingLink"
                   class="row q-gutter-md items-center justify-center"
                 >
-                  <div class="text-h6">Your new Sharing Secret:</div>
+                  <div class="text-h6">Your connect link (Works only once!):</div>
                   <div class="column items-center">
-                    <QrCode :data="generatedSharingSecret" show-fullscreen />
+                    <QrCode :data="generatedSharingLink" show-fullscreen />
                     <div class="row no-wrap items-center">
-                      <div class="text-bold q-pr-sm">{{ generatedSharingSecret }}</div>
+                      <div class="text-bold q-pr-sm">{{ generatedSharingLink }}</div>
                       <q-btn
                         flat
                         :icon="matContentCopy"
-                        @click="copyToClipboard(generatedSharingSecret)"
+                        @click="copyToClipboard(generatedSharingLink)"
                       />
                     </div>
                   </div>
-                  <div>
-                    When asked, enter this in your new device to sync! This will only work once!
-                  </div>
+                  <div>Open the link and confirm the new device!</div>
                 </div>
                 <div v-else class="text-warning">Error: Could not generate sharing secret!</div>
               </q-card-section>
@@ -116,13 +114,13 @@ const tystate = useTaskyonStore()
 const gdp = computedAsync(async () => await tystate.gdp)
 
 const uploadingSK = ref(false)
-const generatedSharingSecret = ref<string>()
+const generatedSharingLink = ref<string>()
 const showProvisioningDialog = ref(false)
 const uploadSK = async () => {
   try {
     uploadingSK.value = true
     const pwd = await tystate.uploadSessionKey()
-    generatedSharingSecret.value = pwd
+    generatedSharingLink.value = window.location.origin + `/connect/gd#${pwd}`
     showProvisioningDialog.value = true
   } catch (err) {
     console.error(err)
