@@ -1,15 +1,20 @@
 <template>
   <q-page padding>
     <div v-if="!incomingSessionId">
-      Connect Taskyon to
-      {{ method }}
-      {{ secret }}
-      {{ incomingSessionId?.slice(0, 5) }}
-      {{ existingSessionId?.slice(0, 5) }}
-      <q-btn flat label="Verify Connection!" @click="downloadKeyFromGdrive(secret)"></q-btn>
+      <q-btn
+        flat
+        label="Click here to connect to Gdrive and verify the new Taskyon session!"
+        no-caps
+        @click="downloadKeyFromGdrive(secret)"
+      ></q-btn>
     </div>
     <div v-else-if="incomingSessionId !== existingSessionId">
       <icon :name="matWarning" />
+      Before pressing the button below, confirm, that the previous device shows the following
+      Session ID:
+      <span class="text-h6">{{ incomingSessionId.slice(0, 5) }}</span>
+
+      If they are the same, you can proceed to connect!
       <q-btn flat label="Connect Device!" @click="setNewSessionKey" />
     </div>
     <div v-else-if="incomingSessionId === existingSessionId">
