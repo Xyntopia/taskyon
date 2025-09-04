@@ -220,9 +220,9 @@ import { getEnvironmentInfo } from 'src/modules/utils'
 const state = useAppStateStore()
 const showAboutDialog = ref(false)
 
-const { mode } = defineProps<{
+const { mode, btnSize = 'md' } = defineProps<{
   mode?: 'minimal' | 'minChat' | undefined
-  btnSize: 'xs' | 'md' | 'sm' | 'lg' | 'xl'
+  btnSize?: 'xs' | 'md' | 'sm' | 'lg' | 'xl'
 }>()
 
 const minMode = computed(() => mode != undefined)

@@ -2,8 +2,6 @@
   <q-layout view="lHh LpR lfr">
     <TaskyonHeader v-model:drawer-open="drawerOpen" :mode="minMode" :btn-size="btnSize" />
 
-    <div class="fade-top-overlay" />
-
     <q-drawer
       v-if="state"
       v-model="drawerOpen"
