@@ -96,6 +96,19 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         component: () => import('pages/DocumentationIndex.vue'),
         meta: { title: 'Documentation', description: 'Taskyon Documentation' },
       },
+      {
+        path: 'connect',
+        component: () => import('pages/ConnectPage.vue'),
+        meta: { titel: 'Connect Taskyon', description: 'Connecting Taskyon to the network.' },
+      },
+      {
+        path: '/fm',
+        component: () => import('pages/FileManagerPage.vue'),
+        meta: {
+          title: 'File Manager',
+          description: 'Manage files saved in Taskyon OPFS.',
+        },
+      },
       // mdRoutes should have our normal taskyon layout thats why we put them in here :)
       ...mdRoutes,
       ...universalTyRoutes,
@@ -127,14 +140,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     meta: {
       title: 'IPFS status',
       description: 'Interplanetary file system status monitor',
-    },
-  },
-  {
-    path: '/fm',
-    component: () => import('pages/FileManagerPage.vue'),
-    meta: {
-      title: 'File Manager',
-      description: 'Manage files saved in Taskyon OPFS.',
     },
   },
   {
