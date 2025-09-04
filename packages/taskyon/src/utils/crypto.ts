@@ -25,16 +25,47 @@ export function parseJwt(token: string | undefined): Record<string, unknown> | u
 }
 
 // used for encryption/decryption
-export const generateRandomEncryptionKey = () =>
-  crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+export const generateRandomEncryptionKey = (wrapper = false) =>
+  crypto.subtle.generateKey(
+    { name: wrapper ? 'AES-KW' : 'AES-GCM', length: 256 },
+    false,
+    wrapper ? ['wrapKey', 'unwrapKey'] : ['encrypt', 'decrypt'],
+  )
+
+export const deriveKeyFromPwd = async (
+  pwd: string,
+  salt: Uint8Array<ArrayBuffer>,
+  wrapper = false,
+) => {
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(pwd),
+    'PBKDF2',
+    false,
+    ['deriveBits', 'deriveKey'],
+  )
+
+  return await window.crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt,
+      iterations: 100000,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    { name: wrapper ? 'AES-KW' : 'AES-GCM', length: 256 },
+    true,
+    wrapper ? ['wrapKey', 'unwrapKey'] : ['encrypt', 'decrypt'],
+  )
+}
 
 export const wrapSessionKey = async (sk: CryptoKey, kek: CryptoKey) => {
-  const iv = crypto.getRandomValues(new Uint8Array(12))
+  //const iv = crypto.getRandomValues(new Uint8Array(12))
   const wrapped = await crypto.subtle.wrapKey(
     'raw', // format of sessionKey
     sk, // non-extractable key
     kek, //wrapper, //kek, // wrapping key
-    { name: 'AES-KW', iv, length: 256 },
+    { name: 'AES-KW', length: 256 },
   )
   return uint8ArrayToBase64UrlSafe(wrapped)
 }

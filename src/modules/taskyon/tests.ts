@@ -3,7 +3,7 @@ import {
   createCryptoSession,
   cryptoKeyToBase64,
   forceDestroyCryptoSession,
-  generateAssymetricKeyDeriver,
+  generateRandomEncryptionKey,
   generateSeedPhrase,
   ToolBase,
   uint8ArrayToBase64UrlSafe,
@@ -414,17 +414,17 @@ export async function testCryptoSession() {
   report.push('\nPHASE 2: Key sharing between devices')
 
   // Create exchange keys (simulate second device's key pair)
-  const exchangeKeyPair = await generateAssymetricKeyDeriver()
+  const exchangeKey = await generateRandomEncryptionKey(true)
   report.push('Exchange key pair generated')
 
   // Export wrapped session key from device1
-  const wrappedSessionKey = await device1.exportSessionKey(exchangeKeyPair)
+  const wrappedSessionKey = await device1.exportSessionKey(exchangeKey)
   report.push('Session key wrapped for sharing')
 
   // Create second device session
   const device2 = await createCryptoSession(accountId2, {
-    wrapped: wrappedSessionKey,
-    unwrapper: exchangeKeyPair,
+    wrappedSK: wrappedSessionKey,
+    unwrapper: exchangeKey,
   })
   report.push('Device2 session created')
   report.push('Wrapped session key imported to device2')

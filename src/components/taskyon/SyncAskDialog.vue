@@ -5,7 +5,7 @@
     <q-btn v-close-popup icon="close" flat round dense />
   </q-card-section>
   <q-list dense class="col">
-    <q-item class="text-center text-yellow">
+    <q-item class="text-center text-warning">
       <div class="col">Gdrive Sync is experimental!</div>
     </q-item>
     <q-item>
@@ -17,16 +17,11 @@
       </q-item-section>
       <q-item-section>
         <div class="row no-wrap items-center">
-          <div>Connect Google Drive for automatic backup?</div>
+          <div>Connect Google Drive for automatic sync</div>
           <InfoDialog>
-            <p>
-              You can optionally use your Google Drive to sync your task nodes across devices. This
-              makes it easy to access your tasks from anywhere.
-            </p>
-            <p>
-              For your privacy, all tasks are always encrypted before being saved in Google Drive.
-              Only you can access your task data. Google will not able to read your data.
-            </p>
+            Enable Google Drive sync to automatically synchronize your tasks across all your
+            devices. All tasks are fully encrypted before leaving your device — only you can read
+            them.
           </InfoDialog>
         </div>
       </q-item-section>
@@ -46,7 +41,30 @@
       </q-item-section>
     </q-item>
     <q-item>
-      <q-item-section>
+      <q-item-section class="q-gutter-md">
+        <q-btn
+          :icon="matDevices"
+          label="Connect a new Device to taskyon"
+          flat
+          :loading="uploadingSK"
+          @click="uploadSK"
+        >
+          <q-dialog v-model="showProvisioningDialog">
+            <q-card>
+              <q-card-section>
+                Your new Sharing Secret:
+
+                <div class="text-bold">{{ generatedSharingSecret }}</div>
+
+                When asked, enter this in your new device to start synching! This will only work for
+                a single drive!
+              </q-card-section>
+              <q-card-actions>
+                <q-btn label="Ok" @click="showProvisioningDialog = false" />
+              </q-card-actions>
+            </q-card>
+          </q-dialog>
+        </q-btn>
         <q-btn
           flat
           label="Reconnect with a different Gdrive user"
@@ -72,13 +90,29 @@ import { mdiConnection, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
 import { ref } from 'vue'
 import InfoDialog from '../InfoDialog.vue'
 import { useAppStateStore } from 'src/stores/appState'
-import { matSync } from '@quasar/extras/material-icons'
+import { matDevices, matSync } from '@quasar/extras/material-icons'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computedAsync } from '@vueuse/core'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const gdp = computedAsync(async () => await tystate.gdp)
+
+const uploadingSK = ref(false)
+const generatedSharingSecret = ref<string>()
+const showProvisioningDialog = ref(false)
+const uploadSK = async () => {
+  try {
+    uploadingSK.value = true
+    const pwd = await tystate.uploadSessionKey()
+    generatedSharingSecret.value = pwd
+    showProvisioningDialog.value = true
+  } catch (err) {
+    console.error(err)
+  } finally {
+    uploadingSK.value = false
+  }
+}
 
 const { title, showDontAskOption = false } = defineProps<{
   title?: string

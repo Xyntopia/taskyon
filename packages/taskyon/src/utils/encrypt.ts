@@ -10,6 +10,19 @@ import {
 } from './crypto'
 import { base64UrlToUint8Array, uint8ArrayToBase64UrlSafe } from './encoding'
 
+const deriveRowKey = (key: CryptoKey, id: string | number) =>
+  crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      info: new TextEncoder().encode(String(id)),
+    },
+    key, // non-extractable
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt'],
+  )
+
 // Define a type for the encrypted data structure
 export const EncryptedDataRow = z.object({
   iv: z.string(),
@@ -59,17 +72,7 @@ async function encryptData(
   // so it effectivly acts as a salt ... this why we don't need a salt
   // we don't want to use rowKey directly, because the iv would include only 12 bytes
   // and the aad doesn't guarantee non-encrptability without the info
-  const derivedKey = await crypto.subtle.deriveKey(
-    {
-      name: 'HKDF',
-      hash: 'SHA-256',
-      info: new TextEncoder().encode(String(id)),
-    },
-    rowKey, // non-extractable
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt'],
-  )
+  const derivedKey = await deriveRowKey(rowKey, id)
 
   // Encrypt data with derived key
   const iv = crypto.getRandomValues(new Uint8Array(12))
@@ -170,19 +173,7 @@ export async function decryptData(
     typeof ciphertext === 'string' ? base64UrlToUint8Array(ciphertext) : ciphertext
   // --- END OF CHANGES ---
 
-  const info = new TextEncoder().encode(String(id))
-
-  const derivedKey = await crypto.subtle.deriveKey(
-    {
-      name: 'HKDF',
-      info,
-      hash: 'SHA-256',
-    },
-    rowKey,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['decrypt'],
-  )
+  const derivedKey = await deriveRowKey(rowKey, id)
 
   const decrypted = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: ivBytes }, // Now correctly using a buffer

@@ -183,7 +183,7 @@ export const useGdrive = (getValidAccessToken: () => Promise<string>) => {
 
   async function uploadFileArchiveWMeta(
     directory: string,
-    zipFile: File,
+    file: File,
     filenames: string[],
     share = false,
   ) {
@@ -191,7 +191,7 @@ export const useGdrive = (getValidAccessToken: () => Promise<string>) => {
     const directoryId = await resolveId({ accessToken: token, directory, create: true })
     if (!directoryId) throw new Error('Failed to create/find directory')
     const { appProps, pubProps } = buildNameProps(filenames)
-    const fileRec = await pushFile(directoryId, zipFile, token, {
+    const fileRec = await pushFile(directoryId, file, token, {
       appProperties: appProps,
       properties: pubProps,
     })
@@ -202,7 +202,11 @@ export const useGdrive = (getValidAccessToken: () => Promise<string>) => {
     return fileRec
   }
 
-  async function downloadArchiveFile(directory: string, archivedFilename: string) {
+  async function downloadArchiveFile(
+    directory: string,
+    archivedFilename: string,
+    deleteAfterDownload = false,
+  ) {
     const token = await getValidAccessToken()
     const directoryId = await resolveId({ accessToken: token, directory })
     if (!directoryId) throw new Error(`Directory "${directory}" not found`)
@@ -222,8 +226,24 @@ export const useGdrive = (getValidAccessToken: () => Promise<string>) => {
     })
     const hit = data.files?.[0]
     if (!hit) return null
+
     const blob = await downloadFileFromDrive(hit.id, token)
-    return new File([blob], hit.name, { type: hit.mimeType })
+    const file = new File([blob], hit.name, { type: hit.mimeType })
+
+    // Delete the file from Google Drive if requested
+    if (deleteAfterDownload) {
+      try {
+        await deleteFileFromDrive(hit.id, token)
+      } catch (error) {
+        console.warn(
+          `Warning: Failed to delete file ${hit.name} (ID: ${hit.id}) from Google Drive:`,
+          error,
+        )
+        // Don't throw here - we still want to return the downloaded file even if deletion fails
+      }
+    }
+
+    return file
   }
 
   return {
@@ -235,6 +255,13 @@ export const useGdrive = (getValidAccessToken: () => Promise<string>) => {
     uploadFileArchiveWMeta,
     downloadArchiveFile,
   }
+}
+
+// Helper function to delete a file from Google Drive
+async function deleteFileFromDrive(fileId: string, token: string) {
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}`
+  const headers = { Authorization: `Bearer ${token}` }
+  await axios.delete(url, { headers })
 }
 
 // --- low-level ops ---

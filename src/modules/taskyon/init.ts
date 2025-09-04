@@ -54,7 +54,7 @@ export async function tyCore(
   // it is running in.
   EnvironmentTools: InternalTool[],
 ) {
-  const cryptoSession = await createCryptoSession('defaultAccount')
+  let cryptoSession = await createCryptoSession('defaultAccount')
 
   const ToolList: InternalTool[] = [
     ...smallHelperTools,
@@ -86,7 +86,7 @@ export async function tyCore(
         tableName: 'vault',
       }),
     ]),
-    cryptoSession.getUserPublicKey,
+    () => cryptoSession.getUserPublicKey(),
   )
 
   // connect secretStore to cryptoSession
@@ -200,8 +200,8 @@ export async function tyCore(
       const packed = await encryptCompressObject(
         task,
         archiveName,
-        cryptoSession.getUserPublicKey,
-        cryptoSession.getSessionKey,
+        () => cryptoSession.getUserPublicKey(),
+        () => cryptoSession.getSessionKey(),
       )
       console.log('created encrypted task file...', id)
 
@@ -227,6 +227,10 @@ export async function tyCore(
     queueTask, // TODO: integrate with outPort!
     secretStore, // TODO: integrate with outPort!
     port: outsidePort,
+    getCryptoSession: () => cryptoSession,
+    resetCryptoSession: async (...args: Parameters<typeof cryptoSession.derive>) => {
+      cryptoSession = await cryptoSession.derive(...args)
+    },
   }
 }
 

@@ -1,16 +1,9 @@
-import { defineStore } from 'pinia'
-import { watch, computed, ref, readonly, watchEffect } from 'vue'
-import type { ChatResponseType, TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
-import { type Model, getCurrentModel, llmSettings, type TyProfile } from 'src/modules/taskyon/types'
+import type { Asyncify, InternalTool } from '@taskyon/taskyon'
+import { deriveKeyFromPwd, randomString, TaskNode, toolCall } from '@taskyon/taskyon'
 import axios from 'axios' // TODO: replace with fetch
-import { Notify } from 'quasar' // load dynamically! :)
-import { useQuasar } from 'quasar'
-import { getApiConfig } from 'src/modules/taskyon/types'
-import type { Taskyon } from 'src/modules/taskyon/init'
-import { tyCore } from 'src/modules/taskyon/init'
-import { availableModels } from 'src/modules/taskyon/chat'
-import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
-import { useAppStateStore } from './appState'
+import { defineStore } from 'pinia'
+import { Notify, useQuasar } from 'quasar' // load dynamically! :)
+import { setColors } from 'src/boot/brand-colors'
 import type { Port } from 'src/modules/frpBus'
 import {
   createDuplexChannel,
@@ -18,20 +11,30 @@ import {
   createTypeFilteredPort,
   filter,
 } from 'src/modules/frpBus'
-import { setColors } from 'src/boot/brand-colors'
+import { useGdrive } from 'src/modules/gdrive'
 import { setPrismTheme } from 'src/modules/markdownUtils '
-import { onScopeDispose } from 'vue'
-import { guiTools } from 'src/modules/tools/GuiTools'
-import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
-import { match, P } from 'ts-pattern'
-import type { InternalTool, Asyncify } from '@taskyon/taskyon'
-import { TaskNode } from '@taskyon/taskyon'
-import { toolCall } from '@taskyon/taskyon'
-import { usePyodideWebworker } from 'src/modules/taskyon/webWorkerApi'
-import { areWeInIframe, waitForIframeDuplexChannel } from './iframeClient'
-import { gDriveSyncPort } from 'src/modules/taskyon/sync'
 import type { AuthenticationOptions, TokenGetter } from 'src/modules/oauth'
 import { OAUTH_PROVIDERS, usePersistentOauth } from 'src/modules/oauth'
+import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
+import { availableModels } from 'src/modules/taskyon/chat'
+import type { Taskyon } from 'src/modules/taskyon/init'
+import { tyCore } from 'src/modules/taskyon/init'
+import { gDriveSyncPort } from 'src/modules/taskyon/sync'
+import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
+import type { ChatResponseType, TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
+import {
+  getApiConfig,
+  getCurrentModel,
+  llmSettings,
+  type Model,
+  type TyProfile,
+} from 'src/modules/taskyon/types'
+import { usePyodideWebworker } from 'src/modules/taskyon/webWorkerApi'
+import { guiTools } from 'src/modules/tools/GuiTools'
+import { match, P } from 'ts-pattern'
+import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
+import { useAppStateStore } from './appState'
+import { areWeInIframe, waitForIframeDuplexChannel } from './iframeClient'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -294,11 +297,29 @@ function connectGdriveSync(
     portDisconnect.value = false
   }
 
+  const gd = useGdrive(getGdriveToken)
+  const keyDir = 'taskyon/provision'
+  const uploadWrappedSessionKey = async (key: string, id: string) => {
+    return await gd.uploadFileArchiveWMeta(keyDir, new File([key], id, { type: 'text/plain' }), [
+      id,
+    ])
+  }
+
+  const downloadWrappedSessionKey = async (id: string) => {
+    const keyFile = await gd.downloadArchiveFile(keyDir, id, true)
+    if (!keyFile) throw new Error("Key does't exist!")
+
+    const key = await keyFile.text()
+    return key
+  }
+
   return {
     gdriveConnected: computed(() => !!portDisconnect.value),
     gdriveErrors: readonly(gdriveErrors),
     attemptConnect,
     disconnect,
+    uploadWrappedSessionKey,
+    downloadWrappedSessionKey,
   }
 }
 
@@ -735,6 +756,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // we don't need any password or anything here, because
     // gdrive receives already encrypted tasks from our taskyon engine...
     const gdp = connectGdriveSync(stateRefs.appConfiguration.gdriveDir, ty.port, getGdriveToken)
+
     // Update your reactive refs when the connection is established
     watchEffect(() => {
       console.log('gdrive connection state changed:', gdp.gdriveConnected.value)
@@ -754,6 +776,31 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
     return gdp
   })
+
+  // TODO: somehow use a better id here?  maybe we could use the id from our taskyon login?
+  const shareKeyId = 'taskyonShareKeyID'
+  // we use a fixed salt right now, because we never save the key ...
+  const salt = new TextEncoder().encode('taskyonSalt')
+  async function uploadSessionKey() {
+    const ty = await taskyon
+    const cs = ty.getCryptoSession()
+
+    const sharingSecret = randomString()
+    const sharingKey = await deriveKeyFromPwd(sharingSecret, salt, true)
+    const sharedSK = await cs.exportSessionKey(sharingKey)
+
+    const gd = await gdp
+    await gd.uploadWrappedSessionKey(sharedSK, shareKeyId)
+    return sharingSecret
+  }
+
+  async function downloadSessionKey(sharingSecret: string) {
+    const gd = await gdp
+    const key = await gd.downloadWrappedSessionKey(shareKeyId)
+    const sharingKey = await deriveKeyFromPwd(sharingSecret, salt, true)
+    const ty = await taskyon
+    await ty.resetCryptoSession({ wrappedSK: key, unwrapper: sharingKey })
+  }
 
   // TODO: this is soo  ugly..  we need to do something about this...
   const connectMessageIframe = async (id: string, iframe: HTMLIFrameElement, origin?: string) => {
@@ -926,6 +973,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   dynamicQuasarTheming(stateRefs)
 
   return {
+    downloadSessionKey,
+    uploadSessionKey,
     getToken,
     getSecretStore,
     getTaskMetaRef,

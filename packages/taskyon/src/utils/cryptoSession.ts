@@ -89,8 +89,8 @@ type UserKeyPair = {
 }
 
 type CryptoSessionOptions = {
-  wrapped?: string
-  unwrapper?: CryptoKeyPair
+  wrappedSK?: string
+  unwrapper?: CryptoKey
   mnemonic?: string
   userKeyPair?: UserKeyPair
   newDK?: boolean
@@ -113,14 +113,10 @@ export async function createCryptoSession(accountId: string, options?: CryptoSes
   const kek = await deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
 
   // Initialize session key (in memory only)
-  const wrappedSK = options?.wrapped
+  const wrappedSK = options?.wrappedSK
     ? options?.unwrapper
-      ? await reWrapSessionKey(
-          options.wrapped,
-          await deriveKek(options.unwrapper.privateKey, options.unwrapper.publicKey),
-          kek,
-        )
-      : options.wrapped
+      ? await reWrapSessionKey(options.wrappedSK, options.unwrapper, kek)
+      : options.wrappedSK
     : await generateWrappedSessionKey(kek)
   const SK = await unwrapSessionKey(wrappedSK, kek)
 
@@ -129,10 +125,9 @@ export async function createCryptoSession(accountId: string, options?: CryptoSes
     ? await keyPairFromMnemonic(options.mnemonic)
     : options?.userKeyPair
 
-  const exportSessionKey = async (shareKey?: CryptoKeyPair) => {
+  const exportSessionKey = async (shareKey?: CryptoKey) => {
     if (shareKey) {
-      const shareKek = await deriveKek(shareKey.privateKey, shareKey.publicKey)
-      return await reWrapSessionKey(wrappedSK, kek, shareKek)
+      return await reWrapSessionKey(wrappedSK, kek, shareKey)
     } else {
       return wrappedSK
     }
@@ -148,10 +143,20 @@ export async function createCryptoSession(accountId: string, options?: CryptoSes
     },
     exportSessionKey,
     destroy: async () => await deleteDatabase(storageNamespace),
-    derive: (options?: { newSK?: boolean; newDK?: boolean; newMnemonic?: string }) => {
+    derive: (options?: {
+      newSK?: boolean
+      wrappedSK?: string
+      newDK?: boolean
+      newMnemonic?: string
+      unwrapper?: CryptoKey
+    }) => {
       return createCryptoSession(accountId, {
-        ...(options?.newSK ? {} : { wrapped: wrappedSK }),
-        unwrapper: deviceKeyPair,
+        ...(options?.wrappedSK
+          ? { wrappedSK: options.wrappedSK }
+          : options?.newSK
+            ? {}
+            : { wrappedSK: wrappedSK }),
+        unwrapper: options?.unwrapper ?? kek,
         newDK: !!options?.newDK,
         ...(userKeyPair ? { userKeyPair } : {}),
         ...(options?.newMnemonic ? { mnemonic: options?.newMnemonic } : {}),
