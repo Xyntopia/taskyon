@@ -306,9 +306,9 @@ function connectGdriveSync(
   }
 
   const downloadWrappedSessionKey = async (id: string) => {
-    // TODO: set to "true" to automatically delete key from gdrive!
     console.warn('key is currently not deleted!!')
-    const keyFile = await gd.downloadArchiveFile(keyDir, id, false)
+    const keyFile = await gd.downloadArchiveFile(keyDir, id, true)
+    // TODO: also delete the directory!
     if (!keyFile) throw new Error("Key does't exist!")
 
     const key = await keyFile.text()
@@ -796,7 +796,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return sharingSecret
   }
 
-  async function newSessionFromSecret(sharingSecret: string) {
+  async function newSessionFromGdrive(sharingSecret: string) {
     const gd = await gdp
     const key = await gd.downloadWrappedSessionKey(shareKeyId)
     // TODO: delete directory and file after downloading secret!!
@@ -985,7 +985,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   return {
     setNewSession: async (cs: CryptoSession) => (await taskyon).setNewSession(cs),
     getSessionId,
-    newSessionFromSecret,
+    newSessionFromGdrive,
     uploadSessionKey,
     getToken,
     getSecretStore,
