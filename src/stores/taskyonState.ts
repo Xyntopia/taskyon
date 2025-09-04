@@ -794,12 +794,19 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return sharingSecret
   }
 
-  async function downloadSessionKey(sharingSecret: string) {
+  async function newSessionFromSecret(sharingSecret: string) {
     const gd = await gdp
     const key = await gd.downloadWrappedSessionKey(shareKeyId)
-    const sharingKey = await deriveKeyFromPwd(sharingSecret, salt, true)
+    // TODO: delete directory and file after downloading secret!!
+    console.warn('we need to delete the directory and secret!!')
+    const sharingKey = await deriveKeyFromPwd(sharingSecret, salt, false)
     const ty = await taskyon
-    await ty.resetCryptoSession({ wrappedSK: key, unwrapper: sharingKey })
+    return await ty.getCryptoSession().derive({ wrappedSK: key, unwrapper: sharingKey })
+  }
+
+  async function getSessionId() {
+    const ty = await taskyon
+    return await ty.getCryptoSession().getSessionId()
   }
 
   // TODO: this is soo  ugly..  we need to do something about this...
@@ -972,8 +979,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   dynamicQuasarTheming(stateRefs)
 
+  // TODO: make all computed values readonly
   return {
-    downloadSessionKey,
+    getSessionId,
+    newSessionFromSecret,
     uploadSessionKey,
     getToken,
     getSecretStore,
@@ -984,7 +993,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     allTools: computed(() => allTools.value),
     switchTaskType,
     taskContentDraft,
-    // TODO: make all computed values readonly
     selectedThread,
     currentTask,
     getOpenRouterPKCEKey,

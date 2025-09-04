@@ -382,7 +382,7 @@ export async function testCryptoSession() {
   report.push('Session key regenerated')
 
   assert(
-    (await device1_1.id()) === (await device1.id()),
+    (await device1_1.deviceId()) === (await device1.deviceId()),
     "device ids shouldn't haven't changed and should be the same!",
   )
 
@@ -466,10 +466,10 @@ export async function testCryptoSession() {
     origKeyBytes,
     newKeyBytes,
     wrappedSessionKey,
-    id1: await device1.id(),
-    id1_1: await device1_1.id(),
-    id1_2: await device1_2.id(),
-    id2: await device2.id(),
+    id1: await device1.deviceId(),
+    id1_1: await device1_1.deviceId(),
+    id1_2: await device1_2.deviceId(),
+    id2: await device2.deviceId(),
     metrics: {
       deviceKeyRegenerated: origKeyBytes !== newKeyBytes,
       sessionKeyShared: !!wrappedSessionKey,

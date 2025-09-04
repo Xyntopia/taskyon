@@ -6,7 +6,13 @@
   </q-card-section>
   <q-list dense class="col">
     <q-item class="text-center text-warning">
-      <div class="col">Gdrive Sync is experimental!</div>
+      <q-item-section side class="text-warning">Gdrive Sync is experimental!</q-item-section>
+    </q-item>
+    <q-item>
+      <q-item-section> Current Session ID: </q-item-section>
+      <q-item-section>
+        <div class="text-weight-bolder text-h6">{{ sessionId.slice(0, 5) }}</div>
+      </q-item-section>
     </q-item>
     <q-item>
       <q-item-section avatar>
@@ -113,6 +119,8 @@ const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const gdp = computedAsync(async () => await tystate.gdp)
 
+const sessionId = ref('')
+void tystate.getSessionId().then((sid) => (sessionId.value = sid))
 const uploadingSK = ref(false)
 const generatedSharingLink = ref<string>()
 const showProvisioningDialog = ref(false)

@@ -54,7 +54,7 @@ export const deriveKeyFromPwd = async (
     },
     keyMaterial,
     { name: wrapper ? 'AES-KW' : 'AES-GCM', length: 256 },
-    true,
+    false,
     wrapper ? ['wrapKey', 'unwrapKey'] : ['encrypt', 'decrypt'],
   )
 }

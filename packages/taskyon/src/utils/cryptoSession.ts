@@ -82,6 +82,30 @@ async function deleteDatabase(namespace: string): Promise<void> {
   })
 }
 
+// generate a fingerprint for a key which is non-exportable!
+async function sessionIdFromKey(key: CryptoKey): Promise<string> {
+  // Create a deterministic dummy key to wrap
+  const dummy = await crypto.subtle.importKey(
+    'raw',
+    new Uint8Array(32), // all zeros
+    { name: 'AES-GCM' }, // arbitrary algorithm
+    true,
+    ['encrypt'],
+  )
+
+  // Wrap the dummy key with our session key
+  const wrapped = await crypto.subtle.wrapKey('raw', dummy, key, 'AES-KW')
+
+  // Hash the wrapped bytes
+  const digest = await crypto.subtle.digest('SHA-256', wrapped)
+  const bytes = new Uint8Array(digest)
+
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
+
 type UserKeyPair = {
   privateKey: CryptoKey
   publicKey: CryptoKey
@@ -136,13 +160,14 @@ export async function createCryptoSession(accountId: string, options?: CryptoSes
   return {
     getSessionKey: () => SK,
     getDevicePublicKey: () => deviceKeyPair.publicKey,
-    id: () => cryptoKeyToBase64(deviceKeyPair.publicKey),
+    deviceId: () => cryptoKeyToBase64(deviceKeyPair.publicKey),
     getUserPublicKey: (): CryptoKey => {
       if (!userKeyPair) throw new Error('User key pair not initialized')
       return userKeyPair.publicKey
     },
     exportSessionKey,
     destroy: async () => await deleteDatabase(storageNamespace),
+    getSessionId: () => sessionIdFromKey(SK), // <-- added
     derive: (options?: {
       newSK?: boolean
       wrappedSK?: string
