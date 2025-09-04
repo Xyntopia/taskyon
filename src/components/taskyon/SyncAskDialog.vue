@@ -64,6 +64,10 @@
                 >
                   <div class="text-h6">Your connect link (Works only once!):</div>
                   <div class="column items-center">
+                    <div class="text-no-wrap">
+                      Session ID:
+                      <span class="text-h6">{{ sessionId.slice(0, 5) }}</span>
+                    </div>
                     <QrCode :data="generatedSharingLink" show-fullscreen />
                     <div class="row no-wrap items-center">
                       <div class="text-bold q-pr-sm">{{ generatedSharingLink }}</div>
