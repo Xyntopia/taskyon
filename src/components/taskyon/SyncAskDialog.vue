@@ -52,15 +52,30 @@
           <q-dialog v-model="showProvisioningDialog">
             <q-card>
               <q-card-section>
-                Your new Sharing Secret:
-
-                <div class="text-bold">{{ generatedSharingSecret }}</div>
-
-                When asked, enter this in your new device to start synching! This will only work for
-                a single drive!
+                <div
+                  v-if="generatedSharingSecret"
+                  class="row q-gutter-md items-center justify-center"
+                >
+                  <div class="text-h6">Your new Sharing Secret:</div>
+                  <div class="column items-center">
+                    <QrCode :data="generatedSharingSecret" show-fullscreen />
+                    <div class="row no-wrap items-center">
+                      <div class="text-bold q-pr-sm">{{ generatedSharingSecret }}</div>
+                      <q-btn
+                        flat
+                        :icon="matContentCopy"
+                        @click="copyToClipboard(generatedSharingSecret)"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    When asked, enter this in your new device to sync! This will only work once!
+                  </div>
+                </div>
+                <div v-else class="text-warning">Error: Could not generate sharing secret!</div>
               </q-card-section>
-              <q-card-actions>
-                <q-btn label="Ok" @click="showProvisioningDialog = false" />
+              <q-card-actions align="right">
+                <q-btn label="Ok" flat @click="showProvisioningDialog = false" />
               </q-card-actions>
             </q-card>
           </q-dialog>
@@ -90,9 +105,11 @@ import { mdiConnection, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
 import { ref } from 'vue'
 import InfoDialog from '../InfoDialog.vue'
 import { useAppStateStore } from 'src/stores/appState'
-import { matDevices, matSync } from '@quasar/extras/material-icons'
+import { matContentCopy, matDevices, matSync } from '@quasar/extras/material-icons'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computedAsync } from '@vueuse/core'
+import QrCode from '../QrCode.vue'
+import { copyToClipboard } from 'src/modules/utils'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
