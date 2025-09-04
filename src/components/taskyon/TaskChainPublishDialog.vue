@@ -88,7 +88,15 @@ No one else can access or remove your files without your permission.`"
                   @click="shareViaSocialApps"
                 />
                 <div class="column items-center">
-                  <QrCode :data="taskyonShareLink" />
+                  <QrCode
+                    :data="taskyonShareLink"
+                    display-text="Scan this QR code to start a conversation with our AI assistant on Taskyon. This is a secure link to our official chat platform - simply scan and begin chatting!"
+                    logo-fallback-text="TY"
+                    show-fullscreen
+                    show-logo
+                    show-print
+                    logo-url="/taskyon_mono_opt.svg"
+                  />
                 </div>
                 <div>
                   <template
