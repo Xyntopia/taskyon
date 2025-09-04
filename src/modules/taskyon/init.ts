@@ -1,7 +1,7 @@
 import { useTyTaskManager } from './taskManager'
 import type { llmSettings } from './types'
 import { runTaskWorker } from './taskWorker'
-import type { InternalTool } from '@taskyon/taskyon'
+import type { CryptoSession, InternalTool } from '@taskyon/taskyon'
 // TODO: make webpack automatically add all tool files from /tools/*
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
@@ -42,8 +42,10 @@ import z from 'zod'
 import { createCryptoSession, ToolBase } from '@taskyon/taskyon'
 import type { EncryptedDataRow } from '@taskyon/taskyon'
 import { encryptCompressObject } from '../../../packages/taskyon/src/utils/fileUtils'
+import { LocalStorage } from 'quasar'
 
 export async function tyCore(
+  // TODO: we want to save some settings "internally" and not in the GUI...
   llmSettings: llmSettings,
   apiKeys: { [key: string]: string },
   // with the Environment Tools we can provide a list of tools as closures which have access
@@ -54,7 +56,19 @@ export async function tyCore(
   // it is running in.
   EnvironmentTools: InternalTool[],
 ) {
-  let cryptoSession = await createCryptoSession('defaultAccount')
+  const accountName = 'defaultAccount'
+  const lastSessionKeyKey = accountName + 'lastSK'
+  let wrappedSK = LocalStorage.getItem(lastSessionKeyKey) as string
+  let cryptoSession: CryptoSession
+  if (wrappedSK) {
+    cryptoSession = await createCryptoSession(accountName, {
+      wrappedSK,
+    })
+  } else {
+    cryptoSession = await createCryptoSession(accountName)
+    wrappedSK = await cryptoSession.exportSessionKey()
+    LocalStorage.setItem(lastSessionKeyKey, wrappedSK)
+  }
 
   const ToolList: InternalTool[] = [
     ...smallHelperTools,
@@ -228,8 +242,8 @@ export async function tyCore(
     secretStore, // TODO: integrate with outPort!
     port: outsidePort,
     getCryptoSession: () => cryptoSession,
-    resetCryptoSession: async (...args: Parameters<typeof cryptoSession.derive>) => {
-      cryptoSession = await cryptoSession.derive(...args)
+    resetCryptoSession: (cs: CryptoSession) => {
+      cryptoSession = cs
     },
   }
 }

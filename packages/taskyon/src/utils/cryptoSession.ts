@@ -113,7 +113,7 @@ type UserKeyPair = {
 }
 
 type CryptoSessionOptions = {
-  wrappedSK?: string
+  wrappedSK?: string | undefined
   unwrapper?: CryptoKey
   mnemonic?: string
   userKeyPair?: UserKeyPair
