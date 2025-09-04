@@ -93,7 +93,7 @@ import {
   testMultipleArchiveUploadDownload,
   testTaskIdHashing,
   testCryptoSession,
-  restIndexedDBKeyStorage,
+  testIndexedDBKeyStorage,
 } from 'src/modules/taskyon/tests'
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
@@ -172,7 +172,7 @@ async function runTest(name: string, testFunc: () => unknown, details = false) {
 }
 
 const tests = {
-  'test key indexeddb storage': restIndexedDBKeyStorage,
+  'test key indexeddb storage': testIndexedDBKeyStorage,
   'test crypto session': testCryptoSession,
   'task hashing': testTaskIdHashing,
   'test Pyodide': testPyodide,

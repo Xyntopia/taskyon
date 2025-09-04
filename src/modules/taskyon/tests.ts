@@ -81,7 +81,7 @@ type TestReport = {
   }
 }
 
-export const restIndexedDBKeyStorage = async (): Promise<TestReport> => {
+export const testIndexedDBKeyStorage = async (): Promise<TestReport> => {
   const DB = 'test_crypto_key_roundtrip'
   const STORE = 'keys'
   const KEY_NAME = 'deviceKeyPair'
@@ -386,6 +386,11 @@ export async function testCryptoSession() {
     "device ids shouldn't haven't changed and should be the same!",
   )
 
+  assert(
+    (await device1_1.getSessionId()) !== (await device1.getSessionId()),
+    'session ids should change!',
+  )
+
   // Test device key regeneration
   const originalDeviceKey = device1.getDevicePublicKey()
   const device1_2 = await device1_1.derive({ newDK: true })
@@ -418,6 +423,7 @@ export async function testCryptoSession() {
   report.push('Exchange key pair generated')
 
   // Export wrapped session key from device1
+  const d1SKid = await device1.getSessionId()
   const wrappedSessionKey = await device1.exportSessionKey(exchangeKey)
   report.push('Session key wrapped for sharing')
 
@@ -430,7 +436,7 @@ export async function testCryptoSession() {
   report.push('Wrapped session key imported to device2')
 
   // Validate session keys
-  const device2SessionKey = device2.getSessionKey()
+  const d2SKid = await device2.getSessionId()
   report.push('Device2 successfully accessed session key')
 
   // ===================================================================
@@ -462,7 +468,8 @@ export async function testCryptoSession() {
     testMnemonic,
     sessionKey1,
     newSessionKey,
-    device2SessionKey,
+    device1_session_id: d1SKid,
+    device2_session_id: d2SKid,
     origKeyBytes,
     newKeyBytes,
     wrappedSessionKey,
