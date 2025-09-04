@@ -1,4 +1,4 @@
-import type { Asyncify, InternalTool } from '@taskyon/taskyon'
+import type { Asyncify, CryptoSession, InternalTool } from '@taskyon/taskyon'
 import { deriveKeyFromPwd, randomString, TaskNode, toolCall } from '@taskyon/taskyon'
 import axios from 'axios' // TODO: replace with fetch
 import { defineStore } from 'pinia'
@@ -983,6 +983,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // TODO: make all computed values readonly
   return {
+    setNewSession: async (cs: CryptoSession) => (await taskyon).setNewSession(cs),
     getSessionId,
     newSessionFromSecret,
     uploadSessionKey,

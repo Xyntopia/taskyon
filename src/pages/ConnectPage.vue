@@ -5,7 +5,18 @@
     {{ secret }}
     {{ incomingSessionId?.slice(0, 5) }}
     {{ existingSessionId?.slice(0, 5) }}
-    <q-btn flat label="Connect this device!" @click="provisonFromGdrive(secret)"></q-btn>
+    <q-btn
+      v-if="!incomingSessionId"
+      flat
+      label="Verify Connection!"
+      @click="provisonFromGdrive(secret)"
+    ></q-btn>
+    <q-btn
+      v-else-if="incomingSessionId !== existingSessionId"
+      flat
+      label="Connect Device!"
+      @click="setNewSessionKey"
+    />
   </q-page>
 </template>
 
@@ -36,6 +47,10 @@ const secret = route.hash.slice(1)
 
 const provisonFromGdrive = async (secret: string) => {
   temporarySession.value = await tystate.newSessionFromSecret(secret)
+}
+
+const setNewSessionKey = async () => {
+  if (temporarySession.value) await tystate.setNewSession(temporarySession.value)
 }
 
 //route.hash = ''

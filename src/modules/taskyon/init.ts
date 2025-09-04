@@ -242,8 +242,10 @@ export async function tyCore(
     secretStore, // TODO: integrate with outPort!
     port: outsidePort,
     getCryptoSession: () => cryptoSession,
-    resetCryptoSession: (cs: CryptoSession) => {
+    setNewSession: async (cs: CryptoSession) => {
       cryptoSession = cs
+      wrappedSK = await cryptoSession.exportSessionKey()
+      LocalStorage.setItem(lastSessionKeyKey, wrappedSK)
     },
   }
 }
