@@ -99,6 +99,12 @@
             })
           "
         />
+        <q-btn
+          flat
+          label="Delete all pending sharing keys"
+          :icon="matKeyOff"
+          @click="gdp?.clearAllKeys"
+        />
       </q-item-section>
     </q-item>
   </q-list>
@@ -113,7 +119,7 @@ import { mdiConnection, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
 import { ref } from 'vue'
 import InfoDialog from '../InfoDialog.vue'
 import { useAppStateStore } from 'src/stores/appState'
-import { matContentCopy, matDevices, matSync } from '@quasar/extras/material-icons'
+import { matContentCopy, matDevices, matKeyOff, matSync } from '@quasar/extras/material-icons'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computedAsync } from '@vueuse/core'
 import QrCode from '../QrCode.vue'

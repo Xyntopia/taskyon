@@ -315,6 +315,8 @@ function connectGdriveSync(
     return key
   }
 
+  const clearAllKeys = () => gd.deleteDirectoryRecursive(keyDir)
+
   return {
     gdriveConnected: computed(() => !!portDisconnect.value),
     gdriveErrors: readonly(gdriveErrors),
@@ -322,6 +324,7 @@ function connectGdriveSync(
     disconnect,
     uploadWrappedSessionKey,
     downloadWrappedSessionKey,
+    clearAllKeys,
   }
 }
 

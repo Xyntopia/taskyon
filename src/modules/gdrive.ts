@@ -246,6 +246,52 @@ export const useGdrive = (getValidAccessToken: () => Promise<string>) => {
     return file
   }
 
+  // Recursively delete a directory (by ID or path) and all its contents
+  async function deleteDirectoryRecursive(
+    directory: string, // path ("foo/bar") or driveId ("1abc...")
+  ): Promise<void> {
+    const token = await getValidAccessToken()
+
+    // Normalize to a directory ID
+    let directoryId: string | null
+    if (directory.match(/^[A-Za-z0-9_-]{10,}$/)) {
+      // looks like an ID
+      directoryId = directory
+    } else {
+      directoryId = await resolveDriveId(directory.split('/').filter(Boolean), 'directory', token)
+    }
+    if (!directoryId) throw new Error(`Directory not found: ${directory}`)
+
+    const url = 'https://www.googleapis.com/drive/v3/files'
+    const headers = { Authorization: `Bearer ${token}` }
+
+    let pageToken: string | undefined
+    do {
+      const params: Record<string, string> = {
+        q: `'${directoryId}' in parents and trashed = false`,
+        fields: 'nextPageToken, files(id, mimeType)',
+        ...(pageToken ? { pageToken } : {}),
+      }
+
+      const { data } = await axios.get(url, { headers, params })
+      const files: { id: string; mimeType: string }[] = data.files ?? []
+
+      for (const f of files) {
+        if (f.mimeType === 'application/vnd.google-apps.folder') {
+          // recurse into subdirectory
+          await deleteDirectoryRecursive(f.id)
+        } else {
+          await deleteFileFromDrive(f.id, token)
+        }
+      }
+
+      pageToken = data.nextPageToken
+    } while (pageToken)
+
+    // finally delete the directory itself
+    await deleteFileFromDrive(directoryId, token)
+  }
+
   return {
     saveObjToGdrive,
     loadObjFromGdrive,
@@ -254,6 +300,7 @@ export const useGdrive = (getValidAccessToken: () => Promise<string>) => {
     publishMarkdown,
     uploadFileArchiveWMeta,
     downloadArchiveFile,
+    deleteDirectoryRecursive,
   }
 }
 
