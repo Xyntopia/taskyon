@@ -1,8 +1,7 @@
 import type { Asyncify, CryptoSession, InternalTool } from '@taskyon/taskyon'
 import { deriveKeyFromPwd, randomString, TaskNode, toolCall } from '@taskyon/taskyon'
-import axios from 'axios' // TODO: replace with fetch
 import { defineStore } from 'pinia'
-import { Notify, useQuasar } from 'quasar' // load dynamically! :)
+import { useQuasar } from 'quasar' // load dynamically! :)
 import { setColors } from 'src/boot/brand-colors'
 import type { Port } from 'src/modules/frpBus'
 import {
@@ -16,6 +15,7 @@ import { setPrismTheme } from 'src/modules/markdownUtils '
 import type { AuthenticationOptions, TokenGetter } from 'src/modules/oauth'
 import { OAUTH_PROVIDERS, usePersistentOauth } from 'src/modules/oauth'
 import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
+import { createBrowserCryptoSession } from 'src/modules/taskyon/browserCryptoSession'
 import { availableModels } from 'src/modules/taskyon/chat'
 import type { Taskyon } from 'src/modules/taskyon/init'
 import { tyCore } from 'src/modules/taskyon/init'
@@ -100,13 +100,6 @@ export function asyncProxy<T extends object>(initializer: () => Promise<T>): Asy
       },
     },
   ) as Asyncify<T>
-}
-
-function removeCodeFromUrl() {
-  if (window.history.pushState) {
-    const baseUrl = window.location.href.split('?')[0]
-    window.history.pushState({}, document.title, baseUrl)
-  }
 }
 
 async function updateLlmModels(
@@ -503,36 +496,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   stateRefs.appConfiguration.chatSuggestions = ChatSuggestions
 
-  let loadingKey = false
-  async function getOpenRouterPKCEKey(code: string) {
-    if (loadingKey == false) {
-      console.log('start openai PKCE')
-      loadingKey = true
-      try {
-        const response = await axios.post<{ key: string }>(
-          'https://openrouter.ai/api/v1/auth/keys',
-          {
-            code: code,
-          },
-        )
-        const data = response.data
-        console.log('downloaded key:', data.key)
-        if (data.key) {
-          Notify.create('API Key retrieved successfully')
-          stateRefs.keys['openrouter.ai'] = data.key
-          stateRefs.llmSettings.selectedApi = 'openrouter.ai'
-        } else {
-          Notify.create('Failed to retrieve API Key')
-        }
-      } catch (error) {
-        console.error('Error fetching API Key:', error)
-        Notify.create('Error occurred while fetching API Key')
-      }
-      removeCodeFromUrl() // Remove the 'code' from URL
-      loadingKey = false
-    }
-  }
-
   // callin ExecutionContext.interrupt();  cancels processing of current task
   console.log('initialize taskyon')
 
@@ -552,9 +515,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     )
   })
 
-  const taskyon = (async () => {
+  const cryptoSession = createBrowserCryptoSession('__CS__default')
+
+  const taskyon = cryptoSession.then(async () => {
     return await tyCore(stateRefs.llmSettings, stateRefs.keys, defineTyGuiTools(stateRefs))
-  })()
+  })
 
   const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
 
@@ -1001,7 +966,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     taskContentDraft,
     selectedThread,
     currentTask,
-    getOpenRouterPKCEKey,
     addModelToHistory,
     stopWorker,
     getTaskManager,
