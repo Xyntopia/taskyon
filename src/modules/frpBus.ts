@@ -570,3 +570,7 @@ export function createIframeMux<I extends string | number | symbol = string>(swe
 
   return { all$, send, attachIframe, detachId, gc, destroy }
 }
+
+export type IframeMultiPlexer<I extends string | number | symbol = string> = ReturnType<
+  typeof createIframeMux<I>
+>

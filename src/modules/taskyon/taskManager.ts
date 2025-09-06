@@ -13,7 +13,6 @@ import {
 } from '../crudWrapper'
 import { sha256UrlSafeHash } from '@taskyon/taskyon'
 import type { TyPGDB } from '../pglite.api'
-import { getDatabase } from '../pglite.api'
 import type { PartialDeep } from 'type-fest'
 import z from 'zod'
 import type { OptionalSome } from '@taskyon/taskyon'
@@ -450,10 +449,8 @@ const withLock =
   to the UI. We could have used the function of RxDB for this. But this approach would have been
   less flexible...
 */
-export async function useTyTaskManager(vectorizerModel?: string) {
+export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: string) {
   console.log('Initialize task manager.')
-
-  const taskyonDb = await getDatabase('taskyon')
 
   // because our tasks only have parent IDs defined, we keep a cache of
   // child IDs in order to be able to do faster tree traversals...
