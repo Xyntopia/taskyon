@@ -1,48 +1,45 @@
-import { useTyTaskManager } from './taskManager'
-import type { llmSettings } from './types'
-import { runTaskWorker } from './taskWorker'
-import type { CryptoSession, InternalTool } from '@taskyon/taskyon'
-// TODO: make webpack automatically add all tool files from /tools/*
-import { executeJavaScript } from '../tools/executeJavaScript'
-import { executePythonScript } from '../tools/executePython'
-import { createChatCompletionTool } from '../tools/chatCompletionTool'
-import {
-  createAddNewToolTool,
-  createChooseTool,
-  createToolSearcher,
-  toolCreationWizard,
-} from '../tools/toolTools'
-import { smallHelperTools } from '../tools/helperCollection'
-import { useFullSmallTools } from '../tools/usefulSmallTools'
-import { devTools } from '../tools/devTools'
-import { taskOrganizationTools, taskSearcher } from '../tools/TaskPlannerTool'
-import { appDevTools } from '../tools/webAppDev'
-import { fileTools } from '../tools/fileTools'
-import { localVectorStore } from '../tools/localVectorStore'
-import { proceduralTools } from '../tools/proceduralGraphics'
-import { wfcGenerator } from '../tools/wavefunctioncollapse'
-import { createOAuthTool } from '../tools/authTools'
+import type { CryptoSession, EncryptedDataRow, InternalTool } from '@taskyon/taskyon'
+import { createCryptoSession, ToolBase } from '@taskyon/taskyon'
+import { dump } from 'js-yaml'
+import z from 'zod'
+import { encryptCompressObject } from '../../../packages/taskyon/src/utils/fileUtils'
 import {
   createCombinedCrudWrapper,
   createMapCrudWrapper,
   createPgLiteCrudWrapper,
   withSecretStore,
 } from '../crudWrapper'
-import { getDatabase } from '../pglite.api'
 import {
   createDuplexChannel,
   createIframeMux,
   createPortApi,
   createTypeFilteredPort,
 } from '../frpBus'
+import { getDatabase } from '../pglite.api'
+import { createOAuthTool } from '../tools/authTools'
+import { createChatCompletionTool } from '../tools/chatCompletionTool'
+import { devTools } from '../tools/devTools'
+import { executeJavaScript } from '../tools/executeJavaScript'
+import { executePythonScript } from '../tools/executePython'
+import { fileTools } from '../tools/fileTools'
+import { smallHelperTools } from '../tools/helperCollection'
+import { localVectorStore } from '../tools/localVectorStore'
+import { proceduralTools } from '../tools/proceduralGraphics'
+import { taskOrganizationTools, taskSearcher } from '../tools/TaskPlannerTool'
 import { testingTools } from '../tools/testTools'
+import {
+  createAddNewToolTool,
+  createChooseTool,
+  createToolSearcher,
+  toolCreationWizard,
+} from '../tools/toolTools'
+import { useFullSmallTools } from '../tools/usefulSmallTools'
+import { wfcGenerator } from '../tools/wavefunctioncollapse'
+import { appDevTools } from '../tools/webAppDev'
 import { TaskyonMessage } from './apiTypes'
-import { dump } from 'js-yaml'
-import z from 'zod'
-import { createCryptoSession, ToolBase } from '@taskyon/taskyon'
-import type { EncryptedDataRow } from '@taskyon/taskyon'
-import { encryptCompressObject } from '../../../packages/taskyon/src/utils/fileUtils'
-import { LocalStorage } from 'quasar'
+import { useTyTaskManager } from './taskManager'
+import { runTaskWorker } from './taskWorker'
+import type { llmSettings } from './types'
 
 export async function tyCore(
   // TODO: we want to save some settings "internally" and not in the GUI...
@@ -55,20 +52,9 @@ export async function tyCore(
   // this way we can give taskyon access and the ability to read & change the environment
   // it is running in.
   EnvironmentTools: InternalTool[],
+  cryptoSession?: CryptoSession,
 ) {
-  const accountName = 'defaultAccount'
-  const lastSessionKeyKey = accountName + 'lastSK'
-  let wrappedSK = LocalStorage.getItem(lastSessionKeyKey) as string
-  let cryptoSession: CryptoSession
-  if (wrappedSK) {
-    cryptoSession = await createCryptoSession(accountName, {
-      wrappedSK,
-    })
-  } else {
-    cryptoSession = await createCryptoSession(accountName)
-    wrappedSK = await cryptoSession.exportSessionKey()
-    LocalStorage.setItem(lastSessionKeyKey, wrappedSK)
-  }
+  // TODO: make webpack automatically add all tool files from /tools/*
 
   const ToolList: InternalTool[] = [
     ...smallHelperTools,
@@ -91,6 +77,8 @@ export async function tyCore(
     ...EnvironmentTools,
   ]
 
+  let cs: CryptoSession = cryptoSession ?? (await createCryptoSession())
+
   const taskManagerInstance = await useTyTaskManager(llmSettings.vectorizationModel)
 
   const secretStore = withSecretStore(
@@ -100,13 +88,13 @@ export async function tyCore(
         tableName: 'vault',
       }),
     ]),
-    () => cryptoSession.getUserPublicKey(),
+    () => cs.getUserPublicKey().publicKey,
   )
 
   // connect secretStore to cryptoSession
   secretStore.onSessionKey(({ respond }) => {
     console.log('importing fixed key for secretStore...')
-    const key = cryptoSession.getSessionKey()
+    const key = cs.getSessionKey()
     respond(key)
   })
 
@@ -214,8 +202,8 @@ export async function tyCore(
       const packed = await encryptCompressObject(
         task,
         archiveName,
-        () => cryptoSession.getUserPublicKey(),
-        () => cryptoSession.getSessionKey(),
+        () => cs.getUserPublicKey()?.publicKey,
+        () => cs.getSessionKey(),
       )
       console.log('created encrypted task file...', id)
 
@@ -241,11 +229,9 @@ export async function tyCore(
     queueTask, // TODO: integrate with outPort!
     secretStore, // TODO: integrate with outPort!
     port: outsidePort,
-    getCryptoSession: () => cryptoSession,
-    setNewSession: async (cs: CryptoSession) => {
-      cryptoSession = cs
-      wrappedSK = await cryptoSession.exportSessionKey()
-      LocalStorage.setItem(lastSessionKeyKey, wrappedSK)
+    getCryptoSession: () => cs,
+    setNewSession: (newCs: CryptoSession) => {
+      cs = newCs
     },
   }
 }

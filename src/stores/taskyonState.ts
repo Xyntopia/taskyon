@@ -515,10 +515,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     )
   })
 
-  const cryptoSession = createBrowserCryptoSession('__CS__default')
-
-  const taskyon = cryptoSession.then(async () => {
-    return await tyCore(stateRefs.llmSettings, stateRefs.keys, defineTyGuiTools(stateRefs))
+  const cryptoSession = createBrowserCryptoSession('__TYCS__default')
+  const taskyon = cryptoSession.then(async (cs) => {
+    return await tyCore(stateRefs.llmSettings, stateRefs.keys, defineTyGuiTools(stateRefs), cs)
   })
 
   const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
