@@ -361,6 +361,31 @@ function defineTyGuiTools(stateRefs: ReturnType<typeof useAppStateStore>): Inter
   ]
 }
 
+const connectModelHistory = (stateRefs: ReturnType<typeof useAppStateStore>) => {
+  const addModelToHistory = (model: string) => {
+    if (stateRefs.modelHistory.length >= 5) {
+      stateRefs.modelHistory.shift() // remove oldest element
+    }
+    stateRefs.modelHistory.push(model)
+  }
+
+  return {
+    addModelToHistory,
+    // Method to handle the updateBotName event
+    handleBotNameUpdate: ({ newName, newService }: { newName: string; newService?: string }) => {
+      console.log('getting an api & bot update :)', newName, newService)
+      if (newService) {
+        stateRefs.llmSettings.selectedApi = newService
+      }
+      const api = getApiConfig(stateRefs.llmSettings)
+      if (api) {
+        api.selectedModel = newName
+      }
+      addModelToHistory(newName)
+    },
+  }
+}
+
 function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof useAppStateStore>) {
   // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
   // we want to oad them gradually into our UI
@@ -521,32 +546,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   })
 
   const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
-
-  function addModelToHistory(model: string) {
-    if (stateRefs.modelHistory.length >= 5) {
-      stateRefs.modelHistory.shift() // remove oldest element
-    }
-    stateRefs.modelHistory.push(model)
-  }
-
-  // Method to handle the updateBotName event
-  const handleBotNameUpdate = ({
-    newName,
-    newService,
-  }: {
-    newName: string
-    newService?: string
-  }) => {
-    console.log('getting an api & bot update :)', newName, newService)
-    if (newService) {
-      stateRefs.llmSettings.selectedApi = newService
-    }
-    const api = getApiConfig(stateRefs.llmSettings)
-    if (api) {
-      api.selectedModel = newName
-    }
-    addModelToHistory(newName)
-  }
+  const { addModelToHistory, handleBotNameUpdate } = connectModelHistory(stateRefs)
 
   // make sure we always have an up-to-date list of tools
   const allTools = ref<Record<string, InternalTool>>({})
