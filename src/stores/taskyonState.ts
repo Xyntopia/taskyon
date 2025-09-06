@@ -512,6 +512,60 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
   }
 }
 
+function reactiveTools(taskyon: Promise<Taskyon>) {
+  const allTools = ref<Record<string, InternalTool>>({})
+
+  void taskyon.then((TY) => {
+    const updateTools = async () => {
+      allTools.value = await TY.taskManagerInstance.updateToolDefinitions(true)
+    }
+    void updateTools()
+
+    // if a new "default" tool was created update UI
+    // TODO: can we move this into our init.ts? or does it make sense here?
+    TY.port.receive((msg) => {
+      console.log('api out message!', msg)
+      void match(msg).with(
+        {
+          type: 'status',
+          data: {
+            type: 'newtool',
+            id: P.select(),
+          },
+        },
+        (id) => {
+          console.log('Default Tool definition was added to taskyon!', id)
+          void updateTools()
+        },
+      )
+    })
+
+    // if a new tool was created as a tasknode, update UI
+    TY.taskManagerInstance.taskStream.subscribe(
+      (msg) =>
+        void match(msg)
+          .returnType<void>()
+          .with(
+            {
+              data: {
+                content: {
+                  type: 'tooldefinition',
+                  data: {
+                    id: P.select(),
+                  },
+                },
+              },
+            },
+            (id) => {
+              console.log('Tool definition was added to taskyon!', id)
+              void updateTools()
+            },
+          ),
+    )
+  })
+  return allTools
+}
+
 export const useTaskyonStore = defineStore('taskyonControl', () => {
   console.log('loading taskyon store!')
 
@@ -548,8 +602,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
   const { addModelToHistory, handleBotNameUpdate } = connectModelHistory(stateRefs)
 
-  // make sure we always have an up-to-date list of tools
-  const allTools = ref<Record<string, InternalTool>>({})
   // iApiOutside is the port to the "outside" of taskyon UI. It is the port used to
   // communicate towards the taskyon engine. iApiInside communicates to the outside of taskyon.
   // For example the iframe is connected to iApiOutside because
@@ -633,56 +685,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       iframePort.send('taskyon connected!')
     }
     // ------------end of IFRAME operations-------
-
-    const updateTools = async () => {
-      allTools.value = await TY.taskManagerInstance.updateToolDefinitions(true)
-    }
-    void updateTools()
-
-    // if a new "default" tool was created update UI
-    // TODO: can we move this into our init.ts? or does it make sense here?
-    TY.port.receive((msg) => {
-      console.log('api out message!', msg)
-      void match(msg).with(
-        {
-          type: 'status',
-          data: {
-            type: 'newtool',
-            id: P.select(),
-          },
-        },
-        (id) => {
-          console.log('Default Tool definition was added to taskyon!', id)
-          void updateTools()
-        },
-      )
-    })
-
-    // if a new tool was created as a tasknode, update UI
-    TY.taskManagerInstance.taskStream.subscribe(
-      (msg) =>
-        void match(msg)
-          .returnType<void>()
-          .with(
-            {
-              data: {
-                content: {
-                  type: 'tooldefinition',
-                  data: {
-                    id: P.select(),
-                  },
-                },
-              },
-            },
-            (id) => {
-              console.log('Tool definition was added to taskyon!', id)
-              void updateTools()
-            },
-          ),
-    )
-
-    return TY
   })
+
+  // make sure we always have an up-to-date list of tools
+  const allTools = reactiveTools(taskyon)
 
   // Access taskManagerInstance and addTask2Tree without redundant awaits
   const getTaskManager = async () => (await taskyon)['taskManagerInstance']
@@ -986,5 +992,3 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     getGdriveToken,
   }
 }) // this state stores all information which
-
-// should be stored e.g. in browser LocalStorage
