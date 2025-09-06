@@ -32,6 +32,27 @@ export const generateRandomEncryptionKey = (wrapper = false) =>
     wrapper ? ['wrapKey', 'unwrapKey'] : ['encrypt', 'decrypt'],
   )
 
+// generate a fingerprint for a key which is non-exportable!
+export async function keyFingerPrint(key: CryptoKey): Promise<string> {
+  // Create a deterministic dummy key to wrap
+  const dummy = await crypto.subtle.importKey(
+    'raw',
+    new Uint8Array(32), // all zeros
+    { name: 'AES-GCM' }, // arbitrary algorithm
+    true,
+    ['encrypt'],
+  )
+
+  // Wrap the dummy key with our session key
+  const wrapped = await crypto.subtle.wrapKey('raw', dummy, key, 'AES-KW')
+
+  // Hash the wrapped bytes
+  const digest = await crypto.subtle.digest('SHA-256', wrapped)
+  const bytes = new Uint8Array(digest)
+
+  return uint8ArrayToBase64UrlSafe(bytes)
+}
+
 export const deriveKeyFromPwd = async (
   pwd: string,
   salt: Uint8Array<ArrayBuffer>,
@@ -309,7 +330,10 @@ const deriveKey32 = async (seed64: Uint8Array<ArrayBuffer>, info: string = '') =
     ),
   )
 
-async function generateKeyPairsFromSeed(seed: Uint8Array<ArrayBuffer>, extractablePublic = true) {
+export async function generateKeyPairsFromSeed(
+  seed: Uint8Array<ArrayBuffer>,
+  extractablePublic = true,
+) {
   if (seed.length <= 32) throw new Error('Seed must be at least 32 bytes')
 
   const keySeed = await deriveKey32(seed)

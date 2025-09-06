@@ -105,7 +105,8 @@ export const useAppStateStore = defineStore(storeName, () => {
     const storedInitialState = deepMerge(initialState, initialStoredStateObjTyped, 'overwrite')
     stateRefs = reactive(storedInitialState)
   } else {
-    // TODO: pop up a dialog where we inform the user about this!!
+    // TODO: pop up a dialog or a separate migration page where we
+    //       inform the user about this and ask them what to do about it...
     console.warn(
       `Stored settings version (${
         initialStoredStateObjTyped?.version || 'undefined'

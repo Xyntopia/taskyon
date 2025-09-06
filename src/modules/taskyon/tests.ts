@@ -1,8 +1,6 @@
 import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import {
-  createCryptoSession,
   cryptoKeyToBase64,
-  forceDestroyCryptoSession,
   generateRandomEncryptionKey,
   generateSeedPhrase,
   ToolBase,
@@ -30,6 +28,7 @@ import { createTaskNode } from './taskManager'
 import { chat2Md, getTextFile } from './taskUtils'
 import { craeteToolJsonSchema, summarizeTools } from './tools'
 import { useNlpWorker, usePyodideWebworker } from './webWorkerApi'
+import { createBrowserCryptoSession, deleteSession } from './browserCryptoSession'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -360,7 +359,7 @@ export async function testCryptoSession() {
   const testMnemonic = generateSeedPhrase()
 
   // Clean up any existing databases first
-  await forceDestroyCryptoSession(accountId)
+  // await forceDestroyCryptoSession()
 
   // ===================================================================
   // Phase 1: Single Device Setup and Key Management
@@ -368,8 +367,8 @@ export async function testCryptoSession() {
   report.push('PHASE 1: Single device initialization and key management')
 
   // Create primary device session
-  const device1 = await createCryptoSession(accountId, { mnemonic: testMnemonic })
-  report.push('Device1 session created')
+  const device1 = await createBrowserCryptoSession(accountId, { mnemonic: testMnemonic })
+  report.push('Device1 session ceate')
 
   // Validate initial keys
   const sessionKey1 = device1.getSessionKey()
@@ -377,7 +376,7 @@ export async function testCryptoSession() {
   report.push(`Device1 public key: ${JSON.stringify(devicePubKey1)}`)
 
   // Test session key regeneration
-  const device1_1 = await device1.derive({ newSK: true })
+  const device1_1 = await device1.newSessionKey()
   const newSessionKey = device1_1.getSessionKey()
   report.push('Session key regenerated')
 
@@ -393,7 +392,7 @@ export async function testCryptoSession() {
 
   // Test device key regeneration
   const originalDeviceKey = device1.getDevicePublicKey()
-  const device1_2 = await device1_1.derive({ newDK: true })
+  const device1_2 = await device1_1.newDeviceKey()
   const newDeviceKey = device1_2.getDevicePublicKey()
 
   // Verify device key changed
@@ -408,10 +407,8 @@ export async function testCryptoSession() {
   }
 
   // Test user key management
-  const userPubKey = (
-    await device1.derive({ newMnemonic: generateSeedPhrase() })
-  ).getUserPublicKey()
-  report.push(`User public key: ${await cryptoKeyToBase64(userPubKey)}`)
+  const userPubKey = (await device1.derive({ mnemonic: generateSeedPhrase() })).getUserPublicKey()
+  report.push(`User public key: ${await cryptoKeyToBase64(userPubKey.publicKey)}`)
 
   // ===================================================================
   // Phase 2: Key Sharing Between Devices
@@ -428,7 +425,7 @@ export async function testCryptoSession() {
   report.push('Session key wrapped for sharing')
 
   // Create second device session
-  const device2 = await createCryptoSession(accountId2, {
+  const device2 = await createBrowserCryptoSession(accountId2, {
     wrappedSK: wrappedSessionKey,
     unwrapper: exchangeKey,
   })
@@ -444,24 +441,17 @@ export async function testCryptoSession() {
   // ===================================================================
   report.push('\nPHASE 3: Session destruction and cleanup')
 
-  // IMPORTANT: Close all sessions before attempting database deletion
-  await device1.destroy()
-  report.push('Device1 session closed')
-
-  await device2.destroy()
-  report.push('Device2 session closed')
-
-  // Now safely delete the database
-  await forceDestroyCryptoSession(accountId)
-  report.push('Database completely destroyed')
+  deleteSession(accountId)
 
   // Verify new session can be created after destruction
-  const newSession = await createCryptoSession(accountId)
+  const newSession = await createBrowserCryptoSession(accountId)
   newSession.getSessionKey()
   report.push('New session created after destruction')
 
-  // Clean up the test session too
-  await newSession.destroy()
+  assert(
+    (await newSession.getSessionId()) !== (await device1.getSessionId()),
+    'Sessions should be different now!!',
+  )
 
   return {
     logs: report,
@@ -477,6 +467,7 @@ export async function testCryptoSession() {
     id1_1: await device1_1.deviceId(),
     id1_2: await device1_2.deviceId(),
     id2: await device2.deviceId(),
+    SKAfterSKdelete: await newSession.getSessionId(),
     metrics: {
       deviceKeyRegenerated: origKeyBytes !== newKeyBytes,
       sessionKeyShared: !!wrappedSessionKey,
