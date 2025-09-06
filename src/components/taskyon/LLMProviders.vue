@@ -169,16 +169,16 @@ insert into the settings below."
 </template>
 
 <script setup lang="ts">
-import OpenRouterPKCE from './OpenRouterPKCE.vue'
-import JsonInput from '../JsonInput.vue'
-import TyMarkdown from '../tyMarkdown.vue'
-import SecretInput from '../SecretInput.vue'
 import { matEdit } from '@quasar/extras/material-icons'
-import ApiSelect from './ApiSelect.vue'
-import InfoDialog from '../InfoDialog.vue'
+import { useQuasar } from 'quasar'
 import tykeyobj from 'src/assets/taskyon_free_key.json'
 import { useAppStateStore } from 'src/stores/appState'
-import { useQuasar } from 'quasar'
+import InfoDialog from '../InfoDialog.vue'
+import JsonInput from '../JsonInput.vue'
+import SecretInput from '../SecretInput.vue'
+import TyMarkdown from '../tyMarkdown.vue'
+import ApiSelect from './ApiSelect.vue'
+import OpenRouterPKCE from './OpenRouterPKCE.vue'
 
 const state = useAppStateStore()
 const $q = useQuasar()
