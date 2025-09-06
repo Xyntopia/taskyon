@@ -28,7 +28,7 @@ import { createTaskNode } from './taskManager'
 import { chat2Md, getTextFile } from './taskUtils'
 import { craeteToolJsonSchema, summarizeTools } from './tools'
 import { useNlpWorker, usePyodideWebworker } from './webWorkerApi'
-import { createBrowserCryptoSession, deleteSession } from './browserCryptoSession'
+import { initCryptoSessionFromBrowser, deleteSession } from './browserCryptoSession'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -353,8 +353,6 @@ export const testIndexedDBKeyStorage = async (): Promise<TestReport> => {
 //       both SK should work, but they look different as wrapped with different DKs
 export async function testCryptoSession() {
   const report: string[] = []
-  const accountId = 'test_account_123'
-  const accountId2 = 'test_account_321'
 
   const testMnemonic = generateSeedPhrase()
 
@@ -367,7 +365,7 @@ export async function testCryptoSession() {
   report.push('PHASE 1: Single device initialization and key management')
 
   // Create primary device session
-  const device1 = await createBrowserCryptoSession(accountId, { mnemonic: testMnemonic })
+  const device1 = await initCryptoSessionFromBrowser({ mnemonic: testMnemonic })
   report.push('Device1 session ceate')
 
   // Validate initial keys
@@ -426,7 +424,7 @@ export async function testCryptoSession() {
 
   // Create second device session
   const device2 = await (
-    await createBrowserCryptoSession(accountId2, {
+    await initCryptoSessionFromBrowser({
       wrappedSK: wrappedSessionKey,
       unwrapper: exchangeKey,
     })
@@ -443,10 +441,10 @@ export async function testCryptoSession() {
   // ===================================================================
   report.push('\nPHASE 3: Session destruction and cleanup')
 
-  deleteSession(accountId)
+  await deleteSession(device1)
 
   // Verify new session can be created after destruction
-  const newSession = await createBrowserCryptoSession(accountId)
+  const newSession = await initCryptoSessionFromBrowser()
   newSession.getSessionKey()
   report.push('New session created after destruction')
 

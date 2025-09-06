@@ -28,6 +28,7 @@
 <script setup lang="ts">
 import { matWarning } from '@quasar/extras/material-icons'
 import { type CryptoSession } from '@taskyon/taskyon'
+import { persistSession } from 'src/modules/taskyon/browserCryptoSession'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { ref } from 'vue'
@@ -62,7 +63,10 @@ const downloadKeyFromGdrive = async (secret: string) => {
 }
 
 const setNewSessionKey = async () => {
-  if (temporarySession.value) await tystate.setNewSession(temporarySession.value)
+  if (temporarySession.value) {
+    await persistSession(temporarySession.value)
+    await tystate.setNewSession(temporarySession.value)
+  }
   // recalculate new session id..
   existingSessionId.value = await tystate.getSessionId()
 }

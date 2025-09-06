@@ -78,7 +78,6 @@ export async function tyCore(
   ]
 
   let cs: CryptoSession = cryptoSession ?? (await createCryptoSession())
-
   const taskManagerInstance = await useTyTaskManager(llmSettings.vectorizationModel)
 
   const secretStore = withSecretStore(

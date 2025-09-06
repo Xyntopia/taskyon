@@ -1,6 +1,6 @@
 // browserDeviceKey.ts
 
-import type { CryptoSessionOptions } from '@taskyon/taskyon'
+import type { CryptoSession, CryptoSessionOptions } from '@taskyon/taskyon'
 import { createCryptoSession } from '@taskyon/taskyon'
 import { LocalStorage } from 'quasar'
 
@@ -76,28 +76,35 @@ async function setDeviceKey(namespace: string, keyPair: CryptoKeyPair): Promise<
 const storageNamespace = 'ty_device_key'
 // in the browser we can permanently store the inital device key safely
 // in indexeddb! We also store wrapped Session Keys safely in localstorage
-export const createBrowserCryptoSession = async (
-  sessionName: string,
-  options?: CryptoSessionOptions,
-) => {
-  // TODO: deal with duplicate sesson IDs, e.g. because of same password...
-  //       if this is the case, we would like to add a salt...  and also use the salt
-  //       to identify the relevant session id...
-  //
-  let wrappedSK = LocalStorage.getItem(sessionName) as string
-
+export const initCryptoSessionFromBrowser = async (options?: CryptoSessionOptions) => {
   const DK = await getDeviceKey(storageNamespace)
-  const cs = await createCryptoSession({ deviceKeyPair: DK, wrappedSK, ...options })
+  let cs = await createCryptoSession({ deviceKeyPair: DK, ...options })
   // in case cs creates a new devicekey, store it here :)
   if (!DK) await setDeviceKey(storageNamespace, cs.getDeviceKey())
-  if (!wrappedSK) {
-    wrappedSK = await cs.exportSessionKey()
-    LocalStorage.setItem(sessionName, wrappedSK)
+
+  // we create an id from the wrapper which we can
+  // use to identify the correct wrapped session key!
+  const sessionName = await cs.getWrapperId()
+  if (!options?.wrappedSK) {
+    // now check if we stored a SK before:
+    const wrappedSK = LocalStorage.getItem(sessionName) as string | undefined
+    // if we stored it before, we need to set it in the cryptosession:
+    cs = await cs.newSessionKey(wrappedSK)
   }
+
+  // always store the created session key
+  const lastWrappedSK = await cs.exportSessionKey()
+  LocalStorage.setItem(sessionName, lastWrappedSK)
 
   return cs
 }
 
-export const deleteSession = (sessionName: string) => {
-  LocalStorage.remove(sessionName)
+export const persistSession = async (cs: CryptoSession) => {
+  const sessionName = await cs.getWrapperId()
+  const lastWrappedSK = await cs.exportSessionKey()
+  LocalStorage.setItem(sessionName, lastWrappedSK)
+}
+
+export const deleteSession = async (session: CryptoSession) => {
+  LocalStorage.remove(await session.getWrapperId())
 }

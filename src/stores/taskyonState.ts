@@ -15,7 +15,7 @@ import { setPrismTheme } from 'src/modules/markdownUtils '
 import type { AuthenticationOptions, TokenGetter } from 'src/modules/oauth'
 import { OAUTH_PROVIDERS, usePersistentOauth } from 'src/modules/oauth'
 import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
-import { createBrowserCryptoSession } from 'src/modules/taskyon/browserCryptoSession'
+import { initCryptoSessionFromBrowser } from 'src/modules/taskyon/browserCryptoSession'
 import { availableModels } from 'src/modules/taskyon/chat'
 import type { Taskyon } from 'src/modules/taskyon/init'
 import { tyCore } from 'src/modules/taskyon/init'
@@ -566,6 +566,54 @@ function reactiveTools(taskyon: Promise<Taskyon>) {
   return allTools
 }
 
+const useSwitchCryptoSession = (
+  taskyon: Promise<Taskyon>,
+  gdp: Promise<ReturnType<typeof connectGdriveSync>>,
+) => {
+  // TODO: somehow use a better id here?  maybe we could use the id from our taskyon login?
+  const shareKeyId = 'taskyonShareKeyID'
+  // we use a fixed salt right now, because we never save the key ...
+  const salt = new TextEncoder().encode('taskyonSalt')
+  async function uploadSessionKey() {
+    const ty = await taskyon
+    const cs = ty.getCryptoSession()
+
+    const sharingSecret = randomString()
+    const sharingKey = await deriveKeyFromPwd(sharingSecret, salt, true)
+    const sharedSK = await cs.exportSessionKey(sharingKey)
+
+    const gd = await gdp
+    await gd.uploadWrappedSessionKey(sharedSK, shareKeyId)
+    return sharingSecret
+  }
+
+  async function newSessionFromGdrive(sharingSecret: string) {
+    const gd = await gdp
+    const key = await gd.downloadWrappedSessionKey(shareKeyId)
+    // TODO: delete directory and file after downloading secret!!
+    console.warn('we need to delete the directory and secret!!')
+    const sharingKey = await deriveKeyFromPwd(sharingSecret, salt, true)
+    const ty = await taskyon
+    return await ty.getCryptoSession().derive({ wrappedSK: key, unwrapper: sharingKey })
+  }
+
+  async function getSessionId() {
+    const ty = await taskyon
+    return await ty.getCryptoSession().getSessionId()
+  }
+
+  const setNewSession = async (cs: CryptoSession) => {
+    ;(await taskyon).setNewSession(cs)
+  }
+
+  return {
+    setNewSession,
+    getSessionId,
+    newSessionFromGdrive,
+    uploadSessionKey,
+  }
+}
+
 export const useTaskyonStore = defineStore('taskyonControl', () => {
   console.log('loading taskyon store!')
 
@@ -594,8 +642,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     )
   })
 
-  const cryptoSession = createBrowserCryptoSession('__TYCS__default')
-  const taskyon = cryptoSession.then(async (cs) => {
+  const taskyon = initCryptoSessionFromBrowser().then(async (cs) => {
     return await tyCore(stateRefs.llmSettings, stateRefs.keys, defineTyGuiTools(stateRefs), cs)
   })
 
@@ -752,37 +799,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return gdp
   })
 
-  // TODO: somehow use a better id here?  maybe we could use the id from our taskyon login?
-  const shareKeyId = 'taskyonShareKeyID'
-  // we use a fixed salt right now, because we never save the key ...
-  const salt = new TextEncoder().encode('taskyonSalt')
-  async function uploadSessionKey() {
-    const ty = await taskyon
-    const cs = ty.getCryptoSession()
-
-    const sharingSecret = randomString()
-    const sharingKey = await deriveKeyFromPwd(sharingSecret, salt, true)
-    const sharedSK = await cs.exportSessionKey(sharingKey)
-
-    const gd = await gdp
-    await gd.uploadWrappedSessionKey(sharedSK, shareKeyId)
-    return sharingSecret
-  }
-
-  async function newSessionFromGdrive(sharingSecret: string) {
-    const gd = await gdp
-    const key = await gd.downloadWrappedSessionKey(shareKeyId)
-    // TODO: delete directory and file after downloading secret!!
-    console.warn('we need to delete the directory and secret!!')
-    const sharingKey = await deriveKeyFromPwd(sharingSecret, salt, true)
-    const ty = await taskyon
-    return await ty.getCryptoSession().derive({ wrappedSK: key, unwrapper: sharingKey })
-  }
-
-  async function getSessionId() {
-    const ty = await taskyon
-    return await ty.getCryptoSession().getSessionId()
-  }
+  const { setNewSession, getSessionId, newSessionFromGdrive, uploadSessionKey } =
+    useSwitchCryptoSession(taskyon, gdp)
 
   // TODO: this is soo  ugly..  we need to do something about this...
   const connectMessageIframe = async (id: string, iframe: HTMLIFrameElement, origin?: string) => {
@@ -956,7 +974,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // TODO: make all computed values readonly
   return {
-    setNewSession: async (cs: CryptoSession) => (await taskyon).setNewSession(cs),
+    setNewSession,
     getSessionId,
     newSessionFromGdrive,
     uploadSessionKey,
