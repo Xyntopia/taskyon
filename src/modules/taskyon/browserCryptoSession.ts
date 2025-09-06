@@ -78,7 +78,7 @@ const storageNamespace = 'ty_device_key'
 // in indexeddb! We also store wrapped Session Keys safely in localstorage
 export const createBrowserCryptoSession = async (
   sessionName: string,
-  options?: Omit<CryptoSessionOptions, 'DK'>,
+  options?: CryptoSessionOptions,
 ) => {
   // TODO: deal with duplicate sesson IDs, e.g. because of same password...
   //       if this is the case, we would like to add a salt...  and also use the salt
@@ -87,7 +87,7 @@ export const createBrowserCryptoSession = async (
   let wrappedSK = LocalStorage.getItem(sessionName) as string
 
   const DK = await getDeviceKey(storageNamespace)
-  const cs = await createCryptoSession({ ...options, deviceKeyPair: DK, wrappedSK })
+  const cs = await createCryptoSession({ deviceKeyPair: DK, wrappedSK, ...options })
   // in case cs creates a new devicekey, store it here :)
   if (!DK) await setDeviceKey(storageNamespace, cs.getDeviceKey())
   if (!wrappedSK) {

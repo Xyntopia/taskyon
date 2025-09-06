@@ -425,10 +425,12 @@ export async function testCryptoSession() {
   report.push('Session key wrapped for sharing')
 
   // Create second device session
-  const device2 = await createBrowserCryptoSession(accountId2, {
-    wrappedSK: wrappedSessionKey,
-    unwrapper: exchangeKey,
-  })
+  const device2 = await (
+    await createBrowserCryptoSession(accountId2, {
+      wrappedSK: wrappedSessionKey,
+      unwrapper: exchangeKey,
+    })
+  ).newDeviceKey()
   report.push('Device2 session created')
   report.push('Wrapped session key imported to device2')
 

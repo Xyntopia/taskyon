@@ -65,8 +65,10 @@ export async function createCryptoSession(options?: CryptoSessionOptions) {
     getSessionId: () => keyFingerPrint(SK), // <-- added
     derive: (options?: CryptoSessionOptions) =>
       createCryptoSession({ wrappedSK, deviceKeyPair: DK, userKeyPair: UK, ...options }),
-    newSessionKey: () => createCryptoSession({ deviceKeyPair: DK, userKeyPair: UK }),
-    newDeviceKey: () => createCryptoSession({ wrappedSK, userKeyPair: UK, unwrapper: kek }),
+    newSessionKey: (wrappedSK?: string) =>
+      createCryptoSession({ wrappedSK, deviceKeyPair: DK, userKeyPair: UK }),
+    newDeviceKey: (deviceKeyPair?: CryptoKeyPair) =>
+      createCryptoSession({ deviceKeyPair, wrappedSK, userKeyPair: UK, unwrapper: kek }),
   }
 }
 
