@@ -654,7 +654,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     )
   })
 
-  const taskyon = initCryptoSessionFromBrowser().then(async (cs) => {
+  const taskyon = initCryptoSessionFromBrowser(undefined, true).then(async (cs) => {
     return await tyCore(stateRefs.llmSettings, stateRefs.keys, defineTyGuiTools(stateRefs), cs)
   })
 
