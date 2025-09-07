@@ -7,8 +7,8 @@ import {
   keyPairFromMnemonic,
   generateAssymetricKeyDeriver,
   generateWrappedSessionKey,
-  unwrapSessionKey,
-  reWrapSessionKey,
+  unwrapKeySymmetric,
+  reWrapSessionKeySymmetric,
   deriveKek,
   cryptoKeyToBase64,
   keyFingerPrint,
@@ -37,10 +37,10 @@ export async function createCryptoSession(options?: CryptoSessionOptions) {
   // Initialize session key (in memory only)
   const wrappedSK = options?.wrappedSK
     ? options?.unwrapper
-      ? await reWrapSessionKey(options.wrappedSK, options.unwrapper, kek)
+      ? await reWrapSessionKeySymmetric(options.wrappedSK, options.unwrapper, kek)
       : options.wrappedSK
     : await generateWrappedSessionKey(kek)
-  const SK = await unwrapSessionKey(wrappedSK, kek)
+  const SK = await unwrapKeySymmetric(wrappedSK, kek)
 
   // Initialize user key pair (in memory only)
   const UK = options?.mnemonic
@@ -49,7 +49,7 @@ export async function createCryptoSession(options?: CryptoSessionOptions) {
 
   const exportSessionKey = async (shareKey?: CryptoKey) => {
     if (shareKey) {
-      return await reWrapSessionKey(wrappedSK, kek, shareKey)
+      return await reWrapSessionKeySymmetric(wrappedSK, kek, shareKey)
     } else {
       return wrappedSK
     }

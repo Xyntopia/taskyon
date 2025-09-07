@@ -908,7 +908,7 @@ export async function testGdriveZipRoundtrip() {
   }
 }
 
-export const testSecretStore = (secretStore: SecretStore) => async () => {
+export const testSecretStore = async (secretStore: SecretStore) => {
   console.log('request a random secret from the store')
 
   const secretName = 'MYTESTTOKEN'

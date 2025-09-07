@@ -2,41 +2,55 @@
 
 import z from 'zod'
 import {
+  cryptoKeyToBase64,
+  deriveKek,
+  generateAssymetricKeyDeriver,
   generateRandomEncryptionKey,
   unwrapWithSymmetricKey,
-  wrapKeyWithPublicKey,
-  wrapWithAssymetricKey,
+  wrapWithSymetricKey,
   type AskCryptoKey,
 } from './crypto'
 import { base64UrlToUint8Array, uint8ArrayToBase64UrlSafe } from './encoding'
 
-const deriveRowKey = (key: CryptoKey, id: string | number) =>
-  crypto.subtle.deriveKey(
+const deriveRowKey = async (key: CryptoKey, info: string | number) => {
+  // our rowKey comes in as AES-GCM which we can not use as
+  //const raw = await crypto.subtle.exportKey('raw', rowKey)
+  const raw = await crypto.subtle.exportKey('raw', key)
+  const hkdf = await crypto.subtle.importKey('raw', raw, 'HKDF', false, ['deriveKey'])
+
+  return crypto.subtle.deriveKey(
     {
       name: 'HKDF',
       hash: 'SHA-256',
-      info: new TextEncoder().encode(String(id)),
+      // we add a static salt here, because our rowKey is bob-specific and random anyways
+      // additionally, we use it with info, so we don't really need a salt here, because
+      // our key appears random anyways..
+      salt: new TextEncoder().encode('111'),
+      info: new TextEncoder().encode(String(info)),
     },
-    key, // non-extractable
+    hkdf,
     { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt'],
+    false, // non-extractable derived key
+    ['encrypt', 'decrypt'], // or just 'encrypt' if you only encrypt
   )
+}
 
 // Define a type for the encrypted data structure
 export const EncryptedDataRow = z.object({
   iv: z.string(),
   ciphertext: z.string(),
-  encryptedToolKey: z.string(),
-  recoveryEncryptedToolKey: z.string(),
+  pk: z.string(),
+  wrk: z.string().describe('wrapped row key'),
+  wrkr: z.string().describe('wrapped row key recovery'),
 })
 export type EncryptedDataRow = z.infer<typeof EncryptedDataRow>
 
 export const EncryptedDataRowMixed = z.object({
   iv: z.instanceof(Uint8Array),
   ciphertext: z.instanceof(Uint8Array),
-  encryptedToolKey: z.string(),
-  recoveryEncryptedToolKey: z.string(),
+  pk: z.string(),
+  wrk: z.string().describe('wrapped row key'),
+  wrkr: z.string().describe('wrapped row key recovery'),
 })
 export type EncryptedDataRowMixed = z.infer<typeof EncryptedDataRowMixed>
 
@@ -62,16 +76,14 @@ async function encryptData<T>(
 
 // Encrypt object with key derived from rowKey + salt + id
 async function encryptData(
-  rowKey: CryptoKey,
+  rowKey: CryptoKey, // AES-GCM with "encrypt"
   data: BufferSource,
   id: string | number,
   base64: boolean = true,
 ) {
-  // Derive AES-GCM key using HKDF
-  // we never share the derivedKey and rowKey is unique per encrypted object anyways
-  // so it effectivly acts as a salt ... this why we don't need a salt
-  // we don't want to use rowKey directly, because the iv would include only 12 bytes
-  // and the aad doesn't guarantee non-encrptability without the info
+  // Derive AES-GCM key with HKDF: rowKey is unique per object, so no extra salt is needed.
+  // Using HKDF binds the key to the row id for separation, instead of relying only on the 12-byte IV.
+  // This avoids accidental cross-row decryption and makes the encryption domain explicit.
   const derivedKey = await deriveRowKey(rowKey, id)
 
   // Encrypt data with derived key
@@ -128,32 +140,40 @@ export async function encryptDataFile(
   getSessionKey: AskCryptoKey,
   base64: boolean = true, // whether to return the data as base64 strings
 ) {
+  const sk = await getSessionKey()
   // Generate a new random tool key for each set operation
   // we need the key to be extractable, so that we can encrypt it !
-  const rowKey = await generateRandomEncryptionKey()
+  const rowKey = await generateRandomEncryptionKey(false, true)
+  const wrappedRK = await wrapWithSymetricKey(sk, rowKey)
 
   // Encrypt the tool key using the recovery public key
-  const recoveryEncryptedToolKey = await wrapKeyWithPublicKey(await publicRecoveryKey(), rowKey)
-
-  const sessionKey = await getSessionKey() // Encrypt the tool key using the symmetric session key
-  const encryptedToolKey = await wrapWithAssymetricKey(sessionKey, rowKey)
+  // derive a random ephemeral X25519 key in order to wrap the key
+  // we will throw away the pruvate part of it after encryption.
+  const ephemeralX25519 = await generateAssymetricKeyDeriver()
+  const kekWrapper = await deriveKek(ephemeralX25519.privateKey, await publicRecoveryKey())
+  const wrappedRkRecovery = await wrapWithSymetricKey(kekWrapper, rowKey)
+  // we also need tp save the public ephemeral key in order to recover the row-key with the recovery
+  // key.
+  const pk = await cryptoKeyToBase64(ephemeralX25519.publicKey)
 
   // Encrypt the data using the tool key
   if (base64) {
-    const { iv, ciphertext } = await encryptData(rowKey, data, info, base64)
+    const { iv, ciphertext } = await encryptData(rowKey, data, info, true)
     return {
       iv,
       ciphertext,
-      encryptedToolKey,
-      recoveryEncryptedToolKey,
+      pk,
+      wrk: wrappedRK,
+      wrkr: wrappedRkRecovery,
     } as EncryptedDataRow
   } else {
-    const { iv, ciphertext } = await encryptData(rowKey, data, info, base64)
+    const { iv, ciphertext } = await encryptData(rowKey, data, info, false)
     return {
       iv,
       ciphertext,
-      encryptedToolKey,
-      recoveryEncryptedToolKey,
+      pk,
+      wrk: wrappedRK,
+      wrkr: wrappedRkRecovery,
     } as EncryptedDataRowMixed
   }
 }
@@ -165,20 +185,15 @@ export async function decryptData(
   ciphertext: string | Uint8Array<ArrayBuffer>,
   id: string | number,
 ) {
-  // --- START OF CHANGES ---
-  // Use `typeof` to check if the inputs are strings. If so, decode them.
-  // If they are already ArrayBuffers, use them as is.
   const ivBytes = typeof iv === 'string' ? base64UrlToUint8Array(iv) : iv
   const ciphertextBytes =
     typeof ciphertext === 'string' ? base64UrlToUint8Array(ciphertext) : ciphertext
-  // --- END OF CHANGES ---
 
   const derivedKey = await deriveRowKey(rowKey, id)
-
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: ivBytes }, // Now correctly using a buffer
+    { name: 'AES-GCM', iv: ivBytes },
     derivedKey,
-    ciphertextBytes, // Now correctly using a buffer
+    ciphertextBytes,
   )
 
   return new Uint8Array(decrypted)
@@ -192,8 +207,10 @@ export const decryptDataFile = async (
   info: string | number,
   getSessionKey: AskCryptoKey,
 ) => {
+  // TODO: optionally unwrap rowkey using recoverykey!
+
   // Decrypt the tool key using the symmetric session key (this is always a string)
-  const rowKey = await unwrapWithSymmetricKey(await getSessionKey(), encData.encryptedToolKey)
+  const rowKey = await unwrapWithSymmetricKey(await getSessionKey(), encData.wrk, true)
 
   // Decrypt the data using the tool key. The updated `decryptData` function
   // will handle the type detection internally. No `if` block needed here!
