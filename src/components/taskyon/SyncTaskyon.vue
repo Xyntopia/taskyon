@@ -21,14 +21,20 @@ With Taskyon, your tasks are always **yours alone**.
     </q-item>
     <template v-if="state.appConfiguration.expertMode">
       <q-expansion-item label="ID Management" expand-separator class="q-py-sm">
+        <q-item>
+          <q-item-section>
+            Device ID: {{ deviceStr?.['Device ID'] }} <br />Session ID:
+            {{ deviceStr?.['Session ID'] }}
+          </q-item-section>
+        </q-item>
         <q-item v-if="false">
           <q-item-label caption>
-            Device ID
+            Current Peer ID: {{ 'N/A' }}
             <InfoDialog
-              info-text="Your Device ID is a unique identifier for this specific device.
+              info-text="Your Current Peer ID is a unique identifier for this specific device.
 It helps Taskyon distinguish between different devices you use, enabling secure
-synchronization and backup of your data. Device IDs are not shared with other
-users and are used only for internal management and security."
+synchronization and backup of your data. Peer IDs are ephemeral and shared with other
+users to securily exchange information. ou do not need to keep track of it."
             />
           </q-item-label>
           <q-item-label> </q-item-label>
@@ -254,6 +260,7 @@ import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from './TyResetButton.vue'
 import { TyProfile } from 'src/modules/taskyon/types'
 import SyncAskDialog from './SyncAskDialog.vue'
+import { asyncComputed } from 'src/modules/vueUtils'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -262,6 +269,14 @@ const { saveObjToGdrive, loadObjFromGdrive } = useGdrive(tystate.getGdriveToken)
 const showSeedPhrase = ref(false)
 const pressedSeedPhraseCopyButton = ref(false)
 const seedPhrase = ref('')
+
+const deviceStr = asyncComputed(
+  async () => ({
+    'Device ID': await tystate.getDeviceId(),
+    'Session ID': await tystate.getSessionId(),
+  }),
+  undefined,
+)
 
 function onGenerateSeedPhrase() {
   console.log('generate user id...')

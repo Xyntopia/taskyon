@@ -1,5 +1,11 @@
 import type { Asyncify, CryptoSession, InternalTool } from '@taskyon/taskyon'
-import { deriveKeyFromPwd, randomString, TaskNode, toolCall } from '@taskyon/taskyon'
+import {
+  cryptoKeyToBase64,
+  deriveKeyFromPwd,
+  randomString,
+  TaskNode,
+  toolCall,
+} from '@taskyon/taskyon'
 import { defineStore } from 'pinia'
 import { useQuasar } from 'quasar' // load dynamically! :)
 import { setColors } from 'src/boot/brand-colors'
@@ -602,6 +608,11 @@ const useSwitchCryptoSession = (
     return await ty.getCryptoSession().getSessionId()
   }
 
+  async function getDeviceId() {
+    const ty = await taskyon
+    return await cryptoKeyToBase64(ty.getCryptoSession().getDevicePublicKey())
+  }
+
   const setNewSession = async (cs: CryptoSession) => {
     ;(await taskyon).setNewSession(cs)
   }
@@ -609,6 +620,7 @@ const useSwitchCryptoSession = (
   return {
     setNewSession,
     getSessionId,
+    getDeviceId,
     newSessionFromGdrive,
     uploadSessionKey,
   }
@@ -799,7 +811,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return gdp
   })
 
-  const { setNewSession, getSessionId, newSessionFromGdrive, uploadSessionKey } =
+  const { setNewSession, getSessionId, getDeviceId, newSessionFromGdrive, uploadSessionKey } =
     useSwitchCryptoSession(taskyon, gdp)
 
   // TODO: this is soo  ugly..  we need to do something about this...
@@ -982,6 +994,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     getSecretStore,
     getTaskMetaRef,
     getMeta,
+    getDeviceId,
     setNewContentDraft,
     setContentDraftFromTask,
     allTools: computed(() => allTools.value),
