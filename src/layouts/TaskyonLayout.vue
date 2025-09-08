@@ -1,6 +1,11 @@
 <template>
   <q-layout view="lHh LpR lfr">
-    <TaskyonHeader v-model:drawer-open="drawerOpen" :mode="minMode" :btn-size="btnSize" />
+    <TaskyonHeader
+      v-model:drawer-open="drawerOpen"
+      :mode="minMode"
+      :btn-size="btnSize"
+      chat-buttons
+    />
 
     <div class="fade-top-overlay" />
 

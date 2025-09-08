@@ -1,143 +1,138 @@
 <!-- DocumentEditorPage.vue -->
 <template>
-  <q-layout view="lHh LpR lfr">
-    <TaskyonHeader btn-size="md" />
-    <q-page-container>
-      <q-page class="row">
-        <!-- Document Editor Card -->
-        <q-card class="col q-ma-md" style="min-width: 200px">
-          <q-card-section>
-            <div class="text-h6">Document Editor</div>
-            <div class="text-subtitle2">
-              Version: {{ currentVersionIndex + 1 }} / {{ documentVersions.length }}
-            </div>
-          </q-card-section>
+  <q-page class="row">
+    <!-- Document Editor Card -->
+    <q-card class="col q-ma-md" style="min-width: 200px">
+      <q-card-section>
+        <div class="text-h6">Document Editor</div>
+        <div class="text-subtitle2">
+          Version: {{ currentVersionIndex + 1 }} / {{ documentVersions.length }}
+        </div>
+      </q-card-section>
 
-          <q-card-section>
-            <!-- Version Controls -->
-            <div class="row q-mb-md items-center q-gutter-sm">
-              <q-btn
-                flat
-                dense
-                :icon="matNavigateBefore"
-                title="Previous Version"
-                :disable="currentVersionIndex === 0"
-                @click="goToPreviousVersion"
-              />
-              <q-btn
-                flat
-                dense
-                :icon="matNavigateNext"
-                title="Next Version"
-                :disable="currentVersionIndex === documentVersions.length - 1"
-                @click="goToNextVersion"
-              />
-              <q-space />
-              <q-btn
-                flat
-                dense
-                :icon="matAdd"
-                color="secondary"
-                title="Create New Version"
-                @click="createNewVersion"
-              />
-              <q-btn-dropdown
-                color="primary"
-                size="sm"
-                :icon="matContentCopy"
-                label="Copy"
-                flat
-                dense
-                :dropdown-icon="matArrowDropDown"
-              >
-                <q-list>
-                  <q-item v-close-popup clickable @click="copyContent">
-                    <q-item-section>Copy Content</q-item-section>
-                  </q-item>
-                  <q-item v-close-popup clickable @click="copyAsMarkdown">
-                    <q-item-section>Copy as Markdown</q-item-section>
-                  </q-item>
-                </q-list>
-              </q-btn-dropdown>
-            </div>
-
-            <!-- Code Editor -->
-            <div class="q-mb-md">
-              <CodeEditor
-                v-model="currentContent"
-                :height="400"
-                language="markdown"
-                @update:model-value="onContentChange"
-              />
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="row q-mt-md items-center q-gutter-sm">
-              <q-btn
-                label="Save Version"
-                color="primary"
-                :disable="!hasUnsavedChanges"
-                @click="saveCurrentVersion"
-              />
-              <q-btn
-                flat
-                label="Reset to Saved"
-                color="secondary"
-                :disable="!hasUnsavedChanges"
-                @click="resetToSaved"
-              />
-              <q-btn flat label="Load Sample" color="accent" @click="loadSampleDocument" />
-            </div>
-          </q-card-section>
-
-          <!-- Version History -->
-          <q-card-section v-if="documentVersions.length > 1">
-            <div class="text-h6 q-mb-sm">Version History</div>
-            <q-list dense>
-              <q-item
-                v-for="(version, index) in documentVersions"
-                :key="index"
-                :class="{ 'bg-blue-1': index === currentVersionIndex }"
-                clickable
-                @click="switchToVersion(index)"
-              >
-                <q-item-section>
-                  <q-item-label>Version {{ index + 1 }}</q-item-label>
-                  <q-item-label caption>{{ formatDate(version.timestamp) }}</q-item-label>
-                  <q-item-label caption lines="1">{{
-                    getVersionPreview(version.content)
-                  }}</q-item-label>
-                </q-item-section>
-                <q-item-section side>
-                  <q-btn
-                    flat
-                    dense
-                    round
-                    :icon="matDelete"
-                    size="sm"
-                    color="negative"
-                    :disable="documentVersions.length === 1"
-                    @click.stop="deleteVersion(index)"
-                  />
-                </q-item-section>
+      <q-card-section>
+        <!-- Version Controls -->
+        <div class="row q-mb-md items-center q-gutter-sm">
+          <q-btn
+            flat
+            dense
+            :icon="matNavigateBefore"
+            title="Previous Version"
+            :disable="currentVersionIndex === 0"
+            @click="goToPreviousVersion"
+          />
+          <q-btn
+            flat
+            dense
+            :icon="matNavigateNext"
+            title="Next Version"
+            :disable="currentVersionIndex === documentVersions.length - 1"
+            @click="goToNextVersion"
+          />
+          <q-space />
+          <q-btn
+            flat
+            dense
+            :icon="matAdd"
+            color="secondary"
+            title="Create New Version"
+            @click="createNewVersion"
+          />
+          <q-btn-dropdown
+            color="primary"
+            size="sm"
+            :icon="matContentCopy"
+            label="Copy"
+            flat
+            dense
+            :dropdown-icon="matArrowDropDown"
+          >
+            <q-list>
+              <q-item v-close-popup clickable @click="copyContent">
+                <q-item-section>Copy Content</q-item-section>
+              </q-item>
+              <q-item v-close-popup clickable @click="copyAsMarkdown">
+                <q-item-section>Copy as Markdown</q-item-section>
               </q-item>
             </q-list>
-          </q-card-section>
-        </q-card>
-
-        <!-- Taskyon iframe -->
-        <div class="col" style="min-height: 0; min-width: 200px">
-          <iframe
-            id="taskyon"
-            title="Taskyon agent"
-            frameborder="0"
-            :src="`${taskyonUrl}?iframe=true`"
-            style="width: 100%; height: 99%"
-          ></iframe>
+          </q-btn-dropdown>
         </div>
-      </q-page>
-    </q-page-container>
-  </q-layout>
+
+        <!-- Code Editor -->
+        <div class="q-mb-md">
+          <CodeEditor
+            v-model="currentContent"
+            :height="400"
+            language="markdown"
+            @update:model-value="onContentChange"
+          />
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="row q-mt-md items-center q-gutter-sm">
+          <q-btn
+            label="Save Version"
+            color="primary"
+            :disable="!hasUnsavedChanges"
+            @click="saveCurrentVersion"
+          />
+          <q-btn
+            flat
+            label="Reset to Saved"
+            color="secondary"
+            :disable="!hasUnsavedChanges"
+            @click="resetToSaved"
+          />
+          <q-btn flat label="Load Sample" color="accent" @click="loadSampleDocument" />
+        </div>
+      </q-card-section>
+
+      <!-- Version History -->
+      <q-card-section v-if="documentVersions.length > 1">
+        <div class="text-h6 q-mb-sm">Version History</div>
+        <q-list dense>
+          <q-item
+            v-for="(version, index) in documentVersions"
+            :key="index"
+            :class="{ 'bg-blue-1': index === currentVersionIndex }"
+            clickable
+            @click="switchToVersion(index)"
+          >
+            <q-item-section>
+              <q-item-label>Version {{ index + 1 }}</q-item-label>
+              <q-item-label caption>{{ formatDate(version.timestamp) }}</q-item-label>
+              <q-item-label caption lines="1">{{
+                getVersionPreview(version.content)
+              }}</q-item-label>
+            </q-item-section>
+            <q-item-section side>
+              <q-btn
+                flat
+                dense
+                round
+                :icon="matDelete"
+                size="sm"
+                color="negative"
+                :disable="documentVersions.length === 1"
+                @click.stop="deleteVersion(index)"
+              />
+            </q-item-section>
+          </q-item>
+        </q-list>
+      </q-card-section>
+    </q-card>
+
+    <!-- Taskyon iframe -->
+    <div class="col" style="min-height: 0; min-width: 200px">
+      <iframe
+        id="taskyon"
+        title="Taskyon agent"
+        frameborder="0"
+        :src="`${taskyonUrl}?iframe=true`"
+        style="width: 100%; height: 99%"
+      ></iframe>
+    </div>
+  </q-page>
 </template>
 
 <script setup lang="ts">
@@ -151,7 +146,6 @@ import {
   matArrowDropDown,
   matDelete,
 } from '@quasar/extras/material-icons'
-import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import CodeEditor from 'src/components/CodeEditor.vue'
 
 // Taskyon imports

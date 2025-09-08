@@ -1,36 +1,32 @@
 <!-- FileManagerPage.vue – DEBUG INSTRUMENTED -->
 <template>
-  <q-layout>
-    <q-page-container>
-      <q-page padding>
-        <FileDropzone class="q-mb-md" enable-paste @add-files="addFiles" />
+  <q-page padding>
+    <FileDropzone class="q-mb-md" enable-paste @add-files="addFiles" />
 
-        <q-card>
-          <q-card-section>
-            <div class="text-h6">
-              Taskyon File Browser
-              <InfoDialog
-                info-text="This browser shows all files that taskyon saved in its OPFS file system and can interact with!"
-              />
-            </div>
-          </q-card-section>
-          <q-separator />
+    <q-card>
+      <q-card-section>
+        <div class="text-h6">
+          Taskyon File Browser
+          <InfoDialog
+            info-text="This browser shows all files that taskyon saved in its OPFS file system and can interact with!"
+          />
+        </div>
+      </q-card-section>
+      <q-separator />
 
-          <q-card-section>
-            <q-tree
-              :nodes="treeData"
-              node-key="id"
-              accordion
-              dense
-              selected-color="primary"
-              @lazy-load="handleLazyLoad"
-              @update:selected="onSelect"
-            />
-          </q-card-section>
-        </q-card>
-      </q-page>
-    </q-page-container>
-  </q-layout>
+      <q-card-section>
+        <q-tree
+          :nodes="treeData"
+          node-key="id"
+          accordion
+          dense
+          selected-color="primary"
+          @lazy-load="handleLazyLoad"
+          @update:selected="onSelect"
+        />
+      </q-card-section>
+    </q-card>
+  </q-page>
 </template>
 
 <script setup lang="ts">
