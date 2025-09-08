@@ -542,7 +542,7 @@ Based on the current document, I can help improve its structure! Let me analyze 
       entryNode: toolCall({ name: 'getDocumentInfo', arguments: {} }),
     },
     appConfiguration: {
-      guiMode: 'minChat',
+      guiMode: 'default',
       showLogo: false,
       chatSuggestions: [gettingStarted],
       welcomeMsg:
@@ -550,7 +550,7 @@ Based on the current document, I can help improve its structure! Let me analyze 
     },
   }
 
-  void initializeTaskyon(tools, configuration)
+  void initializeTaskyon(tools, configuration /*true*/)
 })
 
 // Watch for version changes to update content
