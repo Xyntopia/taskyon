@@ -2,7 +2,7 @@
 // this makes it easy to integrate it with SSR for example...
 
 import { defineStore } from 'pinia'
-import { computed, reactive, toRefs, type Reactive, watch } from 'vue'
+import { computed, reactive, toRefs, type Reactive, watch, ref } from 'vue'
 import { type tyPublicKeyDraft, TyProfile } from 'src/modules/taskyon/types'
 import axios from 'axios'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
@@ -257,5 +257,8 @@ export const useAppStateStore = defineStore(storeName, () => {
     tyPublicKey: computed(() => {
       return isTaskyonKey(stateRefs.keys.taskyon || '', false)
     }),
+    taskyonRunmode: ref<'waiting for connection' | 'standalone mode' | 'connected'>(
+      'standalone mode',
+    ),
   }
 })

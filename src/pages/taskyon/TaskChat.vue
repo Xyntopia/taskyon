@@ -3,6 +3,7 @@
   <FadeAwayScrollPage class="column">
     <q-resize-observer :debounce="500" @resize="onResize" />
     <!--Chat Area-->
+    <div v-if="state.taskyonRunmode === 'waiting for connection'">Connecting....</div>
     <div
       id="chat-area"
       ref="taskThreadContainer"

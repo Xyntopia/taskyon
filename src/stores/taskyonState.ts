@@ -471,7 +471,6 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
 
 export const useTaskyonStore = defineStore('taskyonControl', () => {
   console.log('loading taskyon store!')
-
   // load our store with all the settings
   // we use this here to confgure out taskyon logic
   const stateRefs = useAppStateStore()
@@ -668,10 +667,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     //if ($q.platform.within.iframe) {
     if (isInIframe) {
       console.log('taskon is in iframe!, waiting for message port!')
+      stateRefs.taskyonRunmode = 'waiting for connection'
       const iframePort = await waitForIframeDuplexChannel()
       // connect iframe API to internal GUI API which also connects to taskyon engine automatically.
       iframePort.connect(uiApiOutside)
       iframePort.send('taskyon connected!')
+      console.log('taskyon connected to iframe!')
+      stateRefs.taskyonRunmode = 'connected'
     }
     // ------------end of IFRAME operations-------
 
@@ -966,6 +968,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   }
 
   dynamicQuasarTheming(stateRefs)
+
+  console.log('taskyon store initialized')
 
   return {
     getToken,
