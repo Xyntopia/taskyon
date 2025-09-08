@@ -109,6 +109,7 @@ import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
 import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 import { initializeTaskyon } from '../../../packages/tyclient/src'
+import { useTaskyonStore } from 'src/stores/taskyonState'
 
 const taskyonUrl = window.location.origin
 
@@ -386,7 +387,8 @@ FROM
 
 // Mount: init DB and Taskyon tools (unchanged)
 onMounted(async () => {
-  db.value = await getDatabase('taskyon')
+  const tystate = useTaskyonStore()
+  db.value = await getDatabase(await tystate.getSessionId())
 
   // Taskyon tools
   const tools = [
