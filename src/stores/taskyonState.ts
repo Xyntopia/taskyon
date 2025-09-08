@@ -614,7 +614,7 @@ const useSwitchCryptoSession = (
   }
 
   const setNewSession = async (cs: CryptoSession) => {
-    ;(await taskyon).setNewSession(cs)
+    await (await taskyon).setNewSession(cs)
   }
 
   return {
