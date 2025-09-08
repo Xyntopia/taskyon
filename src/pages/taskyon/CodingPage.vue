@@ -543,6 +543,7 @@ Based on the current document, I can help improve its structure! Let me analyze 
     },
     appConfiguration: {
       guiMode: 'default',
+      expertMode: true,
       showLogo: false,
       chatSuggestions: [gettingStarted],
       welcomeMsg:
