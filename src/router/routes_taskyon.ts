@@ -96,6 +96,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         component: () => import('pages/DocumentationIndex.vue'),
         meta: { title: 'Documentation', description: 'Taskyon Documentation' },
       },
+      {
+        path: '/editor',
+        component: () => import('pages/taskyon/CodingPage.vue'),
+        meta: {
+          title: 'Taskyon Code Editor',
+          description: 'Edit code together with AI',
+        },
+      },
       // mdRoutes should have our normal taskyon layout thats why we put them in here :)
       ...mdRoutes,
       ...universalTyRoutes,
@@ -143,14 +151,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     meta: {
       title: 'SQL debugging',
       description: 'Do queries on taskyons databases using SQL',
-    },
-  },
-  {
-    path: '/editor',
-    component: () => import('pages/taskyon/CodingPage.vue'),
-    meta: {
-      title: 'Taskyon Code Editor',
-      description: 'Edit code together with AI',
     },
   },
   {
