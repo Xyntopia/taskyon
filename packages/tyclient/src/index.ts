@@ -21,11 +21,11 @@ const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
 
       const channel = new MessageChannel()
       const targetOrigin = new URL(iframe.src, location.href).origin || '*' // '' for about:blank/file:
-      console.log('establish iframe communication to', targetOrigin)
+      console.log('tyclient establishing iframe communication to', targetOrigin)
 
       // self‑destructing listener – removed automatically after it fires once
       const handleFirst: (ev: MessageEvent) => void = (ev) => {
-        console.log('received first message from taskyon!', ev)
+        console.log('tyclient received first message from taskyon!', ev)
         stopped = true
 
         channel.port1.removeEventListener('message', handleFirst) // ⬅️ unsubscribe
@@ -57,14 +57,16 @@ const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
 }
 
 const handleFunctionExecutionRequest = (
-  tools: ClientTool[],
+  tools: Record<string, ClientTool>,
   sendTyMessage: (message: TaskyonMessage) => void | undefined,
   stopSignal: AbortSignal,
 ) =>
-  async function (event: MessageEvent<{ type: string; arguments: unknown }>): Promise<void> {
-    console.log('received message:', event)
+  async function (
+    event: MessageEvent<{ type: string; arguments: unknown; functionName: string }>,
+  ): Promise<void> {
+    console.log('tyclient received message:', event)
     // Handle function call
-    const tool = tools[0]
+    const tool = tools[event.data.functionName]
     if (tool && event.data && event.data.type === 'functionCall') {
       //if the message comes from taskyon, we can be sure that its the correct type.
       await handleFunctionExecution(event, tool, sendTyMessage, stopSignal)
@@ -82,12 +84,12 @@ async function handleFunctionExecution(
   const result = await tool.function(data.arguments, {
     taskChain: [],
     getSecret: (name) => {
-      console.log('get secret name', name)
+      console.log('tyclient get secret name', name)
       return Promise.resolve('N/A')
     },
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     setSecret: (name, _value) => {
-      console.log('set secret name', name)
+      console.log('tyclient set secret name', name)
       return Promise.resolve()
     },
     stopSignal,
@@ -107,7 +109,12 @@ export async function initializeTaskyon(
   configuration: partialTyConfiguration,
   persist?: boolean,
 ) {
-  console.log('initialize taskyon client...')
+  console.log('initialize taskyon tyclient...')
+
+  const toolMap = tools.reduce<Record<string, ClientTool>>((p, c) => {
+    p[c.name] = c
+    return p
+  }, {})
 
   const taskyon = document.getElementById('taskyon') as HTMLIFrameElement
 
@@ -116,15 +123,18 @@ export async function initializeTaskyon(
   if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
     console.log('make sure, we can ')
     const tyApi = await waitForApiChannel(taskyon)
-    const send = (msg: TaskyonMessage) => tyApi.postMessage(safeClone(msg))
+    const send = (msg: TaskyonMessage) => {
+      console.log('tyclient sending', msg)
+      tyApi.postMessage(safeClone(msg))
+    }
 
-    console.log('send our configuration!')
+    console.log('tyclient send our configuration!')
     send({
       type: 'configurationMessage',
       conf: configuration,
       persist,
     })
-    console.log('sending our functions!')
+    console.log('tyclient sending our functions!')
     tools.forEach((t) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { function: _toolfunc, ...fdescr } = t
@@ -132,9 +142,9 @@ export async function initializeTaskyon(
         type: 'functionDescription',
         ...fdescr,
       })
-      console.log('set up function listener!')
+      console.log('tyclient set up function listener!')
       tyApi.onmessage = (event) => {
-        void handleFunctionExecutionRequest(tools, send, controller.signal)(event)
+        void handleFunctionExecutionRequest(toolMap, send, controller.signal)(event)
       }
     })
   }
