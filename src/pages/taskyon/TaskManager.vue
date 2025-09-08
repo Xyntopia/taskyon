@@ -8,7 +8,13 @@
       clear search index
       <q-tooltip>This will delete the search index completly</q-tooltip>
     </q-btn>
-    <q-btn flat :icon="mdiDatabase" label="Open SQL Search" to="/sql">
+    <q-btn
+      v-if="state.appConfiguration.expertMode"
+      flat
+      :icon="mdiDatabase"
+      label="Open SQL Search"
+      to="/sql"
+    >
       <q-tooltip>Expert users can use SQL queries on all taskyon data!</q-tooltip>
     </q-btn>
     <q-table
@@ -115,10 +121,12 @@ import { useRouter, useRoute } from 'vue-router'
 import { onMounted } from 'vue'
 import { type QTableProps } from 'quasar'
 import type { PartialDeep } from 'type-fest'
+import { useAppStateStore } from 'src/stores/appState'
 
 // TODO:  do some search caching ;) so that we can move faster back & forth between
 //        pages in the browser...
 
+const state = useAppStateStore()
 const route = useRoute()
 
 const defaultParams = {
