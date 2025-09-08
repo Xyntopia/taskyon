@@ -420,7 +420,7 @@ export async function createOpenAIRequest(
         }
       : { type: 'text' },
     user: 'taskyon',
-    temperature: 0.0,
+    //temperature: 0.0, // deprecated for gpt-5
     stream: stream && api.streamSupport,
     stream_options: { include_usage: true },
     n: 1,

@@ -3,6 +3,8 @@ import { partialTaskDraft } from '@taskyon/taskyon'
 import { deepCopy } from '../utils'
 import { safeYamlDump } from '../yamlUtils'
 import { load } from 'js-yaml'
+import { usePyodideWebworker } from './webWorkerApi'
+import { match, P } from 'ts-pattern'
 
 export function findAllFilesInTasks(taskList: TaskNode[]): string[] {
   const fileSet = new Set<string>()
@@ -113,4 +115,52 @@ export function chat2Md(taskList: TaskNode[], fullMeta = false) {
   const messageStrings = taskList.map((t) => task2Md(t, fullMeta))
 
   return messageStrings.join('\n\n---\n\n')
+}
+
+const { extractKeywords } = usePyodideWebworker()
+
+// TODO: this should be moved into its own "NLP" tool
+export async function generateTaskKeyWords(
+  newTask: partialTaskDraft | undefined,
+  taskChain: TaskNode[],
+) {
+  const chatString = [...taskChain, newTask].reduce(
+    (p, n) =>
+      p +
+      '\n\n' +
+      match(n)
+        .returnType<string>()
+        .with(
+          {
+            content: {
+              type: P.union('message', 'return'),
+              data: P.select(),
+            },
+          },
+          (data) => data,
+        )
+        // TODO: analyze tools for keywords..
+        // main issue here is, that we have some tools that are very repetitive. e.g.
+        // the choosetool tool so we are leacing this out for now until we have found a better solution
+        // e.g. we should probably not use chatCOmpletion and tooltool and similar ones for
+        // keyword extraction.  probably use the "display" property in order to choose which ones to use
+        // and which ones not...
+        /*.with(
+          {
+            content: { type: 'functioncall', data: P.select() },
+          },
+          (data) => safeYamlDump(data.arguments),
+        ).with(
+          {
+            content: { type: P.union('structured'), data: P.select() },
+          },
+          (data) => safeYamlDump(data),
+        )
+          */
+        .otherwise(() => ''),
+
+    '',
+  )
+  const kws = await extractKeywords(chatString, 5)
+  return kws
 }

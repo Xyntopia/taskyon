@@ -131,6 +131,8 @@ export const TaskNodeMeta = z
     promptTokens: z.number().optional(),
     resultTokens: z.number().optional(),
     taskTokens: z.number().optional(),
+    name: z.string().optional(),
+    summary: z.string().optional(),
     estimatedTokens: z
       .object({
         resultTokens: z.number().optional(),
@@ -525,6 +527,7 @@ export const appConfiguration = z.object({
   gdriveConfigurationFile: z.string().default('taskyon_settings.json').meta({
     description: 'gDrive fileid of the configuration',
   }),
+  enableGdriveSync: z.boolean().default(false).optional(),
   expertMode: z.boolean().default(false).meta({
     icon: mdiProfessionalHexagon,
     label: 'Expert Mode',
@@ -693,12 +696,12 @@ export interface TyTaskStreamData {
 export const convertZodToJsonSchemaCached = z.toJSONSchema
 
 export const OAuthCredentials = z.object({
-  type: z.literal('oauth-credentials'),
+  type: z.enum(['oauth-credentials']),
   access_token: z.string(),
-  refresh_token: z.string(),
+  refresh_token: z.string().optional(),
   service: z.string(), // or z.string().url() if you want URL validation
-  token_type: z.string(),
-  expires_in: z.number(),
+  token_type: z.string().optional(),
+  expires_in: z.number().optional(),
   created_at: z.number(), // or z.date().transform(d => d.getTime()) if you parse a Date
 })
 

@@ -16,9 +16,9 @@ export default defineConfig({
 
       // ► 1.  Libraries – inline Zod, leave Vue as import
       libraries: {
-        //inlinedLibraries: ['json-schema', 'type-fest', 'zod', '@taskyon/taskyon'],
+        inlinedLibraries: ['@taskyon/taskyon', 'type-fest'],
         // If you also want to *keep* other libs external, list them here:
-        importedLibraries: ['json-schema', 'type-fest', 'zod', '@taskyon/taskyon'],
+        importedLibraries: ['json-schema', 'zod'],
       },
 
       // ► 2.  Output tweaks

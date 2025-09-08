@@ -25,6 +25,7 @@
       >
         <CreateTaskButton
           v-if="'md' in s"
+          class="mdt"
           :markdown="s.md"
           :label="s.label"
           outline
@@ -33,6 +34,7 @@
         />
         <q-btn
           v-else-if="s.url"
+          class="stb"
           :to="s.url.toString()"
           :label="s.label"
           outline

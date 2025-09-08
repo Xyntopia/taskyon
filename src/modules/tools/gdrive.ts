@@ -1,6 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
 import { createTool, makeTaskResult } from '@taskyon/taskyon'
 import { useGdrive } from 'src/modules/gdrive' // Import the gdrive module
+import { OAUTH_PROVIDERS, usePersistentOauth } from '../oauth'
 
 /*const googleDriveTool = createTool({
   description: 'A tool that saves/loads files from Google Drive using OAuth2 within the iframe',
@@ -166,9 +167,28 @@ Files can be organized in directories and optionally made public with sharable l
     },
     required: ['action', 'directory', 'filename'],
   } as const satisfies JSONSchema7,
-  function: async ({ action, directory, filename, content, mimeType, share }) => {
+  function: async (
+    { action, directory, filename, content, mimeType, share },
+    { getSecret, setSecret },
+  ) => {
     try {
-      const gdrive = useGdrive()
+      // TODO: give gdrivetool its own ability to authenticate through oauth.
+      //       do this through ctx
+      // an oauth token getter function which persists secrets in our local secretstore!
+      const getToken = async () => {
+        const tg = usePersistentOauth({
+          getSecret: async (name) => await getSecret(name, false),
+          setSecret,
+        })
+        return (
+          await tg('google', {
+            oauthURL: OAUTH_PROVIDERS.google.authUrl,
+            clientId: OAUTH_PROVIDERS.google.clientId,
+            scope: OAUTH_PROVIDERS.google.scope,
+          })
+        ).access_token
+      }
+      const gdrive = useGdrive(getToken)
       let result
 
       switch (action) {
@@ -197,9 +217,9 @@ Files can be organized in directories and optionally made public with sharable l
           for (let i = 0; i < len; i++) {
             bytes[i] = binaryString.charCodeAt(i)
           }
-          const blob = new Blob([bytes], { type: mimeType })
+          const blob = new File([bytes], filename, { type: mimeType })
 
-          const gdriveFile = await gdrive.saveFileToGdrive(blob, directory, filename, share)
+          const gdriveFile = await gdrive.saveFileToGdrive(blob, directory, share)
           result = {
             success: true,
             message: `File saved to ${directory}/${filename}`,
@@ -283,5 +303,3 @@ Files can be organized in directories and optionally made public with sharable l
     }
   },
 })
-
-export const storageTools = [gDriveTool]

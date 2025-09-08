@@ -172,10 +172,10 @@ import {
 import JsonInput from 'src/components/JsonInput.vue'
 import { copyToClipboard } from 'quasar'
 import TaskChainPublishDialog from 'src/components/taskyon/TaskChainPublishDialog.vue'
-import { createTaskNode } from 'src/modules/taskyon/taskManager'
 import { ToolBase } from '@taskyon/taskyon'
 import type { InternalTool } from '@taskyon/taskyon'
 import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
+import { createTaskNode } from 'src/modules/taskyon/taskManager'
 
 const { name } = defineProps<{ name?: string }>()
 
@@ -309,7 +309,7 @@ const preliminaryTaskNode = asyncComputed<TaskNode | undefined>(async () => {
 
 async function addNewTask(task: partialTaskDraft) {
   const tm = await tystate.getTaskManager()
-  const newTask = await tm.addPartialTask2Tree(task, undefined, undefined)
+  const newTask = await tm.addPartialTask2Tree(task)
   void router.push({
     params: { name: newTask.id },
   })

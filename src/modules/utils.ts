@@ -4,6 +4,12 @@ import { Buffer } from 'buffer'
 import { safeYamlDump } from './yamlUtils'
 import type { AnyFunction } from '../../packages/taskyon/src/utils/tsHelpers'
 
+export function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
 export function copyToClipboard(text: string) {
   navigator.clipboard
     .writeText(text)
@@ -416,34 +422,50 @@ export function asyncTimeLruCache(
   }
 }
 
+// TODO: add a small test to this :)
+// asyncLruCache.ts
 export function asyncLruCache(size: number, ignoreIndices: number[] = []) {
-  return <TArgs extends unknown[], R>(
-    fn: (...args: TArgs) => R | Promise<R>,
-  ): ((...args: TArgs) => Promise<R>) => {
+  return <TArgs extends unknown[], R>(fn: (...args: TArgs) => R | Promise<R>) => {
     const cache = new Map<string, R>()
+    const inFlight = new Map<string, Promise<R>>()
 
-    return async (...args: TArgs): Promise<R> => {
-      // build a key, skipping any ignored positions
+    const makeKey = (args: TArgs) => {
       const keyArgs = args.filter((_, i) => !ignoreIndices.includes(i))
-      const key = JSON.stringify(keyArgs)
-
-      if (cache.has(key)) {
-        console.log('Cache hit:', key)
-        return cache.get(key)! // R
-      }
-
-      // await will normalize Promise<R> → R or just give you R if it's sync
-      const result = (await fn(...args)) as R
-      cache.set(key, result)
-
-      if (cache.size > size) {
-        const oldestKey = cache.keys().next().value!
-        cache.delete(oldestKey)
-        console.log('Evicted:', oldestKey)
-      }
-
-      return result
+      return JSON.stringify(keyArgs)
     }
+
+    const wrapper = async (...args: TArgs): Promise<R> => {
+      const key = makeKey(args)
+      if (cache.has(key)) return cache.get(key)!
+      if (inFlight.has(key)) return inFlight.get(key)!
+      const p = (async () => {
+        try {
+          const v = (await fn(...args)) as R
+          cache.set(key, v)
+          if (cache.size > size) {
+            const oldestKey = cache.keys().next().value!
+            cache.delete(oldestKey)
+          }
+          return v
+        } finally {
+          inFlight.delete(key)
+        }
+      })()
+      inFlight.set(key, p)
+      return p
+    }
+
+    wrapper.clearCache = () => {
+      cache.clear()
+      inFlight.clear()
+    }
+    wrapper.invalidate = (...args: TArgs) => {
+      const key = makeKey(args)
+      cache.delete(key)
+      inFlight.delete(key)
+    }
+
+    return wrapper
   }
 }
 

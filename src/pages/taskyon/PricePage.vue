@@ -14,6 +14,19 @@ on this list. *Dynamic* means that the backend changes the prices based on the i
 selecting different models).
 `"
         />
+        <InfoDialog
+          label="Model Rankings"
+          :round="false"
+          :info-text="`
+For in in-depth comparison check out webpages like the following
+
+- [artificialanalysis](https://artificialanalysis.ai/leaderboards/models?deprecation=current)
+- [vellum.ai](https://www.vellum.ai/llm-leaderboard?utm_source=google&utm_medium=organic)
+- [llm-stats.com](https://llm-stats.com/)
+- [lmarena.ai](https://lmarena.ai/leaderboard)
+- ... and many more [search](https://www.google.com/search?q=AI+model+rankings)
+`"
+        />
         <ApiSelect v-model="state.llmSettings.selectedApi" />
       </q-card-section>
 

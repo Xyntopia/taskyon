@@ -88,6 +88,8 @@ export const useAppStateStore = defineStore(storeName, () => {
     // this makes it easier to come back to a filtered list for model
     // selection
     modelFilter: '' as string | null,
+    noGuiTests: true,
+    detailedTests: false,
   }
 
   const initialStoredStateObjTyped = initialStoredStateObj as

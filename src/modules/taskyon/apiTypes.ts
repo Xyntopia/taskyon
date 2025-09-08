@@ -4,6 +4,14 @@ import { z } from 'zod'
 import { FunctionArguments, ToolBase } from '@taskyon/taskyon'
 import { partialTaskDraft } from '@taskyon/taskyon'
 
+export const EncryptedTasks = z.object({
+  type: z.literal('addTasks'),
+  data: z.instanceof(Uint8Array) as z.ZodType<Uint8Array>,
+  info: z.string(),
+  ids: z.array(z.string()),
+})
+//type TaskMessage = z.infer<typeof EncryptedTasks>
+
 const RemoteFunctionBase = z.object({
   functionName: z.string().meta({
     description: 'the name of the function',
@@ -43,6 +51,18 @@ export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>
 //export type partialTyConfiguration = PartialDeep<storedSettings>
 export type partialTyConfiguration = PartialDeep<TyProfile>
 //export type partialTyConfiguration = PartialDeep<storedSettings>
+
+export const RequestTask = z.object({
+  type: z.literal('requestTask'),
+  id: z.string(),
+})
+//type RequestTask = z.infer<typeof RequestTask>
+
+export const TaskCreated = z.object({
+  type: z.literal('taskCreated'),
+  ids: z.array(z.string()),
+  info: z.string(),
+})
 
 const TaskMessage = z
   .object({
@@ -104,17 +124,31 @@ export const TaskWorkerMessage = z.discriminatedUnion('type', [
   z.object({ ...BaseMessage.shape, ...RemoteFunctionCall.shape }),
   z.object({ ...BaseMessage.shape, ...RemoteFunctionResponse.shape }),
 ])
-
 export type TaskWorkerMessage = z.infer<typeof TaskWorkerMessage>
 
-export const TaskyonMessage = z.discriminatedUnion('type', [
+export const TyP2P = z.discriminatedUnion('type', [EncryptedTasks, RequestTask, TaskCreated])
+export type TyP2P = z.infer<typeof TyP2P>
+
+export const TyBusMessage = z.discriminatedUnion('type', [
+  ...TyP2P.options,
   z.object({ ...BaseMessage.shape, ...TyStatusMessage.shape }),
-  z.object({ ...BaseMessage.shape, ...RemoteFunctionCall.shape }),
-  z.object({ ...BaseMessage.shape, ...RemoteFunctionResponse.shape }),
+  ...TaskWorkerMessage.options,
+])
+
+export const TaskyonMessage = z.discriminatedUnion('type', [
+  // TODO: can we unify the task message with the SyncApi?
+  ...TyBusMessage.options,
   z.object({ ...BaseMessage.shape, ...TaskMessage.shape }),
   z.object({ ...BaseMessage.shape, ...FunctionDescriptionMessage.shape }),
   z.object({ ...BaseMessage.shape, ...TyReadyMessage.shape }),
   z.object({ ...BaseMessage.shape, ...tyConfigurationMessage.shape }),
 ])
 
+// If you want to map them to { label, value } for q-select:
+/*export const messageTypes = TaskyonMessage.options.map((opt) => {
+  // each option is a ZodObject with a `type` literal
+  return opt.shape.type._zod.def.values[0]!
+})*/
+
 export type TaskyonMessage = z.infer<typeof TaskyonMessage>
+export type messageTypes = TaskyonMessage['type']

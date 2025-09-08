@@ -53,7 +53,11 @@ export function writeMessage(msg: string, cyc: Cypress.Chainable<any> | undefine
 }
 
 export function addAIServices() {
-  cy.get('.q-btn').contains('AI service provider se', { matchCase: false }).click()
+  cy.get('#ty-space-menu').click()
+  cy.dataCy('open-settings').click()
+  cy.dataCy('aiserviceprovider').click()
+
+  //cy.get('.q-btn').contains('AI service provider se', { matchCase: false }).click()
   cy.contains('Add API keys').click()
   // check in our keepass to get the relevant json.
   cy.contains('openai API key').type(Cypress.env().openai_api_key)

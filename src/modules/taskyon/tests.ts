@@ -1,11 +1,11 @@
 import type OpenAI from 'openai'
-import { useNlpWorker } from './webWorkerApi'
+import { useNlpWorker, usePyodideWebworker } from './webWorkerApi'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { chat2Md, getTextFile } from './taskUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useIpfs } from './ipfs'
 import { getDatabase } from '../pglite.api'
-import { createDeepTransformer, normalizeFalsyValues } from '../utils'
+import { createDeepTransformer, normalizeFalsyValues, sleep } from '../utils'
 import { useGdrive } from '../gdrive'
 import { craeteToolJsonSchema, summarizeTools } from './tools'
 import { zodToYamlString } from '../yamlUtils'
@@ -13,14 +13,456 @@ import z from 'zod'
 import type { JSONSchema7 } from 'json-schema'
 import { jsonSchemaToYamlString } from '../yamlUtils'
 import type { SecretStore } from '../crudWrapper'
-import type { Asyncify } from '../../../packages/taskyon/src/utils/tsHelpers'
-import type { TaskNode } from '@taskyon/taskyon'
+import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
+import { decompressEncryptedObject, encryptCompressObject } from '../fileUtils'
+import { gDriveSyncPort } from './sync'
+import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
+import { createTaskNode } from './taskManager'
+import { deepCloneWJson } from '../../../packages/taskyon/src/utils/objHelpers'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 
-export const testSecretStore = (secretStore: Asyncify<SecretStore>) => async () => {
+function assert(condition: boolean, msg?: string): asserts condition {
+  if (!condition) {
+    throw new Error(msg ?? 'Assertion failed')
+  }
+}
+
+// Enhanced integration test for concurrent uploads
+export async function testMultipleArchiveUploadDownload() {
+  const results: Record<string, unknown> = {}
+
+  type DriveFile = {
+    id: string
+    name: string
+    parents?: string[]
+  }
+
+  type DirectoryCheck = {
+    directoryId: string
+    filesFound: number
+    expectedFiles: number
+    filesInDirectory: { id: string; name: string }[]
+    allFilesInSameDirectory: boolean
+    allUploadedFilesFound: boolean
+  }
+
+  // Create unique directory name with timestamp
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const dir = `taskyon/tests/random_dir${timestamp}`
+
+  // Create multiple "archive" files with different logical filenames
+  const archives = [
+    {
+      logicalFilenames: ['foo.txt', 'bar.json'],
+      content: 'Archive 1 content',
+      filename: `archive1-${timestamp}.zip`,
+    },
+    {
+      logicalFilenames: ['baz.md', 'qux.xml'],
+      content: 'Archive 2 content',
+      filename: `archive2-${timestamp}.zip`,
+    },
+    {
+      logicalFilenames: ['test.js', 'config.yaml'],
+      content: 'Archive 3 content',
+      filename: `archive3-${timestamp}.zip`,
+    },
+  ]
+
+  // Create File objects
+  const zipFiles = archives.map(
+    (archive) => new File([archive.content], archive.filename, { type: 'application/zip' }),
+  )
+
+  console.log(`Uploading ${archives.length} archives concurrently to directory: ${dir}`)
+  console.log(
+    'Logical filenames per archive:',
+    archives.map((a) => a.logicalFilenames),
+  )
+
+  // Upload all archives concurrently - this is where the race condition might occur
+  const uploadPromises = archives.map((archive, index) => {
+    const zipFile = zipFiles[index]
+    if (!zipFile) throw new Error(`Missing zip file for archive ${index}`)
+    return useGdrive(tystate.getGdriveToken)
+      .uploadFileArchiveWMeta(
+        dir,
+        zipFile,
+        archive.logicalFilenames,
+        true, // share publicly
+      )
+      .then((result) => ({
+        index,
+        result,
+        logicalFilenames: archive.logicalFilenames,
+      }))
+  })
+
+  const uploadResults = await Promise.all(uploadPromises)
+  results.uploadResults = uploadResults.map((ur) => ({
+    index: ur.index,
+    fileId: ur.result.id,
+    fileName: ur.result.name,
+    webViewLink: ur.result.webViewLink,
+  }))
+  console.log('All uploads completed successfully')
+
+  // Now let's check if all files are in the same directory
+  console.log('Checking if all files landed in the same directory...')
+
+  // Get access token by calling the oauth provider directly
+  const creds = await tystate.getToken('google', {
+    oauthURL: 'https://accounts.google.com/o/oauth2/v2/auth',
+    clientId: 'your-client-id', // You'll need to import OAUTH_PROVIDERS.google.clientId
+    scope: 'https://www.googleapis.com/auth/drive.file',
+  })
+  const token = creds.access_token
+
+  // Use the resolveId helper from gdrive module instead of the cached version
+  const gdrive = useGdrive(tystate.getGdriveToken)
+
+  // Since we can't access resolveDriveId directly, let's verify by listing files in the directory
+  // First, try to load a file to verify the directory exists and get its ID implicitly
+  try {
+    // Try to resolve the directory by attempting to find any file we just uploaded
+    const firstUploadedFile = uploadResults[0]
+    if (!firstUploadedFile) throw new Error('No files were uploaded')
+
+    // Get file metadata to check its parent directory
+    const fileMetaRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${firstUploadedFile.result.id}?fields=parents`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+
+    if (!fileMetaRes.ok) {
+      throw new Error(
+        `Failed to get file metadata for directory check: ${await fileMetaRes.text()}`,
+      )
+    }
+
+    const fileMeta = await fileMetaRes.json()
+    const parentId = fileMeta.parents?.[0]
+    if (!parentId) {
+      throw new Error('Uploaded file has no parent directory')
+    }
+
+    // List all files in this parent directory
+    const listRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q='${parentId}' in parents and trashed=false&fields=files(id,name,parents)`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+
+    if (!listRes.ok) {
+      throw new Error(`Failed to list files in directory: ${await listRes.text()}`)
+    }
+
+    const listData = await listRes.json()
+    const filesInDirectory = (listData.files as DriveFile[]) || []
+
+    const directoryCheck: DirectoryCheck = {
+      directoryId: parentId,
+      filesFound: filesInDirectory.length,
+      expectedFiles: archives.length,
+      filesInDirectory: filesInDirectory.map((f: DriveFile) => ({ id: f.id, name: f.name })),
+      allFilesInSameDirectory: filesInDirectory.length === archives.length,
+      allUploadedFilesFound: false,
+    }
+
+    // Check if all uploaded files are in this directory
+    const uploadedFileIds = uploadResults.map((ur) => ur.result.id)
+    const foundFileIds = filesInDirectory.map((f: DriveFile) => f.id)
+    const allFilesFound = uploadedFileIds.every((id) => foundFileIds.includes(id))
+
+    directoryCheck.allUploadedFilesFound = allFilesFound
+    results.directoryCheck = directoryCheck
+
+    if (!allFilesFound) {
+      const missingFiles = uploadedFileIds.filter((id) => !foundFileIds.includes(id))
+      throw new Error(
+        `Race condition detected: Not all uploaded files found in target directory. Missing file IDs: ${missingFiles.join(', ')}`,
+      )
+    }
+
+    console.log(
+      `Directory check: Found ${filesInDirectory.length} files, expected ${archives.length}`,
+    )
+    console.log('All uploaded files found in directory:', allFilesFound)
+  } catch (error) {
+    throw new Error(
+      `Directory verification failed: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+
+  // Test downloading by logical filename
+  console.log('Testing download by logical filename...')
+  const downloadTests = []
+
+  for (const archive of archives) {
+    for (const logicalFilename of archive.logicalFilenames) {
+      console.log(`Trying to download archive by logical filename "${logicalFilename}"`)
+      const downloaded = await gdrive.downloadArchiveFile(dir, logicalFilename)
+
+      if (!downloaded) {
+        throw new Error(
+          `Failed to download archive by logical filename "${logicalFilename}" from directory "${dir}"`,
+        )
+      }
+
+      const text = await downloaded.text()
+      downloadTests.push({
+        logicalFilename,
+        success: true,
+        fileName: downloaded.name,
+        type: downloaded.type,
+        size: downloaded.size,
+        contentPreview: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
+      })
+    }
+  }
+
+  results.downloadTests = downloadTests
+
+  const directoryCheck = results.directoryCheck as DirectoryCheck
+  console.log('Test completed', {
+    uploadsSuccessful: uploadResults.length,
+    directoryIssues: !directoryCheck.allUploadedFilesFound,
+    downloadTestsRun: downloadTests.length,
+  })
+
+  return results
+}
+
+// quick-n-dirty integration test
+export async function testArchiveUploadDownload() {
+  const results: Record<string, unknown> = {}
+
+  const dir = 'taskyon/test-archive-dir'
+  const logicalFilenames = ['foo.txt', 'bar.json']
+  const uploadedContent = 'Hello from archive!'
+
+  // create a zip archive? nah: keep it simple → just one text file
+  const fakeZipFile = new File([uploadedContent], `archive${new Date().toISOString()}.zip`, {
+    type: 'application/zip',
+  })
+
+  console.log('Uploading archive with meta for:', logicalFilenames)
+  const uploaded = await useGdrive(tystate.getGdriveToken).uploadFileArchiveWMeta(
+    dir,
+    fakeZipFile,
+    logicalFilenames,
+    true,
+  )
+  results.uploaded = uploaded
+
+  // now retrieve by meta name (search for foo.txt inside archive props)
+  console.log('Trying to download archive by logical filename "foo.txt"')
+  const downloaded = await useGdrive(tystate.getGdriveToken).downloadArchiveFile(dir, 'foo.txt')
+  results.downloaded = {
+    ok: !!downloaded,
+    name: downloaded?.name,
+    type: downloaded?.type,
+    size: downloaded?.size,
+    text: downloaded ? await downloaded.text() : null,
+  }
+
+  console.log('Test completed', results)
+  return results
+}
+
+export const testPyodide = async () => {
+  const python = usePyodideWebworker()
+
+  const sampleText =
+    'Taskyon is an open-source platform for managing tasks, projects, and workflows efficiently.'
+  const kws = await python.extractKeywords(sampleText, 5)
+
+  return {
+    kws,
+  }
+}
+
+async function createTestKeys() {
+  const recoveryKey = (
+    await window.crypto.subtle.generateKey(
+      {
+        name: 'RSA-OAEP',
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: 'SHA-256',
+      },
+      true,
+      ['encrypt', 'decrypt'],
+    )
+  ).publicKey
+
+  // Generate a symmetric key (AES-GCM)
+  const sessionKey = await window.crypto.subtle.generateKey(
+    {
+      name: 'AES-GCM',
+      length: 256,
+    },
+    true,
+    ['encrypt', 'decrypt'],
+  )
+  return { recoveryKey, sessionKey }
+}
+
+export async function oauthTests() {
+  const creds = await authenticateWithPopup(
+    {
+      oauthURL: OAUTH_PROVIDERS.google.authUrl,
+      clientId: OAUTH_PROVIDERS.google.clientId,
+      scope: OAUTH_PROVIDERS.google.scope,
+    },
+    undefined,
+  )
+
+  return creds
+}
+
+export async function testGdriveZipRoundtrip() {
+  const t0 = Date.now()
+  const logs: string[] = []
+  const steps: Array<{ step: string; ok: boolean; detail?: unknown }> = []
+
+  function log(step: string, detail?: unknown, ok = true) {
+    const msg = `[${new Date().toISOString()}] ${step}${detail ? `: ${JSON.stringify(detail)}` : ''}`
+    console.log(msg)
+    logs.push(msg)
+    steps.push({ step, ok, detail })
+  }
+
+  try {
+    // 2) pick a fresh directory so tests don’t clash
+    const directory = `taskyon/taskyon-tests/${new Date().toISOString().replace(/[:.]/g, '-')}`
+    log('target directory chosen', directory)
+
+    const gdport = gDriveSyncPort(directory, tystate.getGdriveToken, (error) => {
+      throw error
+    })
+
+    const objs: Record<string, unknown> = {
+      'a1f2c3d4e5.txt': 'hello A',
+      'b6c7d8e9f0.json': { k: 1 },
+      'deadbeefcaf0.md': ['# hi'],
+    }
+    log('prepared test data', objs)
+
+    const filenames = Object.keys(objs)
+    const archiveName = 'roundtrip.tyt'
+
+    const { recoveryKey, sessionKey } = await createTestKeys()
+    log('created keys', { recoveryKey, sessionKey })
+
+    // compress objects "locally" (for the test)
+    const packed = await encryptCompressObject(
+      objs,
+      archiveName,
+      () => recoveryKey,
+      () => sessionKey,
+    )
+    log('created encrypted msgpack file...')
+
+    // we want to allow additional data to be send, for "upwards" compatibility
+    // e.g. in the future we might want to add public keys and other things. Maybe we want to
+    // encrypt tasks with synchronized session keys and similar things...
+    gdport.send({
+      type: 'addTasks',
+      data: packed,
+      info: archiveName,
+      ids: filenames,
+      additionalDataTest: 'hello!   we are simply testing additional keys',
+    })
+    // and send them of to gdrive...
+    log('sent data to gdrive', { archiveName, filenames })
+
+    // 4) for each filename, locate its zip via properties and download it
+    const fileChecks: Array<{
+      filename: string
+      found: boolean
+      blobSize?: number
+      blobType?: string
+      error?: string
+    }> = []
+
+    await new Promise((resolve) => {
+      const unsub = gdport.receive((msg) => {
+        if (msg.type === 'taskCreated') {
+          log('received taskCreated message', msg)
+          resolve(true)
+          unsub()
+        }
+      })
+    })
+
+    for (const name of filenames) {
+      try {
+        gdport.send({ type: 'requestTask', id: name })
+        await new Promise<boolean>((resolve) => {
+          const unsub = gdport.receive(async (msg) => {
+            if (msg.type === 'addTasks') {
+              const decompressed = await decompressEncryptedObject(
+                msg.data,
+                msg.info,
+                () => sessionKey,
+              )
+              const data = decompressed[name]
+              log('decompressed and decrypted file', { name, decompressed })
+              const info = {
+                filename: name,
+                found: true,
+                blobSize: msg.data.length,
+                ids: msg.ids,
+                originalData: objs[name],
+                data: data,
+              }
+              fileChecks.push(info)
+              log(`download hit for ${name}`, info)
+
+              resolve(true)
+              unsub()
+            } else if (msg.type === 'taskCreated') {
+              log('received taskCreated message', msg)
+              resolve(true)
+            } else {
+              fileChecks.push({ filename: name, found: false })
+              log(`download miss for ${name}`, undefined, /*ok*/ false)
+            }
+          })
+        })
+      } catch (e: unknown) {
+        const err = e instanceof Error ? e.message : String(e)
+        fileChecks.push({ filename: name, found: false, error: err })
+        log(`download error for ${name}`, err, /*ok*/ false)
+      }
+    }
+
+    const allFound = fileChecks.every((fc) => fc.found)
+    return {
+      ok: allFound,
+      directory,
+      fileChecks,
+      steps,
+      logs,
+      durationMs: Date.now() - t0,
+    }
+  } catch (e: unknown) {
+    const err = e instanceof Error ? { message: e.message, stack: e.stack } : { message: String(e) }
+    log('fatal error', err, /*ok*/ false)
+    return {
+      ok: false,
+      error: err,
+      steps,
+      logs,
+      durationMs: Date.now() - t0,
+    }
+  }
+}
+
+export const testSecretStore = (secretStore: SecretStore) => async () => {
   console.log('request a random secret from the store')
 
   const secretName = 'MYTESTTOKEN'
@@ -65,7 +507,7 @@ export function testJsonSchemas() {
 }
 
 export async function testGdriveUpload() {
-  const { publishMarkdown } = useGdrive()
+  const { publishMarkdown } = useGdrive(tystate.getGdriveToken)
 
   const markdownContent =
     '# Sample Markdown\n\nThis is a sample markdown file generated by Taskyon to test Gdrive functionality.\n\n' +
@@ -335,6 +777,91 @@ export async function testEstimateChatTokens() {
   )
   console.log('Estimate Chat Tokens Result:', tokens)
   return tokens
+}
+
+function shuffleKeys<T>(obj: T): T {
+  const sobj = deepCloneWJson(obj)
+  if (Array.isArray(sobj) || sobj === null || typeof sobj !== 'object') {
+    return sobj
+  }
+
+  const entries = Object.entries(sobj)
+  for (let i = entries.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const tmp = entries[j]!
+    entries[j] = entries[i]!
+    entries[i] = tmp
+  }
+
+  const shuffled = Object.fromEntries(entries.map(([k, v]) => [k, shuffleKeys(v)]))
+
+  return shuffled as T
+}
+
+async function shouldProduceError(func: (...args: unknown[]) => unknown) {
+  let error: Error | undefined = undefined
+  try {
+    await func()
+  } catch (err) {
+    console.log('correctly produces error:', err)
+    error = err as Error
+  }
+  if (error) return error
+  else throw new Error(`Operation ${func.name} should produce an error!`)
+}
+
+export async function testTaskIdHashing() {
+  const testTask: partialTaskDraft = {
+    role: 'user',
+    name: 'test',
+    content: {
+      type: 'message',
+      data: 'test',
+    },
+    parentID: undefined, // should be stripped away
+  }
+
+  const fullTask = await createTaskNode(testTask, { createMeta: 'missing' })
+
+  const cloneTask = deepCloneWJson(testTask)
+  delete cloneTask.parentID
+  cloneTask.created_at = fullTask.created_at
+  const strippedTask = await createTaskNode(cloneTask, { createMeta: 'missing' })
+  assert(strippedTask.id === fullTask.id, 'strippedTask should be the same as "fullTask" !!!')
+
+  await sleep(10) // sleeping for ms to make sure we have different creation times
+  const ft2 = await createTaskNode(fullTask, { createMeta: 'missing' })
+  await sleep(10) // sleeping for ms to make sure we have different creation times
+  const ft3 = await createTaskNode(fullTask)
+  await sleep(10) // sleeping for ms to make sure we have different creation times
+  const err1 = await shouldProduceError(() => createTaskNode(fullTask, { createMeta: 'overwrite' }))
+  await sleep(10) // sleeping for ms to make sure we have different creation times
+  const ft4 = await createTaskNode(testTask, { createMeta: 'missing' })
+
+  assert(fullTask.id === ft2.id, 'ft2 should match fullTask')
+  assert(fullTask.id === ft3.id, 'ft3 should match fullTask')
+  assert(fullTask.id !== ft4.id, 'ft4 should not match fullTask')
+
+  // ---- Now shuffle key order ----
+  const shuffledTask = shuffleKeys(fullTask)
+  await sleep(10) // sleeping for ms to make sure we have different creation times
+  const sft2 = await createTaskNode(shuffledTask, { createMeta: 'missing' })
+  await sleep(10) // sleeping for ms to make sure we have different creation times
+  const sft3 = await createTaskNode(shuffledTask)
+  await sleep(10) // sleeping for ms to make sure we have different creation times
+  const err3 = await shouldProduceError(() =>
+    createTaskNode(shuffledTask, { createMeta: 'overwrite' }),
+  )
+
+  assert(fullTask.id === sft2.id, 'shuffled ft2 should match')
+  assert(fullTask.id === sft3.id, 'shuffled ft3 should match')
+
+  return {
+    expectedErrors: { err1: err1.message, err3: err3.message },
+    testTask,
+    fullTask,
+    shuffledTask,
+  }
 }
 
 export async function markdownGeneration() {

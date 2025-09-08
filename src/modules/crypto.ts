@@ -13,8 +13,9 @@ const useWebCrypto = typeof window !== 'undefined' && window.crypto
 //  useWebCrypto ? import('./crypto_webcrypto') : import('./crypto_js')
 //const cryptoModulePromise = loadCryptoModule()
 
-export const { encryptObject, decryptObject, deriveKey, generateSalt, sha256UrlSafeHash } =
-  useWebCrypto ? cryptoweb : cryptojs
+export const { decryptObject, deriveKey, generateSalt, sha256UrlSafeHash } = useWebCrypto
+  ? cryptoweb
+  : cryptojs
 
 // Add more exports as needed
 

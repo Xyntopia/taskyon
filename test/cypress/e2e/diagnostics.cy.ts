@@ -35,7 +35,7 @@ describe('run diagnostics', () => {
     cy.contains('About').click()
     cy.contains('Diagnostics').click()
 
-    cy.contains('Generate Diagnostics Report').click()
+    cy.dataCy('run-tests').click()
 
     cy.get(`[data-cy="test-finished"]`, { timeout: 60000 }).contains('Test Finished')
 

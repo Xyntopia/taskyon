@@ -287,7 +287,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRefs } from 'vue'
+import { computed, onMounted, ref, toRefs } from 'vue'
 import { llmSettings, appConfiguration } from 'src/modules/taskyon/types'
 import { useTaskyonStore } from 'stores/taskyonState'
 import ModelSelection from 'components/taskyon/ModelSelection.vue'
@@ -313,6 +313,11 @@ import { mdiFunctionVariant, mdiToolbox } from '@quasar/extras/mdi-v6'
 import ApiSelect from './ApiSelect.vue'
 import { symOutlinedCancel } from '@quasar/extras/material-symbols-outlined'
 import { partialTaskDraft } from '@taskyon/taskyon'
+import { generateTaskKeyWords } from 'src/modules/taskyon/taskUtils'
+import { watchThrottled } from '@vueuse/core'
+// import { watchThrottled } from '@vueuse/core'
+// use idel mechanism to calculate all kinds of stuff here :=)
+//import { useIdle } from '@vueuse/core'
 
 const { expertMode = false, entryNode } = defineProps<{
   entryNode: partialTaskDraft
@@ -326,6 +331,19 @@ const toolMenu = ref()
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { selectedApi } = toRefs(state.llmSettings)
+
+const keywordExtractorReady = ref(false)
+
+onMounted(() => {
+  // pre-load our python-based keyword function!
+  void generateTaskKeyWords(
+    currentnewTask.value ?? {
+      role: 'system',
+      content: { type: 'message', data: 'test' },
+    },
+    [],
+  ).then(() => (keywordExtractorReady.value = true))
+})
 
 //const selectedTaskTypeVar = ref<string>('testasdad')
 
@@ -423,6 +441,41 @@ const currentnewTask = computed(() => {
   return partialTaskDraft.parse(task) // we can do this, because we defined the "role"
 })
 
+const getCurrentKeywords = async () => {
+  const startTime = performance.now()
+  const kwd = (await generateTaskKeyWords(currentnewTask.value, tystate.selectedThread.value))[0]
+  const endTime = performance.now()
+  console.log(`Keyword creation took ${endTime - startTime} ms.`)
+  return kwd
+}
+
+// add taskchain to taskManager
+
+async function getCurrentKeywordsWithTimeout(timeoutMs = 200) {
+  const kwds = await Promise.race([
+    getCurrentKeywords(),
+    new Promise<null>((resolve) =>
+      setTimeout(() => {
+        resolve(null)
+      }, timeoutMs),
+    ),
+  ])
+  console.log(`Keyword Timeout? ${kwds === null ? true : false}`)
+  return kwds
+}
+
+//const { idle, lastActive } = useIdle(2000) // 5 min
+const currentKeywords = ref<string>()
+watchThrottled(
+  tystate.selectedThread,
+  async () => {
+    // calculate keywords here with much biggger timeout!
+    const kwds = await getCurrentKeywordsWithTimeout(2000)
+    if (kwds) currentKeywords.value = kwds
+  },
+  { immediate: true, throttle: 2000 },
+)
+
 //const { estimateChatTokens } = useNlpWorker()
 
 // TODO:   our token estimation needs to become much better ^^
@@ -489,6 +542,7 @@ async function createFileTask(files: File[]) {
 }
 
 async function addNewTask() {
+  const kwdsPromise = getCurrentKeywordsWithTimeout(300)
   const tm = await tystate.getTaskManager()
   const fileTaskObj = await createFileTask(fileAttachments.value)
 
@@ -540,7 +594,8 @@ async function addNewTask() {
     })
   }
 
-  // add taskchain to taskManager
+  const kwds = (await kwdsPromise) ?? currentKeywords.value
+  if (kwds) newTaskChain.forEach((t) => (t.name = kwds))
   const newTaskId = (await tm.addTaskChain(newTaskChain, state.llmSettings.selectedTaskId)).at(-1)
 
   // push the last task to execution queue right away...

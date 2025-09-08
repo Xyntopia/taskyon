@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
 import type { SecretStore } from '../crudWrapper'
-import { OAuthCredentials } from '../taskyon/types'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
+import { authenticateWithPopup } from '../oauth'
 
 declare global {
   interface Window {
@@ -57,53 +57,6 @@ function withAbort<T>(signal: AbortSignal, p: Promise<T>) {
 
 // Enhance createOAuthTool to wait for button press before opening popup
 export const createOAuthTool = (secretStore: SecretStore) => {
-  const openPopups = new Map<WindowProxy, string>()
-  const loginResolvers = new Map<string, (args: OAuthCredentials) => void>()
-
-  function openAuthPopup(params: {
-    oauthURL: string
-    clientId: string
-    scope: string
-    toolId: string
-  }) {
-    const { oauthURL, clientId, scope, toolId } = params
-    const startUrl = new URL(`${window.location.origin}/oauth/start`)
-    startUrl.searchParams.set('svcUrl', oauthURL)
-    startUrl.searchParams.set('cid', clientId)
-    startUrl.searchParams.set('scope', scope)
-
-    const popup = window.open(startUrl.toString(), `oauth:${oauthURL}`, `width=500,height=700`)
-    if (popup) openPopups.set(popup, toolId)
-  }
-
-  function oauthPopupListener(event: MessageEvent) {
-    if (event.origin !== window.location.origin) return
-    const toolId = openPopups.get(event.source as WindowProxy)
-    if (!toolId) return
-
-    const creds = OAuthCredentials.parse(event.data)
-
-    // prevent duplicate handling
-    event.stopImmediatePropagation()
-    event.stopPropagation()
-
-    const resolver = loginResolvers.get(toolId)
-    if (resolver) {
-      resolver(creds)
-      loginResolvers.delete(toolId)
-    }
-
-    try {
-      ;(event.source as WindowProxy).close()
-    } catch {
-      // Ignore errors when trying to close the popup
-      console.warn('Failed to close OAuth popup:', event.source)
-    }
-    openPopups.delete(event.source as WindowProxy)
-  }
-
-  window.addEventListener('message', oauthPopupListener, { capture: true })
-
   return createTool({
     name: 'ensureOauthLogin',
     description: `Ensure, that we have an oauth token for the calling tool.`,
@@ -124,6 +77,10 @@ not working:
           type: 'string',
           description: 'The OAuth authorization URL',
         },
+        tokenUrl: {
+          type: 'string',
+          description: 'The OAuth authorization URL',
+        },
         clientId: {
           type: 'string',
           description: 'The OAuth client ID.',
@@ -138,11 +95,14 @@ not working:
           description: 'This is a unique ID that every tool has',
         },
       },
-      required: ['oauthURL', 'clientId', 'toolId'],
+      required: ['oauthURL', 'clientId', 'toolId', 'tokenUrl'],
       additionalProperties: false,
     } as const satisfies JSONSchema7,
 
-    function: async ({ oauthURL, clientId, scope, toolId }, { taskChain, stopSignal }) => {
+    function: async (
+      { oauthURL, clientId, scope, toolId, tokenUrl },
+      { taskChain, stopSignal },
+    ) => {
       // we need the 3rd last task, -1 is the current task and -2 is the button message UI
       const prev = taskChain.at(-3)
       const isReentry =
@@ -156,7 +116,7 @@ not working:
             { role: 'assistant', content: { type: 'message', data: html } },
             toolCall({
               name: 'ensureOauthLogin',
-              arguments: { oauthURL, clientId, scope, toolId },
+              arguments: { oauthURL, clientId, scope, tokenUrl, toolId },
             }),
           ],
         ])
@@ -178,28 +138,10 @@ not working:
       )
 
       // Now open the OAuth popup
-      openAuthPopup({ oauthURL, clientId, scope, toolId })
-
-      // await token
-      const creds = await withAbort(
-        stopSignal,
-        new Promise<OAuthCredentials>((resolve) => {
-          // install resolver; cleanup on abort happens in withAbort
-          loginResolvers.set(toolId, (tok) => {
-            stopSignal.removeEventListener('abort', () => {}) // no-op, since withAbort cleans this up
-            resolve(tok)
-          })
-        }),
-      )
+      const creds = await authenticateWithPopup({ oauthURL, clientId, scope, tokenUrl }, stopSignal)
 
       // store secret and confirm
-      await secretStore.setSecret(toolId, 'oauth-access-token', creds.access_token)
-      await secretStore.setSecret(toolId, 'oauth-refresh-token', creds.refresh_token)
-      await secretStore.setSecret(
-        toolId,
-        'oauth-expires-at',
-        (creds.created_at + creds.expires_in).toString(),
-      )
+      await secretStore.setSecret(toolId, 'oauth-creds', JSON.stringify(creds))
 
       return makeTaskResult([
         [{ role: 'assistant', content: { type: 'return', data: '🎉 Logged in successfully.' } }],

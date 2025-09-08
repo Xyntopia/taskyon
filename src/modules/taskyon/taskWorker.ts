@@ -1,14 +1,14 @@
 import type { TaskNodeMeta, TyTaskStreamData } from './types'
 import { type llmSettings, getApiConfigCopy } from './types'
 import { type TyTaskManager } from './taskManager'
+import type { RemoteFunctionPort } from './tools'
 import { handleFunctionExecution } from './tools'
 import { createAsyncQueue, humanizeError, serializeForJson, sleep } from '../utils'
 import { createChatCompletionTask } from '../tools/chatCompletionTool'
 import type { CrudWrapper, SecretStore } from '../crudWrapper'
-import type { Port, TaskMessageStream } from '../frpBus'
+import type { TaskMessageStream } from '../frpBus'
 import { createMessagePortAdapter, createStream, filter } from '../frpBus'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
-import type { TaskWorkerMessage, TaskyonMessage } from './apiTypes'
 import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { taskResult, type toolContext } from '@taskyon/taskyon'
 
@@ -27,7 +27,7 @@ async function safeExecuteTask(
   secretStore: SecretStore,
   stopSignal: AbortSignal,
   taskMessageStream: TaskMessageStream,
-  duplexPort: Port<TaskyonMessage, TaskWorkerMessage>,
+  duplexPort: RemoteFunctionPort,
 ): Promise<unknown> {
   if (task.content.type === 'functioncall') {
     // calculate function result
@@ -48,7 +48,7 @@ async function safeExecuteTask(
         getSecret: async (name, askNew, saveNew = true) => {
           console.log('get secret name', name)
           const secr = await secretStore.getSecret(toolId, name, askNew, saveNew)
-          return secr ?? undefined
+          return secr ?? null
         },
         setSecret: async (name, value) => {
           console.log('set secret name', name)
@@ -288,7 +288,7 @@ function createHandleError(
       task,
       selectedModel,
       enableOpenAiTools,
-      taskManager.debugDb,
+      taskManager.metaDb,
     )
 
     // we are adding the error task chain as a subtaskchain with the parentID of this
@@ -317,7 +317,7 @@ const createTaskProcessor = (
   stopAllTasks: (message: string) => void,
   secretStore: SecretStore,
   taskMessageStream: TaskMessageStream,
-  duplexPort: Port<TaskyonMessage, TaskWorkerMessage>,
+  duplexPort: RemoteFunctionPort,
 ) => {
   // this is uses to track how long a list of tasks has been processing
   const handleError = createHandleError(stopAllTasks, taskManager, currentTaskCtrl, queueTask)
@@ -452,7 +452,7 @@ const setupRun = (
   taskManager: TyTaskManager,
   secretStore: SecretStore,
   taskMessageStream: TaskMessageStream,
-  duplexPort: Port<TaskyonMessage, TaskWorkerMessage>,
+  duplexPort: RemoteFunctionPort,
 ) => {
   console.log('setting up task worker run...')
   const currentTaskCtrl: AbortController = new AbortController()
@@ -514,7 +514,7 @@ export function runTaskWorker(
   // task message stream is used in order to give message tasks the ability to communicate to
   // tool call tasks (e.g. a button click)
   taskMessageStream: TaskMessageStream,
-  duplexPort: Port<TaskyonMessage, TaskWorkerMessage>,
+  duplexPort: RemoteFunctionPort,
 ) {
   console.log('starting task worker listener...')
 

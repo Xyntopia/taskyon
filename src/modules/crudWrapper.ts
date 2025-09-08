@@ -1,18 +1,13 @@
 import type { PartialDeep } from 'type-fest'
-import {
-  decryptData,
-  decryptWithSessionKey,
-  encryptObject,
-  wrapKeyWithPublicKey,
-  encryptWithSessionKey,
-  generateRandomEncryptionKey,
-} from './crypto_webcrypto'
+import type { AskSession, EncryptedDataRow } from './crypto_webcrypto'
+import { decryptDataFile, encryptDataFile } from './crypto_webcrypto'
 import type { Stream } from './frpBus'
 import { createStream, filter, streamProcedureCall } from './frpBus'
 import type { PgLiteOptions } from './pglite.api'
 import { createVecPgLiteTable, type TyPGDB } from './pglite.api'
 import { useNlpWorker } from './taskyon/webWorkerApi'
-import { deepMerge, lockMap } from './utils'
+import { deepMerge } from './utils'
+import type { TaskNode } from '@taskyon/taskyon'
 
 type Row<T> = {
   [key: string]: unknown
@@ -23,6 +18,11 @@ type Row<T> = {
 export interface CrudWrapper<T> {
   set: (id: string | number, data: T) => Promise<void>
   get: (id: string | number) => Promise<T | null>
+  delete: (id: string | number) => Promise<void>
+  listIds: () => Promise<(string | number)[]>
+  list: () => Promise<Row<T>[]>
+  listAll: () => Promise<Row<T>[]>
+  clear: () => Promise<void>
   // TODO: the "upsert" strategy is potentially problematic, because
   //       it leads to inconsistent results across different storages.
   //       so it would probably be a good idea to only use this in the "combined"
@@ -32,13 +32,76 @@ export interface CrudWrapper<T> {
     data: T,
     strategy?: 'shallow_merge' | 'replace' | 'deepmerge' | 'native_shallow',
   ) => Promise<T>
-  delete: (id: string | number) => Promise<void>
-  listIds: () => Promise<(string | number)[]>
-  list: () => Promise<Row<T>[]>
-  listAll?: () => Promise<Row<T>[]>
-  clear: () => Promise<void>
 }
 
+export type ImmutableOf<T, C extends CrudWrapper<T>> = Omit<C, 'set' | 'upsert'> & {
+  add(data: T): Promise<number | string>
+  // hard-ban these at the type level if someone widens:
+  set?: never
+  upsert?: never
+}
+
+export function withImmutable<T, B extends CrudWrapper<T>>(
+  base: B,
+  opts: {
+    hash: (data: T) => Promise<string> | string
+    onDuplicate?: 'ignore' | 'error'
+  },
+): ImmutableOf<T, B> {
+  const hash = opts.hash
+  const onDuplicate = opts?.onDuplicate ?? 'ignore'
+
+  const insertIfAbsent = async (id: string | number, data: T) => {
+    const existing = await base.get(id)
+    if (existing !== null) {
+      if (onDuplicate === 'ignore') return
+      throw new Error('Duplicate (immutable) id')
+    }
+    await base.set(id, data)
+  }
+
+  // sortout set & upsert
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { set, upsert, ...passthrough } = base
+
+  const out = {
+    ...passthrough,
+    async add(data: T): Promise<string | number> {
+      const id = await hash(data)
+      await insertIfAbsent(id, data)
+      return id
+    },
+    // passthroughs (read / housekeeping only)
+    get: base.get,
+    delete: base.delete, // keep if you want physical deletes; otherwise drop or tombstone upstream
+    list: base.list,
+    listIds: base.listIds,
+    clear: base.clear,
+  } as ImmutableOf<T, B>
+
+  if (base.listAll) {
+    // TS is fine with assigning an optional key here
+    out.listAll = base.listAll
+  }
+
+  return out
+}
+
+/**
+ * Enhances a CrudWrapper with live streaming capabilities for CRUD events.
+ *
+ * This wrapper emits live updates via streams whenever data is set, upserted, or deleted.
+ *
+ * Streaming data format:
+ * - On `set` or `upsert`: emits `{ id, data }` where `data` is the new or updated value.
+ * - On `delete`: emits `{ id, data: null }` to indicate removal.
+ *
+ * @template T - The type of data managed by the CRUD wrapper.
+ * @param base - The base CrudWrapper to enhance.
+ * @returns The enhanced CrudWrapper with:
+ *   - `readLive(id, emitCurrent?)`: Subscribes to live updates for a specific item. Optionally emits the current value immediately.
+ *   - `liveStream`: Subscribes to all live CRUD events as `{ id, data }` objects.
+ */
 export const withLiveStreams = <T>(
   base: CrudWrapper<T>,
 ): CrudWrapper<T> & {
@@ -64,6 +127,10 @@ export const withLiveStreams = <T>(
       // Optionally, you might emit a deletion event if needed.
       emit({ id, data: null })
     },
+    async clear() {
+      await base.clear()
+      // Optionally, you could notify subscribers here if desired.
+    },
     readLive: (id: string | number, emitCurrent: boolean = true) => {
       const liveForId = filter(liveStream, (event) => event.id === id)
       if (emitCurrent) {
@@ -88,50 +155,7 @@ export const withLiveStreams = <T>(
       }
       return liveForId
     },
-    async clear() {
-      await base.clear()
-      // Optionally, you could notify subscribers here if desired.
-    },
     liveStream,
-  }
-}
-
-const withLock =
-  (lockItem: ReturnType<typeof lockMap>['lockItem']) =>
-  async <T extends (...args: Parameters<T>) => ReturnType<T>>(
-    func: T,
-    id: string | number,
-    args: Parameters<T>,
-  ) => {
-    const unlock = await lockItem(id)
-    let result: ReturnType<T> | undefined
-    try {
-      result = func(...args)
-    } finally {
-      unlock()
-    }
-    return result
-  }
-
-export const withLocking = <T, U>(base: CrudWrapper<U> & T, namespace: string = 'task') => {
-  const { lockItem, clearLocks } = lockMap(namespace)
-
-  const locking = withLock(lockItem)
-
-  return {
-    ...base,
-    set: async (...args: Parameters<CrudWrapper<U>['set']>) =>
-      await locking(base.set, args[0], args),
-    delete: async (...args: Parameters<CrudWrapper<U>['delete']>) =>
-      await locking(base.delete, args[0], args),
-    get: async (...args: Parameters<CrudWrapper<U>['get']>) =>
-      await locking(base.get, args[0], args),
-    upsert: async (...args: Parameters<CrudWrapper<U>['upsert']>) =>
-      await locking(base.upsert, args[0], args),
-    clear: async () => {
-      await base.clear()
-      clearLocks()
-    },
   }
 }
 
@@ -146,7 +170,7 @@ type JsonFindOptions<T> = {
 
 const createFind = <T>(db: TyPGDB, dataColumn: string, idColumn: string, tableName: string) => {
   const find = async (
-    where: PartialDeep<T>,
+    where?: PartialDeep<T>,
     opts: JsonFindOptions<T> = {},
   ): Promise<Record<string, T>> => {
     await db.waitReady
@@ -187,6 +211,7 @@ const createFind = <T>(db: TyPGDB, dataColumn: string, idColumn: string, tableNa
       sql += ` OFFSET $${params.length}`
     }
 
+    console.log('search find:', sql, params)
     const res = await db.query<Row<T>>(sql + ';', params)
     return res.rows.reduce<Record<string, T>>((p, c) => {
       p[c.id] = c.data
@@ -202,11 +227,6 @@ const createFind = <T>(db: TyPGDB, dataColumn: string, idColumn: string, tableNa
   return {
     find,
     findOne,
-    callDb: async <RT>(
-      caller: (db: TyPGDB, idColumn: string, dataColumn: string, tableName: string) => RT,
-    ) => {
-      return await caller(db, idColumn, dataColumn, tableName)
-    },
   }
 }
 
@@ -239,6 +259,12 @@ export const createPgLiteCrudWrapper = async <T>(
       [id],
     )
     return result.rows.length ? result.rows[0]!.data : null
+  }
+
+  const list = async (): Promise<Row<T>[]> => {
+    await db.waitReady
+    const result = await db.query<Row<T>>(`SELECT ${idColumn}, ${dataColumn} FROM ${tableName};`)
+    return result.rows
   }
 
   return {
@@ -287,11 +313,8 @@ export const createPgLiteCrudWrapper = async <T>(
       await db.waitReady
       await db.query(`DELETE FROM ${tableName} WHERE ${idColumn} = $1;`, [id])
     },
-    list: async (): Promise<Row<T>[]> => {
-      await db.waitReady
-      const result = await db.query<Row<T>>(`SELECT ${idColumn}, ${dataColumn} FROM ${tableName};`)
-      return result.rows
-    },
+    list,
+    listAll: list,
     listIds: async (): Promise<(string | number)[]> => {
       await db.waitReady
       const result = await db.query<{ id: string | number }>(
@@ -325,19 +348,30 @@ export const createPgLiteCrudWrapper = async <T>(
       `
       await db.query(sql, [payload])
     },
+    callDb: async <RT>(
+      caller: (db: TyPGDB, idColumn: string, dataColumn: string, tableName: string) => RT,
+    ) => {
+      return await caller(db, idColumn, dataColumn, tableName)
+    },
     ...createFind<T>(db, dataColumn, idColumn, tableName),
   }
 }
 
 // TODO: option to create indices on specific data properties to speed up filtering...
-export const createVectorStore = async (db: TyPGDB, name: string, additionalColumns?: string[]) => {
+export const createVectorStore = async <T>(
+  db: TyPGDB,
+  name: string,
+  additionalColumns?: string[],
+) => {
   const { vectorizeText } = useNlpWorker()
   const numDimensions = 384
   const maxStrLength = 10000 // only vectorize approx. the first page.
-  const crudTable = await createPgLiteCrudWrapper<string>(db, {
+  const dataColumn = 'data'
+  const idColumn = 'id'
+  const crudTable = await createPgLiteCrudWrapper<T>(db, {
     tableName: name,
-    idColumn: 'id',
-    dataColumn: 'data',
+    idColumn,
+    dataColumn,
     additionalColumns: additionalColumns ?? [],
     pgvector: true,
     vectorDims: numDimensions,
@@ -366,7 +400,7 @@ export const createVectorStore = async (db: TyPGDB, name: string, additionalColu
     searchText: string,
     k: number,
     allowedIDs?: string[],
-    filters?: Record<string, unknown>,
+    filters?: PartialDeep<TaskNode>,
   ) => {
     console.log(`Searching for ${searchText.slice(0, maxStrLength)}`)
     const searchVector = await vectorizeText(searchText.slice(0, maxStrLength), modelName)
@@ -427,12 +461,25 @@ export const createVectorStore = async (db: TyPGDB, name: string, additionalColu
   }
 
   // we are overwriting the crudTables upsert operation hre...
-  return { ...crudTable, search, upsert, count }
+  return {
+    ...crudTable,
+    search,
+    upsert,
+    count,
+    ...createFind<T>(db, dataColumn, idColumn, name),
+  }
 }
 
 export const createMapCrudWrapper = <T>(storage: Map<string | number, T>): CrudWrapper<T> => {
   const get = (id: string | number): Promise<T | null> => {
     return Promise.resolve(storage.has(id) ? storage.get(id)! : null)
+  }
+  const list = (): Promise<Row<T>[]> => {
+    const rows: Row<T>[] = []
+    storage.forEach((value, key) => {
+      rows.push({ id: key, data: value })
+    })
+    return Promise.resolve(rows)
   }
   return {
     get,
@@ -464,13 +511,8 @@ export const createMapCrudWrapper = <T>(storage: Map<string | number, T>): CrudW
       storage.delete(id)
       return Promise.resolve()
     },
-    list: (): Promise<Row<T>[]> => {
-      const rows: Row<T>[] = []
-      storage.forEach((value, key) => {
-        rows.push({ id: key, data: value })
-      })
-      return Promise.resolve(rows)
-    },
+    list,
+    listAll: list,
     listIds: (): Promise<(string | number)[]> => {
       return Promise.resolve(Array.from(storage.keys()))
     },
@@ -543,17 +585,6 @@ export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWr
   },
 })
 
-// Define a type for the encrypted data structure
-export type EncryptedDataRow = {
-  iv: string
-  ciphertext: string
-  salt: string
-  encryptedToolKey: string
-  recoveryEncryptedToolKey: string
-}
-
-type AskSession = () => Promise<CryptoKey>
-
 /**
  * Wraps a CRUD interface to transparently encrypt and decrypt data rows.
  *
@@ -567,38 +598,23 @@ type AskSession = () => Promise<CryptoKey>
 
 export function withEncryption(
   base: CrudWrapper<EncryptedDataRow>,
-  publicRecoveryKey: () => Promise<CryptoKey>,
-  getSessionKey?: () => Promise<CryptoKey>,
+  publicRecoveryKey: AskSession,
+  getSessionKey?: AskSession,
 ) {
   return {
     ...base,
     async set(id: string | number, data: unknown, askSession?: AskSession): Promise<void> {
-      // Generate a new random tool key for each set operation
-      // we need the key to be extractable, so that we can encrypt it !
-      const rowKey = await generateRandomEncryptionKey(true)
-
-      // Encrypt the data using the tool key
-      const { iv, ciphertext, salt } = await encryptObject(rowKey, data, id)
-
-      // Encrypt the tool key using the recovery public key
-      const recoveryEncryptedToolKey = await wrapKeyWithPublicKey(await publicRecoveryKey(), rowKey)
-
       if (!askSession && !getSessionKey) {
         throw new Error('No session key provider (askSession or getSessionKey) was provided.')
       }
-      const sessionKey = await (askSession ?? getSessionKey!)()
-      // Encrypt the tool key using the symmetric session key
-      const encryptedToolKey = await encryptWithSessionKey(sessionKey, rowKey)
 
-      // Create the encrypted data row
-      const encData: EncryptedDataRow = {
-        iv,
-        ciphertext,
-        salt,
-        encryptedToolKey,
-        recoveryEncryptedToolKey,
-      }
-
+      const encData = await encryptDataFile(
+        // we need to make this more efficient!   JSON.stringify is not always the best option...
+        new TextEncoder().encode(JSON.stringify(data)),
+        id, // we need the id in order to derive the key
+        publicRecoveryKey,
+        askSession ?? getSessionKey!, // we can do this, because we chec this earlier...
+      )
       // Store the encrypted data row
       await base.set(id, encData)
     },
@@ -611,14 +627,12 @@ export function withEncryption(
       if (!askSession && !getSessionKey) {
         throw new Error('No session key provider (askSession or getSessionKey) was provided.')
       }
-      const sessionKey = await (askSession ?? getSessionKey!)()
-      // Decrypt the tool key using the symmetric session key
-      const rowKey = await decryptWithSessionKey(sessionKey, encData.encryptedToolKey)
 
-      // Decrypt the data using the tool key
-      const data = await decryptData(rowKey, encData.iv, encData.ciphertext, encData.salt, id)
+      const data = await decryptDataFile(encData, id, askSession ?? getSessionKey!)
 
-      return data
+      const result = JSON.parse(new TextDecoder().decode(data))
+
+      return result
     },
   }
 }
@@ -737,20 +751,3 @@ export const withSecretStore = (
 }
 
 export type SecretStore = ReturnType<typeof withSecretStore>
-
-export const createEnhancedCrudWrapper = async <T>(
-  db: TyPGDB,
-  options: PgLiteOptions,
-  storage: Map<string | number, T>,
-) => {
-  const dbWrapper = await createPgLiteCrudWrapper<T>(db, options)
-  const mapWrapper = createMapCrudWrapper<T>(storage)
-  // we are using mapWrapper first, because it is the fastest
-  const combinedWrapper = createCombinedCrudWrapper([mapWrapper, dbWrapper])
-  const liveWrapper = withLiveStreams<T>(combinedWrapper)
-  const lockedWrapper = withLocking(liveWrapper)
-
-  return lockedWrapper
-}
-
-export type EnhancedCrudWrapper<T> = Awaited<ReturnType<typeof createEnhancedCrudWrapper<T>>>

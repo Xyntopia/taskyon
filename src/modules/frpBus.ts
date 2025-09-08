@@ -11,7 +11,7 @@ export type Observer<T> = (value: T) => void | Promise<void>
 export type Unsubscribe = () => void
 
 export interface syncStream<T> {
-  subscribe: (observer: Observer<T>) => Unsubscribe
+  subscribe(this: void, observer: Observer<T>): Unsubscribe
 }
 
 // we have a separate stream declaration here because we want to
@@ -43,21 +43,28 @@ export function createStream<T>(): frpBus<T> {
   }
 }
 
-export type Port<Tx, Rx = Tx> = {
+export type Port<Tx, Rx> = {
   send: frpBus<Tx>['emit']
   receive: frpBus<Rx>['stream']['subscribe']
-  connect: <oTx, oRx>(
-    other: Rx extends oTx ? (oRx extends Tx ? Port<oTx, oRx> : never) : never,
-  ) => void
+  // stricter connect signature: intersection forces compile-time failure when constraints don't hold
+  connect: <Tx, Rx extends oTx, oTx, oRx extends Tx>(
+    this: Port<Tx, Rx>,
+    other: Port<oTx, oRx>,
+  ) => Unsubscribe
 }
+
 export type DuplexChannel<Tx, Rx> = { x: Port<Tx, Rx>; y: Port<Rx, Tx> }
 
-export const connectChannels =
-  <Tx, Rx>(x: Port<Tx, Rx>) =>
-  <oTx, oRx>(y: Port<oTx, oRx>) => {
-    x.receive((msg) => y.send(msg as unknown as oTx))
-    y.receive((msg) => x.send(msg as unknown as Tx))
+const connectChannels = <Tx, Rx, oTx, oRx>(x: Port<Tx, Rx>, y: Port<oTx, oRx>): Unsubscribe => {
+  const unsubX = x.receive((msg) => y.send(msg as unknown as oTx))
+  const unsubY = y.receive((msg) => x.send(msg as unknown as Tx))
+
+  // Return a function that disconnects both subscriptions
+  return () => {
+    unsubX()
+    unsubY()
   }
+}
 
 const makePort = <Tx, Rx = Tx>(
   send: frpBus<Tx>['emit'],
@@ -66,7 +73,7 @@ const makePort = <Tx, Rx = Tx>(
   const self: Port<Tx, Rx> = {
     send,
     receive,
-    connect: (other) => connectChannels(self)(other),
+    connect: (other) => connectChannels(self, other),
   }
   return self
 }
@@ -75,8 +82,8 @@ export const createChannelsFromStreams = <Str1, Str2 = Str1>(
   outS: frpBus<Str1>,
   inS: frpBus<Str2>,
 ): DuplexChannel<Str1, Str2> => ({
-  x: makePort(outS.emit, inS.stream.subscribe),
-  y: makePort(inS.emit, outS.stream.subscribe),
+  x: makePort(outS.emit, (o) => inS.stream.subscribe(o)),
+  y: makePort(inS.emit, (o) => outS.stream.subscribe(o)),
 })
 
 export const createDuplexChannel = <Str1, Str2 = Str1>(): DuplexChannel<Str1, Str2> =>
@@ -118,47 +125,79 @@ export function portMap<A, B>(
   return { port: outer, destroy }
 }*/
 
-/**
- * Derive a child Port that only passes messages satisfying `guard`.
- *
- * • Incoming messages from `parent` are forwarded to the child *only* when the
- *   type-guard returns true.
- * • Anything the child sends is forwarded upstream unchanged.
- * • `destroy()` tears everything down (both directions).
- */
-export function createFilteredPort<pTx, pRx, cTx extends pRx>(
-  parent: Port<pTx, pRx>,
-  guard: (msg: pRx) => msg is cTx,
-): { port: Port<pTx, cTx>; destroy: () => void } {
-  const { x, y } = createDuplexChannel<cTx, pTx>()
+export function mapPort<pTx, pRx, cTx extends pTx, cRx extends pRx>(
+  port: Port<pTx, pRx>,
+  transformTx: (msg: pTx) => cTx,
+  transformRx: (msg: pRx) => cRx,
+): { port: Port<cTx, cRx>; destroy: () => void } {
+  const { x: filtered, y: internal } = createDuplexChannel<cTx, cRx>()
 
   // Upstream ➜ child (apply the filter)
-  const unsubUp = parent.receive((m) => {
-    if (guard(m)) x.send(m) // safe: guard proved it’s TChild
+  const unsubUp = port.receive((m) => {
+    internal.send(transformRx(m)) // safe: guard proved it’s TChild
   })
 
   // Child ➜ upstream (no filtering needed)
-  const unsubDown = x.receive((m) => parent.send(m))
+  const unsubDown = internal.receive((m) => {
+    port.send(transformTx(m)) // safe: guard proved it’s TChild
+  })
 
   const destroy = () => {
     unsubUp()
     unsubDown()
   }
 
-  return { port: y, destroy }
+  return { port: filtered, destroy }
 }
 
-/**
- * Narrow an existing Port with a Zod schema.
- * - `P`  … message type already travelling on the parent port
- * - `T`  … narrower message type described by the schema (T ⊆ P)
- */
-export function createZodPort<Tx, Rx, T extends Rx>(
-  parent: Port<Tx, Rx>,
-  schema: ZodType<T>,
-): { port: Port<Tx, T>; destroy: () => void } {
-  /* reuse the generic filtered-port helper */
-  return createFilteredPort(parent, (m): m is T => schema.safeParse(m).success)
+export function createPortFilter<pTx, pRx, cTx extends pTx, cRx extends pRx>(
+  port: Port<pTx, pRx>,
+  filterTx: (msg: pTx) => msg is cTx,
+  filterRx: (msg: pRx) => msg is cRx,
+): { port: Port<cTx, cRx>; destroy: () => void } {
+  const { x: filtered, y: internal } = createDuplexChannel<cTx, cRx>()
+
+  // Upstream ➜ child (apply the filter)
+  const unsubUp = port.receive((m) => {
+    if (filterRx(m)) internal.send(m) // safe: guard proved it’s TChild
+  })
+
+  // Child ➜ upstream (no filtering needed)
+  const unsubDown = internal.receive((m) => {
+    if (filterTx(m)) port.send(m) // safe: guard proved it’s TChild
+  })
+
+  const destroy = () => {
+    unsubUp()
+    unsubDown()
+  }
+
+  return { port: filtered, destroy }
+}
+
+// lets through messages which are ina  list of types...
+export function createTypeFilteredPort<
+  pTx, // Parent Transmit type
+  pRx extends { type: string }, // Parent Receive type (the superset union)
+  T extends readonly pRx['type'][], // An array of keys from the union's 'type' property
+>(
+  parent: Port<pTx, pRx>,
+  allowedTypes: T,
+): { port: Port<pTx, Extract<pRx, { type: T[number] }>>; destroy: () => void } {
+  // Use a Set for efficient O(1) lookups inside the guard.
+  const typeSet = new Set(allowedTypes)
+
+  // Define the new, narrower child message type using TypeScript's Extract utility.
+  // This extracts all members from the `pRx` union whose `type` property matches one
+  // of the strings in the `allowedTypes` array (`T[number]`).
+  type cRx = Extract<pRx, { type: T[number] }>
+
+  // Reuse the generic filtered-port helper with a custom type guard.
+  return createPortFilter(
+    parent,
+    (msg): msg is pTx => true,
+    (msg): msg is cRx => typeSet.has(msg.type),
+  )
 }
 
 /** Generic message → handler router (sync or async) */
@@ -414,6 +453,36 @@ interface Entry {
   post: (m: unknown) => void
 }
 
+// TODO: add a "bus" to the iframe...
+/**
+ * Create a multiplexer for bidirectional messaging between the host window
+ * and multiple managed iframes. Each iframe is registered under an identifier,
+ * and incoming `postMessage` events are routed to a typed stream keyed by id.
+ *
+ * Features:
+ * - `attachIframe(id, iframe, origin?)`: register an iframe with a unique id.
+ *   - Tracks the iframe with a `WeakRef`, cleaned up automatically if removed.
+ *   - Determines expected origin from the iframe's `src` unless overridden.
+ * - `send(id, msg)`: post a message to the iframe associated with `id`.
+ *   - Messages are dropped if the iframe is disconnected or garbage collected.
+ * - `all$`: a reactive stream of all incoming messages of the form `{ id, payload }`.
+ * - Automatic garbage collection:
+ *   - Uses `WeakRef` + `WeakMap` to avoid leaks.
+ *   - Periodically sweeps stale entries after `sweepEvery` attaches.
+ *   - Falls back to manual `gc()` to force a sweep.
+ * - `detachId(id)`: manually detach an iframe by id.
+ * - `destroy()`: stop listening to window `message` events and clear state.
+ *
+ * Notes:
+ * - `winToId` is a `WeakMap` → iframe window references do not prevent GC.
+ * - Origins:
+ *   - If the iframe has `srcdoc` or `about:srcdoc`, origin is `"null"` and messages
+ *     are sent with target `"*"`.
+ *   - Otherwise the origin is inferred from the iframe `src` or overridden via `origin`.
+ *
+ * @param sweepEvery number of iframe attaches before scheduling a GC sweep (default: 5).
+ * @returns API object: `{ all$, send, attachIframe, detachId, gc, destroy }`.
+ */
 export function createIframeMux<I extends string | number | symbol = string>(sweepEvery = 5) {
   const { stream: all$, emit } = createStream<BusMsg<I>>()
 

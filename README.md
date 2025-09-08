@@ -38,6 +38,8 @@ Built on the principles of [_local-first_](https://dl.acm.org/doi/10.1145/335959
 
 Explore Taskyon's documentation for more information: [https://taskyon.space/docs/index](https://taskyon.space/docs/index)
 
+You can find an alternative documentation here: [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Xyntopia/taskyon)
+
 ## Philosophy: Hyper Individualization & Local First
 
 🤖 **Individualized AI Bots:** Every user deserves a personal AI that learns from direct, human-centric interaction and evolves to become an expert assistant for their specific context.

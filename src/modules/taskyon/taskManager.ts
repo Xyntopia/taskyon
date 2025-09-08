@@ -1,18 +1,15 @@
 import type { TaskNodeMeta, TaskNodeType } from './types'
 import { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { openUserUploadedFile, saveUserUploadedFileToOpfs } from '../OPFS'
-import { usePyodideWebworker } from './webWorkerApi'
 import { load } from 'js-yaml'
 import { processMarkdown } from 'src/modules/taskyon/taskUtils'
 import {
   createCombinedCrudWrapper,
-  createEnhancedCrudWrapper,
   createMapCrudWrapper,
   createPgLiteCrudWrapper,
   createVectorStore,
+  withImmutable,
   withLiveStreams,
-  withLocking,
-  type CrudWrapper,
 } from '../crudWrapper'
 import { sha256UrlSafeHash } from '../crypto_webcrypto'
 import { urlSafeBase64Uuid } from '../crypto'
@@ -23,6 +20,8 @@ import z from 'zod'
 import type { OptionalSome } from '@taskyon/taskyon'
 import type { InternalTool } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
+import { lockMap, sleep } from '../utils'
+import { produce } from 'immer'
 
 /**
  *
@@ -49,53 +48,77 @@ export async function findRootTask(taskId: string, getTask: TyTaskManager['getTa
 }
 
 const TaskWithoutId = TaskNode.omit({ id: true }).strip()
+export type TaskWithoutId = z.infer<typeof TaskWithoutId>
 
-async function taskContentHash(task: Partial<TaskNode>) {
+function normalizeObj<T>(task: T) {
+  const nt = produce(task, (newTask) => {
+    // this will usually remove "undefined" values..
+    return JSON.parse(JSON.stringify(newTask))
+  })
+  // TODO: ensure alphabetical order?
+  return nt
+}
+
+async function taskContentHash(
+  task: partialTaskDraft,
+): Promise<{ hash: string; normalized: TaskWithoutId }> {
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    throw new Error(
+      'crypto.subtle is not available in this environment, We can currently not generate task IDs!!',
+    )
+  }
+
   console.log('generating new hash ID for task')
   // we need to verify that our task is of type TaskNode without ID and we do this using Zod :)
   // we also want to make sure, that we only strip away anything which isn't official
   // part of our tasknode..
   const taskWithoutId = TaskWithoutId.parse(task)
+  const normalized = normalizeObj(taskWithoutId)
   // generate this hash ID to check of there are any duplicate tasks or anything like that...
-  const hashId = await sha256UrlSafeHash(taskWithoutId)
-  return hashId
+  const hash = await sha256UrlSafeHash(normalized)
+  return { hash, normalized }
 }
 
-/**
- * Creates a new content addressable task here.
- *
- * This function creates a taskyon TaskNode where the ID is  SHA-256 hash of the
- * content of the task.
- *
- */
-export async function createTaskNode(task: partialTaskDraft, priorID?: string, parentID?: string) {
-  if (typeof crypto === 'undefined' || !crypto.subtle) {
+async function ensureValidTaskId(task: partialTaskDraft): Promise<TaskNode> {
+  const { hash, normalized } = await taskContentHash(task)
+  if (task.id && hash != task.id) {
     throw new Error(
-      'crypto.subtle is not available in this environment, can not generate task IDs!!',
+      `Not able to create new task as id doesn't match content. Expected: ${hash} got: ${task.id}.`,
     )
   }
-
-  // TODO: add a signature as well! maybe by simply signing the task and adding it to the ID?
-  //       or should we add a special signature property? Or can we do this only by encoding a task into
-  //       a bytestream, similar to JWTs?
-  // TODO: right now we are not using the "name" for the content hash because we update it through
-  //       our keyword generation algorithm...
-  const taskContent = {
-    ...task,
-    priorID,
-    parentID,
-    created_at: Date.now(),
-  }
-
-  const newId = await taskContentHash(taskContent)
-  const newTask: TaskNode = {
-    ...taskContent,
-    id: newId,
-  }
-  return newTask
+  const rt = produce(normalized as TaskNode, (t) => {
+    t.id = hash
+  })
+  return rt
 }
 
-const { extractKeywords } = usePyodideWebworker('task manager keywords')
+function addTaskNodeMeta(
+  options: { createMeta?: 'missing' | 'overwrite' | undefined },
+  task: partialTaskDraft,
+) {
+  // TODO: add signatures, task ACL, etc here...
+  const next = produce(task, (newTask) => {
+    if (options.createMeta == 'overwrite') {
+      newTask.created_at = Date.now()
+    }
+    if (options.createMeta !== undefined) {
+      if (!newTask.created_at) newTask.created_at = Date.now()
+    }
+  })
+  return next
+}
+
+export const createTaskNode = async (
+  task: partialTaskDraft,
+  options: {
+    createMeta?: 'missing' | 'overwrite' | undefined
+  } = { createMeta: 'missing' },
+): Promise<TaskNode> => {
+  // TODO: add task signature and other metadata here as well
+  const newTask = addTaskNodeMeta(options, task)
+  const nt = ensureValidTaskId(newTask)
+  return nt
+}
 
 export type FileMapping = {
   uuid: string
@@ -229,7 +252,7 @@ async function useTaskVectors(
   getTask: (taskId: string) => Promise<TaskNode | null>,
   vectorizerModel?: string,
 ) {
-  const vecDb = await createVectorStore(db, 'tyTaskVectors')
+  const vecDb = await createVectorStore<TaskNode>(db, 'tyTaskVectors')
 
   async function syncVectorIndexWithTasks(progressCallback: (done: number, total: number) => void) {
     let counter = 0
@@ -277,8 +300,6 @@ async function useTaskVectors(
   /**
    * So here we use q ManogQuery "query", which we can use to pre-filter our vector search.
    *
-   *
-   *
    * @param searchTerm
    * @param query
    * @param k
@@ -287,10 +308,21 @@ async function useTaskVectors(
   async function filteredVectorSearch(
     searchTerm: string,
     k = 10,
-    taskTemplate?: Partial<TaskNode> | Record<string, unknown>,
+    taskTemplate?: PartialDeep<TaskNode>,
   ): Promise<{ taskId: string; distance: number }[]> {
     const result = await vecDb.search(searchTerm, k, undefined, taskTemplate)
     return result.map((r) => ({ taskId: r.id, distance: r.distance }))
+  }
+
+  async function filterSearch(
+    k = 10,
+    taskTemplate?: PartialDeep<TaskNode>,
+  ): Promise<{ taskId: string; distance: 0 }[]> {
+    const res = await vecDb.find(taskTemplate, {
+      limit: k,
+      orderBy: { kind: 'dataKey', key: 'created_at' },
+    })
+    return Object.values(res).map((t) => ({ taskId: t.id, distance: 0 }))
   }
 
   async function searchSimilarTasks(task: Partial<TaskNode>, k = 10) {
@@ -299,6 +331,7 @@ async function useTaskVectors(
   }
 
   return {
+    filterSearch,
     syncVectorIndexWithTasks,
     deleteTaskFromVectorStore: vecDb.delete,
     addtoVectorDB,
@@ -309,7 +342,7 @@ async function useTaskVectors(
   }
 }
 
-export function createToolIndex(tyCrudVec: CrudWrapper<TaskNode>) {
+export function createToolIndex(getTask: (id: string | number) => Promise<TaskNode | null>) {
   // we use this index to quickly look up tools from our database!
   // We require that the toolIndex should contain only the latest version of a tool
   const toolIndex = new Map<string, string>()
@@ -331,7 +364,7 @@ export function createToolIndex(tyCrudVec: CrudWrapper<TaskNode>) {
   ): Promise<{ def?: TaskNodeType<'tooldefinition'> | undefined; tool?: InternalTool }> {
     const toolTaskId = toolIndex.get(name)
     if (toolTaskId) {
-      const toolTask = await tyCrudVec.get(toolTaskId)
+      const toolTask = await getTask(toolTaskId)
       if (toolTask?.content.type === 'tooldefinition') {
         return {
           def: toolTask as TaskNodeType<'tooldefinition'>,
@@ -356,7 +389,7 @@ export function createToolIndex(tyCrudVec: CrudWrapper<TaskNode>) {
         // of old tool already exists, we need tocheck which one is newer
         // and only update if the new one is newer than the old one
         if (oldToolId) {
-          const oldTool = await tyCrudVec.get(oldToolId)
+          const oldTool = await getTask(oldToolId)
           if (
             (oldTool?.created_at ?? 0) >= (task?.created_at ?? 0) &&
             oldTool?.content.type === 'tooldefinition'
@@ -387,6 +420,23 @@ export interface TaskTreeNode {
   task: TaskNode
   children: TaskTreeNode[][]
 }
+
+// we use this in order to lock tasks!
+type LockItem = (id: string | number) => Promise<() => void>
+
+const withLock =
+  (lockItem: LockItem) =>
+  async <F extends () => unknown>(
+    func: F,
+    id: string | number,
+  ): Promise<Awaited<ReturnType<F>>> => {
+    const unlock = await lockItem(id)
+    try {
+      return Promise.resolve(func() as ReturnType<F>)
+    } finally {
+      unlock()
+    }
+  }
 
 // TODO:  break down  the individual parts of TaskManager this way into smaller parts:
 //        - on top of that build a function which encapsulates all the "high-level  function such as getting files etc..."
@@ -462,9 +512,16 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   const tySqlCrud = await createPgLiteCrudWrapper<TaskNode>(taskyonDb, {
     tableName: 'taskyonNodes',
   })
-  const tyCrud = withLiveStreams(
+  // make sure that we remove the "upsert" function for tyCrud in order
+  // to make sure the data inside stays immutable...
+  const mod = withLiveStreams(
     createCombinedCrudWrapper([createMapCrudWrapper(new Map<string, TaskNode>()), tySqlCrud]),
   )
+  const tyCrud = withImmutable(mod, {
+    hash: (data: TaskNode) => {
+      return data.id
+    },
+  })
 
   const getAllTaskIds = tyCrud.listIds
 
@@ -477,54 +534,73 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     resetTaskVectors,
     searchSimilarTasks,
     count: countVecs,
+    filterSearch,
   } = await useTaskVectors(taskyonDb, getAllTaskIds, tyCrud.get, vectorizerModel)
 
+  // TODO: updateToolIndex should work through streams!
   const { toolIndex, defaultToolMap, addDefaultTools, getToolDefinition, updateToolIndex } =
-    createToolIndex(tyCrud)
+    createToolIndex(tyCrud.get)
 
+  // taskLocks
+  const { lockItem, clearLocks } = lockMap('TaskLocks')
+  const execWLock = withLock(lockItem)
   // add more enhanced, ty-specific functionality to our CRUD
-  const tyCrudVec = withLocking({
+  const tyCrudVec = {
     ...tyCrud,
-    get: async (id: string | number) => {
-      const task = await tyCrud.get(id)
-      if (task) updateChildAndSiblingMap(task)
-      return task
-    },
-    set: async (id: string | number, task: TaskNode, vectors = false) => {
-      await tyCrud.set(id, task)
-      await tyCrud.get(task.id)
-      if (vectors) void addtoVectorDB(task)
-      // Update parent-child cache
-      updateChildAndSiblingMap(task)
-      // update our toolIndex with the new toolname :)
-      void updateToolIndex(task)
-    },
-    delete: async (id: string | number) => {
-      // Delete from local record/memorydb
-      const task = await tyCrud.get(id)
-      if (task) void deleteFromChildAndSiblings(task)
-      void tyCrud.delete(id)
-      void deleteTaskFromVectorStore(id.toString())
-      if (task?.content.type === 'tooldefinition') toolIndex.delete(task.content.data.name)
-    },
-    upsert: async (id: string | number, data: TaskNode) => {
-      // TODO: make sure, we never call this on tasks!
-      const newData = await tyCrud.upsert(id, data)
-      return newData
-    },
-  })
+    get: async (id: string | number) =>
+      await execWLock(async () => {
+        const task = await tyCrud.get(id)
+        if (task) updateChildAndSiblingMap(task)
+        return task
+      }, id),
+    add: async (
+      task: partialTaskDraft,
+      options: {
+        createMeta?: 'missing' | 'overwrite'
+        vectors?: boolean
+      } = { createMeta: 'missing', vectors: false },
+    ) => {
+      const completeTask = await createTaskNode(task, { createMeta: options.createMeta })
 
-  // TODO: unify this with our other tables?
-  const debugDb = await createEnhancedCrudWrapper<TaskNodeMeta>(
-    taskyonDb,
-    {
-      tableName: 'debugDb',
+      console.log('create new Task:', completeTask)
+      await execWLock(async () => {
+        await tyCrud.add(completeTask)
+        if (options.vectors) void addtoVectorDB(completeTask)
+        // Update parent-child cache
+        updateChildAndSiblingMap(completeTask)
+        // update our toolIndex with the new toolname :)
+        void updateToolIndex(completeTask)
+      }, completeTask.id)
+      return completeTask
     },
-    new Map<string, TaskNodeMeta>(),
+    delete: async (id: string | number) =>
+      await execWLock(async () => {
+        // Delete from local record/memorydb
+        const task = await tyCrud.get(id)
+        if (task) void deleteFromChildAndSiblings(task)
+        void tyCrud.delete(id)
+        void deleteTaskFromVectorStore(id.toString())
+        if (task?.content.type === 'tooldefinition') toolIndex.delete(task.content.data.name)
+      }, id),
+    clear: async () => {
+      clearLocks()
+      await tyCrud.clear()
+      clearLocks()
+    },
+  }
+
+  // we are using mapWrapper first, because it is the fastest
+  const metaDb = withLiveStreams(
+    createCombinedCrudWrapper([
+      createMapCrudWrapper(new Map<string, TaskNodeMeta>()),
+      await createPgLiteCrudWrapper<TaskNodeMeta>(taskyonDb, {
+        tableName: 'metaDb',
+      }),
+    ]),
   )
 
   async function countTasks() {
-    return (await tyCrud.listIds()).length
+    return (await tyCrudVec.listIds()).length
   }
 
   function createCachedIdSearch(
@@ -753,7 +829,11 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     // TODO: manually re-initiailized taskyondb after remove...
     await resetTaskVectors()
     await tyCrudVec.clear()
-    await debugDb.clear()
+    await metaDb.clear()
+    // we are doing the sleep here because some parts
+    // of our app re-load the browser and that prevents the
+    // deletion from happening..
+    await sleep(500)
   }
 
   // deletes tasks from the supplied leaf up to the first branch
@@ -877,22 +957,19 @@ export async function useTyTaskManager(vectorizerModel?: string) {
   async function getJsonTaskBackup() {
     // TODO: give this a callback so that we can save it in "chunks"
     console.log('exporting json backup db!')
-    const allNodes = await tySqlCrud.list()
+    const allNodes = await tyCrudVec.listAll()
     return JSON.stringify(allNodes.map((r) => r.data))
   }
 
   // import tasks from json! :)
-  // TODO: remove this function and replace this with a list of tasnode json functions!!
-  //       we want to get rid of our rxdb dependency here... we could even backup tass as markdown!  that might be even better :)
   async function addTaskBackup(jsonObjString: string) {
-    // TODO: add some zod validation here!
     const jsonObj = JSON.parse(jsonObjString)
     if (Array.isArray(jsonObj)) {
       await Promise.all(
         jsonObj.map(async (obj) => {
-          const res = TaskNode.safeParse(obj.data)
+          const res = TaskNode.safeParse(obj)
           if (res.success) {
-            await tySqlCrud.set(res.data.id, res.data)
+            await tyCrudVec.add(res.data)
           } else {
             console.warn('Could not add data:', res.data, res.error)
           }
@@ -903,55 +980,12 @@ export async function useTyTaskManager(vectorizerModel?: string) {
 
   const fm = await useFileManager(taskyonDb)
 
-  async function updateTaskNameWKeywords(newTask: TaskNode) {
-    const chat = getTaskChain(newTask.id)
-    const chatString = (await chat).reduce((p, n) => {
-      if (n?.content.type === 'message') {
-        return p + '\n\n' + n.content.data
-      }
-      return p
-    }, '')
-    void extractKeywords(chatString, 5).then((kws) => {
-      console.log('update task with kw: ', kws)
-      newTask.name = kws[0]
-      void tyCrudVec.upsert(newTask.id, newTask)
-    })
-  }
-
   // add a task to the db. Adding some default information such as timestamps etc...
   // whats important here is that the TaskNode can only have one type of content
   // so when calling the function, we need to pre-select which type of task
   // we want to have.
-  const addPartialTask2Tree = async (
-    task: partialTaskDraft,
-    priorID: string | undefined,
-    parentID: string | undefined,
-  ): Promise<TaskNode> => {
-    const newTask = await createTaskNode(task, priorID, parentID)
-
-    // task was already added at a previous point...
-    if (await tyCrudVec.get(newTask.id)) return newTask
-
-    console.log('create new Task:', newTask.id)
-    await tyCrudVec.set(newTask.id, newTask, true)
-
-    // extract keywordsfrom entire chat and use it to name the task...
-    // but only if a taskname doesn't exist yet.
-    // TODO: make sure, we update keywords somwhere else e.g.in "debugdb" we
-    //       really would like to have immutable tasks...
-    // TODO: how can we do this much faster, so that we don't have to update our task and
-    //       keep it immutable?  We should probably await keywords, but also keep a
-    //       separate index with keywords for tasks...
-    // TODO: we can get rid of the "discard" lavels, things that should be "discarded" can be part of
-    //       a lower-level function or stay inside a tool etc...
-    if (!newTask.name && task.content && !task.label?.includes('discard')) {
-      await updateTaskNameWKeywords(newTask)
-    } else if (newTask.name) {
-      console.log('task already has a name:', newTask.name)
-    }
-
-    return newTask
-  }
+  const addPartialTask2Tree = (task: partialTaskDraft) =>
+    tyCrudVec.add(task, { createMeta: 'missing', vectors: true })
 
   async function addTaskChain(
     taskList: partialTaskDraft[],
@@ -961,11 +995,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     let lastTaskId = priorID
     const addedTaskList: TaskNode[] = []
     for (const task of taskList) {
-      const addedTask = await addPartialTask2Tree(
-        { ...task },
-        lastTaskId, //previous
-        parentID,
-      )
+      const addedTask = await addPartialTask2Tree({ ...task, priorID: lastTaskId, parentID })
       lastTaskId = addedTask.id
       addedTaskList.push(addedTask)
     }
@@ -1021,6 +1051,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     searchAllDirectChildren,
     searchAllChildren,
     searchSimilarTasks,
+    filterSearch,
     loadYamlConversation,
   }
 
@@ -1035,7 +1066,7 @@ export async function useTyTaskManager(vectorizerModel?: string) {
     addPartialTask2Tree,
     addTaskChain,
     addMdTaskChain,
-    debugDb,
+    metaDb,
   }
 }
 export type TyTaskManager = Awaited<ReturnType<typeof useTyTaskManager>>

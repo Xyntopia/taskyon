@@ -44,7 +44,12 @@
           :size="btnSize"
           to="/"
           aria-label="start new chat"
-          @click="state.llmSettings.selectedTaskId = undefined"
+          @click="
+            () => {
+              state.llmSettings.selectedTaskId = undefined
+              state.createTaskType.type = 'message'
+            }
+          "
           ><q-tooltip>Create New Chat</q-tooltip>
         </q-btn>
       </div>
@@ -97,7 +102,7 @@
       >
         <q-menu>
           <q-list dense>
-            <q-item :size="btnSize" to="/settings">
+            <q-item :size="btnSize" to="/settings" data-cy="open-settings">
               <q-item-section avatar>
                 <q-icon :name="matSettings" />
               </q-item-section>

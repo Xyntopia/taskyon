@@ -3,6 +3,7 @@
   "appConfiguration": {
     "darkTheme": "auto",
     "showLogo": true,
+    "sync": true,
     "welcomeMsg": "Welcome! Just type a message below to start using Taskyon!",
     "appConfigurationUrl": "/taskyon_settings.json",
     "gdriveConfigurationFile": "taskyon_settings.json",

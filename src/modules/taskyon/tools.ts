@@ -1,16 +1,18 @@
 import { bigIntToString } from '../utils'
-import type { TaskWorkerMessage, TaskyonMessage } from './apiTypes'
 import { RemoteFunctionResponse, RemoteFunctionCall } from './apiTypes'
 import { jsonSchemaToYamlString } from '../yamlUtils'
 import { executeCodeInIframe } from './iframeWorker'
 import type { JSONSchema7, JSONSchema7Object } from 'json-schema'
 import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
 import Ajv from 'ajv'
-import type { Port } from '../frpBus'
 import type { InternalTool, toolContext } from '@taskyon/taskyon'
 import type { FunctionArguments, FunctionCall, ParamType } from '@taskyon/taskyon'
 import { ToolBase } from '@taskyon/taskyon'
 import { convertZodToJsonSchemaCached } from './types'
+import type { Port } from '../frpBus'
+import { produce } from 'immer'
+
+export type RemoteFunctionPort = Port<RemoteFunctionCall, RemoteFunctionResponse>
 
 // the following doesn't really work ;) thats why we're doing the custom schema above..
 /*const internalToolFunctionSchema = z
@@ -36,10 +38,10 @@ export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSche
 async function handleRemoteFunction(
   name: string,
   args: FunctionArguments,
-  duplexPort: Port<TaskyonMessage, TaskWorkerMessage>,
+  duplexPort: RemoteFunctionPort,
 ) {
   const funcRP: Promise<RemoteFunctionResponse> = new Promise((resolve, reject) => {
-    const listener = (msg: RemoteFunctionCall | RemoteFunctionResponse) => {
+    const listener = (msg: RemoteFunctionResponse) => {
       console.log('remote function handler received message', msg)
       const response = RemoteFunctionResponse.safeParse(msg)
       if (response.success) {
@@ -131,25 +133,28 @@ export async function handleFunctionExecution(
   tool: InternalTool,
   stopSignal: AbortSignal, // add this to our duplexPort!!
   context: toolContext,
-  duplexPort: Port<TaskyonMessage, TaskWorkerMessage>,
+  duplexPort: RemoteFunctionPort,
 ): Promise<unknown> {
   // TODO: test here, if tool parameters are correct according to json schema
   //       if not, throw an error message...
   let funcR: unknown
   const toolDefaultParams = await createWithDefaults(tool.parameters)
   // mix in with explicit parameters
-  if (typeof func.arguments === 'object' && func.arguments !== null) {
-    func.arguments = {
-      ...toolDefaultParams,
-      ...func.arguments,
-    } as FunctionArguments
-  }
+  const execFunc = produce(func, (draft) => {
+    if (typeof func.arguments === 'object' && func.arguments !== null) {
+      draft.arguments = {
+        ...toolDefaultParams,
+        ...func.arguments,
+      } as FunctionArguments
+    }
+  })
+
   console.log(toolDefaultParams)
   if (tool.function) {
     console.log('using tool!', tool)
     // TODO: try longterm, to get rid of "internal" functions.. not yet sure how to do this..
     //       maybe have tools with privileged access?
-    funcR = await tool.function(func.arguments, context)
+    funcR = await tool.function(execFunc.arguments, context)
   } else if (tool.code) {
     console.log('compile & execute function code in iframe', tool)
     try {
@@ -157,19 +162,19 @@ export async function handleFunctionExecution(
       //console.log('messagePort', messagePort)
       funcR = await executeCodeInIframe(
         tool.code,
-        { params: func.arguments, context: context },
-        func.name + '.js',
+        { params: execFunc.arguments, context: context },
+        execFunc.name + '.js',
         stopSignal,
       )
     } catch (error) {
-      throw new Error(`Error executing iframe code for tool: ${func.name}`, { cause: error })
+      throw new Error(`Error executing iframe code for tool: ${execFunc.name}`, { cause: error })
     }
   } else {
     // we do the zod object parsing/validation here, because we might have a proxy object from upstream
     // and want to make sure its serializable for a postMessage function.
     // TODO: use our "onInterrupt" here somehow ;)
     // TODO: pass tool context here as well :)
-    funcR = await handleRemoteFunction(func.name, func.arguments, duplexPort)
+    funcR = await handleRemoteFunction(execFunc.name, execFunc.arguments, duplexPort)
   }
   funcR = bigIntToString(funcR) // Optionally convert bigInt
 

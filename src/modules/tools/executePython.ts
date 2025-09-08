@@ -3,7 +3,7 @@ import type { PythonScriptResult } from '../pyodide'
 import { usePyodideWebworker } from '../taskyon/webWorkerApi'
 import type { JSONSchema7 } from 'json-schema'
 
-const { asyncRunPython } = usePyodideWebworker('execute python script tool')
+const { asyncRunPython } = usePyodideWebworker()
 
 export const executePythonScript = createTool({
   parameters: {

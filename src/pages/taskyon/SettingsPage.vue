@@ -1,11 +1,12 @@
 <template>
   <FadeAwayScrollPage>
-    <q-toolbar>
+    <q-toolbar class="q-pt-md">
       <q-tabs v-model="selectedTab" class="col-auto" dense no-caps>
         <q-route-tab
           to="/settings/aiserviceprovider"
           label="AI Service Provider"
           name="aiserviceprovider"
+          data-cy="aiserviceprovider"
         />
         <q-route-tab to="/settings/profile" label="Profile & Backup" name="profile" />
         <q-route-tab to="/settings/secrets" label="Secrets" name="secrets" />

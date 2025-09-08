@@ -183,12 +183,8 @@ export const routes: RouteRecordRaw[] = [
   ...taskyonRoutes,
   {
     // we are making sure to only load urls without any extensions here...
-    path: '/oauth/:phase',
+    path: '/oauth/return',
     component: () => import('pages/auth/AuthFlow.vue'),
-    props: (route) => ({
-      query: route.query,
-      phase: route.params.phase,
-    }),
   },
   // Always leave this as last one,
   // but you can also remove it

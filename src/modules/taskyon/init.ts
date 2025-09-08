@@ -16,14 +16,12 @@ import { smallHelperTools } from '../tools/helperCollection'
 import { useFullSmallTools } from '../tools/usefulSmallTools'
 import { devTools } from '../tools/devTools'
 import { taskOrganizationTools, taskSearcher } from '../tools/TaskPlannerTool'
-import { storageTools } from '../tools/gdrive'
 import { appDevTools } from '../tools/webAppDev'
 import { fileTools } from '../tools/fileTools'
 import { localVectorStore } from '../tools/localVectorStore'
 import { proceduralTools } from '../tools/proceduralGraphics'
 import { wfcGenerator } from '../tools/wavefunctioncollapse'
 import { createOAuthTool } from '../tools/authTools'
-import type { EncryptedDataRow } from '../crudWrapper'
 import {
   createCombinedCrudWrapper,
   createMapCrudWrapper,
@@ -31,14 +29,21 @@ import {
   withSecretStore,
 } from '../crudWrapper'
 import { getDatabase } from '../pglite.api'
-import { createDuplexChannel, createIframeMux, createPortApi, createZodPort } from '../frpBus'
+import {
+  createDuplexChannel,
+  createIframeMux,
+  createPortApi,
+  createTypeFilteredPort,
+} from '../frpBus'
 import { testingTools } from '../tools/testTools'
-import { TaskWorkerMessage, TaskyonMessage } from './apiTypes'
+import { TaskyonMessage } from './apiTypes'
 import { dump } from 'js-yaml'
 import z from 'zod'
 import { ToolBase } from '@taskyon/taskyon'
+import type { EncryptedDataRow } from '../crypto_webcrypto'
+import { encryptCompressObject } from '../fileUtils'
 
-export async function initTaskyon(
+export async function tyCore(
   llmSettings: llmSettings,
   apiKeys: { [key: string]: string },
   // with the Environment Tools we can provide a list of tools as closures which have access
@@ -48,7 +53,8 @@ export async function initTaskyon(
   // this way we can give taskyon access and the ability to read & change the environment
   // it is running in.
   EnvironmentTools: InternalTool[],
-  publicRecoveryKey: () => Promise<CryptoKey>,
+  getPublicRecoveryKey: () => Promise<CryptoKey>,
+  getSessionKey: () => Promise<CryptoKey>,
 ) {
   const ToolList: InternalTool[] = [
     ...smallHelperTools,
@@ -58,7 +64,6 @@ export async function initTaskyon(
     ...testingTools,
     ...fileTools,
     ...taskOrganizationTools,
-    ...storageTools,
     ...proceduralTools,
     createAddNewToolTool(),
     wfcGenerator,
@@ -81,7 +86,7 @@ export async function initTaskyon(
         tableName: 'vault',
       }),
     ]),
-    publicRecoveryKey,
+    getPublicRecoveryKey,
   )
 
   console.log('finished taskManager initialization')
@@ -114,17 +119,19 @@ export async function initTaskyon(
   // "outPort" is the outwards port which is used by 3rd party apps
   // to communicate with taskyon.
   // "inPort" is the other side of the channel and is used by taskyon itself
-  const { x: outPort, y: inPort } = createDuplexChannel<unknown, TaskyonMessage>()
+  const { x: outsidePort, y: insidePort } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()
 
   // logging
-  outPort.receive((msg) => {
-    console.log('taskyon sending a request:', msg)
+  outsidePort.receive((msg) => {
+    console.log('taskyon sending a message:', msg)
   })
-  inPort.receive((msg) => {
-    console.log('taskyon receiving a request:', msg)
+  insidePort.receive((msg) => {
+    console.log('taskyon receiving a message:', msg)
   })
 
-  const { port: taskPort } = createZodPort(inPort, TaskWorkerMessage)
+  const { port: wport } = createTypeFilteredPort(insidePort, ['functionResponse'])
+
+  //const { port: taskPort } = createZodPort(inPort, TaskWorkerMessage)
 
   // keys could porentially be reactive here, so in theory, when they change in the GUI,
   // taskyon should automatically pick up on this...
@@ -134,19 +141,18 @@ export async function initTaskyon(
     taskManagerInstance,
     secretStore,
     iframeMultiPlexer.all$,
-    taskPort,
+    wport,
   )
 
   createPortApi(
-    inPort,
+    insidePort,
     TaskyonMessage,
     {
       task: async (msg) => {
-        const tn = await taskManagerInstance.addPartialTask2Tree(
-          { ...msg.task, label: msg.origin ? [msg.origin] : undefined },
-          undefined,
-          undefined,
-        )
+        const tn = await taskManagerInstance.addPartialTask2Tree({
+          ...msg.task,
+          label: msg.origin ? [msg.origin] : undefined,
+        })
         // push the last task to execution queue right away...
         if (msg.execute) {
           queueTask(tn.id)
@@ -156,7 +162,7 @@ export async function initTaskyon(
         const newFunc: ToolBase = msg
         console.log(`functionDescription was sent by ${msg.origin}`, newFunc)
         void taskManagerInstance.addDefaultTools([newFunc])
-        inPort.send({
+        insidePort.send({
           type: 'status',
           data: {
             type: 'newtool',
@@ -173,14 +179,39 @@ export async function initTaskyon(
         }
       },*/
     },
-    console.warn,
-    console.error,
+    (msg) => console.warn('taskyon receiving unknown message', msg),
+    (msg) => console.error('an error occured during handling of the message', msg),
   )
+
+  taskManagerInstance.taskStream.subscribe(async ({ data: task, id }) => {
+    // if tasks is not null, it was freshly created
+    // TODO: only trigger upload on certain task events...
+    if (task) {
+      const archiveName = `${id}.tyt`
+
+      // compress objects "locally" (for the test)
+      const packed = await encryptCompressObject(
+        task,
+        archiveName,
+        getPublicRecoveryKey,
+        getSessionKey,
+      )
+      console.log('created encrypted task file...', id)
+
+      insidePort.send({
+        type: 'addTasks',
+        data: packed,
+        info: archiveName,
+        ids: [String(id)],
+      })
+    }
+  })
 
   return {
     // TODO: not sure, if the iframeMultiPlexer should be a taskyon functionality?
     //       it seems very "GUI"-oriented... maybe simply sending a message on "outPort"
     //       would be sufficient?
+    //       eah iframeMultiplexer should be replaced with something that uses ports...
     connectMessageIframe: iframeMultiPlexer.attachIframe,
     taskManagerInstance,
     workerStream, // TODO: integrate with outPort
@@ -188,9 +219,11 @@ export async function initTaskyon(
     workerStop, // TODO: integrate with outPort
     queueTask, // TODO: integrate with outPort!
     secretStore, // TODO: integrate with outPort!
-    outPort,
+    port: outsidePort,
   }
 }
+
+export type Taskyon = Awaited<ReturnType<typeof tyCore>>
 
 /*function stringifyIfNotString(obj: unknown): string | undefined {
     if (typeof obj === 'undefined') return undefined;

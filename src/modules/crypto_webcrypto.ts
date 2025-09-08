@@ -1,5 +1,6 @@
 import { base64UrlToUint8Array, uint8ArrayToBase64Url, urlSafe64BitString } from './encoding'
 import { Buffer } from 'buffer'
+import { z } from 'zod'
 
 export function parseJwt(token: string | undefined): Record<string, unknown> | undefined {
   if (token) {
@@ -58,12 +59,52 @@ export async function deriveKey(
   )
 }
 
-// Encrypt object with key derived from rowKey + salt + id
-export async function encryptObject<T>(
+// Define a type for the encrypted data structure
+export const EncryptedDataRow = z.object({
+  iv: z.string(),
+  ciphertext: z.string(),
+  salt: z.string(),
+  encryptedToolKey: z.string(),
+  recoveryEncryptedToolKey: z.string(),
+})
+export type EncryptedDataRow = z.infer<typeof EncryptedDataRow>
+
+export const EncryptedDataRowMixed = z.object({
+  iv: z.instanceof(Uint8Array),
+  ciphertext: z.instanceof(Uint8Array),
+  salt: z.instanceof(Uint8Array),
+  encryptedToolKey: z.string(),
+  recoveryEncryptedToolKey: z.string(),
+})
+export type EncryptedDataRowMixed = z.infer<typeof EncryptedDataRowMixed>
+
+async function encryptObject<T>(
   rowKey: CryptoKey,
   data: T,
   id: string | number,
-): Promise<{ iv: string; ciphertext: string; salt: string }> {
+): Promise<{ iv: string; ciphertext: string; salt: string }>
+
+async function encryptObject<T>(
+  rowKey: CryptoKey,
+  data: T,
+  id: string | number,
+  base64: true,
+): Promise<{ iv: string; ciphertext: string; salt: string }>
+
+async function encryptObject<T>(
+  rowKey: CryptoKey,
+  data: T,
+  id: string | number,
+  base64: false,
+): Promise<{ iv: Uint8Array; ciphertext: Uint8Array; salt: Uint8Array }>
+
+// Encrypt object with key derived from rowKey + salt + id
+async function encryptObject(
+  rowKey: CryptoKey,
+  data: BufferSource,
+  id: string | number,
+  base64: boolean = true,
+) {
   const salt = crypto.getRandomValues(new Uint8Array(16))
   const info = new TextEncoder().encode(String(id))
 
@@ -84,17 +125,109 @@ export async function encryptObject<T>(
 
   // Encrypt data with derived key
   const iv = crypto.getRandomValues(new Uint8Array(12))
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    derivedKey,
-    new TextEncoder().encode(JSON.stringify(data)),
+  const encrypted = new Uint8Array(
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, derivedKey, data),
   )
 
-  return {
-    iv: uint8ArrayToBase64Url(iv.buffer),
-    ciphertext: uint8ArrayToBase64Url(encrypted),
-    salt: uint8ArrayToBase64Url(salt.buffer),
+  if (base64)
+    return {
+      iv: uint8ArrayToBase64Url(iv.buffer),
+      ciphertext: uint8ArrayToBase64Url(encrypted.buffer),
+      salt: uint8ArrayToBase64Url(salt.buffer),
+    }
+  else
+    return {
+      iv: iv,
+      ciphertext: encrypted,
+      salt: salt,
+    } as { iv: Uint8Array; ciphertext: Uint8Array; salt: Uint8Array }
+}
+
+export type AskSession = () => Promise<CryptoKey> | CryptoKey
+
+export async function encryptDataFile(
+  data: BufferSource,
+  info: string | number,
+  publicRecoveryKey: AskSession,
+  getSessionKey: AskSession,
+): Promise<EncryptedDataRow>
+
+export async function encryptDataFile(
+  data: BufferSource,
+  info: string | number,
+  publicRecoveryKey: AskSession,
+  getSessionKey: AskSession,
+  base64: true,
+): Promise<EncryptedDataRow>
+
+export async function encryptDataFile(
+  data: BufferSource,
+  info: string | number,
+  publicRecoveryKey: AskSession,
+  getSessionKey: AskSession,
+  base64: false,
+): Promise<EncryptedDataRowMixed>
+
+export async function encryptDataFile(
+  data: BufferSource,
+  info: string | number, // we need the info in order to derive the key with some additional noise
+  // this should be a public key that can be used to encrypt the tool key
+  publicRecoveryKey: AskSession,
+  // and this is the session key provider. This is used to encryp the tool key
+  // this way we never have to use the private recovery key anywhere. Except if we
+  // want to recover the data...
+  // The session key is a symmetric key. We usually save this key in the browser
+  // in a secure storage.
+  getSessionKey: AskSession,
+  base64: boolean = true, // whether to return the data as base64 strings
+) {
+  // Generate a new random tool key for each set operation
+  // we need the key to be extractable, so that we can encrypt it !
+  const rowKey = await generateRandomEncryptionKey(true)
+
+  // Encrypt the tool key using the recovery public key
+  const recoveryEncryptedToolKey = await wrapKeyWithPublicKey(await publicRecoveryKey(), rowKey)
+
+  const sessionKey = await getSessionKey() // Encrypt the tool key using the symmetric session key
+  const encryptedToolKey = await encryptWithSessionKey(sessionKey, rowKey)
+
+  // Encrypt the data using the tool key
+  if (base64) {
+    const { iv, ciphertext, salt } = await encryptObject(rowKey, data, info, base64)
+    return {
+      iv,
+      ciphertext,
+      salt,
+      encryptedToolKey,
+      recoveryEncryptedToolKey,
+    } as EncryptedDataRow
+  } else {
+    const { iv, ciphertext, salt } = await encryptObject(rowKey, data, info, base64)
+    return {
+      iv,
+      ciphertext,
+      salt,
+      encryptedToolKey,
+      recoveryEncryptedToolKey,
+    } as EncryptedDataRowMixed
   }
+}
+
+export const decryptDataFile = async (
+  encData: EncryptedDataRow | EncryptedDataRowMixed,
+  // the info is used to derive the key with some additional noise
+  // this is usually the record ID or some other identifier which is unique for the record
+  // and not encrypted...
+  info: string | number,
+  getSessionKey: AskSession,
+) => {
+  // Decrypt the tool key using the symmetric session key (this is always a string)
+  const rowKey = await decryptWithSessionKey(await getSessionKey(), encData.encryptedToolKey)
+
+  // Decrypt the data using the tool key. The updated `decryptData` function
+  // will handle the type detection internally. No `if` block needed here!
+  const data = await decryptData(rowKey, encData.iv, encData.ciphertext, encData.salt, info)
+  return data
 }
 
 export async function importEd25519PublicKeyFromBase64(base64Key: string): Promise<CryptoKey> {
@@ -180,20 +313,26 @@ export async function decryptWithSessionKey(
 // Decrypt data using derived key
 export async function decryptData(
   rowKey: CryptoKey,
-  iv: string,
-  ciphertext: string,
-  salt: string,
+  iv: string | Uint8Array,
+  ciphertext: string | Uint8Array,
+  salt: string | Uint8Array,
   id: string | number,
 ) {
-  const ivBytes = base64UrlToUint8Array(iv)
-  const ciphertextBytes = base64UrlToUint8Array(ciphertext)
-  const saltBytes = base64UrlToUint8Array(salt)
+  // --- START OF CHANGES ---
+  // Use `typeof` to check if the inputs are strings. If so, decode them.
+  // If they are already ArrayBuffers, use them as is.
+  const ivBytes = typeof iv === 'string' ? base64UrlToUint8Array(iv) : iv
+  const ciphertextBytes =
+    typeof ciphertext === 'string' ? base64UrlToUint8Array(ciphertext) : ciphertext
+  const saltBytes = typeof salt === 'string' ? base64UrlToUint8Array(salt) : salt
+  // --- END OF CHANGES ---
+
   const info = new TextEncoder().encode(String(id))
 
   const derivedKey = await crypto.subtle.deriveKey(
     {
       name: 'HKDF',
-      salt: saltBytes,
+      salt: saltBytes, // Now correctly using a buffer
       info,
       hash: 'SHA-256',
     },
@@ -204,12 +343,12 @@ export async function decryptData(
   )
 
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: ivBytes },
+    { name: 'AES-GCM', iv: ivBytes }, // Now correctly using a buffer
     derivedKey,
-    ciphertextBytes,
+    ciphertextBytes, // Now correctly using a buffer
   )
 
-  return JSON.parse(new TextDecoder().decode(decrypted))
+  return new Uint8Array(decrypted)
 }
 
 export async function decryptObject(

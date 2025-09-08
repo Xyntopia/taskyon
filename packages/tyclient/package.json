@@ -1,6 +1,6 @@
 {
-  "name": "tyclient",
-  "version": "0.4.4",
+  "name": "@taskyon/tyclient",
+  "version": "0.4.5",
   "license": "MIT",
   "main": "dist/tyclient.umd.js",
   "module": "dist/tyclient.es.js",
@@ -15,9 +15,12 @@
   "files": [
     "dist/**/*"
   ],
-  "peerDependencies": {},
-  "dependencies": {
-    "@taskyon/taskyon": "^0.0.1"
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/json-schema": "^7.0.15",
+    "type-fest": "^4.30.1"
   },
   "scripts": {
     "build": "vite build --config vite.lib.config.ts",
