@@ -25,6 +25,21 @@ Taskyon uses cryptoSessions (CS) to unlock user data and keep user data safe and
 
 key sources: SP, DK, UIS
 
+- Taskyon gets DK
+- Taskyon gets additional secret (can be a password or stored secret in taskon.space accoung)
+- Use DK + secret to get SK storage slot
+- get SK from storage slot and unwrap
+- initialize dynamic context using SK
+
+### SK change
+
+- reload dynamic context
+
+### taskyon.space account logout/change
+
+logout: switch back to "default" SK which is wrapped only by device ID
+switch: switch to new SK bound to new account with its secret...
+
 ## OS version
 
 - user opens taskyon

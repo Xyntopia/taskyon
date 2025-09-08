@@ -1,4 +1,4 @@
-import type { CryptoSession, EncryptedDataRow, InternalTool } from '@taskyon/taskyon'
+import type { CryptoSession, EncryptedDataRow, InternalTool, Thunk } from '@taskyon/taskyon'
 import { createCryptoSession, ToolBase } from '@taskyon/taskyon'
 import { dump } from 'js-yaml'
 import z from 'zod'
@@ -45,16 +45,16 @@ import type { llmSettings } from './types'
 
 function createApi(
   insidePort: Port<TaskyonMessage, TaskyonMessage>,
-  taskManagerInstance: TyTaskManager,
+  taskManagerInstance: Thunk<TyTaskManager>,
   queueTask: (id: string) => void,
-  cs: CryptoSession,
+  cs: Thunk<CryptoSession>,
 ) {
   createPortApi(
     insidePort,
     TaskyonMessage,
     {
       task: async (msg) => {
-        const tn = await taskManagerInstance.addPartialTask2Tree({
+        const tn = await taskManagerInstance().addPartialTask2Tree({
           ...msg.task,
           label: msg.origin ? [msg.origin] : undefined,
         })
@@ -66,7 +66,7 @@ function createApi(
       functionDescription: (msg) => {
         const newFunc: ToolBase = msg
         console.log(`functionDescription was sent by ${msg.origin}`, newFunc)
-        void taskManagerInstance.addDefaultTools([newFunc])
+        void taskManagerInstance().addDefaultTools([newFunc])
         insidePort.send({
           type: 'status',
           data: {
@@ -89,7 +89,7 @@ function createApi(
   )
 
   // send events...
-  taskManagerInstance.taskStream.subscribe(async ({ data: task, id }) => {
+  taskManagerInstance().taskStream.subscribe(async ({ data: task, id }) => {
     // if tasks is not null, it was freshly created
     // TODO: only trigger upload on certain task events...
     if (task) {
@@ -99,8 +99,8 @@ function createApi(
       const packed = await encryptCompressObject(
         task,
         archiveName,
-        () => cs.getUserPublicKey()?.publicKey,
-        () => cs.getSessionKey(),
+        () => cs().getUserPublicKey()?.publicKey,
+        () => cs().getSessionKey(),
       )
       console.log('created encrypted task file...', id)
 
@@ -269,33 +269,32 @@ export async function tyCore(
     insidePort,
     iframeMultiPlexer,
   )
-  const {
-    chatCompletionStream,
-    workerStream,
-    workerStop,
-    queueTask,
-    taskManagerInstance,
-    secretStore,
-  } = await ctxCreator(cs)
 
-  // build our context!
-  const setNewSession = (newCs: CryptoSession) => (cs = newCs)
+  // TODO: we need to integrate all of these with our API.
+  //       ideally, the API would be the only thing that communicates with the outside!
+  let ctx = await ctxCreator(cs)
 
   // receive events
-  createApi(insidePort, taskManagerInstance, queueTask, cs)
+  // the Api is static and never needs to change!
+  createApi(
+    insidePort,
+    () => ctx.taskManagerInstance,
+    (id: string) => ctx.queueTask(id),
+    () => cs,
+  )
+
+  const setNewSession = async (newCs: CryptoSession) => {
+    cs = newCs
+    ctx = await ctxCreator(cs)
+  }
 
   return {
+    ...ctx,
     // TODO: not sure, if the iframeMultiPlexer should be a taskyon functionality?
     //       it seems very "GUI"-oriented... maybe simply sending a message on "outPort"
     //       would be sufficient?
     //       eah iframeMultiplexer should be replaced with something that uses ports...
     connectMessageIframe: iframeMultiPlexer.attachIframe,
-    taskManagerInstance,
-    workerStream, // TODO: integrate with outPort
-    chatCompletionStream, // TODO: integrate with outPort
-    workerStop, // TODO: integrate with outPort
-    queueTask, // TODO: integrate with outPort!
-    secretStore, // TODO: integrate with outPort!
     port: outsidePort,
     getCryptoSession: () => cs,
     setNewSession,
