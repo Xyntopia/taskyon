@@ -141,11 +141,18 @@ interface DocumentVersion {
   description?: string
 }
 
-interface PatchOperation {
+interface LinePatchOperation {
   type: 'replace' | 'insert' | 'delete'
-  start: number
-  end?: number
-  text?: string
+  lineStart: number // 1-based line number
+  lineEnd?: number | undefined // 1-based line number (inclusive) for replace/delete
+  text?: string | undefined // New text for replace/insert
+}
+
+interface LineInfo {
+  lineNumber: number
+  content: string
+  startPos: number
+  endPos: number
 }
 
 // State
@@ -242,33 +249,88 @@ function getVersionPreview(content: string): string {
   return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine
 }
 
-// Apply patch to text
-function applyPatch(text: string, patches: PatchOperation[]): string {
-  let result = text
-  // Apply patches in reverse order to maintain indices
-  patches.sort((a, b) => (b.start || 0) - (a.start || 0))
+// Get line information with character positions
+function getLineInfo(content: string): LineInfo[] {
+  const lines = content.split('\n')
+  const lineInfo: LineInfo[] = []
+  let currentPos = 0
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!
+    lineInfo.push({
+      lineNumber: i + 1,
+      content: line,
+      startPos: currentPos,
+      endPos: currentPos + line.length,
+    })
+    currentPos += line.length + 1 // +1 for the newline character
+  }
+
+  return lineInfo
+}
+
+// Format content with line numbers
+function formatContentWithLineNumbers(content: string, maxLines?: number): string {
+  const lines = content.split('\n')
+  const totalLines = lines.length
+  const displayLines = maxLines ? lines.slice(0, maxLines) : lines
+
+  const formatted = displayLines
+    .map((line, index) => {
+      const lineNum = (index + 1).toString().padStart(4, ' ')
+      return `${lineNum}: ${line}`
+    })
+    .join('\n')
+
+  if (maxLines && totalLines > maxLines) {
+    return formatted + `\n... (${totalLines - maxLines} more lines)`
+  }
+
+  return formatted
+}
+
+// Apply line-based patches to text
+function applyLinePatches(text: string, patches: LinePatchOperation[]): string {
+  const lines = text.split('\n')
+
+  // Sort patches by line number in reverse order to maintain indices
+  patches.sort((a, b) => (b.lineStart || 0) - (a.lineStart || 0))
 
   for (const patch of patches) {
+    const lineIndex = patch.lineStart - 1 // Convert to 0-based index
+
     switch (patch.type) {
       case 'replace':
-        result =
-          result.substring(0, patch.start) +
-          (patch.text || '') +
-          result.substring(patch.end || patch.start)
+        if (patch.lineEnd !== undefined) {
+          const endIndex = patch.lineEnd - 1
+          const newLines = patch.text ? patch.text.split('\n') : []
+          lines.splice(lineIndex, endIndex - lineIndex + 1, ...newLines)
+        } else {
+          // Replace single line
+          lines[lineIndex] = patch.text || ''
+        }
         break
-      case 'insert':
-        result =
-          result.substring(0, patch.start) + (patch.text || '') + result.substring(patch.start)
+      case 'insert': {
+        const insertLines = patch.text ? patch.text.split('\n') : ['']
+        lines.splice(lineIndex, 0, ...insertLines)
         break
+      }
       case 'delete':
-        result = result.substring(0, patch.start) + result.substring(patch.end || patch.start)
+        if (patch.lineEnd !== undefined) {
+          const endIndex = patch.lineEnd - 1
+          lines.splice(lineIndex, endIndex - lineIndex + 1)
+        } else {
+          // Delete single line
+          lines.splice(lineIndex, 1)
+        }
         break
     }
   }
-  return result
+
+  return lines.join('\n')
 }
 
-const maxFileSize = 50000
+const maxPreviewLines = 1000
 
 // Initialize on mount
 onMounted(() => {
@@ -291,13 +353,15 @@ onMounted(() => {
       } as const satisfies JSONSchema7,
       function: () => {
         // Gather document context information
+        const lineInfo = getLineInfo(currentContent.value)
         const documentInfo = {
           currentVersion: currentVersionIndex.value + 1,
           totalVersions: documentVersions.value.length,
           contentLength: currentContent.value.length,
+          totalLines: lineInfo.length,
           hasUnsavedChanges: hasUnsavedChanges.value,
           lastModified: currentVersion.value?.timestamp || 'never',
-          contentPreview: currentContent.value.substring(0, maxFileSize),
+          contentPreview: formatContentWithLineNumbers(currentContent.value, maxPreviewLines),
           versions: documentVersions.value.map((v, i) => ({
             index: i + 1,
             timestamp: v.timestamp,
@@ -313,22 +377,32 @@ You are the Taskyon Document Assistant helping users edit and manage their docum
 ## Current Document State
 **Version:** ${documentInfo.currentVersion} of ${documentInfo.totalVersions}
 **Content Length:** ${documentInfo.contentLength} characters
+**Total Lines:** ${documentInfo.totalLines}
 **Has Unsaved Changes:** ${documentInfo.hasUnsavedChanges}
 **Last Modified:** ${documentInfo.lastModified.toLocaleString()}
 
 ## Available Versions
 ${documentInfo.versions.map((v) => `- Version ${v.index}: ${v.preview} (${v.timestamp.toLocaleString()})`).join('\n')}
 
-## Current Content
-\`\`\`markdown
-${documentInfo.contentPreview}${documentInfo.contentLength > maxFileSize ? '\n... (content truncated)' : ''}
+## Current Content (with line numbers)
+\`\`\`
+${documentInfo.contentPreview}
 \`\`\`
 
 ## Available Tools
 You have access to the 'updateDocument' tool which can:
-- Apply text patches for efficient editing (replace, insert, delete operations)
+- Apply line-based patches to the document:
+  - Replace: Replace one or more lines
+  - Insert: Insert new lines at a specific position
+  - Delete: Delete one or more lines
 - Replace entire document content
 - Add descriptions for changes made
+
+## Line-Based Editing
+- Lines are numbered starting from 1
+- lineStart: The line number where the operation begins
+- lineEnd: (optional) The end line for replace/delete operations (inclusive)
+- text: The new text for replace/insert operations (can be multi-line)
 
 ## Your Role
 - Analyze the user's request and current document state
@@ -353,7 +427,7 @@ Only use the updateDocument tool if you are confident about the changes to make.
     createTool({
       name: 'updateDocument',
       description:
-        'Update the document content using text patches for efficient editing or full content replacement',
+        'Update the document content using line-based patches for efficient editing or full content replacement',
       parameters: {
         type: 'object',
         properties: {
@@ -362,12 +436,25 @@ Only use the updateDocument tool if you are confident about the changes to make.
             items: {
               type: 'object',
               properties: {
-                type: { type: 'string', enum: ['replace', 'insert', 'delete'] },
-                start: { type: 'number', description: 'Start position in the text' },
-                end: { type: 'number', description: 'End position (for replace/delete)' },
-                text: { type: 'string', description: 'Text to insert/replace with' },
+                type: {
+                  type: 'string',
+                  enum: ['replace', 'insert', 'delete'],
+                  description: 'Type of patch operation',
+                },
+                lineStart: {
+                  type: 'number',
+                  description: 'Start line number (1-based)',
+                },
+                lineEnd: {
+                  type: 'number',
+                  description: 'End line number (1-based, inclusive) for replace/delete operations',
+                },
+                text: {
+                  type: 'string',
+                  description: 'Text to insert/replace with (can be multi-line)',
+                },
               },
-              required: ['type', 'start'],
+              required: ['type', 'lineStart'],
             },
           },
           newContent: {
@@ -388,8 +475,15 @@ Only use the updateDocument tool if you are confident about the changes to make.
           // Full content replacement
           updatedContent = newContent
         } else if (patches) {
-          // Apply patches
-          updatedContent = applyPatch(currentContent.value, patches)
+          // Apply line-based patches
+          const linePatches: LinePatchOperation[] = patches.map((patch) => ({
+            type: patch.type,
+            lineStart: patch.lineStart,
+            lineEnd: patch.lineEnd,
+            text: patch.text,
+          }))
+
+          updatedContent = applyLinePatches(currentContent.value, linePatches)
         } else {
           return makeTaskResult({
             role: 'system',
@@ -430,7 +524,7 @@ Only use the updateDocument tool if you are confident about the changes to make.
       expertMode: true,
       showLogo: false,
       welcomeMsg:
-        'Hi! I can help you edit documents. I can see the current content and make updates.',
+        'Hi! I can help you edit documents. I can see the current content with line numbers and make precise line-based edits.',
     },
     signatureOrKey: state.keys[state.llmSettings?.selectedApi || ''],
   }
