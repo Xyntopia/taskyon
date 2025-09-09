@@ -21,15 +21,16 @@ import defaultSettings from 'src/assets/taskyon_settings.json'
 import { generateAssymetricRandomNewKey } from 'src/modules/crypto_js'
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 import type { PartialDeep } from 'type-fest'
-import { initialStoredStateObj, currentTyProfileName } from 'src/modules/ui/initialState'
+import { initialStoredStateObj, currentTyProfileName, urlConfig } from 'src/modules/ui/initialState'
 import type { FunctionCall } from '@taskyon/taskyon'
 
 interface TaskWidgetStateType {
   markdownEnabled: boolean
 }
 
-function clearBrowserStorage() {
-  LocalStorage.clear()
+function clearBrowserStorage(localStorageKeys?: string[]) {
+  if (localStorageKeys) localStorageKeys.forEach((key) => LocalStorage.removeItem(key))
+  else LocalStorage.clear()
   sessionStorage.clear()
   clearBrowserCaches()
   clearServiceWorkers()
@@ -99,6 +100,7 @@ function getInitialState() {
 // because we want to this to also work on tyServer and in a "minimal gui" setting.
 // So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
 export const useAppStateStore = defineStore('ui-state', () => {
+  // configuration from the URL!
   const { initialState, defaultStorableSettings } = getInitialState()
 
   const initialStoredStateObjTyped = initialStoredStateObj as
@@ -121,7 +123,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
         initialStoredStateObjTyped?.version || 'undefined'
       }) is not compatible with current version (${initialState.version}). Using default settings.`,
     )
-    clearBrowserStorage()
+    clearBrowserStorage([currentTyProfileName])
     stateRefs = reactive(initialState)
   }
 
@@ -254,6 +256,8 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
   return {
+    isInIframe: urlConfig.isInIframe,
+    urlConfig: urlConfig,
     setSelectedTask: (taskId: string | null | undefined) => {
       console.log('set selected task:', taskId)
       stateRefs.llmSettings.selectedTaskId = taskId || undefined

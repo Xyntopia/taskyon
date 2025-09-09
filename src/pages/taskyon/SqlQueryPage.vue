@@ -81,7 +81,7 @@
         id="taskyon"
         title="Taskyon agent"
         frameborder="0"
-        :src="`${taskyonUrl}?iframe=true`"
+        :src="`${taskyonUrl}?iframe=true&profile=sql`"
         style="width: 100%; height: 99%"
       ></iframe>
     </div>
@@ -103,8 +103,10 @@ import { copyToClipboard, Notify } from 'quasar'
 import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 import { initializeTaskyon } from '../../../packages/tyclient/src'
+import { useAppStateStore } from 'src/stores/appState'
 
 const taskyonUrl = window.location.origin
+const state = useAppStateStore()
 
 function copyJson() {
   copyToClipboard(formattedResult.value)
@@ -467,6 +469,7 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
       chatSuggestions: [gettingStarted],
       welcomeMsg: 'Ask taskyon for help on querying your database!',
     },
+    signatureOrKey: state.keys[state.llmSettings?.selectedApi || ''],
   }
   void initializeTaskyon({ tools, configuration, name: 'sqlqueries', persist: true })
 })

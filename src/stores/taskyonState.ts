@@ -29,10 +29,11 @@ import type { InternalTool, Asyncify } from '@taskyon/taskyon'
 import { TaskNode } from '@taskyon/taskyon'
 import { toolCall } from '@taskyon/taskyon'
 import { usePyodideWebworker } from 'src/modules/taskyon/webWorkerApi'
-import { areWeInIframe, waitForIframeDuplexChannel } from './iframeClient'
+import { waitForIframeDuplexChannel } from './iframeClient'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
 import type { AuthenticationOptions, TokenGetter } from 'src/modules/oauth'
 import { OAUTH_PROVIDERS, usePersistentOauth } from 'src/modules/oauth'
+import { urlConfig } from 'src/modules/ui/initialState'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -475,7 +476,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // we use this here to confgure out taskyon logic
   const stateRefs = useAppStateStore()
 
-  stateRefs.appConfiguration.chatSuggestions = ChatSuggestions
+  if (!urlConfig.isInIframe) stateRefs.appConfiguration.chatSuggestions = ChatSuggestions
 
   let loadingKey = false
   async function getOpenRouterPKCEKey(code: string) {
@@ -513,7 +514,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // pre-initialize our python webworker, because its very slow to startup :)
   void usePyodideWebworker().preInit()
 
-  // TODO: move this into our taskyon library...
   const entryNode = computed(() => {
     return (
       stateRefs.llmSettings.entryNode ??
@@ -662,10 +662,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
     /// -------   IFRAME operations --------
     // We load the iframe here with the iframe=true parameter to make test in cypress work!
-    const isInIframe = areWeInIframe()
     // set up iframe API and hook it up to our taskyon api
     //if ($q.platform.within.iframe) {
-    if (isInIframe) {
+    if (stateRefs.isInIframe) {
       console.log('taskon is in iframe!, waiting for message port!')
       stateRefs.taskyonRunmode = 'waiting for connection'
       const iframePort = await waitForIframeDuplexChannel()

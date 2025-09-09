@@ -3,6 +3,7 @@
   <q-page class="row">
     <!-- Document Editor Card -->
     <div dense class="col">
+      <UnderConstructionHint />
       <div class="row items-center justify-between q-pa-sm">
         <div class="text-h6">Document Editor</div>
         <div class="text-subtitle2">
@@ -103,7 +104,7 @@
         id="taskyon"
         title="Taskyon agent"
         frameborder="0"
-        :src="`${taskyonUrl}?iframe=true`"
+        :src="`${taskyonUrl}?iframe=true&profile=coding`"
         style="width: 100%; height: 99%"
       ></iframe>
     </div>
@@ -127,6 +128,10 @@ import type { JSONSchema7 } from 'json-schema'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 import { initializeTaskyon } from '../../../packages/tyclient/src'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
+import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
+import { useAppStateStore } from 'src/stores/appState'
+
+const state = useAppStateStore()
 
 // Types
 interface DocumentVersion {
@@ -422,6 +427,7 @@ Only use the updateDocument tool if you are confident about the changes to make.
       welcomeMsg:
         'Hi! I can help you edit documents. I can see the current content and make updates.',
     },
+    signatureOrKey: state.keys[state.llmSettings?.selectedApi || ''],
   }
 
   void initializeTaskyon({ tools, configuration, name: 'codingpage', persist: true })
