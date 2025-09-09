@@ -112,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { copyToClipboard, Notify } from 'quasar'
 import {
   matNavigateBefore,
@@ -285,7 +285,8 @@ function formatContentWithLineNumbers(content: string, maxLines?: number): strin
 
   const formatted = displayLines
     .map((line, index) => {
-      const lineNum = (index + 1).toString().padStart(4, ' ')
+      const maxLineDigits = Math.max(1, Math.floor(Math.log10(lines.length)) + 1)
+      const lineNum = (index + 1).toString().padStart(maxLineDigits, ' ')
       return `${lineNum}: ${line}`
     })
     .join('\n')
@@ -538,15 +539,5 @@ Only use the updateDocument tool if you are confident about the changes to make.
   }
 
   void initializeTaskyon({ tools, configuration, name: 'codingpage', persist: true })
-})
-
-// Watch for version changes to update content
-watch(currentVersionIndex, (newIndex) => {
-  if (!hasUnsavedChanges.value) {
-    const version = documentVersions.value[newIndex]
-    if (version) {
-      currentContent.value = version.content
-    }
-  }
 })
 </script>
