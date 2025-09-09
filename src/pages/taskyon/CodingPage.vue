@@ -2,7 +2,7 @@
 <template>
   <q-page class="row">
     <!-- Document Editor Card -->
-    <q-card dense class="col q-ma-sm column" style="min-width: 200px">
+    <q-card dense class="col q-ma-sm column" style="min-width: 200px; width: 100%">
       <div class="row items-center justify-between q-pa-sm">
         <div class="text-h6">Document Editor</div>
         <div class="text-subtitle2">
@@ -58,12 +58,12 @@
       </div>
 
       <!-- Code Editor -->
-      <div class="col q-mb-md">
+      <div class="col q-mb-md" style="max-height: 100%; max-width: 100%">
         <CodeEditor
           v-model="currentContent"
           placeholder="Write here..."
           language="markdown"
-          style="height: 100%; overflow: hidden"
+          style="height: 100%"
           @update:model-value="onContentChange"
         />
       </div>
@@ -592,3 +592,18 @@ watch(currentVersionIndex, (newIndex) => {
   }
 })
 </script>
+
+<style scoped>
+/* Scoped or global */
+.editor-wrapper {
+  display: flex;
+  flex: 1; /* fill parent flexbox cell */
+  min-height: 0; /* important: allow shrinking inside flexbox */
+}
+
+.editor-wrapper .cm-editor {
+  flex: 1;
+  height: 100%; /* fill wrapper’s available height */
+  overflow: auto; /* vertical scrolling stays inside editor */
+}
+</style>
