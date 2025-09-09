@@ -3,7 +3,6 @@
   <q-page class="row">
     <!-- Document Editor Card -->
     <div dense class="col">
-      <UnderConstructionHint />
       <div class="row items-center justify-between q-pa-sm">
         <div class="text-h6">Document Editor</div>
         <div class="text-subtitle2">
@@ -129,8 +128,8 @@ import type { JSONSchema7 } from 'json-schema'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 import { initializeTaskyon } from '../../../packages/tyclient/src'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
-import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
 import { useAppStateStore } from 'src/stores/appState'
+import { watchThrottled } from '@vueuse/core'
 
 const state = useAppStateStore()
 
@@ -161,6 +160,15 @@ const currentVersionIndex = ref(0)
 const currentContent = ref('')
 const hasUnsavedChanges = ref(false)
 const taskyonUrl = window.location.origin
+
+// make sure we persist current version for page reloads
+const storeKey = 'codeEditorText'
+const initialText = state.store[storeKey] as string
+if (initialText) currentContent.value = initialText
+watchThrottled(currentContent, (text) => {
+  console.log('store text!!')
+  state.store[storeKey] = text
+})
 
 // Computed
 const currentVersion = computed(() => documentVersions.value[currentVersionIndex.value])

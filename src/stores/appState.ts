@@ -91,6 +91,9 @@ function getInitialState() {
     modelFilter: '' as string | null,
     noGuiTests: true,
     detailedTests: false,
+
+    // persistentStorage (for some components which need to temporarily persist some informations...)
+    store: {} as Record<string, unknown>,
   }
   return { initialState, defaultStorableSettings }
 }
