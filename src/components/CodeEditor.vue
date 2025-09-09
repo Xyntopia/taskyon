@@ -2,11 +2,11 @@
   <codemirror
     v-model="content"
     placeholder="Code goes here..."
-    :style="{ height: '400px', overflow: 'hidden', background: 'white' }"
     indent-with-tab
     :line-wrapping="true"
     :tab-size="2"
     :extensions="extensions"
+    v-bind="$attrs"
   />
 </template>
 
