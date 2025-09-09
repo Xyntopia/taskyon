@@ -2,7 +2,7 @@
 <template>
   <q-page class="row">
     <!-- Document Editor Card -->
-    <q-card dense class="col q-ma-sm column" style="min-width: 200px; width: 100%">
+    <div dense class="col">
       <div class="row items-center justify-between q-pa-sm">
         <div class="text-h6">Document Editor</div>
         <div class="text-subtitle2">
@@ -11,7 +11,7 @@
       </div>
 
       <!-- Version Controls -->
-      <div class="row items-center q-gutter-sm">
+      <div class="">
         <q-btn
           flat
           dense
@@ -37,6 +37,15 @@
           title="Create New Version"
           @click="createNewVersion"
         />
+        <q-btn
+          flat
+          dense
+          :icon="matContentCopy"
+          color="secondary"
+          label="Copy"
+          @click="copyContent"
+        />
+        <!--
         <q-btn-dropdown
           color="primary"
           size="sm"
@@ -48,22 +57,22 @@
         >
           <q-list>
             <q-item v-close-popup clickable @click="copyContent">
-              <q-item-section>Copy Content</q-item-section>
+              <q-item-section></q-item-section>
             </q-item>
             <q-item v-close-popup clickable @click="copyAsMarkdown">
               <q-item-section>Copy as Markdown</q-item-section>
             </q-item>
           </q-list>
         </q-btn-dropdown>
-      </div>
+      --></div>
 
       <!-- Code Editor -->
-      <div class="col q-mb-md" style="max-height: 100%; max-width: 100%">
+      <div class="" style="max-height: 100%; max-width: 100%">
         <CodeEditor
           v-model="currentContent"
+          class="col"
           placeholder="Write here..."
           language="markdown"
-          style="height: 100%"
           @update:model-value="onContentChange"
         />
       </div>
@@ -85,43 +94,8 @@
           :disable="!hasUnsavedChanges"
           @click="resetToSaved"
         />
-        <q-btn flat dense label="Load Sample" color="accent" @click="loadSampleDocument" />
       </div>
-
-      <!-- Version History -->
-      <q-card-section v-if="documentVersions.length > 1">
-        <div class="text-h6 q-mb-sm">Version History</div>
-        <q-list dense>
-          <q-item
-            v-for="(version, index) in documentVersions"
-            :key="index"
-            :class="{ 'bg-blue-1': index === currentVersionIndex }"
-            clickable
-            @click="switchToVersion(index)"
-          >
-            <q-item-section>
-              <q-item-label>Version {{ index + 1 }}</q-item-label>
-              <q-item-label caption>{{ formatDate(version.timestamp) }}</q-item-label>
-              <q-item-label caption lines="1">{{
-                getVersionPreview(version.content)
-              }}</q-item-label>
-            </q-item-section>
-            <q-item-section side>
-              <q-btn
-                flat
-                dense
-                round
-                :icon="matDelete"
-                size="sm"
-                color="negative"
-                :disable="documentVersions.length === 1"
-                @click.stop="deleteVersion(index)"
-              />
-            </q-item-section>
-          </q-item>
-        </q-list>
-      </q-card-section>
-    </q-card>
+    </div>
 
     <!-- Taskyon iframe -->
     <div class="col col-sm-6 col-md-5" style="min-height: 500px; min-width: 300px">
@@ -144,8 +118,6 @@ import {
   matNavigateNext,
   matAdd,
   matContentCopy,
-  matArrowDropDown,
-  matDelete,
 } from '@quasar/extras/material-icons'
 import CodeEditor from 'src/components/CodeEditor.vue'
 
@@ -184,12 +156,6 @@ const currentVersion = computed(() => documentVersions.value[currentVersionIndex
 function copyContent() {
   copyToClipboard(currentContent.value)
     .then(() => Notify.create({ message: 'Content copied', color: 'primary' }))
-    .catch(() => Notify.create({ message: 'Copy failed', color: 'negative' }))
-}
-
-function copyAsMarkdown() {
-  copyToClipboard(`\`\`\`markdown\n${currentContent.value}\n\`\`\``)
-    .then(() => Notify.create({ message: 'Copied as Markdown', color: 'primary' }))
     .catch(() => Notify.create({ message: 'Copy failed', color: 'negative' }))
 }
 
@@ -262,67 +228,6 @@ function resetToSaved() {
   }
   hasUnsavedChanges.value = false
   Notify.create({ message: 'Reset to saved version', color: 'info' })
-}
-
-function deleteVersion(index: number) {
-  if (documentVersions.value.length === 1) return
-
-  documentVersions.value.splice(index, 1)
-
-  // Adjust current index if needed
-  if (currentVersionIndex.value >= documentVersions.value.length) {
-    currentVersionIndex.value = documentVersions.value.length - 1
-  } else if (index <= currentVersionIndex.value && currentVersionIndex.value > 0) {
-    currentVersionIndex.value--
-  }
-
-  const version = documentVersions.value[currentVersionIndex.value]
-  if (version) {
-    currentContent.value = version.content
-  }
-  hasUnsavedChanges.value = false
-  Notify.create({ message: 'Version deleted', color: 'warning' })
-}
-
-function loadSampleDocument() {
-  const sampleContent = `# Sample Document
-
-## Introduction
-This is a sample document to demonstrate the document editor capabilities.
-
-## Features
-- **Version Control**: Keep track of multiple versions of your document
-- **Patch-based Editing**: Efficient updates using text patches
-- **AI Integration**: Get help from Taskyon AI assistant
-- **Syntax Highlighting**: Support for various programming languages
-
-## Code Example
-\`\`\`javascript
-function hello(name) {
-  console.log(\`Hello, \${name}!\`);
-}
-
-hello('World');
-\`\`\`
-
-## Task List
-- [x] Create basic editor
-- [x] Add version control
-- [ ] Implement advanced features
-- [ ] Add more language support
-
----
-
-*Document created on ${new Date().toLocaleDateString()}*
-`
-  currentContent.value = sampleContent
-  hasUnsavedChanges.value = true
-  Notify.create({ message: 'Sample document loaded', color: 'info' })
-}
-
-// Utility functions
-function formatDate(date: Date): string {
-  return date.toLocaleString()
 }
 
 function getVersionPreview(content: string): string {
@@ -504,65 +409,6 @@ Only use the updateDocument tool if you are confident about the changes to make.
     }),
   ]
 
-  const gettingStarted = {
-    label: 'Example: Ask AI to improve document structure',
-    md: `
-<!--taskyon
-role: user
-name: document help
-
--->
-
-Can you help me create a better structure for this document? Please review the current content and suggest improvements.
-
----
-
-<!--taskyon
-role: assistant
-name: document help
-content:
-  type: structured
-  data: >
-    Do we have to use a tool?: true
-
-    describe your thoughts: The user wants help with document structure. I should first analyze the current document using the documentAssistant tool to understand what we're working with, then provide suggestions and potentially update the document with a better structure.
-
-    use tool: true
-
-    which tool: documentAssistant
-
-    command:
-      name: documentAssistant
-      arguments: {}
-
--->
-
----
-
-<!--taskyon
-role: function
-name: document help
-content:
-  type: functioncall
-  data:
-    name: documentAssistant
-    arguments:
-      needsMoreInfo: false
-
--->
-
----
-
-<!--taskyon
-role: assistant
-name: document structure analysis
-
--->
-
-Based on the current document, I can help improve its structure! Let me analyze what you have and suggest some enhancements with better organization, formatting, and content flow.
-        `,
-  }
-
   const configuration: partialTyConfiguration = {
     llmSettings: {
       enableOpenAiTools: false,
@@ -573,13 +419,12 @@ Based on the current document, I can help improve its structure! Let me analyze 
       guiMode: 'default',
       expertMode: true,
       showLogo: false,
-      chatSuggestions: [gettingStarted],
       welcomeMsg:
-        'Hi! I can help you edit and improve your documents. I can see the current content and make efficient updates.',
+        'Hi! I can help you edit documents. I can see the current content and make updates.',
     },
   }
 
-  void initializeTaskyon(tools, configuration)
+  void initializeTaskyon({ tools, configuration, name: 'codingpage', persist: true })
 })
 
 // Watch for version changes to update content
@@ -592,18 +437,3 @@ watch(currentVersionIndex, (newIndex) => {
   }
 })
 </script>
-
-<style scoped>
-/* Scoped or global */
-.editor-wrapper {
-  display: flex;
-  flex: 1; /* fill parent flexbox cell */
-  min-height: 0; /* important: allow shrinking inside flexbox */
-}
-
-.editor-wrapper .cm-editor {
-  flex: 1;
-  height: 100%; /* fill wrapper’s available height */
-  overflow: auto; /* vertical scrolling stays inside editor */
-}
-</style>
