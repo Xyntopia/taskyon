@@ -62,8 +62,8 @@
         <CodeEditor
           v-model="currentContent"
           placeholder="Write here..."
-          :style="{ overflow: 'hidden', background: 'white' }"
           language="markdown"
+          style="height: 100%; overflow: hidden"
           @update:model-value="onContentChange"
         />
       </div>
@@ -373,32 +373,17 @@ onMounted(() => {
         'Main document assistant that provides context and decides on next actions for document editing',
       parameters: {
         type: 'object',
-        properties: {
-          needsMoreInfo: {
-            type: 'boolean',
-            description: 'Set to true if you need more information from the user before proceeding',
-          },
-        },
+        properties: {},
         additionalProperties: false,
       } as const satisfies JSONSchema7,
-      function: ({ needsMoreInfo }) => {
-        const current = currentVersion.value
-        if (!current) {
-          return makeTaskResult([
-            createChatCompletionTask({
-              prompts: ['Error: No current document version available'],
-              goal: 'SimpleCompletion',
-            }),
-          ])
-        }
-
+      function: () => {
         // Gather document context information
         const documentInfo = {
           currentVersion: currentVersionIndex.value + 1,
           totalVersions: documentVersions.value.length,
           contentLength: currentContent.value.length,
           hasUnsavedChanges: hasUnsavedChanges.value,
-          lastModified: current.timestamp,
+          lastModified: currentVersion.value?.timestamp || 'never',
           contentPreview: currentContent.value.substring(0, 1000),
           versions: documentVersions.value.map((v, i) => ({
             index: i + 1,
@@ -441,25 +426,13 @@ You have access to the 'updateDocument' tool which can:
 
 Only use the updateDocument tool if you are confident about the changes to make. If you need clarification, ask the user first.
 `
-
-        if (needsMoreInfo) {
-          // Return a simple chat completion for asking questions
-          return makeTaskResult([
-            createChatCompletionTask({
-              prompts: [contextPrompt],
-              goal: 'SimpleCompletion',
-            }),
-          ])
-        } else {
-          // Return a chat completion with access to the updateDocument tool
-          return makeTaskResult([
-            createChatCompletionTask({
-              prompts: [contextPrompt],
-              goal: 'ChooseTool',
-              allowedTools: ['updateDocument'],
-            }),
-          ])
-        }
+        return makeTaskResult([
+          createChatCompletionTask({
+            prompts: [contextPrompt],
+            goal: 'ChooseTool',
+            allowedTools: ['updateDocument'],
+          }),
+        ])
       },
     }),
 
@@ -560,8 +533,7 @@ content:
 
     command:
       name: documentAssistant
-      arguments:
-        needsMoreInfo: false
+      arguments: {}
 
 -->
 
