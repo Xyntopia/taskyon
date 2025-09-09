@@ -2,16 +2,12 @@
 <template>
   <q-page class="row">
     <!-- Document Editor Card -->
-    <div dense class="col">
-      <div class="row items-center justify-between q-pa-sm">
-        <div class="text-h6">Document Editor</div>
-        <div class="text-subtitle2">
-          Version: {{ currentVersionIndex + 1 }} / {{ documentVersions.length }}
-        </div>
-      </div>
-
+    <div dense class="col column">
       <!-- Version Controls -->
-      <div class="">
+      <div class="row">
+        <div style="font-size: x-small" class="q-pl-xs">
+          Version:<br />{{ currentVersionIndex + 1 }} / {{ documentVersions.length }}
+        </div>
         <q-btn
           flat
           dense
@@ -45,6 +41,7 @@
           label="Copy"
           @click="copyContent"
         />
+        <q-btn flat dense :icon="mdiNewBox" color="secondary" label="New" @click="reset" />
         <!--
         <q-btn-dropdown
           color="primary"
@@ -67,22 +64,23 @@
       --></div>
 
       <!-- Code Editor -->
-      <div style="max-width: 100%">
+      <q-card flat class="col" style="max-width: 100%">
         <CodeEditor
           v-model="currentContent"
           class="col"
           placeholder="Write here..."
           language="markdown"
-          style="max-height: 65vh"
+          style="max-height: 82vh"
           @update:model-value="onContentChange"
         />
-      </div>
+      </q-card>
 
       <!-- Action Buttons -->
-      <div class="row q-mt-md items-center q-gutter-sm no-wrap">
+      <div class="row q-ma-sm items-center q-gutter-sm no-wrap">
         <q-btn
           label="Save Version"
-          color="primary"
+          flat
+          color="secondary"
           dense
           :disable="!hasUnsavedChanges"
           @click="saveCurrentVersion"
@@ -130,6 +128,7 @@ import { initializeTaskyon } from '../../../packages/tyclient/src'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { useAppStateStore } from 'src/stores/appState'
 import { watchThrottled } from '@vueuse/core'
+import { mdiNewBox } from '@quasar/extras/mdi-v6'
 
 const state = useAppStateStore()
 
@@ -178,6 +177,13 @@ function copyContent() {
   copyToClipboard(currentContent.value)
     .then(() => Notify.create({ message: 'Content copied', color: 'primary' }))
     .catch(() => Notify.create({ message: 'Copy failed', color: 'negative' }))
+}
+
+function reset() {
+  documentVersions.value = []
+  currentVersionIndex.value = 0
+  currentContent.value = ''
+  hasUnsavedChanges.value = false
 }
 
 // Version management functions (unchanged)
@@ -478,8 +484,11 @@ Only use the updateDocument tool if you are confident about the changes to make.
         additionalProperties: false,
       } as const satisfies JSONSchema7,
       function: ({ patches, newContent, description }) => {
+        createNewVersion()
+        saveCurrentVersion()
         let updatedContent: string
 
+        createNewVersion()
         if (newContent) {
           // Full content replacement
           updatedContent = newContent
@@ -506,6 +515,7 @@ Only use the updateDocument tool if you are confident about the changes to make.
         // Update the editor content
         currentContent.value = updatedContent
         hasUnsavedChanges.value = true
+        saveCurrentVersion()
 
         const changeDescription = description || 'Document updated by AI'
 
@@ -529,7 +539,7 @@ Only use the updateDocument tool if you are confident about the changes to make.
     },
     appConfiguration: {
       ...state.appConfiguration,
-      guiMode: 'default',
+      guiMode: 'minChat',
       expertMode: true,
       showLogo: false,
       welcomeMsg:
