@@ -17,10 +17,11 @@ import {
 } from 'src/modules/utils'
 import { unref } from 'vue'
 import defaultSettings from 'src/assets/taskyon_settings.json'
+// TODO: remove, to make this file here faster...
 import { generateAssymetricRandomNewKey } from 'src/modules/crypto_js'
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 import type { PartialDeep } from 'type-fest'
-import { initialStoredStateObj, storeName } from 'src/modules/ui/initialState'
+import { initialStoredStateObj, currentTyProfileName } from 'src/modules/ui/initialState'
 import type { FunctionCall } from '@taskyon/taskyon'
 
 interface TaskWidgetStateType {
@@ -35,18 +36,16 @@ function clearBrowserStorage() {
   clearCookies()
 }
 
-// this is where we save all of our app settings.
-// its important to keep this simple and don't incude 3rd party libraries and other things
-// because we want to this to also work on tyServer and in a "minimal gui" setting.
-// So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
-export const useAppStateStore = defineStore(storeName, () => {
+function getInitialState() {
+  // load storable settings
   const res = TyProfile.safeParse(defaultSettings)
   if (!res.success) {
     throw new Error('The default settings provided do not work!', { cause: res.error.message })
   }
   const defaultStorableSettings = res.data
+
   // llmSettings & appConfiguration define the state of our app!
-  // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
+  // the rest of the state is either secret (keys) or temporary states which don't need to be saved
   const initialState = {
     ...defaultStorableSettings,
     keys: {} as Record<string, string>,
@@ -76,6 +75,7 @@ export const useAppStateStore = defineStore(storeName, () => {
     developerMode: false,
     useDevVersion: false,
     messageDebug: {} as Record<string, 'RAW' | 'MESSAGECONTENT' | 'RAWTASK' | 'ERROR' | undefined>, // whether message with ID should be open or not...
+
     // taskyon.space-specific section, TODO: move this somewhere else!
     keyDraft: {
       name: 'N/A',
@@ -91,6 +91,15 @@ export const useAppStateStore = defineStore(storeName, () => {
     noGuiTests: true,
     detailedTests: false,
   }
+  return { initialState, defaultStorableSettings }
+}
+
+// this is where we save all of our app settings.
+// its important to keep this simple and don't incude 3rd party libraries and other things
+// because we want to this to also work on tyServer and in a "minimal gui" setting.
+// So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
+export const useAppStateStore = defineStore('ui-state', () => {
+  const { initialState, defaultStorableSettings } = getInitialState()
 
   const initialStoredStateObjTyped = initialStoredStateObj as
     | Partial<typeof initialState>
@@ -102,7 +111,7 @@ export const useAppStateStore = defineStore(storeName, () => {
     initialStoredStateObjTyped.version &&
     initialStoredStateObjTyped.version === initialState.version
   ) {
-    console.log(`load saved ${storeName} state!`)
+    console.log(`load saved ui state!`)
     const storedInitialState = deepMerge(initialState, initialStoredStateObjTyped, 'overwrite')
     stateRefs = reactive(storedInitialState)
   } else {
@@ -123,7 +132,7 @@ export const useAppStateStore = defineStore(storeName, () => {
   watch(stateRefs, (newState) => {
     //console.log('saved store!!');
     if (saveToLocalStorage) {
-      LocalStorage.set(storeName, JSON.stringify(newState))
+      LocalStorage.set(currentTyProfileName, JSON.stringify(newState))
     }
   })
 

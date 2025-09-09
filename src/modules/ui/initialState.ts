@@ -4,10 +4,14 @@ import type { PartialDeep } from 'type-fest'
 
 // load our saved state as fast as possible to avoid "color-glitches" at the beginning.
 
-export const storeName = 'taskyonState'
+export const currentTyProfileName = 'currentState'
 console.log('load saved app state!')
-export const getStoredStateString = () => LocalStorage.getItem(storeName) as string
-const initialStoredStateString = getStoredStateString()
-export const initialStoredStateObj = JSON.parse(initialStoredStateString) as
-  | PartialDeep<TyProfile>
-  | undefined
+export const getStoredStateString = (name: string) => LocalStorage.getItem(name) as string
+
+export const getTaskyonUiProfile = (name: string) => {
+  const stateString = getStoredStateString(name)
+  const stateObj = JSON.parse(stateString) as PartialDeep<TyProfile> | undefined
+  return stateObj
+}
+
+export const initialStoredStateObj = getTaskyonUiProfile(currentTyProfileName)
