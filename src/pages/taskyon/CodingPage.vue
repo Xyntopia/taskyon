@@ -68,12 +68,13 @@
       --></div>
 
       <!-- Code Editor -->
-      <div class="" style="max-height: 100%; max-width: 100%">
+      <div style="max-width: 100%">
         <CodeEditor
           v-model="currentContent"
           class="col"
           placeholder="Write here..."
           language="markdown"
+          style="max-height: 65vh"
           @update:model-value="onContentChange"
         />
       </div>
@@ -267,6 +268,8 @@ function applyPatch(text: string, patches: PatchOperation[]): string {
   return result
 }
 
+const maxFileSize = 50000
+
 // Initialize on mount
 onMounted(() => {
   const current = currentVersion.value
@@ -294,7 +297,7 @@ onMounted(() => {
           contentLength: currentContent.value.length,
           hasUnsavedChanges: hasUnsavedChanges.value,
           lastModified: currentVersion.value?.timestamp || 'never',
-          contentPreview: currentContent.value.substring(0, 1000),
+          contentPreview: currentContent.value.substring(0, maxFileSize),
           versions: documentVersions.value.map((v, i) => ({
             index: i + 1,
             timestamp: v.timestamp,
@@ -318,7 +321,7 @@ ${documentInfo.versions.map((v) => `- Version ${v.index}: ${v.preview} (${v.time
 
 ## Current Content
 \`\`\`markdown
-${documentInfo.contentPreview}${documentInfo.contentLength > 1000 ? '\n... (content truncated)' : ''}
+${documentInfo.contentPreview}${documentInfo.contentLength > maxFileSize ? '\n... (content truncated)' : ''}
 \`\`\`
 
 ## Available Tools
@@ -416,11 +419,13 @@ Only use the updateDocument tool if you are confident about the changes to make.
 
   const configuration: partialTyConfiguration = {
     llmSettings: {
+      ...state.llmSettings,
       enableOpenAiTools: false,
       enableToolChooser: true,
       entryNode: toolCall({ name: 'documentAssistant', arguments: {} }),
     },
     appConfiguration: {
+      ...state.appConfiguration,
       guiMode: 'default',
       expertMode: true,
       showLogo: false,
