@@ -20,12 +20,11 @@ import { Codemirror } from 'vue-codemirror'
 
 const content = defineModel<string>({
   required: true,
-  default: '', // Default to an empty string
+  default: '',
 })
 
 const $q = useQuasar()
 const extensions = computed(() => {
   return $q.dark.isActive ? [basicSetup, javascript(), oneDark] : [basicSetup, javascript()]
-  //return [];
 })
 </script>

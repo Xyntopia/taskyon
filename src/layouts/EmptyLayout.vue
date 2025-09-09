@@ -3,9 +3,7 @@
     <TaskyonHeader btn-size="md" />
     <q-page-container>
       <!-- This is where pages get injected we do row & items-stretch in order for our widgets to fill the entire iframe..-->
-      <q-page>
-        <router-view />
-      </q-page>
+      <router-view />
     </q-page-container>
   </q-layout>
 </template>
