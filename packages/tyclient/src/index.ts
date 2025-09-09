@@ -104,14 +104,15 @@ async function handleFunctionExecution(
   })
 }
 
-export async function initializeTaskyon(
-  tools: ClientTool[],
-  configuration: partialTyConfiguration,
-  persist?: boolean,
-) {
+export async function initializeTaskyon(options: {
+  name?: string
+  persist?: boolean
+  tools: ClientTool[]
+  configuration: partialTyConfiguration
+}) {
   console.log('initialize taskyon tyclient...')
 
-  const toolMap = tools.reduce<Record<string, ClientTool>>((p, c) => {
+  const toolMap = options.tools.reduce<Record<string, ClientTool>>((p, c) => {
     p[c.name] = c
     return p
   }, {})
@@ -131,11 +132,13 @@ export async function initializeTaskyon(
     console.log('tyclient send our configuration!')
     send({
       type: 'configurationMessage',
-      conf: configuration,
-      persist,
+      conf: options.configuration,
+      persist: options.persist,
+      origin: window.location.origin,
+      peerId: options?.name,
     })
     console.log('tyclient sending our functions!')
-    tools.forEach((t) => {
+    options.tools.forEach((t) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { function: _toolfunc, ...fdescr } = t
       send({

@@ -468,7 +468,7 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
       welcomeMsg: 'Ask taskyon for help on querying your database!',
     },
   }
-  void initializeTaskyon(tools, configuration)
+  void initializeTaskyon({ tools, configuration, name: 'sqlqueries', persist: true })
 })
 
 // Formatted JSON result for JSON view
