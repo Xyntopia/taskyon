@@ -129,6 +129,7 @@ import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { useAppStateStore } from 'src/stores/appState'
 import { watchThrottled } from '@vueuse/core'
 import { mdiNewBox } from '@quasar/extras/mdi-v6'
+import { removeKeys } from '../../../packages/taskyon/src/utils/objHelpers'
 
 const state = useAppStateStore()
 
@@ -532,16 +533,17 @@ Only use the updateDocument tool if you are confident about the changes to make.
 
   const configuration: partialTyConfiguration = {
     llmSettings: {
-      ...state.llmSettings,
+      ...removeKeys(state.llmSettings, ['entryNode']),
       enableOpenAiTools: false,
       enableToolChooser: true,
       entryNode: toolCall({ name: 'documentAssistant', arguments: {} }),
     },
     appConfiguration: {
-      ...state.appConfiguration,
+      ...removeKeys(state.appConfiguration, ['chatSuggestions']),
       guiMode: 'minChat',
       expertMode: true,
       showLogo: false,
+      chatSuggestions: [],
       welcomeMsg:
         'Hi! I can help you edit documents. I can see the current content with line numbers and make precise line-based edits.',
     },
