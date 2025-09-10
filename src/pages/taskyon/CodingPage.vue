@@ -28,7 +28,7 @@
         <q-btn
           flat
           dense
-          :icon="matAdd"
+          :icon="matSave"
           color="secondary"
           title="Create New Version"
           @click="createNewVersion"
@@ -38,10 +38,10 @@
           dense
           :icon="matContentCopy"
           color="secondary"
-          label="Copy"
+          title="Copy"
           @click="copyContent"
         />
-        <q-btn flat dense :icon="mdiNewBox" color="secondary" label="New" @click="reset" />
+        <q-btn flat dense :icon="mdiNewBox" color="secondary" title="New" @click="reset" />
         <!--
         <q-btn-dropdown
           color="primary"
@@ -70,30 +70,10 @@
           class="col"
           placeholder="Write here..."
           language="markdown"
-          style="max-height: 82vh"
+          style="max-height: 87vh"
           @update:model-value="onContentChange"
         />
       </q-card>
-
-      <!-- Action Buttons -->
-      <div class="row q-ma-sm items-center q-gutter-sm no-wrap">
-        <q-btn
-          label="Save Version"
-          flat
-          color="secondary"
-          dense
-          :disable="!hasUnsavedChanges"
-          @click="saveCurrentVersion"
-        />
-        <q-btn
-          flat
-          dense
-          label="Reset to Saved"
-          color="secondary"
-          :disable="!hasUnsavedChanges"
-          @click="resetToSaved"
-        />
-      </div>
     </div>
 
     <!-- Taskyon iframe -->
@@ -115,8 +95,8 @@ import { copyToClipboard, Notify } from 'quasar'
 import {
   matNavigateBefore,
   matNavigateNext,
-  matAdd,
   matContentCopy,
+  matSave,
 } from '@quasar/extras/material-icons'
 import CodeEditor from 'src/components/CodeEditor.vue'
 
@@ -247,15 +227,6 @@ function goToNextVersion() {
   if (currentVersionIndex.value < documentVersions.value.length - 1) {
     switchToVersion(currentVersionIndex.value + 1)
   }
-}
-
-function resetToSaved() {
-  const current = currentVersion.value
-  if (current) {
-    currentContent.value = current.content
-  }
-  hasUnsavedChanges.value = false
-  Notify.create({ message: 'Reset to saved version', color: 'info' })
 }
 
 function getVersionPreview(content: string): string {
