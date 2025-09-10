@@ -8,11 +8,14 @@ let pgInstance: TyPGDB | null = null
 
 export const getDatabase: (name: string) => Promise<TyPGDB> = async (name) => {
   if (!pgInstance) {
+    console.log('get database', name)
     pgInstance = await PGliteWorker.create(
       new Worker(new URL('./pglite.worker.ts', import.meta.url), {
         type: 'module',
       }),
       {
+        //'memory://'  // if we want to use taskyon in memory-only (this might make sense on
+        // an ephemeral serve for example!)
         dataDir: `idb://${name}0.1`,
         meta: {
           // additional metadata passed to `init`
