@@ -294,7 +294,19 @@ Taskyon provides a Nix flake (flake.nix) as a development environment which can 
 
 ## Debugging
 
-To debug Taskyon, we recommend using **Vue DevTools**, which integrates seamlessly with the development environment. You can inspect components, monitor Vuex state, and track changes in real time, ensuring efficient debugging and development workflows.
+To debug Taskyon, we recommend using **Vue DevTools**, which integrates seamlessly with the development environment. You can inspect components, monitor pinia states, and track changes in real time, ensuring efficient debugging and development workflows.
+
+### Remote Debugging
+
+#### vue
+
+you can start vue devtools using:
+
+```
+vue-devtools
+```
+
+browsers should automatically connect to it
 
 ## Contribution Guidelines
 
