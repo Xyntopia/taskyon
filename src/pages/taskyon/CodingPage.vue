@@ -24,15 +24,15 @@
           :disable="currentVersionIndex === documentVersions.length - 1"
           @click="goToNextVersion"
         />
-        <q-space />
         <q-btn
           flat
           dense
-          :icon="matSave"
+          :icon="mdiTextBoxPlus"
           color="secondary"
           title="Create New Version"
           @click="createNewVersion"
         />
+        <q-space />
         <q-btn
           flat
           dense
@@ -41,7 +41,14 @@
           title="Copy"
           @click="copyContent"
         />
-        <q-btn flat dense :icon="mdiNewBox" color="secondary" title="New" @click="reset" />
+        <q-btn
+          flat
+          dense
+          :icon="mdiNewBox"
+          color="secondary"
+          title="Reset Document"
+          @click="reset"
+        />
         <!--
         <q-btn-dropdown
           color="primary"
@@ -92,12 +99,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { copyToClipboard, Notify } from 'quasar'
-import {
-  matNavigateBefore,
-  matNavigateNext,
-  matContentCopy,
-  matSave,
-} from '@quasar/extras/material-icons'
+import { matNavigateBefore, matNavigateNext, matContentCopy } from '@quasar/extras/material-icons'
 import CodeEditor from 'src/components/CodeEditor.vue'
 
 // Taskyon imports
@@ -108,7 +110,7 @@ import { initializeTaskyon } from '../../../packages/tyclient/src'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { useAppStateStore } from 'src/stores/appState'
 import { watchThrottled } from '@vueuse/core'
-import { mdiNewBox } from '@quasar/extras/mdi-v6'
+import { mdiNewBox, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
 import { removeKeys } from '../../../packages/taskyon/src/utils/objHelpers'
 
 const state = useAppStateStore()
