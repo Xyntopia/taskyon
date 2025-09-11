@@ -1,12 +1,18 @@
 <template>
   <!--Task Page-->
   <FadeAwayScrollPage class="column chat-page" :style-fn="myPageStyle">
-    <q-resize-observer :debounce="500" @resize="onResize" />
     <!--Chat Area-->
     <div v-if="state.taskyonRunmode === 'waiting for connection'">Connecting....</div>
     <div id="chat-area" ref="taskThreadContainer">
       <!--<q-resize-observer :debounce="500" @resize="onResize" />-->
-      <q-scroll-observer axis="vertical" :debounce="300" @scroll="onScroll" />
+      <q-scroll-observer
+        axis="vertical"
+        :debounce="50"
+        :scroll-target="taskThreadContainer"
+        @scroll="onScroll"
+      />
+      <q-resize-observer :debounce="50" :scroll-target="taskThreadContainer" @resize="onResize" />
+
       <!-- "Task" Display (.tasks-container & .task-container) -->
       <TaskChainViewer
         v-if="tystate.selectedThread.value.length > 0 && tystate.currentTask.value"
@@ -17,6 +23,7 @@
         :task-tree-root="rootTaskId"
         :show-ids="showAllTasks"
         :expert-mode="state.appConfiguration.expertMode"
+        @on-size-change="onResize"
       />
       <div v-else-if="loadingChat">loading new chat!!</div>
       <!-- Welcome Message -->
@@ -316,20 +323,30 @@ Please check the path and try again.
   }
 }
 
+watch(
+  () => state.lockBottomScroll,
+  (state) => console.log('lock scroll state:', state),
+)
+
 function onScroll(details: { direction: string }) {
   if (!taskThreadContainer.value) return
   const el = taskThreadContainer.value
   const scrollEnd = el.scrollHeight - el.clientHeight
-  const bottomTolerance = 30
+  const bottomTolerance = 100 // threshold to auto-lock
 
-  if (details.direction === 'down' && scrollEnd - el.scrollTop < bottomTolerance) {
-    state.lockBottomScroll = true
-  } else if (details.direction === 'up' && scrollEnd - el.scrollTop > bottomTolerance + 10) {
+  if (details.direction === 'up') {
+    // Release lock immediately on upward scroll
     state.lockBottomScroll = false
+  } else if (details.direction === 'down') {
+    // Auto-lock only if near bottom
+    if (scrollEnd - el.scrollTop < bottomTolerance) {
+      state.lockBottomScroll = true
+    }
   }
 }
 
 function onResize() {
+  console.log('window is resizing!')
   if (state.lockBottomScroll) {
     //console.log('scroll to bottom');
     scrollToThreadEnd()

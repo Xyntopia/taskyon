@@ -157,6 +157,10 @@ const lastWorkerEvent = computed(() => {
   return tystate.workerStreamLogs.at(-1)
 })
 
+const emit = defineEmits<{
+  (e: 'onSizeChange'): void
+}>()
+
 const props = defineProps<{
   selectedThread: TaskNode[]
   currentTask: TaskNode
@@ -228,6 +232,7 @@ void tystate.chatCompletionStream
     const currentStream = streamingTracker.value.get(taskId)
     const updatedStream = accumulateStep(currentStream, chunk)
     streamingTracker.value.set(taskId, updatedStream)
+    emit('onSizeChange')
   })
   .then((unsubscribe) => (streamerUnsubscriber = unsubscribe))
 
