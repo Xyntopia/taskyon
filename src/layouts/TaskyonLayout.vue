@@ -7,8 +7,6 @@
       chat-buttons
     />
 
-    <div class="fade-top-overlay" />
-
     <q-drawer
       v-if="state"
       v-model="drawerOpen"
