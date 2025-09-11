@@ -1,13 +1,13 @@
 <template>
   <!--Task Page-->
-  <FadeAwayScrollPage class="column" :style-fn="myPageStyle">
+  <FadeAwayScrollPage class="column chat-page" :style-fn="myPageStyle">
     <q-resize-observer :debounce="500" @resize="onResize" />
     <!--Chat Area-->
     <div v-if="state.taskyonRunmode === 'waiting for connection'">Connecting....</div>
     <div id="chat-area" ref="taskThreadContainer">
       <!--<q-resize-observer :debounce="500" @resize="onResize" />-->
       <q-scroll-observer axis="vertical" :debounce="300" @scroll="onScroll" />
-      <!-- "Task" Display -->
+      <!-- "Task" Display (.tasks-container & .task-container) -->
       <TaskChainViewer
         v-if="tystate.selectedThread.value.length > 0 && tystate.currentTask.value"
         :selected-thread="tystate.selectedThread.value"
@@ -177,7 +177,7 @@ import { fetchMarkdown, getTextFile } from 'src/modules/taskyon/taskUtils'
 import { sleep } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
-import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue'
 
@@ -388,6 +388,14 @@ function myPageStyle(offset: number) {
     height: offset ? `calc(100dvh - ${offset}px)` : '100dvh',
   }
 }
+
+// disable/enable  page reload when scrolling "too far down"
+onMounted(() => {
+  document.documentElement.classList.add('no-ptr')
+})
+onBeforeUnmount(() => {
+  document.documentElement.classList.remove('no-ptr')
+})
 </script>
 
 <style lang="sass">
@@ -398,8 +406,70 @@ function myPageStyle(offset: number) {
   flex-direction: column
   align-items: center
 
-// we use this as a workaround when the field is focused or contains text.
-// TODO: not sure, if this is needed!
-/*.ty-msg-edit.q-field--float
-  background-color: white
+  .tasks-container
+    width: min(100%, 800px)
+    max-width: 800px
+    min-width: 0
+    min-height: 0
+    padding: 15px 2px
+
+    .task-container
+      margin-bottom: 15px
+      padding-left: 5px
+      padding-right: 5px
+      border-radius: 5px
+      display: flex
+      flex-direction: column
+      min-width: 0
+      min-height: 0
+
+      //width: calc(100% - 20px)
+
+      // Only if there is an <iframe> child:
+      /* Cap width to (100% of parent – 20px margin).
+        This ensures the iframe can grow up to the container’s full width minus the margin. */
+      &:has(.markdown-iframe)
+        width: calc(100% - 20px)
+
+      &.user
+        position: relative // anchor for ::before
+        align-self: flex-end
+        margin-left: 20px // reserve space for glow
+        padding-left: 10px
+
+        &::before
+          content: ""
+          position: absolute
+          left: -10px // move into the margin area
+          top: 2px
+          bottom: 2px
+          width: 3px
+          border-radius: 2px
+          //background: rgb($primary)
+          //box-shadow: 0 0 3px 3px rgba($primary, 0.6)
+
+      &:not(.user)
+        align-self: flex-start
+        margin-right: 20px
+
+      .task-display
+        display: inline-flex
+        flex-direction: column
+        align-items: auto
+
+        .task-header
+          display: flex
+          flex-flow: row nowrap
+          align-items: flex-start
+
+        iframe.markdown-iframe
+          display: block // so it behaves like a block-level box
+          max-width: 100% // never exceed parent’s width, but allow smaller
+          border: none
+          min-width: 100px
+          width: 100%
+          min-height: 20px
+
+        .ty-markdown
+          align-self: auto
 </style>
