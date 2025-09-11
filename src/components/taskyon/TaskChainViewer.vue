@@ -49,6 +49,7 @@
         />
       </template>
     </q-tree>
+    <!--render the "normal" task view...-->
     <template v-else>
       <template v-for="(task, idx) in props.selectedThread" :key="task.id">
         <q-expansion-item

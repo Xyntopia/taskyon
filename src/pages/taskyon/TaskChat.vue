@@ -1,16 +1,12 @@
 <template>
   <!--Task Page-->
-  <FadeAwayScrollPage class="column">
+  <FadeAwayScrollPage class="column" :style-fn="myPageStyle">
     <q-resize-observer :debounce="500" @resize="onResize" />
     <!--Chat Area-->
     <div v-if="state.taskyonRunmode === 'waiting for connection'">Connecting....</div>
-    <div
-      id="chat-area"
-      ref="taskThreadContainer"
-      :style="`padding-bottom: ${bottomPadding + 5}px;`"
-      class="col full-height column justify-center"
-    >
-      <q-scroll-observer axis="vertical" :debounce="1000" @scroll="onScroll" />
+    <div id="chat-area" ref="taskThreadContainer">
+      <!--<q-resize-observer :debounce="500" @resize="onResize" />-->
+      <q-scroll-observer axis="vertical" :debounce="300" @scroll="onScroll" />
       <!-- "Task" Display -->
       <TaskChainViewer
         v-if="tystate.selectedThread.value.length > 0 && tystate.currentTask.value"
@@ -22,6 +18,7 @@
         :show-ids="showAllTasks"
         :expert-mode="state.appConfiguration.expertMode"
       />
+      <div v-else-if="loadingChat">loading new chat!!</div>
       <!-- Welcome Message -->
       <div
         v-else
@@ -68,7 +65,7 @@
     <!-- Announcements -->
     <q-page-sticky position="top" :offset="[0, 0]" expand style="z-index: 20">
       <div
-        class="column q-gutter-md q-mt-lg items-center text-secondary announcements"
+        class="column q-gutter-md q-mt-lg items-center text-secondary announcements rounded-borders"
         style="max-width: 600px"
       >
         <transition-group
@@ -132,19 +129,17 @@
       </div>
     </q-page-sticky>
     <!--Create new task area-->
-    <q-page-sticky position="bottom" :offset="[0, 0]" expand>
-      <q-resize-observer @resize="handleResize" />
-      <div class="col create-new-task-container" style="max-width: 48rem">
-        <CreateNewTask
-          v-if="tystate.selectedThread.value.length > 0"
-          :file-attachments="fileAttachments"
-          :entry-node="tystate.entryNode"
-          class="q-pa-xs"
-          :min-mode="state.minimalGui !== 'default'"
-          :expert-mode="state.appConfiguration.expertMode"
-        />
-      </div>
-    </q-page-sticky>
+    <div class="col-auto row justify-center create-new-task-container self-stretch">
+      <CreateNewTask
+        v-if="tystate.selectedThread.value.length > 0"
+        :file-attachments="fileAttachments"
+        :entry-node="tystate.entryNode"
+        class="col q-pa-xs create-new-task"
+        :min-mode="state.minimalGui !== 'default'"
+        :expert-mode="state.appConfiguration.expertMode"
+        style="max-width: 48rem"
+      />
+    </div>
     <!--Task Chat Control Buttons-->
     <q-page-sticky position="bottom-right" :offset="[10, bottomPadding + 5]">
       <TaskControlButtons
@@ -169,27 +164,40 @@
 </template>
 
 <script setup lang="ts">
-import { ref, type UnwrapRef, computed, watch, onMounted } from 'vue'
-import { useQuasar, scroll } from 'quasar'
-import { useTaskyonStore } from 'stores/taskyonState'
+import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
 import GetStarted from 'components/taskyon/GetStarted.vue'
 import TaskChainViewer from 'components/taskyon/TaskChainViewer.vue'
-import { defineAsyncComponent } from 'vue'
-import { fetchMarkdown, getTextFile } from 'src/modules/taskyon/taskUtils'
-import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue'
-import { useRoute } from 'vue-router'
-import { useAppStateStore } from 'src/stores/appState'
-import ToggleButton from 'src/components/ToggleButton.vue'
-import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
+import { scroll, useMeta, useQuasar } from 'quasar'
+import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
+import ToggleButton from 'src/components/ToggleButton.vue'
+import { fetchMarkdown, getTextFile } from 'src/modules/taskyon/taskUtils'
 import { sleep } from 'src/modules/utils'
-import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
+import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue'
+
+// we are re-creating the following meta tag dynamically here just for the chat page!
+// <!-- Viewport Meta in order to make window size shrink on mobile when keyboard pops up! -->
+// <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+useMeta(() => ({
+  // set the viewport meta dynamically
+  meta: {
+    viewport: {
+      name: 'viewport',
+      content: 'width=device-width, initial-scale=1.0, interactive-widget=resizes-content',
+    },
+  },
+}))
 
 const props = defineProps<{ detailed?: boolean; treeBrowser?: boolean; rootTaskId?: string }>()
 const showAllTasks = ref<boolean>(props.detailed)
-const showHierarchy = ref<boolean>(false)
+const showHierarchy = ref(false)
+const loadingChat = ref(false)
 
 const ResetButton = process.env.DEV
   ? defineAsyncComponent(
@@ -204,7 +212,7 @@ const ResetButton = process.env.DEV
     )
   : undefined
 
-const { getScrollHeight, getScrollTarget, setVerticalScrollPosition } = scroll
+const { setVerticalScrollPosition } = scroll
 const bottomPadding = ref(100)
 const $q = useQuasar()
 const route = useRoute()
@@ -308,34 +316,16 @@ Please check the path and try again.
   }
 }
 
-function onScroll(
-  details: UnwrapRef<{
-    direction: string
-    position: { top: number }
-    delta: { top: number }
-  }>,
-) {
-  //  const currentPosition = getVerticalScrollPosition(scrollTargetDomElement); // returns a Number (pixels);
-  //const taskThreadArea = document.getElementsByClassName('taskThreadArea')[0];
-  if (taskThreadContainer.value) {
-    //const el = document.querySelector(id)
-    //const el = document.getElementsByClassName()
-    const scrollTargetElement = getScrollTarget(taskThreadContainer.value)
-    const target = getScrollHeight(scrollTargetElement)
-    const scrollEnd = target - (scrollTargetElement as Window).innerHeight
-    //const scrollHeight = getScrollHeight(scrollTargetDomElement); // returns a Number
-    //const currentPos = getVerticalScrollPosition(scrollTargetElement);
-    const bottomTolerance = 10
-    if (details.direction === 'down' && scrollEnd - details.position.top < bottomTolerance) {
-      state.lockBottomScroll = true
-      //console.log('lock bottom scroll!', lockBottomScroll.value);
-    } else if (
-      details.direction === 'up' &&
-      scrollEnd - details.position.top > bottomTolerance + 10
-    ) {
-      //console.log('release bottom lock!');
-      state.lockBottomScroll = false
-    }
+function onScroll(details: { direction: string }) {
+  if (!taskThreadContainer.value) return
+  const el = taskThreadContainer.value
+  const scrollEnd = el.scrollHeight - el.clientHeight
+  const bottomTolerance = 30
+
+  if (details.direction === 'down' && scrollEnd - el.scrollTop < bottomTolerance) {
+    state.lockBottomScroll = true
+  } else if (details.direction === 'up' && scrollEnd - el.scrollTop > bottomTolerance + 10) {
+    state.lockBottomScroll = false
   }
 }
 
@@ -347,15 +337,11 @@ function onResize() {
 }
 
 function scrollToThreadEnd() {
-  const offset = document.body.scrollHeight - window.innerHeight
-  const duration = 300
+  if (!taskThreadContainer.value) return
+  const el = taskThreadContainer.value
+  const offset = el.scrollHeight - el.clientHeight
+  setVerticalScrollPosition(el, offset, 300)
   state.lockBottomScroll = true
-  //console.log('scroll to end of chat!');
-  setVerticalScrollPosition(window, offset, duration)
-}
-
-function handleResize(size: { height: number }) {
-  bottomPadding.value = size.height
 }
 
 // Watch selectedTaskId and update URL query parameter
@@ -382,11 +368,38 @@ watch(
 
 watch(
   () => route.query,
-  () => {
+  async () => {
     // don't update chat if the task is the same as we ahve alread selected...
     if (route.query.t && route.query.t === state.llmSettings.selectedTaskId) return
-    void updateChatThread()
+    loadingChat.value = true
+    await updateChatThread()
+    loadingChat.value = false
   },
   { immediate: true },
 )
+
+// we make sure, that we use "dvh" and also we need to declare
+// q-page to be a
+function myPageStyle(offset: number) {
+  // offset = header+footer size in px
+  return {
+    display: 'flex',
+    flexDirection: 'column',
+    height: offset ? `calc(100dvh - ${offset}px)` : '100dvh',
+  }
+}
 </script>
+
+<style lang="sass">
+#chat-area
+  flex: 1
+  overflow-y: auto
+  display: flex
+  flex-direction: column
+  align-items: center
+
+// we use this as a workaround when the field is focused or contains text.
+// TODO: not sure, if this is needed!
+/*.ty-msg-edit.q-field--float
+  background-color: white
+</style>

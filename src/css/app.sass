@@ -45,12 +45,7 @@ $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(
     border-radius: 20px
     border: transparent
 
-  // sizing of iframes etc...
   #chat-area
-    display: flex
-    flex-direction: column
-    align-items: center
-
     .tasks-container
       width: min(100%, 800px)
       display: flex
@@ -163,6 +158,7 @@ $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(
       .task-buttons
         opacity: 1
 
+  // TODO: move this into component..
   .scroll-area
     white-space: pre-wrap
     box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3)
@@ -172,17 +168,18 @@ $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(
     width: auto // Ensures it takes the necessary width up to its parent's maximum
     min-width: 100% // Ensures it stretches to at least the width of its parent
 
+  // TODO: not sure, if we need this...
   .debug-container
     padding-top: 5px
 
-  .create-new-task-container
-    z-index: 21
+  .create-new-task
     border-top-left-radius: 5px
     border-top-right-radius: 5px
     box-shadow: 0 0 2px 1px rgba($primary,0.1) // Adds an outer border with the primary color
-    backdrop-filter: blur(40px) brightness(1.0)
-    background-color: rgba(white, 0.1) // Adjust transparency as needed
+    //backdrop-filter: blur(40px) brightness(1.0)
+    background-color: rgba(white, 0.2) // Adjust transparency as needed
     border: 0.5px solid rgba(white, 0.5)
+
     .ty-msg-edit
       box-shadow: none
       background-color: rgba(white, 0.5)
@@ -191,24 +188,17 @@ $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(
     border-radius: 5px
     box-shadow: inset 0 0 10px white
 
-  // we use this as a workaround when the field is focused or contains text.
-  .ty-msg-edit.q-field--float
-    background-color: white
-
-  .announcements div
-    border-radius: 5px
-
   .not-in-key
     opacity: 0.5
 
-  // the buttons with chat suggestions:
+    // the buttons with chat suggestions:
   .task-button
     color: rgb($primary)
 
   .body--dark .task-button
     color: rgb($secondary)
 
-  // common settings for both:  dark & light  
+    // common settings for both:  dark & light  
   body.body--light
     //background-color: white
     background: $app-bg-light
@@ -260,11 +250,11 @@ $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(
     background-size: cover // make sure we always cover entire viewport even if content is smaller
     background-attachment: fixed // fix background to viewport
 
-    .create-new-task-container
+    .create-new-task
       background-color: rgba($primary, 0.3) // Adjust transparency as needed
-      backdrop-filter: blur(40px) brightness(0.6)
       border: 0.5px solid rgba(white, 0.1)
       border-bottom: none
+
       .ty-msg-edit
         box-shadow: none
         background-color: rgba($dark, 0.5)
@@ -303,9 +293,9 @@ $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(
       border-radius: 5px
       border: 1px solid rgb($secondary)
 
-body.within-iframe
-  background-color: white !important
-  background: transparent !important
+  body.within-iframe
+    background-color: white !important
+    background: transparent !important
 
 @media print
   /* Hide everything initially */
