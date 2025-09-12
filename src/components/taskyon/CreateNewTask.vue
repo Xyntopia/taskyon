@@ -369,7 +369,7 @@ const slimSettings = computed(() =>
     {
       obj: state.appConfiguration,
       schema: appConfiguration,
-      pickKeys: ['useEnterToSend', 'primaryColor', 'secondaryColor'],
+      pickKeys: ['primaryColor', 'secondaryColor'],
     },
   ),
 )
