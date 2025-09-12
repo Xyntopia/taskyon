@@ -128,34 +128,22 @@ export function createScrollManager(
 
   // --- Core scroll ---
   const scrollToBottom = (smooth = true) => {
-    if (!container.value) {
-      console.log('[scroll] scrollToBottom: no container')
-      return
-    }
+    if (!container.value) return
     const el = container.value
     const offset = el.scrollHeight - el.clientHeight
 
     lockScroll.value = true
-    console.log(`[scroll] scrollToBottom: to=${offset}, smooth=${smooth}`)
 
     setVerticalScrollPosition(el, offset, smooth ? 100 : 0)
   }
 
   // --- Auto scroll scheduling (rAF based) ---
   const requestAutoScroll = () => {
-    if (!lockScroll.value) {
-      console.log('[scroll] autoScroll skipped: lockScroll=false')
-      return
-    }
-
-    if (rafId != null) {
-      console.log('[scroll] autoScroll rescheduled (rAF reset)')
-      cancelAnimationFrame(rafId)
-    }
+    if (!lockScroll.value) return
+    if (rafId != null) cancelAnimationFrame(rafId)
 
     rafId = requestAnimationFrame(() => {
       rafId = null
-      console.log('[scroll] autoScroll executing')
       // no smooth for auto scroll → prevents drift
       scrollToBottom(false)
     })
@@ -164,34 +152,19 @@ export function createScrollManager(
   // --- Scroll listener ---
   const onScroll = (details: { direction: string; position: { top: number } }) => {
     const el = container.value
-    if (!el) {
-      console.log('[scroll] onScroll: no container')
-      return
-    }
+    if (!el) return
 
     const scrollEnd = el.scrollHeight - el.clientHeight
     const diff = scrollEnd - details.position.top
 
-    console.log(`[scroll] onScroll: dir=${details.direction}, diff=${diff}`)
-
-    if (details.direction === 'up' && diff > minUnlockOffset) {
-      if (lockScroll.value) {
-        console.log('[scroll] unlock scroll (user scrolled up)')
-      }
-      lockScroll.value = false
-    } else if (details.direction === 'down' && diff < bottomTolerancePx) {
-      if (!lockScroll.value) {
-        console.log('[scroll] re-lock scroll (near bottom)')
-      }
-      lockScroll.value = true
-    }
+    if (details.direction === 'up' && diff > minUnlockOffset) lockScroll.value = false
+    else if (details.direction === 'down' && diff < bottomTolerancePx) lockScroll.value = true
   }
 
   // --- Public API ---
   const cancel = () => {
     if (rafId != null) {
       cancelAnimationFrame(rafId)
-      console.log('[scroll] cancel pending autoScroll (rAF cleared)')
       rafId = null
     }
   }
