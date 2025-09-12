@@ -22,7 +22,7 @@
         <template #after>
           <slot name="bottom" btn-size="md">
             <q-btn flat :icon="matSend" @click="$emit('execute-task')">
-              <q-tooltip>{{ sendToolTip }})</q-tooltip>
+              <q-tooltip>{{ sendToolTip }}</q-tooltip>
             </q-btn>
           </slot>
         </template> </q-input
