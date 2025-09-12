@@ -459,9 +459,10 @@ export async function createOpenAIRequest(
     url: `${api.baseURL}/chat/completions`,
     // in case we have the openai api we need to wait for the thinking to finish
     // so we are giving it a lot more time... (almost 5 minutes..)
-    // the 115s are currently the maximum we can use for supabase edge functions anyways.
-    // thats where this number is coming from
-    timeout: api.name === 'openai' ? 115 * 1000 : 10000,
+    // for openai we are not restricted to supabase edge servers, so
+    // we can choose any timeout that we want
+    // the 115*1000 ms come from the 120s timeout for taskyon.space in the free version..
+    timeout: api.name === 'taskyon' ? 115 * 1000 : 5 * 60 * 1000,
   }
 }
 
