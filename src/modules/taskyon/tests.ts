@@ -33,6 +33,7 @@ import {
 import { createChatCompletionTask, processTasks } from '@taskyon/tyclient'
 import { authenticateWithPopup } from '@taskyon/taskyon/browser'
 import { getDatabase } from '@taskyon/taskyon/db'
+import { reconcileWithDefaults } from '@taskyon/shared/modules/utils'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { useAppStateStore } from 'src/stores/appState'
@@ -54,6 +55,164 @@ function assert(condition: boolean, msg?: string): asserts condition {
   if (!condition) {
     throw new Error(msg ?? 'Assertion failed')
   }
+}
+
+export function testReconcileWithDefaults() {
+  const diagnostics: Array<{
+    name: string
+    status: 'PASS' | 'FAIL'
+    expected?: unknown
+    actual?: unknown
+  }> = []
+  const summary = { total: 0, passed: 0, failed: 0 }
+
+  const runTest = (
+    name: string,
+    stored: unknown,
+    defaults: unknown,
+    expected: unknown,
+    options?: Parameters<typeof reconcileWithDefaults>[2],
+  ) => {
+    summary.total += 1
+    const actual = reconcileWithDefaults(stored, defaults, options)
+    const passed = JSON.stringify(actual) === JSON.stringify(expected)
+
+    if (passed) {
+      summary.passed += 1
+      diagnostics.push({ name, status: 'PASS' })
+    } else {
+      summary.failed += 1
+      diagnostics.push({ name, status: 'FAIL', expected, actual })
+    }
+
+    assert(
+      passed,
+      `FAIL: ${name} | Expected: ${JSON.stringify(expected)} | Got: ${JSON.stringify(actual)}`,
+    )
+  }
+
+  const defaultSettings = {
+    theme: 'dark',
+    fontSize: 14,
+    features: {
+      beta: false,
+      notifications: true,
+    },
+    tags: ['default-tag'],
+    user: null,
+  }
+
+  runTest(
+    'Should keep stored values when types match',
+    { theme: 'light', features: { beta: true, notifications: true } },
+    defaultSettings,
+    {
+      theme: 'light',
+      fontSize: 14,
+      features: { beta: true, notifications: true },
+      tags: ['default-tag'],
+      user: null,
+    },
+  )
+
+  runTest('Should use default value on type mismatch', { fontSize: '16' }, defaultSettings, {
+    theme: 'dark',
+    fontSize: 14,
+    features: { beta: false, notifications: true },
+    tags: ['default-tag'],
+    user: null,
+  })
+
+  runTest(
+    'Should correctly handle null type mismatch',
+    { user: { name: 'test' } },
+    defaultSettings,
+    {
+      theme: 'dark',
+      fontSize: 14,
+      features: { beta: false, notifications: true },
+      tags: ['default-tag'],
+      user: null,
+    },
+  )
+
+  runTest(
+    'Should drop unknown keys by default',
+    { theme: 'light', unknownKey: 'drop' },
+    defaultSettings,
+    {
+      theme: 'light',
+      fontSize: 14,
+      features: { beta: false, notifications: true },
+      tags: ['default-tag'],
+      user: null,
+    },
+  )
+
+  runTest(
+    'Should preserve unknown keys when requested',
+    {
+      theme: 'light',
+      unknownKey: 'keep',
+      features: { beta: true, extraFeature: 'also-kept' },
+    },
+    defaultSettings,
+    {
+      theme: 'light',
+      fontSize: 14,
+      features: { beta: true, notifications: true, extraFeature: 'also-kept' },
+      tags: ['default-tag'],
+      user: null,
+      unknownKey: 'keep',
+    },
+    { preserveUnknownKeys: true },
+  )
+
+  runTest(
+    'Should reconcile array elements based on default template',
+    { tags: ['user-tag', 123, 'another-tag'] },
+    { tags: ['string-template'] },
+    { tags: ['user-tag', 'string-template', 'another-tag'] },
+  )
+
+  runTest(
+    'Should accept stored array if default array is empty',
+    { list: [1, 2, 'a'] },
+    { list: [] },
+    {
+      list: [1, 2, 'a'],
+    },
+  )
+
+  runTest(
+    'Should keep value when it passes validation',
+    { theme: 'light' },
+    defaultSettings,
+    {
+      theme: 'light',
+      fontSize: 14,
+      features: { beta: false, notifications: true },
+      tags: ['default-tag'],
+      user: null,
+    },
+    { validators: { theme: (value) => value === 'light' || value === 'dark' } },
+  )
+
+  runTest(
+    'Should use default value when validation fails',
+    { theme: 'blue' },
+    defaultSettings,
+    {
+      theme: 'dark',
+      fontSize: 14,
+      features: { beta: false, notifications: true },
+      tags: ['default-tag'],
+      user: null,
+    },
+    { validators: { theme: (value) => value === 'light' || value === 'dark' } },
+  )
+
+  return { summary, diagnostics }
 }
 
 // Define types for the stored crypto key data

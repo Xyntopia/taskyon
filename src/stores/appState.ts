@@ -12,6 +12,7 @@ import {
   clearCookies,
   clearServiceWorkers,
   deepMergeReactive,
+  reconcileWithDefaults,
 } from '../../packages/shared/modules/utils'
 import type { DeepReadonly } from 'vue'
 import { computed, reactive, ref, toRefs, unref, watch, type Reactive } from 'vue'
@@ -310,7 +311,7 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
     initialStoredStateObjTyped.version === initialState.version
   ) {
     console.log(`[PERSIST] load saved ui state from profile "${initialProfileName}"`)
-    const storedInitialState = deepMerge(initialState, initialStoredStateObjTyped, 'overwrite')
+    const storedInitialState = reconcileWithDefaults(initialStoredStateObjTyped, initialState)
     stateRefs = reactive(storedInitialState)
   } else {
     // TODO: pop up a dialog or a separate migration page where we

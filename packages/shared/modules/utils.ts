@@ -310,6 +310,46 @@ export function asyncLruCache(size: number, ignoreIndices: number[] = []) {
   }
 }
 
+type ReconcileOptions = {
+  validators?: Record<string, (value: unknown) => boolean>
+  preserveUnknownKeys?: boolean
+}
+
+export function reconcileWithDefaults<T>(
+  stored: unknown,
+  defaults: T,
+  options: ReconcileOptions = {},
+  path: string[] = [],
+): T {
+  const keyPath = path.join('.')
+
+  if (Array.isArray(defaults)) {
+    if (!Array.isArray(stored)) return structuredClone(defaults) as T
+    const template = defaults[0]
+    if (template === undefined) return stored as T
+    return stored.map((item, index) =>
+      reconcileWithDefaults(item, template, options, [...path, String(index)]),
+    ) as T
+  }
+
+  if (isPlainObject(defaults)) {
+    const storedObject = isPlainObject(stored) ? stored : {}
+    const output: Record<string, unknown> = options.preserveUnknownKeys ? { ...storedObject } : {}
+    for (const key of Object.keys(defaults)) {
+      output[key] = reconcileWithDefaults(storedObject[key], defaults[key], options, [...path, key])
+    }
+    return output as T
+  }
+
+  const sameType =
+    (stored === null && defaults === null) ||
+    (stored !== null && defaults !== null && typeof stored === typeof defaults)
+  const validator = options.validators?.[keyPath]
+  if (sameType && (!validator || validator(stored))) return stored as T
+
+  return structuredClone(defaults) as T
+}
+
 // Deep, in-place, strategy-driven merge for Vue3-style reactive objects.
 // Focus: readability & control with a small option surface.
 
