@@ -1,4 +1,3 @@
-import { useDebounceFn } from '@vueuse/core'
 import { scroll } from 'quasar'
 import type { Ref } from 'vue'
 import { computed, type ComputedRef, reactive, ref, toRefs, watch } from 'vue'
@@ -122,55 +121,87 @@ export function createScrollManager(
   bottomTolerancePx = 30,
 ) {
   const { setVerticalScrollPosition } = scroll
-  let cancelScroll = false
 
+  // --- Internal state ---
+  let rafId: number | null = null
+  let pending = false
+  const minUnlockOffset = 5 // px before we really unlock
+
+  // --- Core scroll ---
   const scrollToBottom = (smooth = true) => {
-    if (!container.value) return
-    if (cancelScroll) {
-      cancelScroll = false
+    if (!container.value) {
+      console.log('[scroll] scrollToBottom: no container')
       return
     }
     const el = container.value
     const offset = el.scrollHeight - el.clientHeight
 
-    // 1. Set the flag to true BEFORE starting the scroll
-    lockScroll.value = true // Ensure lock is enabled
+    lockScroll.value = true
+    console.log(`[scroll] scrollToBottom: to=${offset}, smooth=${smooth}`)
 
     setVerticalScrollPosition(el, offset, smooth ? 100 : 0)
   }
 
-  // 3. Create a debounced version of scrollToBottom to prevent jitter.
-  const debouncedScrollToBottom = useDebounceFn(scrollToBottom, 100)
+  // --- Auto scroll scheduling (rAF based) ---
+  const requestAutoScroll = () => {
+    if (!lockScroll.value) {
+      console.log('[scroll] autoScroll skipped: lockScroll=false')
+      return
+    }
+    if (pending) {
+      console.log('[scroll] autoScroll skipped: already pending')
+      return
+    }
+    pending = true
+    console.log('[scroll] autoScroll scheduled (rAF)')
+    rafId = requestAnimationFrame(() => {
+      pending = false
+      console.log('[scroll] autoScroll executing')
+      // no smooth for auto scroll → prevents drift
+      scrollToBottom(false)
+    })
+  }
 
+  // --- Scroll listener ---
   const onScroll = (details: { direction: string; position: { top: number } }) => {
-    // Any other scroll is considered a user scroll.
     const el = container.value
-    if (!el) return
+    if (!el) {
+      console.log('[scroll] onScroll: no container')
+      return
+    }
 
-    if (details.direction === 'up') {
-      console.log('scroll up!')
-      cancelScroll = true
-      // If the user scrolls up, always unlock. Simple and effective.
-      //debouncedScrollToBottom.
-      lockScroll.value = false
-    } else if (details.direction === 'down') {
-      // If the user scrolls down and reaches the bottom, re-enable the lock.
-      const scrollEnd = el.scrollHeight - el.clientHeight
-      const isNearBottom = scrollEnd - details.position.top < bottomTolerancePx
-      if (isNearBottom) {
-        lockScroll.value = true
+    const scrollEnd = el.scrollHeight - el.clientHeight
+    const diff = scrollEnd - details.position.top
+
+    console.log(`[scroll] onScroll: dir=${details.direction}, diff=${diff}`)
+
+    if (details.direction === 'up' && diff > minUnlockOffset) {
+      if (lockScroll.value) {
+        console.log('[scroll] unlock scroll (user scrolled up)')
       }
+      lockScroll.value = false
+    } else if (details.direction === 'down' && diff < bottomTolerancePx) {
+      if (!lockScroll.value) {
+        console.log('[scroll] re-lock scroll (near bottom)')
+      }
+      lockScroll.value = true
     }
   }
 
-  const autoScroll = () => {
-    if (lockScroll.value) {
-      // Call the debounced function
-      void debouncedScrollToBottom()
+  // --- Public API ---
+  const cancel = () => {
+    if (rafId != null) {
+      cancelAnimationFrame(rafId)
+      console.log('[scroll] cancel pending autoScroll (rAF cleared)')
+      rafId = null
+      pending = false
     }
   }
 
-  // No need for dispose() as we aren't adding window listeners anymore.
-
-  return { onScroll, scrollToBottom, autoScroll }
+  return {
+    onScroll,
+    scrollToBottom, // manual call, smooth param preserved
+    autoScroll: requestAutoScroll, // scheduled auto scroll
+    cancel,
+  }
 }
