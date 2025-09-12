@@ -339,6 +339,11 @@ watch(
 const { lockBottomScroll } = storeToRefs(state)
 const scm = createScrollManager(taskThreadContainer, lockBottomScroll)
 
+watch(tystate.currentTask, (ct) => {
+  console.log('finalize scroll for new task!', ct?.id)
+  scm.autoScroll()
+})
+
 // Watch selectedTaskId and update URL query parameter
 watch(
   () => state.llmSettings.selectedTaskId,

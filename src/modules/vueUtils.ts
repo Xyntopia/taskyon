@@ -124,7 +124,6 @@ export function createScrollManager(
 
   // --- Internal state ---
   let rafId: number | null = null
-  let pending = false
   const minUnlockOffset = 5 // px before we really unlock
 
   // --- Core scroll ---
@@ -148,14 +147,14 @@ export function createScrollManager(
       console.log('[scroll] autoScroll skipped: lockScroll=false')
       return
     }
-    if (pending) {
-      console.log('[scroll] autoScroll skipped: already pending')
-      return
+
+    if (rafId != null) {
+      console.log('[scroll] autoScroll rescheduled (rAF reset)')
+      cancelAnimationFrame(rafId)
     }
-    pending = true
-    console.log('[scroll] autoScroll scheduled (rAF)')
+
     rafId = requestAnimationFrame(() => {
-      pending = false
+      rafId = null
       console.log('[scroll] autoScroll executing')
       // no smooth for auto scroll → prevents drift
       scrollToBottom(false)
@@ -194,7 +193,6 @@ export function createScrollManager(
       cancelAnimationFrame(rafId)
       console.log('[scroll] cancel pending autoScroll (rAF cleared)')
       rafId = null
-      pending = false
     }
   }
 

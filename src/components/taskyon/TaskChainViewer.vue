@@ -190,6 +190,15 @@ watch(
   { immediate: true },
 )
 
+// emit onSizeChange events, if our thread changes!
+watch(
+  () => props.selectedThread.map((t) => t.id),
+  async () => {
+    await nextTick()
+    emit('onSizeChange')
+  },
+)
+
 const isProcessing = (id: string) => {
   const lts = tystate.lastTaskState.get(id)
   if (lts) return lts !== 'processed' && lts !== 'all finished' && lts !== 'aborted'
