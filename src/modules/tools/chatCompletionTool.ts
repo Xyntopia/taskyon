@@ -150,7 +150,8 @@ export async function processChatTask(
     streamTask,
     streamTracker, // track incoming streams...
     stopSignal,
-    10000, // Timeout in milliseconds for waiting for first streamed response
+    // we are using a pretty big timeout, bceause apparentl chat API from openAI needs thiw right now..
+    request.timeout, // Timeout in milliseconds for waiting for first streamed response
     3, // Maximum number of retry attempts
   )
 
