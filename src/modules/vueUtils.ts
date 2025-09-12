@@ -1,9 +1,10 @@
-import type { Ref } from 'vue'
-import { type ComputedRef, ref, watch, computed, toRefs, reactive } from 'vue'
-import type { ZodObject } from 'zod'
-import { convertZodToJsonSchemaCached } from './taskyon/types'
-import { z } from 'zod'
+import { useDebounceFn } from '@vueuse/core'
 import { scroll } from 'quasar'
+import type { Ref } from 'vue'
+import { computed, type ComputedRef, reactive, ref, toRefs, watch } from 'vue'
+import type { ZodObject } from 'zod'
+import { z } from 'zod'
+import { convertZodToJsonSchemaCached } from './taskyon/types'
 
 export function asyncComputed<T>(
   getter: () => Promise<T>,
@@ -118,75 +119,58 @@ export function testBuildSlimView() {
 export function createScrollManager(
   container: Ref<HTMLElement | undefined>,
   lockScroll: Ref<boolean>,
-  graceMs = 1500,
-  bottomTolerancePx = 10,
+  bottomTolerancePx = 30,
 ) {
   const { setVerticalScrollPosition } = scroll
-  let lastUserScrollUp = 0
-  let lastUserInteraction = 0
+  let cancelScroll = false
 
-  // --- Listen for user input to mark activity ---
-  const markUserActivity = () => {
-    console.log('user scrolled or something!')
-    lastUserInteraction = Date.now()
-  }
-  window.addEventListener('wheel', markUserActivity, { passive: true })
-  window.addEventListener('touchstart', markUserActivity, { passive: true })
-  window.addEventListener('keydown', markUserActivity)
-
-  const isRecentUserScroll = () => Date.now() - lastUserInteraction < graceMs
-
-  const onScroll = (details: { direction: string }) => {
+  const scrollToBottom = (smooth = true) => {
     if (!container.value) return
+    if (cancelScroll) {
+      cancelScroll = false
+      return
+    }
     const el = container.value
-    const scrollEnd = el.scrollHeight - el.clientHeight
-    const currentScrollTop = el.scrollTop
-    const isNearBottom = scrollEnd - currentScrollTop < bottomTolerancePx
-    const now = Date.now()
+    const offset = el.scrollHeight - el.clientHeight
 
-    if (isRecentUserScroll()) {
-      // Treat as user scroll
-      console.log('user scroll...')
-      if (details.direction === 'up') {
-        lockScroll.value = false
-        lastUserScrollUp = now
-      } else if (details.direction === 'down') {
-        const isAtAbsoluteBottom = currentScrollTop >= scrollEnd - 2
-        if (isNearBottom && (isAtAbsoluteBottom || now - lastUserScrollUp > graceMs)) {
-          lockScroll.value = true
-        }
-      }
-    } else {
-      console.log('automatic scroll...')
-      // Treat as programmatic scroll: maintain lock if near bottom, never unlock
-      if (lockScroll && isNearBottom) {
+    // 1. Set the flag to true BEFORE starting the scroll
+    lockScroll.value = true // Ensure lock is enabled
+
+    setVerticalScrollPosition(el, offset, smooth ? 100 : 0)
+  }
+
+  // 3. Create a debounced version of scrollToBottom to prevent jitter.
+  const debouncedScrollToBottom = useDebounceFn(scrollToBottom, 100)
+
+  const onScroll = (details: { direction: string; position: { top: number } }) => {
+    // Any other scroll is considered a user scroll.
+    const el = container.value
+    if (!el) return
+
+    if (details.direction === 'up') {
+      console.log('scroll up!')
+      cancelScroll = true
+      // If the user scrolls up, always unlock. Simple and effective.
+      //debouncedScrollToBottom.
+      lockScroll.value = false
+    } else if (details.direction === 'down') {
+      // If the user scrolls down and reaches the bottom, re-enable the lock.
+      const scrollEnd = el.scrollHeight - el.clientHeight
+      const isNearBottom = scrollEnd - details.position.top < bottomTolerancePx
+      if (isNearBottom) {
         lockScroll.value = true
       }
     }
   }
 
-  const scrollToBottom = (smooth = true) => {
-    if (!container.value) return
-    const el = container.value
-    const offset = el.scrollHeight - el.clientHeight
-    setVerticalScrollPosition(el, offset, smooth ? 300 : 0)
-    lockScroll.value = true
-    console.log('scroll to bottom...')
-  }
-
   const autoScroll = () => {
     if (lockScroll.value) {
-      console.log('auto scrolling!')
-      scrollToBottom()
+      // Call the debounced function
+      void debouncedScrollToBottom()
     }
   }
 
-  // Cleanup function to remove listeners if needed
-  const dispose = () => {
-    window.removeEventListener('wheel', markUserActivity)
-    window.removeEventListener('touchstart', markUserActivity)
-    window.removeEventListener('keydown', markUserActivity)
-  }
+  // No need for dispose() as we aren't adding window listeners anymore.
 
-  return { onScroll, scrollToBottom, autoScroll, dispose }
+  return { onScroll, scrollToBottom, autoScroll }
 }
