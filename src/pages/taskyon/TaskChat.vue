@@ -7,11 +7,18 @@
       <!--<q-resize-observer :debounce="500" @resize="onResize" />-->
       <q-scroll-observer
         axis="vertical"
+        :debounce="0"
+        :scroll-target="taskThreadContainer"
+        @scroll="scm.onScroll"
+      />
+      <!--
+      // TODO: I don't think we need this right now...
+      <q-resize-observer
         :debounce="50"
         :scroll-target="taskThreadContainer"
-        @scroll="onScroll"
+        @resize="scm.autoScroll"
       />
-      <q-resize-observer :debounce="50" :scroll-target="taskThreadContainer" @resize="onResize" />
+    -->
 
       <!-- "Task" Display (.tasks-container & .task-container) -->
       <TaskChainViewer
@@ -23,7 +30,7 @@
         :task-tree-root="rootTaskId"
         :show-ids="showAllTasks"
         :expert-mode="state.appConfiguration.expertMode"
-        @on-size-change="onResize"
+        @on-size-change="scm.autoScroll"
       />
       <div v-else-if="loadingChat">loading new chat!!</div>
       <!-- Welcome Message -->
@@ -151,7 +158,7 @@
     <q-page-sticky position="bottom-right" :offset="[10, bottomPadding + 5]">
       <TaskControlButtons
         :show-bottom-scroll-lock="!state.lockBottomScroll"
-        @scroll-to-thread-end="scrollToThreadEnd"
+        @scroll-to-thread-end="scm.scrollToBottom"
       />
     </q-page-sticky>
     <!-- Popup Messages -->
@@ -175,7 +182,7 @@ import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
 import GetStarted from 'components/taskyon/GetStarted.vue'
 import TaskChainViewer from 'components/taskyon/TaskChainViewer.vue'
-import { scroll, useMeta, useQuasar } from 'quasar'
+import { useMeta, useQuasar } from 'quasar'
 import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
@@ -187,6 +194,8 @@ import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue'
+import { createScrollManager } from 'src/modules/vueUtils'
+import { storeToRefs } from 'pinia'
 
 // we are re-creating the following meta tag dynamically here just for the chat page!
 // <!-- Viewport Meta in order to make window size shrink on mobile when keyboard pops up! -->
@@ -219,7 +228,6 @@ const ResetButton = process.env.DEV
     )
   : undefined
 
-const { setVerticalScrollPosition } = scroll
 const bottomPadding = ref(100)
 const $q = useQuasar()
 const route = useRoute()
@@ -328,38 +336,8 @@ watch(
   (state) => console.log('lock scroll state:', state),
 )
 
-function onScroll(details: { direction: string }) {
-  if (!taskThreadContainer.value) return
-  const el = taskThreadContainer.value
-  const scrollEnd = el.scrollHeight - el.clientHeight
-  const bottomTolerance = 100 // threshold to auto-lock
-
-  if (details.direction === 'up') {
-    // Release lock immediately on upward scroll
-    state.lockBottomScroll = false
-  } else if (details.direction === 'down') {
-    // Auto-lock only if near bottom
-    if (scrollEnd - el.scrollTop < bottomTolerance) {
-      state.lockBottomScroll = true
-    }
-  }
-}
-
-function onResize() {
-  console.log('window is resizing!')
-  if (state.lockBottomScroll) {
-    //console.log('scroll to bottom');
-    scrollToThreadEnd()
-  }
-}
-
-function scrollToThreadEnd() {
-  if (!taskThreadContainer.value) return
-  const el = taskThreadContainer.value
-  const offset = el.scrollHeight - el.clientHeight
-  setVerticalScrollPosition(el, offset, 300)
-  state.lockBottomScroll = true
-}
+const { lockBottomScroll } = storeToRefs(state)
+const scm = createScrollManager(taskThreadContainer, lockBottomScroll)
 
 // Watch selectedTaskId and update URL query parameter
 watch(

@@ -1,7 +1,9 @@
+import type { Ref } from 'vue'
 import { type ComputedRef, ref, watch, computed, toRefs, reactive } from 'vue'
 import type { ZodObject } from 'zod'
 import { convertZodToJsonSchemaCached } from './taskyon/types'
 import { z } from 'zod'
+import { scroll } from 'quasar'
 
 export function asyncComputed<T>(
   getter: () => Promise<T>,
@@ -111,4 +113,80 @@ export function testBuildSlimView() {
   console.log('✔ updates propagate bi-directionally')
 
   console.log('✅ All tests passed!')
+}
+
+export function createScrollManager(
+  container: Ref<HTMLElement | undefined>,
+  lockScroll: Ref<boolean>,
+  graceMs = 1500,
+  bottomTolerancePx = 10,
+) {
+  const { setVerticalScrollPosition } = scroll
+  let lastUserScrollUp = 0
+  let lastUserInteraction = 0
+
+  // --- Listen for user input to mark activity ---
+  const markUserActivity = () => {
+    console.log('user scrolled or something!')
+    lastUserInteraction = Date.now()
+  }
+  window.addEventListener('wheel', markUserActivity, { passive: true })
+  window.addEventListener('touchstart', markUserActivity, { passive: true })
+  window.addEventListener('keydown', markUserActivity)
+
+  const isRecentUserScroll = () => Date.now() - lastUserInteraction < graceMs
+
+  const onScroll = (details: { direction: string }) => {
+    if (!container.value) return
+    const el = container.value
+    const scrollEnd = el.scrollHeight - el.clientHeight
+    const currentScrollTop = el.scrollTop
+    const isNearBottom = scrollEnd - currentScrollTop < bottomTolerancePx
+    const now = Date.now()
+
+    if (isRecentUserScroll()) {
+      // Treat as user scroll
+      console.log('user scroll...')
+      if (details.direction === 'up') {
+        lockScroll.value = false
+        lastUserScrollUp = now
+      } else if (details.direction === 'down') {
+        const isAtAbsoluteBottom = currentScrollTop >= scrollEnd - 2
+        if (isNearBottom && (isAtAbsoluteBottom || now - lastUserScrollUp > graceMs)) {
+          lockScroll.value = true
+        }
+      }
+    } else {
+      console.log('automatic scroll...')
+      // Treat as programmatic scroll: maintain lock if near bottom, never unlock
+      if (lockScroll && isNearBottom) {
+        lockScroll.value = true
+      }
+    }
+  }
+
+  const scrollToBottom = (smooth = true) => {
+    if (!container.value) return
+    const el = container.value
+    const offset = el.scrollHeight - el.clientHeight
+    setVerticalScrollPosition(el, offset, smooth ? 300 : 0)
+    lockScroll.value = true
+    console.log('scroll to bottom...')
+  }
+
+  const autoScroll = () => {
+    if (lockScroll.value) {
+      console.log('auto scrolling!')
+      scrollToBottom()
+    }
+  }
+
+  // Cleanup function to remove listeners if needed
+  const dispose = () => {
+    window.removeEventListener('wheel', markUserActivity)
+    window.removeEventListener('touchstart', markUserActivity)
+    window.removeEventListener('keydown', markUserActivity)
+  }
+
+  return { onScroll, scrollToBottom, autoScroll, dispose }
 }
