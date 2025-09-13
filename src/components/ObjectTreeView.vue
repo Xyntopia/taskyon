@@ -40,7 +40,6 @@
       >
         <q-input
           :readonly="readOnly"
-          class="col"
           filled
           :label="separateLabels ? '' : prop.node.label"
           input-style="max-height: 300px"
@@ -60,7 +59,6 @@
       >
         <json-input
           :readonly="readOnly"
-          class="col"
           auto-save
           filled
           :label="separateLabels ? '' : prop.node.label"
@@ -79,7 +77,6 @@
       >
         <q-input
           :readonly="readOnly"
-          class="col"
           style="min-width: 200px"
           :label="separateLabels ? '' : prop.node.label"
           filled
@@ -129,7 +126,6 @@
       >
         <q-input
           :readonly="readOnly"
-          class="col"
           style="min-width: 200px"
           :label="separateLabels ? '' : prop.node.label"
           filled
@@ -389,3 +385,8 @@ const nodeTree = computed(() => {
   }
 })
 </script>
+
+<style lang="sass">
+.q-tree--dense .q-tree__node--child
+    padding-left: 0
+</style>
