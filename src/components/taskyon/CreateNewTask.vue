@@ -112,27 +112,25 @@
           </q-btn>
         </FileDropzone>
         <!--Taskyon features-->
-        <q-btn dense flat :icon="matMoreHoriz" aria-label="quick ai settings">
-          <q-tooltip>More AI Settings</q-tooltip>
-          <q-menu fit data-cy="ai-settings">
-            <div class="q-py-md">
-              <ObjectTreeView
-                v-model="slimSettings.reactiveView"
-                :schema="slimSettings.jsonSchema"
-                dense
-              />
-            </div>
-            <q-card-actions class="float-right">
-              <q-btn
-                v-if="expertMode"
-                flat
-                to="/settings/agent%20config"
-                label="Full list of settings"
-              />
-              <q-btn v-close-popup flat label="Ok" />
-            </q-card-actions>
-          </q-menu>
-        </q-btn>
+        <ResponsiveMenuDialog dense flat :icon="matMoreHoriz" maximized>
+          <template #tooltip>More AI Settings</template>
+          <div class="q-pa-sm">
+            <ObjectTreeView
+              v-model="slimSettings.reactiveView"
+              :schema="slimSettings.jsonSchema"
+              dense
+            />
+          </div>
+          <q-card-actions class="float-right">
+            <q-btn
+              v-if="expertMode"
+              flat
+              to="/settings/agent%20config"
+              label="Full list of settings"
+            />
+            <q-btn v-close-popup flat label="Ok" />
+          </q-card-actions>
+        </ResponsiveMenuDialog>
         <!--Select Tools-->
         <div v-if="expertMode || selectedTaskType" @click.stop>
           <q-btn data-cy="tool-btn" flat dense :icon="mdiFunctionVariant">
@@ -288,34 +286,35 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, toRefs } from 'vue'
-import { llmSettings, appConfiguration } from 'src/modules/taskyon/types'
-import { useTaskyonStore } from 'stores/taskyonState'
-import ModelSelection from 'components/taskyon/ModelSelection.vue'
-import ObjectTreeView from '../ObjectTreeView.vue'
-import chatMessageEdit from './chatMessageEdit.vue'
-import InfoDialog from '../InfoDialog.vue'
 import {
-  matUploadFile,
+  matAttachment,
+  matBuild,
   matChat,
-  matSmartToy,
   matMoreHoriz,
   matSend,
-  matBuild,
-  matAttachment,
+  matSmartToy,
+  matUploadFile,
 } from '@quasar/extras/material-icons'
-import { useAppStateStore } from 'src/stores/appState'
-import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
-import { buildSlimView } from 'src/modules/vueUtils'
-import FileDropzone from '../FileDropzone.vue'
-import { QSelect } from 'quasar'
-import { deepCopy } from 'src/modules/utils'
-import { mdiFunctionVariant, mdiToolbox } from '@quasar/extras/mdi-v6'
-import ApiSelect from './ApiSelect.vue'
 import { symOutlinedCancel } from '@quasar/extras/material-symbols-outlined'
+import { mdiFunctionVariant, mdiToolbox } from '@quasar/extras/mdi-v6'
 import { partialTaskDraft } from '@taskyon/taskyon'
-import { generateTaskKeyWords } from 'src/modules/taskyon/taskUtils'
 import { watchThrottled } from '@vueuse/core'
+import ModelSelection from 'components/taskyon/ModelSelection.vue'
+import { QSelect } from 'quasar'
+import { generateTaskKeyWords } from 'src/modules/taskyon/taskUtils'
+import { appConfiguration, llmSettings } from 'src/modules/taskyon/types'
+import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
+import { deepCopy } from 'src/modules/utils'
+import { buildSlimView } from 'src/modules/vueUtils'
+import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { computed, onMounted, ref, toRefs } from 'vue'
+import FileDropzone from '../FileDropzone.vue'
+import InfoDialog from '../InfoDialog.vue'
+import ObjectTreeView from '../ObjectTreeView.vue'
+import ResponsiveMenuDialog from '../ResponsiveMenuDialog.vue'
+import ApiSelect from './ApiSelect.vue'
+import chatMessageEdit from './chatMessageEdit.vue'
 // import { watchThrottled } from '@vueuse/core'
 // use idel mechanism to calculate all kinds of stuff here :=)
 //import { useIdle } from '@vueuse/core'
