@@ -331,16 +331,10 @@ Please check the path and try again.
   }
 }
 
-watch(
-  () => state.lockBottomScroll,
-  (state) => console.log('lock scroll state:', state),
-)
-
 const { lockBottomScroll } = storeToRefs(state)
 const scm = createScrollManager(taskThreadContainer, lockBottomScroll)
 
-watch(tystate.currentTask, (ct) => {
-  console.log('finalize scroll for new task!', ct?.id)
+watch(tystate.currentTask, () => {
   scm.autoScroll()
 })
 
