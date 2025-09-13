@@ -149,10 +149,28 @@ html.no-ptr
   .body--dark .button-group
     border: 1px solid white
 
+  /*body
+   background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
+   background-size: cover // make sure we always cover entire viewport even if content is smaller
+   background-attachment: fixed // fix background to viewport
+   background-color: black
+
+  /* remove body fixed background and use a dedicated fixed layer */
   body
-    background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
-    background-size: cover // make sure we always cover entire viewport even if content is smaller
-    background-attachment: fixed // fix background to viewport
+    background: none
+    position: relative
+
+  /* keep it behind content */
+  body::before
+    content: ''
+    position: fixed
+    inset: 0
+    z-index: -1
+    pointer-events: none
+    background: $app-bg-dark // or $app-bg-light depending on theme
+    background-repeat: no-repeat
+    background-size: cover
+    background-attachment: scroll /* not needed but explicit */
 
     // common settings for both:  dark & light  
   body.body--light
@@ -181,7 +199,7 @@ html.no-ptr
       color: rgb($primary)
 
   body.body--dark
-    background-color: black
+    background-color: black !important
     background: $app-bg-dark
 
   body.within-iframe
