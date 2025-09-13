@@ -167,15 +167,22 @@ html.no-ptr
     inset: 0
     z-index: -1
     pointer-events: none
-    background: $app-bg-dark // or $app-bg-light depending on theme
+    background: $app-bg-light // or $app-bg-light depending on theme
     background-repeat: no-repeat
     background-size: cover
     background-attachment: scroll /* not needed but explicit */
 
-    // common settings for both:  dark & light  
-  body.body--light
+  body.body--light::before
     //background-color: white
     background: $app-bg-light
+    //color: black
+
+  body.body--dark::before
+    background-color: black !important
+    background: $app-bg-dark
+
+    // common settings for both:  dark & light  
+  body.body--light
     color: black
 
     .welcome-message-text
@@ -197,10 +204,6 @@ html.no-ptr
     .q-drawer
       // this is for the text color :)
       color: rgb($primary)
-
-  body.body--dark
-    background-color: black !important
-    background: $app-bg-dark
 
   body.within-iframe
     background-color: white !important
