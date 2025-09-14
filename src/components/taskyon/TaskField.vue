@@ -70,7 +70,7 @@
         </q-tooltip>
       </div>
       <!--buttons-->
-      <TaskButtons
+      <TaskMenu
         class="task-buttons"
         :task="task"
         @toggle-markdown="toggleMarkdown"
@@ -97,7 +97,7 @@
 import { useTaskyonStore } from 'stores/taskyonState'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
 import { computed, defineAsyncComponent, ref } from 'vue'
-import TaskButtons from './TaskButtons.vue'
+import TaskMenu from './TaskMenu.vue'
 import {
   matArrowDropDown,
   matArrowDropUp,
