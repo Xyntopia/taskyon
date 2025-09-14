@@ -3,21 +3,17 @@
     <q-card flat>
       <!-- ───────── Intro ───────── -->
       <q-card-section>
-        <ty-markdown
-          class="pricing-page-intro"
-          :src="`
-##  Infos and pricing for all available Models.
-
+        <q-expansion-item
+          header-class="text-h6"
+          label="Infos and pricing for all available Models."
+        >
+          <ty-markdown
+            class="pricing-page-intro"
+            :src="`
 List of all of our currently available models in ${state.llmSettings.selectedApi} and their prices.
 The selected AI provider has to provide price information through an API in order to show them
-on this list. *Dynamic* means that the backend changes the prices based on the input (E.g. by automatically
-selecting different models).
-`"
-        />
-        <InfoDialog
-          label="Model Rankings"
-          :round="false"
-          :info-text="`
+on this list.
+
 For in in-depth comparison check out webpages like the following
 
 - [artificialanalysis](https://artificialanalysis.ai/leaderboards/models?deprecation=current)
@@ -26,7 +22,8 @@ For in in-depth comparison check out webpages like the following
 - [lmarena.ai](https://lmarena.ai/leaderboard)
 - ... and many more [search](https://www.google.com/search?q=AI+model+rankings)
 `"
-        />
+          />
+        </q-expansion-item>
         <ApiSelect v-model="state.llmSettings.selectedApi" />
       </q-card-section>
 
