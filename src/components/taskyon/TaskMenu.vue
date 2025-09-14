@@ -1,5 +1,5 @@
 <template>
-  <q-list dense>
+  <q-list>
     <div class="row">
       <q-btn
         v-if="

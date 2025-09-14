@@ -10,7 +10,7 @@
       <q-tooltip>This message is displayed in a secure sandbox</q-tooltip>
     </q-icon>
     <!--Message Display-->
-    <div class="task-display">
+    <div v-touch-hold="() => (showTaskMenu = true)" class="task-display">
       <!--task-header-->
       <div class="task-header">
         <!--task icon-->
@@ -70,23 +70,15 @@
         </q-tooltip>
       </div>
       <!--buttons-->
+      <!-- floating menu button -->
       <q-btn
-        class="task-menu-bottom"
+        class="task-menu-btn"
         flat
         dense
         size="sm"
         :icon="matMoreHoriz"
         @click.stop="showTaskMenu = !showTaskMenu"
       />
-      <q-btn
-        class="task-menu-top"
-        flat
-        dense
-        size="sm"
-        :icon="matMoreHoriz"
-        @click.stop="showTaskMenu = !showTaskMenu"
-      >
-      </q-btn>
       <ResponsiveMenuDialog v-model="showTaskMenu" auto-close>
         <TaskMenu
           class="task-buttons"
@@ -229,24 +221,16 @@ function toggleMarkdown(id: string) {
 .task-display
   position: relative
 
-  // TODO: make message buttons somehow always appear on screen..  never be hidden..
-  .task-menu-top,.task-menu-bottom
-    //border: 1px solid rgb($primary)
-    position: absolute
-    //top: 5px // shift it 10px downward
-    //bottom: 0px
-    right: 0px
+  .task-menu-btn
+    position: sticky
+    top: 0
+    right: 0
+    margin-left: auto
     opacity: 0
-    transition: opacity 1s
+    transition: opacity 0.3s
+    z-index: 10
 
   &:hover
-    .task-menu-top,.task-menu-bottom
+    .task-menu-btn
       opacity: 1
-
-  .task-menu-top
-    //border: 1px solid rgb($primary)
-    top: 5px // shift it 10px downward
-
-  .task-menu-bottom
-    bottom: 5px
 </style>
