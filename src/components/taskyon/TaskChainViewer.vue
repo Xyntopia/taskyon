@@ -437,25 +437,4 @@ function showTask(t: TaskNode) {
     width: 0.8em
     height: 0.8em
     z-index: 9
-
-.task-display
-  position: relative
-
-  // TODO: make message buttons somehow always appear on screen..  never be hidden..
-  .task-buttons
-    z-index: 10
-    //border: 1px solid rgb($primary)
-    position: absolute
-    bottom: -20px // shift it 10px downward
-    //bottom: 0px
-    right: 0px
-    opacity: 0
-    transition: opacity 1s
-    display: flex
-    flex-wrap: nowrap
-    white-space: nowrap
-
-  &:hover
-    .task-buttons
-      opacity: 1
 </style>

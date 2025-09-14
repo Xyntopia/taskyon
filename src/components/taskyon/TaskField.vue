@@ -70,17 +70,36 @@
         </q-tooltip>
       </div>
       <!--buttons-->
-      <TaskMenu
-        class="task-buttons"
-        :task="task"
-        @toggle-markdown="toggleMarkdown"
-        @create-new-conversation="createNewConversation"
-        @edit-task="editTask"
-        @toggle-message-debug="toggleMessageDebug"
-        @delete="deleteTask"
-        @download="showDownloadDlg = true"
-        @share="showShareDlg = true"
+      <q-btn
+        class="task-menu-bottom"
+        flat
+        dense
+        size="sm"
+        :icon="matMoreHoriz"
+        @click.stop="showTaskMenu = !showTaskMenu"
       />
+      <q-btn
+        class="task-menu-top"
+        flat
+        dense
+        size="sm"
+        :icon="matMoreHoriz"
+        @click.stop="showTaskMenu = !showTaskMenu"
+      >
+      </q-btn>
+      <ResponsiveMenuDialog v-model="showTaskMenu" auto-close>
+        <TaskMenu
+          class="task-buttons"
+          :task="task"
+          @toggle-markdown="toggleMarkdown"
+          @create-new-conversation="createNewConversation"
+          @edit-task="editTask"
+          @toggle-message-debug="toggleMessageDebug"
+          @delete="deleteTask"
+          @download="showDownloadDlg = true"
+          @share="showShareDlg = true"
+        />
+      </ResponsiveMenuDialog>
     </div>
     <!--task debugging-->
     <q-slide-transition class="debug-container">
@@ -102,6 +121,7 @@ import {
   matArrowDropDown,
   matArrowDropUp,
   matMonetizationOn,
+  matMoreHoriz,
   matShield,
 } from '@quasar/extras/material-icons'
 import { openrouterPricing } from 'src/modules/utils'
@@ -109,6 +129,7 @@ import { useAppStateStore } from 'src/stores/appState'
 import { useRouter } from 'vue-router'
 import TaskDebugTabs from './TaskDebugTabs.vue'
 import type { TaskNode } from '@taskyon/taskyon'
+import ResponsiveMenuDialog from '../ResponsiveMenuDialog.vue'
 
 const props = defineProps<{
   task: TaskNode
@@ -135,6 +156,7 @@ const tystate = useTaskyonStore()
 const expandMessageContent = ref<boolean>(false)
 const router = useRouter()
 
+const showTaskMenu = ref(false)
 const showShareDlg = ref(false)
 const showDownloadDlg = ref(false)
 const taskMeta = tystate.getTaskMetaRef(task.id)
@@ -202,3 +224,29 @@ function toggleMarkdown(id: string) {
   console.log(`markdown for ${id}`, state.taskWidgetState[id].markdownEnabled)
 }
 </script>
+
+<style scoped lang="sass">
+.task-display
+  position: relative
+
+  // TODO: make message buttons somehow always appear on screen..  never be hidden..
+  .task-menu-top,.task-menu-bottom
+    //border: 1px solid rgb($primary)
+    position: absolute
+    //top: 5px // shift it 10px downward
+    //bottom: 0px
+    right: 0px
+    opacity: 0
+    transition: opacity 1s
+
+  &:hover
+    .task-menu-top,.task-menu-bottom
+      opacity: 1
+
+  .task-menu-top
+    //border: 1px solid rgb($primary)
+    top: 5px // shift it 10px downward
+
+  .task-menu-bottom
+    bottom: 5px
+</style>
