@@ -112,7 +112,7 @@
           </q-btn>
         </FileDropzone>
         <!--Taskyon features-->
-        <ResponsiveMenuDialog dense flat :icon="matMoreHoriz" maximized data-cy="ai-settings">
+        <ResponsiveMenuDialogBtn dense flat :icon="matMoreHoriz" maximized data-cy="ai-settings">
           <template #btnContent><q-tooltip> More AI Settings</q-tooltip></template>
           <div class="q-pa-sm">
             <ObjectTreeView
@@ -130,7 +130,7 @@
             />
             <q-btn v-close-popup flat label="Ok" />
           </q-card-actions>
-        </ResponsiveMenuDialog>
+        </ResponsiveMenuDialogBtn>
         <!--Select Tools-->
         <div v-if="expertMode || selectedTaskType" @click.stop>
           <q-btn data-cy="tool-btn" flat dense :icon="mdiFunctionVariant">
@@ -199,7 +199,7 @@
           </div>
         -->
       <!--Choose Model-->
-      <ResponsiveMenuDialog
+      <ResponsiveMenuDialogBtn
         size="sm"
         no-caps
         class="col-auto model-history"
@@ -264,7 +264,7 @@
         <q-card-actions v-if="$q.platform.is.mobile" class="float-right">
           <q-btn v-close-popup flat label="Ok" />
         </q-card-actions>
-      </ResponsiveMenuDialog>
+      </ResponsiveMenuDialogBtn>
       <!--Tool task execution-->
       <div
         v-if="expertMode && selectedTaskType"
@@ -321,7 +321,7 @@ import { computed, onMounted, ref, toRefs } from 'vue'
 import FileDropzone from '../FileDropzone.vue'
 import InfoDialog from '../InfoDialog.vue'
 import ObjectTreeView from '../ObjectTreeView.vue'
-import ResponsiveMenuDialog from '../ResponsiveMenuDialog.vue'
+import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
 import ApiSelect from './ApiSelect.vue'
 import chatMessageEdit from './chatMessageEdit.vue'
 // import { watchThrottled } from '@vueuse/core'
