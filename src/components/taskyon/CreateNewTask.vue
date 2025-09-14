@@ -112,7 +112,14 @@
           </q-btn>
         </FileDropzone>
         <!--Taskyon features-->
-        <ResponsiveMenuDialogBtn dense flat :icon="matMoreHoriz" maximized data-cy="ai-settings">
+        <ResponsiveMenuDialogBtn
+          dense
+          flat
+          :icon="matMoreHoriz"
+          maximized
+          auto-close
+          data-cy-menu="ai-settings"
+        >
           <template #btnContent><q-tooltip> More AI Settings</q-tooltip></template>
           <div class="q-pa-sm">
             <ObjectTreeView
@@ -132,66 +139,75 @@
           </q-card-actions>
         </ResponsiveMenuDialogBtn>
         <!--Select Tools-->
-        <div v-if="expertMode || selectedTaskType" @click.stop>
-          <q-btn data-cy="tool-btn" flat dense :icon="mdiFunctionVariant">
-            <q-menu ref="toolMenu" auto-close>
-              <q-list dense>
-                <q-item v-if="!selectedTaskType" clickable to="/tool" class="q-mb-md">
-                  <q-item-section avatar>
-                    <q-icon :name="mdiToolbox"></q-icon>
-                  </q-item-section>
-                  <q-item-section> Open Tool Manager </q-item-section>
-                </q-item>
-                <q-item>
-                  <q-item-section class="text-caption">
-                    Search for a tool you want to use..</q-item-section
-                  >
-                  <q-item-section side>
-                    <InfoDialog
-                      info-text="You can use tools here directly and change their parameters to your liking"
-                    />
-                  </q-item-section>
-                </q-item>
-                <q-item class="row">
-                  <q-item-section @click.stop>
-                    <q-select
-                      class="col"
-                      use-input
-                      dense
-                      standout
-                      hide-selected
-                      fill-input
-                      options-dense
-                      input-debounce="0"
-                      color="secondary"
-                      :model-value="selectedTaskType"
-                      :options="filteredToolCollection"
-                      @filter="filterFn"
-                      @update:model-value="
-                        (val) => {
-                          tystate.switchTaskType(val)
-                          toolMenu?.hide()
-                        }
-                      "
-                    >
-                    </q-select>
-                  </q-item-section>
-                </q-item>
-                <q-item
-                  v-if="selectedTaskType"
-                  class="q-mt-md"
-                  clickable
-                  @click="() => tystate.switchTaskType(undefined)"
+        <ResponsiveMenuDialogBtn
+          v-if="expertMode || selectedTaskType"
+          dense
+          flat
+          :icon="mdiFunctionVariant"
+          maximized
+          data-cy="tool-btn"
+          auto-close
+        >
+          <template #default="{ close }">
+            <q-list dense>
+              <q-item v-if="!selectedTaskType" clickable to="/tool" class="q-mb-md">
+                <q-item-section avatar>
+                  <q-icon :name="mdiToolbox"></q-icon>
+                </q-item-section>
+                <q-item-section> Open Tool Manager </q-item-section>
+              </q-item>
+              <q-item>
+                <q-item-section class="text-caption">
+                  Search for a tool you want to use..</q-item-section
                 >
-                  <q-item-section avatar>
-                    <q-icon :name="matChat"></q-icon>
-                  </q-item-section>
-                  <q-item-section> Select Simple Chat </q-item-section>
-                </q-item>
-              </q-list>
-            </q-menu>
-          </q-btn>
-        </div>
+                <q-item-section side>
+                  <InfoDialog
+                    info-text="You can use tools here directly and change their parameters to your liking"
+                  />
+                </q-item-section>
+              </q-item>
+              <q-item class="row">
+                <q-item-section @click.stop>
+                  <q-select
+                    class="col"
+                    use-input
+                    dense
+                    standout
+                    hide-selected
+                    fill-input
+                    options-dense
+                    input-debounce="0"
+                    color="secondary"
+                    :model-value="selectedTaskType"
+                    :options="filteredToolCollection"
+                    @filter="filterFn"
+                    @update:model-value="
+                      (val) => {
+                        tystate.switchTaskType(val)
+                        close()
+                      }
+                    "
+                  >
+                  </q-select>
+                </q-item-section>
+              </q-item>
+              <q-item
+                v-if="selectedTaskType"
+                class="q-mt-md"
+                clickable
+                @click="() => tystate.switchTaskType(undefined)"
+              >
+                <q-item-section avatar>
+                  <q-icon :name="matChat"></q-icon>
+                </q-item-section>
+                <q-item-section> Select Simple Chat </q-item-section>
+              </q-item>
+            </q-list>
+            <q-card-actions v-if="$q.platform.is.mobile" class="float-right">
+              <q-btn v-close-popup flat label="Ok" />
+            </q-card-actions>
+          </template>
+        </ResponsiveMenuDialogBtn>
       </div>
       <!--
           <div v-else-if="expertMode">
@@ -206,7 +222,7 @@
         dense
         flat
         maximized
-        data-cy="model-selection"
+        data-cy-menu="model-selection"
       >
         <template #btnContent>
           <q-icon :name="matSmartToy" />
@@ -215,55 +231,62 @@
           </div>
           <div class="text-weight-thin gt-xs">/{{ state.llmSettings.selectedApi }}</div>
         </template>
-        <q-list dense style="min-width: 100px">
-          <div class="row">
-            <q-btn square flat :icon="matSmartToy" label="Model List" to="/pricing" />
-            <ApiSelect v-model="state.llmSettings.selectedApi" more-settings />
-          </div>
-          <q-separator />
-          <q-item-label header>Previously selected AI models!</q-item-label>
-          <q-item v-if="state.modelHistory.length === 0" v-close-popup>
-            No other models were selected yet!
-          </q-item>
-          <q-item
-            v-for="(m, idx) in state.modelHistory"
-            :key="m"
-            v-close-popup
-            clickable
-            @click="tystate.handleBotNameUpdate({ newName: m })"
-          >
-            <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
-          </q-item>
-          <q-separator />
-          <div class="text-info column items-center">
-            <div>
-              <q-item class="row items-center">
-                <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
-                <ModelSelection
-                  v-model:selected-api="selectedApi"
-                  class="col"
-                  :bot-name="tystate.currentModelId"
-                  :model-list="expertMode"
-                  :select-api="expertMode"
-                  @update-bot-name="tystate.handleBotNameUpdate"
-                ></ModelSelection>
-              </q-item>
+        <template #default="{ close }">
+          <q-list dense style="min-width: 100px">
+            <div class="row">
+              <q-btn square flat :icon="matSmartToy" label="Model List" to="/pricing" />
+              <ApiSelect v-model="state.llmSettings.selectedApi" more-settings />
             </div>
-            <InfoDialog
-              v-if="tystate.currentModelId && tystate.currentModel?.description"
-              :round="false"
-              class="fit"
-              square
-              :dense="false"
-              label="Info about current model"
-              no-caps
-              :info-text="tystate.currentModel?.description || ''"
-            />
-          </div>
-        </q-list>
-        <q-card-actions v-if="$q.platform.is.mobile" class="float-right">
-          <q-btn v-close-popup flat label="Ok" />
-        </q-card-actions>
+            <q-separator />
+            <q-item-label header>Previously selected AI models!</q-item-label>
+            <q-item v-if="state.modelHistory.length === 0" v-close-popup>
+              No other models were selected yet!
+            </q-item>
+            <q-item
+              v-for="(m, idx) in state.modelHistory"
+              :key="m"
+              v-close-popup
+              clickable
+              @click="tystate.handleBotNameUpdate({ newName: m })"
+            >
+              <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
+            </q-item>
+            <q-separator />
+            <div class="text-info column items-center">
+              <div>
+                <q-item class="row items-center">
+                  <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
+                  <ModelSelection
+                    v-model:selected-api="selectedApi"
+                    class="col"
+                    :bot-name="tystate.currentModelId"
+                    :model-list="expertMode"
+                    :select-api="expertMode"
+                    @update-bot-name="
+                      (bot) => {
+                        tystate.handleBotNameUpdate(bot)
+                        close()
+                      }
+                    "
+                  ></ModelSelection>
+                </q-item>
+              </div>
+              <InfoDialog
+                v-if="tystate.currentModelId && tystate.currentModel?.description"
+                :round="false"
+                class="fit"
+                square
+                :dense="false"
+                label="Info about current model"
+                no-caps
+                :info-text="tystate.currentModel?.description || ''"
+              />
+            </div>
+          </q-list>
+          <q-card-actions v-if="$q.platform.is.mobile" class="float-right">
+            <q-btn v-close-popup flat label="Ok" />
+          </q-card-actions>
+        </template>
       </ResponsiveMenuDialogBtn>
       <!--Tool task execution-->
       <div
@@ -336,7 +359,6 @@ const { expertMode = false, entryNode } = defineProps<{
 
 const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
 
-const toolMenu = ref()
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { selectedApi } = toRefs(state.llmSettings)

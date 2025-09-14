@@ -575,7 +575,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     newService,
   }: {
     newName: string
-    newService?: string
+    newService?: string | null
   }) => {
     console.log('getting an api & bot update :)', newName, newService)
     if (newService) {

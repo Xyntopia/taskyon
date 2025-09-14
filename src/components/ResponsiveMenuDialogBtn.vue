@@ -1,19 +1,21 @@
 <!-- ResponsiveMenuDialogBtn.vue -->
 <template>
-  <div @click.stop>
+  <div>
     <!-- Always render a button -->
-    <q-btn v-bind="$attrs" @click="open = true">
+    <q-btn v-bind="$attrs" @click="open = !open" @click.stop>
       <slot name="btnContent" />
-      <!-- Desktop: menu anchored to the button -->
-      <ResponsiveMenuDialog
-        v-model="open"
-        :maximized="maximized"
-        :data-cy="dataCy"
-        :auto-close="autoClose"
-      >
-        <slot />
-      </ResponsiveMenuDialog>
     </q-btn>
+
+    <ResponsiveMenuDialog
+      v-model="open"
+      :maximized="maximized"
+      :data-cy="dataCyMenu"
+      :auto-close="autoClose"
+    >
+      <template #default="{ close: innerClose }">
+        <slot :close="innerClose" />
+      </template>
+    </ResponsiveMenuDialog>
   </div>
 </template>
 
@@ -26,7 +28,7 @@ defineOptions({ inheritAttrs: false })
 
 defineProps<{
   maximized?: QDialog['maximized']
-  dataCy?: string
+  dataCyMenu?: string
   autoClose?: QMenu['autoClose']
 }>()
 
