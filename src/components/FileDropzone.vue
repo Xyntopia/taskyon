@@ -70,7 +70,7 @@
         -->
   </div>
   <!-- named slot for full override; fallback is the menu with delegation -->
-  <q-popup-proxy ref="menu" auto-close breakpoint="600">
+  <q-popup-proxy v-if="enableMenu" ref="menu" auto-close breakpoint="600">
     <q-card flat>
       <q-list @click="onDelegate">
         <q-item clickable data-action="camera">
