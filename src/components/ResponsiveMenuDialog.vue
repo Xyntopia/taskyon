@@ -3,9 +3,9 @@
   <div @click.stop>
     <!-- Always render a button -->
     <q-btn v-bind="$attrs" @click="open = true">
-      <q-tooltip> <slot name="tooltip" /></q-tooltip>
+      <slot name="btnContent" />
       <!-- Desktop: menu anchored to the button -->
-      <q-menu v-if="!$q.platform.is.mobile" auto-close>
+      <q-menu v-if="!$q.platform.is.mobile" :auto-close="autoClose" :data-cy="dataCy">
         <slot />
       </q-menu>
       <!-- Mobile: dialog (bottom sheet style) -->
@@ -14,10 +14,10 @@
         v-model="open"
         transition-show="slide-up"
         transition-hide="slide-down"
-        auto-close
+        :auto-close="autoClose"
         :maximized="maximized"
       >
-        <q-card>
+        <q-card :data-cy="dataCy">
           <slot />
         </q-card>
       </q-dialog>
@@ -26,13 +26,15 @@
 </template>
 
 <script setup lang="ts">
-import { type QDialog } from 'quasar'
+import { type QMenu, type QDialog } from 'quasar'
 import { ref } from 'vue'
 
 defineOptions({ inheritAttrs: false })
 
 defineProps<{
   maximized?: QDialog['maximized']
+  dataCy?: string
+  autoClose?: QMenu['autoClose']
 }>()
 
 const open = ref(false)
