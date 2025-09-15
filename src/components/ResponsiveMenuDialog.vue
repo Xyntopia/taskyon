@@ -21,7 +21,6 @@
     :auto-close="autoClose"
     :maximized="maximized"
     position="bottom"
-    seamless
   >
     <q-card v-touch-swipe.mouse.down="close" :data-cy="dataCy">
       <slot :close="close" />
