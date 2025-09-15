@@ -1,6 +1,6 @@
 <template>
   <q-page padding>
-    <ResponsiveMenuDialogBtn></ResponsiveMenuDialogBtn>
+    <ResponsiveMenuDialogBtn> hello! </ResponsiveMenuDialogBtn>
   </q-page>
 </template>
 
