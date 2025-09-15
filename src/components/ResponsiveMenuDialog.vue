@@ -7,6 +7,8 @@
     :data-cy="dataCy"
     :separate-close-popup="true"
     :touch-position="false"
+    :target="target"
+    no-parent-event
   >
     <slot :close="close" />
   </q-menu>
@@ -42,5 +44,6 @@ defineProps<{
   maximized?: QDialog['maximized']
   dataCy?: string | undefined
   autoClose?: QMenu['autoClose']
+  target?: QMenu['target']
 }>()
 </script>

@@ -75,23 +75,25 @@
         class="task-menu-btn"
         flat
         dense
+        color="secondary"
         size="sm"
         :icon="matMoreHoriz"
         @click.stop="showTaskMenu = !showTaskMenu"
-      />
-      <ResponsiveMenuDialog v-model="showTaskMenu" auto-close>
-        <TaskMenu
-          class="task-buttons"
-          :task="task"
-          @toggle-markdown="toggleMarkdown"
-          @create-new-conversation="createNewConversation"
-          @edit-task="editTask"
-          @toggle-message-debug="toggleMessageDebug"
-          @delete="deleteTask"
-          @download="showDownloadDlg = true"
-          @share="showShareDlg = true"
-        />
-      </ResponsiveMenuDialog>
+      >
+        <ResponsiveMenuDialog v-model="showTaskMenu" auto-close>
+          <TaskMenu
+            class="task-buttons"
+            :task="task"
+            @toggle-markdown="toggleMarkdown"
+            @create-new-conversation="createNewConversation"
+            @edit-task="editTask"
+            @toggle-message-debug="toggleMessageDebug"
+            @delete="deleteTask"
+            @download="showDownloadDlg = true"
+            @share="showShareDlg = true"
+          />
+        </ResponsiveMenuDialog>
+      </q-btn>
     </div>
     <!--task debugging-->
     <q-slide-transition class="debug-container">
@@ -148,6 +150,7 @@ const tystate = useTaskyonStore()
 const expandMessageContent = ref<boolean>(false)
 const router = useRouter()
 
+//const tmButton = useTemplateRef('tmButton')
 const showTaskMenu = ref(false)
 const showShareDlg = ref(false)
 const showDownloadDlg = ref(false)
@@ -220,12 +223,13 @@ function toggleMarkdown(id: string) {
 <style scoped lang="sass">
 .task-display
   position: relative
+  display: flex
+  flex-direction: column
 
   .task-menu-btn
+    align-self: flex-end
     position: sticky
-    top: 0
-    right: 0
-    margin-left: auto
+    top: 5px   // keep a little padding
     opacity: 0
     transition: opacity 0.3s
     z-index: 10
