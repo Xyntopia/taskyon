@@ -87,10 +87,16 @@ const iframeHtml = computed<string | undefined>(() => {
 
   const parentStyle = window.getComputedStyle(document.body)
   const fontFamily = parentStyle.fontFamily || 'Roboto, sans-serif'
+  const fontSize = parentStyle.fontSize || '16px'
   // For dark mode, override parent's color to white.
   const textColor = $q.dark.isActive ? 'white' : parentStyle.color || 'inherit'
 
-  const inlineStyle = `<style>body { font-family: ${fontFamily}; color: ${textColor}; }</style>`
+  const inlineStyle = `<style>body
+  {
+    font-family: ${fontFamily};
+    color: ${textColor};
+    font-size: ${fontSize};
+  }</style>`
 
   const linkTags = ($q.dark.isActive ? tyMdCssUrls.dark : tyMdCssUrls.light)
     .map((href) => `<link rel="stylesheet" href="${href}">`)
