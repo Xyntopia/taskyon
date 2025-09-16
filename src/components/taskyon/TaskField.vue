@@ -10,7 +10,11 @@
       <q-tooltip>This message is displayed in a secure sandbox</q-tooltip>
     </q-icon>
     <!--Message Display-->
-    <div v-touch-hold="() => (showTaskMenu = true)" class="task-display">
+    <div
+      v-touch-hold="() => (showTaskMenu = true)"
+      class="task-display"
+      @contextmenu="handleRightClick"
+    >
       <div class="task-menu-anchor">
         <q-btn
           class="task-menu-btn"
@@ -169,6 +173,27 @@ const humanReadableTaskCosts = computed(() => {
   }
 })
 
+// Helper function to check if text is selected
+function hasTextSelection(): boolean {
+  const selection = window.getSelection()
+  return selection !== null && !selection.isCollapsed && selection.toString().trim().length > 0
+}
+
+// Right-click handler
+function handleRightClick(event: MouseEvent) {
+  // Check if there's any text selected
+  if (hasTextSelection()) {
+    // Let the default context menu show for text selection
+    return
+  }
+
+  // Prevent the default context menu
+  event.preventDefault()
+
+  // Example: Show your custom task menu
+  showTaskMenu.value = true
+}
+
 async function editTask(taskId: string) {
   const task = await (await tystate.getTaskManager()).getTask(taskId)
   if (task?.content?.type === 'tooldefinition') {
@@ -227,27 +252,63 @@ function toggleMarkdown(id: string) {
 
   .task-menu-anchor
     position: sticky
-    top: 20px                 // stick to the visible top edge of the task
+    top: 20px
     width: 100%
-    pointer-events: none     // clicks pass through; button re-enables them
-    z-index: 100 // needed so that we can press the button over the fade overlay!
+    pointer-events: none
+    z-index: 100
 
   .task-menu-btn
-    // Absolutely position the button relative to the sticky anchor
+    // Positioning
     position: absolute
-    right: 0px
-    top: 0px  // visual offset INSIDE the task; tweak as needed
+    right: 0
+    top: 5px
     pointer-events: auto
 
-    // hover/focus reveal
-    opacity: 0
-    transition: opacity 0.2s ease
-    filter: drop-shadow(0 2px 6px rgba(0,0,0,.25))
+    // Shape/visibility
+    opacity: .3
+    transform: translateY(-3px) scale(.94)
+    transition: opacity .2s ease, transform .2s cubic-bezier(.17,.89,.32,1.27), box-shadow .2s ease, filter .2s ease, background-color .2s ease
 
-  // Reveal on hover/focus of card or button
+    // Baseline ring + soft shadow (uses currentColor from Quasar's 'color' prop)
+    //box-shadow: 0px 0px 2px rgba($secondary,1.0)
+
+    // Slight glassy plate so it reads on busy backgrounds
+    // backdrop-filter: blur(6px)
+    // background-color: rgba($secondary,0.8)
+
+    &:focus-visible
+      outline: none
+
+
+  // Reveal on hover/focus with a pop
   &:hover .task-menu-btn,
   .task-menu-btn:hover,
   .task-menu-btn:focus,
   .task-menu-btn:focus-within
     opacity: 1
+    transform: translateY(0) scale(1)
+    background-color: rgba(white,.8)
+    box-shadow: 0px 0px 5px rgba($secondary,1.0)
+    animation: pop-in 160ms cubic-bezier(.17,.89,.32,1.27)
+
+@keyframes pop-in
+  0%
+    transform: translateY(6px) scale(.88)
+    opacity: 0
+  60%
+    transform: translateY(-1px) scale(1.06)
+    opacity: 1
+  100%
+    transform: translateY(0) scale(1)
+
+@media (prefers-reduced-motion: reduce)
+  .task-menu-btn
+    transition: opacity .2s ease
+    transform: none
+  .task-display:hover .task-menu-btn,
+  .task-menu-btn:hover,
+  .task-menu-btn:focus,
+  .task-menu-btn:focus-within
+    animation: none
+    transform: none
 </style>
