@@ -200,3 +200,16 @@ onMounted(() => {
   window.addEventListener('message', handleMessage)
 })
 </script>
+
+<style scoped lang="sass">
+iframe.markdown-iframe
+  display: block // so it behaves like a block-level box
+  max-width: 100% // never exceed parent’s width, but allow smaller
+  border: none
+  min-width: 100px
+  width: 100%
+  min-height: 20px
+
+.ty-markdown
+  align-self: auto
+</style>
