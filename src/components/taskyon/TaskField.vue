@@ -10,11 +10,7 @@
       <q-tooltip>This message is displayed in a secure sandbox</q-tooltip>
     </q-icon>
     <!--Message Display-->
-    <div
-      v-touch-hold="() => (showTaskMenu = true)"
-      class="task-display"
-      @contextmenu.stop="handleRightClick"
-    >
+    <div class="task-display">
       <div v-if="!$q.platform.is.mobile" class="task-menu-anchor">
         <q-btn class="task-menu-btn" flat color="secondary" size="md" :icon="matMoreHoriz">
           <q-menu>
@@ -34,7 +30,7 @@
       </div>
 
       <!-- Context menu - positioned at right-click location -->
-      <ResponsiveMenuDialog v-model="showTaskMenu" auto-close context-menu>
+      <ResponsiveMenuDialog v-if="!textSelected" auto-close context-menu>
         <TaskMenu
           class="task-buttons"
           :task="task"
@@ -137,6 +133,7 @@ import { useRouter } from 'vue-router'
 import TaskDebugTabs from './TaskDebugTabs.vue'
 import type { TaskNode } from '@taskyon/taskyon'
 import ResponsiveMenuDialog from '../ResponsiveMenuDialog.vue'
+import { useTextSelection } from '@vueuse/core'
 
 const props = defineProps<{
   task: TaskNode
@@ -145,6 +142,9 @@ const props = defineProps<{
   short?: boolean | undefined
   showMeta: boolean | undefined
 }>()
+
+const textSelectionState = useTextSelection()
+const textSelected = computed(() => textSelectionState.text.value.length > 0)
 
 const ShareDialogBtn = defineAsyncComponent(
   () =>
@@ -164,7 +164,6 @@ const expandMessageContent = ref<boolean>(false)
 const router = useRouter()
 
 // Separate refs for button menu and context menu
-const showTaskMenu = ref(false) // Menu triggered by right-click
 const showShareDlg = ref(false)
 const showDownloadDlg = ref(false)
 
@@ -183,27 +182,6 @@ const humanReadableTaskCosts = computed(() => {
     return ''
   }
 })
-
-// Helper function to check if text is selected
-function hasTextSelection(): boolean {
-  const selection = window.getSelection()
-  return selection !== null && !selection.isCollapsed && selection.toString().trim().length > 0
-}
-
-// Right-click handler
-function handleRightClick(event: MouseEvent) {
-  // Check if there's any text selected
-  if (hasTextSelection()) {
-    // Let the default context menu show for text selection
-    return
-  }
-
-  // Prevent the default context menu
-  event.preventDefault()
-
-  // Show context menu at right-click position
-  showTaskMenu.value = true
-}
 
 async function editTask(taskId: string) {
   const task = await (await tystate.getTaskManager()).getTask(taskId)
@@ -255,7 +233,8 @@ function toggleMarkdown(id: string) {
 }
 </script>
 
-<style scoped lang="sass">
+<style lang="sass">
+
 .task-display
   position: relative
   display: flex
@@ -301,6 +280,14 @@ function toggleMarkdown(id: string) {
     background-color: rgba(white,.8)
     box-shadow: 0px 0px 5px rgba($secondary,1.0)
     animation: pop-in 160ms cubic-bezier(.17,.89,.32,1.27)
+
+.body--dark
+  .task-display
+    &:hover .task-menu-btn,
+    .task-menu-btn:hover,
+    .task-menu-btn:focus,
+    .task-menu-btn:focus-within
+      background-color: rgba($dark,.8)
 
 @keyframes pop-in
   0%
