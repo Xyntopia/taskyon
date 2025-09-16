@@ -609,6 +609,10 @@ export const generateIframeSrc = (
         contentEl.addEventListener('touchend', () => clearTimeout(pressTimer));
         contentEl.addEventListener('touchmove', () => clearTimeout(pressTimer));
 
+        // Inside your-iframe-content.html
+        document.addEventListener('click', function(event) {
+            window.parent.postMessage({ type: 'iframeClick', x: event.clientX, y: event.clientY }, '*');
+        });
 
       </script>
     </body>

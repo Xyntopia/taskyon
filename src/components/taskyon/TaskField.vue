@@ -13,7 +13,7 @@
     <div v-touch-hold="() => (showTaskMenu = true)" class="task-display">
       <div v-if="!$q.platform.is.mobile" class="task-menu-anchor">
         <q-btn class="task-menu-btn" flat color="secondary" size="xl" dense :icon="matMoreHoriz">
-          <q-menu auto-close>
+          <q-menu ref="taskMenuRef" auto-close>
             <TaskMenu
               class="task-buttons"
               :task="task"
@@ -71,9 +71,12 @@
         <div>
           <!--expandable task content-->
           <slot
-            :on-longpress="
-              () => {
-                showTaskMenu = true
+            :show-task-menu="
+              (state: boolean) => {
+                showTaskMenu = state
+                if (!state) {
+                  taskMenu?.hide()
+                }
               }
             "
           ></slot>
@@ -124,7 +127,7 @@
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
-import { computed, defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, ref, useTemplateRef } from 'vue'
 import TaskMenu from './TaskMenu.vue'
 import {
   matArrowDropDown,
@@ -140,6 +143,7 @@ import TaskDebugTabs from './TaskDebugTabs.vue'
 import type { TaskNode } from '@taskyon/taskyon'
 import ResponsiveMenuDialog from '../ResponsiveMenuDialog.vue'
 import { useTextSelection } from '@vueuse/core'
+import { type QMenu } from 'quasar'
 
 const props = defineProps<{
   task: TaskNode
@@ -149,6 +153,7 @@ const props = defineProps<{
   showMeta: boolean | undefined
 }>()
 
+const taskMenu = useTemplateRef<QMenu>('taskMenuRef')
 const textSelectionState = useTextSelection()
 const textSelected = computed(() => textSelectionState.text.value.length > 0)
 

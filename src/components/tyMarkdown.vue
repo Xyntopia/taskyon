@@ -40,7 +40,8 @@ const iframeRef = ref<HTMLIFrameElement | null>(null)
 // inside your <script setup>
 const emit = defineEmits<{
   (e: 'iframe-ready', el: HTMLIFrameElement): void
-  (e: 'longpress', pos: { x: number; y: number }): void
+  (e: 'ifLongpress', pos: { x: number; y: number }): void
+  (e: 'ifClick', pos: { x: number; y: number }): void
 }>()
 
 watch(iframeRef, (el) => {
@@ -192,7 +193,11 @@ function handleMessage(event: MessageEvent) {
   if (event.data?.type === 'resizeIframe') handleResize(event.data as ResizeIframeMessage)
 
   if (event.data?.type === 'longpress') {
-    emit('longpress', { x: event.data.x, y: event.data.y })
+    emit('ifLongpress', { x: event.data.x, y: event.data.y })
+  }
+
+  if (event.data?.type === 'iframeClick') {
+    emit('ifClick', { x: event.data.x, y: event.data.y })
   }
 }
 
