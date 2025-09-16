@@ -10,7 +10,7 @@
       <q-tooltip>This message is displayed in a secure sandbox</q-tooltip>
     </q-icon>
     <!--Message Display-->
-    <div class="task-display">
+    <div v-touch-hold="() => (showTaskMenu = true)" class="task-display">
       <div v-if="!$q.platform.is.mobile" class="task-menu-anchor">
         <q-btn class="task-menu-btn" flat color="secondary" size="xl" dense :icon="matMoreHoriz">
           <q-menu>
@@ -30,7 +30,7 @@
       </div>
 
       <!-- Context menu - positioned at right-click location -->
-      <ResponsiveMenuDialog v-if="!textSelected" auto-close context-menu>
+      <ResponsiveMenuDialog v-if="!textSelected" v-model="showTaskMenu" auto-close context-menu>
         <TaskMenu
           class="task-buttons"
           :task="task"
@@ -163,7 +163,8 @@ const tystate = useTaskyonStore()
 const expandMessageContent = ref<boolean>(false)
 const router = useRouter()
 
-// Separate refs for button menu and context menu
+//const tmButton = useTemplateRef('tmButton')
+const showTaskMenu = ref(false)
 const showShareDlg = ref(false)
 const showDownloadDlg = ref(false)
 
