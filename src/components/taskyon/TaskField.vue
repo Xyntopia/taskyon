@@ -11,6 +11,30 @@
     </q-icon>
     <!--Message Display-->
     <div v-touch-hold="() => (showTaskMenu = true)" class="task-display">
+      <div class="task-menu-anchor">
+        <q-btn
+          class="task-menu-btn"
+          flat
+          color="secondary"
+          size="md"
+          :icon="matMoreHoriz"
+          @click.stop="showTaskMenu = !showTaskMenu"
+        >
+          <ResponsiveMenuDialog v-model="showTaskMenu" auto-close>
+            <TaskMenu
+              class="task-buttons"
+              :task="task"
+              @toggle-markdown="toggleMarkdown"
+              @create-new-conversation="createNewConversation"
+              @edit-task="editTask"
+              @toggle-message-debug="toggleMessageDebug"
+              @delete="deleteTask"
+              @download="showDownloadDlg = true"
+              @share="showShareDlg = true"
+            />
+          </ResponsiveMenuDialog>
+        </q-btn>
+      </div>
       <!--task-header-->
       <div class="task-header">
         <!--task icon-->
@@ -68,33 +92,6 @@
         <q-tooltip :delay="1000">
           <TokenUsage :task-meta="taskCostMeta" />
         </q-tooltip>
-      </div>
-      <!--buttons-->
-      <!-- floating menu button -->
-      <div class="task-menu-anchor">
-        <q-btn
-          class="task-menu-btn"
-          flat
-          dense
-          color="secondary"
-          size="sm"
-          :icon="matMoreHoriz"
-          @click.stop="showTaskMenu = !showTaskMenu"
-        >
-          <ResponsiveMenuDialog v-model="showTaskMenu" auto-close>
-            <TaskMenu
-              class="task-buttons"
-              :task="task"
-              @toggle-markdown="toggleMarkdown"
-              @create-new-conversation="createNewConversation"
-              @edit-task="editTask"
-              @toggle-message-debug="toggleMessageDebug"
-              @delete="deleteTask"
-              @download="showDownloadDlg = true"
-              @share="showShareDlg = true"
-            />
-          </ResponsiveMenuDialog>
-        </q-btn>
       </div>
     </div>
     <!--task debugging-->
@@ -228,29 +225,27 @@ function toggleMarkdown(id: string) {
   display: flex
   flex-direction: column
 
-  // Sticky anchor lives at the end of the card.
-  // It sticks to the viewport bottom when the card's bottom would scroll past.
   .task-menu-anchor
     position: sticky
-    bottom: 0
-    width: 50%
-    height: 0              // overlay; doesn't affect layout height
-    pointer-events: none   // let clicks pass through, button re-enables them
-    z-index: 10
+    top: 0                   // stick to the visible top edge of the task
+    width: 100%
+    pointer-events: none     // clicks pass through; button re-enables them
 
-  // The button overlays the card, aligned to its bottom-right
   .task-menu-btn
+    // Absolutely position the button relative to the sticky anchor
     position: absolute
-    right: 12px
-    bottom: 12px
+    right: 0px
+    top: 0px  // visual offset INSIDE the task; tweak as needed
     pointer-events: auto
+
+    // hover/focus reveal
     opacity: 0
     transition: opacity 0.2s ease
-    // optional: elevate above card content
     filter: drop-shadow(0 2px 6px rgba(0,0,0,.25))
 
-  // Show the button on hover/focus
+  // Reveal on hover/focus of card or button
   &:hover .task-menu-btn,
+  .task-menu-btn:hover,
   .task-menu-btn:focus,
   .task-menu-btn:focus-within
     opacity: 1
