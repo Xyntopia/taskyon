@@ -227,9 +227,10 @@ function toggleMarkdown(id: string) {
 
   .task-menu-anchor
     position: sticky
-    top: 0                   // stick to the visible top edge of the task
+    top: 20px                 // stick to the visible top edge of the task
     width: 100%
     pointer-events: none     // clicks pass through; button re-enables them
+    z-index: 100 // needed so that we can press the button over the fade overlay!
 
   .task-menu-btn
     // Absolutely position the button relative to the sticky anchor
