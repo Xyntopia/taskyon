@@ -9,6 +9,7 @@
     :touch-position="false"
     :target="target"
     no-parent-event
+    :context-menu="contextMenu"
   >
     <slot :close="close" />
   </q-menu>
@@ -44,5 +45,6 @@ defineProps<{
   dataCy?: string | undefined
   autoClose?: QMenu['autoClose']
   target?: QMenu['target']
+  contextMenu?: QMenu['contextMenu']
 }>()
 </script>
