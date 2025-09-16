@@ -71,29 +71,31 @@
       </div>
       <!--buttons-->
       <!-- floating menu button -->
-      <q-btn
-        class="task-menu-btn"
-        flat
-        dense
-        color="secondary"
-        size="sm"
-        :icon="matMoreHoriz"
-        @click.stop="showTaskMenu = !showTaskMenu"
-      >
-        <ResponsiveMenuDialog v-model="showTaskMenu" auto-close>
-          <TaskMenu
-            class="task-buttons"
-            :task="task"
-            @toggle-markdown="toggleMarkdown"
-            @create-new-conversation="createNewConversation"
-            @edit-task="editTask"
-            @toggle-message-debug="toggleMessageDebug"
-            @delete="deleteTask"
-            @download="showDownloadDlg = true"
-            @share="showShareDlg = true"
-          />
-        </ResponsiveMenuDialog>
-      </q-btn>
+      <div class="task-menu-anchor">
+        <q-btn
+          class="task-menu-btn"
+          flat
+          dense
+          color="secondary"
+          size="sm"
+          :icon="matMoreHoriz"
+          @click.stop="showTaskMenu = !showTaskMenu"
+        >
+          <ResponsiveMenuDialog v-model="showTaskMenu" auto-close>
+            <TaskMenu
+              class="task-buttons"
+              :task="task"
+              @toggle-markdown="toggleMarkdown"
+              @create-new-conversation="createNewConversation"
+              @edit-task="editTask"
+              @toggle-message-debug="toggleMessageDebug"
+              @delete="deleteTask"
+              @download="showDownloadDlg = true"
+              @share="showShareDlg = true"
+            />
+          </ResponsiveMenuDialog>
+        </q-btn>
+      </div>
     </div>
     <!--task debugging-->
     <q-slide-transition class="debug-container">
@@ -226,15 +228,30 @@ function toggleMarkdown(id: string) {
   display: flex
   flex-direction: column
 
-  .task-menu-btn
-    align-self: flex-end
+  // Sticky anchor lives at the end of the card.
+  // It sticks to the viewport bottom when the card's bottom would scroll past.
+  .task-menu-anchor
     position: sticky
-    top: 5px   // keep a little padding
-    opacity: 0
-    transition: opacity 0.3s
+    bottom: 0
+    width: 50%
+    height: 0              // overlay; doesn't affect layout height
+    pointer-events: none   // let clicks pass through, button re-enables them
     z-index: 10
 
-  &:hover
-    .task-menu-btn
-      opacity: 1
+  // The button overlays the card, aligned to its bottom-right
+  .task-menu-btn
+    position: absolute
+    right: 12px
+    bottom: 12px
+    pointer-events: auto
+    opacity: 0
+    transition: opacity 0.2s ease
+    // optional: elevate above card content
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,.25))
+
+  // Show the button on hover/focus
+  &:hover .task-menu-btn,
+  .task-menu-btn:focus,
+  .task-menu-btn:focus-within
+    opacity: 1
 </style>
